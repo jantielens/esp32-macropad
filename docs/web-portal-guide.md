@@ -361,10 +361,12 @@ slots are occupied stops its action list.
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
 
 On ESP32-P4 builds, the **Extensions** page has two small slots
-and one large slot for trusted native `.elf` files. Upload a file named
-`extension-id@version.elf`, then reboot to install it into executable flash.
-Select **Extension** as a button's widget, choose an enabled installed
-extension, and optionally provide per-button configuration text.
+and one large slot for trusted native Extensions. Upload the signed package
+`extension-id@version.ext`, then reboot to install it into executable flash.
+The package contains the Extension ELF and its first-party signature; unsigned
+or modified packages are rejected. Select **Extension** as a button's widget,
+choose an enabled installed extension, and optionally provide per-button
+configuration text.
 
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 

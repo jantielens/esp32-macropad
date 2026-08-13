@@ -450,7 +450,7 @@ while IFS= read -r source; do
   package_name="$(python3 "$SCRIPT_DIR/extension_package_name.py" "$source")"
   title="$(python3 "$SCRIPT_DIR/extension_package_name.py" --title "$source")"
   metadata_file="$(dirname "$source")/metadata.json"
-  package_file="$REPO_ROOT/build/extensions/$package_name"
+  package_file="$REPO_ROOT/build/extensions/${package_name%.elf}.ext"
 
   if [[ ! -f "$metadata_file" ]]; then
     echo "ERROR: Missing extension catalog metadata: $metadata_file" >&2
@@ -468,6 +468,7 @@ while IFS= read -r source; do
   summary="$(jq -r '.summary' "$metadata_file")"
   usage="$(jq -r '.usage' "$metadata_file")"
   package_size="$(stat -c%s "$package_file")"
+  package_name="${package_name%.elf}.ext"
   cp "$package_file" "$OUT_DIR/extensions/$package_name"
 
   cat >> "$extension_fragment_tmp" <<EOF

@@ -128,10 +128,11 @@ void native_extension_routes_register(AsyncWebServer* server) {
                    state->received += len;
                    if (state->received != state->total) return;
                    state->file.close();
-                   const bool staged = native_extension_stage_file(state->slot, state->filename, state->temporary);
+                   const uint8_t slot = state->slot;
+                   const bool staged = native_extension_stage_file(slot, state->filename, state->temporary);
                    upload_cleanup(request);
                    if (!staged) {
-                       web_portal_send_json_error(request, 400, "Invalid extension package");
+                       web_portal_send_json_error(request, 400, "Invalid or unsigned extension package");
                        return;
                    }
                    request->send(201, "application/json", "{\"success\":true}");

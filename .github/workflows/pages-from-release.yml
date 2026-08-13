@@ -92,6 +92,11 @@ jobs:
             --dir release-assets \
             --pattern "*@*.elf"
 
+          gh release download "$tag_name" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --pattern "*@*.ext"
+
           echo "Downloaded assets:"
           ls -lh release-assets
 
@@ -152,6 +157,7 @@ jobs:
 
           mkdir -p build/extensions
           find release-assets -maxdepth 1 -type f -name '*@*.elf' -exec cp {} build/extensions/ \;
+          find release-assets -maxdepth 1 -type f -name '*@*.ext' -exec cp {} build/extensions/ \;
 
       - name: Build installer site (latest stable)
         run: |

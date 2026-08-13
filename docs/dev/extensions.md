@@ -25,10 +25,17 @@ The extension partition contains three fixed slots:
 | Small 2 | 56 KiB |
 | Large | 120 KiB |
 
-Upload a relocation-free ELF named `<extension-id>@<package-semver>.elf`. The ID uses
-lowercase letters, digits, and hyphens. The portal stages the upload on the
-configured storage backend; the next boot validates and commits it into the
+Upload a signed package named `<extension-id>@<package-semver>.ext`. The ID
+uses lowercase letters, digits, and hyphens. A package contains a relocation-free
+ELF followed by its 64-byte signature. The portal stages the upload on the
+configured storage backend; the next boot verifies and commits it into the
 selected executable flash slot.
+
+The signature is an ECDSA P-256 signature over the exact ELF bytes, stored as
+a fixed-width 64-byte `r || s` value. Firmware embeds the project's
+first-party public key and rejects unsigned, modified, or untrusted packages
+before staging. It verifies the staged ELF again before erasing the executable
+slot, which prevents a modified staging file from being installed.
 
 ## Catalog Metadata
 
@@ -53,6 +60,37 @@ state that no configuration is required.
 bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
 ```
 
+Release-ready packages require `EXTENSION_SIGNING_KEY` to point at the
+first-party P-256 private-key PEM file:
+
+```bash
+EXTENSION_SIGNING_KEY="$HOME/.config/esp32-macropad/extension-signing-private.pem" \
+  bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp \
+  build/extensions/hello-world@1.0.0.elf
+```
+
+`tools/build-p4-extensions.sh` builds every shipped Extension as a signed
+package by default. It uses
+`.secrets/extension-signing-private.pem` when `EXTENSION_SIGNING_KEY` is unset
+and fails rather than creating unsigned packages if no key is available.
+
+This creates the development ELF and the single upload file
+`hello-world@1.0.0.ext`. Only generate a new P-256 key pair when establishing a
+project key or rotating it:
+
+```bash
+bash tools/generate-extension-signing-key.sh "$HOME/.config/esp32-macropad/extension-signing-private.pem"
+```
+
+Protect the private key and never commit it. Copy its PEM content to the
+repository Actions secret `EXTENSION_SIGNING_PRIVATE_KEY`. The release workflow
+is triggered only by a `v*.*.*` tag, while pull request builds use an ephemeral
+test key and never access this secret. The public key is compiled into
+`native_extension_signature.cpp`; when rotating the key, replace that public key
+and ship firmware before uploading extensions signed by the new private key.
+Future firmware can add owner-approved third-party public keys using the same
+package format and verification path.
+
 The build script rejects ELF files containing relocations. Rebuild and upload
 every Extension after a firmware update that changes
 `NATIVE_EXTENSION_ABI_VERSION`. ABI 9 is greenfield: older Extension packages
@@ -65,7 +103,7 @@ that exchange `float` values. The builder derives target flags and ABI metadata
 from the installed ESP32-P4 SDK and `native_extension_api.h`; do not supply
 your own `-march` or `-mabi` flags.
 
-Every ABI 8 package must export this fixed, pointer-free descriptor:
+Every ABI 9 package must export this fixed, pointer-free descriptor:
 
 ```cpp
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
@@ -121,7 +159,7 @@ host-allocated service state with the package. This is the supported location
 for mutable state because a native ELF is flash-mapped and should not rely on
 writable globals.
 
-`shutdown` is required in ABI 8. It runs on the Arduino main loop after the
+`shutdown` is required in ABI 9. It runs on the Arduino main loop after the
 final widget is destroyed and every package worker has returned. Release
 package-owned service state here, then clear it with
 `host->core->context_set_data(extension_context, nullptr)`. It must not call
@@ -154,7 +192,7 @@ host API. An Extension worker task may block and make network requests, but it
 must never call an LVGL helper. Copy worker results into fixed state, then read
 that state from `tick` to update the UI.
 
-ABI 8 permits one host-managed worker per package. When the final widget is
+ABI 9 permits one host-managed worker per package. When the final widget is
 destroyed, firmware requests cancellation and wakes an interruptible worker
 wait. Use `host->task->task_cancel_requested(extension_context)` in worker
 loops and `host->task->task_wait_or_cancel(extension_context, timeout_ms)` for
@@ -167,7 +205,7 @@ has joined. Keep worker waits cancellation-aware so this transition is prompt.
 
 ## Host API
 
-`NativeExtensionHostApi` is the ABI 8 surface. Extension packages cannot
+`NativeExtensionHostApi` is the ABI 9 surface. Extension packages cannot
 directly import firmware symbols, so it provides grouped C-style service views:
 
 * `host->core` — time, allocation, math, mutexes, logging, notifications, status

@@ -27,9 +27,9 @@
 
 namespace {
 
-// ABI 8 extends the persisted header with lifecycle metadata. New magics keep
-// older, shorter records from being misread as valid target/title strings.
-constexpr uint32_t SLOT_MAGIC = 0x33545845u;
+// New magics keep older, shorter records from being misread as valid
+// signature-bearing headers.
+constexpr uint32_t SLOT_MAGIC = 0x34545845u;
 constexpr uint32_t STAGE_MAGIC = 0x33544753u;
 constexpr uint32_t ELF_OFFSET = 0x2000;
 constexpr uint32_t SLOT_OFFSET[NATIVE_EXTENSION_SLOT_COUNT] = {0x00000, 0x10000, 0x20000};
@@ -41,7 +41,6 @@ constexpr uint32_t ELF_PT_LOAD = 1;
 constexpr uint32_t ELF_PF_X = 1;
 constexpr uint32_t ELF_SHT_DYNSYM = 11;
 constexpr uint32_t ELF_SHT_RELA = 4;
-constexpr size_t STAGING_CHUNK_SIZE = 4096;
 constexpr uint32_t WORKER_JOIN_TIMEOUT_MS = 20000;
 constexpr uint8_t MAX_EXTENSION_INSTANCE_BINDINGS = MAX_PAD_BUTTONS;
 
@@ -49,7 +48,10 @@ struct ElfHeader { uint8_t ident[16]; uint16_t type, machine; uint32_t version, 
 struct ElfProgram { uint32_t type, offset, vaddr, paddr, filesz, memsz, flags, align; };
 struct ElfSection { uint32_t name, type, flags, addr, offset, size, link, info, align, entsize; };
 struct ElfSymbol { uint32_t name, value, size; uint8_t info, other; uint16_t shndx; };
-struct StageHeader { uint32_t magic; NativeExtensionSlotHeader slot; };
+struct StageHeader {
+    uint32_t magic;
+    NativeExtensionSlotHeader slot;
+};
 static_assert(sizeof(ElfHeader) == 52 && sizeof(ElfProgram) == 32 && sizeof(ElfSection) == 40 && sizeof(ElfSymbol) == 16, "Unexpected ELF layout");
 
 struct LoadedSlot {
@@ -490,7 +492,8 @@ bool read_stage(uint8_t slot, StageHeader* stage) {
     char path[32]; stage_path(slot, path, sizeof(path));
     File file = Storage.open(path, "r");
     const bool valid = file && file.read(reinterpret_cast<uint8_t*>(stage), sizeof(*stage)) == sizeof(*stage) &&
-                       stage->magic == STAGE_MAGIC && stage->slot.elf_size <= SLOT_CAPACITY[slot];
+                       stage->magic == STAGE_MAGIC && stage->slot.elf_size > 0 &&
+                       stage->slot.elf_size <= SLOT_CAPACITY[slot];
     if (file) file.close();
     return valid;
 }
@@ -498,7 +501,7 @@ bool read_stage(uint8_t slot, StageHeader* stage) {
 bool parse_filename(const char* filename, NativeExtensionSlotHeader* header) {
     const char* at = filename ? strrchr(filename, '@') : nullptr;
     const char* dot = filename ? strrchr(filename, '.') : nullptr;
-    if (!at || !dot || at == filename || at >= dot || strcmp(dot, ".elf") != 0 ||
+    if (!at || !dot || at == filename || at >= dot || strcmp(dot, ".ext") != 0 ||
         static_cast<size_t>(at - filename) >= sizeof(header->id) ||
         static_cast<size_t>(dot - at - 1) >= sizeof(header->version)) return false;
     memset(header, 0, sizeof(*header));
@@ -622,7 +625,12 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     if (!metadata) metadata = static_cast<uint8_t*>(malloc(header.elf_size));
     if (!metadata || esp_partition_read(partition, SLOT_OFFSET[slot] + ELF_OFFSET, metadata, header.elf_size) != ESP_OK) { if (metadata) heap_caps_free(metadata); return false; }
     const ElfHeader* elf = reinterpret_cast<const ElfHeader*>(metadata);
-    if (!valid_elf(metadata, header.elf_size)) { heap_caps_free(metadata); return false; }
+    if (!valid_elf(metadata, header.elf_size) ||
+        !native_extension_verify_signature(metadata, header.elf_size, header.signature)) {
+        heap_caps_free(metadata);
+        LOGW(TAG, "Skipped slot %u: invalid or unsigned package", slot);
+        return false;
+    }
     NativeExtensionDescriptor descriptor = {};
     if (!read_descriptor(metadata, header.elf_size, &descriptor) ||
         strcmp(descriptor.id, header.id) != 0 || strcmp(descriptor.version, header.version) != 0 ||
@@ -663,20 +671,29 @@ void install_stage(const esp_partition_t* partition, uint8_t slot) {
     char path[32]; stage_path(slot, path, sizeof(path));
     if (!Storage.exists(path)) return;
     File file = Storage.open(path, "r"); StageHeader stage = {};
-    if (!file || file.read(reinterpret_cast<uint8_t*>(&stage), sizeof(stage)) != sizeof(stage) || stage.magic != STAGE_MAGIC || stage.slot.elf_size > SLOT_CAPACITY[slot]) { if (file) file.close(); return; }
-    if (esp_partition_erase_range(partition, SLOT_OFFSET[slot], SLOT_SIZE[slot]) != ESP_OK) { file.close(); return; }
-    uint8_t* buffer = static_cast<uint8_t*>(heap_caps_malloc(STAGING_CHUNK_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!buffer) buffer = static_cast<uint8_t*>(malloc(STAGING_CHUNK_SIZE));
-    if (!buffer) { file.close(); return; }
-    size_t offset = 0;
-    bool written = true;
-    while (offset < stage.slot.elf_size) {
-        const size_t count = (stage.slot.elf_size - offset < STAGING_CHUNK_SIZE) ? stage.slot.elf_size - offset : STAGING_CHUNK_SIZE;
-        if (file.read(buffer, count) != count || esp_partition_write(partition, SLOT_OFFSET[slot] + ELF_OFFSET + offset, buffer, count) != ESP_OK) { written = false; break; }
-        offset += count;
+    if (!file || file.read(reinterpret_cast<uint8_t*>(&stage), sizeof(stage)) != sizeof(stage) ||
+        stage.magic != STAGE_MAGIC || stage.slot.elf_size == 0 ||
+        stage.slot.elf_size > SLOT_CAPACITY[slot]) { if (file) file.close(); return; }
+    uint8_t* elf = static_cast<uint8_t*>(heap_caps_malloc(stage.slot.elf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    const bool valid = elf && file.read(elf, stage.slot.elf_size) == stage.slot.elf_size &&
+                       valid_elf(elf, stage.slot.elf_size) &&
+                       native_extension_verify_signature(elf, stage.slot.elf_size, stage.slot.signature);
+    if (!valid) {
+        if (elf) heap_caps_free(elf);
+        file.close();
+        LOGW(TAG, "Rejected staged slot %u: invalid or unsigned package", slot);
+        return;
     }
-    heap_caps_free(buffer);
-    file.close(); stage.slot.magic = SLOT_MAGIC;
+    if (esp_partition_erase_range(partition, SLOT_OFFSET[slot], SLOT_SIZE[slot]) != ESP_OK) {
+        heap_caps_free(elf);
+        file.close();
+        return;
+    }
+    const bool written = esp_partition_write(partition, SLOT_OFFSET[slot] + ELF_OFFSET,
+                                             elf, stage.slot.elf_size) == ESP_OK;
+    heap_caps_free(elf);
+    file.close();
+    stage.slot.magic = SLOT_MAGIC;
     if (written && esp_partition_write(partition, SLOT_OFFSET[slot], &stage.slot, sizeof(stage.slot)) == ESP_OK) { Storage.remove(path); LOGI(TAG, "Installed slot %u: %s", slot, stage.slot.id); }
 }
 
@@ -773,13 +790,17 @@ bool native_extension_get_slot(uint8_t slot, NativeExtensionSlotInfo* out) {
 bool native_extension_stage_file(uint8_t slot, const char* filename, const char* source_path) {
     if (!valid_slot(slot) || !source_path) return false;
     File source = Storage.open(source_path, "r");
-    const size_t elf_size = source ? source.size() : 0;
-    if (!source || elf_size == 0 || elf_size > SLOT_CAPACITY[slot]) {
+    const size_t package_size = source ? source.size() : 0;
+    if (!source || package_size <= NATIVE_EXTENSION_SIGNATURE_SIZE ||
+        package_size - NATIVE_EXTENSION_SIGNATURE_SIZE > SLOT_CAPACITY[slot]) {
         if (source) source.close();
         return false;
     }
+    const size_t elf_size = package_size - NATIVE_EXTENSION_SIGNATURE_SIZE;
     uint8_t* elf = static_cast<uint8_t*>(heap_caps_malloc(elf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!elf || source.read(elf, elf_size) != elf_size || !valid_elf(elf, elf_size)) {
+    uint8_t signature[NATIVE_EXTENSION_SIGNATURE_SIZE] = {};
+    if (!elf || source.read(elf, elf_size) != elf_size ||
+        source.read(signature, sizeof(signature)) != sizeof(signature) || !valid_elf(elf, elf_size)) {
         if (elf) heap_caps_free(elf);
         source.close();
         return false;
@@ -787,7 +808,8 @@ bool native_extension_stage_file(uint8_t slot, const char* filename, const char*
     source.close();
     NativeExtensionDescriptor descriptor = {};
     NativeExtensionSlotHeader slot_header = {};
-    if (!read_descriptor(elf, elf_size, &descriptor) || !parse_filename(filename, &slot_header) ||
+    if (!native_extension_verify_signature(elf, elf_size, signature) ||
+        !read_descriptor(elf, elf_size, &descriptor) || !parse_filename(filename, &slot_header) ||
         strcmp(slot_header.id, descriptor.id) != 0 || strcmp(slot_header.version, descriptor.version) != 0) {
         heap_caps_free(elf);
         return false;
@@ -802,6 +824,7 @@ bool native_extension_stage_file(uint8_t slot, const char* filename, const char*
     }
     char path[32]; stage_path(slot, path, sizeof(path));
     File file = Storage.open(path, "w");
+    memcpy(slot_header.signature, signature, sizeof(slot_header.signature));
     const StageHeader stage = {STAGE_MAGIC, slot_header};
     const bool written = file && file.write(reinterpret_cast<const uint8_t*>(&stage), sizeof(stage)) == sizeof(stage) &&
                          file.write(elf, elf_size) == elf_size;

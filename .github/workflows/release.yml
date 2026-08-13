@@ -285,14 +285,34 @@ jobs:
         chmod +x setup.sh
         ./setup.sh
 
+    - name: Restore extension signing key
+      env:
+        EXTENSION_SIGNING_PRIVATE_KEY: ${{ secrets.EXTENSION_SIGNING_PRIVATE_KEY }}
+      run: |
+        set -euo pipefail
+        if [[ -z "$EXTENSION_SIGNING_PRIVATE_KEY" ]]; then
+          echo "Required EXTENSION_SIGNING_PRIVATE_KEY secret is not configured" >&2
+          exit 1
+        fi
+        umask 077
+        printf '%s\n' "$EXTENSION_SIGNING_PRIVATE_KEY" > "$RUNNER_TEMP/extension-signing-private.pem"
+
     - name: Build native extension packages
+      env:
+        EXTENSION_SIGNING_KEY: ${{ runner.temp }}/extension-signing-private.pem
       run: bash tools/build-p4-extensions.sh release-extensions
+
+    - name: Remove extension signing key
+      if: always()
+      run: rm -f "$RUNNER_TEMP/extension-signing-private.pem"
 
     - name: Upload extension release files
       uses: actions/upload-artifact@v4
       with:
         name: ${{ needs.prepare-matrix.outputs.project_name }}-extensions-v${{ needs.prepare-matrix.outputs.version }}
-        path: release-extensions/*.elf
+        path: |
+          release-extensions/*.elf
+          release-extensions/*.ext
         retention-days: 90
 
   release:
@@ -350,7 +370,7 @@ jobs:
     - name: Generate SHA256 checksums
       run: |
         cd release-files
-        sha256sum *.bin *.elf > SHA256SUMS.txt
+        sha256sum *.bin *.elf *.ext > SHA256SUMS.txt
         echo "Checksums generated:"
         cat SHA256SUMS.txt
     

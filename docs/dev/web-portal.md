@@ -437,21 +437,23 @@ or device taking longer to boot.
 
 ESP32-P4 builds support trusted native Extensions. The
 Extensions page exposes two small slots (56 KiB each) and one large slot
-(120 KiB). Upload a relocation-free RISC-V ELF named
-`<extension-id>@<version>.elf`; it stages on SD and installs into the selected
-executable flash slot during the next boot.
+(120 KiB). Upload a signed package named `<extension-id>@<version>.ext`. It
+contains a relocation-free RISC-V ELF followed by its fixed 64-byte ECDSA P-256
+signature; it stages on the configured storage backend and installs into the
+selected executable flash slot during the next boot.
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/extensions` | Returns all slot metadata and runtime load status |
-| `POST` | `/api/extensions/upload?slot=N&filename=id@version.elf` | Stages an ELF into the selected slot for installation at next boot |
+| `POST` | `/api/extensions/upload?slot=N&filename=id@version.ext` | Verifies and stages a signed Extension package for installation at next boot |
 | `POST` | `/api/extensions/enabled?slot=N&enabled=true|false` | Enables or disables an installed extension for the next boot |
 | `DELETE` | `/api/extensions?slot=N` | Erases an extension slot |
 
-The endpoint accepts only relocation-free RISC-V ELF files and uses the normal
-portal authentication gate. The Pad editor's **Extension** widget selects an
-enabled installed extension and passes its per-button configuration text to the
-native instance.
+The endpoint accepts only signed `.ext` packages and uses the normal portal
+authentication gate. Firmware verifies the embedded ELF's format and signature
+before staging, before installation, and before executable mapping. The Pad
+editor's **Extension** widget selects an enabled installed extension and passes
+its per-button configuration text to the native instance.
 
 P4 boards use an `_ext` partition scheme, which reserves a 256 KiB raw
 `extensions` partition. Flash the first firmware using this scheme over USB

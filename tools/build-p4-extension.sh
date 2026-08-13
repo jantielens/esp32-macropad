@@ -67,4 +67,8 @@ fi
 
 python3 "$SCRIPT_DIR/verify_extension_descriptor.py" "$API_HEADER" "$OUTPUT"
 
+if [[ -n "${EXTENSION_SIGNING_KEY:-}" ]]; then
+    bash "$SCRIPT_DIR/sign-p4-extension.sh" "$OUTPUT" "${OUTPUT%.elf}.ext"
+fi
+
 echo "Built $OUTPUT (ABI $ABI_VERSION, target $TARGET_ABI)"

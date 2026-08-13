@@ -62,7 +62,7 @@ async function extensionRenderSlots() {
             card.innerHTML = '<strong>' + extensionSlotName(slot) + ' ' + (slot.slot + 1) + '</strong>' +
                 '<div style="margin:6px 0">' + title + '</div>' +
                 '<small>' + Math.floor((slot.staged ? slot.staged_size : slot.size) / 1024) + ' / ' + Math.floor(slot.capacity / 1024) + ' KiB | ABI ' + slot.abi_version + ' | ' + (slot.target_abi || 'unknown target') + state + '</small>' + runtime;
-            const input = document.createElement('input'); input.type = 'file'; input.accept = '.elf,application/x-elf'; input.style.display = 'none';
+            const input = document.createElement('input'); input.type = 'file'; input.accept = '.ext,application/octet-stream'; input.style.display = 'none';
             const upload = document.createElement('button'); upload.type = 'button'; upload.className = 'btn btn-small'; upload.textContent = slot.installed ? 'Replace' : 'Upload'; upload.onclick = function () { input.click(); };
             input.onchange = function () { extensionUpload(slot, input); };
             card.appendChild(document.createElement('hr')); card.appendChild(input); card.appendChild(upload);

@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "native_extension_api.h"
+#include "native_extension_signature.h"
 
 struct PadBinding;
 
@@ -48,6 +49,7 @@ struct NativeExtensionSlotHeader {
 	uint32_t elf_size;
 	uint8_t enabled;
 	uint8_t reserved[3];
+	uint8_t signature[NATIVE_EXTENSION_SIGNATURE_SIZE];
 	char id[NATIVE_EXTENSION_ID_MAX_LEN];
 	char version[NATIVE_EXTENSION_VERSION_MAX_LEN];
 	char target_abi[NATIVE_EXTENSION_TARGET_ABI_MAX_LEN];
