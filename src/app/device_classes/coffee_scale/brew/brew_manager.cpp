@@ -30,6 +30,9 @@ static const BrewTemplate*  s_template      = nullptr;
 static const BrewTemplate*  s_last_template = nullptr;
 static uint8_t              s_stage_index   = 0;   // index into s_template->stages
 static bool                 s_timer_running = false;
+// brew_start() requests an asynchronous tare.  Do not interpret the previous
+// weight as a first pour until the scale sensor reports that tare is complete.
+static bool                 s_waiting_for_tare = false;
 static uint32_t             s_start_ms      = 0;   // millis() when timer started
 static uint32_t             s_elapsed_ms    = 0;   // frozen elapsed when stopped
 static float                s_dose_weight   = 0.0f;
@@ -229,6 +232,7 @@ void brew_start(const char* template_name) {
     s_elapsed_ms     = 0;
     s_start_ms       = 0;
     s_timer_running  = false;
+    s_waiting_for_tare = true;
     s_dose_weight    = 0.0f;
     s_save_pending   = false;
     s_last_sample_ms = 0;
@@ -288,6 +292,7 @@ void brew_reset() {
     s_elapsed_ms     = 0;
     s_start_ms       = 0;
     s_timer_running  = false;
+    s_waiting_for_tare = false;
     s_dose_weight    = 0.0f;
     s_save_pending   = false;
     s_stage_enter_ms = 0;
@@ -348,17 +353,27 @@ void brew_tick() {
     // Deferred save — runs on main task (internal RAM stack, flash-safe)
     if (s_save_pending) {
         s_save_pending = false;
-        brew_log_save(s_elapsed_ms, s_save_weight,
-                      s_template,
-                      s_dose_weight,
-                      s_series, s_series_count,
-                      s_markers, s_marker_count,
-                      s_captures, s_capture_count);
+        const uint16_t saved_id = brew_log_save(s_elapsed_ms, s_save_weight,
+                                                s_template,
+                                                s_dose_weight,
+                                                s_series, s_series_count,
+                                                s_markers, s_marker_count,
+                                                s_captures, s_capture_count);
         brew_free_series();
-        LOGI(TAG, "Brew saved to flash");
+        if (saved_id) {
+            LOGI(TAG, "Brew saved to storage: %u", (unsigned)saved_id);
+        } else {
+            LOGE(TAG, "Failed to save brew to storage");
+        }
     }
 
     if (s_phase != BREW_ACTIVE) return;
+
+    if (s_waiting_for_tare) {
+        if (strcmp(scale_get_status(), "taring") == 0) return;
+        s_waiting_for_tare = false;
+        LOGI(TAG, "Tare complete; waiting for first pour");
+    }
 
     const BrewStage* stage = current_stage();
     if (!stage) return;
@@ -695,6 +710,7 @@ void brew_manager_init() {
     s_elapsed_ms    = 0;
     s_start_ms      = 0;
     s_timer_running = false;
+    s_waiting_for_tare = false;
     s_dose_weight   = 0.0f;
     s_series        = nullptr;
     s_series_count  = 0;

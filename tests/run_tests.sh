@@ -622,6 +622,10 @@ echo "=== Running unit tests: component_registry ==="
 ./tests/bin/test_component_registry
 echo
 
+echo "=== Running guard: portal component capacity matrix ==="
+python3 ./tests/test_portal_component_capacity_matrix.py
+echo
+
 echo "=== Building unit tests: shutter_curtain_stats ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app -I src/app/device_classes/shutter_tester \
@@ -760,6 +764,10 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running guard: coffee_scale command length ==="
 ./tests/bin/test_coffee_scale_cmd_len
+echo
+
+echo "=== Running guard: brew storage and deferred tare ==="
+bash ./tests/test_brew_storage_and_tare_guards.sh
 echo
 
 echo "=== Building unit tests: expose_dry_down ==="

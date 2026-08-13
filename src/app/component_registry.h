@@ -3,8 +3,10 @@
 #include <ESPAsyncWebServer.h>
 #include <stdint.h>
 
-// Max components the registry can hold (static array, no heap allocation)
-#define MAX_PORTAL_COMPONENTS 32
+// Max components the registry can hold (static array, no heap allocation).
+// 64 accommodates the current feature-rich device classes and leaves room for
+// future portal fragments without silently omitting their navigation entries.
+#define MAX_PORTAL_COMPONENTS 64
 
 // Custom action definition — dispatched by (name, method) pair
 struct ComponentAction {
