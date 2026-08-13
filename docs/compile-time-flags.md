@@ -846,6 +846,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/components/web_portal_native_extensions.cpp
   - src/app/native_extension.cpp
   - src/app/native_extension.h
+  - src/app/native_extension_signature.cpp
+  - src/app/native_extension_signature.h
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
   - src/app/screens/pad_screen_events.cpp
