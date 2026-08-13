@@ -11,6 +11,12 @@ class Element {
         this.attributes = {};
         this.validationMessage = '';
         this.focused = false;
+        var classes = new Set();
+        this.classList = {
+            add: function(c) { classes.add(c); },
+            remove: function(c) { classes.delete(c); },
+            contains: function(c) { return classes.has(c); }
+        };
     }
     setCustomValidity(message) { this.validationMessage = message; }
     reportValidity() { return !this.validationMessage; }
@@ -32,6 +38,13 @@ const document = {
 const context = {
     console,
     document,
+    deviceInfoCache: {
+        catalog: [
+            { type: 'timer', group: 'Timer', label: 'Timer',
+              commands: ['toggle', 'start', 'stop', 'pause', 'resume', 'reset', 'set', 'adjust']
+                  .map(function(id) { return { id: id, label: id }; }) }
+        ]
+    },
     showMessage() {},
     listInjectSyntheticScreenOption() {},
     padInitBindableColor() {},

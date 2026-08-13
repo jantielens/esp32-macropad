@@ -46,8 +46,28 @@ static char* brew_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
+static void brew_describe(JsonObject& out) {
+    out["group"] = "Coffee Scale";
+    out["label"] = "Brew";
+    JsonArray fields = out.createNestedArray("fields");
+    JsonObject command_field = fields.createNestedObject();
+    command_field["name"] = "brew_command";
+    command_field["description"] = "required command identifier";
+    JsonObject value_field = fields.createNestedObject();
+    value_field["name"] = "brew_value";
+    value_field["description"] = "template name for set_template; binding templates are supported";
+    JsonArray commands = out.createNestedArray("commands");
+    const char* ids[] = {"advance", "start", "next", "stop", "reset", "tare", "set_template"};
+    const char* labels[] = {"Advance", "Start", "Next step", "Stop", "Reset", "Tare", "Set template"};
+    for (uint8_t i = 0; i < 7; ++i) {
+        JsonObject item = commands.createNestedObject();
+        item["id"] = ids[i]; item["label"] = labels[i];
+    }
+}
+
 #if HAS_SCALE
-static void brew_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult brew_dispatch(const ButtonAction& act, const char* label,
+                                  uint32_t /*continuation_token*/) {
     const BrewPayload& bp = brew_payload(act);
     const char* cmd = bp.command;
     // Empty command defaults to "advance" — preserves legacy
@@ -79,21 +99,23 @@ static void brew_dispatch(const ButtonAction& act, const char* label) {
     } else {
         LOGW(TAG, "%s brew: unknown cmd '%s'", label, cmd);
     }
+    return ACTION_COMPLETE;
 }
 #else
-static void brew_dispatch(const ButtonAction& /*act*/, const char* label) {
+static ActionResult brew_dispatch(const ButtonAction& /*act*/, const char* label,
+                                  uint32_t /*continuation_token*/) {
     LOGW(TAG, "%s brew: not compiled (HAS_SCALE=0)", label);
+    return ACTION_COMPLETE;
 }
 #endif
 
-static const ActionTypeDef brew_action_type = {
+DEFINE_AND_REGISTER_ACTION_TYPE(brew_action_type,
     /* type_name   */ ACTION_TYPE_BREW,
     /* parse       */ brew_parse,
     /* serialize   */ brew_serialize,
     /* dispatch    */ brew_dispatch,
     /* value_field */ brew_value_field,
-};
-
-REGISTER_ACTION_TYPE(brew_action_type);
+    /* describe    */ brew_describe,
+);
 
 #endif // HAS_DISPLAY && IS_COFFEE_SCALE

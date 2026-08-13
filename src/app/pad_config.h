@@ -70,6 +70,8 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define CONFIG_COLOR_MAX_LEN            192
 #define CONFIG_BINDABLE_SHORT_LEN       64
 #define CONFIG_WIDGET_TYPE_MAX_LEN     16
+#define CONFIG_EXTENSION_ID_MAX_LEN     32
+#define CONFIG_EXTENSION_CONFIG_MAX_LEN 512
 #define MAX_WIDGET_BINDINGS             4
 
 // Per-button widget config blob. This is multiplied by MAX_PAD_BUTTONS inside
@@ -139,6 +141,13 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_HA_SERVICE "ha_service"
 #define ACTION_TYPE_VISUAL_ALERT "visual_alert"
 #define ACTION_TYPE_CYCLE_PAD "cycle_pad"
+#define ACTION_TYPE_DELAY    "delay"
+
+#define ACTION_DELAY_MAX_DURATION_MS 55000U
+
+inline bool action_delay_duration_is_valid(uint32_t duration_ms) {
+    return duration_ms >= 1 && duration_ms <= ACTION_DELAY_MAX_DURATION_MS;
+}
 
 // Maximum number of sequential actions per tap or long-press
 #define MAX_BUTTON_ACTIONS   3
@@ -223,6 +232,9 @@ struct CyclePadPayload {
     bool wrap;                                     // wrap at the numeric boundary
     uint32_t excluded_mask;                        // bit N excludes user-visible Pad N+1
 };
+struct DelayPayload {
+    uint32_t duration_ms;                          // 1-55000 ms
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -254,6 +266,7 @@ union ActionPayload {
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
     VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
     CyclePadPayload   cycle_pad;    // type == ACTION_TYPE_CYCLE_PAD
+    DelayPayload      delay;        // type == ACTION_TYPE_DELAY
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, "" (none) carry no payload data — only the type tag.
@@ -291,6 +304,7 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \
     printf_fn("  VisualAlertPayload= %zu\n", sizeof(VisualAlertPayload)); \
     printf_fn("  CyclePadPayload   = %zu\n", sizeof(CyclePadPayload));    \
+    printf_fn("  DelayPayload      = %zu\n", sizeof(DelayPayload));       \
 } while (0)
 
 // LabelBinding removed — MQTT bindings are now inline in label text.

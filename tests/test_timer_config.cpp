@@ -6,8 +6,12 @@
 #include <thread>
 #include <freertos/semphr.h>
 
+#include "action_parse.h"
+#include "action_registry.h"
 #include "timer_config.h"
 #include <LittleFS.h>
+
+extern "C" unsigned long millis() { return 0; }
 
 std::map<std::string, std::string> timer_test_files;
 bool timer_test_fail_open = false;

@@ -26,8 +26,10 @@ jobs:
     if: github.event_name != 'release' || github.event.release.prerelease == false
 
     steps:
-      - name: Checkout (default branch)
+      - name: Checkout release source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag_name }}
 
       - name: Resolve tag + ensure stable
         id: release_meta
@@ -84,6 +86,16 @@ jobs:
             --repo "${{ github.repository }}" \
             --dir release-assets \
             --pattern "*-boot_app0.bin"
+
+          gh release download "$tag_name" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --pattern "*@*.elf"
+
+          gh release download "$tag_name" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --pattern "*@*.ext"
 
           echo "Downloaded assets:"
           ls -lh release-assets
@@ -142,6 +154,10 @@ jobs:
             cp "$partitions_path" "build/$board_name/app.ino.partitions.bin"
             cp "$boot_app0_path" "build/$board_name/boot_app0.bin"
           done
+
+          mkdir -p build/extensions
+          find release-assets -maxdepth 1 -type f -name '*@*.elf' -exec cp {} build/extensions/ \;
+          find release-assets -maxdepth 1 -type f -name '*@*.ext' -exec cp {} build/extensions/ \;
 
       - name: Build installer site (latest stable)
         run: |

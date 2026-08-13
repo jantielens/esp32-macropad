@@ -46,6 +46,9 @@
 #include "time_binding.h"
 #include "timer_binding.h"
 #include "music_binding.h"
+#if HAS_AUDIO_INPUT && HAS_DISPLAY
+#include "audio_input_binding.h"
+#endif
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -67,10 +70,18 @@
 #include "audio.h"
 #endif
 
+#if HAS_AUDIO_INPUT
+#include "audio_input.h"
+#endif
+
 #include "i2c_bus.h"
 #include "sd_probe.h"
 #include "sd_storage.h"
 #include "storage.h"
+
+#if HAS_NATIVE_EXTENSIONS
+#include "native_extension.h"
+#endif
 
 #include <esp_ota_ops.h>
 #include <esp_heap_caps.h>
@@ -116,7 +127,7 @@ void onWiFiDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
 }
 
 static bool check_config_mode_button() {
-	#if HAS_BUTTON
+	#if HAS_CONFIG_MODE_BUTTON
 	pinMode(BUTTON_PIN, BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT_PULLDOWN);
 
 	const unsigned long start = millis();
@@ -287,6 +298,9 @@ void setup()
 	// so device_config.audio_volume is available).
 	#if HAS_AUDIO
 	audio_init(device_config.audio_volume);
+	#if HAS_AUDIO_INPUT
+	audio_input_meter_init();
+	#endif
 	#endif
 
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
@@ -356,6 +370,12 @@ void setup()
 	#if HAS_DISPLAY
 	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
 	pad_config_init();
+
+	#if HAS_NATIVE_EXTENSIONS
+	// The extension package is optional; an absent or invalid package must not
+	// prevent the core firmware from continuing to boot.
+	native_extension_init();
+	#endif
 
 	// Load swipe gesture actions from LittleFS (uses same filesystem)
 	swipe_config_init();
@@ -489,6 +509,9 @@ void setup()
 	pad_binding_init();
 	timer_binding_init();
 	music_binding_init();
+	#if HAS_AUDIO_INPUT && HAS_DISPLAY
+	audio_input_binding_init();
+	#endif
 	list_binding_init();
 	net_binding_init();
 	timer_config_init();
@@ -590,6 +613,10 @@ void loop()
 
 	// Handle web portal (DNS for captive portal)
 	web_portal_handle();
+
+	#if HAS_NATIVE_EXTENSIONS
+	native_extension_loop();
+	#endif
 
 	#if HAS_MQTT
 	mqtt_manager.loop();

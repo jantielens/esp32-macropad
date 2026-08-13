@@ -86,12 +86,12 @@
             </div>
         </div>
 
-        <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
-            <div id="pad-level-actions-section">
-                <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Full-Screen Tap Actions</label>
+        <details class="editor-group" id="pad-level-actions-section" open>
+            <summary>Full-Screen Tap Actions</summary>
+            <div class="editor-group-body">
                 <div id="pad-level-action-editors"></div>
             </div>
-        </div>
+        </details>
     </section>
 
     <!-- No-display fallback -->
@@ -139,7 +139,7 @@
             <div class="pad-edit-body">
 
                 <!-- Layout group (open by default) -->
-                <details class="editor-group" open>
+                <details class="editor-group" id="pad-edit-labels-section" open>
                     <summary>Layout</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
@@ -153,6 +153,7 @@
                                 <option value="rocker">Rocker</option>
                                 <option value="numericrocker">Numeric Rocker</option>
                                 <option value="list">List</option>
+                                <option value="external" id="pad-edit-external-widget-option" style="display:none;">Extension</option>
                             </select>
                         </div>
                         <div style="display:flex; gap:12px;">
@@ -164,6 +165,20 @@
                                 <label for="pad-edit-row-span">Row Span</label>
                                 <select id="pad-edit-row-span"></select>
                             </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="editor-group" id="pad-edit-extension-section" style="display:none;">
+                    <summary>Extension</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-extension-id">Installed Extension</label>
+                            <select id="pad-edit-extension-id"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-extension-config">Configuration</label>
+                            <textarea id="pad-edit-extension-config" rows="5" maxlength="511" spellcheck="false" placeholder="Optional JSON or text passed to the extension"></textarea>
                         </div>
                     </div>
                 </details>

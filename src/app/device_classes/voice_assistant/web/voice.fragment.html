@@ -1,0 +1,68 @@
+<div class="section-header">
+  <h2>Voice Assistant</h2>
+  <p>Configure Azure AI Foundry transcription and text-to-speech.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <h3 class="h5">Text-to-Speech</h3>
+    <div class="mb-3">
+      <label class="form-label" for="voice_tts_host">Azure AI Foundry host</label>
+      <input type="text" class="form-control" id="voice_tts_host" name="voice_tts_host" maxlength="127" placeholder="your-resource.services.ai.azure.com">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_tts_deployment">Speech deployment</label>
+      <input type="text" class="form-control" id="voice_tts_deployment" name="voice_tts_deployment" maxlength="63" placeholder="gpt-4o-mini-tts">
+    </div>
+    <div class="grid-2col">
+      <div class="mb-3">
+        <label class="form-label" for="voice_tts_voice">Default voice</label>
+        <input type="text" class="form-control" id="voice_tts_voice" name="voice_tts_voice" maxlength="7" value="alloy" placeholder="alloy">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="voice_tts_language">Speech language</label>
+        <input type="text" class="form-control" id="voice_tts_language" name="voice_tts_language" maxlength="2" pattern="[A-Za-z]{2}" placeholder="Optional">
+      </div>
+    </div>
+    <div class="form-text mb-3">Language is sent as a speech instruction. Leave it blank to use the deployment default language.</div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_tts_instructions">TTS instructions</label>
+      <input type="text" class="form-control" id="voice_tts_instructions" name="voice_tts_instructions" maxlength="160" placeholder="Optional Azure voice instructions">
+      <div class="form-text">Passed verbatim to Azure. For example: Speak in Belgian Dutch (Flemish) with a natural Belgian accent.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_tts_api_key">Azure API key</label>
+      <input type="password" class="form-control" id="voice_tts_api_key" name="voice_tts_api_key" maxlength="127" placeholder="Leave empty to keep current" autocomplete="new-password">
+      <div class="form-text">Stored on the device and never returned by the portal. Leave blank to keep the saved key.</div>
+    </div>
+    <div class="form-text mb-3" id="voice-tts-credentials-status"></div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="voice-tts-save-btn">Save Text-to-Speech Settings</button>
+    </div>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="voice_azure_host">Azure AI Foundry host</label>
+      <input type="text" class="form-control" id="voice_azure_host" name="voice_azure_host" maxlength="127" placeholder="your-resource.services.ai.azure.com">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_azure_model">Transcription deployment</label>
+      <input type="text" class="form-control" id="voice_azure_model" name="voice_azure_model" maxlength="63" placeholder="gpt-4o-transcribe">
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_azure_language">Transcription language</label>
+      <input type="text" class="form-control" id="voice_azure_language" name="voice_azure_language" maxlength="2" pattern="[A-Za-z]{2}" placeholder="Auto-detect">
+      <div class="form-text">Optional ISO 639-1 code, for example <code>en</code> or <code>nl</code>. Leave empty to let Azure auto-detect the language.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="voice_azure_api_key">Azure API key</label>
+      <input type="password" class="form-control" id="voice_azure_api_key" name="voice_azure_api_key" maxlength="127" placeholder="Leave empty to keep current" autocomplete="new-password">
+      <div class="form-text">Stored on the device and never returned by the portal. Leave blank to keep the saved key.</div>
+    </div>
+    <div class="form-text mb-3" id="voice-credentials-status"></div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-primary btn-sm" id="voice-save-btn">Save</button>
+    </div>
+  </div>
+</div>

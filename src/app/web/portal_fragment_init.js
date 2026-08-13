@@ -682,8 +682,8 @@ window.init_screensaver_fragment = function () {
 // Swipe Actions
 // ============================================================================
 
-window.init_swipe_actions_fragment = function () {
-    if (typeof swipeInitEditors === 'function') swipeInitEditors();
+window.init_swipe_actions_fragment = async function () {
+    if (typeof swipeInitEditors === 'function') await swipeInitEditors();
     if (typeof loadSwipeActions === 'function') loadSwipeActions();
     actionEditorWireFragment(SWIPE_DIRECTIONS);
 };
@@ -692,8 +692,8 @@ window.init_swipe_actions_fragment = function () {
 // Boot Actions
 // ============================================================================
 
-window.init_boot_actions_fragment = function () {
-    if (typeof bootActionsInitEditors === 'function') bootActionsInitEditors();
+window.init_boot_actions_fragment = async function () {
+    if (typeof bootActionsInitEditors === 'function') await bootActionsInitEditors();
     if (typeof loadBootActions === 'function') loadBootActions();
     actionEditorWireFragment(BOOT_ACTION_PREFIXES);
 };
@@ -718,8 +718,8 @@ window.init_mqtt_triggers_fragment = function () {
 // Timers
 // ============================================================================
 
-window.init_timers_fragment = function () {
-    if (typeof timerConfigInitEditors === 'function') timerConfigInitEditors();
+window.init_timers_fragment = async function () {
+    if (typeof timerConfigInitEditors === 'function') await timerConfigInitEditors();
     if (typeof loadTimerConfig === 'function') loadTimerConfig();
     actionEditorWireFragment(TIMER_EXPIRE_PREFIXES);
 };

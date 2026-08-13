@@ -10,11 +10,6 @@
     if (typeof _actionEditorExtensions === 'undefined') return;
 
     _actionEditorExtensions.push({
-        // Extra <option> for the type dropdown (always visible).
-        options: function () {
-            return '<option value="ha_service">Home Assistant Service</option>';
-        },
-
         // Form group HTML shown when ha_service is selected.
         groups: function (prefix) {
             var h = '';

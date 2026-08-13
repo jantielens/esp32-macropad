@@ -1,0 +1,13 @@
+# Custom partition table for 16MB ESP32-P4 boards with native Extensions.
+#
+# Two 6.25MB OTA slots are retained. A 256KB raw flash partition contains three
+# native Extension slots: two 56KB small slots and one 120KB large slot.
+#
+# Name,       Type, SubType, Offset,     Size,       Flags
+nvs,          data, nvs,      0x9000,     0x5000,
+otadata,      data, ota,      0xE000,     0x2000,
+app0,         app,  ota_0,    0x10000,    0x640000,
+app1,         app,  ota_1,    0x650000,   0x640000,
+extensions,   data, 0x40,     0xC90000,   0x40000,
+storage,      data, spiffs,  0xCD0000,   0x320000,
+coredump,     data, coredump,0xFF0000,   0x10000,

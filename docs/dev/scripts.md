@@ -147,6 +147,44 @@ python3 tools/png2lvgl_assets.py assets/png src/app/png_assets.cpp src/app/png_a
 
 ---
 
+## tools/build-p4-extension.sh
+
+**Purpose:** Build an ESP32-P4 native Extension as a position-independent
+RISC-V ELF and, when signing is configured, a single-file signed upload package.
+
+**Usage:**
+```bash
+bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
+
+# Discover and build every extension package into build/extensions/
+bash tools/build-p4-extensions.sh
+```
+
+**Requirements:** `setup.sh` must have installed the ESP32 Arduino platform.
+The script locates its bundled RISC-V compiler automatically; set
+`ESP32_P4_TOOLCHAIN_DIR` only to override that location.
+
+Name the development ELF using `<extension-id>@<package-semver>.elf`, for
+example `build/extensions/hello-world@1.0.0.elf`. With
+`EXTENSION_SIGNING_KEY` configured, the builder also creates
+`build/extensions/hello-world@1.0.0.ext`: the ELF followed by its 64-byte
+ECDSA P-256 signature. Upload the `.ext` file through the Extensions page to a
+chosen slot. The upload stages on storage and becomes active after the next boot
+installs it into executable flash.
+
+Each extension source exports a descriptor declaring its ID and package semver.
+Use those values in the output filename; the builder rejects a mismatch. The
+package guard discovers every descriptor-exporting source under `extensions/`
+and builds it automatically, so adding an extension requires no test or
+documentation list update. `build-p4-extensions.sh` uses the same discovery
+rule and accepts an optional output-directory argument. It signs packages by
+default with `.secrets/extension-signing-private.pem`, or uses the
+`EXTENSION_SIGNING_KEY` override, and fails when no signing key is available.
+The builder links the shared freestanding `memcpy`/`memset` runtime, derives
+ESP32-P4 ABI flags, and requires the descriptor and shutdown exports.
+
+---
+
 ## tools/generate-board-driver-table.py
 
 **Purpose:** Generate a markdown table mapping **board → selected display/touch backends → basic hardware**.

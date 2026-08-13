@@ -10,37 +10,15 @@
     if (typeof _actionEditorExtensions === 'undefined') return;
 
     _actionEditorExtensions.push({
-        // Extra <option> tags for the type dropdown
-        options: function() {
-            return '<option value="expose">Exposure Timer</option>'
-                 + '<option value="strip">Test Strip</option>'
-                 + '<option value="meter">Light Meter</option>'
-                 + '<option value="print">Print Log</option>'
-                 + '<option value="shelly">Shelly Relay</option>';
-        },
-
         // Extra form group HTML
         groups: function(prefix) {
             var h = '';
             // Expose timer control
             h += '<div id="' + prefix + '-expose-group" style="display:none;">';
             h += '<div class="form-group">';
-            h += '<label for="' + prefix + '-expose-action">Exposure Timer Action</label>';
+            h += '<label for="' + prefix + '-expose-action">Command</label>';
             h += '<select id="' + prefix + '-expose-action" onchange="_actionEditorDarkroomExposeChanged(\'' + prefix + '\')">';
-            h += '<option value="toggle">Toggle (Start/Pause/Resume)</option>';
-            h += '<option value="start">Start</option>';
-            h += '<option value="stop">Stop</option>';
-            h += '<option value="pause">Pause</option>';
-            h += '<option value="resume">Resume</option>';
-            h += '<option value="reset">Reset</option>';
-            h += '<option value="focus">Focus Light ON</option>';
-            h += '<option value="focus_off">Focus Light OFF</option>';
-            h += '<option value="focus_toggle">Focus Light Toggle</option>';
-            h += '<option value="set_time">Set Time</option>';
-            h += '<option value="adjust_seconds">Adjust Seconds</option>';
-            h += '<option value="adjust_stops">Adjust F-Stops</option>';
-            h += '<option value="set_dry_down">Set Dry-Down %</option>';
-            h += '<option value="adjust_dry_down">Adjust Dry-Down %</option>';
+            h += actionEditorCommandOptionsHTML('expose');
             h += '</select>';
             h += '</div>';
             h += '<div class="form-group" id="' + prefix + '-expose-value-group" style="display:none;">';
@@ -52,21 +30,9 @@
             // Test strip control
             h += '<div id="' + prefix + '-strip-group" style="display:none;">';
             h += '<div class="form-group">';
-            h += '<label for="' + prefix + '-strip-action">Test Strip Action</label>';
+            h += '<label for="' + prefix + '-strip-action">Command</label>';
             h += '<select id="' + prefix + '-strip-action" onchange="_actionEditorDarkroomStripChanged(\'' + prefix + '\')">';
-            h += '<option value="start">Start Sequence</option>';
-            h += '<option value="cancel">Cancel Sequence</option>';
-            h += '<option value="set_base">Set Base Time</option>';
-            h += '<option value="adjust_base">Adjust Base Time</option>';
-            h += '<option value="step_up">Step Interval Up</option>';
-            h += '<option value="step_down">Step Interval Down</option>';
-            h += '<option value="adjust_segments">Adjust Segments</option>';
-            h += '<option value="set_segments">Set Segments</option>';
-            h += '<option value="set_countdown">Set Initial Countdown</option>';
-            h += '<option value="adjust_countdown">Adjust Initial Countdown</option>';
-            h += '<option value="set_pause">Set Pause Duration</option>';
-            h += '<option value="adjust_pause">Adjust Pause Duration</option>';
-            h += '<option value="set_tick">Set Exposure Tick</option>';
+            h += actionEditorCommandOptionsHTML('strip');
             h += '</select>';
             h += '</div>';
             h += '<div class="form-group" id="' + prefix + '-strip-value-group" style="display:none;">';
@@ -78,18 +44,9 @@
             // Light meter control
             h += '<div id="' + prefix + '-meter-group" style="display:none;">';
             h += '<div class="form-group">';
-            h += '<label for="' + prefix + '-meter-action">Meter Action</label>';
+            h += '<label for="' + prefix + '-meter-action">Command</label>';
             h += '<select id="' + prefix + '-meter-action" onchange="_actionEditorDarkroomMeterChanged(\'' + prefix + '\')">'; 
-            h += '<option value="read_lref">Read Lref (bare-bulb)</option>';
-            h += '<option value="read_bright">Read Bright Spot</option>';
-            h += '<option value="read_dark">Read Dark Spot</option>';
-            h += '<option value="set_lref">Set Lref</option>';
-            h += '<option value="adjust_lref">Adjust Lref</option>';
-            h += '<option value="set_zone5">Set Zone V Time</option>';
-            h += '<option value="adjust_zone5">Adjust Zone V Time</option>';
-            h += '<option value="mag_measure_a">Measure Mag A (original height)</option>';
-            h += '<option value="mag_measure_b">Measure Mag B (new height)</option>';
-            h += '<option value="mag_clear">Clear Mag Compensation</option>';
+            h += actionEditorCommandOptionsHTML('meter');
             h += '</select>';
             h += '</div>';
             h += '<div class="form-group" id="' + prefix + '-meter-value-group" style="display:none;">';
@@ -101,10 +58,9 @@
             // Print log control
             h += '<div id="' + prefix + '-print-group" style="display:none;">';
             h += '<div class="form-group">';
-            h += '<label for="' + prefix + '-print-action">Print Log Action</label>';
+            h += '<label for="' + prefix + '-print-action">Command</label>';
             h += '<select id="' + prefix + '-print-action" onchange="_actionEditorDarkroomPrintChanged(\'' + prefix + '\')">'; 
-            h += '<option value="toggle_star">Toggle Star</option>';
-            h += '<option value="set_star">Set Star</option>';
+            h += actionEditorCommandOptionsHTML('print');
             h += '</select>';
             h += '</div>';
             h += '<div class="form-group" id="' + prefix + '-print-value-group" style="display:none;">';

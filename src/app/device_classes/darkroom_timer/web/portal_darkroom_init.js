@@ -24,9 +24,12 @@ const RELAY_SLOT_LABELS = {
     'relay-safelight-off': 'Safelight OFF'
 };
 
-function relayConfigInitEditors() {
+async function relayConfigInitEditors() {
     var container = document.getElementById('relay-config-editors');
     if (!container) return;
+    // The action-type picker renders from the firmware catalog cached on
+    // deviceInfoCache; wait for it before building any action editor markup.
+    await getDeviceInfo();
     var html = '';
     RELAY_SLOT_PREFIXES.forEach(function(prefix) {
         html += '<details class="editor-group" id="' + prefix + '-group">';
@@ -77,17 +80,18 @@ async function saveRelayConfig() {
 // Darkroom / Relay Config fragment
 // ============================================================================
 
-window.init_darkroom_fragment = function () {
-    if (typeof relayConfigInitEditors === 'function') relayConfigInitEditors();
+window.init_darkroom_fragment = async function () {
+    if (typeof relayConfigInitEditors === 'function') await relayConfigInitEditors();
     if (typeof loadRelayConfig === 'function') loadRelayConfig();
 
-    // Populate screen options for relay action slots
-    fetch('/api/info').then(function (r) { return r.ok ? r.json() : {}; })
-        .then(function (version) {
-            if (typeof actionEditorPopulateScreens === 'function' && typeof RELAY_SLOT_PREFIXES !== 'undefined') {
-                actionEditorPopulateScreens(RELAY_SLOT_PREFIXES, version.available_screens || []);
-            }
-        }).catch(function () {});
+    // Populate screen options for relay action slots. getDeviceInfo() is
+    // cached (relayConfigInitEditors already awaited it above), so this
+    // resolves immediately without a second network request.
+    getDeviceInfo().then(function (version) {
+        if (typeof actionEditorPopulateScreens === 'function' && typeof RELAY_SLOT_PREFIXES !== 'undefined') {
+            actionEditorPopulateScreens(RELAY_SLOT_PREFIXES, (version && version.available_screens) || []);
+        }
+    });
 
     // Populate sound options for relay action slots
     fetch('/api/sounds/list').then(function (r) { return r.ok ? r.json() : []; })

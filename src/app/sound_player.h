@@ -30,6 +30,11 @@ SoundPlayer* sound_player_begin_path(AudioOutputDriver* output_driver,
                                      SoundPlayerPcmTransform transform = nullptr,
                                      void* transform_context = nullptr);
 
+// Open an in-memory MP3. The caller retains the buffer and must release it
+// after closing the returned session.
+SoundPlayer* sound_player_begin_memory(AudioOutputDriver* output_driver,
+                                                                             const uint8_t* data, size_t size);
+
 // Decode and emit at most one MP3 frame through the supplied session.
 SoundPlayerStepResult sound_player_step(SoundPlayer* player);
 
@@ -50,6 +55,10 @@ void sound_player_close(SoundPlayer* player);
 // Returns true on success.
 bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
                        volatile bool* stop_flag);
+bool sound_player_play_memory(AudioOutputDriver* output_driver, const uint8_t* data,
+                              size_t size, volatile bool* stop_flag,
+                              bool (*guard)(uint32_t) = nullptr,
+                              uint32_t generation = 0);
 
 #ifdef __cplusplus
 #endif

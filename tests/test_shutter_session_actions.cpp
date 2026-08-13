@@ -19,7 +19,10 @@
 #include <ArduinoJson.h>
 #include "pad_config.h"
 #include "action_parse.h"
+#include "action_registry.h"
 #include "shutter_session_actions.h"
+
+extern "C" unsigned long millis() { return 0; }
 
 static int g_pass = 0;
 static int g_fail = 0;

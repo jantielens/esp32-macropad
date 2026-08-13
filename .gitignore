@@ -44,3 +44,6 @@ __pycache__/
 
 # Copilot tracking files (HVE Core)
 .copilot-tracking
+
+# Native extension signing credentials
+.secrets/

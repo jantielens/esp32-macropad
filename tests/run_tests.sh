@@ -112,7 +112,8 @@ echo
 echo "=== Building integration tests: expr_binding ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_expr_binding.cpp \
     src/app/binding_template.cpp \
     src/app/expr_eval.cpp \
@@ -154,6 +155,46 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 
 echo "=== Running unit tests: music command ==="
 ./tests/bin/test_music_command
+echo
+
+echo "=== Building unit tests: Voice Assistant WAV ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_voice_wav.cpp src/app/device_classes/voice_assistant/voice_wav.cpp \
+    -o tests/bin/test_voice_wav
+
+echo "=== Running unit tests: Voice Assistant WAV ==="
+./tests/bin/test_voice_wav
+echo
+
+echo "=== Building unit tests: Voice Assistant transcription request ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_voice_transcription_request.cpp src/app/device_classes/voice_assistant/voice_transcription_request.cpp \
+    -o tests/bin/test_voice_transcription_request
+
+echo "=== Running unit tests: Voice Assistant transcription request ==="
+./tests/bin/test_voice_transcription_request
+echo
+
+echo "=== Building unit tests: Voice Assistant TTS request ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_voice_tts_request.cpp src/app/device_classes/voice_assistant/voice_tts_request.cpp \
+    -o tests/bin/test_voice_tts_request
+
+echo "=== Running unit tests: Voice Assistant TTS request ==="
+./tests/bin/test_voice_tts_request
+echo
+
+echo "=== Building unit tests: Voice Assistant auto-stop ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_voice_auto_stop.cpp src/app/device_classes/voice_assistant/voice_auto_stop.cpp \
+    -o tests/bin/test_voice_auto_stop
+
+echo "=== Running unit tests: Voice Assistant auto-stop ==="
+./tests/bin/test_voice_auto_stop
 echo
 
 echo "=== Building unit tests: MP3 metadata ==="
@@ -256,6 +297,7 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -I ~/Arduino/libraries/lvgl/src \
     tests/test_pad_confirmation.cpp \
     src/app/pad_validate.cpp \
+    src/app/action_validate.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_pad_confirmation
 
@@ -358,11 +400,14 @@ echo
 echo "=== Building unit tests: action_parse ==="
 g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app \
+    -I tests -I src/app \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_parse.cpp \
+    src/app/actions.cpp \
+    src/app/music_command.cpp \
     src/app/action_parse.cpp \
     src/app/action_list.cpp \
+    src/app/action_continuation.cpp \
     src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \
@@ -371,6 +416,20 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
 
 echo "=== Running unit tests: action_parse ==="
 ./tests/bin/test_action_parse
+echo
+
+echo "=== Building unit tests: action continuation ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I tests -I src/app -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_action_continuation.cpp \
+    src/app/action_list.cpp \
+    src/app/action_continuation.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_action_continuation
+
+echo "=== Running unit tests: action continuation ==="
+./tests/bin/test_action_continuation
 echo
 
 echo "=== Building unit tests: pad_cycle ==="
@@ -413,10 +472,13 @@ echo
 echo "=== Building unit tests: shutter_session_actions ==="
 g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app -I src/app/device_classes/shutter_tester \
+    -I tests -I src/app -I src/app/device_classes/shutter_tester \
     -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_shutter_session_actions.cpp \
+    src/app/actions.cpp \
+    src/app/music_command.cpp \
     src/app/action_parse.cpp \
+    src/app/action_continuation.cpp \
     src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     src/app/binding_template.cpp \
@@ -479,7 +541,10 @@ g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
     tests/test_timer_config.cpp \
     src/app/timer_config.cpp \
     src/app/config_psram.cpp \
+    src/app/actions.cpp \
+    src/app/music_command.cpp \
     src/app/action_parse.cpp \
+    src/app/action_continuation.cpp \
     src/app/pad_cycle.cpp \
     src/app/action_registry.cpp \
     tests/stubs.cpp \
@@ -494,9 +559,12 @@ echo
 echo "=== Running unit tests: timer_action_editor ==="
 node tests/test_timer_action_editor.js
 node tests/test_portal_action_editor_cycle.js
+node tests/test_portal_action_picker.js
+node tests/test_portal_action_list.js
 node tests/test_portal_timer_binding.js
 node tests/test_portal_pad_dialog_transaction.js
 node tests/test_portal_pad_import.js
+node tests/test_portal_pad_dirty.js
 python3 tests/test_timer_mcp_integration.py
 node --check src/app/web/portal_action_editor.js
 node --check src/app/web/portal_binding_validator.js
@@ -505,11 +573,20 @@ node --check src/app/web/portal_config_actions.js
 echo
 
 echo "=== Building unit tests: action_bindings ==="
-g++ -std=c++17 -Wall -Wextra -Werror \
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -DHAS_AUDIO=1 -DHAS_SOUND_PLAYER=1 \
     -include tests/log_manager.h -include tests/board_config.h \
-    -I src/app \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
     tests/test_action_bindings.cpp \
+    src/app/actions.cpp \
+    src/app/music_command.cpp \
+    src/app/action_parse.cpp \
+    src/app/action_list.cpp \
+    src/app/action_continuation.cpp \
+    src/app/action_registry.cpp \
     src/app/binding_template.cpp \
+    src/app/pad_cycle.cpp \
     tests/stubs.cpp \
     -o tests/bin/test_action_bindings -lm
 
@@ -838,6 +915,10 @@ echo
 
 echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="
 ./tests/test_mcp_scheme_parity.sh
+echo
+
+echo "=== Running guard: action catalog completeness ==="
+./tests/test_action_catalog_completeness.sh
 echo
 
 echo "=== Running guard: MCP storage browser parity ==="

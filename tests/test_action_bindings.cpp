@@ -2,9 +2,8 @@
 // Unit tests for action binding resolution — verifies that binding template
 // resolution works correctly on ButtonAction value fields
 // ============================================================================
-// Host-native: tests the binding engine behavior on action-field-sized buffers.
-// Exercises the same resolve pattern used by resolve_action_bindings() in
-// action_dispatch.cpp without requiring ESP32-specific headers.
+// Host-native: tests the binding engine behavior on action-field-sized buffers
+// through the production built-in action registry.
 //
 // ButtonAction is a discriminated union; each test sets exactly one arm
 // (selected by `act.type`) before invoking the type-dispatched resolver.
@@ -15,6 +14,13 @@
 #include "binding_template.h"
 #include "action_dispatch.h"
 #include "pad_config.h"
+#include "action_registry.h"
+
+ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
+    return ACTION_COMPLETE;
+}
+
+extern "C" unsigned long millis() { return 0; }
 
 // ---------------------------------------------------------------------------
 // Mock resolvers
@@ -41,39 +47,8 @@ static void mock_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
-// ---------------------------------------------------------------------------
-// Type-dispatched resolver — mirrors action_dispatch.cpp::resolve_action_bindings
-// ---------------------------------------------------------------------------
 static bool resolve_action_bindings(ButtonAction& act) {
-    if (strcmp(act.type, ACTION_TYPE_SCREEN) == 0) {
-        action_resolve_binding_field(act.payload.screen.screen_id, sizeof(act.payload.screen.screen_id));
-    } else if (strcmp(act.type, ACTION_TYPE_MQTT) == 0) {
-        action_resolve_binding_field(act.payload.mqtt.mqtt_topic,   sizeof(act.payload.mqtt.mqtt_topic));
-        action_resolve_binding_field(act.payload.mqtt.mqtt_payload, sizeof(act.payload.mqtt.mqtt_payload));
-    } else if (strcmp(act.type, ACTION_TYPE_KEY) == 0) {
-        action_resolve_binding_field(act.payload.key.key_sequence, sizeof(act.payload.key.key_sequence));
-    } else if (strcmp(act.type, ACTION_TYPE_SOUND_ALERT) == 0 &&
-               strcmp(act.payload.sound_alert.sound_alert_kind, "tone") == 0) {
-        action_resolve_binding_field(act.payload.sound_alert.sound_alert_pattern,
-                                     sizeof(act.payload.sound_alert.sound_alert_pattern));
-    } else if (strcmp(act.type, ACTION_TYPE_VOLUME) == 0) {
-        action_resolve_binding_field(act.payload.volume.volume_value, sizeof(act.payload.volume.volume_value));
-    } else if (strcmp(act.type, ACTION_TYPE_BRIGHTNESS) == 0) {
-        action_resolve_binding_field(act.payload.brightness.brightness_value, sizeof(act.payload.brightness.brightness_value));
-    } else if (strcmp(act.type, ACTION_TYPE_TIMER) == 0) {
-        if (!action_resolve_binding_field(act.payload.timer.timer_value,
-                          sizeof(act.payload.timer.timer_value), true)) return false;
-    } else if (strcmp(act.type, ACTION_TYPE_NOTIFY) == 0) {
-        action_resolve_binding_field(act.payload.notify.notify_text,         sizeof(act.payload.notify.notify_text));
-        action_resolve_binding_field(act.payload.notify.notify_duration_ms,  sizeof(act.payload.notify.notify_duration_ms));
-        action_resolve_binding_field(act.payload.notify.notify_text_color,   sizeof(act.payload.notify.notify_text_color));
-        action_resolve_binding_field(act.payload.notify.notify_bg_color,     sizeof(act.payload.notify.notify_bg_color));
-        action_resolve_binding_field(act.payload.notify.notify_border_color, sizeof(act.payload.notify.notify_border_color));
-    } else if (strcmp(act.type, ACTION_TYPE_VISUAL_ALERT) == 0) {
-        action_resolve_binding_field(act.payload.visual_alert.va_color, sizeof(act.payload.visual_alert.va_color));
-    }
-    // sound, system, back, ble_pair: no bindable fields today.
-    return true;
+    return action_type_resolve_bindings(action_type_find(act.type), act);
 }
 
 // ---------------------------------------------------------------------------

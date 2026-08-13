@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-08-06
+ms.date: 2026-08-12
 ms.topic: reference
 ---
 
@@ -13,6 +13,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.25.0] - 2026-08-12
+
+### Added
+
+* **Native Extensions for ESP32-P4 boards**: ESP32-P4 builds now reserve two 56 KiB small slots and one 120 KiB large slot for trusted, flash-mapped RISC-V Extensions. The Device portal includes an Extensions manager with slot-specific upload, replacement, enable/disable, deletion, staging, reboot-pending, and ABI-incompatibility status. Each package is a signed `id@version.ext` upload file containing a relocation-free RISC-V ELF plus a 64-byte ECDSA P-256 signature. Firmware accepts only packages signed by the embedded first-party public key, verifies them at staging, installation, and load time, and rejects unsigned or modified code. The Pad editor's Extension widget selects an enabled package, passes up to 511 bytes of per-button configuration, marks Extension buttons with `EXT`, and lets the package handle or pass through tap and long-press events. Extensions can run one cooperative worker per package and resolve live binding templates in their own pad context, including named `[pad:]` bindings. The GitHub Pages installer catalogs the latest stable packages with a summary, configuration usage, and a direct `.ext` download. Developer samples and [the Extension guide](docs/dev/extensions.md) document the versioned host ABI, package signing, flash-mapping constraints, and lifecycle callbacks.
+* **Voice Assistant device class**: `esp32-p4-lcd4b-voice` captures microphone audio and sends bounded 16 kHz WAV recordings to an Azure AI Foundry transcription deployment. Voice actions support manual recording, one-tap recording until detected trailing silence, manual stop, and recording cancellation; `[stt:status]` and `[stt:text]` bindings make the result available to follow-up actions such as MQTT Publish. Automatic capture exposes per-action trailing-silence and microphone-RMS threshold settings. Transcription has a fixed 30-second deadline, below the 60-second action-continuation limit, does not retry automatically, and reports provider timeouts as `Azure request timed out`. The Voice Assistant portal page stores the Azure host, deployment, optional ISO language, and write-only API key in NVS.
+* **Azure Text-to-Speech for Voice Assistant**: the Voice Assistant portal now stores separate Azure TTS host, deployment, API key, optional two-letter language, optional verbatim Azure instructions, and default `alloy` voice settings. The new Speak text action accepts bindable text plus optional voice and volume overrides, requests MP3 audio from an Azure `gpt-4o-mini-tts` deployment, and plays it directly from a bounded PSRAM buffer. New requests stop current speech and prevent stale downloads from playing later.
+* **Ordered action continuations and Delay action**: action arrays can now pause for an asynchronous action and resume their remaining actions on the normal dispatch task without blocking the device UI or main loop. The first built-in consumer is **Delay**, which waits for a required whole-number duration from 1 to 55,000 ms before continuing the current list. Up to three pausable actions can be pending device-wide at a time by default; another pausable action stops its action list and logs a clear warning when all continuation slots are occupied.
+* **Microphone input abstraction and ESP32-P4 driver**: audio-input boards now expose a board-neutral API for one-task-at-a-time capture of native interleaved PCM frames. The `esp32-p4-lcd4b` target enables the ES7210 microphone ADC through the existing ES8311 I2S transport, starting RX only while a caller owns a capture session. The abstraction leaves recording, encoding, storage, and network delivery to its callers.
+* **Demand-driven microphone level bindings**: audio-input display boards now expose read-only `[audio:input.rms]` and `[audio:input.peak]` bindings as 0-100 sound levels, plus `[audio:input.active]` to report whether the microphone meter is currently sampling. Sampling starts only while one of these bindings is resolving on a visible button, so boards and pads that do not use the feature do not spend I2S or CPU time on microphone reads.
+
+### Changed
+
+* **ESP32-C3 sensor target omits runtime hardware-button actions**: `esp32c3-withsensors` retains GPIO9 boot-hold configuration mode but no longer includes configurable tap/hold actions, MQTT-triggered action chains, or their portal and MCP controls, keeping its firmware within the 2 MB OTA application partition.
+* **Action modules now own their full contracts**: each built-in action keeps its parse, serialization, dispatch, availability, validation, binding traversal, and portal/MCP catalog metadata together in one self-registering module. The action registry now routes all shared consumers, while device-class actions remain compiled only through their owning class aggregators.
+* **Action editor UX is now consistent across the portal and MCP**: actions are organized into catalog-driven groups such as Navigation, Connectivity, Audio, Display, Timer, and Device, with sentence-case type and command labels. Multi-command actions expose their commands from the firmware catalog, device-class actions use the same metadata path, and Shutter Tester actions are organized by command family. Action arrays now use three fixed ordered slots with contextual labels such as **Action 1**, **Left action 1**, or **Select action 1**; empty slots collapse to **Add action** and are omitted when saved. Existing persisted action types, fields, and JSON remain unchanged, including round-tripping actions unavailable in the current build. The same catalog also supplies concrete field metadata to MCP clients, while `GET /api/info?catalog=1` supplies the portal projection.
+
+### Fixed
+
+* **Action configuration validation and controls now follow the registered action contract**: pad and component configuration rejects unsupported actions, action-specific invalid data, and invalid binding schemes consistently. Brightness, Volume, Device command, and Music again expose their command and value controls in the portal action editor.
 
 ## [1.24.0] - 2026-08-06
 

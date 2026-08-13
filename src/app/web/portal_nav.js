@@ -15,6 +15,7 @@
   var itemMap = {};       // itemId → { cat, item }
   var currentItem = null;
   var activeFetchController = null;
+  var fragmentLoadGeneration = 0;
   var backdropEl = null;
 
   // ---------- Utility ----------
@@ -131,16 +132,18 @@
   function loadFragment(itemId) {
     if (currentItem === itemId) return;
     currentItem = itemId;
+    var loadGeneration = ++fragmentLoadGeneration;
     setActive(itemId);
     expandCategoryFor(itemId);
 
     // Cancel any in-flight fetch
     if (activeFetchController) activeFetchController.abort();
-    activeFetchController = new AbortController();
-    var signal = activeFetchController.signal;
+    var fetchController = new AbortController();
+    activeFetchController = fetchController;
+    var signal = fetchController.signal;
 
     var timeoutId = setTimeout(function () {
-      activeFetchController.abort();
+      fetchController.abort();
     }, FETCH_TIMEOUT_MS);
 
     // Show loading
@@ -161,10 +164,14 @@
         return res.text();
       })
       .then(function (html) {
+        if (loadGeneration !== fragmentLoadGeneration) return;
         contentEl.innerHTML = html;
         // Convention-based fragment init
         var initFn = window['init_' + itemId.replace(/-/g, '_') + '_fragment'];
-        if (typeof initFn === 'function') initFn();
+        return typeof initFn === 'function' ? Promise.resolve(initFn()) : null;
+      })
+      .then(function () {
+        if (loadGeneration !== fragmentLoadGeneration) return;
         // Replace native <select> popups with themed custom dropdowns.
         // Runs after init so any selects added by initFn are also enhanced.
         // The MutationObserver inside dropdownEnhance keeps the UI in sync
@@ -174,6 +181,7 @@
         }
       })
       .catch(function (err) {
+        if (loadGeneration !== fragmentLoadGeneration) return;
         clearTimeout(timeoutId);
         if (err.name === 'AbortError') {
           showError('Request timed out', itemId);

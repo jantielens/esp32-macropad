@@ -44,12 +44,38 @@ const char* binding_template_validate_params(const char* scheme, size_t name_len
     return nullptr;
 }
 
+static void parse_registered_test(const JsonObject& action, ButtonAction& parsed) {
+    strlcpy(parsed.payload.mqtt.mqtt_topic, action["value"] | "",
+            sizeof(parsed.payload.mqtt.mqtt_topic));
+}
+
+static bool visit_registered_test_fields(ButtonAction& parsed,
+                                         ActionBindableFieldVisitor visitor, void* context) {
+    return visitor(parsed.payload.mqtt.mqtt_topic, sizeof(parsed.payload.mqtt.mqtt_topic),
+                   false, context);
+}
+
+static const ActionTypeDef registered_type = {
+    "registered_test", parse_registered_test, nullptr, nullptr, nullptr, nullptr,
+    nullptr, nullptr, visit_registered_test_fields
+};
+
 const ActionTypeDef* action_type_find(const char* type) {
-    static const ActionTypeDef registered_type = {
-        "registered_test", nullptr, nullptr, nullptr, nullptr, nullptr
-    };
     if (type && std::strcmp(type, registered_type.type_name) == 0) return &registered_type;
     return nullptr;
+}
+
+bool action_type_is_supported(const char* type) {
+    return action_type_find(type) != nullptr;
+}
+
+const char* action_type_validate(const ActionTypeDef*, JsonObjectConst) {
+    return nullptr;
+}
+
+bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& action,
+                                       ActionBindableFieldVisitor visitor, void* context) {
+    return def && def->binding_fields && def->binding_fields(action, visitor, context);
 }
 
 static JsonObject make_button(JsonDocument& doc) {
@@ -63,6 +89,15 @@ static JsonObject make_button(JsonDocument& doc) {
 
 int main() {
     std::printf("=== pad confirmation validation tests ===\n");
+
+    {
+        JsonDocument doc;
+        JsonObject button = make_button(doc);
+        JsonObject action = button["actions"].to<JsonArray>().add<JsonObject>();
+        action["type"] = "registered_test";
+        action["value"] = "[unknown:value]";
+        CHECK(pad_validate(doc.as<JsonObjectConst>()) != nullptr);
+    }
 
     {
         JsonDocument doc;

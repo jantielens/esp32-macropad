@@ -1556,6 +1556,19 @@ body {
 .editor-group[open] > summary::before { transform: rotate(90deg); }
 .editor-group-body { padding: 0 14px 14px; }
 
+/* Small sub-heading separating action groups within a host (e.g. Tap vs
+   Hold actions, or On Expire actions) — deliberately much smaller than a
+   normal <h4> so it doesn't compete visually with the editor-group summary. */
+.action-group-heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--portal-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 14px 0 6px;
+}
+.action-group-heading:first-child { margin-top: 0; }
+
 /* Color picker popover */
 .color-popover {
   position: fixed; z-index: 10001;
@@ -2028,6 +2041,19 @@ input[type="text"].label-style-input {
   display: block;
 }
 
+.cdd-group-label {
+  padding: 0.35rem 0.6rem;
+  margin: 2px 0;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--portal-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--portal-editor-nested-bg);
+  pointer-events: none;
+}
+
 .cdd-item {
   display: block;
   width: 100%;
@@ -2039,6 +2065,10 @@ input[type="text"].label-style-input {
   border-radius: 5px;
   text-align: left;
   cursor: pointer;
+}
+
+.cdd-item-grouped {
+  padding-left: 1.1rem;
 }
 
 .cdd-item:hover:not(.cdd-disabled) {

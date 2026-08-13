@@ -83,3 +83,8 @@ After adding or changing partition schemes, run:
 ## Operational note
 
 After changing the partition table, the **first flash should be done over serial (USB)**. OTA updates will work normally afterwards once the correct partition table is on the device.
+
+The `ota_6mb_16MB_ext` and `ota_8mb_32MB_ext` schemes reserve a 256 KiB raw
+`extensions` partition for flash-mapped native Extension packages. All
+ESP32-P4 targets use an extension-aware partition scheme and require a serial
+flash when migrating from the corresponding non-extension partition table.

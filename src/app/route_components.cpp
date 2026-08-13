@@ -13,7 +13,12 @@
 // aggregation lives in portal_components.cpp, widgets.cpp, etc.
 // ============================================================================
 
+#include <Arduino.h>
 #include "board_config.h"
+
+#if HAS_NATIVE_EXTENSIONS
+#include "components/web_portal_native_extensions.cpp"
+#endif
 
 #if HAS_SOUND_PLAYER
 #include "components/web_portal_music.cpp"

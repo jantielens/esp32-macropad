@@ -10,8 +10,6 @@
 
 // ===== PAD CONFIGURATION =====
 
-const MAX_ACTIONS = 3; // Must match MAX_BUTTON_ACTIONS in pad_config.h
-
 const padState = {
     page: 0,
     rawJson: null,   // Original GET response (for merge-on-save)
@@ -34,7 +32,8 @@ const padState = {
 
 let padDirty = false;
 
-function padMarkDirty() {
+function padMarkDirty(event) {
+    if (event && event.isTrusted === false) return;
     padDirty = true;
 }
 
@@ -45,53 +44,42 @@ function padClearDirty() {
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
 const DEVICE_CONFIG_VERSION = 1;
 
-function padInit() {
+async function padInit() {
     const section = document.getElementById('pad-config-section');
     if (!section) return;
 
-    // Generate action editor HTML from shared module — up to 3 sequential actions per gesture.
-    // Slots 2 and 3 start hidden (progressive disclosure via "+ Add" link).
+    // The action-type picker renders from the firmware catalog cached on
+    // deviceInfoCache; wait for it before building any action editor markup
+    // so the picker is complete and correct on first paint.
+    await getDeviceInfo();
+
+    const nativeExtensions = deviceInfoCache && deviceInfoCache.has_native_extensions === true;
+    const externalWidgetOption = document.getElementById('pad-edit-external-widget-option');
+    if (externalWidgetOption) externalWidgetOption.style.display = nativeExtensions ? '' : 'none';
+    if (nativeExtensions && typeof extensionFetchSlots === 'function') {
+        try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
+    }
+
+    // Generate action editor HTML from shared module — three fixed action
+    // slots per gesture. An unused slot collapses as its own "Add ..."
+    // placeholder; labels are set here for the non-widget default and
+    // re-applied by padWidgetTypeChanged() for rocker/list widgets.
     const aeContainer = document.getElementById('pad-action-editors');
     if (aeContainer) {
-        var tapHtml = '';
-        var lpHtml = '';
         var aeOpts = { showBleHint: true, showKeyHelp: true };
-        for (var ai = 0; ai < MAX_ACTIONS; ai++) {
-            var tapPfx = 'pad-edit-action-' + ai;
-            var lpPfx = 'pad-edit-lp-action-' + ai;
-            var tapLabel = ai === 0 ? 'Tap Action' : 'Tap Action ' + (ai + 1);
-            var lpLabel = ai === 0 ? 'Long-Press Action' : 'Long-Press Action ' + (ai + 1);
-            var hidden = ai > 0 ? ' style="display:none"' : '';
-            tapHtml += '<div id="' + tapPfx + '-wrap"' + hidden + '>';
-            if (ai > 0) tapHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveAction(\'tap\',' + ai + ')">&times; Remove</a></div>';
-            tapHtml += actionEditorHTML(tapPfx, tapLabel, aeOpts);
-            tapHtml += '</div>';
-            lpHtml += '<div id="' + lpPfx + '-wrap"' + hidden + '>';
-            if (ai > 0) lpHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveAction(\'lp\',' + ai + ')">&times; Remove</a></div>';
-            lpHtml += actionEditorHTML(lpPfx, lpLabel, aeOpts);
-            lpHtml += '</div>';
-        }
-        tapHtml += '<a id="pad-add-tap-action" class="action-add-link" onclick="padAddAction(\'tap\')">+ Add tap action</a>';
-        lpHtml += '<a id="pad-add-lp-action" class="action-add-link" onclick="padAddAction(\'lp\')">+ Add long-press action</a>';
-        aeContainer.innerHTML = tapHtml +
-            '<hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">' +
-            lpHtml;
+        aeContainer.innerHTML =
+            '<div class="action-group-heading">Tap actions</div>' +
+            '<div id="pad-edit-tap-actions"></div>' +
+            '<div class="action-group-heading" id="pad-edit-lp-heading">Long-press actions</div>' +
+            '<div id="pad-edit-lp-actions"></div>';
+        actionEditorListRender('pad-edit-tap-actions', padActionPrefixes('tap'), padDefaultActionLabels('Tap action'), { actionOptions: aeOpts });
+        actionEditorListRender('pad-edit-lp-actions', padActionPrefixes('lp'), padDefaultActionLabels('Long-press action'), { actionOptions: aeOpts });
     }
 
     const padActionContainer = document.getElementById('pad-level-action-editors');
     if (padActionContainer) {
-        var padActionHtml = '';
-        for (var pai = 0; pai < MAX_ACTIONS; pai++) {
-            var padActionPfx = 'pad-level-action-' + pai;
-            var padActionLabel = pai === 0 ? 'Tap Action' : 'Tap Action ' + (pai + 1);
-            var padActionHidden = pai > 0 ? ' style="display:none"' : '';
-            padActionHtml += '<div id="' + padActionPfx + '-wrap"' + padActionHidden + '>';
-            if (pai > 0) padActionHtml += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;"><span></span><a class="action-remove-link" onclick="padRemoveLevelAction(' + pai + ')">&times; Remove</a></div>';
-            padActionHtml += actionEditorHTML(padActionPfx, padActionLabel, { showBleHint: true, showKeyHelp: true });
-            padActionHtml += '</div>';
-        }
-        padActionHtml += '<a id="pad-add-level-action" class="action-add-link" onclick="padAddLevelAction()">+ Add tap action</a>';
-        padActionContainer.innerHTML = padActionHtml;
+        actionEditorListRender('pad-level-action-editors', padLevelActionPrefixes(), padDefaultActionLabels('Tap action'),
+            { actionOptions: { showBleHint: true, showKeyHelp: true } });
         padActionContainer.addEventListener('input', padMarkDirty);
         padActionContainer.addEventListener('change', padMarkDirty);
     }
@@ -209,89 +197,56 @@ function padInit() {
         }
     });
 
-    // Wait for deviceInfoCache to be ready, then show section + load
-    const waitForInfo = () => {
-        if (deviceInfoCache) {
-            if (deviceInfoCache.has_display === true) {
-                section.style.display = 'block';
-                const padFooter = document.getElementById('pad-floating-footer');
-                if (padFooter) padFooter.style.display = '';
-                // Show button defaults section
-                var btnDefSec = document.getElementById('btn-defaults-section');
-                if (btnDefSec) btnDefSec.style.display = 'block';
-                padPopulateGridDropdowns();
-                padPopulatePadDropdown();
-                padPopulateScreenDropdown();
-                padFetchSoundList();
-                padLoadButtonDefaultsFromDevice();
-                padLoadPage(0);
-                padLoadBlockCatalog();
-                padRefreshDropdownLabels();
-            } else {
-                const noDisp = document.getElementById('pad-no-display-section');
-                if (noDisp) noDisp.style.display = 'block';
-            }
-        } else {
-            setTimeout(waitForInfo, 200);
-        }
-    };
-    waitForInfo();
+    // deviceInfoCache is already populated (awaited at the top of padInit).
+    if (deviceInfoCache.has_display === true) {
+        section.style.display = 'block';
+        const padFooter = document.getElementById('pad-floating-footer');
+        if (padFooter) padFooter.style.display = '';
+        // Show button defaults section
+        var btnDefSec = document.getElementById('btn-defaults-section');
+        if (btnDefSec) btnDefSec.style.display = 'block';
+        padPopulateGridDropdowns();
+        padPopulatePadDropdown();
+        padPopulateScreenDropdown();
+        padFetchSoundList();
+        padLoadButtonDefaultsFromDevice();
+        padLoadPage(0);
+        padLoadBlockCatalog();
+        padRefreshDropdownLabels();
+    } else {
+        const noDisp = document.getElementById('pad-no-display-section');
+        if (noDisp) noDisp.style.display = 'block';
+    }
 }
 
-function padUpdateLevelActionAddLink() {
-    var visibleCount = 0;
-    for (var i = 0; i < MAX_ACTIONS; i++) {
-        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
-        if (wrap && wrap.style.display !== 'none') visibleCount++;
-    }
-    var link = document.getElementById('pad-add-level-action');
-    if (link) link.style.display = visibleCount >= MAX_ACTIONS ? 'none' : '';
+// Prefix lists for the fixed action slots. Order is execution order.
+function padActionPrefixes(gesture) {
+    var base = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
+    var out = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) out.push(base + i);
+    return out;
 }
-
-function padAddLevelAction() {
-    for (var i = 1; i < MAX_ACTIONS; i++) {
-        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
-        if (wrap && wrap.style.display === 'none') {
-            wrap.style.display = '';
-            padMarkDirty();
-            break;
-        }
-    }
-    padUpdateLevelActionAddLink();
+function padLevelActionPrefixes() {
+    var out = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) out.push('pad-level-action-' + i);
+    return out;
 }
-
-function padRemoveLevelAction(index) {
-    var wrap = document.getElementById('pad-level-action-' + index + '-wrap');
-    if (wrap) {
-        wrap.style.display = 'none';
-        actionEditorLoad('pad-level-action-' + index, null);
-    }
-    padMarkDirty();
-    padUpdateLevelActionAddLink();
+function padDefaultActionLabels(base) {
+    var out = [];
+    for (var i = 0; i < MAX_ACTIONS; i++) out.push(base + ' ' + (i + 1));
+    return out;
 }
 
 function padLoadLevelActions(actions) {
     padState.padActions = (actions || []).filter(function(action) {
         return action && typeof action === 'object' && action.type && action.type !== 'none';
     }).slice(0, MAX_ACTIONS);
-    for (var i = 0; i < MAX_ACTIONS; i++) {
-        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
-        if (wrap) wrap.style.display = i === 0 || i < padState.padActions.length ? '' : 'none';
-        actionEditorLoad('pad-level-action-' + i, padState.padActions[i] || null);
-    }
-    padUpdateLevelActionAddLink();
+    actionEditorListLoad(padLevelActionPrefixes(), padState.padActions);
 }
 
 function padBuildLevelActions() {
-    var actions = [];
-    for (var i = 0; i < MAX_ACTIONS; i++) {
-        var wrap = document.getElementById('pad-level-action-' + i + '-wrap');
-        if (!wrap || wrap.style.display === 'none') continue;
-        var action = actionEditorBuild('pad-level-action-' + i);
-        if (action && action.type && action.type !== 'none') actions.push(action);
-    }
-    padState.padActions = actions;
-    return actions;
+    padState.padActions = actionEditorListBuild(padLevelActionPrefixes());
+    return padState.padActions;
 }
 
 function padPopulateGridDropdowns() {
@@ -368,12 +323,7 @@ async function padLoadTemplateButtons() {
 }
 
 function padPopulateScreenDropdown() {
-    var prefixes = [];
-    for (var i = 0; i < MAX_ACTIONS; i++) {
-        prefixes.push('pad-edit-action-' + i);
-        prefixes.push('pad-edit-lp-action-' + i);
-        prefixes.push('pad-level-action-' + i);
-    }
+    var prefixes = padActionPrefixes('tap').concat(padActionPrefixes('lp'), padLevelActionPrefixes());
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
     actionEditorPopulateScreens(
@@ -406,54 +356,10 @@ function padFetchSoundList() {
 
 // Populate sound file dropdowns in action editors (synchronous, uses cache)
 function padPopulateSoundDropdown() {
-    var prefixes = [];
-    for (var i = 0; i < MAX_ACTIONS; i++) {
-        prefixes.push('pad-edit-action-' + i);
-        prefixes.push('pad-edit-lp-action-' + i);
-        prefixes.push('pad-level-action-' + i);
-    }
+    var prefixes = padActionPrefixes('tap').concat(padActionPrefixes('lp'), padLevelActionPrefixes());
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
     actionEditorPopulateSounds(prefixes, padSoundListCache);
-}
-
-// Show the next hidden action slot for tap or lp
-function padAddAction(gesture) {
-    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
-    for (var i = 1; i < MAX_ACTIONS; i++) {
-        var wrap = document.getElementById(pfx + i + '-wrap');
-        if (wrap && wrap.style.display === 'none') {
-            wrap.style.display = '';
-            padMarkDirty();
-            break;
-        }
-    }
-    padUpdateAddLink(gesture);
-}
-
-// Remove (hide + clear) an action slot
-function padRemoveAction(gesture, index) {
-    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
-    var wrap = document.getElementById(pfx + index + '-wrap');
-    if (wrap) {
-        wrap.style.display = 'none';
-        actionEditorLoad(pfx + index, null);
-    }
-    padMarkDirty();
-    padUpdateAddLink(gesture);
-}
-
-// Show/hide the "+ Add" link based on how many slots are visible
-function padUpdateAddLink(gesture) {
-    var pfx = (gesture === 'lp') ? 'pad-edit-lp-action-' : 'pad-edit-action-';
-    var linkId = (gesture === 'lp') ? 'pad-add-lp-action' : 'pad-add-tap-action';
-    var visibleCount = 0;
-    for (var i = 0; i < MAX_ACTIONS; i++) {
-        var wrap = document.getElementById(pfx + i + '-wrap');
-        if (wrap && wrap.style.display !== 'none') visibleCount++;
-    }
-    var link = document.getElementById(linkId);
-    if (link) link.style.display = (visibleCount >= 3) ? 'none' : '';
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list'];
@@ -463,6 +369,15 @@ function padWidgetTypeChanged() {
     WIDGET_SECTIONS.forEach(s => {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
         if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
+    });
+    var extensionSection = document.getElementById('pad-edit-extension-section');
+    if (extensionSection) {
+        extensionSection.style.display = wtype === 'external' ? '' : 'none';
+        if (wtype === 'external') extensionSection.open = true;
+    }
+    ['pad-edit-labels-section', 'pad-edit-icon-section', 'pad-edit-image-section'].forEach(function (id) {
+        var section = document.getElementById(id);
+        if (section) section.style.display = wtype === 'external' ? 'none' : '';
     });
     var confirmGroup = document.getElementById('pad-edit-confirm-group');
     var confirmInput = document.getElementById('pad-edit-confirm');
@@ -474,7 +389,11 @@ function padWidgetTypeChanged() {
     // Refresh icon position visibility (widgets may override layout)
     padIconTypeChanged();
 
-    // Rocker widget: relabel Tap/LP action groups contextually
+    // Rocker/list widgets: relabel Tap/LP action slots contextually. The
+    // slot label is set here rather than mutating a <label> element — the
+    // slot's own label now lives on its <details> wrapper (see
+    // actionEditorListSetLabels), since summary text doubles as the
+    // collapsed "Add action" placeholder.
     var isRocker = (wtype === 'rocker');
     var isNumericRocker = (wtype === 'numericrocker');
     var axis = 'vertical';
@@ -483,45 +402,18 @@ function padWidgetTypeChanged() {
         if (axSel) axis = axSel.value;
     }
     var isList = (wtype === 'list');
-    for (var ai = 0; ai < MAX_ACTIONS; ai++) {
-        var tapLbl = document.querySelector('label[for="pad-edit-action-' + ai + '-type"]');
-        var lpLbl = document.querySelector('label[for="pad-edit-lp-action-' + ai + '-type"]');
-        if (tapLbl) {
-            if (isRocker) {
-                var zoneA = (axis === 'horizontal') ? 'Left' : 'Up';
-                tapLbl.textContent = ai === 0 ? zoneA + ' Action' : zoneA + ' Action ' + (ai + 1);
-            } else if (isList) {
-                tapLbl.textContent = ai === 0 ? 'Select Action' : 'Select Action ' + (ai + 1);
-            } else {
-                tapLbl.textContent = ai === 0 ? 'Tap Action' : 'Tap Action ' + (ai + 1);
-            }
-        }
-        if (lpLbl) {
-            if (isRocker) {
-                var zoneB = (axis === 'horizontal') ? 'Right' : 'Down';
-                lpLbl.textContent = ai === 0 ? zoneB + ' Action' : zoneB + ' Action ' + (ai + 1);
-            } else {
-                lpLbl.textContent = ai === 0 ? 'Long-Press Action' : 'Long-Press Action ' + (ai + 1);
-            }
-        }
-        var lpWrap = document.getElementById('pad-edit-lp-action-' + ai + '-wrap');
-        if (isNumericRocker) {
-            // Numeric rocker: hide all LP action slots (uses adjustment action instead)
-            if (lpWrap) lpWrap.style.display = 'none';
-        } else {
-            // Non-numericrocker: ensure slot 0 is visible (restore after numericrocker switch)
-            // but don't force-show slots 1/2 — preserve dialog's progressive disclosure
-            if (lpWrap && ai === 0) lpWrap.style.display = '';
-        }
-    }
-    var lpAddLink = document.getElementById('pad-add-lp-action');
-    if (isNumericRocker) {
-        if (lpAddLink) lpAddLink.style.display = 'none';
-    } else {
-        padUpdateAddLink('lp');
-    }
-    // Ensure tap add-action link visibility is correct
-    padUpdateAddLink('tap');
+    var tapBase = isRocker ? ((axis === 'horizontal') ? 'Left action' : 'Up action')
+        : isList ? 'Select action' : 'Tap action';
+    var lpBase = isRocker ? ((axis === 'horizontal') ? 'Right action' : 'Down action') : 'Long-press action';
+    actionEditorListSetLabels(padActionPrefixes('tap'), padDefaultActionLabels(tapBase));
+    actionEditorListSetLabels(padActionPrefixes('lp'), padDefaultActionLabels(lpBase));
+
+    // Numeric rocker uses a dedicated adjustment action instead of long-press actions.
+    var lpActionsContainer = document.getElementById('pad-edit-lp-actions');
+    if (lpActionsContainer) lpActionsContainer.style.display = isNumericRocker ? 'none' : '';
+    var lpHeading = document.getElementById('pad-edit-lp-heading');
+    if (lpHeading) lpHeading.style.display = isNumericRocker ? 'none' : '';
+
     // Numeric rocker: show adjustment action editor in widget settings
     var adjSection = document.getElementById('pad-edit-numericrocker-adjust-section');
     if (adjSection) adjSection.style.display = isNumericRocker ? '' : 'none';
@@ -605,6 +497,11 @@ async function padLoadPage(page) {
         console.error('padLoadPage error:', err);
         showMessage('Failed to load Pad ' + (page + 1), 'error');
         padRenderGrid();
+    } finally {
+        // Loading action lists, bindings, and template buttons can update
+        // controls after the initial reset. A settled page is the clean
+        // baseline; only user edits after this point should trigger a prompt.
+        padClearDirty();
     }
 }
 

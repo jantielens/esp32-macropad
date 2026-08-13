@@ -87,6 +87,21 @@ static void test_single_token_unknown_scheme() {
     check_eq(out, "ERR:unknown", "unknown scheme returns error token");
 }
 
+static void test_scheme_registry_capacity() {
+    std::printf("--- scheme registry capacity ---\n");
+
+    for (uint8_t index = 0; index < BINDING_MAX_SCHEMES - 2; ++index) {
+        char scheme_name[16] = {};
+        std::snprintf(scheme_name, sizeof(scheme_name), "s%u", (unsigned)index + 1);
+        check_true(binding_template_register(scheme_name, mock_big_resolve, mock_collect),
+                   "scheme accepted within registry capacity");
+    }
+    check_true(binding_template_scheme_count() == BINDING_MAX_SCHEMES,
+               "registry includes all accepted schemes");
+    check_true(!binding_template_register("overflow", mock_big_resolve, mock_collect),
+               "overflow scheme is rejected");
+}
+
 int main() {
     std::printf("=== binding_template resolver tests ===\n\n");
 
@@ -97,6 +112,7 @@ int main() {
     test_single_token_shape_rejection();
     test_single_token_fallback();
     test_single_token_unknown_scheme();
+    test_scheme_registry_capacity();
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

@@ -32,14 +32,16 @@ static void expose_serialize(const ButtonAction& act, JsonObject obj) {
     if (p.value[0])   obj["expose_value"]   = p.value;
 }
 
-static void expose_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult expose_dispatch(const ButtonAction& act, const char* label,
+                                    uint32_t /*continuation_token*/) {
     const ExposePayload& p = expose_payload(act);
     if (!p.command[0]) {
         LOGW(TAG, "%s expose: empty command", label);
-        return;
+        return ACTION_COMPLETE;
     }
     LOGI(TAG, "%s expose: %s %s", label, p.command, p.value);
     expose_timer_dispatch(p.command, p.value);
+    return ACTION_COMPLETE;
 }
 
 // `value` is the single bindable/numeric field (numeric rocker {step} target
@@ -50,14 +52,32 @@ static char* expose_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
-static const ActionTypeDef expose_action_type = {
+static void expose_describe(JsonObject& out) {
+    out["group"] = "Darkroom Timer";
+    out["label"] = "Exposure timer";
+    JsonArray fields = out.createNestedArray("fields");
+    JsonObject command_field = fields.createNestedObject();
+    command_field["name"] = "expose_command";
+    command_field["description"] = "required command identifier";
+    JsonObject value_field = fields.createNestedObject();
+    value_field["name"] = "expose_value";
+    value_field["description"] = "seconds for set_time/adjust_seconds, f-stops for adjust_stops, or percentage points for dry-down commands; binding templates are supported";
+    JsonArray commands = out.createNestedArray("commands");
+    const char* ids[] = {"toggle", "start", "stop", "pause", "resume", "reset", "focus", "focus_off", "focus_toggle", "set_time", "adjust_seconds", "adjust_stops", "set_dry_down", "adjust_dry_down"};
+    const char* labels[] = {"Toggle start/pause/resume", "Start", "Stop", "Pause", "Resume", "Reset", "Focus light on", "Focus light off", "Toggle focus light", "Set time", "Adjust seconds", "Adjust f-stops", "Set dry-down", "Adjust dry-down"};
+    for (uint8_t i = 0; i < 14; ++i) {
+        JsonObject item = commands.createNestedObject();
+        item["id"] = ids[i]; item["label"] = labels[i];
+    }
+}
+
+DEFINE_AND_REGISTER_ACTION_TYPE(expose_action_type,
     /* type_name   */ ACTION_TYPE_EXPOSE,
     /* parse       */ expose_parse,
     /* serialize   */ expose_serialize,
     /* dispatch    */ expose_dispatch,
     /* value_field */ expose_value_field,
-};
-
-REGISTER_ACTION_TYPE(expose_action_type);
+    /* describe    */ expose_describe,
+);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

@@ -43,7 +43,54 @@ static char* shutter_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
-static void shutter_dispatch(const ButtonAction& act, const char* label) {
+static void shutter_describe(JsonObject& out) {
+    out["group"] = "Shutter Tester";
+    out["label"] = "Shutter tester";
+    JsonArray fields = out.createNestedArray("fields");
+    JsonObject command_field = fields.createNestedObject();
+    command_field["name"] = "shutter_command";
+    command_field["description"] = "required command identifier";
+    JsonObject value_field = fields.createNestedObject();
+    value_field["name"] = "shutter_value";
+    value_field["description"] = "optional value; target speed, adjustment direction, camera id, or guided-test id depending on the command; binding templates are supported";
+    struct Command { const char* id; const char* label; };
+    struct Family { const char* id; const char* label; const Command* commands; uint8_t count; };
+    static const Command target_speed_cmds[] = {
+        {"toggle_lock", "Toggle lock"}, {"set", "Set target speed"}, {"adjust", "Adjust target speed"}
+    };
+    static const Command session_cmds[] = {
+        {"sess_toggle", "Toggle start/stop"}, {"sess_start", "Start"},
+        {"sess_stop", "Stop"}, {"sess_discard", "Discard last shot"}
+    };
+    static const Command guided_test_cmds[] = {
+        {"guide_start", "Start test"}, {"guide_stop", "Stop"},
+        {"guide_skip", "Skip step"}, {"guide_redo", "Redo step"}
+    };
+    static const Command alignment_cmds[] = {
+        {"align_start", "Start"}, {"align_stop", "Stop"}, {"recalibrate", "Recalibrate baseline"}
+    };
+    static const Family families[] = {
+        {"target_speed", "Target speed", target_speed_cmds, 3},
+        {"session", "Session", session_cmds, 4},
+        {"guided_test", "Guided test", guided_test_cmds, 4},
+        {"alignment", "Alignment", alignment_cmds, 3},
+    };
+    JsonArray out_families = out.createNestedArray("command_families");
+    for (const Family& family : families) {
+        JsonObject out_family = out_families.createNestedObject();
+        out_family["id"] = family.id;
+        out_family["label"] = family.label;
+        JsonArray out_commands = out_family.createNestedArray("commands");
+        for (uint8_t i = 0; i < family.count; ++i) {
+            JsonObject item = out_commands.createNestedObject();
+            item["id"] = family.commands[i].id;
+            item["label"] = family.commands[i].label;
+        }
+    }
+}
+
+static ActionResult shutter_dispatch(const ButtonAction& act, const char* label,
+                                     uint32_t /*continuation_token*/) {
     const ShutterPayload& sh = shutter_payload(act);
     const char* cmd = sh.command;
     if (strcmp(cmd, "set") == 0) {
@@ -98,16 +145,16 @@ static void shutter_dispatch(const ButtonAction& act, const char* label) {
     } else {
         LOGW(TAG, "%s shutter: unknown cmd '%s'", label, cmd);
     }
+    return ACTION_COMPLETE;
 }
 
-static const ActionTypeDef shutter_action_type = {
+DEFINE_AND_REGISTER_ACTION_TYPE(shutter_action_type,
     /* type_name   */ ACTION_TYPE_SHUTTER,
     /* parse       */ shutter_parse,
     /* serialize   */ shutter_serialize,
     /* dispatch    */ shutter_dispatch,
     /* value_field */ shutter_value_field,
-};
-
-REGISTER_ACTION_TYPE(shutter_action_type);
+    /* describe    */ shutter_describe,
+);
 
 #endif // HAS_DISPLAY && IS_SHUTTER_TESTER

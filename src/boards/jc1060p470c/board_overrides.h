@@ -15,6 +15,7 @@
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_BACKLIGHT true
+#define HAS_NATIVE_EXTENSIONS true
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
 // Measured under portal, MQTT, and pad load: 4704 bytes remained from 8192.

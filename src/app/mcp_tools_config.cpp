@@ -53,11 +53,13 @@
 
 #if HAS_DISPLAY || HAS_BUTTON
 #include "action_dispatch.h"
+#include "action_validate.h"
 #endif
 
 #if HAS_DISPLAY
 #include "display_manager.h"
 #include "screen_saver_manager.h"
+#include "timer_command.h"
 #include "timer_engine.h"       // TIMER_COUNT, timer_* control
 #include "timer_config.h"       // timer_config_save_raw
 #include "timer_mcp_adapter.h"
@@ -335,8 +337,7 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
 // rejects the shape mistakes that would silently corrupt a feature: wrong root
 // type, over-long action lists, out-of-range counts, and missing required keys.
 
-// Validate an actions array: <= MAX_BUTTON_ACTIONS entries, each an object with
-// a non-empty "type" (mirrors the pad tools' validate_action_array). nullptr = ok.
+// Validate an action array using the same registry-backed path as pad saves.
 static const char* val_action_list(JsonVariantConst v) {
     if (v.isNull()) return nullptr;
     if (!v.is<JsonArrayConst>()) return "actions must be an array";
@@ -344,8 +345,8 @@ static const char* val_action_list(JsonVariantConst v) {
     if (a.size() > MAX_BUTTON_ACTIONS) return "too many actions (max 3 per list)";
     for (JsonVariantConst e : a) {
         if (!e.is<JsonObjectConst>()) return "each action must be an object";
-        const char* t = e["type"] | "";
-        if (!t[0]) return "action missing 'type'";
+        const char* error = action_validate_json(e.as<JsonObjectConst>());
+        if (error) return error;
     }
     return nullptr;
 }

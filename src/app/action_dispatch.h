@@ -4,18 +4,18 @@
 
 #if HAS_DISPLAY || HAS_BUTTON
 
+#include "action_result.h"
 #include "pad_config.h"  // ButtonAction, ACTION_TYPE_* constants
 
-#if HAS_DISPLAY
-#include "timer_command.h"
-#endif
-
 // Execute a ButtonAction — shared dispatch used by both pad button taps
-// and swipe gesture actions.  Runs in LVGL task context.
-// label: short prefix for log messages (e.g. "Tap", "LP", "SwipeR")
-void action_dispatch(const ButtonAction& act, const char* label);
+// and swipe gesture actions. Existing actions return ACTION_COMPLETE even when
+// they log an operational warning, preserving historical action-array behavior.
+// An asynchronous action returns ACTION_PENDING and later uses its token to
+// resume the copied suffix on the task that dispatched the action list.
+ActionResult action_dispatch(const ButtonAction& act, const char* label,
+							 uint32_t continuation_token = 0);
 
-// Process deferred operations (NVS writes) — call from main loop().
+// Process deferred action work and loop-owned action continuations — call from loop().
 void action_dispatch_loop();
 
 #if HAS_MQTT

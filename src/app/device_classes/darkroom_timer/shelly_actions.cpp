@@ -35,25 +35,44 @@ static void shelly_serialize(const ButtonAction& act, JsonObject obj) {
     obj["shelly_on"]    = p.on;
 }
 
-static void shelly_dispatch(const ButtonAction& act, const char* label) {
+static ActionResult shelly_dispatch(const ButtonAction& act, const char* label,
+                                    uint32_t /*continuation_token*/) {
     const ShellyPayload& p = shelly_payload(act);
     if (!p.host[0]) {
         LOGW(TAG, "%s shelly: empty host", label);
-        return;
+        return ACTION_COMPLETE;
     }
     LOGI(TAG, "%s shelly: %s relay %u %s", label, p.host, p.relay,
          p.on ? "on" : "off");
     relay_queue_shelly(p.host, p.relay, p.on);
+    return ACTION_COMPLETE;
 }
 
-static const ActionTypeDef shelly_action_type = {
+static void shelly_describe(JsonObject& out) {
+    out["group"] = "Darkroom Timer";
+    out["label"] = "Shelly relay";
+    JsonArray fields = out.createNestedArray("fields");
+    JsonObject host_field = fields.createNestedObject();
+    host_field["name"] = "shelly_host";
+    host_field["description"] = "required Shelly hostname or IP address";
+    JsonObject relay_field = fields.createNestedObject();
+    relay_field["name"] = "shelly_relay";
+    relay_field["description"] = "relay output index, 0 through 3";
+    JsonObject on_field = fields.createNestedObject();
+    on_field["name"] = "shelly_on";
+    on_field["description"] = "true to turn on, false to turn off";
+    JsonArray commands = out.createNestedArray("commands");
+    JsonObject on = commands.createNestedObject(); on["id"] = "on"; on["label"] = "Turn on";
+    JsonObject off = commands.createNestedObject(); off["id"] = "off"; off["label"] = "Turn off";
+}
+
+DEFINE_AND_REGISTER_ACTION_TYPE(shelly_action_type,
     /* type_name   */ ACTION_TYPE_SHELLY,
     /* parse       */ shelly_parse,
     /* serialize   */ shelly_serialize,
     /* dispatch    */ shelly_dispatch,
     /* value_field */ nullptr,  // host/relay/on — no single bindable value field
-};
-
-REGISTER_ACTION_TYPE(shelly_action_type);
+    /* describe    */ shelly_describe,
+);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

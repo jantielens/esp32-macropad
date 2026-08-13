@@ -262,8 +262,61 @@ jobs:
         path: release-files-${{ matrix.board.name }}/*.bin
         retention-days: 90
 
+  extensions:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Cache arduino-cli
+      uses: actions/cache@v4
+      with:
+        path: |
+          bin/arduino-cli
+          ~/.arduino15
+        key: ${{ runner.os }}-arduino-cli-${{ hashFiles('setup.sh', 'arduino-libraries.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-arduino-cli-
+
+    - name: Install arduino-cli and ESP32 platform
+      run: |
+        chmod +x setup.sh
+        ./setup.sh
+
+    - name: Restore extension signing key
+      env:
+        EXTENSION_SIGNING_PRIVATE_KEY: ${{ secrets.EXTENSION_SIGNING_PRIVATE_KEY }}
+      run: |
+        set -euo pipefail
+        if [[ -z "$EXTENSION_SIGNING_PRIVATE_KEY" ]]; then
+          echo "Required EXTENSION_SIGNING_PRIVATE_KEY secret is not configured" >&2
+          exit 1
+        fi
+        umask 077
+        printf '%s\n' "$EXTENSION_SIGNING_PRIVATE_KEY" > "$RUNNER_TEMP/extension-signing-private.pem"
+
+    - name: Build native extension packages
+      env:
+        EXTENSION_SIGNING_KEY: ${{ runner.temp }}/extension-signing-private.pem
+      run: bash tools/build-p4-extensions.sh release-extensions
+
+    - name: Remove extension signing key
+      if: always()
+      run: rm -f "$RUNNER_TEMP/extension-signing-private.pem"
+
+    - name: Upload extension release files
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ needs.prepare-matrix.outputs.project_name }}-extensions-v${{ needs.prepare-matrix.outputs.version }}
+        path: |
+          release-extensions/*.elf
+          release-extensions/*.ext
+        retention-days: 90
+
   release:
-    needs: [prepare-matrix, build]
+    needs: [prepare-matrix, build, extensions]
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for creating releases
@@ -297,12 +350,18 @@ jobs:
       with:
         pattern: ${{ needs.prepare-matrix.outputs.project_name }}-release-*-v${{ needs.prepare-matrix.outputs.version }}
         path: release-artifacts
+
+    - name: Download extension artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ needs.prepare-matrix.outputs.project_name }}-extensions-v${{ needs.prepare-matrix.outputs.version }}
+        path: release-files
     
     - name: Organize release files
       run: |
         mkdir -p release-files
 
-        # Move .bin files (includes app-only and merged) to release-files directory
+        # Move .bin files (includes app-only and merged) to release-files directory.
         find release-artifacts -type f -name "*.bin" -exec mv {} release-files/ \;
         
         echo "Release files:"
@@ -311,7 +370,7 @@ jobs:
     - name: Generate SHA256 checksums
       run: |
         cd release-files
-        sha256sum *.bin > SHA256SUMS.txt
+        sha256sum *.bin *.elf *.ext > SHA256SUMS.txt
         echo "Checksums generated:"
         cat SHA256SUMS.txt
     

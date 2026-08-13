@@ -9,11 +9,17 @@
 #include <cstring>
 #include <cstdlib>
 #include <ArduinoJson.h>
+#include "action_result.h"
 #include "pad_config.h"
 #include "action_list.h"
 #include "action_parse.h"
+#include "action_registry.h"
 
-void action_dispatch(const ButtonAction&, const char*) {}
+ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
+    return ACTION_COMPLETE;
+}
+
+extern "C" unsigned long millis() { return 0; }
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -647,6 +653,30 @@ TEST(cycle_pad_invalid_explicit_fields_clear_action) {
     }
 }
 
+// ============================================================================
+// Delay action
+// ============================================================================
+
+TEST(delay_action_round_trip) {
+    ButtonAction act = round_trip("{\"type\":\"delay\",\"duration_ms\":3000}");
+    ASSERT_STR(act.type, "delay");
+    ASSERT_EQ(act.payload.delay.duration_ms, 3000);
+}
+
+TEST(delay_invalid_duration_clears_action) {
+    const char* invalid[] = {
+        "{\"type\":\"delay\"}",
+        "{\"type\":\"delay\",\"duration_ms\":0}",
+        "{\"type\":\"delay\",\"duration_ms\":55001}",
+        "{\"type\":\"delay\",\"duration_ms\":\"3000\"}",
+        "{\"type\":\"delay\",\"duration_ms\":3.5}"
+    };
+    for (const char* json : invalid) {
+        ButtonAction act = parse_from_string(json);
+        ASSERT_STR(act.type, "");
+    }
+}
+
 int main() {
     printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
 
@@ -732,6 +762,10 @@ int main() {
     RUN(cycle_pad_canonical_exclusions);
     RUN(cycle_pad_round_trip);
     RUN(cycle_pad_invalid_explicit_fields_clear_action);
+
+    printf("\n--- Delay action ---\n");
+    RUN(delay_action_round_trip);
+    RUN(delay_invalid_duration_clears_action);
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

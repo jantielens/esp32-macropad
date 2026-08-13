@@ -1,5 +1,6 @@
-#include "web_portal_device_api.h"
+#include <Arduino.h>
 
+#include "web_portal_device_api.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
 
@@ -23,6 +24,11 @@
 #include "display_manager.h"
 #include "pad_config.h"
 #endif
+
+#if HAS_DISPLAY || HAS_BUTTON
+#include "action_catalog.h"
+#endif
+
 
 // GET /api/info - Get device information
 void handleGetVersion(AsyncWebServerRequest *request) {
@@ -123,6 +129,26 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_AUDIO ? "true" : "false");
 		response->print(",\"has_sound_player\":");
 		response->print(HAS_SOUND_PLAYER ? "true" : "false");
+		response->print(",\"has_native_extensions\":");
+		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
+
+		// Action authoring catalog: only computed and sent when explicitly
+		// requested, so the bare response used by reboot connection polling
+		// (up to 40 requests) stays lightweight. Portal projection only —
+		// no field docs, since the portal renders pickers, not raw JSON.
+		#if HAS_DISPLAY || HAS_BUTTON
+				if (request->hasParam("catalog")) {
+						auto catalog_doc = make_psram_json_doc(6144);
+						response->print(",\"catalog\":");
+						if (catalog_doc && catalog_doc->capacity() > 0) {
+								JsonArray actions = catalog_doc->to<JsonArray>();
+								action_catalog_emit(actions, false);
+								serializeJson(actions, *response);
+						} else {
+								response->print("[]");
+						}
+				}
+		#endif
 
 		#if HAS_DISPLAY
 				// Display screen information

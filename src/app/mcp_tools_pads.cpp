@@ -33,7 +33,7 @@
 #include "psram_json_allocator.h"
 #include "widgets/widget.h"
 #include "binding_template.h"
-#include "action_registry.h"
+#include "action_catalog.h"
 #include "health_binding.h"
 #include "list_provider.h"
 #include "pad_block.h"
@@ -56,29 +56,6 @@ static constexpr uint32_t PAD_WRITE_TIMEOUT_MS = 4000;
 // Thin adapter over the shared mcp_tool_fail (mcp_tool_util.h).
 static bool pad_fail(JsonObject& result, String& err, int code, const char* msg) {
     return mcp_tool_fail(result, err, code, msg);
-}
-
-// Built-in action types + their flat JSON fields, mirroring the action_parse.cpp
-// strcmp ladder (built-ins are not in the action registry). Device-class action
-// types are enumerated separately from the registry.
-static void emit_builtin_action_fields(JsonObject acts) {
-    auto add = [&](const char* type, const char* fields) { acts[type] = fields; };
-    add("screen",     "target (screen id)");
-    add("mqtt",       "topic, payload");
-    add("key",        "sequence (key DSL)");
-#if HAS_SOUND_PLAYER
-    add("music",      "music_command (play_pause|next|previous|stop)");
-#endif
-    add("volume",     "volume_mode (set|adjust), volume_value");
-    add("brightness", "brightness_mode (set|adjust), brightness_value");
-    add("cycle_pad", "direction (next|previous), wrap (boolean, default true), excluded_pads (optional comma-separated 1-based pad numbers)");
-    add("timer",      "timer_id (1-3), timer_command (start|toggle|stop|pause|resume|reset|set|adjust), timer_mode (up|down; required only for start/toggle), timer_value (countdown start positive whole seconds; set non-negative; adjust signed; max start/set 4294967; bindable; no per-action expire_actions)");
-    add("sound_alert", "sound_alert_kind, sound_alert_pattern, sound_alert_file, sound_alert_volume");
-    add("notify",     "notify_text, notify_duration_ms, notify_text_color, notify_bg_color, notify_border_color, notify_opacity, notify_font_size, notify_location");
-    add("system",     "system_command (reboot|wifi_reconnect|screensaver)");
-    add("ha_service", "entity_id (required domain-qualified string with nonempty domain and object portions); service (required bare string, never domain.service); data_json (optional JSON object encoded as a string). Example: {\"type\":\"ha_service\",\"entity_id\":\"media_player.keuken\",\"service\":\"media_play_pause\",\"data_json\":\"{}\"}");
-    add("back",       "(no fields)");
-    add("ble_pair",   "(no fields)");
 }
 
 // ============================================================================
@@ -151,20 +128,12 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray md = style.createNestedArray("mode");
     md.add("clip"); md.add("scroll"); md.add("dot"); md.add("wrap");
 
-    // Action types: built-in fields (static, mirrors action_parse) + device-class
-    // action types enumerated from the registry (generated, board-specific).
-    JsonObject acts = result.createNestedObject("action_types");
-    emit_builtin_action_fields(acts);
-    for (uint8_t i = 0; i < action_type_count(); ++i) {
-        const ActionTypeDef* d = action_type_at(i);
-        if (!d || !d->type_name) continue;
-        if (d->describe) {
-            JsonObject ao = acts.createNestedObject(d->type_name);
-            d->describe(ao);
-        } else {
-            acts[d->type_name] = "device-class action; flat fields {command, value} (value bindable)";
-        }
-    }
+    // Action types: the same catalog that drives the portal's action-type
+    // picker (see action_catalog.cpp / GET /api/info?catalog=1), with field
+    // docs included. One source for both surfaces — no separate hand-written
+    // list to keep in sync when an action type is added or changed.
+    JsonArray acts = result.createNestedArray("action_types");
+    action_catalog_emit(acts, /* include_field_docs */ true);
     result["actions_note"] = "button.actions (tap) / button.lp_actions (long-press): arrays of {type, ...fields above}";
     result["position_note"] = "set_button/set_buttons 'position' is the 0-based index in the pad's button array, NOT a grid cell (grid placement is col/row). Use 0,1,2,...; a position at or past the end appends. To rebuild a pad: clear_pad then add buttons from position 0.";
     result["screen_ref_note"] = "pad tools accept the 'screen' arg as either the canonical id 'pad_N' or a pad's friendly name (case-insensitive). Names may be unset or non-unique; an ambiguous name is refused with the matching ids so you can pick one. Creating a new pad requires the 'pad_N' id. list_pads shows each pad's name.";

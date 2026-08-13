@@ -85,6 +85,8 @@ struct ButtonTile {
     // not clobber it. Icon recolor is NOT gated by this mask.
     uint8_t labelColorOverride;
     uint8_t page;             // Page index (for HA event)
+    const PadBinding* pad_bindings; // Owning pad's bindings for extension context
+    uint8_t pad_binding_count;
     uint8_t col;              // Grid column (for HA event)
     uint8_t row;              // Grid row (for HA event)
     ButtonAction actions[MAX_BUTTON_ACTIONS];   // Tap actions (sequential)

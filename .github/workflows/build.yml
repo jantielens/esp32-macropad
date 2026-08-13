@@ -207,6 +207,12 @@ jobs:
       run: |
         chmod +x tools/install-custom-partitions.sh
         ./tools/install-custom-partitions.sh
+
+    - name: Validate native extension packages
+      if: matrix.board.name == 'esp32-p4-lcd4b'
+      run: |
+        chmod +x tests/test_native_extension_packages.sh
+        ./tests/test_native_extension_packages.sh
     
     - name: Compile firmware for ${{ matrix.board.name }}
       run: |

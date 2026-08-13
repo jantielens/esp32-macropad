@@ -39,6 +39,9 @@ void pad_binding_set_page(const PadConfig* pad);
 // bindings may be NULL (clears context). count is ignored when bindings is NULL.
 void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count);
 
+// Read the active binding context so a temporary resolver can restore it.
+void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count);
+
 // Expand all [pad:name] tokens in a template string to their underlying
 // binding templates (text substitution, NOT value resolution).
 // Used by data_stream_rebuild() to pre-expand before storing in streams.

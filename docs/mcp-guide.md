@@ -300,8 +300,18 @@ Active records are never evicted. When all four records are active or retained,
 
 - `get_capabilities` — manifest of widget types + fields, button schema, label-style
   DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
-  Its `action_types` object includes `cycle_pad` with `direction`
-  (`next` or `previous`), `wrap` (boolean, default `true`), and optional
+  On microphone-input boards, it also advertises the read-only `[audio:input.rms]`,
+  `[audio:input.peak]`, and `[audio:input.active]` bindings. RMS and peak are
+  sound levels from 0 to 100; `active` is `true` while the resolver-driven meter
+  is sampling.
+  Its `action_types` array is generated from the same firmware catalog that
+  drives the portal's action-type picker (`action_catalog.cpp`), so both
+  surfaces describe the same groups, labels, commands, and fields. Each entry
+  carries `type`, `group`, `label`, an optional `commands` array (`id`/`label`
+  pairs) for multi-command types, an optional `command_families` array for
+  Shutter Tester, and a `fields` array (`name`/`description`) of the flat JSON
+  keys to author. For example, `cycle_pad` documents `direction`
+  (`next` or `previous`), `wrap` (boolean, default `true`), and
   `excluded_pads` (comma-separated 1-based pad numbers).
   It also carries a `device_config` section advertising `set_config`'s writable
   fields and the read/write component list. Its `storage` object advertises the storage

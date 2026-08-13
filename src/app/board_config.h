@@ -87,6 +87,16 @@ struct HwButtonDef {
 #define HAS_MCP true
 #endif
 
+// Enable native extension packages on ESP32-P4 boards. Packages are compiled
+// RISC-V ELF modules loaded from persistent storage at startup.
+#ifndef HAS_NATIVE_EXTENSIONS
+#  define HAS_NATIVE_EXTENSIONS false
+#endif
+
+#if HAS_NATIVE_EXTENSIONS && !HAS_DISPLAY
+#  error "HAS_NATIVE_EXTENSIONS requires HAS_DISPLAY."
+#endif
+
 // Enable the portal and MCP browser for a filesystem partition or SD card.
 #ifndef HAS_STORAGE_BROWSER
 #define HAS_STORAGE_BROWSER true
@@ -131,13 +141,23 @@ struct HwButtonDef {
 #define IS_DARKROOM_TIMER false
 #endif
 
-// Feature-rich device classes (shutter tester, coffee scale, darkroom timer)
-// allocate large scratch/history buffers directly in PSRAM with no internal-RAM
-// fallback — a deliberate policy, since these classes are always shipped on
+// Voice-assistant product variant. When true the firmware compiles cloud
+// transcription, voice actions, transcript bindings, and portal controls.
+#ifndef IS_VOICE_ASSISTANT
+#define IS_VOICE_ASSISTANT false
+#endif
+
+// Feature-rich device classes (shutter tester, coffee scale, darkroom timer,
+// Voice Assistant) allocate large scratch/history buffers directly in PSRAM
+// with no internal-RAM fallback — a deliberate policy, since these classes are always shipped on
 // PSRAM-equipped boards. Enforce it at compile time so a mis-configured board
 // fails fast here instead of OOM'ing at runtime.
-#if (IS_SHUTTER_TESTER || IS_COFFEE_SCALE || IS_DARKROOM_TIMER) && !HAS_PSRAM
+#if (IS_SHUTTER_TESTER || IS_COFFEE_SCALE || IS_DARKROOM_TIMER || IS_VOICE_ASSISTANT) && !HAS_PSRAM
 #  error "Feature-rich device classes require PSRAM."
+#endif
+
+#if IS_VOICE_ASSISTANT && (!HAS_AUDIO_INPUT || !HAS_MQTT || !HAS_DISPLAY)
+#  error "Voice Assistant requires display, MQTT, and audio input."
 #endif
 
 // Enable e-paper wake-button handling (ext1 wake plus short/long press).
@@ -298,6 +318,20 @@ struct HwButtonDef {
 #define HAS_AUDIO false
 #endif
 
+// Enable board-selected PCM microphone input support.
+#ifndef HAS_AUDIO_INPUT
+#define HAS_AUDIO_INPUT false
+#endif
+
+// Enable ES7210 microphone ADC initialization on the shared I2S transport.
+#ifndef HAS_ES7210_MIC
+#define HAS_ES7210_MIC false
+#endif
+
+#if HAS_AUDIO_INPUT && !HAS_AUDIO
+#error "HAS_AUDIO_INPUT requires HAS_AUDIO."
+#endif
+
 // NS4150B power amplifier enable pin.
 #ifndef AUDIO_PA_PIN
 #define AUDIO_PA_PIN -1
@@ -312,6 +346,11 @@ struct HwButtonDef {
 // I2C address of the audio codec (e.g. ES8311 = 0x18).
 #ifndef AUDIO_CODEC_ADDR
 #define AUDIO_CODEC_ADDR 0x18
+#endif
+
+// I2C address of the microphone ADC (e.g. ES7210 = 0x40).
+#ifndef AUDIO_MIC_ADC_ADDR
+#define AUDIO_MIC_ADC_ADDR 0x40
 #endif
 
 // I2S master clock pin.
@@ -387,6 +426,10 @@ struct HwButtonDef {
 // Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 #ifndef AUDIO_OUTPUT_DRIVER
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
+#endif
+
+#if HAS_AUDIO_INPUT && AUDIO_OUTPUT_DRIVER != AUDIO_OUTPUT_DRIVER_ES8311
+#error "HAS_AUDIO_INPUT requires an audio output driver with a microphone input path."
 #endif
 
 // ============================================================================
@@ -487,6 +530,11 @@ struct HwButtonDef {
 #define BUTTON_ACTIVE_LOW true
 #endif
 
+// Enables a boot-hold button to enter configuration mode without runtime actions.
+#ifndef HAS_CONFIG_MODE_BUTTON
+#define HAS_CONFIG_MODE_BUTTON HAS_BUTTON
+#endif
+
 // ----------------------------------------------------------------------------
 // Hardware Button Actions (optional, GPIO-direct buttons)
 // ----------------------------------------------------------------------------
@@ -549,6 +597,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Example override: #define MAX_MQTT_TRIGGERS 3
 #ifndef MAX_MQTT_TRIGGERS
 #define MAX_MQTT_TRIGGERS 8
+#endif
+
+// Maximum independent pending action lists; each consumes about 884 bytes of internal RAM; constrained boards should override this to 1.
+#ifndef ACTION_CONTINUATION_SLOTS
+#define ACTION_CONTINUATION_SLOTS 3
 #endif
 
 // ============================================================================

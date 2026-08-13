@@ -71,7 +71,7 @@ async function copyTextToClipboard(text) {
 
     function pump() {
         while (inflight < MAX_INFLIGHT && queue.length > 0) {
-            var job = queue.shift();
+            const job = queue.shift();
             inflight++;
             originalFetch(job.input, job.init).then(function (res) {
                 inflight--;
@@ -95,7 +95,9 @@ async function copyTextToClipboard(text) {
 
 // API endpoints
 const API_CONFIG = '/api/config';
-const API_INFO = '/api/info';
+// ?catalog=1 adds the action-authoring catalog to the response. Kept off
+// API_VERSION, which the reboot connection poller calls up to 40 times.
+const API_INFO = '/api/info?catalog=1';
 const API_UPDATE = '/api/update';
 const API_REBOOT = '/api/reboot';
 const API_VERSION = '/api/info'; // Used for connection polling

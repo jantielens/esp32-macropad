@@ -34,6 +34,11 @@ void pad_binding_set_bindings(const PadBinding* bindings, uint8_t count) {
     g_binding_count = bindings ? count : 0;
 }
 
+void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count) {
+    if (bindings) *bindings = g_bindings;
+    if (count) *count = g_binding_count;
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================

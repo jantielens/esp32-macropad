@@ -28,6 +28,7 @@ void sensor_manager_register_all(SensorRegistry &registry) {
 	#if HAS_SENSOR_DUMMY
 	register_dummy_sensor(registry);
 	#endif
+
 }
 
 #include "sensors/sensor_manager.cpp"

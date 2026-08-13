@@ -50,16 +50,34 @@
 
     function renderMenu(sel, menuEl) {
         menuEl.innerHTML = '';
-        for (var i = 0; i < sel.options.length; i++) {
-            var opt = sel.options[i];
+        var flatIndex = 0;
+        function renderOption(opt, grouped) {
             var item = document.createElement('button');
             item.type = 'button';
-            item.className = 'cdd-item';
+            item.className = grouped ? 'cdd-item cdd-item-grouped' : 'cdd-item';
             if (opt.disabled) item.classList.add('cdd-disabled');
-            if (i === sel.selectedIndex) item.classList.add('cdd-selected');
+            if (flatIndex === sel.selectedIndex) item.classList.add('cdd-selected');
             item.textContent = opt.textContent;
-            item.dataset.cddIndex = String(i);
+            item.dataset.cddIndex = String(flatIndex);
             menuEl.appendChild(item);
+            flatIndex++;
+        }
+        // Walk top-level children so <optgroup> renders a non-interactive
+        // header, matching native <select> popup behavior. sel.selectedIndex
+        // and the dataset.cddIndex click handler both use the flat option
+        // index (same as sel.options), so flatIndex must count every
+        // <option> exactly once regardless of optgroup nesting.
+        for (var i = 0; i < sel.children.length; i++) {
+            var node = sel.children[i];
+            if (node.tagName === 'OPTGROUP') {
+                var header = document.createElement('div');
+                header.className = 'cdd-group-label';
+                header.textContent = node.label;
+                menuEl.appendChild(header);
+                for (var j = 0; j < node.children.length; j++) renderOption(node.children[j], true);
+            } else if (node.tagName === 'OPTION') {
+                renderOption(node);
+            }
         }
     }
 

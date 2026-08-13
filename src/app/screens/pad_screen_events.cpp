@@ -1,9 +1,13 @@
 #include "pad_screen.h"
-#include "../action_dispatch.h"
+#include "../action_list.h"
 #include "../button_confirmation.h"
 #include "../display_manager.h"
 #include "../log_manager.h"
 #include "../swipe_actions.h"
+#if HAS_NATIVE_EXTENSIONS
+#include "../native_extension.h"
+#include "../widgets/external_widget.h"
+#endif
 #if HAS_AUDIO
 #include "../audio.h"
 #include "../config_manager.h"
@@ -53,7 +57,7 @@ static bool confirm_or_dispatch(const ButtonTile* tile, const ButtonAction* acti
         return button_confirmation_show(actions, count, event_label,
                                         tile->confirm_text, button_display_label(tile));
     }
-    for (uint8_t i = 0; i < count; i++) action_dispatch(actions[i], event_label);
+    action_list_dispatch(actions, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
     return true;
 }
 
@@ -192,6 +196,13 @@ void PadScreen::onTap(lv_event_t* e) {
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
+#if HAS_NATIVE_EXTENSIONS
+    if (strcmp(tile->widget_cfg.type, "external") == 0) {
+        const uint32_t instance_id = external_widget_instance_id(tile->page, tile->col, tile->row);
+        if (native_extension_on_tap(external_widget_config(&tile->widget_cfg)->extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
+    }
+#endif
+
     // Rocker widget: select zone-based action set from tap coordinates
     const ButtonAction* src_actions;
     uint8_t src_count;
@@ -289,7 +300,7 @@ void PadScreen::onTap(lv_event_t* e) {
                 }
             }
 #endif
-            action_dispatch(local_nr, nr_event);
+            action_list_dispatch(&local_nr, 1, nr_event, ACTION_CONTINUATION_OWNER_LVGL);
 #if HAS_MQTT
             publish_button_event(tile, "press");
 #endif
@@ -323,7 +334,7 @@ void PadScreen::onTap(lv_event_t* e) {
     }
 
     if (tile->widget_type) {
-        for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], event_label);
+        action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
     } else {
         confirm_or_dispatch(tile, local, count, event_label);
     }
@@ -336,6 +347,13 @@ void PadScreen::onTap(lv_event_t* e) {
 void PadScreen::onLongPress(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
     if (!tile || !tile->obj) return;
+
+#if HAS_NATIVE_EXTENSIONS
+    if (strcmp(tile->widget_cfg.type, "external") == 0) {
+        const uint32_t instance_id = external_widget_instance_id(tile->page, tile->col, tile->row);
+        if (native_extension_on_long_press(external_widget_config(&tile->widget_cfg)->extension_id, instance_id) == NATIVE_EXTENSION_HANDLED) return;
+    }
+#endif
 
     // Rocker use tap zones — suppress long-press
     if (tile->widget_type &&
@@ -381,7 +399,7 @@ void PadScreen::onLongPress(lv_event_t* e) {
     }
 
     if (tile->widget_type) {
-        for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], "LP");
+        action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL);
     } else {
         confirm_or_dispatch(tile, local, count, "LP");
     }
@@ -450,6 +468,6 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
         }
     }
 #endif
-    for (uint8_t i = 0; i < count; i++) action_dispatch(local[i], "PadTap");
+    action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL);
 }
 

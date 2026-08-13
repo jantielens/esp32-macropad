@@ -24,6 +24,75 @@ flowchart TD
 `AUDIO_OUTPUT_DRIVER`. New output hardware must implement `AudioOutputDriver`
 rather than adding hardware-specific behavior to callers.
 
+## Microphone Input
+
+Boards with `HAS_AUDIO_INPUT` expose a board-neutral capture API in
+`audio_input.h`. A caller reserves input with `audio_input_start_capture()`,
+reads bounded native, interleaved PCM frames, and releases it with
+`audio_input_stop_capture()`. Only one FreeRTOS task can own a capture session
+at a time. The input layer does not resample, create WAV files, retain audio,
+or make network requests.
+
+`esp32-p4-lcd4b` combines the ES8311 output codec with an ES7210 microphone ADC
+on the same 48 kHz I2S clock. The ES8311 driver owns both channels and exposes
+the existing RX channel through `AudioInputDriver`; input capture neither
+reconfigures the shared I2S transport nor interrupts playback.
+
+Pads can display these read-only microphone bindings:
+
+* `[audio:input.rms]` returns the root-mean-square sound level from 0 to 100.
+* `[audio:input.peak]` returns the peak sound level from 0 to 100.
+* `[audio:input.active]` returns `true` while the meter is sampling and `false`
+    after its short resolver-driven sampling lease expires.
+
+The meter task remains asleep and does not read I2S data unless one of these
+bindings is actively resolved.
+
+## Voice Assistant
+
+The `esp32-p4-lcd4b-voice` board variant enables the `voice_assistant` device
+class. It reserves the same board-neutral microphone input from a background
+worker, downsamples the 48 kHz input to 16 kHz mono PCM WAV in PSRAM, and sends
+the recording to Azure AI Foundry for transcription. Recordings are discarded
+after the request completes and are never persisted.
+
+The worker is the sole capture owner while recording. `record_start` begins a
+manual recording; `record_stop_transcribe` stops it and pauses any later
+actions in that action array. `record_until_silence` begins an automatic
+recording, detects speech from the same 0-100 RMS scale as `[audio:input.rms]`,
+then stops after its configured trailing silence. Its action fields are
+`silence_ms` (100-10000, default 1000) and `speech_threshold` (0-100, default
+2). It waits for speech before counting silence and has the same 30-second cap
+as manual recording. A successful transcription resumes later actions, so a
+following ordinary MQTT action can publish `[stt:text]`. During automatic
+recording, a `record_stop_transcribe` action requests an immediate stop but the
+original automatic action owns the resumed suffix. `record_cancel` discards an
+active manual or automatic recording without transcribing or running later
+actions. Failed and timed-out work discards the remaining actions.
+
+The Azure API key, host, deployment name, and optional ISO 639-1 language code
+are stored in NVS. An empty language code uses Azure auto-detection. The portal
+accepts the API key as a write-only password field and only reports whether it
+is configured; it never returns or logs the value. The endpoint CA certificate
+is versioned in `voice_assistant/azure_ca.h`. MQTT publication is an ordinary
+action that uses `[stt:text]` after the transcription continuation succeeds.
+
+Pads can display `[stt:status]` (`idle`, `recording`, `listening`,
+`transcribing`, `ready`, or `error`) and `[stt:text]` (the latest transcript or
+error message).
+
+The same device class can queue Azure Text-to-Speech MP3 responses. Its worker
+downloads bounded MP3 data to PSRAM and transfers that buffer to the audio task;
+it never writes a temporary sound file. The audio task owns the buffer after
+queueing and frees it on successful completion, decoder errors, a stop request,
+or queue flush. TTS action text is the one bindable action value; voice and
+volume remain optional per-action overrides. Each request carries a generation
+guard, so a newer request stops playback and prevents older HTTP responses from
+starting later. TTS has independent Azure host, deployment, API key, optional
+two-letter ISO 639-1 language, default voice, and optional instructions
+settings. The language contributes speech guidance, while instructions are
+passed verbatim to Azure for dialect, accent, or pronunciation guidance.
+
 ## Music CD Player
 
 Audio-capable builds with the sound player enabled also provide a bounded Music

@@ -46,6 +46,11 @@ struct AudioCommand {
     bool loop;               // true = repeat until stop
 #if HAS_SOUND_PLAYER
     bool is_sound;           // true = play sound file (pattern holds filename)
+    bool is_memory_sound;
+    uint8_t* mp3;
+    size_t mp3_size;
+    AudioPlaybackGuard guard;
+    uint32_t generation;
 #endif
 };
 
@@ -67,6 +72,15 @@ static TaskHandle_t audio_task_handle = NULL;
 // when nothing is playing is harmlessly cleared on the next queue receive.
 static volatile bool g_stop_requested = false;
 static volatile bool g_playing = false;
+
+static void audio_command_dispose(AudioCommand* command) {
+#if HAS_SOUND_PLAYER
+    if (command->is_memory_sound && command->mp3) heap_caps_free(command->mp3);
+#else
+    (void)command;
+#endif
+}
+
 #if HAS_SOUND_PLAYER
 static bool g_file_backed_playing = false;
 static AudioMusicInfo g_music_info = {AUDIO_MUSIC_UNAVAILABLE, 0, 0, {0}};
@@ -374,7 +388,12 @@ static void audio_task(void* param) {
         }
         if (xQueueReceive(audio_queue, &cmd, wait) == pdTRUE) {
 #if HAS_SOUND_PLAYER
-            if (music_player && music_transport.state() == MUSIC_TRANSPORT_PLAYING && !cmd.is_sound) {
+            if (cmd.is_memory_sound && cmd.guard && !cmd.guard(cmd.generation)) {
+                audio_command_dispose(&cmd);
+                continue;
+            }
+            if (music_player && music_transport.state() == MUSIC_TRANSPORT_PLAYING &&
+                !cmd.is_sound && !cmd.is_memory_sound) {
                 float tone_gain = 1.0f;
                 if (cmd.volume_override > 0 && cmd.volume_override <= 100) {
                     tone_gain = current_volume == 0 ? 0.0f :
@@ -408,7 +427,11 @@ static void audio_task(void* param) {
             output_driver->setVolume(play_vol);
 
 #if HAS_SOUND_PLAYER
-            if (cmd.is_sound) {
+            if (cmd.is_memory_sound) {
+                sound_player_play_memory(output_driver, cmd.mp3, cmd.mp3_size, &g_stop_requested,
+                                         cmd.guard, cmd.generation);
+                audio_command_dispose(&cmd);
+            } else if (cmd.is_sound) {
                 if (music_storage_playback_claim()) {
                     sound_player_play(output_driver, cmd.pattern, &g_stop_requested);
                     music_storage_playback_release();
@@ -585,7 +608,7 @@ static void audio_enqueue(const char* pattern, uint8_t volume_override, bool loo
 
     // Flush queue
     AudioCommand discard;
-    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) {}
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) audio_command_dispose(&discard);
 
     AudioCommand cmd;
     memset(&cmd, 0, sizeof(cmd));
@@ -611,7 +634,7 @@ void audio_stop() {
     g_stop_requested = true;
     // Flush queued commands
     AudioCommand discard;
-    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) {}
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) audio_command_dispose(&discard);
     LOGD(TAG, "Stop requested");
 }
 
@@ -723,7 +746,7 @@ void audio_play_sound(const char* filename, uint8_t volume_override) {
         g_stop_requested = true;
     }
     AudioCommand discard;
-    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) {}
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) audio_command_dispose(&discard);
 
     AudioCommand cmd;
     memset(&cmd, 0, sizeof(cmd));
@@ -733,6 +756,23 @@ void audio_play_sound(const char* filename, uint8_t volume_override) {
     cmd.is_sound = true;
 
     xQueueSend(audio_queue, &cmd, portMAX_DELAY);
+}
+
+void audio_play_mp3_buffer(uint8_t* mp3, size_t mp3_size, uint8_t volume_override,
+                           AudioPlaybackGuard guard, uint32_t generation) {
+    if (!mp3 || !mp3_size || !audio_initialized) {
+        if (mp3) heap_caps_free(mp3);
+        return;
+    }
+    audio_stop();
+    AudioCommand cmd = {};
+    cmd.volume_override = volume_override;
+    cmd.is_memory_sound = true;
+    cmd.mp3 = mp3;
+    cmd.mp3_size = mp3_size;
+    cmd.guard = guard;
+    cmd.generation = generation;
+    if (xQueueSend(audio_queue, &cmd, 0) != pdTRUE) audio_command_dispose(&cmd);
 }
 #endif // HAS_SOUND_PLAYER
 

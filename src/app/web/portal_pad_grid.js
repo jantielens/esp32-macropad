@@ -260,6 +260,13 @@ function padRenderGrid() {
                     ls.title = 'List Widget';
                     cell.appendChild(ls);
                 }
+                if (btn.widget_type === 'external') {
+                    const ext = document.createElement('div');
+                    ext.textContent = 'EXT';
+                    ext.title = 'Extension Widget';
+                    ext.style.cssText = 'position:absolute;right:4px;bottom:3px;font-size:10px;font-weight:700;padding:1px 3px;border-radius:2px;background:#0f766e;color:#fff;';
+                    cell.appendChild(ext);
+                }
 
                 padRenderResizeHandles(cell, btn, c, r);
 

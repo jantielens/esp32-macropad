@@ -23,6 +23,10 @@
 #include "device_classes/darkroom_timer/darkroom_timer_device_class.cpp"
 #endif
 
+#if IS_VOICE_ASSISTANT
+#include "device_classes/voice_assistant_device_class.cpp"
+#endif
+
 // Called once from setup() before any device-class dispatch so each gated
 // implementation registers itself with the runtime registry. Keeps
 // registration explicit and ordered rather than relying on global ctors.
@@ -38,5 +42,8 @@ void device_classes_register_all() {
 #endif
 #if IS_DARKROOM_TIMER
                 darkroom_timer_device_class_register();
+#endif
+#if IS_VOICE_ASSISTANT
+                voice_assistant_device_class_register();
 #endif
 }

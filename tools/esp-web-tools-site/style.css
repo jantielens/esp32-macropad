@@ -409,6 +409,81 @@ code {
   opacity: 1;
 }
 
+.extensions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 720px) {
+  .extensions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.extension {
+  padding: 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+
+.extension-title {
+  font-weight: 650;
+}
+
+.extension-summary {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.extension-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.extension-specs .badge {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.extension-usage-label {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.extension-usage {
+  margin: 4px 0 0;
+  padding: 8px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--notes);
+  color: var(--text);
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.extension-download {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(127,127,127,0.35);
+}
+
+.extension-download:hover {
+  opacity: 0.8;
+}
+
 .ota-btn {
   margin-top: 10px;
   width: 100%;

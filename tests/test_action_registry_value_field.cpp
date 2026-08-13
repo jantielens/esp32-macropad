@@ -47,6 +47,16 @@ static char* fake_value_field(ButtonAction& act, size_t* out_size) {
     return p.value;
 }
 
+static bool s_fake_available = true;
+
+static bool fake_available() {
+    return s_fake_available;
+}
+
+static const char* fake_validate(JsonObjectConst) {
+    return "fake validation failed";
+}
+
 static const ActionTypeDef fake_action_type = {
     /* type_name   */ ACTION_TYPE_FAKE,
     /* parse       */ nullptr,
@@ -54,6 +64,8 @@ static const ActionTypeDef fake_action_type = {
     /* dispatch    */ nullptr,
     /* value_field */ fake_value_field,
     /* describe    */ nullptr,
+    /* available   */ fake_available,
+    /* validate    */ fake_validate,
 };
 
 // ---------------------------------------------------------------------------
@@ -112,6 +124,20 @@ static void test_lookup_returns_registered_def() {
     check_true(def && def->value_field != nullptr, "value_field accessor present");
 }
 
+static void test_support_and_validation_hooks() {
+    printf("--- support and validation hooks ---\n");
+    s_fake_available = true;
+    check_true(action_type_is_supported(ACTION_TYPE_FAKE), "available type is supported");
+    s_fake_available = false;
+    check_true(!action_type_is_supported(ACTION_TYPE_FAKE), "unavailable type is rejected");
+    s_fake_available = true;
+
+    JsonDocument doc;
+    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
+    check_str(action_type_validate(def, doc.to<JsonObject>()), "fake validation failed",
+              "validation hook result is returned");
+}
+
 static void test_substitute_step_via_registry() {
     printf("--- substitute_step substitutes {step} via registry ---\n");
     const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
@@ -157,28 +183,47 @@ static void test_resolve_bindings_via_registry() {
     if (!def || !def->value_field) { g_fail++; return; }
     {
         ButtonAction act = make_fake("[mock:x]");
-        action_type_resolve_bindings(def, act);
+        check_true(action_type_resolve_bindings(def, act), "binding resolution succeeds");
         check_str(fake_payload(act).value, "RESOLVED", "binding resolved");
     }
     {
         // resolve_bindings must leave {step} untouched — only the rocker
         // substitutes it. This is the cross-feature invariant.
         ButtonAction act = make_fake("{step}");
-        action_type_resolve_bindings(def, act);
+        check_true(action_type_resolve_bindings(def, act), "plain value resolution succeeds");
         check_str(fake_payload(act).value, "{step}", "{step} survives binding resolution");
     }
+}
+
+static bool long_resolve(const char* params, char* out, size_t out_len) {
+    (void)params;
+    memset(out, 'x', out_len - 1);
+    out[out_len - 1] = '\0';
+    return true;
+}
+
+static void test_resolve_bindings_rejects_overflow() {
+    printf("--- resolve_bindings rejects overflow ---\n");
+    const ActionTypeDef* def = action_type_find(ACTION_TYPE_FAKE);
+    if (!def || !def->value_field) { g_fail++; return; }
+    ButtonAction act = make_fake("[long:x]");
+    check_true(!action_type_resolve_bindings(def, act), "oversized binding result is rejected");
+    check_str(fake_payload(act).value, "[long:x]", "overflow leaves original value unchanged");
 }
 
 int main() {
     printf("=== action registry value-field contract tests ===\n\n");
 
     binding_template_register("mock", mock_resolve, mock_collect);
+    binding_template_register("long", long_resolve, mock_collect);
     action_type_register(&fake_action_type);
 
     test_lookup_returns_registered_def();
+    test_support_and_validation_hooks();
     test_substitute_step_via_registry();
     test_has_binding_via_registry();
     test_resolve_bindings_via_registry();
+    test_resolve_bindings_rejects_overflow();
 
     printf("\n=== %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

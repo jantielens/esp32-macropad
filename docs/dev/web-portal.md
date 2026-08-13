@@ -228,6 +228,18 @@ Board-specific firmware variants can promote a custom nav category to first posi
 - `PORTAL_PRIMARY_FRAGMENT` must resolve to an item inside `PORTAL_PRIMARY_CATEGORY`. If it doesn't, the entire primary configuration is ignored.
 - In AP mode, the primary category and `primary` object are suppressed entirely.
 
+### Component Categories
+
+For a normal portal component, use one of the category IDs emitted by
+`kNavCategories` in `web_portal_component_api.cpp`: `device`, `display`,
+`pads`, `actions`, `connectivity`, `audio`, `sensors`, or `firmware`.
+
+The component registry accepts any category string, but `/api/portal/nav` emits
+only those fixed categories. A component assigned to an unknown category
+registers successfully yet is silently absent from portal navigation. Use a
+different category only for a board-specific `PORTAL_PRIMARY_CATEGORY` and set
+every component in that custom section to the same category ID.
+
 **When not configured (default):** all four flags default to `""` and the portal behaves exactly as before — no hero card, `#welcome` on startup, no extra nav category.
 
 **Startup routing fallback chain:** URL hash (if present and item exists in nav) → primary fragment → `#welcome` → first visible item.
@@ -258,6 +270,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
   - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
+  - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, content padding, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
@@ -420,6 +433,32 @@ or device taking longer to boot.
 
 ## REST API Reference
 
+### Extensions
+
+ESP32-P4 builds support trusted native Extensions. The
+Extensions page exposes two small slots (56 KiB each) and one large slot
+(120 KiB). Upload a signed package named `<extension-id>@<version>.ext`. It
+contains a relocation-free RISC-V ELF followed by its fixed 64-byte ECDSA P-256
+signature; it stages on the configured storage backend and installs into the
+selected executable flash slot during the next boot.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/extensions` | Returns all slot metadata and runtime load status |
+| `POST` | `/api/extensions/upload?slot=N&filename=id@version.ext` | Verifies and stages a signed Extension package for installation at next boot |
+| `POST` | `/api/extensions/enabled?slot=N&enabled=true|false` | Enables or disables an installed extension for the next boot |
+| `DELETE` | `/api/extensions?slot=N` | Erases an extension slot |
+
+The endpoint accepts only signed `.ext` packages and uses the normal portal
+authentication gate. Firmware verifies the embedded ELF's format and signature
+before staging, before installation, and before executable mapping. The Pad
+editor's **Extension** widget selects an enabled installed extension and passes
+its per-button configuration text to the native instance.
+
+P4 boards use an `_ext` partition scheme, which reserves a 256 KiB raw
+`extensions` partition. Flash the first firmware using this scheme over USB
+before attempting portal uploads.
+
 ### Music Library
 
 On sound-player builds, the Music portal component provides authenticated,
@@ -510,6 +549,17 @@ Returns comprehensive device information.
   "has_display": true,
   "has_audio": true,
   "has_sound_player": true,
+  "catalog": [
+    {
+      "type": "timer",
+      "group": "Timer",
+      "label": "Timer",
+      "commands": [
+        {"id": "start", "label": "Start"},
+        {"id": "set", "label": "Set countdown"}
+      ]
+    }
+  ],
   "max_pads": 16,
   "max_grid_cols": 8,
   "max_grid_rows": 8,
@@ -532,6 +582,14 @@ Returns comprehensive device information.
 
 **Portal Mode Field:**
 - `ap_active`: `true` when the device is running in AP / captive-portal mode, `false` in full STA mode. Portal JS derives `portalMode` (`"core"` vs `"full"`) from this flag. (Replaces the removed `GET /api/mode` endpoint.)
+
+**Action Catalog:**
+- Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
+- The catalog is generated by enumerating registered `ActionTypeDef` descriptors. An action module's `describe()` callback supplies its portal and MCP presentation metadata and documented fields; `available()` controls support and `validate()` defines authoring validation.
+- Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
+- Simple actions can additionally provide `editor_fields`, with a small field vocabulary: `text`, `number`, `select`, `toggle`, and `color`. `select` fields can reuse the entry's `commands` through `command_options`. Actions with conditional or specialized behavior keep their dedicated portal editor code.
+- The portal uses this projection to populate action type, command, and simple field controls. MCP capability metadata uses the same catalog source with field documentation included.
+- Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, `record_cancel`, and `speak` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. Azure transcription has a 30-second limit and no automatic retry. Failure sets `[stt:status]` to `error`, puts the reason in `[stt:text]`, and stops the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation. `speak` resolves its text field as a binding template, then queues best-effort Azure TTS with optional voice and volume overrides; it does not pause the action list, and provider failures are logged without changing the STT bindings. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
 
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution
@@ -703,6 +761,19 @@ Returns current device configuration (passwords excluded).
   "tap_beep": "",
   "lp_beep": "",
 
+  "voice_azure_host": "your-resource.services.ai.azure.com",
+  "voice_azure_model": "gpt-4o-mini-transcribe",
+  "voice_azure_language": "en",
+  "voice_azure_api_key": "",
+  "voice_api_key_configured": true,
+  "voice_tts_host": "your-resource.services.ai.azure.com",
+  "voice_tts_deployment": "gpt-4o-mini-tts",
+  "voice_tts_language": "en",
+  "voice_tts_voice": "alloy",
+  "voice_tts_instructions": "Speak clearly.",
+  "voice_tts_api_key": "",
+  "voice_tts_api_key_configured": true,
+
   "ha_url": "",
   "ha_token": ""
 }
@@ -713,6 +784,7 @@ Returns current device configuration (passwords excluded).
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
+  - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
 - `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config` — it is always reported as an empty string.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
@@ -760,6 +832,17 @@ Save new configuration. Device reboots after successful save.
   "tap_beep": "800:80",
   "lp_beep": "600:40 40 600:40",
 
+  "voice_azure_host": "your-resource.services.ai.azure.com",
+  "voice_azure_model": "gpt-4o-mini-transcribe",
+  "voice_azure_language": "en",
+  "voice_azure_api_key": "new-transcription-key",
+  "voice_tts_host": "your-resource.services.ai.azure.com",
+  "voice_tts_deployment": "gpt-4o-mini-tts",
+  "voice_tts_language": "en",
+  "voice_tts_voice": "alloy",
+  "voice_tts_instructions": "Speak clearly.",
+  "voice_tts_api_key": "new-speech-key",
+
   "ha_url": "http://192.168.1.50:8123",
   "ha_token": "eyJhbGciOi..."
 }
@@ -777,6 +860,7 @@ Save new configuration. Device reboots after successful save.
 - Only fields present in request are updated
 - Password field: empty string = no change, non-empty = update
 - `ha_token` follows the same rule: empty string = keep current, non-empty = update. `ha_url` is always updated when present.
+- Voice API keys follow the same write-only rule: an empty `voice_azure_api_key` or `voice_tts_api_key` preserves the stored key, while a non-empty value replaces it. Other Voice Assistant fields update only when present.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
@@ -1216,6 +1300,13 @@ clears the list. Pad validation rejects non-array values, more than three
 entries, entries without `type`, unknown action types, and malformed
 action-specific payloads. The literal `"none"` type is accepted for compatibility
 but is removed during parsing and has no runtime effect.
+
+The built-in `delay` action uses `{ "type": "delay", "duration_ms": 3000 }`.
+`duration_ms` must be a whole number from 1 to 55,000. It pauses the current
+ordered action list and resumes remaining actions after the duration elapses.
+Up to three pausable actions can be pending device-wide at a time by default.
+The board may override `ACTION_CONTINUATION_SLOTS`; the portal reads the active
+limit from the action catalog.
 
 ---
 

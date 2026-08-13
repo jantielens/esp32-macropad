@@ -38,6 +38,36 @@
 #define ES8311_GPIO_REG44          0x44
 #define ES8311_GP_REG45            0x45
 
+#if HAS_ES7210_MIC
+#define ES7210_RESET_REG00          0x00
+#define ES7210_MAINCLK_REG02        0x02
+#define ES7210_LRCK_DIVH_REG04      0x04
+#define ES7210_LRCK_DIVL_REG05      0x05
+#define ES7210_POWER_DOWN_REG06     0x06
+#define ES7210_OSR_REG07            0x07
+#define ES7210_TIME_CONTROL0_REG09  0x09
+#define ES7210_TIME_CONTROL1_REG0A  0x0A
+#define ES7210_SDP_INTERFACE1_REG11 0x11
+#define ES7210_SDP_INTERFACE2_REG12 0x12
+#define ES7210_ADC34_HPF2_REG20     0x20
+#define ES7210_ADC34_HPF1_REG21     0x21
+#define ES7210_ADC12_HPF2_REG22     0x22
+#define ES7210_ADC12_HPF1_REG23     0x23
+#define ES7210_ANALOG_REG40         0x40
+#define ES7210_MIC12_BIAS_REG41     0x41
+#define ES7210_MIC34_BIAS_REG42     0x42
+#define ES7210_MIC1_GAIN_REG43      0x43
+#define ES7210_MIC2_GAIN_REG44      0x44
+#define ES7210_MIC3_GAIN_REG45      0x45
+#define ES7210_MIC4_GAIN_REG46      0x46
+#define ES7210_MIC1_POWER_REG47     0x47
+#define ES7210_MIC2_POWER_REG48     0x48
+#define ES7210_MIC3_POWER_REG49     0x49
+#define ES7210_MIC4_POWER_REG4A     0x4A
+#define ES7210_MIC12_POWER_REG4B    0x4B
+#define ES7210_MIC34_POWER_REG4C    0x4C
+#endif
+
 struct ES8311Coeff {
     uint32_t mclk_hz;
     uint32_t sample_rate;
@@ -89,6 +119,52 @@ static uint8_t es8311_read(uint8_t reg) {
     i2c_bus_unlock();
     return val;
 }
+
+#if HAS_ES7210_MIC
+static bool es7210_write(uint8_t reg, uint8_t val) {
+    i2c_bus_lock();
+    Wire.beginTransmission(AUDIO_MIC_ADC_ADDR);
+    Wire.write(reg);
+    Wire.write(val);
+    bool ok = Wire.endTransmission() == 0;
+    i2c_bus_unlock();
+    return ok;
+}
+
+static bool es7210_init(uint32_t sample_rate) {
+    if (sample_rate != 48000) {
+        LOGE(TAG, "ES7210 only configured for 48 kHz, got %lu Hz", sample_rate);
+        return false;
+    }
+
+    struct RegisterWrite { uint8_t reg; uint8_t value; };
+    static const RegisterWrite config[] = {
+        {ES7210_RESET_REG00, 0xFF}, {ES7210_RESET_REG00, 0x32},
+        {ES7210_TIME_CONTROL0_REG09, 0x30}, {ES7210_TIME_CONTROL1_REG0A, 0x30},
+        {ES7210_ADC12_HPF1_REG23, 0x2A}, {ES7210_ADC12_HPF2_REG22, 0x0A},
+        {ES7210_ADC34_HPF1_REG21, 0x2A}, {ES7210_ADC34_HPF2_REG20, 0x0A},
+        {ES7210_SDP_INTERFACE1_REG11, 0x60}, {ES7210_SDP_INTERFACE2_REG12, 0x00},
+        {ES7210_ANALOG_REG40, 0xC3}, {ES7210_MIC12_BIAS_REG41, 0x70},
+        {ES7210_MIC34_BIAS_REG42, 0x70}, {ES7210_MIC1_GAIN_REG43, 0x1A},
+        {ES7210_MIC2_GAIN_REG44, 0x1A}, {ES7210_MIC3_GAIN_REG45, 0x1A},
+        {ES7210_MIC4_GAIN_REG46, 0x1A}, {ES7210_MIC1_POWER_REG47, 0x08},
+        {ES7210_MIC2_POWER_REG48, 0x08}, {ES7210_MIC3_POWER_REG49, 0x08},
+        {ES7210_MIC4_POWER_REG4A, 0x08}, {ES7210_OSR_REG07, 0x20},
+        {ES7210_MAINCLK_REG02, 0xC1}, {ES7210_LRCK_DIVH_REG04, 0x01},
+        {ES7210_LRCK_DIVL_REG05, 0x00}, {ES7210_POWER_DOWN_REG06, 0x04},
+        {ES7210_MIC12_POWER_REG4B, 0x0F}, {ES7210_MIC34_POWER_REG4C, 0x0F},
+        {ES7210_RESET_REG00, 0x71}, {ES7210_RESET_REG00, 0x41},
+    };
+    for (const RegisterWrite& entry : config) {
+        if (!es7210_write(entry.reg, entry.value)) {
+            LOGE(TAG, "ES7210 write failed reg=0x%02X", entry.reg);
+            return false;
+        }
+    }
+    LOGI(TAG, "ES7210 microphone ADC initialized (Fs=%lu Hz)", sample_rate);
+    return true;
+}
+#endif
 
 bool ES8311AudioDriver::initCodec(uint32_t sample_rate) {
     const uint32_t mclk_hz = sample_rate * static_cast<uint32_t>(kEs8311MclkMultiple);
@@ -197,7 +273,13 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
     chan_cfg.auto_clear = true;
     chan_cfg.dma_desc_num = AUDIO_DMA_DESC_NUM;
     chan_cfg.dma_frame_num = AUDIO_DMA_FRAME_NUM;
-    esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle, &rx_handle);
+    esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle,
+#if HAS_AUDIO_INPUT
+                                    &rx_handle
+#else
+                                    nullptr
+#endif
+    );
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_new_channel failed: %s", esp_err_to_name(err));
         return false;
@@ -211,7 +293,12 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
             .bclk = (gpio_num_t)AUDIO_I2S_BCLK,
             .ws   = (gpio_num_t)AUDIO_I2S_LRCK,
             .dout = (gpio_num_t)AUDIO_I2S_DOUT,
-            .din  = (gpio_num_t)AUDIO_I2S_DIN,
+            .din  =
+#if HAS_AUDIO_INPUT
+                (gpio_num_t)AUDIO_I2S_DIN,
+#else
+                I2S_GPIO_UNUSED,
+#endif
             .invert_flags = {
                 .mclk_inv = false,
                 .bclk_inv = false,
@@ -227,25 +314,20 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         cleanup();
         return false;
     }
+#if HAS_AUDIO_INPUT
     err = i2s_channel_init_std_mode(rx_handle, &std_cfg);
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_channel_init_std_mode(RX) failed: %s", esp_err_to_name(err));
         cleanup();
         return false;
     }
+#endif
     err = i2s_channel_enable(tx_handle);
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_channel_enable(TX) failed: %s", esp_err_to_name(err));
         cleanup();
         return false;
     }
-    err = i2s_channel_enable(rx_handle);
-    if (err != ESP_OK) {
-        LOGE(TAG, "i2s_channel_enable(RX) failed: %s", esp_err_to_name(err));
-        cleanup();
-        return false;
-    }
-
     LOGI(TAG, "I2S TX: %u Hz, 16-bit stereo, MCLK=%lu Hz (%lux)",
          sample_rate, sample_rate * static_cast<uint32_t>(kEs8311MclkMultiple),
          static_cast<uint32_t>(kEs8311MclkMultiple));
@@ -255,6 +337,16 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         cleanup();
         return false;
     }
+#if HAS_ES7210_MIC
+    if (!es7210_init(sample_rate)) {
+        LOGE(TAG, "ES7210 init failed");
+        cleanup();
+        return false;
+    }
+#endif
+#if HAS_AUDIO_INPUT
+    this->sample_rate = sample_rate;
+#endif
     return true;
 }
 
@@ -275,12 +367,54 @@ void ES8311AudioDriver::setVolume(uint8_t vol_0_100) {
     LOGD(TAG, "Volume: %u%% -> REG32=0x%02X %s", vol_0_100, reg_val, ok ? "OK" : "FAIL");
 }
 
+// The microphone shares the ES8311 transport only on input-enabled boards.
+#if HAS_AUDIO_INPUT
+bool ES8311AudioDriver::inputAvailable() const {
+    return rx_handle != nullptr && sample_rate != 0;
+}
+
+bool ES8311AudioDriver::captureStart() {
+    if (!inputAvailable()) return false;
+    const esp_err_t err = i2s_channel_enable(rx_handle);
+    if (err != ESP_OK) {
+        LOGE(TAG, "I2S RX enable failed: %s", esp_err_to_name(err));
+        return false;
+    }
+    return true;
+}
+
+size_t ES8311AudioDriver::readFrames(int16_t* frames, size_t frame_count, uint32_t timeout_ms) {
+    if (!inputAvailable() || !frames || frame_count == 0) return 0;
+    size_t bytes_read = 0;
+    const size_t requested_bytes = frame_count * 2 * sizeof(int16_t);
+    const esp_err_t err = i2s_channel_read(rx_handle, frames, requested_bytes, &bytes_read,
+                                           pdMS_TO_TICKS(timeout_ms));
+    if (err != ESP_OK) {
+        if (err != ESP_ERR_TIMEOUT) LOGE(TAG, "I2S read error: %s", esp_err_to_name(err));
+        return 0;
+    }
+    return bytes_read / (2 * sizeof(int16_t));
+}
+
+void ES8311AudioDriver::captureStop() {
+    if (!rx_handle) return;
+    const esp_err_t err = i2s_channel_disable(rx_handle);
+    if (err != ESP_OK) LOGW(TAG, "I2S RX disable failed: %s", esp_err_to_name(err));
+}
+
+AudioInputFormat ES8311AudioDriver::inputFormat() const {
+    return {sample_rate, 2, 16};
+}
+#endif
+
 void ES8311AudioDriver::cleanup() {
+#if HAS_AUDIO_INPUT
     if (rx_handle) {
         i2s_channel_disable(rx_handle);
         i2s_del_channel(rx_handle);
         rx_handle = NULL;
     }
+#endif
     if (tx_handle) {
         i2s_channel_disable(tx_handle);
         i2s_del_channel(tx_handle);
@@ -292,3 +426,9 @@ AudioOutputDriver* audio_output_driver_create() {
     static ES8311AudioDriver driver;
     return &driver;
 }
+
+#if HAS_AUDIO_INPUT
+AudioInputDriver* audio_input_driver_create() {
+    return static_cast<ES8311AudioDriver*>(audio_output_driver_create());
+}
+#endif

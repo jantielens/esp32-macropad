@@ -717,9 +717,12 @@ emit_chunked_variants() {
         # model only independent flags expand exponentially, so this cap is
         # far harder to hit than the old 2^N one; it exists to catch a bundle
         # that accidentally accumulates many independent flags.
-        if [[ $n_variants -gt 64 ]]; then
+        # Four independent feature chunks plus the four mutually exclusive
+        # device classes produce 80 reachable variants. Keep a bounded cap so
+        # a future independent chunk cannot silently explode generated assets.
+        if [[ $n_variants -gt 80 ]]; then
             echo "  ✗ Bundle $bundle_name expands to $n_variants variants" \
-                 "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max 64)." >&2
+                 "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max 80)." >&2
             echo "     Independent flags (HAS_*) each double the gzipped variants emitted into" >&2
             echo "     web_assets.h; device-class flags (IS_*) add only one variant each." >&2
             echo "     Consolidate independent chunk flags, or split the bundle." >&2
@@ -1019,6 +1022,8 @@ asset_feature_flag() {
             echo "IS_COFFEE_SCALE" ;;
         darkroom|prints|portal_action_editor_darkroom|portal_darkroom_init|portal_prints|portal_darkroom)
             echo "IS_DARKROOM_TIMER" ;;
+        voice|portal_action_editor_voice|portal_voice)
+            echo "IS_VOICE_ASSISTANT" ;;
         *)
             echo "" ;;
     esac

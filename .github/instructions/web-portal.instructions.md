@@ -14,6 +14,7 @@ Arduino's build system only compiles `.cpp` files in the sketch root (`src/app/`
 1. Add `#include "components/<name>_component.cpp"` to `src/app/portal_components.cpp` under the correct feature-flag block (always-available, `HAS_DISPLAY`, `HAS_MQTT`, etc.).
 2. Without this include, the component's `REGISTER_COMPONENT()` static initializer never runs. The component will be **silently absent** from the registry and the nav API — no compile error, no runtime warning.
 3. Symptom of a missing include: `/api/portal/nav` returns `"categories":[]` (or the category that should contain the component is missing) even though the source file looks correct.
+4. Set `ComponentDef.category` to an emitted navigation category: `device`, `display`, `pads`, `actions`, `connectivity`, `audio`, `sensors`, or `firmware`. The navigation API silently omits registered components in any other category. A custom category is valid only when its board config defines it as `PORTAL_PRIMARY_CATEGORY`; use that category consistently for its components.
 
 Same aggregation pattern applies to `widgets.cpp`, `screens.cpp`, `display_drivers.cpp`, `touch_drivers.cpp`, and `custom_fonts.cpp`.
 

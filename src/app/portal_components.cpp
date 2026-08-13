@@ -27,6 +27,9 @@
 #include "components/manual_upload_component.cpp"
 #include "components/version_info_component.cpp"
 #include "components/sensor_data_component.cpp"
+#if HAS_NATIVE_EXTENSIONS
+#include "components/extensions_component.cpp"
+#endif
 #if HAS_STORAGE_BROWSER
 #include "components/storage_component.cpp"
 #endif // HAS_STORAGE_BROWSER
@@ -100,6 +103,11 @@
 #include "device_classes/darkroom_timer/components/darkroom_component.cpp"
 #include "device_classes/darkroom_timer/components/prints_component.cpp"
 #endif // IS_DARKROOM_TIMER
+
+// --- Voice Assistant components ---
+#if IS_VOICE_ASSISTANT
+#include "device_classes/voice_assistant/components/voice_component.cpp"
+#endif // IS_VOICE_ASSISTANT
 
 // --- E-Paper-gated components ---
 // Split into one component per nav entry (Status / Image & Schedule /

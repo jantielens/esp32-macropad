@@ -19,7 +19,7 @@ OUT_DIR="${1:-$REPO_ROOT/site}"
 
 # Only deploy “latest” (site output is overwritten each deploy)
 rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR/manifests" "$OUT_DIR/firmware" "$OUT_DIR/ota"
+mkdir -p "$OUT_DIR/manifests" "$OUT_DIR/firmware" "$OUT_DIR/ota" "$OUT_DIR/extensions"
 
 # Prevent GitHub Pages from invoking Jekyll processing
 : > "$OUT_DIR/.nojekyll"
@@ -232,12 +232,14 @@ render_index() {
   local template_path="$1"
   local out_path="$2"
   local board_fragment="$3"
+  local extension_fragment="$4"
 
   awk -v site_version="$SITE_VERSION" \
       -v display_version="$DISPLAY_VERSION" \
       -v version_href="$VERSION_HREF" \
       -v changelog_href="$CHANGELOG_HREF" \
       -v frag="$board_fragment" \
+      -v extension_frag="$extension_fragment" \
       '
         {
           gsub(/{{SITE_VERSION}}/, site_version)
@@ -248,6 +250,11 @@ render_index() {
         /{{BOARD_ENTRIES}}/ {
           while ((getline line < frag) > 0) print line
           close(frag)
+          next
+        }
+        /{{EXTENSION_ENTRIES}}/ {
+          while ((getline line < extension_frag) > 0) print line
+          close(extension_frag)
           next
         }
         { print }
@@ -270,7 +277,8 @@ unset IFS
 
 # Copy firmware + generate manifests
 board_fragment_tmp="$(mktemp)"
-trap 'rm -f "$board_fragment_tmp"' EXIT
+extension_fragment_tmp="$(mktemp)"
+trap 'rm -f "$board_fragment_tmp" "$extension_fragment_tmp"' EXIT
 
 for board_name in "${boards[@]}"; do
   fqbn="${FQBN_TARGETS[$board_name]}"
@@ -438,14 +446,52 @@ EOF
 
 done
 
+while IFS= read -r source; do
+  package_name="$(python3 "$SCRIPT_DIR/extension_package_name.py" "$source")"
+  title="$(python3 "$SCRIPT_DIR/extension_package_name.py" --title "$source")"
+  metadata_file="$(dirname "$source")/metadata.json"
+  package_file="$REPO_ROOT/build/extensions/${package_name%.elf}.ext"
+
+  if [[ ! -f "$metadata_file" ]]; then
+    echo "ERROR: Missing extension catalog metadata: $metadata_file" >&2
+    exit 1
+  fi
+  if ! jq -e 'type == "object" and ((keys | sort) == ["summary", "usage"]) and (.summary | type == "string" and length > 0) and (.usage | type == "string" and length > 0)' "$metadata_file" >/dev/null; then
+    echo "ERROR: Invalid extension catalog metadata: $metadata_file" >&2
+    exit 1
+  fi
+  if [[ ! -f "$package_file" ]]; then
+    echo "ERROR: Missing extension package: $package_file" >&2
+    exit 1
+  fi
+
+  summary="$(jq -r '.summary' "$metadata_file")"
+  usage="$(jq -r '.usage' "$metadata_file")"
+  package_size="$(stat -c%s "$package_file")"
+  package_name="${package_name%.elf}.ext"
+  cp "$package_file" "$OUT_DIR/extensions/$package_name"
+
+  cat >> "$extension_fragment_tmp" <<EOF
+          <article class="extension">
+            <div class="extension-title">$(html_escape "$title")</div>
+            <div class="extension-summary">$(html_escape "$summary")</div>
+            <div class="extension-specs"><span class="badge">$(html_escape "$package_name")</span><span class="badge">$((package_size / 1024)) KiB</span></div>
+            <div class="extension-usage-label">Usage</div>
+            <pre class="extension-usage">$(html_escape "$usage")</pre>
+            <a class="extension-download" href="./extensions/$package_name" download>Download extension</a>
+          </article>
+EOF
+done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$REPO_ROOT/extensions"/*/ | sort)
+
 # Copy static assets and render index.html from template
 cp "$TEMPLATE_DIR/style.css" "$OUT_DIR/style.css"
 cp "$TEMPLATE_DIR/app.js" "$OUT_DIR/app.js"
 cp "$TEMPLATE_DIR/dashboard.html" "$OUT_DIR/dashboard.html"
 cp "$TEMPLATE_DIR/dashboard.js" "$OUT_DIR/dashboard.js"
-render_index "$TEMPLATE_DIR/index.template.html" "$OUT_DIR/index.html" "$board_fragment_tmp"
+render_index "$TEMPLATE_DIR/index.template.html" "$OUT_DIR/index.html" "$board_fragment_tmp" "$extension_fragment_tmp"
 
 echo "Built ESP Web Tools site at: $OUT_DIR" >&2
 echo "Manifests: $OUT_DIR/manifests" >&2
 echo "Firmware:  $OUT_DIR/firmware" >&2
 echo "OTA:       $OUT_DIR/ota" >&2
+echo "Extensions: $OUT_DIR/extensions" >&2

@@ -153,6 +153,46 @@ Buttons with no actions configured are completely inert — no visual tap flash 
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 
+### Voice Assistant
+
+*Shown only on the `esp32-p4-lcd4b-voice` board variant.*
+
+The **Voice Assistant** page is the primary portal category for this board
+variant. It configures the Azure AI Foundry host, transcription deployment, and
+API key. Set an optional two-letter ISO 639-1 language code, such as `en` or
+`nl`, to select the transcription language; leave it blank for Azure
+auto-detection. The API key is stored on the device as a write-only value: leave
+the field blank to keep the saved key. The portal reports only whether the key
+is configured. The public Azure CA certificate is versioned in the firmware.
+
+For a one-tap capture button, configure **Record until silence** followed by a
+Publish MQTT action whose payload is `[stt:text]`. Set the trailing silence in
+milliseconds (default `1000`) and a speech-level threshold from 0 to 100
+(default `2`), using the same RMS scale as `[audio:input.rms]`. It waits for
+speech before starting the trailing-silence timer. Use **Stop and transcribe**
+as a separate control to finish an active recording early, or **Cancel
+recording** to discard an active recording without transcription. The first
+release does not subscribe to LLM responses or attach correlation IDs, so reply
+ordering is the responsibility of the MQTT automation.
+
+The page also stores independent Azure Text-to-Speech host, speech deployment,
+write-only API key, optional two-letter ISO 639-1 language, optional TTS
+instructions, and default voice (`alloy`). The language is included as Azure
+speech guidance. TTS instructions are passed verbatim to Azure and can guide
+dialect, accent, or pronunciation. Add a **Speak text** Voice Assistant action to request an MP3 from a
+`gpt-4o-mini-tts` deployment. Its text field supports normal binding templates;
+an action can optionally override the configured voice and audio volume. A new
+speech request stops the previous playback and supersedes an older request that
+finishes downloading later. Voice overrides must name a supported Azure voice;
+they are not language or locale fields.
+
+Azure transcription waits up to 30 seconds and does not retry automatically.
+If it fails, `[stt:status]` becomes `error`, `[stt:text]` contains the reason,
+and remaining actions in that recording's list do not run. Correct the reported
+problem and start another recording. Speak text is best-effort: it does not
+pause its action list, and an Azure TTS failure skips that speech request while
+recording the reason in the device log.
+
 #### Alert Sounds
 
 *Shown only on boards with sound player support (defaults to boards with audio hardware).*
@@ -312,7 +352,21 @@ Label fields in the button editor support explicit line breaks with `\n` (for ex
 
 For sensitive normal-button actions, open **Action Safety** in the Actions group and enable **Confirm before tap or long-press actions**. The device shows an explicit Cancel/Confirm prompt before running either action list, uses the optional custom message when present, and cancels automatically after 10 seconds.
 
+Choose **Timer / Delay** when a later action must wait. Set a whole-number
+duration from 1 to 55,000 ms. Delay pauses only the current ordered action list;
+when it completes, the next action runs. By default, up to three pausable actions
+can be pending device-wide at a time; starting another pausable action when all
+slots are occupied stops its action list.
+
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
+
+On ESP32-P4 builds, the **Extensions** page has two small slots
+and one large slot for trusted native Extensions. Upload the signed package
+`extension-id@version.ext`, then reboot to install it into executable flash.
+The package contains the Extension ELF and its first-party signature; unsigned
+or modified packages are rejected. Select **Extension** as a button's widget,
+choose an enabled installed extension, and optionally provide per-button
+configuration text.
 
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 
