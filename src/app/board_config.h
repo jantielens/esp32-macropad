@@ -297,15 +297,6 @@ struct HwButtonDef {
 // #define BUTTON_PIN 0
 // #endif
 //
-// Battery Monitor:
-// #ifndef HAS_BATTERY_MONITOR
-// #define HAS_BATTERY_MONITOR false
-// #endif
-//
-// #ifndef BATTERY_ADC_PIN
-// #define BATTERY_ADC_PIN 34
-// #endif
-//
 // Display:
 // #ifndef HAS_DISPLAY
 // #define HAS_DISPLAY false
