@@ -81,22 +81,22 @@ void brew_templates_clear_dynamic() {
 // ============================================================================
 // Built-in: free_pour
 // ============================================================================
-// Two stages: Ready (auto-start on weight) → Brewing (manual stop).
-// Tare fires on entering Ready. Recording starts automatically when pour is
-// detected and continues until the user taps Done.
+// Three stages: prepare brewer → Ready (auto-start on weight) → Brewing.
+// Tare fires after the full brewing setup is placed on the scale. Recording starts
+// automatically when pour is detected and continues until the user taps Finish.
 
 static const BrewStage s_free_pour_stages[] = {
     {
-        "Ready",                                                       // name
-        "Place your cup on the scale and start pouring when ready",     // instruction
-        "Armed",                                                       // next_label
-        STAGE_AUTO_WEIGHT,                                              // type
-        EFFECT_TARE,                                                    // on_enter
+        "Prepare brewer",                                              // name
+        "Put the brewer with its filter and ground coffee on the scale, then tap Tare.", // instruction
+        "Tare",                                                        // next_label
+        STAGE_MANUAL,                                                   // type
+        EFFECT_NONE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         2.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -109,16 +109,29 @@ static const BrewStage s_free_pour_stages[] = {
         ""                                                              // capture_unit
     },
     {
+        "Ready to pour",                                               // name
+        "Start pouring to begin.",                                    // instruction
+        "Waiting",                                                     // next_label
+        STAGE_AUTO_WEIGHT,                                              // type
+        EFFECT_TARE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_exit
+        2.0f,                                                           // auto_threshold
+        0.0f,                                                           // target_weight
+        0.0f,                                                           // target_flow_rate
+        0,                                                              // target_time_ms
+        "", "", "", 0.0f, 1, "", "", "", "", ""              // optional fields
+    },
+    {
         "Brewing",                                                      // name
-        "Pouring - Tap Done when brew is finished",                     // instruction
-        "Done",                                                         // next_label
+        "When the brew is complete, tap Finish.",                      // instruction
+        "Finish",                                                       // next_label
         STAGE_MANUAL,                                                   // type
         EFFECT_NONE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         0.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -136,36 +149,32 @@ static const BrewTemplate s_free_pour_template = {
     "free_pour",
     "Free Pour",         // display_name
     "",                  // description
-    "Start brew",        // start_label (Idle)
-    "Start brew again",  // done_label  (Done)
+    "Start",             // start_label (Idle)
+    "Start",             // done_label  (Done)
+    "Tap Start to begin.",
+    "Brew complete. Tap Start for a new brew.",
     s_free_pour_stages,
-    2,
+    3,
     false,
 };
 
 // ============================================================================
 // Built-in: v60
 // ============================================================================
-// Five stages:
-//   Place cup — user places empty dosing cup on scale; tare fires at start
-//   Dosing    — tares on enter (zeroes out cup); on_exit captures dose
-//   Prep cup  — user grinds and preps; brew_next() tares and moves to Ready
-//   Ready     — armed; auto-advances when first water pour exceeds threshold
-//               (this starts the timer + recording)
-//   Brewing   — recording continues; user taps Done to finish
+// Five stages: place cup, weigh coffee, prepare brewer, auto-start, and brew.
 
 static const BrewStage s_v60_stages[] = {
     {
         "Place cup",                                                    // name
-        "Place your empty dosing cup on the scale, then tap Weigh beans", // instruction
-        "Weigh beans",                                                  // next_label
+        "Put the empty dosing cup on the scale, then tap Tare.",       // instruction
+        "Tare",                                                         // next_label
         STAGE_MANUAL,                                                   // type
         EFFECT_NONE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         0.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -178,16 +187,16 @@ static const BrewStage s_v60_stages[] = {
         ""                                                              // capture_unit
     },
     {
-        "Dosing",                                                       // name
-        "Add beans to the cup, then tap Log dose when done",            // instruction
-        "Log dose",                                                     // next_label
+        "Weigh coffee",                                                 // name
+        "Add coffee, then tap Save dose.",                              // instruction
+        "Save dose",                                                    // next_label
         STAGE_MANUAL,                                                   // type
         EFFECT_TARE,                                                    // on_enter
         EFFECT_CAPTURE_DOSE,                                            // on_exit
         0.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -200,16 +209,16 @@ static const BrewStage s_v60_stages[] = {
         ""                                                              // capture_unit
     },
     {
-        "Prep cup",                                                     // name
-        "Remove beans and grind them. Prep cup and V60 on scale, tap Next to arm", // instruction
-        "Next",                                                         // next_label
+        "Prepare brewer",                                               // name
+        "Put the prepared V60 and cup on the scale, then tap Ready.",  // instruction
+        "Ready",                                                        // next_label
         STAGE_MANUAL,                                                   // type
         EFFECT_NONE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         0.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -222,16 +231,16 @@ static const BrewStage s_v60_stages[] = {
         ""                                                              // capture_unit
     },
     {
-        "Ready",                                                        // name
+        "Ready to pour",                                                // name
         "Start pouring when ready",                                     // instruction
-        "Armed",                                                        // next_label
+        "Waiting",                                                      // next_label
         STAGE_AUTO_WEIGHT,                                              // type
         EFFECT_TARE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         2.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -245,15 +254,15 @@ static const BrewStage s_v60_stages[] = {
     },
     {
         "Brewing",                                                      // name
-        "Pouring - Tap Done when brew is finished",                     // instruction
-        "Done",                                                         // next_label
+        "When the brew is complete, tap Finish.",                      // instruction
+        "Finish",                                                       // next_label
         STAGE_MANUAL,                                                   // type
         EFFECT_NONE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         0.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -271,8 +280,10 @@ static const BrewTemplate s_v60_template = {
     "v60",
     "V60 Pour-Over",     // display_name
     "",                  // description
-    "Start V60",         // start_label (Idle)
-    "Start V60 again",   // done_label  (Done)
+    "Start",             // start_label (Idle)
+    "Start",             // done_label  (Done)
+    "Tap Start to begin.",
+    "Brew complete. Tap Start for a new brew.",
     s_v60_stages,
     5,
     false,
@@ -281,26 +292,21 @@ static const BrewTemplate s_v60_template = {
 // ============================================================================
 // Built-in: rao_v60
 // ============================================================================
-// Six stages exercising all new building blocks:
-//   Place cup — user places empty dosing cup on scale; tare fires at start
-//   Dose beans — tares on enter (zeroes out cup); captures dose weight on exit
-//   Prep      — manual, tares on enter
-//   Arm pour  — auto_weight, tares, starts timer+recording on first pour
-//   Bloom     — auto_time 45s, beep on enter, captures bloom water on exit, target flow 6 g/s
-//   Main pour — manual, beep on enter, target 250g, target flow 5 g/s, user taps Done
+// Seven stages demonstrate dose capture, cumulative water targets, timed stages,
+// and flow-rate guidance.
 
 static const BrewStage s_rao_v60_stages[] = {
     {
         "Place cup",                                                    // name
-        "Place your empty dosing cup on the scale, then tap Tare scale", // instruction
-        "Tare scale",                                                   // next_label
+        "Put the empty dosing cup on the scale, then tap Tare.",       // instruction
+        "Tare",                                                         // next_label
         STAGE_MANUAL,                                                   // type
         EFFECT_NONE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         0.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -313,16 +319,16 @@ static const BrewStage s_rao_v60_stages[] = {
         ""                                                              // capture_unit
     },
     {
-        "Dose beans",                                                   // name
-        "Add beans to the cup, tap Log dose when done",                 // instruction
-        "Log dose",                                                     // next_label
+        "Weigh coffee",                                                 // name
+        "Add coffee to 16 g, then tap Save dose.",                      // instruction
+        "Save dose",                                                    // next_label
         STAGE_MANUAL,                                                   // type
         EFFECT_TARE,                                                    // on_enter
         EFFECT_CAPTURE_DOSE,                                            // on_exit
         0.0f,                                                           // auto_threshold
         16.0f,                                                          // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -335,16 +341,16 @@ static const BrewStage s_rao_v60_stages[] = {
         ""                                                              // capture_unit
     },
     {
-        "Prep",                                                         // name
-        "Grind beans, rinse filter, place cup + V60 on scale. Tap Ready to arm", // instruction
+        "Prepare brewer",                                               // name
+        "Put the prepared V60 and cup on the scale, then tap Ready.",  // instruction
         "Ready",                                                        // next_label
         STAGE_MANUAL,                                                   // type
-        EFFECT_TARE,                                                    // on_enter
+        EFFECT_NONE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         0.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -357,16 +363,16 @@ static const BrewStage s_rao_v60_stages[] = {
         ""                                                              // capture_unit
     },
     {
-        "Arm pour",                                                     // name
-        "Start pouring when ready",                                     // instruction
-        "Armed",                                                        // next_label
+        "Ready to pour",                                                // name
+        "Start pouring to begin.",                                     // instruction
+        "Waiting",                                                      // next_label
         STAGE_AUTO_WEIGHT,                                              // type
         EFFECT_TARE,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         2.0f,                                                           // auto_threshold
         0.0f,                                                           // target_weight (no target; Bloom owns the pour target)
         0.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        0,                                                              // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -380,15 +386,15 @@ static const BrewStage s_rao_v60_stages[] = {
     },
     {
         "Bloom",                                                        // name
-        "Pour to [brew:stage_weight_target]g, then swirl gently. [brew:stage_time_remaining]s remaining", // instruction
-        "Blooming...",                                                  // next_label
+        "Pour to 50 g at 3 g/s, then let it bloom.",                   // instruction
+        "Blooming",                                                     // next_label
         STAGE_AUTO_TIME,                                                // type
         EFFECT_BEEP,                                                    // on_enter
         EFFECT_CAPTURE_WEIGHT,                                          // on_exit
         0.0f,                                                           // auto_threshold
-        60.0f,                                                          // target_weight
-        6.0f,                                                           // target_flow_rate
-        45000,                                                          // auto_time_ms
+        50.0f,                                                          // target_weight
+        3.0f,                                                           // target_flow_rate
+        60000,                                                          // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -401,16 +407,16 @@ static const BrewStage s_rao_v60_stages[] = {
         "g"                                                             // capture_unit
     },
     {
-        "Main pour",                                                    // name
-        "Pour steadily in circles to [brew:stage_weight_target]g, tap Done when finished", // instruction
-        "Done",                                                         // next_label
-        STAGE_MANUAL,                                                   // type
+        "Second pour",                                                  // name
+        "Pour to 150 g at 4 g/s, then wait.",                          // instruction
+        "Pouring",                                                      // next_label
+        STAGE_AUTO_TIME,                                                // type
         EFFECT_BEEP,                                                    // on_enter
         EFFECT_NONE,                                                    // on_exit
         0.0f,                                                           // auto_threshold
-        250.0f,                                                         // target_weight
-        5.0f,                                                           // target_flow_rate
-        0,                                                              // auto_time_ms
+        150.0f,                                                         // target_weight
+        4.0f,                                                           // target_flow_rate
+        45000,                                                          // target_time_ms
         "",                                                             // beep_pattern
         "",                                                             // countdown_beep
         "",                                                             // countdown_done_beep
@@ -422,16 +428,24 @@ static const BrewStage s_rao_v60_stages[] = {
         "",                                                             // capture_label
         ""                                                              // capture_unit
     },
+    {
+        "Final pour", "Pour to 250 g at 4 g/s. When the brew is complete, tap Finish.", "Finish",
+        STAGE_MANUAL, EFFECT_BEEP, EFFECT_NONE,
+        0.0f, 250.0f, 4.0f, 75000,
+        "", "", "", 0.0f, 1, "", "", "", "", ""
+    },
 };
 
 static const BrewTemplate s_rao_v60_template = {
     "rao_v60",
-    "James Rao V60",                                     // display_name
-    "Single-pour V60 with bloom stage and 5:00 target",  // description
-    "Start Rao V60",     // start_label (Idle)
-    "Brew again",        // done_label  (Done)
+    "Advanced V60",                                  // display_name
+    "Guided 16 g V60 with bloom, timed pours, and flow targets", // description
+    "Start",             // start_label (Idle)
+    "Start",             // done_label  (Done)
+    "Tap Start to begin.",
+    "Brew complete. Tap Start for a new brew.",
     s_rao_v60_stages,
-    6,
+    7,
     false,
 };
 

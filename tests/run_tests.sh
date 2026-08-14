@@ -137,6 +137,20 @@ echo "=== Running unit tests: binding_template ==="
 ./tests/bin/test_binding_template
 echo
 
+echo "=== Building unit tests: brew template DSL ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_SCALE=1 \
+    -include tests/board_config.h \
+    -I tests -I src/app -I src/app/device_classes/coffee_scale/brew \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_brew_template_dsl.cpp \
+    src/app/device_classes/coffee_scale/brew/brew_template_dsl.cpp \
+    -o tests/bin/test_brew_template_dsl
+
+echo "=== Running unit tests: brew template DSL ==="
+./tests/bin/test_brew_template_dsl
+echo
+
 echo "=== Building unit tests: music transport ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

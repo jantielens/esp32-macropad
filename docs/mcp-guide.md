@@ -451,14 +451,16 @@ compile none of it.
     "stages": [
       { "name": "Dose", "instruction": "Add coffee", "type": "manual",
         "on_enter": ["tare"], "on_exit": ["capture_dose"] },
-      { "name": "Bloom", "type": "auto_time", "auto_time_s": 45,
+      { "name": "Bloom", "type": "auto_time", "target_time_s": 45,
         "target_weight": 40.0 }
     ]
   }
   ```
 
   Stage `type` is `manual`, `auto_weight` (advances at `target_weight` /
-  `auto_threshold` g) or `auto_time` (advances after `auto_time_s`); effects in
+  `auto_threshold` g) or `auto_time` (advances after `target_time_s`).
+  `target_time_s` is also an advisory progress target for `manual` and
+  `auto_weight` stages; it does not advance those stages. Effects in
   `on_enter`/`on_exit` include `tare`, `beep`, `capture_dose`, `marker`,
   `capture_weight`. Max 16 stages; the template is validated before saving.
 

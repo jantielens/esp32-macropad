@@ -711,8 +711,8 @@ REGISTER_MCP_TOOL(s_tool_delete_brew_template);
 static const McpTool s_tool_set_brew_template = {
     "set_brew_template",
     "Create or replace one brew template. Use this tool directly; do not POST to any HTTP endpoint. `content` is the template's JSON DSL (the same format get_brew_template returns and the portal's template editor uses). The template's `name` field is the machine id and the filename. Schema (v1): "
-    "{\"v\":1,\"name\":\"my_v60\",\"display_name\":\"My V60\",\"description\":\"...\",\"stages\":[{\"name\":\"Dose\",\"instruction\":\"Add coffee\",\"type\":\"manual|auto_weight|auto_time\",\"on_enter\":[\"tare\"],\"on_exit\":[\"capture_dose\"],\"auto_threshold\":2.0,\"target_weight\":60.0,\"target_flow_rate\":6.0,\"auto_time_s\":45}]}. "
-    "Stage `type` is manual (user advances), auto_weight (advances at target/auto_threshold g) or auto_time (advances after auto_time_s). Effects in on_enter/on_exit: tare, beep, capture_dose, marker, capture_weight. Max 16 stages. Validated before saving; call get_brew_template afterward to confirm.",
+    "{\"v\":1,\"name\":\"my_v60\",\"display_name\":\"My V60\",\"description\":\"...\",\"stages\":[{\"name\":\"Dose\",\"instruction\":\"Add coffee\",\"type\":\"manual|auto_weight|auto_time\",\"on_enter\":[\"tare\"],\"on_exit\":[\"capture_dose\"],\"auto_threshold\":2.0,\"target_weight\":60.0,\"target_flow_rate\":6.0,\"target_time_s\":45}]}. "
+    "Stage `type` is manual (user advances), auto_weight (advances at target/auto_threshold g) or auto_time (advances at target_time_s). target_time_s is an advisory progress target for every stage, but only auto_time stages advance automatically. Effects in on_enter/on_exit: tare, beep, capture_dose, marker, capture_weight. Max 16 stages. Validated before saving; call get_brew_template afterward to confirm.",
     "{\"type\":\"object\",\"properties\":{\"content\":{\"type\":\"string\",\"description\":\"Full brew-template JSON in the v1 DSL described in this tool's description.\"}},\"required\":[\"content\"]}",
     tool_set_brew_template, false, false, false, true
 };

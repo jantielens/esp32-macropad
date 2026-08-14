@@ -126,6 +126,14 @@ static bool lookup_value(const char* key, const char* fmt,
         strlcpy(out, brew_get_next_label(), out_len);
         return true;
     }
+    if (strcmp(key, "advance_state") == 0) {
+        strlcpy(out, brew_get_advance_state(), out_len);
+        return true;
+    }
+    if (strcmp(key, "stage_status") == 0) {
+        brew_format_stage_status(out, out_len);
+        return out[0] != '\0';
+    }
     // ---- stage_weight_* ----
     if (strcmp(key, "stage_weight_target") == 0)
         return format_float(fmt, "%.0f", brew_get_stage_weight_target(), out, out_len);
@@ -343,7 +351,7 @@ static void brew_scheme_describe(void* out) {
     JsonObject& o = *static_cast<JsonObject*>(out);
     o["syntax"]  = "[brew:key] or [brew:key;format]";
     o["example"] = "[brew:weight;%.1f] g @ [brew:flow_rate;%.1f] g/s";
-    o["keys"]    = "weight, flow_rate, timer, stage, active, template, dose, water, ratio, instruction, next_label, stage_weight_target/_current/_remaining/_pct, stage_time_target/_current/_remaining/_pct, stage_flow_target/_current/_pct, display_name, stages_json, summary_json, template_count, tpl_*";
+    o["keys"]    = "weight, flow_rate, timer, stage, active, template, dose, water, ratio, instruction, next_label, advance_state, stage_status, stage_weight_target/_current/_remaining/_pct, stage_time_target/_current/_remaining/_pct, stage_flow_target/_current/_pct, display_name, stages_json, summary_json, template_count, tpl_*";
     o["note"]    = "Live brew-session guidance and per-stage progress.";
 }
 #endif

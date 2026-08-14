@@ -177,11 +177,11 @@ static void enter_stage(uint8_t index) {
     s_weight_cue_count = 0;
     s_weight_done_fired = false;
 #if HAS_AUDIO
-    if (stage->type == STAGE_AUTO_TIME && stage->auto_time_ms > 0
+    if (stage->type == STAGE_AUTO_TIME && stage->target_time_ms > 0
         && stage->countdown_beep[0]) {
         uint32_t pattern_dur = brew_dsl_beep_duration_ms(stage->countdown_beep);
-        if (pattern_dur > 0 && pattern_dur < stage->auto_time_ms) {
-            s_countdown_trigger_ms = stage->auto_time_ms - pattern_dur;
+        if (pattern_dur > 0 && pattern_dur < stage->target_time_ms) {
+            s_countdown_trigger_ms = stage->target_time_ms - pattern_dur;
             LOGD(TAG, "Countdown beep at %lu ms (pattern %lu ms)",
                  (unsigned long)s_countdown_trigger_ms, (unsigned long)pattern_dur);
         }
@@ -195,6 +195,12 @@ static void enter_stage(uint8_t index) {
         emit_marker(stage->name, s_series_count);
     }
 
+    // A stage can request a new tare after brew_start(), such as when the
+    // brewer is assembled before an auto-weight pour stage. Suppress first-
+    // pour detection until this tare completes, not only the initial tare.
+    if (stage->on_enter & EFFECT_TARE) {
+        s_waiting_for_tare = true;
+    }
     dispatch_effects(stage->on_enter, stage);
 }
 
@@ -404,7 +410,7 @@ void brew_tick() {
     }
 
     // --- AUTO_TIME: advance after duration elapsed ---
-    if (stage && stage->type == STAGE_AUTO_TIME && stage->auto_time_ms > 0) {
+    if (stage && stage->type == STAGE_AUTO_TIME && stage->target_time_ms > 0) {
         uint32_t elapsed_in_stage = millis() - s_stage_enter_ms;
 
 #if HAS_AUDIO
@@ -417,7 +423,7 @@ void brew_tick() {
         }
 #endif
 
-        if (elapsed_in_stage >= stage->auto_time_ms) {
+        if (elapsed_in_stage >= stage->target_time_ms) {
             LOGI(TAG, "Auto-time: %lu ms elapsed in '%s'",
                  (unsigned long)elapsed_in_stage, stage->name);
 #if HAS_AUDIO
@@ -549,21 +555,23 @@ float brew_get_stage_flow_target() {
 uint32_t brew_get_stage_time_target_ms() {
     if (s_phase != BREW_ACTIVE) return 0;
     const BrewStage* stage = current_stage();
-    if (!stage || stage->auto_time_ms == 0) return 0;
-    return stage->auto_time_ms;
+    if (!stage || stage->target_time_ms == 0) return 0;
+    return stage->target_time_ms;
 }
 
 uint32_t brew_get_stage_time_remaining_ms() {
     if (s_phase != BREW_ACTIVE) return 0;
     const BrewStage* stage = current_stage();
-    if (!stage || stage->type != STAGE_AUTO_TIME || stage->auto_time_ms == 0) return 0;
+    if (!stage || stage->target_time_ms == 0) return 0;
     uint32_t elapsed = millis() - s_stage_enter_ms;
-    if (elapsed >= stage->auto_time_ms) return 0;
-    return stage->auto_time_ms - elapsed;
+    if (elapsed >= stage->target_time_ms) return 0;
+    return stage->target_time_ms - elapsed;
 }
 
 uint32_t brew_get_stage_time_current_ms() {
     if (s_phase != BREW_ACTIVE || s_stage_enter_ms == 0) return 0;
+    const BrewStage* stage = current_stage();
+    if (!stage || stage->target_time_ms == 0) return 0;
     return millis() - s_stage_enter_ms;
 }
 
@@ -599,20 +607,71 @@ const BrewStage* brew_get_stage(uint8_t index) {
 }
 
 const char* brew_get_instruction() {
-    if (s_phase != BREW_ACTIVE) return "";
+    const BrewTemplate* t = s_template ? s_template : s_last_template;
+    if (s_phase == BREW_IDLE) {
+        return (t && t->idle_instruction[0]) ? t->idle_instruction : "Tap Start to begin.";
+    }
+    if (s_phase == BREW_DONE) {
+        return (t && t->done_instruction[0]) ? t->done_instruction : "Brew complete. Tap Start for a new brew.";
+    }
     const BrewStage* stage = current_stage();
     return (stage && stage->instruction[0]) ? stage->instruction : "";
 }
 
 const char* brew_get_next_label() {
     // In IDLE/DONE use the last known template for the label so the button
-    // shows "Start V60" / "Brew again" even between brews.
+    // retains the selected template's shared Start label between brews.
     const BrewTemplate* t = s_template ? s_template : s_last_template;
     if (!t) return "Start";
     if (s_phase == BREW_IDLE) return t->start_label[0] ? t->start_label : "Start";
-    if (s_phase == BREW_DONE) return t->done_label[0]  ? t->done_label  : "Brew again";
+    if (s_phase == BREW_DONE) return t->done_label[0]  ? t->done_label  : "Start";
     const BrewStage* stage = current_stage();
     return (stage && stage->next_label[0]) ? stage->next_label : "Next";
+}
+
+const char* brew_get_advance_state() {
+    if (s_phase != BREW_ACTIVE) return "action";
+    const BrewStage* stage = current_stage();
+    return (stage && stage->type != STAGE_MANUAL) ? "automatic" : "action";
+}
+
+void brew_format_stage_status(char* out, size_t out_len) {
+    if (!out || out_len == 0) return;
+    out[0] = '\0';
+
+    if (s_phase == BREW_IDLE) {
+        strlcpy(out, "Ready to start", out_len);
+        return;
+    }
+    if (s_phase == BREW_DONE) {
+        strlcpy(out, "Brew complete", out_len);
+        return;
+    }
+
+    const BrewStage* stage = current_stage();
+    if (!stage) return;
+    if (stage->type == STAGE_AUTO_WEIGHT) {
+        strlcpy(out, "Waiting for pour", out_len);
+        return;
+    }
+
+    const float target = stage->target_weight;
+    const float remaining = brew_get_stage_weight_remaining();
+    const uint32_t remaining_ms = brew_get_stage_time_remaining_ms();
+    const unsigned remaining_s = (unsigned)((remaining_ms + 999) / 1000);
+    if (stage->type == STAGE_AUTO_TIME) {
+        if (target > 0.0f && remaining > 0.0f) {
+            snprintf(out, out_len, "%.0f g to pour - %u s", remaining, remaining_s);
+        } else if (target > 0.0f) {
+            snprintf(out, out_len, "Waiting - %u s", remaining_s);
+        } else {
+            snprintf(out, out_len, "%u s remaining", remaining_s);
+        }
+        return;
+    }
+    if (target > 0.0f && remaining > 0.0f) {
+        snprintf(out, out_len, "%.0f g to pour", remaining);
+    }
 }
 
 void brew_hint_template(const char* template_name) {

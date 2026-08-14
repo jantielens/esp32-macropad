@@ -24,7 +24,7 @@
 // Stage types control how a stage advances:
 //   STAGE_MANUAL      — user calls brew_next() to advance
 //   STAGE_AUTO_WEIGHT — auto-advances when weight ≥ auto_threshold
-//   STAGE_AUTO_TIME   — auto-advances after auto_time_ms elapsed in this stage
+//   STAGE_AUTO_TIME   — auto-advances when target_time_ms is reached
 //
 // Side effects (on_enter / on_exit) are bitmasks — multiple effects can fire
 // on a single transition.  Effects are serializable as strings for future
@@ -41,7 +41,7 @@
 enum BrewStageType : uint8_t {
     STAGE_MANUAL      = 0,
     STAGE_AUTO_WEIGHT = 1,
-    STAGE_AUTO_TIME   = 2,  // auto-advance after auto_time_ms
+    STAGE_AUTO_TIME   = 2,  // auto-advance when target_time_ms is reached
 };
 
 // Side-effect bitmask flags — combine with bitwise OR.
@@ -82,7 +82,9 @@ struct BrewStage {
     float          auto_threshold;   // g above tare; used by AUTO_WEIGHT
     float          target_weight;    // guidance target weight for this stage (0 = none)
     float          target_flow_rate; // guidance flow rate target g/s (0 = none)
-    uint32_t       auto_time_ms;     // duration for AUTO_TIME stages (0 = unused)
+    // Intended duration for any stage. STAGE_AUTO_TIME advances at this target;
+    // other stage types expose it as advisory progress only.
+    uint32_t       target_time_ms;
     // Custom beep pattern (audio DSL, e.g. "600:40 40 600:40"); empty = default beep
     char           beep_pattern[48];
     // Countdown beep pattern (audio DSL) played before auto_time stage ends;
@@ -109,6 +111,8 @@ struct BrewTemplate {
     char             description[128];// template description / help text
     char             start_label[48]; // advance button label when Idle (before starting)
     char             done_label[48];  // advance button label when Done (restart prompt)
+    char             idle_instruction[128]; // guidance shown through [brew:instruction] in Idle
+    char             done_instruction[128]; // guidance shown through [brew:instruction] in Done
     const BrewStage* stages;
     uint8_t          stage_count;
     bool             is_dynamic;      // true = heap-allocated; freed on brew_reset/unregister
@@ -175,14 +179,18 @@ float       brew_get_water_weight();     // water poured: live while timer runni
 float       brew_get_stage_weight_target();     // current stage target weight (0 if none)
 float       brew_get_stage_weight_remaining();  // max(0, target - weight) grams left
 float       brew_get_stage_flow_target();        // current stage target flow rate g/s (0 if none)
-uint32_t    brew_get_stage_time_target_ms();     // current stage auto_time_ms (0 if not AUTO_TIME)
-uint32_t    brew_get_stage_time_remaining_ms(); // remaining ms for AUTO_TIME stage (0 otherwise)
-uint32_t    brew_get_stage_time_current_ms();   // ms since current stage entered (0 when idle)
+uint32_t    brew_get_stage_time_target_ms();     // current stage time target (0 when unset)
+uint32_t    brew_get_stage_time_remaining_ms(); // remaining ms to target, clamped at 0
+uint32_t    brew_get_stage_time_current_ms();   // elapsed ms toward a configured stage time target (0 otherwise)
 const char* brew_get_display_name();     // template display_name (falls back to name)
-// Current stage instruction text, or "" when Idle/Done. Use [brew:instruction|fallback].
+// Current stage or phase instruction text. Idle/Done use template text or concise defaults.
 const char* brew_get_instruction();
 // Label for the single advance button — changes with each stage.
 const char* brew_get_next_label();
+// `action` for tappable phases/manual stages; `automatic` for auto-advancing stages.
+const char* brew_get_advance_state();
+// Compact live stage progress for small pads. Writes an empty string only when unavailable.
+void        brew_format_stage_status(char* out, size_t out_len);
 // Access captured data points (for brew_binding)
 uint8_t     brew_get_capture_count();
 const BrewCapture* brew_get_capture(uint8_t index);

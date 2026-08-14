@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **Guided Coffee Scale brew templates**: built-in Free Pour and V60 Pour-Over flows now use consistent short labels and phase guidance, while Advanced V60 provides a 16 g / 250 g three-minute guide with cumulative water targets, flow targets, timed bloom and second-pour stages, and a manual final finish. Brew templates support phase instructions, `target_time_s` advisory targets for any stage, and automatic advancement only for `auto_time` stages. New `[brew:advance_state]` and `[brew:stage_status]` bindings let pads distinguish manual from automatic stages and present compact live pour/timing guidance.
+
 ### Fixed
 
 * **Coffee Scale calibration weight accepts Numeric Rocker step values**: the **Adjust calibration weight** action editor now accepts `{step}` placeholders so the same numeric-rocker workflow works for calibration deltas as it does for other adjustment actions.

@@ -55,8 +55,8 @@ Calibration changes are applied live so subsequent readings use the new factor i
 
 A brew is a count-up timer driven by a **brew template**. A template defines an ordered list of **stages**, each with a weight target, a time target, an instruction line, and optional next-stage label. The engine has three phases:
 
-- **Idle** — no brew running. The next-brew label (`[brew:next_label]`) shows the start prompt of the last-used template.
-- **Active** — a brew is in progress. Weight and flow update live, the current stage advances automatically when its target is met or manually via the `brew:next` / `brew:advance` actions, and every sample is appended to an in-PSRAM series for later export.
+- **Idle** — no brew running. The next-brew label (`[brew:next_label]`) shows the start prompt of the last-used template, and `[brew:instruction]` shows the template's idle guidance.
+- **Active** — a brew is in progress. Weight and flow update live. `auto_weight` and `auto_time` stages advance automatically; manual stages advance through the `brew:next` / `brew:advance` actions. Every sample is appended to an in-PSRAM series for later export.
 - **Done** — the brew finished or was stopped. A summary is available until the next `brew:start` or `brew:reset`.
 
 When a brew completes it is written to the brew log on the `Storage` facade (capped at a fixed number of brews, oldest evicted first). The full weight series, stage markers, and captured field values are embedded in each report so it stays self-contained for export.
@@ -108,15 +108,92 @@ Two binding schemes expose live scale and brew data to pad widgets. Both support
 
 | Key | Value |
 |---|---|
-| `weight`, `flow_rate` | Live weight / flow |
-| `timer` | Elapsed brew time |
-| `stage`, `active`, `template` | Current stage name, active flag, template name |
-| `dose`, `water`, `ratio` | Dose weight, water weight, brew ratio |
-| `instruction`, `next_label` | Current instruction text and next-action label |
-| `stage_weight_target` / `_current` / `_remaining` / `_pct` | Per-stage weight progress |
-| `stage_time_target` / `_current` / `_remaining` / `_pct` | Per-stage time progress |
-| `stages_json` | JSON array of stages for a list/table widget |
-| `summary_json` | JSON summary (dose / water / ratio / time + captures) for the done screen |
+| `weight` | Current scale weight in g |
+| `flow_rate` | Current flow rate in g/s |
+| `timer` | Elapsed brew time; accepts timer format such as `mm:ss` |
+| `stage` | Current stage name, or `Idle` / `Done` |
+| `active` | `1` while a brew is active, otherwise `0` |
+| `template` | Active or last-selected template machine name, or `Idle` |
+| `display_name` | Active or last-selected template display name |
+| `dose` | Captured coffee dose in g |
+| `water` | Water weight in g while brewing or after completion |
+| `ratio` | Water-to-dose ratio, or `---` when no dose is captured |
+| `instruction` | Current phase or stage instruction text; resolves inner bindings |
+| `next_label` | Label for the single advance button |
+| `advance_state` | `action` for Idle, Done, and manual stages; `automatic` for auto-advancing stages. Use it to style the advance button. |
+| `stage_status` | Compact live summary such as `28 g to pour - 31 s` or `Waiting - 12 s` |
+| `stage_weight_target` | Current stage's cumulative water target in g, or `0` |
+| `stage_weight_current` | Current scale weight in g for the active stage |
+| `stage_weight_remaining` | Remaining grams to the current stage target, never below `0` |
+| `stage_weight_pct` | Current weight as a percentage of the current stage target |
+| `stage_time_target` | Current stage's intended duration in seconds, or `0` |
+| `stage_time_current` | Elapsed seconds toward the current stage time target, or `0` when no time target is configured |
+| `stage_time_remaining` | Remaining seconds to the current stage time target, clamped at `0` |
+| `stage_time_pct` | Elapsed time as a percentage of the current stage time target; may exceed `100` for a manual stage |
+| `stage_flow_target` | Current stage's target flow rate in g/s, or `0` |
+| `stage_flow_current` | Current flow rate in g/s for the active stage |
+| `stage_flow_pct` | Current flow rate as a percentage of the current stage target |
+| `stages_json` | Table-widget JSON for the template stage list and current progress coloring |
+| `summary_json` | Table-widget JSON for dose, water, ratio, time, and named captures |
+| `template_count` | Number of registered built-in and custom templates |
+| `tpl_N_name` | Machine name of registered template `N`, starting at `0` |
+| `tpl_N_display_name` | Display name of registered template `N` |
+| `tpl_N_description` | Description of registered template `N` |
+| `tpl_N_stages` | Stage count of registered template `N` |
+
+## Built-in templates
+
+The built-in templates share concise `Start` labels in Idle and Done. The advance
+button's color can be styled from `[brew:advance_state]`: normal for `action` and muted
+for `automatic`.
+
+* **Free Pour**: tare the assembled brewer, auto-start on the first pour, then finish
+	the brew manually.
+* **V60 Pour-Over**: tare an empty dosing cup, capture the coffee dose, prepare the
+	V60 and cup, then auto-start on the first pour.
+* **Advanced V60**: a 16 g / 250 g guided recipe with a 50 g bloom, a 150 g timed
+	second pour, and a 250 g final pour. Its stage targets are 45, 60, and 75 seconds,
+	giving a three-minute guide. The final pour remains manual until **Finish** is tapped.
+	Timed stages advance on time; their cumulative water and flow targets guide the pour
+	but do not block the next stage.
+
+## Template time targets
+
+Each stage may define `target_time_s`. It is an intended duration used by
+`stage_time_*` bindings for progress displays. It does not itself decide how a stage
+advances:
+
+| Stage type | Behavior with `target_time_s` |
+|------------|-------------------------------|
+| `manual` | Advisory only. The user advances the stage, even after the target is exceeded. |
+| `auto_weight` | Advisory only. The stage advances when its weight threshold is reached. |
+| `auto_time` | Required. The stage advances automatically when its time target is reached. |
+
+## Template authoring guidance
+
+Built-in and custom templates should use short, consistent labels. Keep the selected
+recipe name visible elsewhere on the pad and use `Start` in both Idle and Done. Avoid
+"again" labels.
+
+| Purpose | Recommended vocabulary |
+|---------|------------------------|
+| Start or restart | `Start` |
+| Zero the scale | `Tare` |
+| Measure coffee | `Weigh coffee` |
+| Store the dose | `Save dose` |
+| Set up the brewer | `Prepare brewer` |
+| First-pour stage | `Ready to pour` with `Waiting` as its label |
+| Initial saturation stage | `Bloom` with `Blooming` as its label |
+| End a brew | `Finish` |
+
+Use the instruction to state the physical action, then the button action when one is
+required. Automatic-stage labels are status text, not invitations to tap. For example,
+use `Put the prepared V60 and cup on the scale, then tap Ready.` before a first-pour
+stage, and `Start pouring to begin.` while waiting for automatic detection.
+
+Timed pour stages are time-led. Their water and flow targets guide the barista, but do
+not delay an `auto_time` transition. Reach the target at the recommended flow, then let
+the stage timer complete; correct an under- or over-pour in the following stage.
 
 ## REST endpoints
 

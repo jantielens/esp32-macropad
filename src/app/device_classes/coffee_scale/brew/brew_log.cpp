@@ -190,7 +190,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
         bool has_targets = false;
         for (uint8_t i = 0; i < tmpl->stage_count; i++) {
             const BrewStage& st = tmpl->stages[i];
-            if (st.target_weight > 0 || st.target_flow_rate > 0 || st.auto_time_ms > 0) {
+            if (st.target_weight > 0 || st.target_flow_rate > 0 || st.target_time_ms > 0) {
                 has_targets = true;
                 break;
             }
@@ -200,7 +200,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
             bool first = true;
             for (uint8_t i = 0; i < tmpl->stage_count; i++) {
                 const BrewStage& st = tmpl->stages[i];
-                if (st.target_weight <= 0 && st.target_flow_rate <= 0 && st.auto_time_ms == 0) continue;
+                if (st.target_weight <= 0 && st.target_flow_rate <= 0 && st.target_time_ms == 0) continue;
                 if (!first) f.print(',');
                 first = false;
                 write_json_string(f, st.name);
@@ -215,9 +215,9 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
                     f.printf("\"flow_rate\":%.1f", st.target_flow_rate);
                     first_f = false;
                 }
-                if (st.auto_time_ms > 0) {
+                if (st.target_time_ms > 0) {
                     if (!first_f) f.print(',');
-                    f.printf("\"time_s\":%u", (unsigned)(st.auto_time_ms / 1000));
+                    f.printf("\"time_s\":%u", (unsigned)(st.target_time_ms / 1000));
                     first_f = false;
                 }
                 if (st.capture_key[0]) {

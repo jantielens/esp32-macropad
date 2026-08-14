@@ -9,6 +9,7 @@
 // JSON schema (v1):
 //   { "v": 1, "name": "...", "display_name": "...", "description": "...",
 //     "start_label": "...", "done_label": "...",
+//     "idle_instruction": "...", "done_instruction": "...",
 //     "stages": [ { "name": "...", "instruction": "...", "next_label": "...",
 //                    "type": "manual|auto_weight|auto_time",
 //                    "on_enter": ["tare","beep",...],
@@ -16,9 +17,11 @@
 //                    "auto_threshold": 2.0,
 //                    "target_weight": 60.0,
 //                    "target_flow_rate": 6.0,
-//                    "auto_time_s": 45,
+//                    "target_time_s": 45,
 //                    "capture": { "key": "...", "label": "...", "unit": "g" }
 //                  }, ... ] }
+// `target_time_s` is a progress target for any stage. Only `auto_time` stages
+// advance automatically when their target is reached.
 
 #include "brew_manager.h"   // BrewTemplate, BrewStage, BrewEffects, BrewStageType
 
@@ -32,6 +35,7 @@
 #define BREW_DSL_ERR_STAGE_NAME     -6   // stage missing "name"
 #define BREW_DSL_ERR_ALLOC          -7   // heap allocation failed
 #define BREW_DSL_ERR_TOO_MANY     -8   // more stages than BREW_DSL_MAX_STAGES
+#define BREW_DSL_ERR_TARGET_TIME   -9   // target_time_s is not a valid whole-second duration
 
 // Maximum number of stages per template
 #define BREW_DSL_MAX_STAGES  16
