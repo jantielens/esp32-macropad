@@ -32,6 +32,7 @@ PubSubClient@2.8
 Adafruit BME280 Library
 Adafruit Unified Sensor
 Adafruit TSL2591 Library
+Adafruit AHTX0
 
 # Coffee Scale device class — load-cell ADCs
 SparkFun Qwiic Scale NAU7802 Arduino Library@1.0.6

@@ -1,0 +1,9 @@
+{
+  "device_class": "headless",
+  "board_label": "FireBeetle 2 ESP32-C6 + AHT10",
+  "description": "DFRobot FireBeetle 2 ESP32-C6 v1.2 battery-powered sensor node with an AHT10 on GPIO19/GPIO20 and onboard LiPo voltage monitoring.",
+  "chip_family": "ESP32-C6",
+  "flash_mb": 4,
+  "psram_mb": 0,
+  "wireless": {"wifi": true, "ble": true}
+}

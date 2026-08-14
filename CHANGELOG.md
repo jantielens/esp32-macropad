@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **FireBeetle 2 ESP32-C6 AHT10 sensor-node target**: the new `firebeetle2-esp32c6-aht10` target supports DFRobot's battery-powered FireBeetle 2 ESP32-C6 v1.2 with an AHT10 on GPIO19/GPIO20. Its built-in LED on GPIO15 remains unconfigured. The target reads the onboard GPIO0 2:1 LiPo divider and uses the `huge_app` partition, so it does not support OTA updates.
+* **Reusable battery ADC sensor adapter**: battery-powered boards can enable `HAS_SENSOR_BATTERY_ADC` and configure their ADC pin, divider, calibration multiplier, and averaging count. The adapter publishes battery voltage and an interpolated single-cell LiPo percentage through API, MQTT/Home Assistant discovery, and BTHome BLE telemetry.
 * **Guided Coffee Scale brew templates**: built-in Free Pour and V60 Pour-Over flows now use consistent short labels and phase guidance, while Advanced V60 provides a 16 g / 250 g three-minute guide with cumulative water targets, flow targets, timed bloom and second-pour stages, and a manual final finish. Brew templates support phase instructions, `target_time_s` advisory targets for any stage, and automatic advancement only for `auto_time` stages. New `[brew:advance_state]` and `[brew:stage_status]` bindings let pads distinguish manual from automatic stages and present compact live pour/timing guidance.
 
 ### Fixed
