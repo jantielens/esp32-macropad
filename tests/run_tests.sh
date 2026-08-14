@@ -33,6 +33,18 @@ echo "=== Running unit tests: expr_eval ==="
 ./tests/bin/test_expr_eval
 echo
 
+echo "=== Building unit tests: battery ADC percentage curve ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -DHAS_SENSOR_BATTERY_ADC=0 \
+    -include tests/Arduino.h -include tests/board_config.h \
+    -I tests -I src/app \
+    tests/test_battery_adc_sensor.cpp \
+    src/app/sensors/battery_adc_sensor.cpp \
+    -o tests/bin/test_battery_adc_sensor -lm
+echo "=== Running unit tests: battery ADC percentage curve ==="
+./tests/bin/test_battery_adc_sensor
+echo
+
 echo "=== Building unit tests: deferred dispatch slot ==="
 g++ -std=c++17 -Wall -Wextra -Werror -pthread \
     -I tests -I src/app \

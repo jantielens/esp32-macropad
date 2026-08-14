@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 261
+Total flags: 267
 
 ### Features (HAS_*)
 
@@ -48,6 +48,8 @@ Total flags: 261
 - **HAS_NATIVE_EXTENSIONS** default: `false` — RISC-V ELF modules loaded from persistent storage at startup.
 - **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
 - **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
+- **HAS_SENSOR_AHT10** default: `false` — Enable AHT10/AHT20 (I2C) temperature and humidity sensor adapter.
+- **HAS_SENSOR_BATTERY_ADC** default: `false` — Enable an ADC-connected LiPo battery monitor sensor adapter.
 - **HAS_SENSOR_BME280** default: `false` — Enable BME280 (I2C) environmental sensor adapter.
 - **HAS_SENSOR_DUMMY** default: `false` — Enable dummy sensor adapter (synthetic values for testing).
 - **HAS_SENSOR_HX711** default: `false` — HX711 strain-gauge amplifier (bit-banged digital protocol).
@@ -73,6 +75,7 @@ Total flags: 261
 ### Hardware (Pins)
 
 - **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin.
+- **BATTERY_ADC_PIN** default: `-1` — ADC GPIO connected to the battery divider. Use -1 to disable the adapter.
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
 - **EPAPER_BATTERY_ADC_PIN** default: `(no default)` — ADC pin for the battery sense divider (GPIO1 on the E1003).
 - **EPAPER_BATTERY_ENABLE_PIN** default: `(no default)` — Drive HIGH ~5ms before sampling to gate the battery divider on (GPIO40 on E1003).
@@ -184,6 +187,9 @@ Total flags: 261
 - **AUDIO_MP3_SCRATCH_PSRAM** default: `false` — Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 - **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
 - **AUDIO_SAMPLE_RATE** default: `48000` — Audio output sample rate in Hz.
+- **BATTERY_ADC_CALIBRATION** default: `1.0f` — Calibration multiplier applied after ADC millivolt conversion and divider scaling.
+- **BATTERY_ADC_DIVIDER** default: `1.0f` — Battery voltage divided by this factor before reaching BATTERY_ADC_PIN.
+- **BATTERY_ADC_SAMPLE_COUNT** default: `8` — Number of ADC samples averaged for each battery reading.
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
 - **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
@@ -308,26 +314,27 @@ Total flags: 261
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CONFIG_MODE_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_ES7210_MIC | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3248w535 |  |  | ✅ |  |  |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3636w518 | ✅ |  | ✅ |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3636w518-sd | ✅ |  | ✅ |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
-| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
-| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32c3-withsensors |  |  |  | ✅ |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  | ✅ |  |  |  |  | ? |  |  |
-| inkplate5v2 |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
-| inkplate6flick |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
-| reterminal-e1003 |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  | ✅ |  |
+| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CONFIG_MODE_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_ES7210_MIC | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3248w535 |  |  | ✅ |  |  |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518 | ✅ |  | ✅ |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518-sd | ✅ |  | ✅ |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
+| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
+| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32c3-withsensors |  |  |  | ✅ |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  |
+| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |
+| inkplate5v2 |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
+| inkplate6flick |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
+| reterminal-e1003 |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -350,6 +357,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc1060p470c | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | jc1060p470c-sd | AUDIO_OUTPUT_DRIVER_ES8311 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
 | esp32c3-withsensors | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
+| firebeetle2-esp32c6-aht10 | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
 | inkplate5v2 | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
 | inkplate6flick | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
 | reterminal-e1003 | AUDIO_OUTPUT_DRIVER_ES8311 | — | — |
@@ -874,6 +882,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/sensors/scale_smoothing.h
 - **HAS_SD_CARD**
   - src/app/board_config.h
+- **HAS_SENSOR_AHT10**
+  - src/app/board_config.h
+  - src/app/sensors.cpp
+- **HAS_SENSOR_BATTERY_ADC**
+  - src/app/board_config.h
+  - src/app/sensors.cpp
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp
@@ -995,6 +1009,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **AUDIO_SAMPLE_RATE**
   - src/app/board_config.h
 - **AUDIO_TASK_STACK_SIZE**
+  - src/app/board_config.h
+- **BATTERY_ADC_CALIBRATION**
+  - src/app/board_config.h
+- **BATTERY_ADC_DIVIDER**
+  - src/app/board_config.h
+- **BATTERY_ADC_PIN**
+  - src/app/board_config.h
+- **BATTERY_ADC_SAMPLE_COUNT**
   - src/app/board_config.h
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS**
   - src/app/board_config.h

@@ -297,6 +297,15 @@ struct HwButtonDef {
 // #define BUTTON_PIN 0
 // #endif
 //
+// Battery Monitor:
+// #ifndef HAS_BATTERY_MONITOR
+// #define HAS_BATTERY_MONITOR false
+// #endif
+//
+// #ifndef BATTERY_ADC_PIN
+// #define BATTERY_ADC_PIN 34
+// #endif
+//
 // Display:
 // #ifndef HAS_DISPLAY
 // #define HAS_DISPLAY false
@@ -603,6 +612,16 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define HAS_SENSOR_BME280 false
 #endif
 
+// Enable AHT10/AHT20 (I2C) temperature and humidity sensor adapter.
+#ifndef HAS_SENSOR_AHT10
+#define HAS_SENSOR_AHT10 false
+#endif
+
+// Enable an ADC-connected LiPo battery monitor sensor adapter.
+#ifndef HAS_SENSOR_BATTERY_ADC
+#define HAS_SENSOR_BATTERY_ADC false
+#endif
+
 // Enable LD2410 OUT pin presence sensor adapter.
 #ifndef HAS_SENSOR_LD2410_OUT
 #define HAS_SENSOR_LD2410_OUT false
@@ -631,6 +650,26 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // BME280 I2C address (0x76 or 0x77).
 #ifndef BME280_I2C_ADDR
 #define BME280_I2C_ADDR 0x76
+#endif
+
+// ADC GPIO connected to the battery divider. Use -1 to disable the adapter.
+#ifndef BATTERY_ADC_PIN
+#define BATTERY_ADC_PIN -1
+#endif
+
+// Battery voltage divided by this factor before reaching BATTERY_ADC_PIN.
+#ifndef BATTERY_ADC_DIVIDER
+#define BATTERY_ADC_DIVIDER 1.0f
+#endif
+
+// Calibration multiplier applied after ADC millivolt conversion and divider scaling.
+#ifndef BATTERY_ADC_CALIBRATION
+#define BATTERY_ADC_CALIBRATION 1.0f
+#endif
+
+// Number of ADC samples averaged for each battery reading.
+#ifndef BATTERY_ADC_SAMPLE_COUNT
+#define BATTERY_ADC_SAMPLE_COUNT 8
 #endif
 
 // LD2410 OUT pin (presence). Use -1 to disable.
