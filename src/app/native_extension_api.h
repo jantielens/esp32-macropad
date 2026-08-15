@@ -5,9 +5,13 @@
 
 // The extension ABI is intentionally C-shaped. Native packages are built
 // separately from the firmware, so this remains the compatibility boundary.
-#define NATIVE_EXTENSION_ABI_VERSION 9u
+#define NATIVE_EXTENSION_ABI_VERSION 12u
 #define NATIVE_EXTENSION_TARGET_ABI "rv32imafc-ilp32f"
 #define NATIVE_EXTENSION_DESCRIPTOR_MAGIC 0x3744584Eu
+#define NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS 250u
+#define NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS 33u
+#define NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS 1000u
+#define NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN 192u
 
 enum NativeExtensionEventResult : uint8_t {
     NATIVE_EXTENSION_PASS_THROUGH = 0,
@@ -64,6 +68,8 @@ struct NativeExtensionDescriptor {
     char id[32];
     char version[16];
     char title[40];
+    uint16_t tick_interval_ms;
+    uint16_t reserved;
 };
 
 typedef void (*NativeExtensionTaskFn)(void* context);
@@ -132,6 +138,10 @@ struct NativeExtensionCanvasApi {
     void (*canvas_set_buffer)(void* canvas, void* buffer, uint32_t width, uint32_t height);
     void (*canvas_clear)(void* canvas, uint32_t rgb);
     void (*canvas_set_pixel)(void* canvas, int32_t x, int32_t y, uint32_t rgb);
+    void (*canvas_fill_rect)(void* canvas, int32_t x, int32_t y,
+                             uint32_t width, uint32_t height, uint32_t rgb);
+    void (*canvas_invalidate_rect)(void* canvas, int32_t x, int32_t y,
+                                   uint32_t width, uint32_t height);
     void (*canvas_draw_line)(void* canvas, int32_t x1, int32_t y1,
                              int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
     void (*canvas_draw_circle)(void* canvas, int32_t x, int32_t y,
@@ -146,6 +156,19 @@ struct NativeExtensionCanvasApi {
 struct NativeExtensionBindingApi {
     bool (*resolve)(void* extension_context, uint32_t instance_id,
                     const char* template_text, char* out, size_t out_size);
+};
+
+struct NativeExtensionButtonSnapshot {
+    uint32_t background_rgb;
+    uint32_t foreground_rgb;
+    char label_top[NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN];
+    char label_center[NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN];
+    char label_bottom[NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN];
+};
+
+struct NativeExtensionButtonApi {
+    bool (*get)(void* extension_context, uint32_t instance_id,
+                NativeExtensionButtonSnapshot* out);
 };
 
 struct NativeExtensionHostApi {
@@ -221,6 +244,10 @@ struct NativeExtensionHostApi {
     void (*canvas_set_buffer)(void* canvas, void* buffer, uint32_t width, uint32_t height);
     void (*canvas_clear)(void* canvas, uint32_t rgb);
     void (*canvas_set_pixel)(void* canvas, int32_t x, int32_t y, uint32_t rgb);
+    void (*canvas_fill_rect)(void* canvas, int32_t x, int32_t y,
+                             uint32_t width, uint32_t height, uint32_t rgb);
+    void (*canvas_invalidate_rect)(void* canvas, int32_t x, int32_t y,
+                                   uint32_t width, uint32_t height);
     void (*canvas_draw_line)(void* canvas, int32_t x1, int32_t y1,
                              int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
     void (*canvas_draw_circle)(void* canvas, int32_t x, int32_t y,
@@ -233,6 +260,7 @@ struct NativeExtensionHostApi {
     const NativeExtensionUiApi* ui;
     const NativeExtensionCanvasApi* canvas;
     const NativeExtensionBindingApi* binding;
+    const NativeExtensionButtonApi* button;
 };
 
 typedef void (*NativeExtensionCreateFn)(const NativeExtensionHostApi* host,

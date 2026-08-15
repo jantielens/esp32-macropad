@@ -6,6 +6,7 @@
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
     NATIVE_EXTENSION_DESCRIPTOR_MAGIC, NATIVE_EXTENSION_ABI_VERSION,
     NATIVE_EXTENSION_TARGET_ABI, "advanced-sample", "1.1.0", "Advanced Sample",
+    NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS, 0,
 };
 
 namespace {

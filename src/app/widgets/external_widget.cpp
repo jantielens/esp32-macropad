@@ -79,6 +79,8 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
     external->instance_id = external_widget_instance_id(button->page, btn->col, btn->row);
     native_extension_set_instance_binding_context(config->extension_id, external->instance_id,
                                                   button->pad_bindings, button->pad_binding_count);
+    native_extension_set_instance_button_context(config->extension_id, external->instance_id, tile,
+                                                 button->label_top, button->label_center, button->label_bottom);
         LOGI("Extensions", "Create %s instance=%08lx root=%dx%d rect=%ux%u",
             config->extension_id, static_cast<unsigned long>(external->instance_id),
             lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
@@ -109,7 +111,8 @@ static void external_tick(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* 
     (void)tile;
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
     const uint32_t now = millis();
-    if (now - external->last_tick_ms < 250) return;
+    const uint16_t interval_ms = native_extension_tick_interval_ms(external_widget_config(cfg)->extension_id);
+    if (now - external->last_tick_ms < interval_ms) return;
     external->last_tick_ms = now;
     if (!external->created) {
         if (external->retry_after_stop) external_create_instance(external);

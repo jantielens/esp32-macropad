@@ -178,6 +178,7 @@ void PadScreen::buildTiles() {
         lv_obj_set_style_pad_all(obj, pad, 0);
 
         lv_color_t fg = rgb_to_lv(fg_def);
+        lv_obj_set_style_text_color(obj, fg, 0);
 
         // Top label
         lv_obj_t* lbl_top = nullptr;

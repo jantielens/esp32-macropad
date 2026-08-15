@@ -149,6 +149,7 @@ void PadScreen::pollColorBindings() {
         case 1: // fg (labels + mono icon recolor)
             // Per-label color overrides win: skip a label's text color if it has its
             // own color (static or binding). Icon recolor is NOT gated by the mask.
+            lv_obj_set_style_text_color(tile.obj, rgb_to_lv(color), 0);
             if (tile.label_top && !(tile.labelColorOverride & 0x01))
                 lv_obj_set_style_text_color(tile.label_top, rgb_to_lv(color), 0);
             if (tile.label_center && !(tile.labelColorOverride & 0x02))
