@@ -54,7 +54,8 @@ Rain uses the hidden seconds to reserve changing digit lanes and schedules
 their normal-looking heads for the next minute boundary. A changed digit updates
 when its planned head arrives. If an update remains pending 10 seconds after
 the time binding reports the new minute, the clock updates directly to avoid a
-stale display.
+stale display. Existing trails in a digit lane finish naturally before the lane
+is reserved. With slow rain, the first reachable target can be a later minute.
 
 ## Build
 
