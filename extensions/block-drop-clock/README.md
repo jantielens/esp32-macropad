@@ -23,7 +23,9 @@ provide this configuration:
 {
   "time": "[time:%H:%M;Europe/Brussels]",
   "burn_in_shift_minutes": 60,
-  "speed": 1.0
+  "speed": 1.0,
+  "block_color": "#55D7E8",
+  "clock_color": "#F3D24B"
 }
 ```
 
@@ -32,6 +34,8 @@ provide this configuration:
 | `time` | `[time:%H%M]` | Binding template that supplies the hour and minute. Separators are optional. |
 | `burn_in_shift_minutes` | `60` | Minutes between vertical clock shifts for burn-in mitigation. Set to `0` to disable shifting. |
 | `speed` | `1.0` | Playfield speed multiplier from `0.25` to `4.0`. |
+| `block_color` | Palette | Optional six-digit RGB color for game blocks, for example `#55D7E8`. Lighter and darker variants are generated from this base color. |
+| `clock_color` | Palette | Optional six-digit RGB color for clock cells, for example `#F3D24B`. Lighter and darker variants are generated from this base color. |
 
 The extension resolves the `time` binding in its owning button context, so it
 supports the project's standard time-binding options such as timezone
