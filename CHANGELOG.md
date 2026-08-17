@@ -16,11 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Matrix Rain native Extension**: ESP32-P4 pads can now render configurable green character streams using firmware fonts directly in an RGB565 canvas. Per-button settings control the font, falling speed, stream density, trail length, and animation cadence.
 * **Block Drop Clock native Extension**: ESP32-P4 pads can now host a responsive pixel-art clock with a live falling-block playfield. The Extension adapts its grid to the containing button, supports time bindings, optional burn-in shifting, and a configurable playfield speed. Its catalog metadata, preview, and development guide are included with the package.
 * **RGB565 sprite blitting for native Extensions**: the canvas host API now copies caller-owned RGB565 sprites into exact destination rectangles with clipped nearest-neighbor scaling. This gives animated Extensions a compact, reusable primitive for pixel-art assets without per-source-pixel canvas calls.
 * **FireBeetle 2 ESP32-C6 AHT10 sensor-node target**: the new `firebeetle2-esp32c6-aht10` target supports DFRobot's battery-powered FireBeetle 2 ESP32-C6 v1.2 with an AHT10 on GPIO19/GPIO20. Its built-in LED on GPIO15 remains unconfigured. The target reads the onboard GPIO0 2:1 LiPo divider and uses the `huge_app` partition, so it does not support OTA updates.
 * **Reusable battery ADC sensor adapter**: battery-powered boards can enable `HAS_SENSOR_BATTERY_ADC` and configure their ADC pin, divider, calibration multiplier, and averaging count. The adapter publishes battery voltage and an interpolated single-cell LiPo percentage through API, MQTT/Home Assistant discovery, and BTHome BLE telemetry.
 * **Guided Coffee Scale brew templates**: built-in Free Pour and V60 Pour-Over flows now use consistent short labels and phase guidance, while Advanced V60 provides a 16 g / 250 g three-minute guide with cumulative water targets, flow targets, timed bloom and second-pour stages, and a manual final finish. Brew templates support phase instructions, `target_time_s` advisory targets for any stage, and automatic advancement only for `auto_time` stages. New `[brew:advance_state]` and `[brew:stage_status]` bindings let pads distinguish manual from automatic stages and present compact live pour/timing guidance.
+
+### Changed
+
+* **Native Extension ABI 16**: Extensions now use grouped host services exclusively, canvas text selects firmware fonts by name, and each External Widget placement can define its own tick interval. All shipped native Extension packages are rebuilt for the new ABI.
 
 ### Fixed
 

@@ -441,6 +441,7 @@ function padDialogOpen(col, row) {
         extensionSelect.value = btn.extension_id || '';
     }
     document.getElementById('pad-edit-extension-config').value = btn.extension_config || '';
+    document.getElementById('pad-edit-extension-tick-interval').value = btn.extension_tick_interval_ms || '';
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -766,6 +767,10 @@ function padDialogOk(keepOpen) {
             btn.extension_id = extensionId;
             const extensionConfig = document.getElementById('pad-edit-extension-config').value.trim();
             if (extensionConfig) btn.extension_config = extensionConfig;
+            const extensionTickInterval = parseInt(document.getElementById('pad-edit-extension-tick-interval').value);
+            if (!isNaN(extensionTickInterval)) {
+                btn.extension_tick_interval_ms = Math.max(33, Math.min(1000, extensionTickInterval));
+            }
         }
     }
 

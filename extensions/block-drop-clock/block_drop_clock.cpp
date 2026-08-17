@@ -107,18 +107,6 @@ struct InstanceState {
     uint8_t full_render;
     uint8_t board_dirty;
     uint8_t rendered_piece_valid;
-    uint32_t perf_window_started_ms;
-    uint16_t perf_tick_count;
-    uint16_t perf_render_count;
-    uint32_t perf_tick_total_ms;
-    uint32_t perf_render_total_ms;
-    uint32_t perf_clear_total_ms;
-    uint32_t perf_draw_total_ms;
-    uint32_t perf_fill_calls;
-    uint16_t perf_game_dirty_count;
-    uint16_t perf_clock_dirty_count;
-    uint16_t perf_shift_dirty_count;
-    uint16_t perf_game_interval_ms;
 };
 
 struct PackageState { InstanceState instances[MAX_INSTANCES]; };
@@ -139,7 +127,6 @@ bool text_equals(const char* left, const char* right) {
 void mark_game_dirty(InstanceState* instance) {
     instance->render_dirty = true;
     instance->game_dirty = true;
-    ++instance->perf_game_dirty_count;
 }
 
 void mark_clock_dirty(InstanceState* instance) {
@@ -161,49 +148,6 @@ char* append_uint(char* out, uint32_t value) {
 char* append_text(char* out, const char* text) {
     while (*text) *out++ = *text++;
     return out;
-}
-
-void log_performance(const NativeExtensionHostApi* host, InstanceState* instance, uint32_t now) {
-    if (!instance->perf_window_started_ms) instance->perf_window_started_ms = now;
-    if (now - instance->perf_window_started_ms < 1000u) return;
-    char message[208];
-    char* out = append_text(message, "block drop perf: tick=");
-    out = append_uint(out, instance->perf_tick_count);
-    out = append_text(out, " render=");
-    out = append_uint(out, instance->perf_render_count);
-    out = append_text(out, " tick_ms=");
-    out = append_uint(out, instance->perf_tick_count ? instance->perf_tick_total_ms / instance->perf_tick_count : 0);
-    out = append_text(out, " render_ms=");
-    out = append_uint(out, instance->perf_render_count ? instance->perf_render_total_ms / instance->perf_render_count : 0);
-    out = append_text(out, " clear_ms=");
-    out = append_uint(out, instance->perf_render_count ? instance->perf_clear_total_ms / instance->perf_render_count : 0);
-    out = append_text(out, " draw_ms=");
-    out = append_uint(out, instance->perf_render_count ? instance->perf_draw_total_ms / instance->perf_render_count : 0);
-    out = append_text(out, " fills=");
-    out = append_uint(out, instance->perf_fill_calls);
-    out = append_text(out, " game=");
-    out = append_uint(out, instance->perf_game_dirty_count);
-    out = append_text(out, " clock=");
-    out = append_uint(out, instance->perf_clock_dirty_count);
-    out = append_text(out, " shift=");
-    out = append_uint(out, instance->perf_shift_dirty_count);
-    out = append_text(out, " speed=");
-    out = append_uint(out, instance->speed_percent);
-    out = append_text(out, " step_ms=");
-    out = append_uint(out, instance->perf_game_interval_ms);
-    *out = '\0';
-    host->core->log(NATIVE_EXTENSION_LOG_INFO, message);
-    instance->perf_window_started_ms = now;
-    instance->perf_tick_count = 0;
-    instance->perf_render_count = 0;
-    instance->perf_tick_total_ms = 0;
-    instance->perf_render_total_ms = 0;
-    instance->perf_clear_total_ms = 0;
-    instance->perf_draw_total_ms = 0;
-    instance->perf_fill_calls = 0;
-    instance->perf_game_dirty_count = 0;
-    instance->perf_clock_dirty_count = 0;
-    instance->perf_shift_dirty_count = 0;
 }
 
 float color_lightness(uint32_t rgb) {
@@ -408,7 +352,6 @@ void draw_block(const NativeExtensionHostApi* host, InstanceState* instance, int
     if (x + size <= 0 || y + size <= 0 || x >= instance->width || y >= instance->height) return;
     host->canvas->canvas_blit_rgb565(instance->canvas, x, y, instance->tinted_sprite_colors[color % SPRITE_COLOR_VARIANTS],
                                      SPRITE_SIZE, SPRITE_SIZE, instance->cell, instance->cell);
-    ++instance->perf_fill_calls;
 }
 
 bool clock_cell(const char* clock, uint8_t wanted_column, uint8_t row, uint8_t* color, uint8_t* character_index) {
@@ -718,7 +661,6 @@ void render(const NativeExtensionHostApi* host, InstanceState* instance) {
     NativeExtensionButtonSnapshot button = {};
     uint32_t background = 0x143D52;
     if (host->button && host->button->get(instance->extension_context, instance->instance_id, &button)) background = button.background_rgb;
-    const uint32_t clear_started_ms = host->core->millis();
     if (instance->full_render) {
         host->canvas->canvas_clear(instance->canvas, background);
     } else {
@@ -733,9 +675,6 @@ void render(const NativeExtensionHostApi* host, InstanceState* instance) {
             host->canvas->canvas_fill_rect(instance->canvas, 0, top < 0 ? 0 : top, instance->width, height, background);
         }
     }
-    instance->perf_clear_total_ms += host->core->millis() - clear_started_ms;
-
-    const uint32_t draw_started_ms = host->core->millis();
     const bool refresh_clock_after_piece = instance->game_dirty &&
                                            (piece_overlaps_clock(instance, instance->rendered_piece) ||
                                             piece_overlaps_clock(instance, instance->game_piece));
@@ -757,7 +696,6 @@ void render(const NativeExtensionHostApi* host, InstanceState* instance) {
             host->canvas->canvas_invalidate_rect(instance->canvas, 0, top < 0 ? 0 : top, instance->width, height);
         }
     }
-    instance->perf_draw_total_ms += host->core->millis() - draw_started_ms;
     instance->render_dirty = false;
     instance->game_dirty = false;
     instance->clock_dirty = false;
@@ -828,13 +766,10 @@ extern "C" void native_extension_tick(const NativeExtensionHostApi* host, void* 
     PackageState* state = static_cast<PackageState*>(host->core->context_get_data(extension_context));
     InstanceState* instance = state ? find_instance(state, instance_id) : nullptr;
     if (!instance) return;
-    const uint32_t tick_started_ms = host->core->millis();
-    const uint32_t now = tick_started_ms;
-    ++instance->perf_tick_count;
+    const uint32_t now = host->core->millis();
     if (now >= instance->next_game_step_ms) {
         advance_game(instance);
-        instance->perf_game_interval_ms = static_cast<uint16_t>(scaled_interval(GAME_FALL_MS, instance->speed_percent));
-        instance->next_game_step_ms = now + instance->perf_game_interval_ms;
+        instance->next_game_step_ms = now + scaled_interval(GAME_FALL_MS, instance->speed_percent);
     }
     if (now >= instance->next_clock_resolve_ms) {
         char resolved[CLOCK_TEXT_MAX_LEN] = {};
@@ -843,7 +778,6 @@ extern "C" void native_extension_tick(const NativeExtensionHostApi* host, void* 
         if (clock[0] && !text_equals(instance->clock, clock)) {
             copy_text(instance->clock, sizeof(instance->clock), clock);
             mark_clock_dirty(instance);
-            ++instance->perf_clock_dirty_count;
         }
         instance->next_clock_resolve_ms = now + CLOCK_RESOLVE_MS;
     }
@@ -851,16 +785,10 @@ extern "C" void native_extension_tick(const NativeExtensionHostApi* host, void* 
         instance->shift_y = instance->shift_y == 1 ? -1 : instance->shift_y + 1;
         instance->last_shift_ms = now;
         mark_clock_dirty(instance);
-        ++instance->perf_shift_dirty_count;
     }
     if (instance->render_dirty) {
-        const uint32_t render_started_ms = host->core->millis();
         render(host, instance);
-        instance->perf_render_total_ms += host->core->millis() - render_started_ms;
-        ++instance->perf_render_count;
     }
-    instance->perf_tick_total_ms += host->core->millis() - tick_started_ms;
-    log_performance(host, instance, now);
 }
 
 extern "C" NativeExtensionEventResult native_extension_on_tap(const NativeExtensionHostApi*, void*, uint32_t) {

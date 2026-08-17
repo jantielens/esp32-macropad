@@ -10,9 +10,10 @@
 
 struct ExternalWidgetState {
     lv_obj_t* root;
+    lv_timer_t* timer;
     lv_obj_t* status_label;
     uint32_t instance_id;
-    uint32_t last_tick_ms;
+    uint16_t tick_interval_ms;
     const ExternalWidgetConfig* config;
     bool created;
     bool retry_after_stop;
@@ -25,6 +26,10 @@ static void external_parse(const JsonObject& btn, uint8_t* data) {
     auto* config = reinterpret_cast<ExternalWidgetConfig*>(data);
     strlcpy(config->extension_id, btn["extension_id"] | "", sizeof(config->extension_id));
     strlcpy(config->config, btn["extension_config"] | "", sizeof(config->config));
+    const int32_t interval_ms = btn["extension_tick_interval_ms"] | 0;
+    config->tick_interval_ms = interval_ms <= 0 ? 0 : static_cast<uint16_t>(clamp_val(
+        interval_ms, static_cast<int32_t>(NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS),
+        static_cast<int32_t>(NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS)));
 }
 
 static bool external_create_instance(ExternalWidgetState* external) {
@@ -46,6 +51,16 @@ static bool external_create_instance(ExternalWidgetState* external) {
         external->status_label = nullptr;
     }
     return true;
+}
+
+static void external_timer_cb(lv_timer_t* timer) {
+    auto* external = static_cast<ExternalWidgetState*>(lv_timer_get_user_data(timer));
+    if (!external || !external->config) return;
+    if (!external->created) {
+        if (external->retry_after_stop) external_create_instance(external);
+        return;
+    }
+    native_extension_tick_instance(external->config->extension_id, external->instance_id);
 }
 
 static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
@@ -76,6 +91,9 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
         reinterpret_cast<const uint8_t*>(state) - offsetof(ButtonTile, widget_state));
     const ExternalWidgetConfig* config = external_widget_config(cfg);
     external->config = config;
+    external->tick_interval_ms = config->tick_interval_ms
+        ? config->tick_interval_ms
+        : native_extension_tick_interval_ms(config->extension_id);
     external->instance_id = external_widget_instance_id(button->page, btn->col, btn->row);
     native_extension_set_instance_binding_context(config->extension_id, external->instance_id,
                                                   button->pad_bindings, button->pad_binding_count);
@@ -86,6 +104,7 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
             lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
     external->status_label = lv_label_create(external->root);
     external_create_instance(external);
+    external->timer = lv_timer_create(external_timer_cb, external->tick_interval_ms, external);
 }
 
 static void external_update(lv_obj_t* tile, const WidgetConfig* cfg,
@@ -98,6 +117,10 @@ static void external_update(lv_obj_t* tile, const WidgetConfig* cfg,
 
 static void external_destroy(WidgetState* state) {
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
+    if (external->timer) {
+        lv_timer_delete(external->timer);
+        external->timer = nullptr;
+    }
     if (external->config && external->created) {
         native_extension_destroy_instance(external->config->extension_id, external->instance_id);
     }
@@ -109,16 +132,8 @@ static void external_destroy(WidgetState* state) {
 
 static void external_tick(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* state) {
     (void)tile;
-    auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
-    const uint32_t now = millis();
-    const uint16_t interval_ms = native_extension_tick_interval_ms(external_widget_config(cfg)->extension_id);
-    if (now - external->last_tick_ms < interval_ms) return;
-    external->last_tick_ms = now;
-    if (!external->created) {
-        if (external->retry_after_stop) external_create_instance(external);
-        return;
-    }
-    native_extension_tick_instance(external_widget_config(cfg)->extension_id, external->instance_id);
+    (void)cfg;
+    (void)state;
 }
 
 REGISTER_WIDGET(external, nullptr, false);

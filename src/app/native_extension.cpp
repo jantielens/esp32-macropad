@@ -5,6 +5,7 @@
 #include "log_manager.h"
 #include "message_bubble.h"
 #include "pad_config.h"
+#include "pad_layout.h"
 #include "storage.h"
 #if HAS_MQTT
 #include "binding_template.h"
@@ -163,8 +164,6 @@ bool set_pending_enabled(uint8_t slot, bool enabled) {
 
 lv_obj_t* as_obj(void* obj) { return static_cast<lv_obj_t*>(obj); }
 lv_color_t host_color(uint32_t rgb) { return lv_color_hex(rgb & 0xFFFFFF); }
-
-void host_set_text(char* out, size_t len, const char* text) { if (out && len) strlcpy(out, text ? text : "", len); }
 uint32_t host_millis() { return millis(); }
 void host_delay_ms(uint32_t delay_ms) { vTaskDelay(pdMS_TO_TICKS(delay_ms)); }
 void host_log(NativeExtensionLogLevel level, const char* message) {
@@ -487,9 +486,20 @@ void host_canvas_fill_rect(void* canvas, int32_t x, int32_t y, uint32_t width, u
     const int32_t clipped_bottom = bottom > entry->height ? static_cast<int32_t>(entry->height) : static_cast<int32_t>(bottom);
     if (left >= clipped_right || top >= clipped_bottom) return;
     const uint16_t color = lv_color_to_u16(host_color(rgb));
+    const uint32_t packed_color = static_cast<uint32_t>(color) | (static_cast<uint32_t>(color) << 16);
     for (int32_t row = top; row < clipped_bottom; ++row) {
         uint16_t* destination = entry->pixels + static_cast<size_t>(row) * entry->width + left;
-        for (int32_t column = left; column < clipped_right; ++column) *destination++ = color;
+        int32_t remaining = clipped_right - left;
+        if ((reinterpret_cast<uintptr_t>(destination) & 3u) && remaining) {
+            *destination++ = color;
+            --remaining;
+        }
+        while (remaining >= 2) {
+            *reinterpret_cast<uint32_t*>(destination) = packed_color;
+            destination += 2;
+            remaining -= 2;
+        }
+        if (remaining) *destination = color;
     }
 }
 void host_canvas_blit_rgb565(void* canvas, int32_t x, int32_t y, const uint16_t* pixels,
@@ -559,6 +569,63 @@ void host_canvas_draw_circle(void* canvas, int32_t x, int32_t y, int32_t radius,
         else { --dx; error += 2 * (dy - dx + 1); }
     }
 }
+uint8_t host_font_family_id(const char* font_name) {
+    if (!font_name || !font_name[0] || strcmp(font_name, "default") == 0) return 0;
+    if (strcmp(font_name, "dseg7") == 0) return 1;
+    if (strcmp(font_name, "bebas") == 0) return 2;
+    if (strcmp(font_name, "doto") == 0) return 3;
+    return 0;
+}
+void host_canvas_draw_text(void* canvas, int32_t x, int32_t y, const char* text,
+                           const char* font_name, uint8_t size, uint32_t rgb) {
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || !entry->pixels || !text || !*text) return;
+
+    LabelStyle style{};
+    style.font_family = host_font_family_id(font_name);
+    style.font_size = size;
+    const lv_font_t* font = pad_resolve_font(style, &lv_font_montserrat_14);
+    if (!font) return;
+
+    const lv_color_t color = host_color(rgb);
+    constexpr uint8_t bpp = 4;
+    if (!font->get_glyph_bitmap) return;
+    int32_t cursor_x = x;
+    for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor; ++cursor) {
+        const uint32_t codepoint = *cursor;
+        lv_font_glyph_dsc_t glyph{};
+        if (!lv_font_get_glyph_dsc(font, &glyph, codepoint, 0)) continue;
+        glyph.req_raw_bitmap = 1;
+        const uint8_t* bitmap = static_cast<const uint8_t*>(font->get_glyph_bitmap(&glyph, nullptr));
+        if (!bitmap) {
+            cursor_x += glyph.adv_w;
+            lv_font_glyph_release_draw_data(&glyph);
+            continue;
+        }
+        for (uint16_t gy = 0; gy < glyph.box_h; ++gy) {
+            for (uint16_t gx = 0; gx < glyph.box_w; ++gx) {
+                const uint32_t bit_index = (static_cast<uint32_t>(gy) * glyph.box_w + gx) * bpp;
+                const uint8_t packed = bitmap[bit_index / 8];
+                const uint8_t coverage = bpp == 4
+                    ? (((bit_index & 4u) == 0 ? packed >> 4 : packed) & 0x0Fu) * 17u
+                    : 0;
+                if (!coverage) continue;
+                const int32_t px = cursor_x + glyph.ofs_x + gx;
+                const int32_t py = y + glyph.ofs_y + gy;
+                if (px < 0 || py < 0 || px >= static_cast<int32_t>(entry->width) || py >= static_cast<int32_t>(entry->height)) continue;
+                const uint16_t existing = entry->pixels[static_cast<uint32_t>(py) * entry->width + px];
+                const lv_color_t existing_color = lv_color_make(
+                    static_cast<uint8_t>(((existing >> 11) & 0x1Fu) * 255u / 31u),
+                    static_cast<uint8_t>(((existing >> 5) & 0x3Fu) * 255u / 63u),
+                    static_cast<uint8_t>((existing & 0x1Fu) * 255u / 31u));
+                const lv_color_t blended = lv_color_mix(color, existing_color, coverage);
+                entry->pixels[static_cast<uint32_t>(py) * entry->width + px] = lv_color_to_u16(blended);
+            }
+        }
+        cursor_x += glyph.adv_w;
+        lv_font_glyph_release_draw_data(&glyph);
+    }
+}
 
 const NativeExtensionCoreApi CORE_API = {
     host_millis, host_delay_ms, host_log, host_alloc, host_free,
@@ -575,33 +642,20 @@ const NativeExtensionUiApi UI_API = {
     host_obj_get_width, host_obj_get_height, host_obj_align, host_obj_set_hidden,
     host_obj_set_clickable, host_obj_invalidate, host_obj_set_bg_color,
     host_obj_set_border, host_obj_set_text_color, host_obj_set_padding,
+    host_obj_add_event_cb, host_event_get_code, host_event_get_target, host_event_get_user_data,
+    host_line_create, host_line_set, host_arc_create, host_arc_set_value,
+    host_spinner_create, host_table_create, host_table_set_size, host_table_set_cell_text,
 };
 const NativeExtensionCanvasApi CANVAS_API = {
     host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer,
     host_canvas_clear, host_canvas_set_pixel, host_canvas_fill_rect, host_canvas_invalidate_rect, host_canvas_draw_line,
-    host_canvas_draw_circle, host_canvas_blit_rgb565,
+    host_canvas_draw_circle, host_canvas_draw_text, host_canvas_blit_rgb565,
 };
 const NativeExtensionBindingApi BINDING_API = {host_binding_resolve};
 const NativeExtensionButtonApi BUTTON_API = {host_button_get};
 
 const NativeExtensionHostApi HOST_API = {
     NATIVE_EXTENSION_ABI_VERSION,
-    host_set_text, host_millis, host_delay_ms, host_log, host_alloc, host_free,
-    host_context_get_data, host_context_set_data,
-    host_math_sin, host_math_cos, host_math_sqrt, host_math_atan2,
-    host_mutex_create, host_mutex_lock, host_mutex_unlock,
-    host_label_create, host_label_set_text, host_obj_center, host_log_info, host_notify,
-    host_task_create, host_http_get,
-    host_obj_create, host_obj_delete, host_obj_set_size, host_obj_set_pos, host_obj_get_width,
-    host_obj_get_height, host_obj_align,
-    host_obj_set_hidden, host_obj_set_clickable, host_obj_invalidate, host_obj_set_bg_color,
-    host_obj_set_border, host_obj_set_text_color, host_obj_set_padding, host_obj_add_event_cb,
-    host_event_get_code, host_event_get_target, host_event_get_user_data,
-    host_line_create, host_line_set, host_arc_create, host_arc_set_value,
-    host_spinner_create, host_table_create, host_table_set_size,
-    host_table_set_cell_text, host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer, host_canvas_clear,
-    host_canvas_set_pixel, host_canvas_fill_rect, host_canvas_invalidate_rect, host_canvas_draw_line, host_canvas_draw_circle,
-    host_canvas_blit_rgb565,
     &CORE_API, &TASK_API, &HTTP_API, &UI_API, &CANVAS_API, &BINDING_API, &BUTTON_API,
 };
 

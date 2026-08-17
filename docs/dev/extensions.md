@@ -119,10 +119,12 @@ extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
 };
 ```
 
-`tick_interval_ms` defines the host-scheduled cadence for the optional `tick`
-callback. It must be between 33 and 1000 ms. Use
-`NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS` for ordinary widgets. Animated
-widgets can request a smaller interval, such as 50 ms for 20 FPS.
+`tick_interval_ms` defines the default host-scheduled cadence for the optional
+`tick` callback. It must be between 33 and 1000 ms. Use
+`NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS` for ordinary widgets. A button's
+External Widget configuration can override this default with
+`extension_tick_interval_ms`, allowing the same package to run at an
+appropriate cadence for each placement.
 
 The loader requires the descriptor, then verifies its ID and package version
 against the filename as well as its ABI and target ABI against firmware. Package
@@ -221,12 +223,11 @@ directly import firmware symbols, so it provides grouped C-style service views:
 * `host->task` — extension worker creation
 * `host->http` — bounded HTTP GET
 * `host->ui` — opaque LVGL objects, labels, layout, styling, and events
-* `host->canvas` — RGB565 canvas allocation, drawing, and sprite blitting
+* `host->canvas` — RGB565 canvas allocation, drawing, sprite blitting, and text
 * `host->binding` — on-demand read-only binding-template resolution
 
-The direct fields remain as source-compatibility helpers for early
-packages, but new extensions should use grouped services. The portal displays
-the descriptor title, target ABI, and package runtime status.
+These grouped services are the complete extension API. The portal displays the
+descriptor title, target ABI, and package runtime status.
 
 ### RGB565 Sprite Blitting
 
@@ -267,9 +268,11 @@ needs an LVGL feature not in this table, add a host wrapper, rebuild the
 firmware, and rebuild all installed Extensions.
 
 Canvas buffers are owned by the Extension and must use RGB565. Allocate them
-with `alloc(canvas_buffer_size(width, height))`, then release them with `free`.
-Canvas text is normally represented with labels layered above the canvas, which
-keeps the draw API small while still allowing custom visualizations.
+with `host->core->alloc(host->canvas->canvas_buffer_size(width, height))`, then
+release them with `host->core->free`. Use
+`host->canvas->canvas_draw_text()` to rasterize a firmware font directly into a
+canvas. Font names are `default`, `dseg7`, `bebas`, and `doto`; unknown names
+fall back to `default`.
 
 `canvas_fill_rect` fills an axis-aligned RGB rectangle efficiently and is the
 preferred primitive for block-based animations. Use `canvas_set_pixel` only for
