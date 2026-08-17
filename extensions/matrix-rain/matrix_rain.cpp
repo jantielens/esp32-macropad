@@ -19,6 +19,12 @@ constexpr float MIN_TRAIL_LENGTH = 0.25f;
 constexpr float MAX_TRAIL_LENGTH = 2.0f;
 constexpr uint16_t MAX_GLYPHS_PER_FRAME = 400;
 constexpr uint32_t BACKGROUND_RGB = 0x010603;
+constexpr uint32_t CLOCK_RESOLVE_MS = 500;
+constexpr uint32_t CLOCK_UPDATE_FAILSAFE_MS = 10000;
+constexpr uint8_t CLOCK_CHARACTERS = 5;
+constexpr uint8_t CLOCK_TEXT_CAPACITY = CLOCK_CHARACTERS + 1;
+constexpr uint8_t CLOCK_TEMPLATE_CAPACITY = 96;
+constexpr uint32_t CLOCK_RGB = 0x00FF41;
 constexpr int32_t GLYPH_CLEAR_PAD_X = 2;
 constexpr int32_t GLYPH_CLEAR_PAD_Y = 4;
 constexpr char CHARACTER_SET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-*/=<>[]{}:;|\\";
@@ -51,6 +57,22 @@ struct InstanceState {
     uint32_t random;
     uint32_t last_motion_ms;
     uint32_t active_cells[MAX_COLUMNS][2];
+    char clock_template[CLOCK_TEMPLATE_CAPACITY];
+    char clock[CLOCK_TEXT_CAPACITY];
+    char resolved_clock[CLOCK_TEXT_CAPACITY];
+    char pending_clock[CLOCK_TEXT_CAPACITY];
+    char planned_clock[CLOCK_TEXT_CAPACITY];
+    uint32_t pending_clock_since_ms[CLOCK_CHARACTERS];
+    uint32_t next_clock_resolve_ms;
+    uint32_t next_minute_ms;
+    uint16_t planned_minute;
+    uint8_t clock_enabled;
+    uint8_t clock_seconds;
+    bool clock_seconds_valid;
+    bool clock_plan_needed;
+    uint8_t clock_column;
+    uint8_t clock_row;
+    uint8_t clock_hit_mask;
     bool background_initialized;
     bool dirty;
 };
@@ -167,6 +189,30 @@ uint32_t green(uint8_t level) {
     return (static_cast<uint32_t>(level / 5) << 16) | (static_cast<uint32_t>(level) << 8) | (static_cast<uint32_t>(level / 8));
 }
 
+bool text_equals(const char* left, const char* right) {
+    size_t index = 0;
+    while (left[index] && left[index] == right[index]) ++index;
+    return left[index] == right[index];
+}
+
+bool normalize_clock(const char* source, char* out, size_t capacity, uint8_t* seconds, bool* seconds_valid) {
+    if (!source || !out || capacity < CLOCK_TEXT_CAPACITY) return false;
+    char digits[6];
+    uint8_t count = 0;
+    for (; *source && count < sizeof(digits); ++source)
+        if (*source >= '0' && *source <= '9') digits[count++] = *source;
+    if (count < 4) return false;
+    out[0] = digits[0];
+    out[1] = digits[1];
+    out[2] = ':';
+    out[3] = digits[2];
+    out[4] = digits[3];
+    out[5] = '\0';
+    if (seconds_valid) *seconds_valid = count >= 6;
+    if (seconds && count >= 6) *seconds = static_cast<uint8_t>((digits[4] - '0') * 10 + digits[5] - '0');
+    return true;
+}
+
 void reset_column(InstanceState* instance, Column* column, uint8_t index) {
     column->random = next_random(instance);
     const uint8_t base_length = static_cast<uint8_t>(5 + column->random % (instance->rows > 10 ? instance->rows / 2 : 5));
@@ -176,6 +222,125 @@ void reset_column(InstanceState* instance, Column* column, uint8_t index) {
     column->speed = (0.036f + static_cast<float>(column->random % 12) * 0.006f) * instance->speed;
     if (static_cast<float>(column->random % 1000) / 1000.0f > instance->density) column->speed = 0.0f;
     (void)index;
+}
+
+bool is_clock_digit(uint8_t index) {
+    return index != 2;
+}
+
+void next_minute_clock(const char* clock, char* next) {
+    uint16_t minutes = static_cast<uint16_t>((clock[0] - '0') * 600 + (clock[1] - '0') * 60 +
+                                              (clock[3] - '0') * 10 + (clock[4] - '0'));
+    minutes = static_cast<uint16_t>((minutes + 1u) % (24u * 60u));
+    next[0] = static_cast<char>('0' + minutes / 600u);
+    next[1] = static_cast<char>('0' + (minutes / 60u) % 10u);
+    next[2] = ':';
+    next[3] = static_cast<char>('0' + (minutes % 60u) / 10u);
+    next[4] = static_cast<char>('0' + minutes % 10u);
+    next[5] = '\0';
+}
+
+void queue_clock_update(InstanceState* instance, const char* clock, uint32_t now) {
+    if (text_equals(instance->clock, clock)) return;
+    for (uint8_t index = 0; index < CLOCK_CHARACTERS; ++index) {
+        if (static_cast<int32_t>(now - instance->next_minute_ms) < 0 &&
+            instance->clock[index] == instance->planned_clock[index])
+            continue;
+        if (instance->clock[index] == clock[index]) {
+            instance->pending_clock[index] = '\0';
+            continue;
+        }
+        if (instance->pending_clock[index] == clock[index]) {
+            if (instance->pending_clock_since_ms[index] == 0) instance->pending_clock_since_ms[index] = now;
+            continue;
+        }
+        instance->pending_clock[index] = clock[index];
+        instance->pending_clock_since_ms[index] = now;
+    }
+    instance->pending_clock[CLOCK_CHARACTERS] = '\0';
+}
+
+void resolve_clock(const NativeExtensionHostApi* host, InstanceState* instance, uint32_t now) {
+    char resolved[CLOCK_TEMPLATE_CAPACITY] = {};
+    char clock[CLOCK_TEXT_CAPACITY] = {};
+    if (!host->binding->resolve(instance->extension_context, instance->instance_id,
+                                instance->clock_template, resolved, sizeof(resolved)) ||
+        !normalize_clock(resolved, clock, sizeof(clock), &instance->clock_seconds,
+                 &instance->clock_seconds_valid)) return;
+    const uint16_t minute = static_cast<uint16_t>((clock[0] - '0') * 600 + (clock[1] - '0') * 60 +
+                                                   (clock[3] - '0') * 10 + (clock[4] - '0'));
+    if (instance->clock_seconds_valid && minute != instance->planned_minute) {
+        instance->planned_minute = minute;
+        instance->next_minute_ms = now + static_cast<uint32_t>(60u - instance->clock_seconds) * 1000u;
+        instance->clock_plan_needed = true;
+    }
+    copy_text(instance->resolved_clock, sizeof(instance->resolved_clock), clock);
+    queue_clock_update(instance, clock, now);
+}
+
+void plan_clock_lanes(InstanceState* instance) {
+    if (!instance->clock_plan_needed || !instance->clock_seconds_valid) return;
+    next_minute_clock(instance->resolved_clock, instance->planned_clock);
+    for (uint8_t index = 0; index < CLOCK_CHARACTERS; ++index) {
+        if (!is_clock_digit(index)) continue;
+        if (instance->pending_clock[index]) continue;
+        if (instance->clock[index] == instance->planned_clock[index]) continue;
+        const uint8_t column = static_cast<uint8_t>(instance->clock_column + index);
+        Column& drop = instance->rain[column];
+        reset_column(instance, &drop, column);
+        if (drop.speed == 0.0f) drop.speed = 0.036f * instance->speed;
+        const uint32_t remaining_ms = instance->next_minute_ms - instance->last_motion_ms;
+        drop.head = static_cast<float>(instance->clock_row) -
+                    drop.speed * static_cast<float>(remaining_ms) / 100.0f;
+        instance->pending_clock[index] = instance->planned_clock[index];
+        instance->pending_clock_since_ms[index] = 0;
+    }
+    instance->clock_plan_needed = false;
+}
+
+void apply_clock_failsafe(InstanceState* instance, uint32_t now) {
+    for (uint8_t index = 0; index < CLOCK_CHARACTERS; ++index) {
+        if (!instance->pending_clock[index] || !instance->pending_clock_since_ms[index] ||
+            now - instance->pending_clock_since_ms[index] < CLOCK_UPDATE_FAILSAFE_MS)
+            continue;
+        instance->clock[index] = instance->pending_clock[index];
+        instance->pending_clock[index] = '\0';
+        instance->pending_clock_since_ms[index] = 0;
+    }
+}
+
+void update_clock_on_hit(InstanceState* instance, uint8_t column, float previous_head, float current_head) {
+    if (previous_head > instance->clock_row || current_head < instance->clock_row) return;
+    if (column < instance->clock_column || column >= instance->clock_column + CLOCK_CHARACTERS) return;
+    const uint8_t index = static_cast<uint8_t>(column - instance->clock_column);
+    if (!instance->pending_clock[index]) return;
+    instance->clock[index] = instance->pending_clock[index];
+    instance->pending_clock[index] = '\0';
+    instance->pending_clock_since_ms[index] = 0;
+    instance->clock_hit_mask |= static_cast<uint8_t>(1u << index);
+}
+
+void draw_clock(const NativeExtensionHostApi* host, const InstanceState* instance) {
+    if (!instance->clock_enabled) return;
+    char character[2] = {0, '\0'};
+    for (uint8_t index = 0; index < CLOCK_CHARACTERS; ++index) {
+        const int32_t x = (instance->clock_column + index) * instance->cell_width;
+        const int32_t y = instance->clock_row * instance->cell_height;
+        if (instance->clock_hit_mask & static_cast<uint8_t>(1u << index)) continue;
+        character[0] = instance->clock[index];
+        host->canvas->canvas_draw_text(instance->canvas, x, y, character,
+                                       instance->font_name, instance->font_size, CLOCK_RGB);
+    }
+}
+
+void clear_clock(const NativeExtensionHostApi* host, const InstanceState* instance) {
+    if (!instance->clock_enabled) return;
+    for (uint8_t index = 0; index < CLOCK_CHARACTERS; ++index)
+        host->canvas->canvas_fill_rect(instance->canvas,
+                                       (instance->clock_column + index) * instance->cell_width - GLYPH_CLEAR_PAD_X,
+                                       instance->clock_row * instance->cell_height - GLYPH_CLEAR_PAD_Y,
+                                       instance->cell_width + GLYPH_CLEAR_PAD_X * 2,
+                                       instance->cell_height + GLYPH_CLEAR_PAD_Y * 2, BACKGROUND_RGB);
 }
 
 uint16_t render(const NativeExtensionHostApi* host, InstanceState* instance) {
@@ -208,6 +373,7 @@ uint16_t render(const NativeExtensionHostApi* host, InstanceState* instance) {
             }
         }
     }
+    clear_clock(host, instance);
     char glyph[2] = {0, 0};
     uint16_t rendered_glyphs = 0;
     uint8_t visible_columns = 0;
@@ -225,9 +391,15 @@ uint16_t render(const NativeExtensionHostApi* host, InstanceState* instance) {
         for (int16_t row = static_cast<int16_t>(instance->rows) - 1; row >= 0; --row) {
             const float distance = drop.head - static_cast<float>(row);
             if (distance < 0.0f || distance >= drop.length) continue;
+            const bool clock_cell = instance->clock_enabled && row == instance->clock_row &&
+                column >= instance->clock_column && column < instance->clock_column + CLOCK_CHARACTERS;
+            const uint8_t clock_index = clock_cell ? static_cast<uint8_t>(column - instance->clock_column) : 0;
+            if (clock_cell && (distance >= 1.0f ||
+                               !(instance->clock_hit_mask & static_cast<uint8_t>(1u << clock_index)))) continue;
             uint8_t intensity = static_cast<uint8_t>(255.0f * (1.0f - distance / drop.length));
             if (distance < 1.0f) intensity = 255;
             glyph[0] = CHARACTER_SET[(drop.random + row * 17u + column * 31u) % (sizeof(CHARACTER_SET) - 1)];
+            if (clock_cell) glyph[0] = instance->clock[clock_index];
             host->canvas->canvas_draw_text(instance->canvas, column * instance->cell_width,
                                             row * instance->cell_height, glyph, instance->font_name,
                                             instance->font_size, green(intensity));
@@ -236,6 +408,7 @@ uint16_t render(const NativeExtensionHostApi* host, InstanceState* instance) {
             if (++rendered_for_column >= glyphs_per_column) break;
         }
     }
+    draw_clock(host, instance);
     host->canvas->canvas_invalidate_rect(instance->canvas, 0, 0, instance->width, instance->height);
     instance->dirty = false;
     return rendered_glyphs;
@@ -273,6 +446,23 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     if (instance->columns > MAX_COLUMNS) instance->columns = MAX_COLUMNS;
     if (instance->rows > MAX_ROWS) instance->rows = MAX_ROWS;
     if (!instance->columns || !instance->rows) { instance->active = false; return; }
+    if (find_string(config_json, "clock", instance->clock_template, sizeof(instance->clock_template))) {
+        instance->clock_enabled = host->binding != nullptr && instance->columns >= CLOCK_CHARACTERS;
+        if (instance->clock_enabled) {
+            instance->clock_column = instance->columns > CLOCK_CHARACTERS
+                ? static_cast<uint8_t>((instance->columns - CLOCK_CHARACTERS) / 2u) : 0;
+            instance->clock_row = static_cast<uint8_t>((instance->rows - 1u) / 2u);
+            char resolved[CLOCK_TEMPLATE_CAPACITY] = {};
+            if (host->binding->resolve(extension_context, instance_id, instance->clock_template,
+                                       resolved, sizeof(resolved)))
+                normalize_clock(resolved, instance->clock, sizeof(instance->clock),
+                                &instance->clock_seconds, &instance->clock_seconds_valid);
+            copy_text(instance->resolved_clock, sizeof(instance->resolved_clock), instance->clock);
+            instance->planned_minute = 0xFFFFu;
+            instance->clock_plan_needed = false;
+            if (!instance->clock[0]) copy_text(instance->clock, sizeof(instance->clock), "00:00");
+        }
+    }
     instance->canvas = host->canvas->canvas_create(root);
     instance->buffer = host->core->alloc(host->canvas->canvas_buffer_size(instance->width, instance->height));
     if (!instance->canvas || !instance->buffer) { instance->active = false; return; }
@@ -280,6 +470,8 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     for (uint8_t column = 0; column < instance->columns; ++column) reset_column(instance, &instance->rain[column], column);
     instance->dirty = true;
     instance->last_motion_ms = host->core->millis();
+    instance->next_clock_resolve_ms = instance->last_motion_ms + CLOCK_RESOLVE_MS;
+    instance->clock_hit_mask = 0;
 }
 
 extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* host, void* extension_context,
@@ -307,15 +499,24 @@ extern "C" void native_extension_tick(const NativeExtensionHostApi* host, void* 
     uint32_t elapsed_ms = now - instance->last_motion_ms;
     if (elapsed_ms > 250u) elapsed_ms = 250u;
     instance->last_motion_ms = now;
+    instance->clock_hit_mask = 0;
+    if (instance->clock_enabled && static_cast<int32_t>(now - instance->next_clock_resolve_ms) >= 0) {
+        resolve_clock(host, instance, now);
+        instance->next_clock_resolve_ms = now + CLOCK_RESOLVE_MS;
+    }
+    plan_clock_lanes(instance);
     for (uint8_t column = 0; column < instance->columns; ++column) {
         Column& drop = instance->rain[column];
         if (drop.speed == 0.0f) {
             reset_column(instance, &drop, column);
             continue;
         }
+        const float previous_head = drop.head;
         drop.head += drop.speed * static_cast<float>(elapsed_ms) / 100.0f;
+        update_clock_on_hit(instance, column, previous_head, drop.head);
         if (drop.head - drop.length > instance->rows) reset_column(instance, &drop, column);
     }
+    apply_clock_failsafe(instance, now);
     render(host, instance);
 }
 
