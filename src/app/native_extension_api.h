@@ -5,7 +5,7 @@
 
 // The extension ABI is intentionally C-shaped. Native packages are built
 // separately from the firmware, so this remains the compatibility boundary.
-#define NATIVE_EXTENSION_ABI_VERSION 12u
+#define NATIVE_EXTENSION_ABI_VERSION 14u
 #define NATIVE_EXTENSION_TARGET_ABI "rv32imafc-ilp32f"
 #define NATIVE_EXTENSION_DESCRIPTOR_MAGIC 0x3744584Eu
 #define NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS 250u
@@ -146,6 +146,9 @@ struct NativeExtensionCanvasApi {
                              int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
     void (*canvas_draw_circle)(void* canvas, int32_t x, int32_t y,
                                int32_t radius, uint32_t rgb, uint8_t width);
+    void (*canvas_blit_rgb565)(void* canvas, int32_t x, int32_t y, const uint16_t* pixels,
+                               uint16_t source_width, uint16_t source_height,
+                               uint16_t destination_width, uint16_t destination_height);
 };
 
 // Resolve an existing binding template on demand. Available only while a
@@ -252,6 +255,9 @@ struct NativeExtensionHostApi {
                              int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
     void (*canvas_draw_circle)(void* canvas, int32_t x, int32_t y,
                                int32_t radius, uint32_t rgb, uint8_t width);
+    void (*canvas_blit_rgb565)(void* canvas, int32_t x, int32_t y, const uint16_t* pixels,
+                               uint16_t source_width, uint16_t source_height,
+                               uint16_t destination_width, uint16_t destination_height);
 
     // ABI 8 grouped service views. New package code should use these.
     const NativeExtensionCoreApi* core;

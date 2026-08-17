@@ -492,6 +492,24 @@ void host_canvas_fill_rect(void* canvas, int32_t x, int32_t y, uint32_t width, u
         for (int32_t column = left; column < clipped_right; ++column) *destination++ = color;
     }
 }
+void host_canvas_blit_rgb565(void* canvas, int32_t x, int32_t y, const uint16_t* pixels,
+                              uint16_t source_width, uint16_t source_height,
+                              uint16_t destination_width, uint16_t destination_height) {
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || !entry->pixels || !pixels || source_width == 0 || source_height == 0 ||
+        destination_width == 0 || destination_height == 0) return;
+    const int32_t left = x < 0 ? 0 : x;
+    const int32_t top = y < 0 ? 0 : y;
+    const int32_t right = x + destination_width > entry->width ? entry->width : x + destination_width;
+    const int32_t bottom = y + destination_height > entry->height ? entry->height : y + destination_height;
+    if (left >= right || top >= bottom) return;
+    for (int32_t destination_y = top; destination_y < bottom; ++destination_y) {
+        const uint16_t* source = pixels + static_cast<size_t>(destination_y - y) * source_height / destination_height * source_width;
+        uint16_t* destination = entry->pixels + static_cast<size_t>(destination_y) * entry->width + left;
+        for (int32_t destination_x = left; destination_x < right; ++destination_x)
+            *destination++ = source[static_cast<size_t>(destination_x - x) * source_width / destination_width];
+    }
+}
 void host_canvas_invalidate_rect(void* canvas, int32_t x, int32_t y, uint32_t width, uint32_t height) {
     CanvasBuffer* entry = find_canvas_buffer(canvas);
     if (!entry || width == 0 || height == 0) return;
@@ -561,7 +579,7 @@ const NativeExtensionUiApi UI_API = {
 const NativeExtensionCanvasApi CANVAS_API = {
     host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer,
     host_canvas_clear, host_canvas_set_pixel, host_canvas_fill_rect, host_canvas_invalidate_rect, host_canvas_draw_line,
-    host_canvas_draw_circle,
+    host_canvas_draw_circle, host_canvas_blit_rgb565,
 };
 const NativeExtensionBindingApi BINDING_API = {host_binding_resolve};
 const NativeExtensionButtonApi BUTTON_API = {host_button_get};
@@ -583,6 +601,7 @@ const NativeExtensionHostApi HOST_API = {
     host_spinner_create, host_table_create, host_table_set_size,
     host_table_set_cell_text, host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer, host_canvas_clear,
     host_canvas_set_pixel, host_canvas_fill_rect, host_canvas_invalidate_rect, host_canvas_draw_line, host_canvas_draw_circle,
+    host_canvas_blit_rgb565,
     &CORE_API, &TASK_API, &HTTP_API, &UI_API, &CANVAS_API, &BINDING_API, &BUTTON_API,
 };
 
