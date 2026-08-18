@@ -36,6 +36,7 @@ struct Column {
     float speed;
     uint8_t length;
     uint32_t random;
+    bool enabled;
 };
 
 struct InstanceState {
@@ -265,8 +266,9 @@ void reset_column(InstanceState* instance, Column* column, uint8_t index) {
     const uint8_t scaled_length = static_cast<uint8_t>(base_length * instance->trail_length);
     column->length = scaled_length == 0 ? 1 : (scaled_length > instance->rows ? instance->rows : scaled_length);
     column->head = -static_cast<float>(column->random % (instance->rows + column->length));
-    column->speed = (0.036f + static_cast<float>(column->random % 12) * 0.006f) * instance->speed;
-    if (static_cast<float>(column->random % 1000) / 1000.0f > instance->density) column->speed = 0.0f;
+    column->speed = column->enabled
+        ? (0.036f + static_cast<float>(column->random % 12) * 0.006f) * instance->speed
+        : 0.0f;
     (void)index;
 }
 
@@ -434,7 +436,11 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     instance->buffer = host->core->alloc(host->canvas->canvas_buffer_size(instance->width, instance->height));
     if (!instance->canvas || !instance->buffer) { instance->active = false; return; }
     host->canvas->canvas_set_buffer(instance->canvas, instance->buffer, instance->width, instance->height);
-    for (uint8_t column = 0; column < instance->columns; ++column) reset_column(instance, &instance->rain[column], column);
+    for (uint8_t column = 0; column < instance->columns; ++column) {
+        Column& drop = instance->rain[column];
+        drop.enabled = static_cast<float>(next_random(instance) % 1000) / 1000.0f < instance->density;
+        reset_column(instance, &drop, column);
+    }
     instance->dirty = true;
     instance->last_motion_ms = host->core->millis();
     instance->next_clock_resolve_ms = instance->last_motion_ms + CLOCK_RESOLVE_MS;
@@ -480,7 +486,6 @@ extern "C" void native_extension_tick(const NativeExtensionHostApi* host, void* 
     for (uint8_t column = 0; column < instance->columns; ++column) {
         Column& drop = instance->rain[column];
         if (drop.speed == 0.0f) {
-            reset_column(instance, &drop, column);
             continue;
         }
         drop.head += drop.speed * static_cast<float>(elapsed_ms) / 100.0f;
