@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-08-12
+ms.date: 2026-08-18
 ms.topic: reference
 ---
 
@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **Matrix Rain native Extension**: ESP32-P4 pads can now render configurable green character streams using firmware fonts directly in an RGB565 canvas. Per-button settings control the font, falling speed, stream density, trail length, and animation cadence.
+* **Matrix Rain native Extension**: ESP32-P4 pads can now render configurable character streams using firmware fonts directly in an RGB565 canvas. Per-button settings control the font, falling speed, stream density, trail length, animation cadence, rain color, and clock color. An optional binding-driven clock supports timezone-aware display and burn-in shifting, while rain fades into the containing button's background color.
 * **Block Drop Clock native Extension**: ESP32-P4 pads can now host a responsive pixel-art clock with a live falling-block playfield. The Extension adapts its grid to the containing button, supports time bindings, optional burn-in shifting, and a configurable playfield speed. Its catalog metadata, preview, and development guide are included with the package.
 * **RGB565 sprite blitting for native Extensions**: the canvas host API now copies caller-owned RGB565 sprites into exact destination rectangles with clipped nearest-neighbor scaling. This gives animated Extensions a compact, reusable primitive for pixel-art assets without per-source-pixel canvas calls.
 * **FireBeetle 2 ESP32-C6 AHT10 sensor-node target**: the new `firebeetle2-esp32c6-aht10` target supports DFRobot's battery-powered FireBeetle 2 ESP32-C6 v1.2 with an AHT10 on GPIO19/GPIO20. Its built-in LED on GPIO15 remains unconfigured. The target reads the onboard GPIO0 2:1 LiPo divider and uses the `huge_app` partition, so it does not support OTA updates.
