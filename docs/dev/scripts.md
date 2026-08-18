@@ -147,6 +147,58 @@ python3 tools/png2lvgl_assets.py assets/png src/app/png_assets.cpp src/app/png_a
 
 ---
 
+## tools/generate-nixie-sprites.py
+
+**Purpose:** Slice the `assets/nixie/nix2.jpg` Nixie digit atlas into isolated RGBA sprites with a local amber glow. The generator excludes the outer cell region when detecting cathode pixels and fades each sprite to transparent at its edges, preventing adjacent-character glow from appearing in a sprite.
+
+**Usage:**
+```bash
+# Generate selected wide-balanced defaults
+python3 tools/generate-nixie-sprites.py
+
+# Write a temporary variant with a wider, softer glow
+python3 tools/generate-nixie-sprites.py \
+  --output-dir build/nixie-sprites \
+  --preview build/nixie-sprites-preview.png \
+  --glow-radius 20 \
+  --glow-cutoff 4 \
+  --glow-gain 5
+```
+
+**Output:**
+- Twelve RGBA PNG sprites (`0` through `9`, the clock separator, and an empty cell)
+- A checkerboard preview showing the sprites' transparency
+
+**Tuning:** Use `--x-edges` and `--y-edges` for a replacement atlas. Use `--glow-radius`, `--glow-cutoff`, `--glow-gain`, `--edge-exclusion`, and `--edge-fade-width` to control cathode detection and glow falloff. The source art was rendered over black, so use the generated sprites on dark backgrounds. Run `python3 tools/generate-nixie-sprites.py --help` for every option.
+
+**Requirements:** Python 3 + Pillow (`python3 -m pip install --user pillow`). Generated files under `assets/nixie/generated/` are ignored because they are reproducible from the source atlas.
+
+---
+
+## tools/generate-nixie-extension-assets.py
+
+**Purpose:** Convert the Nixie source atlas into palette-RLE RGB565 data embedded by `extensions/nixie-clock/nixie_clock.cpp`. The native Extension canvas supports opaque RGB565 blitting only, so this pipeline composites the prepared art over black before encoding it.
+
+**Usage:**
+```bash
+# Regenerate the tracked include using the 96 x 147 default canonical sprites
+python3 tools/generate-nixie-extension-assets.py
+
+# Explore a smaller source atlas for package-size comparisons
+python3 tools/generate-nixie-extension-assets.py \
+  --width 80 \
+  --height 122 \
+  --colors 16 \
+  --separator-colors 64 \
+  --output build/nixie_assets.inc
+```
+
+**Output:** `extensions/nixie-clock/nixie_assets.inc` by default. This generated include is tracked because it is required to build the extension package.
+
+**Requirements:** Python 3 + Pillow (`python3 -m pip install --user pillow`). Rebuild the Nixie Clock package after changing its generated asset include.
+
+---
+
 ## tools/build-p4-extension.sh
 
 **Purpose:** Build an ESP32-P4 native Extension as a position-independent

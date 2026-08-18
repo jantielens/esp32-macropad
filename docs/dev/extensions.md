@@ -358,6 +358,10 @@ still crash the device.
 `extensions/advanced-sample` demonstrates lifecycle logging, a visible
 handled-tap notification, pass-through long press, and on-demand
 `[health:cpu]` resolution in `tick` to display live device CPU usage.
+`extensions/nixie-clock` demonstrates palette-RLE RGB565 artwork embedded in
+the package, per-instance PSRAM sprite decode buffers, a dark aspect-fit canvas
+layout, and a timezone-aware `time` binding that supports either four or six
+clock digits.
 `extensions/flight-radar` is a stateful example: it shares one fixed-buffer
 ADSB.lol polling worker across active widgets, uses `config_json` for location
 and range, and renders a radar canvas plus labels. `interval` is an optional
