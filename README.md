@@ -15,7 +15,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
 - **Building blocks** — drop pre-built button groups such as System Info into any pad with a single click
 - **Custom fonts** — DSEG7 (7-segment), Bebas, and Doto pixel font, in addition to the default Montserrat
-- **Screen saver** with backlight fade, pixel-shift burn-in prevention, panel hardware sleep, LVGL throttle, and per-pad wake redirect
+- **Two-stage screen saver** with an optional transient Idle Screen pad, Display Sleep, backlight fade, pixel-shift burn-in prevention, panel hardware sleep, LVGL throttle, and per-pad wake redirect
 
 ### Live data with bindings
 A simple `[scheme:params]` syntax pulls live data into any label, color, or widget — with format strings, fallbacks, and inline expressions.

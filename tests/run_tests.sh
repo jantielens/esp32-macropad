@@ -539,6 +539,16 @@ echo "=== Running unit tests: timer_format ==="
 ./tests/bin/test_timer_format
 echo
 
+echo "=== Building unit tests: screen_saver_schedule ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_screen_saver_schedule.cpp \
+    -o tests/bin/test_screen_saver_schedule
+
+echo "=== Running unit tests: screen_saver_schedule ==="
+./tests/bin/test_screen_saver_schedule
+echo
+
 echo "=== Building unit tests: timer_commands ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/timer_test_overrides/board_config.h \

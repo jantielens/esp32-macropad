@@ -269,16 +269,21 @@ does not support dragging, swiping, long presses, multi-touch, or live video.
 
 ### Screen Saver (Burn-in Prevention)
 
-Protects your LCD from burn-in by turning off the backlight after a period of inactivity. A built-in pixel-shift mechanism moves content slightly each sleep cycle to prevent ghosting.
+The screen saver has two optional features, both measured from the most recent user activity. **Idle Screen** temporarily shows a configured pad, which can host an animated clock or extension. **Display Sleep** turns off the panel to protect it from burn-in. Either can be used alone, or Idle Screen can lead into Display Sleep. A built-in pixel-shift mechanism moves content slightly each Display Sleep cycle to prevent ghosting.
 
 | Setting | Description |
 |---------|-------------|
-| **Enable screen saver** | Turn on/off automatic sleep |
-| **Idle Timeout** | Seconds of inactivity before sleep (0 = disabled) |
-| **Fade Out** | How long the backlight fade-out takes (ms, 0 = instant) |
-| **Fade In** | How long the backlight fade-in takes on wake (ms, 0 = instant) |
-| **Wake on touch** | Wake the display by touching the screen |
-| **Wake on MQTT Binding** | Binding expression that keeps the screen awake while it resolves to ON (e.g. `[mqtt:devices/node/presence/state]`) |
+| **Enable Display Sleep** | Turn automatic panel sleep on or off |
+| **Display Sleep After** | Seconds of inactivity before panel sleep (0 = disabled) |
+| **Show an Idle Screen** | Enable a transient pad when the device is idle, with or without Display Sleep |
+| **Idle Screen After** | Seconds of inactivity before the configured pad appears (0 = disabled) |
+| **Idle Screen Pad** | Pad to show while idle; it remains available as a normal pad elsewhere |
+| **Fade Out** | Fade-to-black duration when entering Display Sleep (ms, 0 = instant) |
+| **Fade In** | Fade-from-black duration when leaving Display Sleep (ms, 0 = instant) |
+| **Wake on touch** | One touch fully exits Idle Screen or wakes Display Sleep |
+| **MQTT Wake and Keep Awake Binding** | An ON binding fully exits Idle Screen or wakes Display Sleep, and keeps both stages off while it remains ON (e.g. `[mqtt:devices/node/presence/state]`) |
+
+For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds shows the selected pad after five minutes, then turns off the panel after 30 minutes total. The first wake interaction is consumed and returns to the screen that was active before the Idle Screen appeared, so the temporary pad is not added to navigation history.
 
 ### Swipe Actions
 

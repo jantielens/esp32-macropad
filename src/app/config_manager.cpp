@@ -69,6 +69,9 @@
 #define KEY_SCREEN_SAVER_FADE_IN "ss_fi"
 #define KEY_SCREEN_SAVER_WAKE_TOUCH "ss_wt"
 #define KEY_SCREEN_SAVER_WAKE_BINDING "ss_wb"
+#define KEY_IDLE_SCREEN_ENABLED "idle_en"
+#define KEY_IDLE_SCREEN_TIMEOUT "idle_to"
+#define KEY_IDLE_SCREEN_PAD "idle_pad"
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
@@ -196,7 +199,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 				#if HAS_DISPLAY
 				// Screen saver defaults
-				config->screen_saver_enabled = false;
+				config->screen_saver_enabled = true;
 				config->screen_saver_timeout_seconds = 300;
 				config->screen_saver_fade_out_ms = 800;
 				config->screen_saver_fade_in_ms = 400;
@@ -206,6 +209,9 @@ bool config_manager_load(DeviceConfig *config) {
 				config->screen_saver_wake_on_touch = false;
 				#endif
 				config->screen_saver_wake_binding[0] = '\0';
+				config->idle_screen_enabled = false;
+				config->idle_screen_timeout_seconds = 300;
+				config->idle_screen_pad[0] = '\0';
 				#endif
 
 				// Let registered device classes seed their own defaults.
@@ -299,7 +305,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_DISPLAY
 		// Load screen saver settings
-		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, false);
+		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, true);
 		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, 300);
 		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, 800);
 		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, 400);
@@ -309,6 +315,9 @@ bool config_manager_load(DeviceConfig *config) {
 		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, false);
 		#endif
 		preferences.getString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding, CONFIG_SS_WAKE_BINDING_MAX_LEN);
+		config->idle_screen_enabled = preferences.getBool(KEY_IDLE_SCREEN_ENABLED, false);
+		config->idle_screen_timeout_seconds = preferences.getUShort(KEY_IDLE_SCREEN_TIMEOUT, 300);
+		preferences.getString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad, CONFIG_IDLE_SCREEN_PAD_MAX_LEN);
 		#endif
 
 		// Let registered device classes load their own fields from the same
@@ -419,6 +428,9 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms);
 		preferences.putBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
 		preferences.putString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding);
+		preferences.putBool(KEY_IDLE_SCREEN_ENABLED, config->idle_screen_enabled);
+		preferences.putUShort(KEY_IDLE_SCREEN_TIMEOUT, config->idle_screen_timeout_seconds);
+		preferences.putString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad);
 		#endif
 
 		// Let registered device classes persist their own fields.
@@ -660,6 +672,12 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 #endif
 
 #if HAS_DISPLAY
+		LOGI("Config", "Display Sleep: %s after %us", config->screen_saver_enabled ? "enabled" : "disabled",
+				(unsigned)config->screen_saver_timeout_seconds);
+		if (config->idle_screen_enabled) {
+			LOGI("Config", "Idle Screen: %s after %us", config->idle_screen_pad[0] ? config->idle_screen_pad : "(unset)",
+					(unsigned)config->idle_screen_timeout_seconds);
+		}
 		if (strlen(config->screen_saver_wake_binding) > 0) {
 				LOGI("Config", "SS wake binding: %s", config->screen_saver_wake_binding);
 		}

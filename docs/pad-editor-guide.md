@@ -20,7 +20,7 @@ At the top of the pad editor, you configure the pad itself:
 - **Pad selection** — switch between Pad 1 through 16. Each pad is saved independently.
 - **Pad Name** — an optional label shown in Home Assistant and on-device. For example, "Solar", "Lights", or "Cameras".
 - **Columns / Rows** — the grid size. The maximum depends on the board (e.g. 5×5 on round displays, 8×8 on larger panels). A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
-- **Wake Screen** — when the screensaver wakes up, which screen should appear? Leave empty to return to the last active screen, or pick a specific pad.
+- **Wake Screen** — for direct Display Sleep, choose which screen should appear on wake. Leave empty to return to the last active screen. An Idle Screen always returns to the screen active before it appeared, so its own Wake Screen setting is not used during the transient idle session.
 - **Background** — the color behind the grid. Accepts a `#hex` color or a binding expression for dynamic backgrounds.
 
 ### Full-Screen Tap Actions

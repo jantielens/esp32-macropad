@@ -1061,7 +1061,7 @@ Get screen saver status.
 
 #### `POST /api/display/sleep`
 
-Force the screen saver to sleep now (fade backlight to 0).
+Force Display Sleep now (fade backlight to 0). This bypasses the optional Idle Screen.
 
 #### `POST /api/display/wake`
 
@@ -1084,8 +1084,9 @@ Switch the active runtime screen (no persistence).
 ```
 
 **Notes:**
-- Screen-affecting actions count as user activity and will reset the screen saver timer.
-- When the screen saver is dimming/asleep/fading in, touch input is intentionally suppressed to avoid “wake gestures” clicking through into the UI. A second tap may be required after wake.
+- Screen-affecting actions count as user activity and reset both the Idle Screen and Display Sleep timers.
+- Idle Screen is configured through `idle_screen_enabled`, `idle_screen_timeout_seconds`, and `idle_screen_pad` in `GET`/`POST /api/config`. It can run with or without Display Sleep, and is transient: waking restores the screen active before it appeared, without altering navigation history.
+- When Idle Screen is active or Display Sleep is dimming/asleep/fading in, touch input is intentionally suppressed to avoid wake gestures clicking through into the UI. A second tap may be required after wake.
 
 
 

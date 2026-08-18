@@ -246,6 +246,9 @@ async function loadConfig() {
         setValueIfExists('screen_saver_fade_in_ms', config.screen_saver_fade_in_ms);
         setCheckedIfExists('screen_saver_wake_on_touch', config.screen_saver_wake_on_touch);
         setValueIfExists('screen_saver_wake_binding', config.screen_saver_wake_binding);
+        setCheckedIfExists('idle_screen_enabled', config.idle_screen_enabled);
+        setValueIfExists('idle_screen_timeout_seconds', config.idle_screen_timeout_seconds);
+        setValueIfExists('idle_screen_pad', config.idle_screen_pad);
 
         // E-paper settings (only present when firmware has HAS_EPAPER)
         if (config.epaper_url !== undefined) {

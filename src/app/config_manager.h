@@ -42,6 +42,7 @@
 
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
+#define CONFIG_IDLE_SCREEN_PAD_MAX_LEN 8
 
 // Audio feedback beep pattern (may also be defined in pad_config.h)
 #ifndef CONFIG_BEEP_PATTERN_MAX_LEN
@@ -126,13 +127,16 @@ struct DeviceConfig {
 #endif
 
 #if HAS_DISPLAY
-		// Screen saver (burn-in prevention v1): backlight sleep on inactivity
-		bool screen_saver_enabled;               // default false
+		// Screen saver: optional Idle Screen followed by Display Sleep on inactivity.
+		bool screen_saver_enabled;               // default true
 		uint16_t screen_saver_timeout_seconds;   // default 300 (5 min)
 		uint16_t screen_saver_fade_out_ms;       // default 800
 		uint16_t screen_saver_fade_in_ms;        // default 400
 		bool screen_saver_wake_on_touch;         // default true (when HAS_TOUCH)
 		char screen_saver_wake_binding[CONFIG_SS_WAKE_BINDING_MAX_LEN]; // binding expression; wake on "ON"
+		bool idle_screen_enabled;                // default false
+		uint16_t idle_screen_timeout_seconds;    // default 300 (5 min)
+		char idle_screen_pad[CONFIG_IDLE_SCREEN_PAD_MAX_LEN]; // transient pad shown while idle
 #endif
 
 

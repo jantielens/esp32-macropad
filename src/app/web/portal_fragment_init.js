@@ -42,7 +42,8 @@ async function saveFragmentConfig(requiresReboot) {
         'backlight_brightness',
         'screen_saver_enabled', 'screen_saver_timeout_seconds',
         'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms',
-        'screen_saver_wake_on_touch', 'screen_saver_wake_binding'
+        'screen_saver_wake_on_touch', 'screen_saver_wake_binding',
+        'idle_screen_enabled', 'idle_screen_timeout_seconds', 'idle_screen_pad'
     ];
     // Merge any keys contributed by device-class modules (e.g. e-paper).
     if (window.__extra_config_fields && window.__extra_config_fields.length) {
@@ -674,6 +675,16 @@ window.init_screen_preview_fragment = function () {
 
 window.init_screensaver_fragment = function () {
     initConfigFragment('screensaver-save-btn', false);
+    var idlePad = document.getElementById('idle_screen_pad');
+    if (idlePad && typeof deviceInfoCache !== 'undefined' && deviceInfoCache.available_screens) {
+        deviceInfoCache.available_screens.forEach(function (screen) {
+            if (screen.id.indexOf('pad_') !== 0) return;
+            var option = document.createElement('option');
+            option.value = screen.id;
+            option.textContent = screen.name;
+            idlePad.appendChild(option);
+        });
+    }
     // Initialize binding validator on inputs
     if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 };

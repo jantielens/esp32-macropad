@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "screen_saver_manager.h"
+#include "screen_saver_schedule.h"
 #include "log_manager.h"
 #include "display_manager.h"
 #if HAS_IMAGE_FETCH
@@ -22,6 +23,8 @@ namespace {
 
 DeviceConfig* g_config = nullptr;
 std::atomic<ScreenSaverState> g_state{ScreenSaverState::Awake};
+bool g_idle_screen_active = false;
+bool g_idle_screen_attempted = false;
 
 // Sleep overlay: opaque black layer on lv_layer_top() while asleep.
 // Prevents stale content from showing through on displays without true backlight off.
@@ -68,8 +71,9 @@ static void enter_asleep() {
 				displayManager->unlock();
 		}
 
-		// Navigate to wake screen while display is dark (invisible to user).
-		if (displayManager) {
+		// Preserve the captured Idle Screen resume target. Direct Display Sleep
+		// retains the existing per-screen wake redirect behavior.
+		if (displayManager && !g_idle_screen_active) {
 				displayManager->handleSleepScreenRedirect();
 		}
 
@@ -117,6 +121,15 @@ static uint32_t timeout_ms() {
 		return (uint32_t)g_config->screen_saver_timeout_seconds * 1000UL;
 }
 
+static bool idle_screen_enabled() {
+		return g_config && g_config->idle_screen_enabled && g_config->idle_screen_pad[0] != '\0';
+}
+
+static uint32_t idle_screen_timeout_ms() {
+		if (!g_config) return 0;
+		return (uint32_t)g_config->idle_screen_timeout_seconds * 1000UL;
+}
+
 static uint16_t fade_out_ms() {
 		if (!g_config) return 0;
 		return g_config->screen_saver_fade_out_ms;
@@ -147,6 +160,8 @@ static void apply_brightness(uint8_t brightness) {
 		}
 }
 
+static void complete_fade_out();
+
 static void start_fade(ScreenSaverState newState, uint8_t from, uint8_t to, uint16_t duration_ms) {
 		g_state = newState;
 		g_fade_start_ms = millis();
@@ -169,13 +184,18 @@ static void start_fade(ScreenSaverState newState, uint8_t from, uint8_t to, uint
 		if (duration_ms == 0) {
 				g_current_brightness = to;
 				apply_brightness(to);
-				(to == 0) ? enter_asleep() : enter_awake();
+				if (to == 0) complete_fade_out();
+				else enter_awake();
 				return;
 		}
 
 		// Apply the starting brightness right away to avoid a one-loop delay.
 		g_current_brightness = from;
 		apply_brightness(from);
+}
+
+static void complete_fade_out() {
+		enter_asleep();
 }
 
 static void request_activity(bool wake) {
@@ -230,7 +250,7 @@ static void handle_pending_requests() {
 				g_last_activity_ms = millis();
 				// Only escalate "activity" into a wake when we're actually asleep/dimming.
 				// When awake, touches should flow to LVGL without causing redundant wakes.
-				if (activityWake && (g_state == ScreenSaverState::Asleep || g_state == ScreenSaverState::FadingOut)) {
+				if (activityWake && (g_state == ScreenSaverState::Asleep || g_state == ScreenSaverState::FadingOut || g_idle_screen_active)) {
 						doWake = true;
 				}
 		}
@@ -262,6 +282,25 @@ static void handle_pending_requests() {
 
 		if (doWake) {
 				g_last_activity_ms = millis();
+				g_idle_screen_attempted = false;
+				if (g_idle_screen_active && g_state == ScreenSaverState::Awake) {
+					if (displayManager) displayManager->restoreTransientScreen();
+					g_idle_screen_active = false;
+					LOGI("SAVER", "Idle Screen restored");
+					return;
+				}
+				if (g_idle_screen_active && g_state == ScreenSaverState::FadingOut) {
+					if (displayManager) displayManager->restoreTransientScreen();
+					g_idle_screen_active = false;
+				}
+				if (g_idle_screen_active && g_state == ScreenSaverState::Asleep) {
+					if (displayManager) displayManager->restoreTransientScreen();
+					g_idle_screen_active = false;
+				}
+				if (g_idle_screen_active && g_state == ScreenSaverState::FadingIn) {
+					if (displayManager) displayManager->restoreTransientScreen();
+					g_idle_screen_active = false;
+				}
 				const uint8_t target = config_brightness();
 				const uint8_t from = g_current_brightness;
 
@@ -339,7 +378,8 @@ static void update_fade() {
 		if (elapsed >= g_fade_duration_ms) {
 				g_current_brightness = g_fade_to;
 				apply_brightness(g_fade_to);
-				(g_fade_to == 0) ? enter_asleep() : enter_awake();
+				if (g_fade_to == 0) complete_fade_out();
+				else enter_awake();
 				return;
 		}
 
@@ -358,16 +398,27 @@ static void update_fade() {
 }
 
 static void maybe_auto_sleep() {
-		if (!is_enabled()) return;
-
-		// Only auto-sleep from awake.
+		// Both Idle Screen and Display Sleep only transition from an awake panel.
 		if (g_state != ScreenSaverState::Awake) return;
 
-		const uint32_t toMs = timeout_ms();
-		if (toMs == 0) return;
-
 		const uint32_t now = millis();
-		if (now - g_last_activity_ms >= toMs) {
+		const uint32_t elapsed = now - g_last_activity_ms;
+		const ScreenSaverScheduleAction action = screen_saver_schedule_action(
+				is_enabled(), timeout_ms(), idle_screen_enabled(), g_idle_screen_active,
+				g_idle_screen_attempted, g_config->idle_screen_pad[0] != '\0',
+				idle_screen_timeout_ms(), elapsed);
+
+		if (action == ScreenSaverScheduleAction::ShowIdleScreen) {
+				g_idle_screen_attempted = true;
+				if (displayManager && displayManager->showTransientScreen(g_config->idle_screen_pad)) {
+					g_idle_screen_active = true;
+					LOGI("SAVER", "Idle Screen: %s", g_config->idle_screen_pad);
+				} else {
+					LOGW("SAVER", "Idle Screen unavailable: %s", g_config->idle_screen_pad);
+				}
+		}
+
+		if (action == ScreenSaverScheduleAction::Sleep) {
 				start_fade(ScreenSaverState::FadingOut, g_current_brightness, 0, fade_out_ms());
 				LOGI("SAVER", "Auto-sleep (timeout)");
 		}
@@ -400,7 +451,7 @@ static void poll_touch_activity() {
 
 		// Avoid competing with LVGL's indev polling while awake.
 		// Only poll the raw touch state to wake the backlight when sleeping/dimming.
-		if (g_state == ScreenSaverState::Awake || g_state == ScreenSaverState::FadingIn) return;
+		if ((g_state == ScreenSaverState::Awake && !g_idle_screen_active) || g_state == ScreenSaverState::FadingIn) return;
 
 		const bool touched = touch_manager_is_touched();
 		const bool pressedEdge = touched && !g_prev_touch;
@@ -420,6 +471,8 @@ void screen_saver_manager_init(DeviceConfig* config) {
 		g_state = ScreenSaverState::Awake;
 		g_last_activity_ms = millis();
 		g_prev_enabled = is_enabled();
+		g_idle_screen_active = false;
+		g_idle_screen_attempted = false;
 
 		// Clear any early-boot cross-task requests for deterministic startup.
 		portENTER_CRITICAL(&g_mux);
@@ -479,7 +532,7 @@ void screen_saver_manager_loop() {
 		// This is based on state (not config enabled), so it also protects transitions caused
 		// by explicit API calls.
 		static bool prev_force = false;
-		const bool force = (g_state != ScreenSaverState::Awake);
+		const bool force = (g_state != ScreenSaverState::Awake || g_idle_screen_active);
 		if (force != prev_force) {
 				touch_manager_set_lvgl_force_released(force);
 				LOGI("SAVER", "Touch suppress %s", force ? "ON" : "OFF");

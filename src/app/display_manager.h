@@ -98,6 +98,8 @@ private:
 		Screen* screenHistory[SCREEN_HISTORY_MAX];
 		size_t screenHistoryCount;
 		bool skipHistoryPush;    // Set by goBack() to avoid pushing when navigating back
+		Screen* transientResumeScreen;
+		bool transientScreenActive;
 
 		// Defer small LVGL UI updates (like splash status) to the LVGL task.
 		char pendingSplashStatus[96];
@@ -172,6 +174,11 @@ public:
 		
 		// Screen selection by ID (thread-safe, returns true if found)
 		bool showScreen(const char* screen_id);
+
+		// Show a temporary screen without affecting navigation history. Restoring it
+		// returns to the screen that was active when the transient screen began.
+		bool showTransientScreen(const char* screen_id);
+		bool restoreTransientScreen();
 		
 		// Navigate back to previous screen (returns true if there was one)
 		bool goBack();
