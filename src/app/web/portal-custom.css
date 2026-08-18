@@ -670,6 +670,137 @@ body {
 }
 
 /* ================================================================
+   Screen saver timeline
+   ================================================================ */
+.screensaver-timeline {
+  margin: 0 0 22px;
+  padding: 14px;
+  border: 1px solid var(--portal-card-border);
+  border-left: 3px solid var(--portal-primary);
+  border-radius: 6px;
+  background: var(--portal-surface-alt);
+}
+
+.screensaver-timeline-label {
+  margin-bottom: 3px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--portal-text);
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.screensaver-timeline-intro {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  color: var(--portal-text-muted);
+}
+
+.screensaver-timeline-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.screensaver-timeline-step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 12px 0 0;
+}
+
+.screensaver-timeline-step:not(:last-child)::after {
+  position: absolute;
+  top: 7px;
+  left: 14px;
+  right: 0;
+  height: 2px;
+  background: var(--portal-border-light);
+  content: '';
+}
+
+.screensaver-timeline-rail[data-stage-count="0"] .screensaver-timeline-now::after,
+.screensaver-timeline-rail[data-stage-count="1"] #screensaver-timeline-idle:not([hidden])::after {
+  display: none;
+}
+
+.screensaver-timeline-dot {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin-bottom: 7px;
+  border: 3px solid var(--portal-card-bg);
+  border-radius: 50%;
+  background: var(--portal-primary);
+  box-shadow: 0 0 0 1px rgba(var(--portal-primary-rgb), 0.35);
+}
+
+.screensaver-timeline-now .screensaver-timeline-dot {
+  background: var(--portal-text-muted);
+  box-shadow: none;
+}
+
+.screensaver-timeline-time,
+.screensaver-timeline-step strong,
+.screensaver-timeline-step small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screensaver-timeline-time {
+  margin-bottom: 2px;
+  font-size: 0.74rem;
+  color: var(--portal-primary);
+}
+
+.screensaver-timeline-step strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--portal-text);
+}
+
+.screensaver-timeline-step small,
+.screensaver-timeline-summary {
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--portal-text-muted);
+}
+
+.screensaver-timeline-summary {
+  margin-bottom: 0;
+  padding-top: 10px;
+}
+
+@media (max-width: 575.98px) {
+  .screensaver-timeline-rail {
+    display: block;
+  }
+
+  .screensaver-timeline-step {
+    padding: 0 0 12px 28px;
+  }
+
+  .screensaver-timeline-step:not(:last-child)::after {
+    top: 16px;
+    bottom: 0;
+    left: 7px;
+    right: auto;
+    width: 2px;
+    height: auto;
+  }
+
+  .screensaver-timeline-dot {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+}
+
+/* ================================================================
    Screen preview
    ================================================================ */
 .screen-preview-toolbar {

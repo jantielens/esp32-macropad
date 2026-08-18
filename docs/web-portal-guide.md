@@ -269,18 +269,18 @@ does not support dragging, swiping, long presses, multi-touch, or live video.
 
 ### Screen Saver (Burn-in Prevention)
 
-The screen saver has two optional features, both measured from the most recent user activity. **Idle Screen** temporarily shows a configured pad, which can host an animated clock or extension. **Display Sleep** turns off the panel to protect it from burn-in. Either can be used alone, or Idle Screen can lead into Display Sleep. A built-in pixel-shift mechanism moves content slightly each Display Sleep cycle to prevent ghosting.
+The screen saver has two optional features, both measured from the most recent user activity. **Idle Screen** temporarily shows a configured pad, which can host an animated clock or extension. **Display Sleep** turns off the panel to protect it from burn-in. Either can be used alone, or Idle Screen can lead into Display Sleep. A built-in pixel-shift mechanism moves content slightly each Display Sleep cycle to prevent ghosting. The portal shows a live timeline of the current settings above the controls.
 
 | Setting | Description |
 |---------|-------------|
-| **Enable Display Sleep** | Turn automatic panel sleep on or off |
-| **Display Sleep After** | Seconds of inactivity before panel sleep (0 = disabled) |
-| **Show an Idle Screen** | Enable a transient pad when the device is idle, with or without Display Sleep |
-| **Idle Screen After** | Seconds of inactivity before the configured pad appears (0 = disabled) |
-| **Idle Screen Pad** | Pad to show while idle; it remains available as a normal pad elsewhere |
+| **Turn off display after inactivity** | Turn automatic panel sleep on or off |
+| **Turn off display after** | Seconds of inactivity before panel sleep (0 = disabled) |
+| **Show a standby pad** | Enable a transient pad when the device is idle, with or without Display Sleep |
+| **Show standby pad after** | Seconds of inactivity before the configured pad appears (0 = disabled) |
+| **Standby pad** | Pad to show while idle; it remains available as a normal pad elsewhere |
 | **Fade Out** | Fade-to-black duration when entering Display Sleep (ms, 0 = instant) |
 | **Fade In** | Fade-from-black duration when leaving Display Sleep (ms, 0 = instant) |
-| **Wake on touch** | One touch fully exits Idle Screen or wakes Display Sleep |
+| **Wake on touch press** | One touch fully exits Idle Screen or wakes Display Sleep |
 | **MQTT Wake and Keep Awake Binding** | An ON binding fully exits Idle Screen or wakes Display Sleep, and keeps both stages off while it remains ON (e.g. `[mqtt:devices/node/presence/state]`) |
 
 For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds shows the selected pad after five minutes, then turns off the panel after 30 minutes total. The first wake interaction is consumed and returns to the screen that was active before the Idle Screen appeared, so the temporary pad is not added to navigation history.

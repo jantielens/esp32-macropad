@@ -685,6 +685,59 @@ window.init_screensaver_fragment = function () {
             idlePad.appendChild(option);
         });
     }
+    window.screensaverTimelineUpdate = function () {
+        var idleEnabled = document.getElementById('idle_screen_enabled');
+        var idleTimeout = document.getElementById('idle_screen_timeout_seconds');
+        var idlePadSelect = document.getElementById('idle_screen_pad');
+        var sleepEnabled = document.getElementById('screen_saver_enabled');
+        var sleepTimeout = document.getElementById('screen_saver_timeout_seconds');
+        var idleStep = document.getElementById('screensaver-timeline-idle');
+        var sleepStep = document.getElementById('screensaver-timeline-sleep');
+        var rail = document.getElementById('screensaver-timeline-rail');
+        var idleTime = document.getElementById('screensaver-timeline-idle-time');
+        var sleepTime = document.getElementById('screensaver-timeline-sleep-time');
+        var idleTitle = document.getElementById('screensaver-timeline-idle-title');
+        var summary = document.getElementById('screensaver-timeline-summary');
+        if (!idleEnabled || !idleTimeout || !idlePadSelect || !sleepEnabled || !sleepTimeout ||
+            !idleStep || !sleepStep || !rail || !idleTime || !sleepTime || !idleTitle || !summary) return;
+
+        var formatDuration = function (seconds) {
+            if (seconds < 60) return seconds + ' sec';
+            if (seconds % 60 === 0) return (seconds / 60) + ' min';
+            return Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' sec';
+        };
+        var idleSeconds = Number(idleTimeout.value) || 0;
+        var sleepSeconds = Number(sleepTimeout.value) || 0;
+        var hasIdle = idleEnabled.checked && idleSeconds > 0 && idlePadSelect.value;
+        var hasSleep = sleepEnabled.checked && sleepSeconds > 0;
+        var idleName = idlePadSelect.options[idlePadSelect.selectedIndex];
+
+        idleStep.hidden = !hasIdle;
+        sleepStep.hidden = !hasSleep;
+        rail.dataset.stageCount = (hasIdle ? 1 : 0) + (hasSleep ? 1 : 0);
+        if (hasIdle) {
+            idleTime.textContent = formatDuration(idleSeconds);
+            idleTitle.textContent = idleName ? idleName.textContent : 'Standby pad';
+        }
+        if (hasSleep) sleepTime.textContent = formatDuration(sleepSeconds);
+
+        if (!hasIdle && !hasSleep) {
+            summary.textContent = 'The current screen stays visible until activity.';
+        } else if (hasIdle && hasSleep) {
+            summary.textContent = 'The standby pad appears first, then the display turns off.';
+        } else if (hasIdle) {
+            summary.textContent = 'The standby pad remains visible until activity.';
+        } else {
+            summary.textContent = 'The display turns off after the selected delay.';
+        }
+    };
+    ['idle_screen_enabled', 'idle_screen_timeout_seconds', 'idle_screen_pad',
+        'screen_saver_enabled', 'screen_saver_timeout_seconds'].forEach(function (id) {
+        var field = document.getElementById(id);
+        if (field) field.addEventListener('input', window.screensaverTimelineUpdate);
+        if (field) field.addEventListener('change', window.screensaverTimelineUpdate);
+    });
+    window.screensaverTimelineUpdate();
     // Initialize binding validator on inputs
     if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 };

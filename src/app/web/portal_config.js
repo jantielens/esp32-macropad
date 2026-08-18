@@ -249,6 +249,7 @@ async function loadConfig() {
         setCheckedIfExists('idle_screen_enabled', config.idle_screen_enabled);
         setValueIfExists('idle_screen_timeout_seconds', config.idle_screen_timeout_seconds);
         setValueIfExists('idle_screen_pad', config.idle_screen_pad);
+        if (typeof window.screensaverTimelineUpdate === 'function') window.screensaverTimelineUpdate();
 
         // E-paper settings (only present when firmware has HAS_EPAPER)
         if (config.epaper_url !== undefined) {
