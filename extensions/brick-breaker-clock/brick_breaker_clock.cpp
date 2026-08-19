@@ -10,16 +10,28 @@ namespace {
 
 constexpr uint8_t MAX_INSTANCES = 16;
 constexpr uint8_t MAX_CLOCK_BRICKS = 64;
+constexpr uint8_t MAX_LEVEL_BRICKS = 54;
 constexpr uint8_t CLOCK_DIGITS = 4;
 constexpr uint8_t DIGIT_ROWS = 5;
 constexpr uint8_t DIGIT_COLUMNS = 3;
 constexpr uint32_t CLOCK_RESOLVE_MS = 250;
 constexpr uint16_t DEFAULT_RESPAWN_MS = 1000;
+constexpr uint16_t PADDLE_RESPAWN_SAFETY_MS = 30000;
 constexpr uint16_t DEFAULT_SPEED_PERCENT = 100;
 constexpr uint16_t DEFAULT_PADDLE_ACCURACY = 96;
+constexpr uint8_t CEILING_SHOT_DENOMINATOR = 3;
 constexpr uint32_t DEFAULT_BACKGROUND = 0x001010;
 constexpr uint32_t DEFAULT_BRICK_COLOR = 0xF81858;
 constexpr uint8_t BRICK_VARIANTS = 8;
+constexpr uint8_t LEVEL_COUNT = 8;
+constexpr uint8_t LEVEL_COLUMNS = 18;
+constexpr uint8_t LEVEL_ROWS = 3;
+constexpr uint32_t LEVEL_PATTERNS[LEVEL_COUNT][LEVEL_ROWS] = {
+    {0x2AAAAu, 0x15555u, 0x2AAAAu}, {0x24924u, 0x12492u, 0x24924u},
+    {0x3E07Cu, 0x1C038u, 0x0E01Cu}, {0x3FC3Fu, 0x0F00Fu, 0x3FC3Fu},
+    {0x24924u, 0x12492u, 0x24924u}, {0x3E07Cu, 0x1C038u, 0x0E01Cu},
+    {0x38007u, 0x1C00Eu, 0x0E01Cu}, {0x2FFFDu, 0x17FFAu, 0x2FFFDu},
+};
 constexpr uint8_t DIGITS[10][DIGIT_ROWS] = {
     {0b111, 0b101, 0b101, 0b101, 0b111}, {0b010, 0b110, 0b010, 0b010, 0b111},
     {0b111, 0b001, 0b111, 0b100, 0b111}, {0b111, 0b001, 0b111, 0b001, 0b111},
@@ -44,13 +56,24 @@ struct Brick {
     uint8_t rendered;
 };
 
+struct LevelBrick {
+    Rect bounds;
+    uint8_t variant;
+    uint8_t present;
+    uint8_t rendered;
+};
+
 struct InstanceState {
     uint8_t active;
     uint8_t render_dirty;
     uint8_t full_render;
     uint8_t brick_color_custom;
+    uint8_t respawn_on_paddle;
     uint8_t brick_count;
+    uint8_t level_count;
+    uint8_t level_index;
     uint32_t instance_id;
+    uint32_t random_state;
     void* extension_context;
     void* canvas;
     void* canvas_buffer;
@@ -68,6 +91,7 @@ struct InstanceState {
     uint32_t next_clock_resolve_ms;
     uint32_t last_step_ms;
     Brick bricks[MAX_CLOCK_BRICKS];
+    LevelBrick level_bricks[MAX_LEVEL_BRICKS];
     float ball_x;
     float ball_y;
     float ball_dx;
@@ -134,6 +158,14 @@ uint16_t parse_config_uint(const char* json, const char* key, uint16_t fallback,
     return digits ? static_cast<uint16_t>(parsed) : fallback;
 }
 
+bool parse_config_bool(const char* json, const char* key, bool fallback) {
+    const char* value = find_config_value(json, key);
+    if (!value) return fallback;
+    if (value[0] == 't' && value[1] == 'r' && value[2] == 'u' && value[3] == 'e') return true;
+    if (value[0] == 'f' && value[1] == 'a' && value[2] == 'l' && value[3] == 's' && value[4] == 'e') return false;
+    return fallback;
+}
+
 bool parse_hex_color(const char* value, uint32_t* color) {
     if (!value || !color || *value++ != '\"') return false;
     if (*value == '#') ++value;
@@ -183,9 +215,15 @@ InstanceState* create_instance(PackageState* state, uint32_t instance_id) {
         instance = {};
         instance.active = true;
         instance.instance_id = instance_id;
+        instance.random_state = instance_id ^ 0x9E3779B9u;
         return &instance;
     }
     return nullptr;
+}
+
+uint32_t next_random(InstanceState* instance) {
+    instance->random_state = instance->random_state * 1664525u + 1013904223u;
+    return instance->random_state;
 }
 
 Rect make_rect(int16_t x, int16_t y, uint16_t width, uint16_t height) {
@@ -226,9 +264,16 @@ void build_clock_bricks(InstanceState* instance) {
     const uint16_t content_width = 17u * instance->brick_width;
     int16_t x = static_cast<int16_t>((instance->width - content_width) / 2u);
     const int16_t clock_height = 5 * instance->brick_height;
+    const int16_t level_height = LEVEL_ROWS * instance->brick_height;
+    const int16_t level_gap = 2 * instance->brick_height;
     const int16_t desired_y = static_cast<int16_t>(instance->height / 3u - clock_height / 2);
-    const int16_t maximum_y = static_cast<int16_t>(instance->paddle_y - instance->ball_size - clock_height - 8);
-    const int16_t y = desired_y >= 4 && desired_y <= maximum_y ? desired_y : 4;
+    const int16_t maximum_y = static_cast<int16_t>(instance->paddle_y - instance->ball_size -
+                                                    clock_height - level_gap - level_height - 6);
+    int16_t y = 4;
+    if (maximum_y >= 4) {
+        y = desired_y < 4 ? 4 : desired_y;
+        if (y > maximum_y) y = maximum_y;
+    }
     for (uint8_t digit_index = 0; digit_index < CLOCK_DIGITS; ++digit_index) {
         if (digit_index == 2) {
             const int16_t colon_x = x;
@@ -246,12 +291,128 @@ void build_clock_bricks(InstanceState* instance) {
     }
 }
 
+void build_level(InstanceState* instance, int16_t clock_top, int16_t clock_bottom) {
+    instance->level_count = 0;
+    const int16_t level_height = LEVEL_ROWS * instance->brick_height;
+    (void)clock_top;
+    const int16_t top = static_cast<int16_t>(clock_bottom + instance->brick_height * 2u);
+    const int16_t maximum_top = static_cast<int16_t>(instance->paddle_y - instance->ball_size - level_height - 6);
+    if (top > maximum_top) return;
+    const int16_t left = static_cast<int16_t>((instance->width - LEVEL_COLUMNS * instance->brick_width) / 2u);
+    for (uint8_t row = 0; row < LEVEL_ROWS; ++row) {
+        const uint32_t pattern = LEVEL_PATTERNS[instance->level_index % LEVEL_COUNT][row];
+        for (uint8_t column = 0; column < LEVEL_COLUMNS; ++column) {
+            const uint32_t bit = 1u << (LEVEL_COLUMNS - column - 1u);
+            if (!(pattern & bit) || instance->level_count >= MAX_LEVEL_BRICKS) continue;
+            LevelBrick& brick = instance->level_bricks[instance->level_count++];
+            brick.bounds = make_rect(left + column * instance->brick_width,
+                                     top + row * instance->brick_height,
+                                     instance->brick_width, instance->brick_height);
+            brick.variant = static_cast<uint8_t>((instance->level_index + row + column) % BRICK_VARIANTS);
+            brick.present = true;
+        }
+    }
+}
+
+bool level_is_cleared(const InstanceState* instance) {
+    for (uint8_t index = 0; index < instance->level_count; ++index)
+        if (instance->level_bricks[index].present) return false;
+    return instance->level_count != 0;
+}
+
+bool line_intersects_rect(float start_x, float start_y, float end_x, float end_y, const Rect& rect, float margin) {
+    const float left = rect.x - margin;
+    const float right = rect.x + rect.width + margin;
+    const float top = rect.y - margin;
+    const float bottom = rect.y + rect.height + margin;
+    const float delta_x = end_x - start_x;
+    const float delta_y = end_y - start_y;
+    float entry = 0.0f;
+    float exit = 1.0f;
+    const float positions[2] = {start_x, start_y};
+    const float deltas[2] = {delta_x, delta_y};
+    const float minimums[2] = {left, top};
+    const float maximums[2] = {right, bottom};
+    for (uint8_t axis = 0; axis < 2; ++axis) {
+        if (deltas[axis] == 0.0f) {
+            if (positions[axis] < minimums[axis] || positions[axis] > maximums[axis]) return false;
+            continue;
+        }
+        float first = (minimums[axis] - positions[axis]) / deltas[axis];
+        float second = (maximums[axis] - positions[axis]) / deltas[axis];
+        if (first > second) { const float swap = first; first = second; second = swap; }
+        if (first > entry) entry = first;
+        if (second < exit) exit = second;
+        if (entry > exit) return false;
+    }
+    return exit >= 0.0f && entry <= 1.0f;
+}
+
+bool find_ceiling_target(InstanceState* instance, float start_x, float start_y, float* target_x) {
+    const float margin = instance->ball_size / 2.0f;
+    const float ceiling_y = margin;
+    for (uint8_t attempt = 0; attempt < 18; ++attempt) {
+        const float candidate = margin + static_cast<float>(next_random(instance) % 1001u) *
+            (instance->width - margin * 2.0f) / 1000.0f;
+        bool blocked = false;
+        for (uint8_t index = 0; index < instance->level_count && !blocked; ++index)
+            if (instance->level_bricks[index].present &&
+                line_intersects_rect(start_x, start_y, candidate, ceiling_y, instance->level_bricks[index].bounds, margin))
+                blocked = true;
+        for (uint8_t index = 0; index < instance->brick_count && !blocked; ++index)
+            if (instance->bricks[index].respawn_at_ms <= instance->last_step_ms &&
+                line_intersects_rect(start_x, start_y, candidate, ceiling_y, instance->bricks[index].bounds, margin))
+                blocked = true;
+        if (!blocked) { *target_x = candidate; return true; }
+    }
+    return false;
+}
+
+bool find_level_target(InstanceState* instance, float start_x, float start_y, float* target_x, float* target_y) {
+    const float margin = instance->ball_size / 2.0f;
+    for (int16_t row_y = instance->paddle_y; row_y >= 0; row_y -= instance->brick_height) {
+        for (uint8_t attempt = 0; attempt < instance->level_count; ++attempt) {
+            const uint8_t index = static_cast<uint8_t>(next_random(instance) % instance->level_count);
+            const LevelBrick& candidate = instance->level_bricks[index];
+            if (!candidate.present || candidate.bounds.y > row_y ||
+                candidate.bounds.y + candidate.bounds.height <= row_y - instance->brick_height) continue;
+            const int16_t offset_percent = static_cast<int16_t>(next_random(instance) % 61u) - 30;
+            const float candidate_x = candidate.bounds.x + candidate.bounds.width / 2.0f +
+                offset_percent * candidate.bounds.width / 100.0f;
+            const float candidate_y = candidate.bounds.y + candidate.bounds.height / 2.0f;
+            bool blocked = false;
+            for (uint8_t brick_index = 0; brick_index < instance->brick_count && !blocked; ++brick_index)
+                if (instance->bricks[brick_index].respawn_at_ms <= instance->last_step_ms &&
+                    line_intersects_rect(start_x, start_y, candidate_x, candidate_y,
+                                         instance->bricks[brick_index].bounds, margin))
+                    blocked = true;
+            for (uint8_t brick_index = 0; brick_index < instance->level_count && !blocked; ++brick_index) {
+                const LevelBrick& blocker = instance->level_bricks[brick_index];
+                if (brick_index != index && blocker.present &&
+                    line_intersects_rect(start_x, start_y, candidate_x, candidate_y, blocker.bounds, margin))
+                    blocked = true;
+            }
+            if (!blocked) {
+                *target_x = candidate_x;
+                *target_y = candidate_y;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void reset_ball(InstanceState* instance) {
     instance->ball_x = instance->width / 2.0f - instance->ball_size / 2.0f;
     instance->ball_y = instance->paddle_y - instance->ball_size - 3.0f;
     const float scale = static_cast<float>(instance->height) * 0.40f;
     instance->ball_dx = scale * 0.72f;
     instance->ball_dy = -scale;
+}
+
+void respawn_clock_bricks(InstanceState* instance, uint32_t now) {
+    for (uint8_t index = 0; index < instance->brick_count; ++index)
+        if (instance->bricks[index].respawn_at_ms > now) instance->bricks[index].respawn_at_ms = 0;
 }
 
 void step_game(InstanceState* instance, uint32_t now) {
@@ -280,10 +441,29 @@ void step_game(InstanceState* instance, uint32_t now) {
 
     const Rect ball = make_rect(static_cast<int16_t>(instance->ball_x), static_cast<int16_t>(instance->ball_y),
                                 instance->ball_size, instance->ball_size);
+    for (uint8_t index = 0; index < instance->level_count; ++index) {
+        LevelBrick& brick = instance->level_bricks[index];
+        if (!brick.present || !intersects(ball, brick.bounds)) continue;
+        brick.present = false;
+        instance->ball_dy = -instance->ball_dy;
+        if (instance->ball_dy > 0) instance->ball_y = brick.bounds.y + brick.bounds.height;
+        else instance->ball_y = brick.bounds.y - instance->ball_size;
+        if (level_is_cleared(instance)) {
+            const uint8_t previous_level = instance->level_index;
+            instance->level_index = static_cast<uint8_t>(next_random(instance) % LEVEL_COUNT);
+            if (instance->level_index == previous_level)
+                instance->level_index = static_cast<uint8_t>((instance->level_index + 1u) % LEVEL_COUNT);
+            const int16_t clock_top = instance->bricks[0].bounds.y;
+            const int16_t clock_bottom = static_cast<int16_t>(clock_top + 5 * instance->brick_height);
+            build_level(instance, clock_top, clock_bottom);
+            instance->full_render = true;
+        }
+        return;
+    }
     for (uint8_t index = 0; index < instance->brick_count; ++index) {
         Brick& brick = instance->bricks[index];
         if (brick.respawn_at_ms > now || !intersects(ball, brick.bounds)) continue;
-        brick.respawn_at_ms = now + instance->respawn_ms;
+        brick.respawn_at_ms = now + (instance->respawn_on_paddle ? PADDLE_RESPAWN_SAFETY_MS : instance->respawn_ms);
         instance->ball_dy = -instance->ball_dy;
         if (instance->ball_dy > 0) instance->ball_y = brick.bounds.y + brick.bounds.height;
         else instance->ball_y = brick.bounds.y - instance->ball_size;
@@ -297,10 +477,25 @@ void step_game(InstanceState* instance, uint32_t now) {
             (instance->paddle_width / 2.0f);
         const float scale = static_cast<float>(instance->height) * 0.40f;
         instance->ball_dy = -scale;
-        instance->ball_dx = impact * scale * 0.85f;
-        if (instance->ball_dx > -scale * 0.18f && instance->ball_dx < scale * 0.18f)
-            instance->ball_dx = impact < 0 ? -scale * 0.18f : scale * 0.18f;
+        float target_x = 0.0f;
+        float target_y = 0.0f;
+        if (find_level_target(instance, ball_center, instance->paddle_y, &target_x, &target_y)) {
+            const float travel = instance->paddle_y > target_y ? instance->paddle_y - target_y : 1.0f;
+            const int16_t miss_percent = static_cast<int16_t>(next_random(instance) % 121u) - 60;
+            const float miss = miss_percent * instance->brick_width / 100.0f;
+            instance->ball_dx = (target_x + miss - ball_center) * scale / travel;
+        } else if (next_random(instance) % CEILING_SHOT_DENOMINATOR == 0 &&
+                   find_ceiling_target(instance, ball_center, instance->paddle_y, &target_x)) {
+            const float travel = instance->paddle_y > instance->ball_size ?
+                static_cast<float>(instance->paddle_y - instance->ball_size) : 1.0f;
+            instance->ball_dx = (target_x - ball_center) * scale / travel;
+        } else {
+            instance->ball_dx = impact * scale * 0.85f;
+            if (instance->ball_dx > -scale * 0.18f && instance->ball_dx < scale * 0.18f)
+                instance->ball_dx = impact < 0 ? -scale * 0.18f : scale * 0.18f;
+        }
         instance->ball_y = instance->paddle_y - instance->ball_size - 1.0f;
+        if (instance->respawn_on_paddle) respawn_clock_bricks(instance, now);
     }
     if (instance->ball_y > instance->height) reset_ball(instance);
 }
@@ -342,6 +537,12 @@ void draw_brick(const NativeExtensionHostApi* host, InstanceState* instance, con
                                      bounds.width, bounds.height);
 }
 
+void draw_level_brick(const NativeExtensionHostApi* host, InstanceState* instance, const LevelBrick& brick) {
+    host->canvas->canvas_blit_rgb565(instance->canvas, brick.bounds.x, brick.bounds.y,
+                                     BRICK_SPRITES[brick.variant], BRICK_WIDTH, BRICK_HEIGHT,
+                                     brick.bounds.width, brick.bounds.height);
+}
+
 void draw_paddle(const NativeExtensionHostApi* host, InstanceState* instance, const Rect& paddle) {
     draw_masked_sprite(host, instance, paddle, PAD, PAD_WIDTH, PAD_HEIGHT);
 }
@@ -359,6 +560,14 @@ void redraw_bricks_in_rect(const NativeExtensionHostApi* host, InstanceState* in
     }
 }
 
+void redraw_level_in_rect(const NativeExtensionHostApi* host, InstanceState* instance, const Rect& dirty) {
+    for (uint8_t index = 0; index < instance->level_count; ++index) {
+        LevelBrick& brick = instance->level_bricks[index];
+        if (brick.present && intersects(dirty, brick.bounds)) draw_level_brick(host, instance, brick);
+        brick.rendered = brick.present;
+    }
+}
+
 void render(const NativeExtensionHostApi* host, InstanceState* instance, uint32_t now) {
     const Rect ball = make_rect(static_cast<int16_t>(instance->ball_x), static_cast<int16_t>(instance->ball_y),
                                 instance->ball_size, instance->ball_size);
@@ -367,6 +576,7 @@ void render(const NativeExtensionHostApi* host, InstanceState* instance, uint32_
     if (instance->full_render) {
         host->canvas->canvas_clear(instance->canvas, instance->background_color);
         const Rect full = make_rect(0, 0, instance->width, instance->height);
+        redraw_level_in_rect(host, instance, full);
         redraw_bricks_in_rect(host, instance, full, now);
         draw_paddle(host, instance, paddle);
         draw_ball(host, instance, ball);
@@ -383,8 +593,13 @@ void render(const NativeExtensionHostApi* host, InstanceState* instance, uint32_
             const bool visible = brick.respawn_at_ms <= now;
             if (visible != brick.rendered) extend_dirty(&dirty, brick.bounds, instance->width, instance->height);
         }
+        for (uint8_t index = 0; index < instance->level_count; ++index) {
+            LevelBrick& brick = instance->level_bricks[index];
+            if (brick.present != brick.rendered) extend_dirty(&dirty, brick.bounds, instance->width, instance->height);
+        }
         if (dirty.width && dirty.height) {
             host->canvas->canvas_fill_rect(instance->canvas, dirty.x, dirty.y, dirty.width, dirty.height, instance->background_color);
+            redraw_level_in_rect(host, instance, dirty);
             redraw_bricks_in_rect(host, instance, dirty, now);
             draw_paddle(host, instance, paddle);
             draw_ball(host, instance, ball);
@@ -411,6 +626,7 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     copy_text(instance->time_template, sizeof(instance->time_template), "[time:%H%M]");
     parse_config_string(config_json, "time", instance->time_template, sizeof(instance->time_template));
     instance->respawn_ms = parse_config_uint(config_json, "respawn_ms", DEFAULT_RESPAWN_MS, 10000);
+    instance->respawn_on_paddle = parse_config_bool(config_json, "respawn_on_paddle", true);
     instance->speed_percent = parse_config_uint(config_json, "speed", DEFAULT_SPEED_PERCENT, 400);
     if (instance->speed_percent < 25) instance->speed_percent = 25;
     instance->paddle_accuracy = parse_config_uint(config_json, "paddle_accuracy", DEFAULT_PADDLE_ACCURACY, 100);
@@ -440,6 +656,9 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     if (!instance->canvas || !instance->canvas_buffer) { instance->active = false; return; }
     host->canvas->canvas_set_buffer(instance->canvas, instance->canvas_buffer, instance->width, instance->height);
     build_clock_bricks(instance);
+    const int16_t clock_top = instance->bricks[0].bounds.y;
+    const int16_t clock_bottom = static_cast<int16_t>(clock_top + 5 * instance->brick_height);
+    build_level(instance, clock_top, clock_bottom);
     reset_ball(instance);
     instance->full_render = true;
     instance->render_dirty = true;
