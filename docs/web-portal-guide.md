@@ -321,7 +321,7 @@ Configure up to three expiry actions for each on-device timer slot. The Timer ac
 
 Expire actions use the same action editor as buttons, so you can play a sound, send an MQTT message, navigate to a screen, play a beep pattern, or any combination. This replaces the previous beep-only expiry with full action parity.
 
-When a countdown starts, it copies the slot's saved expiry list. Changes apply to the next run and do not alter a countdown already in progress. Runtime state, mode, and duration are not persisted across reboot. Use `[timer:N]` bindings on pad button labels to display timer values. Use `[timer:N_target]` for the active countdown preset in whole seconds, such as a gauge maximum. The target changes after Start, Set, and Adjust, but normal ticking, Stop, and Reset leave it unchanged. Count-up and unconfigured timers return `0`.
+When a countdown starts, it copies the slot's saved expiry list. Changes apply to the next run and do not alter a countdown already in progress. After saving an expiry-list change, stop and start a running timer to use it. Runtime state, mode, and duration are not persisted across reboot. Use `[timer:N]` bindings on pad button labels to display timer values. Use `[timer:N_target]` for the active countdown preset in whole seconds, such as a gauge maximum. The target changes after Start, Set, and Adjust, but normal ticking, Stop, and Reset leave it unchanged. Count-up and unconfigured timers return `0`.
 
 ## E-Paper Page
 

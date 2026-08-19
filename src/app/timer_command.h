@@ -29,6 +29,7 @@ struct PreparedTimerCommand {
     uint32_t value_ms;
     int32_t delta_seconds;
     bool needs_expiry_snapshot;
+    bool initializes_countdown;
 };
 
 struct TimerExpirySnapshot;

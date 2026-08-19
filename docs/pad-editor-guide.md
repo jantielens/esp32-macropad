@@ -489,7 +489,11 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
 
-Start and Toggle actions contain the mode and, for countdowns, the duration. This makes a copied button preserve how it starts the timer. The **Timers** page stores only the expiry actions for each slot.
+Start and Toggle actions contain the mode and, for countdowns, the duration.
+Start always applies its configured duration. Toggle applies it only when the
+timer is stopped; Toggle pauses or resumes an existing timer without replacing
+its countdown target. The **Timers** page stores only the expiry actions for
+each slot.
 
 When you select the **Timer** type, the **Command** selector groups every command by timer instance (T1/T2/T3):
 
@@ -501,12 +505,18 @@ When you select the **Timer** type, the **Command** selector groups every comman
 | **Pause** | Freeze the timer at its current value |
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
-| **Set countdown** | Set the countdown preset to an absolute number of seconds. Only affects countdown-mode timers |
-| **Adjust countdown** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). Only affects countdown-mode timers |
+| **Set countdown** | Set the countdown preset to an absolute number of seconds. On a stopped stopwatch timer, a positive value prepares a paused countdown |
+| **Adjust countdown** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). On a stopped stopwatch timer, a positive value prepares a paused countdown |
 
 For Start and Toggle, select **Stopwatch (Count Up)** or **Countdown**. Countdown
 actions require a positive whole-second Duration and may use a binding. Stopwatch
 actions do not store a duration.
+
+A prepared countdown does not run until **Toggle** or **Resume** starts it. This
+lets adjustment buttons select a target after boot: for example, **Adjust
+countdown** `20` prepares Timer 1 at 20 seconds, then Toggle starts it from 20
+seconds even if Toggle's configured Duration is `1`. **Reset** returns the
+timer to its prepared or adjusted target.
 
 #### Device-Level Timer Configuration
 
@@ -515,8 +525,9 @@ On the **Timers** page, configure up to three expiry actions for each timer slot
 * Expire actions use the same action editor as buttons, so you can trigger a
   sound alert, control Music, send an MQTT message, navigate to a screen, or
   combine up to three actions.
-* A countdown copies the slot's current expiry list when it starts. Editing
-  settings does not change an active run; the next countdown uses the new list.
+* A countdown copies the slot's current expiry list when it starts. A prepared
+  countdown snapshots the list when Toggle or Resume starts it. Editing settings
+  does not change an active run; the next countdown uses the new list.
 
 | Example expire action | What happens |
 |----------------------|-------------|

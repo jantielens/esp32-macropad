@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Countdown targets can be prepared after boot**: a positive **Set countdown** or **Adjust countdown** action now turns a stopped stopwatch timer into a paused countdown with that target. Toggle or Resume starts the prepared target without replacing it with Toggle's configured duration, and Reset returns to it. The timer's expiry actions remain snapshotted only when that countdown first starts, so Timer Settings edits made while selecting a target still apply.
 * **Native Extension ABI 16**: Extensions now use grouped host services exclusively, canvas text selects firmware fonts by name, and each External Widget placement can define its own tick interval. All shipped native Extension packages are rebuilt for the new ABI.
 
 ### Fixed

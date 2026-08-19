@@ -85,7 +85,8 @@ bool timer_command_prepare(const TimerPayload& payload, PreparedTimerCommand* ou
         }
         out->expected_state = timer_get_state(payload.timer_id);
         out->needs_expiry_snapshot = out->mode == TIMER_MODE_DOWN
-            && (is_start || out->expected_state == TIMER_STOPPED);
+            && (is_start || out->expected_state == TIMER_STOPPED
+                || timer_countdown_needs_expiry_snapshot(payload.timer_id));
         return true;
     }
 
@@ -100,8 +101,15 @@ bool timer_command_prepare(const TimerPayload& payload, PreparedTimerCommand* ou
             return timer_error(error, error_len,
                                "set value must be non-negative whole seconds");
         }
-        if (timer_get_mode(payload.timer_id) != TIMER_MODE_DOWN) {
-            return timer_error(error, error_len, "set requires countdown mode");
+        TimerMode mode = timer_get_mode(payload.timer_id);
+        if (mode != TIMER_MODE_DOWN) {
+            out->expected_state = timer_get_state(payload.timer_id);
+            if (mode != TIMER_MODE_UP || out->expected_state != TIMER_STOPPED
+                    || seconds == 0) {
+                return timer_error(error, error_len,
+                                   "set requires countdown mode or a positive fresh preset");
+            }
+            out->initializes_countdown = true;
         }
         out->value_ms = seconds * 1000;
         return true;
@@ -112,8 +120,15 @@ bool timer_command_prepare(const TimerPayload& payload, PreparedTimerCommand* ou
             return timer_error(error, error_len,
                                "adjust value must be signed whole seconds");
         }
-        if (timer_get_mode(payload.timer_id) != TIMER_MODE_DOWN) {
-            return timer_error(error, error_len, "adjust requires countdown mode");
+        TimerMode mode = timer_get_mode(payload.timer_id);
+        if (mode != TIMER_MODE_DOWN) {
+            out->expected_state = timer_get_state(payload.timer_id);
+            if (mode != TIMER_MODE_UP || out->expected_state != TIMER_STOPPED
+                    || out->delta_seconds <= 0) {
+                return timer_error(error, error_len,
+                                   "adjust requires countdown mode or a positive fresh preset");
+            }
+            out->initializes_countdown = true;
         }
         return true;
     }
@@ -123,7 +138,11 @@ bool timer_command_prepare(const TimerPayload& payload, PreparedTimerCommand* ou
     }
     if (strcmp(command, "stop") == 0) out->command = PREPARED_TIMER_STOP;
     else if (strcmp(command, "pause") == 0) out->command = PREPARED_TIMER_PAUSE;
-    else if (strcmp(command, "resume") == 0) out->command = PREPARED_TIMER_RESUME;
+    else if (strcmp(command, "resume") == 0) {
+        out->command = PREPARED_TIMER_RESUME;
+        out->expected_state = timer_get_state(payload.timer_id);
+        out->needs_expiry_snapshot = timer_countdown_needs_expiry_snapshot(payload.timer_id);
+    }
     else if (strcmp(command, "reset") == 0) out->command = PREPARED_TIMER_RESET;
     else return timer_error(error, error_len, "unsupported timer command");
     return true;
@@ -167,7 +186,10 @@ bool timer_command_execute(const PreparedTimerCommand& command,
             }
             return true;
         case PREPARED_TIMER_RESUME:
-            if (!timer_resume(command.timer_id)) {
+            if (command.needs_expiry_snapshot
+                    ? !timer_resume_prepared(command.timer_id, command.expected_state,
+                                             actions, action_count)
+                    : !timer_resume(command.timer_id)) {
                 return timer_error(error, error_len, "timer control rejected");
             }
             return true;
@@ -177,11 +199,28 @@ bool timer_command_execute(const PreparedTimerCommand& command,
             }
             return true;
         case PREPARED_TIMER_SET:
+            if (command.initializes_countdown) {
+                if (!timer_prepare_countdown(command.timer_id, command.expected_state,
+                                             command.value_ms)) {
+                    return timer_error(error, error_len, "countdown preparation rejected");
+                }
+                return true;
+            }
             if (!timer_set_countdown_ms(command.timer_id, command.value_ms)) {
                 return timer_error(error, error_len, "set requires countdown mode");
             }
             return true;
         case PREPARED_TIMER_ADJUST:
+            if (command.initializes_countdown) {
+                uint64_t milliseconds = (uint64_t)command.delta_seconds * 1000;
+                uint32_t countdown_ms = milliseconds > UINT32_MAX
+                    ? UINT32_MAX : (uint32_t)milliseconds;
+                if (!timer_prepare_countdown(command.timer_id, command.expected_state,
+                                             countdown_ms)) {
+                    return timer_error(error, error_len, "countdown preparation rejected");
+                }
+                return true;
+            }
             if (!timer_adjust(command.timer_id, command.delta_seconds)) {
                 return timer_error(error, error_len, "adjust requires countdown mode");
             }

@@ -296,7 +296,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group" id="' + prefix + '-timer-duration-group" style="display:none;">';
     h += '<label class="form-label" for="' + prefix + '-timer-duration">Duration (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-duration" placeholder="e.g. 300">';
-    h += '<small>Positive whole seconds. Supports bindings.</small>';
+    h += '<small>Positive whole seconds. Start always uses it; Toggle uses it only when starting a stopped timer, not when pausing or resuming. Supports bindings.</small>';
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-set-group" style="display:none;">';
     h += '<label class="form-label" for="' + prefix + '-timer-set-sec">Countdown (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';

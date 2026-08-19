@@ -89,6 +89,9 @@ static void test_validation_contract() {
 
     prepare_fails(payload(1, "set", "down", "1"));
     prepare_fails(payload(1, "adjust", "up", "1"));
+    prepare_fails(payload(2, "set", "", "0"));
+    prepare_fails(payload(2, "adjust", "", "0"));
+    prepare_fails(payload(2, "adjust", "", "-1"));
     prepare_fails(payload(1, "stop", "", "1"));
     prepare_fails(payload(1, "pause", "up"));
     prepare_fails(payload(1, "resume", "", "1"));
@@ -198,6 +201,59 @@ static void test_set_adjust_and_expiry() {
     assert(timer_get_ms(1) == UINT32_MAX);
     execute_ok(prepare_ok(payload(1, "adjust", "", "-2147483648")));
     assert(timer_get_ms(1) == 0);
+}
+
+static void test_prepare_countdown_from_set_or_adjust() {
+    timer_engine_init();
+    g_now = 0;
+    g_snapshot = {};
+    g_snapshot_ok = true;
+
+    PreparedTimerCommand adjust = prepare_ok(payload(1, "adjust", "", "20"));
+    assert(adjust.initializes_countdown);
+    execute_ok(adjust);
+    assert(timer_get_state(1) == TIMER_PAUSED);
+    assert(timer_get_mode(1) == TIMER_MODE_DOWN);
+    assert(timer_get_ms(1) == 20000);
+    assert(timer_countdown_needs_expiry_snapshot(1));
+
+    g_snapshot.count = 2;
+    for (uint8_t index = 0; index < g_snapshot.count; index++) {
+        strlcpy(g_snapshot.actions[index].type, ACTION_TYPE_SOUND_ALERT,
+                sizeof(g_snapshot.actions[index].type));
+    }
+    PreparedTimerCommand toggle = prepare_ok(payload(1, "toggle", "down", "1"));
+    assert(toggle.needs_expiry_snapshot);
+    execute_ok(toggle, &g_snapshot);
+    assert(timer_get_state(1) == TIMER_RUNNING);
+    assert(timer_get_ms(1) == 20000);
+    assert(!timer_countdown_needs_expiry_snapshot(1));
+
+    g_now = 5000;
+    execute_ok(prepare_ok(payload(1, "reset")));
+    assert(timer_get_ms(1) == 20000);
+    g_now = 25000;
+    g_dispatched = 0;
+    timer_engine_tick();
+    assert(g_dispatched == 2);
+
+    PreparedTimerCommand set = prepare_ok(payload(2, "set", "", "30"));
+    assert(set.initializes_countdown);
+    execute_ok(set);
+    assert(timer_get_state(2) == TIMER_PAUSED);
+    assert(timer_get_ms(2) == 30000);
+    PreparedTimerCommand start = prepare_ok(payload(2, "toggle", "down", "1"));
+    execute_ok(start, &g_snapshot);
+    assert(timer_get_ms(2) == 30000);
+
+    execute_ok(prepare_ok(payload(3, "set", "", "15")));
+    PreparedTimerCommand resume = prepare_ok(payload(3, "resume"));
+    assert(resume.needs_expiry_snapshot);
+    execute_ok(resume, &g_snapshot);
+    assert(timer_get_state(3) == TIMER_RUNNING);
+    assert(timer_get_ms(3) == 15000);
+
+    g_snapshot_ok = false;
 }
 
 static void test_countdown_target_lifecycle() {
@@ -378,6 +434,7 @@ int main(int argc, char** argv) {
     test_validation_contract();
     test_start_and_toggle_states();
     test_set_adjust_and_expiry();
+    test_prepare_countdown_from_set_or_adjust();
     test_countdown_target_lifecycle();
     test_basic_control_outcomes();
     test_run_entry_point();

@@ -211,7 +211,9 @@ graph LR
 - `set_volume` — set (0-100) or adjust (signed delta) the speaker volume.
 - `timer_control` — start, stop, toggle, pause, resume, reset, set, or adjust one
   of the three on-screen timers. Start and Toggle require `mode` (`up` or
-  `down`); countdown starts also require a positive whole-second `value`.
+  `down`); countdown starts also require a positive whole-second `value`. Set
+  and positive Adjust values prepare a paused countdown when a stopwatch timer
+  is stopped, so a later Toggle or Resume starts from that target.
 - `set_config` — write a safe subset of device settings that apply live without a
   reboot: device name, backlight brightness, the screen-saver group, MQTT publish
   interval/scope, and audio volume. WiFi/MQTT/HA credentials, operating mode, and
@@ -222,8 +224,9 @@ graph LR
   edit, send back).
 
 The `timers` component contains only per-slot `expire_actions` arrays. A
-countdown snapshots those settings when it starts, so configuration edits apply
-to later runs. The component's `exists` result reports whether
+countdown snapshots those settings when it starts, including when Toggle or
+Resume starts a prepared countdown, so configuration edits apply to later runs.
+The component's `exists` result reports whether
 `/config/timers.json` physically exists, even when normalized content is empty.
 - `system_command` — `reboot`, `wifi_reconnect`, or `screensaver`.
 

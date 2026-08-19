@@ -1422,7 +1422,7 @@ Save timer configuration to LittleFS and apply immediately.
 - **Body:** Same JSON format as GET response.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - Unknown timer keys, slot fields, malformed actions, and lists over three actions reject the complete write.
-- Saving replaces the persistent source for future countdown starts. Active runs keep their existing expiry snapshot.
+- Saving replaces the persistent source for future countdown starts. Active runs keep their existing expiry snapshot; stop and start a running countdown to apply the saved list.
 
 ---
 

@@ -25,6 +25,7 @@ struct TimerInstance {
     ButtonAction expire_actions[TIMER_MAX_EXPIRE_ACTIONS];
     uint8_t    expire_action_count;
     bool       expire_fired;    // edge detector: true once actions have fired
+    bool       expiry_snapshot_pending;
 };
 
 static TimerInstance s_timers[TIMER_COUNT];
@@ -70,6 +71,7 @@ static void configure_and_start_locked(TimerInstance& t, TimerMode mode,
     t.start_ms = millis();
     t.state = TIMER_RUNNING;
     t.expire_fired = false;
+    t.expiry_snapshot_pending = false;
     t.expire_action_count = mode == TIMER_MODE_DOWN
         ? (expire_action_count > TIMER_MAX_EXPIRE_ACTIONS
             ? TIMER_MAX_EXPIRE_ACTIONS : expire_action_count)
@@ -139,9 +141,45 @@ bool timer_toggle_prepared(uint8_t id, TimerState expected_state, TimerMode mode
         t.accumulated_ms += millis() - t.start_ms;
         t.state = TIMER_PAUSED;
     } else {
+        if (t.expiry_snapshot_pending) {
+            if (!expire_actions) {
+                timer_unlock();
+                return false;
+            }
+            t.expire_action_count = expire_action_count;
+            memset(t.expire_actions, 0, sizeof(t.expire_actions));
+            if (expire_action_count > 0) {
+                memcpy(t.expire_actions, expire_actions,
+                       expire_action_count * sizeof(ButtonAction));
+            }
+            t.expiry_snapshot_pending = false;
+        }
         t.start_ms = millis();
         t.state = TIMER_RUNNING;
     }
+    timer_unlock();
+    return true;
+}
+
+bool timer_prepare_countdown(uint8_t id, TimerState expected_state,
+                             uint32_t countdown_ms) {
+    if (!s_timer_ready || !valid_id(id) || countdown_ms == 0) return false;
+    timer_lock();
+    TimerInstance& t = get(id);
+    if (t.state != expected_state || t.state != TIMER_STOPPED
+            || t.mode != TIMER_MODE_UP) {
+        timer_unlock();
+        return false;
+    }
+    t.mode = TIMER_MODE_DOWN;
+    t.countdown_ms = countdown_ms;
+    t.accumulated_ms = 0;
+    t.start_ms = 0;
+    t.state = TIMER_PAUSED;
+    t.expire_fired = false;
+    t.expire_action_count = 0;
+    memset(t.expire_actions, 0, sizeof(t.expire_actions));
+    t.expiry_snapshot_pending = true;
     timer_unlock();
     return true;
 }
@@ -173,10 +211,43 @@ bool timer_resume(uint8_t id) {
     if (!s_timer_ready || !valid_id(id)) return false;
     timer_lock();
     auto& t = get(id);
-    if (t.state == TIMER_PAUSED) {
+    if (t.state == TIMER_PAUSED && !t.expiry_snapshot_pending) {
         t.start_ms = millis();
         t.state = TIMER_RUNNING;
     }
+    timer_unlock();
+    return true;
+}
+
+bool timer_resume_prepared(uint8_t id, TimerState expected_state,
+                           const ButtonAction* expire_actions,
+                           uint8_t expire_action_count) {
+    if (!s_timer_ready || !valid_id(id)
+            || expire_action_count > TIMER_MAX_EXPIRE_ACTIONS
+            || (expire_action_count > 0 && !expire_actions)) {
+        return false;
+    }
+    timer_lock();
+    TimerInstance& t = get(id);
+    if (t.state != expected_state || t.state != TIMER_PAUSED) {
+        timer_unlock();
+        return false;
+    }
+    if (t.expiry_snapshot_pending) {
+        if (!expire_actions) {
+            timer_unlock();
+            return false;
+        }
+        t.expire_action_count = expire_action_count;
+        memset(t.expire_actions, 0, sizeof(t.expire_actions));
+        if (expire_action_count > 0) {
+            memcpy(t.expire_actions, expire_actions,
+                   expire_action_count * sizeof(ButtonAction));
+        }
+        t.expiry_snapshot_pending = false;
+    }
+    t.start_ms = millis();
+    t.state = TIMER_RUNNING;
     timer_unlock();
     return true;
 }
@@ -228,6 +299,14 @@ bool timer_adjust(uint8_t id, int32_t delta_seconds) {
     }
     timer_unlock();
     return true;
+}
+
+bool timer_countdown_needs_expiry_snapshot(uint8_t id) {
+    if (!s_timer_ready || !valid_id(id)) return false;
+    timer_lock();
+    bool pending = get(id).expiry_snapshot_pending;
+    timer_unlock();
+    return pending;
 }
 
 uint32_t timer_get_ms(uint8_t id) {
