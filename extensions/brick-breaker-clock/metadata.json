@@ -1,0 +1,4 @@
+{
+  "summary": "A self-playing brick-breaker clock with respawning time bricks.",
+  "usage": "Optional Extension configuration:\n{\"time\":\"[time:%H:%M;Europe/Brussels]\",\"speed\":1.0,\"respawn_ms\":1000,\"paddle_accuracy\":96,\"brick_color\":\"#F81858\"}\n\nThe time binding supplies the four hour-and-minute digits and supports timezone parameters. Clock bricks disappear when hit and return after respawn_ms (default 1000). speed accepts 0.25 to 4.0. paddle_accuracy accepts 0 to 100; the default is near-perfect. The game field uses the owning button's background color. brick_color accepts a six-digit RGB color."
+}

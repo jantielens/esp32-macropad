@@ -362,6 +362,9 @@ handled-tap notification, pass-through long press, and on-demand
 the package, per-instance PSRAM sprite decode buffers, a dark aspect-fit canvas
 layout, and a timezone-aware `time` binding that supports either four or six
 clock digits.
+`extensions/brick-breaker-clock` demonstrates a self-playing canvas game with
+embedded RGB565 arcade sprites, a timezone-aware `time` binding, and a
+responsive time-brick layout that scales to the owning button.
 `extensions/flight-radar` is a stateful example: it shares one fixed-buffer
 ADSB.lol polling worker across active widgets, uses `config_json` for location
 and range, and renders a radar canvas plus labels. `interval` is an optional
