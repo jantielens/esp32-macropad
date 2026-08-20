@@ -419,6 +419,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/duty_cycle.cpp
   - src/app/mcp_tools_config.cpp
+  - src/app/sensors/aht10_sensor.cpp
+  - src/app/sensors/battery_adc_sensor.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/web_portal_config.cpp
 - **HAS_BLE_HID**
@@ -826,6 +828,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen_events.cpp
   - src/app/screens/pad_screen_poll.cpp
   - src/app/screens/pad_tile_builder.cpp
+  - src/app/sensors/aht10_sensor.cpp
+  - src/app/sensors/aht10_sensor.h
+  - src/app/sensors/battery_adc_sensor.cpp
+  - src/app/sensors/battery_adc_sensor.h
   - src/app/sensors/bme280_sensor.cpp
   - src/app/sensors/bme280_sensor.h
   - src/app/sensors/dummy_sensor.cpp
@@ -885,9 +891,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_SENSOR_AHT10**
   - src/app/board_config.h
   - src/app/sensors.cpp
+  - src/app/sensors/aht10_sensor.cpp
+  - src/app/sensors/aht10_sensor.h
 - **HAS_SENSOR_BATTERY_ADC**
   - src/app/board_config.h
   - src/app/sensors.cpp
+  - src/app/sensors/battery_adc_sensor.cpp
+  - src/app/sensors/battery_adc_sensor.h
 - **HAS_SENSOR_BME280**
   - src/app/board_config.h
   - src/app/sensors.cpp

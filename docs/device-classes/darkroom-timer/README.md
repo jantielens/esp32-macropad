@@ -64,6 +64,67 @@ An f-stop test-strip sequencer: pick a base exposure and a per-segment stop incr
 
 Reads the TSL2591 to derive a paper **grade** suggestion from a highlight/shadow (bright/dark) measurement, and computes an **enlargement (magnification) factor** from two reference reads so exposure can be corrected when you resize a print.
 
+## Paper Calibration And Metering Workflow
+
+Before using the meter for an exposure recommendation, establish a paper
+calibration for the current enlarger setup. This calibration couples a Zone V
+exposure time with the bare-bulb lux reading at the easel.
+
+### Create The Paper Calibration
+
+1. Set the enlarger to the conditions you will use for printing: intended
+	paper, developer and process, contrast filter, lens aperture, and easel
+	height. Leave the negative carrier empty.
+2. Make and process a stepped test strip under the bare bulb. Use exposure
+	steps in stops or half-stops, not equal seconds, so each patch is visibly
+	different. For example, if you expect a useful exposure near 8 seconds, make
+	patches from about 2 to 16 seconds in half-stop steps. Include an unexposed
+	margin as the paper-white reference and at least one patch that is distinctly
+	darker than middle gray.
+3. Evaluate the fully processed, dry strip under the light in which you normally
+	judge finished prints. Choose a neutral gray that looks halfway between the
+	unexposed paper white and the darkest useful gray on the strip. This is your
+	paper's Zone V reference. Do not choose the first barely visible gray, which
+	is too light, or the first solid black, which is too dark. A reflection
+	densitometer can make the choice more repeatable, but visual matching is
+	suitable when your viewing conditions are consistent.
+4. Store that patch's exposure time with `set_zone5`. It becomes
+	`[meter:zone5_time]`.
+5. With the empty carrier still in place, position the probe at the easel and
+	run `read_lref`. This records the bare-bulb illuminance as `[meter:lref]`.
+
+> [!IMPORTANT]
+> `zone5_time` and `lref` are one calibration pair. Repeat the bare-bulb test
+> strip and reference reading whenever the paper, chemistry, contrast filter,
+> lens aperture, or enlarger height changes.
+
+> [!NOTE]
+> The meter keeps one Zone V calibration at a time. You can read the negative's
+> bright and dark spots first to obtain a grade suggestion because grade does
+> not need a calibration. If you then change the contrast filter to follow that
+> suggestion, make a new bare-bulb strip and `lref` reading for the selected
+> filter before relying on `[meter:time]`.
+
+### Meter A Negative
+
+1. Insert and focus the negative at the chosen enlargement size.
+2. Move the probe to the brightest projected area, normally the clearest area
+	of the negative, and run `read_bright`.
+3. Move the probe to the darkest projected area, normally the densest area of
+	the negative, and run `read_dark`.
+4. Read `[meter:grade]` for the suggested paper grade and `[meter:time]` for
+	the suggested exposure. Set that time on the exposure timer before printing.
+
+The grade is calculated only from the bright-to-dark contrast ratio. The time
+uses the Zone V calibration and the geometric mean of the two negative readings:
+
+$$
+t_{recommended} = t_{Zone V} \times \frac{L_{ref}}{\sqrt{L_{bright} \times L_{dark}}}
+$$
+
+The time binding remains `---` until all four inputs are available:
+`zone5_time`, `lref`, `l_bright`, and `l_dark`.
+
 ## Action types
 
 Five action types are registered via `REGISTER_ACTION_TYPE`, so buttons, swipe gestures, boot actions, and timer-expire actions can all drive the darkroom. Action **wire strings** are `expose`, `strip`, `meter`, `print`, and `shelly` (legacy field names preserved for field-deployed pad configs). Each takes a flat `{<type>_command, <type>_value}` JSON shape.
