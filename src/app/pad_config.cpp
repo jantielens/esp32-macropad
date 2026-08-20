@@ -175,6 +175,13 @@ static const char* btn_default(const char* pad_default, const char* hardcoded) {
     return (pad_default && pad_default[0]) ? pad_default : hardcoded;
 }
 
+static ButtonShadowMode parse_button_shadow_mode(JsonVariant v) {
+    const char* value = v | "";
+    if (strcmp(value, "enabled") == 0) return BUTTON_SHADOW_ENABLED;
+    if (strcmp(value, "disabled") == 0) return BUTTON_SHADOW_DISABLED;
+    return BUTTON_SHADOW_INHERIT;
+}
+
 static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDefaults* defs) {
     init_button_defaults(btn);
 
@@ -228,6 +235,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
                          btn_default(defs ? defs->corner_radius : nullptr, "8"), false);
     parse_bindable_field(obj["content_pad"], btn->content_pad, CONFIG_BINDABLE_SHORT_LEN,
                          btn_default(defs ? defs->content_pad : nullptr, "4"), false);
+    btn->button_shadow = parse_button_shadow_mode(obj["button_shadow"]);
 
     // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
     // JSON: "actions": [ { "type": "mqtt", ... }, { "type": "sound_alert", ... } ]
@@ -453,6 +461,9 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     out->cols = 3;
     out->rows = 3;
     out->template_pad = -1;
+    out->button_shadow = BUTTON_SHADOW_INHERIT;
+    out->shadow = button_defaults_get()->shadow;
+    out->layout_settings = button_defaults_get()->layout;
     if (page >= MAX_PADS) return false;
     if (!g_fs_mounted) return false;
 
@@ -502,7 +513,9 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     out->cols = doc["cols"] | (uint8_t)3;
     out->rows = doc["rows"] | (uint8_t)3;
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
-    parse_bindable_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN, "#000000");
+    parse_bindable_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN,
+                         btn_default(button_defaults_get()->default_pad_bg_color, "#000000"));
+    out->button_shadow = parse_button_shadow_mode(doc["button_shadow"]);
     out->template_pad = doc["template_pad"] | (int8_t)-1;
     if (out->template_pad >= MAX_PADS) out->template_pad = -1;
 
@@ -542,7 +555,7 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     out->pad_action_count = action_list_parse(doc["pad_actions"], out->pad_actions,
                                               MAX_BUTTON_ACTIONS, true);
 
-    // Use device-level button defaults for cascading to buttons
+    // Use device-level pad and button defaults for cascading to buttons
 #if HAS_DISPLAY
     const ButtonDefaults* defs = button_defaults_get();
 #else

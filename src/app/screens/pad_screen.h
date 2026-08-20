@@ -75,6 +75,9 @@ struct RuntimeNumberBinding {
 // Runtime state per button tile (kept in memory while screen is active)
 struct ButtonTile {
     lv_obj_t* obj;            // Button container object
+    lv_obj_t* shadow;         // Opaque shadow plate, or nullptr for no/drop shadow
+    bool shadow_follows_background;
+    uint8_t shadow_darken_pct;
     lv_obj_t* label_top;      // Top label (Font S) or nullptr
     lv_obj_t* label_center;   // Center label (Font L) or nullptr
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr

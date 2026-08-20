@@ -380,7 +380,7 @@ void setup()
 	// Load swipe gesture actions from LittleFS (uses same filesystem)
 	swipe_config_init();
 
-	// Load device-level button defaults from LittleFS
+	// Load device-level pad and button defaults from LittleFS
 	button_defaults_init();
 
 	// Load boot actions from LittleFS

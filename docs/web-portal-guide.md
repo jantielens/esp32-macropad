@@ -351,7 +351,7 @@ The Pads page is the heart of ESP32 Macropad — this is where you design your t
 
 The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import) and **Building Blocks** — pre-configured button groups you can place into a pad with a single click. This is completely separate from the device config Save & Reboot footer on other pages.
 
-The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default colors, borders, and label styles that all buttons on all pads inherit automatically — saving you from repeating the same appearance settings on every button. Per-button overrides still take precedence.
+The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide pad background and layout defaults alongside button colors, borders, and label styles. Pads and buttons inherit the applicable settings automatically, while explicit overrides still take precedence.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 
@@ -445,7 +445,7 @@ Upload a compiled `.bin` firmware file directly from your computer. A progress b
 
 Erases all configuration and restarts the device in AP mode. You'll need to go through the [first-time setup](first-time-setup.md) again.
 
-> **Warning**: This cannot be undone. Everything stored on the device is wiped: all settings (WiFi, MQTT, BLE, display), all pad layouts, button defaults, timers, swipe and boot actions, stored icons, stored sounds, indexed-store data (e.g. shutter / scale sessions), and any BLE pairings.
+> **Warning**: This cannot be undone. Everything stored on the device is wiped: all settings (WiFi, MQTT, BLE, display), all pad layouts, pad and button defaults, timers, swipe and boot actions, stored icons, stored sounds, indexed-store data (e.g. shutter / scale sessions), and any BLE pairings.
 
 ---
 

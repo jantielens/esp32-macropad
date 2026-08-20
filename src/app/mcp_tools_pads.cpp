@@ -94,6 +94,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     pf["rows"] = "grid rows 1-8";
     pf["wake_screen"] = "screen id to navigate to on screensaver wake ('' = stay)";
     pf["bg_color"] = "pad background color #RRGGBB (default #000000)";
+    pf["button_shadow"] = "'enabled' or 'disabled' to override the device button-shadow setting; omit to inherit";
     pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit buttons into EMPTY cells (-1 = none). Inherited buttons render but are not stored in this pad.";
     pf["bindings"] = "object of name->binding-template, referenced elsewhere as [pad:name]. Names: [a-zA-Z][a-zA-Z0-9_]*";
     pf["pad_actions"] = "ordered array of up to grid.max_actions normal action objects. A non-empty effective list overrides all pad touch actions, including buttons and widgets, except swipes. [] clears it. Template pads never contribute pad_actions.";
@@ -105,13 +106,14 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "col", "row", "col_span", "row_span",
         "label_top", "label_center", "label_bottom",
         "label_top_style", "label_center_style", "label_bottom_style",
-        "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad",
+        "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
         "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions",
         "confirm", "confirm_text"
     };
     for (const char* f : fields) bf.add(f);
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
     btn["labels_note"] = "labels render with LVGL bitmap fonts (Latin text, digits, basic punctuation only). Do NOT use emoji or Unicode symbols — they render as blank/tofu. Use plain text, or an icon_id for graphics.";
+    btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
     btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");

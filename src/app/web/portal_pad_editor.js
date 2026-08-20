@@ -4,7 +4,7 @@
 // Fragment modules (bundled during minification via portal_pad_editor.js.bundle):
 //   portal_pad_blocks.js   - Building block catalog and placement
 //   portal_pad_icons.js    - Icon rendering, cell content, utility helpers
-//   portal_pad_defaults.js - Button defaults, bindings, color helpers
+//   portal_pad_defaults.js - Pad and button defaults, bindings, color helpers
 //   portal_pad_grid.js     - Grid rendering, resize, drag-and-drop
 //   portal_pad_dialog.js   - Button edit dialog
 
@@ -23,7 +23,7 @@ const padState = {
     bindings: [],        // Page-level named bindings [{name, value}]
     padActions: [],      // Full-screen pad tap actions
     colorCache: {},      // page → hex[] — colors from visited pads
-    buttonDefaults: {},  // Device-level button defaults (loaded from /api/button-defaults)
+    buttonDefaults: {},  // Device-level pad and button defaults (loaded from /api/button-defaults)
     templatePad: -1,     // Template pad index (-1 = none)
     templateButtons: [], // Buttons loaded from template pad (for ghost rendering)
     placingBlock: null,  // Block being placed (from catalog), or null
@@ -202,7 +202,7 @@ async function padInit() {
         section.style.display = 'block';
         const padFooter = document.getElementById('pad-floating-footer');
         if (padFooter) padFooter.style.display = '';
-        // Show button defaults section
+        // Show pad and button defaults section
         var btnDefSec = document.getElementById('btn-defaults-section');
         if (btnDefSec) btnDefSec.style.display = 'block';
         padPopulateGridDropdowns();
@@ -428,6 +428,7 @@ async function padLoadPage(page) {
     padState.bindings = [];
     padState.padActions = [];
     padState.templatePad = -1;
+    document.getElementById('pad-button-shadow').value = 'inherit';
     padState.templateButtons = [];
     padClearDirty();
 
@@ -442,14 +443,16 @@ async function padLoadPage(page) {
             document.getElementById('pad-name').value = '';
             document.getElementById('pad-wake-screen').value = '';
             padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
-            padSetBindableColor('pad-edit-page-bg-color', '#000000');
+            padSetBindableColor('pad-edit-page-bg-color', padGetEffectiveDefault('default_pad_bg_color'));
+            document.getElementById('pad-page-bg-mode').value = 'inherit';
+            padPageBackgroundModeChanged();
             padState.bindings = [];
             padLoadLevelActions([]);
             padState.templatePad = -1;
             padState.templateButtons = [];
             padRenderBindings();
             padPopulateTemplateDropdown(page);
-            padCacheColors(page, [], '#000000');
+            padCacheColors(page, [], padGetEffectiveDefault('default_pad_bg_color'));
             padRenderGrid();
             return;
         }
@@ -467,7 +470,10 @@ async function padLoadPage(page) {
         document.getElementById('pad-name').value = json.name || '';
         document.getElementById('pad-wake-screen').value = json.wake_screen || '';
         padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
-        padSetBindableColor('pad-edit-page-bg-color', json.bg_color, '#000000');
+        padSetBindableColor('pad-edit-page-bg-color', json.bg_color || padGetEffectiveDefault('default_pad_bg_color'));
+        document.getElementById('pad-page-bg-mode').value = json.bg_color ? 'override' : 'inherit';
+        padPageBackgroundModeChanged();
+        document.getElementById('pad-button-shadow').value = json.button_shadow || 'inherit';
 
         // Load pad bindings
         padState.bindings = padBindingsFromJson(json.bindings);
@@ -491,7 +497,8 @@ async function padLoadPage(page) {
         }
 
         // Cache colors for cross-pad swatches
-        padCacheColors(page, padState.buttons, padColorToHex(json.bg_color, '#000000'));
+        padCacheColors(page, padState.buttons,
+                   padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), '#000000'));
         padRenderGrid();
     } catch (err) {
         console.error('padLoadPage error:', err);
@@ -530,8 +537,12 @@ function padBuildSaveContext() {
     const wakeScreen = document.getElementById('pad-wake-screen').value;
     if (wakeScreen) payload.wake_screen = wakeScreen;
     else delete payload.wake_screen;
+    const padShadow = document.getElementById('pad-button-shadow').value;
+    if (padShadow !== 'inherit') payload.button_shadow = padShadow;
+    else delete payload.button_shadow;
     const pageBgC = padGetBindableColor('pad-edit-page-bg-color');
-    if (pageBgC && pageBgC !== '#000000') {
+    const pageBgMode = document.getElementById('pad-page-bg-mode').value;
+    if (pageBgMode === 'override' && pageBgC) {
         payload.bg_color = pageBgC.startsWith('#') ? pageBgC.slice(1) : pageBgC;
     } else {
         delete payload.bg_color;
@@ -566,11 +577,11 @@ function padBuildSaveContext() {
         }
     }
 
-    // Validate button defaults binding fields
+    // Validate pad and button defaults binding fields
     if (typeof bindingValidateDefaults === 'function') {
         var bvDef = bindingValidateDefaults();
         if (!bvDef.valid) {
-            throw new Error(bvDef.count + ' button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields');
+            throw new Error(bvDef.count + ' pad and button defaults error' + (bvDef.count > 1 ? 's' : '') + ' — check highlighted fields');
         }
     }
 
@@ -599,6 +610,18 @@ function padBuildSaveContext() {
         body: JSON.stringify(payload),
         blankOnSave: Boolean(deviceInfoCache && deviceInfoCache.display_blank_on_save),
     };
+}
+
+function padPageBackgroundModeChanged() {
+    const mode = document.getElementById('pad-page-bg-mode');
+    const input = document.getElementById('pad-edit-page-bg-color');
+    if (!mode || !input) return;
+    const inherits = mode.value === 'inherit';
+    input.readOnly = inherits;
+    input.parentElement.style.opacity = inherits ? '0.65' : '';
+    if (inherits) {
+        padSetBindableColor('pad-edit-page-bg-color', padGetEffectiveDefault('default_pad_bg_color'));
+    }
 }
 
 async function padSetSaveBrightness(brightness) {

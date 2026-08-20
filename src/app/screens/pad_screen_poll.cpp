@@ -1,4 +1,5 @@
 #include "pad_screen.h"
+#include "../button_shadow_color.h"
 #include "../display_driver.h"
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
@@ -139,6 +140,12 @@ void PadScreen::pollColorBindings() {
         switch (cb.target) {
         case 0: // bg
             lv_obj_set_style_bg_color(tile.obj, rgb_to_lv(color), 0);
+            if (tile.shadow_follows_background) {
+                const uint32_t shadow_color = button_shadow_darken_color(
+                    color, tile.shadow_darken_pct);
+                if (tile.shadow) lv_obj_set_style_bg_color(tile.shadow, rgb_to_lv(shadow_color), 0);
+                else lv_obj_set_style_shadow_color(tile.obj, rgb_to_lv(shadow_color), 0);
+            }
             // Update overlay color to match new background luminance
             if (tile.tap_overlay) {
                 bool is_light = perceived_luminance(color) > TAP_LUMINANCE_THRESH;
@@ -214,6 +221,7 @@ void PadScreen::pollNumberBindings() {
             break;
         case 1: // corner_radius
             lv_obj_set_style_radius(tile.obj, val, 0);
+            if (tile.shadow) lv_obj_set_style_radius(tile.shadow, val, 0);
             break;
         }
     }

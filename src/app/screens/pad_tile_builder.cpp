@@ -3,8 +3,28 @@
 #include "../icon_store.h"
 #include "../log_manager.h"
 #include "../device_class.h"
+#include "../button_shadow_color.h"
 #include <esp_heap_caps.h>
 #include <string.h>
+
+static bool button_shadow_enabled(const PadConfig& cfg, const ScreenButtonConfig& button) {
+    bool enabled = cfg.shadow.enabled;
+    if (cfg.button_shadow != BUTTON_SHADOW_INHERIT)
+        enabled = cfg.button_shadow == BUTTON_SHADOW_ENABLED;
+    if (button.button_shadow != BUTTON_SHADOW_INHERIT)
+        enabled = button.button_shadow == BUTTON_SHADOW_ENABLED;
+    return enabled;
+}
+
+static PadGridLayoutSpace pad_layout_space(const PadLayoutSettings& layout) {
+    PadGridLayoutSpace space = {
+        layout.inset_left_px, layout.inset_right_px,
+        layout.inset_top_px, layout.inset_bottom_px,
+        layout.spacing_px, layout.spacing_px,
+        layout.pixel_shift_distance_px,
+    };
+    return space;
+}
 
 // TAG, perceived_luminance(), rgb_to_lv(), and tile/tap-flash constants are
 // defined in pad_screen.cpp which is #included before this file in screens.cpp.
@@ -33,6 +53,10 @@ void PadScreen::clearTiles() {
         }
 #endif
         // Delete LVGL objects before freeing pixel data they reference
+        if (tiles[i].shadow) {
+            lv_obj_delete(tiles[i].shadow);
+            tiles[i].shadow = nullptr;
+        }
         if (tiles[i].obj) {
             lv_obj_delete(tiles[i].obj);
             tiles[i].obj = nullptr;
@@ -134,11 +158,13 @@ void PadScreen::buildTiles() {
         rs_arr[i] = cfg->buttons[i].row_span;
     }
 
+    const PadGridLayoutSpace layout_space = pad_layout_space(cfg->layout_settings);
+
     pad_compute_grid(
         cfg->cols, cfg->rows,
         (uint16_t)disp_w, (uint16_t)disp_h,
         cols_arr, rows_arr, cs_arr, rs_arr,
-        cfg->button_count, rects);
+        cfg->button_count, rects, &layout_space);
 
     const UIScaleInfo& scale = pad_get_scale_info();
 
@@ -147,8 +173,34 @@ void PadScreen::buildTiles() {
         const ScreenButtonConfig& bcfg = cfg->buttons[i];
         const PadRect& r = rects[i];
         ButtonTile& tile = tiles[i];
+        tile.shadow = nullptr;
+        tile.shadow_follows_background = cfg->shadow.color_mode == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND;
+        tile.shadow_darken_pct = cfg->shadow.darken_pct;
         const int16_t ui_ofs_x = bcfg.ui_offset_x;
         const int16_t ui_ofs_y = bcfg.ui_offset_y;
+        const bool has_shadow = button_shadow_enabled(*cfg, bcfg);
+        const int16_t shadow_offset_x = cfg->shadow.offset_x_px;
+        const int16_t shadow_offset_y = cfg->shadow.offset_y_px;
+        const uint8_t drop_blur = cfg->shadow.drop_blur_px;
+
+        uint32_t bg_def = 0x333333; parse_hex_color(bcfg.bg_color, &bg_def);
+        uint32_t shadow_def = 0x101010;
+        if (tile.shadow_follows_background) shadow_def = button_shadow_darken_color(bg_def, tile.shadow_darken_pct);
+        else parse_hex_color(cfg->shadow.color, &shadow_def);
+        const lv_coord_t cr_def = (lv_coord_t)strtol(bcfg.corner_radius, nullptr, 10);
+        if (has_shadow && cfg->shadow.type == BUTTON_SHADOW_TYPE_OPAQUE) {
+            tile.shadow = lv_obj_create(container);
+            lv_obj_set_pos(tile.shadow, r.x + shadow_offset_x,
+                           r.y + shadow_offset_y);
+            lv_obj_set_size(tile.shadow, r.w, r.h);
+            lv_obj_clear_flag(tile.shadow, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_clear_flag(tile.shadow, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_set_style_bg_color(tile.shadow, rgb_to_lv(shadow_def), 0);
+            lv_obj_set_style_bg_opa(tile.shadow, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(tile.shadow, 0, 0);
+            lv_obj_set_style_radius(tile.shadow, cr_def, 0);
+            lv_obj_set_style_clip_corner(tile.shadow, true, 0);
+        }
 
         // Create tile container
         lv_obj_t* obj = lv_obj_create(container);
@@ -157,17 +209,23 @@ void PadScreen::buildTiles() {
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
         // Styling — compute initial colors from config strings
-        uint32_t bg_def = 0x333333; parse_hex_color(bcfg.bg_color, &bg_def);
         uint32_t fg_def = 0xFFFFFF; parse_hex_color(bcfg.fg_color, &fg_def);
         uint32_t border_def = 0x000000; parse_hex_color(bcfg.border_color, &border_def);
         lv_obj_set_style_bg_color(obj, rgb_to_lv(bg_def), 0);
         lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(obj, rgb_to_lv(border_def), 0);
         lv_coord_t bw_def = (lv_coord_t)strtol(bcfg.border_width, nullptr, 10);
-        lv_coord_t cr_def = (lv_coord_t)strtol(bcfg.corner_radius, nullptr, 10);
         lv_obj_set_style_border_width(obj, bw_def, 0);
         lv_obj_set_style_radius(obj, cr_def, 0);
         lv_obj_set_style_clip_corner(obj, true, 0);
+        if (has_shadow && cfg->shadow.type == BUTTON_SHADOW_TYPE_DROP) {
+            lv_obj_set_style_shadow_color(obj, rgb_to_lv(shadow_def), 0);
+            lv_obj_set_style_shadow_opa(obj, LV_OPA_70, 0);
+            lv_obj_set_style_shadow_width(obj, drop_blur, 0);
+            lv_obj_set_style_shadow_spread(obj, 0, 0);
+            lv_obj_set_style_shadow_offset_x(obj, shadow_offset_x, 0);
+            lv_obj_set_style_shadow_offset_y(obj, shadow_offset_y, 0);
+        }
 
         // Content padding — plain px inset for labels/icon/widget. Cascades
         // button → device defaults → firmware default "4" (the legacy fixed inset).

@@ -155,8 +155,8 @@ function padDialogOpen(col, row) {
     padPopulateScreenDropdown();
     padPopulateSoundDropdown();
 
-    // Sync device-level button defaults from the DOM into padState so placeholders
-    // are current. The Button Defaults form may live on a separate page; only
+    // Sync device-level pad and button defaults from the DOM into padState so placeholders
+    // are current. The Pad and Button Defaults form may live on a separate page; only
     // re-collect when it is actually mounted, otherwise keep the defaults already
     // loaded from the device API (padLoadButtonDefaultsFromDevice) so inherited
     // values/placeholders stay correct instead of falling back to firmware.
@@ -201,7 +201,7 @@ function padDialogOpen(col, row) {
     // Auto-open colors section if any color has a binding or custom override
     var hasColorOverride = btn.bg_color || btn.fg_color || btn.border_color ||
         (btn.border_width !== undefined) || (btn.corner_radius !== undefined) ||
-        (btn.content_pad !== undefined);
+        (btn.content_pad !== undefined) || (btn.button_shadow !== undefined);
     document.getElementById('pad-edit-colors-section').open = !!hasColorOverride;
 
     var effBw = padGetEffectiveDefault('border_width');
@@ -215,6 +215,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-corner-radius').placeholder = effCr;
     document.getElementById('pad-edit-content-pad').placeholder = effCp;
     document.getElementById('pad-edit-ui-offset').value = btn.ui_offset || '';
+    document.getElementById('pad-edit-button-shadow').value = btn.button_shadow || 'inherit';
 
     // Update reset-hint visibility for appearance fields
     padUpdateResetHints();
@@ -495,7 +496,7 @@ function padDialogOk(keepOpen) {
     if (lbs) btn.label_bottom_style = lbs;
 
     // Only store appearance values that differ from the effective device default,
-    // so that changing device-level button defaults propagates to existing buttons.
+    // so that changing device-level pad and button defaults propagates to existing buttons.
     var _bg = padGetBindableColor('pad-edit-bg-color');
     if (_bg && _bg !== padGetEffectiveDefault('bg_color')) btn.bg_color = _bg;
     var _fg = padGetBindableColor('pad-edit-fg-color');
@@ -514,6 +515,8 @@ function padDialogOk(keepOpen) {
     if (cp && cp !== effCp) btn.content_pad = cp; else delete btn.content_pad;
     const uiOffset = document.getElementById('pad-edit-ui-offset').value.trim();
     if (uiOffset) { btn.ui_offset = uiOffset; } else { delete btn.ui_offset; }
+    const buttonShadow = document.getElementById('pad-edit-button-shadow').value || 'inherit';
+    if (buttonShadow !== 'inherit') btn.button_shadow = buttonShadow;
 
     // Tap actions (array)
     var tapArr = actionEditorListBuild(padActionPrefixes('tap'));

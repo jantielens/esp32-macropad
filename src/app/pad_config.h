@@ -38,6 +38,7 @@
 #define CONFIG_VALUE_MAX_LEN          16
 #define CONFIG_TIMER_CMD_MAX_LEN      12
 #define CONFIG_ACTION_TYPE_MAX_LEN     16
+#define CONFIG_BUTTON_SHADOW_MODE_MAX_LEN 9
 #define CONFIG_LAYOUT_NAME_MAX_LEN     16
 #define CONFIG_JSON_PATH_MAX_LEN       48
 #define CONFIG_FORMAT_MAX_LEN          24
@@ -358,6 +359,7 @@ struct ScreenButtonConfig {
     char border_width[CONFIG_BINDABLE_SHORT_LEN]; // default "0" — static or binding
     char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // default "8" — static or binding
     char content_pad[CONFIG_BINDABLE_SHORT_LEN];  // default "4" — plain px inset for labels/icon/widget (0-50)
+    uint8_t button_shadow;                         // ButtonShadowMode override
 
     // Typed actions (up to MAX_BUTTON_ACTIONS sequential actions per gesture)
     ButtonAction actions[MAX_BUTTON_ACTIONS];      // tap actions (executed sequentially)
@@ -396,11 +398,53 @@ struct PadBinding {
     char value[CONFIG_LABEL_MAX_LEN];         // binding template, e.g. "[mqtt:solar/power;$.value]"
 };
 
-// Device-level button defaults — fields that cascade to all buttons on the device
+// Device-level pad and button defaults. Button fields cascade to all buttons;
+// pad background and layout fields apply to every pad.
 // when the per-button JSON field is missing/null. Uses same field types as
 // ScreenButtonConfig so the cascade is a simple string copy.
 // A field is "set" when its string is non-empty.
+enum ButtonShadowMode : uint8_t {
+    BUTTON_SHADOW_INHERIT = 0,
+    BUTTON_SHADOW_ENABLED,
+    BUTTON_SHADOW_DISABLED,
+};
+
+enum ButtonShadowType : uint8_t {
+    BUTTON_SHADOW_TYPE_OPAQUE = 0,
+    BUTTON_SHADOW_TYPE_DROP,
+};
+
+enum ButtonShadowColorMode : uint8_t {
+    BUTTON_SHADOW_COLOR_FIXED = 0,
+    BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND,
+};
+
+// Device-wide shadow styling. Pads and buttons only override whether this
+// effect is enabled; they do not alter its visual parameters.
+struct ButtonShadowSettings {
+    bool enabled;
+    uint8_t type;  // ButtonShadowType
+    uint8_t color_mode;  // ButtonShadowColorMode
+    char color[CONFIG_COLOR_MAX_LEN];
+    uint8_t darken_pct;
+    int16_t offset_x_px;
+    int16_t offset_y_px;
+    uint8_t drop_blur_px;
+};
+
+// Device-wide layout defaults. Insets are extra space inside the permanent
+// pixel-shift margin, so burn-in shifting remains safe at every position.
+struct PadLayoutSettings {
+    uint8_t spacing_px;
+    uint8_t inset_top_px;
+    uint8_t inset_right_px;
+    uint8_t inset_bottom_px;
+    uint8_t inset_left_px;
+    uint8_t pixel_shift_distance_px;
+};
+
 struct ButtonDefaults {
+    char default_pad_bg_color[CONFIG_COLOR_MAX_LEN]; // e.g. "#000000" or a binding
     char bg_color[CONFIG_COLOR_MAX_LEN];          // e.g. "#1a1a2e"
     char fg_color[CONFIG_COLOR_MAX_LEN];          // e.g. "#e0e0ff"
     char border_color[CONFIG_COLOR_MAX_LEN];      // e.g. "#333366"
@@ -411,6 +455,8 @@ struct ButtonDefaults {
     char label_center_style[CONFIG_LABEL_STYLE_MAX_LEN];
     char label_bottom_style[CONFIG_LABEL_STYLE_MAX_LEN];
     uint8_t icon_position;                         // ICON_POS_ABOVE (0) = default
+    ButtonShadowSettings shadow;
+    PadLayoutSettings layout;
 };
 
 // Per-pad config
@@ -420,6 +466,9 @@ struct PadConfig {
     uint8_t rows;                            // 1-8 (grid mode only)
     char wake_screen[CONFIG_SCREEN_ID_MAX_LEN]; // screen to navigate to on screensaver sleep (empty = stay)
     char bg_color[CONFIG_COLOR_MAX_LEN];         // pad background color (default "#000000")
+    uint8_t button_shadow;                        // ButtonShadowMode override
+    ButtonShadowSettings shadow;                  // resolved device-wide settings
+    PadLayoutSettings layout_settings;            // resolved device-wide settings
 
     // Template pad: inherit buttons from another pad into empty grid positions.
     // -1 = none (default). 0..MAX_PADS-1 = source pad index.

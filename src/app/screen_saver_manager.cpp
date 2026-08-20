@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "screen_saver_manager.h"
+#include "button_defaults.h"
 #include "screen_saver_schedule.h"
 #include "log_manager.h"
 #include "display_manager.h"
@@ -51,16 +52,18 @@ static void remove_sleep_overlay() {
 		displayManager->unlock();
 }
 
-// Pixel shift: sub-pixel offset that advances each sleep cycle.
-// Covers a 9×9 grid (−4..+4 in each axis) = 81 positions.
-static uint8_t g_pixel_shift_counter = 0;
+// Pixel shift: offset that advances each sleep cycle. Its configurable range
+// is shared with pad layout's reserved margin.
+static uint16_t g_pixel_shift_counter = 0;
 
 // Timestamp of last periodic sleep-refresh (for displayRefreshSleep ticking).
 static uint32_t g_last_sleep_refresh_ms = 0;
 
 // Centralised state-entry helpers so sleep/wake side-effects live in one place.
 static void enter_asleep() {
-		g_pixel_shift_counter = (g_pixel_shift_counter + 34) % 81;
+		const uint8_t distance = button_defaults_get_pixel_shift_distance();
+		const uint16_t side = 2 * distance + 1;
+		g_pixel_shift_counter = distance ? (g_pixel_shift_counter + 1) % (side * side) : 0;
 		create_sleep_overlay();
 
 		// Send panel sleep commands (Display Off + Sleep In) where supported.
@@ -593,8 +596,15 @@ ScreenSaverStatus screen_saver_manager_get_status() {
 }
 
 void screen_saver_manager_get_pixel_shift(int* dx, int* dy) {
-		int col = (int)(g_pixel_shift_counter % 9) - 4;
-		int row = (int)(g_pixel_shift_counter / 9) - 4;
+		const uint8_t distance = button_defaults_get_pixel_shift_distance();
+		if (distance == 0) {
+			if (dx) *dx = 0;
+			if (dy) *dy = 0;
+			return;
+		}
+		const uint16_t side = 2 * distance + 1;
+		int col = (int)(g_pixel_shift_counter % side) - distance;
+		int row = (int)(g_pixel_shift_counter / side) - distance;
 		if (dx) *dx = col;
 		if (dy) *dy = row;
 }

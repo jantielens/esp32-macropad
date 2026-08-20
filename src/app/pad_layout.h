@@ -15,8 +15,8 @@
 // Pure-computation layout engine: display dimensions + grid config → tile rects.
 // No LVGL object creation — just math. Used by PadScreen to position tiles.
 
-// Pixel shift margin reserved on all sides (matches screen saver ±4px range)
-#define PIXEL_SHIFT_MARGIN 4
+// Default burn-in pixel shift distance. Device defaults can override it at runtime.
+#define DEFAULT_PIXEL_SHIFT_DISTANCE 4
 
 // ============================================================================
 // UI Scale Table
@@ -164,6 +164,17 @@ struct PadRect {
     uint16_t w, h;
 };
 
+// Device-wide pad layout space. Edge insets sit inside the pixel-shift margin.
+struct PadGridLayoutSpace {
+    uint16_t left;
+    uint16_t right;
+    uint16_t top;
+    uint16_t bottom;
+    uint16_t gap_x;
+    uint16_t gap_y;
+    uint16_t pixel_shift_margin;
+};
+
 // ============================================================================
 // Grid Computation
 // ============================================================================
@@ -187,14 +198,27 @@ static inline void pad_compute_grid(
     const uint8_t* button_cols, const uint8_t* button_rows,
     const uint8_t* button_col_spans, const uint8_t* button_row_spans,
     uint8_t button_count,
-    PadRect* out_rects)
+    PadRect* out_rects,
+    const PadGridLayoutSpace* layout_space = nullptr)
 {
-    const uint8_t gap = pad_get_scale_info().gap;
-    const uint16_t safe_w = display_w - 2 * PIXEL_SHIFT_MARGIN;
-    const uint16_t safe_h = display_h - 2 * PIXEL_SHIFT_MARGIN;
+    const uint16_t default_gap = pad_get_scale_info().gap;
+    const uint16_t left = layout_space ? layout_space->left : 0;
+    const uint16_t right = layout_space ? layout_space->right : 0;
+    const uint16_t top = layout_space ? layout_space->top : 0;
+    const uint16_t bottom = layout_space ? layout_space->bottom : 0;
+    const uint16_t gap_x = layout_space ? layout_space->gap_x : default_gap;
+    const uint16_t gap_y = layout_space ? layout_space->gap_y : default_gap;
+    const uint16_t pixel_shift_margin = layout_space
+        ? layout_space->pixel_shift_margin : DEFAULT_PIXEL_SHIFT_DISTANCE;
+    const uint16_t inset_w = 2 * pixel_shift_margin + left + right;
+    const uint16_t inset_h = 2 * pixel_shift_margin + top + bottom;
+    const uint16_t safe_w = display_w > inset_w ? display_w - inset_w : 0;
+    const uint16_t safe_h = display_h > inset_h ? display_h - inset_h : 0;
 
-    const uint16_t tile_w = (safe_w - (cols - 1) * gap) / cols;
-    const uint16_t tile_h = (safe_h - (rows - 1) * gap) / rows;
+    const uint16_t total_gap_x = (cols - 1) * gap_x;
+    const uint16_t total_gap_y = (rows - 1) * gap_y;
+    const uint16_t tile_w = safe_w > total_gap_x ? (safe_w - total_gap_x) / cols : 0;
+    const uint16_t tile_h = safe_h > total_gap_y ? (safe_h - total_gap_y) / rows : 0;
 
     for (uint8_t i = 0; i < button_count; i++) {
         const uint8_t c = button_cols[i];
@@ -202,10 +226,10 @@ static inline void pad_compute_grid(
         const uint8_t cs = button_col_spans[i] > 0 ? button_col_spans[i] : 1;
         const uint8_t rs = button_row_spans[i] > 0 ? button_row_spans[i] : 1;
 
-        out_rects[i].x = PIXEL_SHIFT_MARGIN + c * (tile_w + gap);
-        out_rects[i].y = PIXEL_SHIFT_MARGIN + r * (tile_h + gap);
-        out_rects[i].w = cs * tile_w + (cs - 1) * gap;
-        out_rects[i].h = rs * tile_h + (rs - 1) * gap;
+        out_rects[i].x = pixel_shift_margin + left + c * (tile_w + gap_x);
+        out_rects[i].y = pixel_shift_margin + top + r * (tile_h + gap_y);
+        out_rects[i].w = cs * tile_w + (cs - 1) * gap_x;
+        out_rects[i].h = rs * tile_h + (rs - 1) * gap_y;
     }
 }
 

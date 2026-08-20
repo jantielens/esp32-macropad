@@ -52,9 +52,9 @@ The stored JSON field is `pad_actions`, an array of up to three `ButtonAction` o
 
 > **Example**: A home energy dashboard might use a 4×2 grid named "Energy" with a dark background (`#111111`) — four columns for solar, grid, battery, and net power, with two rows for the bar chart and its label.
 
-### Button Defaults
+### Pad and Button Defaults
 
-The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default values for button appearance. Any button on any pad that doesn't have an explicit override inherits from these defaults.
+The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide defaults for pad appearance, layout, and button appearance. Any button or pad without an explicit override inherits the applicable default.
 
 **Available defaults:**
 
@@ -65,14 +65,19 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 | **Border color** | Default button outline color |
 | **Border width** | Default border thickness (px) |
 | **Corner radius** | Default button corner rounding (px) |
-| **Padding** | Default content inset between the border and labels/icon/widget (px, 0–50) |
+| **Content padding** | Default content inset between the border and labels/icon/widget (px, 0–50) |
 | **Label top/center/bottom style** | Default label style DSL (e.g., `font_size:24;align:left`) |
+| **Button shadow** | Device-wide shadow enablement, type, color, offsets, and drop blur |
 
-The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius, 4px padding).
+The button cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius, 4px content padding). The pad background cascade is: **Pad background → `default_pad_bg_color` → `#000000`**.
 
-> **Tip**: Set your button defaults first, then add buttons. Changing a default immediately updates all buttons that don't have a custom override — both in the editor preview and on the device.
+> **Tip**: Set pad and button defaults first, then add buttons. Changing a default immediately updates all inheriting pads or buttons, both in the editor preview and on the device.
 
 When editing a button, fields that match the device default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the device default.
+
+The **Pad Appearance and Layout** section controls device-wide pad geometry and background. **Default Pad Background** accepts a static color or a globally resolvable binding. A pad with no explicit background inherits this value; a pad-specific background remains an override. Do not use a pad-local `[pad:name]` binding in this shared default. **Button Spacing** sets only the fixed gap between adjacent buttons. **Burn-in Pixel Shift Distance** sets how far content moves in each direction during burn-in prevention; its default is 4 px and `0` disables both the movement and its layout reserve. **Extra Edge Insets** set the top, right, bottom, and left space between the grid and screen edge, inside the configured pixel-shift distance.
+
+Button shadows use independent device-wide styling, so they never change grid geometry. Choose **Opaque** for a crisp offset backing plate or **Drop** for a blurred shadow. Horizontal and Vertical Offset set the shadow's direction and distance. Drop Blur expands a Drop shadow evenly on every side. Use **Specific Color** to set one device-wide shadow color, or **Darker Button Background** to derive a darker tint from each button's background. Derived colors also update when a dynamic background binding changes. Large values may overlap nearby buttons or clip at the screen edge. At pad and button level, the Button Shadow selector only chooses **Inherit**, **Enable**, or **Disable**. It does not change shadow geometry.
 
 ### Template Pad
 
@@ -296,11 +301,13 @@ Each color field accepts either a static `#hex` value or a binding expression fo
 
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
-**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Button Defaults](#button-defaults). If you set a custom value, a **↩** reset link appears next to the label — click it to revert to the inherited default.
+**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Pad and Button Defaults](#pad-and-button-defaults). If you set a custom value, a **↩** reset link appears next to the label: click it to revert to the inherited default.
 
-**Padding** (0–50 px, default 4) sets the content inset between the button border and its content — the top/center/bottom labels, the icon, and any widget. Increase it to keep left/right-aligned labels from crowding the border or rounded corners, or to give a widget more breathing room. Like border width and radius, it inherits from [Button Defaults](#button-defaults) and shows a **↩** reset link when overridden.
+**Content padding** (0–50 px, default 4) sets the content inset between the button border and its content: the top/center/bottom labels, the icon, and any widget. Increase it to keep left/right-aligned labels from crowding the border or rounded corners, or to give a widget more breathing room. Like border width and corner radius, it inherits from [Pad and Button Defaults](#pad-and-button-defaults) and shows a **↩** reset link when overridden.
 
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
+
+**Button shadow** chooses whether this button inherits, enables, or disables the pad's shadow setting. Shadow type and sizing remain device-wide to keep button spacing consistent.
 
 ### Button State (Conditional Visibility)
 

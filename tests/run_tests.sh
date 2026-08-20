@@ -10,6 +10,27 @@ cd "$(dirname "$0")/.."
 
 mkdir -p tests/bin
 
+echo "=== Building unit tests: pad layout ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/Arduino.h -include tests/board_config.h \
+    -I tests -I src/app -I ~/Arduino/libraries/lvgl/src \
+    tests/test_pad_layout.cpp \
+    -o tests/bin/test_pad_layout
+
+echo "=== Running unit tests: pad layout ==="
+./tests/bin/test_pad_layout
+echo
+
+echo "=== Building unit tests: button shadow color ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -I src/app \
+    tests/test_button_shadow_color.cpp \
+    -o tests/bin/test_button_shadow_color
+
+echo "=== Running unit tests: button shadow color ==="
+./tests/bin/test_button_shadow_color
+echo
+
 echo "=== Building compile check: sparkline without HA history ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable \

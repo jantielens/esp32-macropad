@@ -919,7 +919,7 @@ window.init_pad_editor_fragment = function () {
 };
 
 // ============================================================================
-// Button Defaults
+// Pad and Button Defaults
 // ============================================================================
 
 window.init_button_defaults_fragment = function () {

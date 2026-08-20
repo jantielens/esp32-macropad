@@ -1,4 +1,4 @@
-// portal_pad_defaults.js - Button defaults, appearance reset, help overlays, bindings, and color helpers
+// portal_pad_defaults.js - Pad and button defaults, appearance reset, help overlays, bindings, and color helpers
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_pad_editor.js during minification.
 
@@ -57,10 +57,11 @@ function syncLabelStyleVisibility(slot) {
     btn.classList.toggle('active', hasValue);
 }
 
-// --- Button Defaults helpers ---
+// --- Pad and Button Defaults helpers ---
 
 // Firmware hardcoded defaults (must match init_button_defaults in pad_config.cpp)
 const PAD_FIRMWARE_DEFAULTS = {
+    default_pad_bg_color: '#000000',
     bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000',
     border_width: '0', corner_radius: '8', content_pad: '4',
 };
@@ -76,7 +77,7 @@ async function padLoadButtonDefaultsFromDevice() {
             padState.buttonDefaults = {};
         }
     } catch (e) {
-        console.error('Failed to load button defaults:', e);
+            console.error('Failed to load pad and button defaults:', e);
         padState.buttonDefaults = {};
     }
     padLoadButtonDefaults(padState.buttonDefaults);
@@ -92,10 +93,11 @@ function padLoadButtonDefaults(defs) {
     // safe no-ops. This is intentional and harmless; splitting into two
     // functions was considered but rejected as cosmetic-only churn.
     // Init bindable color controls
-    ['pad-def-bg-color-wrap', 'pad-def-fg-color-wrap', 'pad-def-border-color-wrap'].forEach(id => {
+    ['pad-def-pad-bg-color-wrap', 'pad-def-bg-color-wrap', 'pad-def-fg-color-wrap', 'pad-def-border-color-wrap'].forEach(id => {
         var el = document.getElementById(id);
         if (el) padInitBindableColor(el);
     });
+    padSetBindableColor('pad-def-pad-bg-color', defs.default_pad_bg_color || '', PAD_FIRMWARE_DEFAULTS.default_pad_bg_color);
     padSetBindableColor('pad-def-bg-color', defs.bg_color || '', PAD_FIRMWARE_DEFAULTS.bg_color);
     padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
     padSetBindableColor('pad-def-border-color', defs.border_color || '', PAD_FIRMWARE_DEFAULTS.border_color);
@@ -103,6 +105,22 @@ function padLoadButtonDefaults(defs) {
     el = document.getElementById('pad-def-border-width'); if (el) el.value = defs.border_width || '';
     el = document.getElementById('pad-def-corner-radius'); if (el) el.value = defs.corner_radius || '';
     el = document.getElementById('pad-def-content-pad'); if (el) el.value = defs.content_pad || '';
+    el = document.getElementById('pad-def-button-shadow-enabled'); if (el) el.checked = !!defs.button_shadow_enabled;
+    el = document.getElementById('pad-def-button-shadow-type'); if (el) el.value = defs.button_shadow_type || 'opaque';
+    el = document.getElementById('pad-def-button-shadow-color-mode'); if (el) el.value = defs.button_shadow_color_mode || 'fixed';
+    el = document.getElementById('pad-def-button-shadow-color'); if (el) el.value = defs.button_shadow_color || '#101010';
+    el = document.getElementById('pad-def-button-shadow-darken'); if (el) el.value = defs.button_shadow_darken_pct ?? 35;
+    el = document.getElementById('pad-def-button-shadow-offset-x'); if (el) el.value = defs.button_shadow_offset_x_px ?? 0;
+    el = document.getElementById('pad-def-button-shadow-offset-y'); if (el) el.value = defs.button_shadow_offset_y_px ?? 5;
+    el = document.getElementById('pad-def-button-shadow-drop-blur'); if (el) el.value = defs.button_shadow_drop_blur_px ?? 4;
+    el = document.getElementById('pad-def-button-spacing'); if (el) el.value = defs.button_spacing_px ?? 6;
+    el = document.getElementById('pad-def-pixel-shift-distance'); if (el) el.value = defs.pixel_shift_distance_px ?? 4;
+    el = document.getElementById('pad-def-inset-top'); if (el) el.value = defs.pad_inset_top_px ?? 0;
+    el = document.getElementById('pad-def-inset-right'); if (el) el.value = defs.pad_inset_right_px ?? 0;
+    el = document.getElementById('pad-def-inset-bottom'); if (el) el.value = defs.pad_inset_bottom_px ?? 0;
+    el = document.getElementById('pad-def-inset-left'); if (el) el.value = defs.pad_inset_left_px ?? 0;
+    padButtonShadowTypeChanged();
+    padButtonShadowColorModeChanged();
     el = document.getElementById('pad-def-label-top-style'); if (el) el.value = defs.label_top_style || '';
     el = document.getElementById('pad-def-label-center-style'); if (el) el.value = defs.label_center_style || '';
     el = document.getElementById('pad-def-label-bottom-style'); if (el) el.value = defs.label_bottom_style || '';
@@ -113,9 +131,11 @@ function padLoadButtonDefaults(defs) {
 
 function padCollectButtonDefaults() {
     var d = {};
+    var pbc = padGetBindableColor('pad-def-pad-bg-color');
     var bgc = padGetBindableColor('pad-def-bg-color');
     var fgc = padGetBindableColor('pad-def-fg-color');
     var bdc = padGetBindableColor('pad-def-border-color');
+    if (pbc) d.default_pad_bg_color = pbc;
     if (bgc) d.bg_color = bgc;
     if (fgc) d.fg_color = fgc;
     if (bdc) d.border_color = bdc;
@@ -128,8 +148,37 @@ function padCollectButtonDefaults() {
     el = document.getElementById('pad-def-label-bottom-style'); if (el && el.value.trim()) d.label_bottom_style = el.value.trim();
     var ip = document.getElementById('pad-def-icon-position');
     if (ip && ip.value && ip.value !== 'above') d.icon_position = ip.value;
+    el = document.getElementById('pad-def-button-shadow-enabled'); if (el) d.button_shadow_enabled = el.checked;
+    el = document.getElementById('pad-def-button-shadow-type'); if (el) d.button_shadow_type = el.value;
+    el = document.getElementById('pad-def-button-shadow-color-mode'); if (el) d.button_shadow_color_mode = el.value;
+    el = document.getElementById('pad-def-button-shadow-color'); if (el) d.button_shadow_color = el.value;
+    el = document.getElementById('pad-def-button-shadow-darken'); if (el) d.button_shadow_darken_pct = Number(el.value) || 0;
+    el = document.getElementById('pad-def-button-shadow-offset-x'); if (el) d.button_shadow_offset_x_px = Number(el.value) || 0;
+    el = document.getElementById('pad-def-button-shadow-offset-y'); if (el) d.button_shadow_offset_y_px = Number(el.value) || 0;
+    el = document.getElementById('pad-def-button-shadow-drop-blur'); if (el) d.button_shadow_drop_blur_px = Number(el.value) || 0;
+    el = document.getElementById('pad-def-button-spacing'); if (el) d.button_spacing_px = Number(el.value) || 0;
+    el = document.getElementById('pad-def-pixel-shift-distance'); if (el) d.pixel_shift_distance_px = Number(el.value) || 0;
+    el = document.getElementById('pad-def-inset-top'); if (el) d.pad_inset_top_px = Number(el.value) || 0;
+    el = document.getElementById('pad-def-inset-right'); if (el) d.pad_inset_right_px = Number(el.value) || 0;
+    el = document.getElementById('pad-def-inset-bottom'); if (el) d.pad_inset_bottom_px = Number(el.value) || 0;
+    el = document.getElementById('pad-def-inset-left'); if (el) d.pad_inset_left_px = Number(el.value) || 0;
 
     return d;
+}
+
+function padButtonShadowTypeChanged() {
+    var type = document.getElementById('pad-def-button-shadow-type');
+    var blur = document.getElementById('pad-def-button-shadow-blur-wrap');
+    if (type && blur) blur.style.display = type.value === 'drop' ? '' : 'none';
+}
+
+function padButtonShadowColorModeChanged() {
+    var mode = document.getElementById('pad-def-button-shadow-color-mode');
+    var color = document.getElementById('pad-def-button-shadow-color-wrap');
+    var darken = document.getElementById('pad-def-button-shadow-darken-wrap');
+    if (!mode) return;
+    if (color) color.style.display = mode.value === 'fixed' ? '' : 'none';
+    if (darken) darken.style.display = mode.value === 'darken_background' ? '' : 'none';
 }
 
 // Save device-level button defaults to /api/button-defaults
@@ -146,7 +195,7 @@ async function padSaveButtonDefaults() {
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
         padState.buttonDefaults = d;
-        showMessage('Button defaults saved', 'success');
+        showMessage('Pad and button defaults saved', 'success');
         // Re-render current pad grid to reflect updated defaults
         padRenderGrid();
     } catch (err) {
