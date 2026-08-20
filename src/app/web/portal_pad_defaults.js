@@ -119,6 +119,8 @@ function padLoadButtonDefaults(defs) {
     el = document.getElementById('pad-def-inset-right'); if (el) el.value = defs.pad_inset_right_px ?? 0;
     el = document.getElementById('pad-def-inset-bottom'); if (el) el.value = defs.pad_inset_bottom_px ?? 0;
     el = document.getElementById('pad-def-inset-left'); if (el) el.value = defs.pad_inset_left_px ?? 0;
+    padInitLayoutDiagram();
+    padUpdateLayoutDiagram();
     padButtonShadowTypeChanged();
     padButtonShadowColorModeChanged();
     el = document.getElementById('pad-def-label-top-style'); if (el) el.value = defs.label_top_style || '';
@@ -179,6 +181,67 @@ function padButtonShadowColorModeChanged() {
     if (!mode) return;
     if (color) color.style.display = mode.value === 'fixed' ? '' : 'none';
     if (darken) darken.style.display = mode.value === 'darken_background' ? '' : 'none';
+}
+
+function padInitLayoutDiagram() {
+    var diagram = document.getElementById('pad-layout-diagram');
+    if (!diagram || diagram.dataset.initialized) return;
+    diagram.dataset.initialized = '1';
+    [
+        'pad-def-button-spacing', 'pad-def-pixel-shift-distance',
+        'pad-def-inset-top', 'pad-def-inset-right',
+        'pad-def-inset-bottom', 'pad-def-inset-left',
+        'pad-def-pad-bg-color', 'pad-def-bg-color'
+    ].forEach(function(id) {
+        var input = document.getElementById(id);
+        if (input) input.addEventListener('input', padUpdateLayoutDiagram);
+    });
+}
+
+function padLayoutNumber(id) {
+    var input = document.getElementById(id);
+    return Math.max(0, Number(input && input.value) || 0);
+}
+
+function padLayoutHexColor(id, fallback) {
+    var value = padGetBindableColor(id);
+    return /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+}
+
+function padUpdateLayoutDiagram() {
+    var diagram = document.getElementById('pad-layout-diagram');
+    if (!diagram) return;
+
+    var shift = padLayoutNumber('pad-def-pixel-shift-distance');
+    var top = padLayoutNumber('pad-def-inset-top');
+    var right = padLayoutNumber('pad-def-inset-right');
+    var bottom = padLayoutNumber('pad-def-inset-bottom');
+    var left = padLayoutNumber('pad-def-inset-left');
+    var gap = padLayoutNumber('pad-def-button-spacing');
+    var largest = Math.max(shift + top, shift + right, shift + bottom, shift + left, gap, 1);
+    var scale = Math.min(1, 28 / largest);
+
+    diagram.style.setProperty('--layout-shift', (shift * scale) + 'px');
+    diagram.style.setProperty('--layout-top', (top * scale) + 'px');
+    diagram.style.setProperty('--layout-right', (right * scale) + 'px');
+    diagram.style.setProperty('--layout-bottom', (bottom * scale) + 'px');
+    diagram.style.setProperty('--layout-left', (left * scale) + 'px');
+    diagram.style.setProperty('--layout-gap', Math.max(1, gap * scale) + 'px');
+    diagram.style.setProperty('--layout-pad-bg', padLayoutHexColor('pad-def-pad-bg-color', '#000000'));
+    diagram.style.setProperty('--layout-button-bg', padLayoutHexColor('pad-def-bg-color', '#333333'));
+
+    var values = {
+        'pad-layout-shift-value': shift,
+        'pad-layout-top-value': top,
+        'pad-layout-right-value': right,
+        'pad-layout-bottom-value': bottom,
+        'pad-layout-left-value': left,
+        'pad-layout-gap-value': gap
+    };
+    Object.keys(values).forEach(function(id) {
+        var label = document.getElementById(id);
+        if (label) label.textContent = values[id] + ' px';
+    });
 }
 
 // Save device-level button defaults to /api/button-defaults
