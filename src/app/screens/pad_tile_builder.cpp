@@ -53,6 +53,10 @@ void PadScreen::clearTiles() {
         }
 #endif
         // Delete LVGL objects before freeing pixel data they reference
+        if (tiles[i].tap_flash_timer) {
+            lv_timer_delete(tiles[i].tap_flash_timer);
+            tiles[i].tap_flash_timer = nullptr;
+        }
         if (tiles[i].shadow) {
             lv_obj_delete(tiles[i].shadow);
             tiles[i].shadow = nullptr;

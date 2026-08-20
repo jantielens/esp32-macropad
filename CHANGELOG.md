@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Pad rebuilds no longer crash during a button tap flash (#26)**: each button now owns and cancels its pending tap-flash timer before its LVGL overlay is deleted. Rapid taps replace the pending flash and restore the overlay geometry, preventing stale timers from accessing deleted screen objects.
 * **OTA updates now quiesce competing background work (#66)**: manual uploads and online downloads share one race-safe activity lifecycle, preventing concurrent flash writers while image fetching, MQTT processing and health publication, LVGL updates and display presents, Home Assistant history backfill, and native-extension HTTP work defer at their own safe points. The OTA upload path, online-update status polling, portal responses, WiFi, and safety-critical device-class loops remain active.
 * **Rapid Pad saves no longer leave the display blank**: pad persistence now serializes its temporary backlight blanking, restoring the configured brightness before the next save begins. A portal regression test covers concurrent saves.
 * **Native Extension sprites now stay within their target cells**: exact-size RGB565 blitting prevents one-physical-pixel trails on pad sizes whose grid cells are not an integer multiple of a sprite's source dimensions.

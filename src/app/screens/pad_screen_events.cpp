@@ -68,23 +68,21 @@ static bool confirm_or_dispatch(const ButtonTile* tile, const ButtonAction* acti
 // Tap flash: show overlay briefly, then hide after timeout.
 // For rocker widgets, the overlay is resized to cover only the tapped zone;
 // on timeout we restore full size so the next flash starts clean.
-struct TapFlashCtx {
-    lv_obj_t* overlay;
-    lv_coord_t orig_x;
-    lv_coord_t orig_y;
-    lv_coord_t orig_w;
-    lv_coord_t orig_h;
-};
+static void restore_tap_overlay(ButtonTile* tile) {
+    if (!tile->tap_overlay) return;
+    lv_obj_set_pos(tile->tap_overlay, tile->tap_flash_x, tile->tap_flash_y);
+    lv_obj_set_size(tile->tap_overlay, tile->tap_flash_w, tile->tap_flash_h);
+}
 
 void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
-    auto* ctx = (TapFlashCtx*)lv_timer_get_user_data(timer);
-    if (ctx && ctx->overlay) {
-        lv_obj_add_flag(ctx->overlay, LV_OBJ_FLAG_HIDDEN);
-        // Restore original size/position
-        lv_obj_set_pos(ctx->overlay, ctx->orig_x, ctx->orig_y);
-        lv_obj_set_size(ctx->overlay, ctx->orig_w, ctx->orig_h);
+    auto* tile = (ButtonTile*)lv_timer_get_user_data(timer);
+    if (tile) {
+        tile->tap_flash_timer = nullptr;
+        if (tile->tap_overlay) {
+            lv_obj_add_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+            restore_tap_overlay(tile);
+        }
     }
-    delete ctx;
     lv_timer_delete(timer);
 }
 
@@ -94,41 +92,41 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
     if (!tile->tap_overlay) return;
 
     lv_obj_t* ov = tile->tap_overlay;
-
-    // Save original geometry
-    auto* ctx = new TapFlashCtx();
-    ctx->overlay = ov;
-    ctx->orig_x = lv_obj_get_x(ov);
-    ctx->orig_y = lv_obj_get_y(ov);
-    ctx->orig_w = lv_obj_get_width(ov);
-    ctx->orig_h = lv_obj_get_height(ov);
+    if (tile->tap_flash_timer) {
+        lv_timer_delete(tile->tap_flash_timer);
+        tile->tap_flash_timer = nullptr;
+        restore_tap_overlay(tile);
+    }
+    tile->tap_flash_x = lv_obj_get_x(ov);
+    tile->tap_flash_y = lv_obj_get_y(ov);
+    tile->tap_flash_w = lv_obj_get_width(ov);
+    tile->tap_flash_h = lv_obj_get_height(ov);
 
     // Resize to cover only the tapped zone for rocker
     if (zone == 1) {
         // Zone A: top half (vertical) or left half (horizontal)
         if (horizontal) {
-            lv_obj_set_size(ov, ctx->orig_w / 2, ctx->orig_h);
+            lv_obj_set_size(ov, tile->tap_flash_w / 2, tile->tap_flash_h);
         } else {
-            lv_obj_set_size(ov, ctx->orig_w, ctx->orig_h / 2);
+            lv_obj_set_size(ov, tile->tap_flash_w, tile->tap_flash_h / 2);
         }
     } else if (zone == 2) {
         // Zone B: bottom half (vertical) or right half (horizontal)
         if (horizontal) {
-            lv_obj_set_pos(ov, ctx->orig_x + ctx->orig_w / 2, ctx->orig_y);
-            lv_obj_set_size(ov, ctx->orig_w - ctx->orig_w / 2, ctx->orig_h);
+            lv_obj_set_pos(ov, tile->tap_flash_x + tile->tap_flash_w / 2, tile->tap_flash_y);
+            lv_obj_set_size(ov, tile->tap_flash_w - tile->tap_flash_w / 2, tile->tap_flash_h);
         } else {
-            lv_obj_set_pos(ov, ctx->orig_x, ctx->orig_y + ctx->orig_h / 2);
-            lv_obj_set_size(ov, ctx->orig_w, ctx->orig_h - ctx->orig_h / 2);
+            lv_obj_set_pos(ov, tile->tap_flash_x, tile->tap_flash_y + tile->tap_flash_h / 2);
+            lv_obj_set_size(ov, tile->tap_flash_w, tile->tap_flash_h - tile->tap_flash_h / 2);
         }
     }
 
     lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
-    lv_timer_t* t = lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, ctx);
-    if (!t) {
+    tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
+                                             TAP_FLASH_DURATION_MS, tile);
+    if (!tile->tap_flash_timer) {
         lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(ov, ctx->orig_x, ctx->orig_y);
-        lv_obj_set_size(ov, ctx->orig_w, ctx->orig_h);
-        delete ctx;
+        restore_tap_overlay(tile);
     }
 }
 
@@ -138,28 +136,30 @@ static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool hor
     if (!tile->tap_overlay) return;
 
     lv_obj_t* ov = tile->tap_overlay;
-    auto* ctx = new TapFlashCtx();
-    ctx->overlay = ov;
-    ctx->orig_x = lv_obj_get_x(ov);
-    ctx->orig_y = lv_obj_get_y(ov);
-    ctx->orig_w = lv_obj_get_width(ov);
-    ctx->orig_h = lv_obj_get_height(ov);
+    if (tile->tap_flash_timer) {
+        lv_timer_delete(tile->tap_flash_timer);
+        tile->tap_flash_timer = nullptr;
+        restore_tap_overlay(tile);
+    }
+    tile->tap_flash_x = lv_obj_get_x(ov);
+    tile->tap_flash_y = lv_obj_get_y(ov);
+    tile->tap_flash_w = lv_obj_get_width(ov);
+    tile->tap_flash_h = lv_obj_get_height(ov);
 
     if (horizontal) {
-        lv_obj_set_pos(ov, ctx->orig_x + px_start, ctx->orig_y);
-        lv_obj_set_size(ov, px_end - px_start, ctx->orig_h);
+        lv_obj_set_pos(ov, tile->tap_flash_x + px_start, tile->tap_flash_y);
+        lv_obj_set_size(ov, px_end - px_start, tile->tap_flash_h);
     } else {
-        lv_obj_set_pos(ov, ctx->orig_x, ctx->orig_y + px_start);
-        lv_obj_set_size(ov, ctx->orig_w, px_end - px_start);
+        lv_obj_set_pos(ov, tile->tap_flash_x, tile->tap_flash_y + px_start);
+        lv_obj_set_size(ov, tile->tap_flash_w, px_end - px_start);
     }
 
     lv_obj_remove_flag(ov, LV_OBJ_FLAG_HIDDEN);
-    lv_timer_t* t = lv_timer_create(PadScreen::tapFlashTimerCb, TAP_FLASH_DURATION_MS, ctx);
-    if (!t) {
+    tile->tap_flash_timer = lv_timer_create(PadScreen::tapFlashTimerCb,
+                                             TAP_FLASH_DURATION_MS, tile);
+    if (!tile->tap_flash_timer) {
         lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(ov, ctx->orig_x, ctx->orig_y);
-        lv_obj_set_size(ov, ctx->orig_w, ctx->orig_h);
-        delete ctx;
+        restore_tap_overlay(tile);
     }
 }
 

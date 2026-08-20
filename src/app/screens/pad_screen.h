@@ -106,6 +106,11 @@ struct ButtonTile {
     char widget_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN];
     char widget_last[BINDING_TEMPLATE_MAX_LEN * MAX_WIDGET_BINDINGS + MAX_WIDGET_BINDINGS + 1]; // Last resolved combined value (dedup)
     lv_obj_t* tap_overlay;    // Semi-transparent overlay shown briefly on tap
+    lv_timer_t* tap_flash_timer;
+    lv_coord_t tap_flash_x;
+    lv_coord_t tap_flash_y;
+    lv_coord_t tap_flash_w;
+    lv_coord_t tap_flash_h;
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
