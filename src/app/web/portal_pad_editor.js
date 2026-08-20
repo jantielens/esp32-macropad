@@ -673,6 +673,16 @@ async function padSetSaveBrightness(brightness) {
     if (!response.ok) throw new Error('Failed to set display brightness: HTTP ' + response.status);
 }
 
+let padPersistenceQueue = Promise.resolve();
+
+function padQueuePersistence(context) {
+    const save = padPersistenceQueue.then(() => padPersistPage(context));
+    // Keep the queue usable after a failed save while preserving that failure
+    // for the caller that initiated it.
+    padPersistenceQueue = save.catch(() => {});
+    return save;
+}
+
 async function padPersistPage(context) {
     let savedBrightness = 0;
     let brightnessBlanked = false;
@@ -714,7 +724,7 @@ async function padSavePage(options) {
     const bulk = Boolean(options && options.bulk);
     try {
         const context = padBuildSaveContext();
-        await padPersistPage(context);
+        await padQueuePersistence(context);
 
         showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         padClearDirty();

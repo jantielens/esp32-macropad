@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Rapid Pad saves no longer leave the display blank**: pad persistence now serializes its temporary backlight blanking, restoring the configured brightness before the next save begins. A portal regression test covers concurrent saves.
 * **Native Extension sprites now stay within their target cells**: exact-size RGB565 blitting prevents one-physical-pixel trails on pad sizes whose grid cells are not an integer multiple of a sprite's source dimensions.
 * **Coffee Scale calibration weight accepts Numeric Rocker step values**: the **Adjust calibration weight** action editor now accepts `{step}` placeholders so the same numeric-rocker workflow works for calibration deltas as it does for other adjustment actions.
 * **Timer actions are available in the Pad editor again**: the action catalog once again exposes the Timer command choices required by the editor, including Toggle, Start, Stop, Pause, Resume, Reset, Set countdown, and Adjust countdown.

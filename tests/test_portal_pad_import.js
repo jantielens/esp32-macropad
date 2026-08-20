@@ -189,7 +189,7 @@ async function runImport(options = {}) {
         },
     });
     await Promise.resolve();
-    return { requests, messages, reloads };
+    return { context, requests, messages, reloads };
 }
 
 function pageRequests(result, page) {
@@ -250,6 +250,23 @@ function pageRequests(result, page) {
     });
     const emptyActionsBody = JSON.parse(emptyActions.requests.find(request => request.kind === 'pad-save').options.body);
     assert.ok(!Object.hasOwn(emptyActionsBody, 'pad_actions'));
+
+    const concurrent = await runImport();
+    const firstConcurrentRequest = concurrent.requests.length;
+    await Promise.all([
+        concurrent.context.padSavePage(),
+        concurrent.context.padSavePage(),
+    ]);
+    assert.deepStrictEqual(
+        concurrent.requests.slice(firstConcurrentRequest).map(request => request.kind),
+        [
+            'config-read', 'brightness-0', 'icon-delete', 'icon-install', 'pad-save', 'brightness-42',
+            'device-info',
+            'config-read', 'brightness-0', 'icon-delete', 'icon-install', 'pad-save', 'brightness-42',
+            'device-info',
+        ],
+        'concurrent saves must not overlap display blanking'
+    );
 
     console.log('portal_pad_import: PASS');
 })().catch(error => {
