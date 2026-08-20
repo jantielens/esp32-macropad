@@ -98,6 +98,26 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 - Include startup diagnostics (chip model, revision, CPU freq, flash size) using `ESP.*` functions
 - Implement heartbeat pattern with `millis()` for long-running loops (5s interval)
 
+### OTA Activity Contract
+
+`ota_activity.{h,cpp}` owns the single race-safe lifecycle for manual and
+online firmware updates. OTA entry points call `ota_activity_try_begin()` before
+they can reach `Update.begin()` and call `ota_activity_finish()` on every
+recoverable failure. Successful updates retain ownership through reboot.
+
+New background subsystems must decide whether their work competes with OTA flash
+writes. For nonessential network I/O, decoding, rendering, polling, or
+PSRAM-heavy computation, check `ota_activity_is_active()` before starting work
+and at an owned safe point in long-running work. Return, defer, or close the
+subsystem's own operation there; do not suspend another task or add a global
+pause framework.
+
+Keep WiFi, AsyncTCP, portal responses and OTA status polling, OTA transport,
+reboot processing, and safety-critical device-class loops operational. Do not
+reuse the image-fetch screen-saver suspension for OTA: it has independent
+ownership. If a new subsystem needs a checkpoint, add focused coverage to
+`tests/` and exercise it during OTA stress validation.
+
 ## Key Files
 
 ### Scripts

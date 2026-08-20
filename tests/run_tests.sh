@@ -10,6 +10,16 @@ cd "$(dirname "$0")/.."
 
 mkdir -p tests/bin
 
+echo "=== Building unit tests: OTA activity ==="
+g++ -std=c++17 -Wall -Wextra -Werror -pthread -DOTA_ACTIVITY_HOST_TEST \
+    -I src/app \
+    tests/test_ota_activity.cpp src/app/ota_activity.cpp \
+    -o tests/bin/test_ota_activity
+
+echo "=== Running unit tests: OTA activity ==="
+./tests/bin/test_ota_activity
+echo
+
 echo "=== Building unit tests: pad layout ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/Arduino.h -include tests/board_config.h \

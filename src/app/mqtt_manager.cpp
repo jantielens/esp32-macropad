@@ -16,6 +16,7 @@
 #include "power_config.h"
 #include "log_manager.h"
 #include "net_activity.h"
+#include "ota_activity.h"
 
 MqttManager::MqttManager() : _client(_net) {}
 
@@ -111,6 +112,7 @@ bool MqttManager::connected() {
 }
 
 bool MqttManager::publish(const char *topic, const char *payload, bool retained) {
+		if (ota_activity_is_active()) return false;
 		if (!enabled() || !_client.connected()) return false;
 		if (!topic || !payload) return false;
 
@@ -119,6 +121,7 @@ bool MqttManager::publish(const char *topic, const char *payload, bool retained)
 }
 
 bool MqttManager::publishJson(const char *topic, JsonDocument &doc, bool retained) {
+		if (ota_activity_is_active()) return false;
 		if (!topic) return false;
 
 		// Avoid heap allocations inside String by using a bounded buffer.
@@ -139,6 +142,7 @@ bool MqttManager::publishImmediate(const char *topic, const char *payload, bool 
 }
 
 bool MqttManager::subscribe(const char *topic) {
+		if (ota_activity_is_active()) return false;
 		if (!topic || !topic[0]) return false;
 		if (!_client.connected()) return false;
 		bool ok = _client.subscribe(topic);
@@ -193,6 +197,7 @@ void MqttManager::publishDiscoveryOncePerBoot() {
 }
 
 void MqttManager::publishHealthNow() {
+		if (ota_activity_is_active()) return;
 		if (!_client.connected()) return;
 
 		StaticJsonDocument<768> doc;
@@ -216,6 +221,7 @@ void MqttManager::publishHealthNow() {
 }
 
 void MqttManager::publishHealthIfDue() {
+		if (ota_activity_is_active()) return;
 		if (!_client.connected()) return;
 		if (!publishEnabled()) return;
 
@@ -340,6 +346,7 @@ void MqttManager::ensureConnected() {
 }
 
 void MqttManager::loop() {
+		if (ota_activity_is_active()) return;
 		if (!enabled()) return;
 
 		ensureConnected();

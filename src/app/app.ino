@@ -78,6 +78,7 @@
 #include "sd_probe.h"
 #include "sd_storage.h"
 #include "storage.h"
+#include "ota_activity.h"
 
 #if HAS_NATIVE_EXTENSIONS
 #include "native_extension.h"
@@ -619,14 +620,16 @@ void loop()
 	#endif
 
 	#if HAS_MQTT
+	if (!ota_activity_is_active()) {
 	mqtt_manager.loop();
 	mqtt_screen_loop();
 	mqtt_wake_loop();
 	mqtt_audio_loop();
 	mqtt_notify_loop();
 #if MQTT_TRIGGERS_ENABLED
-	mqtt_triggers_loop();
+		mqtt_triggers_loop();
 #endif
+	}
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).

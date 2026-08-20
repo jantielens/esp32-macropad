@@ -1037,6 +1037,30 @@ Get current progress/state of the online update task.
 }
 ```
 
+### OTA Background Work Coordination
+
+`POST /api/update` and `POST /api/firmware/update` share one race-safe OTA
+activity lifecycle. Only one path can own the firmware writer at a time; a
+competing update receives `409 Conflict`.
+
+While the lifecycle is active, the firmware cooperatively defers new
+nonessential work at subsystem-owned safe points:
+
+* Image fetch network reads and image decoding
+* MQTT reconnects, client processing, subscriptions, publishing, and health
+  publication
+* LVGL timers, data polling, screen updates, and new display presents
+* Home Assistant history backfill requests
+* Native-extension host HTTP requests
+
+Work already running is allowed to finish or abort at the safe point it owns;
+the OTA transport does not wait indefinitely for all work to become idle. WiFi,
+AsyncTCP, portal responses and status polling, OTA transfer, reboot processing,
+touch, BLE, audio, and safety-critical device-class loops remain operational.
+
+The screen saver owns an independent image-fetch suspension. OTA activity never
+re-enables image fetching while the screen saver still holds that suspension.
+
 **CORS:**
 - The device responds with `Access-Control-Allow-Origin: https://<owner>.github.io`.
 - Allowed headers: `Authorization`, `Content-Type`.

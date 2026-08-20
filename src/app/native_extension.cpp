@@ -4,6 +4,7 @@
 
 #include "log_manager.h"
 #include "message_bubble.h"
+#include "ota_activity.h"
 #include "pad_config.h"
 #include "pad_layout.h"
 #include "storage.h"
@@ -321,6 +322,7 @@ bool host_task_wait_or_cancel(void* extension_context, uint32_t timeout_ms) {
 bool host_http_get(const char* url, uint8_t* response, size_t capacity,
                    uint32_t timeout_ms, NativeExtensionHttpResult* result) {
     if (result) *result = {0, 0, 0};
+    if (ota_activity_is_active()) return false;
     if (!url || !response || capacity == 0 || timeout_ms == 0) return false;
 
     const bool secure_request = strncmp(url, "https://", 8) == 0;
@@ -349,6 +351,10 @@ bool host_http_get(const char* url, uint8_t* response, size_t capacity,
     size_t copied = 0;
     uint32_t last_data_at = millis();
     while (stream && (content_length < 0 || copied < static_cast<size_t>(content_length))) {
+        if (ota_activity_is_active()) {
+            http.end();
+            return false;
+        }
         const size_t available = stream->available();
         if (available > 0) {
             const size_t remaining = capacity - copied;

@@ -4,9 +4,9 @@
 #include "web_portal_state.h"
 
 #include "device_telemetry.h"
-#include "image_fetch.h"
 #include "log_manager.h"
 #include "net_activity.h"
+#include "ota_activity.h"
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
 
@@ -77,10 +77,6 @@ static void firmware_post_reset() {
 		g_fw_post.started_ms = 0;
 }
 
-bool web_portal_firmware_update_in_progress() {
-		return firmware_update_in_progress;
-}
-
 static bool starts_with(const char* s, const char* prefix) {
 		if (!s || !prefix) return false;
 		const size_t prefix_len = strlen(prefix);
@@ -97,10 +93,8 @@ static void firmware_update_task(void *pv) {
 
 		const char *url = firmware_update_download_url;
 
-		web_portal_set_ota_in_progress(true);
-
 #if HAS_IMAGE_FETCH
-		image_fetch_suspend();
+		// OTA activity gates new fetches without affecting screen-saver suspension.
 #endif
 
 		const bool is_https = starts_with(url, "https://");
@@ -154,10 +148,7 @@ static void firmware_update_task(void *pv) {
 				snprintf(firmware_update_error, sizeof(firmware_update_error), "Download HTTP %d", http_code);
 				http.end();
 				firmware_update_in_progress = false;
-				web_portal_set_ota_in_progress(false);
-#if HAS_IMAGE_FETCH
-				image_fetch_unsuspend();
-#endif
+				ota_activity_finish();
 				vTaskDelete(nullptr);
 				return;
 		}
@@ -182,10 +173,7 @@ static void firmware_update_task(void *pv) {
 				LOGE("OTA", "Firmware too large total=%u free=%u", (unsigned)total, (unsigned)freeSpace);
 				http.end();
 				firmware_update_in_progress = false;
-				web_portal_set_ota_in_progress(false);
-#if HAS_IMAGE_FETCH
-				image_fetch_unsuspend();
-#endif
+				ota_activity_finish();
 				vTaskDelete(nullptr);
 				return;
 		}
@@ -196,10 +184,7 @@ static void firmware_update_task(void *pv) {
 				LOGE("OTA", "OTA begin failed");
 				http.end();
 				firmware_update_in_progress = false;
-				web_portal_set_ota_in_progress(false);
-#if HAS_IMAGE_FETCH
-				image_fetch_unsuspend();
-#endif
+				ota_activity_finish();
 				vTaskDelete(nullptr);
 				return;
 		}
@@ -231,10 +216,7 @@ static void firmware_update_task(void *pv) {
 						Update.abort();
 						http.end();
 						firmware_update_in_progress = false;
-						web_portal_set_ota_in_progress(false);
-#if HAS_IMAGE_FETCH
-						image_fetch_unsuspend();
-#endif
+									ota_activity_finish();
 						vTaskDelete(nullptr);
 						return;
 				}
@@ -256,10 +238,7 @@ static void firmware_update_task(void *pv) {
 				strlcpy(firmware_update_error, "OTA finalize failed", sizeof(firmware_update_error));
 				LOGE("OTA", "OTA finalize failed");
 				firmware_update_in_progress = false;
-				web_portal_set_ota_in_progress(false);
-#if HAS_IMAGE_FETCH
-				image_fetch_unsuspend();
-#endif
+				ota_activity_finish();
 				vTaskDelete(nullptr);
 				return;
 		}
@@ -397,7 +376,7 @@ void handlePostFirmwareUpdate(AsyncWebServerRequest *request, uint8_t *data, siz
 				return;
 		}
 
-		if (web_portal_ota_in_progress() || firmware_update_in_progress) {
+		if (!ota_activity_try_begin()) {
 				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update already in progress\"}");
 				portENTER_CRITICAL(&g_fw_post_mux);
 				firmware_post_reset();
@@ -435,6 +414,7 @@ void handlePostFirmwareUpdate(AsyncWebServerRequest *request, uint8_t *data, siz
 
 		if (!task_ok) {
 				firmware_update_in_progress = false;
+				ota_activity_finish();
 				strlcpy(firmware_update_state, "error", sizeof(firmware_update_state));
 				strlcpy(firmware_update_error, "Failed to start update task", sizeof(firmware_update_error));
 				LOGE("OTA", "Failed to start update task");

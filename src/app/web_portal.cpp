@@ -29,6 +29,7 @@
 #include "web_portal_ap.h"
 #include "web_mcp.h"
 #include "main_loop_bridge.h"
+#include "ota_activity.h"
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -70,7 +71,6 @@ AsyncWebServer *server = nullptr;
 
 // State
 static DeviceConfig *current_config = nullptr;
-static bool ota_in_progress = false;
 
 bool web_portal_is_ap_mode_active() {
 		return web_portal_is_ap_mode();
@@ -78,10 +78,6 @@ bool web_portal_is_ap_mode_active() {
 
 DeviceConfig* web_portal_get_current_config() {
 		return current_config;
-}
-
-void web_portal_set_ota_in_progress(bool in_progress) {
-		ota_in_progress = in_progress;
 }
 
 // ===== Basic Auth (optional; STA/full mode only) =====
@@ -147,5 +143,5 @@ void web_portal_handle() {
 
 // Check if OTA update is in progress
 bool web_portal_ota_in_progress() {
-		return ota_in_progress;
+		return ota_activity_is_active();
 }
