@@ -142,13 +142,18 @@ The web portal is organized into three separate pages for better organization an
   - Network page: WiFi Settings + Device Settings (side-by-side), Network Config (full-width)
 - Container max-width: 900px
 
-### Header Badges
+### Header Identity and Badges
 
-The portal displays 7 real-time device capability and status badges with optimized loading states:
+The header uses the configured device hostname as its title and updates the
+browser title to match. Until device information loads, it shows the firmware's
+device-class name. A device-class badge follows the firmware badge, then the
+portal displays 7 real-time capability and status badges with optimized loading
+states:
 
 | Badge | Color | Placeholder | Example | Description |
 |-------|-------|-------------|---------|-------------|
 | Firmware | Purple | `Firmware v-.-.-` | `Firmware v0.0.1` | Firmware version |
+| Device class | Blue | `Device` | `Macropad` | Firmware device class |
 | Chip | Orange | `--- rev -` | `ESP32-C3 rev 4` | Chip model and revision |
 | Cores | Green | `- Core` | `1 Core` / `2 Cores` | Number of CPU cores |
 | Frequency | Yellow | `--- MHz` | `160 MHz` | CPU frequency |
@@ -160,6 +165,15 @@ The portal displays 7 real-time device capability and status badges with optimiz
 - Badges show format placeholders on initial load (e.g., `--- MHz` instead of `Loading...`)
 - Fixed widths prevent layout shift when data loads
 - Minimal visual changes when actual data arrives
+
+### Fragment Layout Convention
+
+Every fragment begins with a `section-header` containing its title and a short
+description. A single-purpose fragment uses one card. Fragments with independent
+settings groups use a titled card for each group; action buttons remain in a
+shared `save-bar` after the relevant group. Dynamic UI such as extension slots
+uses the shared theme-aware component classes rather than inline colors, borders,
+or spacing.
 
 **Health Badge Features:**
 - Green breathing dot (pulses on updates every 10 seconds)

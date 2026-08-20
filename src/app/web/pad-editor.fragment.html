@@ -1,8 +1,11 @@
 <div id="pad-editor-root">
 
     <!-- Pad Configuration Section -->
-    <section class="section" id="pad-config-section" style="display:none;">
-        <h2>🎛️ Pad Configuration</h2>
+    <section id="pad-config-section" style="display:none;">
+        <div class="section-header">
+            <h2>🎛️ Pad Configuration</h2>
+            <p>Configure the grid, default appearance, reusable bindings, and actions for this pad.</p>
+        </div>
 
         <!-- Controls rows -->
         <div class="pad-controls">
@@ -51,10 +54,11 @@
             <p><small>Adjust columns and rows above, then click empty buttons to configure them.</small></p>
         </div>
 
-        <small style="margin-top:8px; display:block;">Click a button to edit it. Drag a button to an empty cell to move it.</small>
+        <small class="d-block mt-2 mb-3">Click a button to edit it. Drag a button to an empty cell to move it.</small>
 
-        <!-- Background Color -->
-        <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+        <section class="card mb-3">
+            <div class="card-header"><h5 class="mb-0">Appearance</h5></div>
+            <div class="card-body">
             <div id="pad-page-bg-color-wrap">
                 <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Background Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                 <select id="pad-page-bg-mode" class="form-select form-select-sm" style="margin-bottom:6px;" onchange="padPageBackgroundModeChanged()">
@@ -75,41 +79,47 @@
                     <option value="disabled">Disable</option>
                 </select>
             </div>
-        </div>
+            </div>
+        </section>
 
-        <!-- Template Pad -->
-        <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+        <section class="card mb-3">
+            <div class="card-header"><h5 class="mb-0">Template Pad</h5></div>
+            <div class="card-body">
             <label for="pad-template-pad" style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Template Pad</label>
             <select id="pad-template-pad" style="width:100%;">
                 <option value="-1">(none)</option>
             </select>
-            <small style="display:block; margin-top:4px; color:#86868b;">Inherit buttons from another pad into empty grid positions.</small>
-        </div>
+            <small class="form-text">Inherit buttons from another pad into empty grid positions.</small>
+            </div>
+        </section>
 
-        <!-- Pad Bindings -->
-        <div style="margin-top:10px; border:1px solid #d2d2d7; border-radius:8px; padding:10px 12px;">
+        <section class="card mb-3">
+            <div class="card-header"><h5 class="mb-0">Pad Bindings</h5></div>
+            <div class="card-body">
             <div id="pad-bindings-section">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-                    <label style="font-weight:600; font-size:13px;">Pad Bindings</label>
                     <button type="button" class="btn btn-small" id="pad-binding-add" style="padding:2px 10px; font-size:12px;">+ Add</button>
                 </div>
                 <div id="pad-bindings-list"></div>
-                <small style="display:block; color:#86868b; margin-top:2px;">Define named bindings to reuse across buttons via <code>[pad:name]</code>. Names must start with a letter and contain only letters, digits, or underscores.</small>
+                <small class="form-text">Define named bindings to reuse across buttons via <code>[pad:name]</code>. Names must start with a letter and contain only letters, digits, or underscores.</small>
             </div>
-        </div>
+            </div>
+        </section>
 
-        <details class="editor-group" id="pad-level-actions-section" open>
-            <summary>Full-Screen Tap Actions</summary>
-            <div class="editor-group-body">
+        <section class="card mb-3" id="pad-level-actions-section">
+            <div class="card-header"><h5 class="mb-0">Full-Screen Tap Actions</h5></div>
+            <div class="card-body">
                 <div id="pad-level-action-editors"></div>
             </div>
-        </details>
+        </section>
     </section>
 
     <!-- No-display fallback -->
-    <section class="section" id="pad-no-display-section" style="display:none;">
-        <h2>🎛️ Pad Configuration</h2>
-        <p style="color:#86868b;">Pad configuration requires a board with a display. This device does not have a display connected.</p>
+    <section id="pad-no-display-section" style="display:none;">
+        <div class="section-header">
+            <h2>🎛️ Pad Configuration</h2>
+            <p>Pad configuration requires a board with a display. This device does not have a display connected.</p>
+        </div>
     </section>
 
     <!-- Pad Action Bar -->

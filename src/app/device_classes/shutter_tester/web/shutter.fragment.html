@@ -3,6 +3,7 @@
   <p>Sensor preset for capture measurements.</p>
 </div>
 <div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Sensor Preset</h5></div>
   <div class="card-body">
     <div class="mb-3">
       <label class="form-label" for="shutter_preset_id">Sensor Preset</label>
@@ -13,8 +14,11 @@
       </select>
       <div class="form-text">Select the sensor layout wired to this device. The 4-corner preset enables 2D capping and curtain twist analysis; the 3-line preset measures across the full frame; single-sensor measures at the position of sensor 1 only.</div>
     </div>
-    <hr>
-    <h6>Sensor Offsets</h6>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Sensor Offsets</h5></div>
+  <div class="card-body">
     <p class="form-text mt-0 mb-2">Distance from the centre sensor (S2) to an outer sensor (S1 or S3) in mm. Used for capping gradient calculation.</p>
     <div class="row g-3 mb-3">
       <div class="col-6">
@@ -26,8 +30,8 @@
         <input type="number" class="form-control" id="sensor_offset_y_mm" name="sensor_offset_y_mm" step="0.1" min="0" placeholder="7.4">
       </div>
     </div>
-    <div class="save-bar">
-      <button type="button" class="btn btn-primary btn-sm" id="shutter-save-btn">Save &amp; Reboot</button>
-    </div>
   </div>
+</div>
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="shutter-save-btn">Save &amp; Reboot</button>
 </div>

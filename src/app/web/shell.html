@@ -21,7 +21,7 @@
       <button id="hamburger" class="portal-hamburger d-md-none" aria-label="Toggle navigation">
         <span></span><span></span><span></span>
       </button>
-      <h1 class="portal-title">{{PROJECT_DISPLAY_NAME}}</h1>
+      <h1 class="portal-title" id="portal-device-name">{{PROJECT_DISPLAY_NAME}}</h1>
       <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
         <span class="theme-icon-sun">☀️</span>
         <span class="theme-icon-moon">🌙</span>
@@ -32,6 +32,7 @@
     </div>
     <div class="portal-badges">
       <span class="portal-badge badge-firmware" id="firmware-version">Firmware v-.-.-</span>
+      <span class="portal-badge badge-device-class" id="device-class">Device</span>
       <span class="portal-badge badge-chip" id="chip-info">--- rev -</span>
       <span class="portal-badge badge-cores" id="cpu-cores">- Cores</span>
       <span class="portal-badge badge-freq" id="cpu-freq">--- MHz</span>

@@ -55,19 +55,41 @@ async function extensionRenderSlots() {
         root.replaceChildren();
         slots.forEach(function (slot) {
             const card = document.createElement('div');
-            card.style.cssText = 'border:1px solid #d2d2d7;border-radius:8px;padding:12px;';
+            card.className = 'card extensions-slot-card';
+            const header = document.createElement('div');
+            header.className = 'card-header';
             const title = (slot.installed || slot.staged || slot.pending_delete) ? (slot.title || slot.id) + ' @ ' + slot.version : 'Empty';
             const state = slot.pending_delete ? ' - delete pending, reboot required' : slot.staged ? ' - uploaded, reboot pending' : slot.incompatible_abi ? ' - ABI ' + slot.abi_version + ' incompatible, rebuild and re-upload' : slot.loaded ? ' - loaded' : '';
-            const runtime = slot.runtime_detail ? '<div><small>Runtime: ' + slot.runtime_detail + '</small></div>' : '';
-            card.innerHTML = '<strong>' + extensionSlotName(slot) + ' ' + (slot.slot + 1) + '</strong>' +
-                '<div style="margin:6px 0">' + title + '</div>' +
-                '<small>' + Math.floor((slot.staged ? slot.staged_size : slot.size) / 1024) + ' / ' + Math.floor(slot.capacity / 1024) + ' KiB | ABI ' + slot.abi_version + ' | ' + (slot.target_abi || 'unknown target') + state + '</small>' + runtime;
+            const heading = document.createElement('h5');
+            heading.className = 'mb-0';
+            heading.textContent = extensionSlotName(slot) + ' ' + (slot.slot + 1);
+            header.appendChild(heading);
+            const body = document.createElement('div');
+            body.className = 'card-body';
+            const name = document.createElement('div');
+            name.className = 'extensions-slot-name';
+            name.textContent = title;
+            const details = document.createElement('small');
+            details.textContent = Math.floor((slot.staged ? slot.staged_size : slot.size) / 1024) +
+                ' / ' + Math.floor(slot.capacity / 1024) + ' KiB | ABI ' + slot.abi_version +
+                ' | ' + (slot.target_abi || 'unknown target') + state;
+            body.append(name, details);
+            if (slot.runtime_detail) {
+                const runtime = document.createElement('small');
+                runtime.className = 'extensions-slot-runtime';
+                runtime.textContent = 'Runtime: ' + slot.runtime_detail;
+                body.appendChild(runtime);
+            }
             const input = document.createElement('input'); input.type = 'file'; input.accept = '.ext,application/octet-stream'; input.style.display = 'none';
-            const upload = document.createElement('button'); upload.type = 'button'; upload.className = 'btn btn-small'; upload.textContent = slot.installed ? 'Replace' : 'Upload'; upload.onclick = function () { input.click(); };
+            const upload = document.createElement('button'); upload.type = 'button'; upload.className = 'btn btn-outline-primary btn-sm'; upload.textContent = slot.installed ? 'Replace' : 'Upload'; upload.onclick = function () { input.click(); };
             input.onchange = function () { extensionUpload(slot, input); };
-            card.appendChild(document.createElement('hr')); card.appendChild(input); card.appendChild(upload);
-            if (slot.installed) { const del = document.createElement('button'); del.type = 'button'; del.className = 'btn btn-small'; del.style.marginLeft = '8px'; del.textContent = 'Delete'; del.onclick = function () { extensionDelete(slot); }; card.appendChild(del); }
-            if (slot.installed) { const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'btn btn-small'; toggle.style.marginLeft = '8px'; toggle.textContent = slot.enabled ? 'Disable' : 'Enable'; toggle.onclick = function () { extensionSetEnabled(slot); }; card.appendChild(toggle); }
+            const actions = document.createElement('div');
+            actions.className = 'extensions-slot-actions';
+            actions.append(input, upload);
+            if (slot.installed) { const del = document.createElement('button'); del.type = 'button'; del.className = 'btn btn-outline-danger btn-sm'; del.textContent = 'Delete'; del.onclick = function () { extensionDelete(slot); }; actions.appendChild(del); }
+            if (slot.installed) { const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'btn btn-outline-secondary btn-sm'; toggle.textContent = slot.enabled ? 'Disable' : 'Enable'; toggle.onclick = function () { extensionSetEnabled(slot); }; actions.appendChild(toggle); }
+            body.appendChild(actions);
+            card.append(header, body);
             root.appendChild(card);
         });
     } catch (error) { root.textContent = 'Extension status unavailable'; }

@@ -106,7 +106,8 @@ select { color-scheme: light; }
   --portal-primary-rgb: 21, 101, 192;
   --portal-sidebar-bg: #f5f6f8;
   --portal-card-bg: #ffffff;
-  --portal-card-border: rgba(0, 0, 0, 0.08);
+  --portal-card-border: rgba(21, 34, 50, 0.16);
+  --portal-card-header-bg: #eaf2fb;
   --portal-card-hover-border: rgba(21, 101, 192, 0.3);
   --portal-text-muted: #656d76;
   --portal-nav-border: rgba(0, 0, 0, 0.08);
@@ -116,7 +117,7 @@ select { color-scheme: light; }
   --portal-form-border: rgba(0, 0, 0, 0.12);
   --portal-bar-track: rgba(0, 0, 0, 0.06);
   --portal-scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --portal-welcome-card-bg: rgba(0, 0, 0, 0.02);
+  --portal-welcome-card-bg: #edf3f8;
   --portal-welcome-card-border: rgba(0, 0, 0, 0.06);
   --portal-health-bg: linear-gradient(135deg, #f0f7ff 0%, #e8f4ff 100%);
   --portal-health-border: #d0e7ff;
@@ -154,8 +155,9 @@ select { color-scheme: light; }
   --portal-primary: #4e8cff;
   --portal-primary-rgb: 78, 140, 255;
   --portal-sidebar-bg: #1a1d21;
-  --portal-card-bg: #22262a;
-  --portal-card-border: rgba(255, 255, 255, 0.06);
+  --portal-card-bg: #262b31;
+  --portal-card-border: rgba(255, 255, 255, 0.16);
+  --portal-card-header-bg: #303841;
   --portal-card-hover-border: rgba(78, 140, 255, 0.25);
   --portal-text-muted: #8b949e;
   --portal-nav-border: rgba(255, 255, 255, 0.06);
@@ -165,7 +167,7 @@ select { color-scheme: light; }
   --portal-form-border: rgba(255, 255, 255, 0.1);
   --portal-bar-track: rgba(255, 255, 255, 0.08);
   --portal-scrollbar-thumb: rgba(255, 255, 255, 0.12);
-  --portal-welcome-card-bg: rgba(255, 255, 255, 0.03);
+  --portal-welcome-card-bg: #2d343c;
   --portal-welcome-card-border: rgba(255, 255, 255, 0.06);
   --portal-health-bg: linear-gradient(135deg, #1a2332 0%, #1e2a3a 100%);
   --portal-health-border: rgba(78, 140, 255, 0.2);
@@ -284,6 +286,7 @@ select { color-scheme: light; }
 }
 
 .badge-firmware { background: rgba(149, 97, 226, 0.85); }
+.badge-device-class { background: rgba(0, 122, 255, 0.85); }
 .badge-chip     { background: rgba(230, 126, 34, 0.85); }
 .badge-cores    { background: rgba(39, 174, 96, 0.85); }
 .badge-freq     { background: rgba(241, 196, 15, 0.85); color: #1a1a2e; }
@@ -611,7 +614,7 @@ body {
 }
 
 .content-pane .card-header {
-  background: var(--portal-welcome-card-bg);
+  background: var(--portal-card-header-bg);
   border-bottom: 1px solid var(--portal-card-border);
   padding: 14px 18px;
   border-radius: 12px 12px 0 0 !important;
@@ -743,6 +746,25 @@ body {
   color: var(--portal-text-muted);
   font-size: 0.88rem;
   margin: 0;
+}
+
+.extensions-slot-runtime {
+  display: block;
+  margin-top: 4px;
+  color: var(--portal-text-muted);
+}
+
+.extensions-slot-name {
+  margin-bottom: 6px;
+}
+
+.extensions-slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--portal-card-border);
 }
 
 /* ================================================================

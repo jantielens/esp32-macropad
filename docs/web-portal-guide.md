@@ -18,6 +18,8 @@ In AP mode, only the Network page is available. In Full mode, the standard four 
 
 The portal header shows real-time device info at a glance:
 
+- **Device name** — the configured device name, also used for the browser tab title
+- **Device class** — the firmware's device type (for example, Macropad or Coffee Scale)
 - **Firmware version** — currently installed version
 - **Chip** — model and silicon revision (e.g., ESP32-S3 rev 2)
 - **Cores** — number of CPU cores

@@ -27,6 +27,11 @@ async function loadVersion() {
         }
 
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
+        const deviceName = version.wifi_hostname || version.project_display_name || 'Device';
+        const deviceClass = version.device_class || version.project_display_name || 'Device';
+        document.getElementById('portal-device-name').textContent = deviceName;
+        document.getElementById('device-class').textContent = deviceClass;
+        document.title = `${deviceName} — Configuration Portal`;
         document.getElementById('chip-info').textContent = 
             `${version.chip_model} rev ${version.chip_revision}`;
         document.getElementById('cpu-cores').textContent = 

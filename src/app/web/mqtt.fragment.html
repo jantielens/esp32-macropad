@@ -3,6 +3,7 @@
   <p>Broker connection and publish behavior for Home Assistant integration.</p>
 </div>
 <div class="card mb-3" id="mqtt-settings-section">
+  <div class="card-header"><h5 class="mb-0">Broker Connection</h5></div>
   <div class="card-body">
     <div class="row">
       <div class="col-md-8 mb-3">
@@ -22,7 +23,12 @@
       <label class="form-label" for="mqtt_password">Password</label>
       <input type="password" class="form-control" id="mqtt_password" name="mqtt_password" placeholder="Leave empty to keep current">
     </div>
-    <hr>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Publish Behavior</h5></div>
+  <div class="card-body">
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label" for="mqtt_publish_interval_seconds">Publish Interval (seconds)</label>
@@ -39,8 +45,8 @@
         <div class="form-text">Which fields are included in the MQTT state payload. Applies to both modes.</div>
       </div>
     </div>
-    <div class="save-bar">
-      <button type="button" class="btn btn-primary btn-sm" id="mqtt-save-btn">Save</button>
-    </div>
   </div>
+</div>
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="mqtt-save-btn">Save MQTT Settings</button>
 </div>
