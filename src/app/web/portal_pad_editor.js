@@ -31,14 +31,41 @@ const padState = {
 };
 
 let padDirty = false;
+let padSaveInProgress = false;
+let padFooterVisible = false;
+let padQuickSaveObserver = null;
 
 function padMarkDirty(event) {
     if (event && event.isTrusted === false) return;
     padDirty = true;
+    padUpdateQuickSave();
 }
 
 function padClearDirty() {
     padDirty = false;
+    padUpdateQuickSave();
+}
+
+function padUpdateQuickSave() {
+    const quickSave = document.getElementById('pad-quick-save-btn');
+    const editor = document.getElementById('pad-config-section');
+    if (!quickSave || !editor) return;
+
+    quickSave.hidden = !padDirty || padFooterVisible || editor.style.display === 'none';
+    quickSave.disabled = padSaveInProgress;
+    quickSave.textContent = padSaveInProgress ? 'Saving Pad...' : 'Save Pad';
+}
+
+async function padRequestSave() {
+    if (padSaveInProgress) return;
+    padSaveInProgress = true;
+    padUpdateQuickSave();
+    try {
+        await padSavePage();
+    } finally {
+        padSaveInProgress = false;
+        padUpdateQuickSave();
+    }
 }
 
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
@@ -119,12 +146,25 @@ async function padInit() {
         padRenderGrid();
     });
 
-    document.getElementById('pad-save-btn').addEventListener('click', padSavePage);
+    document.getElementById('pad-save-btn').addEventListener('click', padRequestSave);
+    document.getElementById('pad-quick-save-btn').addEventListener('click', padRequestSave);
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
     document.getElementById('pad-binding-add').addEventListener('click', padAddBinding);
     var btnDefSaveBtn = document.getElementById('btn-defaults-save-btn');
     if (btnDefSaveBtn) btnDefSaveBtn.addEventListener('click', padSaveButtonDefaults);
+
+    const padFooter = document.getElementById('pad-floating-footer');
+    const contentPane = document.getElementById('content-pane');
+    if (padQuickSaveObserver) padQuickSaveObserver.disconnect();
+    padFooterVisible = false;
+    if (padFooter && contentPane && typeof IntersectionObserver !== 'undefined') {
+        padQuickSaveObserver = new IntersectionObserver(function (entries) {
+            padFooterVisible = entries[0].isIntersecting;
+            padUpdateQuickSave();
+        }, { root: contentPane, threshold: 0.1 });
+        padQuickSaveObserver.observe(padFooter);
+    }
 
     // More menu toggle
     const moreBtn = document.getElementById('pad-more-btn');
@@ -200,8 +240,8 @@ async function padInit() {
     // deviceInfoCache is already populated (awaited at the top of padInit).
     if (deviceInfoCache.has_display === true) {
         section.style.display = 'block';
-        const padFooter = document.getElementById('pad-floating-footer');
         if (padFooter) padFooter.style.display = '';
+        padUpdateQuickSave();
         // Show pad and button defaults section
         var btnDefSec = document.getElementById('btn-defaults-section');
         if (btnDefSec) btnDefSec.style.display = 'block';

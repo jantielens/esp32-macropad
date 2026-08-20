@@ -61,14 +61,15 @@
             <div class="card-body">
             <div id="pad-page-bg-color-wrap">
                 <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Background Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                <select id="pad-page-bg-mode" class="form-select form-select-sm" style="margin-bottom:6px;" onchange="padPageBackgroundModeChanged()">
-                    <option value="inherit">Inherit device default</option>
-                    <option value="override">Override for this pad</option>
-                </select>
-                <div class="bindable-color">
-                    <div class="bc-swatch"></div>
-                    <input type="text" id="pad-edit-page-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
-                    
+                <div class="pad-background-control-row">
+                    <select id="pad-page-bg-mode" class="form-select form-select-sm" onchange="padPageBackgroundModeChanged()">
+                        <option value="inherit">Inherit device default</option>
+                        <option value="override">Override for this pad</option>
+                    </select>
+                    <div class="bindable-color" title="Choose pad background color">
+                        <div class="bc-swatch"></div>
+                        <input type="text" id="pad-edit-page-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
+                    </div>
                 </div>
             </div>
             <div class="form-group" style="margin:8px 0 0;">
@@ -152,6 +153,10 @@
             </div>
         </div>
     </div>
+
+    <button type="button" id="pad-quick-save-btn" class="btn btn-primary pad-quick-save" hidden>
+        Save Pad
+    </button>
 
     <!-- Pad Button Edit Dialog -->
     <div id="pad-edit-overlay" class="reboot-overlay" style="display:none;">

@@ -27,7 +27,7 @@ async function loadVersion() {
         }
 
         document.getElementById('firmware-version').textContent = `Firmware v${version.version}`;
-        const deviceName = version.wifi_hostname || version.project_display_name || 'Device';
+        const deviceName = version.device_name || version.project_display_name || version.wifi_hostname || 'Device';
         const deviceClass = version.device_class || version.project_display_name || 'Device';
         document.getElementById('portal-device-name').textContent = deviceName;
         document.getElementById('device-class').textContent = deviceClass;

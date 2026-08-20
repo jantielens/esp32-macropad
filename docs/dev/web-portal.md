@@ -293,7 +293,7 @@ every component in that custom section to the same category ID.
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
-- **Custom floating footer**: Save Pad, Show on Device, and More menu (not the shared `{{FOOTER}}` template)
+- **Pad save controls**: The bottom action bar provides Save Pad, Show on Device, and More. A fixed Save Pad button appears while the current pad has unsaved changes, so repeated edits do not require scrolling to the action bar.
 
 **Layout:** Full-width pad grid with responsive button editor dialog
 
@@ -557,6 +557,7 @@ Returns comprehensive device information.
   "sketch_size": 1048576,
   "free_sketch_space": 2097152,
   "mac_address": "AA:BB:CC:DD:EE:FF",
+  "device_name": "Living Room Macropad",
   "wifi_hostname": "esp32-1234",
   "mdns_name": "esp32-1234.local",
   "hostname": "esp32-1234",
@@ -590,6 +591,7 @@ Returns comprehensive device information.
 
 **Discovery Fields:**
 - `mac_address`: Device MAC address
+- `device_name`: Configured user-facing device name, used by the portal header and browser title
 - `wifi_hostname`: WiFi/DHCP hostname
 - `mdns_name`: Full mDNS name (hostname + `.local`)
 - `hostname`: Short hostname

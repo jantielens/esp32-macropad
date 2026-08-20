@@ -1096,6 +1096,21 @@ body {
   margin-top: 16px;
 }
 
+.pad-quick-save {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1020;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+}
+
+@media (max-width: 767.98px) {
+  .pad-quick-save {
+    right: 14px;
+    bottom: 14px;
+  }
+}
+
 /* ================================================================
    Theme Toggle Button
    ================================================================ */
@@ -1848,6 +1863,27 @@ body {
   background: linear-gradient(90deg, #f44336, #ff9800, #ffeb3b, #4caf50, #2196f3, #9c27b0) !important;
 }
 .bindable-color .bc-input { display: none; }
+
+.pad-background-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pad-background-control-row #pad-page-bg-mode {
+  flex: 1 1 240px;
+  max-width: 320px;
+}
+
+.pad-background-control-row .bindable-color {
+  margin: 0;
+}
+
+.pad-background-control-row .bc-swatch {
+  width: 36px;
+  height: 36px;
+}
 
 /* Binding-capable field hint badge */
 .fx-hint {
