@@ -31,6 +31,17 @@ echo "=== Running unit tests: pad layout ==="
 ./tests/bin/test_pad_layout
 echo
 
+echo "=== Building unit tests: numeric rocker zones ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/Arduino.h -include tests/board_config.h \
+    -I tests -I src/app \
+    tests/test_numericrocker_zones.cpp \
+    -o tests/bin/test_numericrocker_zones
+
+echo "=== Running unit tests: numeric rocker zones ==="
+./tests/bin/test_numericrocker_zones
+echo
+
 echo "=== Building unit tests: button shadow color ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -I src/app \

@@ -12,6 +12,7 @@ struct NumericRockerConfig {
     bool horizontal;           // true = left/right (default), false = up/down
     float small_step;          // default 1, 0 = disable inner zones
     float large_step;          // default 10, 0 = disable outer zones
+    uint8_t zone_scale_pct;    // 50-150, default 100
     char indicator_color[CONFIG_COLOR_MAX_LEN];
     uint8_t indicator_opa;     // default 80
     ButtonAction adjust_action; // {step}-substituted action for outer/inner zones
@@ -21,7 +22,8 @@ struct NumericRockerConfig {
 #define NR_OUTER_PCT   12   // target 12% of span for outer zones
 #define NR_INNER_PCT   15   // target 15% of span for inner zones
 #define NR_ZONE_MIN_PX 40   // minimum zone width/height in pixels
-#define NR_ZONE_MAX_PX 80   // maximum zone width/height in pixels
+#define NR_ZONE_SCALE_MIN_PCT 50
+#define NR_ZONE_SCALE_MAX_PCT 150
 
 // Computed zone boundaries in pixels from start of tile span.
 struct NRZoneLayout {
@@ -37,19 +39,25 @@ static inline int nr_clamp(int val, int lo, int hi) {
 }
 
 // Compute zone boundaries from the tile span (width for horizontal, height for vertical).
-// When a step is 0, its zone is disabled and its percentage is given to the other zone type.
-// The center dead zone gets at least 10% of span, or whatever remains after clamping.
-static inline NRZoneLayout nr_compute_zones(int span, float small_step, float large_step) {
+// When a step is 0, its zone is disabled.
+// zone_scale_pct lets a pad tune both zone types while retaining their ratio.
+// The center action zone gets at least 10% of span, or whatever remains after clamping.
+static inline NRZoneLayout nr_compute_zones(int span, float small_step, float large_step,
+                                             int zone_scale_pct = 100) {
     bool has_outer = (large_step > 0);
     bool has_inner = (small_step > 0);
+    zone_scale_pct = nr_clamp(zone_scale_pct, NR_ZONE_SCALE_MIN_PCT,
+                              NR_ZONE_SCALE_MAX_PCT);
     int total_pct = (has_outer ? NR_OUTER_PCT : 0) + (has_inner ? NR_INNER_PCT : 0);
 
     // When one zone is disabled, the other gets the full combined percentage
     int outer_target = has_outer ? (has_inner ? NR_OUTER_PCT : total_pct) : 0;
     int inner_target = has_inner ? (has_outer ? NR_INNER_PCT : total_pct) : 0;
 
-    int outer_px = has_outer ? nr_clamp(span * outer_target / 100, NR_ZONE_MIN_PX, NR_ZONE_MAX_PX) : 0;
-    int inner_px = has_inner ? nr_clamp(span * inner_target / 100, NR_ZONE_MIN_PX, NR_ZONE_MAX_PX) : 0;
+    int outer_px = has_outer ? nr_clamp(span * outer_target * zone_scale_pct / 10000,
+                                        NR_ZONE_MIN_PX, span) : 0;
+    int inner_px = has_inner ? nr_clamp(span * inner_target * zone_scale_pct / 10000,
+                                        NR_ZONE_MIN_PX, span) : 0;
 
     // Ensure zones don't exceed available space (leave at least 10% center)
     int min_center = span / 10;

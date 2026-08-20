@@ -415,6 +415,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-numericrocker-axis').value = btn.widget_numericrocker_axis || 'horizontal';
     document.getElementById('pad-edit-numericrocker-small-step').value = (btn.widget_numericrocker_small_step !== undefined) ? btn.widget_numericrocker_small_step : 1;
     document.getElementById('pad-edit-numericrocker-large-step').value = (btn.widget_numericrocker_large_step !== undefined) ? btn.widget_numericrocker_large_step : 10;
+    document.getElementById('pad-edit-numericrocker-zone-scale').value = (btn.widget_numericrocker_zone_scale_pct !== undefined) ? btn.widget_numericrocker_zone_scale_pct : 100;
     document.getElementById('pad-edit-numericrocker-color').value = btn.widget_numericrocker_color || '#FFFFFF';
     document.getElementById('pad-edit-numericrocker-opacity').value = (btn.widget_numericrocker_opacity !== undefined) ? btn.widget_numericrocker_opacity : 80;
 
@@ -750,6 +751,8 @@ function padDialogOk(keepOpen) {
             if (!isNaN(nrSmall) && nrSmall !== 1) btn.widget_numericrocker_small_step = Math.max(0, nrSmall);
             const nrLarge = parseFloat(document.getElementById('pad-edit-numericrocker-large-step').value);
             if (!isNaN(nrLarge) && nrLarge !== 10) btn.widget_numericrocker_large_step = Math.max(0, nrLarge);
+            const nrZoneScale = parseInt(document.getElementById('pad-edit-numericrocker-zone-scale').value);
+            if (!isNaN(nrZoneScale) && nrZoneScale !== 100) btn.widget_numericrocker_zone_scale_pct = Math.max(50, Math.min(150, nrZoneScale));
             const nrColor = document.getElementById('pad-edit-numericrocker-color').value.trim();
             if (nrColor && nrColor !== '#FFFFFF') btn.widget_numericrocker_color = nrColor;
             const nrOpa = parseInt(document.getElementById('pad-edit-numericrocker-opacity').value);

@@ -704,7 +704,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 
 **How it works:**
 
-- The button area is divided into 5 zones along the selected axis, with pixel-clamped widths that adapt to button size.
+- The button content area is divided into 5 zones along the selected axis. The visual chevrons, hit areas, and tap flash use the same geometry.
 - **Horizontal mode**: left = decrement, right = increment.
 - **Vertical mode**: bottom = decrement, top = increment (up = more).
 - **Outer decrement** (far left / bottom) → `{step}` = `-large_step`
@@ -712,14 +712,15 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 - **Center zone** → works as a normal button (tap and long-press actions)
 - **Inner increment** → `{step}` = `+small_step`
 - **Outer increment** (far right / top) → `{step}` = `+large_step`
-- Zone widths target 12% (outer) and 15% (inner) of the button span, clamped to 40–80 px. The center zone gets whatever remains.
+- At the default 100% tap-area scale, zone widths target 12% (outer) and 15% (inner) of the button span, with a 40px minimum. Wide buttons keep scaling beyond 80px; the center zone remains at least 10% of the span.
+- Taps use the initial touch position, so a finger drifting slightly before release does not change a small step into a large step.
 - Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
 - The tap flash covers only the tapped zone.
 - Inner zones (small step) use the device's **Tap Beep** pattern; outer zones (large step) use the **Long-Press Beep** pattern for a distinct audio cue. Suppressed when the adjustment action itself produces audio.
 - The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
 - The `{step}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value` fields.
 
-**Disabling zones:** Set a step value to **0** to disable that zone pair. The remaining zone expands to fill the freed space (from 15% to the full 27% per side). Setting both steps to 0 makes the entire button a center zone.
+**Disabling zones:** Set a step value to **0** to disable that zone pair. The center action area receives the freed space. Setting both steps to 0 makes the entire button a center zone.
 
 > **Tip:** For best usability, use `col_span >= 2` in horizontal mode or `row_span >= 2` in vertical mode so the tap zones are easy to hit.
 
@@ -730,6 +731,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 | **Direction** | Horizontal (left/right, default) or vertical (up/down) |
 | **Small Step** | Inner zone adjustment magnitude (default 1). Supports decimals (e.g. 0.1, 0.5). Set to 0 to disable inner zones |
 | **Large Step** | Outer zone adjustment magnitude (default 10). Supports decimals. Set to 0 to disable outer zones |
+| **Tap Area Scale** | Scales both inner and outer tap areas from 50% to 150% while preserving their ratio. Default 100% |
 | **Indicator Color** | Chevron color (default white) |
 | **Opacity** | Chevron visibility from 0 (invisible) to 255 (fully opaque). Default 80 (~31%) |
 | **Adjustment Action** | The action template dispatched for outer/inner zones. The `{step}` placeholder is replaced with the signed step value |

@@ -177,6 +177,7 @@ void PadScreen::buildTiles() {
         const ScreenButtonConfig& bcfg = cfg->buttons[i];
         const PadRect& r = rects[i];
         ButtonTile& tile = tiles[i];
+        tile.touch_start_valid = false;
         tile.shadow = nullptr;
         tile.shadow_follows_background = cfg->shadow.color_mode == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND;
         tile.shadow_darken_pct = cfg->shadow.darken_pct;
@@ -537,6 +538,7 @@ void PadScreen::buildTiles() {
         lv_obj_set_user_data(obj, (void*)user);
 
         lv_obj_add_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(obj, onPress, LV_EVENT_PRESSED, &tiles[i]);
         lv_obj_add_event_cb(obj, onTap, LV_EVENT_SHORT_CLICKED, &tiles[i]);
         lv_obj_add_event_cb(obj, onLongPress, LV_EVENT_LONG_PRESSED, &tiles[i]);
 

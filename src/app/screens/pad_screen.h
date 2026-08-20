@@ -111,6 +111,8 @@ struct ButtonTile {
     lv_coord_t tap_flash_y;
     lv_coord_t tap_flash_w;
     lv_coord_t tap_flash_h;
+    lv_point_t touch_start;
+    bool touch_start_valid;
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
@@ -203,6 +205,7 @@ private:
     void releaseAllPadHold(const char* tag);
 
     // Event callbacks
+    static void onPress(lv_event_t* e);
     static void onTap(lv_event_t* e);
     static void onLongPress(lv_event_t* e);
     static void onPadActionTap(lv_event_t* e);
