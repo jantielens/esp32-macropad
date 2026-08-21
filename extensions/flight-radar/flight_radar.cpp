@@ -234,13 +234,13 @@ bool parse_config(const char* json, RadarConfig* config) {
     if (!config) return false;
     const char* end = json;
     while (end && *end) ++end;
-    config->latitude = 51.2189473f;
-    config->longitude = 5.4216694f;
+    config->latitude = 50.901389f;
+    config->longitude = 4.484444f;
     config->range_km = 50.0f;
     config->max_planes = 20;
     config->refresh_interval_secs = REFRESH_INTERVAL_MS / 1000;
-    copy_text(config->latitude_text, sizeof(config->latitude_text), "51.2189473");
-    copy_text(config->longitude_text, sizeof(config->longitude_text), "5.4216694");
+    copy_text(config->latitude_text, sizeof(config->latitude_text), "50.901389");
+    copy_text(config->longitude_text, sizeof(config->longitude_text), "4.484444");
     if (!json || !json[0]) return true;
 
     const char* value = find_value(json, end, "lat");

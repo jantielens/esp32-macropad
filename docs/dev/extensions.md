@@ -46,7 +46,7 @@ ship to the device.
 ```json
 {
   "summary": "Shows nearby aircraft from ADSB.lol in a live radar widget.",
-  "usage": "Set Extension configuration to:\n{\"lat\":51.2189473,\"lon\":5.4216694,\"range_km\":25,\"max_planes\":20,\"interval\":5}"
+  "usage": "Set Extension configuration to:\n{\"lat\":50.901389,\"lon\":4.484444,\"range_km\":25,\"max_planes\":20,\"interval\":5}"
 }
 ```
 
@@ -379,7 +379,7 @@ configuration must be valid JSON: use commas between every property, not
 semicolon-delimited settings.
 
 ```json
-{"lat":51.2189473,"lon":5.4216694,"range_km":25,"max_planes":20,"interval":5}
+{"lat":50.901389,"lon":4.484444,"range_km":25,"max_planes":20,"interval":5}
 ```
 
 For example, a second widget can independently scan Brussels:
