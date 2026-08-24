@@ -27,6 +27,8 @@ static isp_proc_handle_t s_isp_processor = nullptr;
 // reports the packed RAW10 payload size in transaction->received_size.
 static const size_t kCsiRaw10DmaBytesPerPixel = 2;
 static const uint8_t kCsiBufferCount = 2;
+static const size_t kRaw10RowBytes = (size_t)CAMERA_CAPTURE_WIDTH * 5 / 4;
+static uint8_t s_raw10_row_scratch[kRaw10RowBytes * 2];
 // OV02C10 sets 0x4800 without LINE_SYNC_ENABLE, so no line packets are sent.
 static const bool kCsiLinePacketsEnabled = false;
 static bool camera_read_register(uint16_t reg, uint8_t* value);
@@ -426,9 +428,12 @@ void camera_driver_release_raw(CameraRawFrame* frame) {
 }
 
 static uint8_t camera_raw10_high_byte(const CameraRawFrame& raw, uint16_t x, uint16_t y) {
-    const size_t raw_row_bytes = (size_t)raw.width * 5 / 4;
-    const size_t raw_index = (size_t)y * raw_row_bytes + (size_t)(x / 4) * 5 + x % 4;
+    const size_t raw_index = (size_t)y * kRaw10RowBytes + (size_t)(x / 4) * 5 + x % 4;
     return raw.data[raw_index];
+}
+
+static uint8_t camera_raw10_row_high_byte(const uint8_t* row, uint16_t x) {
+    return row[(size_t)(x / 4) * 5 + x % 4];
 }
 
 // Exposure is expressed in lines. The verified mode has 1164 vertical timing
@@ -497,12 +502,12 @@ static uint8_t camera_apply_gain(uint8_t value, uint16_t gain_q8) {
 // in a single step and needs no interpolation between neighbouring quads.
 //   (x, y) = G   (x+1, y)   = B
 //   (x, y+1) = R (x+1, y+1) = G
-static uint16_t camera_bayer_quad_to_rgb565(const CameraRawFrame& raw, uint16_t x, uint16_t y,
+static uint16_t camera_bayer_quad_to_rgb565(const uint8_t* top_row, const uint8_t* bottom_row, uint16_t x,
                                             const CameraWhiteBalance& balance) {
-    const uint8_t green_top = camera_raw10_high_byte(raw, x, y);
-    const uint8_t blue = camera_apply_gain(camera_raw10_high_byte(raw, x + 1, y), balance.blue_gain_q8);
-    const uint8_t red = camera_apply_gain(camera_raw10_high_byte(raw, x, y + 1), balance.red_gain_q8);
-    const uint8_t green_bottom = camera_raw10_high_byte(raw, x + 1, y + 1);
+    const uint8_t green_top = camera_raw10_row_high_byte(top_row, x);
+    const uint8_t blue = camera_apply_gain(camera_raw10_row_high_byte(top_row, x + 1), balance.blue_gain_q8);
+    const uint8_t red = camera_apply_gain(camera_raw10_row_high_byte(bottom_row, x), balance.red_gain_q8);
+    const uint8_t green_bottom = camera_raw10_row_high_byte(bottom_row, x + 1);
     const uint8_t green = static_cast<uint8_t>((green_top + green_bottom) / 2);
 
     return static_cast<uint16_t>(((red & 0xF8) << 8) | ((green & 0xFC) << 3) | (blue >> 3));
@@ -561,11 +566,17 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
         for (uint16_t y = 0; y < settings.output_height; ++y) {
             const uint16_t source_y = static_cast<uint16_t>(
                 (static_cast<uint32_t>(y) * (raw.height - 2) / (settings.output_height - 1)) & ~1U);
+            const uint8_t* source_top_row = raw.data + (size_t)source_y * kRaw10RowBytes;
+            const uint8_t* source_bottom_row = source_top_row + kRaw10RowBytes;
+            memcpy(s_raw10_row_scratch, source_top_row, kRaw10RowBytes);
+            memcpy(s_raw10_row_scratch + kRaw10RowBytes, source_bottom_row, kRaw10RowBytes);
             for (uint16_t x = 0; x < settings.output_width; ++x) {
                 const uint16_t source_x = static_cast<uint16_t>(
                     (static_cast<uint32_t>(x) * (raw.width - 2) / (settings.output_width - 1)) & ~1U);
                 rgb565->data[(size_t)y * settings.output_width + x] =
-                    camera_bayer_quad_to_rgb565(raw, source_x, source_y, balance);
+                    camera_bayer_quad_to_rgb565(s_raw10_row_scratch,
+                                                s_raw10_row_scratch + kRaw10RowBytes,
+                                                source_x, balance);
             }
         }
         if (timing) timing->rgb565_convert_us = static_cast<uint32_t>(esp_timer_get_time() - convert_started_us);

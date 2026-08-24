@@ -505,6 +505,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/camera_drivers.cpp
+  - src/app/camera_feed.cpp
   - src/app/camera_service.cpp
   - src/app/components/camera_component.cpp
   - src/app/config_manager.cpp
@@ -515,6 +516,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_camera.h
   - src/app/web_portal_routes.cpp
   - src/app/widgets.cpp
+  - src/app/widgets/camera_preview_widget.cpp
 - **HAS_CONFIG_MODE_BUTTON**
   - src/app/app.ino
   - src/app/board_config.h
@@ -669,6 +671,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_screenshot.h
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
+  - src/app/widgets/camera_preview_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/list_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
@@ -802,6 +805,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_mcp.cpp
   - src/app/web_portal_config.cpp
   - src/app/widgets/bar_chart_widget.cpp
+  - src/app/widgets/camera_preview_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/list_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp

@@ -131,8 +131,9 @@ Acceptance checks:
 
 ## Phase 2: Shared Camera Producer and Cache
 
-Status: Implemented and hardware-validated at 4 FPS. RGB-only capture takes
-about 148-178 ms per frame at approximately 43% CPU.
+Status: Implemented and hardware-validated at 4 FPS. The internal-RAM RAW-row
+scratch buffer reduces RGB565 conversion from about 109 ms to 58-60 ms; RGB-only
+capture now takes about 92-122 ms per frame.
 
 Goal: introduce the one producer required by direct button preview and MJPEG.
 The producer captures only when an active consumer requests frames.
@@ -250,6 +251,7 @@ assumptions.
 |---|---|---|---:|---|---:|---:|---|---|
 | 2026-08-24 | d3241fb + timeout diagnostics | 640x360 | 76 | Manual snapshots | 145-147 ms after RAW completion | 12,365-17,323 B | Pass, 20/20 | Exposure 1149; manual WB 256/256; no capture, allocation, or encoder errors |
 | 2026-08-24 | d3241fb + timeout diagnostics | 320x180 | 76 | Manual snapshots | Not recorded | Not recorded | Fail | Frequent partially garbled frames despite a complete 1280x720 RAW10 capture; removed from advertised output modes |
+| 2026-08-24 | pending RAW-row scratch commit | 640x360 | 60 | Preview, RGB-only | 92-122 ms | N/A | Pass | 4 FPS stable; RGB565 conversion 58-60 ms, down from about 109 ms |
 | | | | | | | | | |
 
 ## Handoff Checklist
