@@ -1016,6 +1016,10 @@ echo "=== Running guard: widget schema parity (describe <-> parse) ==="
 python3 tools/lint_widget_schema.py
 echo
 
+echo "=== Running guard: camera preview widget wiring ==="
+./tests/test_camera_preview_widget.sh
+echo
+
 echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="
 ./tests/test_mcp_scheme_parity.sh
 echo

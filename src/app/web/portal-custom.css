@@ -1736,6 +1736,15 @@ body {
   background: repeating-linear-gradient(0deg, #fff, #fff 2px, transparent 2px, transparent 5px);
 }
 
+.pad-cell-widget-camera {
+  position: absolute; bottom: 4px; left: 4px; width: 16px; height: 11px;
+  border: 1px solid #fff; border-radius: 2px; opacity: 0.7;
+}
+.pad-cell-widget-camera::after {
+  content: ''; position: absolute; width: 4px; height: 4px; left: 5px; top: 2px;
+  border: 1px solid #fff; border-radius: 50%;
+}
+
 /* Resize drag handles */
 .pad-resize-handle {
   position: absolute; background: rgba(100,180,255,0.45); border-radius: 2px;

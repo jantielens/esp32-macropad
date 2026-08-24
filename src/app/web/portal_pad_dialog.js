@@ -278,6 +278,7 @@ function padDialogOpen(col, row) {
     // Widget type
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
     padWidgetTypeChanged();
+    document.getElementById('pad-edit-camera-preview-scale').value = btn.widget_camera_scale || 'cover';
 
     // Bar chart widget fields
     document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : '0';
@@ -766,6 +767,9 @@ function padDialogOk(keepOpen) {
             if (listProvider) btn.widget_data_binding = listProvider;
             const listFilter = document.getElementById('pad-edit-list-filter').value.trim();
             if (listFilter) btn.widget_data_binding_2 = listFilter;
+        }
+        if (wtype === 'camera_preview') {
+            btn.widget_camera_scale = document.getElementById('pad-edit-camera-preview-scale').value;
         }
         if (wtype === 'external') {
             const extensionId = document.getElementById('pad-edit-extension-id').value;

@@ -83,6 +83,9 @@ async function padInit() {
     const nativeExtensions = deviceInfoCache && deviceInfoCache.has_native_extensions === true;
     const externalWidgetOption = document.getElementById('pad-edit-external-widget-option');
     if (externalWidgetOption) externalWidgetOption.style.display = nativeExtensions ? '' : 'none';
+    const cameraPreviewOption = document.getElementById('pad-edit-camera-preview-widget-option');
+    if (cameraPreviewOption) cameraPreviewOption.style.display =
+        deviceInfoCache && deviceInfoCache.has_camera === true ? '' : 'none';
     if (nativeExtensions && typeof extensionFetchSlots === 'function') {
         try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
     }
@@ -402,7 +405,7 @@ function padPopulateSoundDropdown() {
     actionEditorPopulateSounds(prefixes, padSoundListCache);
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list'];
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview'];
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;

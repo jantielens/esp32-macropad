@@ -236,6 +236,18 @@ bool camera_capture_jpeg(CameraJpegFrame* frame) {
 #endif
 }
 
+bool camera_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* jpeg,
+                           CameraCaptureTiming* timing) {
+#if HAS_CAMERA
+    return camera_driver_capture_rgb565(rgb565, jpeg, timing, camera_get_capture_settings());
+#else
+    if (jpeg) *jpeg = {};
+    if (rgb565) *rgb565 = {};
+    if (timing) *timing = {};
+    return false;
+#endif
+}
+
 void camera_release_jpeg(CameraJpegFrame* frame) {
 #if HAS_CAMERA
     camera_driver_release_jpeg(frame);

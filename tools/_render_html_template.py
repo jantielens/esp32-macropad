@@ -35,6 +35,7 @@ TEMPLATES = [
     ("WIDGET_NUMERICROCKER", "_widget_numericrocker.html"),
     ("WIDGET_WAVEFORM", "_widget_waveform.html"),
     ("WIDGET_LIST", "_widget_list.html"),
+    ("WIDGET_CAMERA_PREVIEW", "_widget_camera_preview.html"),
     ("STYLE_HELP", "_style_help.html"),
     ("HEALTH_WIDGET", "_health_widget.html"),
     ("REBOOT_OVERLAY", "_reboot_overlay.html"),

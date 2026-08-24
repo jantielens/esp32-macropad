@@ -97,6 +97,7 @@ SET_LOOP_TASK_STACK_SIZE(LOOP_TASK_STACK_SIZE);
 
 #if HAS_CAMERA
 #include "camera.h"
+#include "camera_feed.h"
 #endif
 
 // Configuration
@@ -266,6 +267,7 @@ void setup()
 
 	#if HAS_CAMERA
 	camera_init();
+	camera_feed_init();
 	#endif
 
 	// Initialize configuration manager
@@ -633,6 +635,10 @@ void loop()
 
 	#if HAS_DISPLAY || HAS_BUTTON
 	action_dispatch_loop();
+	#endif
+
+	#if HAS_CAMERA
+	camera_feed_loop();
 	#endif
 
 	#if HAS_DISPLAY

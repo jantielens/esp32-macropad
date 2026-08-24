@@ -370,6 +370,8 @@ slots are occupied stops its action list.
 
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
 
+On camera-enabled boards, select **Camera Preview** as a button's widget to display the shared camera feed. Choose Cover to fill the button, Letterbox to show the complete image without stretching, or Center crop to clip an unscaled centered image.
+
 On ESP32-P4 builds, the **Extensions** page has two small slots
 and one large slot for trusted native Extensions. Upload the signed package
 `extension-id@version.ext`, then reboot to install it into executable flash.

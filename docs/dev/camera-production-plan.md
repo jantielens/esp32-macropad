@@ -131,7 +131,8 @@ Acceptance checks:
 
 ## Phase 2: Shared Camera Producer and Cache
 
-Status: Not started
+Status: Implemented and hardware-validated at 4 FPS. RGB-only capture takes
+about 148-178 ms per frame at approximately 43% CPU.
 
 Goal: introduce the one producer required by direct button preview and MJPEG.
 The producer captures only when an active consumer requests frames.
@@ -152,8 +153,8 @@ Implementation requirements:
   generation-number swaps
 * Make producer cadence, requested preview size, JPEG quality, and active
   consumer count explicit state
-* Provide a bounded capture interval. Start at 1 FPS and increase only after
-  device measurement
+* Provide a bounded capture interval. Start at 3 FPS with telemetry and increase
+  only after device measurement
 * Stop or reduce producer work when the display sleeps and no web client exists
 * Check `ota_activity_is_active()` before beginning a nonessential capture
 
@@ -166,7 +167,8 @@ Acceptance checks:
 
 ## Phase 3: Camera Button Widget
 
-Status: Not started
+Status: Implemented and hardware-validated at 4 FPS. Cover, Letterbox, and
+Center crop are available from the Pad Editor.
 
 Goal: show the latest camera RGB565 frame in a button without HTTP.
 
@@ -184,6 +186,7 @@ Implementation requirements:
 * Do not call LVGL outside the LVGL task
 * Request camera feed frames only while the button's pad is visible
 * Use a fixed preview dimension that fits the button and a bounded frame rate
+* Provide cover, letterbox, and unscaled center-crop scale modes
 * Drop stale frames rather than queueing them
 
 Acceptance checks:

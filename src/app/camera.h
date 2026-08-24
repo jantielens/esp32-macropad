@@ -25,6 +25,20 @@ struct CameraJpegFrame {
 	uint16_t height;
 };
 
+struct CameraRgb565Frame {
+	uint16_t* data;
+	size_t size;
+	uint16_t width;
+	uint16_t height;
+};
+
+struct CameraCaptureTiming {
+	uint32_t raw_capture_us;
+	uint32_t rgb565_convert_us;
+	uint32_t jpeg_encode_us;
+	uint32_t total_us;
+};
+
 enum CameraCaptureSaveTo : uint8_t {
 	CAMERA_CAPTURE_SAVE_LATEST,
 	CAMERA_CAPTURE_SAVE_ROLL,
@@ -85,6 +99,12 @@ bool camera_capture_jpeg(CameraJpegFrame* frame);
 
 // Frees a frame returned by camera_capture_jpeg().
 void camera_release_jpeg(CameraJpegFrame* frame);
+
+// Captures RGB565 pixels into caller-owned memory and optionally encodes the
+// same pixels as JPEG. rgb565->data must hold output_width * output_height
+// pixels. Must run on the main loop.
+bool camera_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* jpeg = nullptr,
+						   CameraCaptureTiming* timing = nullptr);
 
 // Captures one JPEG and stores the requested latest image, camera-roll image,
 // or both. Must run on the main loop.

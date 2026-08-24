@@ -13,6 +13,7 @@
 #include <esp_cache.h>
 #include <esp_ldo_regulator.h>
 #include <esp_private/esp_cache_private.h>
+#include <esp_timer.h>
 #include <driver/isp.h>
 #include <soc/mipi_csi_host_struct.h>
 
@@ -415,9 +416,6 @@ bool camera_driver_capture_raw(CameraRawFrame* frame) {
         return false;
     }
 
-    LOGI("Camera", "Captured RAW10 frame: %u bytes (%ux%u, %u lane at %u Mbps)",
-            static_cast<unsigned>(s_csi_context.received_size), CAMERA_CAPTURE_WIDTH,
-         CAMERA_CAPTURE_HEIGHT, CAMERA_CSI_DATA_LANES, CAMERA_CSI_LANE_BIT_RATE_MBPS);
     return true;
 }
 
@@ -510,9 +508,13 @@ static uint16_t camera_bayer_quad_to_rgb565(const CameraRawFrame& raw, uint16_t 
     return static_cast<uint16_t>(((red & 0xF8) << 8) | ((green & 0xFC) << 3) | (blue >> 3));
 }
 
-bool camera_driver_capture_jpeg(CameraJpegFrame* frame, const CameraCaptureSettings& settings) {
-    if (!frame) return false;
-    *frame = {};
+bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* frame,
+                                  CameraCaptureTiming* timing,
+                                  const CameraCaptureSettings& settings) {
+    if (!rgb565 || !rgb565->data) return false;
+    if (frame) *frame = {};
+    if (timing) *timing = {};
+    const int64_t capture_started_us = esp_timer_get_time();
 
     const bool exposure_changed = settings.exposure_lines != s_exposure_lines;
     if (exposure_changed) {
@@ -530,7 +532,9 @@ bool camera_driver_capture_jpeg(CameraJpegFrame* frame, const CameraCaptureSetti
     }
 
     CameraRawFrame raw = {};
+    const int64_t raw_started_us = esp_timer_get_time();
     if (!camera_driver_capture_raw(&raw)) return false;
+    if (timing) timing->raw_capture_us = static_cast<uint32_t>(esp_timer_get_time() - raw_started_us);
 
     const CameraWhiteBalance estimated_balance = camera_estimate_white_balance(raw);
     const CameraWhiteBalance balance = {
@@ -542,60 +546,76 @@ bool camera_driver_capture_jpeg(CameraJpegFrame* frame, const CameraCaptureSetti
 
     const size_t raw_pixel_count = (size_t)raw.width * raw.height;
     const size_t expected_raw_size = raw_pixel_count * 5 / 4;
-    const size_t rgb_size = (size_t)settings.output_width * settings.output_height * sizeof(uint16_t);
-    uint16_t* rgb = nullptr;
     bool captured = false;
     const bool output_supported = raw.size == expected_raw_size &&
                                   raw.width / 2 >= settings.output_width &&
-                                  raw.height / 2 >= settings.output_height;
-    if (output_supported) {
-        rgb = static_cast<uint16_t*>(
-            heap_caps_malloc(rgb_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-        if (!rgb) {
-            LOGW("Camera", "Preview buffer allocation failed: %u bytes for %ux%u",
-                 static_cast<unsigned>(rgb_size), settings.output_width, settings.output_height);
-        }
-    } else {
+                                  raw.height / 2 >= settings.output_height &&
+                                  rgb565->size >= (size_t)settings.output_width * settings.output_height * sizeof(uint16_t);
+    if (!output_supported) {
         LOGW("Camera", "Unsupported preview: raw=%ux%u/%u bytes output=%ux%u",
              raw.width, raw.height, static_cast<unsigned>(raw.size),
              settings.output_width, settings.output_height);
     }
-    if (rgb) {
+    if (output_supported) {
+        const int64_t convert_started_us = esp_timer_get_time();
         for (uint16_t y = 0; y < settings.output_height; ++y) {
             const uint16_t source_y = static_cast<uint16_t>(
                 (static_cast<uint32_t>(y) * (raw.height - 2) / (settings.output_height - 1)) & ~1U);
             for (uint16_t x = 0; x < settings.output_width; ++x) {
                 const uint16_t source_x = static_cast<uint16_t>(
                     (static_cast<uint32_t>(x) * (raw.width - 2) / (settings.output_width - 1)) & ~1U);
-                rgb[(size_t)y * settings.output_width + x] =
+                rgb565->data[(size_t)y * settings.output_width + x] =
                     camera_bayer_quad_to_rgb565(raw, source_x, source_y, balance);
             }
         }
-           LOGD("Camera", "Exposure %u lines, white balance auto=%u/%u manual=%u/%u result=%u/%u",
-               s_exposure_lines, estimated_balance.red_gain_q8, estimated_balance.blue_gain_q8,
-               settings.white_balance_red_q8, settings.white_balance_blue_q8,
-               balance.red_gain_q8, balance.blue_gain_q8);
-        captured = jpeg_encode_rgb565(reinterpret_cast<const uint8_t*>(rgb),
-                                      settings.output_width, settings.output_height, settings.jpeg_quality,
-                                      &frame->data, &frame->size);
-        if (captured) {
-            frame->width = settings.output_width;
-            frame->height = settings.output_height;
+        if (timing) timing->rgb565_convert_us = static_cast<uint32_t>(esp_timer_get_time() - convert_started_us);
+        captured = true;
+        if (frame) {
+            const int64_t jpeg_started_us = esp_timer_get_time();
+            captured = jpeg_encode_rgb565(reinterpret_cast<const uint8_t*>(rgb565->data),
+                                          settings.output_width, settings.output_height, settings.jpeg_quality,
+                                          &frame->data, &frame->size);
+            if (timing) timing->jpeg_encode_us = static_cast<uint32_t>(esp_timer_get_time() - jpeg_started_us);
+            if (captured) {
+                frame->width = settings.output_width;
+                frame->height = settings.output_height;
+            }
         }
+        rgb565->width = settings.output_width;
+        rgb565->height = settings.output_height;
     }
-    if (rgb) free(rgb);
     camera_driver_release_raw(&raw);
 
+    if (timing) timing->total_us = static_cast<uint32_t>(esp_timer_get_time() - capture_started_us);
+
     if (!captured) {
-        camera_driver_release_jpeg(frame);
-        LOGW("Camera", "JPEG frame capture failed for %ux%u at quality %u",
+        if (frame) camera_driver_release_jpeg(frame);
+        LOGW("Camera", "RGB565 frame capture failed for %ux%u at quality %u",
              settings.output_width, settings.output_height, settings.jpeg_quality);
         return false;
     }
 
-    LOGI("Camera", "Captured color JPEG: %u bytes (%ux%u)",
-         static_cast<unsigned>(frame->size), frame->width, frame->height);
+    if (frame) {
+        LOGI("Camera", "Captured color JPEG: %u bytes (%ux%u)",
+             static_cast<unsigned>(frame->size), frame->width, frame->height);
+    }
     return true;
+}
+
+bool camera_driver_capture_jpeg(CameraJpegFrame* frame, const CameraCaptureSettings& settings) {
+    if (!frame) return false;
+    const size_t rgb_size = (size_t)settings.output_width * settings.output_height * sizeof(uint16_t);
+    uint16_t* rgb = static_cast<uint16_t*>(
+        heap_caps_malloc(rgb_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!rgb) {
+        LOGW("Camera", "Preview buffer allocation failed: %u bytes for %ux%u",
+             static_cast<unsigned>(rgb_size), settings.output_width, settings.output_height);
+        return false;
+    }
+    CameraRgb565Frame rgb565 = {.data = rgb, .size = rgb_size};
+    const bool captured = camera_driver_capture_rgb565(&rgb565, frame, nullptr, settings);
+    free(rgb);
+    return captured;
 }
 
 void camera_driver_release_jpeg(CameraJpegFrame* frame) {
@@ -678,6 +698,16 @@ void camera_driver_release_raw(CameraRawFrame* frame) {
 
 bool camera_driver_capture_jpeg(CameraJpegFrame* frame, const CameraCaptureSettings& settings) {
     if (frame) *frame = {};
+    (void)settings;
+    return false;
+}
+
+bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* jpeg,
+                                  CameraCaptureTiming* timing,
+                                  const CameraCaptureSettings& settings) {
+    if (jpeg) *jpeg = {};
+    if (rgb565) *rgb565 = {};
+    if (timing) *timing = {};
     (void)settings;
     return false;
 }

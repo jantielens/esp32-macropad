@@ -471,6 +471,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
+  - src/app/actions/camera_capture_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/ha_service_action.cpp
@@ -500,6 +501,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/web_portal_device_api.cpp
 - **HAS_CAMERA**
+  - src/app/actions/camera_capture_action.cpp
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/camera_drivers.cpp
@@ -512,6 +514,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_camera.cpp
   - src/app/web_portal_camera.h
   - src/app/web_portal_routes.cpp
+  - src/app/widgets.cpp
 - **HAS_CONFIG_MODE_BUTTON**
   - src/app/app.ino
   - src/app/board_config.h
@@ -538,6 +541,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
+  - src/app/actions/camera_capture_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/ha_service_action.cpp
