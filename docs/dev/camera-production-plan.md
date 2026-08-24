@@ -218,8 +218,8 @@ Implementation requirements:
 * Use a `multipart/x-mixed-replace` response with a stable boundary
 * Serve cached JPEG frames only. A request must not directly invoke sensor
   capture or JPEG encoding
-* Start with one authenticated client and return a clear status for additional
-  clients
+* Bound authenticated clients with `CAMERA_MJPEG_MAX_CLIENTS` and return a clear
+  status for additional clients
 * Terminate cleanly on disconnect and decrement the producer's web-consumer
   count
 * Bound output rate to the producer cadence without a per-client frame queue
@@ -229,7 +229,7 @@ Acceptance checks:
 
 * A browser renders the stream for at least 10 minutes without memory growth
 * A disconnected client releases its consumer reservation and JPEG demand
-* A snapshot-save action and one stream client coexist without capture races
+* A snapshot-save action and multiple stream clients coexist without capture races
 * Frame cadence and Wi-Fi throughput are measured during hardware validation
 
 ## Deferred Work

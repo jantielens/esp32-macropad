@@ -21,19 +21,19 @@ namespace {
 
 constexpr char kMjpegBoundary[] = "esp32-macropad";
 portMUX_TYPE s_mjpeg_stream_mux = portMUX_INITIALIZER_UNLOCKED;
-bool s_mjpeg_stream_active = false;
+uint8_t s_mjpeg_stream_count = 0;
 
 bool camera_mjpeg_stream_reserve() {
     portENTER_CRITICAL(&s_mjpeg_stream_mux);
-    const bool available = !s_mjpeg_stream_active;
-    if (available) s_mjpeg_stream_active = true;
+    const bool available = s_mjpeg_stream_count < CAMERA_MJPEG_MAX_CLIENTS;
+    if (available) ++s_mjpeg_stream_count;
     portEXIT_CRITICAL(&s_mjpeg_stream_mux);
     return available;
 }
 
 void camera_mjpeg_stream_release() {
     portENTER_CRITICAL(&s_mjpeg_stream_mux);
-    s_mjpeg_stream_active = false;
+    if (s_mjpeg_stream_count) --s_mjpeg_stream_count;
     portEXIT_CRITICAL(&s_mjpeg_stream_mux);
 }
 
@@ -392,7 +392,7 @@ void handleGetCameraMjpegStream(AsyncWebServerRequest* request) {
         return;
     }
     if (!camera_mjpeg_stream_reserve()) {
-        web_portal_send_json_error(request, 429, "Camera stream already in use");
+        web_portal_send_json_error(request, 429, "Camera stream client limit reached");
         return;
     }
 

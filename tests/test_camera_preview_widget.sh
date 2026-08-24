@@ -24,7 +24,9 @@ grep -q 'class CameraMjpegResponse final : public AsyncWebServerResponse' "$CAME
 grep -q 'CAMERA_FEED_OUTPUT_JPEG' "$CAMERA_API"
 grep -q 'camera_feed_release_frame(&frame)' "$CAMERA_API"
 grep -q 'request->client()->onPoll' "$CAMERA_API"
-grep -q 'Camera stream already in use' "$CAMERA_API"
+grep -q 'CAMERA_MJPEG_MAX_CLIENTS' "$CAMERA_API"
+grep -q 'Camera stream client limit reached' "$CAMERA_API"
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
+grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
 
 echo "PASS: camera preview widget wiring"

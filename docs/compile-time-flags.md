@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 276
+Total flags: 277
 
 ### Features (HAS_*)
 
@@ -139,6 +139,7 @@ Total flags: 276
 
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
 - **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
+- **CAMERA_MJPEG_MAX_CLIENTS** default: `1` — Maximum simultaneous MJPEG clients; boards with constrained WiFi or PSRAM can keep the default.
 - **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
 - **HA_HISTORY_MIN_SLOT_SECS** default: `300` — Shortest sparkline slot duration (seconds) that Home Assistant history can fill.
@@ -1079,6 +1080,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **CAMERA_CSI_DATA_LANES**
   - src/app/board_config.h
 - **CAMERA_CSI_LANE_BIT_RATE_MBPS**
+  - src/app/board_config.h
+- **CAMERA_MJPEG_MAX_CLIENTS**
   - src/app/board_config.h
 - **CAMERA_SCCB_ADDR**
   - src/app/board_config.h

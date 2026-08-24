@@ -604,6 +604,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define ACTION_CONTINUATION_SLOTS 3
 #endif
 
+// Maximum simultaneous MJPEG clients; boards with constrained WiFi or PSRAM can keep the default.
+#ifndef CAMERA_MJPEG_MAX_CLIENTS
+#define CAMERA_MJPEG_MAX_CLIENTS 1
+#endif
+
 // ============================================================================
 // Sensors (Optional)
 // ============================================================================

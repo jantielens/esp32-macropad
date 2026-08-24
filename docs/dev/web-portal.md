@@ -1182,8 +1182,10 @@ perform demosaicing or JPEG encoding.
 Streams the newest cached JPEG frames as
 `multipart/x-mixed-replace; boundary=esp32-macropad`. The stream never captures
 directly from the request task. It activates JPEG demand in the shared camera
-feed and ends that demand when the client disconnects. One authenticated stream
-client is allowed; additional requests receive `429 Too Many Requests`.
+feed and ends that demand when the client disconnects. The compile-time
+`CAMERA_MJPEG_MAX_CLIENTS` board setting limits authenticated stream clients;
+additional requests receive `429 Too Many Requests`. The `jc4880p433` board
+permits three clients.
 
 ---
 
