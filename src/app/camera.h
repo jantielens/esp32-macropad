@@ -25,6 +25,12 @@ struct CameraJpegFrame {
 	uint16_t height;
 };
 
+enum CameraCaptureSaveTo : uint8_t {
+	CAMERA_CAPTURE_SAVE_LATEST,
+	CAMERA_CAPTURE_SAVE_ROLL,
+	CAMERA_CAPTURE_SAVE_BOTH,
+};
+
 struct CameraOutputDimensions {
 	uint16_t width;
 	uint16_t height;
@@ -79,3 +85,7 @@ bool camera_capture_jpeg(CameraJpegFrame* frame);
 
 // Frees a frame returned by camera_capture_jpeg().
 void camera_release_jpeg(CameraJpegFrame* frame);
+
+// Captures one JPEG and stores the requested latest image, camera-roll image,
+// or both. Must run on the main loop.
+bool camera_capture_save(CameraCaptureSaveTo save_to);

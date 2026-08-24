@@ -19,8 +19,8 @@ struct ComponentAction {
 // Component definition — one per feature module
 struct ComponentDef {
     const char* id;                // URL-safe identifier, e.g. "swipe-actions"
-    const char* category;          // one of: device, display, pads, actions,
-                                   //         connectivity, audio, sensors, firmware
+    const char* category;          // one of: device, display, camera, pads,
+                                   //         actions, connectivity, audio, sensors, firmware
     const char* display_name;      // Human-readable, e.g. "Swipe Actions"
     int nav_order;                 // Sort order within category (lower = higher)
 

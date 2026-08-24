@@ -110,6 +110,34 @@ select { color-scheme: light; }
   background: #111111;
 }
 
+.camera-roll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.camera-roll-item {
+  border: 1px solid var(--portal-card-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.camera-roll-image {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  object-fit: cover;
+  background: #111111;
+}
+
+.camera-roll-item-controls {
+  padding: 8px;
+}
+
+.camera-snapshot-metadata {
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
 /* ================================================================
    Custom Properties — Light Mode
    ================================================================ */

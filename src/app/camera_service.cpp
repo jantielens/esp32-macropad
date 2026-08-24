@@ -2,11 +2,15 @@
 
 #if HAS_CAMERA
 #include "camera_driver.h"
+#include "log_manager.h"
+#include "ota_activity.h"
+#include "storage.h"
 
 #include <freertos/FreeRTOS.h>
+#include <time.h>
+#include <string.h>
 
 static const CameraOutputDimensions kCameraOutputDimensions[] = {
-    {320, 180},
     {640, 360},
 };
 
@@ -33,6 +37,109 @@ static CameraCaptureSettings s_capture_settings = {
     .white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT,
 };
 static portMUX_TYPE s_capture_settings_mux = portMUX_INITIALIZER_UNLOCKED;
+
+static const char* const kCameraDirectory = "/camera";
+static const char* const kCameraLatestPath = "/camera/latest.jpg";
+static const time_t kCameraNtpValidEpoch = 1704067200L;
+static const uint32_t kCameraRollMaxSequence = 999999;
+
+struct CameraRollState {
+    char date[9];
+    uint32_t next_sequence;
+};
+
+static CameraRollState s_roll_state = {};
+
+static bool camera_ensure_directory(const char* path) {
+    return Storage.exists(path) || Storage.mkdir(path);
+}
+
+static bool camera_write_jpeg_atomic(const char* path, const CameraJpegFrame& frame) {
+    char temporary_path[48] = {};
+    if (snprintf(temporary_path, sizeof(temporary_path), "%s.tmp", path) >=
+        (int)sizeof(temporary_path)) {
+        return false;
+    }
+    Storage.remove(temporary_path);
+    File file = Storage.open(temporary_path, "w");
+    if (!file) {
+        LOGE("Camera", "Cannot open '%s' for writing", temporary_path);
+        return false;
+    }
+    const size_t written = file.write(frame.data, frame.size);
+    file.close();
+    if (written != frame.size) {
+        LOGE("Camera", "Incomplete JPEG write to '%s' (%u/%u)", path,
+             (unsigned)written, (unsigned)frame.size);
+        Storage.remove(temporary_path);
+        return false;
+    }
+    if (Storage.exists(path) && !Storage.remove(path)) {
+        LOGE("Camera", "Cannot replace '%s'", path);
+        Storage.remove(temporary_path);
+        return false;
+    }
+    if (!Storage.rename(temporary_path, path)) {
+        LOGE("Camera", "Cannot rename '%s' to '%s'", temporary_path, path);
+        Storage.remove(temporary_path);
+        return false;
+    }
+    return true;
+}
+
+static bool camera_roll_filename_sequence(const char* name, uint32_t* sequence) {
+    const char* filename = strrchr(name, '/');
+    filename = filename ? filename + 1 : name;
+    if (strlen(filename) != 10 || strcmp(filename + 6, ".jpg") != 0) return false;
+    uint32_t value = 0;
+    for (uint8_t index = 0; index < 6; ++index) {
+        if (filename[index] < '0' || filename[index] > '9') return false;
+        value = value * 10 + (uint32_t)(filename[index] - '0');
+    }
+    if (value == 0 || value > kCameraRollMaxSequence) return false;
+    *sequence = value;
+    return true;
+}
+
+static bool camera_roll_path(char* path, size_t path_len) {
+    const time_t now = time(nullptr);
+    if (now < kCameraNtpValidEpoch) {
+        LOGW("Camera", "Camera roll requires NTP time; latest image was saved");
+        return false;
+    }
+    struct tm date_time = {};
+    gmtime_r(&now, &date_time);
+    char date[9] = {};
+    if (strftime(date, sizeof(date), "%Y%m%d", &date_time) != 8) return false;
+    char directory[20] = {};
+    if (snprintf(directory, sizeof(directory), "%s/%s", kCameraDirectory, date) >=
+        (int)sizeof(directory) || !camera_ensure_directory(directory)) {
+        LOGE("Camera", "Cannot create camera roll directory '%s'", directory);
+        return false;
+    }
+    if (strcmp(s_roll_state.date, date) != 0) {
+        uint32_t highest_sequence = 0;
+        File directory_file = Storage.open(directory);
+        if (!directory_file || !directory_file.isDirectory()) return false;
+        for (File file = directory_file.openNextFile(); file; file = directory_file.openNextFile()) {
+            uint32_t sequence = 0;
+            if (!file.isDirectory() && camera_roll_filename_sequence(file.name(), &sequence) &&
+                sequence > highest_sequence) {
+                highest_sequence = sequence;
+            }
+            file.close();
+        }
+        directory_file.close();
+        if (highest_sequence >= kCameraRollMaxSequence) {
+            LOGE("Camera", "Camera roll '%s' is full", directory);
+            return false;
+        }
+        strlcpy(s_roll_state.date, date, sizeof(s_roll_state.date));
+        s_roll_state.next_sequence = highest_sequence + 1;
+    }
+    return snprintf(path, path_len, "%s/%06u.jpg", directory,
+                    (unsigned)s_roll_state.next_sequence) < (int)path_len;
+}
 
 static bool camera_capture_settings_are_valid(const CameraCaptureSettings& settings) {
     if (settings.jpeg_quality < kCameraCapabilities.jpeg_quality_min ||
@@ -134,5 +241,35 @@ void camera_release_jpeg(CameraJpegFrame* frame) {
     camera_driver_release_jpeg(frame);
 #else
     if (frame) *frame = {};
+#endif
+}
+
+bool camera_capture_save(CameraCaptureSaveTo save_to) {
+#if HAS_CAMERA
+    if (ota_activity_is_active()) {
+        LOGW("Camera", "Camera capture skipped while OTA is active");
+        return false;
+    }
+    if (!camera_is_detected() || !camera_ensure_directory(kCameraDirectory)) {
+        LOGE("Camera", "Camera or storage unavailable");
+        return false;
+    }
+    CameraJpegFrame frame = {};
+    if (!camera_capture_jpeg(&frame)) return false;
+    bool saved = save_to == CAMERA_CAPTURE_SAVE_ROLL ||
+                 camera_write_jpeg_atomic(kCameraLatestPath, frame);
+    char roll_path[40] = {};
+    if (saved && save_to != CAMERA_CAPTURE_SAVE_LATEST &&
+        camera_roll_path(roll_path, sizeof(roll_path))) {
+        saved = camera_write_jpeg_atomic(roll_path, frame);
+        if (saved) s_roll_state.next_sequence++;
+    } else if (save_to != CAMERA_CAPTURE_SAVE_LATEST) {
+        saved = false;
+    }
+    camera_release_jpeg(&frame);
+    return saved;
+#else
+    (void)save_to;
+    return false;
 #endif
 }

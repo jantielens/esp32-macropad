@@ -238,7 +238,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
 
 **Validation rules:**
 
-- `PORTAL_PRIMARY_CATEGORY` must not collide with any hardcoded category ID (`device`, `display`, `pads`, `actions`, `connectivity`, `audio`, `sensors`, `firmware`). If it does, the primary configuration is ignored.
+- `PORTAL_PRIMARY_CATEGORY` must not collide with any hardcoded category ID (`device`, `display`, `camera`, `pads`, `actions`, `connectivity`, `audio`, `sensors`, `firmware`). If it does, the primary configuration is ignored.
 - `PORTAL_PRIMARY_FRAGMENT` must resolve to an item inside `PORTAL_PRIMARY_CATEGORY`. If it doesn't, the entire primary configuration is ignored.
 - In AP mode, the primary category and `primary` object are suppressed entirely.
 
@@ -246,7 +246,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
 
 For a normal portal component, use one of the category IDs emitted by
 `kNavCategories` in `web_portal_component_api.cpp`: `device`, `display`,
-`pads`, `actions`, `connectivity`, `audio`, `sensors`, or `firmware`.
+`camera`, `pads`, `actions`, `connectivity`, `audio`, `sensors`, or `firmware`.
 
 The component registry accepts any category string, but `/api/portal/nav` emits
 only those fixed categories. A component assigned to an unknown category
@@ -1135,10 +1135,12 @@ Switch the active runtime screen (no persistence).
 
 ### Camera API
 
-The **Sensors > Camera** portal component is available only when `HAS_CAMERA`
-is enabled. It captures one color JPEG on demand; it does not provide a
-continuous stream. All camera endpoints require portal authentication when
-HTTP Basic Auth is enabled.
+The **Camera** category is available only when `HAS_CAMERA` is enabled. It
+contains **Camera settings**, which captures one color JPEG on demand for a
+diagnostic preview. When `HAS_STORAGE_BROWSER` is also enabled, **Snapshots**
+displays saved camera-action images. It does not provide a continuous stream.
+All camera and storage endpoints require portal authentication when HTTP Basic
+Auth is enabled.
 
 #### `GET /api/component/camera/config`
 
@@ -1178,8 +1180,8 @@ perform demosaicing or JPEG encoding.
 
 ### Storage API
 
-The read-only Storage page uses the generic component API. Both endpoints
-require portal authentication when HTTP Basic Auth is enabled.
+The Storage page and feature-specific file views use the generic component API.
+All endpoints require portal authentication when HTTP Basic Auth is enabled.
 
 #### `GET /api/component/storage/status`
 
@@ -1231,6 +1233,15 @@ same absolute, traversal-free validation as the directory list endpoint.
 Directories and missing files return `404`. PNG, JPEG, GIF, WebP, MP3, WAV,
 and Ogg files use their browser-recognized media type; other files use
 `application/octet-stream` so browsers download them.
+
+#### `DELETE /api/component/storage/delete?path=/camera/20260824/000001.jpg`
+
+Deletes one regular file or a directory and all its contents. The path uses the
+same absolute, traversal-free validation as the list endpoint, and the storage
+root (`/`) cannot be deleted. Returns `404` for a missing path and
+`{"success":true}` after a successful deletion. The Camera **Snapshots** view
+uses this endpoint for individual images, a dated camera-roll folder, and the
+latest snapshot copy.
 
 ---
 

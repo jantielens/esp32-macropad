@@ -10,3 +10,4 @@ bool storage_browser_path_is_safe(const String& path);
 const char* storage_browser_file_content_type(const String& path);
 void storage_browser_status_to_json(JsonObject result);
 bool storage_browser_list(const String& path, JsonObject result, const char*& error);
+bool storage_browser_remove(const String& path, const char*& error);

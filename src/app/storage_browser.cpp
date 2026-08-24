@@ -30,6 +30,25 @@ String entry_name(const String& entry_path) {
     const int slash = normalized.lastIndexOf('/');
     return slash >= 0 ? normalized.substring(slash + 1) : normalized;
 }
+
+bool remove_directory_tree(const String& path) {
+    File directory = Storage.open(path);
+    if (!directory || !directory.isDirectory()) return false;
+    while (true) {
+        File entry = directory.openNextFile();
+        if (!entry) break;
+        const String name = entry_name(entry.name());
+        const String entry_path = path == "/" ? "/" + name : path + "/" + name;
+        const bool is_directory = entry.isDirectory();
+        entry.close();
+        if (is_directory ? !remove_directory_tree(entry_path) : !Storage.remove(entry_path)) {
+            directory.close();
+            return false;
+        }
+    }
+    directory.close();
+    return Storage.rmdir(path);
+}
 } // namespace
 
 bool storage_browser_path_is_safe(const String& path) {
@@ -94,6 +113,26 @@ bool storage_browser_list(const String& path, JsonObject result, const char*& er
     directory.close();
     result["truncated"] = static_cast<bool>(entry);
     if (entry) entry.close();
+    return true;
+}
+
+bool storage_browser_remove(const String& path, const char*& error) {
+    if (!storage_browser_path_is_safe(path) || path == "/") {
+        error = "invalid storage path";
+        return false;
+    }
+
+    File entry = Storage.open(path);
+    if (!entry) {
+        error = "file or directory not found";
+        return false;
+    }
+    const bool is_directory = entry.isDirectory();
+    entry.close();
+    if (is_directory ? !remove_directory_tree(path) : !Storage.remove(path)) {
+        error = "could not delete storage path";
+        return false;
+    }
     return true;
 }
 #endif // HAS_STORAGE_BROWSER

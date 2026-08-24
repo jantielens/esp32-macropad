@@ -12,9 +12,7 @@
 #include <new>
 
 #define TAG "CameraAPI"
-// A changed exposure discards one completed sensor frame before encoding the
-// next one, so this must cover two CSI waits plus JPEG processing.
-#define CAMERA_CAPTURE_TIMEOUT_MS 4000
+#define CAMERA_CAPTURE_TIMEOUT_MS 2000
 
 struct CameraSnapshotRequest {
     CameraRawFrame* frame;

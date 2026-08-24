@@ -25,6 +25,7 @@ struct NavCategory {
 static const NavCategory kNavCategories[] = {
     {"device",       "Device",       "\xe2\x9a\x99\xef\xb8\x8f"},  // ⚙️
     {"display",      "Display",      "\xf0\x9f\x96\xa5\xef\xb8\x8f"}, // 🖥️
+    {"camera",       "Camera",       "\xf0\x9f\x93\xb7"},           // 📷
     {"pads",         "Pads",         "\xf0\x9f\x8e\x9b\xef\xb8\x8f"}, // 🎛️
     {"actions",      "Actions",      "\xe2\x9a\xa1"},               // ⚡
     {"connectivity", "Connectivity", "\xf0\x9f\x93\xa1"},           // 📡
@@ -363,6 +364,10 @@ void web_portal_register_component_routes(AsyncWebServer* server) {
     server->on(
         AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/([a-z0-9-]+)$"),
         HTTP_PUT, handleComponentActionRequest, nullptr, handleComponentActionBody);
+
+    server->on(
+        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/([a-z0-9-]+)$"),
+        HTTP_DELETE, handleComponentActionRequest);
 
     // CORS preflight for all component and portal routes
     server->on("/api/component/*", HTTP_OPTIONS, handleCorsPreflightGeneric);

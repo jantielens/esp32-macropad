@@ -48,10 +48,23 @@ void storage_file_get(AsyncWebServerRequest* request) {
     sendFileThrottled(request, path.c_str(), storage_browser_file_content_type(path));
 }
 
+void storage_delete(AsyncWebServerRequest* request) {
+    const String path = request->hasParam("path") ? request->getParam("path")->value() : "";
+    const char* error = nullptr;
+    if (!storage_browser_remove(path, error)) {
+        const int status = strcmp(error, "invalid storage path") == 0 ? 400 :
+            strcmp(error, "file or directory not found") == 0 ? 404 : 500;
+        web_portal_send_json_error(request, status, error);
+        return;
+    }
+    request->send(200, "application/json", "{\"success\":true}");
+}
+
 const ComponentAction storage_actions[] = {
     {"status", HTTP_GET, storage_status_get, nullptr},
     {"list", HTTP_GET, storage_list_get, nullptr},
     {"file", HTTP_GET, storage_file_get, nullptr},
+    {"delete", HTTP_DELETE, storage_delete, nullptr},
 };
 } // namespace
 

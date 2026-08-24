@@ -486,6 +486,23 @@ echo "=== Running unit tests: action_parse ==="
 ./tests/bin/test_action_parse
 echo
 
+echo "=== Building unit tests: camera capture action ==="
+g++ -std=c++17 -Wall -Wextra -Werror -Wno-deprecated-declarations \
+    -DHAS_CAMERA=1 \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I tests -I src/app \
+    -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_camera_capture_action.cpp \
+    src/app/action_continuation.cpp \
+    src/app/action_registry.cpp \
+    src/app/binding_template.cpp \
+    tests/stubs.cpp \
+    -o tests/bin/test_camera_capture_action
+
+echo "=== Running unit tests: camera capture action ==="
+./tests/bin/test_camera_capture_action
+echo
+
 echo "=== Building unit tests: action continuation ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -include tests/log_manager.h -include tests/board_config.h \

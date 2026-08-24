@@ -143,6 +143,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_VISUAL_ALERT "visual_alert"
 #define ACTION_TYPE_CYCLE_PAD "cycle_pad"
 #define ACTION_TYPE_DELAY    "delay"
+#define ACTION_TYPE_CAMERA_CAPTURE "camera_capture"
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
 
@@ -236,6 +237,9 @@ struct CyclePadPayload {
 struct DelayPayload {
     uint32_t duration_ms;                          // 1-55000 ms
 };
+struct CameraCapturePayload {
+    char save_to[7];                               // "latest", "roll", or "both"
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -268,9 +272,10 @@ union ActionPayload {
     VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
     CyclePadPayload   cycle_pad;    // type == ACTION_TYPE_CYCLE_PAD
     DelayPayload      delay;        // type == ACTION_TYPE_DELAY
+    CameraCapturePayload camera_capture; // type == ACTION_TYPE_CAMERA_CAPTURE
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
-    // back, ble_pair, "" (none) carry no payload data — only the type tag.
+    // back, ble_pair, and "" (none) carry no payload data — only the type tag.
 };
 
 struct ButtonAction {

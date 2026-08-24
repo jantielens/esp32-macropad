@@ -14,3 +14,4 @@
 #include "notify_action.cpp"
 #include "visual_alert_action.cpp"
 #include "timer_action.cpp"
+#include "camera_capture_action.cpp"

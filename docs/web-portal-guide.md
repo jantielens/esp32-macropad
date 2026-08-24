@@ -65,7 +65,10 @@ contents, select **Open** beside a file to view supported media in your browser
 or download other file types, or use **Refresh** to reload the storage summary
 and root folder.
 
-The page does not support file uploads, deletion, or formatting.
+The general Storage page does not support file uploads, deletion, or
+formatting. Feature-specific views may offer deletion for their own files; the
+Camera **Snapshots** page can remove a saved image, a day's camera-roll folder,
+or the latest snapshot copy.
 
 ## Music Library
 

@@ -101,8 +101,8 @@ void camera_save_config(AsyncWebServerRequest* request, uint8_t* data, size_t le
 
 static ComponentDef camera_component = {
     .id = "camera",
-    .category = "sensors",
-    .display_name = "Camera",
+    .category = "camera",
+    .display_name = "Camera settings",
     .nav_order = 30,
     .get_config = camera_get_config,
     .save_config = nullptr,
@@ -114,5 +114,10 @@ static ComponentDef camera_component = {
 };
 
 REGISTER_COMPONENT(camera);
+
+#if HAS_STORAGE_BROWSER
+REGISTER_NAV_COMPONENT(camera_snapshots, "camera-snapshots", "camera", "Snapshots", 40,
+                       "camera-snapshots");
+#endif
 
 #endif // HAS_CAMERA

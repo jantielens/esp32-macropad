@@ -99,7 +99,10 @@ function actionEditorGenericFieldsHTML(prefix) {
                 html += '</label>';
                 if (field.type === 'select') {
                     html += '<select class="form-select form-select-sm" id="' + id + '">';
-                    html += field.command_options ? actionEditorCommandOptionsHTML(entry.type) : '';
+                    if (field.command_options) html += actionEditorCommandOptionsHTML(entry.type);
+                    else if (field.options) html += field.options.map(function(option) {
+                        return '<option value="' + option.id + '">' + option.label + '</option>';
+                    }).join('');
                     html += '</select>';
                 } else {
                     var inputType = field.type === 'number' ? 'number' : 'text';
@@ -123,7 +126,7 @@ function actionEditorSetGenericFields(prefix, type, action) {
         var el = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
         if (!el) return;
         if (field.type === 'toggle') el.checked = !!action[field.name];
-        else el.value = action[field.name] === undefined ? '' : action[field.name];
+        else el.value = action[field.name] === undefined ? (field.default || '') : action[field.name];
     });
 }
 

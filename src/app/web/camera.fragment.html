@@ -1,6 +1,6 @@
 <div class="section-header">
-  <h2>Camera</h2>
-  <p>Capture a single color JPEG from the onboard camera.</p>
+  <h2>Camera settings</h2>
+  <p>Configure the onboard camera and test its current image settings.</p>
 </div>
 <div class="card mb-3">
   <div class="card-body">
@@ -33,13 +33,13 @@
     </div>
     <div class="save-bar">
       <button type="button" class="btn btn-outline-primary btn-sm" id="camera-save-btn">Save settings</button>
-      <button type="button" class="btn btn-primary btn-sm" id="camera-capture-btn">Capture</button>
+      <button type="button" class="btn btn-primary btn-sm" id="camera-capture-btn">Test capture</button>
       <a class="btn btn-outline-secondary btn-sm disabled" id="camera-download-btn" download="camera.jpg">Download JPEG</a>
     </div>
   </div>
 </div>
 <div class="card" id="camera-preview-card" hidden>
   <div class="card-body">
-    <img class="camera-preview" id="camera-preview" alt="Latest camera capture">
+    <img class="camera-preview" id="camera-preview" alt="Camera test capture">
   </div>
 </div>

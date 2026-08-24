@@ -76,6 +76,7 @@ portal_health.js
 
 # [chunk:storage HAS_STORAGE_BROWSER]
 portal_storage.js
+portal_camera_snapshots.js
 
 # [chunk:music HAS_SOUND_PLAYER]
 portal_music.js

@@ -1010,7 +1010,7 @@ asset_feature_flag() {
             echo "HAS_BLE_HID" ;;
         volume)
             echo "HAS_AUDIO" ;;
-        camera|portal_camera)
+        camera|camera_snapshots|portal_camera|portal_camera_snapshots)
             echo "HAS_CAMERA" ;;
         sounds)
             echo "HAS_SOUND_PLAYER" ;;
