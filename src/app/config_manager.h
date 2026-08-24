@@ -20,6 +20,7 @@
 
 #include <Arduino.h>
 #include "board_config.h"
+#include "camera.h"
 
 // Maximum string lengths
 #define CONFIG_SSID_MAX_LEN 32
@@ -137,6 +138,15 @@ struct DeviceConfig {
 		bool idle_screen_enabled;                // default false
 		uint16_t idle_screen_timeout_seconds;    // default 300 (5 min)
 		char idle_screen_pad[CONFIG_IDLE_SCREEN_PAD_MAX_LEN]; // transient pad shown while idle
+#endif
+
+#if HAS_CAMERA
+		uint8_t camera_jpeg_quality;             // default CAMERA_JPEG_QUALITY_DEFAULT
+		uint16_t camera_output_width;            // default CAMERA_OUTPUT_WIDTH_DEFAULT
+		uint16_t camera_output_height;           // default CAMERA_OUTPUT_HEIGHT_DEFAULT
+		uint16_t camera_exposure_lines;          // default CAMERA_EXPOSURE_LINES_DEFAULT
+		uint16_t camera_white_balance_red_q8;    // default CAMERA_WHITE_BALANCE_Q8_DEFAULT
+		uint16_t camera_white_balance_blue_q8;   // default CAMERA_WHITE_BALANCE_Q8_DEFAULT
 #endif
 
 

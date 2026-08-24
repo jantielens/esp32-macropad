@@ -95,6 +95,10 @@ SET_LOOP_TASK_STACK_SIZE(LOOP_TASK_STACK_SIZE);
 #include "touch_manager.h"
 #endif
 
+#if HAS_CAMERA
+#include "camera.h"
+#endif
+
 // Configuration
 DeviceConfig device_config;
 bool config_loaded = false;
@@ -250,11 +254,18 @@ void setup()
 	// which can run in the background while touch, config, and pads initialize.
 	wifi_manager_early_init();
 
-	#if HAS_TOUCH
-	// Initialize Wire bus mutex before touch and audio (both may share bus 0)
+	#if HAS_TOUCH || HAS_CAMERA
+	// Initialize Wire bus mutex before touch, audio, and camera SCCB access.
 	i2c_bus_init();
+	#endif
+
+	#if HAS_TOUCH
 	// Initialize touch after display is ready
 	touch_manager_init();
+	#endif
+
+	#if HAS_CAMERA
+	camera_init();
 	#endif
 
 	// Initialize configuration manager
@@ -287,6 +298,33 @@ void setup()
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		device_config.magic = CONFIG_MAGIC;
 	}
+
+	#if HAS_CAMERA
+	if (!camera_set_capture_settings({
+		.jpeg_quality = device_config.camera_jpeg_quality,
+		.output_width = device_config.camera_output_width,
+		.output_height = device_config.camera_output_height,
+		.exposure_lines = device_config.camera_exposure_lines,
+		.white_balance_red_q8 = device_config.camera_white_balance_red_q8,
+		.white_balance_blue_q8 = device_config.camera_white_balance_blue_q8,
+	})) {
+		device_config.camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
+		device_config.camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
+		device_config.camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
+		device_config.camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
+		device_config.camera_white_balance_red_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+		device_config.camera_white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+		camera_set_capture_settings({
+			.jpeg_quality = device_config.camera_jpeg_quality,
+			.output_width = device_config.camera_output_width,
+			.output_height = device_config.camera_output_height,
+			.exposure_lines = device_config.camera_exposure_lines,
+			.white_balance_red_q8 = device_config.camera_white_balance_red_q8,
+			.white_balance_blue_q8 = device_config.camera_white_balance_blue_q8,
+		});
+		LOGW("Camera", "Invalid saved camera settings; restored defaults");
+	}
+	#endif
 
 	#if HAS_SOUND_PLAYER
 	// The audio worker discovers Music files as soon as it starts, so mount the

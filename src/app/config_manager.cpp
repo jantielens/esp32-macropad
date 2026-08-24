@@ -40,6 +40,14 @@
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
+#if HAS_CAMERA
+#define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
+#define KEY_CAMERA_OUTPUT_WIDTH "cam_out_w"
+#define KEY_CAMERA_OUTPUT_HEIGHT "cam_out_h"
+#define KEY_CAMERA_EXPOSURE_LINES "cam_exp"
+#define KEY_CAMERA_WHITE_BALANCE_RED "cam_wb_r"
+#define KEY_CAMERA_WHITE_BALANCE_BLUE "cam_wb_b"
+#endif
 
 #if HAS_BLE
 #define KEY_BLE_BURST_COUNT     "ble_brst"
@@ -214,6 +222,15 @@ bool config_manager_load(DeviceConfig *config) {
 				config->idle_screen_pad[0] = '\0';
 				#endif
 
+				#if HAS_CAMERA
+				config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
+				config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
+				config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
+				config->camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
+				config->camera_white_balance_red_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+				config->camera_white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+				#endif
+
 				// Let registered device classes seed their own defaults.
 				device_class_dispatch_config_defaults(config);
 				
@@ -318,6 +335,15 @@ bool config_manager_load(DeviceConfig *config) {
 		config->idle_screen_enabled = preferences.getBool(KEY_IDLE_SCREEN_ENABLED, false);
 		config->idle_screen_timeout_seconds = preferences.getUShort(KEY_IDLE_SCREEN_TIMEOUT, 300);
 		preferences.getString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad, CONFIG_IDLE_SCREEN_PAD_MAX_LEN);
+		#endif
+
+		#if HAS_CAMERA
+		config->camera_jpeg_quality = preferences.getUChar(KEY_CAMERA_JPEG_QUALITY, CAMERA_JPEG_QUALITY_DEFAULT);
+		config->camera_output_width = preferences.getUShort(KEY_CAMERA_OUTPUT_WIDTH, CAMERA_OUTPUT_WIDTH_DEFAULT);
+		config->camera_output_height = preferences.getUShort(KEY_CAMERA_OUTPUT_HEIGHT, CAMERA_OUTPUT_HEIGHT_DEFAULT);
+		config->camera_exposure_lines = preferences.getUShort(KEY_CAMERA_EXPOSURE_LINES, CAMERA_EXPOSURE_LINES_DEFAULT);
+		config->camera_white_balance_red_q8 = preferences.getUShort(KEY_CAMERA_WHITE_BALANCE_RED, CAMERA_WHITE_BALANCE_Q8_DEFAULT);
+		config->camera_white_balance_blue_q8 = preferences.getUShort(KEY_CAMERA_WHITE_BALANCE_BLUE, CAMERA_WHITE_BALANCE_Q8_DEFAULT);
 		#endif
 
 		// Let registered device classes load their own fields from the same
@@ -431,6 +457,15 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putBool(KEY_IDLE_SCREEN_ENABLED, config->idle_screen_enabled);
 		preferences.putUShort(KEY_IDLE_SCREEN_TIMEOUT, config->idle_screen_timeout_seconds);
 		preferences.putString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad);
+		#endif
+
+		#if HAS_CAMERA
+		preferences.putUChar(KEY_CAMERA_JPEG_QUALITY, config->camera_jpeg_quality);
+		preferences.putUShort(KEY_CAMERA_OUTPUT_WIDTH, config->camera_output_width);
+		preferences.putUShort(KEY_CAMERA_OUTPUT_HEIGHT, config->camera_output_height);
+		preferences.putUShort(KEY_CAMERA_EXPOSURE_LINES, config->camera_exposure_lines);
+		preferences.putUShort(KEY_CAMERA_WHITE_BALANCE_RED, config->camera_white_balance_red_q8);
+		preferences.putUShort(KEY_CAMERA_WHITE_BALANCE_BLUE, config->camera_white_balance_blue_q8);
 		#endif
 
 		// Let registered device classes persist their own fields.
@@ -681,5 +716,13 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		if (strlen(config->screen_saver_wake_binding) > 0) {
 				LOGI("Config", "SS wake binding: %s", config->screen_saver_wake_binding);
 		}
+#endif
+
+#if HAS_CAMERA
+		LOGI("Config", "Camera: quality=%u output=%ux%u exposure=%u WB=%u/%u", config->camera_jpeg_quality,
+				(unsigned)config->camera_output_width, (unsigned)config->camera_output_height,
+				(unsigned)config->camera_exposure_lines,
+				(unsigned)config->camera_white_balance_red_q8,
+				(unsigned)config->camera_white_balance_blue_q8);
 #endif
 }

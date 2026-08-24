@@ -15,6 +15,15 @@
 #define HAS_TOUCH true
 #define HAS_BACKLIGHT true
 #define HAS_NATIVE_EXTENSIONS true
+#define HAS_CAMERA true
+#define CAMERA_DRIVER CAMERA_DRIVER_OV02C10_P4
+#define CAMERA_SCCB_ADDR 0x36  // OV02C10 sensor, shared I2C bus with GT911
+#define CAMERA_SENSOR_ID_REG_HIGH 0x300A
+#define CAMERA_SENSOR_EXPECTED_ID 0x5602
+#define CAMERA_CAPTURE_WIDTH 1280
+#define CAMERA_CAPTURE_HEIGHT 720
+#define CAMERA_CSI_DATA_LANES 1
+#define CAMERA_CSI_LANE_BIT_RATE_MBPS 400
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
 

@@ -1,0 +1,45 @@
+<div class="section-header">
+  <h2>Camera</h2>
+  <p>Capture a single color JPEG from the onboard camera.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="camera-status mb-3" id="camera-status" role="status">Checking camera...</div>
+    <div class="grid-2col mb-3">
+      <div>
+        <label class="form-label" for="camera-jpeg-quality">JPEG quality</label>
+        <input class="form-range" id="camera-jpeg-quality" type="range" min="30" max="90" step="1" value="60">
+        <div class="form-text"><span id="camera-jpeg-quality-value">60</span> (30-90)</div>
+      </div>
+      <div>
+        <label class="form-label" for="camera-output-dimensions">JPEG output</label>
+        <select class="form-select" id="camera-output-dimensions"></select>
+        <div class="form-text" id="camera-raw-mode"></div>
+      </div>
+    </div>
+    <div class="grid-2col mb-3">
+      <div>
+        <label class="form-label" for="camera-exposure-lines">Exposure</label>
+        <input class="form-range" id="camera-exposure-lines" type="range" min="8" max="1149" step="1" value="512">
+        <div class="form-text"><span id="camera-exposure-lines-value">512</span> lines</div>
+      </div>
+      <div>
+        <label class="form-label" for="camera-wb-red">White balance</label>
+        <div class="grid-2col">
+          <div><input class="form-control" id="camera-wb-red" type="number" min="64" max="1024" step="1" value="256" aria-label="Red gain"><div class="form-text">Red gain / 256</div></div>
+          <div><input class="form-control" id="camera-wb-blue" type="number" min="64" max="1024" step="1" value="256" aria-label="Blue gain"><div class="form-text">Blue gain / 256</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="save-bar">
+      <button type="button" class="btn btn-outline-primary btn-sm" id="camera-save-btn">Save settings</button>
+      <button type="button" class="btn btn-primary btn-sm" id="camera-capture-btn">Capture</button>
+      <a class="btn btn-outline-secondary btn-sm disabled" id="camera-download-btn" download="camera.jpg">Download JPEG</a>
+    </div>
+  </div>
+</div>
+<div class="card" id="camera-preview-card" hidden>
+  <div class="card-body">
+    <img class="camera-preview" id="camera-preview" alt="Latest camera capture">
+  </div>
+</div>

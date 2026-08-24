@@ -815,6 +815,55 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define HAS_IMAGE_FETCH HAS_DISPLAY
 #endif
 
+// Enable onboard camera hardware support.
+#ifndef HAS_CAMERA
+#define HAS_CAMERA false
+#endif
+
+// Camera driver selector values.
+#define CAMERA_DRIVER_NONE 0
+#define CAMERA_DRIVER_OV02C10_P4 1
+
+// Select the board-specific camera driver.
+#ifndef CAMERA_DRIVER
+#define CAMERA_DRIVER CAMERA_DRIVER_NONE
+#endif
+
+// Camera sensor SCCB/I2C address.
+#ifndef CAMERA_SCCB_ADDR
+#define CAMERA_SCCB_ADDR 0x00
+#endif
+
+// Camera sensor product ID high-byte register.
+#ifndef CAMERA_SENSOR_ID_REG_HIGH
+#define CAMERA_SENSOR_ID_REG_HIGH 0x0000
+#endif
+
+// Camera sensor product ID expected from the high and low ID registers.
+#ifndef CAMERA_SENSOR_EXPECTED_ID
+#define CAMERA_SENSOR_EXPECTED_ID 0x0000
+#endif
+
+// Camera sensor raw capture width in pixels.
+#ifndef CAMERA_CAPTURE_WIDTH
+#define CAMERA_CAPTURE_WIDTH 0
+#endif
+
+// Camera sensor raw capture height in pixels.
+#ifndef CAMERA_CAPTURE_HEIGHT
+#define CAMERA_CAPTURE_HEIGHT 0
+#endif
+
+// Camera CSI data lane count.
+#ifndef CAMERA_CSI_DATA_LANES
+#define CAMERA_CSI_DATA_LANES 0
+#endif
+
+// Camera CSI lane bit rate in Mbps.
+#ifndef CAMERA_CSI_LANE_BIT_RATE_MBPS
+#define CAMERA_CSI_LANE_BIT_RATE_MBPS 0
+#endif
+
 // Display driver selection
 // Available drivers:
 //   DISPLAY_DRIVER_TFT_ESPI (1) - Bodmer's TFT_eSPI (supports ILI9341, ST7789, etc.)

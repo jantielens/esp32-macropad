@@ -34,6 +34,10 @@
 #include "components/storage_component.cpp"
 #endif // HAS_STORAGE_BROWSER
 
+#if HAS_CAMERA
+#include "components/camera_component.cpp"
+#endif // HAS_CAMERA
+
 // --- Display-gated components ---
 #if HAS_DISPLAY
 #include "components/display_component.cpp"

@@ -24,6 +24,10 @@
 #include "web_portal_sounds.h"
 #endif
 
+#if HAS_CAMERA
+#include "web_portal_camera.h"
+#endif
+
 // ============================================================================
 // Route initializer registry — populated by REGISTER_ROUTES() in feature .cpp
 // files aggregated through route_components.cpp at the sketch root.
@@ -188,6 +192,14 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/icons/file", HTTP_GET, handleGetIconFile);
 		server->on("/api/icons/file", HTTP_DELETE, handleDeleteIconFile);
 
+#endif
+
+#if HAS_CAMERA
+		registerOptions("/api/camera/snapshot.raw");
+		server->on("/api/camera/snapshot.raw", HTTP_GET, handleGetCameraRawSnapshot);
+
+		registerOptions("/api/camera/snapshot.jpg");
+		server->on("/api/camera/snapshot.jpg", HTTP_GET, handleGetCameraJpegSnapshot);
 #endif
 
 		// OTA upload endpoint

@@ -1133,6 +1133,49 @@ Switch the active runtime screen (no persistence).
 
 ---
 
+### Camera API
+
+The **Sensors > Camera** portal component is available only when `HAS_CAMERA`
+is enabled. It captures one color JPEG on demand; it does not provide a
+continuous stream. All camera endpoints require portal authentication when
+HTTP Basic Auth is enabled.
+
+#### `GET /api/component/camera/config`
+
+Returns camera availability, the verified RAW10 sensor mode, active JPEG,
+manual exposure, and white-balance settings, and their bounded values.
+
+#### `POST /api/component/camera/config`
+
+Persists JPEG encoder, manual exposure, and white-balance configuration. The
+request must use advertised ranges and output dimensions from `GET`.
+
+```json
+{
+  "jpeg_quality": 60,
+  "output_width": 640,
+  "output_height": 360,
+  "exposure_lines": 512,
+  "white_balance_red_q8": 256,
+  "white_balance_blue_q8": 256
+}
+```
+
+#### `GET /api/camera/snapshot.jpg`
+
+Captures and streams one color JPEG using the active settings. The response
+has `Content-Type: image/jpeg` and includes `X-Camera-Width`,
+`X-Camera-Height`, and `X-Camera-Color-Mode: color` headers.
+
+#### `GET /api/camera/snapshot.raw`
+
+Captures and streams one raw sensor frame as `application/octet-stream`. The
+response includes `X-Camera-Width`, `X-Camera-Height`, and
+`X-Camera-Pixel-Format: RAW10` headers. This diagnostic endpoint does not
+perform demosaicing or JPEG encoding.
+
+---
+
 ### Storage API
 
 The read-only Storage page uses the generic component API. Both endpoints

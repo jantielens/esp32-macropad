@@ -98,6 +98,7 @@ portal_pad_editor.js
 # Navigation shell, fragment init, and the entry point (must be last chunk).
 portal_nav.js
 portal_fragment_init.js
+portal_camera.js
 portal.js
 
 # [chunk:epaper HAS_EPAPER]
