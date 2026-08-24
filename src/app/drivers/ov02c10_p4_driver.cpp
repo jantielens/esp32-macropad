@@ -606,10 +606,6 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
         return false;
     }
 
-    if (frame) {
-        LOGI("Camera", "Captured color JPEG: %u bytes (%ux%u)",
-             static_cast<unsigned>(frame->size), frame->width, frame->height);
-    }
     return true;
 }
 

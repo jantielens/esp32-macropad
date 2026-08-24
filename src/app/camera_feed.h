@@ -43,5 +43,5 @@ CameraFeedState camera_feed_get_state();
 bool camera_feed_acquire_frame(CameraFeedFrame* frame, CameraFeedOutput output);
 void camera_feed_release_frame(const CameraFeedFrame* frame);
 
-// Captures at most one new frame per second. Must run on the Arduino loop.
+// Captures at the configured bounded cadence. Must run on the Arduino loop.
 void camera_feed_loop();

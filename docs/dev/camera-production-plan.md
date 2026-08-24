@@ -200,7 +200,7 @@ Acceptance checks:
 
 ## Phase 4: MJPEG Feed API
 
-Status: Not started
+Status: Implemented, pending hardware validation
 
 Goal: provide an authenticated `multipart/x-mixed-replace` endpoint backed by
 the shared cached JPEG frame.
@@ -222,15 +222,15 @@ Implementation requirements:
   clients
 * Terminate cleanly on disconnect and decrement the producer's web-consumer
   count
-* Bound output rate, response queueing, and maximum client lifetime
+* Bound output rate to the producer cadence without a per-client frame queue
 * Continue to serve individual snapshots through the existing endpoint
 
 Acceptance checks:
 
 * A browser renders the stream for at least 10 minutes without memory growth
-* A disconnected client releases its consumer reservation
+* A disconnected client releases its consumer reservation and JPEG demand
 * A snapshot-save action and one stream client coexist without capture races
-* Frame cadence and Wi-Fi throughput are logged for hardware measurement
+* Frame cadence and Wi-Fi throughput are measured during hardware validation
 
 ## Deferred Work
 

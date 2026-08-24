@@ -1139,9 +1139,9 @@ Switch the active runtime screen (no persistence).
 The **Camera** category is available only when `HAS_CAMERA` is enabled. It
 contains **Camera settings**, which captures one color JPEG on demand for a
 diagnostic preview. When `HAS_STORAGE_BROWSER` is also enabled, **Snapshots**
-displays saved camera-action images. It does not provide a continuous stream.
-All camera and storage endpoints require portal authentication when HTTP Basic
-Auth is enabled.
+displays saved camera-action images. The API also provides one cached JPEG
+MJPEG stream. All camera and storage endpoints require portal authentication
+when HTTP Basic Auth is enabled.
 
 #### `GET /api/component/camera/config`
 
@@ -1176,6 +1176,14 @@ Captures and streams one raw sensor frame as `application/octet-stream`. The
 response includes `X-Camera-Width`, `X-Camera-Height`, and
 `X-Camera-Pixel-Format: RAW10` headers. This diagnostic endpoint does not
 perform demosaicing or JPEG encoding.
+
+#### `GET /api/camera/stream`
+
+Streams the newest cached JPEG frames as
+`multipart/x-mixed-replace; boundary=esp32-macropad`. The stream never captures
+directly from the request task. It activates JPEG demand in the shared camera
+feed and ends that demand when the client disconnects. One authenticated stream
+client is allowed; additional requests receive `429 Too Many Requests`.
 
 ---
 

@@ -19,4 +19,12 @@ grep -q 'WIDGET_CAMERA_PREVIEW' src/app/web/pad-editor.fragment.html
 grep -q 'widget_camera_scale' src/app/web/portal_pad_dialog.js
 grep -q 'has_camera === true' src/app/web/portal_pad_editor.js
 
+CAMERA_API="src/app/web_portal_camera.cpp"
+grep -q 'class CameraMjpegResponse final : public AsyncWebServerResponse' "$CAMERA_API"
+grep -q 'CAMERA_FEED_OUTPUT_JPEG' "$CAMERA_API"
+grep -q 'camera_feed_release_frame(&frame)' "$CAMERA_API"
+grep -q 'request->client()->onPoll' "$CAMERA_API"
+grep -q 'Camera stream already in use' "$CAMERA_API"
+grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
+
 echo "PASS: camera preview widget wiring"

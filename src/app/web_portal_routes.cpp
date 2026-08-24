@@ -200,6 +200,8 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		registerOptions("/api/camera/snapshot.jpg");
 		server->on("/api/camera/snapshot.jpg", HTTP_GET, handleGetCameraJpegSnapshot);
+
+		server->on("/api/camera/stream", HTTP_GET, handleGetCameraMjpegStream);
 #endif
 
 		// OTA upload endpoint

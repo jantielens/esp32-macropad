@@ -8,5 +8,6 @@
 
 void handleGetCameraRawSnapshot(AsyncWebServerRequest* request);
 void handleGetCameraJpegSnapshot(AsyncWebServerRequest* request);
+void handleGetCameraMjpegStream(AsyncWebServerRequest* request);
 
 #endif
