@@ -32,6 +32,9 @@ grep -q 'CAMERA_MJPEG_MAX_CLIENTS' "$CAMERA_API"
 grep -q 'Camera stream client limit reached' "$CAMERA_API"
 grep -q 'camera_stop_csi_capture();' "$CAMERA_DRIVER"
 grep -q 's_rgb565_raw_staging' "$CAMERA_DRIVER"
+grep -q '#define HAS_CAMERA true' src/boards/jc1060p470c/board_overrides.h
+grep -q '#define CAMERA_DRIVER CAMERA_DRIVER_OV02C10_P4' src/boards/jc1060p470c/board_overrides.h
+grep -q '../jc1060p470c/board_overrides.h' src/boards/jc1060p470c-sd/board_overrides.h
 grep -q 'exposure_line_time_us' "$CAMERA_COMPONENT"
 grep -q 'camera-exposure-time-value' src/app/web/camera.fragment.html
 grep -q 'camera-wb-red" type="range"' src/app/web/camera.fragment.html

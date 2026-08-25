@@ -31,7 +31,9 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | cyd-v2 | TFT_ESPI | ILI9341 | SPI | 320×240 | 1 | XPT2046 | inversion on, gamma fix |
 | esp32-4848S040 | ST7701_RGB | ST7701 | SPI | 480×480 | 0 | GT911 |  |
 | esp32-p4-lcd4b | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
+| esp32-p4-lcd4b-voice | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
 | esp32c3-withsensors | ? | ? | ? | ?×? | ? | none |  |
+| firebeetle2-esp32c6-aht10 | ? | ? | ? | ?×? | ? | none |  |
 | inkplate5v2 | ? | ? | ? | ?×? | ? | none |  |
 | inkplate6flick | ? | ? | ? | ?×? | ? | none |  |
 | jc1060p470c | JD9165_DSI | JD9165 | DSI | 1024×600 | 1 | GT911 |  |

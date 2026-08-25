@@ -54,7 +54,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Bluetooth HID keyboard** (ESP32-P4) — send keystrokes, modifier combos, media keys, and multi-step sequences to any paired host with single-owner pairing
 - **Remote control from HA** — switch screens, trigger beeps, play tones, set volume, send notifications
 - **Resilient WiFi** — event-driven tiered reconnect keeps the display responsive through outages, with gateway-ping liveness detection
-- **Live camera feeds** — OV02C10 JPEG snapshots and **MJPEG streaming** at up to 4 fps on the supported ESP32-P4 camera board
+- **Live camera feeds** — OV02C10 JPEG snapshots and **MJPEG streaming** at up to 4 fps on supported ESP32-P4 camera boards
 - **OTA updates** with rollback protection — flash from the web portal or the online installer
 
 ### Web configuration portal
