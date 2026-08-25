@@ -19,7 +19,7 @@ int main() {
         return true;
     }));
     const char* const expected[] = {
-        "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
+        "/camera", "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
     };
     assert(roots.size() == sizeof(expected) / sizeof(expected[0]));
     for (size_t index = 0; index < roots.size(); ++index) {

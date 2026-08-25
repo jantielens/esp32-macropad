@@ -4,7 +4,10 @@ const vm = require('vm');
 
 const context = {
 	console,
-	document: { addEventListener() {} }
+	document: {
+		addEventListener() {},
+		getElementById() { return null; }
+	}
 };
 vm.createContext(context);
 const source = fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8');

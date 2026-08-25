@@ -38,14 +38,21 @@ EspTestDouble ESP;
 FakeStorage SD_MMC;
 static esp_err_t s_nvs_erase_result = ESP_OK;
 
+struct SerialTestDouble {
+    void flush() {}
+};
+
+SerialTestDouble Serial;
+
 unsigned long millis() { return 0; }
+void delay(unsigned long) {}
 esp_err_t nvs_flash_erase() { return s_nvs_erase_result; }
 esp_err_t nvs_flash_init() { return ESP_OK; }
 
 #include "config_manager.cpp"
 
 static const char* const kOwnedRoots[] = {
-    "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
+    "/camera", "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
 };
 
 static void seed_filesystem() {
