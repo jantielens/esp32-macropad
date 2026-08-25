@@ -1169,6 +1169,8 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | Key | Returns | Example value |
 |-----|---------|---------------|
 | `cpu` | CPU usage percentage | `42` |
+| `cpu_core_0` | Current Core 0 CPU usage percentage (`?` when unavailable) | `67` |
+| `cpu_core_1` | Current Core 1 CPU usage percentage (`?` when unavailable) | `18` |
 | `rssi` | WiFi signal strength (dBm) | `-54` |
 | `uptime` | Seconds since boot | `86400` |
 | `chip` | SoC model name | `ESP32-S3` |
@@ -1235,6 +1237,7 @@ Values are cached for up to 2 seconds to keep the CPU impact low.
 
 ```
 CPU: [health:cpu]%                                     → CPU: 42%
+[health:cpu_core_0]% / [health:cpu_core_1]%             → 67% / 18%
 [health:heap_free;%d] bytes free                       → 145320 bytes free
 WiFi: [health:rssi] dBm                               → WiFi: -54 dBm
 [health:wifi_ssid]                                     → MyNetwork

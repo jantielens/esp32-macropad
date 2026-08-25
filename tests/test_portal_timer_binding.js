@@ -17,6 +17,10 @@ for (const token of [
     assert.strictEqual(context.validateBinding(token).valid, true, token);
 }
 
+for (const token of ['[health:cpu_core_0]', '[health:cpu_core_1]']) {
+    assert.strictEqual(context.validateBinding(token).valid, true, token);
+}
+
 const invalid = context.validateBinding('[timer:1_unknown]');
 assert.strictEqual(invalid.valid, false);
 assert.match(invalid.errors[0].message, /_target/);

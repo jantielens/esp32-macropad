@@ -782,7 +782,7 @@ bindingRegisterScheme('health', {
     keysLabel: 'health key',
     formatParam: 1,
     keys: [
-        'cpu', 'rssi', 'uptime',
+        'cpu', 'cpu_core_0', 'cpu_core_1', 'rssi', 'uptime',
         'heap_free', 'heap_min', 'heap_largest', 'heap_internal',
         'psram_free', 'psram_min', 'psram_largest',
         'heap_total', 'heap_internal_total', 'heap_internal_used',

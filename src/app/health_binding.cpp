@@ -74,6 +74,8 @@ static void ensure_static_initialized() {
 static uint32_t s_last_refresh_ms = 0;
 static uint32_t s_last_mem_refresh_ms = 0;
 static int s_cpu = -1;
+static constexpr uint8_t kHealthCpuCoreCount = 2;
+static int s_cpu_cores[kHealthCpuCoreCount] = {-1, -1};
 static int16_t s_rssi = 0;
 static bool s_rssi_valid = false;
 static DeviceMemorySnapshot s_mem = {};
@@ -86,7 +88,7 @@ static void refresh_if_stale() {
     if (now - s_last_refresh_ms < HEALTH_BINDING_REFRESH_MS && s_last_refresh_ms != 0) return;
     s_last_refresh_ms = now;
 
-    s_cpu = device_telemetry_get_cpu_usage();
+    device_telemetry_get_cpu_usage_snapshot(&s_cpu, s_cpu_cores, kHealthCpuCoreCount);
     s_rssi = device_telemetry_get_cached_rssi(&s_rssi_valid);
 
     s_wifi_connected = (WiFi.status() == WL_CONNECTED);
@@ -149,10 +151,28 @@ static bool health_key_requires_memory_snapshot(const char* key) {
 // Key→value lookup
 // ============================================================================
 
+static int health_cpu_core_index(const char* key) {
+    static constexpr char kCpuCorePrefix[] = "cpu_core_";
+    constexpr size_t kSuffixIndex = sizeof(kCpuCorePrefix) - 1;
+    if (strncmp(key, kCpuCorePrefix, kSuffixIndex) != 0 ||
+        key[kSuffixIndex + 1] != '\0' ||
+        key[kSuffixIndex] < '0' || key[kSuffixIndex] >= '0' + kHealthCpuCoreCount) {
+        return -1;
+    }
+    return key[kSuffixIndex] - '0';
+}
+
 static bool lookup_value(const char* key, char* out, size_t out_len) {
     if (strcmp(key, "cpu") == 0) {
         if (s_cpu < 0) { strlcpy(out, "?", out_len); return true; }
         snprintf(out, out_len, "%d", s_cpu);
+        return true;
+    }
+    const int core = health_cpu_core_index(key);
+    if (core >= 0) {
+        const int usage = s_cpu_cores[core];
+        if (usage < 0) { strlcpy(out, "?", out_len); return true; }
+        snprintf(out, out_len, "%d", usage);
         return true;
     }
     if (strcmp(key, "rssi") == 0) {
@@ -416,6 +436,8 @@ static void health_binding_collect(const char* params, void* user_data) {
 struct HealthKeyDef { const char* key; const char* desc; };
 static const HealthKeyDef HEALTH_KEYS[] = {
     {"cpu",                 "CPU usage % (0-100)"},
+    {"cpu_core_0",          "Core 0 CPU usage % (0-100; ? if unavailable)"},
+    {"cpu_core_1",          "Core 1 CPU usage % (0-100; ? if unavailable)"},
     {"rssi",                "WiFi signal strength, dBm"},
     {"uptime",              "seconds since boot"},
     {"chip",                "SoC model, e.g. ESP32-S3"},

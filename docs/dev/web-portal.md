@@ -197,6 +197,7 @@ Real-time device health monitoring integrated as a header badge with expandable 
 - **Uptime**: Device runtime
 - **Reset Reason**: Why device last restarted
 - **CPU Usage**: Percentage based on IDLE task (nullable when runtime stats unavailable)
+- **CPU Cores**: Current Core 0 and Core 1 usage when per-core runtime stats are available
 - **Core Temp**: Internal temperature sensor (ESP32-C3/S2/S3/C2/C6/H2)
 - **Internal Heap**: Free/min/largest block + fragmentation. On MIPI-DSI boards, the largest-block value is sampled at most every 30 seconds.
 - **PSRAM**: Free/minimum values (when present). MIPI-DSI boards intentionally omit the largest-block measurement because a PSRAM heap walk can interrupt framebuffer scan-out.
@@ -638,6 +639,8 @@ Returns real-time device health statistics.
   "uptime_seconds": 3600,
   "reset_reason": "Power On",
   "cpu_usage": 15,
+  "cpu_usage_core_0": 22,
+  "cpu_usage_core_1": 8,
   "cpu_freq": 160,
   "cpu_temperature": 42,
   "heap_internal_free": 200000,
@@ -692,6 +695,7 @@ not report a PSRAM largest-block value on those boards.
 - `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
 - `ble_name`: current BLE keyboard name (same as the configured device name)
 - `cpu_usage`: `null` when FreeRTOS runtime stats are unavailable/disabled
+- `cpu_usage_core_0` / `cpu_usage_core_1`: optional current per-core percentages, returned only when runtime statistics are available on a multicore target
 - `cpu_temperature`: `null` on chips without an internal temperature sensor
 - `fs_mounted`: `null` when no filesystem partition is present; `false` when present but not mounted
 - `wifi_rssi`, `wifi_channel`, `ip_address`: `null` when not connected
