@@ -392,6 +392,11 @@ Red and Blue sliders are manual multipliers applied after the camera's scene
 estimate. `1.00x neutral` leaves that channel unchanged; raise Red for a warmer
 image or Blue for a cooler image.
 
+**Camera feed rate** controls the shared rate used by both Camera Preview
+buttons and MJPEG streams. It defaults to 4 FPS. Lower it, for example to 2
+FPS, when a complex pad needs more CPU time; lower rates reduce camera work but
+make live images update less often.
+
 On ESP32-P4 builds, the **Extensions** page has two small slots
 and one large slot for trusted native Extensions. Upload the signed package
 `extension-id@version.ext`, then reboot to install it into executable flash.

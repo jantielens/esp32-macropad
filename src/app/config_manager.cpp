@@ -42,6 +42,7 @@
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
 #if HAS_CAMERA
 #define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
+#define KEY_CAMERA_FEED_TARGET_FPS "cam_fps"
 #define KEY_CAMERA_OUTPUT_WIDTH "cam_out_w"
 #define KEY_CAMERA_OUTPUT_HEIGHT "cam_out_h"
 #define KEY_CAMERA_EXPOSURE_LINES "cam_exp"
@@ -224,6 +225,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 				#if HAS_CAMERA
 				config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
+				config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
 				config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
 				config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
 				config->camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
@@ -339,6 +341,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_CAMERA
 		config->camera_jpeg_quality = preferences.getUChar(KEY_CAMERA_JPEG_QUALITY, CAMERA_JPEG_QUALITY_DEFAULT);
+		config->camera_feed_target_fps = preferences.getUChar(KEY_CAMERA_FEED_TARGET_FPS, CAMERA_FEED_TARGET_FPS_DEFAULT);
 		config->camera_output_width = preferences.getUShort(KEY_CAMERA_OUTPUT_WIDTH, CAMERA_OUTPUT_WIDTH_DEFAULT);
 		config->camera_output_height = preferences.getUShort(KEY_CAMERA_OUTPUT_HEIGHT, CAMERA_OUTPUT_HEIGHT_DEFAULT);
 		config->camera_exposure_lines = preferences.getUShort(KEY_CAMERA_EXPOSURE_LINES, CAMERA_EXPOSURE_LINES_DEFAULT);
@@ -461,6 +464,7 @@ bool config_manager_save(const DeviceConfig *config) {
 
 		#if HAS_CAMERA
 		preferences.putUChar(KEY_CAMERA_JPEG_QUALITY, config->camera_jpeg_quality);
+		preferences.putUChar(KEY_CAMERA_FEED_TARGET_FPS, config->camera_feed_target_fps);
 		preferences.putUShort(KEY_CAMERA_OUTPUT_WIDTH, config->camera_output_width);
 		preferences.putUShort(KEY_CAMERA_OUTPUT_HEIGHT, config->camera_output_height);
 		preferences.putUShort(KEY_CAMERA_EXPOSURE_LINES, config->camera_exposure_lines);
@@ -719,7 +723,8 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 #endif
 
 #if HAS_CAMERA
-		LOGI("Config", "Camera: quality=%u output=%ux%u exposure=%u WB=%u/%u", config->camera_jpeg_quality,
+		LOGI("Config", "Camera: quality=%u fps=%u output=%ux%u exposure=%u WB=%u/%u", config->camera_jpeg_quality,
+				(unsigned)config->camera_feed_target_fps,
 				(unsigned)config->camera_output_width, (unsigned)config->camera_output_height,
 				(unsigned)config->camera_exposure_lines,
 				(unsigned)config->camera_white_balance_red_q8,

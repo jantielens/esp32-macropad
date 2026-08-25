@@ -7,7 +7,6 @@
 #include <esp_heap_caps.h>
 
 namespace {
-constexpr uint32_t kFrameIntervalMs = 250;
 constexpr uint32_t kTimingLogIntervalMs = 1000;
 constexpr uint8_t kSlotCount = 2;
 
@@ -102,7 +101,7 @@ CameraFeedState camera_feed_get_state() {
         .width = settings.output_width,
         .height = settings.output_height,
         .jpeg_quality = settings.jpeg_quality,
-        .interval_ms = kFrameIntervalMs,
+        .interval_ms = 1000U / settings.feed_target_fps,
     };
     portENTER_CRITICAL(&s_mux);
     state.rgb565_consumers = s_rgb565_demand;
@@ -148,8 +147,10 @@ void camera_feed_loop() {
     if ((!rgb565_demand && !jpeg_demand) || ota_activity_is_active()) return;
     if (!camera_feed_ensure_cache()) return;
 
+    const CameraCaptureSettings settings = camera_get_capture_settings();
+    const uint32_t interval_ms = 1000U / settings.feed_target_fps;
     const uint32_t now = millis();
-    if (now - s_last_capture_ms < kFrameIntervalMs) return;
+    if (now - s_last_capture_ms < interval_ms) return;
     const int8_t writable_slot = camera_feed_writable_slot();
     if (writable_slot < 0) return;
 

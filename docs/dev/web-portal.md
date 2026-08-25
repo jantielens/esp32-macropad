@@ -1146,16 +1146,19 @@ when HTTP Basic Auth is enabled.
 #### `GET /api/component/camera/config`
 
 Returns camera availability, the verified RAW10 sensor mode, active JPEG,
-manual exposure, and white-balance settings, and their bounded values.
+shared-feed target rate, manual exposure, and white-balance settings, and their
+bounded values.
 
 #### `POST /api/component/camera/config`
 
-Persists JPEG encoder, manual exposure, and white-balance configuration. The
-request must use advertised ranges and output dimensions from `GET`.
+Persists JPEG encoder, shared-feed target rate, manual exposure, and
+white-balance configuration. The request must use advertised ranges and output
+dimensions from `GET`.
 
 ```json
 {
   "jpeg_quality": 60,
+  "feed_target_fps": 4,
   "output_width": 640,
   "output_height": 360,
   "exposure_lines": 512,
@@ -1186,6 +1189,11 @@ feed and ends that demand when the client disconnects. The compile-time
 `CAMERA_MJPEG_MAX_CLIENTS` board setting limits authenticated stream clients;
 additional requests receive `429 Too Many Requests`. The `jc4880p433` board
 permits three clients.
+
+`feed_target_fps` controls the common capture rate for both this stream and
+Camera Preview widgets. It defaults to 4 FPS and is bounded to 1-5 FPS. Lower
+it, for example to 2 FPS, when a complex pad needs more CPU time; this reduces
+camera work but increases live-image update latency.
 
 ---
 

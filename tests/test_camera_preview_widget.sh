@@ -36,11 +36,15 @@ grep -q '#define HAS_CAMERA true' src/boards/jc1060p470c/board_overrides.h
 grep -q '#define CAMERA_DRIVER CAMERA_DRIVER_OV02C10_P4' src/boards/jc1060p470c/board_overrides.h
 grep -q '../jc1060p470c/board_overrides.h' src/boards/jc1060p470c-sd/board_overrides.h
 grep -q 'exposure_line_time_us' "$CAMERA_COMPONENT"
+grep -q 'feed_target_fps' "$CAMERA_COMPONENT"
+grep -q 'CAMERA_FEED_TARGET_FPS_DEFAULT' src/app/camera.h
+grep -q 'camera-feed-target-fps' src/app/web/camera.fragment.html
 grep -q 'camera-exposure-time-value' src/app/web/camera.fragment.html
 grep -q 'camera-wb-red" type="range"' src/app/web/camera.fragment.html
 grep -q 'camera-wb-blue" type="range"' src/app/web/camera.fragment.html
 grep -q 'updateExposureValue' "$CAMERA_PORTAL"
 grep -q 'updateWhiteBalanceValue' "$CAMERA_PORTAL"
+grep -q 'feedTargetFps' "$CAMERA_PORTAL"
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
 grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
 

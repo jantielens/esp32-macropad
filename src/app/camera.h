@@ -10,6 +10,9 @@
 #define CAMERA_OUTPUT_HEIGHT_DEFAULT 360
 #define CAMERA_EXPOSURE_LINES_DEFAULT 512
 #define CAMERA_WHITE_BALANCE_Q8_DEFAULT 256
+#define CAMERA_FEED_TARGET_FPS_DEFAULT 4
+#define CAMERA_FEED_TARGET_FPS_MIN 1
+#define CAMERA_FEED_TARGET_FPS_MAX 5
 
 struct CameraRawFrame {
 	uint8_t* data;
@@ -52,6 +55,7 @@ struct CameraOutputDimensions {
 
 struct CameraCaptureSettings {
 	uint8_t jpeg_quality;
+	uint8_t feed_target_fps;
 	uint16_t output_width;
 	uint16_t output_height;
 	uint16_t exposure_lines;
@@ -65,6 +69,8 @@ struct CameraCapabilities {
 	uint16_t raw_height;
 	uint8_t jpeg_quality_min;
 	uint8_t jpeg_quality_max;
+	uint8_t feed_target_fps_min;
+	uint8_t feed_target_fps_max;
 	uint16_t exposure_lines_min;
 	uint16_t exposure_lines_max;
 	float exposure_line_time_us;

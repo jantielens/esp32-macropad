@@ -3,6 +3,8 @@ window.init_camera_fragment = function () {
     var status = document.getElementById('camera-status');
     var quality = document.getElementById('camera-jpeg-quality');
     var qualityValue = document.getElementById('camera-jpeg-quality-value');
+    var feedTargetFps = document.getElementById('camera-feed-target-fps');
+    var feedTargetFpsValue = document.getElementById('camera-feed-target-fps-value');
     var dimensions = document.getElementById('camera-output-dimensions');
     var exposure = document.getElementById('camera-exposure-lines');
     var exposureValue = document.getElementById('camera-exposure-lines-value');
@@ -30,6 +32,7 @@ window.init_camera_fragment = function () {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 jpeg_quality: Number(quality.value),
+                feed_target_fps: Number(feedTargetFps.value),
                 output_width: Number(parts[0]),
                 output_height: Number(parts[1]),
                 exposure_lines: Number(exposure.value),
@@ -43,6 +46,9 @@ window.init_camera_fragment = function () {
 
     quality.addEventListener('input', function () {
         qualityValue.textContent = quality.value;
+    });
+    feedTargetFps.addEventListener('input', function () {
+        feedTargetFpsValue.textContent = feedTargetFps.value;
     });
 
     function updateExposureValue() {
@@ -73,6 +79,10 @@ window.init_camera_fragment = function () {
         quality.max = config.jpeg_quality_max;
         quality.value = config.jpeg_quality;
         qualityValue.textContent = config.jpeg_quality;
+        feedTargetFps.min = config.feed_target_fps_min;
+        feedTargetFps.max = config.feed_target_fps_max;
+        feedTargetFps.value = config.feed_target_fps;
+        feedTargetFpsValue.textContent = config.feed_target_fps;
         exposure.min = config.exposure_lines_min;
         exposure.max = config.exposure_lines_max;
         exposure.value = config.exposure_lines;

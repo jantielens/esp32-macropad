@@ -142,6 +142,7 @@ struct DeviceConfig {
 
 #if HAS_CAMERA
 		uint8_t camera_jpeg_quality;             // default CAMERA_JPEG_QUALITY_DEFAULT
+		uint8_t camera_feed_target_fps;          // default CAMERA_FEED_TARGET_FPS_DEFAULT
 		uint16_t camera_output_width;            // default CAMERA_OUTPUT_WIDTH_DEFAULT
 		uint16_t camera_output_height;           // default CAMERA_OUTPUT_HEIGHT_DEFAULT
 		uint16_t camera_exposure_lines;          // default CAMERA_EXPOSURE_LINES_DEFAULT

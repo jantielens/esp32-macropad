@@ -22,6 +22,8 @@ static const CameraCapabilities kCameraCapabilities = {
     .raw_height = CAMERA_CAPTURE_HEIGHT,
     .jpeg_quality_min = 30,
     .jpeg_quality_max = 90,
+    .feed_target_fps_min = CAMERA_FEED_TARGET_FPS_MIN,
+    .feed_target_fps_max = CAMERA_FEED_TARGET_FPS_MAX,
     .exposure_lines_min = 8,
     .exposure_lines_max = 1149,
     .exposure_line_time_us = kCameraExposureLineTimeUs,
@@ -33,6 +35,7 @@ static const CameraCapabilities kCameraCapabilities = {
 
 static CameraCaptureSettings s_capture_settings = {
     .jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT,
+    .feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT,
     .output_width = CAMERA_OUTPUT_WIDTH_DEFAULT,
     .output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT,
     .exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT,
@@ -147,6 +150,10 @@ static bool camera_roll_path(char* path, size_t path_len) {
 static bool camera_capture_settings_are_valid(const CameraCaptureSettings& settings) {
     if (settings.jpeg_quality < kCameraCapabilities.jpeg_quality_min ||
         settings.jpeg_quality > kCameraCapabilities.jpeg_quality_max) {
+        return false;
+    }
+    if (settings.feed_target_fps < kCameraCapabilities.feed_target_fps_min ||
+        settings.feed_target_fps > kCameraCapabilities.feed_target_fps_max) {
         return false;
     }
     if (settings.exposure_lines < kCameraCapabilities.exposure_lines_min ||
