@@ -14,6 +14,15 @@
 #define CAMERA_FEED_TARGET_FPS_MIN 1
 #define CAMERA_FEED_TARGET_FPS_MAX 5
 
+enum CameraRotation : uint16_t {
+	CAMERA_ROTATION_0 = 0,
+	CAMERA_ROTATION_90 = 90,
+	CAMERA_ROTATION_180 = 180,
+	CAMERA_ROTATION_270 = 270,
+};
+
+#define CAMERA_ROTATION_DEFAULT CAMERA_ROTATION_0
+
 struct CameraRawFrame {
 	uint8_t* data;
 	size_t size;
@@ -56,6 +65,7 @@ struct CameraOutputDimensions {
 struct CameraCaptureSettings {
 	uint8_t jpeg_quality;
 	uint8_t feed_target_fps;
+	CameraRotation rotation;
 	uint16_t output_width;
 	uint16_t output_height;
 	uint16_t exposure_lines;

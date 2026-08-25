@@ -1146,12 +1146,12 @@ when HTTP Basic Auth is enabled.
 #### `GET /api/component/camera/config`
 
 Returns camera availability, the verified RAW10 sensor mode, active JPEG,
-shared-feed target rate, manual exposure, and white-balance settings, and their
-bounded values.
+rotation, shared-feed target rate, manual exposure, and white-balance settings,
+and their bounded values.
 
 #### `POST /api/component/camera/config`
 
-Persists JPEG encoder, shared-feed target rate, manual exposure, and
+Persists JPEG encoder, rotation, shared-feed target rate, manual exposure, and
 white-balance configuration. The request must use advertised ranges and output
 dimensions from `GET`.
 
@@ -1159,6 +1159,7 @@ dimensions from `GET`.
 {
   "jpeg_quality": 60,
   "feed_target_fps": 4,
+  "rotation": 0,
   "output_width": 640,
   "output_height": 360,
   "exposure_lines": 512,
@@ -1194,6 +1195,11 @@ permits three clients.
 Camera Preview widgets. It defaults to 4 FPS and is bounded to 1-5 FPS. Lower
 it, for example to 2 FPS, when a complex pad needs more CPU time; this reduces
 camera work but increases live-image update latency.
+
+`rotation` accepts `0`, `90`, `180`, or `270` degrees clockwise. Rotation is
+performed while converting RAW10 to RGB565, so test captures, Camera Preview
+widgets, and MJPEG frames use the same orientation without an additional frame
+buffer.
 
 ---
 

@@ -26,6 +26,17 @@ uint32_t s_last_capture_ms = 0;
 uint32_t s_last_timing_log_ms = 0;
 CameraCaptureTiming s_timing = {};
 
+void camera_feed_output_dimensions(const CameraCaptureSettings& settings,
+                                   uint16_t* width, uint16_t* height) {
+    if (settings.rotation == CAMERA_ROTATION_90 || settings.rotation == CAMERA_ROTATION_270) {
+        *width = settings.output_height;
+        *height = settings.output_width;
+    } else {
+        *width = settings.output_width;
+        *height = settings.output_height;
+    }
+}
+
 bool camera_feed_ensure_cache() {
     if (s_slots[0].rgb565.data && s_slots[1].rgb565.data) return true;
 
@@ -97,9 +108,12 @@ void camera_feed_release_demand(CameraFeedOutput output) {
 
 CameraFeedState camera_feed_get_state() {
     const CameraCaptureSettings settings = camera_get_capture_settings();
+    uint16_t width = 0;
+    uint16_t height = 0;
+    camera_feed_output_dimensions(settings, &width, &height);
     CameraFeedState state = {
-        .width = settings.output_width,
-        .height = settings.output_height,
+        .width = width,
+        .height = height,
         .jpeg_quality = settings.jpeg_quality,
         .interval_ms = 1000U / settings.feed_target_fps,
     };

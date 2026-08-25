@@ -5,6 +5,7 @@ window.init_camera_fragment = function () {
     var qualityValue = document.getElementById('camera-jpeg-quality-value');
     var feedTargetFps = document.getElementById('camera-feed-target-fps');
     var feedTargetFpsValue = document.getElementById('camera-feed-target-fps-value');
+    var rotation = document.getElementById('camera-rotation');
     var dimensions = document.getElementById('camera-output-dimensions');
     var exposure = document.getElementById('camera-exposure-lines');
     var exposureValue = document.getElementById('camera-exposure-lines-value');
@@ -33,6 +34,7 @@ window.init_camera_fragment = function () {
             body: JSON.stringify({
                 jpeg_quality: Number(quality.value),
                 feed_target_fps: Number(feedTargetFps.value),
+                rotation: Number(rotation.value),
                 output_width: Number(parts[0]),
                 output_height: Number(parts[1]),
                 exposure_lines: Number(exposure.value),
@@ -83,6 +85,7 @@ window.init_camera_fragment = function () {
         feedTargetFps.max = config.feed_target_fps_max;
         feedTargetFps.value = config.feed_target_fps;
         feedTargetFpsValue.textContent = config.feed_target_fps;
+        rotation.value = config.rotation;
         exposure.min = config.exposure_lines_min;
         exposure.max = config.exposure_lines_max;
         exposure.value = config.exposure_lines;

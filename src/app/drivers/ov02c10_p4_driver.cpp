@@ -613,6 +613,10 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
              settings.output_width, settings.output_height);
     }
     if (output_supported) {
+        const bool swap_dimensions = settings.rotation == CAMERA_ROTATION_90 ||
+                                     settings.rotation == CAMERA_ROTATION_270;
+        const uint16_t output_width = swap_dimensions ? settings.output_height : settings.output_width;
+        const uint16_t output_height = swap_dimensions ? settings.output_width : settings.output_height;
         const int64_t convert_started_us = esp_timer_get_time();
         for (uint16_t y = 0; y < settings.output_height; ++y) {
             const uint16_t source_y = static_cast<uint16_t>(
@@ -621,13 +625,34 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
             const uint8_t* source_bottom_row = source_top_row + kRaw10RowBytes;
             memcpy(s_raw10_row_scratch, source_top_row, kRaw10RowBytes);
             memcpy(s_raw10_row_scratch + kRaw10RowBytes, source_bottom_row, kRaw10RowBytes);
+            uint16_t* destination = rgb565->data;
+            ptrdiff_t destination_step = 1;
+            switch (settings.rotation) {
+                case CAMERA_ROTATION_180:
+                    destination += (size_t)(settings.output_height - 1 - y) * output_width +
+                                   settings.output_width - 1;
+                    destination_step = -1;
+                    break;
+                case CAMERA_ROTATION_90:
+                    destination += settings.output_height - 1 - y;
+                    destination_step = output_width;
+                    break;
+                case CAMERA_ROTATION_270:
+                    destination += (size_t)(settings.output_width - 1) * output_width + y;
+                    destination_step = -static_cast<ptrdiff_t>(output_width);
+                    break;
+                case CAMERA_ROTATION_0:
+                default:
+                    destination += (size_t)y * output_width;
+                    break;
+            }
             for (uint16_t x = 0; x < settings.output_width; ++x) {
                 const uint16_t source_x = static_cast<uint16_t>(
                     (static_cast<uint32_t>(x) * (raw.width - 2) / (settings.output_width - 1)) & ~1U);
-                rgb565->data[(size_t)y * settings.output_width + x] =
-                    camera_bayer_quad_to_rgb565(s_raw10_row_scratch,
-                                                s_raw10_row_scratch + kRaw10RowBytes,
-                                                source_x, balance);
+                *destination = camera_bayer_quad_to_rgb565(s_raw10_row_scratch,
+                                                            s_raw10_row_scratch + kRaw10RowBytes,
+                                                            source_x, balance);
+                destination += destination_step;
             }
         }
         if (timing) timing->rgb565_convert_us = static_cast<uint32_t>(esp_timer_get_time() - convert_started_us);
@@ -635,16 +660,16 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
         if (frame) {
             const int64_t jpeg_started_us = esp_timer_get_time();
             captured = jpeg_encode_rgb565(reinterpret_cast<const uint8_t*>(rgb565->data),
-                                          settings.output_width, settings.output_height, settings.jpeg_quality,
+                                          output_width, output_height, settings.jpeg_quality,
                                           &frame->data, &frame->size);
             if (timing) timing->jpeg_encode_us = static_cast<uint32_t>(esp_timer_get_time() - jpeg_started_us);
             if (captured) {
-                frame->width = settings.output_width;
-                frame->height = settings.output_height;
+                frame->width = output_width;
+                frame->height = output_height;
             }
         }
-        rgb565->width = settings.output_width;
-        rgb565->height = settings.output_height;
+        rgb565->width = output_width;
+        rgb565->height = output_height;
     }
     if (timing) timing->total_us = static_cast<uint32_t>(esp_timer_get_time() - capture_started_us);
 

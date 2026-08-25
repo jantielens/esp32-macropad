@@ -305,6 +305,7 @@ void setup()
 	if (!camera_set_capture_settings({
 		.jpeg_quality = device_config.camera_jpeg_quality,
 		.feed_target_fps = device_config.camera_feed_target_fps,
+		.rotation = device_config.camera_rotation,
 		.output_width = device_config.camera_output_width,
 		.output_height = device_config.camera_output_height,
 		.exposure_lines = device_config.camera_exposure_lines,
@@ -313,6 +314,7 @@ void setup()
 	})) {
 		device_config.camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
 		device_config.camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
+		device_config.camera_rotation = CAMERA_ROTATION_DEFAULT;
 		device_config.camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
 		device_config.camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
 		device_config.camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
@@ -321,6 +323,7 @@ void setup()
 		camera_set_capture_settings({
 			.jpeg_quality = device_config.camera_jpeg_quality,
 			.feed_target_fps = device_config.camera_feed_target_fps,
+			.rotation = device_config.camera_rotation,
 			.output_width = device_config.camera_output_width,
 			.output_height = device_config.camera_output_height,
 			.exposure_lines = device_config.camera_exposure_lines,

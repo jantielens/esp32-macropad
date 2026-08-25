@@ -392,6 +392,10 @@ Red and Blue sliders are manual multipliers applied after the camera's scene
 estimate. `1.00x neutral` leaves that channel unchanged; raise Red for a warmer
 image or Blue for a cooler image.
 
+Choose **Capture rotation** to turn the shared camera image by 0, 90, 180, or
+270 degrees clockwise. The chosen orientation applies to Camera Preview
+buttons, test captures, and MJPEG streams.
+
 **Camera feed rate** controls the shared rate used by both Camera Preview
 buttons and MJPEG streams. It defaults to 4 FPS. Lower it, for example to 2
 FPS, when a complex pad needs more CPU time; lower rates reduce camera work but

@@ -30,6 +30,7 @@ void camera_get_config(AsyncWebServerRequest* request) {
     (*doc)["feed_target_fps"] = settings.feed_target_fps;
     (*doc)["feed_target_fps_min"] = capabilities->feed_target_fps_min;
     (*doc)["feed_target_fps_max"] = capabilities->feed_target_fps_max;
+    (*doc)["rotation"] = settings.rotation;
     (*doc)["exposure_lines"] = settings.exposure_lines;
     (*doc)["exposure_lines_min"] = capabilities->exposure_lines_min;
     (*doc)["exposure_lines_max"] = capabilities->exposure_lines_max;
@@ -52,7 +53,8 @@ void camera_get_config(AsyncWebServerRequest* request) {
 bool camera_save_config_raw(const uint8_t* data, size_t len) {
     StaticJsonDocument<192> doc;
     if (deserializeJson(doc, data, len)) return false;
-    if (!doc.containsKey("jpeg_quality") || !doc.containsKey("feed_target_fps") || !doc.containsKey("output_width") ||
+    if (!doc.containsKey("jpeg_quality") || !doc.containsKey("feed_target_fps") || !doc.containsKey("rotation") ||
+        !doc.containsKey("output_width") ||
         !doc.containsKey("output_height") || !doc.containsKey("exposure_lines") ||
         !doc.containsKey("white_balance_red_q8") || !doc.containsKey("white_balance_blue_q8")) {
         return false;
@@ -61,6 +63,7 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
     CameraCaptureSettings settings = {
         .jpeg_quality = static_cast<uint8_t>(doc["jpeg_quality"] | 0),
         .feed_target_fps = static_cast<uint8_t>(doc["feed_target_fps"] | 0),
+        .rotation = static_cast<CameraRotation>(doc["rotation"] | 0),
         .output_width = static_cast<uint16_t>(doc["output_width"] | 0),
         .output_height = static_cast<uint16_t>(doc["output_height"] | 0),
         .exposure_lines = static_cast<uint16_t>(doc["exposure_lines"] | 0),
@@ -74,6 +77,7 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
     const CameraCaptureSettings previous = {
         .jpeg_quality = config->camera_jpeg_quality,
         .feed_target_fps = config->camera_feed_target_fps,
+        .rotation = config->camera_rotation,
         .output_width = config->camera_output_width,
         .output_height = config->camera_output_height,
         .exposure_lines = config->camera_exposure_lines,
@@ -82,6 +86,7 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
     };
     config->camera_jpeg_quality = settings.jpeg_quality;
     config->camera_feed_target_fps = settings.feed_target_fps;
+    config->camera_rotation = settings.rotation;
     config->camera_output_width = settings.output_width;
     config->camera_output_height = settings.output_height;
     config->camera_exposure_lines = settings.exposure_lines;
@@ -91,6 +96,7 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
 
     config->camera_jpeg_quality = previous.jpeg_quality;
     config->camera_feed_target_fps = previous.feed_target_fps;
+    config->camera_rotation = previous.rotation;
     config->camera_output_width = previous.output_width;
     config->camera_output_height = previous.output_height;
     config->camera_exposure_lines = previous.exposure_lines;

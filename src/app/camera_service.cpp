@@ -36,6 +36,7 @@ static const CameraCapabilities kCameraCapabilities = {
 static CameraCaptureSettings s_capture_settings = {
     .jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT,
     .feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT,
+    .rotation = CAMERA_ROTATION_DEFAULT,
     .output_width = CAMERA_OUTPUT_WIDTH_DEFAULT,
     .output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT,
     .exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT,
@@ -154,6 +155,10 @@ static bool camera_capture_settings_are_valid(const CameraCaptureSettings& setti
     }
     if (settings.feed_target_fps < kCameraCapabilities.feed_target_fps_min ||
         settings.feed_target_fps > kCameraCapabilities.feed_target_fps_max) {
+        return false;
+    }
+    if (settings.rotation != CAMERA_ROTATION_0 && settings.rotation != CAMERA_ROTATION_90 &&
+        settings.rotation != CAMERA_ROTATION_180 && settings.rotation != CAMERA_ROTATION_270) {
         return false;
     }
     if (settings.exposure_lines < kCameraCapabilities.exposure_lines_min ||
