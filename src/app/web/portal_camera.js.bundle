@@ -1,0 +1,3 @@
+# Bundle camera portal handlers into a standalone HAS_CAMERA-gated asset.
+portal_camera.js
+portal_camera_snapshots.js

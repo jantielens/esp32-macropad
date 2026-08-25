@@ -72,6 +72,10 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Exactly one #if variant matches per build, so the browser fetches the
 		// entire portal JS in one request with one gzip member (see handlePortalJS).
 		server->on("/portal.js", HTTP_GET, handlePortalJS);
+		#if HAS_CAMERA
+		server->on("/portal-camera.js", HTTP_GET, handlePortalCameraJS);
+		server->on("/portal-camera.css", HTTP_GET, handlePortalCameraCSS);
+		#endif
 		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints

@@ -85,6 +85,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         const char* id;
         const char* display_name;
         int nav_order;
+        const char* portal_script;
+        const char* portal_style;
     };
     ItemEntry items[MAX_PORTAL_COMPONENTS];
 
@@ -106,7 +108,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
             ComponentDef* comp = component_registry_get(i);
             if (strcmp(comp->category, PORTAL_PRIMARY_CATEGORY) == 0) {
                 const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
-                items[item_count++] = {nav_id, comp->display_name, comp->nav_order};
+                items[item_count++] = {nav_id, comp->display_name, comp->nav_order,
+                                       comp->portal_script, comp->portal_style};
             }
         }
 
@@ -137,6 +140,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
                 JsonObject item = items_arr.createNestedObject();
                 item["id"] = items[i].id;
                 item["display_name"] = items[i].display_name;
+                if (items[i].portal_script) item["portal_script"] = items[i].portal_script;
+                if (items[i].portal_style) item["portal_style"] = items[i].portal_style;
             }
         }
     }
@@ -182,7 +187,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
             // leaves the wizard as the single hand-off path.
             if (!is_setup && ap_mode) continue;
             const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
-            items[item_count++] = {nav_id, comp->display_name, comp->nav_order};
+            items[item_count++] = {nav_id, comp->display_name, comp->nav_order,
+                                   comp->portal_script, comp->portal_style};
         }
 
         if (item_count == 0) continue;  // skip empty categories
@@ -203,6 +209,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
             JsonObject item = items_arr.createNestedObject();
             item["id"] = items[i].id;
             item["display_name"] = items[i].display_name;
+            if (items[i].portal_script) item["portal_script"] = items[i].portal_script;
+            if (items[i].portal_style) item["portal_style"] = items[i].portal_style;
         }
     }
 

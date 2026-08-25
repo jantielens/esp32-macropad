@@ -1068,13 +1068,26 @@ for filename in "${!CSS_CONTENTS[@]}"; do
     if [[ -n "${CSS_CHUNK_NAMES[$filename]:-}" ]]; then
         continue
     fi
-    cat >> "$OUTPUT_FILE" << EOF
+    css_flag=$(asset_feature_flag "$filename")
+    if [[ -n "$css_flag" ]]; then
+        cat >> "$OUTPUT_FILE" << EOF
+// CSS styles from src/app/web/${filename}.css (minified + gzipped)
+#if $css_flag
+const uint8_t ${filename}_css_gz[] PROGMEM = {
+${CSS_GZIP_CONTENTS[$filename]}
+};
+#endif // $css_flag
+
+EOF
+    else
+        cat >> "$OUTPUT_FILE" << EOF
 // CSS styles from src/app/web/${filename}.css (minified + gzipped)
 const uint8_t ${filename}_css_gz[] PROGMEM = {
 ${CSS_GZIP_CONTENTS[$filename]}
 };
 
 EOF
+    fi
 done
 
 # Generate JS sections (gzipped). Chunked-bundle keys are emitted as
@@ -1131,7 +1144,14 @@ for filename in "${!CSS_CONTENTS[@]}"; do
     if [[ -n "${CSS_CHUNK_NAMES[$filename]:-}" ]]; then
         continue
     fi
-    echo "const size_t ${filename}_css_gz_len = sizeof(${filename}_css_gz);" >> "$OUTPUT_FILE"
+    css_flag=$(asset_feature_flag "$filename")
+    if [[ -n "$css_flag" ]]; then
+        echo "#if $css_flag" >> "$OUTPUT_FILE"
+        echo "const size_t ${filename}_css_gz_len = sizeof(${filename}_css_gz);" >> "$OUTPUT_FILE"
+        echo "#endif // $css_flag" >> "$OUTPUT_FILE"
+    else
+        echo "const size_t ${filename}_css_gz_len = sizeof(${filename}_css_gz);" >> "$OUTPUT_FILE"
+    fi
 done
 
 for filename in "${!JS_CONTENTS[@]}"; do

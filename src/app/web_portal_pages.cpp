@@ -165,3 +165,27 @@ void handlePortalJS(AsyncWebServerRequest *request) {
 		);
 		request->send(response);
 }
+
+#if HAS_CAMERA
+void handlePortalCameraJS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"application/javascript",
+				portal_camera_js_gz,
+				portal_camera_js_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+
+void handlePortalCameraCSS(AsyncWebServerRequest *request) {
+		AsyncWebServerResponse *response = begin_gzipped_asset_response(
+				request,
+				"text/css",
+				portal_camera_css_gz,
+				portal_camera_css_gz_len,
+				"public, max-age=600"
+		);
+		request->send(response);
+}
+#endif

@@ -23,6 +23,7 @@ CAMERA_API="src/app/web_portal_camera.cpp"
 CAMERA_DRIVER="src/app/drivers/ov02c10_p4_driver.cpp"
 CAMERA_COMPONENT="src/app/components/camera_component.cpp"
 CAMERA_PORTAL="src/app/web/portal_camera.js"
+CONFIG_MANAGER="src/app/config_manager.cpp"
 grep -q 'class CameraMjpegResponse final : public AsyncWebServerResponse' "$CAMERA_API"
 grep -q 'CAMERA_FEED_OUTPUT_JPEG' "$CAMERA_API"
 grep -q 'camera_feed_release_frame(&frame)' "$CAMERA_API"
@@ -48,6 +49,9 @@ grep -q 'updateExposureValue' "$CAMERA_PORTAL"
 grep -q 'updateWhiteBalanceValue' "$CAMERA_PORTAL"
 grep -q 'feedTargetFps' "$CAMERA_PORTAL"
 grep -q 'rotation: Number(rotation.value)' "$CAMERA_PORTAL"
+grep -q 'camera_save_config_on_main' "$CAMERA_COMPONENT"
+grep -q 'loop_bridge_dispatch(camera_save_config_on_main' "$CAMERA_COMPONENT"
+grep -A5 'LOGI("Config", "Save start")' "$CONFIG_MANAGER" | grep -q 'Serial.flush();'
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
 grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
 

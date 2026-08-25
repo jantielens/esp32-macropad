@@ -756,6 +756,48 @@ void camera_driver_init() {
     }
 }
 
+void camera_driver_deinit() {
+    if (s_camera_streaming) {
+        if (!camera_set_streaming(false)) {
+            LOGW("Camera", "Failed to stop sensor streaming during idle cleanup");
+        }
+        s_camera_streaming = false;
+    }
+    camera_stop_csi_capture();
+    if (s_csi_controller_enabled && s_csi_controller) {
+        const esp_err_t error = esp_cam_ctlr_disable(s_csi_controller);
+        if (error != ESP_OK) {
+            LOGW("Camera", "CSI disable during idle cleanup failed: %s", esp_err_to_name(error));
+        }
+    }
+    s_csi_controller_enabled = false;
+    camera_free_csi_buffers();
+    if (s_isp_processor) {
+        const esp_err_t error = esp_isp_del_processor(s_isp_processor);
+        if (error != ESP_OK) {
+            LOGW("Camera", "ISP cleanup failed: %s", esp_err_to_name(error));
+        }
+        s_isp_processor = nullptr;
+    }
+    if (s_csi_controller) {
+        const esp_err_t error = esp_cam_ctlr_del(s_csi_controller);
+        if (error != ESP_OK) {
+            LOGW("Camera", "CSI cleanup failed: %s", esp_err_to_name(error));
+        }
+        s_csi_controller = nullptr;
+    }
+    if (s_csi_ldo_handle) {
+        const esp_err_t error = esp_ldo_release_channel(s_csi_ldo_handle);
+        if (error != ESP_OK) {
+            LOGW("Camera", "CSI LDO cleanup failed: %s", esp_err_to_name(error));
+        }
+        s_csi_ldo_handle = nullptr;
+    }
+    camera_driver_release_raw(&s_rgb565_raw_staging);
+    s_csi_context = {};
+    s_camera_raw10_configured = false;
+}
+
 bool camera_driver_is_detected() {
     return s_camera_detected;
 }
@@ -763,6 +805,8 @@ bool camera_driver_is_detected() {
 #else
 
 void camera_driver_init() {}
+
+void camera_driver_deinit() {}
 
 bool camera_driver_is_detected() {
     return false;

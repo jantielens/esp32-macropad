@@ -1,7 +1,7 @@
 #include "action_continuation.h"
 #include "action_registry.h"
 
-#if HAS_DISPLAY || HAS_BUTTON
+#if HAS_CAMERA
 
 #include "camera.h"
 #include "log_manager.h"
@@ -13,7 +13,6 @@ namespace {
 
 constexpr const char* kCameraCaptureActionTag = "Action";
 
-#if HAS_CAMERA
 struct CameraCaptureJob {
     uint32_t continuation_token;
     CameraCaptureSaveTo save_to;
@@ -24,7 +23,6 @@ CameraCaptureSaveTo camera_capture_save_to_parse(const char* save_to) {
     if (strcmp(save_to, "roll") == 0) return CAMERA_CAPTURE_SAVE_ROLL;
     return CAMERA_CAPTURE_SAVE_BOTH;
 }
-#endif
 
 bool camera_capture_save_to_is_valid(const char* save_to) {
     return strcmp(save_to, "latest") == 0 || strcmp(save_to, "roll") == 0 ||
@@ -49,11 +47,7 @@ void serialize_camera_capture(const ButtonAction& act, JsonObject action) {
 }
 
 bool camera_capture_available() {
-#if HAS_CAMERA
     return true;
-#else
-    return false;
-#endif
 }
 
 const char* validate_camera_capture(JsonObjectConst action) {
@@ -73,18 +67,15 @@ const char* validate_camera_capture(JsonObjectConst action) {
     return nullptr;
 }
 
-#if HAS_CAMERA
 void execute_camera_capture(const void* opaque, bool* ok, char*, size_t) {
     const CameraCaptureJob* job = static_cast<const CameraCaptureJob*>(opaque);
     if (!job || !job->continuation_token) return;
     *ok = camera_capture_save(job->save_to);
     action_continuation_complete(job->continuation_token, *ok);
 }
-#endif
 
 ActionResult dispatch_camera_capture(const ButtonAction& action, const char* label,
                                      uint32_t continuation_token) {
-#if HAS_CAMERA
     if (!continuation_token) {
         LOGW(kCameraCaptureActionTag, "%s camera capture: must be used in an action list", label);
         return ACTION_FAILED;
@@ -100,12 +91,6 @@ ActionResult dispatch_camera_capture(const ButtonAction& action, const char* lab
         return ACTION_FAILED;
     }
     return ACTION_PENDING;
-#else
-    (void)action;
-    (void)continuation_token;
-    LOGW(kCameraCaptureActionTag, "%s camera capture: unavailable on this board", label);
-    return ACTION_FAILED;
-#endif
 }
 
 void describe_camera_capture(JsonObject& action) {
@@ -141,4 +126,4 @@ DEFINE_AND_REGISTER_ACTION_TYPE(kCameraCaptureActionType,
 
 } // namespace
 
-#endif // HAS_DISPLAY || HAS_BUTTON
+#endif // HAS_CAMERA

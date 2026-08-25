@@ -8,6 +8,7 @@
 
 namespace {
 constexpr uint32_t kTimingLogIntervalMs = 1000;
+constexpr uint32_t kIdleReleaseDelayMs = 5000;
 constexpr uint8_t kSlotCount = 2;
 
 struct FeedSlot {
@@ -24,6 +25,7 @@ uint16_t s_jpeg_demand = 0;
 uint32_t s_generation = 0;
 uint32_t s_last_capture_ms = 0;
 uint32_t s_last_timing_log_ms = 0;
+uint32_t s_idle_since_ms = 0;
 CameraCaptureTiming s_timing = {};
 
 void camera_feed_output_dimensions(const CameraCaptureSettings& settings,
@@ -71,6 +73,48 @@ int8_t camera_feed_writable_slot() {
     portEXIT_CRITICAL(&s_mux);
     return result;
 }
+
+void camera_feed_release_idle_resources() {
+    const uint32_t now = millis();
+    CameraJpegFrame jpegs[kSlotCount] = {};
+    uint16_t* rgb565[kSlotCount] = {};
+
+    portENTER_CRITICAL(&s_mux);
+    if (s_rgb565_demand || s_jpeg_demand) {
+        s_idle_since_ms = 0;
+        portEXIT_CRITICAL(&s_mux);
+        return;
+    }
+    if (!s_idle_since_ms) {
+        s_idle_since_ms = now;
+        portEXIT_CRITICAL(&s_mux);
+        return;
+    }
+    if (now - s_idle_since_ms < kIdleReleaseDelayMs) {
+        portEXIT_CRITICAL(&s_mux);
+        return;
+    }
+    for (uint8_t index = 0; index < kSlotCount; ++index) {
+        if (s_slots[index].leases) {
+            portEXIT_CRITICAL(&s_mux);
+            return;
+        }
+        jpegs[index] = s_slots[index].jpeg;
+        rgb565[index] = s_slots[index].rgb565.data;
+        s_slots[index] = {};
+    }
+    s_current_slot = kSlotCount;
+    s_last_capture_ms = 0;
+    s_last_timing_log_ms = 0;
+    s_idle_since_ms = 0;
+    portEXIT_CRITICAL(&s_mux);
+
+    for (uint8_t index = 0; index < kSlotCount; ++index) {
+        camera_release_jpeg(&jpegs[index]);
+        if (rgb565[index]) free(rgb565[index]);
+    }
+    camera_release_capture_resources();
+}
 }
 
 void camera_feed_init() {
@@ -89,13 +133,16 @@ void camera_feed_deinit() {
     s_generation = 0;
     s_last_capture_ms = 0;
     s_last_timing_log_ms = 0;
+    s_idle_since_ms = 0;
     portEXIT_CRITICAL(&s_mux);
+    camera_release_capture_resources();
 }
 
 void camera_feed_acquire_demand(CameraFeedOutput output) {
     portENTER_CRITICAL(&s_mux);
     uint16_t* demand = output == CAMERA_FEED_OUTPUT_JPEG ? &s_jpeg_demand : &s_rgb565_demand;
     if (*demand != UINT16_MAX) ++*demand;
+    s_idle_since_ms = 0;
     portEXIT_CRITICAL(&s_mux);
 }
 
@@ -158,7 +205,11 @@ void camera_feed_loop() {
     rgb565_demand = s_rgb565_demand;
     jpeg_demand = s_jpeg_demand;
     portEXIT_CRITICAL(&s_mux);
-    if ((!rgb565_demand && !jpeg_demand) || ota_activity_is_active()) return;
+    if (!rgb565_demand && !jpeg_demand) {
+        camera_feed_release_idle_resources();
+        return;
+    }
+    if (ota_activity_is_active()) return;
     if (!camera_feed_ensure_cache()) return;
 
     const CameraCaptureSettings settings = camera_get_capture_settings();

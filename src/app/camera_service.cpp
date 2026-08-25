@@ -271,6 +271,12 @@ void camera_release_jpeg(CameraJpegFrame* frame) {
 #endif
 }
 
+void camera_release_capture_resources() {
+#if HAS_CAMERA
+    camera_driver_deinit();
+#endif
+}
+
 bool camera_capture_save(CameraCaptureSaveTo save_to) {
 #if HAS_CAMERA
     if (ota_activity_is_active()) {

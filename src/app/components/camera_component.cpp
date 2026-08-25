@@ -4,12 +4,19 @@
 
 #include "camera.h"
 #include "config_manager.h"
+#include "main_loop_bridge.h"
 #include "web_portal_json.h"
 #include "web_portal_state.h"
 
 #include <ArduinoJson.h>
 
 namespace {
+
+constexpr uint32_t kCameraConfigSaveTimeoutMs = 5000;
+
+struct CameraConfigSaveRequest {
+    CameraCaptureSettings settings;
+};
 
 void camera_get_config(AsyncWebServerRequest* request) {
     const CameraCapabilities* capabilities = camera_get_capabilities();
@@ -50,30 +57,17 @@ void camera_get_config(AsyncWebServerRequest* request) {
     web_portal_send_json_chunked(request, doc);
 }
 
-bool camera_save_config_raw(const uint8_t* data, size_t len) {
-    StaticJsonDocument<192> doc;
-    if (deserializeJson(doc, data, len)) return false;
-    if (!doc.containsKey("jpeg_quality") || !doc.containsKey("feed_target_fps") || !doc.containsKey("rotation") ||
-        !doc.containsKey("output_width") ||
-        !doc.containsKey("output_height") || !doc.containsKey("exposure_lines") ||
-        !doc.containsKey("white_balance_red_q8") || !doc.containsKey("white_balance_blue_q8")) {
-        return false;
+void camera_save_config_on_main(const void* opaque, bool* ok, char* message, size_t message_len) {
+    const CameraConfigSaveRequest* request = static_cast<const CameraConfigSaveRequest*>(opaque);
+    if (!request) {
+        strlcpy(message, "invalid camera settings", message_len);
+        return;
     }
-
-    CameraCaptureSettings settings = {
-        .jpeg_quality = static_cast<uint8_t>(doc["jpeg_quality"] | 0),
-        .feed_target_fps = static_cast<uint8_t>(doc["feed_target_fps"] | 0),
-        .rotation = static_cast<CameraRotation>(doc["rotation"] | 0),
-        .output_width = static_cast<uint16_t>(doc["output_width"] | 0),
-        .output_height = static_cast<uint16_t>(doc["output_height"] | 0),
-        .exposure_lines = static_cast<uint16_t>(doc["exposure_lines"] | 0),
-        .white_balance_red_q8 = static_cast<uint16_t>(doc["white_balance_red_q8"] | 0),
-        .white_balance_blue_q8 = static_cast<uint16_t>(doc["white_balance_blue_q8"] | 0),
-    };
-    if (!camera_set_capture_settings(settings)) return false;
-
     DeviceConfig* config = web_portal_get_current_config();
-    if (!config) return false;
+    if (!config) {
+        strlcpy(message, "configuration unavailable", message_len);
+        return;
+    }
     const CameraCaptureSettings previous = {
         .jpeg_quality = config->camera_jpeg_quality,
         .feed_target_fps = config->camera_feed_target_fps,
@@ -84,15 +78,22 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
         .white_balance_red_q8 = config->camera_white_balance_red_q8,
         .white_balance_blue_q8 = config->camera_white_balance_blue_q8,
     };
-    config->camera_jpeg_quality = settings.jpeg_quality;
-    config->camera_feed_target_fps = settings.feed_target_fps;
-    config->camera_rotation = settings.rotation;
-    config->camera_output_width = settings.output_width;
-    config->camera_output_height = settings.output_height;
-    config->camera_exposure_lines = settings.exposure_lines;
-    config->camera_white_balance_red_q8 = settings.white_balance_red_q8;
-    config->camera_white_balance_blue_q8 = settings.white_balance_blue_q8;
-    if (config_manager_save(config)) return true;
+    if (!camera_set_capture_settings(request->settings)) {
+        strlcpy(message, "invalid camera settings", message_len);
+        return;
+    }
+    config->camera_jpeg_quality = request->settings.jpeg_quality;
+    config->camera_feed_target_fps = request->settings.feed_target_fps;
+    config->camera_rotation = request->settings.rotation;
+    config->camera_output_width = request->settings.output_width;
+    config->camera_output_height = request->settings.output_height;
+    config->camera_exposure_lines = request->settings.exposure_lines;
+    config->camera_white_balance_red_q8 = request->settings.white_balance_red_q8;
+    config->camera_white_balance_blue_q8 = request->settings.white_balance_blue_q8;
+    if (config_manager_save(config)) {
+        *ok = true;
+        return;
+    }
 
     config->camera_jpeg_quality = previous.jpeg_quality;
     config->camera_feed_target_fps = previous.feed_target_fps;
@@ -103,7 +104,36 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
     config->camera_white_balance_red_q8 = previous.white_balance_red_q8;
     config->camera_white_balance_blue_q8 = previous.white_balance_blue_q8;
     camera_set_capture_settings(previous);
-    return false;
+    strlcpy(message, "camera settings could not be saved", message_len);
+}
+
+bool camera_save_config_raw(const uint8_t* data, size_t len) {
+    StaticJsonDocument<192> doc;
+    if (deserializeJson(doc, data, len)) return false;
+    if (!doc.containsKey("jpeg_quality") || !doc.containsKey("feed_target_fps") || !doc.containsKey("rotation") ||
+        !doc.containsKey("output_width") || !doc.containsKey("output_height") ||
+        !doc.containsKey("exposure_lines") || !doc.containsKey("white_balance_red_q8") ||
+        !doc.containsKey("white_balance_blue_q8")) {
+        return false;
+    }
+
+    const CameraConfigSaveRequest request = {
+        .settings = {
+            .jpeg_quality = static_cast<uint8_t>(doc["jpeg_quality"] | 0),
+            .feed_target_fps = static_cast<uint8_t>(doc["feed_target_fps"] | 0),
+            .rotation = static_cast<CameraRotation>(doc["rotation"] | 0),
+            .output_width = static_cast<uint16_t>(doc["output_width"] | 0),
+            .output_height = static_cast<uint16_t>(doc["output_height"] | 0),
+            .exposure_lines = static_cast<uint16_t>(doc["exposure_lines"] | 0),
+            .white_balance_red_q8 = static_cast<uint16_t>(doc["white_balance_red_q8"] | 0),
+            .white_balance_blue_q8 = static_cast<uint16_t>(doc["white_balance_blue_q8"] | 0),
+        },
+    };
+    bool saved = false;
+    char message[64] = {};
+    return loop_bridge_dispatch(camera_save_config_on_main, &request, sizeof(request),
+                                kCameraConfigSaveTimeoutMs, &saved, message, sizeof(message)) == LOOP_BRIDGE_OK &&
+           saved;
 }
 
 void camera_save_config(AsyncWebServerRequest* request, uint8_t* data, size_t len,
@@ -125,13 +155,30 @@ static ComponentDef camera_component = {
     .custom_actions = nullptr,
     .num_custom_actions = 0,
     .fragment_id = "camera",
+    .portal_script = "/portal-camera.js",
+    .portal_style = "/portal-camera.css",
 };
 
 REGISTER_COMPONENT(camera);
 
 #if HAS_STORAGE_BROWSER
-REGISTER_NAV_COMPONENT(camera_snapshots, "camera-snapshots", "camera", "Snapshots", 40,
-                       "camera-snapshots");
+static ComponentDef camera_snapshots_component = {
+    .id = "camera-snapshots",
+    .category = "camera",
+    .display_name = "Snapshots",
+    .nav_order = 40,
+    .get_config = nullptr,
+    .save_config = nullptr,
+    .save_config_body = nullptr,
+    .delete_config = nullptr,
+    .custom_actions = nullptr,
+    .num_custom_actions = 0,
+    .fragment_id = "camera-snapshots",
+    .portal_script = "/portal-camera.js",
+    .portal_style = "/portal-camera.css",
+};
+
+REGISTER_COMPONENT(camera_snapshots);
 #endif
 
 #endif // HAS_CAMERA

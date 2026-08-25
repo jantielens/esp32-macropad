@@ -37,6 +37,14 @@ struct ComponentDef {
     // UI fragment identifier (matches fragment filename without extension)
     // nullptr means this component contributes to a shared category fragment
     const char* fragment_id;
+
+    // Optional feature-specific JavaScript asset required before this
+    // component's fragment can initialize.
+    const char* portal_script;
+
+    // Optional feature-specific stylesheet required by this component's
+    // fragment.
+    const char* portal_style;
 };
 
 // Registry API
@@ -90,5 +98,7 @@ void component_registry_set_body_allocator_for_test(ComponentBodyAllocFn alloc_f
         .custom_actions   = nullptr, \
         .num_custom_actions = 0, \
         .fragment_id      = _fragment, \
+        .portal_script    = nullptr, \
+        .portal_style     = nullptr, \
     }; \
     REGISTER_COMPONENT(sym)

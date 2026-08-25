@@ -117,6 +117,10 @@ bool camera_capture_jpeg(CameraJpegFrame* frame);
 // Frees a frame returned by camera_capture_jpeg().
 void camera_release_jpeg(CameraJpegFrame* frame);
 
+// Releases CSI, ISP, DMA, and conversion buffers after camera activity stops.
+// Must run on the main loop with no capture in progress.
+void camera_release_capture_resources();
+
 // Captures RGB565 pixels into caller-owned memory and optionally encodes the
 // same pixels as JPEG. rgb565->data must hold output_width * output_height
 // pixels. Must run on the main loop.

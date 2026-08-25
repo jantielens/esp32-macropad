@@ -385,6 +385,11 @@ bool config_manager_save(const DeviceConfig *config) {
 		}
 
 		LOGI("Config", "Save start");
+		// ESP32-P4 USB CDC keeps its TX ring buffer in external RAM. Let the
+		// final logging ISR finish before Preferences starts flash writes, which
+		// temporarily make that memory inaccessible.
+		Serial.flush();
+		delay(1);
 		
 		preferences.begin(CONFIG_NAMESPACE, false); // Read-write mode
 		

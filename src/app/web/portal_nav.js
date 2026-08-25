@@ -40,6 +40,38 @@
 
   // ---------- Two-level nav build ----------
 
+  function loadNavigationAssets(data) {
+    var scripts = {};
+    var styles = {};
+    (data.categories || []).forEach(function (category) {
+      (category.items || []).forEach(function (item) {
+        if (item.portal_script) scripts[item.portal_script] = true;
+        if (item.portal_style) styles[item.portal_style] = true;
+      });
+    });
+
+    var loads = Object.keys(styles).map(function (path) {
+      return new Promise(function (resolve, reject) {
+        var style = document.createElement('link');
+        style.rel = 'stylesheet';
+        style.href = path;
+        style.onload = resolve;
+        style.onerror = function () { reject(new Error('Portal asset unavailable: ' + path)); };
+        document.head.appendChild(style);
+      });
+    });
+    loads = loads.concat(Object.keys(scripts).map(function (path) {
+      return new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.src = path;
+        script.onload = resolve;
+        script.onerror = function () { reject(new Error('Portal asset unavailable: ' + path)); };
+        document.head.appendChild(script);
+      });
+    }));
+    return Promise.all(loads);
+  }
+
   function buildNav(cats) {
     categories = cats;
     itemMap = {};
@@ -334,6 +366,9 @@
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
+      })
+      .then(function (data) {
+        return loadNavigationAssets(data).then(function () { return data; });
       })
       .then(function (data) {
         // Expose primary category data for welcome hero card

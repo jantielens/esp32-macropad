@@ -472,7 +472,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
-  - src/app/actions/camera_capture_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/ha_service_action.cpp
@@ -515,6 +514,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/web_portal_camera.cpp
   - src/app/web_portal_camera.h
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
   - src/app/web_portal_routes.cpp
   - src/app/widgets.cpp
   - src/app/widgets/camera_preview_widget.cpp
@@ -544,7 +545,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
-  - src/app/actions/camera_capture_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/ha_service_action.cpp
