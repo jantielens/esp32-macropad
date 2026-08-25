@@ -106,6 +106,7 @@ static const CameraRegister kOv02c10Raw10Mode[] = {
 struct CameraCsiProbeContext {
     void* buffers[kCsiBufferCount];
     size_t buffer_size;
+    volatile bool capture_armed;
     volatile bool frame_complete;
     volatile size_t received_size;
     volatile uint32_t transaction_requests;
@@ -120,6 +121,44 @@ static CameraCsiProbeContext s_csi_context = {};
 static bool s_csi_controller_enabled = false;
 static bool s_csi_capture_started = false;
 static bool s_camera_streaming = false;
+// This buffer serves the continuous RGB565/JPEG feed and avoids a PSRAM
+// allocation/free cycle for each frame. Raw snapshot callers still own theirs.
+static CameraRawFrame s_rgb565_raw_staging = {};
+
+static bool camera_csi_buffers_ready() {
+    for (void* buffer : s_csi_context.buffers) {
+        if (!buffer) return false;
+    }
+    return true;
+}
+
+static void camera_free_csi_buffers() {
+    for (void*& buffer : s_csi_context.buffers) {
+        if (buffer) free(buffer);
+        buffer = nullptr;
+    }
+    s_csi_context.buffer_size = 0;
+}
+
+static void camera_stop_csi_capture() {
+    s_csi_context.capture_armed = false;
+    if (!s_csi_capture_started) return;
+    const esp_err_t error = esp_cam_ctlr_stop(s_csi_controller);
+    if (error != ESP_OK) {
+        LOGW("Camera", "CSI stop after failed capture: %s", esp_err_to_name(error));
+    }
+    s_csi_capture_started = false;
+}
+
+static void camera_prepare_csi_capture() {
+    s_csi_context.frame_complete = false;
+    s_csi_context.received_size = 0;
+    s_csi_context.transaction_requests = 0;
+    s_csi_context.completed_transactions = 0;
+    s_csi_context.next_buffer_index = 0;
+    s_csi_context.completed_buffer_index = 0;
+    s_csi_context.capture_armed = true;
+}
 
 static bool camera_on_csi_get_new_transaction(esp_cam_ctlr_handle_t controller,
                                               esp_cam_ctlr_trans_t* transaction,
@@ -142,7 +181,7 @@ static bool camera_on_csi_transaction_finished(esp_cam_ctlr_handle_t controller,
     (void)user_data;
     CameraCsiProbeContext* context = &s_csi_context;
     context->completed_transactions++;
-    if (!context->frame_complete) {
+    if (context->capture_armed && !context->frame_complete) {
         context->received_size = transaction->received_size;
         for (uint8_t index = 0; index < kCsiBufferCount; ++index) {
             if (transaction->buffer == context->buffers[index]) {
@@ -290,8 +329,8 @@ static esp_err_t camera_create_isp_bypass(isp_proc_handle_t* processor) {
     return esp_isp_new_processor(&config, processor);
 }
 
-bool camera_driver_capture_raw(CameraRawFrame* frame) {
-    if (frame) *frame = {};
+static bool camera_driver_capture_raw_into(CameraRawFrame* frame, bool retain_buffer_on_failure) {
+    if (!retain_buffer_on_failure && frame) *frame = {};
     const esp_ldo_channel_config_t ldo_config = {
         .chan_id = 3,
         .voltage_mv = 2500,
@@ -319,7 +358,10 @@ bool camera_driver_capture_raw(CameraRawFrame* frame) {
     if (error == ESP_OK && !s_csi_controller) {
         error = esp_cam_new_csi_ctlr(&csi_config, &s_csi_controller);
     }
-    if (error == ESP_OK && !s_csi_context.buffers[0]) {
+    if (error == ESP_OK && !camera_csi_buffers_ready()) {
+        // A prior allocation attempt may have left only one buffer populated.
+        // Never start DMA until both buffers were allocated as a matched pair.
+        camera_free_csi_buffers();
         size_t cache_alignment = 0;
         const uint32_t buffer_caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA;
         error = esp_cache_get_alignment(buffer_caps, &cache_alignment);
@@ -336,6 +378,7 @@ bool camera_driver_capture_raw(CameraRawFrame* frame) {
                     break;
                 }
             }
+            if (error != ESP_OK) camera_free_csi_buffers();
         }
     }
     if (error == ESP_OK && !s_csi_controller_enabled) {
@@ -362,13 +405,10 @@ bool camera_driver_capture_raw(CameraRawFrame* frame) {
         if (!camera_configure_raw10_mode()) error = ESP_FAIL;
         else s_camera_raw10_configured = true;
     }
+    if (error == ESP_OK) {
+        camera_prepare_csi_capture();
+    }
     if (error == ESP_OK && !s_csi_capture_started) {
-        s_csi_context.frame_complete = false;
-        s_csi_context.received_size = 0;
-        s_csi_context.transaction_requests = 0;
-        s_csi_context.completed_transactions = 0;
-        s_csi_context.next_buffer_index = 0;
-        s_csi_context.completed_buffer_index = 0;
         error = esp_cam_ctlr_start(s_csi_controller);
         s_csi_capture_started = error == ESP_OK;
     }
@@ -379,24 +419,29 @@ bool camera_driver_capture_raw(CameraRawFrame* frame) {
             s_camera_streaming = true;
         }
     }
-    if (error == ESP_OK) {
-        s_csi_context.frame_complete = false;
-        s_csi_context.received_size = 0;
-        s_csi_context.transaction_requests = 0;
-        s_csi_context.completed_transactions = 0;
-        s_csi_context.completed_buffer_index = 0;
-    }
     const unsigned long capture_started_ms = millis();
     while (error == ESP_OK && !s_csi_context.frame_complete && millis() - capture_started_ms < 1000) {
         delay(1);
     }
-    if (error == ESP_OK && !s_csi_context.frame_complete) error = ESP_ERR_TIMEOUT;
+    if (error == ESP_OK && !s_csi_context.frame_complete) {
+        error = ESP_ERR_TIMEOUT;
+        // Stop the active transaction before the next capture arms its wait;
+        // otherwise a late callback can complete the wrong request.
+        camera_stop_csi_capture();
+    }
     if (error == ESP_OK && frame) {
-        frame->data = static_cast<uint8_t*>(
-            heap_caps_malloc(s_csi_context.received_size, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM));
-        if (!frame->data) {
+        if (frame->size < s_csi_context.received_size) {
+            uint8_t* resized = static_cast<uint8_t*>(heap_caps_realloc(
+                frame->data, s_csi_context.received_size, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM));
+            if (!resized) {
+                error = ESP_ERR_NO_MEM;
+            } else {
+                frame->data = resized;
+            }
+        }
+        if (error == ESP_OK && !frame->data) {
             error = ESP_ERR_NO_MEM;
-        } else {
+        } else if (error == ESP_OK) {
             void* completed_buffer = s_csi_context.buffers[s_csi_context.completed_buffer_index];
             error = esp_cache_msync(completed_buffer, s_csi_context.buffer_size,
                                     ESP_CACHE_MSYNC_FLAG_TYPE_DATA | ESP_CACHE_MSYNC_FLAG_DIR_M2C);
@@ -408,8 +453,9 @@ bool camera_driver_capture_raw(CameraRawFrame* frame) {
             }
         }
     }
+    s_csi_context.capture_armed = false;
     if (error != ESP_OK) {
-        if (frame) camera_driver_release_raw(frame);
+        if (frame && !retain_buffer_on_failure) camera_driver_release_raw(frame);
         LOGW("Camera", "RAW10 frame capture failed: %s (requests=%u completed=%u bytes=%u)",
              esp_err_to_name(error), static_cast<unsigned>(s_csi_context.transaction_requests),
              static_cast<unsigned>(s_csi_context.completed_transactions),
@@ -419,6 +465,10 @@ bool camera_driver_capture_raw(CameraRawFrame* frame) {
     }
 
     return true;
+}
+
+bool camera_driver_capture_raw(CameraRawFrame* frame) {
+    return camera_driver_capture_raw_into(frame, false);
 }
 
 void camera_driver_release_raw(CameraRawFrame* frame) {
@@ -536,10 +586,11 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
         camera_driver_release_raw(&stale_frame);
     }
 
-    CameraRawFrame raw = {};
     const int64_t raw_started_us = esp_timer_get_time();
-    if (!camera_driver_capture_raw(&raw)) return false;
+    if (!camera_driver_capture_raw_into(&s_rgb565_raw_staging, true)) return false;
     if (timing) timing->raw_capture_us = static_cast<uint32_t>(esp_timer_get_time() - raw_started_us);
+
+    const CameraRawFrame& raw = s_rgb565_raw_staging;
 
     const CameraWhiteBalance estimated_balance = camera_estimate_white_balance(raw);
     const CameraWhiteBalance balance = {
@@ -595,8 +646,6 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
         rgb565->width = settings.output_width;
         rgb565->height = settings.output_height;
     }
-    camera_driver_release_raw(&raw);
-
     if (timing) timing->total_us = static_cast<uint32_t>(esp_timer_get_time() - capture_started_us);
 
     if (!captured) {

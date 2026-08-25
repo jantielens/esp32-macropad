@@ -120,7 +120,14 @@ private:
             _state = RESPONSE_CONTENT;
         }
 
-        if (part_ == PART_NEED_FRAME && load_latest_frame() != CAMERA_MJPEG_FRAME_READY) return false;
+        if (part_ == PART_NEED_FRAME) {
+            const CameraMjpegFrameResult result = load_latest_frame();
+            if (result == CAMERA_MJPEG_FRAME_FAILED) {
+                abort();
+                return false;
+            }
+            if (result != CAMERA_MJPEG_FRAME_READY) return false;
+        }
 
         const uint8_t* source = nullptr;
         size_t source_size = 0;
@@ -148,10 +155,16 @@ private:
             part_ = PART_JPEG;
         } else if (part_ == PART_JPEG) {
             part_ = PART_TRAILER;
-            ++sent_frames_;
         } else {
             part_ = PART_NEED_FRAME;
         }
+    }
+
+    void abort() {
+        if (failed_) return;
+        failed_ = true;
+        _state = RESPONSE_FAILED;
+        if (request_ && request_->client()) request_->client()->close();
     }
 
     CameraMjpegFrameResult load_latest_frame() {
@@ -202,7 +215,6 @@ private:
     char part_header_[96] = {};
     size_t part_header_size_ = 0;
     size_t part_offset_ = 0;
-    uint16_t sent_frames_ = 0;
     AsyncWebServerRequest* request_ = nullptr;
     String headers_;
     size_t headers_offset_ = 0;

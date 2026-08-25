@@ -8,6 +8,7 @@ window.init_camera_snapshots_fragment = function () {
     var latestDelete = document.getElementById('camera-latest-delete');
     var folders = document.getElementById('camera-roll-folders');
     var empty = document.getElementById('camera-roll-empty');
+    var galleryPageSize = 48;
 
     function fileUrl(path) {
         return storageBase + '/file?path=' + encodeURIComponent(path);
@@ -83,6 +84,7 @@ window.init_camera_snapshots_fragment = function () {
         var image = document.createElement('img');
         image.className = 'camera-roll-image card-img-top';
         image.src = fileUrl(entry.path);
+        image.loading = 'lazy';
         image.alt = 'Camera snapshot ' + entry.name;
         imageLink.appendChild(image);
         card.appendChild(imageLink);
@@ -153,9 +155,24 @@ window.init_camera_snapshots_fragment = function () {
                 return;
             }
             gallery.classList.remove('text-muted');
-            files.forEach(function (file) {
-                gallery.appendChild(createImageCard(file, loadFolder));
-            });
+            var displayed = 0;
+            function appendPage() {
+                var pageEnd = Math.min(displayed + galleryPageSize, files.length);
+                while (displayed < pageEnd) {
+                    gallery.appendChild(createImageCard(files[displayed++], loadFolder));
+                }
+                if (displayed >= files.length) return;
+                var loadMore = document.createElement('button');
+                loadMore.className = 'btn btn-outline-secondary btn-sm mt-3';
+                loadMore.type = 'button';
+                loadMore.textContent = 'Show more snapshots';
+                loadMore.addEventListener('click', function () {
+                    loadMore.remove();
+                    appendPage();
+                });
+                gallery.appendChild(loadMore);
+            }
+            appendPage();
         }
         details.addEventListener('toggle', function () {
             if (!details.open || loaded) return;

@@ -11,7 +11,7 @@
 #include <string.h>
 
 static const CameraOutputDimensions kCameraOutputDimensions[] = {
-    {640, 360},
+    {CAMERA_OUTPUT_WIDTH_DEFAULT, CAMERA_OUTPUT_HEIGHT_DEFAULT},
 };
 
 static const CameraCapabilities kCameraCapabilities = {

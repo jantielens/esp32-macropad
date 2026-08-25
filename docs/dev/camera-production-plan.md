@@ -13,7 +13,8 @@ hardware checks required before promoting each capability.
 
 ## Baseline
 
-The current MVE is gated by `HAS_CAMERA` and enabled only for `jc4880p433`.
+The current MVE is gated by `HAS_CAMERA` and enabled for `jc4880p433` and its
+derived board variants.
 It provides OV02C10 RAW10 capture at `1280x720`, demosaic and white balance,
 JPEG encoding, persisted camera settings, and authenticated one-shot JPEG and
 RAW endpoints.
@@ -62,7 +63,7 @@ buffer beyond the documented handoff interval.
 * Do not create a separate capture loop per storage action, button, or client
 * Pause producer work when no preview or stream consumer needs a fresh frame
 * Keep flash writes infrequent and bounded when using LittleFS
-* Start with a single MJPEG client and explicit frame-rate limits
+* Bound MJPEG clients per board and keep explicit frame-rate limits
 * Do not advertise an output dimension until it passes device capture tests
 
 ## Phase 0: Validate Output Modes

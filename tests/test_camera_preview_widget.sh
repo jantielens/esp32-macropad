@@ -20,12 +20,16 @@ grep -q 'widget_camera_scale' src/app/web/portal_pad_dialog.js
 grep -q 'has_camera === true' src/app/web/portal_pad_editor.js
 
 CAMERA_API="src/app/web_portal_camera.cpp"
+CAMERA_DRIVER="src/app/drivers/ov02c10_p4_driver.cpp"
 grep -q 'class CameraMjpegResponse final : public AsyncWebServerResponse' "$CAMERA_API"
 grep -q 'CAMERA_FEED_OUTPUT_JPEG' "$CAMERA_API"
 grep -q 'camera_feed_release_frame(&frame)' "$CAMERA_API"
+grep -q 'void abort()' "$CAMERA_API"
 grep -q 'request->client()->onPoll' "$CAMERA_API"
 grep -q 'CAMERA_MJPEG_MAX_CLIENTS' "$CAMERA_API"
 grep -q 'Camera stream client limit reached' "$CAMERA_API"
+grep -q 'camera_stop_csi_capture();' "$CAMERA_DRIVER"
+grep -q 's_rgb565_raw_staging' "$CAMERA_DRIVER"
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
 grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
 

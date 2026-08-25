@@ -70,6 +70,17 @@ formatting. Feature-specific views may offer deletion for their own files; the
 Camera **Snapshots** page can remove a saved image, a day's camera-roll folder,
 or the latest snapshot copy.
 
+## Camera Snapshots
+
+Camera-enabled boards expose a **Camera** action in the Pad editor. Its **Save
+to** setting chooses `latest`, `roll`, or `both`. The latest image is always
+written to `/camera/latest.jpg`; camera-roll images are written as
+`/camera/YYYYMMDD/NNNNNN.jpg` using UTC. Camera-roll captures require valid NTP
+time. Without it, the `latest` copy can still be saved, but the camera-roll copy
+is skipped. The Camera **Snapshots** page shows the latest image and groups
+camera-roll images by day; each expanded day initially loads 48 snapshots and
+offers **Show more snapshots** for the next group.
+
 ## Music Library
 
 Audio builds with the sound player enabled include a **Music Library** page. It lists
