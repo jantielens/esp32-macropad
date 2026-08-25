@@ -24,8 +24,9 @@
 #define CAMERA_CAPTURE_HEIGHT 720
 #define CAMERA_CSI_DATA_LANES 1
 #define CAMERA_CSI_LANE_BIT_RATE_MBPS 400
-// Shared JPEG feed supports three independently paced web stream clients.
-#define CAMERA_MJPEG_MAX_CLIENTS 3
+// The shared JPEG feed is intentionally limited to one web stream. Multiple
+// clients duplicate large PSRAM copies on AsyncTCP's watchdog-monitored task.
+#define CAMERA_MJPEG_MAX_CLIENTS 1
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
 

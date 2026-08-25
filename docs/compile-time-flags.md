@@ -567,6 +567,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/button_confirmation.h
   - src/app/button_defaults.cpp
   - src/app/button_defaults.h
+  - src/app/camera_feed.cpp
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/data_stream.cpp

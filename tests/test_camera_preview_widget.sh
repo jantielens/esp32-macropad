@@ -24,6 +24,7 @@ CAMERA_DRIVER="src/app/drivers/ov02c10_p4_driver.cpp"
 CAMERA_COMPONENT="src/app/components/camera_component.cpp"
 CAMERA_PORTAL="src/app/web/portal_camera.js"
 CONFIG_MANAGER="src/app/config_manager.cpp"
+CAMERA_FEED="src/app/camera_feed.cpp"
 grep -q 'class CameraMjpegResponse final : public AsyncWebServerResponse' "$CAMERA_API"
 grep -q 'CAMERA_FEED_OUTPUT_JPEG' "$CAMERA_API"
 grep -q 'camera_feed_release_frame(&frame)' "$CAMERA_API"
@@ -31,11 +32,15 @@ grep -q 'void abort()' "$CAMERA_API"
 grep -q 'request->client()->onPoll' "$CAMERA_API"
 grep -q 'CAMERA_MJPEG_MAX_CLIENTS' "$CAMERA_API"
 grep -q 'Camera stream client limit reached' "$CAMERA_API"
+grep -q 'request_->client()->onPoll(nullptr)' "$CAMERA_API"
+grep -q 'if (pending_offset_ == pending_size_ && !prepare_pending()) return 0;' "$CAMERA_API"
 grep -q 'camera_stop_csi_capture();' "$CAMERA_DRIVER"
 grep -q 's_rgb565_raw_staging' "$CAMERA_DRIVER"
 grep -q 'camera_set_streaming(false, 0)' "$CAMERA_DRIVER"
 grep -q 'Deferring idle cleanup: I2C bus busy' "$CAMERA_DRIVER"
 grep -A45 'bool camera_driver_deinit()' "$CAMERA_DRIVER" | grep -q 's_exposure_lines = 0;'
+grep -q 'if (displayDriverIsFlushBusy()) return;' "$CAMERA_FEED"
+test "$(grep -c 'camera_release_capture_resources();' "$CAMERA_FEED")" -eq 1
 grep -q '#define HAS_CAMERA true' src/boards/jc1060p470c/board_overrides.h
 grep -q '#define CAMERA_DRIVER CAMERA_DRIVER_OV02C10_P4' src/boards/jc1060p470c/board_overrides.h
 grep -q '../jc1060p470c/board_overrides.h' src/boards/jc1060p470c-sd/board_overrides.h
@@ -58,6 +63,6 @@ grep -q 'kCameraPortalScript' "$CAMERA_COMPONENT"
 grep -q 'kCameraPortalStyle' "$CAMERA_COMPONENT"
 grep -A5 'LOGI("Config", "Save start")' "$CONFIG_MANAGER" | grep -q 'Serial.flush();'
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
-grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
+grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 1' src/boards/jc4880p433/board_overrides.h
 
 echo "PASS: camera preview widget wiring"

@@ -1189,7 +1189,7 @@ directly from the request task. It activates JPEG demand in the shared camera
 feed and ends that demand when the client disconnects. The compile-time
 `CAMERA_MJPEG_MAX_CLIENTS` board setting limits authenticated stream clients;
 additional requests receive `429 Too Many Requests`. The `jc4880p433` board
-permits three clients.
+permits one client to keep MJPEG response work within the AsyncTCP task budget.
 
 `feed_target_fps` controls the common capture rate for both this stream and
 Camera Preview widgets. It defaults to 4 FPS and is bounded to 1-5 FPS. Lower

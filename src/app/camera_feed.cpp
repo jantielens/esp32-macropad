@@ -1,6 +1,9 @@
 #include "camera_feed.h"
 
 #if HAS_CAMERA
+#if HAS_DISPLAY
+#include "display_driver.h"
+#endif
 #include "log_manager.h"
 #include "ota_activity.h"
 
@@ -123,7 +126,6 @@ void camera_feed_release_idle_resources() {
         camera_release_jpeg(&jpegs[index]);
         if (rgb565[index]) free(rgb565[index]);
     }
-    camera_release_capture_resources();
 }
 }
 
@@ -226,6 +228,9 @@ void camera_feed_loop() {
     const uint32_t interval_ms = 1000U / settings.feed_target_fps;
     const uint32_t now = millis();
     if (now - s_last_capture_ms < interval_ms) return;
+#if HAS_DISPLAY
+    if (displayDriverIsFlushBusy()) return;
+#endif
     const int8_t writable_slot = camera_feed_writable_slot();
     if (writable_slot < 0) return;
 

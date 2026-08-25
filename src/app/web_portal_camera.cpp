@@ -56,6 +56,7 @@ public:
     }
 
     ~CameraMjpegResponse() override {
+        if (request_ && request_->client()) request_->client()->onPoll(nullptr);
         if (jpeg_copy_) free(jpeg_copy_);
         camera_feed_release_demand(CAMERA_FEED_OUTPUT_JPEG);
         camera_mjpeg_stream_release();
@@ -89,20 +90,15 @@ private:
     size_t pump() {
         if (!request_ || !request_->client() || !request_->client()->canSend()) return 0;
 
-        size_t queued = 0;
-        while (request_->client()->space()) {
-            if (pending_offset_ == pending_size_ && !prepare_pending()) break;
+        if (pending_offset_ == pending_size_ && !prepare_pending()) return 0;
 
-            const size_t written = request_->client()->add(
-                reinterpret_cast<const char*>(pending_ + pending_offset_), pending_size_ - pending_offset_);
-            if (!written) break;
-            pending_offset_ += written;
-            queued += written;
-            if (pending_offset_ != pending_size_) break;
-        }
+        const size_t written = request_->client()->add(
+            reinterpret_cast<const char*>(pending_ + pending_offset_), pending_size_ - pending_offset_);
+        if (!written) return 0;
+        pending_offset_ += written;
 
-        if (queued) request_->client()->send();
-        return queued;
+        request_->client()->send();
+        return written;
     }
 
     bool prepare_pending() {
