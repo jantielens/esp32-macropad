@@ -12,6 +12,7 @@
  */
 
 #include "mipi_dsi_driver.h"
+#include "../dma2d_arbiter.h"
 #include "../log_manager.h"
 #include <string.h>
 
@@ -31,6 +32,7 @@ static bool IRAM_ATTR onColorTransDone(esp_lcd_panel_handle_t panel,
                                        esp_lcd_dpi_panel_event_data_t* edata,
                                        void* user_ctx) {
     g_displayFlushBusy = false;
+    dma2d_arbiter_release_from_isr();
     lv_display_t* disp = (lv_display_t*)user_ctx;
     lv_display_flush_ready(disp);
     return false;
@@ -322,6 +324,7 @@ bool onPpaDone(ppa_client_handle_t client,
         driver->drawErr = err;
         driver->drawErrCount++;
         g_displayFlushBusy = false;
+        dma2d_arbiter_release_from_isr();
         lv_display_flush_ready(driver->lvglDisplay);
         return false;
     }
@@ -347,6 +350,14 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
     // Cleared by onColorTransDone ISR after the final DMA2D copy completes.
     g_displayFlushBusy = true;
 
+    // Serialize against the hardware JPEG encoder on the shared 2D-DMA.
+    if (!dma2d_arbiter_acquire(1000)) {
+        LOGE(getLogTag(), "2D-DMA busy, dropping flush");
+        g_displayFlushBusy = false;
+        lv_display_flush_ready(lvglDisplay);
+        return;
+    }
+
     if (displayRotation == 0 || !rotBuffer || !ppaClient) {
         // No rotation — direct DMA2D async copy
         esp_err_t err = esp_lcd_panel_draw_bitmap(panel_handle,
@@ -359,6 +370,7 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
             // or it waits on flush_ready forever.
             LOGE(getLogTag(), "draw_bitmap failed: 0x%x", (int)err);
             g_displayFlushBusy = false;
+            dma2d_arbiter_release();
             lv_display_flush_ready(lvglDisplay);
         }
         return;
@@ -440,6 +452,7 @@ void MipiDsiDriver::pushColors(uint16_t* data, uint32_t len, bool swap_bytes) {
         // run for this flush, so clear the in-flight flag here too — otherwise
         // displayDriverIsFlushBusy() stays true forever and stalls pad polling.
         g_displayFlushBusy = false;
+        dma2d_arbiter_release();
         lv_display_flush_ready(lvglDisplay);
         return;
     }

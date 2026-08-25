@@ -35,6 +35,13 @@ grep -q 'CAMERA_MJPEG_MAX_CLIENTS' "$CAMERA_API"
 grep -q 'Camera stream client limit reached' "$CAMERA_API"
 grep -q 'request_->client()->onPoll(nullptr)' "$CAMERA_API"
 grep -q 'if (pending_offset_ == pending_size_ && !prepare_pending()) return 0;' "$CAMERA_API"
+# ESP32-P4 shares one 2D-DMA between the JPEG codec and the display PPA/DMA2D
+# path; overlapping transfers deadlock, so every user must hold the token.
+grep -q 'dma2d_arbiter_acquire' src/app/drivers/mipi_dsi_driver.cpp
+grep -q 'dma2d_arbiter_release_from_isr' src/app/drivers/mipi_dsi_driver.cpp
+grep -q 'dma2d_arbiter_acquire' src/app/jpeg_encoder_service.cpp
+grep -q 'dma2d_arbiter_acquire' src/app/image_decoder.cpp
+grep -q 'dma2d_arbiter_init' src/app/app.ino
 grep -q 'camera_stop_csi_capture();' "$CAMERA_DRIVER"
 grep -q 's_rgb565_raw_staging' "$CAMERA_DRIVER"
 grep -q 'camera_set_streaming(false, 0)' "$CAMERA_DRIVER"
@@ -70,7 +77,8 @@ grep -q 'kCameraPortalScript' "$CAMERA_COMPONENT"
 grep -q 'kCameraPortalStyle' "$CAMERA_COMPONENT"
 grep -A5 'LOGI("Config", "Save start")' "$CONFIG_MANAGER" | grep -q 'Serial.flush();'
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
-grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 1' src/boards/jc4880p433/board_overrides.h
+grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
+grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc1060p470c/board_overrides.h
 
 MCP_CAMERA="src/app/mcp_tools_camera.cpp"
 grep -q '#if HAS_MCP && HAS_CAMERA' "$MCP_CAMERA"

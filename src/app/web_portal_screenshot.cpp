@@ -18,6 +18,7 @@
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
 #include "driver/jpeg_encode.h"
+#include "dma2d_arbiter.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #endif
@@ -152,11 +153,13 @@ static bool encodeJpeg(const ScreenshotCaptureResult* capture, uint8_t quality,
 				encodeCfg.image_quality = quality;
 
 				uint32_t encodedSize = 0;
+				const bool arbiterHeld = dma2d_arbiter_acquire(2000);
 				esp_err_t err = jpeg_encoder_process(
 						s_hw_jpeg, &encodeCfg,
 						input, (uint32_t)rawSize,
 						output, (uint32_t)outputSize,
 						&encodedSize);
+				if (arbiterHeld) dma2d_arbiter_release();
 				if (err != ESP_OK || encodedSize == 0) {
 						LOGE(TAG, "HW JPEG encode failed (0x%x)", err);
 						break;

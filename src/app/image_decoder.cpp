@@ -57,6 +57,7 @@ static void* psram_alloc(size_t bytes) {
 #ifdef CONFIG_IDF_TARGET_ESP32P4
 #include "driver/jpeg_decode.h"
 #include "driver/ppa.h"
+#include "dma2d_arbiter.h"
 
 static jpeg_decoder_handle_t g_hw_jpeg  = nullptr;
 static ppa_client_handle_t   g_ppa_srm  = nullptr;
@@ -150,11 +151,13 @@ static bool hw_decode_jpeg(
     dcfg.output_format = JPEG_DECODE_OUT_FORMAT_RGB565;
     dcfg.rgb_order     = JPEG_DEC_RGB_ELEMENT_ORDER_BGR;  // little-endian RGB565 = LVGL format
     uint32_t decoded_size = 0;
+    const bool arbiter_held = dma2d_arbiter_acquire(2000);
     esp_err_t err = jpeg_decoder_process(
         g_hw_jpeg, &dcfg,
         in_buf, (uint32_t)len,
         rgb565, (uint32_t)rx_size,
         &decoded_size);
+    if (arbiter_held) dma2d_arbiter_release();
     free(in_buf);
 
     if (err != ESP_OK) {
@@ -233,7 +236,9 @@ static bool ppa_cover_scale(
     srm.scale_y          = ppa_scale;
     srm.mode             = PPA_TRANS_MODE_BLOCKING;
 
+    const bool arbiter_held = dma2d_arbiter_acquire(2000);
     esp_err_t err = ppa_do_scale_rotate_mirror(g_ppa_srm, &srm);
+    if (arbiter_held) dma2d_arbiter_release();
     if (err != ESP_OK) {
         LOGE(TAG, "PPA cover: SRM failed 0x%x", err);
         return false;
@@ -300,7 +305,9 @@ static bool ppa_letterbox_scale(
     srm.scale_y          = ppa_scale;
     srm.mode             = PPA_TRANS_MODE_BLOCKING;
 
+    const bool arbiter_held = dma2d_arbiter_acquire(2000);
     esp_err_t err = ppa_do_scale_rotate_mirror(g_ppa_srm, &srm);
+    if (arbiter_held) dma2d_arbiter_release();
     if (err != ESP_OK) {
         LOGE(TAG, "PPA letterbox: SRM failed 0x%x", err);
         return false;

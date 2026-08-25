@@ -6,6 +6,7 @@
 
 #include "log_manager.h"
 
+#include "dma2d_arbiter.h"
 #include "driver/jpeg_encode.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -91,9 +92,14 @@ static bool jpeg_encode(const uint8_t* pixels, uint16_t width, uint16_t height,
             .image_quality = quality,
         };
         uint32_t encoded_size = 0;
+        if (!dma2d_arbiter_acquire(2000)) {
+            LOGW(TAG, "2D-DMA busy, skipping JPEG encode");
+            break;
+        }
         const esp_err_t error = jpeg_encoder_process(
             s_encoder, &config, input, static_cast<uint32_t>(input_size), output,
             static_cast<uint32_t>(allocated_output_size), &encoded_size);
+        dma2d_arbiter_release();
         if (error != ESP_OK || !encoded_size) {
             LOGE(TAG, "JPEG encode failed: %s", esp_err_to_name(error));
             break;

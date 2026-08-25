@@ -18,6 +18,7 @@
 #include "wifi_manager.h"
 #include "device_class.h"
 #include "duty_cycle.h"
+#include "dma2d_arbiter.h"
 #include "hw_buttons.h"
 #include "hw_button_config.h"
 #if HAS_DISPLAY || HAS_BUTTON
@@ -152,6 +153,8 @@ static bool check_config_mode_button() {
 
 void setup()
 {
+	dma2d_arbiter_init();
+
 	// Optional device-side history for sparklines (/api/health/history)
 	// Start as early as possible after a device boot.
 	#if HEALTH_HISTORY_ENABLED

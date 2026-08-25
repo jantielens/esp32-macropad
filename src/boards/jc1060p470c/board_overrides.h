@@ -26,6 +26,9 @@
 #define CAMERA_CAPTURE_HEIGHT 720
 #define CAMERA_CSI_DATA_LANES 1
 #define CAMERA_CSI_LANE_BIT_RATE_MBPS 400
+// The shared JPEG feed encodes once per frame regardless of client count, so
+// extra stream clients only add per-client TCP copies.
+#define CAMERA_MJPEG_MAX_CLIENTS 3
 // Pin LVGL render task to Core 1 (Core 0 handles WiFi SDIO + system tasks)
 #define LVGL_TASK_CORE 1
 // Measured under portal, MQTT, and pad load: 4704 bytes remained from 8192.
