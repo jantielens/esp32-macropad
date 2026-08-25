@@ -7,6 +7,7 @@ WIDGET="src/app/widgets/camera_preview_widget.cpp"
 
 grep -q '#if HAS_DISPLAY && HAS_CAMERA' "$WIDGET"
 grep -q 'REGISTER_WIDGET_SCHEMA(camera_preview, nullptr, false)' "$WIDGET"
+grep -q 'camera_preview_describe' "$WIDGET"
 grep -q 'CAMERA_FEED_OUTPUT_RGB565' "$WIDGET"
 grep -q 'CAMERA_PREVIEW_SCALE_LETTERBOX' "$WIDGET"
 grep -q 'CAMERA_PREVIEW_SCALE_CENTER_CROP' "$WIDGET"
@@ -70,5 +71,15 @@ grep -q 'kCameraPortalStyle' "$CAMERA_COMPONENT"
 grep -A5 'LOGI("Config", "Save start")' "$CONFIG_MANAGER" | grep -q 'Serial.flush();'
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
 grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 1' src/boards/jc4880p433/board_overrides.h
+
+MCP_CAMERA="src/app/mcp_tools_camera.cpp"
+grep -q '#if HAS_MCP && HAS_CAMERA' "$MCP_CAMERA"
+grep -q '"get_camera_status"' "$MCP_CAMERA"
+grep -q '"set_camera_config"' "$MCP_CAMERA"
+grep -q '"capture_camera_snapshot"' "$MCP_CAMERA"
+grep -q 'mcp_run_control(exec_set_camera_config' "$MCP_CAMERA"
+grep -q 'mcp_run_control(exec_capture_camera_snapshot' "$MCP_CAMERA"
+grep -q 'mcp_camera_capabilities' "$MCP_CAMERA"
+grep -q 'mcp_camera_capabilities(result)' src/app/mcp_tools_pads.cpp
 
 echo "PASS: camera preview widget wiring"

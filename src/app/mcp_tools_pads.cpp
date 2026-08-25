@@ -210,6 +210,10 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     extern void mcp_config_capabilities(JsonObject& out);
     JsonObject device_config = result.createNestedObject("device_config");
     mcp_config_capabilities(device_config);
+#if HAS_CAMERA
+    extern void mcp_camera_capabilities(JsonObject& out);
+    mcp_camera_capabilities(result);
+#endif
     return true;
 }
 
