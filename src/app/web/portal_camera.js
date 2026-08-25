@@ -18,8 +18,21 @@ window.init_camera_fragment = function () {
     var preview = document.getElementById('camera-preview');
     var previewCard = document.getElementById('camera-preview-card');
     var download = document.getElementById('camera-download-btn');
+    var streamClientLimit = document.getElementById('camera-stream-client-limit');
+    var cameraApiPaths = {
+        'camera-stream-url': '/api/camera/stream',
+        'camera-jpeg-snapshot-url': '/api/camera/snapshot.jpg',
+        'camera-raw-snapshot-url': '/api/camera/snapshot.raw'
+    };
     var currentUrl = null;
     var exposureLineTimeUs = 0;
+
+    Object.keys(cameraApiPaths).forEach(function (id) {
+        var link = document.getElementById(id);
+        var url = window.location.origin + cameraApiPaths[id];
+        link.href = url;
+        link.textContent = url;
+    });
 
     function setStatus(message, isError) {
         status.textContent = message;
@@ -85,6 +98,8 @@ window.init_camera_fragment = function () {
         feedTargetFps.max = config.feed_target_fps_max;
         feedTargetFps.value = config.feed_target_fps;
         feedTargetFpsValue.textContent = config.feed_target_fps;
+        streamClientLimit.textContent = 'This device supports ' + config.mjpeg_max_clients +
+            ' concurrent MJPEG ' + (config.mjpeg_max_clients === 1 ? 'stream.' : 'streams.');
         rotation.value = config.rotation;
         exposure.min = config.exposure_lines_min;
         exposure.max = config.exposure_lines_max;

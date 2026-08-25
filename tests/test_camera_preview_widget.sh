@@ -53,6 +53,12 @@ grep -q 'camera-rotation' src/app/web/camera.fragment.html
 grep -q 'camera-exposure-time-value' src/app/web/camera.fragment.html
 grep -q 'camera-wb-red" type="range"' src/app/web/camera.fragment.html
 grep -q 'camera-wb-blue" type="range"' src/app/web/camera.fragment.html
+grep -q 'id="camera-stream-url"' src/app/web/camera.fragment.html
+grep -q 'id="camera-jpeg-snapshot-url"' src/app/web/camera.fragment.html
+grep -q 'id="camera-raw-snapshot-url"' src/app/web/camera.fragment.html
+grep -q 'camera-stream-client-limit' src/app/web/portal_camera.js
+grep -q 'window.location.origin + cameraApiPaths\[id\]' src/app/web/portal_camera.js
+grep -q 'mjpeg_max_clients' src/app/components/camera_component.cpp
 grep -q 'updateExposureValue' "$CAMERA_PORTAL"
 grep -q 'updateWhiteBalanceValue' "$CAMERA_PORTAL"
 grep -q 'feedTargetFps' "$CAMERA_PORTAL"

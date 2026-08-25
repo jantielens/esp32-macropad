@@ -2,6 +2,7 @@
 
 #if HAS_CAMERA
 
+#include "board_config.h"
 #include "camera.h"
 #include "config_manager.h"
 #include "main_loop_bridge.h"
@@ -39,6 +40,7 @@ void camera_get_config(AsyncWebServerRequest* request) {
     (*doc)["feed_target_fps"] = settings.feed_target_fps;
     (*doc)["feed_target_fps_min"] = capabilities->feed_target_fps_min;
     (*doc)["feed_target_fps_max"] = capabilities->feed_target_fps_max;
+    (*doc)["mjpeg_max_clients"] = CAMERA_MJPEG_MAX_CLIENTS;
     (*doc)["rotation"] = settings.rotation;
     (*doc)["exposure_lines"] = settings.exposure_lines;
     (*doc)["exposure_lines_min"] = capabilities->exposure_lines_min;

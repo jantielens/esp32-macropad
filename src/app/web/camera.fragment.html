@@ -3,6 +3,17 @@
   <p>Configure the onboard camera and test its current image settings.</p>
 </div>
 <div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Camera API</h5></div>
+  <div class="card-body">
+    <div class="d-flex flex-column gap-1">
+      <a id="camera-stream-url" href="/api/camera/stream" target="_blank" rel="noopener">/api/camera/stream</a>
+      <a id="camera-jpeg-snapshot-url" href="/api/camera/snapshot.jpg" target="_blank" rel="noopener">/api/camera/snapshot.jpg</a>
+      <a id="camera-raw-snapshot-url" href="/api/camera/snapshot.raw" target="_blank" rel="noopener">/api/camera/snapshot.raw</a>
+    </div>
+    <div class="form-text mt-2" id="camera-stream-client-limit">Loading MJPEG stream limit...</div>
+  </div>
+</div>
+<div class="card mb-3">
   <div class="card-header d-flex align-items-center justify-content-between gap-3">
     <h5 class="mb-0">Image output</h5>
     <div class="camera-status mb-0" id="camera-status" role="status">Checking camera...</div>
@@ -76,7 +87,7 @@
     </div>
   </div>
 </div>
-<div class="save-bar">
+<div class="save-bar mb-3">
   <button type="button" class="btn btn-outline-primary btn-sm" id="camera-save-btn">Save settings</button>
   <button type="button" class="btn btn-primary btn-sm" id="camera-capture-btn">Test capture</button>
   <a class="btn btn-outline-secondary btn-sm disabled" id="camera-download-btn" download="camera.jpg">Download JPEG</a>
