@@ -67,6 +67,7 @@ struct CameraCapabilities {
 	uint8_t jpeg_quality_max;
 	uint16_t exposure_lines_min;
 	uint16_t exposure_lines_max;
+	float exposure_line_time_us;
 	uint16_t white_balance_q8_min;
 	uint16_t white_balance_q8_max;
 	const CameraOutputDimensions* output_dimensions;

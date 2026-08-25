@@ -383,6 +383,15 @@ The Table widget's **Data Binding** field accepts structured table payload bindi
 
 On camera-enabled boards, select **Camera Preview** as a button's widget to display the shared camera feed. Choose Cover to fill the button, Letterbox to show the complete image without stretching, or Center crop to clip an unscaled centered image.
 
+The **Camera settings** page retains an output selector for future camera modes;
+the current OV02C10 path offers its validated `640x360` JPEG output from a
+`1280x720` RAW10 sensor frame. JPEG quality balances image detail against file
+size. **Shutter time** is shown as an approximate duration in milliseconds; the
+sensor-row count below it is the underlying integration value. White-balance
+Red and Blue sliders are manual multipliers applied after the camera's scene
+estimate. `1.00x neutral` leaves that channel unchanged; raise Red for a warmer
+image or Blue for a cooler image.
+
 On ESP32-P4 builds, the **Extensions** page has two small slots
 and one large slot for trusted native Extensions. Upload the signed package
 `extension-id@version.ext`, then reboot to install it into executable flash.

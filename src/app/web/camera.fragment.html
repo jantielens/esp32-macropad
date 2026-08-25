@@ -3,40 +3,63 @@
   <p>Configure the onboard camera and test its current image settings.</p>
 </div>
 <div class="card mb-3">
+  <div class="card-header d-flex align-items-center justify-content-between gap-3">
+    <h5 class="mb-0">Image output</h5>
+    <div class="camera-status mb-0" id="camera-status" role="status">Checking camera...</div>
+  </div>
   <div class="card-body">
-    <div class="camera-status mb-3" id="camera-status" role="status">Checking camera...</div>
-    <div class="grid-2col mb-3">
+    <div class="grid-2col">
       <div>
-        <label class="form-label" for="camera-jpeg-quality">JPEG quality</label>
+        <label class="form-label d-flex justify-content-between" for="camera-jpeg-quality">
+          <span>JPEG quality</span><strong><span id="camera-jpeg-quality-value">60</span>/100</strong>
+        </label>
         <input class="form-range" id="camera-jpeg-quality" type="range" min="30" max="90" step="1" value="60">
-        <div class="form-text"><span id="camera-jpeg-quality-value">60</span> (30-90)</div>
+        <div class="form-text">Higher quality preserves detail and produces larger files.</div>
       </div>
       <div>
         <label class="form-label" for="camera-output-dimensions">JPEG output</label>
         <select class="form-select" id="camera-output-dimensions"></select>
-        <div class="form-text" id="camera-raw-mode"></div>
+        <div class="form-text" id="camera-raw-mode">Loading sensor mode...</div>
       </div>
-    </div>
-    <div class="grid-2col mb-3">
-      <div>
-        <label class="form-label" for="camera-exposure-lines">Exposure</label>
-        <input class="form-range" id="camera-exposure-lines" type="range" min="8" max="1149" step="1" value="512">
-        <div class="form-text"><span id="camera-exposure-lines-value">512</span> lines</div>
-      </div>
-      <div>
-        <label class="form-label" for="camera-wb-red">White balance</label>
-        <div class="grid-2col">
-          <div><input class="form-control" id="camera-wb-red" type="number" min="64" max="1024" step="1" value="256" aria-label="Red gain"><div class="form-text">Red gain / 256</div></div>
-          <div><input class="form-control" id="camera-wb-blue" type="number" min="64" max="1024" step="1" value="256" aria-label="Blue gain"><div class="form-text">Blue gain / 256</div></div>
-        </div>
-      </div>
-    </div>
-    <div class="save-bar">
-      <button type="button" class="btn btn-outline-primary btn-sm" id="camera-save-btn">Save settings</button>
-      <button type="button" class="btn btn-primary btn-sm" id="camera-capture-btn">Test capture</button>
-      <a class="btn btn-outline-secondary btn-sm disabled" id="camera-download-btn" download="camera.jpg">Download JPEG</a>
     </div>
   </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Exposure &amp; color</h5></div>
+  <div class="card-body">
+    <div class="grid-2col">
+      <div>
+        <label class="form-label d-flex justify-content-between" for="camera-exposure-lines">
+          <span>Shutter time</span><strong>~<span id="camera-exposure-time-value">14.7</span> ms</strong>
+        </label>
+        <input class="form-range" id="camera-exposure-lines" type="range" min="8" max="1149" step="1" value="512">
+        <div class="form-text">Longer captures brighten the image. <span id="camera-exposure-lines-value">512</span> sensor rows.</div>
+      </div>
+      <div>
+        <label class="form-label">White balance correction</label>
+        <div class="grid-2col">
+          <div>
+            <label class="form-label d-flex justify-content-between" for="camera-wb-red">
+              <span>Red</span><strong id="camera-wb-red-value">1.00x neutral</strong>
+            </label>
+            <input class="form-range" id="camera-wb-red" type="range" min="64" max="1024" step="1" value="256">
+          </div>
+          <div>
+            <label class="form-label d-flex justify-content-between" for="camera-wb-blue">
+              <span>Blue</span><strong id="camera-wb-blue-value">1.00x neutral</strong>
+            </label>
+            <input class="form-range" id="camera-wb-blue" type="range" min="64" max="1024" step="1" value="256">
+          </div>
+        </div>
+        <div class="form-text">Manual multipliers applied after the camera's scene estimate. Raise red for a warmer image or blue for a cooler image.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="save-bar">
+  <button type="button" class="btn btn-outline-primary btn-sm" id="camera-save-btn">Save settings</button>
+  <button type="button" class="btn btn-primary btn-sm" id="camera-capture-btn">Test capture</button>
+  <a class="btn btn-outline-secondary btn-sm disabled" id="camera-download-btn" download="camera.jpg">Download JPEG</a>
 </div>
 <div class="card" id="camera-preview-card" hidden>
   <div class="card-body">

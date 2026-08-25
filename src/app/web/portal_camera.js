@@ -6,6 +6,7 @@ window.init_camera_fragment = function () {
     var dimensions = document.getElementById('camera-output-dimensions');
     var exposure = document.getElementById('camera-exposure-lines');
     var exposureValue = document.getElementById('camera-exposure-lines-value');
+    var exposureTimeValue = document.getElementById('camera-exposure-time-value');
     var whiteBalanceRed = document.getElementById('camera-wb-red');
     var whiteBalanceBlue = document.getElementById('camera-wb-blue');
     var rawMode = document.getElementById('camera-raw-mode');
@@ -15,6 +16,7 @@ window.init_camera_fragment = function () {
     var previewCard = document.getElementById('camera-preview-card');
     var download = document.getElementById('camera-download-btn');
     var currentUrl = null;
+    var exposureLineTimeUs = 0;
 
     function setStatus(message, isError) {
         status.textContent = message;
@@ -42,8 +44,25 @@ window.init_camera_fragment = function () {
     quality.addEventListener('input', function () {
         qualityValue.textContent = quality.value;
     });
-    exposure.addEventListener('input', function () {
+
+    function updateExposureValue() {
         exposureValue.textContent = exposure.value;
+        exposureTimeValue.textContent = ((Number(exposure.value) * exposureLineTimeUs) / 1000).toFixed(1);
+    }
+
+    function updateWhiteBalanceValue(input, output) {
+        var multiplier = Number(input.value) / 256;
+        output.textContent = multiplier.toFixed(2) + 'x' + (Number(input.value) === 256 ? ' neutral' : '');
+    }
+
+    exposure.addEventListener('input', function () {
+        updateExposureValue();
+    });
+    whiteBalanceRed.addEventListener('input', function () {
+        updateWhiteBalanceValue(whiteBalanceRed, document.getElementById('camera-wb-red-value'));
+    });
+    whiteBalanceBlue.addEventListener('input', function () {
+        updateWhiteBalanceValue(whiteBalanceBlue, document.getElementById('camera-wb-blue-value'));
     });
 
     fetch(base).then(function (response) {
@@ -57,13 +76,16 @@ window.init_camera_fragment = function () {
         exposure.min = config.exposure_lines_min;
         exposure.max = config.exposure_lines_max;
         exposure.value = config.exposure_lines;
-        exposureValue.textContent = config.exposure_lines;
+        exposureLineTimeUs = config.exposure_line_time_us;
+        updateExposureValue();
         whiteBalanceRed.min = config.white_balance_q8_min;
         whiteBalanceRed.max = config.white_balance_q8_max;
         whiteBalanceRed.value = config.white_balance_red_q8;
         whiteBalanceBlue.min = config.white_balance_q8_min;
         whiteBalanceBlue.max = config.white_balance_q8_max;
         whiteBalanceBlue.value = config.white_balance_blue_q8;
+        updateWhiteBalanceValue(whiteBalanceRed, document.getElementById('camera-wb-red-value'));
+        updateWhiteBalanceValue(whiteBalanceBlue, document.getElementById('camera-wb-blue-value'));
         dimensions.innerHTML = '';
         config.output_dimensions.forEach(function (option) {
             var value = option.width + 'x' + option.height;
@@ -73,7 +95,7 @@ window.init_camera_fragment = function () {
             el.selected = option.width === config.output_width && option.height === config.output_height;
             dimensions.appendChild(el);
         });
-        rawMode.textContent = 'Sensor mode: ' + config.raw_width + 'x' + config.raw_height + ' ' + config.raw_pixel_format;
+        rawMode.textContent = 'Validated output. Sensor source: ' + config.raw_width + 'x' + config.raw_height + ' ' + config.raw_pixel_format + '.';
         setStatus(config.detected ? 'Camera ready' : 'Camera not detected', !config.detected);
         captureButton.disabled = !config.detected;
     }).catch(function (error) {

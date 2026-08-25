@@ -30,6 +30,7 @@ void camera_get_config(AsyncWebServerRequest* request) {
     (*doc)["exposure_lines"] = settings.exposure_lines;
     (*doc)["exposure_lines_min"] = capabilities->exposure_lines_min;
     (*doc)["exposure_lines_max"] = capabilities->exposure_lines_max;
+    (*doc)["exposure_line_time_us"] = capabilities->exposure_line_time_us;
     (*doc)["white_balance_red_q8"] = settings.white_balance_red_q8;
     (*doc)["white_balance_blue_q8"] = settings.white_balance_blue_q8;
     (*doc)["white_balance_q8_min"] = capabilities->white_balance_q8_min;

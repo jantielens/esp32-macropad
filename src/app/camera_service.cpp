@@ -13,6 +13,8 @@
 static const CameraOutputDimensions kCameraOutputDimensions[] = {
     {CAMERA_OUTPUT_WIDTH_DEFAULT, CAMERA_OUTPUT_HEIGHT_DEFAULT},
 };
+// Verified OV02C10 mode: 1164 timing rows per 30 FPS frame.
+static const float kCameraExposureLineTimeUs = 1000000.0f / (30.0f * 1164.0f);
 
 static const CameraCapabilities kCameraCapabilities = {
     .raw_pixel_format = "RAW10",
@@ -22,6 +24,7 @@ static const CameraCapabilities kCameraCapabilities = {
     .jpeg_quality_max = 90,
     .exposure_lines_min = 8,
     .exposure_lines_max = 1149,
+    .exposure_line_time_us = kCameraExposureLineTimeUs,
     .white_balance_q8_min = 64,
     .white_balance_q8_max = 1024,
     .output_dimensions = kCameraOutputDimensions,

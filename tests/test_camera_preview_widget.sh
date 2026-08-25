@@ -21,6 +21,8 @@ grep -q 'has_camera === true' src/app/web/portal_pad_editor.js
 
 CAMERA_API="src/app/web_portal_camera.cpp"
 CAMERA_DRIVER="src/app/drivers/ov02c10_p4_driver.cpp"
+CAMERA_COMPONENT="src/app/components/camera_component.cpp"
+CAMERA_PORTAL="src/app/web/portal_camera.js"
 grep -q 'class CameraMjpegResponse final : public AsyncWebServerResponse' "$CAMERA_API"
 grep -q 'CAMERA_FEED_OUTPUT_JPEG' "$CAMERA_API"
 grep -q 'camera_feed_release_frame(&frame)' "$CAMERA_API"
@@ -30,6 +32,12 @@ grep -q 'CAMERA_MJPEG_MAX_CLIENTS' "$CAMERA_API"
 grep -q 'Camera stream client limit reached' "$CAMERA_API"
 grep -q 'camera_stop_csi_capture();' "$CAMERA_DRIVER"
 grep -q 's_rgb565_raw_staging' "$CAMERA_DRIVER"
+grep -q 'exposure_line_time_us' "$CAMERA_COMPONENT"
+grep -q 'camera-exposure-time-value' src/app/web/camera.fragment.html
+grep -q 'camera-wb-red" type="range"' src/app/web/camera.fragment.html
+grep -q 'camera-wb-blue" type="range"' src/app/web/camera.fragment.html
+grep -q 'updateExposureValue' "$CAMERA_PORTAL"
+grep -q 'updateWhiteBalanceValue' "$CAMERA_PORTAL"
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
 grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
 
