@@ -33,6 +33,9 @@ grep -q 'CAMERA_MJPEG_MAX_CLIENTS' "$CAMERA_API"
 grep -q 'Camera stream client limit reached' "$CAMERA_API"
 grep -q 'camera_stop_csi_capture();' "$CAMERA_DRIVER"
 grep -q 's_rgb565_raw_staging' "$CAMERA_DRIVER"
+grep -q 'camera_set_streaming(false, 0)' "$CAMERA_DRIVER"
+grep -q 'Deferring idle cleanup: I2C bus busy' "$CAMERA_DRIVER"
+grep -A45 'bool camera_driver_deinit()' "$CAMERA_DRIVER" | grep -q 's_exposure_lines = 0;'
 grep -q '#define HAS_CAMERA true' src/boards/jc1060p470c/board_overrides.h
 grep -q '#define CAMERA_DRIVER CAMERA_DRIVER_OV02C10_P4' src/boards/jc1060p470c/board_overrides.h
 grep -q '../jc1060p470c/board_overrides.h' src/boards/jc1060p470c-sd/board_overrides.h
@@ -51,6 +54,8 @@ grep -q 'feedTargetFps' "$CAMERA_PORTAL"
 grep -q 'rotation: Number(rotation.value)' "$CAMERA_PORTAL"
 grep -q 'camera_save_config_on_main' "$CAMERA_COMPONENT"
 grep -q 'loop_bridge_dispatch(camera_save_config_on_main' "$CAMERA_COMPONENT"
+grep -q 'kCameraPortalScript' "$CAMERA_COMPONENT"
+grep -q 'kCameraPortalStyle' "$CAMERA_COMPONENT"
 grep -A5 'LOGI("Config", "Save start")' "$CONFIG_MANAGER" | grep -q 'Serial.flush();'
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
 grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h

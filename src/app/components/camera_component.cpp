@@ -13,6 +13,8 @@
 namespace {
 
 constexpr uint32_t kCameraConfigSaveTimeoutMs = 5000;
+constexpr const char* kCameraPortalScript = "/portal-camera.js";
+constexpr const char* kCameraPortalStyle = "/portal-camera.css";
 
 struct CameraConfigSaveRequest {
     CameraCaptureSettings settings;
@@ -155,8 +157,8 @@ static ComponentDef camera_component = {
     .custom_actions = nullptr,
     .num_custom_actions = 0,
     .fragment_id = "camera",
-    .portal_script = "/portal-camera.js",
-    .portal_style = "/portal-camera.css",
+    .portal_script = kCameraPortalScript,
+    .portal_style = kCameraPortalStyle,
 };
 
 REGISTER_COMPONENT(camera);
@@ -174,8 +176,8 @@ static ComponentDef camera_snapshots_component = {
     .custom_actions = nullptr,
     .num_custom_actions = 0,
     .fragment_id = "camera-snapshots",
-    .portal_script = "/portal-camera.js",
-    .portal_style = "/portal-camera.css",
+    .portal_script = kCameraPortalScript,
+    .portal_style = kCameraPortalStyle,
 };
 
 REGISTER_COMPONENT(camera_snapshots);

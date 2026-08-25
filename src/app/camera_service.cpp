@@ -271,9 +271,11 @@ void camera_release_jpeg(CameraJpegFrame* frame) {
 #endif
 }
 
-void camera_release_capture_resources() {
+bool camera_release_capture_resources() {
 #if HAS_CAMERA
-    camera_driver_deinit();
+    return camera_driver_deinit();
+#else
+    return true;
 #endif
 }
 

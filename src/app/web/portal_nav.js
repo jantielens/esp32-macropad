@@ -50,24 +50,26 @@
       });
     });
 
-    var loads = Object.keys(styles).map(function (path) {
+    function loadNavigationAsset(path, kind) {
       return new Promise(function (resolve, reject) {
-        var style = document.createElement('link');
-        style.rel = 'stylesheet';
-        style.href = path;
-        style.onload = resolve;
-        style.onerror = function () { reject(new Error('Portal asset unavailable: ' + path)); };
-        document.head.appendChild(style);
+        var asset = document.createElement(kind === 'style' ? 'link' : 'script');
+        if (kind === 'style') {
+          asset.rel = 'stylesheet';
+          asset.href = path;
+        } else {
+          asset.src = path;
+        }
+        asset.onload = resolve;
+        asset.onerror = function () { reject(new Error('Portal asset unavailable: ' + path)); };
+        document.head.appendChild(asset);
       });
+    }
+
+    var loads = Object.keys(styles).map(function (path) {
+      return loadNavigationAsset(path, 'style');
     });
     loads = loads.concat(Object.keys(scripts).map(function (path) {
-      return new Promise(function (resolve, reject) {
-        var script = document.createElement('script');
-        script.src = path;
-        script.onload = resolve;
-        script.onerror = function () { reject(new Error('Portal asset unavailable: ' + path)); };
-        document.head.appendChild(script);
-      });
+      return loadNavigationAsset(path, 'script');
     }));
     return Promise.all(loads);
   }

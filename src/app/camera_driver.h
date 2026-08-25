@@ -5,7 +5,7 @@
 // Selected camera driver entry points. These are invoked only by camera_service
 // on the Arduino loop task.
 void camera_driver_init();
-void camera_driver_deinit();
+bool camera_driver_deinit();
 bool camera_driver_is_detected();
 bool camera_driver_capture_raw(CameraRawFrame* frame);
 void camera_driver_release_raw(CameraRawFrame* frame);

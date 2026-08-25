@@ -242,8 +242,8 @@ static bool camera_configure_raw10_mode() {
     return configured;
 }
 
-static bool camera_set_streaming(bool enabled) {
-    if (!i2c_bus_lock(pdMS_TO_TICKS(1000))) return false;
+static bool camera_set_streaming(bool enabled, TickType_t lock_timeout = pdMS_TO_TICKS(1000)) {
+    if (!i2c_bus_lock(lock_timeout)) return false;
     bool configured = camera_write_register(0x4800, enabled ? kOv02c10MipiCtrl00 : 0x21);
     if (configured && enabled) {
         configured = camera_write_register(0x3002, 0x01) &&
@@ -756,10 +756,11 @@ void camera_driver_init() {
     }
 }
 
-void camera_driver_deinit() {
+bool camera_driver_deinit() {
     if (s_camera_streaming) {
-        if (!camera_set_streaming(false)) {
-            LOGW("Camera", "Failed to stop sensor streaming during idle cleanup");
+        if (!camera_set_streaming(false, 0)) {
+            LOGD("Camera", "Deferring idle cleanup: I2C bus busy");
+            return false;
         }
         s_camera_streaming = false;
     }
@@ -796,6 +797,8 @@ void camera_driver_deinit() {
     camera_driver_release_raw(&s_rgb565_raw_staging);
     s_csi_context = {};
     s_camera_raw10_configured = false;
+    s_exposure_lines = 0;
+    return true;
 }
 
 bool camera_driver_is_detected() {
@@ -806,7 +809,7 @@ bool camera_driver_is_detected() {
 
 void camera_driver_init() {}
 
-void camera_driver_deinit() {}
+bool camera_driver_deinit() { return true; }
 
 bool camera_driver_is_detected() {
     return false;

@@ -1741,8 +1741,10 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 - `web/bootstrap.min.css` - Bootstrap CSS framework (vendor, bundled into `portal-all.css`)
 - `web/portal-custom.css` - Custom portal styles and responsive overrides (bundled into `portal-all.css`)
 - `web/portal.js.bundle` - Bundle manifest listing all JS modules in concatenation order
-- `web/portal.js` - Entry point (last in bundle); all JS served as a single bundled asset
+- `web/portal.js` - Entry point (last in the shared bundle)
 - `web/portal_*.js` - Feature modules and fragments (see [Asset Bundle System](#asset-bundle-system))
+- `web/portal_<feature>.js.bundle` - Optional standalone component-script bundle
+- `web/portal_<feature>.css` - Optional standalone component stylesheet
 - `web/portal-all.css` - Primary CSS file (bundle target) — served at `/portal-all.css`
 - `web/portal-all.css.bundle` - CSS bundle manifest (see [CSS Bundle](#css-bundle))
 - `web/_portal_*.css` - Feature CSS fragments (bundled into primary CSS at build time)
@@ -1768,7 +1770,7 @@ To keep concurrent in-flight HTTP requests bounded, the frontend applies several
 4. **Single CSS asset** — `bootstrap.min.css` + `portal-custom.css` are concatenated into `/portal-all.css` at build time (see [CSS Bundle](#css-bundle)), saving one request and ~1.5 KB through shared gzip dictionary.
 5. **Inline favicon** — `shell.html` sets `<link rel="icon" href="data:,">` to suppress the browser's automatic `/favicon.ico` lookup (no extra request, no 404).
 6. **`/api/mode` folded into `/api/info`** — the legacy mode endpoint was removed; portal JS derives `portalMode` from `ap_active` on the cached `/api/info` response.
-7. **Chunked static asset streaming** — the gzipped PROGMEM asset handler in `web_portal_pages.cpp` (shell HTML, `portal-all.css`, `portal.js`, fragment HTML) uses a length-aware `AwsResponseFiller` callback with `HTTP_STREAM_CHUNK_SIZE = 4 KB` instead of `beginResponse_P()`. AsyncTCP only calls the filler when LWIP TX buffer space is available, so the response is paced segment by segment and the DMA-internal pbuf pool recycles between chunks. This matters because the browser issues `/portal-all.css` (~38 KB gz) and `/portal.js` (~53 KB gz) **in parallel** as `<link>` / `<script>` tags — those requests are not subject to the `window.fetch` cap and would otherwise queue the full ~90 KB of payload into the DMA-internal pool at once.
+7. **Chunked static asset streaming** — the gzipped PROGMEM asset handler in `web_portal_pages.cpp` (shell HTML, `portal-all.css`, `portal.js`, component assets, fragment HTML) uses a length-aware `AwsResponseFiller` callback with `HTTP_STREAM_CHUNK_SIZE = 4 KB` instead of `beginResponse_P()`. AsyncTCP only calls the filler when LWIP TX buffer space is available, so the response is paced segment by segment and the DMA-internal pbuf pool recycles between chunks. This matters because the browser issues `/portal-all.css` (~38 KB gz) and `/portal.js` (~53 KB gz) **in parallel** as `<link>` / `<script>` tags — those requests are not subject to the `window.fetch` cap and would otherwise queue the full ~90 KB of payload into the DMA-internal pool at once.
 
 The result of these measures is that a fresh portal load on the `release/1.16.0` baseline issues approximately: `GET /`, `GET /portal-all.css`, `GET /portal.js`, `GET /api/info`, `GET /api/health`, `GET /api/portal/nav`, `GET /api/section/welcome` — plus the periodic `GET /api/health` poll. With the fetch cap, at most two are in flight at any moment.
 
@@ -1895,9 +1897,9 @@ The minifier supports `.bundle` manifests for both JavaScript and CSS. A bundle 
 
 The same three shared functions (`discover_bundle_manifests`, `filter_bundle_fragments`, `concatenate_bundle`) handle both JS and CSS bundles in `tools/minify-web-assets.sh`.
 
-#### JavaScript Bundle
+#### Shared JavaScript Bundle
 
-All JavaScript source files are concatenated into a single `portal.js` asset at build time.
+Shared JavaScript source files are concatenated into a single `portal.js` asset at build time.
 
 **How it works:**
 
@@ -1906,6 +1908,20 @@ All JavaScript source files are concatenated into a single `portal.js` asset at 
 3. The minifier concatenates the resolved files, minifies the result, and gzip-compresses it into `web_assets.h`
 4. Every HTML page loads a single `<script src="/portal.js"></script>`
 5. One C++ handler (`handleJS`) serves the bundled asset
+
+#### Component Assets
+
+Components can provide feature-specific assets without adding them to the shared
+bundle. Set `ComponentDef.portal_script` and/or `ComponentDef.portal_style` to
+dedicated route paths. `GET /api/portal/nav` publishes those optional paths for
+each component; `portal_nav.js` deduplicates them, loads styles and scripts, and
+waits for all assets before building navigation or loading a fragment.
+
+The camera components demonstrate this pattern: they advertise
+`/portal-camera.js` and `/portal-camera.css`, served by dedicated handlers in
+`web_portal_pages.cpp` and routes in `web_portal_routes.cpp` under `HAS_CAMERA`.
+Their source assets remain outside `portal.js.bundle`, so non-camera builds do
+not embed or serve camera payloads.
 
 **Module organization:**
 
@@ -1919,7 +1935,7 @@ All JavaScript source files are concatenated into a single `portal.js` asset at 
 | Pad editor | `portal_pad_colors.js`, `portal_pad_io.js`, `portal_pad_blocks.js`, `portal_pad_icons.js`, `portal_pad_defaults.js`, `portal_pad_grid.js`, `portal_pad_dialog.js`, `portal_pad_editor.js` | Visual pad editor (fragments before main) |
 | Entry point | `portal.js` | Must be last — bootstraps the application |
 
-**Adding a new JS module:**
+**Adding shared JS:**
 
 1. Create the module in the correct root:
   - Shared module: `src/app/web/portal_myfeature.js`

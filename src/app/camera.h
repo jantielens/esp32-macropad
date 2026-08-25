@@ -119,7 +119,7 @@ void camera_release_jpeg(CameraJpegFrame* frame);
 
 // Releases CSI, ISP, DMA, and conversion buffers after camera activity stops.
 // Must run on the main loop with no capture in progress.
-void camera_release_capture_resources();
+bool camera_release_capture_resources();
 
 // Captures RGB565 pixels into caller-owned memory and optionally encodes the
 // same pixels as JPEG. rgb565->data must hold output_width * output_height

@@ -101,8 +101,18 @@ void camera_feed_release_idle_resources() {
         }
         jpegs[index] = s_slots[index].jpeg;
         rgb565[index] = s_slots[index].rgb565.data;
-        s_slots[index] = {};
     }
+    portEXIT_CRITICAL(&s_mux);
+
+    if (!camera_release_capture_resources()) {
+        portENTER_CRITICAL(&s_mux);
+        s_idle_since_ms = now;
+        portEXIT_CRITICAL(&s_mux);
+        return;
+    }
+
+    portENTER_CRITICAL(&s_mux);
+    for (uint8_t index = 0; index < kSlotCount; ++index) s_slots[index] = {};
     s_current_slot = kSlotCount;
     s_last_capture_ms = 0;
     s_last_timing_log_ms = 0;
