@@ -1,4 +1,9 @@
-# Home Assistant Integration Guide
+---
+title: Home Assistant Integration Guide
+description: Configure MQTT, service actions, and MJPEG camera access with Home Assistant
+---
+
+## Home Assistant Integration Guide
 
 The ESP32 Macropad integrates with Home Assistant over **two independent paths**. Use either, both, or neither — they do not depend on each other.
 
@@ -19,6 +24,28 @@ Once an MQTT broker is connected, these capabilities become available. Each is i
 | **Statestream** | HA → device | HA's `mqtt_statestream` integration publishes every entity's state to MQTT so the device can read it. |
 | **`[mqtt:…]` Bindings** | any topic → device | Button labels, colors, and widgets subscribe to any MQTT topic (Statestream or any other publisher) to show live data. Works without auto-discovery or Statestream. |
 | **Remote Control** | HA → device | Control entities let HA drive the device: screen-select navigation, screensaver wake, notification messages, and (on audio boards) siren, volume, and beep buttons. |
+
+## Camera
+
+Camera-capable boards expose two MQTT Button entities through auto-discovery:
+
+| Entity | Type | Description |
+|--------|------|-------------|
+| **Save Camera Snapshot** | `button` | Captures a JPEG and writes `/camera/latest.jpg` |
+| **Save Camera Snapshot and Roll** | `button` | Captures a JPEG, writes `/camera/latest.jpg`, and appends the image to the camera roll |
+
+To view the live camera in Home Assistant, add the
+[MJPEG IP Camera](https://www.home-assistant.io/integrations/mjpeg/) integration
+manually. Enter these URLs, replacing `<device-ip>` with the device address:
+
+```text
+MJPEG URL: http://<device-ip>/api/camera/stream
+Still image URL: http://<device-ip>/api/camera/snapshot.jpg
+```
+
+When portal Basic Authentication is enabled, enter the same username and
+password in Home Assistant. Do not enable stream preloading because the device
+limits concurrent MJPEG clients.
 
 > **Prerequisites (MQTT path)**: MQTT broker configured and connected, Home Assistant MQTT integration enabled.
 

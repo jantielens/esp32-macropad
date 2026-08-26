@@ -21,7 +21,8 @@ bool ha_discovery_publish_sensor_config(
 	const char *unit_of_measurement,
 	const char *device_class,
 	const char *state_class,
-	const char *entity_category = nullptr
+	const char *entity_category = nullptr,
+	bool enabled_by_default = true
 );
 
 bool ha_discovery_publish_binary_sensor_config(
@@ -55,6 +56,9 @@ bool ha_discovery_publish_notify_text_config(MqttManager &mqtt);
 
 // Publish HA audio entities (siren, volume number, beep buttons).
 bool ha_discovery_publish_audio_entities(MqttManager &mqtt);
+
+// Publish HA camera snapshot buttons.
+bool ha_discovery_publish_camera_entities(MqttManager &mqtt);
 
 #endif // HAS_MQTT
 

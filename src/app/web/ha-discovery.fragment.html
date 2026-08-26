@@ -68,6 +68,14 @@
     <p class="text-muted small mb-0">Configure these in the Pad Editor. Bindings work without auto-discovery or Statestream — they only need the topic to exist on the broker.</p>
 
     <h4 class="h6 mt-3 mb-1">Remote Control <span class="text-muted small">— HA &rarr; device</span></h4>
-    <p class="text-muted small mb-0">Auto-discovery also exposes control entities so Home Assistant can drive the device: a screen-select entity for remote navigation, screensaver wake, notification messages, and (on audio boards) siren, volume, and beep buttons.</p>
+    <p class="text-muted small">Auto-discovery also exposes control entities so Home Assistant can drive the device: a screen-select entity for remote navigation, screensaver wake, notification messages, camera snapshot buttons, and (on audio boards) siren, volume, and beep buttons.</p>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">MJPEG Camera</h5></div>
+  <div class="card-body">
+    <p class="text-muted small">On camera-capable boards, add Home Assistant's <a href="https://www.home-assistant.io/integrations/mjpeg/" target="_blank" rel="noopener">MJPEG IP Camera</a> integration manually. Use these URLs, replacing <code>&lt;device-ip&gt;</code> with this device's address:</p>
+    <pre class="small mb-2"><code>MJPEG URL: http://&lt;device-ip&gt;/api/camera/stream&#10;Still image URL: http://&lt;device-ip&gt;/api/camera/snapshot.jpg</code></pre>
+    <p class="text-muted small mb-0">When portal Basic Authentication is enabled, enter the same username and password in Home Assistant. Do not enable stream preloading: this device limits concurrent MJPEG clients.</p>
   </div>
 </div>

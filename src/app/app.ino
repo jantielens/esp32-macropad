@@ -8,6 +8,7 @@
 #include "mqtt_screen.h"
 #include "mqtt_wake.h"
 #include "mqtt_audio.h"
+#include "mqtt_camera.h"
 #include "mqtt_notify.h"
 #include "mqtt_triggers.h"
 #include "device_telemetry.h"
@@ -542,6 +543,7 @@ void setup()
 			mqtt_screen_init();
 			mqtt_wake_init(&device_config);
 			mqtt_audio_init();
+			mqtt_camera_init();
 			mqtt_notify_init();
 #if MQTT_TRIGGERS_ENABLED
 			mqtt_triggers_init();
@@ -678,6 +680,7 @@ void loop()
 	mqtt_screen_loop();
 	mqtt_wake_loop();
 	mqtt_audio_loop();
+	mqtt_camera_loop();
 	mqtt_notify_loop();
 #if MQTT_TRIGGERS_ENABLED
 		mqtt_triggers_loop();

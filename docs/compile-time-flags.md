@@ -511,6 +511,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/drivers/ov02c10_p4_driver.cpp
+  - src/app/ha_discovery.cpp
   - src/app/mcp_tools_camera.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/portal_components.cpp

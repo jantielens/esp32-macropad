@@ -10,6 +10,7 @@
 #include "mqtt_sub_store.h"
 #include "mqtt_screen.h"
 #include "mqtt_audio.h"
+#include "mqtt_camera.h"
 #include "mqtt_notify.h"
 #include "mqtt_triggers.h"
 #include "power_manager.h"
@@ -159,6 +160,7 @@ void MqttManager::installCallback() {
 				net_activity_mark(NET_CH_MQTT_RX);
 				mqtt_screen_on_message(topic, payload, length);
 				mqtt_audio_on_message(topic, payload, length);
+			mqtt_camera_on_message(topic, payload, length);
 				mqtt_notify_on_message(topic, payload, length);
 #if MQTT_TRIGGERS_ENABLED
 				mqtt_triggers_on_message(topic, payload, length);
@@ -301,6 +303,10 @@ void MqttManager::onConnected(bool publish_availability) {
 
 		// Audio control subscribe + initial state publish.
 		mqtt_audio_on_connected();
+		delay(1);
+
+		// Camera snapshot control subscribe.
+		mqtt_camera_on_connected();
 		delay(1);
 
 		// Notify control subscribe + initial state publish.

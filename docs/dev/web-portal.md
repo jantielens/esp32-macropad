@@ -1205,6 +1205,22 @@ performed while converting RAW10 to RGB565, so test captures, Camera Preview
 widgets, and MJPEG frames use the same orientation without an additional frame
 buffer.
 
+### Home Assistant MJPEG Camera
+
+Home Assistant does not discover arbitrary MJPEG stream URLs through MQTT. Add
+the [MJPEG IP Camera](https://www.home-assistant.io/integrations/mjpeg/)
+integration manually with these URLs, replacing `<device-ip>` with the device
+address:
+
+```text
+MJPEG URL: http://<device-ip>/api/camera/stream
+Still image URL: http://<device-ip>/api/camera/snapshot.jpg
+```
+
+When portal Basic Authentication is enabled, configure the same credentials in
+Home Assistant. Do not enable stream preloading because it consumes a limited
+MJPEG client slot.
+
 ---
 
 ### Storage API
