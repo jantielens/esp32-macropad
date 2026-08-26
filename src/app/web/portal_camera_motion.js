@@ -1,8 +1,9 @@
 window.init_camera_motion_fragment = function () {
     var base = '/api/component/camera-motion/config';
     var enabled = document.getElementById('camera-motion-enabled');
-    var fps = document.getElementById('camera-motion-fps');
-    var fpsValue = document.getElementById('camera-motion-fps-value');
+    var analyzeEvery = document.getElementById('camera-motion-analyze-every-nth-frame');
+    var analyzeEveryValue = document.getElementById('camera-motion-analyze-every-nth-frame-value');
+    var analysisRate = document.getElementById('camera-motion-analysis-rate');
     var sensitivity = document.getElementById('camera-motion-sensitivity');
     var sensitivityValue = document.getElementById('camera-motion-sensitivity-value');
     var holdSeconds = document.getElementById('camera-presence-hold-seconds');
@@ -15,7 +16,7 @@ window.init_camera_motion_fragment = function () {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 motion_enabled: enabled.checked,
-                motion_fps: Number(fps.value),
+                motion_analyze_every_nth_frame: Number(analyzeEvery.value),
                 motion_sensitivity: Number(sensitivity.value),
                 presence_hold_seconds: Number(holdSeconds.value)
             })
@@ -24,8 +25,12 @@ window.init_camera_motion_fragment = function () {
         });
     }
 
-    fps.addEventListener('input', function () {
-        fpsValue.textContent = fps.value;
+    function updateAnalysisRate(captureFps) {
+        analyzeEveryValue.textContent = analyzeEvery.value;
+        analysisRate.textContent = (captureFps / Number(analyzeEvery.value)).toFixed(2).replace(/\.00$/, '');
+    }
+    analyzeEvery.addEventListener('input', function () {
+        updateAnalysisRate(Number(analyzeEvery.dataset.captureFps));
     });
     sensitivity.addEventListener('input', function () {
         sensitivityValue.textContent = sensitivity.value;
@@ -39,10 +44,11 @@ window.init_camera_motion_fragment = function () {
         return response.json();
     }).then(function (config) {
         enabled.checked = config.motion_enabled;
-        fps.min = config.motion_fps_min;
-        fps.max = config.motion_fps_max;
-        fps.value = config.motion_fps;
-        fpsValue.textContent = config.motion_fps;
+        analyzeEvery.min = config.motion_analyze_every_nth_frame_min;
+        analyzeEvery.max = config.motion_analyze_every_nth_frame_max;
+        analyzeEvery.value = config.motion_analyze_every_nth_frame;
+        analyzeEvery.dataset.captureFps = config.capture_fps;
+        updateAnalysisRate(config.capture_fps);
         sensitivity.min = config.motion_sensitivity_min;
         sensitivity.max = config.motion_sensitivity_max;
         sensitivity.value = config.motion_sensitivity;

@@ -91,7 +91,7 @@ locally on the ESP32-P4 without sending camera frames to a cloud service.
 | Setting | Description |
 |---------|-------------|
 | **Enable camera motion sensing** | Starts or stops local motion analysis. Disabled sensing uses no motion-analysis memory and does not request camera frames. |
-| **Sample rate** | Chooses 1 or 2 frames per second. Use 1 FPS to minimize CPU and PSRAM bandwidth. |
+| **Analyze every** | Analyzes every 1st through 4th camera frame. The displayed rate is derived from the Camera capture rate. |
 | **Sensitivity** | Set a value from 1 to 10. Lower values reduce false triggers; higher values detect smaller changes but can react to shadows or changing light. |
 | **Presence hold time** | Keeps Camera Presence on for 10 to 600 seconds after the most recent motion. |
 
@@ -422,10 +422,10 @@ Choose **Capture rotation** to turn the shared camera image by 0, 90, 180, or
 270 degrees clockwise. The chosen orientation applies to Camera Preview
 buttons, test captures, and MJPEG streams.
 
-**Camera feed rate** controls the shared rate used by both Camera Preview
-buttons and MJPEG streams. It defaults to 4 FPS. Lower it, for example to 2
-FPS, when a complex pad needs more CPU time; lower rates reduce camera work but
-make live images update less often.
+**Camera capture rate** controls the shared rate used by Camera Preview buttons,
+MJPEG streams, and enabled motion sensing. It defaults to 4 FPS. Lower it, for
+example to 2 FPS, when a complex pad needs more CPU time; lower rates reduce
+camera work but make live images and motion response update less often.
 
 On ESP32-P4 builds, the **Extensions** page has two small slots
 and one large slot for trusted native Extensions. Upload the signed package

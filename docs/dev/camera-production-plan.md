@@ -263,6 +263,12 @@ binary sensor **Camera Presence** with device class `presence`.
 The motion feature must remain in the camera subsystem, must pause during OTA,
 and must not add code or memory use to boards without `HAS_CAMERA`.
 
+The shared camera producer owns the only periodic RAW10 capture. Its Camera
+capture rate is the common cadence for live preview, MJPEG, and motion sensing.
+Motion analysis consumes every configured Nth RAW10 frame, while RGB565 and JPEG
+conversion only run when a live-feed consumer is due. This avoids a second
+motion-only sensor capture loop.
+
 ## Hardware Measurement Log
 
 Fill this section during device testing. Do not promote performance targets from

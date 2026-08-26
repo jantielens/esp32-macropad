@@ -60,9 +60,10 @@ void camera_get_config(AsyncWebServerRequest* request) {
     (*doc)["output_width"] = settings.output_width;
     (*doc)["output_height"] = settings.output_height;
     (*doc)["motion_enabled"] = motion_settings.enabled;
-    (*doc)["motion_fps"] = motion_settings.sample_fps;
-    (*doc)["motion_fps_min"] = CAMERA_MOTION_FPS_MIN;
-    (*doc)["motion_fps_max"] = CAMERA_MOTION_FPS_MAX;
+    (*doc)["motion_analyze_every_nth_frame"] = motion_settings.analyze_every_nth_frame;
+    (*doc)["motion_analyze_every_nth_frame_min"] = CAMERA_MOTION_ANALYZE_EVERY_MIN;
+    (*doc)["motion_analyze_every_nth_frame_max"] = CAMERA_MOTION_ANALYZE_EVERY_MAX;
+    (*doc)["capture_fps"] = settings.feed_target_fps;
     (*doc)["motion_sensitivity"] = motion_settings.sensitivity;
     (*doc)["motion_sensitivity_min"] = CAMERA_MOTION_SENSITIVITY_MIN;
     (*doc)["motion_sensitivity_max"] = CAMERA_MOTION_SENSITIVITY_MAX;
@@ -103,7 +104,7 @@ void camera_save_config_on_main(const void* opaque, bool* ok, char* message, siz
     };
     const CameraMotionSettings previous_motion = {
         .enabled = config->camera_motion_enabled,
-        .sample_fps = config->camera_motion_fps,
+        .analyze_every_nth_frame = config->camera_motion_analyze_every_nth_frame,
         .sensitivity = config->camera_motion_sensitivity,
         .presence_hold_seconds = config->camera_presence_hold_seconds,
     };
@@ -126,7 +127,7 @@ void camera_save_config_on_main(const void* opaque, bool* ok, char* message, siz
     }
     if (request->update_motion_settings) {
         config->camera_motion_enabled = request->motion_settings.enabled;
-        config->camera_motion_fps = request->motion_settings.sample_fps;
+        config->camera_motion_analyze_every_nth_frame = request->motion_settings.analyze_every_nth_frame;
         config->camera_motion_sensitivity = request->motion_settings.sensitivity;
         config->camera_presence_hold_seconds = request->motion_settings.presence_hold_seconds;
     }
@@ -144,7 +145,7 @@ void camera_save_config_on_main(const void* opaque, bool* ok, char* message, siz
     config->camera_white_balance_red_q8 = previous.white_balance_red_q8;
     config->camera_white_balance_blue_q8 = previous.white_balance_blue_q8;
     config->camera_motion_enabled = previous_motion.enabled;
-    config->camera_motion_fps = previous_motion.sample_fps;
+    config->camera_motion_analyze_every_nth_frame = previous_motion.analyze_every_nth_frame;
     config->camera_motion_sensitivity = previous_motion.sensitivity;
     config->camera_presence_hold_seconds = previous_motion.presence_hold_seconds;
     camera_set_capture_settings(previous);
@@ -159,7 +160,7 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
                                   doc.containsKey("rotation") || doc.containsKey("output_width") ||
                                   doc.containsKey("output_height") || doc.containsKey("exposure_lines") ||
                                   doc.containsKey("white_balance_red_q8") || doc.containsKey("white_balance_blue_q8");
-    const bool motion_settings = doc.containsKey("motion_enabled") || doc.containsKey("motion_fps") ||
+    const bool motion_settings = doc.containsKey("motion_enabled") || doc.containsKey("motion_analyze_every_nth_frame") ||
                                  doc.containsKey("motion_sensitivity") || doc.containsKey("presence_hold_seconds");
     if (!capture_settings && !motion_settings) return false;
     if (capture_settings && (!doc.containsKey("jpeg_quality") || !doc.containsKey("feed_target_fps") || !doc.containsKey("rotation") ||
@@ -168,7 +169,7 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
         !doc.containsKey("white_balance_blue_q8"))) {
         return false;
     }
-    if (motion_settings && (!doc.containsKey("motion_enabled") || !doc.containsKey("motion_fps") ||
+    if (motion_settings && (!doc.containsKey("motion_enabled") || !doc.containsKey("motion_analyze_every_nth_frame") ||
         !doc.containsKey("motion_sensitivity") || !doc.containsKey("presence_hold_seconds"))) {
         return false;
     }
@@ -190,7 +191,8 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
         },
         .motion_settings = {
             .enabled = doc["motion_enabled"] | current_motion.enabled,
-            .sample_fps = static_cast<uint8_t>(doc["motion_fps"] | current_motion.sample_fps),
+            .analyze_every_nth_frame = static_cast<uint8_t>(doc["motion_analyze_every_nth_frame"] |
+                                                              current_motion.analyze_every_nth_frame),
             .sensitivity = static_cast<uint8_t>(doc["motion_sensitivity"] | current_motion.sensitivity),
             .presence_hold_seconds = static_cast<uint16_t>(doc["presence_hold_seconds"] | current_motion.presence_hold_seconds),
         },

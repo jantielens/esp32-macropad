@@ -506,6 +506,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/camera_drivers.cpp
   - src/app/camera_feed.cpp
+  - src/app/camera_motion.cpp
+  - src/app/camera_motion.h
   - src/app/camera_service.cpp
   - src/app/components/camera_component.cpp
   - src/app/config_manager.cpp
@@ -518,6 +520,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_camera.h
   - src/app/portal_components.cpp
   - src/app/sensors.cpp
+  - src/app/sensors/camera_presence_sensor.cpp
   - src/app/web_portal_camera.cpp
   - src/app/web_portal_camera.h
   - src/app/web_portal_pages.cpp
@@ -874,6 +877,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/battery_adc_sensor.h
   - src/app/sensors/bme280_sensor.cpp
   - src/app/sensors/bme280_sensor.h
+  - src/app/sensors/camera_presence_sensor.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/sensors/dummy_sensor.h
   - src/app/sensors/ld2410_out_sensor.cpp

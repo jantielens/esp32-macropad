@@ -339,17 +339,17 @@ void setup()
 	}
 	if (!camera_motion_set_settings({
 		.enabled = device_config.camera_motion_enabled,
-		.sample_fps = device_config.camera_motion_fps,
+		.analyze_every_nth_frame = device_config.camera_motion_analyze_every_nth_frame,
 		.sensitivity = device_config.camera_motion_sensitivity,
 		.presence_hold_seconds = device_config.camera_presence_hold_seconds,
 	})) {
 		device_config.camera_motion_enabled = false;
-		device_config.camera_motion_fps = CAMERA_MOTION_FPS_DEFAULT;
+		device_config.camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
 		device_config.camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
 		device_config.camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
 		camera_motion_set_settings({
 			.enabled = false,
-			.sample_fps = device_config.camera_motion_fps,
+			.analyze_every_nth_frame = device_config.camera_motion_analyze_every_nth_frame,
 			.sensitivity = device_config.camera_motion_sensitivity,
 			.presence_hold_seconds = device_config.camera_presence_hold_seconds,
 		});

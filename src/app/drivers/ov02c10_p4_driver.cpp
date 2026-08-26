@@ -486,11 +486,6 @@ void camera_driver_release_raw(CameraRawFrame* frame) {
     *frame = {};
 }
 
-static uint8_t camera_raw10_high_byte(const CameraRawFrame& raw, uint16_t x, uint16_t y) {
-    const size_t raw_index = (size_t)y * kRaw10RowBytes + (size_t)(x / 4) * 5 + x % 4;
-    return raw.data[raw_index];
-}
-
 static uint8_t camera_raw10_row_high_byte(const uint8_t* row, uint16_t x) {
     return row[(size_t)(x / 4) * 5 + x % 4];
 }
@@ -505,6 +500,22 @@ static bool camera_write_exposure(uint16_t lines) {
                          camera_write_register(0x3502, static_cast<uint8_t>(lines & 0xFF));
     i2c_bus_unlock();
     return written;
+}
+
+bool camera_driver_prepare_raw_capture(const CameraCaptureSettings& settings) {
+    if (settings.exposure_lines == s_exposure_lines) return true;
+    if (!camera_write_exposure(settings.exposure_lines)) {
+        LOGW("Camera", "Failed to apply exposure %u lines", settings.exposure_lines);
+        return false;
+    }
+    s_exposure_lines = settings.exposure_lines;
+
+    // The SCCB update can land during an active sensor frame. Discard the stale
+    // frame so the next shared frame always uses a full new exposure.
+    CameraRawFrame stale_frame = {};
+    if (!camera_driver_capture_raw(&stale_frame)) return false;
+    camera_driver_release_raw(&stale_frame);
+    return true;
 }
 
 struct CameraWhiteBalance {
@@ -572,34 +583,13 @@ static uint16_t camera_bayer_quad_to_rgb565(const uint8_t* top_row, const uint8_
     return static_cast<uint16_t>(((red & 0xF8) << 8) | ((green & 0xFC) << 3) | (blue >> 3));
 }
 
-bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* frame,
-                                  CameraCaptureTiming* timing,
-                                  const CameraCaptureSettings& settings) {
+bool camera_driver_convert_raw_to_rgb565(const CameraRawFrame& raw, CameraRgb565Frame* rgb565,
+                                         CameraJpegFrame* frame, CameraCaptureTiming* timing,
+                                         const CameraCaptureSettings& settings) {
     if (!rgb565 || !rgb565->data) return false;
     if (frame) *frame = {};
     if (timing) *timing = {};
-    const int64_t capture_started_us = esp_timer_get_time();
-
-    const bool exposure_changed = settings.exposure_lines != s_exposure_lines;
-    if (exposure_changed) {
-        if (!camera_write_exposure(settings.exposure_lines)) {
-            LOGW("Camera", "Failed to apply exposure %u lines", settings.exposure_lines);
-            return false;
-        }
-        s_exposure_lines = settings.exposure_lines;
-
-        // The SCCB update can land during an active sensor frame. Discard its
-        // completion so the returned JPEG always uses a full new exposure.
-        CameraRawFrame stale_frame = {};
-        if (!camera_driver_capture_raw(&stale_frame)) return false;
-        camera_driver_release_raw(&stale_frame);
-    }
-
-    const int64_t raw_started_us = esp_timer_get_time();
-    if (!camera_driver_capture_raw_into(&s_rgb565_raw_staging, true)) return false;
-    if (timing) timing->raw_capture_us = static_cast<uint32_t>(esp_timer_get_time() - raw_started_us);
-
-    const CameraRawFrame& raw = s_rgb565_raw_staging;
+    const int64_t convert_started_total_us = esp_timer_get_time();
 
     const CameraWhiteBalance estimated_balance = camera_estimate_white_balance(raw);
     const CameraWhiteBalance balance = {
@@ -612,7 +602,7 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
     const size_t raw_pixel_count = (size_t)raw.width * raw.height;
     const size_t expected_raw_size = raw_pixel_count * 5 / 4;
     bool captured = false;
-    const bool output_supported = raw.size == expected_raw_size &&
+    const bool output_supported = raw.size >= expected_raw_size &&
                                   raw.width / 2 >= settings.output_width &&
                                   raw.height / 2 >= settings.output_height &&
                                   rgb565->size >= (size_t)settings.output_width * settings.output_height * sizeof(uint16_t);
@@ -680,7 +670,7 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
         rgb565->width = output_width;
         rgb565->height = output_height;
     }
-    if (timing) timing->total_us = static_cast<uint32_t>(esp_timer_get_time() - capture_started_us);
+    if (timing) timing->total_us = static_cast<uint32_t>(esp_timer_get_time() - convert_started_total_us);
 
     if (!captured) {
         if (frame) camera_driver_release_jpeg(frame);
@@ -690,6 +680,24 @@ bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* fr
     }
 
     return true;
+}
+
+bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* frame,
+                                  CameraCaptureTiming* timing,
+                                  const CameraCaptureSettings& settings) {
+    if (!rgb565 || !rgb565->data) return false;
+    if (frame) *frame = {};
+    if (timing) *timing = {};
+    const int64_t capture_started_us = esp_timer_get_time();
+
+    if (!camera_driver_prepare_raw_capture(settings)) return false;
+
+    const int64_t raw_started_us = esp_timer_get_time();
+    if (!camera_driver_capture_raw_into(&s_rgb565_raw_staging, true)) return false;
+    if (timing) timing->raw_capture_us = static_cast<uint32_t>(esp_timer_get_time() - raw_started_us);
+    const bool converted = camera_driver_convert_raw_to_rgb565(s_rgb565_raw_staging, rgb565, frame, timing, settings);
+    if (timing) timing->total_us = static_cast<uint32_t>(esp_timer_get_time() - capture_started_us);
+    return converted;
 }
 
 bool camera_driver_capture_jpeg(CameraJpegFrame* frame, const CameraCaptureSettings& settings) {
@@ -834,6 +842,11 @@ bool camera_driver_capture_raw_reuse(CameraRawFrame* frame) {
     return false;
 }
 
+bool camera_driver_prepare_raw_capture(const CameraCaptureSettings& settings) {
+    (void)settings;
+    return false;
+}
+
 void camera_driver_release_raw(CameraRawFrame* frame) {
     if (frame) *frame = {};
 }
@@ -847,6 +860,17 @@ bool camera_driver_capture_jpeg(CameraJpegFrame* frame, const CameraCaptureSetti
 bool camera_driver_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* jpeg,
                                   CameraCaptureTiming* timing,
                                   const CameraCaptureSettings& settings) {
+    if (jpeg) *jpeg = {};
+    if (rgb565) *rgb565 = {};
+    if (timing) *timing = {};
+    (void)settings;
+    return false;
+}
+
+bool camera_driver_convert_raw_to_rgb565(const CameraRawFrame& raw, CameraRgb565Frame* rgb565,
+                                         CameraJpegFrame* jpeg, CameraCaptureTiming* timing,
+                                         const CameraCaptureSettings& settings) {
+    (void)raw;
     if (jpeg) *jpeg = {};
     if (rgb565) *rgb565 = {};
     if (timing) *timing = {};

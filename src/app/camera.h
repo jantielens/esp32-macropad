@@ -30,6 +30,13 @@ struct CameraRawFrame {
 	uint16_t height;
 };
 
+// Returns the high 8 bits of an OV02C10 packed RAW10 pixel. Callers must use
+// coordinates within the frame dimensions.
+static inline uint8_t camera_raw10_high_byte(const CameraRawFrame& raw, uint16_t x, uint16_t y) {
+	const size_t row_bytes = static_cast<size_t>(raw.width) * 5 / 4;
+	return raw.data[static_cast<size_t>(y) * row_bytes + static_cast<size_t>(x / 4) * 5 + x % 4];
+}
+
 struct CameraJpegFrame {
 	uint8_t* data;
 	size_t size;
@@ -113,6 +120,10 @@ bool camera_capture_raw(CameraRawFrame* frame);
 // Must run on the main loop.
 bool camera_capture_raw_reuse(CameraRawFrame* frame);
 
+// Applies pending capture settings before a shared RAW10 capture. Must run on
+// the main loop.
+bool camera_prepare_raw_capture();
+
 // Frees a frame returned by camera_capture_raw().
 void camera_release_raw(CameraRawFrame* frame);
 
@@ -131,6 +142,12 @@ bool camera_release_capture_resources();
 // pixels. Must run on the main loop.
 bool camera_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* jpeg = nullptr,
 						   CameraCaptureTiming* timing = nullptr);
+
+// Converts a previously captured RAW10 frame into RGB565 and optionally JPEG.
+// Must run on the main loop.
+bool camera_convert_raw_to_rgb565(const CameraRawFrame& raw, CameraRgb565Frame* rgb565,
+							  CameraJpegFrame* jpeg = nullptr,
+							  CameraCaptureTiming* timing = nullptr);
 
 // Captures one JPEG and stores the requested latest image, camera-roll image,
 // or both. Must run on the main loop.

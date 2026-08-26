@@ -6,6 +6,7 @@
 #include "camera_motion.h"
 
 #include <esp_heap_caps.h>
+#include <esp_timer.h>
 
 namespace {
 constexpr uint32_t kIdleReleaseDelayMs = 5000;
@@ -33,6 +34,7 @@ uint32_t s_generation = 0;
 uint32_t s_last_capture_ms = 0;
 uint32_t s_idle_since_ms = 0;
 CameraCaptureTiming s_timing = {};
+CameraRawFrame s_raw_frame = {};
 FeedPublishListener s_publish_listeners[CAMERA_MJPEG_MAX_CLIENTS] = {};
 
 void camera_feed_output_dimensions(const CameraCaptureSettings& settings,
@@ -154,6 +156,8 @@ void camera_feed_release_idle_resources() {
     s_idle_since_ms = 0;
     portEXIT_CRITICAL(&s_mux);
 
+    camera_release_raw(&s_raw_frame);
+
     for (uint8_t index = 0; index < kSlotCount; ++index) {
         camera_release_jpeg(&jpegs[index]);
         if (rgb565[index]) free(rgb565[index]);
@@ -179,6 +183,7 @@ void camera_feed_deinit() {
     s_idle_since_ms = 0;
     portEXIT_CRITICAL(&s_mux);
     camera_motion_deinit();
+    camera_release_raw(&s_raw_frame);
     camera_release_capture_resources();
 }
 
@@ -293,30 +298,51 @@ void camera_feed_loop() {
         camera_feed_release_idle_resources();
         return;
     }
+    camera_motion_loop();
     if (ota_activity_is_active()) return;
-    if (camera_motion_is_enabled()) {
-        camera_motion_loop();
-        if (!rgb565_demand && !jpeg_demand) return;
-    }
-    if (!camera_feed_ensure_cache()) return;
-
+    if (!camera_is_detected()) return;
     const CameraCaptureSettings settings = camera_get_capture_settings();
-    const uint32_t interval_ms = 1000U / settings.feed_target_fps;
+    const bool live_feed_due = rgb565_demand || jpeg_demand;
+    const CameraMotionSettings motion_settings = camera_motion_get_settings();
+    const uint32_t capture_interval_ms = 1000U / settings.feed_target_fps;
+    const uint32_t interval_ms = live_feed_due || !motion_settings.enabled
+        ? capture_interval_ms
+        : capture_interval_ms * motion_settings.analyze_every_nth_frame;
     const uint32_t now = millis();
     if (now - s_last_capture_ms < interval_ms) return;
-    const int8_t writable_slot = camera_feed_claim_writable_slot();
-    if (writable_slot < 0) return;
+    int8_t writable_slot = -1;
+    if (live_feed_due) {
+        if (!camera_feed_ensure_cache()) return;
+        writable_slot = camera_feed_claim_writable_slot();
+        if (writable_slot < 0) return;
+    }
+
+    const int64_t raw_capture_started_us = esp_timer_get_time();
+    if (!camera_prepare_raw_capture() || !camera_capture_raw_reuse(&s_raw_frame)) {
+        if (writable_slot >= 0) {
+            portENTER_CRITICAL(&s_mux);
+            s_slots[writable_slot].writing = false;
+            portEXIT_CRITICAL(&s_mux);
+        }
+        LOGW("Camera", "Shared RAW10 capture failed");
+        return;
+    }
+    const uint32_t raw_capture_us = static_cast<uint32_t>(esp_timer_get_time() - raw_capture_started_us);
+    s_last_capture_ms = now;
+    camera_motion_on_raw_frame(s_raw_frame, !live_feed_due);
+    if (!live_feed_due) return;
 
     FeedSlot& slot = s_slots[writable_slot];
     CameraJpegFrame jpeg = {};
     CameraCaptureTiming timing = {};
-    if (!camera_capture_rgb565(&slot.rgb565, jpeg_demand ? &jpeg : nullptr, &timing)) {
+    if (!camera_convert_raw_to_rgb565(s_raw_frame, &slot.rgb565, jpeg_demand ? &jpeg : nullptr, &timing)) {
         portENTER_CRITICAL(&s_mux);
         slot.writing = false;
         portEXIT_CRITICAL(&s_mux);
         return;
     }
-    s_last_capture_ms = now;
+    timing.raw_capture_us = raw_capture_us;
+    timing.total_us += raw_capture_us;
 
     CameraJpegFrame previous = {};
     portENTER_CRITICAL(&s_mux);

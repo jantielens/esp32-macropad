@@ -46,13 +46,13 @@
   </div>
 </div>
 <div class="card mb-3">
-  <div class="card-header"><h5 class="mb-0">Feed rate</h5></div>
+  <div class="card-header"><h5 class="mb-0">Camera capture rate</h5></div>
   <div class="card-body">
     <label class="form-label d-flex justify-content-between" for="camera-feed-target-fps">
-      <span>Camera feed rate</span><strong><span id="camera-feed-target-fps-value">4</span> FPS</strong>
+      <span>Camera capture rate</span><strong><span id="camera-feed-target-fps-value">4</span> FPS</strong>
     </label>
     <input class="form-range" id="camera-feed-target-fps" type="range" min="1" max="5" step="1" value="4">
-    <div class="form-text">Controls the shared live feed for Camera Preview buttons and MJPEG streams. Use 2 FPS when a complex pad needs more CPU time; lower rates reduce load but increase update latency.</div>
+    <div class="form-text">Controls the shared camera cadence while live preview, MJPEG, or motion sensing is active. Use 2 FPS when a complex pad needs more CPU time; lower rates reduce load but increase update latency.</div>
   </div>
 </div>
 <div class="card mb-3">

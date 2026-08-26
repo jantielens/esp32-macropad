@@ -4,11 +4,13 @@
 
 #if HAS_CAMERA
 
+#include "camera.h"
+
 #include <stdint.h>
 
-#define CAMERA_MOTION_FPS_MIN 1
-#define CAMERA_MOTION_FPS_MAX 2
-#define CAMERA_MOTION_FPS_DEFAULT 1
+#define CAMERA_MOTION_ANALYZE_EVERY_MIN 1
+#define CAMERA_MOTION_ANALYZE_EVERY_MAX 4
+#define CAMERA_MOTION_ANALYZE_EVERY_DEFAULT 2
 #define CAMERA_MOTION_SENSITIVITY_MIN 1
 #define CAMERA_MOTION_SENSITIVITY_MAX 10
 #define CAMERA_MOTION_SENSITIVITY_DEFAULT 5
@@ -18,7 +20,7 @@
 
 struct CameraMotionSettings {
     bool enabled;
-    uint8_t sample_fps;
+    uint8_t analyze_every_nth_frame;
     uint8_t sensitivity;
     uint16_t presence_hold_seconds;
 };
@@ -38,9 +40,12 @@ CameraMotionStatus camera_motion_get_status();
 bool camera_motion_is_enabled();
 void camera_motion_deinit();
 
-// Captures and evaluates RAW10 frames at the configured cadence. Must run on
-// the Arduino main loop. It performs no RGB565 conversion or JPEG encoding.
+// Runs presence timeout handling. Must run on the Arduino main loop.
 void camera_motion_loop();
+
+// Evaluates every configured Nth shared RAW10 frame. Must run on the Arduino
+// main loop after camera capture and before the frame is released or reused.
+void camera_motion_on_raw_frame(const CameraRawFrame& raw, bool analyze_every_frame = false);
 
 // Returns each motion-derived presence state transition exactly once. Must run
 // on the Arduino main loop.

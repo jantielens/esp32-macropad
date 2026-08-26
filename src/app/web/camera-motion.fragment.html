@@ -11,11 +11,11 @@
     </div>
     <div class="grid-2col">
       <div>
-        <label class="form-label d-flex justify-content-between" for="camera-motion-fps">
-          <span>Sample rate</span><strong><span id="camera-motion-fps-value">1</span> FPS</strong>
+        <label class="form-label d-flex justify-content-between" for="camera-motion-analyze-every-nth-frame">
+          <span>Analyze every</span><strong><span id="camera-motion-analyze-every-nth-frame-value">2</span> frame(s)</strong>
         </label>
-        <input class="form-range" id="camera-motion-fps" type="range" min="1" max="2" step="1" value="1">
-        <div class="form-text">Lower rates reduce camera and PSRAM load.</div>
+        <input class="form-range" id="camera-motion-analyze-every-nth-frame" type="range" min="1" max="4" step="1" value="2">
+        <div class="form-text">Motion analyzes every Nth captured frame. At the current camera capture rate, this is approximately <span id="camera-motion-analysis-rate">2</span> FPS.</div>
       </div>
       <div>
         <label class="form-label d-flex justify-content-between" for="camera-motion-sensitivity">

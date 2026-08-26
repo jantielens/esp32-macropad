@@ -47,7 +47,8 @@
 #define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
 #define KEY_CAMERA_FEED_TARGET_FPS "cam_fps"
 #define KEY_CAMERA_MOTION_ENABLED "cam_mot_en"
-#define KEY_CAMERA_MOTION_FPS "cam_mot_fps"
+#define KEY_CAMERA_MOTION_ANALYZE_EVERY "cam_mot_div"
+#define KEY_CAMERA_MOTION_FPS_LEGACY "cam_mot_fps"
 #define KEY_CAMERA_MOTION_SENSITIVITY "cam_mot_sens"
 #define KEY_CAMERA_PRESENCE_HOLD "cam_prs_hold"
 #define KEY_CAMERA_ROTATION "cam_rot"
@@ -235,7 +236,7 @@ bool config_manager_load(DeviceConfig *config) {
 				config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
 				config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
 				config->camera_motion_enabled = false;
-				config->camera_motion_fps = CAMERA_MOTION_FPS_DEFAULT;
+				config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
 				config->camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
 				config->camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
 				config->camera_rotation = CAMERA_ROTATION_DEFAULT;
@@ -356,7 +357,19 @@ bool config_manager_load(DeviceConfig *config) {
 		config->camera_jpeg_quality = preferences.getUChar(KEY_CAMERA_JPEG_QUALITY, CAMERA_JPEG_QUALITY_DEFAULT);
 		config->camera_feed_target_fps = preferences.getUChar(KEY_CAMERA_FEED_TARGET_FPS, CAMERA_FEED_TARGET_FPS_DEFAULT);
 		config->camera_motion_enabled = preferences.getBool(KEY_CAMERA_MOTION_ENABLED, false);
-		config->camera_motion_fps = preferences.getUChar(KEY_CAMERA_MOTION_FPS, CAMERA_MOTION_FPS_DEFAULT);
+		if (preferences.isKey(KEY_CAMERA_MOTION_ANALYZE_EVERY)) {
+				config->camera_motion_analyze_every_nth_frame = preferences.getUChar(
+						KEY_CAMERA_MOTION_ANALYZE_EVERY, CAMERA_MOTION_ANALYZE_EVERY_DEFAULT);
+		} else if (preferences.isKey(KEY_CAMERA_MOTION_FPS_LEGACY)) {
+				const uint8_t legacy_fps = preferences.getUChar(KEY_CAMERA_MOTION_FPS_LEGACY, 1);
+				const uint8_t safe_fps = legacy_fps ? legacy_fps : 1;
+				const uint8_t rounded_divider = static_cast<uint8_t>(
+						(config->camera_feed_target_fps + safe_fps / 2) / safe_fps);
+				config->camera_motion_analyze_every_nth_frame = constrain(
+						rounded_divider, CAMERA_MOTION_ANALYZE_EVERY_MIN, CAMERA_MOTION_ANALYZE_EVERY_MAX);
+		} else {
+				config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
+		}
 		config->camera_motion_sensitivity = preferences.getUChar(KEY_CAMERA_MOTION_SENSITIVITY, CAMERA_MOTION_SENSITIVITY_DEFAULT);
 		config->camera_presence_hold_seconds = preferences.getUShort(KEY_CAMERA_PRESENCE_HOLD, CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT);
 		config->camera_rotation = static_cast<CameraRotation>(
@@ -490,7 +503,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUChar(KEY_CAMERA_JPEG_QUALITY, config->camera_jpeg_quality);
 		preferences.putUChar(KEY_CAMERA_FEED_TARGET_FPS, config->camera_feed_target_fps);
 		preferences.putBool(KEY_CAMERA_MOTION_ENABLED, config->camera_motion_enabled);
-		preferences.putUChar(KEY_CAMERA_MOTION_FPS, config->camera_motion_fps);
+		preferences.putUChar(KEY_CAMERA_MOTION_ANALYZE_EVERY, config->camera_motion_analyze_every_nth_frame);
 		preferences.putUChar(KEY_CAMERA_MOTION_SENSITIVITY, config->camera_motion_sensitivity);
 		preferences.putUShort(KEY_CAMERA_PRESENCE_HOLD, config->camera_presence_hold_seconds);
 		preferences.putUShort(KEY_CAMERA_ROTATION, config->camera_rotation);
@@ -740,9 +753,9 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 #endif
 
 #if HAS_CAMERA
-		LOGI("Config", "Camera motion: %s fps=%u sensitivity=%u hold=%us",
+		LOGI("Config", "Camera motion: %s analyze_every=%u sensitivity=%u hold=%us",
 				config->camera_motion_enabled ? "enabled" : "disabled",
-				(unsigned)config->camera_motion_fps,
+				(unsigned)config->camera_motion_analyze_every_nth_frame,
 				(unsigned)config->camera_motion_sensitivity,
 				(unsigned)config->camera_presence_hold_seconds);
 #endif

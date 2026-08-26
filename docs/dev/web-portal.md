@@ -23,7 +23,7 @@ buffers or request camera frames until enabled. The controls configure local
 RAW10 analysis only:
 
 * Enable or disable camera motion sensing
-* Select a sample rate of 1 or 2 FPS
+* Select whether to analyze every 1st through 4th captured frame
 * Set Sensitivity from 1 to 10, where higher values detect smaller changes
 * Set the motion-derived presence hold time from 10 to 600 seconds
 
@@ -32,13 +32,18 @@ topic `camera_presence/state`. Sensing continues while the display sleeps,
 pauses during OTA, and avoids RGB565 preview conversion and JPEG encoding when
 it is the only camera client.
 
+The Camera capture rate controls the shared RAW10 capture cadence. Motion
+analysis consumes every configured Nth captured frame, while preview and MJPEG
+conversion only run when their live consumers need a new output frame.
+
 Camera presence is motion-derived rather than occupancy detection. A stationary
 person does not refresh the hold time and presence turns off when the configured
 period expires.
 
-Temporary `Camera` log messages record RAW10 capture and analysis duration,
-tile-change counts, score thresholds, global-lighting suppression, and
-confirmation progress to support hardware calibration.
+Camera logs report motion state transitions, capture failures, first-frame
+baseline initialization, and rejected global lighting changes. Per-frame
+diagnostics are intentionally omitted to avoid overloading the ESP32-P4 USB CDC
+serial path.
 
 ## Portal Modes
 
@@ -1197,6 +1202,29 @@ dimensions from `GET`.
 }
 ```
 
+#### `POST /api/component/camera-motion/config`
+
+Persists motion-derived presence sensing independently of the image-output
+settings. The request must include all fields below. `motion_analyze_every_nth_frame`
+is bounded from 1 through 4. It selects how often motion examines a shared RAW10
+frame; the effective motion rate is the camera capture rate divided by this
+value.
+
+```json
+{
+  "motion_enabled": true,
+  "motion_analyze_every_nth_frame": 2,
+  "motion_sensitivity": 5,
+  "presence_hold_seconds": 60
+}
+```
+
+`GET /api/component/camera-motion/config` returns these active values along
+with `capture_fps`, the advertised ranges, current presence state, and the last
+motion timestamp. `capture_fps` is an alias of the Camera settings response's
+canonical `feed_target_fps`, named for the shared capture cadence in this
+motion-specific response.
+
 #### `GET /api/camera/snapshot.jpg`
 
 Captures and streams one color JPEG using the active settings. The response
@@ -1220,10 +1248,10 @@ feed and ends that demand when the client disconnects. The compile-time
 additional requests receive `429 Too Many Requests`. The `jc4880p433` and
 `jc1060p470c` boards permit three clients.
 
-`feed_target_fps` controls the common capture rate for both this stream and
-Camera Preview widgets. It defaults to 4 FPS and is bounded to 1-5 FPS. Lower
-it, for example to 2 FPS, when a complex pad needs more CPU time; this reduces
-camera work but increases live-image update latency.
+`feed_target_fps` controls the common capture rate for this stream, Camera
+Preview widgets, and enabled motion sensing. It defaults to 4 FPS and is
+bounded to 1-5 FPS. Lower it, for example to 2 FPS, when a complex pad needs
+more CPU time; this reduces camera work but increases live-image update latency.
 
 `rotation` accepts `0`, `90`, `180`, or `270` degrees clockwise. Rotation is
 performed while converting RAW10 to RGB565, so test captures, Camera Preview

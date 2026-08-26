@@ -243,6 +243,14 @@ bool camera_capture_raw_reuse(CameraRawFrame* frame) {
 #endif
 }
 
+bool camera_prepare_raw_capture() {
+#if HAS_CAMERA
+    return camera_driver_prepare_raw_capture(camera_get_capture_settings());
+#else
+    return false;
+#endif
+}
+
 void camera_release_raw(CameraRawFrame* frame) {
 #if HAS_CAMERA
     camera_driver_release_raw(frame);
@@ -265,6 +273,19 @@ bool camera_capture_rgb565(CameraRgb565Frame* rgb565, CameraJpegFrame* jpeg,
 #if HAS_CAMERA
     return camera_driver_capture_rgb565(rgb565, jpeg, timing, camera_get_capture_settings());
 #else
+    if (jpeg) *jpeg = {};
+    if (rgb565) *rgb565 = {};
+    if (timing) *timing = {};
+    return false;
+#endif
+}
+
+bool camera_convert_raw_to_rgb565(const CameraRawFrame& raw, CameraRgb565Frame* rgb565,
+                                  CameraJpegFrame* jpeg, CameraCaptureTiming* timing) {
+#if HAS_CAMERA
+    return camera_driver_convert_raw_to_rgb565(raw, rgb565, jpeg, timing, camera_get_capture_settings());
+#else
+    (void)raw;
     if (jpeg) *jpeg = {};
     if (rgb565) *rgb565 = {};
     if (timing) *timing = {};
