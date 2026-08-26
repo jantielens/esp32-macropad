@@ -28,6 +28,8 @@ struct CameraFeedState {
     CameraCaptureTiming timing;
 };
 
+using CameraFeedPublishListener = void (*)(void* context);
+
 // Allocates the shared cache. Call after camera_init().
 void camera_feed_init();
 void camera_feed_deinit();
@@ -35,6 +37,11 @@ void camera_feed_deinit();
 // Keeps the producer active while at least one consumer has acquired demand.
 void camera_feed_acquire_demand(CameraFeedOutput output);
 void camera_feed_release_demand(CameraFeedOutput output);
+
+// Registers a main-loop callback invoked after a complete frame is published.
+// Unregistering waits for any in-progress callback to finish before returning.
+bool camera_feed_register_publish_listener(CameraFeedPublishListener listener, void* context);
+void camera_feed_unregister_publish_listener(CameraFeedPublishListener listener, void* context);
 
 // Returns the current producer configuration and latest published generation.
 CameraFeedState camera_feed_get_state();

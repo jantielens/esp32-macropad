@@ -153,13 +153,16 @@ static bool encodeJpeg(const ScreenshotCaptureResult* capture, uint8_t quality,
 				encodeCfg.image_quality = quality;
 
 				uint32_t encodedSize = 0;
-				const bool arbiterHeld = dma2d_arbiter_acquire(2000);
+				if (!dma2d_arbiter_acquire(2000)) {
+						LOGW(TAG, "2D-DMA busy, deferring screenshot encode");
+						break;
+				}
 				esp_err_t err = jpeg_encoder_process(
 						s_hw_jpeg, &encodeCfg,
 						input, (uint32_t)rawSize,
 						output, (uint32_t)outputSize,
 						&encodedSize);
-				if (arbiterHeld) dma2d_arbiter_release();
+				dma2d_arbiter_release();
 				if (err != ESP_OK || encodedSize == 0) {
 						LOGE(TAG, "HW JPEG encode failed (0x%x)", err);
 						break;

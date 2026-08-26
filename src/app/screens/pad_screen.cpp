@@ -207,6 +207,11 @@ void PadScreen::show() {
             image_fetch_resume_slot(tiles[i].image_slot);
     }
 #endif
+    for (uint8_t i = 0; i < tileCount; i++) {
+        if (tiles[i].widget_type && tiles[i].widget_type->onShow) {
+            tiles[i].widget_type->onShow(&tiles[i].widget_state);
+        }
+    }
 }
 
 void PadScreen::hide() {
@@ -216,6 +221,11 @@ void PadScreen::hide() {
             image_fetch_pause_slot(tiles[i].image_slot);
     }
 #endif
+    for (uint8_t i = 0; i < tileCount; i++) {
+        if (tiles[i].widget_type && tiles[i].widget_type->onHide) {
+            tiles[i].widget_type->onHide(&tiles[i].widget_state);
+        }
+    }
     // Release every device-class engine this instance is holding. Tracking
     // padHeldMask separately from padHoldMask keeps acquire/release balanced
     // when buildTiles() runs after show() or when a config rebuild flipped the

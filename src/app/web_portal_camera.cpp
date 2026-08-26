@@ -53,9 +53,13 @@ public:
         _sendContentLength = false;
         addHeader("Cache-Control", "no-store");
         camera_feed_acquire_demand(CAMERA_FEED_OUTPUT_JPEG);
+        listener_registered_ = camera_feed_register_publish_listener(on_frame_published, this);
     }
 
     ~CameraMjpegResponse() override {
+        if (listener_registered_) {
+            camera_feed_unregister_publish_listener(on_frame_published, this);
+        }
         if (request_ && request_->client()) request_->client()->onPoll(nullptr);
         if (jpeg_copy_) free(jpeg_copy_);
         camera_feed_release_demand(CAMERA_FEED_OUTPUT_JPEG);
@@ -87,18 +91,47 @@ private:
     enum Part : uint8_t { PART_NEED_FRAME, PART_HEADER, PART_JPEG, PART_TRAILER };
     static constexpr size_t kSendBufferSize = 1460;
 
+    static void on_frame_published(void* context) {
+        static_cast<CameraMjpegResponse*>(context)->pump();
+    }
+
     size_t pump() {
+        portENTER_CRITICAL(&pump_mux_);
+        if (pump_in_progress_) {
+            portEXIT_CRITICAL(&pump_mux_);
+            return 0;
+        }
+        pump_in_progress_ = true;
+        portEXIT_CRITICAL(&pump_mux_);
+
+        const size_t written = pump_locked();
+
+        portENTER_CRITICAL(&pump_mux_);
+        pump_in_progress_ = false;
+        portEXIT_CRITICAL(&pump_mux_);
+        return written;
+    }
+
+    size_t pump_locked() {
         if (!request_ || !request_->client() || !request_->client()->canSend()) return 0;
 
-        if (pending_offset_ == pending_size_ && !prepare_pending()) return 0;
+        AsyncClient* client = request_->client();
+        size_t total_written = 0;
+        while (client->space()) {
+            if (pending_offset_ == pending_size_ && !prepare_pending()) break;
 
-        const size_t written = request_->client()->add(
-            reinterpret_cast<const char*>(pending_ + pending_offset_), pending_size_ - pending_offset_);
-        if (!written) return 0;
-        pending_offset_ += written;
+            const size_t available = client->space();
+            const size_t count = std::min(pending_size_ - pending_offset_, available);
+            const size_t written = client->add(
+                reinterpret_cast<const char*>(pending_ + pending_offset_), count);
+            if (!written) break;
+            pending_offset_ += written;
+            total_written += written;
+            if (written != count) break;
+        }
 
-        request_->client()->send();
-        return written;
+        if (total_written) client->send();
+        return total_written;
     }
 
     bool prepare_pending() {
@@ -218,6 +251,9 @@ private:
     size_t pending_size_ = 0;
     size_t pending_offset_ = 0;
     Part part_ = PART_NEED_FRAME;
+    portMUX_TYPE pump_mux_ = portMUX_INITIALIZER_UNLOCKED;
+    bool listener_registered_ = false;
+    bool pump_in_progress_ = false;
     bool failed_ = false;
 };
 

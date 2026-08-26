@@ -4,6 +4,7 @@
 
 #include "../camera_feed.h"
 #include "../display_driver.h"
+#include "../log_manager.h"
 #include "../screen_saver_manager.h"
 
 #include <string.h>
@@ -150,6 +151,26 @@ static void camera_preview_destroy(WidgetState* state) {
     preview->has_demand = false;
 }
 
+static void camera_preview_show(WidgetState* state) {
+    auto* preview = reinterpret_cast<CameraPreviewWidgetState*>(state->data);
+    if (!preview->has_demand) {
+        camera_feed_acquire_demand(CAMERA_FEED_OUTPUT_RGB565);
+        preview->has_demand = true;
+        LOGD("CameraPreview", "Visible: acquired RGB565 feed demand");
+    }
+}
+
+static void camera_preview_hide(WidgetState* state) {
+    auto* preview = reinterpret_cast<CameraPreviewWidgetState*>(state->data);
+    if (preview->has_frame) camera_feed_release_frame(&preview->frame);
+    preview->has_frame = false;
+    if (preview->has_demand) {
+        camera_feed_release_demand(CAMERA_FEED_OUTPUT_RGB565);
+        LOGD("CameraPreview", "Hidden: released RGB565 feed demand");
+    }
+    preview->has_demand = false;
+}
+
 #if HAS_MCP
 static void camera_preview_describe(JsonObject& out) {
     JsonArray fields = out.createNestedArray("config_fields");
@@ -160,6 +181,6 @@ static void camera_preview_describe(JsonObject& out) {
 }
 #endif
 
-REGISTER_WIDGET_SCHEMA(camera_preview, nullptr, false);
+REGISTER_WIDGET_SCHEMA_LIFECYCLE(camera_preview, nullptr, false);
 
 #endif
