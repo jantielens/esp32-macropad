@@ -100,6 +100,7 @@ SET_LOOP_TASK_STACK_SIZE(LOOP_TASK_STACK_SIZE);
 #if HAS_CAMERA
 #include "camera.h"
 #include "camera_feed.h"
+#include "camera_motion.h"
 #endif
 
 // Configuration
@@ -335,6 +336,24 @@ void setup()
 			.white_balance_blue_q8 = device_config.camera_white_balance_blue_q8,
 		});
 		LOGW("Camera", "Invalid saved camera settings; restored defaults");
+	}
+	if (!camera_motion_set_settings({
+		.enabled = device_config.camera_motion_enabled,
+		.sample_fps = device_config.camera_motion_fps,
+		.sensitivity = device_config.camera_motion_sensitivity,
+		.presence_hold_seconds = device_config.camera_presence_hold_seconds,
+	})) {
+		device_config.camera_motion_enabled = false;
+		device_config.camera_motion_fps = CAMERA_MOTION_FPS_DEFAULT;
+		device_config.camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
+		device_config.camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
+		camera_motion_set_settings({
+			.enabled = false,
+			.sample_fps = device_config.camera_motion_fps,
+			.sensitivity = device_config.camera_motion_sensitivity,
+			.presence_hold_seconds = device_config.camera_presence_hold_seconds,
+		});
+		LOGW("Camera", "Invalid saved motion settings; restored defaults");
 	}
 	#endif
 

@@ -20,6 +20,9 @@
 
 #include <Arduino.h>
 #include "board_config.h"
+#if HAS_CAMERA
+#include "camera_motion.h"
+#endif
 #include "camera.h"
 
 // Maximum string lengths
@@ -143,6 +146,10 @@ struct DeviceConfig {
 #if HAS_CAMERA
 		uint8_t camera_jpeg_quality;             // default CAMERA_JPEG_QUALITY_DEFAULT
 		uint8_t camera_feed_target_fps;          // default CAMERA_FEED_TARGET_FPS_DEFAULT
+		bool camera_motion_enabled;              // default false
+		uint8_t camera_motion_fps;               // default CAMERA_MOTION_FPS_DEFAULT
+		uint8_t camera_motion_sensitivity;       // default CAMERA_MOTION_SENSITIVITY_DEFAULT
+		uint16_t camera_presence_hold_seconds;   // default CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT
 		CameraRotation camera_rotation;          // default CAMERA_ROTATION_DEFAULT
 		uint16_t camera_output_width;            // default CAMERA_OUTPUT_WIDTH_DEFAULT
 		uint16_t camera_output_height;           // default CAMERA_OUTPUT_HEIGHT_DEFAULT

@@ -82,6 +82,31 @@ is skipped. The Camera **Snapshots** page shows the latest image and groups
 camera-roll images by day; each expanded day initially loads 48 snapshots and
 offers **Show more snapshots** for the next group.
 
+## Camera Motion Sensing
+
+Camera-enabled boards include a **Motion sensing** item under the **Camera**
+navigation category. It is off by default. Enable it to detect scene motion
+locally on the ESP32-P4 without sending camera frames to a cloud service.
+
+| Setting | Description |
+|---------|-------------|
+| **Enable camera motion sensing** | Starts or stops local motion analysis. Disabled sensing uses no motion-analysis memory and does not request camera frames. |
+| **Sample rate** | Chooses 1 or 2 frames per second. Use 1 FPS to minimize CPU and PSRAM bandwidth. |
+| **Sensitivity** | Set a value from 1 to 10. Lower values reduce false triggers; higher values detect smaller changes but can react to shadows or changing light. |
+| **Presence hold time** | Keeps Camera Presence on for 10 to 600 seconds after the most recent motion. |
+
+Verify Camera Presence in the **Sensor Data** fragment or by subscribing to the
+retained `camera_presence/state` MQTT topic.
+
+Motion sensing keeps operating while the display sleeps. It pauses during a
+firmware update. When it is the only camera feature in use, it does not create
+preview or JPEG frames.
+
+> [!IMPORTANT]
+> Camera Presence is a motion sensor, not an occupancy sensor. A person who
+> remains still creates no new motion, so presence turns off after the selected
+> hold time.
+
 ## Music Library
 
 Audio builds with the sound player enabled include a **Music Library** page. It lists

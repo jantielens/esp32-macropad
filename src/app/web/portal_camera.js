@@ -65,7 +65,6 @@ window.init_camera_fragment = function () {
     feedTargetFps.addEventListener('input', function () {
         feedTargetFpsValue.textContent = feedTargetFps.value;
     });
-
     function updateExposureValue() {
         exposureValue.textContent = exposure.value;
         exposureTimeValue.textContent = ((Number(exposure.value) * exposureLineTimeUs) / 1000).toFixed(1);

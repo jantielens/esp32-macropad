@@ -108,6 +108,11 @@ bool camera_set_capture_settings(const CameraCaptureSettings& settings);
 // Captures one RAW10 frame into caller-owned PSRAM. Must run on the main loop.
 bool camera_capture_raw(CameraRawFrame* frame);
 
+// Captures one RAW10 frame into a reusable caller-owned PSRAM buffer. The
+// frame is allocated on its first successful capture and retained for reuse.
+// Must run on the main loop.
+bool camera_capture_raw_reuse(CameraRawFrame* frame);
+
 // Frees a frame returned by camera_capture_raw().
 void camera_release_raw(CameraRawFrame* frame);
 

@@ -24,6 +24,10 @@
 #include "sensors/dummy_sensor.cpp"
 #endif
 
+#if HAS_CAMERA
+#include "sensors/camera_presence_sensor.cpp"
+#endif
+
 void sensor_manager_register_all(SensorRegistry &registry) {
 	#if HAS_SENSOR_BME280
 	register_bme280_sensor(registry);
@@ -43,6 +47,10 @@ void sensor_manager_register_all(SensorRegistry &registry) {
 
 	#if HAS_SENSOR_DUMMY
 	register_dummy_sensor(registry);
+	#endif
+
+	#if HAS_CAMERA
+	register_camera_presence_sensor(registry);
 	#endif
 
 }

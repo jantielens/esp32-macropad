@@ -234,6 +234,15 @@ bool camera_capture_raw(CameraRawFrame* frame) {
 #endif
 }
 
+bool camera_capture_raw_reuse(CameraRawFrame* frame) {
+#if HAS_CAMERA
+    return camera_driver_capture_raw_reuse(frame);
+#else
+    if (frame) *frame = {};
+    return false;
+#endif
+}
+
 void camera_release_raw(CameraRawFrame* frame) {
 #if HAS_CAMERA
     camera_driver_release_raw(frame);

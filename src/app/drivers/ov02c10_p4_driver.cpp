@@ -331,6 +331,7 @@ static esp_err_t camera_create_isp_bypass(isp_proc_handle_t* processor) {
 
 static bool camera_driver_capture_raw_into(CameraRawFrame* frame, bool retain_buffer_on_failure) {
     if (!retain_buffer_on_failure && frame) *frame = {};
+    const size_t allocated_size = retain_buffer_on_failure && frame ? frame->size : 0;
     const esp_ldo_channel_config_t ldo_config = {
         .chan_id = 3,
         .voltage_mv = 2500,
@@ -430,7 +431,7 @@ static bool camera_driver_capture_raw_into(CameraRawFrame* frame, bool retain_bu
         camera_stop_csi_capture();
     }
     if (error == ESP_OK && frame) {
-        if (frame->size < s_csi_context.received_size) {
+        if (allocated_size < s_csi_context.received_size) {
             uint8_t* resized = static_cast<uint8_t*>(heap_caps_realloc(
                 frame->data, s_csi_context.received_size, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM));
             if (!resized) {
@@ -447,7 +448,11 @@ static bool camera_driver_capture_raw_into(CameraRawFrame* frame, bool retain_bu
                                     ESP_CACHE_MSYNC_FLAG_TYPE_DATA | ESP_CACHE_MSYNC_FLAG_DIR_M2C);
             if (error == ESP_OK) {
                 memcpy(frame->data, completed_buffer, s_csi_context.received_size);
-                frame->size = s_csi_context.received_size;
+                // Reusable callers keep the allocation capacity in size so
+                // subsequent same-mode captures do not reallocate PSRAM.
+                frame->size = retain_buffer_on_failure ?
+                    (allocated_size > s_csi_context.received_size ? allocated_size : s_csi_context.received_size) :
+                    s_csi_context.received_size;
                 frame->width = CAMERA_CAPTURE_WIDTH;
                 frame->height = CAMERA_CAPTURE_HEIGHT;
             }
@@ -469,6 +474,10 @@ static bool camera_driver_capture_raw_into(CameraRawFrame* frame, bool retain_bu
 
 bool camera_driver_capture_raw(CameraRawFrame* frame) {
     return camera_driver_capture_raw_into(frame, false);
+}
+
+bool camera_driver_capture_raw_reuse(CameraRawFrame* frame) {
+    return camera_driver_capture_raw_into(frame, true);
 }
 
 void camera_driver_release_raw(CameraRawFrame* frame) {
@@ -816,6 +825,11 @@ bool camera_driver_is_detected() {
 }
 
 bool camera_driver_capture_raw(CameraRawFrame* frame) {
+    if (frame) *frame = {};
+    return false;
+}
+
+bool camera_driver_capture_raw_reuse(CameraRawFrame* frame) {
     if (frame) *frame = {};
     return false;
 }

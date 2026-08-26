@@ -34,6 +34,16 @@ Camera-capable boards expose two MQTT Button entities through auto-discovery:
 | **Save Camera Snapshot** | `button` | Captures a JPEG and writes `/camera/latest.jpg` |
 | **Save Camera Snapshot and Roll** | `button` | Captures a JPEG, writes `/camera/latest.jpg`, and appends the image to the camera roll |
 
+When **Camera motion sensing** is enabled in the Camera settings page, Home
+Assistant discovers **Camera Presence**, a binary sensor with the `presence`
+device class. Disabling motion sensing removes the entity from Home Assistant.
+Its retained MQTT state is published at `camera_presence/state` whenever
+presence changes.
+
+> [!IMPORTANT]
+> Camera Presence is motion-derived. A stationary person does not create motion,
+> so the entity turns off after the configured presence hold time.
+
 To view the live camera in Home Assistant, add the
 [MJPEG IP Camera](https://www.home-assistant.io/integrations/mjpeg/) integration
 manually. Enter these URLs, replacing `<device-ip>` with the device address:

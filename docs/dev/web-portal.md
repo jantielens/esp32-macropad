@@ -15,6 +15,31 @@ The web portal provides:
 - Optional HTTP Basic Authentication (Full Mode only)
 - Responsive web interface (desktop & mobile)
 
+### Camera Motion Sensing
+
+Camera-enabled boards add a **Motion sensing** navigation item under the Camera
+category. It is disabled by default, so it does not retain motion-analysis
+buffers or request camera frames until enabled. The controls configure local
+RAW10 analysis only:
+
+* Enable or disable camera motion sensing
+* Select a sample rate of 1 or 2 FPS
+* Set Sensitivity from 1 to 10, where higher values detect smaller changes
+* Set the motion-derived presence hold time from 10 to 600 seconds
+
+Verify Camera Presence through the Sensor Data fragment or the retained MQTT
+topic `camera_presence/state`. Sensing continues while the display sleeps,
+pauses during OTA, and avoids RGB565 preview conversion and JPEG encoding when
+it is the only camera client.
+
+Camera presence is motion-derived rather than occupancy detection. A stationary
+person does not refresh the hold time and presence turns off when the configured
+period expires.
+
+Temporary `Camera` log messages record RAW10 capture and analysis duration,
+tile-change counts, score thresholds, global-lighting suppression, and
+confirmation progress to support hardware calibration.
+
 ## Portal Modes
 
 ### Core Mode (AP with Captive Portal)

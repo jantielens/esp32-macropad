@@ -3,6 +3,7 @@
 #if HAS_CAMERA
 #include "log_manager.h"
 #include "ota_activity.h"
+#include "camera_motion.h"
 
 #include <esp_heap_caps.h>
 
@@ -115,7 +116,7 @@ void camera_feed_release_idle_resources() {
     uint16_t* rgb565[kSlotCount] = {};
 
     portENTER_CRITICAL(&s_mux);
-    if (s_rgb565_demand || s_jpeg_demand) {
+    if (s_rgb565_demand || s_jpeg_demand || camera_motion_is_enabled()) {
         s_idle_since_ms = 0;
         portEXIT_CRITICAL(&s_mux);
         return;
@@ -177,6 +178,7 @@ void camera_feed_deinit() {
     s_last_capture_ms = 0;
     s_idle_since_ms = 0;
     portEXIT_CRITICAL(&s_mux);
+    camera_motion_deinit();
     camera_release_capture_resources();
 }
 
@@ -287,11 +289,15 @@ void camera_feed_loop() {
     rgb565_demand = s_rgb565_demand;
     jpeg_demand = s_jpeg_demand;
     portEXIT_CRITICAL(&s_mux);
-    if (!rgb565_demand && !jpeg_demand) {
+    if (!rgb565_demand && !jpeg_demand && !camera_motion_is_enabled()) {
         camera_feed_release_idle_resources();
         return;
     }
     if (ota_activity_is_active()) return;
+    if (camera_motion_is_enabled()) {
+        camera_motion_loop();
+        if (!rgb565_demand && !jpeg_demand) return;
+    }
     if (!camera_feed_ensure_cache()) return;
 
     const CameraCaptureSettings settings = camera_get_capture_settings();

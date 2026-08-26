@@ -1018,6 +1018,7 @@ echo
 
 echo "=== Running guard: camera preview widget wiring ==="
 ./tests/test_camera_preview_widget.sh
+./tests/test_camera_motion.sh
 echo
 
 echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="

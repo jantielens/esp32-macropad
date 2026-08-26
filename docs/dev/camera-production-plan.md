@@ -1,7 +1,7 @@
 ---
 title: Camera Production Plan
 description: Temporary implementation handoff for camera capture, local preview, and MJPEG work
-ms.date: 2026-08-24
+ms.date: 2026-08-26
 ms.topic: how-to
 ---
 
@@ -242,6 +242,26 @@ These are intentionally outside the first production slices:
 * Multiple unrestricted MJPEG clients
 * Automatic exposure or sensor gain control
 * Generalizing the OV02C10 driver for unverified camera boards
+
+## Camera Motion Sensing
+
+Camera-equipped boards can optionally provide **motion-derived presence**. The
+feature is disabled by default. When enabled, it continues while the display is
+asleep and samples the existing RAW10 camera path on the Arduino main loop.
+
+The analyser samples an $80 \times 45$ grid directly from RAW10 high bytes and
+compares it with the preceding grid. It uses sensitivity thresholds,
+two-frame confirmation, and a scene-wide-change rejection to limit false
+triggers from lighting changes. It does not request RGB565 conversion or JPEG
+encoding when it is the sole camera consumer.
+
+Camera presence is not occupancy detection: a stationary person produces no
+new motion and presence clears after the configured hold time. It is exposed as
+the retained MQTT topic `camera_presence/state` and as the Home Assistant
+binary sensor **Camera Presence** with device class `presence`.
+
+The motion feature must remain in the camera subsystem, must pause during OTA,
+and must not add code or memory use to boards without `HAS_CAMERA`.
 
 ## Hardware Measurement Log
 

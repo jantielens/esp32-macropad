@@ -12,6 +12,9 @@
 #include "log_manager.h"
 #include "power_config.h"
 #include "storage.h"
+#if HAS_CAMERA
+#include "camera_motion.h"
+#endif
 #include <Preferences.h>
 #include <nvs_flash.h>
 
@@ -43,6 +46,10 @@
 #if HAS_CAMERA
 #define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
 #define KEY_CAMERA_FEED_TARGET_FPS "cam_fps"
+#define KEY_CAMERA_MOTION_ENABLED "cam_mot_en"
+#define KEY_CAMERA_MOTION_FPS "cam_mot_fps"
+#define KEY_CAMERA_MOTION_SENSITIVITY "cam_mot_sens"
+#define KEY_CAMERA_PRESENCE_HOLD "cam_prs_hold"
 #define KEY_CAMERA_ROTATION "cam_rot"
 #define KEY_CAMERA_OUTPUT_WIDTH "cam_out_w"
 #define KEY_CAMERA_OUTPUT_HEIGHT "cam_out_h"
@@ -227,6 +234,10 @@ bool config_manager_load(DeviceConfig *config) {
 				#if HAS_CAMERA
 				config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
 				config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
+				config->camera_motion_enabled = false;
+				config->camera_motion_fps = CAMERA_MOTION_FPS_DEFAULT;
+				config->camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
+				config->camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
 				config->camera_rotation = CAMERA_ROTATION_DEFAULT;
 				config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
 				config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
@@ -344,6 +355,10 @@ bool config_manager_load(DeviceConfig *config) {
 		#if HAS_CAMERA
 		config->camera_jpeg_quality = preferences.getUChar(KEY_CAMERA_JPEG_QUALITY, CAMERA_JPEG_QUALITY_DEFAULT);
 		config->camera_feed_target_fps = preferences.getUChar(KEY_CAMERA_FEED_TARGET_FPS, CAMERA_FEED_TARGET_FPS_DEFAULT);
+		config->camera_motion_enabled = preferences.getBool(KEY_CAMERA_MOTION_ENABLED, false);
+		config->camera_motion_fps = preferences.getUChar(KEY_CAMERA_MOTION_FPS, CAMERA_MOTION_FPS_DEFAULT);
+		config->camera_motion_sensitivity = preferences.getUChar(KEY_CAMERA_MOTION_SENSITIVITY, CAMERA_MOTION_SENSITIVITY_DEFAULT);
+		config->camera_presence_hold_seconds = preferences.getUShort(KEY_CAMERA_PRESENCE_HOLD, CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT);
 		config->camera_rotation = static_cast<CameraRotation>(
 			preferences.getUShort(KEY_CAMERA_ROTATION, CAMERA_ROTATION_DEFAULT));
 		config->camera_output_width = preferences.getUShort(KEY_CAMERA_OUTPUT_WIDTH, CAMERA_OUTPUT_WIDTH_DEFAULT);
@@ -474,6 +489,10 @@ bool config_manager_save(const DeviceConfig *config) {
 		#if HAS_CAMERA
 		preferences.putUChar(KEY_CAMERA_JPEG_QUALITY, config->camera_jpeg_quality);
 		preferences.putUChar(KEY_CAMERA_FEED_TARGET_FPS, config->camera_feed_target_fps);
+		preferences.putBool(KEY_CAMERA_MOTION_ENABLED, config->camera_motion_enabled);
+		preferences.putUChar(KEY_CAMERA_MOTION_FPS, config->camera_motion_fps);
+		preferences.putUChar(KEY_CAMERA_MOTION_SENSITIVITY, config->camera_motion_sensitivity);
+		preferences.putUShort(KEY_CAMERA_PRESENCE_HOLD, config->camera_presence_hold_seconds);
 		preferences.putUShort(KEY_CAMERA_ROTATION, config->camera_rotation);
 		preferences.putUShort(KEY_CAMERA_OUTPUT_WIDTH, config->camera_output_width);
 		preferences.putUShort(KEY_CAMERA_OUTPUT_HEIGHT, config->camera_output_height);
@@ -718,6 +737,14 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		LOGI("Config", "Audio volume: %u%%", config->audio_volume);
 		if (config->tap_beep[0]) LOGI("Config", "Tap beep: %s", config->tap_beep);
 		if (config->lp_beep[0]) LOGI("Config", "LP beep: %s", config->lp_beep);
+#endif
+
+#if HAS_CAMERA
+		LOGI("Config", "Camera motion: %s fps=%u sensitivity=%u hold=%us",
+				config->camera_motion_enabled ? "enabled" : "disabled",
+				(unsigned)config->camera_motion_fps,
+				(unsigned)config->camera_motion_sensitivity,
+				(unsigned)config->camera_presence_hold_seconds);
 #endif
 
 #if HAS_DISPLAY

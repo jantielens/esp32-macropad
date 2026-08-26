@@ -1,0 +1,40 @@
+<div class="section-header">
+  <h2>Motion sensing</h2>
+  <p>Detect camera motion locally and expose it as motion-derived presence.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" id="camera-motion-enabled" type="checkbox" role="switch">
+      <label class="form-check-label" for="camera-motion-enabled">Enable camera motion sensing</label>
+      <div class="form-text">Analyzes camera frames locally while enabled, including when the display sleeps. It does not create JPEG or preview frames when no other camera client is active.</div>
+    </div>
+    <div class="grid-2col">
+      <div>
+        <label class="form-label d-flex justify-content-between" for="camera-motion-fps">
+          <span>Sample rate</span><strong><span id="camera-motion-fps-value">1</span> FPS</strong>
+        </label>
+        <input class="form-range" id="camera-motion-fps" type="range" min="1" max="2" step="1" value="1">
+        <div class="form-text">Lower rates reduce camera and PSRAM load.</div>
+      </div>
+      <div>
+        <label class="form-label d-flex justify-content-between" for="camera-motion-sensitivity">
+          <span>Sensitivity</span><strong><span id="camera-motion-sensitivity-value">5</span>/10</strong>
+        </label>
+        <input class="form-range" id="camera-motion-sensitivity" type="range" min="1" max="10" step="1" value="5">
+        <div class="form-text">Higher sensitivity detects smaller changes but can react to shadows and lighting changes.</div>
+      </div>
+      <div>
+        <label class="form-label d-flex justify-content-between" for="camera-presence-hold-seconds">
+          <span>Presence hold time</span><strong><span id="camera-presence-hold-seconds-value">60</span> seconds</strong>
+        </label>
+        <input class="form-range" id="camera-presence-hold-seconds" type="range" min="10" max="600" step="10" value="60">
+        <div class="form-text">Presence stays on for this period after the last detected motion.</div>
+      </div>
+    </div>
+    <div class="form-text mt-3">Verify Camera Presence in the Sensor Data fragment or on the <code>camera_presence/state</code> MQTT topic.</div>
+  </div>
+</div>
+<div class="save-bar mb-3">
+  <button type="button" class="btn btn-primary btn-sm" id="camera-motion-save-btn">Save motion settings</button>
+</div>

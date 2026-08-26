@@ -514,7 +514,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_discovery.cpp
   - src/app/mcp_tools_camera.cpp
   - src/app/mcp_tools_pads.cpp
+  - src/app/mqtt_camera.cpp
+  - src/app/mqtt_camera.h
   - src/app/portal_components.cpp
+  - src/app/sensors.cpp
   - src/app/web_portal_camera.cpp
   - src/app/web_portal_camera.h
   - src/app/web_portal_pages.cpp
@@ -843,6 +846,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
+  - src/app/mqtt_camera.cpp
+  - src/app/mqtt_camera.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
   - src/app/mqtt_notify.cpp
