@@ -45,3 +45,13 @@ add_host_gtest(test_audio_gain
 add_host_gtest(test_image_rgba_source
     test_image_rgba_source.cpp
 )
+
+add_host_gtest(test_music_command
+    test_music_command.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp
+)
+
+add_host_gtest(test_music_transport
+    test_music_transport.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/music_transport.cpp
+)

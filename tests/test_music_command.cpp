@@ -1,17 +1,9 @@
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
+#include <gtest/gtest.h>
 
 #include "music_command.h"
 
-static void check(bool condition, const char* message) {
-    if (!condition) {
-        std::fprintf(stderr, "FAIL: %s\n", message);
-        std::exit(1);
-    }
-}
-
-int main() {
+TEST(MusicCommand, ParsesAndSerializesKnownCommands) {
     const struct {
         const char* text;
         MusicCommand command;
@@ -23,14 +15,11 @@ int main() {
     };
     for (const auto& entry : valid) {
         MusicCommand parsed = MUSIC_COMMAND_STOP;
-        check(music_command_parse(entry.text, &parsed) && parsed == entry.command,
-              "valid Music command must parse");
-        check(std::strcmp(music_command_name(parsed), entry.text) == 0,
-              "Music command must serialize canonically");
+        ASSERT_TRUE(music_command_parse(entry.text, &parsed));
+        EXPECT_EQ(parsed, entry.command);
+        EXPECT_STREQ(music_command_name(parsed), entry.text);
     }
     MusicCommand ignored = MUSIC_COMMAND_STOP;
-    check(!music_command_parse("skip", &ignored), "unknown Music command must fail");
-    check(!music_command_parse(nullptr, &ignored), "null Music command must fail");
-    std::puts("music command checks passed");
-    return 0;
+    EXPECT_FALSE(music_command_parse("skip", &ignored));
+    EXPECT_FALSE(music_command_parse(nullptr, &ignored));
 }
