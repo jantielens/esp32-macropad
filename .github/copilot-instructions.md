@@ -147,7 +147,7 @@ ownership. If a new subsystem needs a checkpoint, add focused coverage to
 
 ### Tests
 
-- `tests/run_tests.sh` — Builds and runs all host-native tests (no ESP32 needed)
+- `CMakeLists.txt` + `tests/CMakeLists.txt` — Configure, build, and run host-native tests with CTest (no ESP32 needed)
 - `tests/test_expr_eval.cpp` — Expression evaluator tests
 - `tests/test_expr_binding.cpp` — Expression binding integration tests
 - `tests/test_key_sequence.cpp` — Key sequence DSL parser tests

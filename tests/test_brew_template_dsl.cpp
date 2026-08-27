@@ -1,10 +1,9 @@
-#include <cassert>
-#include <cstdio>
 #include <cstring>
+#include <gtest/gtest.h>
 
 #include "brew_template_dsl.h"
 
-int main() {
+TEST(BrewTemplateDsl, ParsesSerializesAndRejectsOverflow) {
     const char* json = R"json({
         "v": 1,
         "name": "test_brew",
@@ -19,20 +18,16 @@ int main() {
     BrewTemplate* tmpl = nullptr;
     BrewStage* stages = nullptr;
     char error[80];
-    assert(brew_dsl_parse(json, std::strlen(json), &tmpl, &stages,
-                          error, sizeof(error)) == BREW_DSL_OK);
-    assert(std::strcmp(tmpl->idle_instruction, "Tap Start to begin.") == 0);
-    assert(std::strcmp(tmpl->done_instruction, "Brew complete.") == 0);
-    assert(tmpl->stages[0].target_time_ms == 210000);
-    assert(tmpl->stages[1].target_time_ms == 45000);
+    ASSERT_EQ(brew_dsl_parse(json, std::strlen(json), &tmpl, &stages, error, sizeof(error)), BREW_DSL_OK);
+    ASSERT_NE(tmpl, nullptr); ASSERT_NE(stages, nullptr);
+    EXPECT_STREQ(tmpl->idle_instruction, "Tap Start to begin."); EXPECT_STREQ(tmpl->done_instruction, "Brew complete.");
+    EXPECT_EQ(tmpl->stages[0].target_time_ms, 210000u); EXPECT_EQ(tmpl->stages[1].target_time_ms, 45000u);
 
     char serialized[1024];
-    assert(brew_dsl_serialize(tmpl, serialized, sizeof(serialized)) > 0);
-    assert(std::strstr(serialized, "\"idle_instruction\"") != nullptr);
-    assert(std::strstr(serialized, "\"done_instruction\"") != nullptr);
-    assert(std::strstr(serialized, "\"target_time_s\":210") != nullptr);
-    assert(std::strstr(serialized, "\"target_time_s\":45") != nullptr);
-    assert(std::strstr(serialized, "\"auto_time_s\"") == nullptr);
+    ASSERT_GT(brew_dsl_serialize(tmpl, serialized, sizeof(serialized)), 0);
+    EXPECT_NE(std::strstr(serialized, "\"idle_instruction\""), nullptr); EXPECT_NE(std::strstr(serialized, "\"done_instruction\""), nullptr);
+    EXPECT_NE(std::strstr(serialized, "\"target_time_s\":210"), nullptr); EXPECT_NE(std::strstr(serialized, "\"target_time_s\":45"), nullptr);
+    EXPECT_EQ(std::strstr(serialized, "\"auto_time_s\""), nullptr);
 
     delete[] stages;
     delete tmpl;
@@ -44,11 +39,6 @@ int main() {
     })json";
     tmpl = nullptr;
     stages = nullptr;
-    assert(brew_dsl_parse(oversized_time, std::strlen(oversized_time), &tmpl, &stages,
-                          error, sizeof(error)) == BREW_DSL_ERR_TARGET_TIME);
-    assert(tmpl == nullptr);
-    assert(stages == nullptr);
-
-    std::puts("brew_template_dsl: PASS");
-    return 0;
+    EXPECT_EQ(brew_dsl_parse(oversized_time, std::strlen(oversized_time), &tmpl, &stages, error, sizeof(error)), BREW_DSL_ERR_TARGET_TIME);
+    EXPECT_EQ(tmpl, nullptr); EXPECT_EQ(stages, nullptr);
 }

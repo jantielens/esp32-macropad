@@ -2,7 +2,7 @@
 // Unit tests: component_registry
 // ============================================================================
 // Tests: add, find, iterate, overflow, duplicate detection, category filtering.
-// Build: g++ -std=c++17 ... (see tests/run_tests.sh)
+// Build: CMake/CTest (see tests/CMakeLists.txt)
 
 #include "../src/app/component_registry.h"
 

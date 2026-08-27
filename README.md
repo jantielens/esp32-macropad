@@ -203,7 +203,9 @@ Building from source, contributing, or adding new board support? See the [develo
 Host-native unit and integration tests run on the development machine (no ESP32 needed):
 
 ```bash
-./tests/run_tests.sh
+cmake -S . -B build/host-tests
+cmake --build build/host-tests --parallel
+ctest --test-dir build/host-tests --output-on-failure
 ```
 
 ## 📄 License
