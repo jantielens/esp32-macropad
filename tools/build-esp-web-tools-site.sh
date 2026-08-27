@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 TEMPLATE_DIR="$REPO_ROOT/tools/esp-web-tools-site"
+BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
 
 source "$REPO_ROOT/config.sh"
 
@@ -285,7 +286,7 @@ for board_name in "${boards[@]}"; do
   chip_family="$(get_chip_family_for_fqbn "$fqbn")"
   bootloader_offset_dec="$(get_bootloader_offset_dec_for_chip_family "$chip_family")"
 
-  src_dir="$REPO_ROOT/build/$board_name"
+  src_dir="$BUILD_DIR/$board_name"
 
   bootloader_bin="$src_dir/app.ino.bootloader.bin"
   partitions_bin="$src_dir/app.ino.partitions.bin"
@@ -450,7 +451,7 @@ while IFS= read -r source; do
   package_name="$(python3 "$REPO_ROOT/tools/extension_package_name.py" "$source")"
   title="$(python3 "$REPO_ROOT/tools/extension_package_name.py" --title "$source")"
   metadata_file="$(dirname "$source")/metadata.json"
-  package_file="$REPO_ROOT/build/extensions/${package_name%.elf}.ext"
+  package_file="$BUILD_DIR/extensions/${package_name%.elf}.ext"
 
   if [[ ! -f "$metadata_file" ]]; then
     echo "ERROR: Missing extension catalog metadata: $metadata_file" >&2
