@@ -8,6 +8,7 @@ FEED="src/app/camera_feed.cpp"
 SENSOR="src/app/sensors/camera_presence_sensor.cpp"
 COMPONENT="src/app/components/camera_component.cpp"
 ACTIONS="src/app/camera_motion_actions.cpp"
+BINDING="src/app/camera_binding.cpp"
 
 grep -q '#if HAS_CAMERA' "$MOTION"
 grep -q 'CAMERA_MOTION_ANALYZE_EVERY_DEFAULT' src/app/camera_motion.h
@@ -26,6 +27,17 @@ grep -A2 'camera_motion_loop();' "$FEED" | grep -q 'ota_activity_is_active()'
 grep -q 'analyze_every_nth_frame' "$FEED"
 grep -q 'camera_motion_release_grid();' "$MOTION"
 grep -q 'camera_raw10_high_byte(raw' "$MOTION"
+grep -q 's_status.changed_tiles = changed_tiles' "$MOTION"
+grep -q 's_status.global_change = global_change' "$MOTION"
+grep -q 's_status.confirm_frames = s_active_frames' "$MOTION"
+grep -q 's_status.last_sample_ms = now' "$MOTION"
+grep -q 'binding_template_register("camera"' "$BINDING"
+grep -q '"changed_tiles"' "$BINDING"
+grep -q '"score_threshold"' "$BINDING"
+grep -q '"sample_age"' "$BINDING"
+grep -q '"motion_age"' "$BINDING"
+grep -q 'camera_binding_init();' src/app/binding_finite_schemes.cpp
+grep -q 'camera_binding_init();' src/app/app.ino
 grep -q 'camera_presence/state' "$SENSOR"
 grep -q 'camera_presence_remove_discovery' "$SENSOR"
 grep -q '"Camera Presence"' "$SENSOR"

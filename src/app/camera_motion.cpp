@@ -15,11 +15,6 @@ constexpr size_t kGridSize = static_cast<size_t>(kGridWidth) * kGridHeight;
 constexpr uint8_t kConfirmFrames = 2;
 constexpr uint16_t kGlobalChangeTileCount = static_cast<uint16_t>(kGridSize * 7 / 10);
 
-struct SensitivityThresholds {
-    uint16_t minimum_changed_tiles;
-    uint32_t minimum_score;
-};
-
 CameraMotionSettings s_settings = {
     .enabled = false,
     .analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT,
@@ -39,21 +34,21 @@ bool s_presence_changed = false;
 bool s_confirmed_motion = false;
 portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 
-SensitivityThresholds camera_motion_thresholds(uint8_t sensitivity) {
+CameraMotionThresholds camera_motion_thresholds(uint8_t sensitivity) {
     // Sensitivity grows from 1 (large movement only) to 10 (small movement).
     // Observed static noise is about 40-85 tiles / 900-2100 score, while a
     // hand movement is about 319-723 tiles / 24000-61000 score.
     if (sensitivity <= CAMERA_MOTION_SENSITIVITY_DEFAULT) {
         const uint8_t offset = sensitivity - CAMERA_MOTION_SENSITIVITY_MIN;
         return {
-            .minimum_changed_tiles = static_cast<uint16_t>(400 - offset * 50),
-            .minimum_score = 25000U - static_cast<uint32_t>(offset) * 3250U,
+            .changed_tiles = static_cast<uint16_t>(400 - offset * 50),
+            .score = 25000U - static_cast<uint32_t>(offset) * 3250U,
         };
     }
     const uint8_t offset = sensitivity - CAMERA_MOTION_SENSITIVITY_DEFAULT;
     return {
-        .minimum_changed_tiles = static_cast<uint16_t>(200 - offset * 25),
-        .minimum_score = 12000U - static_cast<uint32_t>(offset) * 1500U,
+        .changed_tiles = static_cast<uint16_t>(200 - offset * 25),
+        .score = 12000U - static_cast<uint32_t>(offset) * 1500U,
     };
 }
 
@@ -115,9 +110,13 @@ void camera_motion_process_raw(const CameraRawFrame& raw, uint32_t now) {
     }
 
     const CameraMotionSettings settings = camera_motion_get_settings();
-    const SensitivityThresholds thresholds = camera_motion_thresholds(settings.sensitivity);
+    const CameraMotionThresholds thresholds = camera_motion_thresholds(settings.sensitivity);
     uint16_t changed_tiles = 0;
     uint32_t score = 0;
+    portENTER_CRITICAL(&s_mux);
+    s_status.has_last_sample = true;
+    s_status.last_sample_ms = now;
+    portEXIT_CRITICAL(&s_mux);
     size_t index = 0;
     for (uint16_t grid_y = 0; grid_y < kGridHeight; ++grid_y) {
         const uint16_t source_y = static_cast<uint16_t>(
@@ -140,21 +139,28 @@ void camera_motion_process_raw(const CameraRawFrame& raw, uint32_t now) {
 
     if (!s_have_previous_grid) {
         s_have_previous_grid = true;
+        portENTER_CRITICAL(&s_mux);
+        s_status.baseline_ready = true;
+        s_status.global_change = false;
+        s_status.confirm_frames = 0;
+        portEXIT_CRITICAL(&s_mux);
         LOGI("Camera", "Motion sample: baseline captured (%ux%u grid)", kGridWidth, kGridHeight);
         return;
     }
 
-    portENTER_CRITICAL(&s_mux);
-    s_status.changed_tiles = changed_tiles;
-    s_status.score = score;
-    portEXIT_CRITICAL(&s_mux);
     // A nearly frame-wide change is normally illumination or exposure, not
     // localized motion. The new frame remains the baseline for the next sample.
     const bool global_change = changed_tiles >= kGlobalChangeTileCount;
-    const bool motion = !global_change && changed_tiles >= thresholds.minimum_changed_tiles &&
-                        score >= thresholds.minimum_score;
+    const bool motion = !global_change && changed_tiles >= thresholds.changed_tiles &&
+                        score >= thresholds.score;
     s_active_frames = motion ? static_cast<uint8_t>(
         s_active_frames < kConfirmFrames ? s_active_frames + 1 : kConfirmFrames) : 0;
+    portENTER_CRITICAL(&s_mux);
+    s_status.changed_tiles = changed_tiles;
+    s_status.score = score;
+    s_status.global_change = global_change;
+    s_status.confirm_frames = s_active_frames;
+    portEXIT_CRITICAL(&s_mux);
     if (global_change) {
         LOGW("Camera", "Motion frame ignored: global change (%u/%u tiles)",
              changed_tiles, kGridSize);
@@ -166,12 +172,17 @@ void camera_motion_process_raw(const CameraRawFrame& raw, uint32_t now) {
     portENTER_CRITICAL(&s_mux);
     s_status.has_last_motion = true;
     s_status.last_motion_epoch = epoch > 0 ? static_cast<uint32_t>(epoch) : 0;
+    s_status.last_motion_ms = now;
     s_confirmed_motion = true;
     portEXIT_CRITICAL(&s_mux);
     camera_motion_set_presence(true);
 }
 
 } // namespace
+
+CameraMotionThresholds camera_motion_get_thresholds(uint8_t sensitivity) {
+    return camera_motion_thresholds(sensitivity);
+}
 
 CameraMotionSettings camera_motion_get_settings() {
     portENTER_CRITICAL(&s_mux);
@@ -194,6 +205,12 @@ bool camera_motion_set_settings(const CameraMotionSettings& settings) {
         portENTER_CRITICAL(&s_mux);
         s_status.changed_tiles = 0;
         s_status.score = 0;
+        s_status.last_motion_ms = 0;
+        s_status.has_last_sample = false;
+        s_status.last_sample_ms = 0;
+        s_status.baseline_ready = false;
+        s_status.global_change = false;
+        s_status.confirm_frames = 0;
         s_confirmed_motion = false;
         portEXIT_CRITICAL(&s_mux);
         camera_motion_set_presence(false);

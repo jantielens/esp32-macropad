@@ -37,6 +37,9 @@
 #include "display_manager.h"
 #include "expr_binding.h"
 #include "health_binding.h"
+#if HAS_CAMERA
+#include "camera_binding.h"
+#endif
 #include "icon_store.h"
 #include "pad_binding.h"
 #include "sound_store.h"
@@ -585,6 +588,9 @@ void setup()
 	#endif
 
 	#if HAS_DISPLAY
+	#if HAS_CAMERA
+	camera_binding_init();
+	#endif
 	health_binding_init();
 	time_binding_init();
 	expr_binding_init();

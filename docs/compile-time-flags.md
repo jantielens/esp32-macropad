@@ -504,6 +504,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_CAMERA**
   - src/app/actions/camera_capture_action.cpp
   - src/app/app.ino
+  - src/app/binding_finite_schemes.cpp
   - src/app/board_config.h
   - src/app/camera_drivers.cpp
   - src/app/camera_feed.cpp
@@ -824,6 +825,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mqtt_action.cpp
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/camera_motion_actions.cpp
+  - src/app/camera_motion_actions.h
   - src/app/config_manager.cpp
   - src/app/data_stream.cpp
   - src/app/data_stream.h

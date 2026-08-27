@@ -1165,6 +1165,35 @@ Multiple bindings in one label, showing indoor conditions:
 
 **Syntax:** `[health:key;format]`
 
+### Camera Motion Binding
+
+Camera-enabled display boards provide live camera motion data with
+`[camera:key;format]`. These bindings read the local detector directly, so
+they remain useful while tuning sensitivity even when no motion event or MQTT
+message is produced.
+
+| Key | Value and purpose |
+| --- | --- |
+| `presence` | `ON` or `OFF` current motion-derived presence |
+| `motion_enabled` | `ON` or `OFF` detector setting |
+| `changed_tiles` | Changed-tile count from the latest analyzed frame |
+| `score` | Aggregate pixel-difference score from the latest analyzed frame |
+| `tile_threshold` | Changed-tile threshold for the current sensitivity |
+| `score_threshold` | Score threshold for the current sensitivity |
+| `global_change` | `ON` when the latest frame was rejected as broad illumination or exposure change |
+| `confirm_frames` | Consecutive qualifying frames accumulated, from 0 through 2 |
+| `baseline_ready` | `ON` after the initial RAW10 baseline frame is captured |
+| `sample_age` | Seconds since the latest analyzed frame, or 0 before analysis starts |
+| `last_motion` | Unix timestamp of latest confirmed motion, or 0 when unavailable before time synchronization |
+| `motion_age` | Seconds since latest confirmed motion, or 0 before one occurs |
+
+Use the values together when tuning detection. For example, show
+`Tiles [camera:changed_tiles]/[camera:tile_threshold]` and
+`Score [camera:score]/[camera:score_threshold]` to compare live readings with
+the active thresholds. `global_change` helps distinguish broad lighting shifts
+from localized motion, while `sample_age` reveals whether the detector is
+receiving analyzed frames.
+
 Displays real-time device diagnostics — useful for system monitoring buttons or debug pads.
 
 | Key | Returns | Example value |

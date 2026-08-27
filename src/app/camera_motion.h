@@ -18,6 +18,11 @@
 #define CAMERA_PRESENCE_HOLD_SECONDS_MAX 600
 #define CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT 60
 
+struct CameraMotionThresholds {
+    uint16_t changed_tiles;
+    uint32_t score;
+};
+
 struct CameraMotionSettings {
     bool enabled;
     uint8_t analyze_every_nth_frame;
@@ -33,11 +38,18 @@ struct CameraMotionStatus {
     bool presence;
     bool has_last_motion;
     uint32_t last_motion_epoch;
+    uint32_t last_motion_ms;
+    bool has_last_sample;
+    uint32_t last_sample_ms;
+    bool baseline_ready;
+    bool global_change;
+    uint8_t confirm_frames;
     uint16_t changed_tiles;
     uint32_t score;
 };
 
 CameraMotionSettings camera_motion_get_settings();
+CameraMotionThresholds camera_motion_get_thresholds(uint8_t sensitivity);
 bool camera_motion_set_settings(const CameraMotionSettings& settings);
 CameraMotionStatus camera_motion_get_status();
 bool camera_motion_is_enabled();
