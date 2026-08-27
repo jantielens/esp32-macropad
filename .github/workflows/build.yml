@@ -147,9 +147,9 @@ jobs:
 
     - name: Run host-native tests
       run: |
-        mkdir -p test-results
+        mkdir -p "$GITHUB_WORKSPACE/test-results"
         ctest --test-dir build/host-tests --output-on-failure \
-          --output-junit test-results/host-tests.xml
+          --output-junit "$GITHUB_WORKSPACE/test-results/host-tests.xml"
 
     - name: Publish host-test results
       if: ${{ !cancelled() }}
