@@ -1061,12 +1061,13 @@ The pad editor and Home page validate binding syntax **in real time** as you typ
 
 **How it works:**
 
+- The editor loads the available schemes and their finite keys from the running device, so board- and device-class-specific bindings are validated without a separate portal catalog
 - Validation runs on a **400 ms debounce** while you type, so errors appear almost immediately without interrupting your typing flow
 - Validation also runs **immediately on blur** (when you click or tab away from a field)
 - Errors appear as a **red border** and a **red message below the field** describing the problem
 - **Saving is blocked** while any field has a validation error — the save button shows which fields need attention
 
-> **Tip:** Validation is purely syntactic — it checks that your binding is well-formed, not that the MQTT topic exists or that the data path returns a value. Runtime resolution issues still show `---` or `ERR:` on the device.
+> **Tip:** If the editor cannot retrieve binding metadata, it continues with generic structural checks so you can keep editing. The device remains the authoritative validator when saving. Validation confirms that a binding is well-formed, not that an MQTT topic exists or that a data path returns a value. Runtime resolution issues still show `---` or `ERR:` on the device.
 
 ### Preview Live Values
 

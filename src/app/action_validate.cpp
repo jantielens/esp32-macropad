@@ -19,7 +19,8 @@ const char* action_validate_binding_tokens(const char* value) {
         const char* scheme = token + 1;
         const char* separator = scheme;
         while ((*separator >= 'a' && *separator <= 'z')
-                || (*separator >= 'A' && *separator <= 'Z')) separator++;
+            || (*separator >= 'A' && *separator <= 'Z')
+            || (*separator >= '0' && *separator <= '9') || *separator == '_') separator++;
         if (*separator != ':' || separator == scheme) { token++; continue; }
         size_t scheme_len = (size_t)(separator - scheme);
         if (!binding_template_scheme_known(scheme, scheme_len)) {
@@ -32,16 +33,22 @@ const char* action_validate_binding_tokens(const char* value) {
             return s_action_validation_error;
         }
         const char* params = separator + 1;
-        char parameter_value[48];
-        size_t parameter_len = 0;
-        while (*params && *params != ';' && *params != ']' && *params != '|'
-                && parameter_len < sizeof(parameter_value) - 1) {
-            parameter_value[parameter_len++] = *params++;
+        const char* end = params;
+        int bracket_depth = 1;
+        while (*end && bracket_depth > 0) {
+            if (*end == '[') ++bracket_depth;
+            else if (*end == ']') --bracket_depth;
+            ++end;
         }
+        if (bracket_depth != 0) { token++; continue; }
+        const size_t parameter_len = (size_t)((end - 1) - params);
+        if (parameter_len >= BINDING_TEMPLATE_MAX_LEN) return "binding parameters too long";
+        char parameter_value[BINDING_TEMPLATE_MAX_LEN];
+        memcpy(parameter_value, params, parameter_len);
         parameter_value[parameter_len] = '\0';
         const char* error = binding_template_validate_params(scheme, scheme_len, parameter_value);
         if (error) return error;
-        token++;
+        token = end;
     }
     return nullptr;
 }

@@ -5,6 +5,7 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#include "binding_schema.h"
 #include "config_manager.h"
 #include "device_telemetry.h"
 #include "repo_slug_config.h"
@@ -263,6 +264,20 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 
 		response->print("}");
 		request->send(response);
+}
+
+// GET /api/bindings - Live binding scheme metadata for portal validation.
+void handleGetBindings(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+
+		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
+		if (!doc || doc->capacity() == 0) {
+			request->send(503, "application/json", "{\"error\":\"binding schema unavailable\"}");
+			return;
+		}
+		JsonArray schemes = (*doc)["schemes"].to<JsonArray>();
+		binding_schema_emit(&schemes);
+		web_portal_send_json_chunked(request, doc);
 }
 
 // GET /api/health - Get device health statistics

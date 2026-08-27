@@ -559,6 +559,27 @@ All endpoints return JSON responses with proper HTTP status codes.
 - Example: `curl -u username:password http://<device-ip>/api/info`
 - In Core Mode (AP + captive portal), endpoints are intentionally unauthenticated to allow initial setup.
 
+### Binding Schema
+
+#### `GET /api/bindings`
+
+Returns the live registry of binding schemes used by the portal validator and
+the MCP capability manifest. Each entry contains `name`, `min_params`,
+`max_params`, `widget_max_params`, `format_param`, `validation_mode`, and
+`free_form`. Finite schemes also include their current `keys` array.
+
+The response is board-aware: device-class and feature-gated schemes appear
+only when registered by the running firmware. Clients should fetch this endpoint
+instead of maintaining a static binding scheme or key list.
+
+The Pad editor uses the response for scheme-specific validation and authoring
+assistance. If the endpoint is temporarily unavailable, it remains usable and
+checks only generic token structure, required values, parameter counts, and
+format syntax. The device validates saved configurations authoritatively.
+
+The MCP `get_capabilities` manifest serializes its binding-scheme list from the
+same registry, so portal and MCP clients receive equivalent metadata.
+
 ### Device Information
 
 #### `GET /api/info`

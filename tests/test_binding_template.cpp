@@ -10,27 +10,34 @@
 static int g_pass = 0;
 static int g_fail = 0;
 
-static bool mock_big_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mock_big_resolve(const char* params, char* out, size_t out_len) {
     (void)params;
     // Produce a deterministic long payload to validate truncation behavior.
     for (size_t i = 0; i + 1 < out_len; i++) {
         out[i] = (char)('A' + (i % 26));
     }
     out[out_len - 1] = '\0';
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
-static bool mock_fail_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mock_fail_resolve(const char* params, char* out, size_t out_len) {
     (void)params;
     (void)out;
     (void)out_len;
-    return false;
+    return BINDING_RESOLVER_UNAVAILABLE;
 }
 
 static void mock_collect(const char* params, void* user_data) {
     (void)params;
     (void)user_data;
 }
+
+static uint8_t mock_key_count() { return 1; }
+static const char* mock_key_at(uint8_t index) { return index == 0 ? "any" : nullptr; }
+
+static const BindingSchemeSpec kMockFiniteSpec = {
+    1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false, mock_key_count, mock_key_at
+};
 
 static void check_true(bool cond, const char* label) {
     if (!cond) {
@@ -90,28 +97,45 @@ static void test_single_token_unknown_scheme() {
 static void test_scheme_registry_capacity() {
     std::printf("--- scheme registry capacity ---\n");
 
-    for (uint8_t index = 0; index < BINDING_MAX_SCHEMES - 2; ++index) {
+    for (uint8_t index = 0; index < BINDING_MAX_SCHEMES - 3; ++index) {
         char scheme_name[16] = {};
         std::snprintf(scheme_name, sizeof(scheme_name), "s%u", (unsigned)index + 1);
-        check_true(binding_template_register(scheme_name, mock_big_resolve, mock_collect),
+        check_true(binding_template_register(scheme_name, mock_big_resolve, mock_collect, kMockFiniteSpec),
                    "scheme accepted within registry capacity");
     }
     check_true(binding_template_scheme_count() == BINDING_MAX_SCHEMES,
                "registry includes all accepted schemes");
-    check_true(!binding_template_register("overflow", mock_big_resolve, mock_collect),
+    check_true(!binding_template_register("overflow", mock_big_resolve, mock_collect, kMockFiniteSpec),
                "overflow scheme is rejected");
+}
+
+static void test_metadata_parameter_validation() {
+    std::printf("--- metadata parameter validation ---\n");
+
+    const BindingSchemeSpec expression_spec = {
+        1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr
+    };
+    check_true(binding_template_register("expr", mock_big_resolve, mock_collect, expression_spec),
+               "expression scheme registered");
+    check_true(binding_template_validate_params("expr", 4, "[big:any;fmt]+1;%.1f") == nullptr,
+               "nested parameters do not inflate expression count");
+    check_true(binding_template_validate_params("expr", 4, "a;b;c") != nullptr,
+               "outer parameter overflow rejected");
+    check_true(binding_template_validate_params("big", 3, "any") == nullptr,
+               "full finite parameter list accepted");
 }
 
 int main() {
     std::printf("=== binding_template resolver tests ===\n\n");
 
-    binding_template_register("big", mock_big_resolve, mock_collect);
-    binding_template_register("fail", mock_fail_resolve, mock_collect);
+    binding_template_register("big", mock_big_resolve, mock_collect, kMockFiniteSpec);
+    binding_template_register("fail", mock_fail_resolve, mock_collect, kMockFiniteSpec);
 
     test_single_token_large_output();
     test_single_token_shape_rejection();
     test_single_token_fallback();
     test_single_token_unknown_scheme();
+    test_metadata_parameter_validation();
     test_scheme_registry_capacity();
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);

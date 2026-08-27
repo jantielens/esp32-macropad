@@ -9,6 +9,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define TAG "ScaleBind"
 
@@ -75,20 +76,20 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
 // Scheme resolver — called by binding_template_resolve()
 // ============================================================================
 
-static bool scale_binding_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus scale_binding_resolve(const char* params, char* out, size_t out_len) {
     char key[32];
     char fmt[32];
     parse_scale_params(params, key, sizeof(key), fmt, sizeof(fmt));
 
     if (!key[0]) {
         strlcpy(out, "ERR:no key", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     char raw[64];
     if (!lookup_value(key, raw, sizeof(raw))) {
         strlcpy(out, "ERR:bad key", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (fmt[0]) {
@@ -103,7 +104,7 @@ static bool scale_binding_resolve(const char* params, char* out, size_t out_len)
     } else {
         strlcpy(out, raw, out_len);
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 // ============================================================================
@@ -115,28 +116,28 @@ static void scale_binding_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
+static const char* const kScaleBindingKeys[] = {
+    "weight", "flow_rate", "calibration_factor", "offset", "available", "cal_weight", "status",
+};
+
+static uint8_t scale_binding_key_count() {
+    return sizeof(kScaleBindingKeys) / sizeof(kScaleBindingKeys[0]);
+}
+
+static const char* scale_binding_key_at(uint8_t index) {
+    return index < scale_binding_key_count() ? kScaleBindingKeys[index] : nullptr;
+}
+
 // ============================================================================
 // Init — register the "scale" scheme
 // ============================================================================
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void scale_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[scale:key] or [scale:key;format]";
-    o["example"] = "[scale:weight;%.1f] g";
-    o["keys"]    = "weight, flow_rate, calibration_factor, offset, available, cal_weight, status";
-    o["note"]    = "Live coffee-scale sensor readings.";
-}
-#endif
-
 void scale_binding_init() {
-    if (!binding_template_register("scale", scale_binding_resolve, scale_binding_collect)) {
+    if (!binding_template_register("scale", scale_binding_resolve, scale_binding_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                    scale_binding_key_count, scale_binding_key_at})) {
         LOGE(TAG, "Failed to register scale binding scheme");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("scale", scale_scheme_describe);
-#endif
 }
 
 #else // !HAS_DISPLAY || !HAS_SCALE

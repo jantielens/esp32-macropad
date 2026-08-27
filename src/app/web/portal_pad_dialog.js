@@ -466,12 +466,28 @@ function padDialogOpen(col, row) {
 
 function padDialogClose() {
     if (typeof padPvHide === 'function') padPvHide();
+    padDialogClearValidationError();
     document.getElementById('pad-edit-overlay').style.display = 'none';
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
 }
 
+function padDialogShowValidationError(message) {
+    const alert = document.getElementById('pad-edit-validation-error');
+    if (!alert) return;
+    alert.textContent = message;
+    alert.style.display = '';
+}
+
+function padDialogClearValidationError() {
+    const alert = document.getElementById('pad-edit-validation-error');
+    if (!alert) return;
+    alert.textContent = '';
+    alert.style.display = 'none';
+}
+
 function padDialogOk(keepOpen) {
+    padDialogClearValidationError();
     const col = padState.editCol;
     const row = padState.editRow;
 
@@ -792,7 +808,8 @@ function padDialogOk(keepOpen) {
     if (typeof bindingValidateDialog === 'function') {
         var bvResult = bindingValidateDialog();
         if (!bvResult.valid) {
-            showMessage(bvResult.count + ' binding error' + (bvResult.count > 1 ? 's' : '') + ' — check highlighted fields', 'error');
+            padDialogShowValidationError(bvResult.count + ' binding error' +
+                (bvResult.count > 1 ? 's' : '') + ' - check highlighted fields');
             return;
         }
     }

@@ -1441,6 +1441,15 @@ body {
   font-size: 24px;
 }
 
+.pad-dialog-validation-error {
+  background: var(--bs-danger, #dc3545);
+  border-radius: 4px;
+  color: #fff;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
 .reboot-modal p {
   color: var(--portal-text);
   margin: 12px 0;

@@ -1,9 +1,8 @@
 /**
  * Client-side binding syntax validator.
  *
- * Architecture: scheme-agnostic orchestrator + per-scheme registry.
- * Each scheme registers itself via bindingRegisterScheme() at the
- * bottom of this file. Adding a new scheme = appending one block.
+ * Architecture: scheme-agnostic validator backed by the live firmware
+ * registry fetched from GET /api/bindings.
  *
  * Validates [scheme:params] tokens in binding input fields.
  * Runs on blur and before save to give users immediate feedback
@@ -23,9 +22,30 @@
 //   formatParam             — 0-based index of the format param (validated by generic pipeline)
 
 var _bindingSchemeRegistry = {};
+var _bindingSchemaLoaded = false;
+var _bindingSchemaPromise = null;
 
-function bindingRegisterScheme(name, def) {
-    _bindingSchemeRegistry[name] = def;
+function bindingLoadSchema() {
+    if (_bindingSchemaPromise) return _bindingSchemaPromise;
+    _bindingSchemaPromise = fetch('/api/bindings', { cache: 'no-store' })
+        .then(function(response) {
+            if (!response.ok) throw new Error('binding schema request failed');
+            return response.json();
+        })
+        .then(function(payload) {
+            var schemes = payload && Array.isArray(payload.schemes) ? payload.schemes : [];
+            for (var i = 0; i < schemes.length; i++) {
+                var scheme = schemes[i];
+                if (scheme && typeof scheme.name === 'string') {
+                    _bindingSchemeRegistry[scheme.name.toLowerCase()] = scheme;
+                }
+            }
+            _bindingSchemaLoaded = true;
+        })
+        .catch(function() {
+            _bindingSchemaLoaded = true;
+        });
+    return _bindingSchemaPromise;
 }
 
 function _bindingGetScheme(name) {
@@ -406,48 +426,49 @@ function bindingValidateToken(token, opts) {
     var def = _bindingGetScheme(scheme);
 
     if (!def) {
+        if (!_bindingSchemaLoaded) return null;
         var suggestion = bindingFuzzyScheme(scheme);
         if (suggestion) return 'Unknown scheme "' + token.scheme + '" — did you mean "' + suggestion + '"?';
-        if (opts && opts.requireKnownScheme) return 'Unknown scheme "' + token.scheme + '"';
-        return null; // unrecognised scheme — not validated
+        return 'Unknown scheme "' + token.scheme + '"';
     }
 
     var split = bindingSplitFallback(token.params);
     var params = split.params;
 
-    // Custom validator overrides the generic pipeline
-    if (def.validate) {
-        return def.validate(params, opts || {});
-    }
-
-    // ── Generic validation pipeline ──
     var parts = bindingSplitParams(params);
 
-    if (def.firstParamRequired && parts[0].trim() === '') {
-        return (def.firstParamLabel || 'Parameter') + ' is empty';
+    if (typeof def.min_params === 'number' && parts.length < def.min_params) {
+        return 'Too few parameters — expected at least ' + def.min_params;
     }
 
-    if (def.keys && parts[0].trim() !== '' && def.keys.indexOf(parts[0].trim()) === -1) {
-        return 'Unknown ' + (def.keysLabel || 'key') + ' "' + parts[0].trim() + '"';
+    if (typeof def.max_params === 'number' && parts.length > def.max_params) {
+        return 'Too many parameters — expected at most ' + def.max_params;
     }
 
-    if (typeof def.maxParams === 'number' && parts.length > def.maxParams) {
-        return 'Too many parameters — expected at most ' + def.maxParams;
+    if (typeof def.min_params === 'number' && def.min_params > 0 && parts[0].trim() === '') {
+        return 'Binding parameter is empty';
+    }
+
+    if (!def.free_form && Array.isArray(def.keys) && parts[0].trim() !== '' &&
+        def.keys.indexOf(parts[0].trim()) === -1) {
+        return 'Unknown binding key "' + parts[0].trim() + '"';
     }
 
     if (opts && opts.isWidgetBinding &&
-        typeof def.widgetMaxParams === 'number' && parts.length > def.widgetMaxParams) {
+        typeof def.widget_max_params === 'number' && parts.length > def.widget_max_params) {
         return 'Widget data bindings must not include a format parameter';
     }
 
     // Validate format string at the declared position
-    if (typeof def.formatParam === 'number' && parts.length > def.formatParam) {
-        var fmt = parts[def.formatParam].trim();
+    if (typeof def.format_param === 'number' && def.format_param >= 0 && parts.length > def.format_param) {
+        var fmt = parts[def.format_param].trim();
         if (fmt !== '') {
             var fmtErr = bindingValidateFormat(fmt);
             if (fmtErr) return fmtErr;
         }
     }
+
+    if (def.validation_mode === 1) return bindingValidateExprParams(params);
 
     return null;
 }
@@ -642,6 +663,7 @@ function _bvCount(ids, opts, skipEmpty) {
  * that exist in the DOM at page load. Call once from page init.
  */
 function bindingInitStaticInputs() {
+    bindingLoadSchema();
     _bvAttach(_BV_STD);
     _bvAttach(_BV_DEF);
 
@@ -754,145 +776,9 @@ function bindingValidateHomeConfig() {
     return { valid: count === 0, count: count };
 }
 
-// ═════════════════════════════════════════════════════════════════
-// Scheme Registrations
-//
-// Each block below is self-contained. To add a new binding scheme,
-// append a new bindingRegisterScheme() call — no other code changes
-// needed. The orchestrator validates unknown schemes gracefully.
-// ═════════════════════════════════════════════════════════════════
-
-// ─── Scheme: mqtt ────────────────────────────────────────────────
-// [mqtt:topic;path;format]
-bindingRegisterScheme('mqtt', {
-    maxParams: 3,
-    widgetMaxParams: 2,
-    firstParamRequired: true,
-    firstParamLabel: 'MQTT topic',
-    formatParam: 2
-});
-
-// ─── Scheme: health ──────────────────────────────────────────────
-// [health:key;format]
-bindingRegisterScheme('health', {
-    maxParams: 2,
-    widgetMaxParams: 1,
-    firstParamRequired: true,
-    firstParamLabel: 'Health key',
-    keysLabel: 'health key',
-    formatParam: 1,
-    keys: [
-        'cpu', 'cpu_core_0', 'cpu_core_1', 'rssi', 'uptime',
-        'heap_free', 'heap_min', 'heap_largest', 'heap_internal',
-        'psram_free', 'psram_min', 'psram_largest',
-        'heap_total', 'heap_internal_total', 'heap_internal_used',
-        'psram_total', 'psram_used',
-        'table', 'extended_table',
-        'chip', 'chip_rev', 'chip_cores', 'cpu_freq', 'flash_size',
-        'firmware', 'board', 'mac', 'reset_reason',
-        'wifi_connected', 'wifi_ssid', 'ip', 'hostname',
-        'brightness', 'volume',
-        'ble_status', 'ble_state', 'ble_name', 'ble_pairing',
-        'ble_bonded', 'ble_encrypted', 'ble_peer_addr', 'ble_peer_id_addr'
-    ]
-});
-
-// ─── Scheme: net ─────────────────────────────────────────────────
-// [net:channel]  or  [net:channel;age]
-bindingRegisterScheme('net', {
-    firstParamRequired: true,
-    firstParamLabel: 'Network channel',
-    keysLabel: 'network channel',
-    keys: [
-        'portal', 'mcp', 'mqtt_rx', 'mqtt_tx', 'mqtt', 'http', 'ble', 'ota', 'any'
-    ],
-    validate: function(params, opts) {
-        var parts = bindingSplitParams(params);
-        var chan = (parts[0] || '').trim();
-        if (chan === '') return 'Network channel is empty';
-        var valid = ['portal', 'mcp', 'mqtt_rx', 'mqtt_tx', 'mqtt', 'http', 'ble', 'ota', 'any'];
-        if (valid.indexOf(chan) === -1) {
-            return 'Unknown network channel "' + chan + '" — expected one of ' + valid.join(', ');
-        }
-        if (parts.length > 1) {
-            var sub = (parts[1] || '').trim();
-            if (sub !== '' && sub !== 'age') {
-                return 'Second parameter must be "age" or omitted';
-            }
-        }
-        if (parts.length > 2) return 'Too many parameters for net binding';
-        return null;
-    }
-});
-
-// ─── Scheme: time ────────────────────────────────────────────────
-// [time:format;timezone]
-bindingRegisterScheme('time', {
-    maxParams: 2,
-    firstParamRequired: true,
-    firstParamLabel: 'Time format'
-});
-
-// ─── Scheme: timer ───────────────────────────────────────────────
-// [timer:N;format] or [timer:N_state|N_expired|N_mode|N_target]
-bindingRegisterScheme('timer', {
-    validate: function(params, opts) {
-        var parts = bindingSplitParams(params);
-        var param = parts[0].trim();
-        if (param === '') return 'Timer parameter is empty';
-        var m = param.match(/^(\d+)(_.+)?$/);
-        if (!m) return 'Invalid timer parameter "' + param + '" — expected N or N_state/N_expired/N_mode/N_target';
-        var num = parseInt(m[1]);
-        if (num < 1 || num > 3) return 'Timer number must be 1–3, got ' + num;
-        var suffix = m[2] || '';
-        if (suffix && ['_state', '_expired', '_mode', '_target'].indexOf(suffix) === -1) {
-            return 'Unknown timer suffix "' + suffix + '" — valid: _state, _expired, _mode, _target';
-        }
-        if (parts.length > 2) return 'Too many parameters for timer binding';
-        if (opts && opts.isWidgetBinding && parts.length > 1) {
-            var fmt = parts[1].trim();
-            var numericFormats = ['ss'];
-            if (numericFormats.indexOf(fmt) === -1) {
-                return 'Widget data bindings only allow numeric formats (none or "ss"), got "' + fmt + '"';
-            }
-        }
-        return null;
-    }
-});
-
-// ─── Scheme: music ───────────────────────────────────────────────
-// [music:key], including optional compile-time Music analysis keys.
-bindingRegisterScheme('music', {
-    validate: function(params) {
-        var key = bindingSplitParams(params)[0].trim();
-        var base = ['file', 'file_name', 'title', 'artist', 'album', 'track',
-            'index', 'count', 'elapsed_s', 'total_s', 'status'];
-        if (base.indexOf(key) !== -1) return null;
-        if (/^analysis\.(rms|peak)$/.test(key)) return null;
-        var match = key.match(/^analysis\.band\.(\d+)$/);
-        if (match) {
-            var band = parseInt(match[1]);
-            return band >= 0 && band < 8 ? null : 'Music analysis band must be 0 through 7';
-        }
-        return 'Unknown music key';
-    }
-});
-
-// ─── Scheme: pad ─────────────────────────────────────────────────
-// [pad:name;format]
-bindingRegisterScheme('pad', {
-    maxParams: 2,
-    widgetMaxParams: 1,
-    firstParamRequired: true,
-    firstParamLabel: 'Pad binding name',
-    formatParam: 1
-});
-
-// ─── Scheme: expr ────────────────────────────────────────────────
-// [expr:expression;format]
-// Custom validator: structural checks + recursive nested token validation.
-bindingRegisterScheme('expr', {
-    validate: function(params, opts) {
+// Expression syntax is the only scheme-specific browser check. Its semantic
+// contract stays in the firmware registry through validation_mode.
+function bindingValidateExprParams(params) {
         // Find the last ; at depth 0 (format separator)
         var depth = 0, inQuote = false, lastSemiAt0 = -1;
         for (var i = 0; i < params.length; i++) {
@@ -943,6 +829,5 @@ bindingRegisterScheme('expr', {
             }
         }
 
-        return null;
-    }
-});
+    return null;
+}

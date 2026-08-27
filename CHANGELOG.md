@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-08-25
+ms.date: 2026-08-27
 ms.topic: reference
 ---
 
@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Binding validation now follows the running device**: the Pad editor loads its binding schemes, parameter limits, and finite keys from the new `GET /api/bindings` endpoint instead of maintaining its own scheme and key catalogs. Firmware validation, portal guidance, and the MCP capability manifest use the same live registry, so a binding key added by firmware automatically becomes available to both clients. The editor continues structural validation when the metadata request is unavailable, while device-side validation remains authoritative when saving.
 * **Home Assistant diagnostic telemetry is more focused**: CPU usage and battery voltage remain enabled by default, while advanced memory diagnostics are opt-in. Discovery no longer advertises static flash or filesystem-capacity values, resource counters no longer create long-term measurement statistics, and ESP32-P4 boards expose opt-in DMA-capable internal-heap metrics for diagnosing network-buffer pressure.
 * **Numeric rocker tap areas**: Numeric rocker zones now scale with wide buttons instead of stopping at 80px, and the Pad editor exposes a 50-150% per-button Tap Area Scale control for further tuning. Visual arrows, touch handling, and tap feedback share the padded content geometry. Touches are classified from their initial press position, preventing a slight release drift from turning a small adjustment into a large one.
 * **Portal UI/UX quality-of-life improvements**: The web configuration portal now uses the configured device name in its header and browser title, presents settings in clearer high-contrast sections, and makes repeated pad edits faster with an accessible Save Pad control.

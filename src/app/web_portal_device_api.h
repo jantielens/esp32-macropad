@@ -4,6 +4,7 @@
 #include <ESPAsyncWebServer.h>
 
 void handleGetVersion(AsyncWebServerRequest *request);
+void handleGetBindings(AsyncWebServerRequest *request);
 void handleGetHealth(AsyncWebServerRequest *request);
 void handleGetHealthHistory(AsyncWebServerRequest *request);
 void handleReboot(AsyncWebServerRequest *request);

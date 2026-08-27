@@ -98,6 +98,8 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		registerOptions("/api/info");
 		server->on("/api/info", HTTP_GET, handleGetVersion);
+		registerOptions("/api/bindings");
+		server->on("/api/bindings", HTTP_GET, handleGetBindings);
 		#if HEALTH_HISTORY_ENABLED
 		server->on("/api/health/history", HTTP_GET, handleGetHealthHistory);
 		#endif

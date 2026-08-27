@@ -55,6 +55,12 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), context);
 
+context._bindingSchemaLoaded = true;
+context._bindingSchemeRegistry.mqtt = {
+    name: 'mqtt', min_params: 1, max_params: 3, widget_max_params: 2,
+    format_param: 2, validation_mode: 0, free_form: true
+};
+
 const prefix = 'test';
 function element(suffix) { return document.getElementById(prefix + suffix); }
 function setTimer(command, mode, duration) {

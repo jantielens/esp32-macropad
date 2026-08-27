@@ -14,22 +14,22 @@ struct SchemeEntry {
     char name[16];
     binding_resolver_fn resolver;
     binding_topic_collector_fn collector;
-    binding_describe_fn describe;
-    binding_validate_fn validate;
+    BindingSchemeSpec spec;
 };
 
 static SchemeEntry g_schemes[BINDING_MAX_SCHEMES];
 static int g_scheme_count = 0;
 
 bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
-                               binding_topic_collector_fn collector) {
-    if (!scheme || !scheme[0] || g_scheme_count >= BINDING_MAX_SCHEMES) return false;
+                               binding_topic_collector_fn collector,
+                               const BindingSchemeSpec& spec) {
+    if (!scheme || !scheme[0] || !resolver || g_scheme_count >= BINDING_MAX_SCHEMES ||
+        (!spec.free_form && (!spec.key_count || !spec.key_at))) return false;
     SchemeEntry& e = g_schemes[g_scheme_count];
     strlcpy(e.name, scheme, sizeof(e.name));
     e.resolver = resolver;
     e.collector = collector;
-    e.describe = nullptr;
-    e.validate = nullptr;
+    e.spec = spec;
     g_scheme_count++;
     return true;
 }
@@ -40,26 +40,8 @@ const char* binding_template_scheme_name(uint8_t index) {
     return (index < g_scheme_count) ? g_schemes[index].name : nullptr;
 }
 
-bool binding_template_set_scheme_describe(const char* scheme, binding_describe_fn fn) {
-    if (!scheme) return false;
-    for (int i = 0; i < g_scheme_count; i++) {
-        if (strcmp(g_schemes[i].name, scheme) == 0) { g_schemes[i].describe = fn; return true; }
-    }
-    return false;
-}
-
-bool binding_template_describe_scheme(uint8_t index, void* out_json) {
-    if (index >= g_scheme_count || !g_schemes[index].describe) return false;
-    g_schemes[index].describe(out_json);
-    return true;
-}
-
-bool binding_template_set_scheme_validate(const char* scheme, binding_validate_fn fn) {
-    if (!scheme) return false;
-    for (int i = 0; i < g_scheme_count; i++) {
-        if (strcmp(g_schemes[i].name, scheme) == 0) { g_schemes[i].validate = fn; return true; }
-    }
-    return false;
+const BindingSchemeSpec* binding_template_scheme_spec(uint8_t index) {
+    return index < g_scheme_count ? &g_schemes[index].spec : nullptr;
 }
 
 bool binding_template_scheme_known(const char* scheme, size_t name_len) {
@@ -71,10 +53,37 @@ bool binding_template_scheme_known(const char* scheme, size_t name_len) {
 }
 
 const char* binding_template_validate_params(const char* scheme, size_t name_len, const char* params) {
+    static const char* const kEmptyParameter = "binding parameter is required";
+    static const char* const kTooFewParameters = "too few binding parameters";
+    static const char* const kTooManyParameters = "too many binding parameters";
+    static const char* const kUnknownKey = "unknown binding key";
     for (int i = 0; i < g_scheme_count; i++) {
         if (strlen(g_schemes[i].name) == name_len &&
             strncmp(g_schemes[i].name, scheme, name_len) == 0) {
-            return g_schemes[i].validate ? g_schemes[i].validate(params) : nullptr;
+            const BindingSchemeSpec& spec = g_schemes[i].spec;
+            if (!params || !params[0]) return spec.min_params ? kEmptyParameter : nullptr;
+            uint8_t count = 1;
+            bool in_quotes = false;
+            int bracket_depth = 0;
+            for (const char* p = params; *p; ++p) {
+                if (*p == '"') in_quotes = !in_quotes;
+                else if (!in_quotes) {
+                    if (*p == '[') ++bracket_depth;
+                    else if (*p == ']' && bracket_depth > 0) --bracket_depth;
+                    else if (*p == '|' && bracket_depth == 0) break;
+                    else if (*p == ';' && bracket_depth == 0) ++count;
+                }
+            }
+            if (count < spec.min_params) return kTooFewParameters;
+            if (count > spec.max_params) return kTooManyParameters;
+            if (spec.validation_mode == BINDING_VALIDATION_STRUCTURAL_ONLY || spec.free_form) return nullptr;
+            size_t key_len = 0;
+            while (params[key_len] && params[key_len] != ';' && params[key_len] != '|') ++key_len;
+            for (uint8_t key_index = 0; key_index < spec.key_count(); ++key_index) {
+                const char* key = spec.key_at(key_index);
+                if (key && strlen(key) == key_len && strncmp(key, params, key_len) == 0) return nullptr;
+            }
+            return kUnknownKey;
         }
     }
     return nullptr;
@@ -89,6 +98,16 @@ static const SchemeEntry* find_scheme(const char* name, size_t name_len) {
         }
     }
     return nullptr;
+}
+
+BindingResolverStatus binding_template_resolve_registered(const char* scheme, size_t name_len,
+                                                          const char* params, char* out,
+                                                          size_t out_len) {
+    const SchemeEntry* entry = find_scheme(scheme, name_len);
+    if (!entry || !entry->resolver) {
+        return BINDING_RESOLVER_UNKNOWN;
+    }
+    return entry->resolver(params, out, out_len);
 }
 
 // ============================================================================
@@ -182,13 +201,16 @@ bool binding_template_has_bindings(const char* label) {
     return find_next_token(label, &ts, &sc, &sl, &pm, &pl, &te);
 }
 
-bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
+static bool resolve_template(const char* templ, char* out, size_t out_len,
+                             BindingResolverStatus* status) {
     if (!templ || !out || out_len == 0) {
         if (out && out_len > 0) out[0] = '\0';
+        if (status) *status = BINDING_RESOLVER_UNAVAILABLE;
         return false;
     }
 
     bool any_resolved = false;
+    BindingResolverStatus outcome = BINDING_RESOLVER_RESOLVED;
     size_t written = 0;
     const char* p = templ;
 
@@ -229,6 +251,7 @@ bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
             size_t copy = elen < space ? elen : space;
             memcpy(out + written, err, copy);
             written += copy;
+            outcome = BINDING_RESOLVER_UNKNOWN;
         } else {
             // Make null-terminated copy of params
             size_t plen = params_len < sizeof(params_buf) - 1 ? params_len : sizeof(params_buf) - 1;
@@ -239,7 +262,9 @@ bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
             char* fallback = split_pipe_fallback(params_buf);
 
             char resolved[128];
-            if (entry->resolver(params_buf, resolved, sizeof(resolved))) {
+            BindingResolverStatus resolved_status = binding_template_resolve_registered(
+                scheme, scheme_len, params_buf, resolved, sizeof(resolved));
+            if (resolved_status == BINDING_RESOLVER_RESOLVED) {
                 any_resolved = true;
                 size_t rlen = strlen(resolved);
                 size_t space = out_len - 1 - written;
@@ -247,6 +272,11 @@ bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
                 memcpy(out + written, resolved, copy);
                 written += copy;
             } else {
+                if (resolved_status == BINDING_RESOLVER_UNKNOWN) {
+                    outcome = BINDING_RESOLVER_UNKNOWN;
+                } else if (outcome == BINDING_RESOLVER_RESOLVED) {
+                    outcome = BINDING_RESOLVER_UNAVAILABLE;
+                }
                 // Resolver failed — use pipe fallback or placeholder
                 const char* ph = fallback ? fallback : "---";
                 size_t phlen = strlen(ph);
@@ -261,7 +291,19 @@ bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
     }
 
     out[written] = '\0';
+    if (status) *status = outcome;
     return any_resolved;
+}
+
+bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
+    return resolve_template(templ, out, out_len, nullptr);
+}
+
+BindingResolverStatus binding_template_resolve_status(const char* templ, char* out,
+                                                      size_t out_len) {
+    BindingResolverStatus status = BINDING_RESOLVER_UNAVAILABLE;
+    resolve_template(templ, out, out_len, &status);
+    return status;
 }
 
 bool binding_template_resolve_single_token(const char* templ, char* out, size_t out_len) {
@@ -294,7 +336,8 @@ bool binding_template_resolve_single_token(const char* templ, char* out, size_t 
     params_buf[plen] = '\0';
 
     char* fallback = split_pipe_fallback(params_buf);
-    if (entry->resolver(params_buf, out, out_len)) {
+    if (binding_template_resolve_registered(scheme, scheme_len, params_buf, out, out_len) ==
+        BINDING_RESOLVER_RESOLVED) {
         return true;
     }
 

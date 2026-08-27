@@ -54,9 +54,11 @@ void relay_queue_shelly(const char*, uint8_t, bool) {}
 static binding_resolver_fn s_expose_resolver = nullptr;
 
 bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
-                               binding_topic_collector_fn collector) {
+                               binding_topic_collector_fn collector,
+                               const BindingSchemeSpec& spec) {
     (void)scheme;
     (void)collector;
+    (void)spec;
     s_expose_resolver = resolver;
     return true;
 }

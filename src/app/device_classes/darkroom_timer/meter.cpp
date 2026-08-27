@@ -10,6 +10,7 @@
 
 #include <Arduino.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #define TAG "Meter"
@@ -292,62 +293,62 @@ static void cmd_mag_clear() {
 // Binding resolver
 // ============================================================================
 
-static bool meter_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus meter_resolve(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:no_key");
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (strcmp(params, "lref") == 0) {
-        if (g_meter.lref <= 0.0f) { snprintf(out, out_len, "---"); return false; }
+        if (g_meter.lref <= 0.0f) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.4f", g_meter.lref);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "zone5_time") == 0) {
-        if (g_meter.zone5_time <= 0.0f) { snprintf(out, out_len, "---"); return false; }
+        if (g_meter.zone5_time <= 0.0f) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.1f", g_meter.zone5_time);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "l_bright") == 0) {
-        if (g_meter.l_bright < 0.0f) { snprintf(out, out_len, "---"); return false; }
+        if (g_meter.l_bright < 0.0f) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.4f", g_meter.l_bright);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "l_dark") == 0) {
-        if (g_meter.l_dark < 0.0f) { snprintf(out, out_len, "---"); return false; }
+        if (g_meter.l_dark < 0.0f) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.4f", g_meter.l_dark);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "sbr") == 0) {
-        if (!g_meter.has_results) { snprintf(out, out_len, "---"); return false; }
+        if (!g_meter.has_results) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.2f", g_meter.sbr);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "grade") == 0) {
-        if (!g_meter.has_results) { snprintf(out, out_len, "---"); return false; }
+        if (!g_meter.has_results) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         if (g_meter.grade == (int)g_meter.grade) {
             snprintf(out, out_len, "%d", (int)g_meter.grade);
         } else {
             snprintf(out, out_len, "%.1f", g_meter.grade);
         }
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "grade_label") == 0) {
-        if (!g_meter.has_results) { snprintf(out, out_len, "---"); return false; }
+        if (!g_meter.has_results) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%s", g_meter.grade_label);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "time") == 0) {
-        if (!g_meter.has_results || g_meter.time_s < 0.0f) { snprintf(out, out_len, "---"); return false; }
+        if (!g_meter.has_results || g_meter.time_s < 0.0f) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.1f", g_meter.time_s);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Magnification compensation bindings
@@ -357,18 +358,18 @@ static bool meter_resolve(const char* params, char* out, size_t out_len) {
         portENTER_CRITICAL(&g_meter_lock);
         float v = g_meter.mag_lux_a;
         portEXIT_CRITICAL(&g_meter_lock);
-        if (v < 0.0f) { snprintf(out, out_len, "---"); return false; }
+        if (v < 0.0f) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.4f", v);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "mag_lux_b") == 0) {
         portENTER_CRITICAL(&g_meter_lock);
         float v = g_meter.mag_lux_b;
         portEXIT_CRITICAL(&g_meter_lock);
-        if (v < 0.0f) { snprintf(out, out_len, "---"); return false; }
+        if (v < 0.0f) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.4f", v);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "mag_factor") == 0) {
@@ -376,12 +377,12 @@ static bool meter_resolve(const char* params, char* out, size_t out_len) {
         float a = g_meter.mag_lux_a, b = g_meter.mag_lux_b;
         portEXIT_CRITICAL(&g_meter_lock);
         if (a < 0.0f || b < MIN_VALID_LUX) {
-            snprintf(out, out_len, "---"); return false;
+            snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE;
         }
         float factor = a / b;
-        if (!isfinite(factor)) { snprintf(out, out_len, "---"); return false; }
+        if (!isfinite(factor)) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         snprintf(out, out_len, "%.1f", factor);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     if (strcmp(params, "mag_time") == 0) {
@@ -389,24 +390,37 @@ static bool meter_resolve(const char* params, char* out, size_t out_len) {
         float a = g_meter.mag_lux_a, b = g_meter.mag_lux_b;
         portEXIT_CRITICAL(&g_meter_lock);
         if (a < 0.0f || b < MIN_VALID_LUX) {
-            snprintf(out, out_len, "---"); return false;
+            snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE;
         }
         float set_time = expose_timer_get_time();
-        if (set_time <= 0.0f) { snprintf(out, out_len, "---"); return false; }
+        if (set_time <= 0.0f) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         float rec = set_time * (a / b);
-        if (!isfinite(rec)) { snprintf(out, out_len, "---"); return false; }
+        if (!isfinite(rec)) { snprintf(out, out_len, "---"); return BINDING_RESOLVER_UNAVAILABLE; }
         rec = roundf(rec * 10.0f) / 10.0f;
         snprintf(out, out_len, "%.1f", rec);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     snprintf(out, out_len, "ERR:bad_key");
-    return false;
+    return BINDING_RESOLVER_UNAVAILABLE;
 }
 
 static void meter_collect(const char* params, void* user_data) {
     (void)params;
     (void)user_data;
+}
+
+static const char* const kMeterBindingKeys[] = {
+    "lref", "zone5_time", "l_bright", "l_dark", "sbr", "grade", "grade_label", "time",
+    "mag_lux_a", "mag_lux_b", "mag_factor", "mag_time",
+};
+
+static uint8_t meter_binding_key_count() {
+    return sizeof(kMeterBindingKeys) / sizeof(kMeterBindingKeys[0]);
+}
+
+static const char* meter_binding_key_at(uint8_t index) {
+    return index < meter_binding_key_count() ? kMeterBindingKeys[index] : nullptr;
 }
 
 // ============================================================================
@@ -538,26 +552,14 @@ bool meter_get_has_results() {
 }
 #endif // HAS_MCP
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void meter_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[meter:key] or [meter:key;format]";
-    o["example"] = "Grade [meter:grade_label] @ [meter:time;%.1f]s";
-    o["keys"]    = "lref, l_bright, l_dark, sbr, grade, grade_label, time, mag_lux_a, mag_lux_b, mag_time, mag_factor";
-    o["note"]    = "Darkroom enlarging-meter readings and recommended grade/time.";
-}
-#endif
-
 void meter_init() {
-    if (!binding_template_register("meter", meter_resolve, meter_collect)) {
+    if (!binding_template_register("meter", meter_resolve, meter_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                    meter_binding_key_count, meter_binding_key_at})) {
         LOGE(TAG, "Failed to register meter binding scheme");
     } else {
         LOGI(TAG, "Meter binding scheme registered");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("meter", meter_scheme_describe);
-#endif
 }
 
 #else // !IS_DARKROOM_TIMER

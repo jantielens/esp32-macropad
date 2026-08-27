@@ -15,30 +15,32 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-#endif
-
 namespace {
 
 const char* const kMusicKeys[] = {
     "file", "file_name", "title", "artist", "album", "track", "index", "count",
     "elapsed_s", "total_s", "status",
 #if HAS_MUSIC_ANALYSIS
-    "analysis.rms", "analysis.peak",
+    "analysis.rms", "analysis.peak", "analysis.band.0", "analysis.band.1",
+    "analysis.band.2", "analysis.band.3", "analysis.band.4", "analysis.band.5",
+    "analysis.band.6", "analysis.band.7",
 #endif
 };
 
-bool is_analysis_key(const char* key) {
-#if HAS_MUSIC_ANALYSIS
-    if (strcmp(key, "analysis.rms") == 0 || strcmp(key, "analysis.peak") == 0) return true;
-    if (strncmp(key, "analysis.band.", 14) == 0) {
-        const int band = atoi(key + 14);
-        return band >= 0 && band < 8;
+const char* find_music_key(const char* params) {
+    if (!params) return nullptr;
+    for (const char* key : kMusicKeys) {
+        if (strcmp(params, key) == 0) return key;
     }
-#endif
-    (void)key;
-    return false;
+    return nullptr;
+}
+
+uint8_t music_binding_key_count() {
+    return sizeof(kMusicKeys) / sizeof(kMusicKeys[0]);
+}
+
+const char* music_binding_key_at(uint8_t index) {
+    return index < music_binding_key_count() ? kMusicKeys[index] : nullptr;
 }
 
 const char* status_text(AudioMusicStatus status) {
@@ -53,8 +55,9 @@ const char* status_text(AudioMusicStatus status) {
     return "unavailable";
 }
 
-bool music_binding_resolve(const char* params, char* out, size_t out_len) {
-    if (!params || !out || out_len == 0) return false;
+BindingResolverStatus music_binding_resolve(const char* params, char* out, size_t out_len) {
+    if (!find_music_key(params)) return BINDING_RESOLVER_UNKNOWN;
+    if (!out || out_len == 0) return BINDING_RESOLVER_UNAVAILABLE;
     AudioMusicInfo info = {};
     audio_get_music_info(&info);
     if (strcmp(params, "file") == 0) {
@@ -93,14 +96,14 @@ bool music_binding_resolve(const char* params, char* out, size_t out_len) {
             snprintf(out, out_len, "%u", analysis.peak);
         } else {
             const int band = atoi(params + 14);
-            if (band < 0 || band >= 8) return false;
+            if (band < 0 || band >= 8) return BINDING_RESOLVER_UNKNOWN;
             snprintf(out, out_len, "%u", analysis.bands[band]);
         }
 #endif
     } else {
-        return false;
+        return BINDING_RESOLVER_UNKNOWN;
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 void music_binding_collect(const char* params, void* user_data) {
@@ -108,44 +111,15 @@ void music_binding_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
-const char* music_binding_validate(const char* params) {
-    if (!params || !params[0]) return "music key is required";
-    for (const char* key : kMusicKeys) {
-        if (strcmp(params, key) == 0) return nullptr;
-    }
-    if (is_analysis_key(params)) return nullptr;
-#if HAS_MUSIC_ANALYSIS
-    if (strncmp(params, "analysis.", 9) == 0) {
-        return "analysis key must be rms, peak, or band.0 through band.7";
-    }
-#endif
-    return "unknown music key";
-}
-
-#if HAS_MCP
-void music_binding_describe(void* out_json) {
-    JsonObject& out = *static_cast<JsonObject*>(out_json);
-    out["syntax"] = "[music:file|file_name|title|artist|album|track|index|count|elapsed_s|total_s|status]";
-    out["example"] = "[music:status]";
-    out["keys"] = "file, file_name, title, artist, album, track, index, count, elapsed_s, total_s, status";
-#if HAS_MUSIC_ANALYSIS
-    out["analysis"] = "analysis.rms, analysis.peak, analysis.band.0 through analysis.band.7; integer levels from 0 to 100 before volume scaling";
-#endif
-    out["read_only"] = true;
-}
-#endif
-
 } // namespace
 
 void music_binding_init() {
-    if (!binding_template_register("music", music_binding_resolve, music_binding_collect)) {
+    if (!binding_template_register("music", music_binding_resolve, music_binding_collect,
+                                   {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
+                                    music_binding_key_count, music_binding_key_at})) {
         LOGE("MusicBind", "Failed to register music binding scheme");
         return;
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("music", music_binding_describe);
-    binding_template_set_scheme_validate("music", music_binding_validate);
-#endif
 }
 
 #else

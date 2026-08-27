@@ -191,6 +191,58 @@ echo "=== Running unit tests: binding_template ==="
 ./tests/bin/test_binding_template
 echo
 
+echo "=== Building unit tests: binding schema ==="
+g++ -std=c++17 -Wall -Wextra -Werror \
+    -include tests/log_manager.h -include tests/board_config.h \
+    -I tests -I src/app -I ~/Arduino/libraries/ArduinoJson/src \
+    tests/test_binding_schema.cpp \
+    src/app/binding_template.cpp src/app/binding_schema.cpp tests/stubs.cpp \
+    -o tests/bin/test_binding_schema
+
+echo "=== Running unit tests: binding schema ==="
+./tests/bin/test_binding_schema
+echo
+
+run_binding_schema_production_profile() {
+    local profile_name="$1"
+    local profile_define="$2"
+    shift 2
+
+    echo "=== Building binding schema profile: ${profile_name} ==="
+    g++ -std=c++17 -Wall -Wextra -Werror \
+        -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function \
+        ${profile_define:+"$profile_define"} \
+        -include tests/Arduino.h -include tests/binding_schema_profiles/platform_stubs.h \
+        -I tests/binding_schema_profiles -I tests -I src -I src/app \
+        tests/test_binding_schema_production.cpp \
+        tests/binding_schema_profiles/stubs.cpp \
+        src/app/binding_template.cpp src/app/binding_finite_schemes.cpp \
+        src/app/health_binding.cpp src/app/timer_binding.cpp src/app/music_binding.cpp \
+        src/app/net_binding.cpp src/app/list_binding.cpp src/app/list_provider.cpp \
+        src/app/time_binding.cpp "$@" \
+        -o "tests/bin/test_binding_schema_${profile_name}"
+
+    echo "=== Running binding schema profile: ${profile_name} ==="
+    "tests/bin/test_binding_schema_${profile_name}"
+    echo
+}
+
+run_binding_schema_production_profile "baseline" ""
+run_binding_schema_production_profile "full" "-DBINDING_SCHEMA_PROFILE_FULL" \
+    src/app/audio_input_binding.cpp
+run_binding_schema_production_profile "voice" "-DBINDING_SCHEMA_PROFILE_VOICE" \
+    src/app/device_classes/voice_assistant/voice_binding.cpp
+run_binding_schema_production_profile "coffee" "-DBINDING_SCHEMA_PROFILE_COFFEE" \
+    src/app/device_classes/coffee_scale/scale_binding.cpp \
+    src/app/device_classes/coffee_scale/brew/brew_binding.cpp
+run_binding_schema_production_profile "darkroom" "-DBINDING_SCHEMA_PROFILE_DARKROOM" \
+    src/app/device_classes/darkroom_timer/print_log.cpp \
+    src/app/device_classes/darkroom_timer/meter.cpp \
+    src/app/device_classes/darkroom_timer/expose_timer.cpp \
+    src/app/device_classes/darkroom_timer/test_strip.cpp
+run_binding_schema_production_profile "shutter" "-DBINDING_SCHEMA_PROFILE_SHUTTER" \
+    src/app/device_classes/shutter_tester/shutter_binding.cpp
+
 echo "=== Building unit tests: brew template DSL ==="
 g++ -std=c++17 -Wall -Wextra -Werror \
     -DHAS_SCALE=1 \
@@ -1018,7 +1070,7 @@ echo
 
 echo "=== Running guard: camera preview widget wiring ==="
 ./tests/test_camera_preview_widget.sh
-./tests/test_camera_motion.sh
+/bin/bash ./tests/test_camera_motion.sh
 echo
 
 echo "=== Running guard: MCP binding-scheme parity (register <-> describe) ==="
