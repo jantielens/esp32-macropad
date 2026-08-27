@@ -34,26 +34,14 @@
 #include <WiFi.h>
 
 #if HAS_DISPLAY
+#include "binding_builtin_schemes.h"
 #include "display_manager.h"
-#include "expr_binding.h"
-#include "health_binding.h"
-#if HAS_CAMERA
-#include "camera_binding.h"
-#endif
 #include "icon_store.h"
-#include "pad_binding.h"
 #include "sound_store.h"
 #include "boot_actions.h"
 #include "pad_block.h"
 #include "list_provider.h"
-#include "list_binding.h"
-#include "net_binding.h"
 #include "time_binding.h"
-#include "timer_binding.h"
-#include "music_binding.h"
-#if HAS_AUDIO_INPUT && HAS_DISPLAY
-#include "audio_input_binding.h"
-#endif
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -588,20 +576,7 @@ void setup()
 	#endif
 
 	#if HAS_DISPLAY
-	#if HAS_CAMERA
-	camera_binding_init();
-	#endif
-	health_binding_init();
-	time_binding_init();
-	expr_binding_init();
-	pad_binding_init();
-	timer_binding_init();
-	music_binding_init();
-	#if HAS_AUDIO_INPUT && HAS_DISPLAY
-	audio_input_binding_init();
-	#endif
-	list_binding_init();
-	net_binding_init();
+	binding_builtin_schemes_init();
 	timer_config_init();
 	#endif
 

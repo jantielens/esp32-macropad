@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "binding_finite_schemes.h"
+#include "binding_builtin_schemes.h"
 #include "binding_template.h"
 #include "list_binding.h"
 #include "list_provider.h"
@@ -77,12 +77,18 @@ static void expect_structural_resolvers_are_invoked() {
 #endif
 }
 
+static bool scheme_is_registered(const char* expected) {
+    for (uint8_t index = 0; index < binding_template_scheme_count(); ++index) {
+        const char* scheme = binding_template_scheme_name(index);
+        if (scheme && std::strcmp(scheme, expected) == 0) return true;
+    }
+    return false;
+}
+
 int main() {
     list_provider_register(&kFixtureProvider);
     list_binding_set_selected("fixture", "selected-item");
-    time_binding_init();
-    list_binding_init();
-    binding_finite_schemes_init();
+    binding_builtin_schemes_init();
 #if IS_VOICE_ASSISTANT
     voice_binding_init();
 #endif
@@ -104,6 +110,9 @@ int main() {
     expect(all_registered_finite_keys_are_recognized(),
            "every production finite key is not unknown to its real resolver");
     expect_structural_resolvers_are_invoked();
+#if HAS_CAMERA && HAS_DISPLAY
+    expect(scheme_is_registered("camera"), "camera scheme registered on camera display profile");
+#endif
 
     std::printf("=== Results: %d failure(s) ===\n", g_failures);
     return g_failures == 0 ? 0 : 1;

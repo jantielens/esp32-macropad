@@ -24,9 +24,11 @@ Mixed static + binding: `"Temperature: [mqtt:sensors/temp;$.value;%.1f]°C"`
 
 ## Scheme Registry
 
-- Max 8 schemes registered via `binding_template_register(scheme, resolver, collector)`
+- Max 16 schemes registered via `binding_template_register(scheme, resolver, collector, spec)`
 - Each scheme provides a `resolver` function and optionally a `collect_topics` function
-- Schemes are registered during init (e.g., `mqtt_sub_store_init()`, `health_binding_init()`, `time_binding_init()`, `expr_binding_init()`, `pad_binding_init()`, `timer_binding_init()`)
+- Core built-in schemes register only through `binding_builtin_schemes_init()` in `binding_builtin_schemes.cpp`. Add the scheme's header and guarded init call there; do not register core schemes directly from `app.ino`.
+- Device-class schemes register through their owning device class's `on_setup_late` hook. Do not add them to the built-in aggregate.
+- The MQTT scheme registers during `mqtt_sub_store_init()` because it owns its subscription store.
 
 ## Thread Safety
 
@@ -58,9 +60,10 @@ Mixed static + binding: `"Temperature: [mqtt:sensors/temp;$.value;%.1f]°C"`
 
 1. Implement `resolver(params, out, out_len)` → returns `true` if resolved
 2. Optionally implement `collector(params, user_data)` for MQTT topic collection
-3. Call `binding_template_register("scheme_name", resolver, collector)` during init
-4. Gate with appropriate `#if HAS_*` flags
-5. **Expose it to the MCP server** (so LLM pad-authoring clients can discover and use it): under `#if HAS_MCP`, add a `describe(void* out_json)` hook and register it with `binding_template_set_scheme_describe("scheme_name", describe)`. If the scheme has a constrained key/param set, also add a `validate(params)` hook via `binding_template_set_scheme_validate(...)` so authoring writes reject bad tokens. This is enforced by `tests/test_mcp_scheme_parity.sh` — a scheme registered without a describe hook fails the test suite (unless explicitly allowlisted with a justification).
+3. Call `binding_template_register("scheme_name", resolver, collector, spec)` from the scheme's init function
+4. Add that init function to `binding_builtin_schemes_init()` for a core scheme, or its owning `on_setup_late` hook for a device-class scheme
+5. Gate with appropriate `#if HAS_*` flags
+6. **Expose it to the MCP server** (so LLM pad-authoring clients can discover and use it): provide complete `BindingSchemeSpec` metadata. The shared registry serializes it for both MCP and the portal; `tests/test_mcp_scheme_parity.sh` enforces shared registry metadata for each registered scheme.
 
 ## Key Files
 

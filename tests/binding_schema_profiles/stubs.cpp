@@ -8,6 +8,9 @@
 #include "net_activity.h"
 #include "timer_engine.h"
 #include "log_manager.h"
+#if HAS_CAMERA
+#include "camera_motion.h"
+#endif
 
 #include <cstdio>
 #include <cstring>
@@ -195,6 +198,14 @@ const char* ble_hid_peer_id_addr() { return ""; }
 #endif
 
 void timer_engine_init() {}
+#if HAS_CAMERA
+CameraMotionSettings camera_motion_get_settings() {
+    return {.enabled = false, .analyze_every_nth_frame = 2, .sensitivity = 5,
+            .presence_hold_seconds = 60, .keep_display_awake = false};
+}
+CameraMotionThresholds camera_motion_get_thresholds(uint8_t) { return {}; }
+CameraMotionStatus camera_motion_get_status() { return {}; }
+#endif
 uint32_t timer_get_target_seconds(uint8_t) { return 0; }
 TimerState timer_get_state(uint8_t) { return TIMER_STOPPED; }
 TimerMode timer_get_mode(uint8_t) { return TIMER_MODE_UP; }

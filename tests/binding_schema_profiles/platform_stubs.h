@@ -13,6 +13,7 @@ class String {};
 #define HAS_MCP 0
 #define HAS_PSRAM 1
 #define TELEMETRY_ALLOW_PSRAM_POOL_WALK 0
+#define HAS_CAMERA 0
 
 #if defined(BINDING_SCHEMA_PROFILE_FULL)
 #define HAS_AUDIO 1
@@ -20,6 +21,15 @@ class String {};
 #define HAS_MUSIC_ANALYSIS 1
 #define HAS_AUDIO_INPUT 1
 #define HAS_BLE_HID 1
+#define IS_VOICE_ASSISTANT 0
+#elif defined(BINDING_SCHEMA_PROFILE_CAMERA)
+#undef HAS_CAMERA
+#define HAS_CAMERA 1
+#define HAS_AUDIO 0
+#define HAS_SOUND_PLAYER 0
+#define HAS_MUSIC_ANALYSIS 0
+#define HAS_AUDIO_INPUT 0
+#define HAS_BLE_HID 0
 #define IS_VOICE_ASSISTANT 0
 #elif defined(BINDING_SCHEMA_PROFILE_VOICE)
 #define HAS_AUDIO 0

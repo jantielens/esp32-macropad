@@ -411,8 +411,10 @@ than raising the default — that would cost every board.
 
 These all use registration-based APIs called from `on_setup_late`:
 
-- **Binding scheme**: `binding_template_register_scheme("foo", ...)` from
-  the class's binding init function.
+- **Binding scheme**: Call `binding_template_register("foo", resolver,
+  collector, spec)` from the class's binding init function, then invoke that
+  function from the class's `on_setup_late` hook. Device-class schemes remain
+  with their owner and are not added to `binding_builtin_schemes.cpp`.
 - **List provider**: `list_provider_register(...)` exposes a `[list:foo.selected]`
   data source.
 - **Pad block**: `pad_block_register(...)` adds pre-configured button groups

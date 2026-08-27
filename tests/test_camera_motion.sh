@@ -36,8 +36,9 @@ grep -q '"changed_tiles"' "$BINDING"
 grep -q '"score_threshold"' "$BINDING"
 grep -q '"sample_age"' "$BINDING"
 grep -q '"motion_age"' "$BINDING"
-grep -q 'camera_binding_init();' src/app/binding_finite_schemes.cpp
-grep -q 'camera_binding_init();' src/app/app.ino
+grep -q 'camera_binding_init();' src/app/binding_builtin_schemes.cpp
+grep -q 'binding_builtin_schemes_init();' src/app/app.ino
+! grep -Eq '^[[:space:]]+(camera|health|time|expr|pad|timer|music|audio_input|list|net)_binding_init\(\);' src/app/app.ino
 grep -q 'camera_presence/state' "$SENSOR"
 grep -q 'camera_presence_remove_discovery' "$SENSOR"
 grep -q '"Camera Presence"' "$SENSOR"

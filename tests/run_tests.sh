@@ -216,10 +216,11 @@ run_binding_schema_production_profile() {
         -I tests/binding_schema_profiles -I tests -I src -I src/app \
         tests/test_binding_schema_production.cpp \
         tests/binding_schema_profiles/stubs.cpp \
-        src/app/binding_template.cpp src/app/binding_finite_schemes.cpp \
+        src/app/binding_template.cpp src/app/binding_builtin_schemes.cpp \
         src/app/health_binding.cpp src/app/timer_binding.cpp src/app/music_binding.cpp \
         src/app/net_binding.cpp src/app/list_binding.cpp src/app/list_provider.cpp \
-        src/app/time_binding.cpp "$@" \
+        src/app/expr_binding.cpp src/app/pad_binding.cpp src/app/camera_binding.cpp \
+        src/app/expr_eval.cpp src/app/time_binding.cpp "$@" \
         -o "tests/bin/test_binding_schema_${profile_name}"
 
     echo "=== Running binding schema profile: ${profile_name} ==="
@@ -228,6 +229,7 @@ run_binding_schema_production_profile() {
 }
 
 run_binding_schema_production_profile "baseline" ""
+run_binding_schema_production_profile "camera" "-DBINDING_SCHEMA_PROFILE_CAMERA"
 run_binding_schema_production_profile "full" "-DBINDING_SCHEMA_PROFILE_FULL" \
     src/app/audio_input_binding.cpp
 run_binding_schema_production_profile "voice" "-DBINDING_SCHEMA_PROFILE_VOICE" \

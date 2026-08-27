@@ -8,6 +8,7 @@
 #include "log_manager.h"
 
 #include <Arduino.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
