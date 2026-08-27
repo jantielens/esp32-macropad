@@ -65,3 +65,8 @@ add_host_gtest(test_voice_wav
     test_voice_wav.cpp
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_wav.cpp
 )
+
+add_host_gtest(test_voice_tts_request
+    test_voice_tts_request.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_tts_request.cpp
+)
