@@ -354,7 +354,7 @@ for board_name in "${boards[@]}"; do
     display_size=$(jq -r '.display.size // ""' "$metadata_file")
 
     case "$device_class" in
-      macropad|epaper|headless|shutter_tester|coffee_scale|darkroom_timer) ;;
+      macropad|epaper|headless|shutter_tester|coffee_scale|darkroom_timer|voice_assistant) ;;
       *)
         echo "WARNING: Unknown device_class '$device_class' in $metadata_file, defaulting to 'macropad'" >&2
         device_class="macropad"
@@ -447,8 +447,8 @@ EOF
 done
 
 while IFS= read -r source; do
-  package_name="$(python3 "$SCRIPT_DIR/extension_package_name.py" "$source")"
-  title="$(python3 "$SCRIPT_DIR/extension_package_name.py" --title "$source")"
+  package_name="$(python3 "$REPO_ROOT/tools/extension_package_name.py" "$source")"
+  title="$(python3 "$REPO_ROOT/tools/extension_package_name.py" --title "$source")"
   metadata_file="$(dirname "$source")/metadata.json"
   package_file="$REPO_ROOT/build/extensions/${package_name%.elf}.ext"
 
