@@ -23,6 +23,9 @@ struct CameraMotionSettings {
     uint8_t analyze_every_nth_frame;
     uint8_t sensitivity;
     uint16_t presence_hold_seconds;
+#if HAS_DISPLAY
+    bool keep_display_awake;
+#endif
 };
 
 struct CameraMotionStatus {
@@ -50,5 +53,9 @@ void camera_motion_on_raw_frame(const CameraRawFrame& raw, bool analyze_every_fr
 // Returns each motion-derived presence state transition exactly once. Must run
 // on the Arduino main loop.
 bool camera_motion_take_presence_change(bool* presence);
+
+// Returns each confirmed motion sample at most once. Must run on the Arduino
+// main loop. Repeated samples are coalesced until consumed.
+bool camera_motion_take_confirmed_motion();
 
 #endif // HAS_CAMERA

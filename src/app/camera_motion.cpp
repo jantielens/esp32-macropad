@@ -25,6 +25,9 @@ CameraMotionSettings s_settings = {
     .analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT,
     .sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT,
     .presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT,
+#if HAS_DISPLAY
+    .keep_display_awake = false,
+#endif
 };
 CameraMotionStatus s_status = {};
 uint8_t* s_previous_grid = nullptr;
@@ -33,6 +36,7 @@ uint8_t s_active_frames = 0;
 uint32_t s_last_motion_ms = 0;
 uint8_t s_frames_since_analysis = 0;
 bool s_presence_changed = false;
+bool s_confirmed_motion = false;
 portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 
 SensitivityThresholds camera_motion_thresholds(uint8_t sensitivity) {
@@ -162,6 +166,7 @@ void camera_motion_process_raw(const CameraRawFrame& raw, uint32_t now) {
     portENTER_CRITICAL(&s_mux);
     s_status.has_last_motion = true;
     s_status.last_motion_epoch = epoch > 0 ? static_cast<uint32_t>(epoch) : 0;
+    s_confirmed_motion = true;
     portEXIT_CRITICAL(&s_mux);
     camera_motion_set_presence(true);
 }
@@ -189,6 +194,7 @@ bool camera_motion_set_settings(const CameraMotionSettings& settings) {
         portENTER_CRITICAL(&s_mux);
         s_status.changed_tiles = 0;
         s_status.score = 0;
+        s_confirmed_motion = false;
         portEXIT_CRITICAL(&s_mux);
         camera_motion_set_presence(false);
     }
@@ -237,6 +243,14 @@ bool camera_motion_take_presence_change(bool* presence) {
     s_presence_changed = false;
     portEXIT_CRITICAL(&s_mux);
     return true;
+}
+
+bool camera_motion_take_confirmed_motion() {
+    portENTER_CRITICAL(&s_mux);
+    const bool confirmed = s_confirmed_motion;
+    s_confirmed_motion = false;
+    portEXIT_CRITICAL(&s_mux);
+    return confirmed;
 }
 
 #endif // HAS_CAMERA

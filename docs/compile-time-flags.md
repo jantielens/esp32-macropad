@@ -407,6 +407,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio_input.cpp
   - src/app/audio_input.h
   - src/app/audio_input_binding.cpp
+  - src/app/binding_finite_schemes.cpp
   - src/app/board_config.h
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
@@ -518,6 +519,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_camera.cpp
   - src/app/mqtt_camera.h
+  - src/app/mqtt_sub_store.cpp
   - src/app/portal_components.cpp
   - src/app/sensors.cpp
   - src/app/sensors/camera_presence_sensor.cpp
@@ -569,6 +571,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
   - src/app/audio_input_binding.cpp
+  - src/app/binding_finite_schemes.cpp
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
@@ -576,6 +579,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/button_confirmation.h
   - src/app/button_defaults.cpp
   - src/app/button_defaults.h
+  - src/app/camera_motion.cpp
+  - src/app/camera_motion.h
+  - src/app/components/camera_component.cpp
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/data_stream.cpp
@@ -650,6 +656,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
+  - src/app/sensors/camera_presence_sensor.cpp
   - src/app/swipe_actions.cpp
   - src/app/swipe_actions.h
   - src/app/swipe_config.cpp

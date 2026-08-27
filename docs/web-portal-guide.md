@@ -94,6 +94,8 @@ locally on the ESP32-P4 without sending camera frames to a cloud service.
 | **Analyze every** | Analyzes every 1st through 4th camera frame. The displayed rate is derived from the Camera capture rate. |
 | **Sensitivity** | Set a value from 1 to 10. Lower values reduce false triggers; higher values detect smaller changes but can react to shadows or changing light. |
 | **Presence hold time** | Keeps Camera Presence on for 10 to 600 seconds after the most recent motion. |
+| **Keep display awake while motion is detected** | Wakes the display and resets its inactivity timer for every confirmed motion sample. |
+| **Actions on Motion Detected** | Up to three actions that run in order when Camera Presence changes from off to on. |
 
 Verify Camera Presence in the **Sensor Data** fragment or by subscribing to the
 retained `camera_presence/state` MQTT topic.
@@ -106,6 +108,14 @@ preview or JPEG frames.
 > Camera Presence is a motion sensor, not an occupancy sensor. A person who
 > remains still creates no new motion, so presence turns off after the selected
 > hold time.
+
+Motion actions run once for each presence episode. Choose **Wake display** in a
+Device command action to wake Display Sleep or leave the Idle Screen; the normal
+inactivity timer resumes immediately after the wake.
+
+Enable **Keep display awake while motion is detected** when ongoing movement
+should continuously reset the inactivity timer. Once movement stops, normal
+screen saver timing resumes; the presence hold time does not keep the display on.
 
 ## Music Library
 

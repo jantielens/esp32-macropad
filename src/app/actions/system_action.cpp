@@ -42,6 +42,13 @@ ActionResult dispatch_system(const ButtonAction& act, const char* label, uint32_
 #else
         LOGW(kSystemActionTag, "%s system: screensaver unavailable (no display)", label);
 #endif
+        } else if (strcmp(command, "wake_display") == 0) {
+    #if defined(ARDUINO) && HAS_DISPLAY
+        LOGI(kSystemActionTag, "%s system: wake_display", label);
+        screen_saver_manager_wake();
+    #else
+        LOGW(kSystemActionTag, "%s system: wake_display unavailable (no display)", label);
+    #endif
     } else {
         LOGW(kSystemActionTag, "%s system: unknown command '%s'", label, command);
     }
@@ -53,7 +60,8 @@ const char* validate_system(const JsonObjectConst action) {
     if (!action["system_command"].is<const char*>()) return "system_command must be a string";
     const char* command = action["system_command"].as<const char*>();
     if (strcmp(command, "reboot") == 0 || strcmp(command, "wifi_reconnect") == 0) return nullptr;
-    return strcmp(command, "screensaver") == 0 && HAS_DISPLAY ? nullptr : "unknown system command";
+    return (strcmp(command, "screensaver") == 0 || strcmp(command, "wake_display") == 0) && HAS_DISPLAY
+        ? nullptr : "unknown system command";
 }
 
 bool system_available() { return true; }
@@ -65,6 +73,7 @@ void describe_system(JsonObject& action) {
     JsonObject reconnect = commands.createNestedObject(); reconnect["id"] = "wifi_reconnect"; reconnect["label"] = "Reconnect Wi-Fi";
 #if HAS_DISPLAY
     JsonObject saver = commands.createNestedObject(); saver["id"] = "screensaver"; saver["label"] = "Enable screensaver";
+    JsonObject wake = commands.createNestedObject(); wake["id"] = "wake_display"; wake["label"] = "Wake display";
 #endif
     JsonArray editor_fields = action.createNestedArray("editor_fields");
     JsonObject command = editor_fields.createNestedObject(); command["name"] = "system_command"; command["label"] = "Command"; command["type"] = "select"; command["command_options"] = true;

@@ -2,8 +2,12 @@
 
 #if HAS_CAMERA
 
+#include "camera_motion_actions.h"
 #include "ha_discovery.h"
 #include "sensor_manager.h"
+#if HAS_DISPLAY
+#include "screen_saver_manager.h"
+#endif
 #if HAS_MQTT
 #include "mqtt_manager.h"
 #endif
@@ -30,26 +34,34 @@ bool camera_presence_remove_discovery() {
 #endif
 
 void camera_presence_loop() {
-#if HAS_MQTT
     bool presence = false;
+    const bool presence_changed = camera_motion_take_presence_change(&presence);
+#if HAS_DISPLAY
+    if (camera_motion_take_confirmed_motion() && camera_motion_get_settings().keep_display_awake) {
+        screen_saver_manager_notify_activity(true);
+    }
+#endif
+#if HAS_MQTT
     const CameraMotionStatus status = camera_motion_get_status();
     if (!status.enabled) {
         if (s_discovery_published && camera_presence_remove_discovery()) {
             s_discovery_published = false;
         }
-        camera_motion_take_presence_change(&presence);
-        return;
-    }
-    if (!s_discovery_published) {
+    } else if (!s_discovery_published) {
         camera_presence_publish_ha(mqtt_manager);
         if (sensor_manager_publish_binary_state(kCameraPresenceStateTopicSuffix, status.presence, true)) {
             s_discovery_published = true;
         }
     }
-    if (camera_motion_take_presence_change(&presence)) {
+    if (presence_changed && status.enabled) {
         sensor_manager_publish_binary_state(kCameraPresenceStateTopicSuffix, presence, true);
     }
 #endif
+    if (presence_changed) {
+#if CAMERA_MOTION_ACTIONS_ENABLED
+        if (presence) camera_motion_actions_on_presence_started();
+#endif
+    }
 }
 
 void camera_presence_append_api(JsonObject& doc) {

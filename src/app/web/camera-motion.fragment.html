@@ -9,6 +9,11 @@
       <label class="form-check-label" for="camera-motion-enabled">Enable camera motion sensing</label>
       <div class="form-text">Analyzes camera frames locally while enabled, including when the display sleeps. It does not create JPEG or preview frames when no other camera client is active.</div>
     </div>
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" id="camera-motion-keep-display-awake" type="checkbox" role="switch">
+      <label class="form-check-label" for="camera-motion-keep-display-awake">Keep display awake while motion is detected</label>
+      <div class="form-text">Each confirmed motion sample wakes the display and resets its inactivity timer. Normal sleep resumes after motion stops.</div>
+    </div>
     <div class="grid-2col">
       <div>
         <label class="form-label d-flex justify-content-between" for="camera-motion-analyze-every-nth-frame">
@@ -33,6 +38,12 @@
       </div>
     </div>
     <div class="form-text mt-3">Verify Camera Presence in the Sensor Data fragment or on the <code>camera_presence/state</code> MQTT topic.</div>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Actions on Motion Detected</h5></div>
+  <div class="card-body">
+    <div id="camera-motion-action-editors"></div>
   </div>
 </div>
 <div class="save-bar mb-3">

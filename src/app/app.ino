@@ -101,6 +101,7 @@ SET_LOOP_TASK_STACK_SIZE(LOOP_TASK_STACK_SIZE);
 #include "camera.h"
 #include "camera_feed.h"
 #include "camera_motion.h"
+#include "camera_motion_actions.h"
 #endif
 
 // Configuration
@@ -342,6 +343,9 @@ void setup()
 		.analyze_every_nth_frame = device_config.camera_motion_analyze_every_nth_frame,
 		.sensitivity = device_config.camera_motion_sensitivity,
 		.presence_hold_seconds = device_config.camera_presence_hold_seconds,
+		#if HAS_DISPLAY
+		.keep_display_awake = device_config.camera_motion_keep_display_awake,
+		#endif
 	})) {
 		device_config.camera_motion_enabled = false;
 		device_config.camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
@@ -352,6 +356,9 @@ void setup()
 			.analyze_every_nth_frame = device_config.camera_motion_analyze_every_nth_frame,
 			.sensitivity = device_config.camera_motion_sensitivity,
 			.presence_hold_seconds = device_config.camera_presence_hold_seconds,
+			#if HAS_DISPLAY
+			.keep_display_awake = false,
+			#endif
 		});
 		LOGW("Camera", "Invalid saved motion settings; restored defaults");
 	}
@@ -466,6 +473,10 @@ void setup()
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
+	#endif
+
+	#if CAMERA_MOTION_ACTIONS_ENABLED
+	camera_motion_actions_init();
 	#endif
 
 	#if HAS_SOUND_PLAYER

@@ -20,12 +20,15 @@ The web portal provides:
 Camera-enabled boards add a **Motion sensing** navigation item under the Camera
 category. It is disabled by default, so it does not retain motion-analysis
 buffers or request camera frames until enabled. The controls configure local
-RAW10 analysis only:
+RAW10 analysis and optional motion-triggered actions:
 
 * Enable or disable camera motion sensing
 * Select whether to analyze every 1st through 4th captured frame
 * Set Sensitivity from 1 to 10, where higher values detect smaller changes
 * Set the motion-derived presence hold time from 10 to 600 seconds
+* Configure up to three ordered actions that run when Camera Presence changes
+  from off to on
+* Keep the display awake while confirmed motion samples continue
 
 Verify Camera Presence through the Sensor Data fragment or the retained MQTT
 topic `camera_presence/state`. Sensing continues while the display sleeps,
@@ -39,6 +42,15 @@ conversion only run when their live consumers need a new output frame.
 Camera presence is motion-derived rather than occupancy detection. A stationary
 person does not refresh the hold time and presence turns off when the configured
 period expires.
+
+Motion actions run once per presence episode, not for every analyzed frame. The
+available action catalog includes **Wake display**, which exits the Idle Screen
+or wakes Display Sleep and then lets the normal screen saver timeout resume.
+
+When **Keep display awake while motion is detected** is enabled, every confirmed
+motion sample wakes the display and resets the inactivity timer. This is distinct
+from the one-shot motion actions. After movement stops, the configured screen
+saver timeout resumes; the presence hold time does not extend it.
 
 Camera logs report motion state transitions, capture failures, first-frame
 baseline initialization, and rejected global lighting changes. Per-frame
@@ -1229,14 +1241,22 @@ Persists motion-derived presence sensing independently of the image-output
 settings. The request must include all fields below. `motion_analyze_every_nth_frame`
 is bounded from 1 through 4. It selects how often motion examines a shared RAW10
 frame; the effective motion rate is the camera capture rate divided by this
-value.
+value. On display-enabled boards, `motion_keep_display_awake` controls whether
+every confirmed motion sample wakes the display and resets its inactivity timer.
+`actions` contains up to three `ButtonAction` objects, validated against the
+device's action catalog. The array runs once when Camera Presence changes from
+off to on.
 
 ```json
 {
   "motion_enabled": true,
   "motion_analyze_every_nth_frame": 2,
   "motion_sensitivity": 5,
-  "presence_hold_seconds": 60
+  "presence_hold_seconds": 60,
+  "motion_keep_display_awake": false,
+  "actions": [
+    {"type": "system", "system_command": "wake_display"}
+  ]
 }
 ```
 

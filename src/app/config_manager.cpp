@@ -51,6 +51,9 @@
 #define KEY_CAMERA_MOTION_FPS_LEGACY "cam_mot_fps"
 #define KEY_CAMERA_MOTION_SENSITIVITY "cam_mot_sens"
 #define KEY_CAMERA_PRESENCE_HOLD "cam_prs_hold"
+#if HAS_DISPLAY
+#define KEY_CAMERA_MOTION_KEEP_DISPLAY_AWAKE "cam_mot_wake"
+#endif
 #define KEY_CAMERA_ROTATION "cam_rot"
 #define KEY_CAMERA_OUTPUT_WIDTH "cam_out_w"
 #define KEY_CAMERA_OUTPUT_HEIGHT "cam_out_h"
@@ -239,6 +242,9 @@ bool config_manager_load(DeviceConfig *config) {
 				config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
 				config->camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
 				config->camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
+				#if HAS_DISPLAY
+				config->camera_motion_keep_display_awake = false;
+				#endif
 				config->camera_rotation = CAMERA_ROTATION_DEFAULT;
 				config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
 				config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
@@ -372,6 +378,9 @@ bool config_manager_load(DeviceConfig *config) {
 		}
 		config->camera_motion_sensitivity = preferences.getUChar(KEY_CAMERA_MOTION_SENSITIVITY, CAMERA_MOTION_SENSITIVITY_DEFAULT);
 		config->camera_presence_hold_seconds = preferences.getUShort(KEY_CAMERA_PRESENCE_HOLD, CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT);
+		#if HAS_DISPLAY
+		config->camera_motion_keep_display_awake = preferences.getBool(KEY_CAMERA_MOTION_KEEP_DISPLAY_AWAKE, false);
+		#endif
 		config->camera_rotation = static_cast<CameraRotation>(
 			preferences.getUShort(KEY_CAMERA_ROTATION, CAMERA_ROTATION_DEFAULT));
 		config->camera_output_width = preferences.getUShort(KEY_CAMERA_OUTPUT_WIDTH, CAMERA_OUTPUT_WIDTH_DEFAULT);
@@ -506,6 +515,9 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUChar(KEY_CAMERA_MOTION_ANALYZE_EVERY, config->camera_motion_analyze_every_nth_frame);
 		preferences.putUChar(KEY_CAMERA_MOTION_SENSITIVITY, config->camera_motion_sensitivity);
 		preferences.putUShort(KEY_CAMERA_PRESENCE_HOLD, config->camera_presence_hold_seconds);
+		#if HAS_DISPLAY
+		preferences.putBool(KEY_CAMERA_MOTION_KEEP_DISPLAY_AWAKE, config->camera_motion_keep_display_awake);
+		#endif
 		preferences.putUShort(KEY_CAMERA_ROTATION, config->camera_rotation);
 		preferences.putUShort(KEY_CAMERA_OUTPUT_WIDTH, config->camera_output_width);
 		preferences.putUShort(KEY_CAMERA_OUTPUT_HEIGHT, config->camera_output_height);
@@ -753,11 +765,20 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 #endif
 
 #if HAS_CAMERA
+		#if HAS_DISPLAY
+		LOGI("Config", "Camera motion: %s analyze_every=%u sensitivity=%u hold=%us awake=%d",
+				config->camera_motion_enabled ? "enabled" : "disabled",
+				(unsigned)config->camera_motion_analyze_every_nth_frame,
+				(unsigned)config->camera_motion_sensitivity,
+				(unsigned)config->camera_presence_hold_seconds,
+				(int)config->camera_motion_keep_display_awake);
+		#else
 		LOGI("Config", "Camera motion: %s analyze_every=%u sensitivity=%u hold=%us",
 				config->camera_motion_enabled ? "enabled" : "disabled",
 				(unsigned)config->camera_motion_analyze_every_nth_frame,
 				(unsigned)config->camera_motion_sensitivity,
 				(unsigned)config->camera_presence_hold_seconds);
+		#endif
 #endif
 
 #if HAS_DISPLAY

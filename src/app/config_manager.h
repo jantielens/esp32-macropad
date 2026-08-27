@@ -150,6 +150,9 @@ struct DeviceConfig {
 		uint8_t camera_motion_analyze_every_nth_frame; // default CAMERA_MOTION_ANALYZE_EVERY_DEFAULT
 		uint8_t camera_motion_sensitivity;       // default CAMERA_MOTION_SENSITIVITY_DEFAULT
 		uint16_t camera_presence_hold_seconds;   // default CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT
+		#if HAS_DISPLAY
+		bool camera_motion_keep_display_awake;   // default false
+		#endif
 		CameraRotation camera_rotation;          // default CAMERA_ROTATION_DEFAULT
 		uint16_t camera_output_width;            // default CAMERA_OUTPUT_WIDTH_DEFAULT
 		uint16_t camera_output_height;           // default CAMERA_OUTPUT_HEIGHT_DEFAULT

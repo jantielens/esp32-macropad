@@ -1,6 +1,7 @@
 window.init_camera_motion_fragment = function () {
     var base = '/api/component/camera-motion/config';
     var enabled = document.getElementById('camera-motion-enabled');
+    var keepDisplayAwake = document.getElementById('camera-motion-keep-display-awake');
     var analyzeEvery = document.getElementById('camera-motion-analyze-every-nth-frame');
     var analyzeEveryValue = document.getElementById('camera-motion-analyze-every-nth-frame-value');
     var analysisRate = document.getElementById('camera-motion-analysis-rate');
@@ -9,17 +10,23 @@ window.init_camera_motion_fragment = function () {
     var holdSeconds = document.getElementById('camera-presence-hold-seconds');
     var holdSecondsValue = document.getElementById('camera-presence-hold-seconds-value');
     var saveButton = document.getElementById('camera-motion-save-btn');
+    var actionPrefixes = actionEditorSlotPrefixes('camera-motion-action-');
 
     function saveSettings() {
+        var payload = {
+            motion_enabled: enabled.checked,
+            motion_analyze_every_nth_frame: Number(analyzeEvery.value),
+            motion_sensitivity: Number(sensitivity.value),
+            presence_hold_seconds: Number(holdSeconds.value),
+            actions: actionEditorListBuild(actionPrefixes)
+        };
+        if (!keepDisplayAwake.closest('.form-check').hidden) {
+            payload.motion_keep_display_awake = keepDisplayAwake.checked;
+        }
         return fetch(base, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                motion_enabled: enabled.checked,
-                motion_analyze_every_nth_frame: Number(analyzeEvery.value),
-                motion_sensitivity: Number(sensitivity.value),
-                presence_hold_seconds: Number(holdSeconds.value)
-            })
+            body: JSON.stringify(payload)
         }).then(function (response) {
             if (!response.ok) throw new Error('Unable to save motion settings');
         });
@@ -44,6 +51,11 @@ window.init_camera_motion_fragment = function () {
         return response.json();
     }).then(function (config) {
         enabled.checked = config.motion_enabled;
+        if (typeof config.motion_keep_display_awake === 'boolean') {
+            keepDisplayAwake.checked = config.motion_keep_display_awake;
+        } else {
+            keepDisplayAwake.closest('.form-check').hidden = true;
+        }
         analyzeEvery.min = config.motion_analyze_every_nth_frame_min;
         analyzeEvery.max = config.motion_analyze_every_nth_frame_max;
         analyzeEvery.value = config.motion_analyze_every_nth_frame;
@@ -57,6 +69,11 @@ window.init_camera_motion_fragment = function () {
         holdSeconds.max = config.presence_hold_seconds_max;
         holdSeconds.value = config.presence_hold_seconds;
         holdSecondsValue.textContent = config.presence_hold_seconds;
+        getDeviceInfo().then(function () {
+            actionEditorListRender('camera-motion-action-editors', actionPrefixes);
+            actionEditorListLoad(actionPrefixes, config.actions || []);
+            actionEditorWireFragment(actionPrefixes);
+        });
     }).catch(function (error) {
         alert(error.message);
         saveButton.disabled = true;

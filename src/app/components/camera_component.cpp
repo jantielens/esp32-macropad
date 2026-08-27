@@ -5,8 +5,11 @@
 #include "board_config.h"
 #include "camera.h"
 #include "camera_motion.h"
+#include "camera_motion_actions.h"
 #include "config_manager.h"
+#include "log_manager.h"
 #include "main_loop_bridge.h"
+#include "psram_json_allocator.h"
 #include "web_portal_json.h"
 #include "web_portal_state.h"
 
@@ -15,7 +18,8 @@
 namespace {
 
 constexpr uint32_t kCameraConfigSaveTimeoutMs = 5000;
-constexpr size_t kCameraConfigMaxBodyBytes = 512;
+constexpr size_t kCameraConfigMaxBodyBytes = 2048;
+constexpr size_t kCameraConfigResponseBytes = 2048;
 constexpr const char* kCameraPortalScript = "/portal-camera.js";
 constexpr const char* kCameraPortalStyle = "/portal-camera.css";
 
@@ -36,7 +40,7 @@ void camera_get_config(AsyncWebServerRequest* request) {
     const CameraCaptureSettings settings = camera_get_capture_settings();
     const CameraMotionSettings motion_settings = camera_motion_get_settings();
     const CameraMotionStatus motion_status = camera_motion_get_status();
-    auto doc = make_psram_json_doc(768);
+    auto doc = make_psram_json_doc(kCameraConfigResponseBytes);
     (*doc)["detected"] = camera_is_detected();
     (*doc)["raw_pixel_format"] = capabilities->raw_pixel_format;
     (*doc)["raw_width"] = capabilities->raw_width;
@@ -70,8 +74,15 @@ void camera_get_config(AsyncWebServerRequest* request) {
     (*doc)["presence_hold_seconds"] = motion_settings.presence_hold_seconds;
     (*doc)["presence_hold_seconds_min"] = CAMERA_PRESENCE_HOLD_SECONDS_MIN;
     (*doc)["presence_hold_seconds_max"] = CAMERA_PRESENCE_HOLD_SECONDS_MAX;
+#if HAS_DISPLAY
+    (*doc)["motion_keep_display_awake"] = motion_settings.keep_display_awake;
+#endif
     (*doc)["presence"] = motion_status.presence;
     (*doc)["last_motion"] = motion_status.has_last_motion ? motion_status.last_motion_epoch : 0;
+#if CAMERA_MOTION_ACTIONS_ENABLED
+    JsonArray actions = doc->createNestedArray("actions");
+    camera_motion_actions_to_json(actions);
+#endif
     JsonArray output_dimensions = doc->createNestedArray("output_dimensions");
     for (size_t index = 0; index < capabilities->output_dimensions_count; ++index) {
         JsonObject dimensions = output_dimensions.createNestedObject();
@@ -107,6 +118,9 @@ void camera_save_config_on_main(const void* opaque, bool* ok, char* message, siz
         .analyze_every_nth_frame = config->camera_motion_analyze_every_nth_frame,
         .sensitivity = config->camera_motion_sensitivity,
         .presence_hold_seconds = config->camera_presence_hold_seconds,
+    #if HAS_DISPLAY
+        .keep_display_awake = config->camera_motion_keep_display_awake,
+    #endif
     };
     if ((request->update_capture_settings && !camera_set_capture_settings(request->settings)) ||
         (request->update_motion_settings && !camera_motion_set_settings(request->motion_settings))) {
@@ -130,6 +144,9 @@ void camera_save_config_on_main(const void* opaque, bool* ok, char* message, siz
         config->camera_motion_analyze_every_nth_frame = request->motion_settings.analyze_every_nth_frame;
         config->camera_motion_sensitivity = request->motion_settings.sensitivity;
         config->camera_presence_hold_seconds = request->motion_settings.presence_hold_seconds;
+    #if HAS_DISPLAY
+        config->camera_motion_keep_display_awake = request->motion_settings.keep_display_awake;
+    #endif
     }
     if (config_manager_save(config)) {
         *ok = true;
@@ -148,21 +165,29 @@ void camera_save_config_on_main(const void* opaque, bool* ok, char* message, siz
     config->camera_motion_analyze_every_nth_frame = previous_motion.analyze_every_nth_frame;
     config->camera_motion_sensitivity = previous_motion.sensitivity;
     config->camera_presence_hold_seconds = previous_motion.presence_hold_seconds;
+#if HAS_DISPLAY
+    config->camera_motion_keep_display_awake = previous_motion.keep_display_awake;
+#endif
     camera_set_capture_settings(previous);
     camera_motion_set_settings(previous_motion);
     strlcpy(message, "camera settings could not be saved", message_len);
 }
 
 bool camera_save_config_raw(const uint8_t* data, size_t len) {
-    StaticJsonDocument<384> doc;
+    BasicJsonDocument<PsramJsonAllocator> doc(kCameraConfigMaxBodyBytes);
     if (deserializeJson(doc, data, len)) return false;
     const bool capture_settings = doc.containsKey("jpeg_quality") || doc.containsKey("feed_target_fps") ||
                                   doc.containsKey("rotation") || doc.containsKey("output_width") ||
                                   doc.containsKey("output_height") || doc.containsKey("exposure_lines") ||
                                   doc.containsKey("white_balance_red_q8") || doc.containsKey("white_balance_blue_q8");
     const bool motion_settings = doc.containsKey("motion_enabled") || doc.containsKey("motion_analyze_every_nth_frame") ||
-                                 doc.containsKey("motion_sensitivity") || doc.containsKey("presence_hold_seconds");
-    if (!capture_settings && !motion_settings) return false;
+                                 doc.containsKey("motion_sensitivity") || doc.containsKey("presence_hold_seconds")
+#if HAS_DISPLAY
+                                 || doc.containsKey("motion_keep_display_awake")
+#endif
+                                 ;
+    const bool motion_actions = doc.containsKey("actions");
+    if (!capture_settings && !motion_settings && !motion_actions) return false;
     if (capture_settings && (!doc.containsKey("jpeg_quality") || !doc.containsKey("feed_target_fps") || !doc.containsKey("rotation") ||
         !doc.containsKey("output_width") || !doc.containsKey("output_height") ||
         !doc.containsKey("exposure_lines") || !doc.containsKey("white_balance_red_q8") ||
@@ -170,9 +195,18 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
         return false;
     }
     if (motion_settings && (!doc.containsKey("motion_enabled") || !doc.containsKey("motion_analyze_every_nth_frame") ||
-        !doc.containsKey("motion_sensitivity") || !doc.containsKey("presence_hold_seconds"))) {
+        !doc.containsKey("motion_sensitivity") || !doc.containsKey("presence_hold_seconds")
+    #if HAS_DISPLAY
+        || !doc.containsKey("motion_keep_display_awake")
+    #endif
+        )) {
         return false;
     }
+#if CAMERA_MOTION_ACTIONS_ENABLED
+    if (motion_actions && !doc["actions"].is<JsonArray>()) return false;
+#else
+    if (motion_actions) return false;
+#endif
 
     const CameraCaptureSettings current_capture = camera_get_capture_settings();
     const CameraMotionSettings current_motion = camera_motion_get_settings();
@@ -195,13 +229,41 @@ bool camera_save_config_raw(const uint8_t* data, size_t len) {
                                                               current_motion.analyze_every_nth_frame),
             .sensitivity = static_cast<uint8_t>(doc["motion_sensitivity"] | current_motion.sensitivity),
             .presence_hold_seconds = static_cast<uint16_t>(doc["presence_hold_seconds"] | current_motion.presence_hold_seconds),
+#if HAS_DISPLAY
+            .keep_display_awake = doc["motion_keep_display_awake"] | current_motion.keep_display_awake,
+#endif
         },
     };
-    bool saved = false;
-    char message[64] = {};
-    return loop_bridge_dispatch(camera_save_config_on_main, &request, sizeof(request),
-                                kCameraConfigSaveTimeoutMs, &saved, message, sizeof(message)) == LOOP_BRIDGE_OK &&
-           saved;
+    if (capture_settings || motion_settings) {
+        bool saved = false;
+        char message[64] = {};
+        if (loop_bridge_dispatch(camera_save_config_on_main, &request, sizeof(request),
+                                 kCameraConfigSaveTimeoutMs, &saved, message, sizeof(message)) != LOOP_BRIDGE_OK ||
+            !saved) {
+            return false;
+        }
+    }
+#if CAMERA_MOTION_ACTIONS_ENABLED
+    if (motion_actions && !camera_motion_actions_save_raw(data, len)) {
+        if (capture_settings || motion_settings) {
+            const CameraConfigSaveRequest rollback = {
+                .update_capture_settings = capture_settings,
+                .update_motion_settings = motion_settings,
+                .settings = current_capture,
+                .motion_settings = current_motion,
+            };
+            bool rolled_back = false;
+            char message[64] = {};
+            if (loop_bridge_dispatch(camera_save_config_on_main, &rollback, sizeof(rollback),
+                                     kCameraConfigSaveTimeoutMs, &rolled_back, message,
+                                     sizeof(message)) != LOOP_BRIDGE_OK || !rolled_back) {
+                LOGE("Camera", "Failed to roll back settings after motion actions save failure");
+            }
+        }
+        return false;
+    }
+#endif
+    return true;
 }
 
 void camera_save_config(AsyncWebServerRequest* request, uint8_t* data, size_t len,
@@ -237,7 +299,7 @@ static ComponentDef camera_motion_component = {
     .nav_order = 35,
     .get_config = camera_get_config,
     .save_config = nullptr,
-    .save_config_body = camera_save_config,
+            .save_config_body = camera_save_config,
     .delete_config = nullptr,
     .custom_actions = nullptr,
     .num_custom_actions = 0,

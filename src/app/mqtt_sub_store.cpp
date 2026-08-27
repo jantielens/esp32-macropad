@@ -9,6 +9,9 @@
 #include "pad_binding.h"
 #include "pad_config.h"
 #include "action_dispatch.h"
+#if HAS_CAMERA
+#include "camera_motion_actions.h"
+#endif
 
 #include <ArduinoJson.h>
 #include "psram_json_allocator.h"
@@ -272,6 +275,9 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(dcfg->screen_saver_wake_binding, &ctx);
         }
     }
+#if CAMERA_MOTION_ACTIONS_ENABLED
+    camera_motion_actions_collect_binding_topics(&ctx);
+#endif
 #endif // HAS_DISPLAY
 
     // Update store entries and subscribe
