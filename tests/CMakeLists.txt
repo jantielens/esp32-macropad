@@ -70,3 +70,9 @@ add_host_gtest(test_voice_tts_request
     test_voice_tts_request.cpp
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_tts_request.cpp
 )
+
+add_host_gtest(test_epaper_next_client_logic
+    test_epaper_next_client_logic.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_next_client_logic.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_transport_crc32.cpp
+)
