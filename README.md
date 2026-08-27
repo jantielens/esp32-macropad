@@ -200,7 +200,11 @@ Building from source, contributing, or adding new board support? See the [develo
 
 ### Running Tests
 
-Host-native unit and integration tests run on the development machine (no ESP32 needed):
+Host-native unit and integration tests run on the development machine (no ESP32 needed). They require CMake 3.20 or later. If CMake is installed through ESP-IDF but is not on `PATH`, use its toolchain directory for the commands below:
+
+```bash
+export PATH="$HOME/.espressif/tools/cmake/<version>/bin:$PATH"
+```
 
 ```bash
 cmake -S . -B build/host-tests

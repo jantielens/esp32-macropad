@@ -148,6 +148,7 @@ ownership. If a new subsystem needs a checkpoint, add focused coverage to
 ### Tests
 
 - `CMakeLists.txt` + `tests/CMakeLists.txt` — Configure, build, and run host-native tests with CTest (no ESP32 needed)
+- Host tests require CMake 3.20 or later. Run the complete suite with `cmake -S . -B build/host-tests`, `cmake --build build/host-tests --parallel`, then `ctest --test-dir build/host-tests --output-on-failure`. When CMake comes from ESP-IDF but is absent from `PATH`, prepend `$HOME/.espressif/tools/cmake/<version>/bin` to `PATH`.
 - `tests/test_expr_eval.cpp` — Expression evaluator tests
 - `tests/test_expr_binding.cpp` — Expression binding integration tests
 - `tests/test_key_sequence.cpp` — Key sequence DSL parser tests
