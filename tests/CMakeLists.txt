@@ -37,3 +37,11 @@ target_compile_definitions(test_epaper_schedule PRIVATE HAS_EPAPER=1)
 add_host_gtest(test_button_shadow_color
     test_button_shadow_color.cpp
 )
+
+add_host_gtest(test_audio_gain
+    test_audio_gain.cpp
+)
+
+add_host_gtest(test_image_rgba_source
+    test_image_rgba_source.cpp
+)
