@@ -29,7 +29,6 @@ extern DeviceConfig device_config;
 #include <esp_heap_caps.h>
 
 #include "version.h"
-#include "project_branding.h"
 
 #define TAG "HealthBind"
 
