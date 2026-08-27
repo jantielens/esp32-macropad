@@ -55,3 +55,13 @@ add_host_gtest(test_music_transport
     test_music_transport.cpp
     ${PROJECT_SOURCE_DIR}/src/app/music_transport.cpp
 )
+
+add_host_gtest(test_voice_transcription_request
+    test_voice_transcription_request.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_transcription_request.cpp
+)
+
+add_host_gtest(test_voice_wav
+    test_voice_wav.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_wav.cpp
+)
