@@ -33,3 +33,7 @@ add_host_gtest(test_epaper_schedule
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_schedule.cpp
 )
 target_compile_definitions(test_epaper_schedule PRIVATE HAS_EPAPER=1)
+
+add_host_gtest(test_button_shadow_color
+    test_button_shadow_color.cpp
+)
