@@ -2,10 +2,7 @@
 #include <stdint.h>
 #include <time.h>
 
-// Mock the schedule module functions
-extern bool epaper_schedule_should_refresh(uint32_t hour_bitmask, int8_t tz_offset, uint64_t utc_epoch);
-extern uint32_t epaper_schedule_seconds_to_next(uint32_t hour_bitmask, int8_t tz_offset, uint64_t utc_epoch);
-extern const uint64_t EPAPER_SCHEDULE_MIN_VALID_EPOCH;
+#include "device_classes/epaper/epaper_schedule.h"
 
 class EpaperScheduleTest : public ::testing::Test {
 protected:
@@ -142,11 +139,10 @@ TEST_F(EpaperScheduleTest, SecondsToNextWrapsToNextDay) {
 // Test: seconds_to_next with timezone offset
 TEST_F(EpaperScheduleTest, SecondsToNextWithTimezoneOffset) {
 		// At UTC 12:00 with tz+5 = local 17:00 (hour 17)
-		// Next enabled hour is 19 (local) = 22 (UTC) = 10 hours later in UTC
+		// Next enabled hour is 19 (local) = 14:00 UTC = 2 hours later
 		uint64_t epoch_12_00_utc = EPOCH_2000_01_01_00_00 + (12 * 3600);
 		uint32_t bitmask = (1U << 19);  // Hour 19 local enabled
 		uint32_t secs = epaper_schedule_seconds_to_next(bitmask, 5, epoch_12_00_utc);
-		// Should be approximately 10 hours = 36000 seconds
-		EXPECT_GE(secs, 36000 - 60);
-		EXPECT_LE(secs, 36000 + 60);
+		EXPECT_GE(secs, 7200 - 60);
+		EXPECT_LE(secs, 7200 + 60);
 }

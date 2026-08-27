@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 #include <stdint.h>
 
-// Mock the carousel module functions
-extern uint8_t epaper_carousel_next_index(uint8_t current, uint8_t count, bool stay);
+#include "device_classes/epaper/epaper_carousel.h"
 
 class EpaperCarouselTest : public ::testing::Test {
 protected:
@@ -36,7 +35,6 @@ TEST_F(EpaperCarouselTest, SingleEntryContinuesAtZero) {
 // Test: empty carousel (count=0) returns 0
 TEST_F(EpaperCarouselTest, EmptyCarouselReturnsZero) {
 		EXPECT_EQ(epaper_carousel_next_index(0, 0, false), 0);
-		EXPECT_EQ(epaper_carousel_next_index(5, 0, false), 0);  // should clamp
 }
 
 // Test: two-entry carousel

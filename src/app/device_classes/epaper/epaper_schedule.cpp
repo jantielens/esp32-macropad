@@ -44,9 +44,7 @@ uint32_t epaper_schedule_seconds_to_next(uint32_t hour_bitmask, int8_t tz_offset
 						// Then add (i-1) * 3600 for each full hour until the target hour
 
 						uint32_t seconds_into_current_hour = utc_epoch % 3600u;
-						uint32_t seconds_to_next_hour = (seconds_into_current_hour > 0)
-								? (3600u - seconds_into_current_hour)
-								: 0;
+						uint32_t seconds_to_next_hour = 3600u - seconds_into_current_hour;
 
 						// Add full hours between current and target
 						uint32_t total_seconds = seconds_to_next_hour + (uint32_t)(i - 1) * 3600u;
