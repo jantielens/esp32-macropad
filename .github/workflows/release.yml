@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*.*.*'  # Matches v0.0.1, v1.0.0, v1.2.3-beta.1, etc.
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to rebuild and publish
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,16 +23,33 @@ jobs:
       version: ${{ steps.extract-version.outputs.version }}
       is_prerelease: ${{ steps.extract-version.outputs.is_prerelease }}
       project_name: ${{ steps.set-matrix.outputs.project_name }}
+      tag_name: ${{ steps.extract-version.outputs.tag_name }}
+      source_sha: ${{ steps.extract-version.outputs.source_sha }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.tag_name || github.ref }}
     
     - name: Extract version from tag
       id: extract-version
       run: |
+        TAG_NAME="${{ inputs.tag_name || github.ref_name }}"
+        if ! [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+          echo "Invalid release tag: $TAG_NAME" >&2
+          exit 1
+        fi
+        if ! git rev-parse --verify --quiet "refs/tags/$TAG_NAME"; then
+          echo "Release tag not found: $TAG_NAME" >&2
+          exit 1
+        fi
+
         # Extract version from tag (remove 'v' prefix)
-        VERSION=${GITHUB_REF#refs/tags/v}
+        VERSION="${TAG_NAME#v}"
+        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "source_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
         echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Tag: $TAG_NAME"
         echo "Version: $VERSION"
         
         # Check if this is a pre-release (contains hyphen)
@@ -73,6 +96,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare-matrix.outputs.tag_name }}
     
     - name: Setup Python
       uses: actions/setup-python@v5
@@ -207,8 +232,8 @@ jobs:
         Board: ${{ matrix.board.name }}
         FQBN: ${{ matrix.board.fqbn }}
         Version: $VERSION
-        Git Tag: ${GITHUB_REF#refs/tags/}
-        Git Commit: ${GITHUB_SHA:0:7}
+        Git Tag: ${{ needs.prepare-matrix.outputs.tag_name }}
+        Git Commit: ${{ needs.prepare-matrix.outputs.source_sha }}
         Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
         Repository: ${{ github.repository }}
         Workflow: ${{ github.workflow }}
@@ -269,6 +294,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare-matrix.outputs.tag_name }}
 
     - name: Cache arduino-cli
       uses: actions/cache@v4
@@ -324,6 +351,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare-matrix.outputs.tag_name }}
     
     - name: Extract changelog for this version
       id: changelog
@@ -377,6 +406,8 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ needs.prepare-matrix.outputs.tag_name }}
+        target_commitish: ${{ needs.prepare-matrix.outputs.source_sha }}
         name: Release v${{ needs.prepare-matrix.outputs.version }}
         body_path: release-notes.md
         files: release-files/*
@@ -391,7 +422,7 @@ jobs:
       run: |
         set -euo pipefail
         for attempt in 1 2 3 4 5; do
-          if gh release edit "${GITHUB_REF_NAME}" --draft=false --repo "${GITHUB_REPOSITORY}"; then
+          if gh release edit "${{ needs.prepare-matrix.outputs.tag_name }}" --draft=false --repo "${GITHUB_REPOSITORY}"; then
             exit 0
           fi
           if [[ "$attempt" -lt 5 ]]; then

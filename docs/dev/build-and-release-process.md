@@ -552,6 +552,16 @@ Verify:
 - ✅ SHA256 checksums included
 - ✅ Not marked as pre-release
 
+### Repair an Existing Release
+
+When a release workflow fails after its tag is published, use the **Run workflow**
+button on the [ESP32 Release workflow](https://github.com/<owner>/<repo>/actions/workflows/release.yml).
+Enter the existing tag, for example `v0.0.5`, in **Existing release tag to rebuild
+and publish**. The manual run uses the current workflow definition but checks out
+the named immutable tag, so it rebuilds the original release source without moving
+the tag. It updates that tag's GitHub Release and publishes it after all assets
+upload.
+
 ---
 
 ## Scenario 2: Pre-Release / Beta Testing
