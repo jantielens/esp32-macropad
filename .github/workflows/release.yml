@@ -380,7 +380,24 @@ jobs:
         name: Release v${{ needs.prepare-matrix.outputs.version }}
         body_path: release-notes.md
         files: release-files/*
-        draft: false
+        draft: true
         prerelease: ${{ needs.prepare-matrix.outputs.is_prerelease }}
         generate_release_notes: false # Keep release notes strictly from CHANGELOG.md
         token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+
+    - name: Publish GitHub Release
+      env:
+        GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        for attempt in 1 2 3 4 5; do
+          if gh release edit "${GITHUB_REF_NAME}" --draft=false --repo "${GITHUB_REPOSITORY}"; then
+            exit 0
+          fi
+          if [[ "$attempt" -lt 5 ]]; then
+            echo "Release publish attempt $attempt failed; retrying in 10 seconds..." >&2
+            sleep 10
+          fi
+        done
+        echo "Unable to publish release after 5 attempts; the uploaded release remains a draft." >&2
+        exit 1

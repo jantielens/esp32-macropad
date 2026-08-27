@@ -526,7 +526,7 @@ git push origin v0.0.5
 **What happens automatically**:
 - GitHub Actions builds firmware for all boards (e.g., esp32-nodisplay, cyd-v2, jc3636w518)
 - Extracts changelog section for v0.0.5
-- Creates GitHub Release with:
+- Creates a draft GitHub Release and uploads:
   - `esp32-template-esp32-nodisplay-v0.0.5.bin` (app-only)
   - `esp32-template-esp32-nodisplay-v0.0.5-bootloader.bin`
   - `esp32-template-esp32-nodisplay-v0.0.5-partitions.bin`
@@ -537,6 +537,7 @@ git push origin v0.0.5
   - `SHA256SUMS.txt`
 - Release notes populated from CHANGELOG.md (no auto-generated “What’s Changed” section)
 - Debug symbols (`.elf`) and build metadata available in workflow artifacts
+- Publishes the release after all assets upload. The final publish operation retries up to five times; if every attempt fails, the completed release remains a draft for manual publication.
 
 **Additional automation for stable releases**:
 - After the GitHub Release is published (and is not a prerelease), `.github/workflows/pages-from-release.yml` deploys the GitHub Pages firmware installer.
@@ -894,9 +895,9 @@ Follow [Semantic Versioning](https://semver.org/):
 2. Build firmware for all boards (matrix)
 3. Build discovered native Extension packages
 4. Extract changelog section
-5. Create GitHub Release
-6. Upload firmware and Extension binaries
-7. Generate checksums
+5. Generate checksums
+6. Create a draft GitHub Release and upload firmware and Extension binaries
+7. Publish the release, retrying transient GitHub API failures
 
 ### Pages Installer Deploy Workflow (`.github/workflows/pages-from-release.yml`)
 
