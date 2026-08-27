@@ -407,6 +407,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio_input.cpp
   - src/app/audio_input.h
   - src/app/audio_input_binding.cpp
+  - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
@@ -503,6 +504,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_CAMERA**
   - src/app/actions/camera_capture_action.cpp
   - src/app/app.ino
+  - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
   - src/app/camera_binding.cpp
   - src/app/camera_drivers.cpp
@@ -571,6 +573,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
   - src/app/audio_input_binding.cpp
+  - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
@@ -823,6 +826,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_registry.h
   - src/app/actions/mqtt_action.cpp
   - src/app/app.ino
+  - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
   - src/app/camera_motion_actions.cpp
   - src/app/camera_motion_actions.h
