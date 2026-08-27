@@ -260,6 +260,12 @@ function padRenderGrid() {
                     ls.title = 'List Widget';
                     cell.appendChild(ls);
                 }
+                if (btn.widget_type === 'camera_preview') {
+                    const camera = document.createElement('div');
+                    camera.className = 'pad-cell-widget-camera';
+                    camera.title = 'Camera Preview Widget';
+                    cell.appendChild(camera);
+                }
                 if (btn.widget_type === 'external') {
                     const ext = document.createElement('div');
                     ext.textContent = 'EXT';

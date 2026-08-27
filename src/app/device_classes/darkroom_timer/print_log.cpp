@@ -399,35 +399,35 @@ static void write_star(const char* id, bool starred) {
 // Binding resolver
 // ============================================================================
 
-static bool print_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus print_resolve(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:no_key");
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (strcmp(params, "id") == 0) {
         snprintf(out, out_len, "%s", s_next_id);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
     if (strcmp(params, "last_id") == 0) {
         snprintf(out, out_len, "%s", s_last_id);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
     if (strcmp(params, "count") == 0) {
         snprintf(out, out_len, "%u", (unsigned)s_count);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
     if (strcmp(params, "starred") == 0) {
         snprintf(out, out_len, "%d", s_last_starred ? 1 : 0);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
     if (strcmp(params, "star_label") == 0) {
         snprintf(out, out_len, "%s", s_last_starred ? "*" : "");
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     snprintf(out, out_len, "ERR:bad_key");
-    return false;
+    return BINDING_RESOLVER_UNAVAILABLE;
 }
 
 static void print_collect(const char* params, void* user_data) {
@@ -435,16 +435,17 @@ static void print_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void print_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[print:key] or [print:key;format]";
-    o["example"] = "Prints: [print:count]";
-    o["keys"]    = "id, last_id, count";
-    o["note"]    = "Darkroom print-log counters.";
+static const char* const kPrintBindingKeys[] = {
+    "id", "last_id", "count", "starred", "star_label",
+};
+
+static uint8_t print_binding_key_count() {
+    return sizeof(kPrintBindingKeys) / sizeof(kPrintBindingKeys[0]);
 }
-#endif
+
+static const char* print_binding_key_at(uint8_t index) {
+    return index < print_binding_key_count() ? kPrintBindingKeys[index] : nullptr;
+}
 
 // ============================================================================
 // Public API
@@ -544,15 +545,13 @@ void print_log_init() {
     strlcpy(s_last_id, "---", sizeof(s_last_id));
     s_last_starred = false;
 
-    if (!binding_template_register("print", print_resolve, print_collect)) {
+    if (!binding_template_register("print", print_resolve, print_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                    print_binding_key_count, print_binding_key_at})) {
         LOGE(TAG, "Failed to register print binding scheme");
     } else {
         LOGI(TAG, "Print binding scheme registered");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("print", print_scheme_describe);
-#endif
-
     LOGI(TAG, "Init: next=%s count=%u", s_next_id, (unsigned)s_count);
 }
 

@@ -5,6 +5,8 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#include "binding_schema.h"
+#include "config_manager.h"
 #include "device_telemetry.h"
 #include "repo_slug_config.h"
 #include "log_manager.h"
@@ -20,6 +22,8 @@
 #include <ArduinoJson.h>
 #include <WiFi.h>
 
+extern DeviceConfig device_config;
+
 #if HAS_DISPLAY
 #include "display_manager.h"
 #include "pad_config.h"
@@ -28,6 +32,31 @@
 #if HAS_DISPLAY || HAS_BUTTON
 #include "action_catalog.h"
 #endif
+
+static void print_json_string(AsyncResponseStream *response, const char *value) {
+		response->print('"');
+		for (const char *cursor = value ? value : ""; *cursor; ++cursor) {
+			const unsigned char character = static_cast<unsigned char>(*cursor);
+			switch (character) {
+				case '"': response->print("\\\""); break;
+				case '\\': response->print("\\\\"); break;
+				case '\b': response->print("\\b"); break;
+				case '\f': response->print("\\f"); break;
+				case '\n': response->print("\\n"); break;
+				case '\r': response->print("\\r"); break;
+				case '\t': response->print("\\t"); break;
+				default:
+					if (character < 0x20) {
+						char escaped[7];
+						snprintf(escaped, sizeof(escaped), "\\u%04x", character);
+						response->print(escaped);
+					} else {
+						response->print(static_cast<char>(character));
+					}
+			}
+		}
+		response->print('"');
+}
 
 
 // GET /api/info - Get device information
@@ -65,7 +94,9 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(device_telemetry_free_sketch_space());
 		response->print(",\"mac_address\":\"");
 		response->print(WiFi.macAddress());
-		response->print("\",\"wifi_hostname\":\"");
+		response->print("\",\"device_name\":");
+		print_json_string(response, device_config.device_name);
+		response->print(",\"wifi_hostname\":\"");
 		response->print(WiFi.getHostname());
 		response->print("\",\"mdns_name\":\"");
 		response->print(WiFi.getHostname());
@@ -131,6 +162,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_SOUND_PLAYER ? "true" : "false");
 		response->print(",\"has_native_extensions\":");
 		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
+		response->print(",\"has_camera\":");
+		response->print(HAS_CAMERA ? "true" : "false");
 
 		// Action authoring catalog: only computed and sent when explicitly
 		// requested, so the bare response used by reboot connection polling
@@ -231,6 +264,20 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 
 		response->print("}");
 		request->send(response);
+}
+
+// GET /api/bindings - Live binding scheme metadata for portal validation.
+void handleGetBindings(AsyncWebServerRequest *request) {
+		if (!portal_auth_gate(request)) return;
+
+		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
+		if (!doc || doc->capacity() == 0) {
+			request->send(503, "application/json", "{\"error\":\"binding schema unavailable\"}");
+			return;
+		}
+		JsonArray schemes = (*doc)["schemes"].to<JsonArray>();
+		binding_schema_emit(&schemes);
+		web_portal_send_json_chunked(request, doc);
 }
 
 // GET /api/health - Get device health statistics

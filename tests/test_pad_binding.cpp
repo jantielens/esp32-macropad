@@ -32,8 +32,8 @@ extern "C" void mqtt_sub_store_ensure_binding_subscribed(const char* binding_tem
     g_subscription_checks.emplace_back(binding_template ? binding_template : "");
 }
 
-static bool mock_mqtt_resolve(const char* params, char* out, size_t out_len) {
-    if (!params) return false;
+static BindingResolverStatus mock_mqtt_resolve(const char* params, char* out, size_t out_len) {
+    if (!params) return BINDING_RESOLVER_UNAVAILABLE;
     // Parse "topic;path;format" — key is "topic;path"
     char buf[256];
     snprintf(buf, sizeof(buf), "%s", params);
@@ -52,9 +52,9 @@ static bool mock_mqtt_resolve(const char* params, char* out, size_t out_len) {
         key = buf;
     }
     auto it = g_mqtt_values.find(key);
-    if (it == g_mqtt_values.end()) return false;
+    if (it == g_mqtt_values.end()) return BINDING_RESOLVER_UNAVAILABLE;
     snprintf(out, out_len, "%s", it->second.c_str());
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 static void mock_mqtt_collect(const char* params, void* user_data) {
@@ -70,16 +70,16 @@ static void mock_mqtt_collect(const char* params, void* user_data) {
 
 static std::map<std::string, std::string> g_health_values;
 
-static bool mock_health_resolve(const char* params, char* out, size_t out_len) {
-    if (!params) return false;
+static BindingResolverStatus mock_health_resolve(const char* params, char* out, size_t out_len) {
+    if (!params) return BINDING_RESOLVER_UNAVAILABLE;
     char buf[128];
     snprintf(buf, sizeof(buf), "%s", params);
     char* semi = strchr(buf, ';');
     if (semi) *semi = '\0';
     auto it = g_health_values.find(buf);
-    if (it == g_health_values.end()) return false;
+    if (it == g_health_values.end()) return BINDING_RESOLVER_UNAVAILABLE;
     snprintf(out, out_len, "%s", it->second.c_str());
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 static void mock_health_collect(const char* params, void* user_data) {
@@ -109,10 +109,10 @@ static char* split_format(char* buf) {
     return fmt[0] ? fmt : NULL;
 }
 
-static bool expr_test_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus expr_test_resolve(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:empty expr");
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
     char buf[BINDING_TEMPLATE_MAX_LEN];
     snprintf(buf, sizeof(buf), "%s", params);
@@ -124,13 +124,13 @@ static bool expr_test_resolve(const char* params, char* out, size_t out_len) {
 
     if (strstr(resolved, "---") != NULL) {
         snprintf(out, out_len, "---");
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     char eval_result[EXPR_STR_MAX];
     if (!expr_eval(resolved, eval_result, sizeof(eval_result))) {
         snprintf(out, out_len, "%s", eval_result);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (fmt) {
@@ -144,7 +144,7 @@ static bool expr_test_resolve(const char* params, char* out, size_t out_len) {
     } else {
         snprintf(out, out_len, "%s", eval_result);
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 static void expr_test_collect(const char* params, void* user_data) {
@@ -580,9 +580,11 @@ int main() {
     printf("=== pad binding integration tests ===\n\n");
 
     // Register schemes (order: inner before outer)
-    binding_template_register("mqtt",   mock_mqtt_resolve,   mock_mqtt_collect);
-    binding_template_register("health", mock_health_resolve, mock_health_collect);
-    binding_template_register("expr",   expr_test_resolve,   expr_test_collect);
+    const BindingSchemeSpec free_form = {1, 3, 2, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr};
+    const BindingSchemeSpec expression = {1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr};
+    binding_template_register("mqtt",   mock_mqtt_resolve,   mock_mqtt_collect, free_form);
+    binding_template_register("health", mock_health_resolve, mock_health_collect, free_form);
+    binding_template_register("expr",   expr_test_resolve,   expr_test_collect, expression);
     pad_binding_init();  // registers "pad" scheme
 
     // Resolution tests

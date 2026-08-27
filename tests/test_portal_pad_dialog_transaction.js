@@ -6,6 +6,8 @@ class Element {
     constructor() {
         this.value = '';
         this.checked = false;
+        this.textContent = '';
+        this.style = { display: 'none' };
     }
 }
 
@@ -54,6 +56,8 @@ context.padDialogOk(true);
 assert.strictEqual(context.padState.buttons, originalButtons);
 assert.strictEqual(context.padState.buttons.length, 1);
 assert.strictEqual(context.padState.buttons[0], originalButton);
+assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, '');
+assert.match(document.getElementById('pad-edit-validation-error').textContent, /1 binding error/);
 
 context.bindingValidateDialog = function() { return { valid: true, count: 0 }; };
 context.padDialogOk(true);
@@ -61,5 +65,6 @@ assert.strictEqual(context.padState.buttons.length, 1);
 assert.notStrictEqual(context.padState.buttons[0], originalButton);
 assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
+assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
 
 console.log('portal_pad_dialog_transaction: PASS');

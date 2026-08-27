@@ -35,12 +35,26 @@ static void brew_log_path(uint16_t id, char* buf, size_t len) {
     snprintf(buf, len, "%s/%04u.json", BREW_LOG_DIR, (unsigned)id);
 }
 
+static bool ensure_brew_log_dir() {
+    if (Storage.exists(BREW_LOG_DIR)) return true;
+    if (Storage.mkdir(BREW_LOG_DIR)) return true;
+    LOGE(TAG, "Failed to create %s", BREW_LOG_DIR);
+    return false;
+}
+
 static uint16_t next_id() {
     return s_prefs.getUShort(BREW_LOG_NVS_KEY_NEXT, 1);
 }
 
 static void set_next_id(uint16_t id) {
     s_prefs.putUShort(BREW_LOG_NVS_KEY_NEXT, id);
+}
+
+void brew_log_init() {
+    if (!s_prefs.begin(BREW_LOG_NVS_NAMESPACE, false)) {
+        LOGE(TAG, "Failed to open NVS namespace");
+    }
+    ensure_brew_log_dir();
 }
 
 // Scan /brews/ to find the lowest ID file (for eviction).
@@ -82,6 +96,8 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
                        const BrewMarker* markers, uint8_t marker_count,
                        const BrewCapture* captures, uint8_t capture_count) {
     const char* template_name = tmpl ? tmpl->name : "free_pour";
+    if (!ensure_brew_log_dir()) return 0;
+
     // Evict if at capacity
     if (brew_log_count() >= BREW_LOG_MAX_BREWS) {
         evict_oldest();
@@ -174,7 +190,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
         bool has_targets = false;
         for (uint8_t i = 0; i < tmpl->stage_count; i++) {
             const BrewStage& st = tmpl->stages[i];
-            if (st.target_weight > 0 || st.target_flow_rate > 0 || st.auto_time_ms > 0) {
+            if (st.target_weight > 0 || st.target_flow_rate > 0 || st.target_time_ms > 0) {
                 has_targets = true;
                 break;
             }
@@ -184,7 +200,7 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
             bool first = true;
             for (uint8_t i = 0; i < tmpl->stage_count; i++) {
                 const BrewStage& st = tmpl->stages[i];
-                if (st.target_weight <= 0 && st.target_flow_rate <= 0 && st.auto_time_ms == 0) continue;
+                if (st.target_weight <= 0 && st.target_flow_rate <= 0 && st.target_time_ms == 0) continue;
                 if (!first) f.print(',');
                 first = false;
                 write_json_string(f, st.name);
@@ -199,9 +215,9 @@ uint16_t brew_log_save(uint32_t elapsed_ms, float final_weight,
                     f.printf("\"flow_rate\":%.1f", st.target_flow_rate);
                     first_f = false;
                 }
-                if (st.auto_time_ms > 0) {
+                if (st.target_time_ms > 0) {
                     if (!first_f) f.print(',');
-                    f.printf("\"time_s\":%u", (unsigned)(st.auto_time_ms / 1000));
+                    f.printf("\"time_s\":%u", (unsigned)(st.target_time_ms / 1000));
                     first_f = false;
                 }
                 if (st.capture_key[0]) {
@@ -287,6 +303,7 @@ uint16_t brew_log_count() {
 // ============================================================================
 
 uint16_t brew_log_import_raw(const char* json, size_t json_len) {
+    if (!ensure_brew_log_dir()) return 0;
     if (brew_log_count() >= BREW_LOG_MAX_BREWS) return 0;
 
     uint16_t id = next_id();

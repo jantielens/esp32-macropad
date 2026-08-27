@@ -99,7 +99,10 @@ function actionEditorGenericFieldsHTML(prefix) {
                 html += '</label>';
                 if (field.type === 'select') {
                     html += '<select class="form-select form-select-sm" id="' + id + '">';
-                    html += field.command_options ? actionEditorCommandOptionsHTML(entry.type) : '';
+                    if (field.command_options) html += actionEditorCommandOptionsHTML(entry.type);
+                    else if (field.options) html += field.options.map(function(option) {
+                        return '<option value="' + option.id + '">' + option.label + '</option>';
+                    }).join('');
                     html += '</select>';
                 } else {
                     var inputType = field.type === 'number' ? 'number' : 'text';
@@ -123,7 +126,7 @@ function actionEditorSetGenericFields(prefix, type, action) {
         var el = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
         if (!el) return;
         if (field.type === 'toggle') el.checked = !!action[field.name];
-        else el.value = action[field.name] === undefined ? '' : action[field.name];
+        else el.value = action[field.name] === undefined ? (field.default || '') : action[field.name];
     });
 }
 
@@ -296,7 +299,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group" id="' + prefix + '-timer-duration-group" style="display:none;">';
     h += '<label class="form-label" for="' + prefix + '-timer-duration">Duration (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-duration" placeholder="e.g. 300">';
-    h += '<small>Positive whole seconds. Supports bindings.</small>';
+    h += '<small>Positive whole seconds. Start always uses it; Toggle uses it only when starting a stopped timer, not when pausing or resuming. Supports bindings.</small>';
     h += '</div>';
     h += '<div class="form-group" id="' + prefix + '-timer-set-group" style="display:none;">';
     h += '<label class="form-label" for="' + prefix + '-timer-set-sec">Countdown (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';

@@ -8,6 +8,7 @@
 #include "mqtt_screen.h"
 #include "mqtt_wake.h"
 #include "mqtt_audio.h"
+#include "mqtt_camera.h"
 #include "mqtt_notify.h"
 #include "mqtt_triggers.h"
 #include "device_telemetry.h"
@@ -18,6 +19,7 @@
 #include "wifi_manager.h"
 #include "device_class.h"
 #include "duty_cycle.h"
+#include "dma2d_arbiter.h"
 #include "hw_buttons.h"
 #include "hw_button_config.h"
 #if HAS_DISPLAY || HAS_BUTTON
@@ -32,23 +34,14 @@
 #include <WiFi.h>
 
 #if HAS_DISPLAY
+#include "binding_builtin_schemes.h"
 #include "display_manager.h"
-#include "expr_binding.h"
-#include "health_binding.h"
 #include "icon_store.h"
-#include "pad_binding.h"
 #include "sound_store.h"
 #include "boot_actions.h"
 #include "pad_block.h"
 #include "list_provider.h"
-#include "list_binding.h"
-#include "net_binding.h"
 #include "time_binding.h"
-#include "timer_binding.h"
-#include "music_binding.h"
-#if HAS_AUDIO_INPUT && HAS_DISPLAY
-#include "audio_input_binding.h"
-#endif
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
@@ -78,6 +71,7 @@
 #include "sd_probe.h"
 #include "sd_storage.h"
 #include "storage.h"
+#include "ota_activity.h"
 
 #if HAS_NATIVE_EXTENSIONS
 #include "native_extension.h"
@@ -92,6 +86,13 @@ SET_LOOP_TASK_STACK_SIZE(LOOP_TASK_STACK_SIZE);
 
 #if HAS_TOUCH
 #include "touch_manager.h"
+#endif
+
+#if HAS_CAMERA
+#include "camera.h"
+#include "camera_feed.h"
+#include "camera_motion.h"
+#include "camera_motion_actions.h"
 #endif
 
 // Configuration
@@ -146,6 +147,8 @@ static bool check_config_mode_button() {
 
 void setup()
 {
+	dma2d_arbiter_init();
+
 	// Optional device-side history for sparklines (/api/health/history)
 	// Start as early as possible after a device boot.
 	#if HEALTH_HISTORY_ENABLED
@@ -249,11 +252,19 @@ void setup()
 	// which can run in the background while touch, config, and pads initialize.
 	wifi_manager_early_init();
 
-	#if HAS_TOUCH
-	// Initialize Wire bus mutex before touch and audio (both may share bus 0)
+	#if HAS_TOUCH || HAS_CAMERA
+	// Initialize Wire bus mutex before touch, audio, and camera SCCB access.
 	i2c_bus_init();
+	#endif
+
+	#if HAS_TOUCH
 	// Initialize touch after display is ready
 	touch_manager_init();
+	#endif
+
+	#if HAS_CAMERA
+	camera_init();
+	camera_feed_init();
 	#endif
 
 	// Initialize configuration manager
@@ -286,6 +297,63 @@ void setup()
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		device_config.magic = CONFIG_MAGIC;
 	}
+
+	#if HAS_CAMERA
+	if (!camera_set_capture_settings({
+		.jpeg_quality = device_config.camera_jpeg_quality,
+		.feed_target_fps = device_config.camera_feed_target_fps,
+		.rotation = device_config.camera_rotation,
+		.output_width = device_config.camera_output_width,
+		.output_height = device_config.camera_output_height,
+		.exposure_lines = device_config.camera_exposure_lines,
+		.white_balance_red_q8 = device_config.camera_white_balance_red_q8,
+		.white_balance_blue_q8 = device_config.camera_white_balance_blue_q8,
+	})) {
+		device_config.camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
+		device_config.camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
+		device_config.camera_rotation = CAMERA_ROTATION_DEFAULT;
+		device_config.camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
+		device_config.camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
+		device_config.camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
+		device_config.camera_white_balance_red_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+		device_config.camera_white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+		camera_set_capture_settings({
+			.jpeg_quality = device_config.camera_jpeg_quality,
+			.feed_target_fps = device_config.camera_feed_target_fps,
+			.rotation = device_config.camera_rotation,
+			.output_width = device_config.camera_output_width,
+			.output_height = device_config.camera_output_height,
+			.exposure_lines = device_config.camera_exposure_lines,
+			.white_balance_red_q8 = device_config.camera_white_balance_red_q8,
+			.white_balance_blue_q8 = device_config.camera_white_balance_blue_q8,
+		});
+		LOGW("Camera", "Invalid saved camera settings; restored defaults");
+	}
+	if (!camera_motion_set_settings({
+		.enabled = device_config.camera_motion_enabled,
+		.analyze_every_nth_frame = device_config.camera_motion_analyze_every_nth_frame,
+		.sensitivity = device_config.camera_motion_sensitivity,
+		.presence_hold_seconds = device_config.camera_presence_hold_seconds,
+		#if HAS_DISPLAY
+		.keep_display_awake = device_config.camera_motion_keep_display_awake,
+		#endif
+	})) {
+		device_config.camera_motion_enabled = false;
+		device_config.camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
+		device_config.camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
+		device_config.camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
+		camera_motion_set_settings({
+			.enabled = false,
+			.analyze_every_nth_frame = device_config.camera_motion_analyze_every_nth_frame,
+			.sensitivity = device_config.camera_motion_sensitivity,
+			.presence_hold_seconds = device_config.camera_presence_hold_seconds,
+			#if HAS_DISPLAY
+			.keep_display_awake = false,
+			#endif
+		});
+		LOGW("Camera", "Invalid saved motion settings; restored defaults");
+	}
+	#endif
 
 	#if HAS_SOUND_PLAYER
 	// The audio worker discovers Music files as soon as it starts, so mount the
@@ -380,7 +448,7 @@ void setup()
 	// Load swipe gesture actions from LittleFS (uses same filesystem)
 	swipe_config_init();
 
-	// Load device-level button defaults from LittleFS
+	// Load device-level pad and button defaults from LittleFS
 	button_defaults_init();
 
 	// Load boot actions from LittleFS
@@ -396,6 +464,10 @@ void setup()
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
+	#endif
+
+	#if CAMERA_MOTION_ACTIONS_ENABLED
+	camera_motion_actions_init();
 	#endif
 
 	#if HAS_SOUND_PLAYER
@@ -492,6 +564,7 @@ void setup()
 			mqtt_screen_init();
 			mqtt_wake_init(&device_config);
 			mqtt_audio_init();
+			mqtt_camera_init();
 			mqtt_notify_init();
 #if MQTT_TRIGGERS_ENABLED
 			mqtt_triggers_init();
@@ -503,17 +576,7 @@ void setup()
 	#endif
 
 	#if HAS_DISPLAY
-	health_binding_init();
-	time_binding_init();
-	expr_binding_init();
-	pad_binding_init();
-	timer_binding_init();
-	music_binding_init();
-	#if HAS_AUDIO_INPUT && HAS_DISPLAY
-	audio_input_binding_init();
-	#endif
-	list_binding_init();
-	net_binding_init();
+	binding_builtin_schemes_init();
 	timer_config_init();
 	#endif
 
@@ -596,6 +659,10 @@ void loop()
 	action_dispatch_loop();
 	#endif
 
+	#if HAS_CAMERA
+	camera_feed_loop();
+	#endif
+
 	#if HAS_DISPLAY
 	message_bubble_loop();
 	visual_alert_loop();
@@ -619,14 +686,17 @@ void loop()
 	#endif
 
 	#if HAS_MQTT
+	if (!ota_activity_is_active()) {
 	mqtt_manager.loop();
 	mqtt_screen_loop();
 	mqtt_wake_loop();
 	mqtt_audio_loop();
+	mqtt_camera_loop();
 	mqtt_notify_loop();
 #if MQTT_TRIGGERS_ENABLED
-	mqtt_triggers_loop();
+		mqtt_triggers_loop();
 #endif
+	}
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).

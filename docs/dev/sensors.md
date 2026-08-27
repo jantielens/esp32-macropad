@@ -12,6 +12,11 @@ Key points:
 Optional testing helper:
 - A dummy sensor can be enabled to emit a synthetic `dummy_value` for UI/MQTT/BLE testing.
 
+Battery-powered boards can enable the reusable ADC battery adapter. It averages
+calibrated ADC millivolt readings, applies the board's divider and calibration
+factor, and publishes voltage plus an approximate resting single-cell LiPo
+percentage through the API, MQTT/Home Assistant, and BTHome BLE telemetry.
+
 
 ## Step-by-Step: Add Your Own Sensor (BME280 Example)
 This is the full pattern using the BME280 adapter as reference.
@@ -68,6 +73,37 @@ For a simple presence-only LD2410 setup, use its **OUT** pin as a digital input:
 - Expose it in JSON as `sensors.presence` (true/false/null).
 - Publish a **dedicated MQTT event topic** (e.g. `devices/<sanitized>/presence/state`) on changes only.
 - Publish HA discovery as a `binary_sensor` with device_class `presence` and `stat_t` pointing to that event topic.
+
+### Example: AHT10 (I2C temperature and humidity)
+
+Enable it in your board override:
+
+```cpp
+#define HAS_SENSOR_AHT10 true
+#define SENSOR_I2C_SDA 19
+#define SENSOR_I2C_SCL 20
+```
+
+The adapter supports AHT10 and AHT20 devices at address `0x38`. It publishes
+`temperature` and `humidity`, registers Home Assistant sensors, and advertises
+BTHome temperature and humidity objects when `HAS_BLE` is enabled.
+
+### Example: Battery ADC
+
+Enable the generic adapter with the hardware-specific voltage-divider values:
+
+```cpp
+#define HAS_SENSOR_BATTERY_ADC true
+#define BATTERY_ADC_PIN 0
+#define BATTERY_ADC_DIVIDER 2.0f
+#define BATTERY_ADC_CALIBRATION 1.0f
+#define BATTERY_ADC_SAMPLE_COUNT 8
+```
+
+The adapter publishes `battery_voltage` in volts and `battery_percentage` as an
+approximate state of charge for a resting single-cell LiPo. Adjust
+`BATTERY_ADC_CALIBRATION` after comparing the reported voltage with a trusted
+multimeter reading.
 
 ### Example: Dummy sensor (synthetic values)
 Enable it in your board override:

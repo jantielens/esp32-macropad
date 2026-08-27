@@ -56,6 +56,10 @@ static void numericrocker_parse(const JsonObject& btn, uint8_t* data) {
     cfg->large_step = btn["widget_numericrocker_large_step"] | 10.0f;
     if (cfg->large_step < 0) cfg->large_step = 0;
 
+    int zone_scale = btn["widget_numericrocker_zone_scale_pct"] | 100;
+    cfg->zone_scale_pct = (uint8_t)nr_clamp(zone_scale, NR_ZONE_SCALE_MIN_PCT,
+                                             NR_ZONE_SCALE_MAX_PCT);
+
     widget_parse_field(btn["widget_numericrocker_color"], cfg->indicator_color,
                        sizeof(cfg->indicator_color), "#FFFFFF");
 
@@ -119,9 +123,12 @@ static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Use the tile's content area (honors the button's content padding) so the
     // chevrons inset consistently with labels and other widgets.
     lv_obj_update_layout(tile);
-    int span = cfg->horizontal ? (int)lv_obj_get_content_width(tile)
-                               : (int)lv_obj_get_content_height(tile);
-    NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step);
+    lv_area_t content;
+    lv_obj_get_content_coords(tile, &content);
+    int span = cfg->horizontal ? (content.x2 - content.x1 + 1)
+                               : (content.y2 - content.y1 + 1);
+    NRZoneLayout z = nr_compute_zones(span, cfg->small_step, cfg->large_step,
+                                      cfg->zone_scale_pct);
 
     // Create chevrons only for active zones.
     // Use LV_ALIGN_CENTER so LVGL centers the label's midpoint at the offset.
@@ -203,6 +210,7 @@ static void numericrocker_describe(JsonObject& out) {
     add("widget_numericrocker_axis","string","'h'/'horizontal' or 'v'/'vertical'");
     add("widget_numericrocker_small_step","number","inner-arrow step (± per tap)");
     add("widget_numericrocker_large_step","number","outer-arrow step (± per tap)");
+    add("widget_numericrocker_zone_scale_pct","number","tap-area scale percentage (50-150, default 100)");
     // The adjust action is a NESTED action OBJECT (same shape as a button
     // action) — NOT a bare string. Spell that out with an example so an LLM does
     // not emit "volume"/"brightness" as a string (which the device ignores).

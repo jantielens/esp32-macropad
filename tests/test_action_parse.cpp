@@ -558,6 +558,12 @@ TEST(system_action_screensaver) {
     ASSERT_STR(act.payload.system.system_command, "screensaver");
 }
 
+TEST(system_action_wake_display) {
+    ButtonAction act = round_trip("{\"type\":\"system\",\"system_command\":\"wake_display\"}");
+    ASSERT_STR(act.type, "system");
+    ASSERT_STR(act.payload.system.system_command, "wake_display");
+}
+
 // ============================================================================
 // Visual alert action
 // ============================================================================
@@ -750,6 +756,7 @@ int main() {
     RUN(system_action_round_trip);
     RUN(system_command_not_serialized_when_empty);
     RUN(system_action_screensaver);
+    RUN(system_action_wake_display);
 
     printf("\n--- Visual alert action ---\n");
     RUN(visual_alert_action_parse);

@@ -76,7 +76,9 @@ static configRUN_TIME_COUNTER_TYPE s_idle_rt_last[portNUM_PROCESSORS] = {};
 static int64_t           s_wall_us_last = 0;
 static bool              s_cpu_first_sample = true;
 #endif
-static volatile int      s_cpu_usage = -1;           // Written by timer, read by getter
+static portMUX_TYPE      s_cpu_usage_mux = portMUX_INITIALIZER_UNLOCKED;
+static int               s_cpu_usage = -1;
+static int               s_cpu_usage_per_core[portNUM_PROCESSORS] = {};
 static esp_timer_handle_t s_cpu_timer = nullptr;
 
 // /api/health min/max window sampling (time-based rollover).
@@ -291,12 +293,19 @@ static void cpu_timer_cb(void*) {
 	const int64_t wall_delta = wall_now - s_wall_us_last;
 	if (wall_delta <= 0) return;
 
-	// Sum idle microseconds across all cores.
+	// Derive each core's usage while retaining the aggregate for existing clients.
 	int64_t idle_us_total = 0;
+	int per_core_usage[portNUM_PROCESSORS] = {};
 	for (int c = 0; c < portNUM_PROCESSORS; c++) {
 		const configRUN_TIME_COUNTER_TYPE cur = ulTaskGetIdleRunTimeCounterForCore(c);
-		idle_us_total += (int64_t)(cur - s_idle_rt_last[c]);
+		const int64_t idle_us = (int64_t)(cur - s_idle_rt_last[c]);
+		idle_us_total += idle_us;
 		s_idle_rt_last[c] = cur;
+
+		int usage = (int)(100 - (idle_us * 100 / wall_delta));
+		if (usage < 0) usage = 0;
+		if (usage > 100) usage = 100;
+		per_core_usage[c] = usage;
 	}
 	s_wall_us_last = wall_now;
 
@@ -307,7 +316,12 @@ static void cpu_timer_cb(void*) {
 	if (usage < 0)   usage = 0;
 	if (usage > 100)  usage = 100;
 
+	portENTER_CRITICAL(&s_cpu_usage_mux);
+	for (int c = 0; c < portNUM_PROCESSORS; c++) {
+		s_cpu_usage_per_core[c] = per_core_usage[c];
+	}
 	s_cpu_usage = usage;
+	portEXIT_CRITICAL(&s_cpu_usage_mux);
 #else
 	// Per-core idle-counter API unavailable on this IDF — leave s_cpu_usage at -1.
 	(void)0;
@@ -610,7 +624,37 @@ void device_telemetry_start_cpu_monitoring() {
 }
 
 int device_telemetry_get_cpu_usage() {
-		return s_cpu_usage;  // Atomic read of a volatile int
+		int aggregate = -1;
+		device_telemetry_get_cpu_usage_snapshot(&aggregate, nullptr, 0);
+		return aggregate;
+}
+
+int device_telemetry_get_cpu_usage_for_core(uint8_t core) {
+#if TELEMETRY_HAS_PER_CORE_IDLE_COUNTER
+		if (core >= portNUM_PROCESSORS) return -1;
+		int usage = -1;
+		portENTER_CRITICAL(&s_cpu_usage_mux);
+		if (s_cpu_usage >= 0) usage = s_cpu_usage_per_core[core];
+		portEXIT_CRITICAL(&s_cpu_usage_mux);
+		return usage;
+#else
+		(void)core;
+		return -1;
+#endif
+}
+
+void device_telemetry_get_cpu_usage_snapshot(int* aggregate,
+                                              int* per_core_values,
+                                              uint8_t max_cores) {
+	portENTER_CRITICAL(&s_cpu_usage_mux);
+	if (aggregate) *aggregate = s_cpu_usage;
+	if (per_core_values) {
+		const uint8_t core_count = max_cores < portNUM_PROCESSORS ? max_cores : portNUM_PROCESSORS;
+		for (uint8_t core = 0; core < core_count; ++core) {
+			per_core_values[core] = s_cpu_usage >= 0 ? s_cpu_usage_per_core[core] : -1;
+		}
+	}
+	portEXIT_CRITICAL(&s_cpu_usage_mux);
 }
 
 void device_telemetry_start_health_window_sampling() {
@@ -752,12 +796,28 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 		doc["reset_reason"] = reset_str;
 
 		// CPU usage (nullable when runtime stats are unavailable)
-		const int cpu_usage = device_telemetry_get_cpu_usage();
+		int cpu_usage = -1;
+		int cpu_usage_per_core[portNUM_PROCESSORS] = {};
+		device_telemetry_get_cpu_usage_snapshot(&cpu_usage, cpu_usage_per_core, portNUM_PROCESSORS);
 		if (cpu_usage < 0) {
 				doc["cpu_usage"] = nullptr;
 		} else {
 				doc["cpu_usage"] = cpu_usage;
 		}
+
+		// Per-core values are API-only diagnostics. Keep MQTT's established
+		// aggregate schema unchanged, and omit the fields where unavailable.
+		#if portNUM_PROCESSORS > 1
+		if (include_api_only_fields) {
+			for (uint8_t core = 0; core < portNUM_PROCESSORS; ++core) {
+				const int core_usage = cpu_usage_per_core[core];
+				if (core_usage < 0) continue;
+				char field[20];
+				snprintf(field, sizeof(field), "cpu_usage_core_%u", (unsigned)core);
+				doc[field] = core_usage;
+			}
+		}
+		#endif
 
 		// CPU / SoC temperature (persistent handle, installed once in device_telemetry_init)
 #if SOC_TEMP_SENSOR_SUPPORTED

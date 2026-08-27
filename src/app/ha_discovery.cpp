@@ -21,30 +21,29 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		// - Single JSON publish model: all entities share the same stat_t.
 		// - value_template extracts fields from the JSON payload.
 
-		ha_discovery_publish_sensor_config(mqtt, "uptime", "Uptime", "{{ value_json.uptime_seconds }}", "s", "duration", "measurement", "diagnostic");
+		ha_discovery_publish_sensor_config(mqtt, "uptime", "Uptime", "{{ value_json.uptime_seconds }}", "s", "duration", "", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "reset_reason", "Reset Reason", "{{ value_json.reset_reason }}", "", "", "", "diagnostic");
 
-		ha_discovery_publish_sensor_config(mqtt, "cpu_usage", "CPU Usage", "{{ value_json.cpu_usage }}", "%", "", "measurement", "diagnostic");
+		ha_discovery_publish_sensor_config(mqtt, "cpu_usage", "CPU Usage", "{{ value_json.cpu_usage }}", "%", "", "", "diagnostic");
 		ha_discovery_publish_sensor_config(mqtt, "cpu_temperature", "Core Temp", "{{ value_json.cpu_temperature }}", "°C", "temperature", "measurement", "diagnostic");
 		delay(1);  // yield — let SDIO transport drain
 
-		ha_discovery_publish_sensor_config(mqtt, "heap_fragmentation", "Heap Fragmentation", "{{ value_json.heap_fragmentation }}", "%", "", "measurement", "diagnostic");
+		ha_discovery_publish_sensor_config(mqtt, "heap_fragmentation", "Heap Fragmentation", "{{ value_json.heap_fragmentation }}", "%", "", "", "diagnostic", false);
 
-		ha_discovery_publish_sensor_config(mqtt, "heap_internal_free", "Internal Heap Free", "{{ value_json.heap_internal_free }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "heap_internal_min", "Internal Heap Min", "{{ value_json.heap_internal_min }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "heap_internal_largest", "Internal Heap Largest", "{{ value_json.heap_internal_largest }}", "B", "", "measurement", "diagnostic");
+		ha_discovery_publish_sensor_config(mqtt, "heap_internal_free", "Internal Heap Free", "{{ value_json.heap_internal_free }}", "B", "", "", "diagnostic");
+		ha_discovery_publish_sensor_config(mqtt, "heap_internal_min", "Internal Heap Min", "{{ value_json.heap_internal_min }}", "B", "", "", "diagnostic");
+		ha_discovery_publish_sensor_config(mqtt, "heap_internal_largest", "Internal Heap Largest", "{{ value_json.heap_internal_largest }}", "B", "", "", "diagnostic", false);
+		ha_discovery_publish_sensor_config(mqtt, "heap_dma_internal_free", "DMA Internal Heap Free", "{{ value_json.heap_dma_internal_free }}", "B", "", "", "diagnostic", false);
+		ha_discovery_publish_sensor_config(mqtt, "heap_dma_internal_min", "DMA Internal Heap Min", "{{ value_json.heap_dma_internal_min }}", "B", "", "", "diagnostic", false);
+		ha_discovery_publish_sensor_config(mqtt, "heap_dma_internal_largest", "DMA Internal Heap Largest", "{{ value_json.heap_dma_internal_largest }}", "B", "", "", "diagnostic", false);
 		delay(1);
 
-		ha_discovery_publish_sensor_config(mqtt, "psram_free", "PSRAM Free", "{{ value_json.psram_free }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "psram_min", "PSRAM Min Free", "{{ value_json.psram_min }}", "B", "", "measurement", "diagnostic");
-
-		ha_discovery_publish_sensor_config(mqtt, "flash_used", "Flash Used", "{{ value_json.flash_used }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "flash_total", "Flash Total", "{{ value_json.flash_total }}", "B", "", "measurement", "diagnostic");
+		ha_discovery_publish_sensor_config(mqtt, "psram_free", "PSRAM Free", "{{ value_json.psram_free }}", "B", "", "", "diagnostic", false);
+		ha_discovery_publish_sensor_config(mqtt, "psram_min", "PSRAM Min Free", "{{ value_json.psram_min }}", "B", "", "", "diagnostic", false);
 		delay(1);
 
 		ha_discovery_publish_binary_sensor_config(mqtt, "fs_mounted", "FS Mounted", "{{ 'ON' if value_json.fs_mounted else 'OFF' }}", "", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "fs_used_bytes", "FS Used", "{{ value_json.fs_used_bytes }}", "B", "", "measurement", "diagnostic");
-		ha_discovery_publish_sensor_config(mqtt, "fs_total_bytes", "FS Total", "{{ value_json.fs_total_bytes }}", "B", "", "measurement", "diagnostic");
+		ha_discovery_publish_sensor_config(mqtt, "fs_used_bytes", "FS Used", "{{ value_json.fs_used_bytes }}", "B", "", "", "diagnostic");
 
 		#if HAS_DISPLAY
 		// display_fps is API-only (not in MQTT payload), no HA entity needed.
@@ -79,6 +78,9 @@ void ha_discovery_publish_health(MqttManager &mqtt) {
 		// Audio entities (siren, volume, beep buttons)
 		#if HAS_AUDIO
 		ha_discovery_publish_audio_entities(mqtt);
+		#endif
+		#if HAS_CAMERA
+		ha_discovery_publish_camera_entities(mqtt);
 		#endif
 		delay(1);  // yield — audio publishes 6-7 messages
 }
@@ -185,7 +187,8 @@ bool ha_discovery_publish_sensor_config(
 		const char *unit_of_measurement,
 		const char *device_class,
 		const char *state_class,
-		const char *entity_category
+		const char *entity_category,
+		bool enabled_by_default
 ) {
 		char topic[160];
 		snprintf(topic, sizeof(topic), "homeassistant/sensor/%s/%s/config", mqtt.sanitizedName(), object_id);
@@ -231,6 +234,9 @@ bool ha_discovery_publish_sensor_config(
 		}
 		if (state_class && strlen(state_class) > 0) {
 				doc["stat_cla"] = state_class;
+		}
+		if (!enabled_by_default) {
+				doc["enabled_by_default"] = false;
 		}
 
 		fill_device_block(doc, mqtt);
@@ -474,6 +480,33 @@ static bool publish_beep_button_config(MqttManager &mqtt, const char *object_id_
 		return mqtt.publishJson(topic, doc, true);
 }
 
+static bool publish_camera_snapshot_button_config(MqttManager &mqtt, const char* object_id_suffix,
+                                                   const char* name, const char* cmd_topic_suffix) {
+		char topic[160];
+		snprintf(topic, sizeof(topic), "homeassistant/button/%s/%s/config", mqtt.sanitizedName(), object_id_suffix);
+
+		StaticJsonDocument<768> doc;
+		doc["~"] = mqtt.baseTopic();
+		doc["name"] = name;
+
+		char ha_oid[96];
+		snprintf(ha_oid, sizeof(ha_oid), "%s_%s", mqtt.sanitizedName(), object_id_suffix);
+		doc["object_id"] = ha_oid;
+		doc["uniq_id"] = ha_oid;
+
+		char cmd_t[80];
+		snprintf(cmd_t, sizeof(cmd_t), "~/%s", cmd_topic_suffix);
+		doc["cmd_t"] = cmd_t;
+		doc["ic"] = "mdi:camera";
+		doc["avty_t"] = "~/availability";
+		doc["pl_avail"] = "online";
+		doc["pl_not_avail"] = "offline";
+
+		fill_device_block(doc, mqtt);
+		if (doc.overflowed()) return false;
+		return mqtt.publishJson(topic, doc, true);
+}
+
 static bool publish_custom_tone_text_config(MqttManager &mqtt) {
 		char topic[160];
 		snprintf(topic, sizeof(topic), "homeassistant/text/%s/custom_tone/config", mqtt.sanitizedName());
@@ -541,6 +574,18 @@ bool ha_discovery_publish_audio_entities(MqttManager &mqtt) {
 		ok &= publish_sound_text_config(mqtt);
 #endif
 		return ok;
+}
+
+bool ha_discovery_publish_camera_entities(MqttManager &mqtt) {
+#if HAS_CAMERA
+		return publish_camera_snapshot_button_config(mqtt, "camera_snapshot_latest",
+				"Save Camera Snapshot", "camera/snapshot/latest") &&
+				publish_camera_snapshot_button_config(mqtt, "camera_snapshot_roll",
+				"Save Camera Snapshot and Roll", "camera/snapshot/roll");
+#else
+		(void)mqtt;
+		return false;
+#endif
 }
 
 #endif // HAS_MQTT

@@ -1,0 +1,106 @@
+#!/bin/bash
+# Camera preview widget wiring guard.
+set -e
+cd "$(dirname "$0")/.."
+
+WIDGET="src/app/widgets/camera_preview_widget.cpp"
+
+grep -q '#if HAS_DISPLAY && HAS_CAMERA' "$WIDGET"
+grep -q 'REGISTER_WIDGET_SCHEMA_LIFECYCLE(camera_preview, nullptr, false)' "$WIDGET"
+grep -q 'camera_preview_describe' "$WIDGET"
+grep -q 'CAMERA_FEED_OUTPUT_RGB565' "$WIDGET"
+grep -q 'CAMERA_PREVIEW_SCALE_LETTERBOX' "$WIDGET"
+grep -q 'CAMERA_PREVIEW_SCALE_CENTER_CROP' "$WIDGET"
+grep -q 'LV_IMAGE_ALIGN_CONTAIN' "$WIDGET"
+grep -q 'widget_camera_scale' "$WIDGET"
+grep -q 'screen_saver_manager_is_asleep()' "$WIDGET"
+grep -q 'static void camera_preview_show' "$WIDGET"
+grep -q 'static void camera_preview_hide' "$WIDGET"
+grep -q 'Hidden: released RGB565 feed demand' "$WIDGET"
+grep -q 'widget_type->onShow' src/app/screens/pad_screen.cpp
+grep -q 'widget_type->onHide' src/app/screens/pad_screen.cpp
+grep -A2 '#if HAS_CAMERA' src/app/widgets.cpp | grep -q 'camera_preview_widget.cpp'
+grep -q 'value="camera_preview"' src/app/web/pad-editor.fragment.html
+grep -q 'WIDGET_CAMERA_PREVIEW' src/app/web/pad-editor.fragment.html
+grep -q 'widget_camera_scale' src/app/web/portal_pad_dialog.js
+grep -q 'has_camera === true' src/app/web/portal_pad_editor.js
+
+CAMERA_API="src/app/web_portal_camera.cpp"
+CAMERA_DRIVER="src/app/drivers/ov02c10_p4_driver.cpp"
+CAMERA_COMPONENT="src/app/components/camera_component.cpp"
+CAMERA_PORTAL="src/app/web/portal_camera.js"
+CONFIG_MANAGER="src/app/config_manager.cpp"
+CAMERA_FEED="src/app/camera_feed.cpp"
+grep -q 'class CameraMjpegResponse final : public AsyncWebServerResponse' "$CAMERA_API"
+grep -q 'CAMERA_FEED_OUTPUT_JPEG' "$CAMERA_API"
+grep -q 'camera_feed_release_frame(&frame)' "$CAMERA_API"
+grep -q 'void abort()' "$CAMERA_API"
+grep -q 'request->client()->onPoll' "$CAMERA_API"
+grep -q 'CAMERA_MJPEG_MAX_CLIENTS' "$CAMERA_API"
+grep -q 'Camera stream client limit reached' "$CAMERA_API"
+grep -q 'request_->client()->onPoll(nullptr)' "$CAMERA_API"
+grep -q 'while (client->space())' "$CAMERA_API"
+grep -q 'if (total_written) client->send();' "$CAMERA_API"
+# ESP32-P4 shares one 2D-DMA between the JPEG codec and the display PPA/DMA2D
+# path; overlapping transfers deadlock, so every user must hold the token.
+grep -q 'dma2d_arbiter_acquire' src/app/drivers/mipi_dsi_driver.cpp
+grep -q 'dma2d_arbiter_release_from_isr' src/app/drivers/mipi_dsi_driver.cpp
+grep -q 'dma2d_arbiter_acquire' src/app/jpeg_encoder_service.cpp
+grep -q 'dma2d_arbiter_acquire' src/app/image_decoder.cpp
+grep -q 'dma2d_arbiter_init' src/app/app.ino
+grep -q 'camera_stop_csi_capture();' "$CAMERA_DRIVER"
+grep -q 's_rgb565_raw_staging' "$CAMERA_DRIVER"
+grep -q 'camera_set_streaming(false, 0)' "$CAMERA_DRIVER"
+grep -q 'Deferring idle cleanup: I2C bus busy' "$CAMERA_DRIVER"
+grep -A45 'bool camera_driver_deinit()' "$CAMERA_DRIVER" | grep -q 's_exposure_lines = 0;'
+! grep -q 'displayDriverIsFlushBusy' "$CAMERA_FEED"
+grep -q 'int8_t camera_feed_claim_writable_slot()' "$CAMERA_FEED"
+grep -q 's_slots\[slot\].writing = true;' "$CAMERA_FEED"
+grep -q 's_slots\[slot\].writing' "$CAMERA_FEED"
+grep -q 'camera_feed_register_publish_listener' "$CAMERA_FEED"
+grep -q 'camera_feed_notify_published' "$CAMERA_FEED"
+grep -q 'camera_feed_unregister_publish_listener' "$CAMERA_API"
+grep -q 'static void on_frame_published' "$CAMERA_API"
+test "$(grep -c 'camera_release_capture_resources();' "$CAMERA_FEED")" -eq 1
+grep -q '#define HAS_CAMERA true' src/boards/jc1060p470c/board_overrides.h
+grep -q '#define CAMERA_DRIVER CAMERA_DRIVER_OV02C10_P4' src/boards/jc1060p470c/board_overrides.h
+grep -q '../jc1060p470c/board_overrides.h' src/boards/jc1060p470c-sd/board_overrides.h
+grep -q 'exposure_line_time_us' "$CAMERA_COMPONENT"
+grep -q 'feed_target_fps' "$CAMERA_COMPONENT"
+grep -q 'CAMERA_ROTATION_270' src/app/camera.h
+grep -q 'CAMERA_FEED_TARGET_FPS_DEFAULT' src/app/camera.h
+grep -q 'camera-feed-target-fps' src/app/web/camera.fragment.html
+grep -q 'camera-rotation' src/app/web/camera.fragment.html
+grep -q 'camera-exposure-time-value' src/app/web/camera.fragment.html
+grep -q 'camera-wb-red" type="range"' src/app/web/camera.fragment.html
+grep -q 'camera-wb-blue" type="range"' src/app/web/camera.fragment.html
+grep -q 'id="camera-stream-url"' src/app/web/camera.fragment.html
+grep -q 'id="camera-jpeg-snapshot-url"' src/app/web/camera.fragment.html
+grep -q 'id="camera-raw-snapshot-url"' src/app/web/camera.fragment.html
+grep -q 'camera-stream-client-limit' src/app/web/portal_camera.js
+grep -q 'window.location.origin + cameraApiPaths\[id\]' src/app/web/portal_camera.js
+grep -q 'mjpeg_max_clients' src/app/components/camera_component.cpp
+grep -q 'updateExposureValue' "$CAMERA_PORTAL"
+grep -q 'updateWhiteBalanceValue' "$CAMERA_PORTAL"
+grep -q 'feedTargetFps' "$CAMERA_PORTAL"
+grep -q 'rotation: Number(rotation.value)' "$CAMERA_PORTAL"
+grep -q 'camera_save_config_on_main' "$CAMERA_COMPONENT"
+grep -q 'loop_bridge_dispatch(camera_save_config_on_main' "$CAMERA_COMPONENT"
+grep -q 'kCameraPortalScript' "$CAMERA_COMPONENT"
+grep -q 'kCameraPortalStyle' "$CAMERA_COMPONENT"
+grep -A5 'LOGI("Config", "Save start")' "$CONFIG_MANAGER" | grep -q 'Serial.flush();'
+grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
+grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
+grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc1060p470c/board_overrides.h
+
+MCP_CAMERA="src/app/mcp_tools_camera.cpp"
+grep -q '#if HAS_MCP && HAS_CAMERA' "$MCP_CAMERA"
+grep -q '"get_camera_status"' "$MCP_CAMERA"
+grep -q '"set_camera_config"' "$MCP_CAMERA"
+grep -q '"capture_camera_snapshot"' "$MCP_CAMERA"
+grep -q 'mcp_run_control(exec_set_camera_config' "$MCP_CAMERA"
+grep -q 'mcp_run_control(exec_capture_camera_snapshot' "$MCP_CAMERA"
+grep -q 'mcp_camera_capabilities' "$MCP_CAMERA"
+grep -q 'mcp_camera_capabilities(result)' src/app/mcp_tools_pads.cpp
+
+echo "PASS: camera preview widget wiring"

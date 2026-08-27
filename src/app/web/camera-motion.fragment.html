@@ -1,0 +1,51 @@
+<div class="section-header">
+  <h2>Motion sensing</h2>
+  <p>Detect camera motion locally and expose it as motion-derived presence.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" id="camera-motion-enabled" type="checkbox" role="switch">
+      <label class="form-check-label" for="camera-motion-enabled">Enable camera motion sensing</label>
+      <div class="form-text">Analyzes camera frames locally while enabled, including when the display sleeps. It does not create JPEG or preview frames when no other camera client is active.</div>
+    </div>
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" id="camera-motion-keep-display-awake" type="checkbox" role="switch">
+      <label class="form-check-label" for="camera-motion-keep-display-awake">Keep display awake while motion is detected</label>
+      <div class="form-text">Each confirmed motion sample wakes the display and resets its inactivity timer. Normal sleep resumes after motion stops.</div>
+    </div>
+    <div class="grid-2col">
+      <div>
+        <label class="form-label d-flex justify-content-between" for="camera-motion-analyze-every-nth-frame">
+          <span>Analyze every</span><strong><span id="camera-motion-analyze-every-nth-frame-value">2</span> frame(s)</strong>
+        </label>
+        <input class="form-range" id="camera-motion-analyze-every-nth-frame" type="range" min="1" max="4" step="1" value="2">
+        <div class="form-text">Motion analyzes every Nth captured frame. At the current camera capture rate, this is approximately <span id="camera-motion-analysis-rate">2</span> FPS.</div>
+      </div>
+      <div>
+        <label class="form-label d-flex justify-content-between" for="camera-motion-sensitivity">
+          <span>Sensitivity</span><strong><span id="camera-motion-sensitivity-value">5</span>/10</strong>
+        </label>
+        <input class="form-range" id="camera-motion-sensitivity" type="range" min="1" max="10" step="1" value="5">
+        <div class="form-text">Higher sensitivity detects smaller changes but can react to shadows and lighting changes.</div>
+      </div>
+      <div>
+        <label class="form-label d-flex justify-content-between" for="camera-presence-hold-seconds">
+          <span>Presence hold time</span><strong><span id="camera-presence-hold-seconds-value">60</span> seconds</strong>
+        </label>
+        <input class="form-range" id="camera-presence-hold-seconds" type="range" min="10" max="600" step="10" value="60">
+        <div class="form-text">Presence stays on for this period after the last detected motion.</div>
+      </div>
+    </div>
+    <div class="form-text mt-3">Verify Camera Presence in the Sensor Data fragment or on the <code>camera_presence/state</code> MQTT topic.</div>
+  </div>
+</div>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Actions on Motion Detected</h5></div>
+  <div class="card-body">
+    <div id="camera-motion-action-editors"></div>
+  </div>
+</div>
+<div class="save-bar mb-3">
+  <button type="button" class="btn btn-primary btn-sm" id="camera-motion-save-btn">Save motion settings</button>
+</div>

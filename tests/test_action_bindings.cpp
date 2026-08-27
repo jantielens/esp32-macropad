@@ -25,21 +25,21 @@ extern "C" unsigned long millis() { return 0; }
 // ---------------------------------------------------------------------------
 // Mock resolvers
 // ---------------------------------------------------------------------------
-static bool mock_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mock_resolve(const char* params, char* out, size_t out_len) {
     (void)params;
     strlcpy(out, "RESOLVED", out_len);
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
-static bool mock_echo(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mock_echo(const char* params, char* out, size_t out_len) {
     strlcpy(out, params, out_len);
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
-static bool mock_long(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mock_long(const char* params, char* out, size_t out_len) {
     (void)params;
     strlcpy(out, "1234567890123456789", out_len);
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 static void mock_collect(const char* params, void* user_data) {
@@ -311,11 +311,12 @@ static void test_multiple_bindings_in_one_field() {
 int main() {
     printf("=== resolve_action_bindings tests ===\n\n");
 
-    binding_template_register("mock", mock_resolve, mock_collect);
-    binding_template_register("echo", mock_echo, mock_collect);
-    binding_template_register("long", mock_long, mock_collect);
+    const BindingSchemeSpec free_form = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr};
+    binding_template_register("mock", mock_resolve, mock_collect, free_form);
+    binding_template_register("echo", mock_echo, mock_collect, free_form);
+    binding_template_register("long", mock_long, mock_collect, free_form);
     // Register "m" as alias for mock (short scheme name for small-field tests)
-    binding_template_register("m", mock_resolve, mock_collect);
+    binding_template_register("m", mock_resolve, mock_collect, free_form);
 
     test_value_fields_resolved();
     test_structural_fields_excluded();

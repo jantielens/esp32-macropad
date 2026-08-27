@@ -20,6 +20,10 @@
 
 #include <Arduino.h>
 #include "board_config.h"
+#if HAS_CAMERA
+#include "camera_motion.h"
+#endif
+#include "camera.h"
 
 // Maximum string lengths
 #define CONFIG_SSID_MAX_LEN 32
@@ -42,6 +46,7 @@
 
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
+#define CONFIG_IDLE_SCREEN_PAD_MAX_LEN 8
 
 // Audio feedback beep pattern (may also be defined in pad_config.h)
 #ifndef CONFIG_BEEP_PATTERN_MAX_LEN
@@ -126,13 +131,34 @@ struct DeviceConfig {
 #endif
 
 #if HAS_DISPLAY
-		// Screen saver (burn-in prevention v1): backlight sleep on inactivity
-		bool screen_saver_enabled;               // default false
+		// Screen saver: optional Idle Screen followed by Display Sleep on inactivity.
+		bool screen_saver_enabled;               // default true
 		uint16_t screen_saver_timeout_seconds;   // default 300 (5 min)
 		uint16_t screen_saver_fade_out_ms;       // default 800
 		uint16_t screen_saver_fade_in_ms;        // default 400
 		bool screen_saver_wake_on_touch;         // default true (when HAS_TOUCH)
 		char screen_saver_wake_binding[CONFIG_SS_WAKE_BINDING_MAX_LEN]; // binding expression; wake on "ON"
+		bool idle_screen_enabled;                // default false
+		uint16_t idle_screen_timeout_seconds;    // default 300 (5 min)
+		char idle_screen_pad[CONFIG_IDLE_SCREEN_PAD_MAX_LEN]; // transient pad shown while idle
+#endif
+
+#if HAS_CAMERA
+		uint8_t camera_jpeg_quality;             // default CAMERA_JPEG_QUALITY_DEFAULT
+		uint8_t camera_feed_target_fps;          // default CAMERA_FEED_TARGET_FPS_DEFAULT
+		bool camera_motion_enabled;              // default false
+		uint8_t camera_motion_analyze_every_nth_frame; // default CAMERA_MOTION_ANALYZE_EVERY_DEFAULT
+		uint8_t camera_motion_sensitivity;       // default CAMERA_MOTION_SENSITIVITY_DEFAULT
+		uint16_t camera_presence_hold_seconds;   // default CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT
+		#if HAS_DISPLAY
+		bool camera_motion_keep_display_awake;   // default false
+		#endif
+		CameraRotation camera_rotation;          // default CAMERA_ROTATION_DEFAULT
+		uint16_t camera_output_width;            // default CAMERA_OUTPUT_WIDTH_DEFAULT
+		uint16_t camera_output_height;           // default CAMERA_OUTPUT_HEIGHT_DEFAULT
+		uint16_t camera_exposure_lines;          // default CAMERA_EXPOSURE_LINES_DEFAULT
+		uint16_t camera_white_balance_red_q8;    // default CAMERA_WHITE_BALANCE_Q8_DEFAULT
+		uint16_t camera_white_balance_blue_q8;   // default CAMERA_WHITE_BALANCE_Q8_DEFAULT
 #endif
 
 

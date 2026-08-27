@@ -25,6 +25,7 @@ struct NavCategory {
 static const NavCategory kNavCategories[] = {
     {"device",       "Device",       "\xe2\x9a\x99\xef\xb8\x8f"},  // ⚙️
     {"display",      "Display",      "\xf0\x9f\x96\xa5\xef\xb8\x8f"}, // 🖥️
+    {"camera",       "Camera",       "\xf0\x9f\x93\xb7"},           // 📷
     {"pads",         "Pads",         "\xf0\x9f\x8e\x9b\xef\xb8\x8f"}, // 🎛️
     {"actions",      "Actions",      "\xe2\x9a\xa1"},               // ⚡
     {"connectivity", "Connectivity", "\xf0\x9f\x93\xa1"},           // 📡
@@ -84,6 +85,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         const char* id;
         const char* display_name;
         int nav_order;
+        const char* portal_script;
+        const char* portal_style;
     };
     ItemEntry items[MAX_PORTAL_COMPONENTS];
 
@@ -105,7 +108,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
             ComponentDef* comp = component_registry_get(i);
             if (strcmp(comp->category, PORTAL_PRIMARY_CATEGORY) == 0) {
                 const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
-                items[item_count++] = {nav_id, comp->display_name, comp->nav_order};
+                items[item_count++] = {nav_id, comp->display_name, comp->nav_order,
+                                       comp->portal_script, comp->portal_style};
             }
         }
 
@@ -136,6 +140,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
                 JsonObject item = items_arr.createNestedObject();
                 item["id"] = items[i].id;
                 item["display_name"] = items[i].display_name;
+                if (items[i].portal_script) item["portal_script"] = items[i].portal_script;
+                if (items[i].portal_style) item["portal_style"] = items[i].portal_style;
             }
         }
     }
@@ -181,7 +187,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
             // leaves the wizard as the single hand-off path.
             if (!is_setup && ap_mode) continue;
             const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
-            items[item_count++] = {nav_id, comp->display_name, comp->nav_order};
+            items[item_count++] = {nav_id, comp->display_name, comp->nav_order,
+                                   comp->portal_script, comp->portal_style};
         }
 
         if (item_count == 0) continue;  // skip empty categories
@@ -202,6 +209,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
             JsonObject item = items_arr.createNestedObject();
             item["id"] = items[i].id;
             item["display_name"] = items[i].display_name;
+            if (items[i].portal_script) item["portal_script"] = items[i].portal_script;
+            if (items[i].portal_style) item["portal_style"] = items[i].portal_style;
         }
     }
 
@@ -363,6 +372,10 @@ void web_portal_register_component_routes(AsyncWebServer* server) {
     server->on(
         AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/([a-z0-9-]+)$"),
         HTTP_PUT, handleComponentActionRequest, nullptr, handleComponentActionBody);
+
+    server->on(
+        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/([a-z0-9-]+)$"),
+        HTTP_DELETE, handleComponentActionRequest);
 
     // CORS preflight for all component and portal routes
     server->on("/api/component/*", HTTP_OPTIONS, handleCorsPreflightGeneric);

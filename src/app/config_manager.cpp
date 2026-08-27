@@ -12,6 +12,9 @@
 #include "log_manager.h"
 #include "power_config.h"
 #include "storage.h"
+#if HAS_CAMERA
+#include "camera_motion.h"
+#endif
 #include <Preferences.h>
 #include <nvs_flash.h>
 
@@ -40,6 +43,24 @@
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
+#if HAS_CAMERA
+#define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
+#define KEY_CAMERA_FEED_TARGET_FPS "cam_fps"
+#define KEY_CAMERA_MOTION_ENABLED "cam_mot_en"
+#define KEY_CAMERA_MOTION_ANALYZE_EVERY "cam_mot_div"
+#define KEY_CAMERA_MOTION_FPS_LEGACY "cam_mot_fps"
+#define KEY_CAMERA_MOTION_SENSITIVITY "cam_mot_sens"
+#define KEY_CAMERA_PRESENCE_HOLD "cam_prs_hold"
+#if HAS_DISPLAY
+#define KEY_CAMERA_MOTION_KEEP_DISPLAY_AWAKE "cam_mot_wake"
+#endif
+#define KEY_CAMERA_ROTATION "cam_rot"
+#define KEY_CAMERA_OUTPUT_WIDTH "cam_out_w"
+#define KEY_CAMERA_OUTPUT_HEIGHT "cam_out_h"
+#define KEY_CAMERA_EXPOSURE_LINES "cam_exp"
+#define KEY_CAMERA_WHITE_BALANCE_RED "cam_wb_r"
+#define KEY_CAMERA_WHITE_BALANCE_BLUE "cam_wb_b"
+#endif
 
 #if HAS_BLE
 #define KEY_BLE_BURST_COUNT     "ble_brst"
@@ -69,6 +90,9 @@
 #define KEY_SCREEN_SAVER_FADE_IN "ss_fi"
 #define KEY_SCREEN_SAVER_WAKE_TOUCH "ss_wt"
 #define KEY_SCREEN_SAVER_WAKE_BINDING "ss_wb"
+#define KEY_IDLE_SCREEN_ENABLED "idle_en"
+#define KEY_IDLE_SCREEN_TIMEOUT "idle_to"
+#define KEY_IDLE_SCREEN_PAD "idle_pad"
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
@@ -196,7 +220,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 				#if HAS_DISPLAY
 				// Screen saver defaults
-				config->screen_saver_enabled = false;
+				config->screen_saver_enabled = true;
 				config->screen_saver_timeout_seconds = 300;
 				config->screen_saver_fade_out_ms = 800;
 				config->screen_saver_fade_in_ms = 400;
@@ -206,6 +230,27 @@ bool config_manager_load(DeviceConfig *config) {
 				config->screen_saver_wake_on_touch = false;
 				#endif
 				config->screen_saver_wake_binding[0] = '\0';
+				config->idle_screen_enabled = false;
+				config->idle_screen_timeout_seconds = 300;
+				config->idle_screen_pad[0] = '\0';
+				#endif
+
+				#if HAS_CAMERA
+				config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
+				config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
+				config->camera_motion_enabled = false;
+				config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
+				config->camera_motion_sensitivity = CAMERA_MOTION_SENSITIVITY_DEFAULT;
+				config->camera_presence_hold_seconds = CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT;
+				#if HAS_DISPLAY
+				config->camera_motion_keep_display_awake = false;
+				#endif
+				config->camera_rotation = CAMERA_ROTATION_DEFAULT;
+				config->camera_output_width = CAMERA_OUTPUT_WIDTH_DEFAULT;
+				config->camera_output_height = CAMERA_OUTPUT_HEIGHT_DEFAULT;
+				config->camera_exposure_lines = CAMERA_EXPOSURE_LINES_DEFAULT;
+				config->camera_white_balance_red_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
+				config->camera_white_balance_blue_q8 = CAMERA_WHITE_BALANCE_Q8_DEFAULT;
 				#endif
 
 				// Let registered device classes seed their own defaults.
@@ -299,7 +344,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_DISPLAY
 		// Load screen saver settings
-		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, false);
+		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, true);
 		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, 300);
 		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, 800);
 		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, 400);
@@ -309,6 +354,40 @@ bool config_manager_load(DeviceConfig *config) {
 		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, false);
 		#endif
 		preferences.getString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding, CONFIG_SS_WAKE_BINDING_MAX_LEN);
+		config->idle_screen_enabled = preferences.getBool(KEY_IDLE_SCREEN_ENABLED, false);
+		config->idle_screen_timeout_seconds = preferences.getUShort(KEY_IDLE_SCREEN_TIMEOUT, 300);
+		preferences.getString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad, CONFIG_IDLE_SCREEN_PAD_MAX_LEN);
+		#endif
+
+		#if HAS_CAMERA
+		config->camera_jpeg_quality = preferences.getUChar(KEY_CAMERA_JPEG_QUALITY, CAMERA_JPEG_QUALITY_DEFAULT);
+		config->camera_feed_target_fps = preferences.getUChar(KEY_CAMERA_FEED_TARGET_FPS, CAMERA_FEED_TARGET_FPS_DEFAULT);
+		config->camera_motion_enabled = preferences.getBool(KEY_CAMERA_MOTION_ENABLED, false);
+		if (preferences.isKey(KEY_CAMERA_MOTION_ANALYZE_EVERY)) {
+				config->camera_motion_analyze_every_nth_frame = preferences.getUChar(
+						KEY_CAMERA_MOTION_ANALYZE_EVERY, CAMERA_MOTION_ANALYZE_EVERY_DEFAULT);
+		} else if (preferences.isKey(KEY_CAMERA_MOTION_FPS_LEGACY)) {
+				const uint8_t legacy_fps = preferences.getUChar(KEY_CAMERA_MOTION_FPS_LEGACY, 1);
+				const uint8_t safe_fps = legacy_fps ? legacy_fps : 1;
+				const uint8_t rounded_divider = static_cast<uint8_t>(
+						(config->camera_feed_target_fps + safe_fps / 2) / safe_fps);
+				config->camera_motion_analyze_every_nth_frame = constrain(
+						rounded_divider, CAMERA_MOTION_ANALYZE_EVERY_MIN, CAMERA_MOTION_ANALYZE_EVERY_MAX);
+		} else {
+				config->camera_motion_analyze_every_nth_frame = CAMERA_MOTION_ANALYZE_EVERY_DEFAULT;
+		}
+		config->camera_motion_sensitivity = preferences.getUChar(KEY_CAMERA_MOTION_SENSITIVITY, CAMERA_MOTION_SENSITIVITY_DEFAULT);
+		config->camera_presence_hold_seconds = preferences.getUShort(KEY_CAMERA_PRESENCE_HOLD, CAMERA_PRESENCE_HOLD_SECONDS_DEFAULT);
+		#if HAS_DISPLAY
+		config->camera_motion_keep_display_awake = preferences.getBool(KEY_CAMERA_MOTION_KEEP_DISPLAY_AWAKE, false);
+		#endif
+		config->camera_rotation = static_cast<CameraRotation>(
+			preferences.getUShort(KEY_CAMERA_ROTATION, CAMERA_ROTATION_DEFAULT));
+		config->camera_output_width = preferences.getUShort(KEY_CAMERA_OUTPUT_WIDTH, CAMERA_OUTPUT_WIDTH_DEFAULT);
+		config->camera_output_height = preferences.getUShort(KEY_CAMERA_OUTPUT_HEIGHT, CAMERA_OUTPUT_HEIGHT_DEFAULT);
+		config->camera_exposure_lines = preferences.getUShort(KEY_CAMERA_EXPOSURE_LINES, CAMERA_EXPOSURE_LINES_DEFAULT);
+		config->camera_white_balance_red_q8 = preferences.getUShort(KEY_CAMERA_WHITE_BALANCE_RED, CAMERA_WHITE_BALANCE_Q8_DEFAULT);
+		config->camera_white_balance_blue_q8 = preferences.getUShort(KEY_CAMERA_WHITE_BALANCE_BLUE, CAMERA_WHITE_BALANCE_Q8_DEFAULT);
 		#endif
 
 		// Let registered device classes load their own fields from the same
@@ -343,6 +422,11 @@ bool config_manager_save(const DeviceConfig *config) {
 		}
 
 		LOGI("Config", "Save start");
+		// ESP32-P4 USB CDC keeps its TX ring buffer in external RAM. Let the
+		// final logging ISR finish before Preferences starts flash writes, which
+		// temporarily make that memory inaccessible.
+		Serial.flush();
+		delay(1);
 		
 		preferences.begin(CONFIG_NAMESPACE, false); // Read-write mode
 		
@@ -419,6 +503,27 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUShort(KEY_SCREEN_SAVER_FADE_IN, config->screen_saver_fade_in_ms);
 		preferences.putBool(KEY_SCREEN_SAVER_WAKE_TOUCH, config->screen_saver_wake_on_touch);
 		preferences.putString(KEY_SCREEN_SAVER_WAKE_BINDING, config->screen_saver_wake_binding);
+		preferences.putBool(KEY_IDLE_SCREEN_ENABLED, config->idle_screen_enabled);
+		preferences.putUShort(KEY_IDLE_SCREEN_TIMEOUT, config->idle_screen_timeout_seconds);
+		preferences.putString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad);
+		#endif
+
+		#if HAS_CAMERA
+		preferences.putUChar(KEY_CAMERA_JPEG_QUALITY, config->camera_jpeg_quality);
+		preferences.putUChar(KEY_CAMERA_FEED_TARGET_FPS, config->camera_feed_target_fps);
+		preferences.putBool(KEY_CAMERA_MOTION_ENABLED, config->camera_motion_enabled);
+		preferences.putUChar(KEY_CAMERA_MOTION_ANALYZE_EVERY, config->camera_motion_analyze_every_nth_frame);
+		preferences.putUChar(KEY_CAMERA_MOTION_SENSITIVITY, config->camera_motion_sensitivity);
+		preferences.putUShort(KEY_CAMERA_PRESENCE_HOLD, config->camera_presence_hold_seconds);
+		#if HAS_DISPLAY
+		preferences.putBool(KEY_CAMERA_MOTION_KEEP_DISPLAY_AWAKE, config->camera_motion_keep_display_awake);
+		#endif
+		preferences.putUShort(KEY_CAMERA_ROTATION, config->camera_rotation);
+		preferences.putUShort(KEY_CAMERA_OUTPUT_WIDTH, config->camera_output_width);
+		preferences.putUShort(KEY_CAMERA_OUTPUT_HEIGHT, config->camera_output_height);
+		preferences.putUShort(KEY_CAMERA_EXPOSURE_LINES, config->camera_exposure_lines);
+		preferences.putUShort(KEY_CAMERA_WHITE_BALANCE_RED, config->camera_white_balance_red_q8);
+		preferences.putUShort(KEY_CAMERA_WHITE_BALANCE_BLUE, config->camera_white_balance_blue_q8);
 		#endif
 
 		// Let registered device classes persist their own fields.
@@ -659,9 +764,42 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		if (config->lp_beep[0]) LOGI("Config", "LP beep: %s", config->lp_beep);
 #endif
 
+#if HAS_CAMERA
+		#if HAS_DISPLAY
+		LOGI("Config", "Camera motion: %s analyze_every=%u sensitivity=%u hold=%us awake=%d",
+				config->camera_motion_enabled ? "enabled" : "disabled",
+				(unsigned)config->camera_motion_analyze_every_nth_frame,
+				(unsigned)config->camera_motion_sensitivity,
+				(unsigned)config->camera_presence_hold_seconds,
+				(int)config->camera_motion_keep_display_awake);
+		#else
+		LOGI("Config", "Camera motion: %s analyze_every=%u sensitivity=%u hold=%us",
+				config->camera_motion_enabled ? "enabled" : "disabled",
+				(unsigned)config->camera_motion_analyze_every_nth_frame,
+				(unsigned)config->camera_motion_sensitivity,
+				(unsigned)config->camera_presence_hold_seconds);
+		#endif
+#endif
+
 #if HAS_DISPLAY
+		LOGI("Config", "Display Sleep: %s after %us", config->screen_saver_enabled ? "enabled" : "disabled",
+				(unsigned)config->screen_saver_timeout_seconds);
+		if (config->idle_screen_enabled) {
+			LOGI("Config", "Idle Screen: %s after %us", config->idle_screen_pad[0] ? config->idle_screen_pad : "(unset)",
+					(unsigned)config->idle_screen_timeout_seconds);
+		}
 		if (strlen(config->screen_saver_wake_binding) > 0) {
 				LOGI("Config", "SS wake binding: %s", config->screen_saver_wake_binding);
 		}
+#endif
+
+#if HAS_CAMERA
+		LOGI("Config", "Camera: quality=%u fps=%u rotation=%u output=%ux%u exposure=%u WB=%u/%u", config->camera_jpeg_quality,
+				(unsigned)config->camera_feed_target_fps,
+				(unsigned)config->camera_rotation,
+				(unsigned)config->camera_output_width, (unsigned)config->camera_output_height,
+				(unsigned)config->camera_exposure_lines,
+				(unsigned)config->camera_white_balance_red_q8,
+				(unsigned)config->camera_white_balance_blue_q8);
 #endif
 }

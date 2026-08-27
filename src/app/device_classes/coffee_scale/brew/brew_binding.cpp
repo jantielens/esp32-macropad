@@ -126,6 +126,14 @@ static bool lookup_value(const char* key, const char* fmt,
         strlcpy(out, brew_get_next_label(), out_len);
         return true;
     }
+    if (strcmp(key, "advance_state") == 0) {
+        strlcpy(out, brew_get_advance_state(), out_len);
+        return true;
+    }
+    if (strcmp(key, "stage_status") == 0) {
+        brew_format_stage_status(out, out_len);
+        return out[0] != '\0';
+    }
     // ---- stage_weight_* ----
     if (strcmp(key, "stage_weight_target") == 0)
         return format_float(fmt, "%.0f", brew_get_stage_weight_target(), out, out_len);
@@ -307,21 +315,21 @@ static bool lookup_value(const char* key, const char* fmt,
 // Scheme resolver
 // ============================================================================
 
-static bool brew_binding_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus brew_binding_resolve(const char* params, char* out, size_t out_len) {
     char key[32];
     char fmt[32];
     parse_brew_params(params, key, sizeof(key), fmt, sizeof(fmt));
 
     if (!key[0]) {
         strlcpy(out, "ERR:no key", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (!lookup_value(key, fmt, out, out_len)) {
         strlcpy(out, "ERR:bad key", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 // ============================================================================
@@ -333,28 +341,51 @@ static void brew_binding_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
+static const char* const kBrewBindingKeys[] = {
+    "weight", "flow_rate", "timer", "stage", "active", "template", "dose", "water", "ratio",
+    "instruction", "next_label", "advance_state", "stage_status", "stage_weight_target",
+    "stage_weight_current", "stage_weight_remaining", "stage_weight_pct", "stage_time_target",
+    "stage_time_current", "stage_time_remaining", "stage_time_pct", "stage_flow_target",
+    "stage_flow_current", "stage_flow_pct", "display_name", "stages_json", "summary_json",
+    "template_count",
+};
+
+static const char* const kBrewTemplateBindingFields[] = {
+    "name", "display_name", "description", "stages",
+};
+
+static uint8_t brew_binding_key_count() {
+    return sizeof(kBrewBindingKeys) / sizeof(kBrewBindingKeys[0]) +
+           brew_template_count() * (sizeof(kBrewTemplateBindingFields) /
+                                    sizeof(kBrewTemplateBindingFields[0]));
+}
+
+static const char* brew_binding_key_at(uint8_t index) {
+    const uint8_t static_key_count = sizeof(kBrewBindingKeys) / sizeof(kBrewBindingKeys[0]);
+    if (index < static_key_count) return kBrewBindingKeys[index];
+
+    index -= static_key_count;
+    const uint8_t field_count = sizeof(kBrewTemplateBindingFields) /
+                                sizeof(kBrewTemplateBindingFields[0]);
+    const uint8_t template_index = index / field_count;
+    if (template_index >= brew_template_count()) return nullptr;
+
+    static char key[32];
+    snprintf(key, sizeof(key), "tpl_%u_%s", (unsigned)template_index,
+             kBrewTemplateBindingFields[index % field_count]);
+    return key;
+}
+
 // ============================================================================
 // Init
 // ============================================================================
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void brew_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[brew:key] or [brew:key;format]";
-    o["example"] = "[brew:weight;%.1f] g @ [brew:flow_rate;%.1f] g/s";
-    o["keys"]    = "weight, flow_rate, timer, stage, active, template, dose, water, ratio, instruction, next_label, stage_weight_target/_current/_remaining/_pct, stage_time_target/_current/_remaining/_pct, stage_flow_target/_current/_pct, display_name, stages_json, summary_json, template_count, tpl_*";
-    o["note"]    = "Live brew-session guidance and per-stage progress.";
-}
-#endif
-
 void brew_binding_init() {
-    if (!binding_template_register("brew", brew_binding_resolve, brew_binding_collect)) {
+    if (!binding_template_register("brew", brew_binding_resolve, brew_binding_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                    brew_binding_key_count, brew_binding_key_at})) {
         LOGE(TAG, "Failed to register brew binding scheme");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("brew", brew_scheme_describe);
-#endif
 }
 
 #else // !HAS_DISPLAY || !HAS_SCALE

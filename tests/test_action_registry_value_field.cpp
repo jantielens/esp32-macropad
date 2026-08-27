@@ -71,10 +71,10 @@ static const ActionTypeDef fake_action_type = {
 // ---------------------------------------------------------------------------
 // Mock binding resolver
 // ---------------------------------------------------------------------------
-static bool mock_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mock_resolve(const char* params, char* out, size_t out_len) {
     (void)params;
     strlcpy(out, "RESOLVED", out_len);
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 static void mock_collect(const char* params, void* user_data) {
     (void)params;
@@ -195,11 +195,11 @@ static void test_resolve_bindings_via_registry() {
     }
 }
 
-static bool long_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus long_resolve(const char* params, char* out, size_t out_len) {
     (void)params;
     memset(out, 'x', out_len - 1);
     out[out_len - 1] = '\0';
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 static void test_resolve_bindings_rejects_overflow() {
@@ -214,8 +214,9 @@ static void test_resolve_bindings_rejects_overflow() {
 int main() {
     printf("=== action registry value-field contract tests ===\n\n");
 
-    binding_template_register("mock", mock_resolve, mock_collect);
-    binding_template_register("long", long_resolve, mock_collect);
+    const BindingSchemeSpec free_form = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr};
+    binding_template_register("mock", mock_resolve, mock_collect, free_form);
+    binding_template_register("long", long_resolve, mock_collect, free_form);
     action_type_register(&fake_action_type);
 
     test_lookup_returns_registered_def();

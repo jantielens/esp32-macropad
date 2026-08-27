@@ -9,6 +9,9 @@
 #include "pad_binding.h"
 #include "pad_config.h"
 #include "action_dispatch.h"
+#if HAS_CAMERA
+#include "camera_motion_actions.h"
+#endif
 
 #include <ArduinoJson.h>
 #include "psram_json_allocator.h"
@@ -83,7 +86,7 @@ static void parse_mqtt_params(const char* params,
 // MQTT binding scheme resolver — called by binding_template_resolve()
 // ============================================================================
 
-static bool mqtt_binding_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mqtt_binding_resolve(const char* params, char* out, size_t out_len) {
     char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
     char path[CONFIG_JSON_PATH_MAX_LEN];
     char fmt[CONFIG_FORMAT_MAX_LEN];
@@ -92,13 +95,13 @@ static bool mqtt_binding_resolve(const char* params, char* out, size_t out_len) 
 
     if (!topic[0]) {
         strlcpy(out, "ERR:no topic", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
     bool truncated = false;
     if (!mqtt_sub_store_get(topic, payload, sizeof(payload), nullptr, &truncated)) {
-        return false; // Not yet received — caller shows placeholder
+        return BINDING_RESOLVER_UNAVAILABLE; // Not yet received — caller shows placeholder
     }
 
     // Extract value from JSON payload
@@ -114,7 +117,7 @@ static bool mqtt_binding_resolve(const char* params, char* out, size_t out_len) 
     } else {
         strlcpy(out, extracted, out_len);
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 // ============================================================================
@@ -152,18 +155,6 @@ static void mqtt_binding_collect(const char* params, void* user_data) {
 // Init
 // ============================================================================
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-// Self-description for the MCP capability manifest (lives with the scheme).
-static void mqtt_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[mqtt:topic;path;format]";
-    o["example"] = "[mqtt:home/temp;temperature;%.1f\u00b0C]";
-    o["path"]    = "JSON key, dot-notation for nested (data.temp); empty (';;') = raw payload";
-    o["format"]  = "printf: %d, %.0f, %.1f, %.2f, %s";
-}
-#endif
-
 void mqtt_sub_store_init() {
     if (g_entries) return; // already initialized
 
@@ -183,10 +174,8 @@ void mqtt_sub_store_init() {
          (unsigned)(MQTT_SUB_STORE_MAX_ENTRIES * sizeof(SubStoreEntry)));
 
     // Register "mqtt" scheme with the binding template engine
-    binding_template_register("mqtt", mqtt_binding_resolve, mqtt_binding_collect);
-#if HAS_MCP
-    binding_template_set_scheme_describe("mqtt", mqtt_scheme_describe);
-#endif
+    binding_template_register("mqtt", mqtt_binding_resolve, mqtt_binding_collect,
+                              {1, 3, 2, 2, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr});
 }
 
 // ============================================================================
@@ -286,6 +275,9 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(dcfg->screen_saver_wake_binding, &ctx);
         }
     }
+#if CAMERA_MOTION_ACTIONS_ENABLED
+    camera_motion_actions_collect_binding_topics(&ctx);
+#endif
 #endif // HAS_DISPLAY
 
     // Update store entries and subscribe

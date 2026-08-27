@@ -42,7 +42,8 @@ async function saveFragmentConfig(requiresReboot) {
         'backlight_brightness',
         'screen_saver_enabled', 'screen_saver_timeout_seconds',
         'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms',
-        'screen_saver_wake_on_touch', 'screen_saver_wake_binding'
+        'screen_saver_wake_on_touch', 'screen_saver_wake_binding',
+        'idle_screen_enabled', 'idle_screen_timeout_seconds', 'idle_screen_pad'
     ];
     // Merge any keys contributed by device-class modules (e.g. e-paper).
     if (window.__extra_config_fields && window.__extra_config_fields.length) {
@@ -153,6 +154,10 @@ window.init_welcome_fragment = function () {
         if (el) el.textContent = h.ip_address ? 'Connected' : 'Disconnected';
         el = document.getElementById('welcome-wifi-detail');
         if (el && h.wifi_rssi) el.textContent = h.wifi_rssi + ' dBm';
+        el = document.getElementById('welcome-ip-address');
+        if (el) el.textContent = h.ip_address || 'Not connected';
+        el = document.getElementById('welcome-ip-detail');
+        if (el) el.textContent = h.ip_address ? 'Network address' : '';
         el = document.getElementById('welcome-mqtt-status');
         if (el) el.textContent = h.mqtt_connected ? 'Connected' : 'Disconnected';
         el = document.getElementById('welcome-mqtt-detail');
@@ -674,6 +679,69 @@ window.init_screen_preview_fragment = function () {
 
 window.init_screensaver_fragment = function () {
     initConfigFragment('screensaver-save-btn', false);
+    var idlePad = document.getElementById('idle_screen_pad');
+    if (idlePad && typeof deviceInfoCache !== 'undefined' && deviceInfoCache.available_screens) {
+        deviceInfoCache.available_screens.forEach(function (screen) {
+            if (screen.id.indexOf('pad_') !== 0) return;
+            var option = document.createElement('option');
+            option.value = screen.id;
+            option.textContent = screen.name;
+            idlePad.appendChild(option);
+        });
+    }
+    window.screensaverTimelineUpdate = function () {
+        var idleEnabled = document.getElementById('idle_screen_enabled');
+        var idleTimeout = document.getElementById('idle_screen_timeout_seconds');
+        var idlePadSelect = document.getElementById('idle_screen_pad');
+        var sleepEnabled = document.getElementById('screen_saver_enabled');
+        var sleepTimeout = document.getElementById('screen_saver_timeout_seconds');
+        var idleStep = document.getElementById('screensaver-timeline-idle');
+        var sleepStep = document.getElementById('screensaver-timeline-sleep');
+        var rail = document.getElementById('screensaver-timeline-rail');
+        var idleTime = document.getElementById('screensaver-timeline-idle-time');
+        var sleepTime = document.getElementById('screensaver-timeline-sleep-time');
+        var idleTitle = document.getElementById('screensaver-timeline-idle-title');
+        var summary = document.getElementById('screensaver-timeline-summary');
+        if (!idleEnabled || !idleTimeout || !idlePadSelect || !sleepEnabled || !sleepTimeout ||
+            !idleStep || !sleepStep || !rail || !idleTime || !sleepTime || !idleTitle || !summary) return;
+
+        var formatDuration = function (seconds) {
+            if (seconds < 60) return seconds + ' sec';
+            if (seconds % 60 === 0) return (seconds / 60) + ' min';
+            return Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' sec';
+        };
+        var idleSeconds = Number(idleTimeout.value) || 0;
+        var sleepSeconds = Number(sleepTimeout.value) || 0;
+        var hasIdle = idleEnabled.checked && idleSeconds > 0 && idlePadSelect.value;
+        var hasSleep = sleepEnabled.checked && sleepSeconds > 0;
+        var idleName = idlePadSelect.options[idlePadSelect.selectedIndex];
+
+        idleStep.hidden = !hasIdle;
+        sleepStep.hidden = !hasSleep;
+        rail.dataset.stageCount = (hasIdle ? 1 : 0) + (hasSleep ? 1 : 0);
+        if (hasIdle) {
+            idleTime.textContent = formatDuration(idleSeconds);
+            idleTitle.textContent = idleName ? idleName.textContent : 'Standby pad';
+        }
+        if (hasSleep) sleepTime.textContent = formatDuration(sleepSeconds);
+
+        if (!hasIdle && !hasSleep) {
+            summary.textContent = 'The current screen stays visible until activity.';
+        } else if (hasIdle && hasSleep) {
+            summary.textContent = 'The standby pad appears first, then the display turns off.';
+        } else if (hasIdle) {
+            summary.textContent = 'The standby pad remains visible until activity.';
+        } else {
+            summary.textContent = 'The display turns off after the selected delay.';
+        }
+    };
+    ['idle_screen_enabled', 'idle_screen_timeout_seconds', 'idle_screen_pad',
+        'screen_saver_enabled', 'screen_saver_timeout_seconds'].forEach(function (id) {
+        var field = document.getElementById(id);
+        if (field) field.addEventListener('input', window.screensaverTimelineUpdate);
+        if (field) field.addEventListener('change', window.screensaverTimelineUpdate);
+    });
+    window.screensaverTimelineUpdate();
     // Initialize binding validator on inputs
     if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 };
@@ -855,7 +923,7 @@ window.init_pad_editor_fragment = function () {
 };
 
 // ============================================================================
-// Button Defaults
+// Pad and Button Defaults
 // ============================================================================
 
 window.init_button_defaults_fragment = function () {

@@ -1,0 +1,4 @@
+{
+  "summary": "A responsive amber Nixie-tube clock for dark button backgrounds.",
+  "usage": "Optional Extension configuration:\n{\"time\":\"[time:%H%M;Europe/Brussels]\",\"animations\":true}\n\nUse [time:%H%M%S;Europe/Brussels] for HH:MM:SS. Set animations to false to disable all effects. transition_intensity, separator_intensity, and flicker_intensity each accept 0 to disable that individual effect. See the Extension README for all animation knobs."
+}

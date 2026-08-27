@@ -2,7 +2,7 @@
 // Unit tests: component_registry
 // ============================================================================
 // Tests: add, find, iterate, overflow, duplicate detection, category filtering.
-// Build: g++ -std=c++17 ... (see tests/run_tests.sh)
+// Build: CMake/CTest (see tests/CMakeLists.txt)
 
 #include "../src/app/component_registry.h"
 
@@ -49,7 +49,9 @@ static void test_add_and_find() {
         .delete_config = nullptr,
         .custom_actions = nullptr,
         .num_custom_actions = 0,
-        .fragment_id = "wifi"
+           .fragment_id = "wifi",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
 
     bool added = component_registry_add(&comp);
@@ -89,7 +91,9 @@ static void test_max_components() {
             .delete_config = nullptr,
             .custom_actions = nullptr,
             .num_custom_actions = 0,
-            .fragment_id = nullptr
+            .fragment_id = nullptr,
+            .portal_script = nullptr,
+            .portal_style = nullptr
         };
     }
 
@@ -121,7 +125,9 @@ static void test_duplicate_id() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "timers"
+            .fragment_id = "timers",
+            .portal_script = nullptr,
+            .portal_style = nullptr
     };
     static ComponentDef comp2 = {
         .id = "timers",
@@ -131,7 +137,9 @@ static void test_duplicate_id() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "timers"
+        .fragment_id = "timers",
+        .portal_script = nullptr,
+        .portal_style = nullptr
     };
 
     bool first = component_registry_add(&comp1);
@@ -157,7 +165,9 @@ static void test_category_iteration() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "wifi"
+           .fragment_id = "wifi",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
     static ComponentDef actions_comp1 = {
         .id = "swipe-actions", .category = "actions", .display_name = "Swipe Actions",
@@ -165,7 +175,9 @@ static void test_category_iteration() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "swipe-actions"
+           .fragment_id = "swipe-actions",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
     static ComponentDef actions_comp2 = {
         .id = "boot-actions", .category = "actions", .display_name = "Boot Actions",
@@ -173,7 +185,9 @@ static void test_category_iteration() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "boot-actions"
+           .fragment_id = "boot-actions",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
 
     component_registry_add(&device_comp);
@@ -227,7 +241,9 @@ static void test_nav_order() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "timers"
+           .fragment_id = "timers",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
     static ComponentDef comp_a = {
         .id = "swipe-actions", .category = "actions", .display_name = "Swipe Actions",
@@ -235,7 +251,9 @@ static void test_nav_order() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "swipe-actions"
+           .fragment_id = "swipe-actions",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
     static ComponentDef comp_b = {
         .id = "boot-actions", .category = "actions", .display_name = "Boot Actions",
@@ -243,7 +261,9 @@ static void test_nav_order() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "boot-actions"
+           .fragment_id = "boot-actions",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
 
     component_registry_add(&comp_c);  // nav_order=30
@@ -285,7 +305,9 @@ static void test_get_by_index() {
         .get_config = nullptr, .save_config = nullptr,
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = nullptr, .num_custom_actions = 0,
-        .fragment_id = "ble"
+           .fragment_id = "ble",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
 
     component_registry_add(&comp);
@@ -316,7 +338,9 @@ static void test_custom_actions() {
         .save_config_body = nullptr, .delete_config = nullptr,
         .custom_actions = actions,
         .num_custom_actions = 3,
-        .fragment_id = "brightness"
+           .fragment_id = "brightness",
+           .portal_script = nullptr,
+           .portal_style = nullptr
     };
 
     component_registry_add(&comp);

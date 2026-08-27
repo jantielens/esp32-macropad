@@ -73,15 +73,15 @@ static const char* split_name_format(const char* params, size_t* name_len) {
 // Scheme resolver — called by binding_template_resolve() for [pad:...]
 // ============================================================================
 
-static bool pad_binding_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus pad_binding_resolve(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         strlcpy(out, "ERR:no_name", out_len);  // debug only — engine overwrites with "---"
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (!g_bindings) {
         strlcpy(out, "ERR:no_page", out_len);  // debug only — engine overwrites with "---"
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // Split "name" or "name;format"
@@ -92,24 +92,20 @@ static bool pad_binding_resolve(const char* params, char* out, size_t out_len) {
     const char* tmpl = find_binding(g_bindings, g_binding_count, params, name_len);
     if (!tmpl) {
         strlcpy(out, "ERR:not_found", out_len);  // debug only — engine overwrites with "---"
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // Guard against recursive [pad:] references in the underlying template
     if (strstr(tmpl, "[pad:")) {
         strlcpy(out, "ERR:recursive", out_len);  // debug only — engine overwrites with "---"
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // Resolve the underlying binding template
     char resolved[BINDING_TEMPLATE_MAX_LEN];
-    binding_template_resolve(tmpl, resolved, sizeof(resolved));
-
-    // If resolution produced a placeholder, pass it through
-    if (strstr(resolved, "---") != nullptr) {
-        strlcpy(out, resolved, out_len);
-        return false;
-    }
+    const BindingResolverStatus status = binding_template_resolve_status(
+        tmpl, resolved, sizeof(resolved));
+    if (status != BINDING_RESOLVER_RESOLVED) return status;
 
     // Apply per-usage format if provided
     if (fmt && fmt[0]) {
@@ -127,7 +123,7 @@ static bool pad_binding_resolve(const char* params, char* out, size_t out_len) {
         strlcpy(out, resolved, out_len);
     }
 
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 // ============================================================================
@@ -293,24 +289,11 @@ void pad_resolve(const char* const* inputs, size_t count,
 // Init
 // ============================================================================
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void pad_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[pad:name]";
-    o["example"] = "[pad:power]";
-    o["note"]    = "resolves a pad-level named binding declared in pad.bindings; usable inside [expr:..]";
-    o["limit"]   = "one level only: a pad binding's VALUE may not contain another [pad:...] token (the engine will not resolve pad-through-pad and renders blank). Inline the underlying binding instead. validate_pad rejects this.";
-}
-#endif
-
 void pad_binding_init() {
-    if (!binding_template_register("pad", pad_binding_resolve, pad_binding_collect)) {
+    if (!binding_template_register("pad", pad_binding_resolve, pad_binding_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr})) {
         LOGE(TAG, "Failed to register pad binding scheme");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("pad", pad_scheme_describe);
-#endif
 }
 
 #endif // HAS_DISPLAY && HAS_MQTT

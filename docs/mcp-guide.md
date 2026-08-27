@@ -193,6 +193,9 @@ graph LR
   Reads are capped at 65,536 bytes; use the portal Storage page for larger streamed downloads.
 - `get_ha_execution_result` — look up the pending or completed Home Assistant
   action results returned by `press_button`.
+- `get_camera_status` — camera detection state, active capture settings,
+  board-specific limits, and authenticated JPEG, RAW10, and MJPEG portal
+  endpoints.
 
 **Control tools** (require the control toggle):
 
@@ -211,7 +214,9 @@ graph LR
 - `set_volume` — set (0-100) or adjust (signed delta) the speaker volume.
 - `timer_control` — start, stop, toggle, pause, resume, reset, set, or adjust one
   of the three on-screen timers. Start and Toggle require `mode` (`up` or
-  `down`); countdown starts also require a positive whole-second `value`.
+  `down`); countdown starts also require a positive whole-second `value`. Set
+  and positive Adjust values prepare a paused countdown when a stopwatch timer
+  is stopped, so a later Toggle or Resume starts from that target.
 - `set_config` — write a safe subset of device settings that apply live without a
   reboot: device name, backlight brightness, the screen-saver group, MQTT publish
   interval/scope, and audio volume. WiFi/MQTT/HA credentials, operating mode, and
@@ -220,16 +225,22 @@ graph LR
   `swipe`, `boot`, `button-defaults`, `hw-buttons`, `mqtt-triggers`) with a
   validated full-replacement object (read it first with `get_component_config`,
   edit, send back).
+- `set_camera_config` — persist one or more camera capture settings. Read
+  `get_camera_status` first for the valid output dimensions and limits.
+- `capture_camera_snapshot` — capture a JPEG and save it to the latest snapshot,
+  dated camera roll, or both. Image bytes remain on the portal and Storage
+  browser surfaces rather than in the JSON-only MCP response.
 
 The `timers` component contains only per-slot `expire_actions` arrays. A
-countdown snapshots those settings when it starts, so configuration edits apply
-to later runs. The component's `exists` result reports whether
+countdown snapshots those settings when it starts, including when Toggle or
+Resume starts a prepared countdown, so configuration edits apply to later runs.
+The component's `exists` result reports whether
 `/config/timers.json` physically exists, even when normalized content is empty.
 - `system_command` — `reboot`, `wifi_reconnect`, or `screensaver`.
 
-Display-related tools are present only on boards that have a display; `set_volume`
-requires audio hardware; `get_component_config` lists only the components compiled
-into the board.
+Display-related tools are present only on boards that have a display; camera tools
+require camera hardware; `set_volume` requires audio hardware; and
+`get_component_config` lists only the components compiled into the board.
 
 ### Home Assistant execution results
 
@@ -300,6 +311,9 @@ Active records are never evicted. When all four records are active or retained,
 
 - `get_capabilities` — manifest of widget types + fields, button schema, label-style
   DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
+  Binding scheme names, parameter limits, and finite keys are serialized from the
+  same live registry used by `GET /api/bindings` for the portal, so the manifest
+  reflects the current board and device class without a separate MCP catalog.
   On microphone-input boards, it also advertises the read-only `[audio:input.rms]`,
   `[audio:input.peak]`, and `[audio:input.active]` bindings. RMS and peak are
   sound levels from 0 to 100; `active` is `true` while the resolver-driven meter
@@ -315,8 +329,10 @@ Active records are never evicted. When all four records are active or retained,
   `excluded_pads` (comma-separated 1-based pad numbers).
   It also carries a `device_config` section advertising `set_config`'s writable
   fields and the read/write component list. Its `storage` object advertises the storage
-  tool names, 128-entry listing limit, and 65,536-byte Base64 file-read limit. Read-only,
-  so it works with token alone.
+  tool names, 128-entry listing limit, and 65,536-byte Base64 file-read limit.
+  Camera boards additionally expose `camera`, which names the camera status,
+  configuration, and capture tools and explains that image transport stays on
+  authenticated portal and storage endpoints. Read-only, so it works with token alone.
 - `get_pad_blocks` — list pre-built button groups (building blocks) that can be
   dropped onto a pad. Read-only.
 - `validate_pad` — dry-run validate a pad JSON (grid bounds, span overflow,
@@ -451,14 +467,16 @@ compile none of it.
     "stages": [
       { "name": "Dose", "instruction": "Add coffee", "type": "manual",
         "on_enter": ["tare"], "on_exit": ["capture_dose"] },
-      { "name": "Bloom", "type": "auto_time", "auto_time_s": 45,
+      { "name": "Bloom", "type": "auto_time", "target_time_s": 45,
         "target_weight": 40.0 }
     ]
   }
   ```
 
   Stage `type` is `manual`, `auto_weight` (advances at `target_weight` /
-  `auto_threshold` g) or `auto_time` (advances after `auto_time_s`); effects in
+  `auto_threshold` g) or `auto_time` (advances after `target_time_s`).
+  `target_time_s` is also an advisory progress target for `manual` and
+  `auto_weight` stages; it does not advance those stages. Effects in
   `on_enter`/`on_exit` include `tare`, `beep`, `capture_dose`, `marker`,
   `capture_weight`. Max 16 stages; the template is validated before saving.
 

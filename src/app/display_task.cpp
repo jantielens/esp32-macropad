@@ -5,6 +5,7 @@
 
 #include "display_manager.h"
 #include "log_manager.h"
+#include "ota_activity.h"
 #include "rtos_task_utils.h"
 
 #include "data_stream.h"
@@ -83,8 +84,6 @@ void DisplayManager::lvglTask(void* pvParameter) {
 		
 		while (true) {
 				mgr->lock();
-				mgr->processDisplayJob();
-				action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
 				bool updated_after_screen_switch = false;
 				if (mgr->lvglStopRequested) {
 						mgr->unlock();
@@ -92,6 +91,14 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						vTaskSuspend(nullptr);
 						continue;
 				}
+					if (ota_activity_is_active()) {
+						mgr->flushPending = false;
+						mgr->unlock();
+						vTaskDelay(pdMS_TO_TICKS(20));
+						continue;
+					}
+					mgr->processDisplayJob();
+					action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
 
 				// Apply any deferred splash status update.
 				if (mgr->pendingSplashStatusSet) {
@@ -287,6 +294,7 @@ void DisplayManager::presentTask(void* pvParameter) {
 		while (true) {
 				// Wait for signal from LVGL task
 				xSemaphoreTake(mgr->presentSem, portMAX_DELAY);
+				if (ota_activity_is_active()) continue;
 				
 				// Time the QSPI panel transfer
 				const uint64_t start_us = esp_timer_get_time();

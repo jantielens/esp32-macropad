@@ -6,6 +6,7 @@
 #include "binding_template.h"
 #include "list_provider.h"
 #include "log_manager.h"
+#include <stdio.h>
 #include <string.h>
 
 #define TAG "ListBind"
@@ -55,30 +56,30 @@ void list_binding_set_selected(const char* provider_id, const char* item_id) {
 // Resolver — params = "provider_id.selected" (dot-delimited)
 // ============================================================================
 
-static bool list_binding_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus list_binding_resolve(const char* params, char* out, size_t out_len) {
     // Split on '.' — left = provider_id, right = key
     const char* dot = strchr(params, '.');
-    if (!dot) return false;
+    if (!dot) return BINDING_RESOLVER_UNAVAILABLE;
 
     size_t id_len = (size_t)(dot - params);
-    if (id_len == 0 || id_len >= LIST_ITEM_ID_MAX) return false;
+    if (id_len == 0 || id_len >= LIST_ITEM_ID_MAX) return BINDING_RESOLVER_UNAVAILABLE;
 
     char provider_id[LIST_ITEM_ID_MAX];
     memcpy(provider_id, params, id_len);
     provider_id[id_len] = '\0';
 
     const char* key = dot + 1;
-    if (strcmp(key, "selected") != 0) return false;
+    if (strcmp(key, "selected") != 0) return BINDING_RESOLVER_UNAVAILABLE;
 
     // Look up entry
     for (uint8_t i = 0; i < g_entry_count; i++) {
         if (strcmp(g_entries[i].provider_id, provider_id) == 0) {
-            if (g_entries[i].selected_id[0] == '\0') return false;
+            if (g_entries[i].selected_id[0] == '\0') return BINDING_RESOLVER_UNAVAILABLE;
             strlcpy(out, g_entries[i].selected_id, out_len);
-            return true;
+            return BINDING_RESOLVER_RESOLVED;
         }
     }
-    return false;
+    return BINDING_RESOLVER_UNAVAILABLE;
 }
 
 // ============================================================================
@@ -90,44 +91,31 @@ static void list_binding_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
+static uint8_t list_binding_key_count() {
+    return list_provider_count();
+}
+
+static const char* list_binding_key_at(uint8_t index) {
+    const ListProvider* provider = list_provider_at(index);
+    if (!provider || !provider->id || !provider->id[0]) return nullptr;
+
+    static char key[LIST_ITEM_ID_MAX + sizeof(".selected")];
+    snprintf(key, sizeof(key), "%s.selected", provider->id);
+    return key;
+}
+
 // ============================================================================
 // Init
 // ============================================================================
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void list_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]    = "[list:provider.selected]";
-    o["example"]   = "[list:pads.selected]";
-    o["providers"] = "see list_providers[]";
-}
-
-// Validate a [list:PROVIDER.field] token: the provider must be registered.
-static char s_list_verr[80];
-static const char* list_scheme_validate(const char* params) {
-    if (!params || !params[0]) return nullptr;
-    char provider[LIST_ITEM_ID_MAX];
-    size_t n = 0;
-    while (params[n] && params[n] != '.' && n < sizeof(provider) - 1) { provider[n] = params[n]; n++; }
-    provider[n] = '\0';
-    if (!provider[0] || list_provider_find(provider)) return nullptr;
-    snprintf(s_list_verr, sizeof(s_list_verr),
-             "unknown list provider '%s' — use one from capabilities.list_providers", provider);
-    return s_list_verr;
-}
-#endif
-
 void list_binding_init() {
-    if (!binding_template_register("list", list_binding_resolve, list_binding_collect)) {
+    if (!binding_template_register("list", list_binding_resolve, list_binding_collect,
+                                   {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
+                                    list_binding_key_count, list_binding_key_at})) {
         LOGE(TAG, "Failed to register list binding scheme");
     } else {
         LOGI(TAG, "List binding scheme registered");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("list", list_scheme_describe);
-    binding_template_set_scheme_validate("list", list_scheme_validate);
-#endif
 }
 
 #else // !HAS_DISPLAY

@@ -3,9 +3,9 @@
   <p>Controls how the device runs.</p>
 </div>
 <div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Operating Mode</h5></div>
   <div class="card-body">
-    <fieldset class="mb-3">
-      <legend class="form-label">Operating Mode</legend>
+    <fieldset class="mb-0">
 
       <div class="form-check" id="mode_opt_always_on">
         <input class="form-check-input" type="radio" name="operating_mode" id="operating_mode_always_on" value="always_on">
@@ -47,8 +47,12 @@
            it would be unreachable. -->
     </fieldset>
 
-    <div id="duty-cycle-settings" style="display:none;">
-      <hr>
+  </div>
+</div>
+
+<div class="card mb-3" id="duty-cycle-settings" style="display:none;">
+  <div class="card-header"><h5 class="mb-0">Duty-Cycle Settings</h5></div>
+  <div class="card-body">
       <div class="row">
         <div class="col-md-6 mb-3">
           <label class="form-label" for="duty_cycle_wake_seconds">Wake Interval (seconds)</label>
@@ -61,11 +65,12 @@
           <div class="form-text">Cap on exponential backoff when Wi-Fi connect fails. Uses the wake interval as the base. (Duty-Cycle MQTT only.)</div>
         </div>
       </div>
-    </div>
+  </div>
+</div>
 
-    <div id="ble-telemetry-settings" style="display:none;">
-      <hr>
-      <h6 class="mb-2">BLE Advertising</h6>
+<div class="card mb-3" id="ble-telemetry-settings" style="display:none;">
+  <div class="card-header"><h5 class="mb-0">BLE Advertising</h5></div>
+  <div class="card-body">
       <div class="row">
         <div class="col-md-6 mb-3">
           <label class="form-label" for="ble_burst_count">Burst Count</label>
@@ -78,10 +83,12 @@
           <div class="form-text">Time between adv packets within the burst (20&ndash;10240 ms).</div>
         </div>
       </div>
-    </div>
+  </div>
+</div>
 
-    <details class="mb-3">
-      <summary class="form-label" style="cursor:pointer;">Recovery Portal Auto-Sleep</summary>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Recovery Portal Auto-Sleep</h5></div>
+  <div class="card-body">
       <div class="mt-2">
         <label class="form-label" for="portal_idle_timeout_seconds">Auto-Sleep Delay (seconds)</label>
         <input type="number" class="form-control" id="portal_idle_timeout_seconds" name="portal_idle_timeout_seconds" min="0" max="65535" placeholder="120">
@@ -91,10 +98,9 @@
           same duration, then wakes to retry Wi-Fi. <code>0</code> = disabled (portal stays up indefinitely).
         </div>
       </div>
-    </details>
-
-    <div class="save-bar">
-      <button type="button" class="btn btn-primary btn-sm" id="mode-save-btn">Save</button>
-    </div>
   </div>
+</div>
+
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="mode-save-btn">Save Operating Mode</button>
 </div>

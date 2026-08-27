@@ -7,18 +7,33 @@
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "net_activity.h"
+#include "ota_activity.h"
 
 #include <Update.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 
-// OTA upload state gate (avoid concurrent uploads).
 static portMUX_TYPE g_ota_upload_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t g_ota_last_percent = 0;
+static bool g_ota_upload_active = false;
 
 static size_t ota_progress = 0;
 static size_t ota_total = 0;
+
+static void ota_upload_finish() {
+		portENTER_CRITICAL(&g_ota_upload_mux);
+		g_ota_upload_active = false;
+		portEXIT_CRITICAL(&g_ota_upload_mux);
+		ota_activity_finish();
+}
+
+static bool ota_upload_is_active() {
+		portENTER_CRITICAL(&g_ota_upload_mux);
+		const bool active = g_ota_upload_active;
+		portEXIT_CRITICAL(&g_ota_upload_mux);
+		return active;
+}
 
 // POST /api/update - Handle OTA firmware upload
 void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -26,15 +41,13 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 
 		// First chunk - initialize OTA
 		if (index == 0) {
-				// Guard against concurrent OTA uploads or online-update flow.
-				bool allowed = false;
-				portENTER_CRITICAL(&g_ota_upload_mux);
-				if (!web_portal_ota_in_progress() && !web_portal_firmware_update_in_progress()) {
-						web_portal_set_ota_in_progress(true);
+				const bool allowed = ota_activity_try_begin();
+				if (allowed) {
+						portENTER_CRITICAL(&g_ota_upload_mux);
 						g_ota_last_percent = 0;
-						allowed = true;
+						g_ota_upload_active = true;
+						portEXIT_CRITICAL(&g_ota_upload_mux);
 				}
-				portEXIT_CRITICAL(&g_ota_upload_mux);
 
 				if (!allowed) {
 						request->send(409, "application/json", "{\"success\":false,\"message\":\"Update already in progress\"}");
@@ -52,9 +65,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 				if (!filename.endsWith(".bin")) {
 								LOGE("OTA", "Not a .bin file");
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"Only .bin files are supported\"}");
-						portENTER_CRITICAL(&g_ota_upload_mux);
-						web_portal_set_ota_in_progress(false);
-						portEXIT_CRITICAL(&g_ota_upload_mux);
+						ota_upload_finish();
 						return;
 				}
 
@@ -68,9 +79,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 				if (ota_total > 0 && ota_total > freeSpace) {
 								LOGE("OTA", "Firmware too large");
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"Firmware too large\"}");
-						portENTER_CRITICAL(&g_ota_upload_mux);
-						web_portal_set_ota_in_progress(false);
-						portEXIT_CRITICAL(&g_ota_upload_mux);
+						ota_upload_finish();
 						return;
 				}
 
@@ -79,11 +88,11 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 								LOGE("OTA", "Begin failed");
 						Update.printError(Serial);
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"OTA begin failed\"}");
-						portENTER_CRITICAL(&g_ota_upload_mux);
-						web_portal_set_ota_in_progress(false);
-						portEXIT_CRITICAL(&g_ota_upload_mux);
+						ota_upload_finish();
 						return;
 				}
+		} else if (!ota_upload_is_active()) {
+				return;
 		}
 
 		// Write chunk to flash
@@ -94,9 +103,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 						Update.printError(Serial);
 						Update.abort();
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"Write failed\"}");
-						portENTER_CRITICAL(&g_ota_upload_mux);
-						web_portal_set_ota_in_progress(false);
-						portEXIT_CRITICAL(&g_ota_upload_mux);
+						ota_upload_finish();
 						return;
 				}
 
@@ -122,14 +129,13 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 
 						delay(500);
 						ESP.restart();
+						return;
 				} else {
 								LOGE("OTA", "Update failed");
 						Update.printError(Serial);
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"Update failed\"}");
 				}
 
-				portENTER_CRITICAL(&g_ota_upload_mux);
-				web_portal_set_ota_in_progress(false);
-				portEXIT_CRITICAL(&g_ota_upload_mux);
+				ota_upload_finish();
 		}
 }

@@ -18,7 +18,7 @@ ESP32 Macropad — a feature-rich, configurable macropad firmware for ESP32 devi
 - **Widget Subsystem** (`HAS_DISPLAY`): Extensible widget types — gauge, sparkline, bar chart, table, rocker, numeric rocker, list. Each widget renders inside a button.
 - **Data Stream Registry** (`HAS_DISPLAY && HAS_MQTT`): Demand-driven per-widget ring buffers in PSRAM for history-based widgets. Slots are bucketed on wall-clock time once NTP is valid (ring reset once on the transition), so history from external sources lines up with live samples.
 - **HA History Backfill** (`HAS_HA_HISTORY` = `HAS_DISPLAY && HAS_MQTT && HAS_PSRAM`): Fills the unsampled part of a sparkline stream from Home Assistant Recorder long-term statistics. `ha_stats.{h,cpp}` — background PSRAM-stacked FreeRTOS task, one request in flight, POSTs `recorder/get_statistics`; `ha_stats_resample.{h,cpp}` — pure, host-testable ISO 8601 parsing / bucket resampling / ring merge (`tests/test_ha_stats_resample.cpp`). Live samples always win over backfilled values.
-- **Binding Template Engine** (`HAS_MQTT`): Scheme-extensible `[scheme:params]` token resolver. Schemes: `mqtt`, `health`, `time`, `expr`, `pad`, `timer`, `list`, `net`. Pipe fallback: `[scheme:params|fallback]`. Called only from LVGL task.
+- **Binding Template Engine** (`HAS_MQTT`): Scheme-extensible `[scheme:params]` token resolver. Schemes: `mqtt`, `health`, `time`, `expr`, `pad`, `timer`, `list`, `net`. Pipe fallback: `[scheme:params|fallback]`. Called only from LVGL task. Each scheme registers a `BindingSchemeSpec` containing its parameter and finite-key metadata; the core validator, `GET /api/bindings`, and MCP `get_capabilities` consume that single registry. `binding_schema.{h,cpp}` owns the shared JSON serialization.
 - **Pad Validate + Resolve core** (`HAS_DISPLAY`): Single source of truth shared by BOTH front-ends (MCP tools + web portal). `pad_validate.{h,cpp}` — `pad_validate(pad, tolerate_offgrid=false)` validates a full pad JSON (grid/spans, widget types + config caps, colors, action arrays, binding tokens, one-level `[pad:]` rule); the portal save path passes `tolerate_offgrid=true` to keep hidden off-grid buttons, MCP stays strict. `pad_resolve_request.{h,cpp}` — `pad_resolve_request(args, result)` resolves `[scheme:params]` tokens against live data for `resolve_bindings` (MCP) and `POST /api/pad/resolve` (portal); resolution runs on the main loop via the bridge (below) using `pad_resolve()` in `pad_binding.cpp`. Extracting these killed the former three-way drift (MCP `validate_pad_doc`, portal `validate_pad_json`, JS `portal_binding_validator.js`).
 - **Deferred dispatch slots** (`deferred_dispatch_slot.h`): Shared fixed-buffer, single-slot completion primitive for cross-task synchronous work. It uses a `StaticSemaphore_t` binary semaphore and internal-DRAM state, rejects invalid, unavailable, ISR/consumer-task, and oversized requests explicitly, and retains a timed-out slot until its sole consumer finishes. At the completion/timeout boundary it consumes the matching completion give before reuse. An abandoned cleanup callback runs exactly once on the consumer task, outside the slot lock; normal success, busy, invalid, unavailable, and oversized paths never run it. `main_loop_bridge.{h,cpp}` instantiates the 256-byte main-loop slot, is independent of `HAS_MCP`, and is drained by Arduino `loopTask` through `web_portal_handle()`. `DisplayManager` instantiates the 64-byte display slot, drained only by the LVGL task under its existing mutex. Pointer-bearing contexts are shallow copies, so callers must transfer payload ownership with abandoned cleanup or have execution own and release it.
 - **MCP Core Server** (`web_mcp.{cpp,h}`): Built-in Model Context Protocol server — single `POST /mcp` JSON-RPC 2.0 endpoint (protocol `2025-06-18`, Streamable HTTP, JSON-only, stateless). Gated by the `HAS_MCP` compile-time flag (default true; independent of `HAS_DISPLAY`). Self-registers via `REGISTER_ROUTES` using a custom `AsyncWebHandler` subclass (the stock callback handler rejects `Accept: text/event-stream` requests via `isHTTP()`, which all MCP clients send). Off by default, STA-mode only, dedicated bearer token (hardware-RNG, constant-time compare, fail-closed). Extensible tool registry (`mcp_tool_registry.{h,cpp}` + `REGISTER_MCP_TOOL`); core universal read/control tools in `mcp_tools_core.cpp` (device/screen/pad-press/system) and `mcp_tools_config.cpp` (device-settings `get_config`/`set_config`, `notify`, `set_volume`, `timer_control`, `get_component_config`/`set_component_config`); pad authoring + capability manifest in `mcp_tools_pads.cpp`; device-class tools aggregate through `mcp_components.cpp`. Control tools (gated by `mcp_control_enabled`) NEVER call `action_dispatch`/LVGL/blocking I/O on the web task — they defer to the main loop via `mcp_control_dispatch()` (spinlock slot + binary semaphore, bounded wait), drained in `web_mcp_loop()`. Reboot is deferred with a grace period so the response flushes first. See `docs/mcp-guide.md`.
@@ -98,6 +98,26 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 - Include startup diagnostics (chip model, revision, CPU freq, flash size) using `ESP.*` functions
 - Implement heartbeat pattern with `millis()` for long-running loops (5s interval)
 
+### OTA Activity Contract
+
+`ota_activity.{h,cpp}` owns the single race-safe lifecycle for manual and
+online firmware updates. OTA entry points call `ota_activity_try_begin()` before
+they can reach `Update.begin()` and call `ota_activity_finish()` on every
+recoverable failure. Successful updates retain ownership through reboot.
+
+New background subsystems must decide whether their work competes with OTA flash
+writes. For nonessential network I/O, decoding, rendering, polling, or
+PSRAM-heavy computation, check `ota_activity_is_active()` before starting work
+and at an owned safe point in long-running work. Return, defer, or close the
+subsystem's own operation there; do not suspend another task or add a global
+pause framework.
+
+Keep WiFi, AsyncTCP, portal responses and OTA status polling, OTA transport,
+reboot processing, and safety-critical device-class loops operational. Do not
+reuse the image-fetch screen-saver suspension for OTA: it has independent
+ownership. If a new subsystem needs a checkpoint, add focused coverage to
+`tests/` and exercise it during OTA stress validation.
+
 ## Key Files
 
 ### Scripts
@@ -127,7 +147,8 @@ All scripts use absolute paths via `SCRIPT_DIR` resolution — they work from an
 
 ### Tests
 
-- `tests/run_tests.sh` — Builds and runs all host-native tests (no ESP32 needed)
+- `CMakeLists.txt` + `tests/CMakeLists.txt` — Configure, build, and run host-native tests with CTest (no ESP32 needed)
+- Host tests require CMake 3.20 or later. Run the complete suite with `cmake -S . -B build/host-tests`, `cmake --build build/host-tests --parallel`, then `ctest --test-dir build/host-tests --output-on-failure`. When CMake comes from ESP-IDF but is absent from `PATH`, prepend `$HOME/.espressif/tools/cmake/<version>/bin` to `PATH`.
 - `tests/test_expr_eval.cpp` — Expression evaluator tests
 - `tests/test_expr_binding.cpp` — Expression binding integration tests
 - `tests/test_key_sequence.cpp` — Key sequence DSL parser tests

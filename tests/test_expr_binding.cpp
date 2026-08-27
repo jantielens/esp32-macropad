@@ -52,15 +52,15 @@ static void parse_mock_params(const char* params,
     path[plen] = '\0';
 }
 
-static bool mock_mqtt_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mock_mqtt_resolve(const char* params, char* out, size_t out_len) {
     char topic[128], path[64];
     parse_mock_params(params, topic, sizeof(topic), path, sizeof(path));
 
     std::string key = std::string(topic) + ";" + path;
     auto it = g_mqtt_values.find(key);
-    if (it == g_mqtt_values.end()) return false;
+    if (it == g_mqtt_values.end()) return BINDING_RESOLVER_UNAVAILABLE;
     snprintf(out, out_len, "%s", it->second.c_str());
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 static void mock_mqtt_collect(const char* params, void* user_data) {
@@ -73,13 +73,13 @@ static void mock_mqtt_collect(const char* params, void* user_data) {
 
 static std::map<std::string, std::string> g_health_values;
 
-static bool mock_health_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus mock_health_resolve(const char* params, char* out, size_t out_len) {
     const char* sep = strchr(params, ';');
     std::string key = sep ? std::string(params, sep - params) : std::string(params);
     auto it = g_health_values.find(key);
-    if (it == g_health_values.end()) return false;
+    if (it == g_health_values.end()) return BINDING_RESOLVER_UNAVAILABLE;
     snprintf(out, out_len, "%s", it->second.c_str());
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 static void mock_health_collect(const char* params, void* user_data) {
@@ -189,10 +189,10 @@ static bool resolve_and_quote(const char* expr, char* out, size_t out_len) {
     return true;
 }
 
-static bool expr_test_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus expr_test_resolve(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:empty expr");
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     char buf[BINDING_TEMPLATE_MAX_LEN];
@@ -204,14 +204,14 @@ static bool expr_test_resolve(const char* params, char* out, size_t out_len) {
     char resolved[BINDING_TEMPLATE_MAX_LEN];
     if (!resolve_and_quote(buf, resolved, sizeof(resolved))) {
         snprintf(out, out_len, "---");
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // Evaluate
     char eval_result[EXPR_STR_MAX];
     if (!expr_eval(resolved, eval_result, sizeof(eval_result))) {
         snprintf(out, out_len, "%s", eval_result);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // Format (basic for tests)
@@ -226,7 +226,7 @@ static bool expr_test_resolve(const char* params, char* out, size_t out_len) {
     } else {
         snprintf(out, out_len, "%s", eval_result);
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 static void expr_test_collect(const char* params, void* user_data) {
@@ -627,9 +627,11 @@ int main() {
     printf("=== expr binding integration tests ===\n\n");
 
     // Register schemes (order matters — inner schemes before expr)
-    binding_template_register("mqtt",   mock_mqtt_resolve,   mock_mqtt_collect);
-    binding_template_register("health", mock_health_resolve, mock_health_collect);
-    binding_template_register("expr",   expr_test_resolve,   expr_test_collect);
+    const BindingSchemeSpec free_form = { 1, 3, 2, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr };
+    const BindingSchemeSpec expression = { 1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr };
+    binding_template_register("mqtt",   mock_mqtt_resolve,   mock_mqtt_collect, free_form);
+    binding_template_register("health", mock_health_resolve, mock_health_collect, free_form);
+    binding_template_register("expr",   expr_test_resolve,   expr_test_collect, expression);
 
     test_unit_conversion();
     test_conditional_text();

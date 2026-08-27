@@ -8,6 +8,7 @@
 #include "brew_template_dsl.h"
 
 #include <ArduinoJson.h>
+#include <stdint.h>
 #include <string.h>
 
 // ---------------------------------------------------------------------------
@@ -177,6 +178,20 @@ int brew_dsl_parse(const char* json, size_t json_len,
             set_err(err_buf, err_buf_len, msg);
             return BREW_DSL_ERR_STAGE_TYPE;
         }
+
+        // target_time_s must fit when converted to the internal millisecond
+        // representation. Reject invalid values rather than silently wrapping
+        // into a short or zero-duration target.
+        JsonVariantConst target_time = sobj["target_time_s"];
+        if (!target_time.isNull()) {
+            if (!target_time.is<uint32_t>()
+                || target_time.as<uint64_t>() > (UINT32_MAX / 1000U)) {
+                char msg[64];
+                snprintf(msg, sizeof(msg), "stage %d: invalid 'target_time_s'", i);
+                set_err(err_buf, err_buf_len, msg);
+                return BREW_DSL_ERR_TARGET_TIME;
+            }
+        }
     }
 
     // Allocate
@@ -195,6 +210,8 @@ int brew_dsl_parse(const char* json, size_t json_len,
     safe_copy(tmpl->description,  sizeof(tmpl->description),  doc["description"]  | "");
     safe_copy(tmpl->start_label,  sizeof(tmpl->start_label),  doc["start_label"]  | "");
     safe_copy(tmpl->done_label,   sizeof(tmpl->done_label),   doc["done_label"]   | "");
+    safe_copy(tmpl->idle_instruction, sizeof(tmpl->idle_instruction), doc["idle_instruction"] | "");
+    safe_copy(tmpl->done_instruction, sizeof(tmpl->done_instruction), doc["done_instruction"] | "");
     tmpl->stages      = stages;
     tmpl->stage_count  = (uint8_t)stage_count;
     tmpl->is_dynamic   = true;
@@ -227,9 +244,9 @@ int brew_dsl_parse(const char* json, size_t json_len,
         s.target_weight   = sobj["target_weight"]  | 0.0f;
         s.target_flow_rate = sobj["target_flow_rate"] | 0.0f;
 
-        // auto_time_s → auto_time_ms
-        uint32_t time_s = sobj["auto_time_s"] | (uint32_t)0;
-        s.auto_time_ms = time_s * 1000;
+        // target_time_s → target_time_ms. Only auto_time stages auto-advance.
+        uint32_t time_s = sobj["target_time_s"] | (uint32_t)0;
+        s.target_time_ms = time_s * 1000;
 
         // Beep pattern (optional, empty string = default beep)
         safe_copy(s.beep_pattern, sizeof(s.beep_pattern), sobj["beep_pattern"] | "");
@@ -290,6 +307,8 @@ int brew_dsl_serialize(const BrewTemplate* tmpl, char* buf, size_t buf_len) {
     if (tmpl->description[0])  doc["description"]  = tmpl->description;
     if (tmpl->start_label[0])  doc["start_label"]  = tmpl->start_label;
     if (tmpl->done_label[0])   doc["done_label"]   = tmpl->done_label;
+    if (tmpl->idle_instruction[0]) doc["idle_instruction"] = tmpl->idle_instruction;
+    if (tmpl->done_instruction[0]) doc["done_instruction"] = tmpl->done_instruction;
 
     JsonArray stages_arr = doc["stages"].to<JsonArray>();
 
@@ -314,7 +333,7 @@ int brew_dsl_serialize(const BrewTemplate* tmpl, char* buf, size_t buf_len) {
         if (s.auto_threshold != 0.0f)  sobj["auto_threshold"]  = s.auto_threshold;
         if (s.target_weight != 0.0f)   sobj["target_weight"]   = s.target_weight;
         if (s.target_flow_rate != 0.0f) sobj["target_flow_rate"] = s.target_flow_rate;
-        if (s.auto_time_ms != 0)       sobj["auto_time_s"]     = s.auto_time_ms / 1000;
+        if (s.target_time_ms != 0)     sobj["target_time_s"]   = s.target_time_ms / 1000;
 
         // Beep pattern (only emit if non-empty)
         if (s.beep_pattern[0]) sobj["beep_pattern"] = s.beep_pattern;

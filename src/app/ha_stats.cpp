@@ -6,6 +6,7 @@
 #include "config_manager.h"     // DeviceConfig, CONFIG_HA_*_MAX_LEN
 #include "log_manager.h"
 #include "net_activity.h"
+#include "ota_activity.h"
 #include "psram_json_allocator.h"
 #include "rtos_task_utils.h"
 #include "web_portal_state.h"   // web_portal_get_current_config()
@@ -121,6 +122,7 @@ static uint64_t parse_start(JsonVariantConst v) {
 // Fetch and resample one job into `out` (slot_count entries). Returns the
 // number of buckets that received a value, or -1 on failure.
 static int fetch_job(const HaStatsJob& job, float* out) {
+        if (ota_activity_is_active()) return -1;
     const uint32_t t_start = millis();
     const DeviceConfig* cfg = web_portal_get_current_config();
     if (!cfg || !cfg->ha_url[0] || !cfg->ha_token[0]) {
@@ -176,6 +178,11 @@ static int fetch_job(const HaStatsJob& job, float* out) {
     }
     if (!began) {
         LOGW(TAG, "HTTP begin failed: %s", url);
+        return -1;
+    }
+
+    if (ota_activity_is_active()) {
+        http.end();
         return -1;
     }
 
@@ -372,7 +379,7 @@ bool ha_stats_request(data_stream_handle_t handle, uint32_t uid,
                       const char* entity_id, uint8_t statistic,
                       uint32_t slot_ms, uint16_t slot_count,
                       uint64_t end_bucket) {
-    if (!g_task || !g_values) return false;
+    if (ota_activity_is_active() || !g_task || !g_values) return false;
     if (!entity_id || !entity_id[0] || slot_count == 0 ||
         slot_count > HA_STATS_RESULT_MAX_SLOTS || slot_ms == 0) return false;
     if (WiFi.status() != WL_CONNECTED) return false;

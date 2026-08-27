@@ -3,8 +3,6 @@
 #include <cstring>
 #include <cstdio>
 
-#include <ArduinoJson.h>
-
 #include "binding_template.h"
 #include "action_continuation.h"
 #include "timer_binding.h"
@@ -55,15 +53,14 @@ int main() {
         }
     }
     assert(timer_scheme >= 0);
-    JsonDocument metadata;
-    JsonObject metadata_object = metadata.to<JsonObject>();
-    assert(binding_template_describe_scheme((uint8_t)timer_scheme, &metadata_object));
-    const char* keys = metadata_object["keys"] | "";
-    assert(std::strstr(keys, "N=value") != nullptr);
-    assert(std::strstr(keys, "N_state") != nullptr);
-    assert(std::strstr(keys, "N_mode") != nullptr);
-    assert(std::strstr(keys, "N_expired") != nullptr);
-    assert(std::strstr(keys, "N_target") != nullptr);
+    const BindingSchemeSpec* spec = binding_template_scheme_spec((uint8_t)timer_scheme);
+    assert(spec && !spec->free_form);
+    assert(spec->key_count() == 15);
+    assert(std::strcmp(spec->key_at(0), "1") == 0);
+    assert(std::strcmp(spec->key_at(1), "1_state") == 0);
+    assert(std::strcmp(spec->key_at(2), "1_mode") == 0);
+    assert(std::strcmp(spec->key_at(3), "1_expired") == 0);
+    assert(std::strcmp(spec->key_at(4), "1_target") == 0);
 
     std::puts("timer_binding_target: PASS");
     return 0;

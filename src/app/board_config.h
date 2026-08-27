@@ -604,12 +604,27 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define ACTION_CONTINUATION_SLOTS 3
 #endif
 
+// Maximum simultaneous MJPEG clients; boards with constrained WiFi or PSRAM can keep the default.
+#ifndef CAMERA_MJPEG_MAX_CLIENTS
+#define CAMERA_MJPEG_MAX_CLIENTS 1
+#endif
+
 // ============================================================================
 // Sensors (Optional)
 // ============================================================================
 // Enable BME280 (I2C) environmental sensor adapter.
 #ifndef HAS_SENSOR_BME280
 #define HAS_SENSOR_BME280 false
+#endif
+
+// Enable AHT10/AHT20 (I2C) temperature and humidity sensor adapter.
+#ifndef HAS_SENSOR_AHT10
+#define HAS_SENSOR_AHT10 false
+#endif
+
+// Enable an ADC-connected LiPo battery monitor sensor adapter.
+#ifndef HAS_SENSOR_BATTERY_ADC
+#define HAS_SENSOR_BATTERY_ADC false
 #endif
 
 // Enable LD2410 OUT pin presence sensor adapter.
@@ -640,6 +655,26 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // BME280 I2C address (0x76 or 0x77).
 #ifndef BME280_I2C_ADDR
 #define BME280_I2C_ADDR 0x76
+#endif
+
+// ADC GPIO connected to the battery divider. Use -1 to disable the adapter.
+#ifndef BATTERY_ADC_PIN
+#define BATTERY_ADC_PIN -1
+#endif
+
+// Battery voltage divided by this factor before reaching BATTERY_ADC_PIN.
+#ifndef BATTERY_ADC_DIVIDER
+#define BATTERY_ADC_DIVIDER 1.0f
+#endif
+
+// Calibration multiplier applied after ADC millivolt conversion and divider scaling.
+#ifndef BATTERY_ADC_CALIBRATION
+#define BATTERY_ADC_CALIBRATION 1.0f
+#endif
+
+// Number of ADC samples averaged for each battery reading.
+#ifndef BATTERY_ADC_SAMPLE_COUNT
+#define BATTERY_ADC_SAMPLE_COUNT 8
 #endif
 
 // LD2410 OUT pin (presence). Use -1 to disable.
@@ -783,6 +818,55 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 #ifndef HAS_IMAGE_FETCH
 #define HAS_IMAGE_FETCH HAS_DISPLAY
+#endif
+
+// Enable onboard camera hardware support.
+#ifndef HAS_CAMERA
+#define HAS_CAMERA false
+#endif
+
+// Camera driver selector values.
+#define CAMERA_DRIVER_NONE 0
+#define CAMERA_DRIVER_OV02C10_P4 1
+
+// Select the board-specific camera driver.
+#ifndef CAMERA_DRIVER
+#define CAMERA_DRIVER CAMERA_DRIVER_NONE
+#endif
+
+// Camera sensor SCCB/I2C address.
+#ifndef CAMERA_SCCB_ADDR
+#define CAMERA_SCCB_ADDR 0x00
+#endif
+
+// Camera sensor product ID high-byte register.
+#ifndef CAMERA_SENSOR_ID_REG_HIGH
+#define CAMERA_SENSOR_ID_REG_HIGH 0x0000
+#endif
+
+// Camera sensor product ID expected from the high and low ID registers.
+#ifndef CAMERA_SENSOR_EXPECTED_ID
+#define CAMERA_SENSOR_EXPECTED_ID 0x0000
+#endif
+
+// Camera sensor raw capture width in pixels.
+#ifndef CAMERA_CAPTURE_WIDTH
+#define CAMERA_CAPTURE_WIDTH 0
+#endif
+
+// Camera sensor raw capture height in pixels.
+#ifndef CAMERA_CAPTURE_HEIGHT
+#define CAMERA_CAPTURE_HEIGHT 0
+#endif
+
+// Camera CSI data lane count.
+#ifndef CAMERA_CSI_DATA_LANES
+#define CAMERA_CSI_DATA_LANES 0
+#endif
+
+// Camera CSI lane bit rate in Mbps.
+#ifndef CAMERA_CSI_LANE_BIT_RATE_MBPS
+#define CAMERA_CSI_LANE_BIT_RATE_MBPS 0
 #endif
 
 // Display driver selection

@@ -8,6 +8,14 @@
 #include "sensors/bme280_sensor.cpp"
 #endif
 
+#if HAS_SENSOR_AHT10
+#include "sensors/aht10_sensor.cpp"
+#endif
+
+#if HAS_SENSOR_BATTERY_ADC
+#include "sensors/battery_adc_sensor.cpp"
+#endif
+
 #if HAS_SENSOR_LD2410_OUT
 #include "sensors/ld2410_out_sensor.cpp"
 #endif
@@ -16,9 +24,21 @@
 #include "sensors/dummy_sensor.cpp"
 #endif
 
+#if HAS_CAMERA
+#include "sensors/camera_presence_sensor.cpp"
+#endif
+
 void sensor_manager_register_all(SensorRegistry &registry) {
 	#if HAS_SENSOR_BME280
 	register_bme280_sensor(registry);
+	#endif
+
+	#if HAS_SENSOR_AHT10
+	register_aht10_sensor(registry);
+	#endif
+
+	#if HAS_SENSOR_BATTERY_ADC
+	register_battery_adc_sensor(registry);
 	#endif
 
 	#if HAS_SENSOR_LD2410_OUT
@@ -27,6 +47,10 @@ void sensor_manager_register_all(SensorRegistry &registry) {
 
 	#if HAS_SENSOR_DUMMY
 	register_dummy_sensor(registry);
+	#endif
+
+	#if HAS_CAMERA
+	register_camera_presence_sensor(registry);
 	#endif
 
 }

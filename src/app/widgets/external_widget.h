@@ -9,6 +9,7 @@
 struct ExternalWidgetConfig {
     char extension_id[CONFIG_EXTENSION_ID_MAX_LEN];
     char config[CONFIG_EXTENSION_CONFIG_MAX_LEN];
+    uint16_t tick_interval_ms;
 };
 
 static_assert(sizeof(ExternalWidgetConfig) <= WIDGET_CONFIG_MAX_BYTES,

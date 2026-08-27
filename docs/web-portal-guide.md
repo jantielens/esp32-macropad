@@ -18,6 +18,8 @@ In AP mode, only the Network page is available. In Full mode, the standard four 
 
 The portal header shows real-time device info at a glance:
 
+- **Device name** — the configured device name, also used for the browser tab title
+- **Device class** — the firmware's device type (for example, Macropad or Coffee Scale)
 - **Firmware version** — currently installed version
 - **Chip** — model and silicon revision (e.g., ESP32-S3 rev 2)
 - **Cores** — number of CPU cores
@@ -34,6 +36,7 @@ The orange **CPU** badge in the header shows real-time CPU usage with a breathin
 - **Uptime** — how long the device has been running
 - **Reset reason** — why the device last restarted
 - **CPU usage** — percentage (based on FreeRTOS IDLE task measurement)
+- **CPU cores** — current Core 0 and Core 1 usage on multicore devices when runtime sampling is available
 - **Core temperature** — internal chip temperature sensor
 - **Heap memory** — free, minimum, largest block, and fragmentation. On MIPI-DSI boards, largest-block data can be up to 30 seconds old.
 - **PSRAM** — free and minimum values for external RAM (when present). MIPI-DSI boards do not report PSRAM largest-block data because measuring it can disrupt display scan-out.
@@ -63,7 +66,56 @@ contents, select **Open** beside a file to view supported media in your browser
 or download other file types, or use **Refresh** to reload the storage summary
 and root folder.
 
-The page does not support file uploads, deletion, or formatting.
+The general Storage page does not support file uploads, deletion, or
+formatting. Feature-specific views may offer deletion for their own files; the
+Camera **Snapshots** page can remove a saved image, a day's camera-roll folder,
+or the latest snapshot copy.
+
+## Camera Snapshots
+
+Camera-enabled boards expose a **Camera** action in the Pad editor. Its **Save
+to** setting chooses `latest`, `roll`, or `both`. The latest image is always
+written to `/camera/latest.jpg`; camera-roll images are written as
+`/camera/YYYYMMDD/NNNNNN.jpg` using UTC. Camera-roll captures require valid NTP
+time. Without it, the `latest` copy can still be saved, but the camera-roll copy
+is skipped. The Camera **Snapshots** page shows the latest image and groups
+camera-roll images by day; each expanded day initially loads 48 snapshots and
+offers **Show more snapshots** for the next group.
+
+## Camera Motion Sensing
+
+Camera-enabled boards include a **Motion sensing** item under the **Camera**
+navigation category. It is off by default. Enable it to detect scene motion
+locally on the ESP32-P4 without sending camera frames to a cloud service.
+
+| Setting | Description |
+|---------|-------------|
+| **Enable camera motion sensing** | Starts or stops local motion analysis. Disabled sensing uses no motion-analysis memory and does not request camera frames. |
+| **Analyze every** | Analyzes every 1st through 4th camera frame. The displayed rate is derived from the Camera capture rate. |
+| **Sensitivity** | Set a value from 1 to 10. Lower values reduce false triggers; higher values detect smaller changes but can react to shadows or changing light. |
+| **Presence hold time** | Keeps Camera Presence on for 10 to 600 seconds after the most recent motion. |
+| **Keep display awake while motion is detected** | Wakes the display and resets its inactivity timer for every confirmed motion sample. |
+| **Actions on Motion Detected** | Up to three actions that run in order when Camera Presence changes from off to on. |
+
+Verify Camera Presence in the **Sensor Data** fragment or by subscribing to the
+retained `camera_presence/state` MQTT topic.
+
+Motion sensing keeps operating while the display sleeps. It pauses during a
+firmware update. When it is the only camera feature in use, it does not create
+preview or JPEG frames.
+
+> [!IMPORTANT]
+> Camera Presence is a motion sensor, not an occupancy sensor. A person who
+> remains still creates no new motion, so presence turns off after the selected
+> hold time.
+
+Motion actions run once for each presence episode. Choose **Wake display** in a
+Device command action to wake Display Sleep or leave the Idle Screen; the normal
+inactivity timer resumes immediately after the wake.
+
+Enable **Keep display awake while motion is detected** when ongoing movement
+should continuously reset the inactivity timer. Once movement stops, normal
+screen saver timing resumes; the presence hold time does not keep the display on.
 
 ## Music Library
 
@@ -269,16 +321,21 @@ does not support dragging, swiping, long presses, multi-touch, or live video.
 
 ### Screen Saver (Burn-in Prevention)
 
-Protects your LCD from burn-in by turning off the backlight after a period of inactivity. A built-in pixel-shift mechanism moves content slightly each sleep cycle to prevent ghosting.
+The screen saver has two optional features, both measured from the most recent user activity. **Idle Screen** temporarily shows a configured pad, which can host an animated clock or extension. **Display Sleep** turns off the panel to protect it from burn-in. Either can be used alone, or Idle Screen can lead into Display Sleep. A built-in pixel-shift mechanism moves content slightly each Display Sleep cycle to prevent ghosting. The portal shows a live timeline of the current settings above the controls.
 
 | Setting | Description |
 |---------|-------------|
-| **Enable screen saver** | Turn on/off automatic sleep |
-| **Idle Timeout** | Seconds of inactivity before sleep (0 = disabled) |
-| **Fade Out** | How long the backlight fade-out takes (ms, 0 = instant) |
-| **Fade In** | How long the backlight fade-in takes on wake (ms, 0 = instant) |
-| **Wake on touch** | Wake the display by touching the screen |
-| **Wake on MQTT Binding** | Binding expression that keeps the screen awake while it resolves to ON (e.g. `[mqtt:devices/node/presence/state]`) |
+| **Turn off display after inactivity** | Turn automatic panel sleep on or off |
+| **Turn off display after** | Seconds of inactivity before panel sleep (0 = disabled) |
+| **Show a standby pad** | Enable a transient pad when the device is idle, with or without Display Sleep |
+| **Show standby pad after** | Seconds of inactivity before the configured pad appears (0 = disabled) |
+| **Standby pad** | Pad to show while idle; it remains available as a normal pad elsewhere |
+| **Fade Out** | Fade-to-black duration when entering Display Sleep (ms, 0 = instant) |
+| **Fade In** | Fade-from-black duration when leaving Display Sleep (ms, 0 = instant) |
+| **Wake on touch press** | One touch fully exits Idle Screen or wakes Display Sleep |
+| **MQTT Wake and Keep Awake Binding** | An ON binding fully exits Idle Screen or wakes Display Sleep, and keeps both stages off while it remains ON (e.g. `[mqtt:devices/node/presence/state]`) |
+
+For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds shows the selected pad after five minutes, then turns off the panel after 30 minutes total. The first wake interaction is consumed and returns to the screen that was active before the Idle Screen appeared, so the temporary pad is not added to navigation history.
 
 ### Swipe Actions
 
@@ -316,7 +373,7 @@ Configure up to three expiry actions for each on-device timer slot. The Timer ac
 
 Expire actions use the same action editor as buttons, so you can play a sound, send an MQTT message, navigate to a screen, play a beep pattern, or any combination. This replaces the previous beep-only expiry with full action parity.
 
-When a countdown starts, it copies the slot's saved expiry list. Changes apply to the next run and do not alter a countdown already in progress. Runtime state, mode, and duration are not persisted across reboot. Use `[timer:N]` bindings on pad button labels to display timer values. Use `[timer:N_target]` for the active countdown preset in whole seconds, such as a gauge maximum. The target changes after Start, Set, and Adjust, but normal ticking, Stop, and Reset leave it unchanged. Count-up and unconfigured timers return `0`.
+When a countdown starts, it copies the slot's saved expiry list. Changes apply to the next run and do not alter a countdown already in progress. After saving an expiry-list change, stop and start a running timer to use it. Runtime state, mode, and duration are not persisted across reboot. Use `[timer:N]` bindings on pad button labels to display timer values. Use `[timer:N_target]` for the active countdown preset in whole seconds, such as a gauge maximum. The target changes after Start, Set, and Adjust, but normal ticking, Stop, and Reset leave it unchanged. Count-up and unconfigured timers return `0`.
 
 ## E-Paper Page
 
@@ -344,9 +401,9 @@ Duration is per slot and applies while that slot is active. The page does not ex
 
 The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 16 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
-The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import) and **Building Blocks** — pre-configured button groups you can place into a pad with a single click. This is completely separate from the device config Save & Reboot footer on other pages.
+The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import) and **Building Blocks** — pre-configured button groups you can place into a pad with a single click. While the current pad has unsaved changes, a fixed **Save Pad** button also appears at the lower-right of the page. This is completely separate from the device config Save & Reboot footer on other pages.
 
-The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default colors, borders, and label styles that all buttons on all pads inherit automatically — saving you from repeating the same appearance settings on every button. Per-button overrides still take precedence.
+The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide pad background and layout defaults alongside button colors, borders, and label styles. Pads and buttons inherit the applicable settings automatically, while explicit overrides still take precedence.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 
@@ -359,6 +416,26 @@ can be pending device-wide at a time; starting another pausable action when all
 slots are occupied stops its action list.
 
 The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
+
+On camera-enabled boards, select **Camera Preview** as a button's widget to display the shared camera feed. Choose Cover to fill the button, Letterbox to show the complete image without stretching, or Center crop to clip an unscaled centered image.
+
+The **Camera settings** page retains an output selector for future camera modes;
+the current OV02C10 path offers its validated `640x360` JPEG output from a
+`1280x720` RAW10 sensor frame. JPEG quality balances image detail against file
+size. **Shutter time** is shown as an approximate duration in milliseconds; the
+sensor-row count below it is the underlying integration value. White-balance
+Red and Blue sliders are manual multipliers applied after the camera's scene
+estimate. `1.00x neutral` leaves that channel unchanged; raise Red for a warmer
+image or Blue for a cooler image.
+
+Choose **Capture rotation** to turn the shared camera image by 0, 90, 180, or
+270 degrees clockwise. The chosen orientation applies to Camera Preview
+buttons, test captures, and MJPEG streams.
+
+**Camera capture rate** controls the shared rate used by Camera Preview buttons,
+MJPEG streams, and enabled motion sensing. It defaults to 4 FPS. Lower it, for
+example to 2 FPS, when a complex pad needs more CPU time; lower rates reduce
+camera work but make live images and motion response update less often.
 
 On ESP32-P4 builds, the **Extensions** page has two small slots
 and one large slot for trusted native Extensions. Upload the signed package
@@ -440,7 +517,7 @@ Upload a compiled `.bin` firmware file directly from your computer. A progress b
 
 Erases all configuration and restarts the device in AP mode. You'll need to go through the [first-time setup](first-time-setup.md) again.
 
-> **Warning**: This cannot be undone. Everything stored on the device is wiped: all settings (WiFi, MQTT, BLE, display), all pad layouts, button defaults, timers, swipe and boot actions, stored icons, stored sounds, indexed-store data (e.g. shutter / scale sessions), and any BLE pairings.
+> **Warning**: This cannot be undone. Everything stored on the device is wiped: all settings (WiFi, MQTT, BLE, display), all pad layouts, pad and button defaults, timers, swipe and boot actions, stored icons, stored sounds, indexed-store data (e.g. shutter / scale sessions), and any BLE pairings.
 
 ---
 

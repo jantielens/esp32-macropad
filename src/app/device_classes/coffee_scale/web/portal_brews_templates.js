@@ -198,7 +198,7 @@ function brewTmplRenderStages(stages) {
         let pillsHtml = '';
         if (s.target_weight) pillsHtml += '<span class="brew-tmpl-pill">' + s.target_weight + 'g target</span>';
         if (s.target_flow_rate) pillsHtml += '<span class="brew-tmpl-pill">' + s.target_flow_rate + ' g/s flow</span>';
-        if (s.auto_time_s) pillsHtml += '<span class="brew-tmpl-pill">' + s.auto_time_s + 's duration</span>';
+        if (s.target_time_s) pillsHtml += '<span class="brew-tmpl-pill">' + s.target_time_s + 's target</span>';
         if (s.auto_threshold) pillsHtml += '<span class="brew-tmpl-pill">trigger &gt;' + s.auto_threshold + 'g</span>';
         if (s.capture) pillsHtml += '<span class="brew-tmpl-pill">' + (s.capture.label || s.capture.key) + ' (' + (s.capture.unit || 'g') + ')</span>';
         if (s.beep_pattern) pillsHtml += '<span class="brew-tmpl-pill">\uD83D\uDD0A ' + s.beep_pattern + '</span>';

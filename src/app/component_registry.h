@@ -3,8 +3,10 @@
 #include <ESPAsyncWebServer.h>
 #include <stdint.h>
 
-// Max components the registry can hold (static array, no heap allocation)
-#define MAX_PORTAL_COMPONENTS 32
+// Max components the registry can hold (static array, no heap allocation).
+// 64 accommodates the current feature-rich device classes and leaves room for
+// future portal fragments without silently omitting their navigation entries.
+#define MAX_PORTAL_COMPONENTS 64
 
 // Custom action definition — dispatched by (name, method) pair
 struct ComponentAction {
@@ -17,8 +19,8 @@ struct ComponentAction {
 // Component definition — one per feature module
 struct ComponentDef {
     const char* id;                // URL-safe identifier, e.g. "swipe-actions"
-    const char* category;          // one of: device, display, pads, actions,
-                                   //         connectivity, audio, sensors, firmware
+    const char* category;          // one of: device, display, camera, pads,
+                                   //         actions, connectivity, audio, sensors, firmware
     const char* display_name;      // Human-readable, e.g. "Swipe Actions"
     int nav_order;                 // Sort order within category (lower = higher)
 
@@ -35,6 +37,14 @@ struct ComponentDef {
     // UI fragment identifier (matches fragment filename without extension)
     // nullptr means this component contributes to a shared category fragment
     const char* fragment_id;
+
+    // Optional feature-specific JavaScript asset required before this
+    // component's fragment can initialize.
+    const char* portal_script;
+
+    // Optional feature-specific stylesheet required by this component's
+    // fragment.
+    const char* portal_style;
 };
 
 // Registry API
@@ -88,5 +98,7 @@ void component_registry_set_body_allocator_for_test(ComponentBodyAllocFn alloc_f
         .custom_actions   = nullptr, \
         .num_custom_actions = 0, \
         .fragment_id      = _fragment, \
+        .portal_script    = nullptr, \
+        .portal_style     = nullptr, \
     }; \
     REGISTER_COMPONENT(sym)

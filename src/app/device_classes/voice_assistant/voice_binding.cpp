@@ -4,48 +4,64 @@
 
 #include "binding_template.h"
 
-#include <ArduinoJson.h>
 #include <string.h>
 
 namespace {
-bool voice_binding_resolve(const char* params, char* out, size_t out_len) {
+enum VoiceBindingKey {
+    VOICE_BINDING_STATUS,
+    VOICE_BINDING_TEXT,
+};
+
+struct VoiceBindingKeyDef {
+    const char* name;
+    VoiceBindingKey key;
+};
+
+constexpr VoiceBindingKeyDef kVoiceBindingKeys[] = {
+    {"status", VOICE_BINDING_STATUS},
+    {"text", VOICE_BINDING_TEXT},
+};
+
+const VoiceBindingKeyDef* find_voice_binding_key(const char* params) {
+    if (!params) return nullptr;
+    for (const VoiceBindingKeyDef& key : kVoiceBindingKeys) {
+        if (strcmp(params, key.name) == 0) return &key;
+    }
+    return nullptr;
+}
+
+BindingResolverStatus voice_binding_resolve(const char* params, char* out, size_t out_len) {
+    const VoiceBindingKeyDef* key = find_voice_binding_key(params);
+    if (!key) return BINDING_RESOLVER_UNKNOWN;
+    if (!out || out_len == 0) return BINDING_RESOLVER_UNAVAILABLE;
     VoiceSnapshot snapshot = {};
     voice_get_snapshot(&snapshot);
-    if (strcmp(params, "status") == 0) {
-        strlcpy(out, voice_status_name(snapshot.status), out_len);
-        return true;
+    switch (key->key) {
+        case VOICE_BINDING_STATUS:
+            strlcpy(out, voice_status_name(snapshot.status), out_len);
+            return BINDING_RESOLVER_RESOLVED;
+        case VOICE_BINDING_TEXT:
+            strlcpy(out, snapshot.text, out_len);
+                return snapshot.text[0] ? BINDING_RESOLVER_RESOLVED : BINDING_RESOLVER_UNAVAILABLE;
     }
-    if (strcmp(params, "text") == 0) {
-        strlcpy(out, snapshot.text, out_len);
-        return snapshot.text[0] != '\0';
-    }
-    return false;
+            return BINDING_RESOLVER_UNKNOWN;
 }
 
 void voice_binding_collect(const char*, void*) {}
 
-const char* voice_binding_validate(const char* params) {
-    return strcmp(params, "status") == 0 || strcmp(params, "text") == 0
-        ? nullptr : "stt key must be status or text";
+uint8_t voice_binding_key_count() {
+    return sizeof(kVoiceBindingKeys) / sizeof(kVoiceBindingKeys[0]);
 }
 
-#if HAS_MCP
-void voice_binding_describe(void* out_json) {
-    JsonObject& out = *static_cast<JsonObject*>(out_json);
-    out["syntax"] = "[stt:status|text]";
-    out["example"] = "[stt:text]";
-    out["keys"] = "status, text (status: idle, recording, listening, transcribing, ready, error)";
-    out["read_only"] = true;
+const char* voice_binding_key_at(uint8_t index) {
+    return index < voice_binding_key_count() ? kVoiceBindingKeys[index].name : nullptr;
 }
-#endif
 } // namespace
 
 void voice_binding_init() {
-    binding_template_register("stt", voice_binding_resolve, voice_binding_collect);
-#if HAS_MCP
-    binding_template_set_scheme_describe("stt", voice_binding_describe);
-    binding_template_set_scheme_validate("stt", voice_binding_validate);
-#endif
+    binding_template_register("stt", voice_binding_resolve, voice_binding_collect,
+                              {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
+                               voice_binding_key_count, voice_binding_key_at});
 }
 
 #endif // IS_VOICE_ASSISTANT

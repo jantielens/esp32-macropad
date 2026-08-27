@@ -44,6 +44,7 @@
 #include "sensors/nau7802_sensor.h"
 #include "scale_binding.h"
 #include "brew/brew_binding.h"
+#include "brew/brew_log.h"
 #include "brew/brew_manager.h"
 #include "brew/brew_templates.h"
 #include "coffee_scale_config.h"
@@ -80,6 +81,7 @@ static void coffee_scale_register_sensors() {
 // ---------------------------------------------------------------------------
 static void on_setup_late_hook(DeviceConfig * /*config*/, PowerMode /*current_mode*/) {
     brew_templates_init();
+    brew_log_init();
     brew_manager_init();
     scale_binding_init();
     brew_binding_init();

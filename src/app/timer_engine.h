@@ -34,9 +34,16 @@ bool timer_configure_and_start(uint8_t id, TimerMode mode, uint32_t countdown_ms
 bool timer_toggle_prepared(uint8_t id, TimerState expected_state, TimerMode mode,
                            uint32_t countdown_ms, const ButtonAction* expire_actions,
                            uint8_t expire_action_count);
+// Prepare a stopped count-up timer as a paused countdown. Its expiry actions
+// are snapshotted only when the countdown first starts.
+bool timer_prepare_countdown(uint8_t id, TimerState expected_state,
+                             uint32_t countdown_ms);
 bool timer_stop(uint8_t id);      // stop and reset to 0 (up) or preset (down)
 bool timer_pause(uint8_t id);
 bool timer_resume(uint8_t id);
+bool timer_resume_prepared(uint8_t id, TimerState expected_state,
+                           const ButtonAction* expire_actions,
+                           uint8_t expire_action_count);
 bool timer_reset(uint8_t id);     // reset without changing running state
 
 // Replace a countdown preset without changing state or elapsed time.
@@ -48,6 +55,7 @@ bool timer_set_countdown_ms(uint8_t id, uint32_t countdown_ms);
 // If adjustment pulls timer back out of overtime, resets expire_fired so
 // the expire actions can fire again if the timer crosses zero again.
 bool timer_adjust(uint8_t id, int32_t delta_seconds);
+bool timer_countdown_needs_expiry_snapshot(uint8_t id);
 
 // Query — returns elapsed (up) or remaining/overtime (down) in milliseconds.
 // For countdown: before expiry returns remaining ms, after expiry returns

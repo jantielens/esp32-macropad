@@ -956,7 +956,8 @@ static const McpTool s_tool_timer_control = {
     "Control one of the three on-screen timers (timer_id 1-3), just like the timer buttons in a pad. "
     "command: start | stop | toggle | pause | resume | reset | set | adjust. Start and Toggle require mode "
     "up or down; down also requires a positive whole-second value. Set uses non-negative whole seconds and "
-    "Adjust uses a signed whole-second delta on an active countdown. Countdown expiry actions come from the "
+    "Adjust uses a signed whole-second delta. On a stopped stopwatch, a positive Set or Adjust prepares a "
+    "paused countdown; Toggle or Resume starts it. Countdown expiry actions come from the "
     "device-level timers component and are snapshotted when a run starts.",
     "{\"type\":\"object\",\"properties\":{\"timer_id\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":3},\"command\":{\"type\":\"string\",\"enum\":[\"start\",\"stop\",\"toggle\",\"pause\",\"resume\",\"reset\",\"set\",\"adjust\"]},\"mode\":{\"type\":\"string\",\"enum\":[\"up\",\"down\"],\"description\":\"required for start/toggle\"},\"value\":{\"type\":\"integer\",\"minimum\":-2147483648,\"maximum\":2147483647,\"description\":\"whole seconds; countdown start/set max 4294967, adjust uses a signed 32-bit delta\"}},\"required\":[\"timer_id\",\"command\"]}",
     tool_timer_control, false, false, true

@@ -15,7 +15,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 - **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
 - **Building blocks** — drop pre-built button groups such as System Info into any pad with a single click
 - **Custom fonts** — DSEG7 (7-segment), Bebas, and Doto pixel font, in addition to the default Montserrat
-- **Screen saver** with backlight fade, pixel-shift burn-in prevention, panel hardware sleep, LVGL throttle, and per-pad wake redirect
+- **Two-stage screen saver** with an optional transient Idle Screen pad, Display Sleep, backlight fade, pixel-shift burn-in prevention, panel hardware sleep, LVGL throttle, and per-pad wake redirect
 
 ### Live data with bindings
 A simple `[scheme:params]` syntax pulls live data into any label, color, or widget — with format strings, fallbacks, and inline expressions.
@@ -54,7 +54,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Bluetooth HID keyboard** (ESP32-P4) — send keystrokes, modifier combos, media keys, and multi-step sequences to any paired host with single-owner pairing
 - **Remote control from HA** — switch screens, trigger beeps, play tones, set volume, send notifications
 - **Resilient WiFi** — event-driven tiered reconnect keeps the display responsive through outages, with gateway-ping liveness detection
-- **Live camera feeds** — JPEG, PNG, and **MJPEG streaming** support (8–15 fps, with hardware JPEG decode + PPA scaling on ESP32-P4)
+- **Live camera feeds** — OV02C10 JPEG snapshots and **MJPEG streaming** at up to 4 fps on supported ESP32-P4 camera boards
 - **OTA updates** with rollback protection — flash from the web portal or the online installer
 
 ### Web configuration portal
@@ -96,6 +96,18 @@ ESP32 Macropad runs on these ESP32 development boards:
 
 Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are the current non-touch e-paper targets.
 
+### Headless Sensor Targets
+
+The `firebeetle2-esp32c6-aht10` target supports a DFRobot FireBeetle 2
+ESP32-C6 v1.2 with an AHT10 on GPIO19/GPIO20. It reads the board's onboard
+LiPo divider on GPIO0 and intentionally leaves the built-in GPIO15 LED
+unconfigured. The target uses the 3 MB `huge_app` partition and therefore does
+not support OTA updates.
+
+```bash
+./build.sh firebeetle2-esp32c6-aht10
+```
+
 ### SD Primary Storage Variants
 
 The `jc1060p470c-sd`, `jc3636w518-sd`, and `jc4880p433-sd` targets store
@@ -117,7 +129,7 @@ The firmware auto-detects a device class at build time based on board capability
 |---|---|---|---|---|
 | **Macropad** | `HAS_DISPLAY` (default) | `ESP32 Macropad` | `ESP32-MACROPAD-XXXXXX` | All touch-screen boards listed above |
 | **E-Paper** | `HAS_EPAPER` | `ESP32-MP E-Paper` | `ESP32-MP-EPAPER-XXXXXX` | Inkplate 5V2, Inkplate 6FLICK, Seeed reTerminal E1003 |
-| **Headless** | `!HAS_DISPLAY` | `ESP32-MP Headless` | `ESP32-MP-HEADLESS-XXXXXX` | Sensor-only boards (e.g. `esp32c3-withsensors`) |
+| **Headless** | `!HAS_DISPLAY` | `ESP32-MP Headless` | `ESP32-MP-HEADLESS-XXXXXX` | Sensor-only boards (e.g. `esp32c3-withsensors`, `firebeetle2-esp32c6-aht10`) |
 | **Shutter Tester** | `IS_SHUTTER_TESTER` | `ESP32-MP Shutter Tester` | `ESP32-MP-SHUTTER-XXXXXX` | `jc4880p433-shutter` — see [docs/device-classes/shutter-tester/](docs/device-classes/shutter-tester/README.md) |
 | **Coffee Scale** | `IS_COFFEE_SCALE` | `ESP32-MP Coffee Scale` | `ESP32-MP-SCALE-XXXXXX` | `jc4880p433-nau7802`, `jc4880p433-hx711` — see [docs/device-classes/coffee-scale/](docs/device-classes/coffee-scale/README.md) |
 | **Darkroom Timer** | `IS_DARKROOM_TIMER` | `ESP32-MP Darkroom Timer` | `ESP32-MP-DARKROOM-XXXXXX` | `jc4880p433-darkroom` — see [docs/device-classes/darkroom-timer/](docs/device-classes/darkroom-timer/README.md) |
@@ -188,10 +200,16 @@ Building from source, contributing, or adding new board support? See the [develo
 
 ### Running Tests
 
-Host-native unit and integration tests run on the development machine (no ESP32 needed):
+Host-native unit and integration tests run on the development machine (no ESP32 needed). They require CMake 3.20 or later. If CMake is installed through ESP-IDF but is not on `PATH`, use its toolchain directory for the commands below:
 
 ```bash
-./tests/run_tests.sh
+export PATH="$HOME/.espressif/tools/cmake/<version>/bin:$PATH"
+```
+
+```bash
+cmake -S . -B build/host-tests
+cmake --build build/host-tests --parallel
+ctest --test-dir build/host-tests --output-on-failure
 ```
 
 ## 📄 License

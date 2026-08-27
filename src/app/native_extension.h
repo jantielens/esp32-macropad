@@ -35,6 +35,7 @@ struct NativeExtensionSlotInfo {
 	uint32_t elf_size;
 	uint32_t staged_size;
 	uint32_t abi_version;
+	uint16_t tick_interval_ms;
 	char id[NATIVE_EXTENSION_ID_MAX_LEN];
 	char version[NATIVE_EXTENSION_VERSION_MAX_LEN];
 	char target_abi[NATIVE_EXTENSION_TARGET_ABI_MAX_LEN];
@@ -68,8 +69,12 @@ bool native_extension_create_instance(const char* extension_id, uint32_t instanc
 									  void* root, const char* config_json);
 void native_extension_set_instance_binding_context(const char* extension_id, uint32_t instance_id,
                                                    const PadBinding* bindings, uint8_t binding_count);
+void native_extension_set_instance_button_context(const char* extension_id, uint32_t instance_id,
+												  void* button, void* label_top,
+												  void* label_center, void* label_bottom);
 void native_extension_clear_instance_binding_context(const char* extension_id, uint32_t instance_id);
 bool native_extension_is_stopping(const char* extension_id);
+uint16_t native_extension_tick_interval_ms(const char* extension_id);
 void native_extension_destroy_instance(const char* extension_id, uint32_t instance_id);
 NativeExtensionEventResult native_extension_on_tap(const char* extension_id, uint32_t instance_id);
 NativeExtensionEventResult native_extension_on_long_press(const char* extension_id, uint32_t instance_id);

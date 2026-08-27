@@ -451,7 +451,7 @@ async function timerConfigInitEditors() {
         html += '<div class="editor-group-body">';
         html += '<div id="timer-' + tid + '-expire-section">';
         html += '<div class="action-group-heading">On expire actions</div>';
-        html += '<small style="display:block; margin-bottom:12px;">Actions snapshotted when a countdown starts and run once when it reaches zero.</small>';
+        html += '<small style="display:block; margin-bottom:12px;">Actions are copied when a countdown starts and run once when it reaches zero. Stop and start a running timer after saving changes.</small>';
         html += '<div id="timer-' + tid + '-expire-editors"></div>';
         html += '</div>';
         html += '</div></details>';
@@ -488,7 +488,7 @@ async function saveTimerConfig() {
             body: JSON.stringify(payload)
         });
         if (response.ok) {
-            showMessage('Timer config saved', 'success');
+            showMessage('Timer config saved. Stop and start running countdowns to use the new actions.', 'success');
         } else {
             showMessage('Failed to save timer config', 'error');
         }

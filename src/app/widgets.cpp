@@ -18,6 +18,9 @@
 #include "widgets/rocker_widget.cpp"
 #include "widgets/numericrocker_widget.cpp"
 #include "widgets/list_widget.cpp"
+#if HAS_CAMERA
+#include "widgets/camera_preview_widget.cpp"
+#endif
 
 #if HAS_NATIVE_EXTENSIONS
 #include "widgets/external_widget.cpp"

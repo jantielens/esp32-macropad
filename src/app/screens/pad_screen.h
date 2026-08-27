@@ -75,6 +75,9 @@ struct RuntimeNumberBinding {
 // Runtime state per button tile (kept in memory while screen is active)
 struct ButtonTile {
     lv_obj_t* obj;            // Button container object
+    lv_obj_t* shadow;         // Opaque shadow plate, or nullptr for no/drop shadow
+    bool shadow_follows_background;
+    uint8_t shadow_darken_pct;
     lv_obj_t* label_top;      // Top label (Font S) or nullptr
     lv_obj_t* label_center;   // Center label (Font L) or nullptr
     lv_obj_t* label_bottom;   // Bottom label (Font S) or nullptr
@@ -103,6 +106,13 @@ struct ButtonTile {
     char widget_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN];
     char widget_last[BINDING_TEMPLATE_MAX_LEN * MAX_WIDGET_BINDINGS + MAX_WIDGET_BINDINGS + 1]; // Last resolved combined value (dedup)
     lv_obj_t* tap_overlay;    // Semi-transparent overlay shown briefly on tap
+    lv_timer_t* tap_flash_timer;
+    lv_coord_t tap_flash_x;
+    lv_coord_t tap_flash_y;
+    lv_coord_t tap_flash_w;
+    lv_coord_t tap_flash_h;
+    lv_point_t touch_start;
+    bool touch_start_valid;
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
@@ -195,6 +205,7 @@ private:
     void releaseAllPadHold(const char* tag);
 
     // Event callbacks
+    static void onPress(lv_event_t* e);
     static void onTap(lv_event_t* e);
     static void onLongPress(lv_event_t* e);
     static void onPadActionTap(lv_event_t* e);

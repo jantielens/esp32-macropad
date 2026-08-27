@@ -20,7 +20,7 @@ At the top of the pad editor, you configure the pad itself:
 - **Pad selection** — switch between Pad 1 through 16. Each pad is saved independently.
 - **Pad Name** — an optional label shown in Home Assistant and on-device. For example, "Solar", "Lights", or "Cameras".
 - **Columns / Rows** — the grid size. The maximum depends on the board (e.g. 5×5 on round displays, 8×8 on larger panels). A 3×2 grid gives you 6 large buttons; a 4×4 grid gives you 16 smaller ones.
-- **Wake Screen** — when the screensaver wakes up, which screen should appear? Leave empty to return to the last active screen, or pick a specific pad.
+- **Wake Screen** — for direct Display Sleep, choose which screen should appear on wake. Leave empty to return to the last active screen. An Idle Screen always returns to the screen active before it appeared, so its own Wake Screen setting is not used during the transient idle session.
 - **Background** — the color behind the grid. Accepts a `#hex` color or a binding expression for dynamic backgrounds.
 
 ### Full-Screen Tap Actions
@@ -52,9 +52,9 @@ The stored JSON field is `pad_actions`, an array of up to three `ButtonAction` o
 
 > **Example**: A home energy dashboard might use a 4×2 grid named "Energy" with a dark background (`#111111`) — four columns for solar, grid, battery, and net power, with two rows for the bar chart and its label.
 
-### Button Defaults
+### Pad and Button Defaults
 
-The **Button Defaults** section (collapsible, at the bottom of the Pads page) lets you set device-wide default values for button appearance. Any button on any pad that doesn't have an explicit override inherits from these defaults.
+The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide defaults for pad appearance, layout, and button appearance. Any button or pad without an explicit override inherits the applicable default.
 
 **Available defaults:**
 
@@ -65,14 +65,19 @@ The **Button Defaults** section (collapsible, at the bottom of the Pads page) le
 | **Border color** | Default button outline color |
 | **Border width** | Default border thickness (px) |
 | **Corner radius** | Default button corner rounding (px) |
-| **Padding** | Default content inset between the border and labels/icon/widget (px, 0–50) |
+| **Content padding** | Default content inset between the border and labels/icon/widget (px, 0–50) |
 | **Label top/center/bottom style** | Default label style DSL (e.g., `font_size:24;align:left`) |
+| **Button shadow** | Device-wide shadow enablement, type, color, offsets, and drop blur |
 
-The cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius, 4px padding).
+The button cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius, 4px content padding). The pad background cascade is: **Pad background → `default_pad_bg_color` → `#000000`**.
 
-> **Tip**: Set your button defaults first, then add buttons. Changing a default immediately updates all buttons that don't have a custom override — both in the editor preview and on the device.
+> **Tip**: Set pad and button defaults first, then add buttons. Changing a default immediately updates all inheriting pads or buttons, both in the editor preview and on the device.
 
 When editing a button, fields that match the device default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the device default.
+
+The **Pad Appearance and Layout** section controls device-wide pad geometry and background. **Default Pad Background** accepts a static color or a globally resolvable binding. A pad with no explicit background inherits this value; a pad-specific background remains an override. Do not use a pad-local `[pad:name]` binding in this shared default. **Button Spacing** sets only the fixed gap between adjacent buttons. **Burn-in Pixel Shift Distance** sets how far content moves in each direction during burn-in prevention; its default is 4 px and `0` disables both the movement and its layout reserve. **Extra Edge Insets** set the top, right, bottom, and left space between the grid and screen edge, inside the configured pixel-shift distance. A live 2×2 layout diagram shows the screen border, pixel-shift reserve, insets, button spacing, and their current pixel values as you adjust the controls.
+
+Button shadows use independent device-wide styling, so they never change grid geometry. Choose **Opaque** for a crisp offset backing plate or **Drop** for a blurred shadow. Horizontal and Vertical Offset set the shadow's direction and distance. Drop Blur expands a Drop shadow evenly on every side. Use **Specific Color** to set one device-wide shadow color, or **Darker Button Background** to derive a darker tint from each button's background. Derived colors also update when a dynamic background binding changes. Large values may overlap nearby buttons or clip at the screen edge. At pad and button level, the Button Shadow selector only chooses **Inherit**, **Enable**, or **Disable**. It does not change shadow geometry.
 
 ### Template Pad
 
@@ -296,11 +301,13 @@ Each color field accepts either a static `#hex` value or a binding expression fo
 
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
-**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Button Defaults](#button-defaults). If you set a custom value, a **↩** reset link appears next to the label — click it to revert to the inherited default.
+**Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Pad and Button Defaults](#pad-and-button-defaults). If you set a custom value, a **↩** reset link appears next to the label: click it to revert to the inherited default.
 
-**Padding** (0–50 px, default 4) sets the content inset between the button border and its content — the top/center/bottom labels, the icon, and any widget. Increase it to keep left/right-aligned labels from crowding the border or rounded corners, or to give a widget more breathing room. Like border width and radius, it inherits from [Button Defaults](#button-defaults) and shows a **↩** reset link when overridden.
+**Content padding** (0–50 px, default 4) sets the content inset between the button border and its content: the top/center/bottom labels, the icon, and any widget. Increase it to keep left/right-aligned labels from crowding the border or rounded corners, or to give a widget more breathing room. Like border width and corner radius, it inherits from [Pad and Button Defaults](#pad-and-button-defaults) and shows a **↩** reset link when overridden.
 
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
+
+**Button shadow** chooses whether this button inherits, enables, or disables the pad's shadow setting. Shadow type and sizing remain device-wide to keep button spacing consistent.
 
 ### Button State (Conditional Visibility)
 
@@ -489,7 +496,11 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
 
-Start and Toggle actions contain the mode and, for countdowns, the duration. This makes a copied button preserve how it starts the timer. The **Timers** page stores only the expiry actions for each slot.
+Start and Toggle actions contain the mode and, for countdowns, the duration.
+Start always applies its configured duration. Toggle applies it only when the
+timer is stopped; Toggle pauses or resumes an existing timer without replacing
+its countdown target. The **Timers** page stores only the expiry actions for
+each slot.
 
 When you select the **Timer** type, the **Command** selector groups every command by timer instance (T1/T2/T3):
 
@@ -501,12 +512,18 @@ When you select the **Timer** type, the **Command** selector groups every comman
 | **Pause** | Freeze the timer at its current value |
 | **Resume** | Continue from the paused value |
 | **Reset** | Reset to 0 or preset without changing the running state |
-| **Set countdown** | Set the countdown preset to an absolute number of seconds. Only affects countdown-mode timers |
-| **Adjust countdown** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). Only affects countdown-mode timers |
+| **Set countdown** | Set the countdown preset to an absolute number of seconds. On a stopped stopwatch timer, a positive value prepares a paused countdown |
+| **Adjust countdown** | Add or subtract seconds from the countdown preset (e.g., `15`, `-10`, or `{step}` for numeric rocker). On a stopped stopwatch timer, a positive value prepares a paused countdown |
 
 For Start and Toggle, select **Stopwatch (Count Up)** or **Countdown**. Countdown
 actions require a positive whole-second Duration and may use a binding. Stopwatch
 actions do not store a duration.
+
+A prepared countdown does not run until **Toggle** or **Resume** starts it. This
+lets adjustment buttons select a target after boot: for example, **Adjust
+countdown** `20` prepares Timer 1 at 20 seconds, then Toggle starts it from 20
+seconds even if Toggle's configured Duration is `1`. **Reset** returns the
+timer to its prepared or adjusted target.
 
 #### Device-Level Timer Configuration
 
@@ -515,8 +532,9 @@ On the **Timers** page, configure up to three expiry actions for each timer slot
 * Expire actions use the same action editor as buttons, so you can trigger a
   sound alert, control Music, send an MQTT message, navigate to a screen, or
   combine up to three actions.
-* A countdown copies the slot's current expiry list when it starts. Editing
-  settings does not change an active run; the next countdown uses the new list.
+* A countdown copies the slot's current expiry list when it starts. A prepared
+  countdown snapshots the list when Toggle or Resume starts it. Editing settings
+  does not change an active run; the next countdown uses the new list.
 
 | Example expire action | What happens |
 |----------------------|-------------|
@@ -633,9 +651,12 @@ On ESP32-P4 boards, the **Extension** widget runs an enabled native Extension
 installed from the Device portal. Choose the package and
 optionally enter up to 511 bytes of configuration text for that button. An
 Extension can appear on multiple buttons; each placement has its own instance
-and configuration. The button action lists remain available when the Extension
-returns pass-through from tap or long press. See the [Extension developer guide](dev/extensions.md)
-for package and lifecycle details.
+and configuration. Set **Extension tick interval** when an Extension needs a
+specific animation or refresh cadence; it accepts 33 to 1000 milliseconds and
+otherwise uses the package default. The button action lists remain available
+when the Extension returns pass-through from tap or long press. See the
+[Extension developer guide](dev/extensions.md) for package and lifecycle
+details.
 
 ### Rocker
 
@@ -683,7 +704,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 
 **How it works:**
 
-- The button area is divided into 5 zones along the selected axis, with pixel-clamped widths that adapt to button size.
+- The button content area is divided into 5 zones along the selected axis. The visual chevrons, hit areas, and tap flash use the same geometry.
 - **Horizontal mode**: left = decrement, right = increment.
 - **Vertical mode**: bottom = decrement, top = increment (up = more).
 - **Outer decrement** (far left / bottom) → `{step}` = `-large_step`
@@ -691,14 +712,15 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 - **Center zone** → works as a normal button (tap and long-press actions)
 - **Inner increment** → `{step}` = `+small_step`
 - **Outer increment** (far right / top) → `{step}` = `+large_step`
-- Zone widths target 12% (outer) and 15% (inner) of the button span, clamped to 40–80 px. The center zone gets whatever remains.
+- At the default 100% tap-area scale, zone widths target 12% (outer) and 15% (inner) of the button span, with a 40px minimum. Wide buttons keep scaling beyond 80px; the center zone remains at least 10% of the span.
+- Taps use the initial touch position, so a finger drifting slightly before release does not change a small step into a large step.
 - Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
 - The tap flash covers only the tapped zone.
 - Inner zones (small step) use the device's **Tap Beep** pattern; outer zones (large step) use the **Long-Press Beep** pattern for a distinct audio cue. Suppressed when the adjustment action itself produces audio.
 - The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
 - The `{step}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value` fields.
 
-**Disabling zones:** Set a step value to **0** to disable that zone pair. The remaining zone expands to fill the freed space (from 15% to the full 27% per side). Setting both steps to 0 makes the entire button a center zone.
+**Disabling zones:** Set a step value to **0** to disable that zone pair. The center action area receives the freed space. Setting both steps to 0 makes the entire button a center zone.
 
 > **Tip:** For best usability, use `col_span >= 2` in horizontal mode or `row_span >= 2` in vertical mode so the tap zones are easy to hit.
 
@@ -709,6 +731,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 | **Direction** | Horizontal (left/right, default) or vertical (up/down) |
 | **Small Step** | Inner zone adjustment magnitude (default 1). Supports decimals (e.g. 0.1, 0.5). Set to 0 to disable inner zones |
 | **Large Step** | Outer zone adjustment magnitude (default 10). Supports decimals. Set to 0 to disable outer zones |
+| **Tap Area Scale** | Scales both inner and outer tap areas from 50% to 150% while preserving their ratio. Default 100% |
 | **Indicator Color** | Chevron color (default white) |
 | **Opacity** | Chevron visibility from 0 (invisible) to 255 (fully opaque). Default 80 (~31%) |
 | **Adjustment Action** | The action template dispatched for outer/inner zones. The `{step}` placeholder is replaced with the signed step value |
@@ -1038,12 +1061,13 @@ The pad editor and Home page validate binding syntax **in real time** as you typ
 
 **How it works:**
 
+- The editor loads the available schemes and their finite keys from the running device, so board- and device-class-specific bindings are validated without a separate portal catalog
 - Validation runs on a **400 ms debounce** while you type, so errors appear almost immediately without interrupting your typing flow
 - Validation also runs **immediately on blur** (when you click or tab away from a field)
 - Errors appear as a **red border** and a **red message below the field** describing the problem
 - **Saving is blocked** while any field has a validation error — the save button shows which fields need attention
 
-> **Tip:** Validation is purely syntactic — it checks that your binding is well-formed, not that the MQTT topic exists or that the data path returns a value. Runtime resolution issues still show `---` or `ERR:` on the device.
+> **Tip:** If the editor cannot retrieve binding metadata, it continues with generic structural checks so you can keep editing. The device remains the authoritative validator when saving. Validation confirms that a binding is well-formed, not that an MQTT topic exists or that a data path returns a value. Runtime resolution issues still show `---` or `ERR:` on the device.
 
 ### Preview Live Values
 
@@ -1141,11 +1165,42 @@ Multiple bindings in one label, showing indoor conditions:
 
 **Syntax:** `[health:key;format]`
 
+### Camera Motion Binding
+
+Camera-enabled display boards provide live camera motion data with
+`[camera:key;format]`. These bindings read the local detector directly, so
+they remain useful while tuning sensitivity even when no motion event or MQTT
+message is produced.
+
+| Key | Value and purpose |
+| --- | --- |
+| `presence` | `ON` or `OFF` current motion-derived presence |
+| `motion_enabled` | `ON` or `OFF` detector setting |
+| `changed_tiles` | Changed-tile count from the latest analyzed frame |
+| `score` | Aggregate pixel-difference score from the latest analyzed frame |
+| `tile_threshold` | Changed-tile threshold for the current sensitivity |
+| `score_threshold` | Score threshold for the current sensitivity |
+| `global_change` | `ON` when the latest frame was rejected as broad illumination or exposure change |
+| `confirm_frames` | Consecutive qualifying frames accumulated, from 0 through 2 |
+| `baseline_ready` | `ON` after the initial RAW10 baseline frame is captured |
+| `sample_age` | Seconds since the latest analyzed frame, or 0 before analysis starts |
+| `last_motion` | Unix timestamp of latest confirmed motion, or 0 when unavailable before time synchronization |
+| `motion_age` | Seconds since latest confirmed motion, or 0 before one occurs |
+
+Use the values together when tuning detection. For example, show
+`Tiles [camera:changed_tiles]/[camera:tile_threshold]` and
+`Score [camera:score]/[camera:score_threshold]` to compare live readings with
+the active thresholds. `global_change` helps distinguish broad lighting shifts
+from localized motion, while `sample_age` reveals whether the detector is
+receiving analyzed frames.
+
 Displays real-time device diagnostics — useful for system monitoring buttons or debug pads.
 
 | Key | Returns | Example value |
 |-----|---------|---------------|
 | `cpu` | CPU usage percentage | `42` |
+| `cpu_core_0` | Current Core 0 CPU usage percentage (`?` when unavailable) | `67` |
+| `cpu_core_1` | Current Core 1 CPU usage percentage (`?` when unavailable) | `18` |
 | `rssi` | WiFi signal strength (dBm) | `-54` |
 | `uptime` | Seconds since boot | `86400` |
 | `chip` | SoC model name | `ESP32-S3` |
@@ -1212,6 +1267,7 @@ Values are cached for up to 2 seconds to keep the CPU impact low.
 
 ```
 CPU: [health:cpu]%                                     → CPU: 42%
+[health:cpu_core_0]% / [health:cpu_core_1]%             → 67% / 18%
 [health:heap_free;%d] bytes free                       → 145320 bytes free
 WiFi: [health:rssi] dBm                               → WiFi: -54 dBm
 [health:wifi_ssid]                                     → MyNetwork

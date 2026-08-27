@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
   pull-requests: write
 
 jobs:
@@ -137,10 +138,33 @@ jobs:
     - name: Install photoframe vector dependencies
       run: python3 -m pip install pillow==12.2.0
 
+    - name: Configure host-native tests
+      run: |
+        cmake -S . -B build/host-tests
+
+    - name: Build host-native tests
+      run: cmake --build build/host-tests --parallel
+
     - name: Run host-native tests
       run: |
-        chmod +x tests/run_tests.sh tests/test_photoframe_vector_drift.sh
-        ./tests/run_tests.sh
+        mkdir -p "$GITHUB_WORKSPACE/test-results"
+        ctest --test-dir build/host-tests --output-on-failure \
+          --output-junit "$GITHUB_WORKSPACE/test-results/host-tests.xml"
+
+    - name: Publish host-test results
+      if: ${{ !cancelled() }}
+      uses: dorny/test-reporter@v2
+      with:
+        name: Host-native tests
+        path: test-results/host-tests.xml
+        reporter: java-junit
+
+    - name: Upload host-test report
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: host-test-results
+        path: test-results/host-tests.xml
 
   compile-flags-doc:
     runs-on: ubuntu-latest

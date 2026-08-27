@@ -81,6 +81,16 @@ void device_telemetry_fill_mqtt_scoped(JsonDocument &doc, MqttPublishScope scope
 // Returns -1 when runtime stats are unavailable (treated as unknown).
 int device_telemetry_get_cpu_usage();
 
+// Get current CPU usage percentage for one FreeRTOS core (0-100).
+// Returns -1 when the core is unavailable or runtime stats are unavailable.
+int device_telemetry_get_cpu_usage_for_core(uint8_t core);
+
+// Copy the aggregate and up to max_cores per-core CPU usage values from one
+// coherent telemetry sample. Values are -1 when runtime stats are unavailable.
+void device_telemetry_get_cpu_usage_snapshot(int* aggregate,
+											 int* per_core_values,
+											 uint8_t max_cores);
+
 // Initialize CPU monitoring background task.
 // Must be called once during setup.
 void device_telemetry_start_cpu_monitoring();

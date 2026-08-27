@@ -1,0 +1,22 @@
+<div class="section-header d-flex align-items-center justify-content-between gap-3">
+  <div>
+    <h2>Snapshots</h2>
+    <p class="mb-0">Saved images from camera capture actions.</p>
+  </div>
+  <button class="btn btn-outline-secondary" id="camera-snapshots-refresh" type="button">Refresh</button>
+</div>
+
+<div class="card mb-3" id="camera-latest-card">
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+      <h3 class="h5 mb-0">Latest snapshot</h3>
+      <button class="btn btn-outline-danger btn-sm" id="camera-latest-delete" type="button">Delete</button>
+    </div>
+    <a id="camera-latest-link" target="_blank" rel="noopener"><img class="camera-preview" id="camera-latest-image" alt="Latest saved camera snapshot"></a>
+    <p class="camera-snapshot-metadata text-muted mb-0 mt-2" id="camera-latest-metadata" hidden></p>
+    <p class="text-muted mb-0" id="camera-latest-empty" hidden>No latest snapshot is saved.</p>
+  </div>
+</div>
+
+<div id="camera-roll-empty" class="text-muted" hidden>No camera-roll images are saved.</div>
+<div id="camera-roll-folders"></div>

@@ -1,7 +1,10 @@
 <div class="section-header">
-    <h2>🎨 Button Defaults</h2>
-    <p>Set default appearance for all buttons on all pads. Individual buttons can override these values.</p>
+    <h2>🎨 Pad and Button Defaults</h2>
+    <p>Set device-wide pad and button defaults. Pads and buttons can override the applicable values.</p>
 </div>
+<div class="card mb-3">
+    <div class="card-header"><h5 class="mb-0">Button Appearance</h5></div>
+    <div class="card-body">
     <div style="display:flex; gap:12px; margin-bottom:8px;">
         <div id="pad-def-bg-color-wrap" style="flex:1;">
             <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
@@ -31,14 +34,80 @@
             <input type="text" id="pad-def-border-width" class="form-control form-control-sm" maxlength="63" style="width:100%;" placeholder="(firmware default)">
         </div>
         <div class="form-group" style="flex:1; margin-bottom:4px;">
-            <label for="pad-def-corner-radius" style="font-size:13px;">Radius <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+            <label for="pad-def-corner-radius" style="font-size:13px;">Corner Radius <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
             <input type="text" id="pad-def-corner-radius" class="form-control form-control-sm" maxlength="63" style="width:100%;" placeholder="(firmware default)">
         </div>
         <div class="form-group" style="flex:1; margin-bottom:4px;">
-            <label for="pad-def-content-pad" style="font-size:13px;">Padding</label>
+            <label for="pad-def-content-pad" style="font-size:13px;">Content Padding</label>
             <input type="number" id="pad-def-content-pad" class="form-control form-control-sm" min="0" max="50" style="width:100%;" placeholder="(firmware default)">
         </div>
     </div>
+</div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header"><h5 class="mb-0">Pad Appearance and Layout</h5></div>
+    <div class="card-body">
+        <div id="pad-def-pad-bg-color-wrap" class="form-group" style="max-width:280px; margin-bottom:10px;">
+            <label style="font-size:13px;">Default Pad Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+            <div class="bindable-color">
+                <div class="bc-swatch"></div>
+                <input type="text" id="pad-def-pad-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="(firmware default)">
+            </div>
+        </div>
+        <div class="form-group" style="max-width:180px; margin-bottom:10px;">
+            <label for="pad-def-button-spacing" style="font-size:13px;">Button Spacing</label>
+            <input type="number" id="pad-def-button-spacing" class="form-control form-control-sm" min="0" max="64" value="6">
+            <small class="form-text">Gap between adjacent buttons.</small>
+        </div>
+        <div class="form-group" style="max-width:220px; margin-bottom:10px;">
+            <label for="pad-def-pixel-shift-distance" style="font-size:13px;">Burn-in Pixel Shift Distance</label>
+            <input type="number" id="pad-def-pixel-shift-distance" class="form-control form-control-sm" min="0" max="8" value="4">
+            <small class="form-text">Pixels moved in each direction to prevent burn-in. Set 0 to disable.</small>
+        </div>
+        <div class="form-label">Extra Edge Insets</div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <div class="form-group" style="flex:1; min-width:100px; margin-bottom:4px;">
+                <label for="pad-def-inset-top" style="font-size:13px;">Top</label>
+                <input type="number" id="pad-def-inset-top" class="form-control form-control-sm" min="0" max="64" value="0">
+            </div>
+            <div class="form-group" style="flex:1; min-width:100px; margin-bottom:4px;">
+                <label for="pad-def-inset-right" style="font-size:13px;">Right</label>
+                <input type="number" id="pad-def-inset-right" class="form-control form-control-sm" min="0" max="64" value="0">
+            </div>
+            <div class="form-group" style="flex:1; min-width:100px; margin-bottom:4px;">
+                <label for="pad-def-inset-bottom" style="font-size:13px;">Bottom</label>
+                <input type="number" id="pad-def-inset-bottom" class="form-control form-control-sm" min="0" max="64" value="0">
+            </div>
+            <div class="form-group" style="flex:1; min-width:100px; margin-bottom:4px;">
+                <label for="pad-def-inset-left" style="font-size:13px;">Left</label>
+                <input type="number" id="pad-def-inset-left" class="form-control form-control-sm" min="0" max="64" value="0">
+            </div>
+        </div>
+        <small class="form-text">Insets add space inside the burn-in pixel-shift distance.</small>
+        <div class="pad-layout-diagram" id="pad-layout-diagram" aria-label="Pad layout preview">
+            <div class="pad-layout-screen">
+                <span class="pad-layout-label pad-layout-label-shift">Pixel Shift <b id="pad-layout-shift-value">4 px</b></span>
+                <div class="pad-layout-shift">
+                    <span class="pad-layout-label pad-layout-label-top">Top <b id="pad-layout-top-value">0 px</b></span>
+                    <span class="pad-layout-label pad-layout-label-right">Right <b id="pad-layout-right-value">0 px</b></span>
+                    <span class="pad-layout-label pad-layout-label-bottom">Bottom <b id="pad-layout-bottom-value">0 px</b></span>
+                    <span class="pad-layout-label pad-layout-label-left">Left <b id="pad-layout-left-value">0 px</b></span>
+                    <div class="pad-layout-insets">
+                        <div class="pad-layout-grid">
+                            <div></div><div></div><div></div><div></div>
+                        </div>
+                    </div>
+                </div>
+                <span class="pad-layout-label pad-layout-label-gap">Spacing <b id="pad-layout-gap-value">6 px</b></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header"><h5 class="mb-0">Button Labels and Icon</h5></div>
+    <div class="card-body">
     <div style="display:flex; gap:12px; margin-top:4px;">
         <div class="form-group" style="flex:1; margin-bottom:4px;">
             <label for="pad-def-label-top-style" style="font-size:13px;">Top Label Style</label>
@@ -62,9 +131,58 @@
             <option value="center">Centered (icon only)</option>
         </select>
     </div>
+</div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header"><h5 class="mb-0">Button Shadow</h5></div>
+    <div class="card-body">
+        <div class="form-check" style="margin-bottom:8px;">
+            <input type="checkbox" class="form-check-input" id="pad-def-button-shadow-enabled">
+            <label class="form-check-label" for="pad-def-button-shadow-enabled">Enable button shadows</label>
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <div class="form-group" style="flex:1; min-width:120px; margin-bottom:4px;">
+                <label for="pad-def-button-shadow-type" style="font-size:13px;">Type</label>
+                <select id="pad-def-button-shadow-type" class="form-select form-select-sm" onchange="padButtonShadowTypeChanged()">
+                    <option value="opaque">Opaque</option>
+                    <option value="drop">Drop</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex:1; min-width:160px; margin-bottom:4px;">
+                <label for="pad-def-button-shadow-color-mode" style="font-size:13px;">Color Mode</label>
+                <select id="pad-def-button-shadow-color-mode" class="form-select form-select-sm" onchange="padButtonShadowColorModeChanged()">
+                    <option value="fixed">Specific Color</option>
+                    <option value="darken_background">Darker Button Background</option>
+                </select>
+            </div>
+            <div class="form-group" id="pad-def-button-shadow-color-wrap" style="flex:1; min-width:120px; margin-bottom:4px;">
+                <label for="pad-def-button-shadow-color" style="font-size:13px;">Color</label>
+                <input type="color" id="pad-def-button-shadow-color" value="#101010" style="width:100%; height:31px;">
+            </div>
+            <div class="form-group" id="pad-def-button-shadow-darken-wrap" style="flex:1; min-width:140px; margin-bottom:4px; display:none;">
+                <label for="pad-def-button-shadow-darken" style="font-size:13px;">Darken Amount (%)</label>
+                <input type="number" id="pad-def-button-shadow-darken" class="form-control form-control-sm" min="0" max="100" value="35">
+            </div>
+            <div class="form-group" style="flex:1; min-width:100px; margin-bottom:4px;">
+                <label for="pad-def-button-shadow-offset-x" style="font-size:13px;">Horizontal Offset</label>
+                <input type="number" id="pad-def-button-shadow-offset-x" class="form-control form-control-sm" min="-64" max="64" value="0">
+            </div>
+            <div class="form-group" style="flex:1; min-width:100px; margin-bottom:4px;">
+                <label for="pad-def-button-shadow-offset-y" style="font-size:13px;">Vertical Offset</label>
+                <input type="number" id="pad-def-button-shadow-offset-y" class="form-control form-control-sm" min="-64" max="64" value="5">
+            </div>
+            <div class="form-group" id="pad-def-button-shadow-blur-wrap" style="flex:1; min-width:100px; margin-bottom:4px;">
+                <label for="pad-def-button-shadow-drop-blur" style="font-size:13px;">Drop Blur</label>
+                <input type="number" id="pad-def-button-shadow-drop-blur" class="form-control form-control-sm" min="0" max="32" value="4">
+            </div>
+        </div>
+        <small class="form-text">Shadows may overlap nearby buttons or clip at the screen edge.</small>
+    </div>
+</div>
 
     <div class="save-bar">
-        <button type="button" id="btn-defaults-save-btn" class="btn btn-primary btn-sm">Save Button Defaults</button>
+        <button type="button" id="btn-defaults-save-btn" class="btn btn-primary btn-sm">Save Pad and Button Defaults</button>
     </div>
 
 {{BINDING_HELP}}

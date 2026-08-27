@@ -183,6 +183,9 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["screen_saver_fade_in_ms"] = current_config->screen_saver_fade_in_ms;
 				(*doc)["screen_saver_wake_on_touch"] = current_config->screen_saver_wake_on_touch;
 				(*doc)["screen_saver_wake_binding"] = current_config->screen_saver_wake_binding;
+				(*doc)["idle_screen_enabled"] = current_config->idle_screen_enabled;
+				(*doc)["idle_screen_timeout_seconds"] = current_config->idle_screen_timeout_seconds;
+				(*doc)["idle_screen_pad"] = current_config->idle_screen_pad;
 				#endif
 
 				// Let registered device classes append their own fields.
@@ -624,6 +627,23 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (doc.containsKey("screen_saver_wake_binding")) {
 				strlcpy(current_config->screen_saver_wake_binding, doc["screen_saver_wake_binding"] | "", CONFIG_SS_WAKE_BINDING_MAX_LEN);
 		}
+
+		if (doc.containsKey("idle_screen_enabled")) {
+				current_config->idle_screen_enabled = parseBoolField(doc, "idle_screen_enabled");
+		}
+
+		if (doc.containsKey("idle_screen_timeout_seconds")) {
+				if (doc["idle_screen_timeout_seconds"].is<const char*>()) {
+					const char* v = doc["idle_screen_timeout_seconds"];
+					current_config->idle_screen_timeout_seconds = (uint16_t)atoi(v ? v : "0");
+				} else {
+					current_config->idle_screen_timeout_seconds = (uint16_t)(doc["idle_screen_timeout_seconds"] | 0);
+				}
+		}
+
+		if (doc.containsKey("idle_screen_pad")) {
+				strlcpy(current_config->idle_screen_pad, doc["idle_screen_pad"] | "", CONFIG_IDLE_SCREEN_PAD_MAX_LEN);
+		}
 		#endif
 
 		// Let registered device classes parse their own fields before save.
@@ -631,6 +651,20 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				JsonObject body = doc.as<JsonObject>();
 				device_class_dispatch_config_api_set(current_config, body);
 		}
+
+		#if HAS_DISPLAY
+		if (current_config->idle_screen_enabled &&
+				(!current_config->idle_screen_pad[0] ||
+					current_config->idle_screen_timeout_seconds == 0 ||
+					(current_config->screen_saver_enabled &&
+						current_config->idle_screen_timeout_seconds >= current_config->screen_saver_timeout_seconds))) {
+			request->send(400, "application/json", "{\"success\":false,\"message\":\"Idle Screen requires a pad, a positive timeout, and a shorter timeout than Display Sleep when it is enabled\"}");
+			portENTER_CRITICAL(&g_config_post_mux);
+			config_post_reset();
+			portEXIT_CRITICAL(&g_config_post_mux);
+			return;
+		}
+		#endif
 
 		current_config->magic = CONFIG_MAGIC;
 

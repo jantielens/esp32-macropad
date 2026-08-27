@@ -417,7 +417,7 @@ static void cmd_set_tick(bool on) {
 // Binding resolver
 // ============================================================================
 
-static bool strip_resolve(const char* params, char* out, size_t out_len) {
+static bool strip_resolve_value(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:no_key");
         return false;
@@ -633,11 +633,39 @@ static bool strip_resolve(const char* params, char* out, size_t out_len) {
     return false;
 }
 
+static BindingResolverStatus strip_resolve(const char* params, char* out, size_t out_len) {
+    return strip_resolve_value(params, out, out_len) ? BINDING_RESOLVER_RESOLVED
+                                                      : BINDING_RESOLVER_UNAVAILABLE;
+}
+
 static void strip_collect(const char* params, void* user_data) {
     (void)params;
     (void)user_data;
 }
 
+static const char* const kStripBindingKeys[] = {
+    "state", "segment", "segments", "remaining", "elapsed", "seg_inc", "base_time", "step",
+    "relay", "progress", "range", "total_time", "countdown", "pause", "tick", "table",
+};
+
+static uint8_t strip_binding_key_count() {
+    return (uint8_t)(sizeof(kStripBindingKeys) / sizeof(kStripBindingKeys[0]) +
+                     3 * g_strip.segment_count);
+}
+
+static const char* strip_binding_key_at(uint8_t index) {
+    const uint8_t static_count = sizeof(kStripBindingKeys) / sizeof(kStripBindingKeys[0]);
+    if (index < static_count) return kStripBindingKeys[index];
+
+    const uint8_t dynamic_index = index - static_count;
+    const uint8_t segment = dynamic_index / 3 + 1;
+    if (segment > g_strip.segment_count) return nullptr;
+
+    static char key[20];
+    static const char* const prefixes[] = {"seg_time:", "seg_offset:", "seg_inc:"};
+    snprintf(key, sizeof(key), "%s%u", prefixes[dynamic_index % 3], (unsigned)segment);
+    return key;
+}
 // ============================================================================
 // Public API
 // ============================================================================
@@ -752,7 +780,7 @@ void test_strip_tick() {
             }
         }
 #endif
-        if (elapsed >= g_strip.phase_duration_ms) {
+    if (elapsed >= g_strip.phase_duration_ms) {
             // Segment complete
             if (g_strip.current_segment >= g_strip.segment_count) {
                 // Last segment
@@ -787,27 +815,15 @@ void test_strip_tick() {
     }
 }
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void strip_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[strip:key] or [strip:key;format]";
-    o["example"] = "[strip:segment] / [strip:segments]";
-    o["keys"]    = "state, base_time, total_time, elapsed, remaining, segment, segments, seg_inc, step, range, progress, countdown, tick, relay, table";
-    o["note"]    = "Darkroom f-stop test-strip sequencer state.";
-}
-#endif
-
 void test_strip_init() {
     recalculate_segments();
-    if (!binding_template_register("strip", strip_resolve, strip_collect)) {
+    if (!binding_template_register("strip", strip_resolve, strip_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                    strip_binding_key_count, strip_binding_key_at})) {
         LOGE(TAG, "Failed to register strip binding scheme");
     } else {
         LOGI(TAG, "Strip binding scheme registered");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("strip", strip_scheme_describe);
-#endif
 }
 
 #if HAS_MCP

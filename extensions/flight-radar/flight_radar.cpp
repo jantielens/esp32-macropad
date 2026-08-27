@@ -7,6 +7,7 @@
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
     NATIVE_EXTENSION_DESCRIPTOR_MAGIC, NATIVE_EXTENSION_ABI_VERSION,
     NATIVE_EXTENSION_TARGET_ABI, "flight-radar", "1.4.1", "Flight Radar",
+    NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS, 0,
 };
 
 namespace {
@@ -233,13 +234,13 @@ bool parse_config(const char* json, RadarConfig* config) {
     if (!config) return false;
     const char* end = json;
     while (end && *end) ++end;
-    config->latitude = 51.2189473f;
-    config->longitude = 5.4216694f;
+    config->latitude = 50.901389f;
+    config->longitude = 4.484444f;
     config->range_km = 50.0f;
     config->max_planes = 20;
     config->refresh_interval_secs = REFRESH_INTERVAL_MS / 1000;
-    copy_text(config->latitude_text, sizeof(config->latitude_text), "51.2189473");
-    copy_text(config->longitude_text, sizeof(config->longitude_text), "5.4216694");
+    copy_text(config->latitude_text, sizeof(config->latitude_text), "50.901389");
+    copy_text(config->longitude_text, sizeof(config->longitude_text), "4.484444");
     if (!json || !json[0]) return true;
 
     const char* value = find_value(json, end, "lat");
@@ -265,20 +266,20 @@ float radians(float degrees) { return degrees * PI / 180.0f; }
 float haversine_km(const NativeExtensionHostApi* host, float home_lat, float home_lon, float lat, float lon) {
     const float delta_lat = radians(lat - home_lat);
     const float delta_lon = radians(lon - home_lon);
-    const float sin_lat = host->math_sin(delta_lat * 0.5f);
-    const float sin_lon = host->math_sin(delta_lon * 0.5f);
-    const float a = sin_lat * sin_lat + host->math_cos(radians(home_lat)) * host->math_cos(radians(lat)) * sin_lon * sin_lon;
-    return EARTH_RADIUS_KM * 2.0f * host->math_atan2(host->math_sqrt(a), host->math_sqrt(1.0f - a));
+    const float sin_lat = host->core->math_sin(delta_lat * 0.5f);
+    const float sin_lon = host->core->math_sin(delta_lon * 0.5f);
+    const float a = sin_lat * sin_lat + host->core->math_cos(radians(home_lat)) * host->core->math_cos(radians(lat)) * sin_lon * sin_lon;
+    return EARTH_RADIUS_KM * 2.0f * host->core->math_atan2(host->core->math_sqrt(a), host->core->math_sqrt(1.0f - a));
 }
 
 float bearing_radians(const NativeExtensionHostApi* host, const RadarConfig& config, const Plane& plane) {
     const float delta_lon = radians(plane.longitude - config.longitude);
     const float target_lat = radians(plane.latitude);
     const float home_lat = radians(config.latitude);
-    const float y = host->math_sin(delta_lon) * host->math_cos(target_lat);
-    const float x = host->math_cos(home_lat) * host->math_sin(target_lat) -
-                    host->math_sin(home_lat) * host->math_cos(target_lat) * host->math_cos(delta_lon);
-    return host->math_atan2(y, x);
+    const float y = host->core->math_sin(delta_lon) * host->core->math_cos(target_lat);
+    const float x = host->core->math_cos(home_lat) * host->core->math_sin(target_lat) -
+                    host->core->math_sin(home_lat) * host->core->math_cos(target_lat) * host->core->math_cos(delta_lon);
+    return host->core->math_atan2(y, x);
 }
 
 const char* find_object_end(const char* begin, const char* end) {
@@ -346,52 +347,14 @@ uint16_t parse_response(const NativeExtensionHostApi* host, const char* response
 
 void set_status(RadarScan* scan, const char* text) { copy_text(scan->status, sizeof(scan->status), text); }
 
-void log_refresh(RadarService* service, const RadarScan& scan) {
-    char message[120] = "flight radar: total=";
-    append_uint(message, sizeof(message), scan.refresh_ms);
-    append_text(message, sizeof(message), "ms in_range=");
-    append_uint(message, sizeof(message), scan.in_range);
-    append_text(message, sizeof(message), " displayed=");
-    append_uint(message, sizeof(message), scan.count);
-    service->host->log(NATIVE_EXTENSION_LOG_INFO, message);
-    for (uint16_t index = 0; index < scan.count; ++index) {
-        const Plane& plane = scan.snapshot[index];
-        char plane_message[96] = "flight radar: ";
-        append_text(plane_message, sizeof(plane_message), plane.callsign);
-        append_text(plane_message, sizeof(plane_message), " lat=");
-        append_fixed_1(plane_message, sizeof(plane_message), plane.latitude);
-        append_text(plane_message, sizeof(plane_message), " lon=");
-        append_fixed_1(plane_message, sizeof(plane_message), plane.longitude);
-        append_text(plane_message, sizeof(plane_message), " dist=");
-        append_fixed_1(plane_message, sizeof(plane_message), plane.distance_km);
-        append_text(plane_message, sizeof(plane_message), "km");
-        service->host->log(NATIVE_EXTENSION_LOG_INFO, plane_message);
-    }
-}
-
-void log_config(const NativeExtensionHostApi* host, const RadarConfig& config) {
-    char message[112] = "flight radar: config lat=";
-    append_text(message, sizeof(message), config.latitude_text);
-    append_text(message, sizeof(message), " lon=");
-    append_text(message, sizeof(message), config.longitude_text);
-    append_text(message, sizeof(message), " range=");
-    append_fixed_1(message, sizeof(message), config.range_km);
-    append_text(message, sizeof(message), "km max=");
-    append_uint(message, sizeof(message), config.max_planes);
-    append_text(message, sizeof(message), " interval=");
-    append_uint(message, sizeof(message), config.refresh_interval_secs);
-    append_text(message, sizeof(message), "s");
-    host->log(NATIVE_EXTENSION_LOG_INFO, message);
-}
-
 void refresh(RadarService* service, uint8_t scan_index) {
     const NativeExtensionHostApi* host = service->host;
     if (scan_index >= MAX_SCANS) return;
     RadarConfig config = {};
-    if (!host->mutex_lock(service->mutex, 100)) return;
-    if (!service->scans[scan_index].active) { host->mutex_unlock(service->mutex); return; }
+    if (!host->core->mutex_lock(service->mutex, 100)) return;
+    if (!service->scans[scan_index].active) { host->core->mutex_unlock(service->mutex); return; }
     config = service->scans[scan_index].config;
-    host->mutex_unlock(service->mutex);
+    host->core->mutex_unlock(service->mutex);
 
     // ADSB.lol accepts nautical miles; local Haversine filtering remains exact.
     char url[112] = "https://api.adsb.lol/v2/point/";
@@ -405,19 +368,19 @@ void refresh(RadarService* service, uint8_t scan_index) {
     if (radius_nm > 250) radius_nm = 250;
     append_uint(url, sizeof(url), radius_nm);
 
-    const uint32_t started = host->millis();
+    const uint32_t started = host->core->millis();
     NativeExtensionHttpResult result = {};
-    if (!host->http_get(url, service->response, RESPONSE_CAPACITY - 1, HTTP_TIMEOUT_MS, &result) || result.status_code != 200 || result.truncated) {
-        if (host->mutex_lock(service->mutex, 100)) {
+    if (!host->http->http_get(url, service->response, RESPONSE_CAPACITY - 1, HTTP_TIMEOUT_MS, &result) || result.status_code != 200 || result.truncated) {
+        if (host->core->mutex_lock(service->mutex, 100)) {
             char error[72] = "ADSB request failed: HTTP ";
             append_uint(error, sizeof(error), result.status_code > 0 ? static_cast<uint32_t>(result.status_code) : 0);
             RadarScan& scan = service->scans[scan_index];
             set_status(&scan, error);
-            scan.last_refresh_ms = host->millis();
+            scan.last_refresh_ms = host->core->millis();
             ++scan.version;
-            host->mutex_unlock(service->mutex);
+            host->core->mutex_unlock(service->mutex);
         }
-        host->log(NATIVE_EXTENSION_LOG_WARN, "flight radar ADSB request failed");
+        host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar ADSB request failed");
         host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_ERROR,
                        "ADSB request failed");
         return;
@@ -431,48 +394,46 @@ void refresh(RadarService* service, uint8_t scan_index) {
         // An empty result is valid; malformed root documents are shown as an error.
         const char* array = find_value(reinterpret_cast<const char*>(service->response), reinterpret_cast<const char*>(service->response) + result.body_length, "ac");
         if (!array) {
-            if (host->mutex_lock(service->mutex, 100)) {
+            if (host->core->mutex_lock(service->mutex, 100)) {
                 RadarScan& scan = service->scans[scan_index];
                 set_status(&scan, "ADSB JSON parse failed");
-                scan.last_refresh_ms = host->millis();
+                scan.last_refresh_ms = host->core->millis();
                 ++scan.version;
-                host->mutex_unlock(service->mutex);
+                host->core->mutex_unlock(service->mutex);
             }
-            host->log(NATIVE_EXTENSION_LOG_WARN, "flight radar ADSB JSON parse failed");
+            host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar ADSB JSON parse failed");
             host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_ERROR,
                                    "ADSB JSON parse failed");
             return;
         }
     }
-    const uint32_t elapsed = host->millis() - started;
-    if (host->mutex_lock(service->mutex, 100)) {
+    const uint32_t elapsed = host->core->millis() - started;
+    if (host->core->mutex_lock(service->mutex, 100)) {
         RadarScan& scan = service->scans[scan_index];
         for (uint16_t index = 0; index < count; ++index) scan.snapshot[index] = service->parse[index];
         scan.count = count;
         scan.in_range = in_range;
         scan.refresh_ms = elapsed;
-        scan.last_refresh_ms = host->millis();
+        scan.last_refresh_ms = host->core->millis();
         set_status(&scan, count ? "Live ADS-B" : "No aircraft in range");
         host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_RUNNING,
                        count ? "Live ADS-B" : "No aircraft in range");
         ++scan.version;
-        log_refresh(service, scan);
-        host->mutex_unlock(service->mutex);
+        host->core->mutex_unlock(service->mutex);
     }
 }
 
 void radar_worker(void* context) {
     RadarService* service = static_cast<RadarService*>(context);
-    service->host->log(NATIVE_EXTENSION_LOG_INFO, "flight radar: worker started");
     service->host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_RUNNING,
                                     "Radar worker started");
     // The worker never calls LVGL. It cooperatively exits when the final radar
     // widget disappears, allowing host shutdown to free package state safely.
     while (!service->host->task->task_cancel_requested(service->extension_context)) {
-        uint32_t now = service->host->millis();
+        uint32_t now = service->host->core->millis();
         uint32_t next_due_ms = 500;
         uint8_t due_scan = MAX_SCANS;
-        if (service->host->mutex_lock(service->mutex, 100)) {
+        if (service->host->core->mutex_lock(service->mutex, 100)) {
             for (uint8_t index = 0; index < MAX_SCANS; ++index) {
                 const RadarScan& scan = service->scans[index];
                 if (!scan.active) continue;
@@ -483,7 +444,7 @@ void radar_worker(void* context) {
                 const uint32_t remaining = interval_ms - elapsed;
                 if (remaining < next_due_ms) next_due_ms = remaining;
             }
-            service->host->mutex_unlock(service->mutex);
+            service->host->core->mutex_unlock(service->mutex);
         }
         if (due_scan < MAX_SCANS) refresh(service, due_scan);
         else if (!service->host->task->task_wait_or_cancel(service->extension_context, next_due_ms)) break;
@@ -494,23 +455,22 @@ void radar_worker(void* context) {
 
 RadarService* get_service(const NativeExtensionHostApi* host, void* extension_context) {
     // Allocate once per package. The host invokes shutdown after worker exit.
-    RadarService* service = static_cast<RadarService*>(host->context_get_data(extension_context));
+    RadarService* service = static_cast<RadarService*>(host->core->context_get_data(extension_context));
     if (service) return service;
-    service = static_cast<RadarService*>(host->alloc(sizeof(RadarService)));
+    service = static_cast<RadarService*>(host->core->alloc(sizeof(RadarService)));
     if (!service) return nullptr;
     clear_bytes(service, sizeof(*service));
     service->host = host;
     service->extension_context = extension_context;
-    service->mutex = host->mutex_create();
-    service->response = static_cast<uint8_t*>(host->alloc(RESPONSE_CAPACITY));
+    service->mutex = host->core->mutex_create();
+    service->response = static_cast<uint8_t*>(host->core->alloc(RESPONSE_CAPACITY));
     if (!service->mutex || !service->response) {
-        host->log(NATIVE_EXTENSION_LOG_ERROR, "flight radar: service allocation failed");
-        if (service->response) host->free(service->response);
-        host->free(service);
+        host->core->log(NATIVE_EXTENSION_LOG_ERROR, "flight radar: service allocation failed");
+        if (service->response) host->core->free(service->response);
+        host->core->free(service);
         return nullptr;
     }
-    host->context_set_data(extension_context, service);
-    host->log(NATIVE_EXTENSION_LOG_INFO, "flight radar: service ready");
+    host->core->context_set_data(extension_context, service);
     return service;
 }
 
@@ -545,7 +505,6 @@ int8_t find_or_create_scan(RadarService* service, const RadarConfig& config) {
         scan.active = 1;
         scan.config = config;
         set_status(&scan, "Starting ADS-B...");
-        log_config(service->host, config);
         return index;
     }
     return -1;
@@ -553,7 +512,7 @@ int8_t find_or_create_scan(RadarService* service, const RadarConfig& config) {
 
 void draw_marker(const NativeExtensionHostApi* host, void* canvas, int32_t x, int32_t y, float heading) {
     const float angle = radians(heading);
-    const float forward_x = host->math_sin(angle), forward_y = -host->math_cos(angle);
+    const float forward_x = host->core->math_sin(angle), forward_y = -host->core->math_cos(angle);
     const float side_x = -forward_y, side_y = forward_x;
     // A triangle's area centroid is tailward of its geometric center. Shift
     // its vertices forward so the reported aircraft coordinate stays centered.
@@ -565,9 +524,9 @@ void draw_marker(const NativeExtensionHostApi* host, void* canvas, int32_t x, in
     const int32_t left_y = marker_y - static_cast<int32_t>(forward_y * MARKER_TAIL_PX) + static_cast<int32_t>(side_y * MARKER_HALF_WIDTH_PX);
     const int32_t right_x = marker_x - static_cast<int32_t>(forward_x * MARKER_TAIL_PX) - static_cast<int32_t>(side_x * MARKER_HALF_WIDTH_PX);
     const int32_t right_y = marker_y - static_cast<int32_t>(forward_y * MARKER_TAIL_PX) - static_cast<int32_t>(side_y * MARKER_HALF_WIDTH_PX);
-    host->canvas_draw_line(canvas, tip_x, tip_y, left_x, left_y, 0xFFDF00, MARKER_LINE_WIDTH_PX);
-    host->canvas_draw_line(canvas, left_x, left_y, right_x, right_y, 0xFFDF00, MARKER_LINE_WIDTH_PX);
-    host->canvas_draw_line(canvas, right_x, right_y, tip_x, tip_y, 0xFFDF00, MARKER_LINE_WIDTH_PX);
+    host->canvas->canvas_draw_line(canvas, tip_x, tip_y, left_x, left_y, 0xFFDF00, MARKER_LINE_WIDTH_PX);
+    host->canvas->canvas_draw_line(canvas, left_x, left_y, right_x, right_y, 0xFFDF00, MARKER_LINE_WIDTH_PX);
+    host->canvas->canvas_draw_line(canvas, right_x, right_y, tip_x, tip_y, 0xFFDF00, MARKER_LINE_WIDTH_PX);
 }
 
 void render_view(RadarService* service, RadarView* view) {
@@ -579,37 +538,37 @@ void render_view(RadarService* service, RadarView* view) {
     uint32_t refresh_ms = 0;
     if (view->scan_index >= MAX_SCANS) return;
     // Copy a scan snapshot quickly, then render without holding the worker lock.
-    if (!host->mutex_lock(service->mutex, 20)) return;
+    if (!host->core->mutex_lock(service->mutex, 20)) return;
     const RadarScan& scan = service->scans[view->scan_index];
-    if (!scan.active) { host->mutex_unlock(service->mutex); return; }
+    if (!scan.active) { host->core->mutex_unlock(service->mutex); return; }
     version = scan.version;
-    if (version == view->rendered_version) { host->mutex_unlock(service->mutex); return; }
+    if (version == view->rendered_version) { host->core->mutex_unlock(service->mutex); return; }
     count = scan.count;
     config = scan.config;
     refresh_ms = scan.refresh_ms;
     copy_text(status, sizeof(status), scan.status);
     for (uint16_t index = 0; index < count; ++index) service->render[index] = scan.snapshot[index];
-    host->mutex_unlock(service->mutex);
+    host->core->mutex_unlock(service->mutex);
 
     const int32_t radar_height = view->height > FOOTER_HEIGHT_PX ? view->height - FOOTER_HEIGHT_PX : view->height;
     const int32_t center_x = view->width / 2;
     const int32_t center_y = radar_height / 2;
     const int32_t edge = (view->width < radar_height ? view->width : radar_height) / 2 - RADAR_INSET_PX;
-    host->canvas_clear(view->canvas, 0x06131B);
+    host->canvas->canvas_clear(view->canvas, 0x06131B);
     for (uint8_t ring = 1; ring <= 4; ++ring) {
         const int32_t ring_radius = edge * ring / 4;
-        host->canvas_draw_circle(view->canvas, center_x, center_y, ring_radius, 0x1B5266, 1);
+        host->canvas->canvas_draw_circle(view->canvas, center_x, center_y, ring_radius, 0x1B5266, 1);
         char range_label[16] = {};
         append_fixed_1(range_label, sizeof(range_label), config.range_km * ring / 4.0f);
         append_text(range_label, sizeof(range_label), " km");
-        host->label_set_text(view->range_labels[ring - 1], range_label);
-        host->obj_set_pos(view->range_labels[ring - 1], center_x + 5, center_y - ring_radius - 14);
+        host->ui->label_set_text(view->range_labels[ring - 1], range_label);
+        host->ui->obj_set_pos(view->range_labels[ring - 1], center_x + 5, center_y - ring_radius - 14);
     }
-    host->canvas_draw_line(view->canvas, center_x, center_y - edge, center_x, center_y + edge, 0x1B5266, 1);
-    host->canvas_draw_line(view->canvas, center_x - edge, center_y, center_x + edge, center_y, 0x1B5266, 1);
-    host->canvas_draw_circle(view->canvas, center_x, center_y, 3, 0xFFFFFF, 1);
+    host->canvas->canvas_draw_line(view->canvas, center_x, center_y - edge, center_x, center_y + edge, 0x1B5266, 1);
+    host->canvas->canvas_draw_line(view->canvas, center_x - edge, center_y, center_x + edge, center_y, 0x1B5266, 1);
+    host->canvas->canvas_draw_circle(view->canvas, center_x, center_y, 3, 0xFFFFFF, 1);
 
-    for (uint8_t index = 0; index < MAX_LABELS; ++index) host->obj_set_hidden(view->plane_labels[index], true);
+    for (uint8_t index = 0; index < MAX_LABELS; ++index) host->ui->obj_set_hidden(view->plane_labels[index], true);
     for (uint16_t index = 0; index < count; ++index) {
         const Plane& plane = service->render[index];
         const float bearing = bearing_radians(host, config, plane);
@@ -617,8 +576,8 @@ void render_view(RadarService* service, RadarView* view) {
         if (plane.distance_km > 0.0f && radius < NEAR_HOME_MARKER_RADIUS_PX) {
             radius = NEAR_HOME_MARKER_RADIUS_PX;
         }
-        const int32_t x = center_x + static_cast<int32_t>(host->math_sin(bearing) * radius);
-        const int32_t y = center_y - static_cast<int32_t>(host->math_cos(bearing) * radius);
+        const int32_t x = center_x + static_cast<int32_t>(host->core->math_sin(bearing) * radius);
+        const int32_t y = center_y - static_cast<int32_t>(host->core->math_cos(bearing) * radius);
         draw_marker(host, view->canvas, x, y, plane.heading_degrees);
         if (index < MAX_LABELS) {
             char label[64] = {};
@@ -628,14 +587,14 @@ void render_view(RadarService* service, RadarView* view) {
             else append_text(label, sizeof(label), "-");
             append_text(label, sizeof(label), "ft ");
             append_text(label, sizeof(label), plane.aircraft_type);
-            host->label_set_text(view->plane_labels[index], label);
+            host->ui->label_set_text(view->plane_labels[index], label);
             const float marker_angle = radians(plane.heading_degrees);
-            const float marker_forward_x = host->math_sin(marker_angle);
-            const float marker_forward_y = -host->math_cos(marker_angle);
-            host->obj_set_pos(view->plane_labels[index],
+            const float marker_forward_x = host->core->math_sin(marker_angle);
+            const float marker_forward_y = -host->core->math_cos(marker_angle);
+            host->ui->obj_set_pos(view->plane_labels[index],
                               x + static_cast<int32_t>(marker_forward_x * (MARKER_TIP_PX + MARKER_LABEL_GAP_PX)),
                               y + static_cast<int32_t>(marker_forward_y * (MARKER_TIP_PX + MARKER_LABEL_GAP_PX)) - 7);
-            host->obj_set_hidden(view->plane_labels[index], false);
+            host->ui->obj_set_hidden(view->plane_labels[index], false);
         }
     }
     char footer[96] = {};
@@ -645,8 +604,8 @@ void render_view(RadarService* service, RadarView* view) {
     append_text(footer, sizeof(footer), " planes | ");
     append_uint(footer, sizeof(footer), refresh_ms);
     append_text(footer, sizeof(footer), "ms");
-    host->label_set_text(view->status_label, footer);
-    host->obj_set_pos(view->status_label, RADAR_INSET_PX, view->height - FOOTER_HEIGHT_PX + 5);
+    host->ui->label_set_text(view->status_label, footer);
+    host->ui->obj_set_pos(view->status_label, RADAR_INSET_PX, view->height - FOOTER_HEIGHT_PX + 5);
     view->rendered_version = version;
 }
 
@@ -655,71 +614,71 @@ void render_view(RadarService* service, RadarView* view) {
 extern "C" void native_extension_create_instance(const NativeExtensionHostApi* host,
                                                   void* extension_context, uint32_t instance_id,
                                                   void* root, const char* config_json) {
-    if (!host || host->abi_version != NATIVE_EXTENSION_ABI_VERSION || !root) return;
-    host->log(NATIVE_EXTENSION_LOG_INFO, "flight radar: creating view");
+    if (!host || host->abi_version != NATIVE_EXTENSION_ABI_VERSION || !host->core ||
+        !host->task || !host->http || !host->ui || !host->canvas || !root) return;
     // Instance creation is LVGL-task-only. It attaches this view to a scan and
     // starts the one package worker on the first successful view.
     RadarService* service = get_service(host, extension_context);
     if (!service) {
-        host->notify("Flight radar allocation failed");
+        host->core->notify("Flight radar allocation failed");
         return;
     }
     RadarConfig config = {};
     if (!parse_config(config_json, &config)) {
-        host->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: invalid config");
-        host->notify("Flight radar config invalid");
+        host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: invalid config");
+        host->core->notify("Flight radar config invalid");
         return;
     }
     RadarView* view = create_view(service, instance_id);
     if (!view) {
-        host->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: view limit reached");
-        host->notify("Flight radar has too many views");
+        host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: view limit reached");
+        host->core->notify("Flight radar has too many views");
         return;
     }
 
-    view->width = static_cast<uint16_t>(host->obj_get_width(root));
-    view->height = static_cast<uint16_t>(host->obj_get_height(root));
+    view->width = static_cast<uint16_t>(host->ui->obj_get_width(root));
+    view->height = static_cast<uint16_t>(host->ui->obj_get_height(root));
     if (view->width < 32 || view->height < 32) {
         char message[72] = "flight radar: view too small ";
         append_uint(message, sizeof(message), view->width);
         append_text(message, sizeof(message), "x");
         append_uint(message, sizeof(message), view->height);
-        host->log(NATIVE_EXTENSION_LOG_WARN, message);
+        host->core->log(NATIVE_EXTENSION_LOG_WARN, message);
         view->active = 0;
         return;
     }
-    view->canvas_buffer = host->alloc(host->canvas_buffer_size(view->width, view->height));
-    view->canvas = host->canvas_create(root);
+    view->canvas_buffer = host->core->alloc(host->canvas->canvas_buffer_size(view->width, view->height));
+    view->canvas = host->canvas->canvas_create(root);
     if (!view->canvas_buffer || !view->canvas) {
-        host->log(NATIVE_EXTENSION_LOG_ERROR, "flight radar: canvas allocation failed");
-        if (view->canvas_buffer) host->free(view->canvas_buffer);
+        host->core->log(NATIVE_EXTENSION_LOG_ERROR, "flight radar: canvas allocation failed");
+        if (view->canvas_buffer) host->core->free(view->canvas_buffer);
         view->active = 0;
         return;
     }
-    host->canvas_set_buffer(view->canvas, view->canvas_buffer, view->width, view->height);
-    host->obj_set_pos(view->canvas, 0, 0);
-    host->obj_set_clickable(view->canvas, false);
+    host->canvas->canvas_set_buffer(view->canvas, view->canvas_buffer, view->width, view->height);
+    host->ui->obj_set_pos(view->canvas, 0, 0);
+    host->ui->obj_set_clickable(view->canvas, false);
     for (uint8_t index = 0; index < MAX_LABELS; ++index) {
-        view->plane_labels[index] = host->label_create(root);
-        host->obj_set_text_color(view->plane_labels[index], 0xD5F7FF);
-        host->obj_set_hidden(view->plane_labels[index], true);
+        view->plane_labels[index] = host->ui->label_create(root);
+        host->ui->obj_set_text_color(view->plane_labels[index], 0xD5F7FF);
+        host->ui->obj_set_hidden(view->plane_labels[index], true);
     }
     for (uint8_t index = 0; index < 4; ++index) {
-        view->range_labels[index] = host->label_create(root);
-        host->obj_set_text_color(view->range_labels[index], 0x5F8A98);
+        view->range_labels[index] = host->ui->label_create(root);
+        host->ui->obj_set_text_color(view->range_labels[index], 0x5F8A98);
     }
-    view->status_label = host->label_create(root);
-    host->obj_set_text_color(view->status_label, 0x8AB7C7);
-    host->label_set_text(view->status_label, "Starting ADS-B...");
-    host->obj_set_pos(view->status_label, RADAR_INSET_PX, view->height - FOOTER_HEIGHT_PX + 5);
+    view->status_label = host->ui->label_create(root);
+    host->ui->obj_set_text_color(view->status_label, 0x8AB7C7);
+    host->ui->label_set_text(view->status_label, "Starting ADS-B...");
+    host->ui->obj_set_pos(view->status_label, RADAR_INSET_PX, view->height - FOOTER_HEIGHT_PX + 5);
 
-    if (host->mutex_lock(service->mutex, 100)) {
+    if (host->core->mutex_lock(service->mutex, 100)) {
         const int8_t scan_index = find_or_create_scan(service, config);
         if (scan_index < 0) {
-            host->mutex_unlock(service->mutex);
-            host->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: scan limit reached");
-            host->notify("Flight radar scan limit reached");
-            if (view->canvas_buffer) host->free(view->canvas_buffer);
+            host->core->mutex_unlock(service->mutex);
+            host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: scan limit reached");
+            host->core->notify("Flight radar scan limit reached");
+            if (view->canvas_buffer) host->core->free(view->canvas_buffer);
             clear_bytes(view, sizeof(*view));
             return;
         }
@@ -731,24 +690,24 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
             if (!service->worker_started) {
                 set_status(&service->scans[scan_index], "Flight radar worker failed");
                 ++service->scans[scan_index].version;
-                host->log(NATIVE_EXTENSION_LOG_ERROR, "flight radar: worker creation failed");
+                host->core->log(NATIVE_EXTENSION_LOG_ERROR, "flight radar: worker creation failed");
             }
         }
         ++service->scans[scan_index].version;
-        host->mutex_unlock(service->mutex);
+        host->core->mutex_unlock(service->mutex);
     } else {
-        host->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: create mutex timeout");
+        host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: create mutex timeout");
     }
 }
 
 extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* host,
                                                    void* extension_context, uint32_t instance_id) {
-    RadarService* service = host ? static_cast<RadarService*>(host->context_get_data(extension_context)) : nullptr;
-    if (!service || !host->mutex_lock(service->mutex, 100)) return;
+    RadarService* service = host && host->core ? static_cast<RadarService*>(host->core->context_get_data(extension_context)) : nullptr;
+    if (!service || !host->core->mutex_lock(service->mutex, 100)) return;
     for (uint8_t index = 0; index < MAX_VIEWS; ++index) {
         RadarView& view = service->views[index];
         if (!view.active || view.instance_id != instance_id) continue;
-        if (view.canvas_buffer) host->free(view.canvas_buffer);
+        if (view.canvas_buffer) host->core->free(view.canvas_buffer);
         clear_bytes(&view, sizeof(view));
         // Drop an unreferenced scan; the worker stops when the package loses
         // its final widget and the host requests cancellation.
@@ -759,7 +718,7 @@ extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* 
         }
         break;
     }
-    host->mutex_unlock(service->mutex);
+    host->core->mutex_unlock(service->mutex);
 }
 
 extern "C" void native_extension_shutdown(const NativeExtensionHostApi* host,
@@ -776,7 +735,7 @@ extern "C" void native_extension_shutdown(const NativeExtensionHostApi* host,
 
 extern "C" void native_extension_tick(const NativeExtensionHostApi* host,
                                        void* extension_context, uint32_t instance_id) {
-    RadarService* service = host ? static_cast<RadarService*>(host->context_get_data(extension_context)) : nullptr;
+    RadarService* service = host && host->core ? static_cast<RadarService*>(host->core->context_get_data(extension_context)) : nullptr;
     if (!service) return;
     // Tick renders only the matching widget's assigned scan snapshot.
     for (uint8_t index = 0; index < MAX_VIEWS; ++index) {

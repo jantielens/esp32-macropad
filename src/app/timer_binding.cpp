@@ -16,30 +16,34 @@
 // Helpers
 // ============================================================================
 
-// Parse "N" or "N_suffix" from params, returning timer id (1-based) or 0 on error.
-// Sets *suffix to point after '_' if present, else NULL.
-static uint8_t parse_timer_params(const char* params, const char** suffix) {
-    *suffix = NULL;
-    if (!params || !params[0]) return 0;
+struct TimerBindingKeyDef {
+    const char* name;
+    uint8_t id;
+    const char* suffix;
+};
 
-    uint8_t id = params[0] - '0';
-    if (id < 1 || id > TIMER_COUNT) return 0;
+static const TimerBindingKeyDef kTimerBindingKeys[] = {
+    {"1", 1, nullptr}, {"1_state", 1, "state"}, {"1_mode", 1, "mode"},
+    {"1_expired", 1, "expired"}, {"1_target", 1, "target"},
+    {"2", 2, nullptr}, {"2_state", 2, "state"}, {"2_mode", 2, "mode"},
+    {"2_expired", 2, "expired"}, {"2_target", 2, "target"},
+    {"3", 3, nullptr}, {"3_state", 3, "state"}, {"3_mode", 3, "mode"},
+    {"3_expired", 3, "expired"}, {"3_target", 3, "target"},
+};
 
-    if (params[1] == '\0' || params[1] == ';') {
-        return id;
+static const TimerBindingKeyDef* find_timer_binding_key(const char* params) {
+    if (!params) return nullptr;
+    for (const TimerBindingKeyDef& key : kTimerBindingKeys) {
+        if (strcmp(params, key.name) == 0) return &key;
     }
-    if (params[1] == '_') {
-        *suffix = params + 2;
-        return id;
-    }
-    return 0;
+    return nullptr;
 }
 
 // ============================================================================
 // Resolver
 // ============================================================================
 
-static bool timer_binding_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus timer_binding_resolve(const char* params, char* out, size_t out_len) {
     // Split at first ';' for format override (only relevant for value keys)
     char buf[64];
     const char* format = NULL;
@@ -62,42 +66,39 @@ static bool timer_binding_resolve(const char* params, char* out, size_t out_len)
         }
     }
 
-    const char* suffix = NULL;
-    uint8_t id = parse_timer_params(params, &suffix);
-    if (id == 0) {
+    const TimerBindingKeyDef* key = find_timer_binding_key(params);
+    if (!key) {
         snprintf(out, out_len, "ERR:bad_timer");
-        return false;
+        return BINDING_RESOLVER_UNKNOWN;
     }
 
     // Meta keys: state, expired, mode, target
-    if (suffix) {
-        if (strcmp(suffix, "state") == 0) {
-            TimerState st = timer_get_state(id);
+    if (key->suffix) {
+        if (strcmp(key->suffix, "state") == 0) {
+            TimerState st = timer_get_state(key->id);
             const char* s = (st == TIMER_RUNNING) ? "running" :
                             (st == TIMER_PAUSED)  ? "paused"  : "stopped";
             snprintf(out, out_len, "%s", s);
-            return true;
+            return BINDING_RESOLVER_RESOLVED;
         }
-        if (strcmp(suffix, "expired") == 0) {
-            snprintf(out, out_len, "%s", timer_is_expired(id) ? "ON" : "OFF");
-            return true;
+        if (strcmp(key->suffix, "expired") == 0) {
+            snprintf(out, out_len, "%s", timer_is_expired(key->id) ? "ON" : "OFF");
+            return BINDING_RESOLVER_RESOLVED;
         }
-        if (strcmp(suffix, "mode") == 0) {
-            snprintf(out, out_len, "%s", timer_get_mode(id) == TIMER_MODE_DOWN ? "down" : "up");
-            return true;
+        if (strcmp(key->suffix, "mode") == 0) {
+            snprintf(out, out_len, "%s", timer_get_mode(key->id) == TIMER_MODE_DOWN ? "down" : "up");
+            return BINDING_RESOLVER_RESOLVED;
         }
-        if (strcmp(suffix, "target") == 0) {
+        if (strcmp(key->suffix, "target") == 0) {
             snprintf(out, out_len, "%lu",
-                     (unsigned long)timer_get_target_seconds(id));
-            return true;
+                     (unsigned long)timer_get_target_seconds(key->id));
+            return BINDING_RESOLVER_RESOLVED;
         }
-        snprintf(out, out_len, "ERR:bad_key");
-        return false;
     }
 
     // Value key: format timer
-    timer_format(id, format, out, out_len);
-    return true;
+    timer_format(key->id, format, out, out_len);
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 // ============================================================================
@@ -110,49 +111,27 @@ static void timer_binding_collect(const char* params, void* user_data) {
     // Timer bindings are local — no external subscriptions needed.
 }
 
+static uint8_t timer_binding_key_count() {
+    return sizeof(kTimerBindingKeys) / sizeof(kTimerBindingKeys[0]);
+}
+
+static const char* timer_binding_key_at(uint8_t index) {
+    return index < timer_binding_key_count() ? kTimerBindingKeys[index].name : nullptr;
+}
+
 // ============================================================================
 // Init
 // ============================================================================
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void timer_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[timer:N], [timer:N;format], [timer:N_state], [timer:N_mode], [timer:N_expired], or [timer:N_target]";
-    o["example"] = "[timer:1]";
-    o["keys"]    = "N=value, N_state=running|paused|stopped, N_mode=up|down, N_expired=ON|OFF, N_target=active countdown preset in whole seconds";
-    o["note"]    = "timers 1-3; N_target is 0 for count-up or unconfigured timers";
-}
-
-// Validate Timer binding IDs and the complete supported suffix set.
-static const char* timer_scheme_validate(const char* params) {
-    if (!params || !params[0]) return nullptr;
-    const char* suffix = nullptr;
-    uint8_t id = parse_timer_params(params, &suffix);
-    if (id == 0) {
-        return "timer id must be 1-3 (e.g. [timer:1] or [timer:1_target])";
-    }
-    if (!suffix || strcmp(suffix, "state") == 0
-            || strcmp(suffix, "mode") == 0
-            || strcmp(suffix, "expired") == 0
-            || strcmp(suffix, "target") == 0) {
-        return nullptr;
-    }
-    return "timer key must be value, state, mode, expired, or target";
-}
-#endif
-
 void timer_binding_init() {
     timer_engine_init();
-    if (!binding_template_register("timer", timer_binding_resolve, timer_binding_collect)) {
+    if (!binding_template_register("timer", timer_binding_resolve, timer_binding_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                    timer_binding_key_count, timer_binding_key_at})) {
         LOGE(TAG, "Failed to register timer binding scheme");
     } else {
         LOGI(TAG, "Timer binding scheme registered");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("timer", timer_scheme_describe);
-    binding_template_set_scheme_validate("timer", timer_scheme_validate);
-#endif
 }
 
 #else // !HAS_DISPLAY

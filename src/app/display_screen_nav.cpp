@@ -67,6 +67,39 @@ bool DisplayManager::showScreen(const char* screen_id) {
 		return false;
 }
 
+bool DisplayManager::showTransientScreen(const char* screen_id) {
+		if (!screen_id || !currentScreen || currentScreen == &splashScreen) return false;
+
+		for (size_t i = 0; i < screenCount; i++) {
+			if (strcmp(availableScreens[i].id, screen_id) != 0) continue;
+			if (!transientScreenActive) {
+				transientResumeScreen = currentScreen;
+				transientScreenActive = true;
+			}
+			skipHistoryPush = true;
+			pendingScreen = availableScreens[i].instance;
+			LOGI("Display", "Queued transient screen: %s", screen_id);
+			return true;
+		}
+
+		LOGW("Display", "Transient screen not found: %s", screen_id);
+		return false;
+}
+
+bool DisplayManager::restoreTransientScreen() {
+		if (!transientScreenActive) return false;
+
+		Screen* target = transientResumeScreen;
+		transientResumeScreen = nullptr;
+		transientScreenActive = false;
+		if (!target || target == currentScreen) return true;
+
+		skipHistoryPush = true;
+		pendingScreen = target;
+		LOGI("Display", "Queued transient screen restore");
+		return true;
+}
+
 bool DisplayManager::goBack() {
 		if (screenHistoryCount == 0) return false;
 		pendingScreen = screenHistory[--screenHistoryCount];

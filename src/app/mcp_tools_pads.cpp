@@ -33,6 +33,7 @@
 #include "psram_json_allocator.h"
 #include "widgets/widget.h"
 #include "binding_template.h"
+#include "binding_schema.h"
 #include "action_catalog.h"
 #include "health_binding.h"
 #include "list_provider.h"
@@ -94,6 +95,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     pf["rows"] = "grid rows 1-8";
     pf["wake_screen"] = "screen id to navigate to on screensaver wake ('' = stay)";
     pf["bg_color"] = "pad background color #RRGGBB (default #000000)";
+    pf["button_shadow"] = "'enabled' or 'disabled' to override the device button-shadow setting; omit to inherit";
     pf["template_pad"] = "int pad index 0..MAX_PADS-1 to inherit buttons into EMPTY cells (-1 = none). Inherited buttons render but are not stored in this pad.";
     pf["bindings"] = "object of name->binding-template, referenced elsewhere as [pad:name]. Names: [a-zA-Z][a-zA-Z0-9_]*";
     pf["pad_actions"] = "ordered array of up to grid.max_actions normal action objects. A non-empty effective list overrides all pad touch actions, including buttons and widgets, except swipes. [] clears it. Template pads never contribute pad_actions.";
@@ -105,13 +107,14 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "col", "row", "col_span", "row_span",
         "label_top", "label_center", "label_bottom",
         "label_top_style", "label_center_style", "label_bottom_style",
-        "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad",
+        "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
         "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions",
         "confirm", "confirm_text"
     };
     for (const char* f : fields) bf.add(f);
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
     btn["labels_note"] = "labels render with LVGL bitmap fonts (Latin text, digits, basic punctuation only). Do NOT use emoji or Unicode symbols — they render as blank/tofu. Use plain text, or an icon_id for graphics.";
+    btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
     btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
@@ -138,25 +141,10 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     result["position_note"] = "set_button/set_buttons 'position' is the 0-based index in the pad's button array, NOT a grid cell (grid placement is col/row). Use 0,1,2,...; a position at or past the end appends. To rebuild a pad: clear_pad then add buttons from position 0.";
     result["screen_ref_note"] = "pad tools accept the 'screen' arg as either the canonical id 'pad_N' or a pad's friendly name (case-insensitive). Names may be unset or non-unique; an ambiguous name is refused with the matching ids so you can pick one. Creating a new pad requires the 'pad_N' id. list_pads shows each pad's name.";
 
-    // Bindings: ONE generated block. Each scheme is enumerated from the live
-    // registry (so device-class schemes auto-appear) and described in place via
-    // emit_binding_detail — the single source of binding docs (no separate
-    // examples + help blocks).
     JsonObject bindings = result.createNestedObject("bindings");
-    bindings["_about"] = "A [scheme:params] token resolves to live data at runtime; usable in any label/color/state/widget field, mixable with literal text and multiple tokens. Optional '|fallback' at the OUTER bracket level when unresolved/error. Tokens nest inside [expr:..]. Pad-level [pad:name] bindings are declared in pad.bindings.";
-    for (uint8_t i = 0; i < binding_template_scheme_count(); ++i) {
-        const char* name = binding_template_scheme_name(i);
-        if (!name || !name[0]) continue;
-        JsonObject so = bindings.createNestedObject(name);
-        // Each scheme describes itself (hook lives in its own .cpp). Schemes with
-        // no hook (e.g. device-class) fall back to a generic shape here.
-        if (!binding_template_describe_scheme(i, &so)) {
-            char ex[40];
-            snprintf(ex, sizeof(ex), "[%s:params]", name);
-            so["example"] = ex;
-            so["note"] = "device-class scheme";
-        }
-    }
+    bindings["_about"] = "A [scheme:params] token resolves to live data at runtime; usable in labels, colors, state, and widget fields. Optional '|fallback' is supported at the outer bracket level. Tokens nest inside [expr:..].";
+    JsonArray binding_schemes = bindings.createNestedArray("schemes");
+    binding_schema_emit(&binding_schemes);
 
     // Complementary enumerations referenced by the binding detail above.
     JsonArray hk = result.createNestedArray("health_keys");
@@ -208,6 +196,10 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     extern void mcp_config_capabilities(JsonObject& out);
     JsonObject device_config = result.createNestedObject("device_config");
     mcp_config_capabilities(device_config);
+#if HAS_CAMERA
+    extern void mcp_camera_capabilities(JsonObject& out);
+    mcp_camera_capabilities(result);
+#endif
     return true;
 }
 

@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include <time.h>
 #include <sys/time.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -110,10 +111,10 @@ static const char* resolve_tz(const char* tz_param) {
 // Scheme resolver — called by binding_template_resolve()
 // ============================================================================
 
-static bool time_binding_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus time_binding_resolve(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         strlcpy(out, "ERR:no fmt", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // Parse: "format" or "format;timezone"
@@ -136,14 +137,14 @@ static bool time_binding_resolve(const char* params, char* out, size_t out_len) 
     // Handle %ums (uptime milliseconds) — standalone, no NTP needed
     if (strcmp(fmt, "%ums") == 0) {
         snprintf(out, out_len, "%lu", (unsigned long)millis());
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Check if NTP has synced (time > 2024-01-01)
     time_t now = time(nullptr);
     if (now < 1704067200L) {
         strlcpy(out, "--:--", out_len);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Get sub-second precision via gettimeofday
@@ -200,9 +201,9 @@ static bool time_binding_resolve(const char* params, char* out, size_t out_len) 
 
     if (strftime(out, out_len, expanded, &ti) == 0) {
         strlcpy(out, "ERR:fmt", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 // ============================================================================
@@ -218,23 +219,11 @@ static void time_binding_collect(const char* params, void* user_data) {
 // Public API
 // ============================================================================
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void time_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[time:strftime;timezone]";
-    o["example"] = "[time:%H:%M;Europe/Brussels]";
-    o["codes"]   = "%H:%M, %H:%M:%S, %I:%M %p, %Y-%m-%d, %d/%m/%Y, %a, %b; timezone = Olson name (omit = UTC)";
-}
-#endif
-
 void time_binding_init() {
-    if (!binding_template_register("time", time_binding_resolve, time_binding_collect)) {
+    if (!binding_template_register("time", time_binding_resolve, time_binding_collect,
+                                   {1, 2, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr})) {
         LOGE(TAG, "Failed to register time binding scheme");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("time", time_scheme_describe);
-#endif
 }
 
 void time_binding_start_ntp() {

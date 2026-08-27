@@ -15,6 +15,82 @@
   color-scheme: dark;
 }
 
+/* Pad appearance and layout diagram */
+.pad-layout-diagram {
+  --layout-shift: 4px;
+  --layout-top: 0px;
+  --layout-right: 0px;
+  --layout-bottom: 0px;
+  --layout-left: 0px;
+  --layout-gap: 6px;
+  --layout-pad-bg: #000000;
+  --layout-button-bg: #333333;
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+  padding: 12px 4px 4px;
+}
+
+.pad-layout-screen {
+  position: relative;
+  width: min(100%, 260px);
+  aspect-ratio: 16 / 10;
+  padding: var(--layout-shift);
+  border: 3px solid var(--portal-text);
+  background: color-mix(in srgb, var(--portal-text) 10%, transparent);
+  box-shadow: inset 0 0 0 1px var(--portal-border);
+}
+
+.pad-layout-shift {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: var(--layout-top) var(--layout-right) var(--layout-bottom) var(--layout-left);
+  background: color-mix(in srgb, var(--portal-primary) 16%, var(--layout-pad-bg));
+}
+
+.pad-layout-insets {
+  width: 100%;
+  height: 100%;
+  background: var(--layout-pad-bg);
+}
+
+.pad-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  height: 100%;
+  gap: var(--layout-gap);
+}
+
+.pad-layout-grid > div {
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid color-mix(in srgb, white 20%, transparent);
+  background: var(--layout-button-bg);
+}
+
+.pad-layout-label {
+  position: absolute;
+  z-index: 1;
+  padding: 1px 3px;
+  border: 1px solid var(--portal-border);
+  background: var(--portal-surface);
+  color: var(--portal-text);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.pad-layout-label b { font-weight: 700; }
+.pad-layout-label-shift { top: -18px; left: 0; }
+.pad-layout-label-top { top: 3px; left: 50%; transform: translateX(-50%); }
+.pad-layout-label-right { top: 50%; right: 3px; transform: translateY(-50%); }
+.pad-layout-label-bottom { bottom: 3px; left: 50%; transform: translateX(-50%); }
+.pad-layout-label-left { top: 50%; left: 3px; transform: translateY(-50%); }
+.pad-layout-label-gap { right: 0; bottom: -18px; }
+
 /* Native select option popups inherit color-scheme from the element
    itself in Chromium. Force it on selects so the popup matches the
    active theme even when the document-level color-scheme isn't
@@ -30,7 +106,8 @@ select { color-scheme: light; }
   --portal-primary-rgb: 21, 101, 192;
   --portal-sidebar-bg: #f5f6f8;
   --portal-card-bg: #ffffff;
-  --portal-card-border: rgba(0, 0, 0, 0.08);
+  --portal-card-border: rgba(21, 34, 50, 0.16);
+  --portal-card-header-bg: #eaf2fb;
   --portal-card-hover-border: rgba(21, 101, 192, 0.3);
   --portal-text-muted: #656d76;
   --portal-nav-border: rgba(0, 0, 0, 0.08);
@@ -40,7 +117,7 @@ select { color-scheme: light; }
   --portal-form-border: rgba(0, 0, 0, 0.12);
   --portal-bar-track: rgba(0, 0, 0, 0.06);
   --portal-scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --portal-welcome-card-bg: rgba(0, 0, 0, 0.02);
+  --portal-welcome-card-bg: #edf3f8;
   --portal-welcome-card-border: rgba(0, 0, 0, 0.06);
   --portal-health-bg: linear-gradient(135deg, #f0f7ff 0%, #e8f4ff 100%);
   --portal-health-border: #d0e7ff;
@@ -78,8 +155,9 @@ select { color-scheme: light; }
   --portal-primary: #4e8cff;
   --portal-primary-rgb: 78, 140, 255;
   --portal-sidebar-bg: #1a1d21;
-  --portal-card-bg: #22262a;
-  --portal-card-border: rgba(255, 255, 255, 0.06);
+  --portal-card-bg: #262b31;
+  --portal-card-border: rgba(255, 255, 255, 0.16);
+  --portal-card-header-bg: #303841;
   --portal-card-hover-border: rgba(78, 140, 255, 0.25);
   --portal-text-muted: #8b949e;
   --portal-nav-border: rgba(255, 255, 255, 0.06);
@@ -89,7 +167,7 @@ select { color-scheme: light; }
   --portal-form-border: rgba(255, 255, 255, 0.1);
   --portal-bar-track: rgba(255, 255, 255, 0.08);
   --portal-scrollbar-thumb: rgba(255, 255, 255, 0.12);
-  --portal-welcome-card-bg: rgba(255, 255, 255, 0.03);
+  --portal-welcome-card-bg: #2d343c;
   --portal-welcome-card-border: rgba(255, 255, 255, 0.06);
   --portal-health-bg: linear-gradient(135deg, #1a2332 0%, #1e2a3a 100%);
   --portal-health-border: rgba(78, 140, 255, 0.2);
@@ -208,6 +286,7 @@ select { color-scheme: light; }
 }
 
 .badge-firmware { background: rgba(149, 97, 226, 0.85); }
+.badge-device-class { background: rgba(0, 122, 255, 0.85); }
 .badge-chip     { background: rgba(230, 126, 34, 0.85); }
 .badge-cores    { background: rgba(39, 174, 96, 0.85); }
 .badge-freq     { background: rgba(241, 196, 15, 0.85); color: #1a1a2e; }
@@ -535,7 +614,7 @@ body {
 }
 
 .content-pane .card-header {
-  background: var(--portal-welcome-card-bg);
+  background: var(--portal-card-header-bg);
   border-bottom: 1px solid var(--portal-card-border);
   padding: 14px 18px;
   border-radius: 12px 12px 0 0 !important;
@@ -667,6 +746,156 @@ body {
   color: var(--portal-text-muted);
   font-size: 0.88rem;
   margin: 0;
+}
+
+.extensions-slot-runtime {
+  display: block;
+  margin-top: 4px;
+  color: var(--portal-text-muted);
+}
+
+.extensions-slot-name {
+  margin-bottom: 6px;
+}
+
+.extensions-slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--portal-card-border);
+}
+
+/* ================================================================
+   Screen saver timeline
+   ================================================================ */
+.screensaver-timeline {
+  margin: 0 0 22px;
+  padding: 14px;
+  border: 1px solid var(--portal-card-border);
+  border-left: 3px solid var(--portal-primary);
+  border-radius: 6px;
+  background: var(--portal-surface-alt);
+}
+
+.screensaver-timeline-label {
+  margin-bottom: 3px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--portal-text);
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.screensaver-timeline-intro {
+  margin: 0 0 14px;
+  font-size: 0.78rem;
+  color: var(--portal-text-muted);
+}
+
+.screensaver-timeline-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.screensaver-timeline-step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 12px 0 0;
+}
+
+.screensaver-timeline-step:not(:last-child)::after {
+  position: absolute;
+  top: 7px;
+  left: 14px;
+  right: 0;
+  height: 2px;
+  background: var(--portal-border-light);
+  content: '';
+}
+
+.screensaver-timeline-rail[data-stage-count="0"] .screensaver-timeline-now::after,
+.screensaver-timeline-rail[data-stage-count="1"] #screensaver-timeline-idle:not([hidden])::after {
+  display: none;
+}
+
+.screensaver-timeline-dot {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin-bottom: 7px;
+  border: 3px solid var(--portal-card-bg);
+  border-radius: 50%;
+  background: var(--portal-primary);
+  box-shadow: 0 0 0 1px rgba(var(--portal-primary-rgb), 0.35);
+}
+
+.screensaver-timeline-now .screensaver-timeline-dot {
+  background: var(--portal-text-muted);
+  box-shadow: none;
+}
+
+.screensaver-timeline-time,
+.screensaver-timeline-step strong,
+.screensaver-timeline-step small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screensaver-timeline-time {
+  margin-bottom: 2px;
+  font-size: 0.74rem;
+  color: var(--portal-primary);
+}
+
+.screensaver-timeline-step strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--portal-text);
+}
+
+.screensaver-timeline-step small,
+.screensaver-timeline-summary {
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--portal-text-muted);
+}
+
+.screensaver-timeline-summary {
+  margin-bottom: 0;
+  padding-top: 10px;
+}
+
+@media (max-width: 575.98px) {
+  .screensaver-timeline-rail {
+    display: block;
+  }
+
+  .screensaver-timeline-step {
+    padding: 0 0 12px 28px;
+  }
+
+  .screensaver-timeline-step:not(:last-child)::after {
+    top: 16px;
+    bottom: 0;
+    left: 7px;
+    right: auto;
+    width: 2px;
+    height: auto;
+  }
+
+  .screensaver-timeline-dot {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
 }
 
 /* ================================================================
@@ -865,6 +1094,21 @@ body {
   padding-top: 14px;
   border-top: 1px solid var(--portal-card-border);
   margin-top: 16px;
+}
+
+.pad-quick-save {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1020;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+}
+
+@media (max-width: 767.98px) {
+  .pad-quick-save {
+    right: 14px;
+    bottom: 14px;
+  }
 }
 
 /* ================================================================
@@ -1197,6 +1441,15 @@ body {
   font-size: 24px;
 }
 
+.pad-dialog-validation-error {
+  background: var(--bs-danger, #dc3545);
+  border-radius: 4px;
+  color: #fff;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
 .reboot-modal p {
   color: var(--portal-text);
   margin: 12px 0;
@@ -1452,6 +1705,15 @@ body {
   background: repeating-linear-gradient(0deg, #fff, #fff 2px, transparent 2px, transparent 5px);
 }
 
+.pad-cell-widget-camera {
+  position: absolute; bottom: 4px; left: 4px; width: 16px; height: 11px;
+  border: 1px solid #fff; border-radius: 2px; opacity: 0.7;
+}
+.pad-cell-widget-camera::after {
+  content: ''; position: absolute; width: 4px; height: 4px; left: 5px; top: 2px;
+  border: 1px solid #fff; border-radius: 50%;
+}
+
 /* Resize drag handles */
 .pad-resize-handle {
   position: absolute; background: rgba(100,180,255,0.45); border-radius: 2px;
@@ -1619,6 +1881,27 @@ body {
   background: linear-gradient(90deg, #f44336, #ff9800, #ffeb3b, #4caf50, #2196f3, #9c27b0) !important;
 }
 .bindable-color .bc-input { display: none; }
+
+.pad-background-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pad-background-control-row #pad-page-bg-mode {
+  flex: 1 1 240px;
+  max-width: 320px;
+}
+
+.pad-background-control-row .bindable-color {
+  margin: 0;
+}
+
+.pad-background-control-row .bc-swatch {
+  width: 36px;
+  height: 36px;
+}
 
 /* Binding-capable field hint badge */
 .fx-hint {

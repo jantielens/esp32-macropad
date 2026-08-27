@@ -69,7 +69,7 @@ def main() -> None:
         fail("missing native_extension_descriptor export")
 
     descriptor_offset = None
-    descriptor_size = struct.calcsize("<II24s32s16s40s")
+    descriptor_size = struct.calcsize("<II24s32s16s40sHH")
     for program_type, offset, vaddr, _, file_size, _, _, _ in programs:
         if program_type == 1 and vaddr <= descriptor_vaddr and descriptor_vaddr + descriptor_size <= vaddr + file_size:
             descriptor_offset = offset + descriptor_vaddr - vaddr
@@ -77,7 +77,7 @@ def main() -> None:
     if descriptor_offset is None or descriptor_offset + descriptor_size > len(data):
         fail("descriptor is not in a loadable ELF segment")
 
-    magic, descriptor_abi, raw_target, raw_id, raw_version, raw_title = struct.unpack_from("<II24s32s16s40s", data, descriptor_offset)
+    magic, descriptor_abi, raw_target, raw_id, raw_version, raw_title, tick_interval_ms, _ = struct.unpack_from("<II24s32s16s40sHH", data, descriptor_offset)
     if magic != descriptor_magic:
         fail("descriptor magic does not match ABI header")
     if descriptor_abi != abi_version:
@@ -88,6 +88,10 @@ def main() -> None:
         fail("descriptor ID/version does not match package filename")
     if not c_string(raw_title):
         fail("descriptor title is empty")
+    minimum = int(re.search(r"\d+", constant(header, "NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS")).group())
+    maximum = int(re.search(r"\d+", constant(header, "NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS")).group())
+    if not minimum <= tick_interval_ms <= maximum:
+        fail(f"descriptor tick interval {tick_interval_ms} is outside {minimum}-{maximum} ms")
 
     print(f"Descriptor: {filename_id}@{filename_version} (ABI {abi_version}, target {target_abi})")
 

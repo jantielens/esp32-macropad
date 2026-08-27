@@ -1,7 +1,7 @@
 {
   "device_class": "macropad",
   "board_label": "JC1060P470C",
-  "description": "Guition JC1060P470C — 7.0\" 1024x600 MIPI-DSI JD9165 IPS with GT911 capacitive touch. ESP32-P4 with 32 MB PSRAM; largest screen in the lineup.",
+  "description": "Guition JC1060P470C — 7.0\" 1024x600 MIPI-DSI JD9165 IPS with GT911 capacitive touch and OV02C10 MIPI-CSI camera. ESP32-P4 with 32 MB PSRAM; largest screen in the lineup.",
   "chip_family": "ESP32-P4",
   "flash_mb": 16,
   "psram_mb": 32,
@@ -15,5 +15,9 @@
     "resolution": "1024x600",
     "type": "MIPI-DSI",
     "touch": true
+  },
+  "camera": {
+    "sensor": "OV02C10",
+    "interface": "MIPI-CSI"
   }
 }

@@ -29,7 +29,6 @@ extern DeviceConfig device_config;
 #include <esp_heap_caps.h>
 
 #include "version.h"
-#include "project_branding.h"
 
 #define TAG "HealthBind"
 
@@ -74,6 +73,8 @@ static void ensure_static_initialized() {
 static uint32_t s_last_refresh_ms = 0;
 static uint32_t s_last_mem_refresh_ms = 0;
 static int s_cpu = -1;
+static constexpr uint8_t kHealthCpuCoreCount = 2;
+static int s_cpu_cores[kHealthCpuCoreCount] = {-1, -1};
 static int16_t s_rssi = 0;
 static bool s_rssi_valid = false;
 static DeviceMemorySnapshot s_mem = {};
@@ -86,7 +87,7 @@ static void refresh_if_stale() {
     if (now - s_last_refresh_ms < HEALTH_BINDING_REFRESH_MS && s_last_refresh_ms != 0) return;
     s_last_refresh_ms = now;
 
-    s_cpu = device_telemetry_get_cpu_usage();
+    device_telemetry_get_cpu_usage_snapshot(&s_cpu, s_cpu_cores, kHealthCpuCoreCount);
     s_rssi = device_telemetry_get_cached_rssi(&s_rssi_valid);
 
     s_wifi_connected = (WiFi.status() == WL_CONNECTED);
@@ -149,10 +150,28 @@ static bool health_key_requires_memory_snapshot(const char* key) {
 // Key→value lookup
 // ============================================================================
 
+static int health_cpu_core_index(const char* key) {
+    static constexpr char kCpuCorePrefix[] = "cpu_core_";
+    constexpr size_t kSuffixIndex = sizeof(kCpuCorePrefix) - 1;
+    if (strncmp(key, kCpuCorePrefix, kSuffixIndex) != 0 ||
+        key[kSuffixIndex + 1] != '\0' ||
+        key[kSuffixIndex] < '0' || key[kSuffixIndex] >= '0' + kHealthCpuCoreCount) {
+        return -1;
+    }
+    return key[kSuffixIndex] - '0';
+}
+
 static bool lookup_value(const char* key, char* out, size_t out_len) {
     if (strcmp(key, "cpu") == 0) {
         if (s_cpu < 0) { strlcpy(out, "?", out_len); return true; }
         snprintf(out, out_len, "%d", s_cpu);
+        return true;
+    }
+    const int core = health_cpu_core_index(key);
+    if (core >= 0) {
+        const int usage = s_cpu_cores[core];
+        if (usage < 0) { strlcpy(out, "?", out_len); return true; }
+        snprintf(out, out_len, "%d", usage);
         return true;
     }
     if (strcmp(key, "rssi") == 0) {
@@ -352,14 +371,20 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
 // Scheme resolver — called by binding_template_resolve()
 // ============================================================================
 
-static bool health_binding_resolve(const char* params, char* out, size_t out_len) {
+static bool health_key_known(const char* key);
+
+static BindingResolverStatus health_binding_resolve(const char* params, char* out, size_t out_len) {
     char key[32];
     char fmt[32];
     parse_health_params(params, key, sizeof(key), fmt, sizeof(fmt));
 
     if (!key[0]) {
         strlcpy(out, "ERR:no key", out_len);
-        return false;
+        return BINDING_RESOLVER_UNKNOWN;
+    }
+    if (!health_key_known(key)) {
+        strlcpy(out, "ERR:bad key", out_len);
+        return BINDING_RESOLVER_UNKNOWN;
     }
 
     ensure_static_initialized();
@@ -370,13 +395,20 @@ static bool health_binding_resolve(const char* params, char* out, size_t out_len
 
     if (strcmp(key, "table") == 0 || strcmp(key, "extended_table") == 0) {
         bool extended = (strcmp(key, "extended_table") == 0);
-        return health_table_build(extended, lookup_value, out, out_len);
+        return health_table_build(extended, lookup_value, out, out_len)
+               ? BINDING_RESOLVER_RESOLVED : BINDING_RESOLVER_UNAVAILABLE;
     }
 
     char raw[64];
     if (!lookup_value(key, raw, sizeof(raw))) {
+#if !TELEMETRY_ALLOW_PSRAM_POOL_WALK
+        if (strcmp(key, "psram_largest") == 0) {
+            strlcpy(out, "---", out_len);
+            return BINDING_RESOLVER_UNAVAILABLE;
+        }
+#endif
         strlcpy(out, "ERR:bad key", out_len);
-        return false;
+        return BINDING_RESOLVER_UNKNOWN;
     }
 
     if (fmt[0]) {
@@ -391,7 +423,7 @@ static bool health_binding_resolve(const char* params, char* out, size_t out_len
     } else {
         strlcpy(out, raw, out_len);
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 // ============================================================================
@@ -407,15 +439,11 @@ static void health_binding_collect(const char* params, void* user_data) {
 // Init — register the "health" scheme
 // ============================================================================
 
-// Canonical [health:key] table, kept beside the resolver ladder so the MCP
-// capability manifest can enumerate keys AND their meaning without a
-// hand-duplicated copy. Gated on HAS_MCP — only the manifest consumes it.
-#if HAS_MCP
-#include <ArduinoJson.h>
-
 struct HealthKeyDef { const char* key; const char* desc; };
 static const HealthKeyDef HEALTH_KEYS[] = {
     {"cpu",                 "CPU usage % (0-100)"},
+    {"cpu_core_0",          "Core 0 CPU usage % (0-100; ? if unavailable)"},
+    {"cpu_core_1",          "Core 1 CPU usage % (0-100; ? if unavailable)"},
     {"rssi",                "WiFi signal strength, dBm"},
     {"uptime",              "seconds since boot"},
     {"chip",                "SoC model, e.g. ESP32-S3"},
@@ -448,9 +476,12 @@ static const HealthKeyDef HEALTH_KEYS[] = {
     {"ip",                  "device IP address"},
     {"hostname",            "device hostname"},
     {"brightness",          "backlight brightness 0-100"},
+#if HAS_AUDIO
     {"volume",              "audio volume 0-100"},
+#endif
     {"table",               "structured table payload (for the table widget)"},
     {"extended_table",      "structured table payload, extended schema"},
+#if HAS_BLE_HID
     {"ble_status",          "compact BLE status (disabled/ready/pairing/connected/error)"},
     {"ble_name",            "current BLE keyboard name"},
     {"ble_state",           "detailed BLE state"},
@@ -459,6 +490,7 @@ static const HealthKeyDef HEALTH_KEYS[] = {
     {"ble_encrypted",       "ON/OFF current connection encrypted"},
     {"ble_peer_addr",       "connected peer Bluetooth address"},
     {"ble_peer_id_addr",    "connected peer identity address"},
+#endif
 };
 
 uint8_t health_binding_key_count() {
@@ -473,42 +505,20 @@ const char* health_binding_key_desc_at(uint8_t index) {
     return (index < health_binding_key_count()) ? HEALTH_KEYS[index].desc : nullptr;
 }
 
-// Self-description for the MCP capability manifest (lives with the scheme).
-static void health_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[health:key;format]";
-    o["example"] = "[health:heap_free;%d]";
-    o["keys"]    = "see health_keys[] for the full {name, desc} list";
-}
-
-// Validate a [health:KEY] token's params (the key, already stripped of any
-// ;format / |fallback by the caller). Lives with the scheme so the key set is
-// the single source for both the manifest and authoring validation.
-static char s_health_verr[80];
-static const char* health_scheme_validate(const char* params) {
-    if (!params || !params[0]) return nullptr;
-    for (uint8_t i = 0; i < health_binding_key_count(); ++i) {
-        const char* hk = health_binding_key_at(i);
-        if (hk && strcmp(hk, params) == 0) return nullptr;
+static bool health_key_known(const char* key) {
+    if (!key) return false;
+    for (uint8_t index = 0; index < health_binding_key_count(); ++index) {
+        if (strcmp(key, HEALTH_KEYS[index].key) == 0) return true;
     }
-    snprintf(s_health_verr, sizeof(s_health_verr),
-             "unknown health key '%s' — use a key from capabilities.health_keys", params);
-    return s_health_verr;
+    return false;
 }
-#else
-uint8_t health_binding_key_count() { return 0; }
-const char* health_binding_key_at(uint8_t index) { (void)index; return nullptr; }
-const char* health_binding_key_desc_at(uint8_t index) { (void)index; return nullptr; }
-#endif // HAS_MCP
 
 void health_binding_init() {
-    if (!binding_template_register("health", health_binding_resolve, health_binding_collect)) {
+    if (!binding_template_register("health", health_binding_resolve, health_binding_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                    health_binding_key_count, health_binding_key_at})) {
         LOGE(TAG, "Failed to register health binding scheme");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("health", health_scheme_describe);
-    binding_template_set_scheme_validate("health", health_scheme_validate);
-#endif
 }
 
 #else // !HAS_DISPLAY

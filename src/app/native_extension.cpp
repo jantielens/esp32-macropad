@@ -4,7 +4,9 @@
 
 #include "log_manager.h"
 #include "message_bubble.h"
+#include "ota_activity.h"
 #include "pad_config.h"
+#include "pad_layout.h"
 #include "storage.h"
 #if HAS_MQTT
 #include "binding_template.h"
@@ -43,11 +45,18 @@ constexpr uint32_t ELF_SHT_DYNSYM = 11;
 constexpr uint32_t ELF_SHT_RELA = 4;
 constexpr uint32_t WORKER_JOIN_TIMEOUT_MS = 20000;
 constexpr uint8_t MAX_EXTENSION_INSTANCE_BINDINGS = MAX_PAD_BUTTONS;
+constexpr uint8_t MAX_EXTENSION_CANVASES = MAX_PAD_BUTTONS;
 
 struct ElfHeader { uint8_t ident[16]; uint16_t type, machine; uint32_t version, entry, phoff, shoff, flags; uint16_t ehsize, phentsize, phnum, shentsize, shnum, shstrndx; };
 struct ElfProgram { uint32_t type, offset, vaddr, paddr, filesz, memsz, flags, align; };
 struct ElfSection { uint32_t name, type, flags, addr, offset, size, link, info, align, entsize; };
 struct ElfSymbol { uint32_t name, value, size; uint8_t info, other; uint16_t shndx; };
+struct CanvasBuffer {
+    lv_obj_t* canvas;
+    uint16_t* pixels;
+    uint32_t width;
+    uint32_t height;
+};
 struct StageHeader {
     uint32_t magic;
     NativeExtensionSlotHeader slot;
@@ -71,6 +80,10 @@ struct LoadedSlot {
         uint32_t instance_id;
         const PadBinding* bindings;
         uint8_t binding_count;
+        void* button;
+        void* label_top;
+        void* label_center;
+        void* label_bottom;
     } instance_bindings[MAX_EXTENSION_INSTANCE_BINDINGS];
     NativeExtensionSlotInfo info;
     NativeExtensionCreateFn create;
@@ -81,8 +94,29 @@ struct LoadedSlot {
     NativeExtensionTickFn tick;
 };
 LoadedSlot s_slots[NATIVE_EXTENSION_SLOT_COUNT] = {};
+CanvasBuffer s_canvas_buffers[MAX_EXTENSION_CANVASES] = {};
 portMUX_TYPE s_worker_lock = portMUX_INITIALIZER_UNLOCKED;
 TaskHandle_t s_lvgl_task = nullptr;
+
+CanvasBuffer* find_canvas_buffer(void* canvas) {
+    for (auto& entry : s_canvas_buffers) if (entry.canvas == canvas) return &entry;
+    return nullptr;
+}
+
+CanvasBuffer* register_canvas_buffer(void* canvas, void* buffer, uint32_t width, uint32_t height) {
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry) for (auto& candidate : s_canvas_buffers) if (!candidate.canvas) { entry = &candidate; break; }
+    if (!entry) return nullptr;
+    entry->canvas = static_cast<lv_obj_t*>(canvas);
+    entry->pixels = static_cast<uint16_t*>(buffer);
+    entry->width = width;
+    entry->height = height;
+    return entry;
+}
+
+void clear_canvas_buffer(void* canvas) {
+    if (CanvasBuffer* entry = find_canvas_buffer(canvas)) *entry = {};
+}
 
 bool valid_slot(uint8_t slot) { return slot < NATIVE_EXTENSION_SLOT_COUNT; }
 bool range_valid(size_t offset, size_t size, size_t total) { return offset <= total && size <= total - offset; }
@@ -131,8 +165,6 @@ bool set_pending_enabled(uint8_t slot, bool enabled) {
 
 lv_obj_t* as_obj(void* obj) { return static_cast<lv_obj_t*>(obj); }
 lv_color_t host_color(uint32_t rgb) { return lv_color_hex(rgb & 0xFFFFFF); }
-
-void host_set_text(char* out, size_t len, const char* text) { if (out && len) strlcpy(out, text ? text : "", len); }
 uint32_t host_millis() { return millis(); }
 void host_delay_ms(uint32_t delay_ms) { vTaskDelay(pdMS_TO_TICKS(delay_ms)); }
 void host_log(NativeExtensionLogLevel level, const char* message) {
@@ -185,6 +217,28 @@ bool host_binding_resolve(void* extension_context, uint32_t instance_id,
 #else
     return false;
 #endif
+}
+uint32_t host_color_rgb(lv_color_t color) {
+    return (static_cast<uint32_t>(color.red) << 16) |
+           (static_cast<uint32_t>(color.green) << 8) | color.blue;
+}
+bool host_button_get(void* extension_context, uint32_t instance_id,
+                     NativeExtensionButtonSnapshot* out) {
+    if (!out) return false;
+    memset(out, 0, sizeof(*out));
+    LoadedSlot* slot = static_cast<LoadedSlot*>(extension_context);
+    if (!slot || !s_lvgl_task || xTaskGetCurrentTaskHandle() != s_lvgl_task) return false;
+    for (const auto& context : slot->instance_bindings) {
+        if (context.instance_id != instance_id || !context.button) continue;
+        lv_obj_t* button = static_cast<lv_obj_t*>(context.button);
+        out->background_rgb = host_color_rgb(lv_obj_get_style_bg_color(button, LV_PART_MAIN));
+        out->foreground_rgb = host_color_rgb(lv_obj_get_style_text_color(button, LV_PART_MAIN));
+        if (context.label_top) strlcpy(out->label_top, lv_label_get_text(static_cast<lv_obj_t*>(context.label_top)), sizeof(out->label_top));
+        if (context.label_center) strlcpy(out->label_center, lv_label_get_text(static_cast<lv_obj_t*>(context.label_center)), sizeof(out->label_center));
+        if (context.label_bottom) strlcpy(out->label_bottom, lv_label_get_text(static_cast<lv_obj_t*>(context.label_bottom)), sizeof(out->label_bottom));
+        return true;
+    }
+    return false;
 }
 float host_math_sin(float radians) { return sinf(radians); }
 float host_math_cos(float radians) { return cosf(radians); }
@@ -268,6 +322,7 @@ bool host_task_wait_or_cancel(void* extension_context, uint32_t timeout_ms) {
 bool host_http_get(const char* url, uint8_t* response, size_t capacity,
                    uint32_t timeout_ms, NativeExtensionHttpResult* result) {
     if (result) *result = {0, 0, 0};
+    if (ota_activity_is_active()) return false;
     if (!url || !response || capacity == 0 || timeout_ms == 0) return false;
 
     const bool secure_request = strncmp(url, "https://", 8) == 0;
@@ -296,6 +351,10 @@ bool host_http_get(const char* url, uint8_t* response, size_t capacity,
     size_t copied = 0;
     uint32_t last_data_at = millis();
     while (stream && (content_length < 0 || copied < static_cast<size_t>(content_length))) {
+        if (ota_activity_is_active()) {
+            http.end();
+            return false;
+        }
         const size_t available = stream->available();
         if (available > 0) {
             const size_t remaining = capacity - copied;
@@ -322,7 +381,7 @@ bool host_http_get(const char* url, uint8_t* response, size_t capacity,
 }
 
 void* host_obj_create(void* parent) { return parent ? lv_obj_create(as_obj(parent)) : nullptr; }
-void host_obj_delete(void* obj) { if (obj) lv_obj_delete(as_obj(obj)); }
+void host_obj_delete(void* obj) { if (obj) { clear_canvas_buffer(obj); lv_obj_delete(as_obj(obj)); } }
 void host_obj_set_size(void* obj, int32_t width, int32_t height) { if (obj) lv_obj_set_size(as_obj(obj), width, height); }
 void host_obj_set_pos(void* obj, int32_t x, int32_t y) { if (obj) lv_obj_set_pos(as_obj(obj), x, y); }
 int32_t host_obj_get_width(void* obj) { return obj ? lv_obj_get_width(as_obj(obj)) : 0; }
@@ -394,19 +453,105 @@ void* host_table_create(void* parent) { return parent ? lv_table_create(as_obj(p
 void host_table_set_size(void* table, uint16_t rows, uint16_t columns) { if (table) { lv_table_set_row_count(as_obj(table), rows); lv_table_set_column_count(as_obj(table), columns); } }
 void host_table_set_cell_text(void* table, uint16_t row, uint16_t column, const char* text) { if (table) lv_table_set_cell_value(as_obj(table), row, column, text ? text : ""); }
 
-void* host_canvas_create(void* parent) { return parent ? lv_canvas_create(as_obj(parent)) : nullptr; }
+void* host_canvas_create(void* parent) {
+    lv_obj_t* canvas = parent ? lv_canvas_create(as_obj(parent)) : nullptr;
+    if (canvas) lv_obj_add_event_cb(canvas, [](lv_event_t* event) { clear_canvas_buffer(lv_event_get_target(event)); }, LV_EVENT_DELETE, nullptr);
+    return canvas;
+}
 size_t host_canvas_buffer_size(uint32_t width, uint32_t height) { return LV_CANVAS_BUF_SIZE(width, height, 16, 1); }
-void host_canvas_set_buffer(void* canvas, void* buffer, uint32_t width, uint32_t height) { if (canvas && buffer) lv_canvas_set_buffer(as_obj(canvas), buffer, width, height, LV_COLOR_FORMAT_RGB565); }
-void host_canvas_clear(void* canvas, uint32_t rgb) { if (canvas) lv_canvas_fill_bg(as_obj(canvas), host_color(rgb), LV_OPA_COVER); }
-void host_canvas_set_pixel(void* canvas, int32_t x, int32_t y, uint32_t rgb) { if (canvas && x >= 0 && y >= 0) lv_canvas_set_px(as_obj(canvas), x, y, host_color(rgb), LV_OPA_COVER); }
+void host_canvas_set_buffer(void* canvas, void* buffer, uint32_t width, uint32_t height) {
+    if (!canvas || !buffer || width == 0 || height == 0 || !register_canvas_buffer(canvas, buffer, width, height)) return;
+    lv_canvas_set_buffer(as_obj(canvas), buffer, width, height, LV_COLOR_FORMAT_RGB565);
+}
+void canvas_write_pixel(CanvasBuffer* entry, int32_t x, int32_t y, uint16_t color) {
+    if (entry && entry->pixels && x >= 0 && y >= 0 &&
+        x < static_cast<int32_t>(entry->width) && y < static_cast<int32_t>(entry->height)) {
+        entry->pixels[static_cast<size_t>(y) * entry->width + x] = color;
+    }
+}
+void host_canvas_clear(void* canvas, uint32_t rgb) {
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || !entry->pixels) return;
+    uint16_t* pixel = entry->pixels;
+    const uint16_t color = lv_color_to_u16(host_color(rgb));
+    const size_t count = static_cast<size_t>(entry->width) * entry->height;
+    for (size_t index = 0; index < count; ++index) pixel[index] = color;
+    lv_obj_invalidate(entry->canvas);
+}
+void host_canvas_set_pixel(void* canvas, int32_t x, int32_t y, uint32_t rgb) {
+    canvas_write_pixel(find_canvas_buffer(canvas), x, y, lv_color_to_u16(host_color(rgb)));
+}
+void host_canvas_fill_rect(void* canvas, int32_t x, int32_t y, uint32_t width, uint32_t height, uint32_t rgb) {
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || !entry->pixels || width == 0 || height == 0) return;
+    const int64_t right = static_cast<int64_t>(x) + width;
+    const int64_t bottom = static_cast<int64_t>(y) + height;
+    const int32_t left = x < 0 ? 0 : x;
+    const int32_t top = y < 0 ? 0 : y;
+    const int32_t clipped_right = right > entry->width ? static_cast<int32_t>(entry->width) : static_cast<int32_t>(right);
+    const int32_t clipped_bottom = bottom > entry->height ? static_cast<int32_t>(entry->height) : static_cast<int32_t>(bottom);
+    if (left >= clipped_right || top >= clipped_bottom) return;
+    const uint16_t color = lv_color_to_u16(host_color(rgb));
+    const uint32_t packed_color = static_cast<uint32_t>(color) | (static_cast<uint32_t>(color) << 16);
+    for (int32_t row = top; row < clipped_bottom; ++row) {
+        uint16_t* destination = entry->pixels + static_cast<size_t>(row) * entry->width + left;
+        int32_t remaining = clipped_right - left;
+        if ((reinterpret_cast<uintptr_t>(destination) & 3u) && remaining) {
+            *destination++ = color;
+            --remaining;
+        }
+        while (remaining >= 2) {
+            *reinterpret_cast<uint32_t*>(destination) = packed_color;
+            destination += 2;
+            remaining -= 2;
+        }
+        if (remaining) *destination = color;
+    }
+}
+void host_canvas_blit_rgb565(void* canvas, int32_t x, int32_t y, const uint16_t* pixels,
+                              uint16_t source_width, uint16_t source_height,
+                              uint16_t destination_width, uint16_t destination_height) {
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || !entry->pixels || !pixels || source_width == 0 || source_height == 0 ||
+        destination_width == 0 || destination_height == 0) return;
+    const int32_t left = x < 0 ? 0 : x;
+    const int32_t top = y < 0 ? 0 : y;
+    const int32_t right = x + destination_width > entry->width ? entry->width : x + destination_width;
+    const int32_t bottom = y + destination_height > entry->height ? entry->height : y + destination_height;
+    if (left >= right || top >= bottom) return;
+    for (int32_t destination_y = top; destination_y < bottom; ++destination_y) {
+        const uint16_t* source = pixels + static_cast<size_t>(destination_y - y) * source_height / destination_height * source_width;
+        uint16_t* destination = entry->pixels + static_cast<size_t>(destination_y) * entry->width + left;
+        for (int32_t destination_x = left; destination_x < right; ++destination_x)
+            *destination++ = source[static_cast<size_t>(destination_x - x) * source_width / destination_width];
+    }
+}
+void host_canvas_invalidate_rect(void* canvas, int32_t x, int32_t y, uint32_t width, uint32_t height) {
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || width == 0 || height == 0) return;
+    const int64_t right = static_cast<int64_t>(x) + width;
+    const int64_t bottom = static_cast<int64_t>(y) + height;
+    const int32_t left = x < 0 ? 0 : x;
+    const int32_t top = y < 0 ? 0 : y;
+    const int32_t clipped_right = right > entry->width ? static_cast<int32_t>(entry->width) : static_cast<int32_t>(right);
+    const int32_t clipped_bottom = bottom > entry->height ? static_cast<int32_t>(entry->height) : static_cast<int32_t>(bottom);
+    if (left >= clipped_right || top >= clipped_bottom) return;
+    lv_area_t canvas_area;
+    lv_obj_get_coords(entry->canvas, &canvas_area);
+    const lv_area_t area = {canvas_area.x1 + left, canvas_area.y1 + top,
+                            canvas_area.x1 + clipped_right - 1, canvas_area.y1 + clipped_bottom - 1};
+    lv_obj_invalidate_area(entry->canvas, &area);
+}
 void host_canvas_draw_line(void* canvas, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint32_t rgb, uint8_t width) {
-    if (!canvas || width == 0) return;
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || !entry->pixels || width == 0) return;
+    const uint16_t color = lv_color_to_u16(host_color(rgb));
     const int32_t delta_x = abs(x2 - x1), step_x = x1 < x2 ? 1 : -1;
     const int32_t delta_y = -abs(y2 - y1), step_y = y1 < y2 ? 1 : -1;
     int32_t error = delta_x + delta_y;
     while (true) {
         const int32_t half = width / 2;
-        for (int32_t oy = -half; oy <= half; ++oy) for (int32_t ox = -half; ox <= half; ++ox) host_canvas_set_pixel(canvas, x1 + ox, y1 + oy, rgb);
+        for (int32_t oy = -half; oy <= half; ++oy) for (int32_t ox = -half; ox <= half; ++ox) canvas_write_pixel(entry, x1 + ox, y1 + oy, color);
         if (x1 == x2 && y1 == y2) break;
         const int32_t double_error = error * 2;
         if (double_error >= delta_y) { error += delta_y; x1 += step_x; }
@@ -414,18 +559,77 @@ void host_canvas_draw_line(void* canvas, int32_t x1, int32_t y1, int32_t x2, int
     }
 }
 void host_canvas_draw_circle(void* canvas, int32_t x, int32_t y, int32_t radius, uint32_t rgb, uint8_t width) {
-    if (!canvas || radius < 0 || width == 0) return;
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || !entry->pixels || radius < 0 || width == 0) return;
+    const uint16_t color = lv_color_to_u16(host_color(rgb));
     int32_t dx = radius, dy = 0, error = 1 - radius;
     while (dx >= dy) {
         for (int32_t stroke = 0; stroke < width; ++stroke) {
-            host_canvas_set_pixel(canvas, x + dx - stroke, y + dy, rgb); host_canvas_set_pixel(canvas, x + dy, y + dx - stroke, rgb);
-            host_canvas_set_pixel(canvas, x - dy, y + dx - stroke, rgb); host_canvas_set_pixel(canvas, x - dx + stroke, y + dy, rgb);
-            host_canvas_set_pixel(canvas, x - dx + stroke, y - dy, rgb); host_canvas_set_pixel(canvas, x - dy, y - dx + stroke, rgb);
-            host_canvas_set_pixel(canvas, x + dy, y - dx + stroke, rgb); host_canvas_set_pixel(canvas, x + dx - stroke, y - dy, rgb);
+            canvas_write_pixel(entry, x + dx - stroke, y + dy, color); canvas_write_pixel(entry, x + dy, y + dx - stroke, color);
+            canvas_write_pixel(entry, x - dy, y + dx - stroke, color); canvas_write_pixel(entry, x - dx + stroke, y + dy, color);
+            canvas_write_pixel(entry, x - dx + stroke, y - dy, color); canvas_write_pixel(entry, x - dy, y - dx + stroke, color);
+            canvas_write_pixel(entry, x + dy, y - dx + stroke, color); canvas_write_pixel(entry, x + dx - stroke, y - dy, color);
         }
         ++dy;
         if (error < 0) error += 2 * dy + 1;
         else { --dx; error += 2 * (dy - dx + 1); }
+    }
+}
+uint8_t host_font_family_id(const char* font_name) {
+    if (!font_name || !font_name[0] || strcmp(font_name, "default") == 0) return 0;
+    if (strcmp(font_name, "dseg7") == 0) return 1;
+    if (strcmp(font_name, "bebas") == 0) return 2;
+    if (strcmp(font_name, "doto") == 0) return 3;
+    return 0;
+}
+void host_canvas_draw_text(void* canvas, int32_t x, int32_t y, const char* text,
+                           const char* font_name, uint8_t size, uint32_t rgb) {
+    CanvasBuffer* entry = find_canvas_buffer(canvas);
+    if (!entry || !entry->pixels || !text || !*text) return;
+
+    LabelStyle style{};
+    style.font_family = host_font_family_id(font_name);
+    style.font_size = size;
+    const lv_font_t* font = pad_resolve_font(style, &lv_font_montserrat_14);
+    if (!font) return;
+
+    const lv_color_t color = host_color(rgb);
+    constexpr uint8_t bpp = 4;
+    if (!font->get_glyph_bitmap) return;
+    int32_t cursor_x = x;
+    for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor; ++cursor) {
+        const uint32_t codepoint = *cursor;
+        lv_font_glyph_dsc_t glyph{};
+        if (!lv_font_get_glyph_dsc(font, &glyph, codepoint, 0)) continue;
+        glyph.req_raw_bitmap = 1;
+        const uint8_t* bitmap = static_cast<const uint8_t*>(font->get_glyph_bitmap(&glyph, nullptr));
+        if (!bitmap) {
+            cursor_x += glyph.adv_w;
+            lv_font_glyph_release_draw_data(&glyph);
+            continue;
+        }
+        for (uint16_t gy = 0; gy < glyph.box_h; ++gy) {
+            for (uint16_t gx = 0; gx < glyph.box_w; ++gx) {
+                const uint32_t bit_index = (static_cast<uint32_t>(gy) * glyph.box_w + gx) * bpp;
+                const uint8_t packed = bitmap[bit_index / 8];
+                const uint8_t coverage = bpp == 4
+                    ? (((bit_index & 4u) == 0 ? packed >> 4 : packed) & 0x0Fu) * 17u
+                    : 0;
+                if (!coverage) continue;
+                const int32_t px = cursor_x + glyph.ofs_x + gx;
+                const int32_t py = y + glyph.ofs_y + gy;
+                if (px < 0 || py < 0 || px >= static_cast<int32_t>(entry->width) || py >= static_cast<int32_t>(entry->height)) continue;
+                const uint16_t existing = entry->pixels[static_cast<uint32_t>(py) * entry->width + px];
+                const lv_color_t existing_color = lv_color_make(
+                    static_cast<uint8_t>(((existing >> 11) & 0x1Fu) * 255u / 31u),
+                    static_cast<uint8_t>(((existing >> 5) & 0x3Fu) * 255u / 63u),
+                    static_cast<uint8_t>((existing & 0x1Fu) * 255u / 31u));
+                const lv_color_t blended = lv_color_mix(color, existing_color, coverage);
+                entry->pixels[static_cast<uint32_t>(py) * entry->width + px] = lv_color_to_u16(blended);
+            }
+        }
+        cursor_x += glyph.adv_w;
+        lv_font_glyph_release_draw_data(&glyph);
     }
 }
 
@@ -444,32 +648,21 @@ const NativeExtensionUiApi UI_API = {
     host_obj_get_width, host_obj_get_height, host_obj_align, host_obj_set_hidden,
     host_obj_set_clickable, host_obj_invalidate, host_obj_set_bg_color,
     host_obj_set_border, host_obj_set_text_color, host_obj_set_padding,
+    host_obj_add_event_cb, host_event_get_code, host_event_get_target, host_event_get_user_data,
+    host_line_create, host_line_set, host_arc_create, host_arc_set_value,
+    host_spinner_create, host_table_create, host_table_set_size, host_table_set_cell_text,
 };
 const NativeExtensionCanvasApi CANVAS_API = {
     host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer,
-    host_canvas_clear, host_canvas_set_pixel, host_canvas_draw_line,
-    host_canvas_draw_circle,
+    host_canvas_clear, host_canvas_set_pixel, host_canvas_fill_rect, host_canvas_invalidate_rect, host_canvas_draw_line,
+    host_canvas_draw_circle, host_canvas_draw_text, host_canvas_blit_rgb565,
 };
 const NativeExtensionBindingApi BINDING_API = {host_binding_resolve};
+const NativeExtensionButtonApi BUTTON_API = {host_button_get};
 
 const NativeExtensionHostApi HOST_API = {
     NATIVE_EXTENSION_ABI_VERSION,
-    host_set_text, host_millis, host_delay_ms, host_log, host_alloc, host_free,
-    host_context_get_data, host_context_set_data,
-    host_math_sin, host_math_cos, host_math_sqrt, host_math_atan2,
-    host_mutex_create, host_mutex_lock, host_mutex_unlock,
-    host_label_create, host_label_set_text, host_obj_center, host_log_info, host_notify,
-    host_task_create, host_http_get,
-    host_obj_create, host_obj_delete, host_obj_set_size, host_obj_set_pos, host_obj_get_width,
-    host_obj_get_height, host_obj_align,
-    host_obj_set_hidden, host_obj_set_clickable, host_obj_invalidate, host_obj_set_bg_color,
-    host_obj_set_border, host_obj_set_text_color, host_obj_set_padding, host_obj_add_event_cb,
-    host_event_get_code, host_event_get_target, host_event_get_user_data,
-    host_line_create, host_line_set, host_arc_create, host_arc_set_value,
-    host_spinner_create, host_table_create, host_table_set_size,
-    host_table_set_cell_text, host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer, host_canvas_clear,
-    host_canvas_set_pixel, host_canvas_draw_line, host_canvas_draw_circle,
-    &CORE_API, &TASK_API, &HTTP_API, &UI_API, &CANVAS_API, &BINDING_API,
+    &CORE_API, &TASK_API, &HTTP_API, &UI_API, &CANVAS_API, &BINDING_API, &BUTTON_API,
 };
 
 const esp_partition_t* extension_partition() {
@@ -593,7 +786,9 @@ bool read_descriptor(const uint8_t* file, size_t len, NativeExtensionDescriptor*
             return out->magic == NATIVE_EXTENSION_DESCRIPTOR_MAGIC &&
                    out->abi_version == NATIVE_EXTENSION_ABI_VERSION &&
                    strcmp(out->target_abi, NATIVE_EXTENSION_TARGET_ABI) == 0 &&
-                   out->id[0] && out->version[0] && out->title[0];
+                     out->id[0] && out->version[0] && out->title[0] &&
+                     out->tick_interval_ms >= NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS &&
+                     out->tick_interval_ms <= NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS;
         }
     }
     return false;
@@ -658,7 +853,7 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     LoadedSlot& loaded = s_slots[slot];
     loaded.mapping = const_cast<void*>(mapping); loaded.mapping_handle = mapping_handle;
     loaded.create = reinterpret_cast<NativeExtensionCreateFn>(create); loaded.destroy = reinterpret_cast<NativeExtensionDestroyFn>(destroy); loaded.shutdown = reinterpret_cast<NativeExtensionShutdownFn>(shutdown); loaded.tap = reinterpret_cast<NativeExtensionEventFn>(tap); loaded.long_press = reinterpret_cast<NativeExtensionEventFn>(long_press); loaded.tick = reinterpret_cast<NativeExtensionTickFn>(tick);
-    loaded.info = {slot, true, false, false, false, true, true, SLOT_CAPACITY[slot], header.elf_size, 0, header.abi_version, {}, {}, {}, {}, NATIVE_EXTENSION_RUNTIME_IDLE, {}};
+    loaded.info = {slot, true, false, false, false, true, true, SLOT_CAPACITY[slot], header.elf_size, 0, header.abi_version, descriptor.tick_interval_ms, {}, {}, {}, {}, NATIVE_EXTENSION_RUNTIME_IDLE, {}};
     strlcpy(loaded.info.id, header.id, sizeof(loaded.info.id)); strlcpy(loaded.info.version, header.version, sizeof(loaded.info.version));
     strlcpy(loaded.info.target_abi, header.target_abi, sizeof(loaded.info.target_abi));
     strlcpy(loaded.info.title, header.title, sizeof(loaded.info.title));
@@ -881,6 +1076,23 @@ void native_extension_set_instance_binding_context(const char* id, uint32_t inst
     }
     LOGW(TAG, "Binding context limit reached: %s", id ? id : "");
 }
+void native_extension_set_instance_button_context(const char* id, uint32_t instance_id,
+                                                  void* button, void* label_top,
+                                                  void* label_center, void* label_bottom) {
+    LoadedSlot* slot = loaded_by_id(id);
+    if (!slot) return;
+    for (auto& context : slot->instance_bindings) {
+        if (context.instance_id == instance_id || context.instance_id == 0) {
+            context.instance_id = instance_id;
+            context.button = button;
+            context.label_top = label_top;
+            context.label_center = label_center;
+            context.label_bottom = label_bottom;
+            return;
+        }
+    }
+    LOGW(TAG, "Button context limit reached: %s", id ? id : "");
+}
 void native_extension_clear_instance_binding_context(const char* id, uint32_t instance_id) {
     LoadedSlot* slot = loaded_by_id(id);
     if (!slot) return;
@@ -894,6 +1106,10 @@ void native_extension_clear_instance_binding_context(const char* id, uint32_t in
 bool native_extension_is_stopping(const char* id) {
     LoadedSlot* slot = loaded_by_id(id);
     return slot && slot->worker_join_pending && !slot->worker_join_failed;
+}
+uint16_t native_extension_tick_interval_ms(const char* id) {
+    const LoadedSlot* slot = loaded_by_id(id);
+    return slot ? slot->info.tick_interval_ms : NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS;
 }
 void native_extension_destroy_instance(const char* id, uint32_t instance_id) {
     if (LoadedSlot* slot = loaded_by_id(id)) {

@@ -5,9 +5,13 @@
 
 // The extension ABI is intentionally C-shaped. Native packages are built
 // separately from the firmware, so this remains the compatibility boundary.
-#define NATIVE_EXTENSION_ABI_VERSION 9u
+#define NATIVE_EXTENSION_ABI_VERSION 16u
 #define NATIVE_EXTENSION_TARGET_ABI "rv32imafc-ilp32f"
 #define NATIVE_EXTENSION_DESCRIPTOR_MAGIC 0x3744584Eu
+#define NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS 250u
+#define NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS 33u
+#define NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS 1000u
+#define NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN 192u
 
 enum NativeExtensionEventResult : uint8_t {
     NATIVE_EXTENSION_PASS_THROUGH = 0,
@@ -55,7 +59,7 @@ struct NativeExtensionHttpResult {
     uint8_t truncated;
 };
 
-// Required ABI 8 data export. It is fixed-layout and pointer-free so the host
+// Required package data export. It is fixed-layout and pointer-free so the host
 // can inspect it before executing a package.
 struct NativeExtensionDescriptor {
     uint32_t magic;
@@ -64,14 +68,14 @@ struct NativeExtensionDescriptor {
     char id[32];
     char version[16];
     char title[40];
+    uint16_t tick_interval_ms;
+    uint16_t reserved;
 };
 
 typedef void (*NativeExtensionTaskFn)(void* context);
 typedef void (*NativeExtensionLvglEventFn)(void* event);
 
-// Grouped source-level service views. New extensions should prefer these over
-// the direct fields in NativeExtensionHostApi; direct fields remain during the
-// ABI 8 transition so early sample source stays readable.
+// Grouped source-level service views exposed to native packages.
 struct NativeExtensionCoreApi {
     uint32_t (*millis)();
     void (*delay_ms)(uint32_t delay_ms);
@@ -124,6 +128,20 @@ struct NativeExtensionUiApi {
     void (*obj_set_border)(void* obj, uint32_t rgb, int32_t width, int32_t radius);
     void (*obj_set_text_color)(void* obj, uint32_t rgb);
     void (*obj_set_padding)(void* obj, int32_t all);
+    void (*obj_add_event_cb)(void* obj, NativeExtensionLvglEventFn callback,
+                             NativeExtensionLvglEventCode event_code, void* user_data);
+    NativeExtensionLvglEventCode (*event_get_code)(void* event);
+    void* (*event_get_target)(void* event);
+    void* (*event_get_user_data)(void* event);
+    void* (*line_create)(void* parent);
+    void (*line_set)(void* line, int32_t x1, int32_t y1,
+                     int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
+    void* (*arc_create)(void* parent);
+    void (*arc_set_value)(void* arc, int32_t value);
+    void* (*spinner_create)(void* parent, uint32_t duration_ms, uint32_t arc_degrees);
+    void* (*table_create)(void* parent);
+    void (*table_set_size)(void* table, uint16_t rows, uint16_t columns);
+    void (*table_set_cell_text)(void* table, uint16_t row, uint16_t column, const char* text);
 };
 
 struct NativeExtensionCanvasApi {
@@ -132,10 +150,19 @@ struct NativeExtensionCanvasApi {
     void (*canvas_set_buffer)(void* canvas, void* buffer, uint32_t width, uint32_t height);
     void (*canvas_clear)(void* canvas, uint32_t rgb);
     void (*canvas_set_pixel)(void* canvas, int32_t x, int32_t y, uint32_t rgb);
+    void (*canvas_fill_rect)(void* canvas, int32_t x, int32_t y,
+                             uint32_t width, uint32_t height, uint32_t rgb);
+    void (*canvas_invalidate_rect)(void* canvas, int32_t x, int32_t y,
+                                   uint32_t width, uint32_t height);
     void (*canvas_draw_line)(void* canvas, int32_t x1, int32_t y1,
                              int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
     void (*canvas_draw_circle)(void* canvas, int32_t x, int32_t y,
                                int32_t radius, uint32_t rgb, uint8_t width);
+    void (*canvas_draw_text)(void* canvas, int32_t x, int32_t y, const char* text,
+                             const char* font_name, uint8_t size, uint32_t rgb);
+    void (*canvas_blit_rgb565)(void* canvas, int32_t x, int32_t y, const uint16_t* pixels,
+                               uint16_t source_width, uint16_t source_height,
+                               uint16_t destination_width, uint16_t destination_height);
 };
 
 // Resolve an existing binding template on demand. Available only while a
@@ -148,91 +175,28 @@ struct NativeExtensionBindingApi {
                     const char* template_text, char* out, size_t out_size);
 };
 
+struct NativeExtensionButtonSnapshot {
+    uint32_t background_rgb;
+    uint32_t foreground_rgb;
+    char label_top[NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN];
+    char label_center[NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN];
+    char label_bottom[NATIVE_EXTENSION_BUTTON_LABEL_MAX_LEN];
+};
+
+struct NativeExtensionButtonApi {
+    bool (*get)(void* extension_context, uint32_t instance_id,
+                NativeExtensionButtonSnapshot* out);
+};
+
 struct NativeExtensionHostApi {
     uint32_t abi_version;
-    void (*set_text)(char* out, size_t out_len, const char* text);
-
-    // Core helpers.
-    uint32_t (*millis)();
-    void (*delay_ms)(uint32_t delay_ms);
-    void (*log)(NativeExtensionLogLevel level, const char* message);
-    void* (*alloc)(size_t size);
-    void (*free)(void* memory);
-    void* (*context_get_data)(void* extension_context);
-    void (*context_set_data)(void* extension_context, void* data);
-    float (*math_sin)(float radians);
-    float (*math_cos)(float radians);
-    float (*math_sqrt)(float value);
-    float (*math_atan2)(float y, float x);
-    void* (*mutex_create)();
-    bool (*mutex_lock)(void* mutex, uint32_t timeout_ms);
-    void (*mutex_unlock)(void* mutex);
-    void* (*label_create)(void* parent);
-    void (*label_set_text)(void* label, const char* text);
-    void (*obj_center)(void* obj);
-    void (*log_info)(const char* message);
-    void (*notify)(const char* message);
-
-    // Worker tasks and bounded, deliberately insecure HTTP GET. These may be
-    // called only from an extension worker, never an LVGL callback.
-    bool (*task_create)(void* extension_context, NativeExtensionTaskFn entry, const char* name,
-                        uint32_t stack_bytes, void* context,
-                        uint32_t priority, void** out_handle);
-    bool (*http_get)(const char* url, uint8_t* response, size_t capacity,
-                     uint32_t timeout_ms, NativeExtensionHttpResult* result);
-
-    // Common LVGL object and style operations. Object pointers are opaque and
-    // may only be used from extension lifecycle, event, and tick callbacks.
-    void* (*obj_create)(void* parent);
-    void (*obj_delete)(void* obj);
-    void (*obj_set_size)(void* obj, int32_t width, int32_t height);
-    void (*obj_set_pos)(void* obj, int32_t x, int32_t y);
-    int32_t (*obj_get_width)(void* obj);
-    int32_t (*obj_get_height)(void* obj);
-    void (*obj_align)(void* obj, NativeExtensionAlign align, int32_t x, int32_t y);
-    void (*obj_set_hidden)(void* obj, bool hidden);
-    void (*obj_set_clickable)(void* obj, bool clickable);
-    void (*obj_invalidate)(void* obj);
-    void (*obj_set_bg_color)(void* obj, uint32_t rgb, uint8_t opacity);
-    void (*obj_set_border)(void* obj, uint32_t rgb, int32_t width, int32_t radius);
-    void (*obj_set_text_color)(void* obj, uint32_t rgb);
-    void (*obj_set_padding)(void* obj, int32_t all);
-    void (*obj_add_event_cb)(void* obj, NativeExtensionLvglEventFn callback,
-                             NativeExtensionLvglEventCode event_code, void* user_data);
-    NativeExtensionLvglEventCode (*event_get_code)(void* event);
-    void* (*event_get_target)(void* event);
-    void* (*event_get_user_data)(void* event);
-
-    // Frequently useful LVGL controls.
-    void* (*line_create)(void* parent);
-    void (*line_set)(void* line, int32_t x1, int32_t y1,
-                     int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
-    void* (*arc_create)(void* parent);
-    void (*arc_set_value)(void* arc, int32_t value);
-    void* (*spinner_create)(void* parent, uint32_t duration_ms, uint32_t arc_degrees);
-    void* (*table_create)(void* parent);
-    void (*table_set_size)(void* table, uint16_t rows, uint16_t columns);
-    void (*table_set_cell_text)(void* table, uint16_t row, uint16_t column, const char* text);
-
-    // Canvas operations use RGB565 buffers allocated by the extension. Text
-    // is normally represented by child labels, keeping this draw API compact.
-    void* (*canvas_create)(void* parent);
-    size_t (*canvas_buffer_size)(uint32_t width, uint32_t height);
-    void (*canvas_set_buffer)(void* canvas, void* buffer, uint32_t width, uint32_t height);
-    void (*canvas_clear)(void* canvas, uint32_t rgb);
-    void (*canvas_set_pixel)(void* canvas, int32_t x, int32_t y, uint32_t rgb);
-    void (*canvas_draw_line)(void* canvas, int32_t x1, int32_t y1,
-                             int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
-    void (*canvas_draw_circle)(void* canvas, int32_t x, int32_t y,
-                               int32_t radius, uint32_t rgb, uint8_t width);
-
-    // ABI 8 grouped service views. New package code should use these.
     const NativeExtensionCoreApi* core;
     const NativeExtensionTaskApi* task;
     const NativeExtensionHttpApi* http;
     const NativeExtensionUiApi* ui;
     const NativeExtensionCanvasApi* canvas;
     const NativeExtensionBindingApi* binding;
+    const NativeExtensionButtonApi* button;
 };
 
 typedef void (*NativeExtensionCreateFn)(const NativeExtensionHostApi* host,

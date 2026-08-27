@@ -48,9 +48,11 @@ void expose_timer_set_time(float) {}
 static binding_resolver_fn s_meter_resolver = nullptr;
 
 bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
-                               binding_topic_collector_fn collector) {
+                               binding_topic_collector_fn collector,
+                               const BindingSchemeSpec& spec) {
     (void)scheme;
     (void)collector;
+    (void)spec;
     s_meter_resolver = resolver;
     return true;
 }

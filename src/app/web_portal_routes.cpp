@@ -24,6 +24,10 @@
 #include "web_portal_sounds.h"
 #endif
 
+#if HAS_CAMERA
+#include "web_portal_camera.h"
+#endif
+
 // ============================================================================
 // Route initializer registry — populated by REGISTER_ROUTES() in feature .cpp
 // files aggregated through route_components.cpp at the sketch root.
@@ -68,6 +72,10 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Exactly one #if variant matches per build, so the browser fetches the
 		// entire portal JS in one request with one gzip member (see handlePortalJS).
 		server->on("/portal.js", HTTP_GET, handlePortalJS);
+		#if HAS_CAMERA
+		server->on("/portal-camera.js", HTTP_GET, handlePortalCameraJS);
+		server->on("/portal-camera.css", HTTP_GET, handlePortalCameraCSS);
+		#endif
 		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints
@@ -90,6 +98,8 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		registerOptions("/api/info");
 		server->on("/api/info", HTTP_GET, handleGetVersion);
+		registerOptions("/api/bindings");
+		server->on("/api/bindings", HTTP_GET, handleGetBindings);
 		#if HEALTH_HISTORY_ENABLED
 		server->on("/api/health/history", HTTP_GET, handleGetHealthHistory);
 		#endif
@@ -188,6 +198,16 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/icons/file", HTTP_GET, handleGetIconFile);
 		server->on("/api/icons/file", HTTP_DELETE, handleDeleteIconFile);
 
+#endif
+
+#if HAS_CAMERA
+		registerOptions("/api/camera/snapshot.raw");
+		server->on("/api/camera/snapshot.raw", HTTP_GET, handleGetCameraRawSnapshot);
+
+		registerOptions("/api/camera/snapshot.jpg");
+		server->on("/api/camera/snapshot.jpg", HTTP_GET, handleGetCameraJpegSnapshot);
+
+		server->on("/api/camera/stream", HTTP_GET, handleGetCameraMjpegStream);
 #endif
 
 		// OTA upload endpoint

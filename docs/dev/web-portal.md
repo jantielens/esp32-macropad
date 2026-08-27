@@ -15,6 +15,48 @@ The web portal provides:
 - Optional HTTP Basic Authentication (Full Mode only)
 - Responsive web interface (desktop & mobile)
 
+### Camera Motion Sensing
+
+Camera-enabled boards add a **Motion sensing** navigation item under the Camera
+category. It is disabled by default, so it does not retain motion-analysis
+buffers or request camera frames until enabled. The controls configure local
+RAW10 analysis and optional motion-triggered actions:
+
+* Enable or disable camera motion sensing
+* Select whether to analyze every 1st through 4th captured frame
+* Set Sensitivity from 1 to 10, where higher values detect smaller changes
+* Set the motion-derived presence hold time from 10 to 600 seconds
+* Configure up to three ordered actions that run when Camera Presence changes
+  from off to on
+* Keep the display awake while confirmed motion samples continue
+
+Verify Camera Presence through the Sensor Data fragment or the retained MQTT
+topic `camera_presence/state`. Sensing continues while the display sleeps,
+pauses during OTA, and avoids RGB565 preview conversion and JPEG encoding when
+it is the only camera client.
+
+The Camera capture rate controls the shared RAW10 capture cadence. Motion
+analysis consumes every configured Nth captured frame, while preview and MJPEG
+conversion only run when their live consumers need a new output frame.
+
+Camera presence is motion-derived rather than occupancy detection. A stationary
+person does not refresh the hold time and presence turns off when the configured
+period expires.
+
+Motion actions run once per presence episode, not for every analyzed frame. The
+available action catalog includes **Wake display**, which exits the Idle Screen
+or wakes Display Sleep and then lets the normal screen saver timeout resume.
+
+When **Keep display awake while motion is detected** is enabled, every confirmed
+motion sample wakes the display and resets the inactivity timer. This is distinct
+from the one-shot motion actions. After movement stops, the configured screen
+saver timeout resumes; the presence hold time does not extend it.
+
+Camera logs report motion state transitions, capture failures, first-frame
+baseline initialization, and rejected global lighting changes. Per-frame
+diagnostics are intentionally omitted to avoid overloading the ESP32-P4 USB CDC
+serial path.
+
 ## Portal Modes
 
 ### Core Mode (AP with Captive Portal)
@@ -142,13 +184,18 @@ The web portal is organized into three separate pages for better organization an
   - Network page: WiFi Settings + Device Settings (side-by-side), Network Config (full-width)
 - Container max-width: 900px
 
-### Header Badges
+### Header Identity and Badges
 
-The portal displays 7 real-time device capability and status badges with optimized loading states:
+The header uses the configured device hostname as its title and updates the
+browser title to match. Until device information loads, it shows the firmware's
+device-class name. A device-class badge follows the firmware badge, then the
+portal displays 7 real-time capability and status badges with optimized loading
+states:
 
 | Badge | Color | Placeholder | Example | Description |
 |-------|-------|-------------|---------|-------------|
 | Firmware | Purple | `Firmware v-.-.-` | `Firmware v0.0.1` | Firmware version |
+| Device class | Blue | `Device` | `Macropad` | Firmware device class |
 | Chip | Orange | `--- rev -` | `ESP32-C3 rev 4` | Chip model and revision |
 | Cores | Green | `- Core` | `1 Core` / `2 Cores` | Number of CPU cores |
 | Frequency | Yellow | `--- MHz` | `160 MHz` | CPU frequency |
@@ -160,6 +207,15 @@ The portal displays 7 real-time device capability and status badges with optimiz
 - Badges show format placeholders on initial load (e.g., `--- MHz` instead of `Loading...`)
 - Fixed widths prevent layout shift when data loads
 - Minimal visual changes when actual data arrives
+
+### Fragment Layout Convention
+
+Every fragment begins with a `section-header` containing its title and a short
+description. A single-purpose fragment uses one card. Fragments with independent
+settings groups use a titled card for each group; action buttons remain in a
+shared `save-bar` after the relevant group. Dynamic UI such as extension slots
+uses the shared theme-aware component classes rather than inline colors, borders,
+or spacing.
 
 **Health Badge Features:**
 - Green breathing dot (pulses on updates every 10 seconds)
@@ -183,6 +239,7 @@ Real-time device health monitoring integrated as a header badge with expandable 
 - **Uptime**: Device runtime
 - **Reset Reason**: Why device last restarted
 - **CPU Usage**: Percentage based on IDLE task (nullable when runtime stats unavailable)
+- **CPU Cores**: Current Core 0 and Core 1 usage when per-core runtime stats are available
 - **Core Temp**: Internal temperature sensor (ESP32-C3/S2/S3/C2/C6/H2)
 - **Internal Heap**: Free/min/largest block + fragmentation. On MIPI-DSI boards, the largest-block value is sampled at most every 30 seconds.
 - **PSRAM**: Free/minimum values (when present). MIPI-DSI boards intentionally omit the largest-block measurement because a PSRAM heap walk can interrupt framebuffer scan-out.
@@ -224,7 +281,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
 
 **Validation rules:**
 
-- `PORTAL_PRIMARY_CATEGORY` must not collide with any hardcoded category ID (`device`, `display`, `pads`, `actions`, `connectivity`, `audio`, `sensors`, `firmware`). If it does, the primary configuration is ignored.
+- `PORTAL_PRIMARY_CATEGORY` must not collide with any hardcoded category ID (`device`, `display`, `camera`, `pads`, `actions`, `connectivity`, `audio`, `sensors`, `firmware`). If it does, the primary configuration is ignored.
 - `PORTAL_PRIMARY_FRAGMENT` must resolve to an item inside `PORTAL_PRIMARY_CATEGORY`. If it doesn't, the entire primary configuration is ignored.
 - In AP mode, the primary category and `primary` object are suppressed entirely.
 
@@ -232,7 +289,7 @@ Board-specific firmware variants can promote a custom nav category to first posi
 
 For a normal portal component, use one of the category IDs emitted by
 `kNavCategories` in `web_portal_component_api.cpp`: `device`, `display`,
-`pads`, `actions`, `connectivity`, `audio`, `sensors`, or `firmware`.
+`camera`, `pads`, `actions`, `connectivity`, `audio`, `sensors`, or `firmware`.
 
 The component registry accepts any category string, but `/api/portal/nav` emits
 only those fixed categories. A component assigned to an unknown category
@@ -272,14 +329,16 @@ every component in that custom section to the same category ID.
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
-  - **Button Defaults**: Collapsible section at the bottom of the Pads page for device-wide default appearance (colors, border, radius, content padding, label styles). Buttons on all pads inherit defaults unless overridden; reset-to-default ↩ links appear on overridden fields. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
+  - **Camera Preview widget**: Available only on camera-enabled boards. It displays the shared camera feed with Cover, Letterbox, or Center crop scaling.
+  - **Numeric rocker tap areas**: The numeric rocker settings include a per-button Tap Area Scale control from 50% to 150%. It scales both fine and coarse zones while the firmware reserves a center action area.
+  - **Pad and Button Defaults**: Separate Button Appearance, Pad Appearance and Layout, Button Labels and Icon, and Button Shadow sections on the Pads page. Pad Appearance and Layout provides device-wide button spacing, `default_pad_bg_color`, Burn-in Pixel Shift Distance (`pixel_shift_distance_px`, 0-8 px), and extra top, right, bottom, and left edge insets inside that distance. A live 2×2 diagram updates with those controls and labels their current pixel values. A value of 0 disables pixel shifting and its layout reserve. A pad without an explicit background inherits the device default. Shadows can be opaque backing plates or LVGL drop shadows, with free-form offsets and blur that may overlap or clip. Shadow color can use either a specific color or a darker tint of each button's background, including dynamic background bindings. Pads and buttons can enable or disable the device shadow setting. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
   - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode — green/red ghost overlay shows valid/invalid positions. Blocks check grid dimensions, free cells, and 64-button limit. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
-- **Custom floating footer**: Save Pad, Show on Device, and More menu (not the shared `{{FOOTER}}` template)
+- **Pad save controls**: The bottom action bar provides Save Pad, Show on Device, and More. A fixed Save Pad button appears while the current pad has unsaved changes, so repeated edits do not require scrolling to the action bar.
 
 **Layout:** Full-width pad grid with responsive button editor dialog
 
@@ -512,6 +571,27 @@ All endpoints return JSON responses with proper HTTP status codes.
 - Example: `curl -u username:password http://<device-ip>/api/info`
 - In Core Mode (AP + captive portal), endpoints are intentionally unauthenticated to allow initial setup.
 
+### Binding Schema
+
+#### `GET /api/bindings`
+
+Returns the live registry of binding schemes used by the portal validator and
+the MCP capability manifest. Each entry contains `name`, `min_params`,
+`max_params`, `widget_max_params`, `format_param`, `validation_mode`, and
+`free_form`. Finite schemes also include their current `keys` array.
+
+The response is board-aware: device-class and feature-gated schemes appear
+only when registered by the running firmware. Clients should fetch this endpoint
+instead of maintaining a static binding scheme or key list.
+
+The Pad editor uses the response for scheme-specific validation and authoring
+assistance. If the endpoint is temporarily unavailable, it remains usable and
+checks only generic token structure, required values, parameter counts, and
+format syntax. The device validates saved configurations authoritatively.
+
+The MCP `get_capabilities` manifest serializes its binding-scheme list from the
+same registry, so portal and MCP clients receive equivalent metadata.
+
 ### Device Information
 
 #### `GET /api/info`
@@ -543,6 +623,7 @@ Returns comprehensive device information.
   "sketch_size": 1048576,
   "free_sketch_space": 2097152,
   "mac_address": "AA:BB:CC:DD:EE:FF",
+  "device_name": "Living Room Macropad",
   "wifi_hostname": "esp32-1234",
   "mdns_name": "esp32-1234.local",
   "hostname": "esp32-1234",
@@ -576,6 +657,7 @@ Returns comprehensive device information.
 
 **Discovery Fields:**
 - `mac_address`: Device MAC address
+- `device_name`: Configured user-facing device name, used by the portal header and browser title
 - `wifi_hostname`: WiFi/DHCP hostname
 - `mdns_name`: Full mDNS name (hostname + `.local`)
 - `hostname`: Short hostname
@@ -620,6 +702,8 @@ Returns real-time device health statistics.
   "uptime_seconds": 3600,
   "reset_reason": "Power On",
   "cpu_usage": 15,
+  "cpu_usage_core_0": 22,
+  "cpu_usage_core_1": 8,
   "cpu_freq": 160,
   "cpu_temperature": 42,
   "heap_internal_free": 200000,
@@ -674,6 +758,7 @@ not report a PSRAM largest-block value on those boards.
 - `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
 - `ble_name`: current BLE keyboard name (same as the configured device name)
 - `cpu_usage`: `null` when FreeRTOS runtime stats are unavailable/disabled
+- `cpu_usage_core_0` / `cpu_usage_core_1`: optional current per-core percentages, returned only when runtime statistics are available on a multicore target
 - `cpu_temperature`: `null` on chips without an internal temperature sensor
 - `fs_mounted`: `null` when no filesystem partition is present; `false` when present but not mounted
 - `wifi_rssi`, `wifi_channel`, `ip_address`: `null` when not connected
@@ -1021,6 +1106,30 @@ Get current progress/state of the online update task.
 }
 ```
 
+### OTA Background Work Coordination
+
+`POST /api/update` and `POST /api/firmware/update` share one race-safe OTA
+activity lifecycle. Only one path can own the firmware writer at a time; a
+competing update receives `409 Conflict`.
+
+While the lifecycle is active, the firmware cooperatively defers new
+nonessential work at subsystem-owned safe points:
+
+* Image fetch network reads and image decoding
+* MQTT reconnects, client processing, subscriptions, publishing, and health
+  publication
+* LVGL timers, data polling, screen updates, and new display presents
+* Home Assistant history backfill requests
+* Native-extension host HTTP requests
+
+Work already running is allowed to finish or abort at the safe point it owns;
+the OTA transport does not wait indefinitely for all work to become idle. WiFi,
+AsyncTCP, portal responses and status polling, OTA transfer, reboot processing,
+touch, BLE, audio, and safety-critical device-class loops remain operational.
+
+The screen saver owns an independent image-fetch suspension. OTA activity never
+re-enables image fetching while the screen saver still holds that suspension.
+
 **CORS:**
 - The device responds with `Access-Control-Allow-Origin: https://<owner>.github.io`.
 - Allowed headers: `Authorization`, `Content-Type`.
@@ -1061,7 +1170,7 @@ Get screen saver status.
 
 #### `POST /api/display/sleep`
 
-Force the screen saver to sleep now (fade backlight to 0).
+Force Display Sleep now (fade backlight to 0). This bypasses the optional Idle Screen.
 
 #### `POST /api/display/wake`
 
@@ -1084,17 +1193,134 @@ Switch the active runtime screen (no persistence).
 ```
 
 **Notes:**
-- Screen-affecting actions count as user activity and will reset the screen saver timer.
-- When the screen saver is dimming/asleep/fading in, touch input is intentionally suppressed to avoid “wake gestures” clicking through into the UI. A second tap may be required after wake.
+- Screen-affecting actions count as user activity and reset both the Idle Screen and Display Sleep timers.
+- Idle Screen is configured through `idle_screen_enabled`, `idle_screen_timeout_seconds`, and `idle_screen_pad` in `GET`/`POST /api/config`. It can run with or without Display Sleep, and is transient: waking restores the screen active before it appeared, without altering navigation history.
+- When Idle Screen is active or Display Sleep is dimming/asleep/fading in, touch input is intentionally suppressed to avoid wake gestures clicking through into the UI. A second tap may be required after wake.
 
 
 
 ---
 
+### Camera API
+
+The **Camera** category is available only when `HAS_CAMERA` is enabled. It
+contains **Camera settings**, which captures one color JPEG on demand for a
+diagnostic preview. When `HAS_STORAGE_BROWSER` is also enabled, **Snapshots**
+displays saved camera-action images. The API also provides one cached JPEG
+MJPEG stream. All camera and storage endpoints require portal authentication
+when HTTP Basic Auth is enabled.
+
+#### `GET /api/component/camera/config`
+
+Returns camera availability, the verified RAW10 sensor mode, active JPEG,
+rotation, shared-feed target rate, manual exposure, and white-balance settings,
+and their bounded values.
+
+#### `POST /api/component/camera/config`
+
+Persists JPEG encoder, rotation, shared-feed target rate, manual exposure, and
+white-balance configuration. The request must use advertised ranges and output
+dimensions from `GET`.
+
+```json
+{
+  "jpeg_quality": 60,
+  "feed_target_fps": 4,
+  "rotation": 0,
+  "output_width": 640,
+  "output_height": 360,
+  "exposure_lines": 512,
+  "white_balance_red_q8": 256,
+  "white_balance_blue_q8": 256
+}
+```
+
+#### `POST /api/component/camera-motion/config`
+
+Persists motion-derived presence sensing independently of the image-output
+settings. The request must include all fields below. `motion_analyze_every_nth_frame`
+is bounded from 1 through 4. It selects how often motion examines a shared RAW10
+frame; the effective motion rate is the camera capture rate divided by this
+value. On display-enabled boards, `motion_keep_display_awake` controls whether
+every confirmed motion sample wakes the display and resets its inactivity timer.
+`actions` contains up to three `ButtonAction` objects, validated against the
+device's action catalog. The array runs once when Camera Presence changes from
+off to on.
+
+```json
+{
+  "motion_enabled": true,
+  "motion_analyze_every_nth_frame": 2,
+  "motion_sensitivity": 5,
+  "presence_hold_seconds": 60,
+  "motion_keep_display_awake": false,
+  "actions": [
+    {"type": "system", "system_command": "wake_display"}
+  ]
+}
+```
+
+`GET /api/component/camera-motion/config` returns these active values along
+with `capture_fps`, the advertised ranges, current presence state, and the last
+motion timestamp. `capture_fps` is an alias of the Camera settings response's
+canonical `feed_target_fps`, named for the shared capture cadence in this
+motion-specific response.
+
+#### `GET /api/camera/snapshot.jpg`
+
+Captures and streams one color JPEG using the active settings. The response
+has `Content-Type: image/jpeg` and includes `X-Camera-Width`,
+`X-Camera-Height`, and `X-Camera-Color-Mode: color` headers.
+
+#### `GET /api/camera/snapshot.raw`
+
+Captures and streams one raw sensor frame as `application/octet-stream`. The
+response includes `X-Camera-Width`, `X-Camera-Height`, and
+`X-Camera-Pixel-Format: RAW10` headers. This diagnostic endpoint does not
+perform demosaicing or JPEG encoding.
+
+#### `GET /api/camera/stream`
+
+Streams the newest cached JPEG frames as
+`multipart/x-mixed-replace; boundary=esp32-macropad`. The stream never captures
+directly from the request task. It activates JPEG demand in the shared camera
+feed and ends that demand when the client disconnects. The compile-time
+`CAMERA_MJPEG_MAX_CLIENTS` board setting limits authenticated stream clients;
+additional requests receive `429 Too Many Requests`. The `jc4880p433` and
+`jc1060p470c` boards permit three clients.
+
+`feed_target_fps` controls the common capture rate for this stream, Camera
+Preview widgets, and enabled motion sensing. It defaults to 4 FPS and is
+bounded to 1-5 FPS. Lower it, for example to 2 FPS, when a complex pad needs
+more CPU time; this reduces camera work but increases live-image update latency.
+
+`rotation` accepts `0`, `90`, `180`, or `270` degrees clockwise. Rotation is
+performed while converting RAW10 to RGB565, so test captures, Camera Preview
+widgets, and MJPEG frames use the same orientation without an additional frame
+buffer.
+
+### Home Assistant MJPEG Camera
+
+Home Assistant does not discover arbitrary MJPEG stream URLs through MQTT. Add
+the [MJPEG IP Camera](https://www.home-assistant.io/integrations/mjpeg/)
+integration manually with these URLs, replacing `<device-ip>` with the device
+address:
+
+```text
+MJPEG URL: http://<device-ip>/api/camera/stream
+Still image URL: http://<device-ip>/api/camera/snapshot.jpg
+```
+
+When portal Basic Authentication is enabled, configure the same credentials in
+Home Assistant. Do not enable stream preloading because it consumes a limited
+MJPEG client slot.
+
+---
+
 ### Storage API
 
-The read-only Storage page uses the generic component API. Both endpoints
-require portal authentication when HTTP Basic Auth is enabled.
+The Storage page and feature-specific file views use the generic component API.
+All endpoints require portal authentication when HTTP Basic Auth is enabled.
 
 #### `GET /api/component/storage/status`
 
@@ -1146,6 +1372,15 @@ same absolute, traversal-free validation as the directory list endpoint.
 Directories and missing files return `404`. PNG, JPEG, GIF, WebP, MP3, WAV,
 and Ogg files use their browser-recognized media type; other files use
 `application/octet-stream` so browsers download them.
+
+#### `DELETE /api/component/storage/delete?path=/camera/20260824/000001.jpg`
+
+Deletes one regular file or a directory and all its contents. The path uses the
+same absolute, traversal-free validation as the list endpoint, and the storage
+root (`/`) cannot be deleted. Returns `404` for a missing path and
+`{"success":true}` after a successful deletion. The Camera **Snapshots** view
+uses this endpoint for individual images, a dated camera-roll folder, and the
+latest snapshot copy.
 
 ---
 
@@ -1375,20 +1610,20 @@ Save the MQTT trigger configuration.
 
 ---
 
-### Button Defaults API
+### Pad and Button Defaults API
 
-All button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. Button defaults are stored on LittleFS at `/config/button_defaults.json`.
+All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. These defaults are stored on LittleFS at `/config/button_defaults.json`.
 
 #### `GET /api/button-defaults`
 
-Returns the current device-level button defaults.
+Returns the current device-level pad and button defaults.
 
-- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`.
+- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
 - Default (no file saved): empty JSON object `{}`.
 
 #### `POST /api/button-defaults`
 
-Save device-level button defaults to LittleFS.
+Save device-level pad and button defaults to LittleFS.
 
 - **Body:** JSON object with any subset of the fields listed above.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
@@ -1421,7 +1656,7 @@ Save timer configuration to LittleFS and apply immediately.
 - **Body:** Same JSON format as GET response.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - Unknown timer keys, slot fields, malformed actions, and lists over three actions reject the complete write.
-- Saving replaces the persistent source for future countdown starts. Active runs keep their existing expiry snapshot.
+- Saving replaces the persistent source for future countdown starts. Active runs keep their existing expiry snapshot; stop and start a running countdown to apply the saved list.
 
 ---
 
@@ -1620,8 +1855,10 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 - `web/bootstrap.min.css` - Bootstrap CSS framework (vendor, bundled into `portal-all.css`)
 - `web/portal-custom.css` - Custom portal styles and responsive overrides (bundled into `portal-all.css`)
 - `web/portal.js.bundle` - Bundle manifest listing all JS modules in concatenation order
-- `web/portal.js` - Entry point (last in bundle); all JS served as a single bundled asset
+- `web/portal.js` - Entry point (last in the shared bundle)
 - `web/portal_*.js` - Feature modules and fragments (see [Asset Bundle System](#asset-bundle-system))
+- `web/portal_<feature>.js.bundle` - Optional standalone component-script bundle
+- `web/portal_<feature>.css` - Optional standalone component stylesheet
 - `web/portal-all.css` - Primary CSS file (bundle target) — served at `/portal-all.css`
 - `web/portal-all.css.bundle` - CSS bundle manifest (see [CSS Bundle](#css-bundle))
 - `web/_portal_*.css` - Feature CSS fragments (bundled into primary CSS at build time)
@@ -1647,7 +1884,7 @@ To keep concurrent in-flight HTTP requests bounded, the frontend applies several
 4. **Single CSS asset** — `bootstrap.min.css` + `portal-custom.css` are concatenated into `/portal-all.css` at build time (see [CSS Bundle](#css-bundle)), saving one request and ~1.5 KB through shared gzip dictionary.
 5. **Inline favicon** — `shell.html` sets `<link rel="icon" href="data:,">` to suppress the browser's automatic `/favicon.ico` lookup (no extra request, no 404).
 6. **`/api/mode` folded into `/api/info`** — the legacy mode endpoint was removed; portal JS derives `portalMode` from `ap_active` on the cached `/api/info` response.
-7. **Chunked static asset streaming** — the gzipped PROGMEM asset handler in `web_portal_pages.cpp` (shell HTML, `portal-all.css`, `portal.js`, fragment HTML) uses a length-aware `AwsResponseFiller` callback with `HTTP_STREAM_CHUNK_SIZE = 4 KB` instead of `beginResponse_P()`. AsyncTCP only calls the filler when LWIP TX buffer space is available, so the response is paced segment by segment and the DMA-internal pbuf pool recycles between chunks. This matters because the browser issues `/portal-all.css` (~38 KB gz) and `/portal.js` (~53 KB gz) **in parallel** as `<link>` / `<script>` tags — those requests are not subject to the `window.fetch` cap and would otherwise queue the full ~90 KB of payload into the DMA-internal pool at once.
+7. **Chunked static asset streaming** — the gzipped PROGMEM asset handler in `web_portal_pages.cpp` (shell HTML, `portal-all.css`, `portal.js`, component assets, fragment HTML) uses a length-aware `AwsResponseFiller` callback with `HTTP_STREAM_CHUNK_SIZE = 4 KB` instead of `beginResponse_P()`. AsyncTCP only calls the filler when LWIP TX buffer space is available, so the response is paced segment by segment and the DMA-internal pbuf pool recycles between chunks. This matters because the browser issues `/portal-all.css` (~38 KB gz) and `/portal.js` (~53 KB gz) **in parallel** as `<link>` / `<script>` tags — those requests are not subject to the `window.fetch` cap and would otherwise queue the full ~90 KB of payload into the DMA-internal pool at once.
 
 The result of these measures is that a fresh portal load on the `release/1.16.0` baseline issues approximately: `GET /`, `GET /portal-all.css`, `GET /portal.js`, `GET /api/info`, `GET /api/health`, `GET /api/portal/nav`, `GET /api/section/welcome` — plus the periodic `GET /api/health` poll. With the fetch cap, at most two are in flight at any moment.
 
@@ -1774,9 +2011,9 @@ The minifier supports `.bundle` manifests for both JavaScript and CSS. A bundle 
 
 The same three shared functions (`discover_bundle_manifests`, `filter_bundle_fragments`, `concatenate_bundle`) handle both JS and CSS bundles in `tools/minify-web-assets.sh`.
 
-#### JavaScript Bundle
+#### Shared JavaScript Bundle
 
-All JavaScript source files are concatenated into a single `portal.js` asset at build time.
+Shared JavaScript source files are concatenated into a single `portal.js` asset at build time.
 
 **How it works:**
 
@@ -1785,6 +2022,20 @@ All JavaScript source files are concatenated into a single `portal.js` asset at 
 3. The minifier concatenates the resolved files, minifies the result, and gzip-compresses it into `web_assets.h`
 4. Every HTML page loads a single `<script src="/portal.js"></script>`
 5. One C++ handler (`handleJS`) serves the bundled asset
+
+#### Component Assets
+
+Components can provide feature-specific assets without adding them to the shared
+bundle. Set `ComponentDef.portal_script` and/or `ComponentDef.portal_style` to
+dedicated route paths. `GET /api/portal/nav` publishes those optional paths for
+each component; `portal_nav.js` deduplicates them, loads styles and scripts, and
+waits for all assets before building navigation or loading a fragment.
+
+The camera components demonstrate this pattern: they advertise
+`/portal-camera.js` and `/portal-camera.css`, served by dedicated handlers in
+`web_portal_pages.cpp` and routes in `web_portal_routes.cpp` under `HAS_CAMERA`.
+Their source assets remain outside `portal.js.bundle`, so non-camera builds do
+not embed or serve camera payloads.
 
 **Module organization:**
 
@@ -1798,7 +2049,7 @@ All JavaScript source files are concatenated into a single `portal.js` asset at 
 | Pad editor | `portal_pad_colors.js`, `portal_pad_io.js`, `portal_pad_blocks.js`, `portal_pad_icons.js`, `portal_pad_defaults.js`, `portal_pad_grid.js`, `portal_pad_dialog.js`, `portal_pad_editor.js` | Visual pad editor (fragments before main) |
 | Entry point | `portal.js` | Must be last — bootstraps the application |
 
-**Adding a new JS module:**
+**Adding shared JS:**
 
 1. Create the module in the correct root:
   - Shared module: `src/app/web/portal_myfeature.js`

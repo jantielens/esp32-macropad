@@ -12,6 +12,8 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
 
 #define TAG "ShutterBind"
 
@@ -468,26 +470,27 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
 // Scheme resolver
 // ============================================================================
 
-static bool shutter_binding_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus shutter_binding_resolve(const char* params, char* out, size_t out_len) {
     char key[32];
     char fmt[32];
     parse_params(params, key, sizeof(key), fmt, sizeof(fmt));
 
     if (!key[0]) {
         strlcpy(out, "ERR:no key", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // history_json is routed directly to the output buffer to avoid truncation
     // by the 192-byte BINDING_TEMPLATE_MAX_LEN intermediate copy below.
     if (strcmp(key, "history_json") == 0) {
-        return build_history_json(out, out_len);
+        return build_history_json(out, out_len) ? BINDING_RESOLVER_RESOLVED
+                            : BINDING_RESOLVER_UNAVAILABLE;
     }
 
     char raw[512]; // Larger intermediate buffer for numeric/string values.
     if (!lookup_value(key, raw, sizeof(raw))) {
         strlcpy(out, "ERR:bad key", out_len);
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     if (fmt[0]) {
@@ -502,7 +505,7 @@ static bool shutter_binding_resolve(const char* params, char* out, size_t out_le
     } else {
         strlcpy(out, raw, out_len);
     }
-    return true;
+    return BINDING_RESOLVER_RESOLVED;
 }
 
 // ============================================================================
@@ -518,24 +521,11 @@ static void shutter_binding_collect(const char* params, void* user_data) {
 // Init
 // ============================================================================
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void shutter_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[shutter:key] or [shutter:key;format]";
-    o["example"] = "[shutter:speed] ([shutter:deviation;%+.1f]%)";
-    o["keys"]    = "speed, speed_seconds, target_speed, target_ms, duration_ms, deviation, deviation_abs, deviation_stops, verdict, spread, spread_ms, sensor_count, valid_sensor_count, preset_id, preset_name, count, capture_id, available, history_json; per-sensor sensor_N_ms/_valid/_depth/_snr; namespaced align.*, calib.*, session.*, guide.*";
-    o["note"]    = "Live shutter-tester measurement + alignment/session state.";
-}
-#endif
-
 void shutter_binding_init() {
-    if (!binding_template_register("shutter", shutter_binding_resolve, shutter_binding_collect)) {
+    if (!binding_template_register("shutter", shutter_binding_resolve, shutter_binding_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr})) {
         LOGE(TAG, "Failed to register shutter binding scheme");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("shutter", shutter_scheme_describe);
-#endif
 }
 
 #else // !HAS_DISPLAY || !IS_SHUTTER_TESTER

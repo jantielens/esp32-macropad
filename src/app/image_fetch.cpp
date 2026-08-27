@@ -5,6 +5,7 @@
 #include "image_decoder.h"
 #include "log_manager.h"
 #include "net_activity.h"
+#include "ota_activity.h"
 #include "rtos_task_utils.h"
 
 #include <HTTPClient.h>
@@ -314,6 +315,7 @@ static bool read_exact(WiFiClient* stream, uint8_t* buf, size_t len, uint32_t ti
     size_t received = 0;
     uint32_t start = (uint32_t)millis();
     while (received < len) {
+        if (ota_activity_is_active()) return false;
         if ((uint32_t)millis() - start > timeout_ms) return false;
         size_t avail = stream->available();
         if (avail == 0) { vTaskDelay(pdMS_TO_TICKS(1)); continue; }
@@ -488,7 +490,7 @@ static void fetch_task(void* param) {
         for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
             int8_t idx = (scan_start + i) % IMAGE_SLOT_MAX;
             ImageSlot& s = g_slots[idx];
-            if (!s.active || s.paused || g_suspended) continue;
+            if (!s.active || s.paused || g_suspended || ota_activity_is_active()) continue;
 
             // Check if this slot is due for a fetch
             if (!s.fetched_once) {
@@ -524,7 +526,7 @@ static void fetch_task(void* param) {
         if (next < 0) {
             // No slot ready — close connections for inactive/cancelled/paused slots
             for (int8_t i = 0; i < IMAGE_SLOT_MAX; i++) {
-                if (g_conn[i].active && (!g_slots[i].active || g_slots[i].paused)) conn_close(i);
+                if (g_conn[i].active && (!g_slots[i].active || g_slots[i].paused || ota_activity_is_active())) conn_close(i);
             }
             // Sleep until the soonest slot is due
             if (min_wait_ms < 10) min_wait_ms = 10;  // Floor to avoid busy-spin
@@ -551,6 +553,11 @@ static void fetch_task(void* param) {
         strlcpy(user, slot.user, sizeof(user));
         strlcpy(pass, slot.pass, sizeof(pass));
         xSemaphoreGive(g_mutex);
+
+        if (ota_activity_is_active()) {
+            conn_close(next);
+            continue;
+        }
 
         // Persistent connection: ensure client exists, then fetch a frame.
         // MJPEG streaming: if the server responds with multipart/x-mixed-replace,
@@ -608,6 +615,12 @@ static void fetch_task(void* param) {
             }
             xSemaphoreGive(g_mutex);
             vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
+        if (ota_activity_is_active()) {
+            heap_caps_free(raw_data);
+            conn_close(next);
             continue;
         }
 

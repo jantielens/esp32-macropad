@@ -104,6 +104,9 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
+    const char* shadow = b["button_shadow"] | "";
+    if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
+        return "bad button_shadow";
     const char* wt = b["widget_type"] | "";
     const WidgetType* wtype = wt[0] ? widget_find(wt) : nullptr;
     if (wt[0] && !wtype) return "unknown widget type";
@@ -193,6 +196,9 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
 
 // Validate a complete pad JSON (grid + buttons + collisions). nullptr = ok.
 const char* pad_validate(JsonObjectConst pad, bool tolerate_offgrid) {
+    const char* shadow = pad["button_shadow"] | "";
+    if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
+        return "bad button_shadow";
     const char* layout = pad["layout"] | "grid";
     int cols = pad["cols"] | 0;
     int rows = pad["rows"] | 0;

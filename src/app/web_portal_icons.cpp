@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "board_config.h"
+#include "button_defaults.h"
 #include "display_manager.h"
 #include "icon_store.h"
 #include "log_manager.h"
@@ -393,11 +394,18 @@ void handleGetButtonSizes(AsyncWebServerRequest *request) {
     uint8_t row_arr[1] = {0};
     uint8_t cs_arr[1] = {1};
     uint8_t rs_arr[1] = {1};
+    const PadLayoutSettings& settings = button_defaults_get()->layout;
+    const PadGridLayoutSpace layout_space = {
+        settings.inset_left_px, settings.inset_right_px,
+        settings.inset_top_px, settings.inset_bottom_px,
+        settings.spacing_px, settings.spacing_px,
+        settings.pixel_shift_distance_px,
+    };
     PadRect rect;
 
     pad_compute_grid((uint8_t)cols, (uint8_t)rows,
                      (uint16_t)disp_w, (uint16_t)disp_h,
-                     col_arr, row_arr, cs_arr, rs_arr, 1, &rect);
+                     col_arr, row_arr, cs_arr, rs_arr, 1, &rect, &layout_space);
 
     const UIScaleInfo& scale = pad_get_scale_info();
     const uint8_t padding = 4;  // Matches lv_obj_set_style_pad_all(obj, 4, 0)
@@ -412,8 +420,8 @@ void handleGetButtonSizes(AsyncWebServerRequest *request) {
         "\"font_small_h\":%u}",
         disp_w, disp_h,
         rect.w, rect.h,
-        scale.gap, padding,
-        PIXEL_SHIFT_MARGIN,
+        settings.spacing_px, padding,
+        settings.pixel_shift_distance_px,
         font_small_h);
     request->send(response);
 }

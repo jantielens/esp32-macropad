@@ -249,10 +249,10 @@ static void cmd_adjust_dry_down(float delta) {
 // Binding resolver
 // ============================================================================
 
-static bool expose_resolve(const char* params, char* out, size_t out_len) {
+static BindingResolverStatus expose_resolve(const char* params, char* out, size_t out_len) {
     if (!params || !params[0]) {
         snprintf(out, out_len, "ERR:no_key");
-        return false;
+        return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     // Split key;format at first ';' (bracket-depth-aware)
@@ -282,7 +282,7 @@ static bool expose_resolve(const char* params, char* out, size_t out_len) {
         } else {
             snprintf(out, out_len, "%.1f", g_expose.exposure_time_s);
         }
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Key: remaining
@@ -294,7 +294,7 @@ static bool expose_resolve(const char* params, char* out, size_t out_len) {
         } else {
             snprintf(out, out_len, "%.1f", rem / 1000.0f);
         }
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Key: elapsed
@@ -306,7 +306,7 @@ static bool expose_resolve(const char* params, char* out, size_t out_len) {
         } else {
             snprintf(out, out_len, "%.1f", el / 1000.0f);
         }
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Key: state
@@ -319,19 +319,19 @@ static bool expose_resolve(const char* params, char* out, size_t out_len) {
             default:             st = "stopped";  break;
         }
         snprintf(out, out_len, "%s", st);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Key: relay
     if (strcmp(params, "relay") == 0) {
         snprintf(out, out_len, "%s", relay_is_on() ? "ON" : "OFF");
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Key: dry_down
     if (strcmp(params, "dry_down") == 0) {
         snprintf(out, out_len, "%.1f", g_expose.dry_down_pct);
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     // Key: effective_time
@@ -342,17 +342,29 @@ static bool expose_resolve(const char* params, char* out, size_t out_len) {
         } else {
             snprintf(out, out_len, "%.1f", eff);
         }
-        return true;
+        return BINDING_RESOLVER_RESOLVED;
     }
 
     snprintf(out, out_len, "ERR:bad_key");
-    return false;
+    return BINDING_RESOLVER_UNAVAILABLE;
 }
 
 // No MQTT topics to collect
 static void expose_collect(const char* params, void* user_data) {
     (void)params;
     (void)user_data;
+}
+
+static const char* const kExposeBindingKeys[] = {
+    "time", "remaining", "elapsed", "state", "relay", "dry_down", "effective_time",
+};
+
+static uint8_t expose_binding_key_count() {
+    return sizeof(kExposeBindingKeys) / sizeof(kExposeBindingKeys[0]);
+}
+
+static const char* expose_binding_key_at(uint8_t index) {
+    return index < expose_binding_key_count() ? kExposeBindingKeys[index] : nullptr;
 }
 
 // ============================================================================
@@ -472,26 +484,14 @@ const char* expose_state_str(uint8_t state) {
 }
 #endif // HAS_MCP
 
-#if HAS_MCP
-#include <ArduinoJson.h>
-static void expose_scheme_describe(void* out) {
-    JsonObject& o = *static_cast<JsonObject*>(out);
-    o["syntax"]  = "[expose:key] or [expose:key;format]";
-    o["example"] = "[expose:remaining;%.1f]s";
-    o["keys"]    = "time, elapsed, remaining, effective_time, dry_down, state, running, paused, stopped, focus, relay";
-    o["note"]    = "Darkroom single-exposure timer state.";
-}
-#endif
-
 void expose_timer_init() {
-    if (!binding_template_register("expose", expose_resolve, expose_collect)) {
+    if (!binding_template_register("expose", expose_resolve, expose_collect,
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
+                                    expose_binding_key_count, expose_binding_key_at})) {
         LOGE(TAG, "Failed to register expose binding scheme");
     } else {
         LOGI(TAG, "Expose binding scheme registered");
     }
-#if HAS_MCP
-    binding_template_set_scheme_describe("expose", expose_scheme_describe);
-#endif
 }
 
 #else // !IS_DARKROOM_TIMER

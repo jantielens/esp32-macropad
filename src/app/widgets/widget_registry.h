@@ -40,6 +40,8 @@ struct WidgetType {
                             const char** out_ha_entity, uint8_t* out_ha_stat);
     bool resolveInTick;
     void (*describeSchema)(JsonObject& out);
+    void (*onShow)(WidgetState* state);
+    void (*onHide)(WidgetState* state);
 };
 
 const WidgetType* widget_find(const char* type_name);

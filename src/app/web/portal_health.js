@@ -527,6 +527,10 @@ async function startBlePairing() {
     // Next health poll will update the UI
 }
 
+function healthIntegerValue(value) {
+    return (typeof value === 'number' && isFinite(value)) ? Math.floor(value) : null;
+}
+
 async function updateHealth() {
     try {
         const response = await fetch(API_HEALTH);
@@ -537,7 +541,7 @@ async function updateHealth() {
         // fragments) so they don't issue their own /api/health requests.
         latestHealth = health;
 
-        const cpuUsage = (typeof health.cpu_usage === 'number' && isFinite(health.cpu_usage)) ? Math.floor(health.cpu_usage) : null;
+        const cpuUsage = healthIntegerValue(health.cpu_usage);
         const hasPsram = (
             (deviceInfoCache && typeof deviceInfoCache.psram_size === 'number' && deviceInfoCache.psram_size > 0) ||
             (typeof health.psram_free === 'number' && health.psram_free > 0)
@@ -546,6 +550,12 @@ async function updateHealth() {
         // Update point-in-time rows (shown when history is unavailable).
         const ptCpu = document.getElementById('health-point-cpu-value');
         if (ptCpu) ptCpu.textContent = (cpuUsage !== null) ? `${cpuUsage}%` : '—';
+        const cpuCore0 = healthIntegerValue(health.cpu_usage_core_0);
+        const cpuCore1 = healthIntegerValue(health.cpu_usage_core_1);
+        const ptCpuCoresWrap = document.getElementById('health-point-cpu-cores-wrap');
+        if (ptCpuCoresWrap) ptCpuCoresWrap.style.display = (cpuCore0 !== null && cpuCore1 !== null) ? '' : 'none';
+        const ptCpuCores = document.getElementById('health-point-cpu-cores-value');
+        if (ptCpuCores) ptCpuCores.textContent = (cpuCore0 !== null && cpuCore1 !== null) ? `0: ${cpuCore0}%  1: ${cpuCore1}%` : '—';
         const ptHeap = document.getElementById('health-point-heap-value');
         if (ptHeap) ptHeap.textContent = healthFormatBytes(health.heap_internal_free);
         const ptPsramWrap = document.getElementById('health-point-psram-wrap');
