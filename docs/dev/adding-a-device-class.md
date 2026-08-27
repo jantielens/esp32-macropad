@@ -146,9 +146,8 @@ device_class_for_board() {
 }
 ```
 
-After editing, run `./tests/run_tests.sh` (it invokes
-`test_branding_mirror.sh`) to confirm the C++ table and the bash helpers
-agree.
+After editing, run `ctest --test-dir build/host-tests -R test_branding_mirror`
+to confirm the C++ table and the bash helpers agree.
 
 ## 2. Enable the Class on a Board
 
@@ -429,7 +428,7 @@ and the existing shutter-tester implementations.
 After all touchpoints are in place:
 
 ```bash
-./tests/run_tests.sh                       # confirms branding mirror passes
+ctest --test-dir build/host-tests -R test_branding_mirror # confirms branding mirror passes
 ./build.sh <board-that-enables-IS_FOO>     # confirms full build links
 ./build.sh <board-that-does-NOT-enable-IS_FOO>   # confirms no leak
 ```
