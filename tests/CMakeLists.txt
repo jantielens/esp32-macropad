@@ -76,3 +76,8 @@ add_host_gtest(test_epaper_next_client_logic
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_next_client_logic.cpp
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_transport_crc32.cpp
 )
+
+add_host_gtest(test_mp3_metadata
+    test_mp3_metadata.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/mp3_metadata.cpp
+)
