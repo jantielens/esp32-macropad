@@ -81,3 +81,13 @@ add_host_gtest(test_mp3_metadata
     test_mp3_metadata.cpp
     ${PROJECT_SOURCE_DIR}/src/app/mp3_metadata.cpp
 )
+
+add_host_gtest(test_brew_template_dsl
+    test_brew_template_dsl.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_template_dsl.cpp
+)
+target_compile_definitions(test_brew_template_dsl PRIVATE HAS_SCALE=1)
+target_include_directories(test_brew_template_dsl PRIVATE
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew
+    $ENV{HOME}/Arduino/libraries/ArduinoJson/src
+)
