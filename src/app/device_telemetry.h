@@ -2,6 +2,7 @@
 #define DEVICE_TELEMETRY_H
 
 #include <ArduinoJson.h>
+#include <esp_attr.h>
 #include "fs_health.h"
 #include "power_config.h"
 
@@ -25,6 +26,44 @@ struct DeviceHealthWindowBands {
 	uint32_t psram_free_min_window;
 	uint32_t psram_free_max_window;
 };
+
+enum DeviceRuntimePhase : uint8_t {
+	DEVICE_RUNTIME_PHASE_UNKNOWN,
+	DEVICE_RUNTIME_PHASE_MAIN_SCREEN_SAVER,
+	DEVICE_RUNTIME_PHASE_MAIN_ACTION_DISPATCH,
+	DEVICE_RUNTIME_PHASE_MAIN_CAMERA_FEED,
+	DEVICE_RUNTIME_PHASE_MAIN_DISPLAY_EFFECTS,
+	DEVICE_RUNTIME_PHASE_MAIN_TOUCH,
+	DEVICE_RUNTIME_PHASE_MAIN_PORTAL,
+	DEVICE_RUNTIME_PHASE_MAIN_NETWORK,
+	DEVICE_RUNTIME_PHASE_MAIN_SENSORS,
+	DEVICE_RUNTIME_PHASE_MAIN_BUTTONS,
+	DEVICE_RUNTIME_PHASE_MAIN_HOUSEKEEPING,
+	DEVICE_RUNTIME_PHASE_LVGL_WAIT_LOCK,
+	DEVICE_RUNTIME_PHASE_LVGL_DEFERRED_WORK,
+	DEVICE_RUNTIME_PHASE_LVGL_SCREEN_SWITCH,
+	DEVICE_RUNTIME_PHASE_LVGL_TIMER,
+	DEVICE_RUNTIME_PHASE_LVGL_SCREEN_UPDATE,
+	DEVICE_RUNTIME_PHASE_LVGL_FLUSH,
+	DEVICE_RUNTIME_PHASE_LVGL_SLEEP,
+};
+
+constexpr uint32_t DEVICE_TELEMETRY_SLOW_EXTENSION_TICK_MS = 20;
+
+// Lightweight progress markers for diagnosing a stalled main loop or LVGL task.
+// They do not acquire the display mutex and are exposed through /api/health.
+void device_telemetry_mark_main_loop(DeviceRuntimePhase phase);
+void device_telemetry_mark_lvgl_task(DeviceRuntimePhase phase);
+void device_telemetry_mark_lvgl_extension_tick(const char* extension_id);
+void device_telemetry_mark_lvgl_extension_tick_complete(uint32_t elapsed_ms);
+void device_telemetry_mark_display_lock_wait();
+void device_telemetry_mark_display_lock_acquired(bool by_lvgl_task);
+void device_telemetry_mark_display_lock_released();
+void device_telemetry_mark_sleep_refresh_attempt();
+void device_telemetry_mark_sleep_refresh_complete();
+void device_telemetry_mark_async_flush_started();
+void device_telemetry_mark_async_flush_completed(bool errored);
+void IRAM_ATTR device_telemetry_mark_async_flush_completed_from_isr(bool errored);
 
 inline void device_telemetry_append_fs_health(JsonDocument &doc, const FSHealthStats &fs) {
 	const char* backend = fs.backend == FS_BACKEND_SDMMC ? "sdmmc" : "littlefs";

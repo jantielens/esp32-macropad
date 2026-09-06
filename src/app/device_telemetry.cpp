@@ -54,6 +54,158 @@ extern DeviceConfig device_config;
 static int16_t s_cached_rssi = 0;
 static bool    s_rssi_valid  = false;
 
+struct RuntimeDiagnostics {
+	DeviceRuntimePhase main_phase;
+	DeviceRuntimePhase lvgl_phase;
+	uint32_t main_progress_ms;
+	uint32_t lvgl_progress_ms;
+	uint32_t display_lock_acquired_ms;
+	uint32_t display_lock_wait_started_ms;
+	bool display_lock_held;
+	bool display_lock_owner_lvgl;
+	bool display_lock_waiting;
+	char lvgl_extension_id[32];
+	uint32_t sleep_refresh_attempt_count;
+	uint32_t sleep_refresh_attempted_ms;
+	uint32_t sleep_refresh_completed_ms;
+	uint32_t async_flush_started_ms;
+	uint32_t async_flush_completed_ms;
+	uint32_t async_flush_error_count;
+	bool async_flush_in_flight;
+	uint32_t extension_tick_started_ms;
+	uint32_t extension_tick_completed_ms;
+	uint32_t extension_tick_last_duration_ms;
+	uint32_t extension_tick_max_duration_ms;
+	uint32_t extension_tick_slow_count;
+};
+
+DRAM_ATTR static portMUX_TYPE s_runtime_diagnostics_mux = portMUX_INITIALIZER_UNLOCKED;
+DRAM_ATTR static RuntimeDiagnostics s_runtime_diagnostics = {};
+
+static const char* runtime_phase_name(DeviceRuntimePhase phase) {
+	switch (phase) {
+		case DEVICE_RUNTIME_PHASE_MAIN_SCREEN_SAVER: return "screen_saver";
+		case DEVICE_RUNTIME_PHASE_MAIN_ACTION_DISPATCH: return "action_dispatch";
+		case DEVICE_RUNTIME_PHASE_MAIN_CAMERA_FEED: return "camera_feed";
+		case DEVICE_RUNTIME_PHASE_MAIN_DISPLAY_EFFECTS: return "display_effects";
+		case DEVICE_RUNTIME_PHASE_MAIN_TOUCH: return "touch";
+		case DEVICE_RUNTIME_PHASE_MAIN_PORTAL: return "portal";
+		case DEVICE_RUNTIME_PHASE_MAIN_NETWORK: return "network";
+		case DEVICE_RUNTIME_PHASE_MAIN_SENSORS: return "sensors";
+		case DEVICE_RUNTIME_PHASE_MAIN_BUTTONS: return "buttons";
+		case DEVICE_RUNTIME_PHASE_MAIN_HOUSEKEEPING: return "housekeeping";
+		case DEVICE_RUNTIME_PHASE_LVGL_WAIT_LOCK: return "wait_lock";
+		case DEVICE_RUNTIME_PHASE_LVGL_DEFERRED_WORK: return "deferred_work";
+		case DEVICE_RUNTIME_PHASE_LVGL_SCREEN_SWITCH: return "screen_switch";
+		case DEVICE_RUNTIME_PHASE_LVGL_TIMER: return "timer";
+		case DEVICE_RUNTIME_PHASE_LVGL_SCREEN_UPDATE: return "screen_update";
+		case DEVICE_RUNTIME_PHASE_LVGL_FLUSH: return "flush";
+		case DEVICE_RUNTIME_PHASE_LVGL_SLEEP: return "sleep";
+		case DEVICE_RUNTIME_PHASE_UNKNOWN:
+		default: return "unknown";
+	}
+}
+
+void device_telemetry_mark_main_loop(DeviceRuntimePhase phase) {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.main_phase = phase;
+	s_runtime_diagnostics.main_progress_ms = millis();
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_lvgl_task(DeviceRuntimePhase phase) {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.lvgl_phase = phase;
+	s_runtime_diagnostics.lvgl_progress_ms = millis();
+	if (phase != DEVICE_RUNTIME_PHASE_LVGL_TIMER) {
+		s_runtime_diagnostics.lvgl_extension_id[0] = '\0';
+	}
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_lvgl_extension_tick(const char* extension_id) {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.lvgl_phase = DEVICE_RUNTIME_PHASE_LVGL_TIMER;
+	s_runtime_diagnostics.lvgl_progress_ms = millis();
+	s_runtime_diagnostics.extension_tick_started_ms = s_runtime_diagnostics.lvgl_progress_ms;
+	strlcpy(s_runtime_diagnostics.lvgl_extension_id, extension_id ? extension_id : "",
+				 sizeof(s_runtime_diagnostics.lvgl_extension_id));
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_lvgl_extension_tick_complete(uint32_t elapsed_ms) {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.extension_tick_last_duration_ms = elapsed_ms;
+	if (elapsed_ms > s_runtime_diagnostics.extension_tick_max_duration_ms) {
+		s_runtime_diagnostics.extension_tick_max_duration_ms = elapsed_ms;
+	}
+	if (elapsed_ms > DEVICE_TELEMETRY_SLOW_EXTENSION_TICK_MS) {
+		s_runtime_diagnostics.extension_tick_slow_count++;
+	}
+	s_runtime_diagnostics.lvgl_extension_id[0] = '\0';
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_display_lock_wait() {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.display_lock_waiting = true;
+	s_runtime_diagnostics.display_lock_wait_started_ms = millis();
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_display_lock_acquired(bool by_lvgl_task) {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.display_lock_held = true;
+	s_runtime_diagnostics.display_lock_owner_lvgl = by_lvgl_task;
+	s_runtime_diagnostics.display_lock_acquired_ms = millis();
+	s_runtime_diagnostics.display_lock_waiting = false;
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_display_lock_released() {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.display_lock_held = false;
+	s_runtime_diagnostics.display_lock_owner_lvgl = false;
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_sleep_refresh_attempt() {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.sleep_refresh_attempt_count++;
+	s_runtime_diagnostics.sleep_refresh_attempted_ms = millis();
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_sleep_refresh_complete() {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.sleep_refresh_completed_ms = millis();
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_async_flush_started() {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.async_flush_in_flight = true;
+	s_runtime_diagnostics.async_flush_started_ms = millis();
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void device_telemetry_mark_async_flush_completed(bool errored) {
+	portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.async_flush_in_flight = false;
+	s_runtime_diagnostics.async_flush_completed_ms = millis();
+	if (errored) s_runtime_diagnostics.async_flush_error_count++;
+	portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+}
+
+void IRAM_ATTR device_telemetry_mark_async_flush_completed_from_isr(bool errored) {
+	const uint32_t now_ms = pdTICKS_TO_MS(xTaskGetTickCountFromISR());
+	portENTER_CRITICAL_ISR(&s_runtime_diagnostics_mux);
+	s_runtime_diagnostics.async_flush_in_flight = false;
+	s_runtime_diagnostics.async_flush_completed_ms = now_ms;
+	if (errored) s_runtime_diagnostics.async_flush_error_count++;
+	portEXIT_CRITICAL_ISR(&s_runtime_diagnostics_mux);
+}
+
 void device_telemetry_cache_rssi() {
 	if (WiFi.status() == WL_CONNECTED) {
 		s_cached_rssi = WiFi.RSSI();
@@ -430,6 +582,45 @@ void device_telemetry_log_memory_snapshot(const char *tag) {
 
 void device_telemetry_fill_api(JsonDocument &doc) {
 		fill_common(doc, true, true, true);
+
+			RuntimeDiagnostics runtime = {};
+			portENTER_CRITICAL(&s_runtime_diagnostics_mux);
+			runtime = s_runtime_diagnostics;
+			portEXIT_CRITICAL(&s_runtime_diagnostics_mux);
+			const uint32_t now_ms = millis();
+			JsonObject runtime_doc = doc["runtime"].to<JsonObject>();
+			runtime_doc["main_phase"] = runtime_phase_name(runtime.main_phase);
+			runtime_doc["main_age_ms"] = runtime.main_progress_ms
+				? now_ms - runtime.main_progress_ms : 0;
+			runtime_doc["lvgl_phase"] = runtime_phase_name(runtime.lvgl_phase);
+			runtime_doc["lvgl_age_ms"] = runtime.lvgl_progress_ms
+				? now_ms - runtime.lvgl_progress_ms : 0;
+			runtime_doc["lvgl_extension"] = runtime.lvgl_extension_id[0]
+				? runtime.lvgl_extension_id : nullptr;
+			runtime_doc["extension_tick_age_ms"] = runtime.lvgl_extension_id[0]
+				? now_ms - runtime.extension_tick_started_ms : 0;
+			runtime_doc["extension_tick_last_duration_ms"] = runtime.extension_tick_last_duration_ms;
+			runtime_doc["extension_tick_max_duration_ms"] = runtime.extension_tick_max_duration_ms;
+			runtime_doc["extension_tick_slow_count"] = runtime.extension_tick_slow_count;
+			runtime_doc["display_lock_held"] = runtime.display_lock_held;
+			runtime_doc["display_lock_owner"] = runtime.display_lock_held
+				? (runtime.display_lock_owner_lvgl ? "lvgl" : "other") : "none";
+			runtime_doc["display_lock_held_ms"] = runtime.display_lock_held
+				? now_ms - runtime.display_lock_acquired_ms : 0;
+			runtime_doc["display_lock_waiting"] = runtime.display_lock_waiting;
+			runtime_doc["display_lock_wait_age_ms"] = runtime.display_lock_waiting
+				? now_ms - runtime.display_lock_wait_started_ms : 0;
+			runtime_doc["sleep_refresh_attempts"] = runtime.sleep_refresh_attempt_count;
+			runtime_doc["sleep_refresh_attempt_age_ms"] = runtime.sleep_refresh_attempted_ms
+				? now_ms - runtime.sleep_refresh_attempted_ms : 0;
+			runtime_doc["sleep_refresh_complete_age_ms"] = runtime.sleep_refresh_completed_ms
+				? now_ms - runtime.sleep_refresh_completed_ms : 0;
+			runtime_doc["async_flush_in_flight"] = runtime.async_flush_in_flight;
+			runtime_doc["async_flush_started_age_ms"] = runtime.async_flush_in_flight
+				? now_ms - runtime.async_flush_started_ms : 0;
+			runtime_doc["async_flush_complete_age_ms"] = runtime.async_flush_completed_ms
+				? now_ms - runtime.async_flush_completed_ms : 0;
+			runtime_doc["async_flush_errors"] = runtime.async_flush_error_count;
 
 		// Min/max fields sampled by a background timer (multi-client safe).
 		// We report a merged snapshot across the last complete window and the current

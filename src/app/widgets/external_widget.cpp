@@ -3,10 +3,14 @@
 #if HAS_NATIVE_EXTENSIONS
 
 #include "external_widget.h"
+#include "../device_telemetry.h"
 #include "../native_extension.h"
 #include "../screens/pad_screen.h"
+#include "../screen_saver_manager.h"
 #include <stddef.h>
 #include <string.h>
+
+static constexpr uint32_t kSlowExtensionWarningIntervalMs = 60000;
 
 struct ExternalWidgetState {
     lv_obj_t* root;
@@ -56,11 +60,24 @@ static bool external_create_instance(ExternalWidgetState* external) {
 static void external_timer_cb(lv_timer_t* timer) {
     auto* external = static_cast<ExternalWidgetState*>(lv_timer_get_user_data(timer));
     if (!external || !external->config) return;
+    if (screen_saver_manager_is_fully_asleep()) return;
     if (!external->created) {
         if (external->retry_after_stop) external_create_instance(external);
         return;
     }
+    const uint32_t started_ms = millis();
+    device_telemetry_mark_lvgl_extension_tick(external->config->extension_id);
     native_extension_tick_instance(external->config->extension_id, external->instance_id);
+    const uint32_t elapsed_ms = millis() - started_ms;
+    device_telemetry_mark_lvgl_extension_tick_complete(elapsed_ms);
+    static uint32_t last_slow_warning_ms = 0;
+    if (elapsed_ms > DEVICE_TELEMETRY_SLOW_EXTENSION_TICK_MS &&
+        started_ms - last_slow_warning_ms >= kSlowExtensionWarningIntervalMs) {
+        LOGW("EXT", "slow tick id=%s instance=%08lx elapsed_ms=%lu",
+                external->config->extension_id, static_cast<unsigned long>(external->instance_id),
+                static_cast<unsigned long>(elapsed_ms));
+        last_slow_warning_ms = started_ms;
+    }
 }
 
 static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
@@ -99,7 +116,7 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
                                                   button->pad_bindings, button->pad_binding_count);
     native_extension_set_instance_button_context(config->extension_id, external->instance_id, tile,
                                                  button->label_top, button->label_center, button->label_bottom);
-        LOGI("Extensions", "Create %s instance=%08lx root=%dx%d rect=%ux%u",
+        LOGI("EXT", "create id=%s instance=%08lx root=%dx%d rect=%ux%u",
             config->extension_id, static_cast<unsigned long>(external->instance_id),
             lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
     external->status_label = lv_label_create(external->root);
