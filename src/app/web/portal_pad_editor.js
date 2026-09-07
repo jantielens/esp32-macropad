@@ -251,7 +251,7 @@ async function padInit() {
         padPopulateGridDropdowns();
         padPopulatePadDropdown();
         padPopulateScreenDropdown();
-        padFetchSoundList();
+        if (deviceInfoCache.has_sound_player === true) padFetchSoundList();
         padLoadButtonDefaultsFromDevice();
         padLoadPage(0);
         padLoadBlockCatalog();
