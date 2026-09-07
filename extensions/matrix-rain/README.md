@@ -20,7 +20,7 @@ provide:
 
 ```json
 {
-  "clock": "[time:%H:%M:%S;Europe/Brussels]",
+  "time": "[time:%H:%M;Europe/Brussels]",
   "burn_in_shift_minutes": 60,
   "rain_color": "#00FF41",
   "clock_color": "#00FF41",
@@ -36,7 +36,7 @@ provide:
 | --- | --- | --- |
 | `font_family` | `default` | `default`, `dseg7`, `bebas`, or `doto`. |
 | `font_size` | `18` | Compiled firmware font size from 12 to 48 pixels. |
-| `clock` | Disabled | Optional `[time:...]` binding that displays a centered `HH:MM` clock. |
+| `time` | Disabled | Optional `[time:...]` binding that displays a centered `HH:MM` clock. The legacy `clock` key remains accepted for existing configurations. |
 | `burn_in_shift_minutes` | `60` | Moves the clock vertically by one character cell every interval. Set to `0` to disable it. |
 | `rain_color` | `#00FF41` | Six-digit RGB color for the rain, with an optional leading `#`. Intensity fades are applied to this color. |
 | `clock_color` | `#00FF41` | Six-digit RGB color for clock characters, with an optional leading `#`. |

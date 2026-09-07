@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Native Extension configuration is now consistent across clock widgets**: Matrix Rain uses the shared `time` binding key used by the other clock Extensions, while retaining `clock` as a compatibility alias. Its examples now accurately show its `HH:MM` display format. Brick Breaker Clock now interprets its documented decimal `speed` multiplier correctly, so `1.0` runs at normal speed; existing whole-number percentage values remain supported.
 * **Non-audio boards no longer request unavailable sound files**: the Pad editor and shared action controls now load uploaded sound files only when the device reports sound-player support, preventing browser console errors from calls to the unavailable endpoint.
 * **ESP32-P4 LCD4B native Extensions no longer crash on launch**: LCD4B and LCD4B Voice firmware now uses a 16 MB-compatible flash layout that keeps the flash-mapped Extensions partition below the affected 16 MiB instruction-mapping boundary. The boards retain their physical 32 MB flash chips, but use 6.25 MB OTA slots and 3.125 MB internal flash storage until the upstream P4 behavior can be resolved and retested.
 * **External Widgets now recreate reliably after pad saves**: workerless Extensions such as Word Clock no longer enter a transient stopping state between the old and replacement widget during a synchronous pad rebuild. Extensions with a background worker retain their cancellation-aware retry behavior.

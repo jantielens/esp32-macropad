@@ -46,7 +46,7 @@ optionally provide this configuration:
 | Field | Default | Description |
 | --- | ---: | --- |
 | `time` | `[time:%H%M]` | Binding template supplying the four clock digits. It supports timezone parameters such as `Europe/Brussels`. |
-| `speed` | `1.0` | Ball-speed multiplier from `0.25` to `4.0`. |
+| `speed` | `1.0` | Ball-speed multiplier from `0.25` to `4.0`. Existing whole-number percentage values from `25` to `400` remain accepted. |
 | `respawn_on_paddle` | `true` | Returns all hit clock bricks together when the ball next hits the paddle. A 30-second safety timeout prevents indefinite damage. |
 | `respawn_ms` | `1000` | Timed respawn delay when `respawn_on_paddle` is `false`. The supported range is `0` to `10000` milliseconds. |
 | `paddle_accuracy` | `96` | Autonomous paddle tracking accuracy from `0` to `100`. The default provides near-perfect play and prioritizes reachable level bricks with a randomized miss offset, then clear ceiling shots. |

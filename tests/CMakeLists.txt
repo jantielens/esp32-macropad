@@ -361,6 +361,7 @@ add_host_compile_check(check_mcp_device_identity_no_mcp ${PROJECT_SOURCE_DIR}/sr
 
 foreach(script
     test_brew_storage_and_tare_guards.sh test_branding_mirror.sh test_asset_variant_matrix.sh test_word_clock_logic.sh
+    test_extension_config_contracts.sh
     test_camera_preview_widget.sh test_camera_motion.sh test_mcp_scheme_parity.sh
     test_action_catalog_completeness.sh test_mcp_storage_parity.sh test_display_safe_telemetry.sh
     test_sd_wifi_order.sh test_photoframe_vector_drift.sh test_esp_web_tools_site.sh
