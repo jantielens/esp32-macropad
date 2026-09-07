@@ -1231,7 +1231,18 @@ bool native_extension_delete(uint8_t slot) {
 bool native_extension_create_instance(const char* id, uint32_t instance_id, void* root, const char* config) {
     LoadedSlot* slot = loaded_by_id(id);
     if (!slot || !root) { LOGW(TAG, "Create unavailable: %s", id ? id : ""); return false; }
-    if (slot->worker_join_pending || slot->worker_join_failed) {
+    bool unavailable = false;
+    portENTER_CRITICAL(&s_worker_lock);
+    // Pad config saves rebuild widgets synchronously. A package without a
+    // worker does not need the deferred main-loop shutdown between instances.
+    if (slot->worker_join_pending && !slot->worker_task) {
+        slot->worker_join_pending = false;
+        slot->worker_cancel_requested = false;
+        slot->worker_completed = false;
+    }
+    unavailable = slot->worker_join_pending || slot->worker_join_failed;
+    portEXIT_CRITICAL(&s_worker_lock);
+    if (unavailable) {
         LOGW(TAG, "Create unavailable while worker stops: %s", id ? id : "");
         return false;
     }

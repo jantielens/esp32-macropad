@@ -12,6 +12,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.0] - 2026-09-07
+
+### Fixed
+
+* **ESP32-P4 LCD4B native Extensions no longer crash on launch**: LCD4B and LCD4B Voice firmware now uses a 16 MB-compatible flash layout that keeps the flash-mapped Extensions partition below the affected 16 MiB instruction-mapping boundary. The boards retain their physical 32 MB flash chips, but use 6.25 MB OTA slots and 3.125 MB internal flash storage until the upstream P4 behavior can be resolved and retested.
+* **External Widgets now recreate reliably after pad saves**: workerless Extensions such as Word Clock no longer enter a transient stopping state between the old and replacement widget during a synchronous pad rebuild. Extensions with a background worker retain their cancellation-aware retry behavior.
+
 ## [1.27.0] - 2026-09-07
 
 ### Added
@@ -26,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* **ESP32-P4 LCD4B native Extensions no longer crash on launch**: LCD4B and LCD4B Voice firmware now uses a 16 MB-compatible flash layout that keeps the flash-mapped Extensions partition below the affected 16 MiB instruction-mapping boundary. The boards retain their physical 32 MB flash chips, but use 6.25 MB OTA slots and 3.125 MB internal flash storage until the upstream P4 behavior can be resolved and retested.
 * **Stalled display renders are diagnosable without serial logs**: health telemetry now reports main-loop, LVGL, mutex, flush, and sleep-refresh state. Flush telemetry is safe in the ISR path, full-sleep refreshes avoid in-flight DMA, and native Extensions pause while the display is fully asleep with slow ticks attributed to their package.
 
 ## [1.26.0] - 2026-08-27
