@@ -384,6 +384,19 @@ This template automates the installation:
 - For boards using `PartitionScheme=...`, `upload.sh` defaults to a full flash (`--full`) to ensure the partition layout on the device matches what was built.
 - If you see errors like “offset not aligned” or “sketch too big”, verify your offsets are 0x10000-aligned (except NVS/otadata) and that your firmware fits in the configured app partition size.
 
+### ESP32-P4 Extension Flash Limit
+
+The ESP32-P4 LCD4B and LCD4B Voice boards contain 32 MB flash, but their
+configured image capacity is intentionally limited to 16 MB. Their native
+Extensions execute from a flash instruction mapping, and an Extension partition
+above 16 MiB causes an illegal-instruction crash on affected P4 hardware.
+
+These targets use `FlashSize=16M,PartitionScheme=ota_6mb_16MB_ext`. This
+provides two 6.25 MB OTA app partitions, a 256 KiB Extensions partition below
+the boundary, and a 3.125 MB internal flash storage partition. Reconsider this
+configuration only after an upstream ESP32-P4 flash instruction-mapping fix is
+available and validated on hardware.
+
 **Notes:**
 - If `get_build_props_for_board` is **not** defined, the build still proceeds (the call is guarded).
 - Use profiles to toggle flash/PSRAM options or other board-specific build properties.
