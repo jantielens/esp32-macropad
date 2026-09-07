@@ -37,12 +37,17 @@ constexpr uint32_t ELF_OFFSET = 0x2000;
 constexpr uint32_t SLOT_OFFSET[NATIVE_EXTENSION_SLOT_COUNT] = {0x00000, 0x10000, 0x20000};
 constexpr uint32_t SLOT_SIZE[NATIVE_EXTENSION_SLOT_COUNT] = {0x10000, 0x10000, 0x20000};
 constexpr uint32_t SLOT_CAPACITY[NATIVE_EXTENSION_SLOT_COUNT] = {0xE000, 0xE000, 0x1E000};
+constexpr uint16_t ELF_TYPE_EXEC = 2;
 constexpr uint16_t ELF_TYPE_DYN = 3;
 constexpr uint16_t ELF_MACHINE_RISCV = 243;
+constexpr uint16_t ELF_MACHINE_XTENSA = 94;
 constexpr uint32_t ELF_PT_LOAD = 1;
 constexpr uint32_t ELF_PF_X = 1;
+constexpr uint32_t ELF_SHT_SYMTAB = 2;
 constexpr uint32_t ELF_SHT_DYNSYM = 11;
 constexpr uint32_t ELF_SHT_RELA = 4;
+constexpr uint32_t ELF_R_XTENSA_RELATIVE = 5;
+constexpr uint32_t ELF_SHF_EXECINSTR = 0x4;
 constexpr uint32_t WORKER_JOIN_TIMEOUT_MS = 20000;
 constexpr uint8_t MAX_EXTENSION_INSTANCE_BINDINGS = MAX_PAD_BUTTONS;
 constexpr uint8_t MAX_EXTENSION_CANVASES = MAX_PAD_BUTTONS;
@@ -51,6 +56,7 @@ struct ElfHeader { uint8_t ident[16]; uint16_t type, machine; uint32_t version, 
 struct ElfProgram { uint32_t type, offset, vaddr, paddr, filesz, memsz, flags, align; };
 struct ElfSection { uint32_t name, type, flags, addr, offset, size, link, info, align, entsize; };
 struct ElfSymbol { uint32_t name, value, size; uint8_t info, other; uint16_t shndx; };
+struct ElfRela { uint32_t offset, info; int32_t addend; };
 struct CanvasBuffer {
     lv_obj_t* canvas;
     uint16_t* pixels;
@@ -61,11 +67,12 @@ struct StageHeader {
     uint32_t magic;
     NativeExtensionSlotHeader slot;
 };
-static_assert(sizeof(ElfHeader) == 52 && sizeof(ElfProgram) == 32 && sizeof(ElfSection) == 40 && sizeof(ElfSymbol) == 16, "Unexpected ELF layout");
+static_assert(sizeof(ElfHeader) == 52 && sizeof(ElfProgram) == 32 && sizeof(ElfSection) == 40 && sizeof(ElfSymbol) == 16 && sizeof(ElfRela) == 12, "Unexpected ELF layout");
 
 struct LoadedSlot {
     void* mapping;
     esp_partition_mmap_handle_t mapping_handle;
+    void* data_mapping;
     void* extension_data;
     uint8_t active_instances;
     TaskHandle_t worker_task;
@@ -120,6 +127,13 @@ void clear_canvas_buffer(void* canvas) {
 
 bool valid_slot(uint8_t slot) { return slot < NATIVE_EXTENSION_SLOT_COUNT; }
 bool range_valid(size_t offset, size_t size, size_t total) { return offset <= total && size <= total - offset; }
+bool elf_symbol_section(uint32_t type) {
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    return type == ELF_SHT_SYMTAB;
+#else
+    return type == ELF_SHT_DYNSYM;
+#endif
+}
 void stage_path(uint8_t slot, char* path, size_t len) { snprintf(path, len, "/extensions/slot%u.stage", slot); }
 void delete_path(uint8_t slot, char* path, size_t len) { snprintf(path, len, "/extensions/slot%u.delete", slot); }
 void enabled_path(uint8_t slot, char* path, size_t len) { snprintf(path, len, "/extensions/slot%u.enabled", slot); }
@@ -459,9 +473,10 @@ void* host_canvas_create(void* parent) {
     return canvas;
 }
 size_t host_canvas_buffer_size(uint32_t width, uint32_t height) { return LV_CANVAS_BUF_SIZE(width, height, 16, 1); }
-void host_canvas_set_buffer(void* canvas, void* buffer, uint32_t width, uint32_t height) {
-    if (!canvas || !buffer || width == 0 || height == 0 || !register_canvas_buffer(canvas, buffer, width, height)) return;
+bool host_canvas_set_buffer(void* canvas, void* buffer, uint32_t width, uint32_t height) {
+    if (!canvas || !buffer || width == 0 || height == 0 || !register_canvas_buffer(canvas, buffer, width, height)) return false;
     lv_canvas_set_buffer(as_obj(canvas), buffer, width, height, LV_COLOR_FORMAT_RGB565);
+    return true;
 }
 void canvas_write_pixel(CanvasBuffer* entry, int32_t x, int32_t y, uint16_t color) {
     if (entry && entry->pixels && x >= 0 && y >= 0 &&
@@ -582,6 +597,21 @@ uint8_t host_font_family_id(const char* font_name) {
     if (strcmp(font_name, "doto") == 0) return 3;
     return 0;
 }
+int32_t host_canvas_measure_text(const char* text, const char* font_name, uint8_t size) {
+    if (!text || !*text) return 0;
+    LabelStyle style{};
+    style.font_family = host_font_family_id(font_name);
+    style.font_size = size;
+    const lv_font_t* font = pad_resolve_font(style, &lv_font_montserrat_14);
+    if (!font) return 0;
+
+    int32_t width = 0;
+    for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor; ++cursor) {
+        lv_font_glyph_dsc_t glyph{};
+        if (lv_font_get_glyph_dsc(font, &glyph, *cursor, 0)) width += glyph.adv_w;
+    }
+    return width;
+}
 void host_canvas_draw_text(void* canvas, int32_t x, int32_t y, const char* text,
                            const char* font_name, uint8_t size, uint32_t rgb) {
     CanvasBuffer* entry = find_canvas_buffer(canvas);
@@ -655,7 +685,7 @@ const NativeExtensionUiApi UI_API = {
 const NativeExtensionCanvasApi CANVAS_API = {
     host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer,
     host_canvas_clear, host_canvas_set_pixel, host_canvas_fill_rect, host_canvas_invalidate_rect, host_canvas_draw_line,
-    host_canvas_draw_circle, host_canvas_draw_text, host_canvas_blit_rgb565,
+    host_canvas_draw_circle, host_canvas_measure_text, host_canvas_draw_text, host_canvas_blit_rgb565,
 };
 const NativeExtensionBindingApi BINDING_API = {host_binding_resolve};
 const NativeExtensionButtonApi BUTTON_API = {host_button_get};
@@ -694,12 +724,26 @@ bool read_stage(uint8_t slot, StageHeader* stage) {
 bool parse_filename(const char* filename, NativeExtensionSlotHeader* header) {
     const char* at = filename ? strrchr(filename, '@') : nullptr;
     const char* dot = filename ? strrchr(filename, '.') : nullptr;
+    const char* version = at ? at + 1 : nullptr;
+    size_t version_len = at && dot ? static_cast<size_t>(dot - version) : 0;
     if (!at || !dot || at == filename || at >= dot || strcmp(dot, ".ext") != 0 ||
         static_cast<size_t>(at - filename) >= sizeof(header->id) ||
-        static_cast<size_t>(dot - at - 1) >= sizeof(header->version)) return false;
+        version_len >= sizeof(header->version)) return false;
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    constexpr const char* TARGET_SUFFIX = "-s3";
+#else
+    constexpr const char* TARGET_SUFFIX = "-p4";
+#endif
+    if (version_len >= 3 && version[version_len - 3] == '-' &&
+        (memcmp(version + version_len - 2, "p4", 2) == 0 ||
+         memcmp(version + version_len - 2, "s3", 2) == 0)) {
+        if (memcmp(version + version_len - 3, TARGET_SUFFIX, 3) != 0) return false;
+        version_len -= 3;
+    }
+    if (version_len == 0) return false;
     memset(header, 0, sizeof(*header));
     memcpy(header->id, filename, at - filename);
-    memcpy(header->version, at + 1, dot - at - 1);
+    memcpy(header->version, version, version_len);
     for (size_t index = 0; header->id[index]; ++index) {
         const char c = header->id[index];
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) return false;
@@ -732,7 +776,7 @@ bool find_symbol(const uint8_t* file, size_t len, const ElfHeader* elf,
                  uintptr_t bias, const char* target, uintptr_t* result) {
     for (uint16_t section_index = 0; section_index < elf->shnum; ++section_index) {
         const ElfSection& section = sections[section_index];
-        if (section.type != ELF_SHT_DYNSYM || section.entsize != sizeof(ElfSymbol) || section.link >= elf->shnum || !range_valid(section.offset, section.size, len)) continue;
+        if (!elf_symbol_section(section.type) || section.entsize != sizeof(ElfSymbol) || section.link >= elf->shnum || !range_valid(section.offset, section.size, len)) continue;
         const ElfSection& strings = sections[section.link];
         if (!range_valid(strings.offset, strings.size, len)) continue;
         const ElfSymbol* symbols = reinterpret_cast<const ElfSymbol*>(file + section.offset);
@@ -771,7 +815,7 @@ bool read_descriptor(const uint8_t* file, size_t len, NativeExtensionDescriptor*
     const ElfSection* sections = reinterpret_cast<const ElfSection*>(file + elf->shoff);
     for (uint16_t section_index = 0; section_index < elf->shnum; ++section_index) {
         const ElfSection& section = sections[section_index];
-        if (section.type != ELF_SHT_DYNSYM || section.entsize != sizeof(ElfSymbol) || section.link >= elf->shnum || !range_valid(section.offset, section.size, len)) continue;
+        if (!elf_symbol_section(section.type) || section.entsize != sizeof(ElfSymbol) || section.link >= elf->shnum || !range_valid(section.offset, section.size, len)) continue;
         const ElfSection& strings = sections[section.link];
         if (!range_valid(strings.offset, strings.size, len)) continue;
         const ElfSymbol* symbols = reinterpret_cast<const ElfSymbol*>(file + section.offset);
@@ -794,11 +838,122 @@ bool read_descriptor(const uint8_t* file, size_t len, NativeExtensionDescriptor*
     return false;
 }
 
+bool s3_image_size(const ElfProgram* programs, uint16_t count, size_t* out_size) {
+    size_t image_size = 0;
+    for (uint16_t index = 0; index < count; ++index) {
+        const ElfProgram& program = programs[index];
+        if (program.type != ELF_PT_LOAD) continue;
+        if (program.vaddr > UINT32_MAX - program.memsz) return false;
+        const size_t segment_end = static_cast<size_t>(program.vaddr) + program.memsz;
+        if (segment_end > image_size) image_size = segment_end;
+    }
+    if (!image_size) return false;
+    *out_size = image_size;
+    return true;
+}
+
+bool s3_executable_image_size(const ElfSection* sections, uint16_t count, size_t* out_size) {
+    size_t image_size = 0;
+    for (uint16_t index = 0; index < count; ++index) {
+        const ElfSection& section = sections[index];
+        if ((section.flags & ELF_SHF_EXECINSTR) == 0) continue;
+        if (section.addr > UINT32_MAX - section.size) return false;
+        const size_t section_end = static_cast<size_t>(section.addr) + section.size;
+        if (section_end > image_size) image_size = section_end;
+    }
+    if (!image_size || image_size > SIZE_MAX - 3) return false;
+    *out_size = (image_size + 3) & ~static_cast<size_t>(3);
+    return true;
+}
+
+bool s3_address_is_executable(const ElfSection* sections, uint16_t count, uint32_t address) {
+    for (uint16_t index = 0; index < count; ++index) {
+        const ElfSection& section = sections[index];
+        if (section.addr > UINT32_MAX - section.size) continue;
+        if (address >= section.addr && address < section.addr + section.size)
+            return (section.flags & ELF_SHF_EXECINSTR) != 0;
+    }
+    return false;
+}
+
+uint8_t* s3_runtime_address(uint8_t* executable_image, uint8_t* data_image,
+                            const ElfSection* sections, uint16_t section_count,
+                            uint32_t address) {
+    return (s3_address_is_executable(sections, section_count, address) ?
+            executable_image : data_image) + address;
+}
+
+bool load_s3_image(const uint8_t* file, size_t len, const ElfHeader* elf,
+                   const ElfProgram* programs, const ElfSection* sections,
+                   void** out_executable_image, void** out_data_image) {
+    size_t image_size = 0;
+    size_t executable_image_size = 0;
+    if (!s3_image_size(programs, elf->phnum, &image_size) ||
+        !s3_executable_image_size(sections, elf->shnum, &executable_image_size) ||
+        (image_size & 3)) return false;
+    uint32_t* executable_image = static_cast<uint32_t*>(heap_caps_malloc(
+        executable_image_size, MALLOC_CAP_EXEC | MALLOC_CAP_32BIT));
+    uint8_t* data_image = static_cast<uint8_t*>(heap_caps_calloc(1, image_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!executable_image || !data_image) {
+        if (executable_image) heap_caps_free(executable_image);
+        if (data_image) heap_caps_free(data_image);
+        return false;
+    }
+    for (size_t word = 0; word < executable_image_size / sizeof(uint32_t); ++word) executable_image[word] = 0;
+    for (uint16_t index = 0; index < elf->phnum; ++index) {
+        const ElfProgram& program = programs[index];
+        if (program.type != ELF_PT_LOAD) continue;
+        memcpy(data_image + program.vaddr, file + program.offset, program.filesz);
+        if (program.vaddr >= executable_image_size) continue;
+        const size_t executable_bytes = min(static_cast<size_t>(program.filesz),
+                                            executable_image_size - static_cast<size_t>(program.vaddr));
+        if ((program.vaddr & 3) || (executable_bytes & 3)) {
+            heap_caps_free(executable_image);
+            heap_caps_free(data_image);
+            return false;
+        }
+        const uint32_t* source = reinterpret_cast<const uint32_t*>(file + program.offset);
+        uint32_t* destination = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(executable_image) + program.vaddr);
+        for (size_t word = 0; word < executable_bytes / sizeof(uint32_t); ++word) destination[word] = source[word];
+    }
+    for (uint16_t section_index = 0; section_index < elf->shnum; ++section_index) {
+        const ElfSection& section = sections[section_index];
+        if (section.type != ELF_SHT_RELA || !section.size) continue;
+        if (section.entsize != sizeof(ElfRela) || !range_valid(section.offset, section.size, len)) {
+            heap_caps_free(executable_image);
+            heap_caps_free(data_image);
+            return false;
+        }
+        const ElfRela* relocations = reinterpret_cast<const ElfRela*>(file + section.offset);
+        for (size_t index = 0; index < section.size / sizeof(ElfRela); ++index) {
+            const ElfRela& relocation = relocations[index];
+            if ((relocation.info & 0xff) != ELF_R_XTENSA_RELATIVE || (relocation.offset & 3) ||
+                relocation.offset > image_size - sizeof(uint32_t)) {
+                heap_caps_free(executable_image);
+                heap_caps_free(data_image);
+                return false;
+            }
+            uint32_t* target = reinterpret_cast<uint32_t*>(s3_runtime_address(
+                reinterpret_cast<uint8_t*>(executable_image), data_image, sections, elf->shnum, relocation.offset));
+            *target = reinterpret_cast<uintptr_t>(s3_runtime_address(
+                reinterpret_cast<uint8_t*>(executable_image), data_image, sections, elf->shnum, *target));
+        }
+    }
+    *out_executable_image = executable_image;
+    *out_data_image = data_image;
+    return true;
+}
+
 bool valid_elf(const uint8_t* elf_data, size_t elf_size) {
     if (!elf_data || elf_size < sizeof(ElfHeader)) return false;
     const ElfHeader* elf = reinterpret_cast<const ElfHeader*>(elf_data);
-    if (memcmp(elf->ident, "\x7f" "ELF", 4) || elf->type != ELF_TYPE_DYN ||
-        elf->machine != ELF_MACHINE_RISCV || elf->phentsize != sizeof(ElfProgram) ||
+    const bool expected_target =
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    elf->type == ELF_TYPE_DYN && elf->machine == ELF_MACHINE_XTENSA;
+#else
+        elf->type == ELF_TYPE_DYN && elf->machine == ELF_MACHINE_RISCV;
+#endif
+    if (memcmp(elf->ident, "\x7f" "ELF", 4) || !expected_target || elf->phentsize != sizeof(ElfProgram) ||
         elf->shentsize != sizeof(ElfSection) ||
         !range_valid(elf->phoff, static_cast<size_t>(elf->phnum) * elf->phentsize, elf_size) ||
         !range_valid(elf->shoff, static_cast<size_t>(elf->shnum) * elf->shentsize, elf_size)) return false;
@@ -807,10 +962,14 @@ bool valid_elf(const uint8_t* elf_data, size_t elf_size) {
     for (uint16_t index = 0; index < elf->phnum; ++index) {
         if (programs[index].type == ELF_PT_LOAD &&
             (!range_valid(programs[index].offset, programs[index].filesz, elf_size) ||
-             programs[index].vaddr > UINT32_MAX - programs[index].filesz)) return false;
+             programs[index].vaddr > UINT32_MAX - programs[index].filesz ||
+             programs[index].memsz < programs[index].filesz ||
+             programs[index].vaddr > UINT32_MAX - programs[index].memsz)) return false;
     }
     for (uint16_t index = 0; index < elf->shnum; ++index) {
-        if (sections[index].type == ELF_SHT_RELA && sections[index].size) return false;
+        if (sections[index].type == ELF_SHT_RELA && sections[index].size &&
+            (sections[index].entsize != sizeof(ElfRela) ||
+             !range_valid(sections[index].offset, sections[index].size, elf_size))) return false;
     }
     return true;
 }
@@ -832,14 +991,24 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
         strcmp(descriptor.target_abi, header.target_abi) != 0) { heap_caps_free(metadata); return false; }
     const ElfProgram* programs = reinterpret_cast<const ElfProgram*>(metadata + elf->phoff);
     const ElfSection* sections = reinterpret_cast<const ElfSection*>(metadata + elf->shoff);
-    for (uint16_t index = 0; index < elf->shnum; ++index) if (sections[index].type == ELF_SHT_RELA && sections[index].size) { heap_caps_free(metadata); return false; }
     const void* mapping = nullptr;
     esp_partition_mmap_handle_t mapping_handle = 0;
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    void* image = nullptr;
+    void* data_image = nullptr;
+    if (!load_s3_image(metadata, header.elf_size, elf, programs, sections, &image, &data_image)) {
+        heap_caps_free(metadata);
+        LOGW(TAG, "Skipped slot %u: could not relocate package", slot);
+        return false;
+    }
+    mapping = image;
+#else
     if (esp_partition_mmap(partition, SLOT_OFFSET[slot] + ELF_OFFSET, header.elf_size,
                            ESP_PARTITION_MMAP_INST, &mapping, &mapping_handle) != ESP_OK || !mapping) {
         heap_caps_free(metadata);
         return false;
     }
+#endif
     uintptr_t create = 0, destroy = 0, shutdown = 0, tap = 0, long_press = 0, tick = 0;
     const uintptr_t bias = reinterpret_cast<uintptr_t>(mapping);
     const bool required = find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_create_instance", &create) &&
@@ -849,9 +1018,20 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_on_long_press", &long_press);
     find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_tick", &tick);
     heap_caps_free(metadata);
-    if (!required) { esp_partition_munmap(mapping_handle); return false; }
+        if (!required) {
+    #if defined(CONFIG_IDF_TARGET_ESP32S3)
+        heap_caps_free(const_cast<void*>(mapping));
+        heap_caps_free(data_image);
+    #else
+        esp_partition_munmap(mapping_handle);
+    #endif
+        return false;
+        }
     LoadedSlot& loaded = s_slots[slot];
     loaded.mapping = const_cast<void*>(mapping); loaded.mapping_handle = mapping_handle;
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    loaded.data_mapping = data_image;
+#endif
     loaded.create = reinterpret_cast<NativeExtensionCreateFn>(create); loaded.destroy = reinterpret_cast<NativeExtensionDestroyFn>(destroy); loaded.shutdown = reinterpret_cast<NativeExtensionShutdownFn>(shutdown); loaded.tap = reinterpret_cast<NativeExtensionEventFn>(tap); loaded.long_press = reinterpret_cast<NativeExtensionEventFn>(long_press); loaded.tick = reinterpret_cast<NativeExtensionTickFn>(tick);
     loaded.info = {slot, true, false, false, false, true, true, SLOT_CAPACITY[slot], header.elf_size, 0, header.abi_version, descriptor.tick_interval_ms, {}, {}, {}, {}, NATIVE_EXTENSION_RUNTIME_IDLE, {}};
     strlcpy(loaded.info.id, header.id, sizeof(loaded.info.id)); strlcpy(loaded.info.version, header.version, sizeof(loaded.info.version));
@@ -1057,7 +1237,7 @@ bool native_extension_create_instance(const char* id, uint32_t instance_id, void
     }
     s_lvgl_task = xTaskGetCurrentTaskHandle();
     LOGI(TAG, "Create %s instance=%08lx", id, static_cast<unsigned long>(instance_id));
-    slot->create(&HOST_API, slot, instance_id, root, config ? config : "");
+    if (!slot->create(&HOST_API, slot, instance_id, root, config ? config : "")) return false;
     ++slot->active_instances;
     host_status_set(slot, NATIVE_EXTENSION_RUNTIME_RUNNING, "Widget instance active");
     return true;

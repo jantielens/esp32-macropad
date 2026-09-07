@@ -4,6 +4,7 @@
 #if HAS_DISPLAY
 
 #include "display_manager.h"
+#include "device_telemetry.h"
 #include "log_manager.h"
 #include "ota_activity.h"
 #include "rtos_task_utils.h"
@@ -83,6 +84,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 		LOGI("Display", "LVGL render task start (core %d)", xPortGetCoreID());
 		
 		while (true) {
+				device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_WAIT_LOCK);
 				mgr->lock();
 				bool updated_after_screen_switch = false;
 				if (mgr->lvglStopRequested) {
@@ -97,6 +99,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						vTaskDelay(pdMS_TO_TICKS(20));
 						continue;
 					}
+					device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_DEFERRED_WORK);
 					mgr->processDisplayJob();
 					action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
 
@@ -118,6 +121,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				
 				// Process pending screen switch (deferred from external calls)
 				if (mgr->pendingScreen) {
+						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_SWITCH);
 						Screen* target = mgr->pendingScreen;
 						button_confirmation_cancel();
 						if (mgr->currentScreen) {
@@ -171,6 +175,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				}
 				
 				// Handle LVGL rendering (animations, timers, etc.)
+				device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_TIMER);
 				const uint64_t lv_start_us = esp_timer_get_time();
 				uint32_t delayMs = lv_timer_handler();
 				const uint32_t lv_timer_us = (uint32_t)(esp_timer_get_time() - lv_start_us);
@@ -209,11 +214,13 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				// Update current screen (data refresh)
 				if (!updated_after_screen_switch && mgr->currentScreen
 						&& !screen_saver_manager_is_fully_asleep()) {
+						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_UPDATE);
 						mgr->currentScreen->update();
 				}
 				
 				// Flush canvas buffer only when LVGL produced draw data.
 				if (mgr->flushPending) {
+						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_FLUSH);
 						if (mgr->driver->renderMode() == DisplayDriver::RenderMode::Buffered
 								&& mgr->presentSem) {
 								// Buffered mode: delegate present() to the async present task.
@@ -260,6 +267,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				// Throttle the render loop while the screensaver is fully asleep.
 				// The display is blanked and panel is sleeping — no need for fast ticks.
 				if (screen_saver_manager_is_fully_asleep()) {
+						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SLEEP);
 						delayMs = SCREENSAVER_SLEEP_TICK_MS;
 
 						// No rendering during sleep — publish fps=0 so /api/health

@@ -4,6 +4,7 @@
 
 #include "data_stream.h"
 #include "display_manager.h"
+#include "device_telemetry.h"
 #include "log_manager.h"
 #include "pad_config.h"
 #include "rtos_task_utils.h"
@@ -264,12 +265,15 @@ void DisplayManager::unlockIfNeeded(bool didLock) {
 
 void DisplayManager::lock() {
 		if (lvglMutex) {
+				device_telemetry_mark_display_lock_wait();
 				xSemaphoreTake(lvglMutex, portMAX_DELAY);
+				device_telemetry_mark_display_lock_acquired(isInLvglTask());
 		}
 }
 
 void DisplayManager::unlock() {
 		if (lvglMutex) {
+				device_telemetry_mark_display_lock_released();
 				xSemaphoreGive(lvglMutex);
 		}
 }

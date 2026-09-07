@@ -5,6 +5,7 @@
 #include "screen_saver_manager.h"
 #include "button_defaults.h"
 #include "screen_saver_schedule.h"
+#include "device_telemetry.h"
 #include "log_manager.h"
 #include "display_manager.h"
 #if HAS_IMAGE_FETCH
@@ -439,10 +440,16 @@ static void maybe_refresh_asleep() {
 		const uint32_t now = millis();
 		if (now - g_last_sleep_refresh_ms < SCREENSAVER_SLEEP_REFRESH_MS) return;
 
-		g_last_sleep_refresh_ms = now;
 		displayManager->lock();
+		if (displayDriverIsFlushBusy()) {
+			displayManager->unlock();
+			return;
+		}
+		g_last_sleep_refresh_ms = now;
+		device_telemetry_mark_sleep_refresh_attempt();
 		displayManager->getDriver()->displayRefreshSleep();
 		displayManager->unlock();
+		device_telemetry_mark_sleep_refresh_complete();
 		LOGI("SAVER", "Periodic sleep refresh");
 #endif
 }

@@ -5,8 +5,12 @@
 
 // The extension ABI is intentionally C-shaped. Native packages are built
 // separately from the firmware, so this remains the compatibility boundary.
-#define NATIVE_EXTENSION_ABI_VERSION 16u
+#define NATIVE_EXTENSION_ABI_VERSION 17u
+#define NATIVE_EXTENSION_TARGET_ABI_P4 "rv32imafc-ilp32f"
+#define NATIVE_EXTENSION_TARGET_ABI_S3 "xtensa-esp32s3"
+#ifndef NATIVE_EXTENSION_TARGET_ABI
 #define NATIVE_EXTENSION_TARGET_ABI "rv32imafc-ilp32f"
+#endif
 #define NATIVE_EXTENSION_DESCRIPTOR_MAGIC 0x3744584Eu
 #define NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS 250u
 #define NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS 33u
@@ -147,7 +151,7 @@ struct NativeExtensionUiApi {
 struct NativeExtensionCanvasApi {
     void* (*canvas_create)(void* parent);
     size_t (*canvas_buffer_size)(uint32_t width, uint32_t height);
-    void (*canvas_set_buffer)(void* canvas, void* buffer, uint32_t width, uint32_t height);
+    bool (*canvas_set_buffer)(void* canvas, void* buffer, uint32_t width, uint32_t height);
     void (*canvas_clear)(void* canvas, uint32_t rgb);
     void (*canvas_set_pixel)(void* canvas, int32_t x, int32_t y, uint32_t rgb);
     void (*canvas_fill_rect)(void* canvas, int32_t x, int32_t y,
@@ -158,6 +162,7 @@ struct NativeExtensionCanvasApi {
                              int32_t x2, int32_t y2, uint32_t rgb, uint8_t width);
     void (*canvas_draw_circle)(void* canvas, int32_t x, int32_t y,
                                int32_t radius, uint32_t rgb, uint8_t width);
+    int32_t (*canvas_measure_text)(const char* text, const char* font_name, uint8_t size);
     void (*canvas_draw_text)(void* canvas, int32_t x, int32_t y, const char* text,
                              const char* font_name, uint8_t size, uint32_t rgb);
     void (*canvas_blit_rgb565)(void* canvas, int32_t x, int32_t y, const uint16_t* pixels,
@@ -199,7 +204,7 @@ struct NativeExtensionHostApi {
     const NativeExtensionButtonApi* button;
 };
 
-typedef void (*NativeExtensionCreateFn)(const NativeExtensionHostApi* host,
+typedef bool (*NativeExtensionCreateFn)(const NativeExtensionHostApi* host,
                                         void* extension_context, uint32_t instance_id, void* root,
                                         const char* config_json);
 typedef void (*NativeExtensionDestroyFn)(const NativeExtensionHostApi* host,

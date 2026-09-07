@@ -1,16 +1,16 @@
 ---
 title: Nixie Clock Extension
 description: Configure the responsive amber Nixie Clock native Extension
-ms.date: 2026-08-18
+ms.date: 2026-09-07
 ms.topic: how-to
 ---
 
 ## Overview
 
-Nixie Clock is a native Extension for ESP32-P4 boards. It renders an amber
-Nixie-tube clock inside its containing button. The clock retains the artwork's
-aspect ratio, centers itself in the available button content, and fills unused
-space with black.
+Nixie Clock is a native Extension for supported ESP32-P4 and ESP32-S3 boards.
+It renders an amber Nixie-tube clock inside its containing button. The clock
+retains the artwork's aspect ratio, centers itself in the available button
+content, and fills unused space with black.
 
 The package uses precomposited RGB565 artwork, so use a dark or black button
 background. By default, changed digits briefly strike brighter, separators
@@ -101,9 +101,12 @@ settings:
 
 ```bash
 python3 tools/generate-nixie-extension-assets.py
-bash tools/build-p4-extension.sh \
+bash tools/build-extension.sh p4 \
   extensions/nixie-clock/nixie_clock.cpp \
-  build/extensions/nixie-clock@1.0.0.elf
+  build/extensions/nixie-clock@1.0.0-p4.elf
+bash tools/build-extension.sh s3 \
+  extensions/nixie-clock/nixie_clock.cpp \
+  build/extensions/nixie-clock@1.0.0-s3.elf
 ```
 
 The generated assets are documented in [the Nixie artwork guide](../../assets/nixie/README.md). See the [native Extension developer guide](../../docs/dev/extensions.md) for package signing and upload details.

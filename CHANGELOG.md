@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-08-27
+ms.date: 2026-09-07
 ms.topic: reference
 ---
 
@@ -11,6 +11,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.27.0] - 2026-09-07
+
+### Added
+
+* **Word Clock native Extension**: ESP32-P4 pads can now render the current time as a responsive English word clock. Rounded mode selects the nearest five-minute phrase, minute-dots mode uses the preceding phrase with one to four corner dots, and accurate mode spells each minute on its expanded 18 by 18 face. Per-button settings select a bundled font, fitting size, inactive-letter color, time binding, and burn-in shift interval. The package includes catalog metadata, rendered previews, a configuration guide, and exhaustive phrase-map tests.
+* **Native Extensions for ESP32-S3 display boards**: supported 16 MB ESP32-S3 boards can now install signed Xtensa Extension packages alongside ESP32-P4's flash-mapped RISC-V packages. Each Extension source builds into target-qualified P4 and S3 packages; S3 loads executable code into internal executable RAM and data into PSRAM.
+
+### Changed
+
+* **Native Extension ABI 17**: creation callbacks now report success, and canvas buffer registration reports failure. The host counts only successfully created Extension instances, while every shipped package handles failed canvas setup and releases partially allocated buffers.
+* **jc3636w518 Extension memory profile**: the constrained 360 by 360 ESP32-S3 board family disables MCP, remote image/MJPEG fetching, and audio output so WiFi, SD storage, and native Extensions retain sufficient DMA-capable internal RAM. Font icons, emoji, and locally stored icons remain available.
+
+### Fixed
+
+* **Stalled display renders are diagnosable without serial logs**: health telemetry now reports main-loop, LVGL, mutex, flush, and sleep-refresh state. Flush telemetry is safe in the ISR path, full-sleep refreshes avoid in-flight DMA, and native Extensions pause while the display is fully asleep with slow ticks attributed to their package.
 
 ## [1.26.0] - 2026-08-27
 

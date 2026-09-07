@@ -181,6 +181,23 @@ compute_ccache_flags() {
     echo -e "${GREEN}Cache:     ccache enabled (CCACHE_MAXSIZE=$CCACHE_MAXSIZE)${NC}"
 }
 
+copy_boot_app0_bin() {
+    local fqbn="$1"
+    local output_dir="$2"
+    local vendor rest arch data_dir boot_app0_bin
+    vendor="${fqbn%%:*}"
+    rest="${fqbn#*:}"
+    arch="${rest%%:*}"
+    data_dir="$("$ARDUINO_CLI" config get directories.data 2>/dev/null)"
+    if [[ -z "$data_dir" ]]; then
+        data_dir="$HOME/.arduino15"
+    fi
+    boot_app0_bin="$(ls -d "$data_dir/packages/$vendor/hardware/$arch/"*/tools/partitions/boot_app0.bin 2>/dev/null | sort -V | tail -n 1)"
+    if [[ -n "$boot_app0_bin" && -f "$boot_app0_bin" ]]; then
+        cp "$boot_app0_bin" "$output_dir/boot_app0.bin"
+    fi
+}
+
 # Build a single board
 build_board() {
     local fqbn="$1"
@@ -370,6 +387,8 @@ build_board() {
         echo "$build_output" | grep -E "(warning:.*will not be executed|error:|fatal error:)" | sed 's/^/  /'
         echo ""
     fi
+
+    copy_boot_app0_bin "$fqbn" "$board_build_path"
     
     echo ""
     echo -e "${GREEN}✓ Build complete for $board_name${NC}"

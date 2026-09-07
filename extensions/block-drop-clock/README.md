@@ -1,15 +1,15 @@
 ---
 title: Block Drop Clock Extension
 description: Configuration and development guide for the pixel-art Block Drop Clock native extension
-ms.date: 2026-08-17
+ms.date: 2026-09-07
 ms.topic: reference
 ---
 
 ## Overview
 
-Block Drop Clock is a native extension for ESP32-P4 boards. It renders the
-current hour and minute as a pixel-art clock while a small block-drop game plays
-below it.
+Block Drop Clock is a native extension for supported ESP32-P4 and ESP32-S3
+boards. It renders the current hour and minute as a pixel-art clock while a
+small block-drop game plays below it.
 The display adapts its grid size to the containing button.
 
 ![Block Drop Clock preview](preview.png)
@@ -56,9 +56,12 @@ Only regions affected by a game step, time update, or clock shift are redrawn.
 Build this extension alone during development:
 
 ```bash
-bash tools/build-p4-extension.sh \
+bash tools/build-extension.sh p4 \
   extensions/block-drop-clock/block_drop_clock.cpp \
-  build/extensions/block-drop-clock@1.0.0.elf
+  build/extensions/block-drop-clock@1.0.0-p4.elf
+bash tools/build-extension.sh s3 \
+  extensions/block-drop-clock/block_drop_clock.cpp \
+  build/extensions/block-drop-clock@1.0.0-s3.elf
 ```
 
 Build and sign every shipped extension package:

@@ -24,19 +24,19 @@ def constant(header: str, name: str) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) != 3:
-        fail("usage: verify_extension_descriptor.py <abi-header> <package.elf>")
+    if len(sys.argv) not in (3, 4):
+        fail("usage: verify_extension_descriptor.py <abi-header> <package.elf> [target-abi]")
 
     header_path = Path(sys.argv[1])
     elf_path = Path(sys.argv[2])
     header = header_path.read_text(encoding="ascii")
     abi_version = int(re.search(r"\d+", constant(header, "NATIVE_EXTENSION_ABI_VERSION")).group())
-    target_abi = constant(header, "NATIVE_EXTENSION_TARGET_ABI").strip('"')
+    target_abi = sys.argv[3] if len(sys.argv) == 4 else constant(header, "NATIVE_EXTENSION_TARGET_ABI").strip('"')
     descriptor_magic = int(re.search(r"0x[0-9A-Fa-f]+", constant(header, "NATIVE_EXTENSION_DESCRIPTOR_MAGIC")).group(), 16)
 
-    match = re.fullmatch(r"([a-z0-9-]+)@([0-9]+\.[0-9]+\.[0-9]+)\.elf", elf_path.name)
+    match = re.fullmatch(r"([a-z0-9-]+)@([0-9]+\.[0-9]+\.[0-9]+)(?:-(?:p4|s3))?\.elf", elf_path.name)
     if not match:
-        fail("filename must be <extension-id>@<package-semver>.elf")
+        fail("filename must be <extension-id>@<package-semver>[-p4|-s3].elf")
     filename_id, filename_version = match.groups()
 
     data = elf_path.read_bytes()
@@ -51,7 +51,7 @@ def main() -> None:
 
     descriptor_vaddr = None
     for (_, section_type, _, _, section_offset, section_size, link, _, _, entry_size) in sections:
-        if section_type != 11 or entry_size != 16 or link >= len(sections):
+        if section_type not in (2, 11) or entry_size != 16 or link >= len(sections):
             continue
         strings = sections[link]
         string_offset, string_size = strings[4], strings[5]

@@ -86,18 +86,19 @@ void set_advanced_label(const NativeExtensionHostApi* host, InstanceState* insta
 
 } // namespace
 
-extern "C" void native_extension_create_instance(const NativeExtensionHostApi* host,
+extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* host,
                                                   void* extension_context, uint32_t instance_id, void* root,
                                                   const char* config_json) {
     (void)config_json; // This sample has no package-specific JSON settings.
     if (!host || !host->core || !host->ui || !host->binding || !root || !host->ui->obj_create ||
         !host->ui->obj_set_size || !host->ui->label_create ||
-        !host->ui->label_set_text || !host->ui->obj_center) return;
+        !host->ui->label_set_text || !host->ui->obj_center) return false;
     SampleState* state = get_state(host, extension_context);
     InstanceState* instance = state ? create_instance(state, instance_id) : nullptr;
-    if (!instance) return;
+    if (!instance) return false;
     host->core->log(NATIVE_EXTENSION_LOG_INFO, "advanced sample created");
     set_advanced_label(host, instance, root);
+    return instance->cpu_label != nullptr;
 }
 
 extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* host,

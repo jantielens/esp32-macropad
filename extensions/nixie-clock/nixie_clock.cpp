@@ -397,12 +397,12 @@ void schedule_flicker(InstanceState* instance, uint32_t now) {
 
 }  // namespace
 
-extern "C" void native_extension_create_instance(const NativeExtensionHostApi* host, void* extension_context,
+extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* host, void* extension_context,
                                                   uint32_t instance_id, void* root, const char* config_json) {
-    if (!host || !host->core || !host->ui || !host->canvas || !host->binding || !root) return;
+    if (!host || !host->core || !host->ui || !host->canvas || !host->binding || !root) return false;
     PackageState* state = package_state(host, extension_context);
     InstanceState* instance = create_instance(state, instance_id);
-    if (!instance) return;
+    if (!instance) return false;
     instance->extension_context = extension_context;
     instance->width = static_cast<uint16_t>(host->ui->obj_get_width(root));
     instance->height = static_cast<uint16_t>(host->ui->obj_get_height(root));
@@ -422,14 +422,20 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     instance->canvas_buffer = host->core->alloc(host->canvas->canvas_buffer_size(instance->width, instance->height));
     instance->sprite_buffer = static_cast<uint16_t*>(host->core->alloc(
         static_cast<size_t>(NIXIE_SPRITE_WIDTH) * NIXIE_SPRITE_HEIGHT * sizeof(uint16_t)));
-    if (!instance->canvas || !instance->canvas_buffer || !instance->sprite_buffer) return;
-    host->canvas->canvas_set_buffer(instance->canvas, instance->canvas_buffer, instance->width, instance->height);
+    if (!instance->canvas || !instance->canvas_buffer || !instance->sprite_buffer) return false;
+    if (!host->canvas->canvas_set_buffer(instance->canvas, instance->canvas_buffer, instance->width, instance->height)) {
+        host->core->free(instance->sprite_buffer);
+        host->core->free(instance->canvas_buffer);
+        instance->active = false;
+        return false;
+    }
     char resolved[TIME_TEMPLATE_CAPACITY] = {};
     if (host->binding->resolve(extension_context, instance_id, instance->time_template, resolved, sizeof(resolved)))
         normalize_clock(resolved, instance->clock);
     if (!instance->clock[0]) copy_text(instance->clock, sizeof(instance->clock), "0000");
     schedule_flicker(instance, host->core->millis());
     instance->render_dirty = true;
+    return true;
 }
 
 extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* host, void* extension_context,

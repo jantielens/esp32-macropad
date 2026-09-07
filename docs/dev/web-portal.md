@@ -494,17 +494,18 @@ or device taking longer to boot.
 
 ### Extensions
 
-ESP32-P4 builds support trusted native Extensions. The
+ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native Extensions. The
 Extensions page exposes two small slots (56 KiB each) and one large slot
-(120 KiB). Upload a signed package named `<extension-id>@<version>.ext`. It
-contains a relocation-free RISC-V ELF followed by its fixed 64-byte ECDSA P-256
-signature; it stages on the configured storage backend and installs into the
-selected executable flash slot during the next boot.
+(120 KiB). Upload a signed package named `<extension-id>@<version>-p4.ext` or
+`<extension-id>@<version>-s3.ext` that matches the device. It contains a
+relocation-free native ELF followed by its fixed 64-byte ECDSA P-256 signature;
+it stages on the configured storage backend and installs into the selected
+executable flash slot during the next boot.
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/extensions` | Returns all slot metadata and runtime load status |
-| `POST` | `/api/extensions/upload?slot=N&filename=id@version.ext` | Verifies and stages a signed Extension package for installation at next boot |
+| `POST` | `/api/extensions/upload?slot=N&filename=id@version-target.ext` | Verifies and stages a signed Extension package for installation at next boot |
 | `POST` | `/api/extensions/enabled?slot=N&enabled=true|false` | Enables or disables an installed extension for the next boot |
 | `DELETE` | `/api/extensions?slot=N` | Erases an extension slot |
 
@@ -514,9 +515,9 @@ before staging, before installation, and before executable mapping. The Pad
 editor's **Extension** widget selects an enabled installed extension and passes
 its per-button configuration text to the native instance.
 
-P4 boards use an `_ext` partition scheme, which reserves a 256 KiB raw
-`extensions` partition. Flash the first firmware using this scheme over USB
-before attempting portal uploads.
+Supported P4 and S3 boards use an `_ext` partition scheme, which reserves a
+256 KiB raw `extensions` partition. Flash the first firmware using this scheme
+over USB before attempting portal uploads.
 
 ### Music Library
 
@@ -729,6 +730,30 @@ Returns real-time device health statistics.
   "display_lv_timer_us": 250,
   "display_present_us": 1200,
 
+  "runtime": {
+    "main_phase": "portal",
+    "main_age_ms": 4,
+    "lvgl_phase": "sleep",
+    "lvgl_age_ms": 50,
+    "lvgl_extension": null,
+    "extension_tick_age_ms": 0,
+    "extension_tick_last_duration_ms": 3,
+    "extension_tick_max_duration_ms": 8,
+    "extension_tick_slow_count": 0,
+    "display_lock_held": false,
+    "display_lock_owner": "none",
+    "display_lock_held_ms": 0,
+    "display_lock_waiting": false,
+    "display_lock_wait_age_ms": 0,
+    "sleep_refresh_attempts": 3,
+    "sleep_refresh_attempt_age_ms": 240000,
+    "sleep_refresh_complete_age_ms": 240000,
+    "async_flush_in_flight": false,
+    "async_flush_started_age_ms": 0,
+    "async_flush_complete_age_ms": 25,
+    "async_flush_errors": 0
+  },
+
   "sensors": {
     "temperature": 21.7,
     "humidity": 39.6,
@@ -764,6 +789,20 @@ not report a PSRAM largest-block value on those boards.
 - `wifi_rssi`, `wifi_channel`, `ip_address`: `null` when not connected
 - `*_min_window` / `*_max_window`: sampled continuously by firmware and returned as a multi-client-safe snapshot (captures short-lived dips/spikes)
 - `sensors`: object containing optional sensor values (empty object when no sensors are available)
+- `runtime`: last checkpoints from the Arduino main loop and LVGL task, plus
+  display-lock ownership and wait state. A growing `*_age_ms` identifies the
+  task or lock wait that stopped making progress. `lvgl_extension` identifies
+  an active native extension timer callback; otherwise it is `null`.
+- `extension_tick_*`: duration telemetry for native extension callbacks. A
+  nonzero `lvgl_extension` with a growing `extension_tick_age_ms` identifies
+  a callback that did not return. Ticks are skipped while Tier 2 screen saver
+  sleep is active.
+- `sleep_refresh_*`: periodic screen-saver refresh attempts and completion.
+  An attempt without a later completion indicates the main loop blocked while
+  refreshing the sleeping display.
+- `async_flush_*`: MIPI-DSI asynchronous DMA2D flush state. A growing
+  `async_flush_started_age_ms` while `async_flush_in_flight` is `true`
+  indicates a completion callback did not arrive.
 
 #### `GET /api/health/history`
 

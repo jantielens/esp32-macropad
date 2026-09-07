@@ -13,6 +13,7 @@
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_BACKLIGHT true   // PWM brightness control (LEDC attached before LCD init to avoid glitch)
+#define HAS_NATIVE_EXTENSIONS true
 // BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
 #define HAS_BLE_HID false
 

@@ -448,10 +448,10 @@ EOF
 done
 
 while IFS= read -r source; do
-  package_name="$(python3 "$REPO_ROOT/tools/extension_package_name.py" "$source")"
+  package_base="$(python3 "$REPO_ROOT/tools/extension_package_name.py" "$source")"
+  package_base="${package_base%.elf}"
   title="$(python3 "$REPO_ROOT/tools/extension_package_name.py" --title "$source")"
   metadata_file="$(dirname "$source")/metadata.json"
-  package_file="$BUILD_DIR/extensions/${package_name%.elf}.ext"
 
   if [[ ! -f "$metadata_file" ]]; then
     echo "ERROR: Missing extension catalog metadata: $metadata_file" >&2
@@ -461,20 +461,21 @@ while IFS= read -r source; do
     echo "ERROR: Invalid extension catalog metadata: $metadata_file" >&2
     exit 1
   fi
-  if [[ ! -f "$package_file" ]]; then
-    echo "ERROR: Missing extension package: $package_file" >&2
-    exit 1
-  fi
-
   summary="$(jq -r '.summary' "$metadata_file")"
   usage="$(jq -r '.usage' "$metadata_file")"
-  package_size="$(stat -c%s "$package_file")"
-  package_name="${package_name%.elf}.ext"
-  cp "$package_file" "$OUT_DIR/extensions/$package_name"
+  for target in p4 s3; do
+    package_name="$package_base-$target.ext"
+    package_file="$BUILD_DIR/extensions/$package_name"
+    if [[ ! -f "$package_file" ]]; then
+      echo "ERROR: Missing extension package: $package_file" >&2
+      exit 1
+    fi
+    package_size="$(stat -c%s "$package_file")"
+    cp "$package_file" "$OUT_DIR/extensions/$package_name"
 
-  cat >> "$extension_fragment_tmp" <<EOF
+    cat >> "$extension_fragment_tmp" <<EOF
           <article class="extension">
-            <div class="extension-title">$(html_escape "$title")</div>
+            <div class="extension-title">$(html_escape "$title") ($target)</div>
             <div class="extension-summary">$(html_escape "$summary")</div>
             <div class="extension-specs"><span class="badge">$(html_escape "$package_name")</span><span class="badge">$((package_size / 1024)) KiB</span></div>
             <div class="extension-usage-label">Usage</div>
@@ -482,6 +483,7 @@ while IFS= read -r source; do
             <a class="extension-download" href="./extensions/$package_name" download>Download extension</a>
           </article>
 EOF
+  done
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$REPO_ROOT/extensions"/*/ | sort)
 
 # Copy static assets and render index.html from template

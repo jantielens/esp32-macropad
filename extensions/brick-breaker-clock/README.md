@@ -1,15 +1,16 @@
 ---
 title: Brick Breaker Clock Extension
 description: Configuration and developer guide for the Brick Breaker Clock native extension
-ms.date: 2026-08-19
+ms.date: 2026-09-07
 ms.topic: reference
 ---
 
 ## Overview
 
-Brick Breaker Clock is a self-playing native extension for ESP32-P4 boards. It
-shows the current hour and minute as a wall of retro arcade bricks. A near-perfect
-paddle keeps a ball in play as it strikes the time bricks.
+Brick Breaker Clock is a self-playing native extension for supported ESP32-P4
+and ESP32-S3 boards. It shows the current hour and minute as a wall of retro
+arcade bricks. A near-perfect paddle keeps a ball in play as it strikes the time
+bricks.
 
 A struck clock brick, including either colon brick, disappears, then returns
 when the ball next reaches the paddle. A timed respawn mode remains available.
@@ -75,9 +76,12 @@ map for the new digits, and discard old respawn state.
 Build this extension alone during development:
 
 ```bash
-bash tools/build-p4-extension.sh \
+bash tools/build-extension.sh p4 \
   extensions/brick-breaker-clock/brick_breaker_clock.cpp \
-  build/extensions/brick-breaker-clock@1.0.0.elf
+  build/extensions/brick-breaker-clock@1.0.0-p4.elf
+bash tools/build-extension.sh s3 \
+  extensions/brick-breaker-clock/brick_breaker_clock.cpp \
+  build/extensions/brick-breaker-clock@1.0.0-s3.elf
 ```
 
 Build and sign every shipped extension package:

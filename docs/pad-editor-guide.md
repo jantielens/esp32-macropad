@@ -647,9 +647,9 @@ Widgets replace the standard button rendering with specialized visualizations or
 
 ### Extension
 
-On ESP32-P4 boards, the **Extension** widget runs an enabled native Extension
-installed from the Device portal. Choose the package and
-optionally enter up to 511 bytes of configuration text for that button. An
+On ESP32-P4 and supported ESP32-S3 boards, the **Extension** widget runs an
+enabled native Extension installed from the Device portal. Choose the package
+and optionally enter up to 511 bytes of configuration text for that button. An
 Extension can appear on multiple buttons; each placement has its own instance
 and configuration. Set **Extension tick interval** when an Extension needs a
 specific animation or refresh cadence; it accepts 33 to 1000 milliseconds and

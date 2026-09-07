@@ -707,12 +707,12 @@ void render(const NativeExtensionHostApi* host, InstanceState* instance) {
 
 } // namespace
 
-extern "C" void native_extension_create_instance(const NativeExtensionHostApi* host, void* extension_context,
+extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* host, void* extension_context,
                                                   uint32_t instance_id, void* root, const char* config_json) {
-    if (!host || !host->core || !host->ui || !host->canvas || !host->binding || !root) return;
+    if (!host || !host->core || !host->ui || !host->canvas || !host->binding || !root) return false;
     PackageState* state = package_state(host, extension_context);
     InstanceState* instance = state ? create_instance(state, instance_id) : nullptr;
-    if (!instance) return;
+    if (!instance) return false;
     instance->extension_context = extension_context;
     instance->width = static_cast<uint16_t>(host->ui->obj_get_width(root));
     instance->height = static_cast<uint16_t>(host->ui->obj_get_height(root));
@@ -723,26 +723,32 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     instance->block_color_set = parse_color_config(config_json, "block_color", &instance->block_color);
     instance->clock_color_set = parse_color_config(config_json, "clock_color", &instance->clock_color);
     char resolved[CLOCK_TEXT_MAX_LEN] = {};
-    if (!host->binding->resolve(extension_context, instance_id, instance->time_template, resolved, sizeof(resolved))) return;
+    if (!host->binding->resolve(extension_context, instance_id, instance->time_template, resolved, sizeof(resolved))) return false;
     normalize_clock(resolved, instance->clock, sizeof(instance->clock));
     if (!instance->clock[0]) copy_text(instance->clock, sizeof(instance->clock), "0000");
     instance->cell = static_cast<uint16_t>(instance->width / MAX_CLOCK_COLUMNS);
     const uint16_t vertical_cell = static_cast<uint16_t>(instance->height / 16u);
     if (vertical_cell < instance->cell) instance->cell = vertical_cell;
-    if (instance->cell < 3) { instance->active = false; return; }
+    if (instance->cell < 3) { instance->active = false; return false; }
     instance->grid_rows = static_cast<uint8_t>(instance->height / instance->cell);
     instance->game_top = instance->grid_rows - GAME_ROWS;
     instance->game_columns = MAX_CLOCK_COLUMNS;
     if (instance->game_columns < MIN_GAME_COLUMNS) instance->game_columns = MIN_GAME_COLUMNS;
     instance->canvas = host->canvas->canvas_create(root);
     instance->buffer = host->core->alloc(host->canvas->canvas_buffer_size(instance->width, instance->height));
-    if (!instance->canvas || !instance->buffer) { instance->active = false; return; }
-    host->canvas->canvas_set_buffer(instance->canvas, instance->buffer, instance->width, instance->height);
+    if (!instance->canvas || !instance->buffer) { instance->active = false; return false; }
+    if (!host->canvas->canvas_set_buffer(instance->canvas, instance->buffer, instance->width, instance->height)) {
+        if (instance->buffer) host->core->free(instance->buffer);
+        instance->active = false;
+        return false;
+    }
     build_tinted_sprite_colors(instance);
     spawn_game_piece(instance);
     instance->render_dirty = true;
     instance->full_render = true;
     instance->last_shift_ms = host->core->millis();
+    instance->rendered_piece_valid = instance->game_piece.active;
+    return true;
 }
 
 extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* host, void* extension_context,

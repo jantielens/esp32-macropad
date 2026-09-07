@@ -437,7 +437,7 @@ development ELF and signed installable `.ext` package with the release.
 - **`tools/extract-changelog.sh`** - Parses CHANGELOG.md for version-specific notes
 - **`create-release.sh`** - Helper script to automate release preparation
 - **`tools/build-esp-web-tools-site.sh`** - Builds the static installer site (HTML + manifests + firmware copies)
-- **`tools/build-p4-extensions.sh`** - Builds every Extension ELF and signed `.ext` package
+- **`tools/build-p4-extensions.sh`** - Builds P4 and S3 Extension ELFs and signed `.ext` packages
 - **`EXTENSION_SIGNING_PRIVATE_KEY`** - Repository Actions secret containing the first-party P-256 private-key PEM used by release builds
 - **`extensions/*/metadata.json`** - Catalog summary and usage text for each published Extension
 - **`src/version.h`** - Firmware version tracking

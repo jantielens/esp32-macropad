@@ -647,28 +647,34 @@ void setup()
 
 void loop()
 {
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_HOUSEKEEPING);
 	power_manager_led_loop();
 	power_manager_loop();
 	device_class_dispatch_loop();
 
 	#if HAS_DISPLAY
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_SCREEN_SAVER);
 	screen_saver_manager_loop();
 	#endif
 
 	#if HAS_DISPLAY || HAS_BUTTON
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_ACTION_DISPATCH);
 	action_dispatch_loop();
 	#endif
 
 	#if HAS_CAMERA
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_CAMERA_FEED);
 	camera_feed_loop();
 	#endif
 
 	#if HAS_DISPLAY
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_DISPLAY_EFFECTS);
 	message_bubble_loop();
 	visual_alert_loop();
 	#endif
 
 	#if HAS_TOUCH
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_TOUCH);
 	touch_manager_loop();
 	#endif
 
@@ -679,6 +685,7 @@ void loop()
 	#endif
 
 	// Handle web portal (DNS for captive portal)
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_PORTAL);
 	web_portal_handle();
 
 	#if HAS_NATIVE_EXTENSIONS
@@ -686,6 +693,7 @@ void loop()
 	#endif
 
 	#if HAS_MQTT
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_NETWORK);
 	if (!ota_activity_is_active()) {
 	mqtt_manager.loop();
 	mqtt_screen_loop();
@@ -700,9 +708,11 @@ void loop()
 	#endif
 
 	// Allow sensors to flush ISR-deferred work (e.g., instant MQTT publishes).
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_SENSORS);
 	sensor_manager_loop();
 
 	// Process hardware button debounce/hold + action dispatch (no-op when !HAS_BUTTON).
+	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_BUTTONS);
 	hw_buttons_loop();
 
 
