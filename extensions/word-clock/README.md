@@ -35,16 +35,43 @@ Accurate mode spells every minute with its expanded letter face.
 
 ## Configuration
 
-Add the **Extension** widget to a button, select `word-clock`, and optionally
-provide this configuration:
+Add the **Extension** widget to a button, select `word-clock`, then use one of
+these configurations.
+
+### Rounded
+
+The default mode rounds to the nearest five-minute phrase.
 
 ```json
 {
   "time": "[time:%H%M;Europe/Brussels]",
-  "mode": "rounded",
+  "mode": "rounded"
+}
+```
+
+### Minute Dots
+
+Use the preceding five-minute phrase and light one to four corner dots for the
+remaining minutes.
+
+```json
+{
+  "time": "[time:%H%M;Europe/Brussels]",
+  "mode": "minute-dots"
+}
+```
+
+### Accurate
+
+Spell each minute. The threshold keeps `past` phrasing through minute 35, then
+uses `to` the next hour.
+
+```json
+{
+  "time": "[time:%H%M;Europe/Brussels]",
+  "mode": "accurate",
   "accurate_past_threshold_minutes": 35,
   "font_family": "bebas",
-  "font_size": 0,
   "dimmed_color": "#383631",
   "burn_in_shift_minutes": 60
 }

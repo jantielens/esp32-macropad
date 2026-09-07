@@ -58,23 +58,45 @@ constexpr WordRange ACCURATE_WORDS[] = {
     {1, 8, 5}, {2, 0, 4}, {2, 5, 4}, {2, 10, 3}, {3, 0, 5}, {3, 6, 5},
     {4, 0, 4}, {4, 5, 3}, {5, 0, 6}, {5, 7, 6}, {6, 0, 8}, {7, 0, 8},
     {6, 9, 7}, {7, 9, 7}, {8, 0, 9}, {9, 0, 8}, {9, 9, 8}, {0, 6, 6},
-    {10, 0, 6}, {10, 7, 5}, {10, 13, 5}, {11, 9, 7}, {12, 0, 4}, {12, 5, 4},
+    {10, 0, 6}, {10, 7, 5}, {10, 13, 5}, {11, 8, 7}, {12, 0, 4}, {12, 5, 4},
     {12, 10, 2}, {13, 0, 3}, {13, 4, 3}, {13, 8, 5}, {14, 0, 4}, {14, 5, 4},
     {14, 10, 3}, {15, 0, 5}, {15, 6, 5}, {16, 0, 4}, {16, 5, 3}, {16, 9, 6},
     {17, 0, 6}, {17, 7, 6},
 };
 static_assert(sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]) == WORD_CLOCK_ACCURATE_OCLOCK + 1u,
               "accurate word-clock face must map every phrase word");
-static_assert(ACCURATE_GRID[0][ACCURATE_WORDS[WORD_CLOCK_ACCURATE_TWENTY].column] == 'T' &&
-              ACCURATE_GRID[1][ACCURATE_WORDS[WORD_CLOCK_ACCURATE_MINUTE_TWO].column] == 'T',
-              "twenty-two must read from TWENTY to TWO");
-static_assert(ACCURATE_WORDS[WORD_CLOCK_ACCURATE_OCLOCK].row >=
-                  ACCURATE_WORDS[WORD_CLOCK_ACCURATE_HOUR_TWELVE].row,
-              "OCLOCK must follow the hour words in the accurate face");
 static_assert(ACCURATE_GRID[7][11] == 'X' && GRID[5][5] == 'X',
               "SIX must retain its literal X rather than use a filler marker");
 static_assert(GRID[1][WORDS[4].column] == 'Q' && GRID[1][WORDS[4].column + 6] == 'R',
               "QUARTER range must cover QUARTER in the word-clock face");
+constexpr const char* ACCURATE_WORD_TEXTS[] = {
+    "IT", "IS", "MINUTE", "S", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT",
+    "NINE", "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN",
+    "EIGHTEEN", "NINETEEN", "TWENTY", "THIRTY", "FORTY", "FIFTY", "QUARTER", "HALF", "PAST", "TO",
+    "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN",
+    "TWELVE", "OCLOCK",
+};
+static_assert(sizeof(ACCURATE_WORD_TEXTS) / sizeof(ACCURATE_WORD_TEXTS[0]) ==
+                  sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]),
+              "accurate word-clock text must map every phrase word");
+
+constexpr bool accurate_range_matches_text(const WordRange& range, const char* text) {
+    for (uint8_t offset = 0; offset < range.length; ++offset)
+        if (ACCURATE_GRID[range.row][range.column + offset] != text[offset]) return false;
+    return text[range.length] == '\0';
+}
+
+constexpr bool accurate_ranges_match_face() {
+    for (uint8_t word = 0; word < sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]); ++word)
+        if (!accurate_range_matches_text(ACCURATE_WORDS[word], ACCURATE_WORD_TEXTS[word])) return false;
+    return true;
+}
+
+static_assert(accurate_ranges_match_face(),
+              "every accurate word range must exactly match its text in the word-clock face");
+static_assert(ACCURATE_WORDS[WORD_CLOCK_ACCURATE_OCLOCK].row >=
+                  ACCURATE_WORDS[WORD_CLOCK_ACCURATE_HOUR_TWELVE].row,
+              "OCLOCK must follow the hour words in the accurate face");
 constexpr char WORD_NAMES[][11] = {
     "IT", "IS", "FIVE_MIN", "TEN_MIN", "QUARTER", "TWENTY", "HALF",
     "PAST", "TO", "ONE", "TWO", "THREE", "FOUR", "FIVE_HOUR", "SIX",
