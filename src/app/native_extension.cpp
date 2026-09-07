@@ -475,6 +475,7 @@ void* host_canvas_create(void* parent) {
 size_t host_canvas_buffer_size(uint32_t width, uint32_t height) { return LV_CANVAS_BUF_SIZE(width, height, 16, 1); }
 bool host_canvas_set_buffer(void* canvas, void* buffer, uint32_t width, uint32_t height) {
     if (!canvas || !buffer || width == 0 || height == 0 || !register_canvas_buffer(canvas, buffer, width, height)) return false;
+    memset(buffer, 0, host_canvas_buffer_size(width, height));
     lv_canvas_set_buffer(as_obj(canvas), buffer, width, height, LV_COLOR_FORMAT_RGB565);
     return true;
 }
