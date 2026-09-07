@@ -1,0 +1,107 @@
+---
+title: Word Clock Extension
+description: Configuration and rendering guide for the responsive Word Clock native extension
+ms.date: 2026-09-06
+ms.topic: reference
+---
+
+## Overview
+
+Word Clock presents the time as highlighted words in an English letter matrix.
+Rounded and minute-dots modes use a fixed 11 by 10 face; accurate mode uses a
+larger 18 by 18 face. The visual treatment is inspired by the familiar
+word-clock format, while using original letter layouts and phrase maps.
+
+The extension uses the owning button's resolved background color for its face.
+Inactive letters use the dimmed color and active words use the button's text
+color. It measures the selected bundled font before rendering so the complete
+matrix remains centered and unstretched in square, portrait, landscape, and
+compact button layouts.
+
+## Mode Previews
+
+Rounded mode displays the nearest five-minute phrase.
+
+![Rounded Word Clock preview showing five to nine](./docs/rounded.png)
+
+Minute-dots mode uses the previous five-minute phrase and lights a corner dot
+for each remaining minute.
+
+![Minute-dots Word Clock preview showing five to nine with one corner dot](./docs/minute-dots.png)
+
+Accurate mode spells every minute with its expanded letter face.
+
+![Accurate Word Clock preview showing three to nine](./docs/accurate.png)
+
+## Configuration
+
+Add the **Extension** widget to a button, select `word-clock`, and optionally
+provide this configuration:
+
+```json
+{
+  "time": "[time:%H%M;Europe/Brussels]",
+  "mode": "rounded",
+  "font_family": "bebas",
+  "font_size": 0,
+  "dimmed_color": "#383631",
+  "burn_in_shift_minutes": 60
+}
+```
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `time` | `[time:%H%M]` | Existing time binding that supplies hour and minute. Timezone parameters are supported. |
+| `mode` | `rounded` | `rounded` uses the nearest five-minute phrase. `minute-dots` uses the preceding five-minute phrase and lights one to four filled corner dots for the remaining minutes. `accurate` spells every minute in words. |
+| `font_family` | `bebas` | `default`, `bebas`, `doto`, or `dseg7`. `bebas` best matches the compact, uppercase clock face. |
+| `font_size` | `0` | `0` chooses the largest fitting bundled font. Otherwise use 12, 14, 18, 24, 32, 36, or 48. Large values reduce automatically when the button is too small. |
+| Button text color | Button setting | Words that describe the current time use the owning button's resolved text color. |
+| `dimmed_color` | `#383631` | Six-digit RGB color for inactive letters. |
+| `burn_in_shift_minutes` | `60` | Moves the complete matrix among small offsets at this interval. Set to `0` to disable it. |
+
+The extension accepts time bindings that produce four digits. Separators in the
+binding output are ignored. In the default `rounded` mode, it rounds to the
+nearest five-minute phrase, so 10:03 displays "IT IS FIVE PAST TEN" and
+10:58 displays "IT IS ELEVEN O'CLOCK". `minute-dots` uses floor-to-five-minute
+phrases: 14:14 displays "IT IS TEN PAST TWO" with four corner dots, and 13:38
+displays "IT IS TWENTY FIVE TO TWO" with three dots.
+
+`accurate` uses its own square 18 by 18 letter matrix with dim separator letters
+between words. Its remaining inactive letters are varied rather than repeated.
+It uses spoken expressions for familiar times: 08:15 displays "IT IS
+QUARTER PAST EIGHT", 08:30 displays "IT IS HALF PAST EIGHT", and 08:45
+displays "IT IS QUARTER TO NINE". It keeps full teen words such as
+"THIRTEEN", while clean compound values use separate words such as
+"TWENTY FIVE". Other minutes use the current hour through
+30 minutes past, then count down to the next hour: 01:20 displays "IT IS
+TWENTY PAST ONE", 01:58 displays "IT IS TWO TO TWO", and 05:13 displays
+"IT IS THIRTEEN PAST FIVE".
+
+## Rendering
+
+The host schedules a 250 ms tick. The extension checks its time binding at most
+twice per second, but redraws its RGB565 canvas only when the displayed phrase
+changes or when a burn-in shift occurs. It has no worker task or network
+activity.
+
+The extension's canvas is allocated to the current button bounds. Font metrics
+from the host select the largest fitting font, then place each glyph in an
+independent cell within a near-square 11 by 10 face. Extra space becomes an
+even background border; minute-dots mode reserves a small perimeter for minute
+dots. Accurate mode uses a square 18 by 18 face for its larger vocabulary
+and separated word groups. This preserves a readable clock face on every
+supported aspect ratio.
+
+## Build
+
+```bash
+bash tools/build-p4-extension.sh \
+  extensions/word-clock/word_clock.cpp \
+  build/extensions/word-clock@1.0.0.elf
+```
+
+Build and sign every shipped extension package:
+
+```bash
+./tools/build-p4-extensions.sh
+```

@@ -611,29 +611,29 @@ void render_view(RadarService* service, RadarView* view) {
 
 } // namespace
 
-extern "C" void native_extension_create_instance(const NativeExtensionHostApi* host,
+extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* host,
                                                   void* extension_context, uint32_t instance_id,
                                                   void* root, const char* config_json) {
     if (!host || host->abi_version != NATIVE_EXTENSION_ABI_VERSION || !host->core ||
-        !host->task || !host->http || !host->ui || !host->canvas || !root) return;
+        !host->task || !host->http || !host->ui || !host->canvas || !root) return false;
     // Instance creation is LVGL-task-only. It attaches this view to a scan and
     // starts the one package worker on the first successful view.
     RadarService* service = get_service(host, extension_context);
     if (!service) {
         host->core->notify("Flight radar allocation failed");
-        return;
+        return false;
     }
     RadarConfig config = {};
     if (!parse_config(config_json, &config)) {
         host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: invalid config");
         host->core->notify("Flight radar config invalid");
-        return;
+        return false;
     }
     RadarView* view = create_view(service, instance_id);
     if (!view) {
         host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: view limit reached");
         host->core->notify("Flight radar has too many views");
-        return;
+        return false;
     }
 
     view->width = static_cast<uint16_t>(host->ui->obj_get_width(root));
@@ -645,7 +645,7 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
         append_uint(message, sizeof(message), view->height);
         host->core->log(NATIVE_EXTENSION_LOG_WARN, message);
         view->active = 0;
-        return;
+        return false;
     }
     view->canvas_buffer = host->core->alloc(host->canvas->canvas_buffer_size(view->width, view->height));
     view->canvas = host->canvas->canvas_create(root);
@@ -653,9 +653,13 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
         host->core->log(NATIVE_EXTENSION_LOG_ERROR, "flight radar: canvas allocation failed");
         if (view->canvas_buffer) host->core->free(view->canvas_buffer);
         view->active = 0;
-        return;
+        return false;
     }
-    host->canvas->canvas_set_buffer(view->canvas, view->canvas_buffer, view->width, view->height);
+    if (!host->canvas->canvas_set_buffer(view->canvas, view->canvas_buffer, view->width, view->height)) {
+        host->core->free(view->canvas_buffer);
+        clear_bytes(view, sizeof(*view));
+        return false;
+    }
     host->ui->obj_set_pos(view->canvas, 0, 0);
     host->ui->obj_set_clickable(view->canvas, false);
     for (uint8_t index = 0; index < MAX_LABELS; ++index) {
@@ -680,7 +684,7 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
             host->core->notify("Flight radar scan limit reached");
             if (view->canvas_buffer) host->core->free(view->canvas_buffer);
             clear_bytes(view, sizeof(*view));
-            return;
+            return false;
         }
         view->scan_index = static_cast<uint8_t>(scan_index);
         ++service->scans[scan_index].view_count;
@@ -697,7 +701,11 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
         host->core->mutex_unlock(service->mutex);
     } else {
         host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar: create mutex timeout");
+        if (view->canvas_buffer) host->core->free(view->canvas_buffer);
+        clear_bytes(view, sizeof(*view));
+        return false;
     }
+    return true;
 }
 
 extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* host,

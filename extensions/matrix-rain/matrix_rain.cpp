@@ -381,12 +381,12 @@ uint16_t render(const NativeExtensionHostApi* host, InstanceState* instance) {
 
 } // namespace
 
-extern "C" void native_extension_create_instance(const NativeExtensionHostApi* host, void* extension_context,
+extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* host, void* extension_context,
                                                    uint32_t instance_id, void* root, const char* config_json) {
-    if (!host || !host->core || !host->ui || !host->canvas || !root) return;
+    if (!host || !host->core || !host->ui || !host->canvas || !root) return false;
     PackageState* state = package_state(host, extension_context);
     InstanceState* instance = state ? create_instance(state, instance_id) : nullptr;
-    if (!instance) return;
+    if (!instance) return false;
     instance->extension_context = extension_context;
     instance->width = static_cast<uint16_t>(host->ui->obj_get_width(root));
     instance->height = static_cast<uint16_t>(host->ui->obj_get_height(root));
@@ -418,7 +418,7 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     instance->rows = static_cast<uint8_t>(instance->height / instance->cell_height);
     if (instance->columns > MAX_COLUMNS) instance->columns = MAX_COLUMNS;
     if (instance->rows > MAX_ROWS) instance->rows = MAX_ROWS;
-    if (!instance->columns || !instance->rows) { instance->active = false; return; }
+    if (!instance->columns || !instance->rows) { instance->active = false; return false; }
     if (find_string(config_json, "clock", instance->clock_template, sizeof(instance->clock_template))) {
         instance->clock_enabled = host->binding != nullptr && instance->columns >= CLOCK_CHARACTERS;
         if (instance->clock_enabled) {
@@ -434,8 +434,12 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     }
     instance->canvas = host->canvas->canvas_create(root);
     instance->buffer = host->core->alloc(host->canvas->canvas_buffer_size(instance->width, instance->height));
-    if (!instance->canvas || !instance->buffer) { instance->active = false; return; }
-    host->canvas->canvas_set_buffer(instance->canvas, instance->buffer, instance->width, instance->height);
+    if (!instance->canvas || !instance->buffer) { instance->active = false; return false; }
+    if (!host->canvas->canvas_set_buffer(instance->canvas, instance->buffer, instance->width, instance->height)) {
+        host->core->free(instance->buffer);
+        instance->active = false;
+        return false;
+    }
     for (uint8_t column = 0; column < instance->columns; ++column) {
         Column& drop = instance->rain[column];
         drop.enabled = static_cast<float>(next_random(instance) % 1000) / 1000.0f < instance->density;
@@ -446,6 +450,7 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     instance->next_clock_resolve_ms = instance->last_motion_ms + CLOCK_RESOLVE_MS;
     instance->last_shift_ms = instance->last_motion_ms;
     instance->shift_interval_ms = parse_shift_interval(config_json);
+    return true;
 }
 
 extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* host, void* extension_context,

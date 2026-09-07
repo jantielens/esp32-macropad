@@ -11,19 +11,19 @@ extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
 
 // This runs on the LVGL task. The root is already sized and clipped to the
 // host button, and child objects are automatically deleted with that root.
-extern "C" void native_extension_create_instance(const NativeExtensionHostApi* host,
+extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* host,
                                                   void* extension_context, uint32_t instance_id, void* root,
                                                   const char* config_json) {
     (void)extension_context;
     (void)instance_id;
     (void)config_json;
     if (!host || !host->ui || !root || !host->ui->label_create ||
-        !host->ui->label_set_text || !host->ui->obj_center) return;
-
+        !host->ui->label_set_text || !host->ui->obj_center) return false;
     void* label = host->ui->label_create(root);
-    if (!label) return;
+    if (!label) return false;
     host->ui->label_set_text(label, "hello world");
     host->ui->obj_center(label);
+    return true;
 }
 
 // Per-widget cleanup runs before the host destroys the root. This sample owns

@@ -286,6 +286,11 @@ High-frame-rate Extensions should preserve static pixels in their buffer, repain
 only changed scene regions, and call `canvas_invalidate_rect` for the old and
 new bounds of every moving object.
 
+`canvas_measure_text(text, font_name, size)` returns the rendered advance width
+in pixels for a bundled font. Use it with `canvas_draw_text()` when a layout
+must fit proportional text into a defined region. The two functions resolve the
+same font family and nearest compiled font size.
+
 ### Animation Performance Lessons
 
 The following practices were established while validating animated Extension
@@ -365,6 +370,9 @@ clock digits.
 `extensions/brick-breaker-clock` demonstrates a self-playing canvas game with
 embedded RGB565 arcade sprites, a timezone-aware `time` binding, and a
 responsive time-brick layout that scales to the owning button.
+`extensions/word-clock` demonstrates a responsive letter-matrix clock with
+rounded, minute-dots, and accurate phrase modes, bundled font selection, and
+button-color integration.
 `extensions/flight-radar` is a stateful example: it shares one fixed-buffer
 ADSB.lol polling worker across active widgets, uses `config_json` for location
 and range, and renders a radar canvas plus labels. `interval` is an optional

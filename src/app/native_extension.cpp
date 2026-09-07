@@ -459,9 +459,10 @@ void* host_canvas_create(void* parent) {
     return canvas;
 }
 size_t host_canvas_buffer_size(uint32_t width, uint32_t height) { return LV_CANVAS_BUF_SIZE(width, height, 16, 1); }
-void host_canvas_set_buffer(void* canvas, void* buffer, uint32_t width, uint32_t height) {
-    if (!canvas || !buffer || width == 0 || height == 0 || !register_canvas_buffer(canvas, buffer, width, height)) return;
+bool host_canvas_set_buffer(void* canvas, void* buffer, uint32_t width, uint32_t height) {
+    if (!canvas || !buffer || width == 0 || height == 0 || !register_canvas_buffer(canvas, buffer, width, height)) return false;
     lv_canvas_set_buffer(as_obj(canvas), buffer, width, height, LV_COLOR_FORMAT_RGB565);
+    return true;
 }
 void canvas_write_pixel(CanvasBuffer* entry, int32_t x, int32_t y, uint16_t color) {
     if (entry && entry->pixels && x >= 0 && y >= 0 &&
@@ -582,6 +583,21 @@ uint8_t host_font_family_id(const char* font_name) {
     if (strcmp(font_name, "doto") == 0) return 3;
     return 0;
 }
+int32_t host_canvas_measure_text(const char* text, const char* font_name, uint8_t size) {
+    if (!text || !*text) return 0;
+    LabelStyle style{};
+    style.font_family = host_font_family_id(font_name);
+    style.font_size = size;
+    const lv_font_t* font = pad_resolve_font(style, &lv_font_montserrat_14);
+    if (!font) return 0;
+
+    int32_t width = 0;
+    for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor; ++cursor) {
+        lv_font_glyph_dsc_t glyph{};
+        if (lv_font_get_glyph_dsc(font, &glyph, *cursor, 0)) width += glyph.adv_w;
+    }
+    return width;
+}
 void host_canvas_draw_text(void* canvas, int32_t x, int32_t y, const char* text,
                            const char* font_name, uint8_t size, uint32_t rgb) {
     CanvasBuffer* entry = find_canvas_buffer(canvas);
@@ -655,7 +671,7 @@ const NativeExtensionUiApi UI_API = {
 const NativeExtensionCanvasApi CANVAS_API = {
     host_canvas_create, host_canvas_buffer_size, host_canvas_set_buffer,
     host_canvas_clear, host_canvas_set_pixel, host_canvas_fill_rect, host_canvas_invalidate_rect, host_canvas_draw_line,
-    host_canvas_draw_circle, host_canvas_draw_text, host_canvas_blit_rgb565,
+    host_canvas_draw_circle, host_canvas_measure_text, host_canvas_draw_text, host_canvas_blit_rgb565,
 };
 const NativeExtensionBindingApi BINDING_API = {host_binding_resolve};
 const NativeExtensionButtonApi BUTTON_API = {host_button_get};
@@ -1057,7 +1073,7 @@ bool native_extension_create_instance(const char* id, uint32_t instance_id, void
     }
     s_lvgl_task = xTaskGetCurrentTaskHandle();
     LOGI(TAG, "Create %s instance=%08lx", id, static_cast<unsigned long>(instance_id));
-    slot->create(&HOST_API, slot, instance_id, root, config ? config : "");
+    if (!slot->create(&HOST_API, slot, instance_id, root, config ? config : "")) return false;
     ++slot->active_instances;
     host_status_set(slot, NATIVE_EXTENSION_RUNTIME_RUNNING, "Widget instance active");
     return true;

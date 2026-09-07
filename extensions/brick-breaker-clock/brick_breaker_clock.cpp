@@ -613,16 +613,16 @@ void render(const NativeExtensionHostApi* host, InstanceState* instance, uint32_
 
 } // namespace
 
-extern "C" void native_extension_create_instance(const NativeExtensionHostApi* host, void* extension_context,
+extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* host, void* extension_context,
                                                   uint32_t instance_id, void* root, const char* config_json) {
-    if (!host || !host->core || !host->ui || !host->canvas || !host->binding || !root) return;
+    if (!host || !host->core || !host->ui || !host->canvas || !host->binding || !root) return false;
     PackageState* state = package_state(host, extension_context);
     InstanceState* instance = state ? create_instance(state, instance_id) : nullptr;
-    if (!instance) return;
+    if (!instance) return false;
     instance->extension_context = extension_context;
     instance->width = static_cast<uint16_t>(host->ui->obj_get_width(root));
     instance->height = static_cast<uint16_t>(host->ui->obj_get_height(root));
-    if (instance->width < 40 || instance->height < 40) { instance->active = false; return; }
+    if (instance->width < 40 || instance->height < 40) { instance->active = false; return false; }
     copy_text(instance->time_template, sizeof(instance->time_template), "[time:%H%M]");
     parse_config_string(config_json, "time", instance->time_template, sizeof(instance->time_template));
     instance->respawn_ms = parse_config_uint(config_json, "respawn_ms", DEFAULT_RESPAWN_MS, 10000);
@@ -653,8 +653,12 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     instance->paddle_x = (instance->width - instance->paddle_width) / 2.0f;
     instance->canvas = host->canvas->canvas_create(root);
     instance->canvas_buffer = host->core->alloc(host->canvas->canvas_buffer_size(instance->width, instance->height));
-    if (!instance->canvas || !instance->canvas_buffer) { instance->active = false; return; }
-    host->canvas->canvas_set_buffer(instance->canvas, instance->canvas_buffer, instance->width, instance->height);
+    if (!instance->canvas || !instance->canvas_buffer) { instance->active = false; return false; }
+    if (!host->canvas->canvas_set_buffer(instance->canvas, instance->canvas_buffer, instance->width, instance->height)) {
+        host->core->free(instance->canvas_buffer);
+        instance->active = false;
+        return false;
+    }
     build_clock_bricks(instance);
     const int16_t clock_top = instance->bricks[0].bounds.y;
     const int16_t clock_bottom = static_cast<int16_t>(clock_top + 5 * instance->brick_height);
@@ -662,6 +666,7 @@ extern "C" void native_extension_create_instance(const NativeExtensionHostApi* h
     reset_ball(instance);
     instance->full_render = true;
     instance->render_dirty = true;
+    return true;
 }
 
 extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* host, void* extension_context,

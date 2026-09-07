@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-08-27
+ms.date: 2026-09-06
 ms.topic: reference
 ---
 
@@ -11,6 +11,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.27.0] - 2026-09-06
+
+### Added
+
+* **Word Clock native Extension**: ESP32-P4 pads can now render the current time as a responsive English word clock. Rounded mode selects the nearest five-minute phrase, minute-dots mode uses the preceding phrase with one to four corner dots, and accurate mode spells each minute on its expanded 18 by 18 face. Per-button settings select a bundled font, fitting size, inactive-letter color, time binding, and burn-in shift interval. The package includes catalog metadata, rendered previews, a configuration guide, and exhaustive phrase-map tests.
+
+### Changed
+
+* **Native Extension ABI 17**: creation callbacks now report success, and canvas buffer registration reports failure. The host counts only successfully created Extension instances, while every shipped package handles failed canvas setup and releases partially allocated buffers.
 
 ## [1.26.0] - 2026-08-27
 
