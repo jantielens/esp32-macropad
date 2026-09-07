@@ -18,14 +18,16 @@ enum WordClockMode : uint8_t {
 };
 
 enum WordClockAccurateWord : uint8_t {
-    WORD_CLOCK_ACCURATE_IT, WORD_CLOCK_ACCURATE_IS, WORD_CLOCK_ACCURATE_MINUTE_ONE,
+    WORD_CLOCK_ACCURATE_IT, WORD_CLOCK_ACCURATE_IS, WORD_CLOCK_ACCURATE_MINUTE,
+    WORD_CLOCK_ACCURATE_MINUTE_PLURAL, WORD_CLOCK_ACCURATE_MINUTE_ONE,
     WORD_CLOCK_ACCURATE_MINUTE_TWO, WORD_CLOCK_ACCURATE_MINUTE_THREE, WORD_CLOCK_ACCURATE_MINUTE_FOUR,
     WORD_CLOCK_ACCURATE_MINUTE_FIVE, WORD_CLOCK_ACCURATE_MINUTE_SIX, WORD_CLOCK_ACCURATE_MINUTE_SEVEN,
     WORD_CLOCK_ACCURATE_MINUTE_EIGHT, WORD_CLOCK_ACCURATE_MINUTE_NINE, WORD_CLOCK_ACCURATE_MINUTE_TEN,
     WORD_CLOCK_ACCURATE_MINUTE_ELEVEN, WORD_CLOCK_ACCURATE_MINUTE_TWELVE, WORD_CLOCK_ACCURATE_THIRTEEN,
     WORD_CLOCK_ACCURATE_FOURTEEN, WORD_CLOCK_ACCURATE_FIFTEEN, WORD_CLOCK_ACCURATE_SIXTEEN,
     WORD_CLOCK_ACCURATE_SEVENTEEN, WORD_CLOCK_ACCURATE_EIGHTEEN, WORD_CLOCK_ACCURATE_NINETEEN,
-    WORD_CLOCK_ACCURATE_TWENTY, WORD_CLOCK_ACCURATE_QUARTER, WORD_CLOCK_ACCURATE_HALF,
+    WORD_CLOCK_ACCURATE_TWENTY, WORD_CLOCK_ACCURATE_THIRTY, WORD_CLOCK_ACCURATE_FORTY,
+    WORD_CLOCK_ACCURATE_FIFTY, WORD_CLOCK_ACCURATE_QUARTER, WORD_CLOCK_ACCURATE_HALF,
     WORD_CLOCK_ACCURATE_PAST, WORD_CLOCK_ACCURATE_TO, WORD_CLOCK_ACCURATE_HOUR_ONE,
     WORD_CLOCK_ACCURATE_HOUR_TWO,
     WORD_CLOCK_ACCURATE_HOUR_THREE, WORD_CLOCK_ACCURATE_HOUR_FOUR, WORD_CLOCK_ACCURATE_HOUR_FIVE,
@@ -84,6 +86,10 @@ static inline WordClockAccurateWord word_clock_accurate_number_word(uint8_t valu
     return static_cast<WordClockAccurateWord>(WORD_CLOCK_ACCURATE_MINUTE_ONE + value - 1u);
 }
 
+static inline WordClockAccurateWord word_clock_accurate_tens_word(uint8_t value) {
+    return static_cast<WordClockAccurateWord>(WORD_CLOCK_ACCURATE_TWENTY + value / 10u - 2u);
+}
+
 static inline WordClockAccurateWord word_clock_accurate_hour_word(uint8_t hour) {
     const uint8_t normalized_hour = static_cast<uint8_t>(hour % 12u);
     return static_cast<WordClockAccurateWord>(WORD_CLOCK_ACCURATE_HOUR_ONE +
@@ -91,8 +97,8 @@ static inline WordClockAccurateWord word_clock_accurate_hour_word(uint8_t hour) 
 }
 
 static inline bool word_clock_accurate_word_is_active(WordClockAccurateWord word, uint8_t hour,
-                                                       uint8_t minute) {
-    const bool to_next_hour = minute > 30u;
+                                                       uint8_t minute, uint8_t past_threshold_minutes = 30u) {
+    const bool to_next_hour = minute > past_threshold_minutes;
     const uint8_t displayed_minute = to_next_hour ? static_cast<uint8_t>(60u - minute) : minute;
     const WordClockAccurateWord displayed_hour = word_clock_accurate_hour_word(
         static_cast<uint8_t>(hour + (to_next_hour ? 1u : 0u)));
@@ -102,7 +108,10 @@ static inline bool word_clock_accurate_word_is_active(WordClockAccurateWord word
         return true;
     if (displayed_minute == 15u) return word == WORD_CLOCK_ACCURATE_QUARTER;
     if (displayed_minute == 30u) return word == WORD_CLOCK_ACCURATE_HALF;
+    if (word == WORD_CLOCK_ACCURATE_MINUTE) return true;
+    if (word == WORD_CLOCK_ACCURATE_MINUTE_PLURAL) return displayed_minute != 1u;
     if (displayed_minute <= 19u) return word == word_clock_accurate_number_word(displayed_minute);
-    if (word == WORD_CLOCK_ACCURATE_TWENTY) return true;
-    return word == word_clock_accurate_number_word(static_cast<uint8_t>(displayed_minute - 20u));
+    if (word == word_clock_accurate_tens_word(displayed_minute)) return true;
+    const uint8_t units = static_cast<uint8_t>(displayed_minute % 10u);
+    return units && word == word_clock_accurate_number_word(units);
 }

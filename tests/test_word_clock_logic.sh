@@ -46,7 +46,8 @@ bool expected_active(WordClockWord word, uint8_t hour, uint8_t minute, WordClock
     return contains(minute_words[phrase], minute_counts[phrase], word);
 }
 
-bool expected_accurate_active(WordClockAccurateWord word, uint8_t hour, uint8_t minute) {
+bool expected_accurate_active(WordClockAccurateWord word, uint8_t hour, uint8_t minute,
+                              uint8_t past_threshold_minutes) {
     static constexpr WordClockAccurateWord minute_words[31][2] = {
         {}, {WORD_CLOCK_ACCURATE_MINUTE_ONE}, {WORD_CLOCK_ACCURATE_MINUTE_TWO},
         {WORD_CLOCK_ACCURATE_MINUTE_THREE}, {WORD_CLOCK_ACCURATE_MINUTE_FOUR},
@@ -76,7 +77,7 @@ bool expected_accurate_active(WordClockAccurateWord word, uint8_t hour, uint8_t 
         2, 2, 2, 2, 2, 2, 2, 2, 2,
         1,
     };
-    const bool next_hour = minute > 30u;
+    const bool next_hour = minute > past_threshold_minutes;
     const uint8_t displayed_minute = next_hour ? static_cast<uint8_t>(60u - minute) : minute;
     const uint8_t hour_value = static_cast<uint8_t>((hour + (next_hour ? 1u : 0u)) % 12u);
     const WordClockAccurateWord hour_word = static_cast<WordClockAccurateWord>(
@@ -85,7 +86,17 @@ bool expected_accurate_active(WordClockAccurateWord word, uint8_t hour, uint8_t 
     if (word == hour_word) return true;
     if (displayed_minute == 0u) return word == WORD_CLOCK_ACCURATE_OCLOCK;
     if (word == (next_hour ? WORD_CLOCK_ACCURATE_TO : WORD_CLOCK_ACCURATE_PAST)) return true;
-    return contains_accurate(minute_words[displayed_minute], minute_counts[displayed_minute], word);
+    if (displayed_minute == 15u || displayed_minute == 30u)
+        return contains_accurate(minute_words[displayed_minute], minute_counts[displayed_minute], word);
+    if (word == WORD_CLOCK_ACCURATE_MINUTE) return true;
+    if (word == WORD_CLOCK_ACCURATE_MINUTE_PLURAL) return displayed_minute != 1u;
+    if (displayed_minute <= 29u)
+        return contains_accurate(minute_words[displayed_minute], minute_counts[displayed_minute], word);
+    const WordClockAccurateWord tens = static_cast<WordClockAccurateWord>(
+        WORD_CLOCK_ACCURATE_TWENTY + displayed_minute / 10u - 2u);
+    if (word == tens) return true;
+    const uint8_t units = displayed_minute % 10u;
+    return units && word == static_cast<WordClockAccurateWord>(WORD_CLOCK_ACCURATE_MINUTE_ONE + units - 1u);
 }
 
 int main() {
@@ -113,21 +124,23 @@ int main() {
             }
         }
     }
-    for (uint8_t hour = 0; hour < 12; ++hour) {
-        for (uint8_t minute = 0; minute < 60; ++minute) {
-            for (uint8_t value = WORD_CLOCK_ACCURATE_IT; value <= WORD_CLOCK_ACCURATE_OCLOCK; ++value) {
-                const WordClockAccurateWord word = static_cast<WordClockAccurateWord>(value);
-                const bool expected = expected_accurate_active(word, hour, minute);
-                const bool actual = word_clock_accurate_word_is_active(word, hour, minute);
-                if (expected == actual) continue;
-                std::fprintf(stderr, "FAIL: accurate %02u:%02u word %u expected %u, got %u\n",
-                             hour, minute, value, expected, actual);
-                ++failures;
+    for (uint8_t threshold = 30; threshold <= 44; ++threshold) {
+        for (uint8_t hour = 0; hour < 12; ++hour) {
+            for (uint8_t minute = 0; minute < 60; ++minute) {
+                for (uint8_t value = WORD_CLOCK_ACCURATE_IT; value <= WORD_CLOCK_ACCURATE_OCLOCK; ++value) {
+                    const WordClockAccurateWord word = static_cast<WordClockAccurateWord>(value);
+                    const bool expected = expected_accurate_active(word, hour, minute, threshold);
+                    const bool actual = word_clock_accurate_word_is_active(word, hour, minute, threshold);
+                    if (expected == actual) continue;
+                    std::fprintf(stderr, "FAIL: accurate threshold %u %02u:%02u word %u expected %u, got %u\n",
+                                 threshold, hour, minute, value, expected, actual);
+                    ++failures;
+                }
             }
         }
     }
     if (failures) return 1;
-    std::puts("PASS: word clock phrase logic covers all three modes and all 2160 minute states.");
+    std::puts("PASS: word clock phrase logic covers all modes and accurate thresholds.");
     return 0;
 }
 CPP

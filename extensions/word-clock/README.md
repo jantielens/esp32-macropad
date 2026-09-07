@@ -1,7 +1,7 @@
 ---
 title: Word Clock Extension
 description: Configuration and rendering guide for the responsive Word Clock native extension
-ms.date: 2026-09-06
+ms.date: 2026-09-07
 ms.topic: reference
 ---
 
@@ -42,6 +42,7 @@ provide this configuration:
 {
   "time": "[time:%H%M;Europe/Brussels]",
   "mode": "rounded",
+  "accurate_past_threshold_minutes": 35,
   "font_family": "bebas",
   "font_size": 0,
   "dimmed_color": "#383631",
@@ -53,6 +54,7 @@ provide this configuration:
 | --- | --- | --- |
 | `time` | `[time:%H%M]` | Existing time binding that supplies hour and minute. Timezone parameters are supported. |
 | `mode` | `rounded` | `rounded` uses the nearest five-minute phrase. `minute-dots` uses the preceding five-minute phrase and lights one to four filled corner dots for the remaining minutes. `accurate` spells every minute in words. |
+| `accurate_past_threshold_minutes` | `35` | Accurate mode only. Counts through this minute as `past` the current hour, then uses `to` the next hour. Values are clamped to 30 through 44 so `quarter to` remains consistent. |
 | `font_family` | `bebas` | `default`, `bebas`, `doto`, or `dseg7`. `bebas` best matches the compact, uppercase clock face. |
 | `font_size` | `0` | `0` chooses the largest fitting bundled font. Otherwise use 12, 14, 18, 24, 32, 36, or 48. Large values reduce automatically when the button is too small. |
 | Button text color | Button setting | Words that describe the current time use the owning button's resolved text color. |
@@ -70,12 +72,12 @@ displays "IT IS TWENTY FIVE TO TWO" with three dots.
 between words. Its remaining inactive letters are varied rather than repeated.
 It uses spoken expressions for familiar times: 08:15 displays "IT IS
 QUARTER PAST EIGHT", 08:30 displays "IT IS HALF PAST EIGHT", and 08:45
-displays "IT IS QUARTER TO NINE". It keeps full teen words such as
-"THIRTEEN", while clean compound values use separate words such as
-"TWENTY FIVE". Other minutes use the current hour through
-30 minutes past, then count down to the next hour: 01:20 displays "IT IS
-TWENTY PAST ONE", 01:58 displays "IT IS TWO TO TWO", and 05:13 displays
-"IT IS THIRTEEN PAST FIVE".
+displays "IT IS QUARTER TO NINE". Other exact minutes include `MINUTE` or
+`MINUTES`: 05:13 displays "IT IS THIRTEEN MINUTES PAST FIVE". Full teen
+words remain intact, while compound values use separate words such as
+"THIRTY FOUR". `accurate_past_threshold_minutes` defaults to 35, so 08:35
+displays "IT IS THIRTY FIVE MINUTES PAST EIGHT" and 08:36 displays "IT IS
+TWENTY FOUR MINUTES TO NINE".
 
 ## Rendering
 

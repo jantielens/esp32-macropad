@@ -21,6 +21,9 @@ constexpr uint32_t DEFAULT_FOREGROUND_RGB = 0xF4EFE1;
 constexpr uint32_t DEFAULT_DIMMED_RGB = 0x383631;
 constexpr uint32_t DEFAULT_SHIFT_MINUTES = 60;
 constexpr uint32_t MAX_SHIFT_MINUTES = 30000;
+constexpr uint8_t DEFAULT_ACCURATE_PAST_THRESHOLD_MINUTES = 35;
+constexpr uint8_t MIN_ACCURATE_PAST_THRESHOLD_MINUTES = 30;
+constexpr uint8_t MAX_ACCURATE_PAST_THRESHOLD_MINUTES = 44;
 constexpr uint8_t LOG_MESSAGE_CAPACITY = 192;
 constexpr uint16_t OUTER_MARGIN = 6;
 constexpr char GRID[GRID_ROWS][GRID_COLUMNS + 1] = {
@@ -38,9 +41,9 @@ constexpr char GRID[GRID_ROWS][GRID_COLUMNS + 1] = {
 constexpr char ACCURATE_GRID[ACCURATE_GRID_ROWS][ACCURATE_GRID_COLUMNS + 1] = {
     "IT#IS#TWENTY######", "ONE#TWO#THREE#####", "FOUR#FIVE#SIX#####", "SEVEN#EIGHT#######",
     "NINE#TEN##########", "ELEVEN#TWELVE#####", "THIRTEEN#FIFTEEN##", "FOURTEEN#SIXTEEN##",
-    "SEVENTEEN#########", "EIGHTEEN#NINETEEN#", "QUARTER#HALF######", "PAST#TO###########",
-    "ONE#TWO#THREE#####", "FOUR#FIVE#SIX#####", "SEVEN#EIGHT#######", "NINE#TEN##########",
-    "ELEVEN#TWELVE#####", "OCLOCK############",
+    "SEVENTEEN#########", "EIGHTEEN#NINETEEN#", "THIRTY#FORTY#FIFTY", "MINUTES#QUARTER###",
+    "HALF#PAST#TO######", "ONE#TWO#THREE#####", "FOUR#FIVE#SIX#####", "SEVEN#EIGHT#######",
+    "NINE#TEN#ELEVEN###", "TWELVE#OCLOCK#####",
 };
 
 struct WordRange { uint8_t row, column, length; };
@@ -51,19 +54,23 @@ constexpr WordRange WORDS[] = {
     {9, 0, 3}, {7, 5, 6}, {8, 5, 6}, {9, 5, 6},
 };
 constexpr WordRange ACCURATE_WORDS[] = {
-    {0, 0, 2}, {0, 3, 2}, {1, 0, 3}, {1, 4, 3}, {1, 8, 5}, {2, 0, 4},
-    {2, 5, 4}, {2, 10, 3}, {3, 0, 5}, {3, 6, 5}, {4, 0, 4}, {4, 5, 3},
-    {5, 0, 6}, {5, 7, 6}, {6, 0, 8}, {7, 0, 8}, {6, 9, 7}, {7, 9, 7},
-    {8, 0, 9}, {9, 0, 8}, {9, 9, 8}, {0, 6, 6}, {10, 0, 7}, {10, 8, 4},
-    {11, 0, 4}, {11, 5, 2}, {12, 0, 3}, {12, 4, 3}, {12, 8, 5}, {13, 0, 4},
-    {13, 5, 4}, {13, 10, 3}, {14, 0, 5}, {14, 6, 5}, {15, 0, 4}, {15, 5, 3},
-    {16, 0, 6}, {16, 7, 6}, {17, 0, 6},
+    {0, 0, 2}, {0, 3, 2}, {11, 0, 6}, {11, 6, 1}, {1, 0, 3}, {1, 4, 3},
+    {1, 8, 5}, {2, 0, 4}, {2, 5, 4}, {2, 10, 3}, {3, 0, 5}, {3, 6, 5},
+    {4, 0, 4}, {4, 5, 3}, {5, 0, 6}, {5, 7, 6}, {6, 0, 8}, {7, 0, 8},
+    {6, 9, 7}, {7, 9, 7}, {8, 0, 9}, {9, 0, 8}, {9, 9, 8}, {0, 6, 6},
+    {10, 0, 6}, {10, 7, 5}, {10, 13, 5}, {11, 9, 7}, {12, 0, 4}, {12, 5, 4},
+    {12, 10, 2}, {13, 0, 3}, {13, 4, 3}, {13, 8, 5}, {14, 0, 4}, {14, 5, 4},
+    {14, 10, 3}, {15, 0, 5}, {15, 6, 5}, {16, 0, 4}, {16, 5, 3}, {16, 9, 6},
+    {17, 0, 6}, {17, 7, 6},
 };
 static_assert(sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]) == WORD_CLOCK_ACCURATE_OCLOCK + 1u,
               "accurate word-clock face must map every phrase word");
 static_assert(ACCURATE_GRID[0][ACCURATE_WORDS[WORD_CLOCK_ACCURATE_TWENTY].column] == 'T' &&
               ACCURATE_GRID[1][ACCURATE_WORDS[WORD_CLOCK_ACCURATE_MINUTE_TWO].column] == 'T',
               "twenty-two must read from TWENTY to TWO");
+static_assert(ACCURATE_WORDS[WORD_CLOCK_ACCURATE_OCLOCK].row >=
+                  ACCURATE_WORDS[WORD_CLOCK_ACCURATE_HOUR_TWELVE].row,
+              "OCLOCK must follow the hour words in the accurate face");
 static_assert(ACCURATE_GRID[7][11] == 'X' && GRID[5][5] == 'X',
               "SIX must retain its literal X rather than use a filler marker");
 static_assert(GRID[1][WORDS[4].column] == 'Q' && GRID[1][WORDS[4].column + 6] == 'R',
@@ -73,13 +80,14 @@ constexpr char WORD_NAMES[][11] = {
     "PAST", "TO", "ONE", "TWO", "THREE", "FOUR", "FIVE_HOUR", "SIX",
     "SEVEN", "EIGHT", "NINE", "TEN_HOUR", "ELEVEN", "TWELVE", "OCLOCK",
 };
-constexpr char ACCURATE_WORD_NAMES[][13] = {
-    "IT", "IS", "MIN_ONE", "MIN_TWO", "MIN_THREE", "MIN_FOUR", "MIN_FIVE",
-    "MIN_SIX", "MIN_SEVEN", "MIN_EIGHT", "MIN_NINE", "MIN_TEN", "MIN_ELEVEN",
-    "MIN_TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN",
-    "EIGHTEEN", "NINETEEN", "TWENTY", "QUARTER", "HALF", "PAST", "TO", "HOUR_ONE",
-    "HOUR_TWO", "HOUR_THREE", "HOUR_FOUR", "HOUR_FIVE", "HOUR_SIX", "HOUR_SEVEN",
-    "HOUR_EIGHT", "HOUR_NINE", "HOUR_TEN", "HOUR_ELEVEN", "HOUR_TWELVE", "OCLOCK",
+constexpr char ACCURATE_WORD_NAMES[][14] = {
+    "IT", "IS", "MINUTE", "MINUTE_PLURAL", "MIN_ONE", "MIN_TWO", "MIN_THREE",
+    "MIN_FOUR", "MIN_FIVE", "MIN_SIX", "MIN_SEVEN", "MIN_EIGHT", "MIN_NINE",
+    "MIN_TEN", "MIN_ELEVEN", "MIN_TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN",
+    "SIXTEEN", "SEVENTEEN", "EIGHTEEN", "NINETEEN", "TWENTY", "THIRTY", "FORTY",
+    "FIFTY", "QUARTER", "HALF", "PAST", "TO", "HOUR_ONE", "HOUR_TWO", "HOUR_THREE",
+    "HOUR_FOUR", "HOUR_FIVE", "HOUR_SIX", "HOUR_SEVEN", "HOUR_EIGHT", "HOUR_NINE",
+    "HOUR_TEN", "HOUR_ELEVEN", "HOUR_TWELVE", "OCLOCK",
 };
 static_assert(sizeof(ACCURATE_WORD_NAMES) / sizeof(ACCURATE_WORD_NAMES[0]) == WORD_CLOCK_ACCURATE_OCLOCK + 1u,
               "accurate word-clock names must match the phrase vocabulary");
@@ -111,6 +119,7 @@ struct InstanceState {
     uint32_t next_resolve_ms;
     uint32_t last_shift_ms;
     uint32_t shift_interval_ms;
+    uint8_t accurate_past_threshold_minutes;
     WordClockMode mode;
 };
 
@@ -160,7 +169,8 @@ void log_phrase(const NativeExtensionHostApi* host, const InstanceState* instanc
     bool first = true;
     if (instance->mode == WORD_CLOCK_MODE_ACCURATE) {
         for (uint8_t word = 0; word < sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]); ++word) {
-            if (!word_clock_accurate_word_is_active(static_cast<WordClockAccurateWord>(word), hour, minute)) continue;
+            if (!word_clock_accurate_word_is_active(static_cast<WordClockAccurateWord>(word), hour, minute,
+                                                    instance->accurate_past_threshold_minutes)) continue;
             if (!first) cursor = append_text(cursor, end, ",");
             cursor = append_text(cursor, end, ACCURATE_WORD_NAMES[word]);
             first = false;
@@ -268,6 +278,15 @@ uint32_t parse_shift_interval(const char* json) {
     if (!find_number(json, "burn_in_shift_minutes", &minutes)) return DEFAULT_SHIFT_MINUTES * 60000u;
     if (minutes > MAX_SHIFT_MINUTES) minutes = MAX_SHIFT_MINUTES;
     return minutes * 60000u;
+}
+
+uint8_t parse_accurate_past_threshold(const char* json) {
+    uint32_t threshold = DEFAULT_ACCURATE_PAST_THRESHOLD_MINUTES;
+    if (find_number(json, "accurate_past_threshold_minutes", &threshold)) {
+        if (threshold < MIN_ACCURATE_PAST_THRESHOLD_MINUTES) threshold = MIN_ACCURATE_PAST_THRESHOLD_MINUTES;
+        if (threshold > MAX_ACCURATE_PAST_THRESHOLD_MINUTES) threshold = MAX_ACCURATE_PAST_THRESHOLD_MINUTES;
+    }
+    return static_cast<uint8_t>(threshold);
 }
 
 PackageState* package_state(const NativeExtensionHostApi* host, void* context) {
@@ -378,7 +397,8 @@ bool cell_is_active(const InstanceState* instance, uint8_t row, uint8_t column,
         for (uint8_t word = 0; word < sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]); ++word) {
             const WordRange& range = ACCURATE_WORDS[word];
             if (range.row == row && column >= range.column && column < range.column + range.length &&
-                word_clock_accurate_word_is_active(static_cast<WordClockAccurateWord>(word), hour, minute)) return true;
+                word_clock_accurate_word_is_active(static_cast<WordClockAccurateWord>(word), hour, minute,
+                                                   instance->accurate_past_threshold_minutes)) return true;
         }
     } else {
         for (uint8_t word = 0; word < sizeof(WORDS) / sizeof(WORDS[0]); ++word) {
@@ -442,6 +462,7 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     find_string(config_json, "font_family", instance->font_name, sizeof(instance->font_name));
     find_string(config_json, "time", instance->time_template, sizeof(instance->time_template));
     instance->mode = parse_mode(config_json);
+    instance->accurate_past_threshold_minutes = parse_accurate_past_threshold(config_json);
     parse_color(config_json, "dimmed_color", &instance->dimmed_rgb);
     NativeExtensionButtonSnapshot button = {};
     if (host->button && host->button->get(extension_context, instance_id, &button)) {
