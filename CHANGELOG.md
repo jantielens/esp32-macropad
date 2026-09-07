@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.28.0] - 2026-09-07
 
+### Added
+
+* **Flight Radar Extension guide**: Flight Radar now includes installation, configuration, operating-limit, and package-build documentation. The guide covers ADSB.lol connectivity, the location and polling settings, shared request streams, and supported widget limits.
+
 ### Fixed
 
 * **Non-audio boards no longer request unavailable sound files**: the Pad editor and shared action controls now load uploaded sound files only when the device reports sound-player support, preventing browser console errors from calls to the unavailable endpoint.
