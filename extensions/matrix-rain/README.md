@@ -1,7 +1,7 @@
 ---
 title: Matrix Rain Extension
 description: Configuration and development guide for the Matrix-style character rain native extension
-ms.date: 2026-08-18
+ms.date: 2026-09-07
 ms.topic: reference
 ---
 
@@ -68,9 +68,12 @@ remain behind.
 ## Build
 
 ```bash
-bash tools/build-p4-extension.sh \
+bash tools/build-extension.sh p4 \
   extensions/matrix-rain/matrix_rain.cpp \
-  build/extensions/matrix-rain@1.0.0.elf
+  build/extensions/matrix-rain@1.0.0-p4.elf
+bash tools/build-extension.sh s3 \
+  extensions/matrix-rain/matrix_rain.cpp \
+  build/extensions/matrix-rain@1.0.0-s3.elf
 ```
 
 The extension requires firmware and a package built for the same native

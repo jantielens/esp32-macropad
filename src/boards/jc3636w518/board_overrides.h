@@ -11,13 +11,19 @@
 // ---------------------------------------------------------------------------
 // Enable display support on this board.
 #define HAS_DISPLAY true
+#define HAS_NATIVE_EXTENSIONS true
 // BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
 #define HAS_BLE_HID false
+// MCP disabled to preserve internal RAM for WiFi, SD storage, and extensions.
+#define HAS_MCP false
+// Remote image and MJPEG fetching disabled to preserve DMA-capable internal RAM.
+#define HAS_IMAGE_FETCH false
 
 // ---------------------------------------------------------------------------
 // Audio (PCM510xA, 3-wire I2S)
 // ---------------------------------------------------------------------------
-#define HAS_AUDIO true
+// Audio disabled to preserve internal DMA-capable RAM for WiFi and SD storage.
+#define HAS_AUDIO false
 #define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_PCM510XA
 #define AUDIO_I2S_LRCK 16
 #define AUDIO_I2S_DOUT 17

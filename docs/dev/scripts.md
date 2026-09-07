@@ -199,27 +199,29 @@ python3 tools/generate-nixie-extension-assets.py \
 
 ---
 
-## tools/build-p4-extension.sh
+## Native extension builders
 
-**Purpose:** Build an ESP32-P4 native Extension as a position-independent
-RISC-V ELF and, when signing is configured, a single-file signed upload package.
+**Purpose:** Build an ESP32-P4 or ESP32-S3 native Extension and, when signing is
+configured, a single-file signed upload package. `build-p4-extension.sh` remains
+available for P4-only local builds.
 
 **Usage:**
 ```bash
-bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
+bash tools/build-extension.sh p4 extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0-p4.elf
+bash tools/build-extension.sh s3 extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0-s3.elf
 
-# Discover and build every extension package into build/extensions/
+# Discover and build P4 and S3 packages for every extension into build/extensions/
 bash tools/build-p4-extensions.sh
 ```
 
 **Requirements:** `setup.sh` must have installed the ESP32 Arduino platform.
-The script locates its bundled RISC-V compiler automatically; set
-`ESP32_P4_TOOLCHAIN_DIR` only to override that location.
+The scripts locate their bundled RISC-V and Xtensa compilers automatically; set
+`ESP32_P4_TOOLCHAIN_DIR` or `ESP32_S3_TOOLCHAIN_DIR` only to override a location.
 
-Name the development ELF using `<extension-id>@<package-semver>.elf`, for
-example `build/extensions/hello-world@1.0.0.elf`. With
+Name the development ELF using `<extension-id>@<package-semver>-<target>.elf`,
+for example `build/extensions/hello-world@1.0.0-s3.elf`. With
 `EXTENSION_SIGNING_KEY` configured, the builder also creates
-`build/extensions/hello-world@1.0.0.ext`: the ELF followed by its 64-byte
+`build/extensions/hello-world@1.0.0-s3.ext`: the ELF followed by its 64-byte
 ECDSA P-256 signature. Upload the `.ext` file through the Extensions page to a
 chosen slot. The upload stages on storage and becomes active after the next boot
 installs it into executable flash.
@@ -229,11 +231,12 @@ Use those values in the output filename; the builder rejects a mismatch. The
 package guard discovers every descriptor-exporting source under `extensions/`
 and builds it automatically, so adding an extension requires no test or
 documentation list update. `build-p4-extensions.sh` uses the same discovery
-rule and accepts an optional output-directory argument. It signs packages by
+rule, creates both target packages, and accepts an optional output-directory
+argument. It signs packages by
 default with `.secrets/extension-signing-private.pem`, or uses the
 `EXTENSION_SIGNING_KEY` override, and fails when no signing key is available.
-The builder links the shared freestanding `memcpy`/`memset` runtime, derives
-ESP32-P4 ABI flags, and requires the descriptor and shutdown exports.
+The builders link the shared freestanding `memcpy`/`memset` runtime, select the
+target ABI, and require the descriptor and shutdown exports.
 
 ---
 

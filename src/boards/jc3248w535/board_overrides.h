@@ -17,6 +17,7 @@
 // ============================================================================
 // Enable display support on this board.
 #define HAS_DISPLAY true
+#define HAS_NATIVE_EXTENSIONS true
 // BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
 #define HAS_BLE_HID false
 

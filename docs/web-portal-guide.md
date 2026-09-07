@@ -437,9 +437,10 @@ MJPEG streams, and enabled motion sensing. It defaults to 4 FPS. Lower it, for
 example to 2 FPS, when a complex pad needs more CPU time; lower rates reduce
 camera work but make live images and motion response update less often.
 
-On ESP32-P4 builds, the **Extensions** page has two small slots
-and one large slot for trusted native Extensions. Upload the signed package
-`extension-id@version.ext`, then reboot to install it into executable flash.
+On ESP32-P4 and supported 16 MB ESP32-S3 display builds, the **Extensions** page
+has two small slots and one large slot for trusted native Extensions. Upload the
+signed package `extension-id@version-p4.ext` or `extension-id@version-s3.ext`
+that matches the device, then reboot to install it into executable flash.
 The package contains the Extension ELF and its first-party signature; unsigned
 or modified packages are rejected. Select **Extension** as a button's widget,
 choose an enabled installed extension, and optionally provide per-button

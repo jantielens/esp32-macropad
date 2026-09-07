@@ -10,20 +10,40 @@ SIGNING_KEY="$TMP_DIR/extension-signing-private.pem"
 openssl ecparam -name prime256v1 -genkey -noout -out "$SIGNING_KEY"
 export EXTENSION_SIGNING_KEY="$SIGNING_KEY"
 ABI_VERSION=$(sed -n 's/^#define NATIVE_EXTENSION_ABI_VERSION \([0-9][0-9]*\)u$/\1/p' src/app/native_extension_api.h)
-TARGET_ABI=$(sed -n 's/^#define NATIVE_EXTENSION_TARGET_ABI "\([^"]*\)"$/\1/p' src/app/native_extension_api.h)
 
 build_package() {
-    local source=$1
-    local output=$2
+    local target=$1
+    local source=$2
+    local output=$3
+    local target_abi
+    local readelf
+    case "$target" in
+        p4)
+            target_abi="rv32imafc-ilp32f"
+            readelf="$HOME/.arduino15/packages/esp32/tools/esp-rv32/2511/bin/riscv32-esp-elf-readelf"
+            ;;
+        s3)
+            target_abi="xtensa-esp32s3"
+            readelf="$HOME/.arduino15/packages/esp32/tools/esp-x32/2511/bin/xtensa-esp32s3-elf-readelf"
+            ;;
+        *)
+            echo "Unknown test target: $target" >&2
+            exit 1
+            ;;
+    esac
     local log
-    log=$(bash tools/build-p4-extension.sh "$source" "$output")
-    grep -q "ABI $ABI_VERSION, target $TARGET_ABI" <<<"$log"
-    "$HOME/.arduino15/packages/esp32/tools/esp-rv32/2511/bin/riscv32-esp-elf-readelf" -sW "$output" |
+    log=$(bash tools/build-extension.sh "$target" "$source" "$output")
+    grep -q "ABI $ABI_VERSION, target $target_abi" <<<"$log"
+    "$readelf" -sW "$output" |
         grep -q '[[:space:]]native_extension_descriptor$'
-    "$HOME/.arduino15/packages/esp32/tools/esp-rv32/2511/bin/riscv32-esp-elf-readelf" -sW "$output" |
+    "$readelf" -sW "$output" |
         grep -q '[[:space:]]native_extension_shutdown$'
-    ! "$HOME/.arduino15/packages/esp32/tools/esp-rv32/2511/bin/riscv32-esp-elf-readelf" -r "$output" |
-        grep -q 'contains [1-9]'
+    if [[ "$target" == "s3" ]]; then
+        ! "$readelf" -rW "$output" | grep -E 'R_' | grep -vq 'R_XTENSA_RELATIVE'
+        "$readelf" -rW "$output" | grep -q 'R_XTENSA_RELATIVE'
+    else
+        ! "$readelf" -r "$output" | grep -q 'contains [1-9]\|R_'
+    fi
     [[ $(wc -c < "${output%.elf}.ext") -eq $(($(wc -c < "$output") + 64)) ]]
 }
 
@@ -35,7 +55,9 @@ while IFS= read -r source; do
         exit 1
     fi
     jq -e 'type == "object" and ((keys | sort) == ["summary", "usage"]) and (.summary | type == "string" and length > 0) and (.usage | type == "string" and length > 0)' "$metadata" >/dev/null
-    build_package "$source" "$TMP_DIR/$package_name"
+    base_name="${package_name%.elf}"
+    build_package p4 "$source" "$TMP_DIR/$base_name-p4.elf"
+    build_package s3 "$source" "$TMP_DIR/$base_name-s3.elf"
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/)
 
 first_package=$(find "$TMP_DIR" -maxdepth 1 -type f -name '*.ext' | head -n 1)

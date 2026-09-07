@@ -6,7 +6,11 @@
 // The extension ABI is intentionally C-shaped. Native packages are built
 // separately from the firmware, so this remains the compatibility boundary.
 #define NATIVE_EXTENSION_ABI_VERSION 17u
+#define NATIVE_EXTENSION_TARGET_ABI_P4 "rv32imafc-ilp32f"
+#define NATIVE_EXTENSION_TARGET_ABI_S3 "xtensa-esp32s3"
+#ifndef NATIVE_EXTENSION_TARGET_ABI
 #define NATIVE_EXTENSION_TARGET_ABI "rv32imafc-ilp32f"
+#endif
 #define NATIVE_EXTENSION_DESCRIPTOR_MAGIC 0x3744584Eu
 #define NATIVE_EXTENSION_TICK_INTERVAL_DEFAULT_MS 250u
 #define NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS 33u

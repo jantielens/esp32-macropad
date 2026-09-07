@@ -1,14 +1,17 @@
 ---
 title: Native Extensions
-description: Developer guide for creating and installing ESP32-P4 native Extensions
-ms.date: 2026-08-15
+description: Developer guide for creating and installing ESP32-P4 and ESP32-S3 native Extensions
+ms.date: 2026-09-07
 ms.topic: how-to
 ---
 
 ## Overview
 
-Extensions are trusted, flash-mapped RISC-V ELF modules for the
-ESP32-P4 boards. An Extension can be installed in one slot and placed on
+Extensions are trusted native ELF modules for ESP32-P4 and 16 MB ESP32-S3
+display boards. P4 packages use RISC-V and execute from flash. S3 packages
+use Xtensa; their code is relocated into executable internal RAM and their
+data is relocated into PSRAM. An Extension source is built into one signed
+package per target. An Extension can be installed in one slot and placed on
 zero or more pad buttons through the **Extension** widget.
 
 The firmware owns storage, flash mapping, LVGL task ownership, package slots,
@@ -25,11 +28,13 @@ The extension partition contains three fixed slots:
 | Small 2 | 56 KiB |
 | Large | 120 KiB |
 
-Upload a signed package named `<extension-id>@<package-semver>.ext`. The ID
-uses lowercase letters, digits, and hyphens. A package contains a relocation-free
-ELF followed by its 64-byte signature. The portal stages the upload on the
-configured storage backend; the next boot verifies and commits it into the
-selected executable flash slot.
+Upload a signed package named `<extension-id>@<package-semver>-p4.ext` or
+`<extension-id>@<package-semver>-s3.ext`. The ID uses lowercase letters, digits,
+and hyphens. A package contains an ELF followed by its 64-byte signature. P4
+ELFs are relocation-free. S3 ELFs may contain only `R_XTENSA_RELATIVE`
+relocations, which the loader applies while creating the in-memory image. The
+portal stages the upload on the configured storage backend; the next boot
+verifies the target ABI and commits it into the selected extension slot.
 
 The signature is an ECDSA P-256 signature over the exact ELF bytes, stored as
 a fixed-width 64-byte `r || s` value. Firmware embeds the project's
@@ -57,7 +62,10 @@ state that no configuration is required.
 ## Build
 
 ```bash
-bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp build/extensions/hello-world@1.0.0.elf
+bash tools/build-extension.sh p4 extensions/hello-world/hello_world.cpp \
+  build/extensions/hello-world@1.0.0-p4.elf
+bash tools/build-extension.sh s3 extensions/hello-world/hello_world.cpp \
+  build/extensions/hello-world@1.0.0-s3.elf
 ```
 
 Release-ready packages require `EXTENSION_SIGNING_KEY` to point at the
@@ -65,18 +73,19 @@ first-party P-256 private-key PEM file:
 
 ```bash
 EXTENSION_SIGNING_KEY="$HOME/.config/esp32-macropad/extension-signing-private.pem" \
-  bash tools/build-p4-extension.sh extensions/hello-world/hello_world.cpp \
-  build/extensions/hello-world@1.0.0.elf
+  bash tools/build-extension.sh p4 extensions/hello-world/hello_world.cpp \
+  build/extensions/hello-world@1.0.0-p4.elf
 ```
 
-`tools/build-p4-extensions.sh` builds every shipped Extension as a signed
-package by default. It uses
+`tools/build-p4-extensions.sh` builds both P4 and S3 packages, while
+`tools/build-extension.sh` builds a single package for either target. It uses
 `.secrets/extension-signing-private.pem` when `EXTENSION_SIGNING_KEY` is unset
 and fails rather than creating unsigned packages if no key is available.
 
-This creates the development ELF and the single upload file
-`hello-world@1.0.0.ext`. Only generate a new P-256 key pair when establishing a
-project key or rotating it:
+Each build creates a development ELF and its matching upload file, such as
+`hello-world@1.0.0-p4.ext` or `hello-world@1.0.0-s3.ext`. Upload the package
+matching the device target. Only generate a new P-256 key pair when establishing
+a project key or rotating it:
 
 ```bash
 bash tools/generate-extension-signing-key.sh "$HOME/.config/esp32-macropad/extension-signing-private.pem"
@@ -91,18 +100,24 @@ and ship firmware before uploading extensions signed by the new private key.
 Future firmware can add owner-approved third-party public keys using the same
 package format and verification path.
 
-The build script rejects ELF files containing relocations. Rebuild and upload
-every Extension after a firmware update that changes
+The build scripts reject P4 ELF files containing relocations and reject S3
+ELF files containing relocations other than `R_XTENSA_RELATIVE`. Rebuild and
+upload both target packages after a firmware update that changes
 `NATIVE_EXTENSION_ABI_VERSION`. Packages must use the current value declared in
 `native_extension_api.h`; packages built for a different ABI are intentionally
 unsupported.
 
+S3 executable internal RAM is limited. The loader only reserves the executable
+code span in internal RAM, while extension constants and writable data use
+PSRAM. A package whose executable code cannot fit in the largest available
+internal executable block is skipped at boot.
+
 The extension build links a tiny freestanding runtime that provides `memcpy`
 and `memset`; it does not link the Arduino or C++ standard-library runtimes.
-It uses the ESP32-P4 `ilp32f` floating-point ABI, matching firmware callbacks
-that exchange `float` values. The builder derives target flags and ABI metadata
-from the installed ESP32-P4 SDK and `native_extension_api.h`; do not supply
-your own `-march` or `-mabi` flags.
+The builder selects the required target ABI; do not supply your own `-march`,
+`-mabi`, target, or linker flags.
+P4 uses the ESP32-P4 `ilp32f` floating-point ABI, matching firmware callbacks
+that exchange `float` values.
 
 Every package must export this fixed, pointer-free descriptor:
 
@@ -129,8 +144,9 @@ appropriate cadence for each placement.
 The loader requires the descriptor, then verifies its ID and package version
 against the filename as well as its ABI and target ABI against firmware. Package
 semantic versioning is independent from the firmware ABI: use
-`flight-radar@1.2.0.elf`, not an ABI-derived version, when an ABI rebuild
-does not itself introduce a major package behavior change.
+`flight-radar@1.2.0-p4.elf` or `flight-radar@1.2.0-s3.elf`, not an ABI-derived
+version, when an ABI rebuild does not itself introduce a major package behavior
+change.
 
 ## Lifecycle
 
@@ -165,9 +181,9 @@ passed as `config_json`; it is a text payload limited to 511 bytes.
 
 `extension_context` is an opaque, loader-owned handle shared by every instance
 of a package. Use `context_get_data` and `context_set_data` to associate one
-host-allocated service state with the package. This is the supported location
-for mutable state because a native ELF is flash-mapped and should not rely on
-writable globals.
+host-allocated service state with the package. This is required for mutable
+package state on flash-mapped P4 packages and gives both targets one consistent
+place for shared state.
 
 `shutdown` is required. It runs on the Arduino main loop after the
 final widget is destroyed and every package worker has returned. Release

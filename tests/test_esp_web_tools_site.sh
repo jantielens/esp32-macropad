@@ -42,7 +42,8 @@ done
 
 while IFS= read -r source; do
     package_name="$(python3 tools/extension_package_name.py "$source")"
-    : > "$TMP_DIR/build/extensions/${package_name%.elf}.ext"
+    : > "$TMP_DIR/build/extensions/${package_name%.elf}-p4.ext"
+    : > "$TMP_DIR/build/extensions/${package_name%.elf}-s3.ext"
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/ | sort)
 
 GITHUB_SHA=smoketest \

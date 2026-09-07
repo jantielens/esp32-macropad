@@ -494,17 +494,18 @@ or device taking longer to boot.
 
 ### Extensions
 
-ESP32-P4 builds support trusted native Extensions. The
+ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native Extensions. The
 Extensions page exposes two small slots (56 KiB each) and one large slot
-(120 KiB). Upload a signed package named `<extension-id>@<version>.ext`. It
-contains a relocation-free RISC-V ELF followed by its fixed 64-byte ECDSA P-256
-signature; it stages on the configured storage backend and installs into the
-selected executable flash slot during the next boot.
+(120 KiB). Upload a signed package named `<extension-id>@<version>-p4.ext` or
+`<extension-id>@<version>-s3.ext` that matches the device. It contains a
+relocation-free native ELF followed by its fixed 64-byte ECDSA P-256 signature;
+it stages on the configured storage backend and installs into the selected
+executable flash slot during the next boot.
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/extensions` | Returns all slot metadata and runtime load status |
-| `POST` | `/api/extensions/upload?slot=N&filename=id@version.ext` | Verifies and stages a signed Extension package for installation at next boot |
+| `POST` | `/api/extensions/upload?slot=N&filename=id@version-target.ext` | Verifies and stages a signed Extension package for installation at next boot |
 | `POST` | `/api/extensions/enabled?slot=N&enabled=true|false` | Enables or disables an installed extension for the next boot |
 | `DELETE` | `/api/extensions?slot=N` | Erases an extension slot |
 
@@ -514,9 +515,9 @@ before staging, before installation, and before executable mapping. The Pad
 editor's **Extension** widget selects an enabled installed extension and passes
 its per-button configuration text to the native instance.
 
-P4 boards use an `_ext` partition scheme, which reserves a 256 KiB raw
-`extensions` partition. Flash the first firmware using this scheme over USB
-before attempting portal uploads.
+Supported P4 and S3 boards use an `_ext` partition scheme, which reserves a
+256 KiB raw `extensions` partition. Flash the first firmware using this scheme
+over USB before attempting portal uploads.
 
 ### Music Library
 

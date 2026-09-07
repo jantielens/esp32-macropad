@@ -12,6 +12,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+* **Native Extensions for ESP32-S3 display boards**: supported 16 MB ESP32-S3 boards can now install signed Xtensa Extension packages alongside ESP32-P4's flash-mapped RISC-V packages. Each Extension source builds into target-qualified P4 and S3 packages; S3 loads executable code into internal executable RAM and data into PSRAM.
+
+### Changed
+
+* **jc3636w518 Extension memory profile**: the constrained 360 by 360 ESP32-S3 board family disables MCP, remote image/MJPEG fetching, and audio output so WiFi, SD storage, and native Extensions retain sufficient DMA-capable internal RAM. Font icons, emoji, and locally stored icons remain available.
+
 ## [1.27.0] - 2026-09-06
 
 ### Added

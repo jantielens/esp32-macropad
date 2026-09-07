@@ -97,6 +97,11 @@ struct HwButtonDef {
 #  error "HAS_NATIVE_EXTENSIONS requires HAS_DISPLAY."
 #endif
 
+#if HAS_NATIVE_EXTENSIONS && defined(CONFIG_IDF_TARGET_ESP32S3)
+#  undef NATIVE_EXTENSION_TARGET_ABI
+#  define NATIVE_EXTENSION_TARGET_ABI "xtensa-esp32s3"
+#endif
+
 // Enable the portal and MCP browser for a filesystem partition or SD card.
 #ifndef HAS_STORAGE_BROWSER
 #define HAS_STORAGE_BROWSER true

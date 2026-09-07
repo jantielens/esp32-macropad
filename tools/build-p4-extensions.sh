@@ -22,7 +22,9 @@ found=0
 while IFS= read -r source; do
     found=1
     package_name=$(python3 "$SCRIPT_DIR/extension_package_name.py" "$source")
-    bash "$SCRIPT_DIR/build-p4-extension.sh" "$source" "$OUTPUT_DIR/$package_name"
+    package_base=${package_name%.elf}
+    bash "$SCRIPT_DIR/build-extension.sh" p4 "$source" "$OUTPUT_DIR/$package_base-p4.elf"
+    bash "$SCRIPT_DIR/build-extension.sh" s3 "$source" "$OUTPUT_DIR/$package_base-s3.elf"
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/)
 
 if [[ $found -eq 0 ]]; then
