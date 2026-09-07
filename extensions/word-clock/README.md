@@ -138,7 +138,7 @@ supported aspect ratio.
 ```bash
 bash tools/build-extension.sh s3 \
   extensions/word-clock/word_clock.cpp \
-  build/extensions/word-clock@1.0.3-s3.elf
+  build/extensions/word-clock@1.0.4-s3.elf
 ```
 
 Use `p4` instead of `s3` to build the ESP32-P4 package.

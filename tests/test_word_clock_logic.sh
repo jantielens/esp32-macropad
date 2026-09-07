@@ -8,7 +8,7 @@ binary=$(mktemp)
 trap 'rm -f "$binary"' EXIT
 
 "$compiler" -std=c++17 -Wall -Wextra -Werror -Iextensions/word-clock -x c++ - -o "$binary" <<'CPP'
-#include "word_clock_phrase.h"
+#include "word_clock_face.h"
 
 #include <cstdio>
 
@@ -128,19 +128,6 @@ uint8_t accurate_phrase(WordClockAccurateWord* words, uint8_t hour, uint8_t minu
     return count;
 }
 
-uint16_t accurate_word_position(WordClockAccurateWord word) {
-    static constexpr uint8_t rows[] = {
-        0, 0, 10, 10, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 7, 6, 7, 8, 9,
-        9, 0, 0, 1, 1, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 15,
-        15, 15, 16, 16,
-    };
-    static constexpr uint8_t columns[] = {
-        0, 3, 0, 6, 12, 0, 4, 10, 0, 5, 9, 0, 6, 11, 0, 7, 0, 0, 9, 9, 0, 0,
-        9, 6, 12, 0, 6, 8, 0, 5, 10, 0, 4, 8, 0, 5, 10, 0, 6, 0, 5, 9, 0, 7,
-    };
-    return static_cast<uint16_t>(rows[word] * 18u + columns[word]);
-}
-
 int main() {
     int failures = 0;
     static constexpr uint8_t font_sizes[] = {12, 14, 18, 24, 32, 36, 48};
@@ -212,7 +199,8 @@ int main() {
                 WordClockAccurateWord phrase[8] = {};
                 const uint8_t word_count = accurate_phrase(phrase, hour, minute, threshold);
                 for (uint8_t index = 1; index < word_count; ++index) {
-                    if (accurate_word_position(phrase[index - 1]) < accurate_word_position(phrase[index])) continue;
+                    if (word_clock_accurate_word_position(phrase[index - 1]) <
+                        word_clock_accurate_word_position(phrase[index])) continue;
                     std::fprintf(stderr, "FAIL: accurate threshold %u %02u:%02u visual order word %u before %u\n",
                                  threshold, hour, minute, phrase[index - 1], phrase[index]);
                     ++failures;

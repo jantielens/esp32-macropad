@@ -1,9 +1,10 @@
 #include "native_extension_api.h"
+#include "word_clock_face.h"
 #include "word_clock_phrase.h"
 
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
     NATIVE_EXTENSION_DESCRIPTOR_MAGIC, NATIVE_EXTENSION_ABI_VERSION,
-    NATIVE_EXTENSION_TARGET_ABI, "word-clock", "1.0.3", "Word Clock", 50, 0,
+    NATIVE_EXTENSION_TARGET_ABI, "word-clock", "1.0.4", "Word Clock", 50, 0,
 };
 
 namespace {
@@ -12,7 +13,7 @@ constexpr uint8_t MAX_INSTANCES = 16;
 constexpr uint8_t GRID_ROWS = 10;
 constexpr uint8_t GRID_COLUMNS = 11;
 constexpr uint8_t ACCURATE_GRID_ROWS = 18;
-constexpr uint8_t ACCURATE_GRID_COLUMNS = 18;
+constexpr uint8_t ACCURATE_GRID_COLUMNS = WORD_CLOCK_ACCURATE_GRID_COLUMNS;
 constexpr uint16_t MAX_FACE_CELLS = ACCURATE_GRID_ROWS * ACCURATE_GRID_COLUMNS;
 constexpr uint16_t FACE_MASK_BYTES = (MAX_FACE_CELLS + 7u) / 8u;
 constexpr uint8_t FONT_SIZES[] = {48, 36, 32, 24, 18, 14, 12};
@@ -50,24 +51,14 @@ constexpr char ACCURATE_GRID[ACCURATE_GRID_ROWS][ACCURATE_GRID_COLUMNS + 1] = {
     "TWELVE#OCLOCK#####", "##################",
 };
 
-struct WordRange { uint8_t row, column, length; };
+using WordRange = WordClockFaceRange;
 constexpr WordRange WORDS[] = {
     {0, 0, 2}, {0, 3, 2}, {2, 6, 4}, {3, 5, 3}, {1, 2, 7}, {2, 0, 6},
     {3, 0, 4}, {4, 0, 4}, {3, 9, 2}, {5, 0, 3}, {6, 8, 3}, {5, 6, 5},
     {6, 0, 4}, {6, 4, 4}, {5, 3, 3}, {8, 0, 5}, {7, 0, 5}, {4, 7, 4},
     {9, 0, 3}, {7, 5, 6}, {8, 5, 6}, {9, 5, 6},
 };
-constexpr WordRange ACCURATE_WORDS[] = {
-    {0, 0, 2}, {0, 3, 2}, {10, 0, 6}, {10, 6, 1}, {1, 12, 3}, {2, 0, 3},
-    {2, 4, 5}, {2, 10, 4}, {3, 0, 4}, {3, 5, 3}, {3, 9, 5}, {4, 0, 5},
-    {4, 6, 4}, {4, 11, 3}, {5, 0, 6}, {5, 7, 6}, {6, 0, 8}, {7, 0, 8},
-    {6, 9, 7}, {7, 9, 7}, {8, 0, 9}, {9, 0, 8}, {9, 9, 8}, {0, 6, 6},
-    {0, 12, 6}, {1, 0, 5}, {1, 6, 5}, {10, 8, 7}, {11, 0, 4}, {11, 5, 4},
-    {11, 10, 2}, {12, 0, 3}, {12, 4, 3}, {12, 8, 5}, {13, 0, 4}, {13, 5, 4},
-    {13, 10, 3}, {14, 0, 5}, {14, 6, 5}, {15, 0, 4}, {15, 5, 3}, {15, 9, 6},
-    {16, 0, 6}, {16, 7, 6},
-};
-static_assert(sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]) == WORD_CLOCK_ACCURATE_OCLOCK + 1u,
+static_assert(sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES) / sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES[0]) == WORD_CLOCK_ACCURATE_OCLOCK + 1u,
               "accurate word-clock face must map every phrase word");
 static_assert(ACCURATE_GRID[7][11] == 'X' && GRID[5][5] == 'X',
               "SIX must retain its literal X rather than use a filler marker");
@@ -81,7 +72,7 @@ constexpr const char* ACCURATE_WORD_TEXTS[] = {
     "TWELVE", "OCLOCK",
 };
 static_assert(sizeof(ACCURATE_WORD_TEXTS) / sizeof(ACCURATE_WORD_TEXTS[0]) ==
-                  sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]),
+                  sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES) / sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES[0]),
               "accurate word-clock text must map every phrase word");
 
 constexpr bool accurate_range_matches_text(const WordRange& range, const char* text) {
@@ -91,15 +82,15 @@ constexpr bool accurate_range_matches_text(const WordRange& range, const char* t
 }
 
 constexpr bool accurate_ranges_match_face() {
-    for (uint8_t word = 0; word < sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]); ++word)
-        if (!accurate_range_matches_text(ACCURATE_WORDS[word], ACCURATE_WORD_TEXTS[word])) return false;
+    for (uint8_t word = 0; word < sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES) / sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES[0]); ++word)
+        if (!accurate_range_matches_text(WORD_CLOCK_ACCURATE_WORD_RANGES[word], ACCURATE_WORD_TEXTS[word])) return false;
     return true;
 }
 
 static_assert(accurate_ranges_match_face(),
               "every accurate word range must exactly match its text in the word-clock face");
-static_assert(ACCURATE_WORDS[WORD_CLOCK_ACCURATE_OCLOCK].row >=
-                  ACCURATE_WORDS[WORD_CLOCK_ACCURATE_HOUR_TWELVE].row,
+static_assert(WORD_CLOCK_ACCURATE_WORD_RANGES[WORD_CLOCK_ACCURATE_OCLOCK].row >=
+                  WORD_CLOCK_ACCURATE_WORD_RANGES[WORD_CLOCK_ACCURATE_HOUR_TWELVE].row,
               "OCLOCK must follow the hour words in the accurate face");
 constexpr char WORD_NAMES[][11] = {
     "IT", "IS", "FIVE_MIN", "TEN_MIN", "QUARTER", "TWENTY", "HALF",
@@ -205,7 +196,8 @@ void log_phrase(const NativeExtensionHostApi* host, const InstanceState* instanc
     const uint8_t minute = static_cast<uint8_t>((instance->last_time[2] - '0') * 10u + instance->last_time[3] - '0');
     bool first = true;
     if (instance->mode == WORD_CLOCK_MODE_ACCURATE) {
-        for (uint8_t word = 0; word < sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]); ++word) {
+           for (uint8_t word = 0;
+               word < sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES) / sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES[0]); ++word) {
             if (!word_clock_accurate_word_is_active(static_cast<WordClockAccurateWord>(word), hour, minute,
                                                     instance->accurate_past_threshold_minutes)) continue;
             if (!first) cursor = append_text(cursor, end, ",");
@@ -448,8 +440,8 @@ void draw_letter(const NativeExtensionHostApi* host, const InstanceState* instan
 bool cell_is_active(const InstanceState* instance, uint8_t row, uint8_t column,
                     uint8_t hour, uint8_t minute) {
     if (instance->mode == WORD_CLOCK_MODE_ACCURATE) {
-        for (uint8_t word = 0; word < sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]); ++word) {
-            const WordRange& range = ACCURATE_WORDS[word];
+        for (uint8_t word = 0; word < sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES) / sizeof(WORD_CLOCK_ACCURATE_WORD_RANGES[0]); ++word) {
+            const WordRange& range = WORD_CLOCK_ACCURATE_WORD_RANGES[word];
             if (range.row == row && column >= range.column && column < range.column + range.length &&
                 word_clock_accurate_word_is_active(static_cast<WordClockAccurateWord>(word), hour, minute,
                                                    instance->accurate_past_threshold_minutes)) return true;
