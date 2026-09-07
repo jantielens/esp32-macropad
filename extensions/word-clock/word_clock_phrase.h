@@ -36,6 +36,24 @@ enum WordClockAccurateWord : uint8_t {
     WORD_CLOCK_ACCURATE_HOUR_TWELVE, WORD_CLOCK_ACCURATE_OCLOCK,
 };
 
+static inline uint8_t word_clock_burn_in_shift_pixels(uint8_t font_size, uint8_t configured_pixels) {
+    if (configured_pixels) return configured_pixels;
+    const uint8_t adaptive_pixels = static_cast<uint8_t>(font_size / 3u);
+    return adaptive_pixels < 4u ? 4u : adaptive_pixels;
+}
+
+static inline int16_t word_clock_burn_in_shift_x(uint8_t phase, uint8_t pixels) {
+    return static_cast<int16_t>(static_cast<int16_t>(phase % 3u) - 1) * pixels;
+}
+
+static inline int16_t word_clock_burn_in_shift_y(uint8_t phase, uint8_t pixels) {
+    return static_cast<int16_t>(static_cast<int16_t>(phase / 3u) - 1) * pixels;
+}
+
+static inline uint8_t word_clock_burn_in_next_phase(uint8_t phase) {
+    return static_cast<uint8_t>((phase + 1u) % 9u);
+}
+
 static inline WordClockWord word_clock_hour_word(uint8_t hour) {
     switch (hour % 12u) {
         case 0: return WORD_CLOCK_TWELVE;

@@ -21,6 +21,7 @@ constexpr uint32_t DEFAULT_FOREGROUND_RGB = 0xF4EFE1;
 constexpr uint32_t DEFAULT_DIMMED_RGB = 0x383631;
 constexpr uint32_t DEFAULT_SHIFT_MINUTES = 60;
 constexpr uint32_t MAX_SHIFT_MINUTES = 30000;
+constexpr uint8_t MAX_SHIFT_PIXELS = 24;
 constexpr uint8_t DEFAULT_ACCURATE_PAST_THRESHOLD_MINUTES = 35;
 constexpr uint8_t MIN_ACCURATE_PAST_THRESHOLD_MINUTES = 30;
 constexpr uint8_t MAX_ACCURATE_PAST_THRESHOLD_MINUTES = 44;
@@ -39,11 +40,11 @@ constexpr char GRID[GRID_ROWS][GRID_COLUMNS + 1] = {
     "TENSEOCLOCK",
 };
 constexpr char ACCURATE_GRID[ACCURATE_GRID_ROWS][ACCURATE_GRID_COLUMNS + 1] = {
-    "IT#IS#TWENTY######", "ONE#TWO#THREE#####", "FOUR#FIVE#SIX#####", "SEVEN#EIGHT#######",
-    "NINE#TEN##########", "ELEVEN#TWELVE#####", "THIRTEEN#FIFTEEN##", "FOURTEEN#SIXTEEN##",
-    "SEVENTEEN#########", "EIGHTEEN#NINETEEN#", "THIRTY#FORTY#FIFTY", "MINUTES#QUARTER###",
-    "HALF#PAST#TO######", "ONE#TWO#THREE#####", "FOUR#FIVE#SIX#####", "SEVEN#EIGHT#######",
-    "NINE#TEN#ELEVEN###", "TWELVE#OCLOCK#####",
+    "IT#IS#TWENTYTHIRTY", "FORTY#FIFTY#ONE###", "TWO#THREE#FOUR####", "FIVE#SIX#SEVEN####",
+    "EIGHT#NINE#TEN####", "ELEVEN#TWELVE#####", "THIRTEEN#FIFTEEN##", "FOURTEEN#SIXTEEN##",
+    "SEVENTEEN#########", "EIGHTEEN#NINETEEN#", "MINUTES#QUARTER###", "HALF#PAST#TO######",
+    "ONE#TWO#THREE#####", "FOUR#FIVE#SIX#####", "SEVEN#EIGHT#######", "NINE#TEN#ELEVEN###",
+    "TWELVE#OCLOCK#####", "##################",
 };
 
 struct WordRange { uint8_t row, column, length; };
@@ -54,14 +55,14 @@ constexpr WordRange WORDS[] = {
     {9, 0, 3}, {7, 5, 6}, {8, 5, 6}, {9, 5, 6},
 };
 constexpr WordRange ACCURATE_WORDS[] = {
-    {0, 0, 2}, {0, 3, 2}, {11, 0, 6}, {11, 6, 1}, {1, 0, 3}, {1, 4, 3},
-    {1, 8, 5}, {2, 0, 4}, {2, 5, 4}, {2, 10, 3}, {3, 0, 5}, {3, 6, 5},
-    {4, 0, 4}, {4, 5, 3}, {5, 0, 6}, {5, 7, 6}, {6, 0, 8}, {7, 0, 8},
+    {0, 0, 2}, {0, 3, 2}, {10, 0, 6}, {10, 6, 1}, {1, 12, 3}, {2, 0, 3},
+    {2, 4, 5}, {2, 10, 4}, {3, 0, 4}, {3, 5, 3}, {3, 9, 5}, {4, 0, 5},
+    {4, 6, 4}, {4, 11, 3}, {5, 0, 6}, {5, 7, 6}, {6, 0, 8}, {7, 0, 8},
     {6, 9, 7}, {7, 9, 7}, {8, 0, 9}, {9, 0, 8}, {9, 9, 8}, {0, 6, 6},
-    {10, 0, 6}, {10, 7, 5}, {10, 13, 5}, {11, 8, 7}, {12, 0, 4}, {12, 5, 4},
-    {12, 10, 2}, {13, 0, 3}, {13, 4, 3}, {13, 8, 5}, {14, 0, 4}, {14, 5, 4},
-    {14, 10, 3}, {15, 0, 5}, {15, 6, 5}, {16, 0, 4}, {16, 5, 3}, {16, 9, 6},
-    {17, 0, 6}, {17, 7, 6},
+    {0, 12, 6}, {1, 0, 5}, {1, 6, 5}, {10, 8, 7}, {11, 0, 4}, {11, 5, 4},
+    {11, 10, 2}, {12, 0, 3}, {12, 4, 3}, {12, 8, 5}, {13, 0, 4}, {13, 5, 4},
+    {13, 10, 3}, {14, 0, 5}, {14, 6, 5}, {15, 0, 4}, {15, 5, 3}, {15, 9, 6},
+    {16, 0, 6}, {16, 7, 6},
 };
 static_assert(sizeof(ACCURATE_WORDS) / sizeof(ACCURATE_WORDS[0]) == WORD_CLOCK_ACCURATE_OCLOCK + 1u,
               "accurate word-clock face must map every phrase word");
@@ -141,6 +142,8 @@ struct InstanceState {
     uint32_t next_resolve_ms;
     uint32_t last_shift_ms;
     uint32_t shift_interval_ms;
+    uint8_t shift_pixels;
+    uint8_t shift_phase;
     uint8_t accurate_past_threshold_minutes;
     WordClockMode mode;
 };
@@ -300,6 +303,13 @@ uint32_t parse_shift_interval(const char* json) {
     if (!find_number(json, "burn_in_shift_minutes", &minutes)) return DEFAULT_SHIFT_MINUTES * 60000u;
     if (minutes > MAX_SHIFT_MINUTES) minutes = MAX_SHIFT_MINUTES;
     return minutes * 60000u;
+}
+
+uint8_t parse_shift_pixels(const char* json) {
+    uint32_t pixels = 0;
+    if (find_number(json, "burn_in_shift_pixels", &pixels) && pixels <= MAX_SHIFT_PIXELS)
+        return static_cast<uint8_t>(pixels);
+    return 0;
 }
 
 uint8_t parse_accurate_past_threshold(const char* json) {
@@ -485,6 +495,7 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     find_string(config_json, "time", instance->time_template, sizeof(instance->time_template));
     instance->mode = parse_mode(config_json);
     instance->accurate_past_threshold_minutes = parse_accurate_past_threshold(config_json);
+    instance->shift_pixels = parse_shift_pixels(config_json);
     parse_color(config_json, "dimmed_color", &instance->dimmed_rgb);
     NativeExtensionButtonSnapshot button = {};
     if (host->button && host->button->get(extension_context, instance_id, &button)) {
@@ -516,6 +527,7 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     instance->next_resolve_ms = now + RESOLVE_INTERVAL_MS;
     instance->last_shift_ms = now;
     instance->shift_interval_ms = parse_shift_interval(config_json);
+    instance->shift_pixels = word_clock_burn_in_shift_pixels(instance->font_size, instance->shift_pixels);
     instance->dirty = true;
     return true;
 }
@@ -556,10 +568,9 @@ extern "C" void native_extension_tick(const NativeExtensionHostApi* host, void* 
         instance->next_resolve_ms = now + RESOLVE_INTERVAL_MS;
     }
     if (instance->shift_interval_ms && now - instance->last_shift_ms >= instance->shift_interval_ms) {
-        const int16_t shift = instance->font_size / 4u;
-        const uint8_t phase = static_cast<uint8_t>((now / instance->shift_interval_ms) % 4u);
-        instance->shift_x = phase == 1 ? shift : (phase == 3 ? -shift : 0);
-        instance->shift_y = phase == 2 ? shift : 0;
+        instance->shift_phase = word_clock_burn_in_next_phase(instance->shift_phase);
+        instance->shift_x = word_clock_burn_in_shift_x(instance->shift_phase, instance->shift_pixels);
+        instance->shift_y = word_clock_burn_in_shift_y(instance->shift_phase, instance->shift_pixels);
         instance->last_shift_ms = now;
         instance->dirty = true;
     }

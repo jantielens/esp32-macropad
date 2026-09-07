@@ -99,8 +99,81 @@ bool expected_accurate_active(WordClockAccurateWord word, uint8_t hour, uint8_t 
     return units && word == static_cast<WordClockAccurateWord>(WORD_CLOCK_ACCURATE_MINUTE_ONE + units - 1u);
 }
 
+uint8_t accurate_phrase(WordClockAccurateWord* words, uint8_t hour, uint8_t minute,
+                        uint8_t past_threshold_minutes) {
+    const bool next_hour = minute > past_threshold_minutes;
+    const uint8_t displayed_minute = next_hour ? static_cast<uint8_t>(60u - minute) : minute;
+    const WordClockAccurateWord displayed_hour = word_clock_accurate_hour_word(
+        static_cast<uint8_t>(hour + (next_hour ? 1u : 0u)));
+    uint8_t count = 0;
+    words[count++] = WORD_CLOCK_ACCURATE_IT;
+    words[count++] = WORD_CLOCK_ACCURATE_IS;
+    if (displayed_minute == 0u) {
+        words[count++] = displayed_hour;
+        words[count++] = WORD_CLOCK_ACCURATE_OCLOCK;
+        return count;
+    }
+    if (displayed_minute == 15u) words[count++] = WORD_CLOCK_ACCURATE_QUARTER;
+    else if (displayed_minute == 30u) words[count++] = WORD_CLOCK_ACCURATE_HALF;
+    else {
+        if (displayed_minute >= 20u) words[count++] = word_clock_accurate_tens_word(displayed_minute);
+        const uint8_t units = static_cast<uint8_t>(displayed_minute % 10u);
+        if (displayed_minute < 20u || units) words[count++] = word_clock_accurate_number_word(
+            displayed_minute < 20u ? displayed_minute : units);
+        words[count++] = WORD_CLOCK_ACCURATE_MINUTE;
+        if (displayed_minute != 1u) words[count++] = WORD_CLOCK_ACCURATE_MINUTE_PLURAL;
+    }
+    words[count++] = next_hour ? WORD_CLOCK_ACCURATE_TO : WORD_CLOCK_ACCURATE_PAST;
+    words[count++] = displayed_hour;
+    return count;
+}
+
+uint16_t accurate_word_position(WordClockAccurateWord word) {
+    static constexpr uint8_t rows[] = {
+        0, 0, 10, 10, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6, 7, 6, 7, 8, 9,
+        9, 0, 0, 1, 1, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 15,
+        15, 15, 16, 16,
+    };
+    static constexpr uint8_t columns[] = {
+        0, 3, 0, 6, 12, 0, 4, 10, 0, 5, 9, 0, 6, 11, 0, 7, 0, 0, 9, 9, 0, 0,
+        9, 6, 12, 0, 6, 8, 0, 5, 10, 0, 4, 8, 0, 5, 10, 0, 6, 0, 5, 9, 0, 7,
+    };
+    return static_cast<uint16_t>(rows[word] * 18u + columns[word]);
+}
+
 int main() {
     int failures = 0;
+    static constexpr uint8_t font_sizes[] = {12, 14, 18, 24, 32, 36, 48};
+    static constexpr uint8_t expected_shifts[] = {4, 4, 6, 8, 10, 12, 16};
+    for (uint8_t index = 0; index < sizeof(font_sizes); ++index) {
+        const uint8_t actual = word_clock_burn_in_shift_pixels(font_sizes[index], 0);
+        if (actual != expected_shifts[index]) {
+            std::fprintf(stderr, "FAIL: font size %u expected shift %u, got %u\n",
+                         font_sizes[index], expected_shifts[index], actual);
+            ++failures;
+        }
+    }
+    if (word_clock_burn_in_shift_pixels(12, 7) != 7) {
+        std::fprintf(stderr, "FAIL: configured burn-in shift was not preserved\n");
+        ++failures;
+    }
+    for (uint8_t phase = 0; phase < 9; ++phase) {
+        const int16_t x = word_clock_burn_in_shift_x(phase, 4);
+        const int16_t y = word_clock_burn_in_shift_y(phase, 4);
+        if (x < -4 || x > 4 || y < -4 || y > 4 || x % 4 || y % 4) {
+            std::fprintf(stderr, "FAIL: shift phase %u produced (%d, %d)\n", phase, x, y);
+            ++failures;
+        }
+    }
+    uint8_t shift_phase = 0;
+    for (uint8_t expected = 1; expected <= 9; ++expected) {
+        shift_phase = word_clock_burn_in_next_phase(shift_phase);
+        const uint8_t actual = static_cast<uint8_t>(expected % 9u);
+        if (shift_phase != actual) {
+            std::fprintf(stderr, "FAIL: burn-in phase %u expected %u, got %u\n", expected, actual, shift_phase);
+            ++failures;
+        }
+    }
     for (uint8_t mode = WORD_CLOCK_MODE_ROUNDED; mode <= WORD_CLOCK_MODE_MINUTE_DOTS; ++mode) {
         for (uint8_t hour = 0; hour < 12; ++hour) {
             for (uint8_t minute = 0; minute < 60; ++minute) {
@@ -134,6 +207,14 @@ int main() {
                     if (expected == actual) continue;
                     std::fprintf(stderr, "FAIL: accurate threshold %u %02u:%02u word %u expected %u, got %u\n",
                                  threshold, hour, minute, value, expected, actual);
+                    ++failures;
+                }
+                WordClockAccurateWord phrase[8] = {};
+                const uint8_t word_count = accurate_phrase(phrase, hour, minute, threshold);
+                for (uint8_t index = 1; index < word_count; ++index) {
+                    if (accurate_word_position(phrase[index - 1]) < accurate_word_position(phrase[index])) continue;
+                    std::fprintf(stderr, "FAIL: accurate threshold %u %02u:%02u visual order word %u before %u\n",
+                                 threshold, hour, minute, phrase[index - 1], phrase[index]);
                     ++failures;
                 }
             }

@@ -73,7 +73,8 @@ uses `to` the next hour.
   "accurate_past_threshold_minutes": 35,
   "font_family": "bebas",
   "dimmed_color": "#383631",
-  "burn_in_shift_minutes": 60
+  "burn_in_shift_minutes": 15,
+  "burn_in_shift_pixels": 0
 }
 ```
 
@@ -86,7 +87,8 @@ uses `to` the next hour.
 | `font_size` | `0` | `0` chooses the largest fitting bundled font. Otherwise use 12, 14, 18, 24, 32, 36, or 48. Large values reduce automatically when the button is too small. |
 | Button text color | Button setting | Words that describe the current time use the owning button's resolved text color. |
 | `dimmed_color` | `#383631` | Six-digit RGB color for inactive letters. |
-| `burn_in_shift_minutes` | `60` | Moves the complete matrix among small offsets at this interval. Set to `0` to disable it. |
+| `burn_in_shift_minutes` | `60` | Moves the complete matrix through a nine-position grid at this interval. Set to `0` to disable it. |
+| `burn_in_shift_pixels` | `0` | Offset distance in pixels. `0` uses `max(4, font_size / 3)`; otherwise use 1 through 24. |
 
 The extension accepts time bindings that produce four digits. Separators in the
 binding output are ignored. In the default `rounded` mode, it rounds to the
@@ -112,6 +114,14 @@ The host schedules a 250 ms tick. The extension checks its time binding at most
 twice per second, but redraws its RGB565 canvas only when the displayed phrase
 changes or when a burn-in shift occurs. It has no worker task or network
 activity.
+
+## Burn-In Prevention
+
+The complete face, including the always-lit `IT IS` letters, moves through a
+three by three grid centered on the button. The default interval is 60 minutes;
+15 minutes is suitable for a clock that remains visible for long periods. The
+adaptive distance is at least four pixels and scales with the selected font.
+Set `burn_in_shift_pixels` when a fixed distance better suits the display.
 
 The extension's canvas is allocated to the current button bounds. Font metrics
 from the host select the largest fitting font, then place each glyph in an
