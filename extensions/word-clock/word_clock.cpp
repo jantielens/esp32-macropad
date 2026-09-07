@@ -3,7 +3,7 @@
 
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
     NATIVE_EXTENSION_DESCRIPTOR_MAGIC, NATIVE_EXTENSION_ABI_VERSION,
-    NATIVE_EXTENSION_TARGET_ABI, "word-clock", "1.0.0", "Word Clock", 250, 0,
+    NATIVE_EXTENSION_TARGET_ABI, "word-clock", "1.0.3", "Word Clock", 50, 0,
 };
 
 namespace {
@@ -13,10 +13,13 @@ constexpr uint8_t GRID_ROWS = 10;
 constexpr uint8_t GRID_COLUMNS = 11;
 constexpr uint8_t ACCURATE_GRID_ROWS = 18;
 constexpr uint8_t ACCURATE_GRID_COLUMNS = 18;
+constexpr uint16_t MAX_FACE_CELLS = ACCURATE_GRID_ROWS * ACCURATE_GRID_COLUMNS;
+constexpr uint16_t FACE_MASK_BYTES = (MAX_FACE_CELLS + 7u) / 8u;
 constexpr uint8_t FONT_SIZES[] = {48, 36, 32, 24, 18, 14, 12};
 constexpr uint8_t FONT_SIZE_COUNT = sizeof(FONT_SIZES) / sizeof(FONT_SIZES[0]);
 constexpr uint8_t TIME_TEMPLATE_CAPACITY = 96;
 constexpr uint32_t RESOLVE_INTERVAL_MS = 500;
+constexpr uint32_t DEFAULT_PHRASE_ANIMATION_MS = 0;
 constexpr uint32_t DEFAULT_FOREGROUND_RGB = 0xF4EFE1;
 constexpr uint32_t DEFAULT_DIMMED_RGB = 0x383631;
 constexpr uint32_t DEFAULT_SHIFT_MINUTES = 60;
@@ -136,15 +139,24 @@ struct InstanceState {
     char font_name[16];
     char time_template[TIME_TEMPLATE_CAPACITY];
     char last_time[5];
+    char previous_time[5];
     uint32_t foreground_rgb;
     uint32_t dimmed_rgb;
     uint32_t background_rgb;
     uint32_t next_resolve_ms;
+    uint32_t next_animation_ms;
     uint32_t last_shift_ms;
     uint32_t shift_interval_ms;
     uint8_t shift_pixels;
     uint8_t shift_phase;
     uint8_t accurate_past_threshold_minutes;
+    uint16_t animation_progress;
+    uint16_t animation_removed_count;
+    uint16_t animation_added_count;
+    uint32_t phrase_animation_ms;
+    bool animation_active;
+    uint8_t previous_active_cells[FACE_MASK_BYTES];
+    uint8_t current_active_cells[FACE_MASK_BYTES];
     WordClockMode mode;
 };
 
@@ -222,6 +234,10 @@ bool text_equals(const char* left, const char* right) {
     return left[index] == right[index];
 }
 
+bool is_json_whitespace(char value) {
+    return value == ' ' || value == '\t' || value == '\r' || value == '\n';
+}
+
 bool find_number(const char* json, const char* key, uint32_t* out) {
     if (!json || !key || !out) return false;
     for (const char* cursor = json; *cursor; ++cursor) {
@@ -232,14 +248,14 @@ bool find_number(const char* json, const char* key, uint32_t* out) {
         if (*key_cursor || *name != '"') continue;
         while (*name && *name != ':') ++name;
         if (*name++ != ':') return false;
-        while (*name == ' ' || *name == '\t') ++name;
+        while (is_json_whitespace(*name)) ++name;
         uint32_t value = 0;
         bool found = false;
         while (*name >= '0' && *name <= '9') {
             value = value * 10u + static_cast<uint32_t>(*name++ - '0');
             found = true;
         }
-        if (!found || (*name && *name != ' ' && *name != '\t' && *name != ',' && *name != '}')) return false;
+        if (!found || (*name && !is_json_whitespace(*name) && *name != ',' && *name != '}')) return false;
         *out = value;
         return true;
     }
@@ -319,6 +335,12 @@ uint8_t parse_accurate_past_threshold(const char* json) {
         if (threshold > MAX_ACCURATE_PAST_THRESHOLD_MINUTES) threshold = MAX_ACCURATE_PAST_THRESHOLD_MINUTES;
     }
     return static_cast<uint8_t>(threshold);
+}
+
+uint32_t parse_phrase_animation_interval(const char* json) {
+    uint32_t interval = DEFAULT_PHRASE_ANIMATION_MS;
+    find_number(json, "phrase_animation_ms", &interval);
+    return interval;
 }
 
 PackageState* package_state(const NativeExtensionHostApi* host, void* context) {
@@ -442,6 +464,78 @@ bool cell_is_active(const InstanceState* instance, uint8_t row, uint8_t column,
     return false;
 }
 
+bool time_cell_is_active(const InstanceState* instance, const char* time, uint8_t row, uint8_t column) {
+    const uint8_t hour = static_cast<uint8_t>((time[0] - '0') * 10u + time[1] - '0');
+    const uint8_t minute = static_cast<uint8_t>((time[2] - '0') * 10u + time[3] - '0');
+    return cell_is_active(instance, row, column, hour, minute);
+}
+
+uint16_t cell_index(uint8_t row, uint8_t column) {
+    return static_cast<uint16_t>(row) * ACCURATE_GRID_COLUMNS + column;
+}
+
+bool transition_mask_cell_is_active(const uint8_t* mask, uint8_t row, uint8_t column) {
+    const uint16_t index = cell_index(row, column);
+    return (mask[index / 8u] & (1u << (index % 8u))) != 0;
+}
+
+void transition_mask_set_cell(uint8_t* mask, uint8_t row, uint8_t column, bool active) {
+    const uint16_t index = cell_index(row, column);
+    const uint8_t bit = static_cast<uint8_t>(1u << (index % 8u));
+    if (active) mask[index / 8u] |= bit;
+    else mask[index / 8u] &= static_cast<uint8_t>(~bit);
+}
+
+void prepare_transition(InstanceState* instance) {
+    for (uint16_t index = 0; index < FACE_MASK_BYTES; ++index) {
+        instance->previous_active_cells[index] = 0;
+        instance->current_active_cells[index] = 0;
+    }
+    uint16_t removed = 0;
+    uint16_t added = 0;
+    for (uint8_t row = 0; row < face_rows(instance->mode); ++row)
+        for (uint8_t column = 0; column < face_columns(instance->mode); ++column) {
+            const bool previous = time_cell_is_active(instance, instance->previous_time, row, column);
+            const bool current = time_cell_is_active(instance, instance->last_time, row, column);
+            transition_mask_set_cell(instance->previous_active_cells, row, column, previous);
+            transition_mask_set_cell(instance->current_active_cells, row, column, current);
+            if (previous && !current) ++removed;
+            if (!previous && current) ++added;
+        }
+    const uint8_t previous_dots = word_clock_minute_dots(
+        static_cast<uint8_t>((instance->previous_time[2] - '0') * 10u + instance->previous_time[3] - '0'), instance->mode);
+    const uint8_t current_dots = word_clock_minute_dots(
+        static_cast<uint8_t>((instance->last_time[2] - '0') * 10u + instance->last_time[3] - '0'), instance->mode);
+    instance->animation_removed_count = static_cast<uint16_t>(removed +
+        (previous_dots > current_dots ? previous_dots - current_dots : 0));
+    instance->animation_added_count = static_cast<uint16_t>(added +
+        (current_dots > previous_dots ? current_dots - previous_dots : 0));
+}
+
+bool transition_cell_is_active(const InstanceState* instance, uint8_t row, uint8_t column) {
+    const bool previous = transition_mask_cell_is_active(instance->previous_active_cells, row, column);
+    const bool current = transition_mask_cell_is_active(instance->current_active_cells, row, column);
+    if (previous == current) return current;
+    const uint16_t target_index = cell_index(row, column);
+    uint16_t position = 0;
+    if (previous) {
+        for (uint8_t scan_row = 0; scan_row < face_rows(instance->mode); ++scan_row)
+            for (uint8_t scan_column = 0; scan_column < face_columns(instance->mode); ++scan_column)
+                if (transition_mask_cell_is_active(instance->previous_active_cells, static_cast<uint8_t>(scan_row),
+                                                   static_cast<uint8_t>(scan_column)) &&
+                    !transition_mask_cell_is_active(instance->current_active_cells, static_cast<uint8_t>(scan_row),
+                                                    static_cast<uint8_t>(scan_column)) &&
+                    cell_index(scan_row, scan_column) > target_index) ++position;
+        return instance->animation_progress <= position;
+    }
+    for (uint8_t scan_row = 0; scan_row < face_rows(instance->mode); ++scan_row)
+        for (uint8_t scan_column = 0; scan_column < face_columns(instance->mode); ++scan_column)
+            if (!transition_mask_cell_is_active(instance->previous_active_cells, scan_row, scan_column) &&
+                transition_mask_cell_is_active(instance->current_active_cells, scan_row, scan_column) &&
+                cell_index(scan_row, scan_column) < target_index) ++position;
+    return instance->animation_progress > instance->animation_removed_count + position;
+}
+
 void draw_filled_dot(const NativeExtensionHostApi* host, const InstanceState* instance,
                      int32_t center_x, int32_t center_y) {
     const int32_t radius = instance->dot_radius;
@@ -456,14 +550,34 @@ void draw_clock(const NativeExtensionHostApi* host, const InstanceState* instanc
     host->canvas->canvas_clear(instance->canvas, instance->background_rgb);
     const uint8_t rows = face_rows(instance->mode);
     const uint8_t columns = face_columns(instance->mode);
-    const uint8_t hour = static_cast<uint8_t>((instance->last_time[0] - '0') * 10u + instance->last_time[1] - '0');
-    const uint8_t minute = static_cast<uint8_t>((instance->last_time[2] - '0') * 10u + instance->last_time[3] - '0');
     for (uint8_t row = 0; row < rows; ++row)
         for (uint8_t column = 0; column < columns; ++column)
             draw_letter(host, instance, row, column,
-                        cell_is_active(instance, row, column, hour, minute)
+                        (instance->animation_active
+                            ? transition_cell_is_active(instance, row, column)
+                            : time_cell_is_active(instance, instance->last_time, row, column))
                             ? instance->foreground_rgb : instance->dimmed_rgb);
-    const uint8_t dots = word_clock_minute_dots(minute, instance->mode);
+    const uint8_t current_dots = word_clock_minute_dots(
+        static_cast<uint8_t>((instance->last_time[2] - '0') * 10u + instance->last_time[3] - '0'), instance->mode);
+    const uint8_t previous_dots = instance->animation_active ? word_clock_minute_dots(
+        static_cast<uint8_t>((instance->previous_time[2] - '0') * 10u + instance->previous_time[3] - '0'), instance->mode) : 0;
+    uint8_t dots = current_dots;
+    if (instance->animation_active) {
+        if (previous_dots > current_dots) {
+            const uint8_t removed_dots = previous_dots - current_dots;
+            const uint16_t character_count = instance->animation_removed_count - removed_dots;
+            const uint16_t progress = instance->animation_progress > character_count
+                ? instance->animation_progress - character_count : 0;
+            const uint8_t completed = progress < removed_dots ? static_cast<uint8_t>(progress) : removed_dots;
+            dots = static_cast<uint8_t>(previous_dots - (completed < removed_dots ? completed : removed_dots));
+        } else if (current_dots > previous_dots) {
+            const uint8_t added_dots = current_dots - previous_dots;
+            const uint16_t character_count = instance->animation_added_count - added_dots;
+            const uint16_t start = instance->animation_removed_count + character_count;
+            const uint16_t progress = instance->animation_progress > start ? instance->animation_progress - start : 0;
+            dots = static_cast<uint8_t>(previous_dots + (progress < added_dots ? progress : added_dots));
+        }
+    }
     const int32_t inset = instance->dot_radius + 2;
     const int32_t left = instance->origin_x - inset;
     const int32_t right = instance->origin_x + columns * instance->cell_width + inset - 1;
@@ -495,6 +609,7 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     find_string(config_json, "time", instance->time_template, sizeof(instance->time_template));
     instance->mode = parse_mode(config_json);
     instance->accurate_past_threshold_minutes = parse_accurate_past_threshold(config_json);
+    instance->phrase_animation_ms = parse_phrase_animation_interval(config_json);
     instance->shift_pixels = parse_shift_pixels(config_json);
     parse_color(config_json, "dimmed_color", &instance->dimmed_rgb);
     NativeExtensionButtonSnapshot button = {};
@@ -561,11 +676,23 @@ extern "C" void native_extension_tick(const NativeExtensionHostApi* host, void* 
         char time[sizeof(instance->last_time)] = {};
         if (host->binding->resolve(extension_context, instance_id, instance->time_template, resolved, sizeof(resolved)) &&
             normalize_time(resolved, time) && !text_equals(time, instance->last_time)) {
+            copy_text(instance->previous_time, sizeof(instance->previous_time), instance->last_time);
             copy_text(instance->last_time, sizeof(instance->last_time), time);
+            prepare_transition(instance);
+            instance->animation_progress = 0;
+            instance->animation_active = instance->phrase_animation_ms != 0;
+            instance->next_animation_ms = now + instance->phrase_animation_ms;
             instance->dirty = true;
             log_phrase(host, instance, resolved);
         }
         instance->next_resolve_ms = now + RESOLVE_INTERVAL_MS;
+    }
+    if (instance->animation_active && now >= instance->next_animation_ms) {
+        ++instance->animation_progress;
+        instance->next_animation_ms = now + instance->phrase_animation_ms;
+        if (instance->animation_progress >= instance->animation_removed_count + instance->animation_added_count)
+            instance->animation_active = false;
+        instance->dirty = true;
     }
     if (instance->shift_interval_ms && now - instance->last_shift_ms >= instance->shift_interval_ms) {
         instance->shift_phase = word_clock_burn_in_next_phase(instance->shift_phase);

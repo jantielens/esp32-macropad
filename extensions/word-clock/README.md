@@ -71,6 +71,7 @@ uses `to` the next hour.
   "time": "[time:%H%M;Europe/Brussels]",
   "mode": "accurate",
   "accurate_past_threshold_minutes": 35,
+  "phrase_animation_ms": 100,
   "font_family": "bebas",
   "dimmed_color": "#383631",
   "burn_in_shift_minutes": 15,
@@ -83,6 +84,7 @@ uses `to` the next hour.
 | `time` | `[time:%H%M]` | Existing time binding that supplies hour and minute. Timezone parameters are supported. |
 | `mode` | `rounded` | `rounded` uses the nearest five-minute phrase. `minute-dots` uses the preceding five-minute phrase and lights one to four filled corner dots for the remaining minutes. `accurate` spells every minute in words. |
 | `accurate_past_threshold_minutes` | `35` | Accurate mode only. Counts through this minute as `past` the current hour, then uses `to` the next hour. Values are clamped to 30 through 44 so `quarter to` remains consistent. |
+| `phrase_animation_ms` | `0` | Milliseconds per character during a phrase change. `0` changes immediately. Otherwise, removed characters dim from right to left, then added characters highlight from left to right. Unchanged characters remain highlighted. |
 | `font_family` | `bebas` | `default`, `bebas`, `doto`, or `dseg7`. `bebas` best matches the compact, uppercase clock face. |
 | `font_size` | `0` | `0` chooses the largest fitting bundled font. Otherwise use 12, 14, 18, 24, 32, 36, or 48. Large values reduce automatically when the button is too small. |
 | Button text color | Button setting | Words that describe the current time use the owning button's resolved text color. |
@@ -110,10 +112,10 @@ TWENTY FOUR MINUTES TO NINE".
 
 ## Rendering
 
-The host schedules a 250 ms tick. The extension checks its time binding at most
-twice per second, but redraws its RGB565 canvas only when the displayed phrase
-changes or when a burn-in shift occurs. It has no worker task or network
-activity.
+The host schedules a 50 ms tick. The extension checks its time binding at most
+twice per second, but redraws its RGB565 canvas only when the displayed phrase,
+phrase-animation step, or burn-in shift changes. It has no worker task or
+network activity.
 
 ## Burn-In Prevention
 
@@ -136,7 +138,7 @@ supported aspect ratio.
 ```bash
 bash tools/build-p4-extension.sh \
   extensions/word-clock/word_clock.cpp \
-  build/extensions/word-clock@1.0.0.elf
+  build/extensions/word-clock@1.0.3.elf
 ```
 
 Build and sign every shipped extension package:
