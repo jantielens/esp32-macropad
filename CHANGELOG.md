@@ -12,21 +12,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.28.0] - 2026-09-08
 
-### Changed
+### Highlights
 
-* **Wi-Fi recovery is faster and diagnosable**: all boards now allow a five-second automatic-reconnect grace period before active retries at 5, 10, 20, and then 30-second intervals. Gateway liveness is advisory, manual reconnect acts immediately, and health telemetry reports association-time RSSI, channel, BSSID, disconnect reason, retry count, and recovery duration without recurring ESP-Hosted Wi-Fi queries.
-* **ESP32-P4 screen previews preserve fine colored UI detail**: Screenshot JPEGs now default to quality 85 with YUV444 chroma sampling, avoiding color artifacts on sparklines, charts, and text. The screenshot API accepts `quality=1..100` and `subsample=420|422|444` for transfer-size tradeoffs.
 * **Sparkline history combines coarse Home Assistant data with recent live detail**: Home Assistant Recorder history now backfills fine-grained sparklines instead of being skipped below five-minute intervals. Consecutive historical readings are visually interpolated, with missing periods held at their prior value; locally collected samples keep the configured finer resolution and always take precedence.
+* **ESP32-P4 screen previews preserve fine colored UI detail**: Screenshot JPEGs now default to quality 85 with YUV444 chroma sampling, avoiding color artifacts on sparklines, charts, and text. The screenshot API accepts `quality=1..100` and `subsample=420|422|444` for transfer-size tradeoffs.
+* **Wi-Fi recovery is faster and diagnosable**: all boards now allow a five-second automatic-reconnect grace period before active retries at 5, 10, 20, and then 30-second intervals. Gateway liveness is advisory, manual reconnect acts immediately, and health telemetry reports association-time RSSI, channel, BSSID, disconnect reason, retry count, and recovery duration without recurring ESP-Hosted Wi-Fi queries.
 * **Write-only portal credentials now show clear state and pending changes**: WiFi, MQTT, Home Assistant, Basic Auth, Voice Assistant, and e-paper credential fields show whether a value is stored without revealing it. Entering a replacement shows an orange pending-save indicator; emptying the field restores its stored or unconfigured state.
-
-### Fixed
-
-* **Portal updates no longer use cached JavaScript or CSS from an earlier firmware**: the fresh portal shell now references static assets by firmware version, while those versioned assets remain cached for repeat visits.
-* **Pad image-source passwords no longer leak through the portal API**: `GET /api/pad` now removes each button's HTTP password and supplies a stored-state marker instead. Saving an unchanged button retains its stored password, while a non-empty replacement still takes effect.
-
-## [1.28.0] - 2026-09-07
 
 ### Added
 
@@ -39,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **ESP32-P4 LCD4B native Extensions no longer crash on launch**: LCD4B and LCD4B Voice firmware now uses a 16 MB-compatible flash layout that keeps the flash-mapped Extensions partition below the affected 16 MiB instruction-mapping boundary. The boards retain their physical 32 MB flash chips, but use 6.25 MB OTA slots and 3.125 MB internal flash storage until the upstream P4 behavior can be resolved and retested.
 * **External Widgets now recreate reliably after pad saves**: workerless Extensions such as Word Clock no longer enter a transient stopping state between the old and replacement widget during a synchronous pad rebuild. Extensions with a background worker retain their cancellation-aware retry behavior.
 * **Native Extensions no longer flash corrupted pixels on first render**: the shared RGB565 canvas host now clears each newly allocated buffer before LVGL can display it, preventing stale memory from appearing while an Extension waits for its first render tick.
+* **Portal updates no longer use cached JavaScript or CSS from an earlier firmware**: the fresh portal shell now references static assets by firmware version, while those versioned assets remain cached for repeat visits.
+* **Pad image-source passwords no longer leak through the portal API**: `GET /api/pad` now removes each button's HTTP password and supplies a stored-state marker instead. Saving an unchanged button retains its stored password, while a non-empty replacement still takes effect.
 
 ## [1.27.0] - 2026-09-07
 
