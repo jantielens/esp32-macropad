@@ -11,6 +11,9 @@ static unsigned primary_allocation_count = 0;
 static unsigned fallback_allocation_count = 0;
 static unsigned load_count = 0;
 
+static void lock_cache() {}
+static void unlock_cache() {}
+
 static PadConfig* fail_primary_allocation() {
     primary_allocation_count++;
     return nullptr;
@@ -56,7 +59,7 @@ static void test_failed_allocation_retains_existing_state() {
 
     PadCacheRefreshResult result = pad_cache_refresh(
         &slot, 3, fail_primary_allocation, fail_fallback_allocation,
-        load_nonempty, publish_eligibility);
+        load_nonempty, publish_eligibility, lock_cache, unlock_cache);
 
     assert(result == PadCacheRefreshResult::AllocationFailed);
     assert(slot == &existing);
@@ -79,7 +82,7 @@ static void test_successful_replacement_commits_pointer_and_eligibility() {
 
     PadCacheRefreshResult result = pad_cache_refresh(
         &slot, 3, allocate_config, fail_fallback_allocation,
-        load_nonempty, publish_eligibility);
+        load_nonempty, publish_eligibility, lock_cache, unlock_cache);
 
     assert(result == PadCacheRefreshResult::Replaced);
     assert(slot != existing);
@@ -102,7 +105,7 @@ static void test_actions_only_pad_is_eligible() {
 
     PadCacheRefreshResult result = pad_cache_refresh(
         &slot, 5, allocate_config, fail_fallback_allocation,
-        load_actions_only, publish_eligibility);
+        load_actions_only, publish_eligibility, lock_cache, unlock_cache);
 
     assert(result == PadCacheRefreshResult::Replaced);
     assert((eligibility_mask & ((uint32_t)1U << 5)) != 0);

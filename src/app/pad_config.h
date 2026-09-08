@@ -493,6 +493,15 @@ struct PadConfig {
     ScreenButtonConfig buttons[MAX_PAD_BUTTONS];
 };
 
+// Compact copy for data stream registration. It retains only the widget
+// configuration and bindings needed to expand [pad:] tokens.
+struct PadDataStreamSnapshot {
+    uint8_t binding_count;
+    PadBinding bindings[PAD_MAX_BINDINGS];
+    uint8_t button_count;
+    WidgetConfig widgets[MAX_PAD_BUTTONS];
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -504,6 +513,11 @@ bool pad_config_init();
 // On success, out is populated and returns true. On failure (file missing,
 // parse error), out is zeroed and returns false.
 bool pad_config_load(uint8_t page, PadConfig* out);
+
+// Copy the widget and binding fields required for data-stream registration.
+// The result is protected from concurrent pad cache replacement.
+bool pad_config_get_data_stream_snapshot(uint8_t page,
+                                         PadDataStreamSnapshot* out);
 
 // Save raw JSON bytes to LittleFS. Preserves all fields including future/unknown ones.
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len);

@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Pad saves no longer stall data-stream rebuilds**: stream registration now snapshots only widget settings and pad bindings instead of copying every full pad configuration on the LVGL task. Cache replacement is synchronized with the compact snapshot, preventing a concurrent pad save or deletion from invalidating its source data.
 * **E-paper wake duration and MQTT behavior**: MQTT connection attempts, reTerminal image requests, and stalled response bodies have bounded timeouts. The e-paper telemetry connection avoids availability, discovery, health, and control traffic, reducing radio-on time during duty-cycle wakes.
 
 ## [1.28.0] - 2026-09-08

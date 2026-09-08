@@ -425,6 +425,15 @@ static void test_expand_basic() {
         g_pass++;
     }
 
+    expanded = pad_binding_expand_bindings(page.bindings, page.binding_count,
+                                           "[pad:power]", out, sizeof(out));
+    if (!expanded || strcmp(out, "[mqtt:solar/power;$.value]") != 0) {
+        printf("  FAIL [expand explicit bindings]: got \"%s\" (expanded=%d)\n", out, expanded);
+        g_fail++;
+    } else {
+        g_pass++;
+    }
+
     expanded = pad_binding_expand(&page, "Prefix [pad:grid] suffix", out, sizeof(out));
     if (!expanded || strcmp(out, "Prefix [mqtt:grid/power;$.watts] suffix") != 0) {
         printf("  FAIL [expand with text]: got \"%s\"\n", out);

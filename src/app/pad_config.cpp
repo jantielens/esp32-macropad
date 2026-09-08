@@ -34,6 +34,15 @@ static std::atomic<uint32_t> g_eligible_mask{0};
 // In-RAM cache so the LVGL render task (PSRAM stack) never touches flash.
 // Flash reads require disabling cache, which is incompatible with PSRAM stacks.
 static PadConfig* g_cache[MAX_PADS] = {};
+static portMUX_TYPE g_cache_mux = portMUX_INITIALIZER_UNLOCKED;
+
+static void cache_lock() {
+    portENTER_CRITICAL(&g_cache_mux);
+}
+
+static void cache_unlock() {
+    portEXIT_CRITICAL(&g_cache_mux);
+}
 
 static void publish_eligibility(uint8_t page, bool eligible) {
     uint32_t bit = (uint32_t)1U << page;
@@ -598,7 +607,7 @@ static bool load_cache_from_flash(uint8_t page, PadConfig* config) {
 static bool cache_update(uint8_t page) {
     PadCacheRefreshResult result = pad_cache_refresh(
         &g_cache[page], page, allocate_cache_psram, allocate_cache_fallback,
-        load_cache_from_flash, publish_eligibility);
+        load_cache_from_flash, publish_eligibility, cache_lock, cache_unlock);
     if (result == PadCacheRefreshResult::AllocationFailed) {
         LOGE(TAG, "Pad %u: cache allocation failed", page);
         return false;
@@ -639,6 +648,27 @@ bool pad_config_load(uint8_t page, PadConfig* out) {
 
     // No cache entry — page not configured
     return false;
+}
+
+bool pad_config_get_data_stream_snapshot(uint8_t page,
+                                         PadDataStreamSnapshot* out) {
+    if (!out || page >= MAX_PADS) return false;
+
+    cache_lock();
+    const PadConfig* config = g_cache[page];
+    if (!config) {
+        cache_unlock();
+        return false;
+    }
+
+    out->binding_count = config->binding_count;
+    memcpy(out->bindings, config->bindings, sizeof(out->bindings));
+    out->button_count = config->button_count;
+    for (uint8_t button = 0; button < out->button_count; button++) {
+        out->widgets[button] = config->buttons[button].widget;
+    }
+    cache_unlock();
+    return true;
 }
 
 bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
@@ -717,8 +747,11 @@ bool pad_config_delete(uint8_t page) {
     }
 
     // Clear RAM cache before bumping generation (same ordering rationale as save)
-    free(g_cache[page]);
+    cache_lock();
+    PadConfig* old = g_cache[page];
     g_cache[page] = nullptr;
+    cache_unlock();
+    free(old);
     publish_eligibility(page, false);
 
     // Refresh any pad that referenced this page as its template_pad

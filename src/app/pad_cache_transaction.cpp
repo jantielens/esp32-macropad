@@ -8,14 +8,18 @@ PadCacheRefreshResult pad_cache_refresh(PadConfig** slot,
                                         PadCacheAllocator allocate_primary,
                                         PadCacheAllocator allocate_fallback,
                                         PadCacheLoader load,
-                                        PadCacheEligibilityPublisher publish) {
+                                        PadCacheEligibilityPublisher publish,
+                                        PadCacheLock lock,
+                                        PadCacheLock unlock) {
     PadConfig* replacement = allocate_primary();
     if (!replacement) replacement = allocate_fallback();
     if (!replacement) return PadCacheRefreshResult::AllocationFailed;
 
     if (load(page, replacement)) {
+        lock();
         PadConfig* old = *slot;
         *slot = replacement;
+        unlock();
         publish(page, replacement->button_count > 0 ||
                   replacement->pad_action_count > 0);
         free(old);
@@ -23,8 +27,11 @@ PadCacheRefreshResult pad_cache_refresh(PadConfig** slot,
     }
 
     free(replacement);
-    free(*slot);
+    lock();
+    PadConfig* old = *slot;
     *slot = nullptr;
+    unlock();
+    free(old);
     publish(page, false);
     return PadCacheRefreshResult::Cleared;
 }

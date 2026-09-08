@@ -50,6 +50,10 @@ void pad_binding_get_bindings(const PadBinding** bindings, uint8_t* count);
 bool pad_binding_expand(const PadConfig* page, const char* templ,
                         char* out, size_t out_len);
 
+// Expand [pad:] tokens using an explicit binding array.
+bool pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
+                                 const char* templ, char* out, size_t out_len);
+
 // Resolve `count` binding-template strings against an optional pad binding
 // context (binds/bind_count may be NULL/0 — then [pad:] tokens resolve to the
 // placeholder). Result i is written to out + i*stride (NUL-terminated, capped

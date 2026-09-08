@@ -150,19 +150,16 @@ static void pad_binding_collect(const char* params, void* user_data) {
 // Expand utility — text substitution of [pad:name] to underlying templates
 // ============================================================================
 
-bool pad_binding_expand(const PadConfig* page, const char* templ,
-                        char* out, size_t out_len) {
+bool pad_binding_expand_bindings(const PadBinding* bindings, uint8_t count,
+                                 const char* templ, char* out, size_t out_len) {
     if (!templ || !out || out_len == 0) {
         if (out && out_len > 0) out[0] = '\0';
         return false;
     }
-    if (!page || page->binding_count == 0) {
+    if (!bindings || count == 0) {
         strlcpy(out, templ, out_len);
         return false;
     }
-
-    const PadBinding* bindings = page->bindings;
-    uint8_t count = page->binding_count;
 
     bool any_expanded = false;
     size_t written = 0;
@@ -256,6 +253,15 @@ bool pad_binding_expand(const PadConfig* page, const char* templ,
 
     out[written] = '\0';
     return any_expanded;
+}
+
+bool pad_binding_expand(const PadConfig* page, const char* templ,
+                        char* out, size_t out_len) {
+    if (!page) {
+        return pad_binding_expand_bindings(nullptr, 0, templ, out, out_len);
+    }
+    return pad_binding_expand_bindings(page->bindings, page->binding_count,
+                                       templ, out, out_len);
 }
 
 // ============================================================================
