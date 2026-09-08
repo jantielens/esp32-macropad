@@ -1,6 +1,10 @@
 #include "rtos_task_utils.h"
 
+#if __has_include("esp_memory_utils.h")
 #include "esp_memory_utils.h"
+#else
+#include "soc/soc_memory_types.h"
+#endif
 #include "soc/soc_caps.h"
 
 #include <esp_heap_caps.h>
