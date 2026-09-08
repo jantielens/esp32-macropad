@@ -2,7 +2,7 @@
 #define BOARD_OVERRIDES_JC4827W543C_H
 
 // ============================================================================
-// EXPERIMENTAL / HARDWARE-UNTESTED: GUITION JC4827W543C
+// GUITION JC4827W543C
 // ESP32-S3-WROOM-1-N4R8, 4.3-inch 480x272 NV3041A QSPI IPS panel and GT911
 // capacitive touch. Pin mapping follows the manufacturer Arduino examples:
 // https://github.com/wegi1/ESP32-S3-JC4827W543C
@@ -18,8 +18,8 @@
 #define HAS_BLE_HID false
 #define HAS_MCP false
 #define HAS_IMAGE_FETCH false
-// Generated driver-table status note.
-#define BOARD_DRIVER_TABLE_NOTES "experimental, hardware untested"
+// Generated driver-table validation note.
+#define BOARD_DRIVER_TABLE_NOTES "hardware validated by @00lems00 (#81)"
 
 // ESP32-S3 internal memory is constrained when WiFi and the display are active.
 #define LVGL_TASK_CORE 1

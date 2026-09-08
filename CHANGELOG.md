@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **GUITION JC4827W543C support**: this 4.3-inch ESP32-S3 macropad with a 480 by 272 NV3041A QSPI display and GT911 capacitive touch now has a tested 4 MB firmware target. It retains WiFi, web portal, MQTT, and LittleFS, while omitting OTA updates, native Extensions, BLE HID, MCP, and remote image fetching to fit its single application partition. Hardware validation and detailed test results were provided by @00lems00 in [#81](https://github.com/jantielens/esp32-macropad/issues/81).
 * **E-paper wake diagnostics**: non-retained MQTT events at `devices/<name>/epaper/wake` provide correlated WiFi, image, panel, NTP, MQTT, and end-to-end timing for each wake. Events include stable session and wake identifiers, refresh outcome, radio context, image source, and journal status. Home Assistant can archive the raw events through its File integration.
 * **E-paper offline diagnostics**: a 16-record RTC journal retains failed, interrupted, and unconfirmed MQTT wake events for oldest-first delivery after connectivity returns. Deferred events preserve their original refresh outcome and report journal overflow.
 
