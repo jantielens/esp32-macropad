@@ -139,11 +139,6 @@ static int fetch_job(const HaStatsJob& job, float* out) {
     const uint64_t window_ms = (uint64_t)job.slot_ms * job.slot_count;
     const bool hourly = job.slot_ms >= HA_STATS_HOURLY_SLOT_THRESHOLD_SECS * 1000ULL ||
                         window_ms > HA_STATS_HOURLY_WINDOW_THRESHOLD_SECS * 1000ULL;
-    if (hourly && job.slot_ms < HA_STATS_HOURLY_SLOT_THRESHOLD_SECS * 1000ULL) {
-        LOGI(TAG, "%s: hourly statistics are coarser than %lums slots; skipping history",
-             job.entity_id, (unsigned long)job.slot_ms);
-        return 0;
-    }
 
     char start_iso[32], end_iso[32];
     format_utc(start_sec, start_iso, sizeof(start_iso));
@@ -245,7 +240,9 @@ static int fetch_job(const HaStatsJob& job, float* out) {
         n++;
     }
 
-    const size_t filled = ha_stats_resample(g_points, n, job.slot_ms, job.end_bucket,
+    const uint32_t source_period_ms = hourly ? 3600000UL : 300000UL;
+    const size_t filled = ha_stats_resample(g_points, n, job.slot_ms, source_period_ms,
+                                            job.end_bucket,
                                             out, job.slot_count);
     const uint32_t t_done = millis();
 

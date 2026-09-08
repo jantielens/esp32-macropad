@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-* **Sparkline history combines coarse Home Assistant data with recent live detail**: Home Assistant Recorder history now backfills fine-grained sparklines instead of being skipped below five-minute intervals. Historical readings are held between Recorder periods, while locally collected samples keep the configured finer resolution and always take precedence.
+* **Sparkline history combines coarse Home Assistant data with recent live detail**: Home Assistant Recorder history now backfills fine-grained sparklines instead of being skipped below five-minute intervals. Consecutive historical readings are visually interpolated, with missing periods held at their prior value; locally collected samples keep the configured finer resolution and always take precedence.
 * **Write-only portal credentials now show clear state and pending changes**: WiFi, MQTT, Home Assistant, Basic Auth, Voice Assistant, and e-paper credential fields show whether a value is stored without revealing it. Entering a replacement shows an orange pending-save indicator; emptying the field restores its stored or unconfigured state.
 
 ### Fixed

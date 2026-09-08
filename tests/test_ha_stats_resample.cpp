@@ -129,6 +129,8 @@ TEST(request_window_supports_1024_slots) {
 
 // 5-minute buckets, so bucket id == start_sec / 300.
 static const uint64_t SLOT_MS = 300000;
+static const uint64_t RECORDER_5_MIN_MS = 300000;
+static const uint64_t RECORDER_HOUR_MS = 3600000;
 
 TEST(resample_aligns_points_to_buckets) {
     HaStatPoint pts[3] = {
@@ -137,7 +139,7 @@ TEST(resample_aligns_points_to_buckets) {
         { 1002 * 300, 30.0f },
     };
     float out[4];
-    size_t filled = ha_stats_resample(pts, 3, SLOT_MS, 1002, out, 4);
+    size_t filled = ha_stats_resample(pts, 3, SLOT_MS, RECORDER_5_MIN_MS, 1002, out, 4);
     ASSERT_EQ(filled, 3u);
     ASSERT_NAN(out[0]);          // bucket 999 — no point
     ASSERT_NEAR(out[1], 10.0f);
@@ -149,7 +151,7 @@ TEST(resample_supports_slot_index_above_255) {
     HaStatPoint point = { 1800 * 600, 42.0f };
     float out[1024];
 
-    size_t filled = ha_stats_resample(&point, 1, 600000, 2000, out, 1024);
+    size_t filled = ha_stats_resample(&point, 1, 600000, RECORDER_5_MIN_MS, 2000, out, 1024);
 
     ASSERT_EQ(filled, 201u);
     ASSERT_NEAR(out[823], 42.0f);
@@ -162,7 +164,7 @@ TEST(resample_holds_values_across_missing_periods) {
         { 1003 * 300, 40.0f },
     };
     float out[4];
-    size_t filled = ha_stats_resample(pts, 2, SLOT_MS, 1003, out, 4);
+    size_t filled = ha_stats_resample(pts, 2, SLOT_MS, RECORDER_5_MIN_MS, 1003, out, 4);
     ASSERT_EQ(filled, 4u);
     ASSERT_NEAR(out[0], 10.0f);
     ASSERT_NEAR(out[1], 10.0f);
@@ -170,24 +172,42 @@ TEST(resample_holds_values_across_missing_periods) {
     ASSERT_NEAR(out[3], 40.0f);
 }
 
-TEST(resample_expands_coarse_history_onto_fine_grid) {
-    // Two five-minute Recorder values become one-minute chart slots. The
-    // first value fills its period and the second takes over at its boundary.
+TEST(resample_interpolates_consecutive_coarse_history_on_fine_grid) {
+    // Two five-minute Recorder values become a smooth one-minute transition.
     HaStatPoint pts[2] = {
         { 1000 * 60, 10.0f },
         { 1005 * 60, 20.0f },
     };
     float out[10];
-    size_t filled = ha_stats_resample(pts, 2, 60000, 1009, out, 10);
+    size_t filled = ha_stats_resample(pts, 2, 60000, RECORDER_5_MIN_MS, 1009, out, 10);
     ASSERT_EQ(filled, 10u);
-    for (size_t i = 0; i < 5; i++) ASSERT_NEAR(out[i], 10.0f);
+    ASSERT_NEAR(out[0], 10.0f);
+    ASSERT_NEAR(out[1], 12.0f);
+    ASSERT_NEAR(out[2], 14.0f);
+    ASSERT_NEAR(out[3], 16.0f);
+    ASSERT_NEAR(out[4], 18.0f);
     for (size_t i = 5; i < 10; i++) ASSERT_NEAR(out[i], 20.0f);
+}
+
+TEST(resample_interpolates_hourly_history_on_fine_grid) {
+    HaStatPoint pts[2] = {
+        { 1000 * 900, 10.0f },
+        { 1004 * 900, 50.0f },
+    };
+    float out[8];
+    size_t filled = ha_stats_resample(pts, 2, 900000, RECORDER_HOUR_MS, 1007, out, 8);
+    ASSERT_EQ(filled, 8u);
+    ASSERT_NEAR(out[0], 10.0f);
+    ASSERT_NEAR(out[1], 20.0f);
+    ASSERT_NEAR(out[2], 30.0f);
+    ASSERT_NEAR(out[3], 40.0f);
+    for (size_t i = 4; i < 8; i++) ASSERT_NEAR(out[i], 50.0f);
 }
 
 TEST(resample_keeps_leading_history_without_value_empty) {
     HaStatPoint point = { 1005 * 60, 20.0f };
     float out[10];
-    size_t filled = ha_stats_resample(&point, 1, 60000, 1009, out, 10);
+    size_t filled = ha_stats_resample(&point, 1, 60000, RECORDER_5_MIN_MS, 1009, out, 10);
     ASSERT_EQ(filled, 5u);
     for (size_t i = 0; i < 5; i++) ASSERT_NAN(out[i]);
     for (size_t i = 5; i < 10; i++) ASSERT_NEAR(out[i], 20.0f);
@@ -200,7 +220,7 @@ TEST(resample_ignores_points_outside_window) {
         { 2000 * 300, 99.0f },   // In the future
     };
     float out[3];
-    size_t filled = ha_stats_resample(pts, 3, SLOT_MS, 1002, out, 3);
+    size_t filled = ha_stats_resample(pts, 3, SLOT_MS, RECORDER_5_MIN_MS, 1002, out, 3);
     ASSERT_EQ(filled, 1u);
     ASSERT_NEAR(out[2], 20.0f);
 }
@@ -214,7 +234,7 @@ TEST(resample_last_point_in_bucket_wins) {
         { 4200, 3.0f },
     };
     float out[1];
-    size_t filled = ha_stats_resample(pts, 3, 3600000, 1, out, 1);  // 1 h slots
+    size_t filled = ha_stats_resample(pts, 3, 3600000, RECORDER_5_MIN_MS, 1, out, 1);  // 1 h slots
     ASSERT_EQ(filled, 1u);
     ASSERT_NEAR(out[0], 3.0f);
 }
@@ -225,7 +245,7 @@ TEST(resample_skips_non_finite_values) {
         { 1001 * 300, 5.0f },
     };
     float out[2];
-    size_t filled = ha_stats_resample(pts, 2, SLOT_MS, 1001, out, 2);
+    size_t filled = ha_stats_resample(pts, 2, SLOT_MS, RECORDER_5_MIN_MS, 1001, out, 2);
     ASSERT_EQ(filled, 1u);
     ASSERT_NAN(out[0]);
     ASSERT_NEAR(out[1], 5.0f);
@@ -233,7 +253,7 @@ TEST(resample_skips_non_finite_values) {
 
 TEST(resample_handles_empty_input) {
     float out[3] = { 1.0f, 2.0f, 3.0f };
-    ASSERT_EQ(ha_stats_resample(nullptr, 0, SLOT_MS, 1000, out, 3), 0u);
+    ASSERT_EQ(ha_stats_resample(nullptr, 0, SLOT_MS, RECORDER_5_MIN_MS, 1000, out, 3), 0u);
     ASSERT_NAN(out[0]);
     ASSERT_NAN(out[1]);
     ASSERT_NAN(out[2]);
@@ -378,7 +398,8 @@ int main() {
     RUN(resample_aligns_points_to_buckets);
     RUN(resample_supports_slot_index_above_255);
     RUN(resample_holds_values_across_missing_periods);
-    RUN(resample_expands_coarse_history_onto_fine_grid);
+    RUN(resample_interpolates_consecutive_coarse_history_on_fine_grid);
+    RUN(resample_interpolates_hourly_history_on_fine_grid);
     RUN(resample_keeps_leading_history_without_value_empty);
     RUN(resample_ignores_points_outside_window);
     RUN(resample_last_point_in_bucket_wins);
