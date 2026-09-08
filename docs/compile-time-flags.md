@@ -171,7 +171,7 @@ Total flags: 276
 - **WEB_PORTAL_CONFIG_BODY_TIMEOUT_MS** default: `5000` — Timeout for an incomplete /api/config upload (ms) before freeing the buffer.
 - **WEB_PORTAL_CONFIG_MAX_JSON_BYTES** default: `4096` — Max JSON body size accepted by /api/config.
 - **WIFI_MAX_ATTEMPTS** default: `3` — Maximum WiFi connection attempts at boot before falling back.
-- **WIFI_TIER2_BACKOFF_MAX_MS** default: `60000` — Tier 2 exponential backoff: maximum retry interval cap.
+- **WIFI_TIER2_BACKOFF_MAX_MS** default: `30000` — Tier 2 exponential backoff: maximum retry interval cap.
 
 ### Other
 
@@ -312,10 +312,10 @@ Total flags: 276
 - **UI_SCALE_TIER** default: `UI_SCALE_MEDIUM` — Default UI scale tier (boards override in board_overrides.h)
 - **USE_SD_STORAGE** default: `false` — flash cache-disable starving the framebuffer DMA.
 - **WIFI_CACHED_RSSI_FLOOR_DBM** default: `-78` — installation that always sits at the edge of one AP.
-- **WIFI_REBOOT_AFTER_MS** default: `600000` — Total outage before controlled device reboot.
-- **WIFI_TIER1_DURATION_MS** default: `60000` — Tier 1: SDK auto-reconnect window — device takes no active reconnect action.
-- **WIFI_TIER2_BACKOFF_BASE_MS** default: `10000` — Tier 2 exponential backoff: initial retry interval.
-- **WIFI_TIER2_DURATION_MS** default: `300000` — Tier 2: active reconnect with exponential backoff.
+- **WIFI_REBOOT_AFTER_MS** default: `300000` — Total outage before controlled device reboot.
+- **WIFI_TIER1_DURATION_MS** default: `5000` — Tier 1: SDK auto-reconnect window — device takes no active reconnect action.
+- **WIFI_TIER2_BACKOFF_BASE_MS** default: `5000` — Tier 2 exponential backoff: initial retry interval.
+- **WIFI_TIER2_DURATION_MS** default: `120000` — Tier 2: active reconnect with exponential backoff.
 <!-- END COMPILE_FLAG_REPORT:FLAGS -->
 
 ## Board Matrix: Features (generated)

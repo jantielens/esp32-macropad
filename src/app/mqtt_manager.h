@@ -87,6 +87,7 @@ private:
 		char _health_state_topic[128] = {0};
 
 		bool _discovery_published_this_boot = false;
+		bool _subscriptions_initialized = false;
 
 		unsigned long _last_reconnect_attempt_ms = 0;
 		unsigned long _last_health_publish_ms = 0;

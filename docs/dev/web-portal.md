@@ -768,6 +768,11 @@ Returns real-time device health statistics.
 
   "wifi_rssi": -45,
   "wifi_channel": 6,
+  "wifi_bssid": "AA:BB:CC:DD:EE:FF",
+  "wifi_disconnect_reason": 4,
+  "wifi_retry_count": 0,
+  "wifi_associated_at_ms": 123000,
+  "wifi_last_recovery_ms": 4200,
   "ip_address": "192.168.1.100",
   "hostname": "esp32-1234"
 }
@@ -786,7 +791,17 @@ not report a PSRAM largest-block value on those boards.
 - `cpu_usage_core_0` / `cpu_usage_core_1`: optional current per-core percentages, returned only when runtime statistics are available on a multicore target
 - `cpu_temperature`: `null` on chips without an internal temperature sensor
 - `fs_mounted`: `null` when no filesystem partition is present; `false` when present but not mounted
-- `wifi_rssi`, `wifi_channel`, `ip_address`: `null` when not connected
+- `wifi_rssi`, `wifi_channel`, `wifi_bssid`, and `ip_address`: `null` when not
+  connected. They are captured at association time, so health polling does not
+  issue ESP-Hosted Wi-Fi queries.
+- `wifi_disconnect_reason`: numeric reason supplied by the most recent Wi-Fi
+  disconnect event; `null` until one occurs
+- `wifi_retry_count`: active reconnect attempts in the current or most recent
+  outage; `null` when not connected
+- `wifi_associated_at_ms`: `millis()` timestamp for the cached association
+  snapshot; `null` when not connected
+- `wifi_last_recovery_ms`: duration of the most recent recovered outage;
+  `null` when not connected
 - `*_min_window` / `*_max_window`: sampled continuously by firmware and returned as a multi-client-safe snapshot (captures short-lived dips/spikes)
 - `sensors`: object containing optional sensor values (empty object when no sensors are available)
 - `runtime`: last checkpoints from the Arduino main loop and LVGL task, plus

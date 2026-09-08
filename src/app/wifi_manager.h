@@ -12,6 +12,33 @@ enum class WifiReconnectTier : uint8_t {
     Tier3 = 3,  // Hard WiFi stack reset
 };
 
+enum class WifiRecoveryAction : uint8_t {
+    None,
+    Begin,
+    ResetRadio,
+    Reboot,
+};
+
+struct WifiRecoveryPolicy {
+    unsigned long grace_ms;
+    unsigned long reset_after_ms;
+    unsigned long reboot_after_ms;
+    unsigned long backoff_base_ms;
+    unsigned long backoff_max_ms;
+};
+
+struct WifiConnectionDiagnostics {
+    int16_t rssi;
+    uint8_t channel;
+    uint8_t bssid[6];
+    uint8_t disconnect_reason;
+    unsigned int retry_count;
+    unsigned long associated_at_ms;
+    unsigned long last_recovery_duration_ms;
+    bool associated;
+    bool has_disconnect_reason;
+};
+
 // Start WiFi hardware early (SDIO link on P4, STA mode on others).
 // Call before wifi_manager_connect() to overlap hardware bring-up with other init.
 void wifi_manager_early_init();
@@ -41,5 +68,15 @@ WifiReconnectTier wifi_reconnect_get_tier(unsigned long elapsed_ms,
 
 // Check whether the device should reboot based on total outage duration.
 bool wifi_reconnect_should_reboot(unsigned long total_outage_ms, unsigned long threshold_ms);
+
+// Determine the next recovery command. Manual requests bypass the grace period.
+WifiRecoveryAction wifi_reconnect_next_action(unsigned long outage_ms,
+                                              unsigned long since_last_attempt_ms,
+                                              unsigned int retry_count,
+                                              bool manual_request,
+                                              const WifiRecoveryPolicy& policy);
+
+// Copy cached association and recovery diagnostics. This does not query WiFi.
+void wifi_manager_get_diagnostics(WifiConnectionDiagnostics* diagnostics);
 
 #endif // WIFI_MANAGER_H

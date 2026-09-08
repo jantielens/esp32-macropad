@@ -25,9 +25,17 @@ static constexpr unsigned long WIFI_BACKOFF_BASE = 3000; // 3 seconds base
 // scan to find a stronger AP. Conservative so a stationary device with a decent
 // link never pays the scan cost.
 static constexpr unsigned long WIFI_CHECK_INTERVAL_MS = 10000; // 10 seconds (safety-net poll)
-static constexpr unsigned long WIFI_PING_INTERVAL_MS  = 30000; // 30 seconds between pings
-static constexpr int          WIFI_PING_FAIL_THRESHOLD = 3;    // consecutive failures before reconnect
+static constexpr unsigned long WIFI_PING_INTERVAL_MS  = 10000; // 10 seconds between pings
+static constexpr int          WIFI_PING_FAIL_THRESHOLD = 2;    // consecutive failures before reconnect
 static constexpr unsigned long WIFI_TIER3_REINIT_TIMEOUT_MS = 60000; // Tier 3 reinit retry interval
+
+static constexpr WifiRecoveryPolicy WIFI_RECOVERY_POLICY = {
+		WIFI_TIER1_DURATION_MS,
+		WIFI_TIER1_DURATION_MS + WIFI_TIER2_DURATION_MS,
+		WIFI_REBOOT_AFTER_MS,
+		WIFI_TIER2_BACKOFF_BASE_MS,
+		WIFI_TIER2_BACKOFF_MAX_MS,
+};
 
 static unsigned long g_last_wifi_check_ms = 0;
 
@@ -47,21 +55,35 @@ static unsigned long g_state_entry_ms = 0;    // millis() when current state was
 static unsigned long g_last_retry_ms = 0;     // millis() of last Tier 2 reconnect attempt
 static unsigned int  g_tier2_attempt = 0;     // Tier 2 backoff attempt counter
 static bool g_events_registered = false;
+static bool g_mdns_started = false;
 
-// Atomic flags — written from system event task, read from loop() task.
-static std::atomic<bool> g_wifi_disconnected{false};
-static std::atomic<bool> g_wifi_reconnected{false};
+enum class WifiEventType : uint8_t { None, Disconnected, GotIp };
+
+// A single atomic event record preserves the latest event and disconnect reason.
+// Wi-Fi events are edge notifications; current association state remains authoritative.
+static std::atomic<uint16_t> g_wifi_event{0};
 static std::atomic<bool> g_wifi_reconnect_requested{false};
+
+static std::atomic<int16_t> g_diag_rssi{0};
+static std::atomic<uint8_t> g_diag_channel{0};
+static std::atomic<uint64_t> g_diag_bssid{0};
+static std::atomic<uint8_t> g_diag_disconnect_reason{0};
+static std::atomic<bool> g_diag_has_disconnect_reason{false};
+static std::atomic<unsigned int> g_diag_retry_count{0};
+static std::atomic<unsigned long> g_diag_associated_at_ms{0};
+static std::atomic<unsigned long> g_diag_last_recovery_duration_ms{0};
+static std::atomic<bool> g_diag_associated{false};
 
 // --- Gateway ping liveness check ---
 static unsigned long g_last_ping_ms = 0;
 static int           g_ping_fail_count = 0;
-static volatile bool g_ping_in_flight = false;
-static volatile bool g_ping_got_reply = false;
+static std::atomic<bool> g_ping_in_flight{false};
+static std::atomic<bool> g_ping_got_reply{false};
+static std::atomic<bool> g_ping_result_pending{false};
 
 static void ping_on_success(esp_ping_handle_t hdl, void *args) {
 		(void)hdl; (void)args;
-		g_ping_got_reply = true;
+		g_ping_got_reply.store(true, std::memory_order_release);
 }
 
 static void ping_on_timeout(esp_ping_handle_t hdl, void *args) {
@@ -72,11 +94,12 @@ static void ping_on_timeout(esp_ping_handle_t hdl, void *args) {
 static void ping_on_end(esp_ping_handle_t hdl, void *args) {
 		(void)args;
 		esp_ping_delete_session(hdl);
-		g_ping_in_flight = false;
+		g_ping_in_flight.store(false, std::memory_order_release);
+		g_ping_result_pending.store(true, std::memory_order_release);
 }
 
 static void wifi_ping_start(IPAddress gateway) {
-		if (g_ping_in_flight) return;
+		if (g_ping_in_flight.load(std::memory_order_acquire)) return;
 		if (gateway == IPAddress(0, 0, 0, 0)) return;
 
 		esp_ping_config_t cfg = ESP_PING_DEFAULT_CONFIG();
@@ -100,12 +123,12 @@ static void wifi_ping_start(IPAddress gateway) {
 		cbs.on_ping_end     = ping_on_end;
 
 		esp_ping_handle_t hdl = nullptr;
-		g_ping_got_reply = false;
-		g_ping_in_flight = true;
+		g_ping_got_reply.store(false, std::memory_order_release);
+		g_ping_in_flight.store(true, std::memory_order_release);
 
 		esp_err_t err = esp_ping_new_session(&cfg, &cbs, &hdl);
 		if (err != ESP_OK) {
-				g_ping_in_flight = false;
+				g_ping_in_flight.store(false, std::memory_order_release);
 				return;
 		}
 		esp_ping_start(hdl);
@@ -116,6 +139,8 @@ RTC_DATA_ATTR static uint8_t g_cached_channel = 0;
 RTC_DATA_ATTR static bool g_cached_valid = false;
 RTC_DATA_ATTR static char g_cached_ssid[CONFIG_SSID_MAX_LEN] = {0};
 
+static void cache_association_diagnostics(unsigned long now);
+
 static void format_bssid(const uint8_t *bssid, char *out, size_t out_len) {
 		if (!out || out_len < 18) return;
 		if (!bssid) {
@@ -124,6 +149,48 @@ static void format_bssid(const uint8_t *bssid, char *out, size_t out_len) {
 		}
 		snprintf(out, out_len, "%02X:%02X:%02X:%02X:%02X:%02X",
 				bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+}
+
+static uint64_t pack_bssid(const uint8_t bssid[6]) {
+		uint64_t packed = 0;
+		for (int i = 0; i < 6; ++i) packed |= (uint64_t)bssid[i] << (i * 8);
+		return packed;
+}
+
+static void unpack_bssid(uint64_t packed, uint8_t bssid[6]) {
+		for (int i = 0; i < 6; ++i) bssid[i] = (uint8_t)(packed >> (i * 8));
+}
+
+static void cache_association_diagnostics(unsigned long now) {
+		if (WiFi.status() != WL_CONNECTED) return;
+
+		const uint8_t* bssid = WiFi.BSSID();
+		if (bssid) g_diag_bssid.store(pack_bssid(bssid), std::memory_order_release);
+		g_diag_rssi.store(WiFi.RSSI(), std::memory_order_release);
+		g_diag_channel.store((uint8_t)WiFi.channel(), std::memory_order_release);
+		g_diag_associated_at_ms.store(now, std::memory_order_release);
+		g_diag_associated.store(true, std::memory_order_release);
+
+		uint8_t copied_bssid[6];
+		unpack_bssid(g_diag_bssid.load(std::memory_order_acquire), copied_bssid);
+		char bssid_str[18];
+		format_bssid(copied_bssid, bssid_str, sizeof(bssid_str));
+		LOGI("WiFi", "Association: %s | Ch %u | RSSI %d dBm", bssid_str,
+				(unsigned)g_diag_channel.load(std::memory_order_acquire),
+				(int)g_diag_rssi.load(std::memory_order_acquire));
+}
+
+void wifi_manager_get_diagnostics(WifiConnectionDiagnostics* diagnostics) {
+		if (!diagnostics) return;
+		diagnostics->rssi = g_diag_rssi.load(std::memory_order_acquire);
+		diagnostics->channel = g_diag_channel.load(std::memory_order_acquire);
+		unpack_bssid(g_diag_bssid.load(std::memory_order_acquire), diagnostics->bssid);
+		diagnostics->disconnect_reason = g_diag_disconnect_reason.load(std::memory_order_acquire);
+		diagnostics->retry_count = g_diag_retry_count.load(std::memory_order_acquire);
+		diagnostics->associated_at_ms = g_diag_associated_at_ms.load(std::memory_order_acquire);
+		diagnostics->last_recovery_duration_ms = g_diag_last_recovery_duration_ms.load(std::memory_order_acquire);
+		diagnostics->associated = g_diag_associated.load(std::memory_order_acquire);
+		diagnostics->has_disconnect_reason = g_diag_has_disconnect_reason.load(std::memory_order_acquire);
 }
 
 static bool wait_for_connection(unsigned long timeout_ms) {
@@ -341,6 +408,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 						const int rssi = WiFi.RSSI();
 						if (rssi > WIFI_CACHED_RSSI_FLOOR_DBM) {
 								LOGI("WiFi", "Connected (cached AP, %d dBm)", rssi);
+								cache_association_diagnostics(millis());
 								return true;
 						}
 						// Connected but the link is weak. A scan may surface a stronger
@@ -379,6 +447,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 						LOGI("WiFi", "Access: http://%s", WiFi.localIP().toString().c_str());
 						LOGI("WiFi", "Access: http://%s.local", WiFi.getHostname());
 						LOGI("WiFi", "Connected");
+						cache_association_diagnostics(millis());
 						return true;
 				}
 
@@ -417,6 +486,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 								LOGI("WiFi", "Access: http://%s", WiFi.localIP().toString().c_str());
 								LOGI("WiFi", "Access: http://%s.local", WiFi.getHostname());
 								LOGI("WiFi", "Connected");
+								cache_association_diagnostics(millis());
 
 								if (has_best_ap && best_channel > 0) {
 										memcpy(g_cached_bssid, best_bssid, sizeof(g_cached_bssid));
@@ -450,13 +520,15 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 // --- WiFi event handlers (set flags only, no WiFi API calls) ---
 
 static void on_wifi_disconnected(arduino_event_id_t event, arduino_event_info_t info) {
-		(void)event; (void)info;
-		g_wifi_disconnected.store(true, std::memory_order_release);
+		(void)event;
+		const uint16_t record = ((uint16_t)WifiEventType::Disconnected << 8) |
+				(uint16_t)info.wifi_sta_disconnected.reason;
+		g_wifi_event.store(record, std::memory_order_release);
 }
 
 static void on_wifi_got_ip(arduino_event_id_t event, arduino_event_info_t info) {
 		(void)event; (void)info;
-		g_wifi_reconnected.store(true, std::memory_order_release);
+		g_wifi_event.store((uint16_t)WifiEventType::GotIp << 8, std::memory_order_release);
 }
 
 void wifi_manager_register_events() {
@@ -482,6 +554,7 @@ static void enter_outage(unsigned long now) {
 		g_tier2_attempt = 0;
 		g_wifi_state = WifiState::Tier1Wait;
 		g_ping_fail_count = 0;
+		g_diag_associated.store(false, std::memory_order_release);
 		LOGW("WiFi", "Disconnected — entering Tier 1 (SDK auto-reconnect)");
 }
 
@@ -489,8 +562,9 @@ static void recover_from_outage(const DeviceConfig *config, unsigned long now,
                                 const char *tier_name) {
 		const unsigned long outage_duration = now - g_outage_start_ms;
 		g_wifi_state = WifiState::Connected;
-		g_wifi_disconnected.store(false, std::memory_order_release);
-		g_wifi_reconnected.store(false, std::memory_order_release);
+		g_wifi_event.store(0, std::memory_order_release);
+		g_diag_last_recovery_duration_ms.store(outage_duration, std::memory_order_release);
+		cache_association_diagnostics(now);
 
 		power_manager_note_wifi_success();
 		wifi_manager_start_mdns(config);
@@ -504,6 +578,10 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 		if (!config) return;
 
 		LOGI("mDNS", "Start");
+		if (g_mdns_started) {
+			MDNS.end();
+			g_mdns_started = false;
+		}
 
 		char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
 		config_manager_sanitize_device_name(config->device_name, sanitized, CONFIG_DEVICE_NAME_MAX_LEN);
@@ -514,6 +592,7 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 		}
 
 		if (MDNS.begin(sanitized)) {
+			g_mdns_started = true;
 				LOGI("mDNS", "Name: %s.local", sanitized);
 
 				MDNS.addService("http", "tcp", 80);
@@ -549,18 +628,23 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 		const unsigned long now = millis();
 
 		// --- Consume atomic event flags ---
-		const bool event_disconnected = g_wifi_disconnected.exchange(false, std::memory_order_acquire);
-		const bool event_reconnected = g_wifi_reconnected.exchange(false, std::memory_order_acquire);
+		const uint16_t event_record = g_wifi_event.exchange(0, std::memory_order_acquire);
+		const WifiEventType event_type = (WifiEventType)(event_record >> 8);
+		const uint8_t disconnect_reason = (uint8_t)event_record;
 
 		// --- Handle explicit reconnect request ---
 		if (g_wifi_reconnect_requested.exchange(false, std::memory_order_acquire)) {
 				LOGI("WiFi", "Processing reconnect request");
 				WiFi.disconnect(false);
 				enter_outage(now);
+				WiFi.begin(config->wifi_ssid, config->wifi_password);
+				g_last_retry_ms = now;
+				g_tier2_attempt = 1;
+				g_diag_retry_count.store(g_tier2_attempt, std::memory_order_release);
 				return;
 		}
 		// --- Handle reconnection event (takes priority over disconnect) ---
-		if (event_reconnected) {
+		if (event_type == WifiEventType::GotIp) {
 				if (g_wifi_state != WifiState::Connected) {
 						recover_from_outage(config, now,
 								g_wifi_state == WifiState::Tier1Wait   ? "Tier 1" :
@@ -570,7 +654,10 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 		}
 
 		// --- Handle disconnect event while connected ---
-		if (event_disconnected && g_wifi_state == WifiState::Connected) {
+		if (event_type == WifiEventType::Disconnected && g_wifi_state == WifiState::Connected) {
+				g_diag_disconnect_reason.store(disconnect_reason, std::memory_order_release);
+				g_diag_has_disconnect_reason.store(true, std::memory_order_release);
+				LOGW("WiFi", "Disconnected (reason %u)", (unsigned)disconnect_reason);
 				enter_outage(now);
 				return;
 		}
@@ -594,8 +681,8 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 		// --- Gateway ping liveness (only when connected) ---
 		if (g_wifi_state == WifiState::Connected) {
 				// Collect result from previous ping (if any)
-				if (!g_ping_in_flight && g_last_ping_ms > 0) {
-						if (g_ping_got_reply) {
+				if (g_ping_result_pending.exchange(false, std::memory_order_acq_rel)) {
+						if (g_ping_got_reply.load(std::memory_order_acquire)) {
 								if (g_ping_fail_count > 0) {
 										LOGI("WiFi", "Ping OK — link recovered after %d failure(s)", g_ping_fail_count);
 								}
@@ -605,18 +692,14 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 								LOGW("WiFi", "Ping failed (%d/%d)", g_ping_fail_count, WIFI_PING_FAIL_THRESHOLD);
 
 								if (g_ping_fail_count >= WIFI_PING_FAIL_THRESHOLD) {
-										LOGW("WiFi", "Link dead (WiFi reported connected) — entering reconnect");
+										LOGW("WiFi", "Gateway unreachable while associated; retaining WiFi connection");
 										g_ping_fail_count = 0;
-										g_last_ping_ms = 0;
-										WiFi.disconnect(false);
-										enter_outage(now);
-										return;
 								}
 						}
 				}
 
 				// Launch a new ping every WIFI_PING_INTERVAL_MS
-				if (!g_ping_in_flight && (now - g_last_ping_ms >= WIFI_PING_INTERVAL_MS)) {
+				if (!g_ping_in_flight.load(std::memory_order_acquire) && (now - g_last_ping_ms >= WIFI_PING_INTERVAL_MS)) {
 						IPAddress gw = WiFi.gatewayIP();
 						if (gw != IPAddress(0, 0, 0, 0)) {
 								wifi_ping_start(gw);
@@ -626,54 +709,53 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 				return; // Connected — nothing more to do
 		}
 
-		// --- Outage in progress: check for reboot threshold ---
+		// --- Outage in progress: policy decides retry, reset, or reboot ---
 		const unsigned long total_outage = now - g_outage_start_ms;
-		if (wifi_reconnect_should_reboot(total_outage, WIFI_REBOOT_AFTER_MS)) {
+		if (g_wifi_state == WifiState::Tier3Reinit) {
+				if (now - g_state_entry_ms >= WIFI_TIER3_REINIT_TIMEOUT_MS) {
+						LOGW("WiFi", "Tier 3 reinit timeout — retrying hard reset");
+						g_wifi_state = WifiState::Tier3Reset;
+						g_state_entry_ms = now;
+				}
+				return;
+		}
+
+		if (g_wifi_state == WifiState::Tier3Off) {
+				if (now - g_state_entry_ms >= 1000) {
+						LOGI("WiFi", "Tier 3: re-initializing WiFi stack");
+						WiFi.mode(WIFI_STA);
+						WiFi.begin(config->wifi_ssid, config->wifi_password);
+						g_wifi_state = WifiState::Tier3Reinit;
+						g_state_entry_ms = now;
+				}
+				return;
+		}
+
+		const unsigned long since_last_retry = g_last_retry_ms == 0 ? ~0UL : now - g_last_retry_ms;
+		const WifiRecoveryAction recovery_action = wifi_reconnect_next_action(
+				total_outage, since_last_retry, g_tier2_attempt, false, WIFI_RECOVERY_POLICY);
+		if (recovery_action == WifiRecoveryAction::Reboot) {
 				LOGE("WiFi", "Total outage %lus exceeds threshold — rebooting", total_outage / 1000);
 				ESP.restart();
 				return; // unreachable
 		}
+		if (recovery_action == WifiRecoveryAction::None) return;
 
-		// --- Determine current tier ---
-		const WifiReconnectTier tier = wifi_reconnect_get_tier(
-				total_outage, WIFI_TIER1_DURATION_MS, WIFI_TIER2_DURATION_MS);
-
-		// --- Tier 1: wait for SDK auto-reconnect ---
-		if (g_wifi_state == WifiState::Tier1Wait) {
-				if (tier >= WifiReconnectTier::Tier2) {
-						g_wifi_state = WifiState::Tier2Retry;
-						g_state_entry_ms = now;
-						g_tier2_attempt = 0;
-						g_last_retry_ms = 0;
-						LOGW("WiFi", "Tier 1 expired (%lus) — escalating to Tier 2", total_outage / 1000);
-				}
-				return;
-		}
-
-		// --- Tier 2: active reconnect with exponential backoff ---
-		if (g_wifi_state == WifiState::Tier2Retry) {
-				if (tier >= WifiReconnectTier::Tier3) {
-						g_wifi_state = WifiState::Tier3Reset;
-						g_state_entry_ms = now;
-						LOGW("WiFi", "Tier 2 expired (%lus) — escalating to Tier 3", total_outage / 1000);
-						return;
-				}
-
+		if (recovery_action == WifiRecoveryAction::Begin) {
 				const unsigned long backoff = wifi_reconnect_next_backoff(
 						g_tier2_attempt, WIFI_TIER2_BACKOFF_BASE_MS, WIFI_TIER2_BACKOFF_MAX_MS);
-
-				if (g_last_retry_ms == 0 || (now - g_last_retry_ms >= backoff)) {
-						LOGI("WiFi", "Tier 2 retry #%u (backoff %lus)", g_tier2_attempt + 1, backoff / 1000);
-						WiFi.disconnect(false);
-						WiFi.begin(config->wifi_ssid, config->wifi_password);
-						g_last_retry_ms = now;
-						g_tier2_attempt++;
-				}
+				LOGI("WiFi", "Active retry #%u (backoff %lus)", g_tier2_attempt + 1, backoff / 1000);
+				WiFi.disconnect(false);
+				WiFi.begin(config->wifi_ssid, config->wifi_password);
+				g_last_retry_ms = now;
+				g_tier2_attempt++;
+				g_diag_retry_count.store(g_tier2_attempt, std::memory_order_release);
+				g_wifi_state = WifiState::Tier2Retry;
 				return;
 		}
 
-		// --- Tier 3: hard WiFi stack reset ---
-		if (g_wifi_state == WifiState::Tier3Reset) {
+		// --- Tier 3: hardware-specific reset after bounded active retries ---
+		if (recovery_action == WifiRecoveryAction::ResetRadio || g_wifi_state == WifiState::Tier3Reset) {
 				#ifdef CONFIG_IDF_TARGET_ESP32P4
 				// P4-safe path: skip WIFI_OFF toggle (SDIO stability).
 				LOGW("WiFi", "Tier 3: P4 safe reset (disconnect + begin)");
@@ -696,25 +778,4 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 				return;
 		}
 
-		// --- Tier 3 Off: waiting 1 s before re-init (non-P4 only) ---
-		if (g_wifi_state == WifiState::Tier3Off) {
-				if (now - g_state_entry_ms >= 1000) {
-						LOGI("WiFi", "Tier 3: re-initializing WiFi stack");
-						WiFi.mode(WIFI_STA);
-						WiFi.begin(config->wifi_ssid, config->wifi_password);
-						g_wifi_state = WifiState::Tier3Reinit;
-						g_state_entry_ms = now;
-				}
-				return;
-		}
-
-		// --- Tier 3 Reinit: waiting for connection or 60 s retry ---
-		if (g_wifi_state == WifiState::Tier3Reinit) {
-				if (now - g_state_entry_ms >= WIFI_TIER3_REINIT_TIMEOUT_MS) {
-						LOGW("WiFi", "Tier 3 reinit timeout — retrying hard reset");
-						g_wifi_state = WifiState::Tier3Reset;
-						g_state_entry_ms = now;
-				}
-				return;
-		}
 }
