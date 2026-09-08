@@ -1303,13 +1303,5 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define HAS_HA_HISTORY (HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)
 #endif
 
-// Recorder statistics are only published on 5-minute boundaries, so hydration is
-// skipped for streams whose per-slot duration is finer than one Recorder period.
-//
-// Shortest sparkline slot duration (seconds) that Home Assistant history can fill.
-#ifndef HA_HISTORY_MIN_SLOT_SECS
-#define HA_HISTORY_MIN_SLOT_SECS 300
-#endif
-
 #endif // BOARD_CONFIG_H
 

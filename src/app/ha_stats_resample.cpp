@@ -100,7 +100,13 @@ size_t ha_stats_resample(const HaStatPoint* points, size_t point_count,
     }
 
     size_t filled = 0;
+    float last_value = NAN;
     for (size_t i = 0; i < out_count; i++) {
+        if (isfinite(out[i])) {
+            last_value = out[i];
+        } else if (isfinite(last_value)) {
+            out[i] = last_value;
+        }
         if (isfinite(out[i])) filled++;
     }
     return filled;

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 277
+Total flags: 276
 
 ### Features (HAS_*)
 
@@ -142,7 +142,6 @@ Total flags: 277
 - **CAMERA_MJPEG_MAX_CLIENTS** default: `1` — Maximum simultaneous MJPEG clients; boards with constrained WiFi or PSRAM can keep the default.
 - **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
-- **HA_HISTORY_MIN_SLOT_SECS** default: `300` — Shortest sparkline slot duration (seconds) that Home Assistant history can fill.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
 - **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
@@ -1152,8 +1151,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_SD_EN_PIN**
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
-- **HA_HISTORY_MIN_SLOT_SECS**
-  - src/app/board_config.h
 - **HEALTH_HISTORY_ENABLED**
   - src/app/app.ino
   - src/app/board_config.h

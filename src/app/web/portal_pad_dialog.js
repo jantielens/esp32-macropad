@@ -140,7 +140,7 @@ function padUpdateSparklineEditor() {
         warn.textContent = 'Home Assistant uses hourly history beyond 24 hours, so backfill needs at least 1 hour per point at this range. Live data still uses the finer interval.';
         warn.style.display = '';
     } else if (anyHistoryEnabled && intervalSeconds < 300) {
-        warn.textContent = 'Home Assistant history is stored in 5-minute periods, so backfill is skipped at this resolution. Live data still uses the finer interval.';
+        warn.textContent = 'Home Assistant history is stored in 5-minute periods. Historical values are held between periods; live data uses the finer interval.';
         warn.style.display = '';
     } else {
         warn.style.display = 'none';

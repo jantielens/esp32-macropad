@@ -151,22 +151,46 @@ TEST(resample_supports_slot_index_above_255) {
 
     size_t filled = ha_stats_resample(&point, 1, 600000, 2000, out, 1024);
 
-    ASSERT_EQ(filled, 1u);
+    ASSERT_EQ(filled, 201u);
     ASSERT_NEAR(out[823], 42.0f);
+    ASSERT_NEAR(out[1023], 42.0f);
 }
 
-TEST(resample_leaves_missing_periods_as_gaps) {
+TEST(resample_holds_values_across_missing_periods) {
     HaStatPoint pts[2] = {
         { 1000 * 300, 10.0f },
         { 1003 * 300, 40.0f },
     };
     float out[4];
     size_t filled = ha_stats_resample(pts, 2, SLOT_MS, 1003, out, 4);
-    ASSERT_EQ(filled, 2u);
+    ASSERT_EQ(filled, 4u);
     ASSERT_NEAR(out[0], 10.0f);
-    ASSERT_NAN(out[1]);
-    ASSERT_NAN(out[2]);
+    ASSERT_NEAR(out[1], 10.0f);
+    ASSERT_NEAR(out[2], 10.0f);
     ASSERT_NEAR(out[3], 40.0f);
+}
+
+TEST(resample_expands_coarse_history_onto_fine_grid) {
+    // Two five-minute Recorder values become one-minute chart slots. The
+    // first value fills its period and the second takes over at its boundary.
+    HaStatPoint pts[2] = {
+        { 1000 * 60, 10.0f },
+        { 1005 * 60, 20.0f },
+    };
+    float out[10];
+    size_t filled = ha_stats_resample(pts, 2, 60000, 1009, out, 10);
+    ASSERT_EQ(filled, 10u);
+    for (size_t i = 0; i < 5; i++) ASSERT_NEAR(out[i], 10.0f);
+    for (size_t i = 5; i < 10; i++) ASSERT_NEAR(out[i], 20.0f);
+}
+
+TEST(resample_keeps_leading_history_without_value_empty) {
+    HaStatPoint point = { 1005 * 60, 20.0f };
+    float out[10];
+    size_t filled = ha_stats_resample(&point, 1, 60000, 1009, out, 10);
+    ASSERT_EQ(filled, 5u);
+    for (size_t i = 0; i < 5; i++) ASSERT_NAN(out[i]);
+    for (size_t i = 5; i < 10; i++) ASSERT_NEAR(out[i], 20.0f);
 }
 
 TEST(resample_ignores_points_outside_window) {
@@ -353,7 +377,9 @@ int main() {
     printf("\nResampling:\n");
     RUN(resample_aligns_points_to_buckets);
     RUN(resample_supports_slot_index_above_255);
-    RUN(resample_leaves_missing_periods_as_gaps);
+    RUN(resample_holds_values_across_missing_periods);
+    RUN(resample_expands_coarse_history_onto_fine_grid);
+    RUN(resample_keeps_leading_history_without_value_empty);
     RUN(resample_ignores_points_outside_window);
     RUN(resample_last_point_in_bucket_wins);
     RUN(resample_skips_non_finite_values);
