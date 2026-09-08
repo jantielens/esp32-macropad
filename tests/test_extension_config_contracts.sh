@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 require() {
     local pattern=$1
     local file=$2
-    rg -q --fixed-strings "$pattern" "$file" || {
+    grep -Fq -- "$pattern" "$file" || {
         echo "Missing configuration contract '$pattern' in $file" >&2
         exit 1
     }
