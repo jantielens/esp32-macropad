@@ -11,6 +11,7 @@
 #include <string.h>
 
 static constexpr uint32_t kSlowExtensionWarningIntervalMs = 60000;
+static constexpr uint16_t kStoppingRetryIntervalMs = NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS;
 
 struct ExternalWidgetState {
     lv_obj_t* root;
@@ -50,6 +51,9 @@ static bool external_create_instance(ExternalWidgetState* external) {
     }
     external->created = true;
     external->retry_after_stop = false;
+    if (external->timer) {
+        lv_timer_set_period(external->timer, external->tick_interval_ms);
+    }
     if (external->status_label) {
         lv_obj_delete(external->status_label);
         external->status_label = nullptr;
@@ -62,7 +66,10 @@ static void external_timer_cb(lv_timer_t* timer) {
     if (!external || !external->config) return;
     if (screen_saver_manager_is_fully_asleep()) return;
     if (!external->created) {
-        if (external->retry_after_stop) external_create_instance(external);
+        if (external->retry_after_stop) {
+            external_create_instance(external);
+            if (!external->created) lv_timer_set_period(timer, kStoppingRetryIntervalMs);
+        }
         return;
     }
     const uint32_t started_ms = millis();
@@ -122,6 +129,9 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
     external->status_label = lv_label_create(external->root);
     external_create_instance(external);
     external->timer = lv_timer_create(external_timer_cb, external->tick_interval_ms, external);
+    if (external->retry_after_stop) {
+        lv_timer_set_period(external->timer, kStoppingRetryIntervalMs);
+    }
 }
 
 static void external_update(lv_obj_t* tile, const WidgetConfig* cfg,

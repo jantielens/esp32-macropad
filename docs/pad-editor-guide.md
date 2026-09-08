@@ -983,13 +983,13 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 
 **Data gaps** — if data stops arriving (e.g., MQTT sensor goes offline), the sparkline uses Last Observation Carried Forward (LOCF) to fill gaps, keeping the graph smooth instead of showing holes.
 
-**History backfill from Home Assistant** — a freshly booted device has no history, so a 24-hour sparkline would take a full day to fill up. Enable **Backfill from Home Assistant** beside a line's live binding and set its **History entity**. The device fetches that entity's long-term statistics once the clock is synchronized, then fills the empty part of the chart. Live data always wins: backfilled values are only written to slots the device has not sampled itself.
+**History backfill from Home Assistant** — a freshly booted device has no history, so a 24-hour sparkline would take a full day to fill up. Enable **Backfill from Home Assistant** beside a line's live binding and set its **History entity**. The device fetches that entity's long-term statistics once the clock is synchronized, then fills the empty part of the chart. On a finer chart grid, consecutive coarse historical readings are visually interpolated; missing periods retain the previous value. Newer locally collected samples retain the configured resolution. Live data always wins: backfilled values are only written to slots the device has not sampled itself.
 
 Requirements and limits:
 
 - The Home Assistant URL and a long-lived access token must be configured on the portal's Integrations page.
-- Home Assistant records statistics on 5-minute boundaries, so a line whose point interval is under 5 minutes is not backfilled. The pad editor calculates the interval and warns when this is the case.
-- Windows longer than an hour per slot use Home Assistant's hourly statistics; shorter ones use the 5-minute statistics.
+- Home Assistant records statistics on 5-minute boundaries. On a line whose point interval is under 5 minutes, consecutive historical values are visually interpolated while locally collected data still uses the finer interval.
+- Windows over 24 hours use Home Assistant's hourly statistics. Consecutive hourly values are also visually interpolated on finer chart grids.
 - Only boards with PSRAM include this feature.
 - Backfill runs once per stream, one stream at a time, in the background — it does not block the UI.
 

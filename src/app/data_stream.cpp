@@ -252,16 +252,9 @@ static void hydrate_streams() {
             continue;
         }
 
-        // Recorder only publishes on 5-minute boundaries, so a finer grid would
-        // leave most slots empty — not worth a request.
+        // Recorder statistics seed their matching slots and are held across a
+        // finer grid. Locally collected trailing slots remain authoritative.
         const uint32_t slot_ms = slot_duration_ms(s);
-        if (slot_ms < HA_HISTORY_MIN_SLOT_SECS * 1000UL) {
-            LOGD(TAG, "Stream[%d] slot %lums < recorder period — no hydration",
-                 i, (unsigned long)slot_ms);
-            s->hydrate_done = true;
-            continue;
-        }
-
         if (ha_stats_request((data_stream_handle_t)i, s->uid, s->ha_entity,
                              s->ha_stat, slot_ms, s->slot_count, current_bucket(s))) {
             s->hydrate_attempts++;

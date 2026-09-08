@@ -137,6 +137,27 @@ WEB_DIR="$PROJECT_ROOT/src/app/web"
 OUTPUT_FILE="$PROJECT_ROOT/src/app/web_assets.h"
 BRANDING_FILE="$PROJECT_ROOT/src/app/project_branding.h"
 REPO_SLUG_FILE="$PROJECT_ROOT/src/app/repo_slug_config.h"
+VERSION_FILE="$PROJECT_ROOT/src/version.h"
+
+firmware_version_part() {
+    local name="$1"
+    sed -nE "s/^[[:space:]]*#define[[:space:]]+${name}[[:space:]]+([0-9]+)[[:space:]]*$/\\1/p" \
+        "$VERSION_FILE" | head -n 1
+}
+
+if [[ ! -f "$VERSION_FILE" ]]; then
+    echo "Error: Firmware version header not found: $VERSION_FILE" >&2
+    exit 1
+fi
+
+VERSION_MAJOR="$(firmware_version_part VERSION_MAJOR)"
+VERSION_MINOR="$(firmware_version_part VERSION_MINOR)"
+VERSION_PATCH="$(firmware_version_part VERSION_PATCH)"
+if [[ -z "$VERSION_MAJOR" || -z "$VERSION_MINOR" || -z "$VERSION_PATCH" ]]; then
+    echo "Error: Could not read VERSION_MAJOR, VERSION_MINOR, and VERSION_PATCH from $VERSION_FILE" >&2
+    exit 1
+fi
+FIRMWARE_VERSION="$VERSION_MAJOR.$VERSION_MINOR.$VERSION_PATCH"
 
 echo "=== Web Assets Minification ==="
 echo "Project root:         $PROJECT_ROOT"
@@ -146,6 +167,7 @@ echo "Web sources:          $WEB_DIR"
 echo "Output:               $OUTPUT_FILE"
 echo "Branding header:      $BRANDING_FILE"
 echo "Repo slug header:     $REPO_SLUG_FILE"
+echo "Firmware version:     $FIRMWARE_VERSION"
 echo
 
 # ---------------------------------------------------------------------------
@@ -806,7 +828,8 @@ for html_file in "${HTML_FILES[@]}"; do
         --web-dir "$WEB_DIR" \
         --input "$html_file" \
         --project-name "$PROJECT_NAME" \
-        --project-display-name "$PROJECT_DISPLAY_NAME")
+        --project-display-name "$PROJECT_DISPLAY_NAME" \
+        --firmware-version "$FIRMWARE_VERSION")
     
     HTML_CONTENTS["$filename"]="$minified"
     minified_size=$(echo -n "$minified" | wc -c)
@@ -837,7 +860,8 @@ for fragment_file in "${FRAGMENT_FILES[@]}"; do
         --web-dir "$WEB_DIR" \
         --input "$fragment_file" \
         --project-name "$PROJECT_NAME" \
-        --project-display-name "$PROJECT_DISPLAY_NAME")
+        --project-display-name "$PROJECT_DISPLAY_NAME" \
+        --firmware-version "$FIRMWARE_VERSION")
     
     FRAGMENT_CONTENTS["$filename"]="$minified"
     minified_size=$(echo -n "$minified" | wc -c)

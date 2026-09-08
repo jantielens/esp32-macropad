@@ -59,6 +59,21 @@ ship to the device.
 `usage` as pre-wrapped text. Describe the required Extension configuration or
 state that no configuration is required.
 
+### Configuration Conventions
+
+Extension configuration is a JSON object stored per button. Extensions that
+render the current time use `time` for their optional `[time:...]` binding.
+Clock-only extensions normally expect four digits (`HHMM`); Nixie Clock also
+accepts six digits (`HHMMSS`). A visual or game animation `speed` uses a decimal
+multiplier, where `1.0` is normal speed. Extensions may retain documented legacy
+keys as input aliases, but their metadata and README examples must use the
+canonical key.
+
+Each extension must keep its source parser, README, and catalog `usage` example
+in agreement. Add focused coverage under `tests/` when changing a configuration
+contract; catalog metadata deliberately remains presentation-only and does not
+ship to the device.
+
 ## Build
 
 ```bash

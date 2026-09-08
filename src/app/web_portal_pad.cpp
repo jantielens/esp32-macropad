@@ -74,6 +74,66 @@ static const char* validate_pad_json(const uint8_t* json, size_t len) {
     return pad_validate(doc.as<JsonObjectConst>(), /*tolerate_offgrid=*/true);
 }
 
+static uint8_t* allocate_pad_json_buffer(size_t len) {
+    uint8_t* buffer = nullptr;
+    if (psramFound()) {
+        buffer = (uint8_t*)heap_caps_malloc(len + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    if (!buffer) {
+        buffer = (uint8_t*)heap_caps_malloc(len + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    }
+    return buffer;
+}
+
+static void remove_pad_image_passwords(JsonArray buttons) {
+    for (JsonObject button : buttons) {
+        const char* password = button["bg_image_password"] | "";
+        const bool password_set = password[0] != '\0';
+        button.remove("bg_image_password");
+        button["bg_image_password_set"] = password_set;
+    }
+}
+
+static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t len, size_t* prepared_len) {
+    if (!prepared_len) return nullptr;
+
+    BasicJsonDocument<PsramJsonAllocator> submitted(len * 2 + 512);
+    if (deserializeJson(submitted, json, len)) return nullptr;
+
+    size_t existing_len = 0;
+    char* existing_json = pad_config_read_raw(page, &existing_len);
+    BasicJsonDocument<PsramJsonAllocator> existing(existing_len * 2 + 512);
+    const bool have_existing = existing_json && !deserializeJson(existing, existing_json, existing_len);
+
+    JsonArray submitted_buttons = submitted["buttons"].as<JsonArray>();
+    JsonArrayConst existing_buttons = existing["buttons"].as<JsonArrayConst>();
+    for (JsonObject button : submitted_buttons) {
+        const char* submitted_password = button["bg_image_password"] | "";
+        const bool preserve_password = (button["bg_image_password_set"] | false) && submitted_password[0] == '\0';
+        button.remove("bg_image_password_set");
+        if (!preserve_password || !have_existing) continue;
+
+        const int col = button["col"] | -1;
+        const int row = button["row"] | -1;
+        for (JsonObjectConst existing_button : existing_buttons) {
+            if ((existing_button["col"] | -2) != col || (existing_button["row"] | -2) != row) continue;
+            const char* password = existing_button["bg_image_password"] | "";
+            if (password[0] != '\0') button["bg_image_password"] = password;
+            break;
+        }
+    }
+
+    if (existing_json) free(existing_json);
+
+    const size_t serialized_len = measureJson(submitted);
+    uint8_t* prepared = allocate_pad_json_buffer(serialized_len);
+    if (!prepared) return nullptr;
+
+    serializeJson(submitted, prepared, serialized_len + 1);
+    *prepared_len = serialized_len;
+    return prepared;
+}
+
 // ============================================================================
 // GET /api/pad?page=N
 // ============================================================================
@@ -98,10 +158,16 @@ void handleGetPadConfig(AsyncWebServerRequest *request) {
         return;
     }
 
-    // Stream the raw JSON directly
-    AsyncWebServerResponse *response = request->beginResponse(200, "application/json", String(json));
+    std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(len * 2 + 512);
+    if (!doc || deserializeJson(*doc, json, len)) {
+        free(json);
+        web_portal_send_json_error(request, 500, "Failed to read config");
+        return;
+    }
     free(json);
-    request->send(response);
+
+    remove_pad_image_passwords((*doc)["buttons"].as<JsonArray>());
+    web_portal_send_json_chunked(request, doc);
 }
 
 // ============================================================================
@@ -178,19 +244,30 @@ void handlePostPadConfig(AsyncWebServerRequest *request, uint8_t *data, size_t l
     // All data received — validate and save
     g_pad_post.buf[g_pad_post.total] = '\0';
 
-    const char* err = validate_pad_json(g_pad_post.buf, g_pad_post.total);
-    if (err) {
-        LOGW(TAG, "Validation failed for page %u: %s", g_pad_post.page, err);
-        web_portal_send_json_error(request, 400, err);
+    size_t prepared_len = 0;
+    uint8_t* prepared_json = prepare_pad_save_json(g_pad_post.page, g_pad_post.buf, g_pad_post.total, &prepared_len);
+    if (!prepared_json) {
+        web_portal_send_json_error(request, 400, "Invalid JSON");
         pad_post_reset();
         return;
     }
 
-    if (!pad_config_save_raw(g_pad_post.page, g_pad_post.buf, g_pad_post.total)) {
-        web_portal_send_json_error(request, 500, "Failed to save config");
+    const char* err = validate_pad_json(prepared_json, prepared_len);
+    if (err) {
+        LOGW(TAG, "Validation failed for page %u: %s", g_pad_post.page, err);
+        web_portal_send_json_error(request, 400, err);
+        heap_caps_free(prepared_json);
         pad_post_reset();
         return;
     }
+
+    if (!pad_config_save_raw(g_pad_post.page, prepared_json, prepared_len)) {
+        web_portal_send_json_error(request, 500, "Failed to save config");
+        heap_caps_free(prepared_json);
+        pad_post_reset();
+        return;
+    }
+    heap_caps_free(prepared_json);
 
     uint8_t saved_page = g_pad_post.page;
     pad_post_reset();

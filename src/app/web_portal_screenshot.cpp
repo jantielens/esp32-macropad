@@ -64,6 +64,10 @@ enum class ScreenshotFormat {
 		Jpeg,
 };
 
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+static const jpeg_down_sampling_type_t DEFAULT_JPEG_SUBSAMPLE = JPEG_DOWN_SAMPLING_YUV444;
+#endif
+
 struct ScreenshotCaptureResult {
 		uint8_t* pixels = nullptr;
 		uint16_t width = 0;
@@ -103,7 +107,7 @@ static bool initHwJpeg() {
 }
 
 static bool encodeJpeg(const ScreenshotCaptureResult* capture, uint8_t quality,
-		uint8_t** jpegBuf, size_t* jpegSize) {
+		jpeg_down_sampling_type_t subSample, uint8_t** jpegBuf, size_t* jpegSize) {
 		SemaphoreHandle_t mutex = jpegMutex();
 		if (!mutex || xSemaphoreTake(mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
 				LOGE(TAG, "HW JPEG encoder busy");
@@ -149,7 +153,7 @@ static bool encodeJpeg(const ScreenshotCaptureResult* capture, uint8_t quality,
 				encodeCfg.width = width;
 				encodeCfg.height = height;
 				encodeCfg.src_type = JPEG_ENCODE_IN_FORMAT_RGB565;
-				encodeCfg.sub_sample = JPEG_DOWN_SAMPLING_YUV420;
+				encodeCfg.sub_sample = subSample;
 				encodeCfg.image_quality = quality;
 
 				uint32_t encodedSize = 0;
@@ -336,10 +340,11 @@ static void sendBmp(AsyncWebServerRequest* request, ScreenshotCaptureResult* cap
 }
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-static bool sendJpeg(AsyncWebServerRequest* request, ScreenshotCaptureResult* capture, uint8_t quality) {
+static bool sendJpeg(AsyncWebServerRequest* request, ScreenshotCaptureResult* capture, uint8_t quality,
+		jpeg_down_sampling_type_t subSample) {
 		uint8_t* jpegBuf = nullptr;
 		size_t jpegSize = 0;
-		if (!encodeJpeg(capture, quality, &jpegBuf, &jpegSize)) return false;
+		if (!encodeJpeg(capture, quality, subSample, &jpegBuf, &jpegSize)) return false;
 
 		auto ctx = std::make_shared<ScreenshotContext>();
 		ctx->jpegBuf = jpegBuf;
@@ -384,6 +389,25 @@ static bool parseQuality(AsyncWebServerRequest* request, uint8_t* quality) {
 		return true;
 }
 
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+static bool parseSubSample(AsyncWebServerRequest* request, jpeg_down_sampling_type_t* subSample) {
+		*subSample = DEFAULT_JPEG_SUBSAMPLE;
+		if (!request->hasParam("subsample")) return true;
+
+		const String& value = request->getParam("subsample")->value();
+		if (value == "420") {
+			*subSample = JPEG_DOWN_SAMPLING_YUV420;
+		} else if (value == "422") {
+			*subSample = JPEG_DOWN_SAMPLING_YUV422;
+		} else if (value == "444") {
+			*subSample = JPEG_DOWN_SAMPLING_YUV444;
+		} else {
+			return false;
+		}
+		return true;
+}
+#endif
+
 // GET /api/screenshot — capture display as JPEG on ESP32-P4, BMP elsewhere
 void handleGetScreenshot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
@@ -417,6 +441,14 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 				request->send(400, "text/plain", "Invalid quality; expected an integer from 1 to 100");
 				return;
 		}
+
+		#ifdef CONFIG_IDF_TARGET_ESP32P4
+		jpeg_down_sampling_type_t subSample = DEFAULT_JPEG_SUBSAMPLE;
+		if (!parseSubSample(request, &subSample)) {
+			request->send(400, "text/plain", "Invalid subsample; expected 420, 422, or 444");
+			return;
+		}
+		#endif
 
 		ScreenshotCaptureResult* capture = new (std::nothrow) ScreenshotCaptureResult();
 		if (!capture) {
@@ -463,7 +495,7 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
 		if (format == ScreenshotFormat::Jpeg) {
-				if (sendJpeg(request, capture, quality)) return;
+			if (sendJpeg(request, capture, quality, subSample)) return;
 				LOGW(TAG, "Falling back to BMP screenshot");
 		}
 		#endif

@@ -81,11 +81,12 @@ void ha_stats_request_window(uint32_t slot_ms, uint16_t slot_count,
 }
 
 size_t ha_stats_resample(const HaStatPoint* points, size_t point_count,
-                         uint64_t slot_ms, uint64_t end_bucket,
+                         uint64_t slot_ms, uint64_t source_period_ms,
+                         uint64_t end_bucket,
                          float* out, size_t out_count) {
     if (!out || out_count == 0) return 0;
     for (size_t i = 0; i < out_count; i++) out[i] = NAN;
-    if (!points || point_count == 0 || slot_ms == 0) return 0;
+    if (!points || point_count == 0 || slot_ms == 0 || source_period_ms == 0) return 0;
 
     // Bucket id of out[0]. end_bucket may be smaller than out_count for
     // pathological clocks, in which case there is nothing to align against.
@@ -99,8 +100,29 @@ size_t ha_stats_resample(const HaStatPoint* points, size_t point_count,
         out[bucket - first_bucket] = points[i].value;
     }
 
+    // Interpolate only across adjacent Recorder periods. Longer gaps represent
+    // missing history and stay unfilled here so the LOCF pass below preserves
+    // the prior value rather than inventing a trend across the unknown range.
+    for (size_t i = 0; i + 1 < out_count; i++) {
+        if (!isfinite(out[i])) continue;
+        size_t next = i + 1;
+        while (next < out_count && !isfinite(out[next])) next++;
+        if (next >= out_count) break;
+        const uint64_t elapsed_ms = (uint64_t)(next - i) * slot_ms;
+        if (elapsed_ms > source_period_ms + slot_ms) continue;
+        const float step = (out[next] - out[i]) / (float)(next - i);
+        for (size_t j = i + 1; j < next; j++) out[j] = out[i] + step * (float)(j - i);
+        i = next - 1;
+    }
+
     size_t filled = 0;
+    float last_value = NAN;
     for (size_t i = 0; i < out_count; i++) {
+        if (isfinite(out[i])) {
+            last_value = out[i];
+        } else if (isfinite(last_value)) {
+            out[i] = last_value;
+        }
         if (isfinite(out[i])) filled++;
     }
     return filled;

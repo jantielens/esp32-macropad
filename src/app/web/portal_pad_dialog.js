@@ -137,10 +137,10 @@ function padUpdateSparklineEditor() {
     var warn = document.getElementById('pad-edit-sparkline-ha-warn');
     var needsHourlyHistory = windowSeconds > 86400 && intervalSeconds < 3600;
     if (anyHistoryEnabled && needsHourlyHistory) {
-        warn.textContent = 'Home Assistant uses hourly history beyond 24 hours, so backfill needs at least 1 hour per point at this range. Live data still uses the finer interval.';
+        warn.textContent = 'Home Assistant uses hourly history beyond 24 hours. Historical values are visually interpolated; live data uses the finer interval.';
         warn.style.display = '';
     } else if (anyHistoryEnabled && intervalSeconds < 300) {
-        warn.textContent = 'Home Assistant history is stored in 5-minute periods, so backfill is skipped at this resolution. Live data still uses the finer interval.';
+        warn.textContent = 'Home Assistant history is stored in 5-minute periods. Historical values are held between periods; live data uses the finer interval.';
         warn.style.display = '';
     } else {
         warn.style.display = 'none';
@@ -260,7 +260,9 @@ function padDialogOpen(col, row) {
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
     document.getElementById('pad-edit-bg-image-user').value = btn.bg_image_user || '';
-    document.getElementById('pad-edit-bg-image-password').value = '';
+    updateWriteOnlySecretField('pad-edit-bg-image-password',
+        'pad-edit-bg-image-password-status', btn.bg_image_password_set === true,
+        'Not configured.', 'password');
     document.getElementById('pad-edit-bg-image-interval').value = (btn.bg_image_interval_ms !== undefined) ? btn.bg_image_interval_ms : 0;
     document.getElementById('pad-edit-bg-image-letterbox').checked = !!btn.bg_image_letterbox;
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_url;
@@ -558,6 +560,10 @@ function padDialogOk(keepOpen) {
         const imgPass = document.getElementById('pad-edit-bg-image-password').value;
         if (imgUser) btn.bg_image_user = imgUser;
         if (imgPass) btn.bg_image_password = imgPass;
+        else {
+            const previous = padFindButton(col, row);
+            if (previous && previous.bg_image_password_set) btn.bg_image_password_set = true;
+        }
         const imgInterval = parseInt(document.getElementById('pad-edit-bg-image-interval').value);
         if (!isNaN(imgInterval) && imgInterval >= 0) btn.bg_image_interval_ms = imgInterval;
         if (document.getElementById('pad-edit-bg-image-letterbox').checked) btn.bg_image_letterbox = true;

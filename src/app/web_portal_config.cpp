@@ -99,6 +99,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 		if (doc && doc->capacity() > 0) {
 				(*doc)["wifi_ssid"] = current_config->wifi_ssid;
 				(*doc)["wifi_password"] = ""; // Don't send password
+				(*doc)["wifi_password_set"] = (strlen(current_config->wifi_password) > 0);
 				(*doc)["device_name"] = current_config->device_name;
 
 				// Sanitized name for display
@@ -118,10 +119,12 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["mqtt_port"] = current_config->mqtt_port;
 				(*doc)["mqtt_username"] = current_config->mqtt_username;
 				(*doc)["mqtt_password"] = "";
+				(*doc)["mqtt_password_set"] = (strlen(current_config->mqtt_password) > 0);
 
 				// Home Assistant REST API (token not returned)
 				(*doc)["ha_url"] = current_config->ha_url;
 				(*doc)["ha_token"] = "";
+				(*doc)["ha_token_set"] = (strlen(current_config->ha_token) > 0);
 
 				// Power settings
 				(*doc)["operating_mode"] = current_config->operating_mode;

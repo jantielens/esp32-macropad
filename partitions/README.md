@@ -88,3 +88,15 @@ The `ota_6mb_16MB_ext` and `ota_8mb_32MB_ext` schemes reserve a 256 KiB raw
 `extensions` partition for flash-mapped native Extension packages. All
 ESP32-P4 targets use an extension-aware partition scheme and require a serial
 flash when migrating from the corresponding non-extension partition table.
+
+## ESP32-P4 extension XIP limit
+
+The ESP32-P4 LCD4B and LCD4B Voice targets use `ota_6mb_16MB_ext` and set
+`FlashSize=16M`, even though their hardware has 32 MB flash. Native Extensions
+execute from a flash instruction mapping; placing their partition above 16 MiB
+causes an illegal-instruction crash on affected P4 hardware.
+
+This limits each OTA app partition to 6.25 MB and the internal flash storage
+partition to 3.125 MB. The physical capacity is unchanged, but the space above
+16 MiB is intentionally unused until the ESP32-P4 flash instruction-mapping
+behavior is resolved upstream and can be retested.

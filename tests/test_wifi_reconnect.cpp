@@ -162,6 +162,41 @@ TEST(reboot_zero_outage) {
 }
 
 // ============================================================================
+// wifi_reconnect_next_action tests
+// ============================================================================
+
+static constexpr WifiRecoveryPolicy kPolicy = {5000, 125000, 300000, 5000, 30000};
+
+TEST(policy_waits_during_grace) {
+    ASSERT_EQ((int)wifi_reconnect_next_action(4999, ~0UL, 0, false, kPolicy),
+              (int)WifiRecoveryAction::None);
+}
+
+TEST(policy_starts_retry_at_grace) {
+    ASSERT_EQ((int)wifi_reconnect_next_action(5000, ~0UL, 0, false, kPolicy),
+              (int)WifiRecoveryAction::Begin);
+}
+
+TEST(policy_honors_exponential_backoff) {
+    ASSERT_EQ((int)wifi_reconnect_next_action(10000, 9999, 1, false, kPolicy),
+              (int)WifiRecoveryAction::None);
+    ASSERT_EQ((int)wifi_reconnect_next_action(10000, 10000, 1, false, kPolicy),
+              (int)WifiRecoveryAction::Begin);
+}
+
+TEST(policy_manual_reconnect_is_immediate) {
+    ASSERT_EQ((int)wifi_reconnect_next_action(0, 0, 0, true, kPolicy),
+              (int)WifiRecoveryAction::Begin);
+}
+
+TEST(policy_escalates_to_reset_and_reboot) {
+    ASSERT_EQ((int)wifi_reconnect_next_action(125000, ~0UL, 0, false, kPolicy),
+              (int)WifiRecoveryAction::ResetRadio);
+    ASSERT_EQ((int)wifi_reconnect_next_action(300000, ~0UL, 0, false, kPolicy),
+              (int)WifiRecoveryAction::Reboot);
+}
+
+// ============================================================================
 // millis() rollover simulation
 // ============================================================================
 
@@ -210,6 +245,13 @@ int main() {
     RUN(reboot_above_threshold);
     RUN(reboot_zero_threshold);
     RUN(reboot_zero_outage);
+
+    printf("\n--- wifi_reconnect_next_action ---\n");
+    RUN(policy_waits_during_grace);
+    RUN(policy_starts_retry_at_grace);
+    RUN(policy_honors_exponential_backoff);
+    RUN(policy_manual_reconnect_is_immediate);
+    RUN(policy_escalates_to_reset_and_reboot);
 
     printf("\n--- Edge cases ---\n");
     RUN(backoff_with_large_values);

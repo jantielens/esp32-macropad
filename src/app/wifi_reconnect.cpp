@@ -27,3 +27,24 @@ return WifiReconnectTier::Tier3;
 bool wifi_reconnect_should_reboot(unsigned long total_outage_ms, unsigned long threshold_ms) {
 return total_outage_ms >= threshold_ms;
 }
+
+WifiRecoveryAction wifi_reconnect_next_action(unsigned long outage_ms,
+                                               unsigned long since_last_attempt_ms,
+                                               unsigned int retry_count,
+                                               bool manual_request,
+                                               const WifiRecoveryPolicy& policy) {
+if (wifi_reconnect_should_reboot(outage_ms, policy.reboot_after_ms)) {
+return WifiRecoveryAction::Reboot;
+}
+if (outage_ms >= policy.reset_after_ms) {
+return WifiRecoveryAction::ResetRadio;
+}
+if (manual_request || outage_ms >= policy.grace_ms) {
+const unsigned long backoff = wifi_reconnect_next_backoff(
+retry_count, policy.backoff_base_ms, policy.backoff_max_ms);
+if (manual_request || since_last_attempt_ms >= backoff) {
+return WifiRecoveryAction::Begin;
+}
+}
+return WifiRecoveryAction::None;
+}

@@ -12,18 +12,9 @@ if (typeof bindingRegisterScheme === 'function') {
     });
 }
 
-function updateVoiceCredentialStatus(config, statusId, apiKeyFieldId, configuredField, configuredText) {
-    var status = document.getElementById(statusId);
-    if (!status) return;
-    var apiKeyField = document.getElementById(apiKeyFieldId);
-    if (apiKeyField) {
-        apiKeyField.value = '';
-        apiKeyField.placeholder = config[configuredField]
-            ? '(saved - leave blank to keep)' : 'Enter Azure API key';
-    }
-    status.textContent = config[configuredField]
-        ? configuredText + ' is configured.'
-        : configuredText + ' is not configured.';
+function updateVoiceCredentialStatus(config, statusId, apiKeyFieldId, configuredField) {
+    updateWriteOnlySecretField(apiKeyFieldId, statusId, config[configuredField] === true,
+        '', 'API key');
 }
 
 window.init_voice_fragment = function () {
@@ -31,8 +22,8 @@ window.init_voice_fragment = function () {
     initConfigFragment('voice-tts-save-btn', false);
     fetch('/api/config').then(function (response) { return response.json(); }).then(function (config) {
         updateVoiceCredentialStatus(config, 'voice-credentials-status', 'voice_azure_api_key',
-            'voice_api_key_configured', 'Azure API key');
+            'voice_api_key_configured');
         updateVoiceCredentialStatus(config, 'voice-tts-credentials-status', 'voice_tts_api_key',
-            'voice_tts_api_key_configured', 'Azure Text-to-Speech API key');
+            'voice_tts_api_key_configured');
     }).catch(function () {});
 };

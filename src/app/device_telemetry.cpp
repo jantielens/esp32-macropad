@@ -6,6 +6,7 @@
 #include "fs_health.h"
 #include "sensors/sensor_manager.h"
 #include "image_fetch.h"
+#include "wifi_manager.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -207,8 +208,10 @@ void IRAM_ATTR device_telemetry_mark_async_flush_completed_from_isr(bool errored
 }
 
 void device_telemetry_cache_rssi() {
-	if (WiFi.status() == WL_CONNECTED) {
-		s_cached_rssi = WiFi.RSSI();
+	WifiConnectionDiagnostics wifi_diagnostics = {};
+	wifi_manager_get_diagnostics(&wifi_diagnostics);
+	if (wifi_diagnostics.associated) {
+		s_cached_rssi = wifi_diagnostics.rssi;
 		s_rssi_valid  = true;
 		LOGI("Telemetry", "Cached WiFi RSSI: %d dBm", (int)s_cached_rssi);
 	}
@@ -1132,12 +1135,31 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 
 // WiFi stats — use cached RSSI to avoid ESP-Hosted RPC on every publish.
 	if (WiFi.status() == WL_CONNECTED) {
+			WifiConnectionDiagnostics wifi_diagnostics = {};
+			wifi_manager_get_diagnostics(&wifi_diagnostics);
 			bool rssi_ok = false;
 			int16_t rssi = device_telemetry_get_cached_rssi(&rssi_ok);
 			doc["wifi_rssi"] = rssi_ok ? (int)rssi : (int)0;
 
 				if (include_ip_and_channel) {
-						doc["wifi_channel"] = WiFi.channel();
+					doc["wifi_channel"] = wifi_diagnostics.associated ? wifi_diagnostics.channel : 0;
+					if (wifi_diagnostics.has_disconnect_reason) {
+						doc["wifi_disconnect_reason"] = wifi_diagnostics.disconnect_reason;
+					} else {
+						doc["wifi_disconnect_reason"] = nullptr;
+					}
+					doc["wifi_retry_count"] = wifi_diagnostics.retry_count;
+					doc["wifi_associated_at_ms"] = wifi_diagnostics.associated_at_ms;
+					doc["wifi_last_recovery_ms"] = wifi_diagnostics.last_recovery_duration_ms;
+					if (wifi_diagnostics.associated) {
+						char bssid[18];
+						snprintf(bssid, sizeof(bssid), "%02X:%02X:%02X:%02X:%02X:%02X",
+								wifi_diagnostics.bssid[0], wifi_diagnostics.bssid[1], wifi_diagnostics.bssid[2],
+								wifi_diagnostics.bssid[3], wifi_diagnostics.bssid[4], wifi_diagnostics.bssid[5]);
+						doc["wifi_bssid"] = bssid;
+					} else {
+						doc["wifi_bssid"] = nullptr;
+					}
 
 						// Avoid heap churn in String::toString() by formatting into a fixed buffer.
 						char ip_buf[16];
@@ -1151,6 +1173,11 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 
 				if (include_ip_and_channel) {
 						doc["wifi_channel"] = nullptr;
+						doc["wifi_bssid"] = nullptr;
+						doc["wifi_disconnect_reason"] = nullptr;
+						doc["wifi_retry_count"] = nullptr;
+						doc["wifi_associated_at_ms"] = nullptr;
+						doc["wifi_last_recovery_ms"] = nullptr;
 						doc["ip_address"] = nullptr;
 						doc["hostname"] = nullptr;
 				}

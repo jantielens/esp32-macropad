@@ -257,6 +257,7 @@ add_host_legacy_test(test_pad_cache_transaction SOURCES test_pad_cache_transacti
 add_host_legacy_test(test_wifi_reconnect SOURCES test_wifi_reconnect.cpp ${PROJECT_SOURCE_DIR}/src/app/wifi_reconnect.cpp)
 add_host_legacy_test(test_screen_saver_schedule SOURCES test_screen_saver_schedule.cpp)
 add_host_legacy_test(test_component_registry SOURCES test_component_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp stubs.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_command_test(test_portal_asset_cache bash ${PROJECT_SOURCE_DIR}/tests/test_portal_asset_cache.sh)
 
 add_host_legacy_test(test_timer_binding_target
     SOURCES test_timer_binding_target.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_engine.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
@@ -361,6 +362,7 @@ add_host_compile_check(check_mcp_device_identity_no_mcp ${PROJECT_SOURCE_DIR}/sr
 
 foreach(script
     test_brew_storage_and_tare_guards.sh test_branding_mirror.sh test_asset_variant_matrix.sh test_word_clock_logic.sh
+    test_extension_config_contracts.sh
     test_camera_preview_widget.sh test_camera_motion.sh test_mcp_scheme_parity.sh
     test_action_catalog_completeness.sh test_mcp_storage_parity.sh test_display_safe_telemetry.sh
     test_sd_wifi_order.sh test_photoframe_vector_drift.sh test_esp_web_tools_site.sh

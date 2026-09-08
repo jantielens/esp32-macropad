@@ -67,4 +67,26 @@ assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
 
+const savedCredentialButton = {
+    col: 1,
+    row: 2,
+    bg_image_url: 'https://camera.example/stream',
+    bg_image_password_set: true
+};
+context.padState.buttons = [savedCredentialButton];
+context.padFindButton = function(col, row) {
+    return context.padState.buttons.find(function(button) {
+        return button.col === col && button.row === row;
+    });
+};
+document.getElementById('pad-edit-bg-image-url').value = savedCredentialButton.bg_image_url;
+document.getElementById('pad-edit-bg-image-user').value = '';
+document.getElementById('pad-edit-bg-image-password').value = '';
+document.getElementById('pad-edit-bg-image-interval').value = '0';
+document.getElementById('pad-edit-bg-image-letterbox').checked = false;
+
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].bg_image_password_set, true);
+assert.strictEqual(context.padState.buttons[0].bg_image_password, undefined);
+
 console.log('portal_pad_dialog_transaction: PASS');

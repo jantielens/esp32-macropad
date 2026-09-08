@@ -1026,9 +1026,11 @@ function actionEditorWireFragment(prefixes) {
             if (info && info.available_screens) {
                 actionEditorPopulateScreens(prefixes, info.available_screens);
             }
+            if (info && info.has_sound_player === true) {
+                fetch('/api/sounds/list').then(function(r) { return r.ok ? r.json() : []; })
+                    .then(function(sounds) { actionEditorPopulateSounds(prefixes, sounds); })
+                    .catch(function() {});
+            }
         });
     }
-    fetch('/api/sounds/list').then(function(r) { return r.ok ? r.json() : []; })
-        .then(function(sounds) { actionEditorPopulateSounds(prefixes, sounds); })
-        .catch(function() {});
 }

@@ -2,7 +2,7 @@
 
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
     NATIVE_EXTENSION_DESCRIPTOR_MAGIC, NATIVE_EXTENSION_ABI_VERSION,
-    NATIVE_EXTENSION_TARGET_ABI, "matrix-rain", "1.0.0", "Matrix Rain", 100, 0,
+    NATIVE_EXTENSION_TARGET_ABI, "matrix-rain", "1.0.1", "Matrix Rain", 100, 0,
 };
 
 namespace {
@@ -419,7 +419,9 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     if (instance->columns > MAX_COLUMNS) instance->columns = MAX_COLUMNS;
     if (instance->rows > MAX_ROWS) instance->rows = MAX_ROWS;
     if (!instance->columns || !instance->rows) { instance->active = false; return false; }
-    if (find_string(config_json, "clock", instance->clock_template, sizeof(instance->clock_template))) {
+    if ((find_string(config_json, "time", instance->clock_template, sizeof(instance->clock_template)) ||
+         find_string(config_json, "clock", instance->clock_template, sizeof(instance->clock_template))) &&
+        instance->clock_template[0]) {
         instance->clock_enabled = host->binding != nullptr && instance->columns >= CLOCK_CHARACTERS;
         if (instance->clock_enabled) {
             instance->clock_column = instance->columns > CLOCK_CHARACTERS

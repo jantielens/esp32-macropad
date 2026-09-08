@@ -768,6 +768,11 @@ Returns real-time device health statistics.
 
   "wifi_rssi": -45,
   "wifi_channel": 6,
+  "wifi_bssid": "AA:BB:CC:DD:EE:FF",
+  "wifi_disconnect_reason": 4,
+  "wifi_retry_count": 0,
+  "wifi_associated_at_ms": 123000,
+  "wifi_last_recovery_ms": 4200,
   "ip_address": "192.168.1.100",
   "hostname": "esp32-1234"
 }
@@ -786,7 +791,17 @@ not report a PSRAM largest-block value on those boards.
 - `cpu_usage_core_0` / `cpu_usage_core_1`: optional current per-core percentages, returned only when runtime statistics are available on a multicore target
 - `cpu_temperature`: `null` on chips without an internal temperature sensor
 - `fs_mounted`: `null` when no filesystem partition is present; `false` when present but not mounted
-- `wifi_rssi`, `wifi_channel`, `ip_address`: `null` when not connected
+- `wifi_rssi`, `wifi_channel`, `wifi_bssid`, and `ip_address`: `null` when not
+  connected. They are captured at association time, so health polling does not
+  issue ESP-Hosted Wi-Fi queries.
+- `wifi_disconnect_reason`: numeric reason supplied by the most recent Wi-Fi
+  disconnect event; `null` until one occurs
+- `wifi_retry_count`: active reconnect attempts in the current or most recent
+  outage; `null` when not connected
+- `wifi_associated_at_ms`: `millis()` timestamp for the cached association
+  snapshot; `null` when not connected
+- `wifi_last_recovery_ms`: duration of the most recent recovered outage;
+  `null` when not connected
 - `*_min_window` / `*_max_window`: sampled continuously by firmware and returned as a multi-client-safe snapshot (captures short-lived dips/spikes)
 - `sensors`: object containing optional sensor values (empty object when no sensors are available)
 - `runtime`: last checkpoints from the Arduino main loop and LVGL task, plus
@@ -849,6 +864,7 @@ Returns current device configuration (passwords excluded).
 {
   "wifi_ssid": "MyNetwork",
   "wifi_password": "",
+  "wifi_password_set": true,
   "device_name": "esp32-device",
   "device_name_sanitized": "esp32-device",
   "fixed_ip": "",
@@ -899,7 +915,11 @@ Returns current device configuration (passwords excluded).
   "voice_tts_api_key_configured": true,
 
   "ha_url": "",
-  "ha_token": ""
+  "ha_token": "",
+  "ha_token_set": false,
+
+  "mqtt_password": "",
+  "mqtt_password_set": false
 }
 ```
 
@@ -909,7 +929,13 @@ Returns current device configuration (passwords excluded).
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
-- `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config` — it is always reported as an empty string.
+  - Every credential represented in `GET /api/config` is returned as an empty
+  string. Its companion `*_set` or `*_configured` boolean states whether a
+  value is stored, allowing the portal to show `Saved` without retrieving the
+  secret. This includes WiFi, MQTT, Home Assistant, Basic Auth, and Voice
+  Assistant credentials. The e-paper service endpoint follows the same
+  write-only pattern with `epaper_service_token_set`.
+- `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config`.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
 #### `POST /api/config`
@@ -982,9 +1008,11 @@ Save new configuration. Device reboots after successful save.
 
 **Notes:**
 - Only fields present in request are updated
-- Password field: empty string = no change, non-empty = update
-- `ha_token` follows the same rule: empty string = keep current, non-empty = update. `ha_url` is always updated when present.
-- Voice API keys follow the same write-only rule: an empty `voice_azure_api_key` or `voice_tts_api_key` preserves the stored key, while a non-empty value replaces it. Other Voice Assistant fields update only when present.
+- Write-only credentials use the same preservation rule: an empty string keeps
+  the existing value, while a non-empty value replaces it. `POST /api/config`
+  cannot clear a stored credential.
+- `ha_url` is always updated when present. Other Voice Assistant fields update
+  only when present.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
@@ -1456,11 +1484,11 @@ Requires `HAS_DISPLAY`. Gated by Basic Auth when enabled.
 #### `GET /api/screenshot`
 
 Capture the current display contents as an image. ESP32-P4 boards default to a
-hardware-encoded JPEG; other boards retain the 24-bit BMP default.
+hardware-encoded high-fidelity JPEG; other boards retain the 24-bit BMP default.
 
-- **Query parameters:** `format=bmp|jpg` overrides the format. `quality=1..100` controls JPEG quality and defaults to `85`.
+- **Query parameters:** `format=bmp|jpg` overrides the format. `quality=1..100` controls JPEG quality and defaults to `85`. On ESP32-P4, `subsample=420|422|444` controls JPEG chroma subsampling and defaults to `444`.
 - **Response:** `image/jpeg` for JPEG or `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order).
-- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV420 subsampling. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
+- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV444 subsampling by default. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
 - **Memory:** Per-request snapshot, conversion, and JPEG buffers are released as soon as the final response chunk is produced. Interrupted responses release any remaining buffers when their response context is destroyed. On ESP32-P4, the lazily initialized JPEG encoder and its synchronization primitive remain allocated after first use.
 - **Thread safety:** The AsyncTCP handler synchronously dispatches capture work through a fixed 64-byte single slot to the LVGL task, which runs it under the existing LVGL mutex. A request that reaches its 3-second deadline keeps the slot occupied until the LVGL task finishes; its captured payload is then reclaimed on that task. Returns `503 Screenshot service busy` for a concurrent capture, `503 Screenshot service unavailable` before display dispatch is ready, and `504 Screenshot capture timed out` when the LVGL task has not completed by the deadline.
 - **Fallback:** If hardware JPEG encoding fails, the endpoint transparently returns BMP with `Content-Type: image/bmp`. Requesting `format=jpg` on a non-P4 board returns `400`.
@@ -1477,12 +1505,16 @@ curl -u user:pass http://<device-ip>/api/screenshot -o screenshot.bmp
 # Explicit format and JPEG quality
 curl -u user:pass 'http://<device-ip>/api/screenshot?format=bmp' -o screenshot.bmp
 curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=70' -o screenshot.jpg
+
+# Smaller JPEG for photo-like screens, with reduced color detail
+curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=85&subsample=420' -o screenshot.jpg
 ```
 
 **Notes:**
 
 - Image dimensions match the device's display resolution.
 - BMP is uncompressed, so BMP files range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
+- YUV444 retains thin colored lines and text better than YUV420, but creates larger JPEG files. Use YUV420 when transfer size matters more than UI fidelity.
 - The portal exposes this endpoint under **Display > Screen Preview**. Opening the fragment does not capture an image; **Capture Preview** and **Refresh Preview** request a fresh framebuffer.
 
 #### `POST /api/screen/tap?x=<x>&y=<y>`
@@ -1874,6 +1906,12 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 
 > **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
 
+> **Image credentials.** `GET /api/pad` never returns a button's
+> `bg_image_password`. It supplies `bg_image_password_set` instead. On a later
+> save, the portal retains a password marked as stored unless the user enters a
+> replacement value. The editor shows an orange pending-save state while a
+> replacement is entered and restores the stored state when the field is empty.
+
 
 ## Implementation Details
 
@@ -1910,6 +1948,8 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 - Reduces flash storage and bandwidth by ~80%
 - Assets served with `Content-Encoding: gzip` header
 - Browser automatically decompresses (transparent to user)
+- Shell and fragment HTML use `Cache-Control: no-store`, so a portal reload always discovers the firmware's current asset URLs.
+- JavaScript and CSS asset URLs include the firmware version, for example `/portal.js?v=1.28.0`, and use `Cache-Control: public, max-age=31536000, immutable`. Each released firmware version therefore loads current portal assets while repeat visits retain browser caching.
 
 ### Concurrent Request Throttling
 

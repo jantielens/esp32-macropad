@@ -2,7 +2,7 @@
 
 extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
     NATIVE_EXTENSION_DESCRIPTOR_MAGIC, NATIVE_EXTENSION_ABI_VERSION,
-    NATIVE_EXTENSION_TARGET_ABI, "brick-breaker-clock", "1.0.0", "Brick Breaker Clock",
+    NATIVE_EXTENSION_TARGET_ABI, "brick-breaker-clock", "1.0.1", "Brick Breaker Clock",
     33, 0,
 };
 
@@ -156,6 +156,29 @@ uint16_t parse_config_uint(const char* json, const char* key, uint16_t fallback,
         if (++digits > 5 || parsed > maximum) return maximum;
     }
     return digits ? static_cast<uint16_t>(parsed) : fallback;
+}
+
+uint16_t parse_speed_percent(const char* json) {
+    const char* value = find_config_value(json, "speed");
+    if (!value) return DEFAULT_SPEED_PERCENT;
+    uint32_t whole = 0;
+    uint8_t digits = 0;
+    while (*value >= '0' && *value <= '9') {
+        whole = whole * 10u + static_cast<uint32_t>(*value++ - '0');
+        if (++digits > 3) return 400;
+    }
+    if (digits == 0) return DEFAULT_SPEED_PERCENT;
+    if (*value != '.') {
+        if (whole <= 4) return whole == 0 ? 25 : static_cast<uint16_t>(whole * 100u);
+        return whole > 400 ? 400 : (whole < 25 ? 25 : whole);
+    }
+    ++value;
+    uint16_t fraction = 0;
+    if (*value >= '0' && *value <= '9') fraction = static_cast<uint16_t>((*value++ - '0') * 10u);
+    else return DEFAULT_SPEED_PERCENT;
+    if (*value >= '0' && *value <= '9') fraction = static_cast<uint16_t>(fraction + *value++ - '0');
+    const uint32_t percent = static_cast<uint32_t>(whole) * 100u + fraction;
+    return percent < 25 ? 25 : (percent > 400 ? 400 : static_cast<uint16_t>(percent));
 }
 
 bool parse_config_bool(const char* json, const char* key, bool fallback) {
@@ -627,8 +650,7 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     parse_config_string(config_json, "time", instance->time_template, sizeof(instance->time_template));
     instance->respawn_ms = parse_config_uint(config_json, "respawn_ms", DEFAULT_RESPAWN_MS, 10000);
     instance->respawn_on_paddle = parse_config_bool(config_json, "respawn_on_paddle", true);
-    instance->speed_percent = parse_config_uint(config_json, "speed", DEFAULT_SPEED_PERCENT, 400);
-    if (instance->speed_percent < 25) instance->speed_percent = 25;
+    instance->speed_percent = parse_speed_percent(config_json);
     instance->paddle_accuracy = parse_config_uint(config_json, "paddle_accuracy", DEFAULT_PADDLE_ACCURACY, 100);
     instance->background_color = DEFAULT_BACKGROUND;
     instance->brick_color = DEFAULT_BRICK_COLOR;

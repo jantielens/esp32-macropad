@@ -554,7 +554,8 @@ on-screen through a browser. The device serves the live framebuffer at
 and as a 24-bit BMP elsewhere. The image is image-only, so an assistant must
 **not** fetch it as text — it renders the URL in a browser and captures the
 image element instead. `?format=bmp|jpg` selects a format explicitly on P4;
-`?quality=1..100` sets JPEG quality (default `85`).
+`?quality=1..100` sets JPEG quality (default `85`), while
+`?subsample=420|422|444` selects JPEG chroma subsampling (default `444`).
 
 With a Playwright-style browser tool (such as the one in VS Code), the recipe is:
 

@@ -214,8 +214,9 @@ variant. It configures the Azure AI Foundry host, transcription deployment, and
 API key. Set an optional two-letter ISO 639-1 language code, such as `en` or
 `nl`, to select the transcription language; leave it blank for Azure
 auto-detection. The API key is stored on the device as a write-only value: leave
-the field blank to keep the saved key. The portal reports only whether the key
-is configured. The public Azure CA certificate is versioned in the firmware.
+the field blank to keep the saved key. Entering a replacement changes its status
+to orange until you save. The public Azure CA certificate is versioned in the
+firmware.
 
 For a one-tap capture button, configure **Record until silence** followed by a
 Publish MQTT action whose payload is `[stt:text]`. Set the trailing silence in
@@ -318,6 +319,11 @@ touch to release or for the screen saver to wake, and the screen can change
 before the device consumes it. After changing **Current Screen**, the old image
 is hidden and cannot be tapped; capture a fresh preview first. Screen Preview
 does not support dragging, swiping, long presses, multi-touch, or live video.
+
+ESP32-P4 previews use a high-quality JPEG with full color resolution, which
+keeps thin colored charts and labels clear. The screen-preview API also accepts
+`quality=1..100` and `subsample=420|422|444` query parameters for manual
+captures; lower subsampling reduces transfer size at the cost of color detail.
 
 ### Screen Saver (Burn-in Prevention)
 
@@ -463,7 +469,7 @@ All binding fields validate syntax in real time as you type — bracket balance,
 | Setting | Description |
 |---------|-------------|
 | **WiFi SSID** | Your wireless network name (required, max 31 characters) |
-| **WiFi Password** | Network password (leave empty for open networks) |
+| **WiFi Password** | Network password. Leave it empty during initial setup for an open network. When a password is stored, the portal shows `Saved`; an empty field preserves that password. |
 
 ### Device Settings
 
@@ -491,14 +497,22 @@ For assigning a static IP instead of using DHCP:
 |---------|-------------|
 | **MQTT Host** | Broker hostname or IP address. Leave empty to disable MQTT |
 | **MQTT Port** | Default: 1883 |
-| **MQTT Username / Password** | Credentials for your broker (optional) |
+| **MQTT Username / Password** | Credentials for your broker (optional). The password is write-only; the portal reports whether one is saved without displaying it. |
 
 ### Security (Optional)
 
 | Setting | Description |
 |---------|-------------|
 | **Enable HTTP Basic Auth** | Require a username and password to access the web portal (Full mode only — AP mode stays open for initial setup) |
-| **Username / Password** | Credentials for portal access |
+| **Username / Password** | Credentials for portal access. The password is write-only. |
+
+#### Credential Status
+
+Credential inputs are write-only: the portal never displays an existing
+password, token, or API key. An empty field preserves a stored credential; it
+does not clear it. Entering a new value changes the status to orange until you
+save, then it either replaces the stored credential or creates one when none
+was set.
 
 ---
 

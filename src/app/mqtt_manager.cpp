@@ -44,6 +44,7 @@ void MqttManager::begin(const DeviceConfig *config, const char *friendly_name, c
 		installCallback();
 
 		_discovery_published_this_boot = false;
+		_subscriptions_initialized = false;
 		_last_reconnect_attempt_ms = 0;
 		_last_health_publish_ms = 0;
 }
@@ -293,8 +294,14 @@ void MqttManager::onConnected(bool publish_availability) {
 		}
 		delay(1);  // yield — let SDIO transport drain
 
-		// Re-subscribe to all tracked subscription topics.
-		mqtt_sub_store_subscribe_all();
+		if (_subscriptions_initialized) {
+			// Retain the live store across reconnects; reloading pad files here can
+			// temporarily produce an empty scan and discard active subscriptions.
+			mqtt_sub_store_resubscribe();
+		} else {
+			mqtt_sub_store_subscribe_all();
+			_subscriptions_initialized = true;
+		}
 		delay(1);
 
 		// Screen control subscribe + initial state publish.

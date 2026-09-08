@@ -37,14 +37,18 @@ void ha_stats_request_window(uint32_t slot_ms, uint16_t slot_count,
 // Resample `points` onto the bucket grid.
 //
 // out[i] receives the value for bucket `end_bucket - (out_count - 1) + i`.
-// Buckets with no covering period are left as NAN. When several periods land
-// in one bucket the last one wins, matching the live ingest path (which also
-// overwrites within a slot rather than averaging).
+// `source_period_ms` is the Recorder period (five minutes or one hour). Values
+// from consecutive periods are linearly interpolated across finer stream
+// slots; missing periods retain the previous value. Slots before the first
+// known Recorder value remain NAN. When several periods land in one bucket the
+// last one wins, matching the live ingest path (which also overwrites within a
+// slot rather than averaging).
 //
 // `points` may be in any order; entries outside the output range are ignored.
 // Returns the number of buckets that received a finite value.
 size_t ha_stats_resample(const HaStatPoint* points, size_t point_count,
-                         uint64_t slot_ms, uint64_t end_bucket,
+                         uint64_t slot_ms, uint64_t source_period_ms,
+                         uint64_t end_bucket,
                          float* out, size_t out_count);
 
 // Merge resampled buckets into a ring buffer.

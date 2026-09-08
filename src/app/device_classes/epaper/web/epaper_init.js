@@ -273,16 +273,8 @@ window.init_epaper_image_fragment = function () {
                 }
                 setNamedValue('epaper_service_url', cfg.epaper_service_url || '');
                 setNamedValue('epaper_service_interval_seconds', cfg.epaper_service_interval_seconds || 900);
-                if (serviceToken) {
-                    serviceToken.value = '';
-                    serviceToken.placeholder = serviceTokenSet
-                        ? '(saved - leave blank to keep)' : '';
-                }
-                if (serviceTokenStatus) {
-                    serviceTokenStatus.textContent = serviceTokenSet
-                        ? 'A token is stored. Leave blank to keep it.'
-                        : 'No token stored.';
-                }
+                updateWriteOnlySecretField('epaper_service_token', 'epaper-service-token-status',
+                    serviceTokenSet, 'Not configured.', 'token');
                 updateSourceSections();
 
                 var scheduleMask = (cfg.epaper_schedule_hours == null)
