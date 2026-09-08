@@ -702,6 +702,32 @@ body {
   color: var(--portal-text-muted);
 }
 
+.content-pane .secret-status,
+.modal .secret-status {
+  display: flex;
+  align-items: center;
+  min-height: 1.2rem;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.content-pane .secret-status.is-set,
+.modal .secret-status.is-set {
+  color: #34c759;
+}
+
+.content-pane .secret-status.is-empty,
+.modal .secret-status.is-empty {
+  color: var(--portal-text-muted);
+  font-weight: 500;
+}
+
+.content-pane .secret-status.is-pending,
+.modal .secret-status.is-pending {
+  color: #ff9f0a;
+}
+
 /* ================================================================
    Fragment Loading / Error States
    ================================================================ */
@@ -1036,6 +1062,11 @@ body {
 .status-dot.connected    { background: #34c759; }
 .status-dot.disconnected { background: #ff3b30; }
 .status-dot.warning      { background: #ff9f0a; }
+.status-dot.unconfigured {
+  background: transparent;
+  border: 1px solid currentColor;
+  box-sizing: border-box;
+}
 
 /* ================================================================
    Pending-reboot banner

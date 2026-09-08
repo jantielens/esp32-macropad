@@ -73,9 +73,11 @@ actions. Failed and timed-out work discards the remaining actions.
 The Azure API key, host, deployment name, and optional ISO 639-1 language code
 are stored in NVS. An empty language code uses Azure auto-detection. The portal
 accepts the API key as a write-only password field and only reports whether it
-is configured; it never returns or logs the value. The endpoint CA certificate
-is versioned in `voice_assistant/azure_ca.h`. MQTT publication is an ordinary
-action that uses `[stt:text]` after the transcription continuation succeeds.
+is configured; it never returns or logs the value. An empty input preserves a
+stored key, while a replacement shows an orange pending-save state until saved.
+The endpoint CA certificate is versioned in `voice_assistant/azure_ca.h`. MQTT
+publication is an ordinary action that uses `[stt:text]` after the transcription
+continuation succeeds.
 
 Pads can display `[stt:status]` (`idle`, `recording`, `listening`,
 `transcribing`, `ready`, or `error`) and `[stt:text]` (the latest transcript or

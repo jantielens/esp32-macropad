@@ -156,7 +156,7 @@ Service mode is available only on the reTerminal E1003. Configure these fields o
 * Bearer token issued for the frame
 * One refresh interval for all service wakes
 
-The token identifies the frame and binds its supported formats and exact `1872 x 1404` driven geometry. The portal stores the token in NVS but never returns it through the configuration API. Leaving the token input empty preserves an existing token.
+The token identifies the frame and binds its supported formats and exact `1872 x 1404` driven geometry. The portal stores the token in NVS but never returns it through the configuration API. Leaving the token input empty preserves an existing token; entering a replacement shows an orange pending-save state until you save.
 
 The client sends `GET <base>/api/v1/next` with one `Authorization: Bearer` header. After a successful display, it retains the image key and transport CRC in RTC slow memory and sends both advisory fingerprint headers on later wakes. The fingerprint survives deep sleep but is cleared by a full power cycle.
 

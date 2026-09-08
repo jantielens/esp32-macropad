@@ -260,7 +260,9 @@ function padDialogOpen(col, row) {
     // Image background
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
     document.getElementById('pad-edit-bg-image-user').value = btn.bg_image_user || '';
-    document.getElementById('pad-edit-bg-image-password').value = '';
+    updateWriteOnlySecretField('pad-edit-bg-image-password',
+        'pad-edit-bg-image-password-status', btn.bg_image_password_set === true,
+        'Not configured.', 'password');
     document.getElementById('pad-edit-bg-image-interval').value = (btn.bg_image_interval_ms !== undefined) ? btn.bg_image_interval_ms : 0;
     document.getElementById('pad-edit-bg-image-letterbox').checked = !!btn.bg_image_letterbox;
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_url;
@@ -558,6 +560,10 @@ function padDialogOk(keepOpen) {
         const imgPass = document.getElementById('pad-edit-bg-image-password').value;
         if (imgUser) btn.bg_image_user = imgUser;
         if (imgPass) btn.bg_image_password = imgPass;
+        else {
+            const previous = padFindButton(col, row);
+            if (previous && previous.bg_image_password_set) btn.bg_image_password_set = true;
+        }
         const imgInterval = parseInt(document.getElementById('pad-edit-bg-image-interval').value);
         if (!isNaN(imgInterval) && imgInterval >= 0) btn.bg_image_interval_ms = imgInterval;
         if (document.getElementById('pad-edit-bg-image-letterbox').checked) btn.bg_image_letterbox = true;

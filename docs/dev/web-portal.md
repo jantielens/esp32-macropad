@@ -849,6 +849,7 @@ Returns current device configuration (passwords excluded).
 {
   "wifi_ssid": "MyNetwork",
   "wifi_password": "",
+  "wifi_password_set": true,
   "device_name": "esp32-device",
   "device_name_sanitized": "esp32-device",
   "fixed_ip": "",
@@ -899,7 +900,11 @@ Returns current device configuration (passwords excluded).
   "voice_tts_api_key_configured": true,
 
   "ha_url": "",
-  "ha_token": ""
+  "ha_token": "",
+  "ha_token_set": false,
+
+  "mqtt_password": "",
+  "mqtt_password_set": false
 }
 ```
 
@@ -909,7 +914,13 @@ Returns current device configuration (passwords excluded).
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
-- `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config` — it is always reported as an empty string.
+  - Every credential represented in `GET /api/config` is returned as an empty
+  string. Its companion `*_set` or `*_configured` boolean states whether a
+  value is stored, allowing the portal to show `Saved` without retrieving the
+  secret. This includes WiFi, MQTT, Home Assistant, Basic Auth, and Voice
+  Assistant credentials. The e-paper service endpoint follows the same
+  write-only pattern with `epaper_service_token_set`.
+- `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config`.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
 #### `POST /api/config`
@@ -982,9 +993,11 @@ Save new configuration. Device reboots after successful save.
 
 **Notes:**
 - Only fields present in request are updated
-- Password field: empty string = no change, non-empty = update
-- `ha_token` follows the same rule: empty string = keep current, non-empty = update. `ha_url` is always updated when present.
-- Voice API keys follow the same write-only rule: an empty `voice_azure_api_key` or `voice_tts_api_key` preserves the stored key, while a non-empty value replaces it. Other Voice Assistant fields update only when present.
+- Write-only credentials use the same preservation rule: an empty string keeps
+  the existing value, while a non-empty value replaces it. `POST /api/config`
+  cannot clear a stored credential.
+- `ha_url` is always updated when present. Other Voice Assistant fields update
+  only when present.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
@@ -1873,6 +1886,12 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
   Errors: `400` (bad params / invalid JSON), `503` (busy: another resolve/control job is in flight, retry; or out of memory), and `500` (the main-loop dispatch timed out or another internal failure occurred). The resolver copies its input before queuing it, so a timed-out request remains safe while the main loop finishes and releases its owned data.
 
 > **Pad save validation.** `POST /api/pad` validates the submitted pad through the shared `pad_validate()` (the same validator the MCP write tools use): grid bounds, span overflow, widget types/config caps, colors, action arrays, binding tokens (unknown scheme, bad health key, …), and the one-level `[pad:name]` rule. Buttons that fall outside a shrunken grid are tolerated (hidden, and reappear when the grid grows).
+
+> **Image credentials.** `GET /api/pad` never returns a button's
+> `bg_image_password`. It supplies `bg_image_password_set` instead. On a later
+> save, the portal retains a password marked as stored unless the user enters a
+> replacement value. The editor shows an orange pending-save state while a
+> replacement is entered and restores the stored state when the field is empty.
 
 
 ## Implementation Details

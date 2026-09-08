@@ -12,6 +12,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+* **Write-only portal credentials now show clear state and pending changes**: WiFi, MQTT, Home Assistant, Basic Auth, Voice Assistant, and e-paper credential fields show whether a value is stored without revealing it. Entering a replacement shows an orange pending-save indicator; emptying the field restores its stored or unconfigured state.
+
+### Fixed
+
+* **Pad image-source passwords no longer leak through the portal API**: `GET /api/pad` now removes each button's HTTP password and supplies a stored-state marker instead. Saving an unchanged button retains its stored password, while a non-empty replacement still takes effect.
+
 ## [1.28.0] - 2026-09-07
 
 ### Added

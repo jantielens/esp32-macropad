@@ -93,6 +93,43 @@ function updateOnlineUpdateSection(info) {
 
 }
 
+function updateWriteOnlySecretField(fieldId, statusId, isSet, emptyMessage, valueName) {
+    const name = valueName || 'value';
+    const field = document.getElementById(fieldId);
+    if (field) {
+        field.value = '';
+        field.placeholder = isSet
+            ? 'Enter a new ' + name + ' to replace it'
+            : 'Enter ' + name;
+    }
+    const status = document.getElementById(statusId);
+    const updateStatus = function (hasPendingValue) {
+        if (!status) return;
+        const isPending = hasPendingValue === true;
+        status.classList.add('secret-status');
+        status.classList.toggle('is-set', isSet && !isPending);
+        status.classList.toggle('is-empty', !isSet && !isPending);
+        status.classList.toggle('is-pending', isPending);
+        const indicator = document.createElement('span');
+        indicator.className = 'status-dot ' + (isPending ? 'warning' : (isSet ? 'connected' : 'unconfigured'));
+        indicator.setAttribute('aria-hidden', 'true');
+        const statusText = isPending
+            ? (isSet
+                ? 'New ' + name + ' entered. It will replace the saved ' + name + ' when you save.'
+                : 'New ' + name + ' entered. It will be saved when you save.')
+            : (isSet
+                ? 'Saved on device. Leave this field empty to keep it.'
+                : (emptyMessage || 'Not configured.'));
+        status.replaceChildren(indicator, document.createTextNode(statusText));
+    };
+    updateStatus(false);
+    if (field) {
+        field.oninput = function () {
+            updateStatus(field.value.length > 0);
+        };
+    }
+}
+
 /**
  * Load current configuration from device
  */
@@ -143,11 +180,10 @@ async function loadConfig() {
         
         // WiFi settings
         setValueIfExists('wifi_ssid', config.wifi_ssid);
-        const wifiPwdField = document.getElementById('wifi_password');
-        if (wifiPwdField) {
-            wifiPwdField.value = '';
-            wifiPwdField.placeholder = hasConfig ? '(saved - leave blank to keep)' : '';
-        }
+        updateWriteOnlySecretField('wifi_password', 'wifi_password_status',
+            config.wifi_password_set === true,
+            hasConfig ? 'No password saved. This may be an open network.' : 'Not configured.',
+            'password');
         
         // Device settings
         setValueIfExists('device_name', config.device_name);
@@ -183,11 +219,10 @@ async function loadConfig() {
         // MQTT scope
         setValueIfExists('mqtt_publish_scope', config.mqtt_publish_scope);
 
-        const mqttPwdField = document.getElementById('mqtt_password');
-        if (mqttPwdField) {
-            mqttPwdField.value = '';
-            mqttPwdField.placeholder = hasConfig ? '(saved - leave blank to keep)' : '';
-        }
+        updateWriteOnlySecretField('mqtt_password', 'mqtt_password_status', config.mqtt_password_set === true,
+            '', 'password');
+        updateWriteOnlySecretField('ha_token', 'ha_token_status', config.ha_token_set === true,
+            '', 'token');
 
         // Basic Auth settings
         setCheckedIfExists('basic_auth_enabled', config.basic_auth_enabled);
@@ -212,12 +247,8 @@ async function loadConfig() {
         }
 
         setValueIfExists('basic_auth_username', config.basic_auth_username);
-        const authPwdField = document.getElementById('basic_auth_password');
-        if (authPwdField) {
-            authPwdField.value = '';
-            const saved = config.basic_auth_password_set === true;
-            authPwdField.placeholder = saved ? '(saved - leave blank to keep)' : '';
-        }
+        updateWriteOnlySecretField('basic_auth_password', 'basic_auth_password_status',
+            config.basic_auth_password_set === true, '', 'password');
 
         // MCP server settings
         var mcpCard = document.getElementById('mcp-card');
