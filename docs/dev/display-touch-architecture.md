@@ -483,6 +483,16 @@ void DisplayManager::lvglTask(void* pvParameter) {
 - **Dual-core:** LVGL + Present tasks pinned to Core 0, Arduino `loop()` on Core 1
 - **Single-core:** All tasks time-sliced on Core 0
 
+### Task Stack Placement
+
+Use the named helpers in `rtos_task_utils.h` for new application tasks.
+`rtos_create_task_psram_stack()` is for compute, network, decode, and render
+work that never invokes flash-backed operations. Tasks that may access
+LittleFS, Preferences/NVS, OTA, or other storage affected by SPI-flash cache
+disable must use `rtos_create_task_internal_stack()`. The internal helper
+allocates with `MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT` and verifies that both
+ends of the stack are internal RAM before creating the task.
+
 ### Async Present Task (Buffered Render Mode)
 
 For Buffered render-mode drivers (e.g., Arduino_GFX / AXS15231B on jc3248w535), `present()` is decoupled into a separate FreeRTOS task:

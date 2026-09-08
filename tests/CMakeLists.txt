@@ -365,6 +365,7 @@ foreach(script
     test_extension_config_contracts.sh
     test_camera_preview_widget.sh test_camera_motion.sh test_mcp_scheme_parity.sh
     test_action_catalog_completeness.sh test_mcp_storage_parity.sh test_display_safe_telemetry.sh
+    test_rtos_task_stack_helpers.sh
     test_sd_wifi_order.sh test_photoframe_vector_drift.sh test_esp_web_tools_site.sh
 )
     get_filename_component(name ${script} NAME_WE)

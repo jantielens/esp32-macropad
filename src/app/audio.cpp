@@ -8,6 +8,7 @@
 #include "audio_output_driver.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
+#include "rtos_task_utils.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -555,23 +556,10 @@ void audio_init(uint8_t initial_volume) {
     }
 #endif
 
-    BaseType_t task_result = xTaskCreatePinnedToCoreWithCaps(
-        audio_task, "audio", AUDIO_TASK_STACK_SIZE, NULL, 5,
-        &audio_task_handle, 1,
-        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (task_result != pdPASS) {
+    if (!rtos_create_task_internal_stack_pinned(
+            audio_task, "audio", AUDIO_TASK_STACK_SIZE, NULL, 5,
+            &audio_task_handle, nullptr, 1)) {
         LOGE(TAG, "Failed to create audio task with internal stack");
-        vQueueDelete(audio_queue);
-        audio_queue = NULL;
-        return;
-    }
-
-    uint8_t* stack_start = pxTaskGetStackStart(audio_task_handle);
-    uint8_t* stack_end = stack_start + AUDIO_TASK_STACK_SIZE - 1;
-    if (!esp_ptr_internal(stack_start) || !esp_ptr_internal(stack_end)) {
-        LOGE(TAG, "Audio task stack is not internal: %p-%p", stack_start, stack_end);
-        vTaskDelete(audio_task_handle);
-        audio_task_handle = NULL;
         vQueueDelete(audio_queue);
         audio_queue = NULL;
         return;

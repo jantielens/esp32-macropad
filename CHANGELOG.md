@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 * **E-paper Home Assistant telemetry**: retained state exposes `wake_loop_ms` as the routine dashboard metric, while complete diagnostic timing is available from the wake-event archive. Retired detailed timing entities are removed automatically.
+* **Task-stack placement is explicit**: new internal-RAM task helpers verify stack placement for work that may access LittleFS, Preferences/NVS, OTA, or other flash-backed operations. Audio now uses the shared helper; PSRAM-stack helpers are documented for compute, network, decode, and render work that does not access flash-backed storage.
 
 ### Fixed
 
