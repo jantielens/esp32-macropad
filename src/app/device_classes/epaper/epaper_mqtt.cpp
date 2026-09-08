@@ -14,6 +14,12 @@
 
 RTC_DATA_ATTR static bool g_epaper_discovery_published = false;
 
+constexpr uint32_t kWakeDeliveryAckTimeoutMs = 250;
+static char g_wake_topic[160] = {};
+static uint64_t g_pending_wake_ack_session_id = 0;
+static uint32_t g_pending_wake_ack_id = 0;
+static bool g_pending_wake_ack_received = false;
+
 bool epaper_mqtt_discovery_already_published() {
 		return g_epaper_discovery_published;
 }
@@ -22,13 +28,53 @@ void epaper_mqtt_mark_discovery_published() {
 		g_epaper_discovery_published = true;
 }
 
-static const char* result_to_str(EpaperRefreshResult r) {
-		switch (r) {
+static const char* refresh_result_to_str(EpaperRefreshResult result) {
+		switch (result) {
 				case EpaperRefreshResult::Updated:     return "updated";
 				case EpaperRefreshResult::Skipped:     return "skipped";
 				case EpaperRefreshResult::FailedFetch: return "failed_fetch";
 				case EpaperRefreshResult::FailedDraw:  return "failed_draw";
 				case EpaperRefreshResult::Disabled:    return "disabled";
+		}
+		return "unknown";
+}
+
+static const char* wake_result_to_str(EpaperWakeResult result) {
+		switch (result) {
+				case EpaperWakeResult::InProgress:        return "in_progress";
+				case EpaperWakeResult::Updated:           return "updated";
+				case EpaperWakeResult::Skipped:           return "skipped";
+				case EpaperWakeResult::FailedFetch:       return "failed_fetch";
+				case EpaperWakeResult::FailedDraw:        return "failed_draw";
+				case EpaperWakeResult::WifiFailed:        return "wifi_failed";
+				case EpaperWakeResult::MqttConnectFailed: return "mqtt_connect_failed";
+				case EpaperWakeResult::MqttPublishUnconfirmed: return "mqtt_publish_unconfirmed";
+				case EpaperWakeResult::LowBattery:        return "low_battery";
+				case EpaperWakeResult::ScheduleSuppressed:return "schedule_suppressed";
+				case EpaperWakeResult::SourceUnconfigured:return "source_unconfigured";
+				case EpaperWakeResult::Interrupted:       return "interrupted";
+		}
+		return "unknown";
+}
+
+static const char* wake_reason_to_str(EpaperWakeReason reason) {
+		switch (reason) {
+				case EpaperWakeReason::Timer:    return "timer";
+				case EpaperWakeReason::Button:   return "button";
+				case EpaperWakeReason::ColdBoot: return "cold_boot";
+		}
+		return "unknown";
+}
+
+static const char* wake_stage_to_str(EpaperWakeStage stage) {
+		switch (stage) {
+				case EpaperWakeStage::Boot:        return "boot";
+				case EpaperWakeStage::Battery:     return "battery";
+				case EpaperWakeStage::Wifi:        return "wifi";
+				case EpaperWakeStage::Refresh:     return "refresh";
+				case EpaperWakeStage::Ntp:         return "ntp";
+				case EpaperWakeStage::MqttConnect: return "mqtt_connect";
+				case EpaperWakeStage::MqttPublish: return "mqtt_publish";
 		}
 		return "unknown";
 }
@@ -49,7 +95,7 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		doc["battery_pct"]     = epaper_battery_percent(outcome.battery_mv);
 		doc["wifi_rssi"]       = timing ? timing->wifi_rssi : (int16_t)WiFi.RSSI();
 		doc["image_crc32"]     = outcome.crc_used;
-		doc["refresh_result"]  = result_to_str(outcome.result);
+		doc["refresh_result"]  = refresh_result_to_str(outcome.result);
 		doc["refresh_count"]   = epaper_refresh_get_count();
 		doc["sidecar_http_status"] = outcome.sidecar_http_status;
 		doc["source_mode"] = epaper_source_uses_service(g_epaper_config.source_mode)
@@ -68,19 +114,7 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		doc["schedule_hours"] = g_epaper_config.schedule_hours;
 		doc["schedule_tz_offset"] = g_epaper_config.schedule_tz_offset;
 
-		JsonObject t = doc.createNestedObject("timing");
-		if (timing) {
-				t["boot_to_wifi_ms"]  = timing->boot_to_wifi_ms;
-				t["ntp_sync_ms"]      = timing->ntp_sync_ms;
-				t["crc_retry_count"]  = timing->crc_retry_count;
-				t["crc_to_draw_ms"]   = timing->crc_to_draw_ms;
-				t["draw_to_mqtt_ms"]  = timing->draw_to_mqtt_ms;
-				t["total_active_ms"]  = timing->total_active_ms;
-			t["resolve_ms"]       = timing->resolve_ms;
-			t["fetch_ms"]         = timing->fetch_ms;
-			t["draw_ms"]          = timing->draw_ms;
-			t["image_source"]     = timing->image_from_cache ? "cache" : "download";
-		}
+		if (timing) doc["wake_loop_ms"] = timing->total_active_ms;
 
 		const bool ok = mqtt_manager.publishJson(topic, doc, true /*retained*/);
 		if (ok) {
@@ -91,8 +125,129 @@ bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		return ok;
 }
 
-void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
-	// Publishes seventeen retained HA discovery configs for the e-paper
+bool epaper_mqtt_prepare_wake_delivery() {
+		extern MqttManager mqtt_manager;
+		if (!mqtt_manager.connected()) return false;
+
+		snprintf(g_wake_topic, sizeof(g_wake_topic), "%s/epaper/wake", mqtt_manager.baseTopic());
+		g_pending_wake_ack_session_id = 0;
+		g_pending_wake_ack_id = 0;
+		g_pending_wake_ack_received = false;
+		if (!mqtt_manager.subscribe(g_wake_topic)) {
+			LOGW("Epaper", "Wake acknowledgement subscription failed");
+			return false;
+		}
+		mqtt_manager.loop();
+		return true;
+}
+
+void epaper_mqtt_on_message(const char* topic, const uint8_t* payload, unsigned int length) {
+		if (!topic || !payload || g_pending_wake_ack_id == 0 ||
+				strcmp(topic, g_wake_topic) != 0) return;
+
+		StaticJsonDocument<128> doc;
+		if (deserializeJson(doc, payload, length)) return;
+		if (doc["session_id"].as<uint64_t>() == g_pending_wake_ack_session_id &&
+				doc["wake_id"].as<uint32_t>() == g_pending_wake_ack_id) {
+			g_pending_wake_ack_received = true;
+		}
+}
+
+static bool publish_wake_record(const EpaperWakeRecord& record,
+																bool deferred,
+																uint32_t reporting_wake_id,
+																uint32_t dropped_wake_records) {
+		extern MqttManager mqtt_manager;
+		if (!mqtt_manager.connected()) return false;
+
+		char topic[160];
+		snprintf(topic, sizeof(topic), "%s/epaper/wake", mqtt_manager.baseTopic());
+
+		StaticJsonDocument<768> doc;
+		doc["session_id"] = record.timing.session_id;
+		doc["wake_id"] = record.timing.wake_id;
+		doc["wake_reason"] = wake_reason_to_str(record.wake_reason);
+		doc["result"] = wake_result_to_str(record.result);
+		doc["last_stage"] = wake_stage_to_str(record.last_stage);
+		doc["delivery"] = deferred ? "deferred" : "live";
+		doc["reported_by_wake_id"] = reporting_wake_id;
+		doc["battery_mv"] = record.battery_mv;
+		doc["sidecar_http_status"] = record.sidecar_http_status;
+		doc["crc_fetch_attempts"] = record.timing.crc_retry_count;
+		doc["wifi_rssi"] = record.timing.wifi_rssi;
+		doc["image_source"] = record.timing.image_from_cache ? "cache" : "download";
+		if (record.refresh_result != record.result) {
+			doc["refresh_result"] = wake_result_to_str(record.refresh_result);
+		}
+		if (record.previous_delivery.valid) {
+			JsonObject previous_delivery = doc.createNestedObject("previous_delivery");
+			previous_delivery["session_id"] = record.previous_delivery.session_id;
+			previous_delivery["wake_id"] = record.previous_delivery.wake_id;
+			previous_delivery["mqtt_connect_ms"] = record.previous_delivery.mqtt_connect_ms;
+			previous_delivery["mqtt_publish_ms"] = record.previous_delivery.mqtt_publish_ms;
+			previous_delivery["total_active_ms"] = record.previous_delivery.total_active_ms;
+		}
+		if (dropped_wake_records > 0) doc["dropped_wake_records"] = dropped_wake_records;
+
+		JsonObject stages = doc.createNestedObject("stages_ms");
+		stages["boot_to_wifi"] = record.timing.boot_to_wifi_ms;
+		stages["refresh"] = record.timing.crc_to_draw_ms;
+		stages["resolve"] = record.timing.resolve_ms;
+		stages["fetch"] = record.timing.fetch_ms;
+		stages["panel_draw"] = record.timing.draw_ms;
+		stages["ntp"] = record.timing.ntp_sync_ms;
+		stages["active_before_telemetry"] = record.timing.total_active_ms;
+
+		return mqtt_manager.publishJson(topic, doc, false /*retained*/);
+}
+
+static bool publish_wake_record_confirmed(const EpaperWakeRecord& record,
+																		 bool deferred, uint32_t reporting_wake_id,
+																		 uint32_t dropped_wake_records) {
+		extern MqttManager mqtt_manager;
+		g_pending_wake_ack_session_id = record.timing.session_id;
+		g_pending_wake_ack_id = record.timing.wake_id;
+		g_pending_wake_ack_received = false;
+		if (!publish_wake_record(record, deferred, reporting_wake_id, dropped_wake_records)) {
+			g_pending_wake_ack_session_id = 0;
+			g_pending_wake_ack_id = 0;
+			return false;
+		}
+
+		const uint32_t start_ms = millis();
+		while (!g_pending_wake_ack_received &&
+				(millis() - start_ms) < kWakeDeliveryAckTimeoutMs) {
+			mqtt_manager.loop();
+			delay(10);
+		}
+		const bool confirmed = g_pending_wake_ack_received;
+		g_pending_wake_ack_session_id = 0;
+		g_pending_wake_ack_id = 0;
+		if (!confirmed) LOGW("Epaper", "Wake %lu broker acknowledgement timed out",
+				(unsigned long)record.timing.wake_id);
+		return confirmed;
+}
+
+bool epaper_mqtt_publish_pending_wakes(uint32_t reporting_wake_id) {
+		EpaperWakeRecord record = {};
+		while (epaper_wake_journal_peek(&record)) {
+			if (record.result == EpaperWakeResult::InProgress) return false;
+			const bool deferred = record.timing.wake_id != reporting_wake_id;
+			const uint32_t dropped_wake_records = epaper_wake_journal_dropped_count();
+			if (!publish_wake_record_confirmed(record, deferred, reporting_wake_id, dropped_wake_records)) {
+				if (!deferred) {
+					epaper_wake_journal_mark_delivery_failed(EpaperWakeResult::MqttPublishUnconfirmed);
+				}
+				return false;
+			}
+			if (dropped_wake_records > 0) epaper_wake_journal_clear_dropped_count();
+			epaper_wake_journal_remove_oldest();
+		}
+		return true;
+}
+
+bool epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
+	// Publishes retained HA discovery configs for the e-paper
 		// telemetry surfaced under <base>/epaper/state. Entities are NOT marked
 		// entity_category="diagnostic" so they appear together in the main
 		// entity list of the device card; the "E-Paper" name prefix keeps them
@@ -104,6 +259,7 @@ void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
 		const char* device_name = mqtt.friendlyName();
 		const char* sanitized   = mqtt.sanitizedName();
 
+		bool all_published = true;
 		auto publish_sensor = [&](const char* object_id,
 													const char* name_suffix,
 													const char* value_template,
@@ -133,8 +289,20 @@ void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
 				ids.add(sanitized);
 				dev["name"] = device_name;
 
-				mqtt.publishJson(cfg_topic, doc, true /*retained*/);
+				all_published &= mqtt.publishJson(cfg_topic, doc, true /*retained*/);
 		};
+
+		const char* legacy_timing_entities[] = {
+				"epaper_boot_to_wifi_ms", "epaper_ntp_sync_ms", "epaper_crc_to_draw_ms",
+				"epaper_draw_to_mqtt_ms", "epaper_last_elapsed_ms", "epaper_crc_retries",
+				"epaper_resolve_ms", "epaper_fetch_ms", "epaper_draw_ms", "epaper_image_source",
+		};
+		for (const char* object_id : legacy_timing_entities) {
+			char cfg_topic[192];
+			snprintf(cfg_topic, sizeof(cfg_topic),
+						 "homeassistant/sensor/%s/%s/config", sanitized, object_id);
+			all_published &= mqtt.publish(cfg_topic, "", true /*retained*/);
+		}
 
 		// Core status entities.
 		publish_sensor("epaper_battery", "Battery",
@@ -153,38 +321,9 @@ void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt) {
 									 "{{ value_json.sidecar_http_status }}", "", "", "measurement");
 		delay(1);
 
-		// Per-cycle timing budget. HA accepts "ms" as a duration unit since 2023.
 		publish_sensor("epaper_loop_ms", "E-Paper Wake Loop Time",
-									 "{{ value_json.timing.total_active_ms }}", "ms", "duration", "measurement");
-		publish_sensor("epaper_boot_to_wifi_ms", "E-Paper Boot to WiFi",
-									 "{{ value_json.timing.boot_to_wifi_ms }}", "ms", "duration", "measurement");
-		publish_sensor("epaper_ntp_sync_ms", "E-Paper NTP Sync Time",
-									 "{{ value_json.timing.ntp_sync_ms }}", "ms", "duration", "measurement");
-		delay(1);
-		publish_sensor("epaper_crc_to_draw_ms", "E-Paper CRC to Draw",
-									 "{{ value_json.timing.crc_to_draw_ms }}", "ms", "duration", "measurement");
-		publish_sensor("epaper_draw_to_mqtt_ms", "E-Paper Draw to MQTT",
-									 "{{ value_json.timing.draw_to_mqtt_ms }}", "ms", "duration", "measurement");
-		delay(1);
-		publish_sensor("epaper_last_elapsed_ms", "E-Paper Refresh Elapsed",
-									 "{{ value_json.timing.last_elapsed_ms }}", "ms", "duration", "measurement");
-		publish_sensor("epaper_crc_retries", "E-Paper CRC Fetch Attempts",
-									 "{{ value_json.timing.crc_retry_count }}", "", "", "measurement");
-		delay(1);
-
-	// Image-fetch/render breakdown (subset of crc_to_draw_ms): isolates the API
-	// resolve, the SD-cache-or-download fetch, and the panel upload+refresh so
-	// long-term trends (e.g. a slowing image API) are observable in HA.
-	publish_sensor("epaper_resolve_ms", "E-Paper URL Resolve",
-									 "{{ value_json.timing.resolve_ms }}", "ms", "duration", "measurement");
-	publish_sensor("epaper_fetch_ms", "E-Paper Image Fetch",
-									 "{{ value_json.timing.fetch_ms }}", "ms", "duration", "measurement");
-	delay(1);
-	publish_sensor("epaper_draw_ms", "E-Paper Panel Draw",
-									 "{{ value_json.timing.draw_ms }}", "ms", "duration", "measurement");
-	publish_sensor("epaper_image_source", "E-Paper Image Source",
-									 "{{ value_json.timing.image_source }}", "", "", "");
-	delay(1);
+										 "{{ value_json.wake_loop_ms }}", "ms", "duration", "measurement");
+		return all_published;
 }
 
 #endif // HAS_EPAPER && HAS_MQTT

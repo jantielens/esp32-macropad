@@ -9,7 +9,11 @@ struct RtosTaskPsramAlloc {
 		uint32_t stackDepthBytes;
 };
 
-// Create a FreeRTOS task whose stack is allocated from PSRAM.
+using RtosTaskInternalAlloc = RtosTaskPsramAlloc;
+
+// Create a FreeRTOS task whose stack is allocated from PSRAM. Use this only
+// for compute, network, decode, or render work that never accesses LittleFS,
+// Preferences/NVS, OTA, or other flash-backed operations.
 // Returns false if PSRAM is not available or allocation/task creation fails.
 //
 // Notes:
@@ -35,5 +39,32 @@ bool rtos_create_task_psram_stack_pinned(
 		UBaseType_t priority,
 		TaskHandle_t* outHandle,
 		RtosTaskPsramAlloc* outAlloc,
+		BaseType_t coreId
+);
+
+// Create a FreeRTOS task whose stack is allocated from internal RAM.
+// Use this for tasks that may access LittleFS, Preferences/NVS, OTA, or other
+// flash-backed operations. Returns false if allocation, placement validation,
+// or task creation fails.
+bool rtos_create_task_internal_stack(
+		TaskFunction_t taskFunction,
+		const char* name,
+		uint32_t stackDepthBytes,
+		void* param,
+		UBaseType_t priority,
+		TaskHandle_t* outHandle,
+		RtosTaskInternalAlloc* outAlloc
+);
+
+// Core-pinned variant of rtos_create_task_internal_stack.
+// Pins the task to the specified core (0 or 1). Use tskNO_AFFINITY for no pinning.
+bool rtos_create_task_internal_stack_pinned(
+		TaskFunction_t taskFunction,
+		const char* name,
+		uint32_t stackDepthBytes,
+		void* param,
+		UBaseType_t priority,
+		TaskHandle_t* outHandle,
+		RtosTaskInternalAlloc* outAlloc,
 		BaseType_t coreId
 );

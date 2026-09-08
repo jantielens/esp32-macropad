@@ -1,18 +1,21 @@
-## User-Facing Highlights
+<!-- PR title: use a concise, descriptive summary of the overall change. Do not reuse the last commit message. -->
 
-<!-- Lead with the most important new or improved user-facing behavior. Keep this concise and describe why it matters. -->
+<!-- Lead with concise bullets for the most important user-facing behavior and why it matters. -->
 
-## Changes by Theme
+* Highlight
 
-### Theme Name
+## Changes
 
-* Describe every related change, including behavior changes, fixes, documentation, and tests
+### Area
+
+* Describe related behavior changes, fixes, documentation, and tests
 
 ## Verification
 
-* [ ] Relevant tests passed
+* [ ] Complete host test suite passed
 * [ ] Relevant firmware build passed
+* [ ] Hardware validation completed, where applicable
 
 ## Related Issues
 
-None
+* Closes #

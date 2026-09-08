@@ -15,9 +15,16 @@ class MqttManager;
 bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 															 const EpaperTimingBudget* timing);
 
-// Publish HA discovery entries for the e-paper telemetry sensors. Should
-// only be called once per cold boot (caller-managed RTC flag).
-void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt);
+bool epaper_mqtt_publish_pending_wakes(uint32_t reporting_wake_id);
+
+// Subscribe to the wake event topic before publishing so the broker's echoed
+// event confirms that a QoS 0 diagnostic record reached the broker.
+bool epaper_mqtt_prepare_wake_delivery();
+void epaper_mqtt_on_message(const char* topic, const uint8_t* payload, unsigned int length);
+
+// Publish HA discovery entries for the e-paper telemetry sensors. Returns
+// true only when every retained configuration message was accepted locally.
+bool epaper_mqtt_publish_ha_discovery(MqttManager& mqtt);
 
 // RTC-retained flag: true once HA discovery has been published this power
 // cycle. Persists across deep sleep + soft resets; cleared only on cold

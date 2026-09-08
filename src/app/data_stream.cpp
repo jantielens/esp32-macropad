@@ -296,24 +296,24 @@ void data_stream_rebuild() {
     // Mark all streams for potential removal
     bool keep[DATA_STREAM_MAX_STREAMS] = {};
 
-    // Temp config buffer — PSRAM preferred
-    PadConfig* cfg = (PadConfig*)heap_caps_malloc(
-        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
-    if (!cfg) {
-        LOGE(TAG, "OOM for pad config in rebuild");
+    // Compact pad snapshot — PSRAM preferred.
+    PadDataStreamSnapshot* snapshot = (PadDataStreamSnapshot*)heap_caps_malloc(
+        sizeof(PadDataStreamSnapshot), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!snapshot) snapshot = (PadDataStreamSnapshot*)malloc(sizeof(PadDataStreamSnapshot));
+    if (!snapshot) {
+        LOGE(TAG, "OOM for data stream snapshot in rebuild");
         return;
     }
 
     // Scan all pads for widgets that need data streams
     for (uint8_t page = 0; page < MAX_PADS; page++) {
-        if (!pad_config_load(page, cfg)) continue;
-        for (uint8_t b = 0; b < cfg->button_count; b++) {
-            const ScreenButtonConfig& btn = cfg->buttons[b];
-            if (!btn.widget.type[0]) continue;
+        if (!pad_config_get_data_stream_snapshot(page, snapshot)) continue;
+        for (uint8_t b = 0; b < snapshot->button_count; b++) {
+            const WidgetConfig& widget = snapshot->widgets[b];
+            if (!widget.type[0]) continue;
 
             // Only widgets with getStreamParams need data streams
-            const WidgetType* wt = widget_find(btn.widget.type);
+            const WidgetType* wt = widget_find(widget.type);
             if (!wt || !wt->getStreamParams) continue;
 
             // Iterate over stream indices (0 = primary, 1/2 = extra lines)
@@ -323,7 +323,7 @@ void data_stream_rebuild() {
                 const char* binding = nullptr;
                 const char* ha_entity = nullptr;
                 uint8_t ha_stat = 0;
-                if (!wt->getStreamParams(&btn.widget, si,
+                if (!wt->getStreamParams(&widget, si,
                                          &window_secs, &slot_count, &binding,
                                          &ha_entity, &ha_stat))
                     break;  // No more streams for this widget
@@ -331,7 +331,9 @@ void data_stream_rebuild() {
 
                 // Expand [pad:] tokens so streams store the underlying template
                 char expanded[BINDING_TEMPLATE_MAX_LEN];
-                if (pad_binding_expand(cfg, binding, expanded, sizeof(expanded))) {
+                if (pad_binding_expand_bindings(snapshot->bindings,
+                                                snapshot->binding_count,
+                                                binding, expanded, sizeof(expanded))) {
                     binding = expanded;
                 }
 
@@ -391,7 +393,7 @@ void data_stream_rebuild() {
         }
     }
 
-    free(cfg);
+    free(snapshot);
 
     // Free streams that are no longer needed
     for (int i = 0; i < DATA_STREAM_MAX_STREAMS; i++) {

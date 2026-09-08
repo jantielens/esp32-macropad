@@ -18,6 +18,9 @@
 #include "log_manager.h"
 #include "net_activity.h"
 #include "ota_activity.h"
+#if HAS_EPAPER
+#include "device_classes/epaper/epaper_mqtt.h"
+#endif
 
 MqttManager::MqttManager() : _client(_net) {}
 
@@ -53,6 +56,11 @@ bool MqttManager::connectAndPublishDiscoveryBlocking(uint32_t timeout_ms) {
 		if (!connectEnabled()) return false;
 		if (_discovery_published_this_boot) return true;
 
+		// PubSubClient::connect() blocks for its socket timeout, so the outer
+		// deadline below cannot bound a single connection attempt on its own.
+		const uint16_t socket_timeout_s = (uint16_t)((timeout_ms + 999) / 1000);
+		_client.setSocketTimeout(socket_timeout_s > 0 ? socket_timeout_s : 1);
+
 		LOGI("MQTT", "Boot discovery: connecting to %s:%d (timeout %ums)",
 				_config->mqtt_host, resolvedPort(), (unsigned)timeout_ms);
 
@@ -84,6 +92,24 @@ bool MqttManager::connectAndPublishDiscoveryBlocking(uint32_t timeout_ms) {
 
 		LOGI("MQTT", "Boot discovery: done (%ums)", (unsigned)(millis() - start));
 		return true;
+}
+
+bool MqttManager::connectBlockingMinimal(uint32_t timeout_ms) {
+		if (!connectEnabled()) return false;
+
+		_client.setServer(_config->mqtt_host, resolvedPort());
+		const uint16_t socket_timeout_s = (uint16_t)((timeout_ms + 999) / 1000);
+		_client.setSocketTimeout(socket_timeout_s > 0 ? socket_timeout_s : 1);
+		installCallback();
+
+		const uint32_t start = millis();
+		while (!_client.connected() && (millis() - start) < timeout_ms) {
+			if (attemptConnectWithLWT(false, true)) return true;
+			LOGW("MQTT", "Minimal connect attempt failed (state %d)", _client.state());
+			delay(250);
+		}
+		LOGW("MQTT", "Minimal connect: broker unreachable after %ums", (unsigned)timeout_ms);
+		return false;
 }
 
 bool MqttManager::connectEnabled() const {
@@ -163,6 +189,9 @@ void MqttManager::installCallback() {
 				mqtt_audio_on_message(topic, payload, length);
 			mqtt_camera_on_message(topic, payload, length);
 				mqtt_notify_on_message(topic, payload, length);
+#if HAS_EPAPER
+			epaper_mqtt_on_message(topic, payload, length);
+#endif
 #if MQTT_TRIGGERS_ENABLED
 				mqtt_triggers_on_message(topic, payload, length);
 #endif
@@ -257,11 +286,17 @@ void MqttManager::publishHealthIfDue() {
 		}
 }
 
-bool MqttManager::attemptConnectWithLWT(bool use_lwt) {
+bool MqttManager::attemptConnectWithLWT(bool use_lwt, bool unique_client_id) {
 		_client.setServer(_config->mqtt_host, resolvedPort());
 
 		char client_id[96];
-		snprintf(client_id, sizeof(client_id), "%s", _sanitized_name);
+		if (unique_client_id) {
+			const uint32_t mac_suffix = (uint32_t)(ESP.getEfuseMac() & 0xFFFFFF);
+			snprintf(client_id, sizeof(client_id), "%s-%06lx", _sanitized_name,
+					(unsigned long)mac_suffix);
+		} else {
+			snprintf(client_id, sizeof(client_id), "%s", _sanitized_name);
+		}
 
 		bool has_user = strlen(_config->mqtt_username) > 0;
 		bool has_pass = strlen(_config->mqtt_password) > 0;

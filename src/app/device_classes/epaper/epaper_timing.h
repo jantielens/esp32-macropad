@@ -15,6 +15,8 @@
 // Cleared on cold boot (power loss / USB unplug) — portal shows zero values
 // until the first full cycle completes.
 struct EpaperTimingBudget {
+		uint64_t session_id;
+		uint32_t wake_id;
 		uint32_t boot_to_wifi_ms;   // power-on -> WiFi connected
 		int16_t  wifi_rssi;         // captured immediately after WiFi connect
 		uint8_t  crc_retry_count;   // attempts made by sidecar fetcher (1 = no retries)
@@ -34,6 +36,72 @@ struct EpaperTimingBudget {
 };
 
 extern EpaperTimingBudget epaper_timing_last;
+
+enum class EpaperWakeReason : uint8_t {
+		Timer,
+		Button,
+		ColdBoot,
+};
+
+enum class EpaperWakeStage : uint8_t {
+		Boot,
+		Battery,
+		Wifi,
+		Refresh,
+		Ntp,
+		MqttConnect,
+		MqttPublish,
+};
+
+enum class EpaperWakeResult : uint8_t {
+		InProgress,
+		Updated,
+		Skipped,
+		FailedFetch,
+		FailedDraw,
+		WifiFailed,
+		MqttConnectFailed,
+		MqttPublishUnconfirmed,
+		LowBattery,
+		ScheduleSuppressed,
+		SourceUnconfigured,
+		Interrupted,
+};
+
+struct EpaperPreviousDelivery {
+		uint64_t session_id;
+		uint32_t wake_id;
+		uint32_t mqtt_connect_ms;
+		uint32_t mqtt_publish_ms;
+		uint32_t total_active_ms;
+		bool valid;
+};
+
+struct EpaperWakeRecord {
+		EpaperTimingBudget timing;
+		EpaperPreviousDelivery previous_delivery;
+		uint16_t battery_mv;
+		int16_t sidecar_http_status;
+		EpaperWakeReason wake_reason;
+		EpaperWakeStage last_stage;
+		EpaperWakeResult result;
+		EpaperWakeResult refresh_result;
+};
+
+constexpr uint8_t EPAPER_WAKE_JOURNAL_CAPACITY = 16;
+
+uint32_t epaper_timing_begin_wake(EpaperWakeReason wake_reason);
+uint64_t epaper_wake_journal_session_id();
+void epaper_wake_journal_checkpoint(EpaperWakeStage stage);
+void epaper_wake_journal_finalize(EpaperWakeResult result, uint16_t battery_mv,
+															 int16_t sidecar_http_status);
+void epaper_wake_journal_mark_delivery_failed(EpaperWakeResult result);
+void epaper_wake_journal_complete_delivery(uint32_t mqtt_connect_ms,
+																	 uint32_t mqtt_publish_ms, uint32_t total_active_ms);
+bool epaper_wake_journal_peek(EpaperWakeRecord* record);
+void epaper_wake_journal_remove_oldest();
+uint32_t epaper_wake_journal_dropped_count();
+void epaper_wake_journal_clear_dropped_count();
 
 // Sub-step timing setters called by the active e-paper driver as each phase
 // completes. They write directly into epaper_timing_last. The duty cycle calls

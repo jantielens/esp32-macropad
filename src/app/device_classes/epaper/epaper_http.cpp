@@ -23,12 +23,11 @@
 namespace {
 
 constexpr uint32_t kHttpTimeoutMs = 15000;
-constexpr uint32_t kDownloadIdleTimeoutMs = 15000;
 
 }  // namespace
 
 bool epaper_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* out_len,
-		size_t* body_bytes_read, bool honor_content_length) {
+		size_t* body_bytes_read, bool honor_content_length, uint32_t idle_timeout_ms) {
 		*out_buf = nullptr;
 		*out_len = 0;
 		if (body_bytes_read) *body_bytes_read = 0;
@@ -72,7 +71,7 @@ bool epaper_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* out_len,
 						last_progress_ms = millis();
 				} else {
 						if (length_hint > 0 && total >= (size_t)length_hint) break;
-						if (millis() - last_progress_ms > kDownloadIdleTimeoutMs) {
+						if (millis() - last_progress_ms > idle_timeout_ms) {
 								LOGW("Epaper", "image download stalled after %u bytes", (unsigned)total);
 								heap_caps_free(buffer);
 								return false;

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 276
+Total flags: 277
 
 ### Features (HAS_*)
 
@@ -65,7 +65,7 @@ Total flags: 276
 
 - **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
-- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
@@ -195,6 +195,7 @@ Total flags: 276
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
 - **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
+- **BOARD_DRIVER_TABLE_NOTES** default: `(no default)` — Generated driver-table validation note.
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
 - **CAMERA_CAPTURE_HEIGHT** default: `0` — Camera sensor raw capture height in pixels.
 - **CAMERA_CAPTURE_WIDTH** default: `0` — Camera sensor raw capture width in pixels.
@@ -329,6 +330,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
 | jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
 | jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
 | esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
 | jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
@@ -355,6 +357,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
 | jc3636w518 | AUDIO_OUTPUT_DRIVER_PCM510XA | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
 | jc3636w518-sd | AUDIO_OUTPUT_DRIVER_PCM510XA | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
+| jc4827w543c | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_NV3041A | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b-voice | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
@@ -416,6 +419,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/display_manager.cpp
   - src/app/drivers/arduino_gfx_driver.cpp
+  - src/app/drivers/arduino_gfx_nv3041a_driver.cpp
   - src/app/drivers/arduino_gfx_st77916_driver.cpp
   - src/app/drivers/mipi_dsi_driver.cpp
   - src/app/drivers/st7701_rgb_driver.cpp
@@ -736,6 +740,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_timing.cpp
   - src/app/device_classes/epaper/epaper_timing.h
   - src/app/device_classes/epaper_device_class.cpp
+  - src/app/mqtt_manager.cpp
   - src/app/portal_components.cpp
 - **HAS_EPAPER_FRONTLIGHT**
   - src/app/board_config.h
@@ -1294,6 +1299,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LCD_BL_PIN**
   - src/app/drivers/arduino_gfx_driver.cpp
+  - src/app/drivers/arduino_gfx_nv3041a_driver.cpp
   - src/app/drivers/arduino_gfx_st77916_driver.cpp
   - src/app/drivers/mipi_dsi_driver.cpp
   - src/app/drivers/st7701_rgb_driver.cpp
@@ -1504,6 +1510,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **TFT_BACKLIGHT_PWM_FREQ**
   - src/app/board_config.h
 - **TFT_SPI_FREQ_HZ**
+  - src/app/drivers/arduino_gfx_nv3041a_driver.cpp
   - src/app/drivers/arduino_gfx_st77916_driver.cpp
 - **TOUCH_CAL_X_MAX**
   - src/app/touch_manager.cpp

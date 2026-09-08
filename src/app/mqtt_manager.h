@@ -33,6 +33,10 @@ public:
 		// Returns true if discovery was published, false otherwise (non-fatal).
 		bool connectAndPublishDiscoveryBlocking(uint32_t timeout_ms);
 
+		// Blocking transport-only connect for short duty cycles. It deliberately
+		// omits LWT, availability, discovery, health, and normal subscriptions.
+		bool connectBlockingMinimal(uint32_t timeout_ms);
+
 		void disconnect();
 
 		unsigned long lastHealthPublishMs() const { return _last_health_publish_ms; }
@@ -67,7 +71,7 @@ private:
 
 		// Shared connect helper: sets server, builds client ID, calls PubSubClient::connect
 		// with LWT (unless duty_cycle is true). Returns true on success.
-		bool attemptConnectWithLWT(bool use_lwt);
+		bool attemptConnectWithLWT(bool use_lwt, bool unique_client_id = false);
 
 		// Post-connect sequence: availability, discovery, subscriptions, initial health.
 		void onConnected(bool publish_availability);

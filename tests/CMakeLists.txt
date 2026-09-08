@@ -365,6 +365,7 @@ foreach(script
     test_extension_config_contracts.sh
     test_camera_preview_widget.sh test_camera_motion.sh test_mcp_scheme_parity.sh
     test_action_catalog_completeness.sh test_mcp_storage_parity.sh test_display_safe_telemetry.sh
+    test_rtos_task_stack_helpers.sh
     test_sd_wifi_order.sh test_photoframe_vector_drift.sh test_esp_web_tools_site.sh
 )
     get_filename_component(name ${script} NAME_WE)
@@ -443,6 +444,12 @@ add_host_gtest(test_epaper_next_client_logic
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_next_client_logic.cpp
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_transport_crc32.cpp
 )
+
+add_host_gtest(test_epaper_wake_journal
+        test_epaper_wake_journal.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_timing.cpp
+)
+target_compile_definitions(test_epaper_wake_journal PRIVATE HAS_EPAPER=1)
 
 add_host_gtest(test_mp3_metadata
     test_mp3_metadata.cpp

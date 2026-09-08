@@ -12,6 +12,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.29.0] - 2026-09-08
+
+### Added
+
+* **GUITION JC4827W543C support**: this 4.3-inch ESP32-S3 macropad with a 480 by 272 NV3041A QSPI display and GT911 capacitive touch now has a tested 4 MB firmware target. It retains WiFi, web portal, MQTT, and LittleFS, while omitting OTA updates, native Extensions, BLE HID, MCP, and remote image fetching to fit its single application partition. Hardware validation and detailed test results were provided by @00lems00 in [#81](https://github.com/jantielens/esp32-macropad/issues/81).
+* **E-paper wake diagnostics**: non-retained MQTT events at `devices/<name>/epaper/wake` provide correlated WiFi, image, panel, NTP, MQTT, and end-to-end timing for each wake. Events include stable session and wake identifiers, refresh outcome, radio context, image source, and journal status. Home Assistant can archive the raw events through its File integration.
+* **E-paper offline diagnostics**: a 16-record RTC journal retains failed, interrupted, and unconfirmed MQTT wake events for oldest-first delivery after connectivity returns. Deferred events preserve their original refresh outcome and report journal overflow.
+
+### Changed
+
+* **E-paper Home Assistant telemetry**: retained state exposes `wake_loop_ms` as the routine dashboard metric, while complete diagnostic timing is available from the wake-event archive. Retired detailed timing entities are removed automatically.
+* **Task-stack placement is explicit**: new internal-RAM task helpers verify stack placement for work that may access LittleFS, Preferences/NVS, OTA, or other flash-backed operations. Audio now uses the shared helper; PSRAM-stack helpers are documented for compute, network, decode, and render work that does not access flash-backed storage.
+
+### Fixed
+
+* **Pad saves no longer stall data-stream rebuilds**: stream registration now snapshots only widget settings and pad bindings instead of copying every full pad configuration on the LVGL task. Cache replacement is synchronized with the compact snapshot, preventing a concurrent pad save or deletion from invalidating its source data.
+* **E-paper wake duration and MQTT behavior**: MQTT connection attempts, reTerminal image requests, and stalled response bodies have bounded timeouts. The e-paper telemetry connection avoids availability, discovery, health, and control traffic, reducing radio-on time during duty-cycle wakes.
+
 ## [1.28.0] - 2026-09-08
 
 ### Highlights

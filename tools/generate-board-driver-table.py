@@ -210,6 +210,9 @@ def _detect_panel(
 
 def _build_notes(defines: Dict[str, str]) -> str:
     notes = []
+    table_notes = defines.get("BOARD_DRIVER_TABLE_NOTES")
+    if table_notes:
+        notes.append(table_notes.strip('"'))
     if defines.get("DISPLAY_INVERSION_ON") == "true":
         notes.append("inversion on")
     if defines.get("DISPLAY_INVERSION_OFF") == "true":
