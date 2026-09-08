@@ -41,6 +41,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | jc3248w535 | ARDUINO_GFX | AXS15231B | QSPI | 320×480 | 1 | AXS15231B |  |
 | jc3636w518 | ARDUINO_GFX_ST77916 | ST77916 | QSPI | 360×360 | 0 | CST816S |  |
 | jc3636w518-sd | ARDUINO_GFX_ST77916 | ST77916 | QSPI | 360×360 | 0 | CST816S |  |
+| jc4827w543c | ARDUINO_GFX_NV3041A | NV3041A | QSPI | 480×272 | 0 | GT911 | experimental, hardware untested |
 | jc4880p433 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-darkroom | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-hx711 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |

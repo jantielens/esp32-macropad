@@ -59,6 +59,7 @@ declare -A FQBN_TARGETS=(
     ["jc3248w535"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3248W535 (16MB + OPI PSRAM)
     ["jc3636w518"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 (16MB + OPI PSRAM)
     ["jc3636w518-sd"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 SDMMC primary-storage variant
+    ["jc4827w543c"]="esp32:esp32:esp32s3:FlashSize=4M,PSRAM=opi,PartitionScheme=huge_app,USBMode=hwcdc,CDCOnBoot=cdc" # EXPERIMENTAL: hardware-untested ESP32-S3 GUITION JC4827W543C (480x272 NV3041A QSPI + GT911 touch; 4MB + 8MB OPI PSRAM; no OTA)
     ["esp32-p4-lcd4b"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext" # ESP32-P4 Waveshare WIFI6-Touch-LCD-4B (720x720 MIPI-DSI + GT911 touch; 32MB + 32MB PSRAM; constrained to 16MB for extension XIP)
     ["esp32-p4-lcd4b-voice"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext" # ESP32-P4 LCD4B Azure Voice Assistant variant; constrained to 16MB for extension XIP
     ["jc4880p433"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 (480x800 MIPI-DSI ST7701 + GT911 touch; 16MB + 32MB PSRAM)
