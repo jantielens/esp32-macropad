@@ -1469,11 +1469,11 @@ Requires `HAS_DISPLAY`. Gated by Basic Auth when enabled.
 #### `GET /api/screenshot`
 
 Capture the current display contents as an image. ESP32-P4 boards default to a
-hardware-encoded JPEG; other boards retain the 24-bit BMP default.
+hardware-encoded high-fidelity JPEG; other boards retain the 24-bit BMP default.
 
-- **Query parameters:** `format=bmp|jpg` overrides the format. `quality=1..100` controls JPEG quality and defaults to `85`.
+- **Query parameters:** `format=bmp|jpg` overrides the format. `quality=1..100` controls JPEG quality and defaults to `85`. On ESP32-P4, `subsample=420|422|444` controls JPEG chroma subsampling and defaults to `444`.
 - **Response:** `image/jpeg` for JPEG or `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order).
-- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV420 subsampling. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
+- **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV444 subsampling by default. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
 - **Memory:** Per-request snapshot, conversion, and JPEG buffers are released as soon as the final response chunk is produced. Interrupted responses release any remaining buffers when their response context is destroyed. On ESP32-P4, the lazily initialized JPEG encoder and its synchronization primitive remain allocated after first use.
 - **Thread safety:** The AsyncTCP handler synchronously dispatches capture work through a fixed 64-byte single slot to the LVGL task, which runs it under the existing LVGL mutex. A request that reaches its 3-second deadline keeps the slot occupied until the LVGL task finishes; its captured payload is then reclaimed on that task. Returns `503 Screenshot service busy` for a concurrent capture, `503 Screenshot service unavailable` before display dispatch is ready, and `504 Screenshot capture timed out` when the LVGL task has not completed by the deadline.
 - **Fallback:** If hardware JPEG encoding fails, the endpoint transparently returns BMP with `Content-Type: image/bmp`. Requesting `format=jpg` on a non-P4 board returns `400`.
@@ -1490,12 +1490,16 @@ curl -u user:pass http://<device-ip>/api/screenshot -o screenshot.bmp
 # Explicit format and JPEG quality
 curl -u user:pass 'http://<device-ip>/api/screenshot?format=bmp' -o screenshot.bmp
 curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=70' -o screenshot.jpg
+
+# Smaller JPEG for photo-like screens, with reduced color detail
+curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=85&subsample=420' -o screenshot.jpg
 ```
 
 **Notes:**
 
 - Image dimensions match the device's display resolution.
 - BMP is uncompressed, so BMP files range from ~253 KB (360×360) to ~1.2 MB (1024×600) depending on the board.
+- YUV444 retains thin colored lines and text better than YUV420, but creates larger JPEG files. Use YUV420 when transfer size matters more than UI fidelity.
 - The portal exposes this endpoint under **Display > Screen Preview**. Opening the fragment does not capture an image; **Capture Preview** and **Refresh Preview** request a fresh framebuffer.
 
 #### `POST /api/screen/tap?x=<x>&y=<y>`

@@ -929,7 +929,7 @@ body {
    ================================================================ */
 .screen-preview-toolbar {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
@@ -946,6 +946,7 @@ body {
   justify-content: center;
   gap: 8px;
   min-width: 138px;
+  margin-top: 26px;
 }
 
 .screen-preview-spinner {
@@ -1013,6 +1014,7 @@ body {
 
   .screen-preview-capture {
     width: 100%;
+    margin-top: 0;
   }
 }
 

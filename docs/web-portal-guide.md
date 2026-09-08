@@ -320,6 +320,11 @@ before the device consumes it. After changing **Current Screen**, the old image
 is hidden and cannot be tapped; capture a fresh preview first. Screen Preview
 does not support dragging, swiping, long presses, multi-touch, or live video.
 
+ESP32-P4 previews use a high-quality JPEG with full color resolution, which
+keeps thin colored charts and labels clear. The screen-preview API also accepts
+`quality=1..100` and `subsample=420|422|444` query parameters for manual
+captures; lower subsampling reduces transfer size at the cost of color detail.
+
 ### Screen Saver (Burn-in Prevention)
 
 The screen saver has two optional features, both measured from the most recent user activity. **Idle Screen** temporarily shows a configured pad, which can host an animated clock or extension. **Display Sleep** turns off the panel to protect it from burn-in. Either can be used alone, or Idle Screen can lead into Display Sleep. A built-in pixel-shift mechanism moves content slightly each Display Sleep cycle to prevent ghosting. The portal shows a live timeline of the current settings above the controls.
