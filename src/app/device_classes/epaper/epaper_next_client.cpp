@@ -21,7 +21,7 @@
 
 namespace {
 
-constexpr uint32_t kServiceHttpTimeoutMs = 15000;
+constexpr uint32_t kServiceHttpTimeoutMs = 7000;
 constexpr const char* kImageKeyHeader = "Photoframe-Image-Key";
 constexpr const char* kContentCrcHeader = "Photoframe-Content-CRC32";
 
@@ -117,7 +117,8 @@ bool read_and_validate_body(HTTPClient& http, const ShowMetadata& metadata,
 		uint8_t* data = nullptr;
 		size_t len = 0;
 		size_t body_bytes_read = 0;
-		if (!epaper_http_read_body(http, &data, &len, &body_bytes_read, false)) return false;
+		if (!epaper_http_read_body(http, &data, &len, &body_bytes_read,
+				false, kServiceHttpTimeoutMs)) return false;
 		payload->body_bytes_read = body_bytes_read;
 		if (epaper_transport_crc32(data, len) != metadata.content_crc32 ||
 				!epaper_driver_prepare_service_blob(data, len, media_type,
@@ -179,7 +180,6 @@ EpaperNextPayload epaper_next_client_fetch(const char* service_base,
 				WiFiClientSecure secure;
 				HTTPClient http;
 				if (!begin_request(http, plain, secure, url)) {
-						if (attempt + 1 < max_cycles) continue;
 						return empty_payload(EpaperNextResult::FailedFetch);
 				}
 				http.setTimeout(kServiceHttpTimeoutMs);
@@ -224,7 +224,6 @@ EpaperNextPayload epaper_next_client_fetch(const char* service_base,
 				ShowMetadata metadata = {};
 				if (!parse_show_metadata(http, &metadata)) {
 						http.end();
-						if (attempt + 1 < max_cycles) continue;
 						return empty_payload(EpaperNextResult::FailedContent);
 				}
 				if (action == EpaperNextAction::FollowRedirect) {
@@ -239,7 +238,6 @@ EpaperNextPayload epaper_next_client_fetch(const char* service_base,
 				payload.content_crc32 = metadata.content_crc32;
 				if (!valid_content_headers(http, payload.media_type, sizeof(payload.media_type))) {
 						http.end();
-						if (attempt + 1 < max_cycles) continue;
 						return payload;
 				}
 				if (cache_enabled && try_cache(metadata.content_crc32, payload.media_type, &payload)) {
@@ -256,7 +254,7 @@ EpaperNextPayload epaper_next_client_fetch(const char* service_base,
 						payload.result = EpaperNextResult::Show;
 						return payload;
 				}
-				if (attempt + 1 == max_cycles) return payload;
+				return payload;
 		}
 		return empty_payload(EpaperNextResult::FailedFetch);
 }

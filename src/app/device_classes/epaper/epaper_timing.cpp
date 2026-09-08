@@ -6,6 +6,14 @@
 
 // RTC-retained. Survives deep sleep; zeroed on cold boot.
 RTC_DATA_ATTR EpaperTimingBudget epaper_timing_last = {};
+RTC_DATA_ATTR static uint32_t s_epaper_wake_id = 0;
+
+uint32_t epaper_timing_begin_wake() {
+		const uint32_t next_wake_id = ++s_epaper_wake_id;
+		epaper_timing_last = {};
+		epaper_timing_last.wake_id = next_wake_id;
+		return next_wake_id;
+}
 
 void epaper_timing_reset_draw_steps() {
 		epaper_timing_last.resolve_ms = 0;

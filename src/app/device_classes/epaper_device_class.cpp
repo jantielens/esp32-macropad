@@ -644,6 +644,7 @@ static bool epaper_ntp_stop() {
 // block plus the splash decisions that lived in app.ino).
 // ---------------------------------------------------------------------------
 static bool run_duty_cycle_hook(DeviceConfig *config) {
+		epaper_timing_begin_wake();
 		// Splash policy (moved from app.ino):
 		//   - Cold boot: always show the boot splash so a freshly plugged-in
 		//     device gets proof of life.
@@ -833,29 +834,6 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				LOGI("Epaper", "Carousel: advanced to slot %u", next_idx);
 		}
 		epaper_timing_last.crc_to_draw_ms = t_draw_done - t_wifi_done;
-
-#if HAS_MQTT
-		uint32_t t_mqtt_done = t_draw_done;
-		if (strlen(config->mqtt_host) > 0) {
-				const uint32_t mqtt_start = millis();
-				char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
-				config_manager_sanitize_device_name(config->device_name, sanitized, sizeof(sanitized));
-				mqtt_manager.begin(config, config->device_name, sanitized);
-				if (mqtt_manager.connectAndPublishDiscoveryBlocking(5000)) {
-						epaper_mqtt_publish_state(outcome, &epaper_timing_last);
-				} else {
-						LOGW("Epaper", "MQTT unreachable (5s timeout); skipping telemetry");
-				}
-				mqtt_manager.disconnect();
-				t_mqtt_done = millis();
-				epaper_timing_last.draw_to_mqtt_ms = t_mqtt_done - mqtt_start;
-		} else {
-				epaper_timing_last.draw_to_mqtt_ms = 0;
-		}
-#else
-		epaper_timing_last.draw_to_mqtt_ms = 0;
-#endif
-
 		if (defer_ntp_resync) {
 			while (millis() - deferred_ntp_start_ms < kEpaperNtpDeferredMaxWaitMs &&
 					!epaper_ntp_is_synced()) {
@@ -868,7 +846,32 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 			} else {
 				LOGW("Epaper", "NTP deferred resync incomplete after %ums", elapsed_ms);
 			}
+			epaper_timing_last.ntp_sync_ms = elapsed_ms;
 		}
+
+		epaper_timing_last.total_active_ms = millis();
+
+#if HAS_MQTT
+		if (strlen(config->mqtt_host) > 0) {
+			const uint32_t mqtt_start = millis();
+			char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
+			config_manager_sanitize_device_name(config->device_name, sanitized, sizeof(sanitized));
+			mqtt_manager.begin(config, config->device_name, sanitized);
+			if (mqtt_manager.connectAndPublishDiscoveryBlocking(5000)) {
+				epaper_mqtt_publish_state(outcome, &epaper_timing_last);
+				const char* wake_reason = button_wake ? "button" : cold_boot ? "cold_boot" : "timer";
+				epaper_mqtt_publish_wake(outcome, epaper_timing_last, wake_reason);
+			} else {
+				LOGW("Epaper", "MQTT unreachable (5s timeout); skipping telemetry");
+			}
+			mqtt_manager.disconnect();
+			epaper_timing_last.draw_to_mqtt_ms = millis() - mqtt_start;
+		} else {
+			epaper_timing_last.draw_to_mqtt_ms = 0;
+		}
+#else
+		epaper_timing_last.draw_to_mqtt_ms = 0;
+#endif
 
 		// Sleep-time compensation: subtract active loop duration so wake-to-wake
 		// cadence approximates duty_cycle_wake_seconds. Skip when target is 0
@@ -882,7 +885,6 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				LOGI("Epaper", "Using carousel slot %u duration: %u seconds", active_slot_index, target_s);
 		}
 
-		epaper_timing_last.total_active_ms = millis();
 		uint32_t sleep_s = target_s;
 		if (target_s > 0) {
 				const uint32_t active_s = epaper_timing_last.total_active_ms / 1000u;

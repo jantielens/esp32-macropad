@@ -15,6 +15,7 @@
 // Cleared on cold boot (power loss / USB unplug) — portal shows zero values
 // until the first full cycle completes.
 struct EpaperTimingBudget {
+		uint32_t wake_id;
 		uint32_t boot_to_wifi_ms;   // power-on -> WiFi connected
 		int16_t  wifi_rssi;         // captured immediately after WiFi connect
 		uint8_t  crc_retry_count;   // attempts made by sidecar fetcher (1 = no retries)
@@ -34,6 +35,8 @@ struct EpaperTimingBudget {
 };
 
 extern EpaperTimingBudget epaper_timing_last;
+
+uint32_t epaper_timing_begin_wake();
 
 // Sub-step timing setters called by the active e-paper driver as each phase
 // completes. They write directly into epaper_timing_last. The duty cycle calls

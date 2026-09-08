@@ -12,6 +12,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.29.0] - 2026-09-08
+
+### Added
+
+* **Correlated e-paper wake diagnostics**: e-paper devices now publish one non-retained MQTT event per wake at `devices/<name>/epaper/wake`. Every event includes its RTC-retained wake ID, wake reason, refresh outcome, radio context, image source, and a correlated breakdown of WiFi, refresh, fetch, panel-draw, NTP, and pre-telemetry timings. Home Assistant can archive the raw events through its File integration; the e-paper guide documents the working append-mode automation.
+
+### Changed
+
+* **E-paper Home Assistant timing telemetry is intentionally compact**: retained state now exposes one `wake_loop_ms` dashboard metric. The detailed timing discovery entities are explicitly removed on the next cold boot, avoiding stale Home Assistant entities while per-stage diagnostics remain available in the wake event.
+
+### Fixed
+
+* **E-paper dependency stalls no longer extend wakes unpredictably**: MQTT connection attempts apply the five-second caller budget to the socket timeout. reTerminal next-image requests and stalled response bodies time out after seven seconds, and only explicit transient service responses (`405` or `5xx`) can make one additional request. Timing state is reset and finalized before telemetry publishes, so each reported wake now contains a self-consistent current-cycle snapshot.
+
 ## [1.28.0] - 2026-09-08
 
 ### Highlights

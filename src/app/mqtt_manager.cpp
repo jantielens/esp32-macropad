@@ -53,6 +53,11 @@ bool MqttManager::connectAndPublishDiscoveryBlocking(uint32_t timeout_ms) {
 		if (!connectEnabled()) return false;
 		if (_discovery_published_this_boot) return true;
 
+		// PubSubClient::connect() blocks for its socket timeout, so the outer
+		// deadline below cannot bound a single connection attempt on its own.
+		const uint16_t socket_timeout_s = (uint16_t)((timeout_ms + 999) / 1000);
+		_client.setSocketTimeout(socket_timeout_s > 0 ? socket_timeout_s : 1);
+
 		LOGI("MQTT", "Boot discovery: connecting to %s:%d (timeout %ums)",
 				_config->mqtt_host, resolvedPort(), (unsigned)timeout_ms);
 

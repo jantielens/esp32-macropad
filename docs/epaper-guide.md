@@ -321,7 +321,8 @@ The battery voltage is read before the panel-drive waveform sags the cell, on bo
 
 ### MQTT Telemetry
 
-When MQTT is configured, every wake publishes a retained JSON document to `<base>/epaper/state` with the following shape:
+When MQTT is configured, every wake updates a compact retained JSON document at
+`<base>/epaper/state` for the device's latest status:
 
 ```json
 {
@@ -332,22 +333,92 @@ When MQTT is configured, every wake publishes a retained JSON document to `<base
   "refresh_result": "updated",
   "refresh_count": 42,
   "sidecar_http_status": 200,
-  "timing": {
-    "boot_to_wifi_ms": 2310,
-    "crc_retry_count": 1,
-    "crc_to_draw_ms": 4820,
-    "draw_to_mqtt_ms": 180,
-    "total_active_ms": 7820,
-    "last_elapsed_ms": 5100
+  "wake_loop_ms": 7820
+}
+```
+
+The `wake_loop_ms` value is set before telemetry begins, so it always describes
+the current wake through panel work and any deferred NTP work. MQTT connection
+and body-request waits are bounded to prevent a failed dependency from keeping
+the radio awake for an extended period. A clean DISCONNECT is sent before deep
+sleep to avoid spurious LWT messages on the broker.
+
+The device also publishes one non-retained, correlated diagnostic event per
+wake at `<base>/epaper/wake`. This topic is intended for MQTT Explorer,
+automations, or a time-series sink rather than Home Assistant sensor history:
+
+```json
+{
+  "wake_id": 1842,
+  "wake_reason": "timer",
+  "result": "updated",
+  "sidecar_http_status": 200,
+  "crc_fetch_attempts": 1,
+  "wifi_rssi": -62,
+  "image_source": "download",
+  "stages_ms": {
+    "boot_to_wifi": 3352,
+    "refresh": 4820,
+    "resolve": 0,
+    "fetch": 1310,
+    "panel_draw": 1850,
+    "ntp": 0,
+    "active_before_telemetry": 8172
   }
 }
 ```
 
-The MQTT connect attempt is bounded at 5 s. A clean DISCONNECT is sent before deep sleep to avoid spurious LWT messages on the broker.
+### Home Assistant Wake Archive
+
+Home Assistant can archive the non-retained wake events to a file without a
+custom integration or YAML notification platform. This preserves one complete
+diagnostic record for every wake, including correlated stage timings.
+
+1. In **Settings > Devices & services**, add the **File** integration.
+2. Configure it as a notification entity writing to
+   `/config/www/media/epaper_wakes.jsonl` in append mode.
+3. In the Home Assistant File Editor, that directory appears as
+   `/homeassistant/www/media`. The File integration does not create missing
+   parent directories, so use this existing directory rather than a new nested
+   path.
+4. Create an automation with an MQTT trigger for `devices/+/epaper/wake`.
+5. Add the **Notifications: Send a notification message** action, select the
+   File notification entity (normally `notify.file`), and set its message to
+   `{{ trigger.payload }}`.
+
+The automation editor accepts this YAML:
+
+```yaml
+alias: Archive e-paper wake diagnostics
+description: ""
+mode: queued
+triggers:
+  - trigger: mqtt
+    topic: devices/+/epaper/wake
+conditions: []
+actions:
+  - action: notify.send_message
+    target:
+      entity_id: notify.file
+    data:
+      message: "{{ trigger.payload }}"
+```
+
+The File integration adds a two-line banner when it creates the file. Every
+following line is the unmodified JSON MQTT payload and can be analyzed as
+JSONL. The archive is served from `/local/media/epaper_wakes.jsonl`. To create
+a strictly JSONL copy for external analysis, retain only lines beginning with
+`{`:
+
+```bash
+grep '^{' epaper_wakes.jsonl > epaper_wakes_clean.jsonl
+jq -s '.' epaper_wakes_clean.jsonl > epaper_wakes.json
+```
 
 ### Home Assistant Auto-Discovery
 
-Twelve sensor entities are auto-discovered into Home Assistant, all reading from the JSON state topic above:
+Seven sensor entities are auto-discovered into Home Assistant, all reading from
+the retained state topic above:
 
 | Entity                          | JSON field                       | Unit |
 |---------------------------------|----------------------------------|------|
@@ -357,14 +428,14 @@ Twelve sensor entities are auto-discovered into Home Assistant, all reading from
 | E-Paper Last Refresh Result     | `refresh_result`                 |      |
 | E-Paper Image CRC               | `image_crc32` (formatted as hex) |      |
 | E-Paper Sidecar HTTP Status     | `sidecar_http_status`            |      |
-| E-Paper Wake Loop Time          | `timing.total_active_ms`         | ms   |
-| E-Paper Boot to WiFi            | `timing.boot_to_wifi_ms`         | ms   |
-| E-Paper CRC to Draw             | `timing.crc_to_draw_ms`          | ms   |
-| E-Paper Draw to MQTT            | `timing.draw_to_mqtt_ms`         | ms   |
-| E-Paper Refresh Elapsed         | `timing.last_elapsed_ms`         | ms   |
-| E-Paper CRC Fetch Attempts      | `timing.crc_retry_count`         |      |
+| E-Paper Wake Loop Time          | `wake_loop_ms`                   | ms   |
 
 WiFi RSSI is intentionally not duplicated &mdash; the generic `WiFi RSSI` entity from the shared health discovery already updates on every wake.
+
+Detailed timing entities from firmware before this telemetry design are removed
+from Home Assistant discovery on the first cold boot after upgrade. Use the
+single `/epaper/wake` event for per-stage diagnostics; all fields in one event
+share the same `wake_id` and therefore represent one wake.
 
 Discovery configs are retained on the broker, so they are only published on cold boot. An `RTC_DATA_ATTR` flag suppresses the entire discovery burst (health + e-paper) on subsequent warm wakes to save battery.
 

@@ -14,7 +14,8 @@ class HTTPClient;
 // headers (the Service cache-hit abort). body_bytes_read counts only bytes
 // returned by stream->read().
 bool epaper_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* out_len,
-		size_t* body_bytes_read, bool honor_content_length = true);
+		size_t* body_bytes_read, bool honor_content_length = true,
+		uint32_t idle_timeout_ms = 15000);
 
 // Download the full body of an HTTP(S) URL into a freshly-allocated PSRAM
 // buffer, following up to 3 cross-host 3xx redirects (the image endpoint

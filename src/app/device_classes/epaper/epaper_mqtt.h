@@ -15,6 +15,10 @@ class MqttManager;
 bool epaper_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 															 const EpaperTimingBudget* timing);
 
+bool epaper_mqtt_publish_wake(const EpaperRefreshOutcome& outcome,
+																const EpaperTimingBudget& timing,
+																const char* wake_reason);
+
 // Publish HA discovery entries for the e-paper telemetry sensors. Should
 // only be called once per cold boot (caller-managed RTC flag).
 void epaper_mqtt_publish_ha_discovery(MqttManager& mqtt);
