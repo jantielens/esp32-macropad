@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{PROJECT_DISPLAY_NAME}} — Configuration Portal</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/portal-all.css">
+  <link rel="stylesheet" href="/portal-all.css?v={{FIRMWARE_VERSION}}">
   <script>
     /* Apply theme immediately to prevent flash */
     (function() {
@@ -77,6 +77,6 @@
        wraps each in an #if guard, so every build links exactly ONE combined
        portal.js variant. /portal.js therefore serves the entire portal JS in
        a single HTTP response with a single gzip member. -->
-  <script src="/portal.js"></script>
+  <script src="/portal.js?v={{FIRMWARE_VERSION}}"></script>
 </body>
 </html>

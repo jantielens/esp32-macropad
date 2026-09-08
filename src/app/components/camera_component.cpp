@@ -12,6 +12,7 @@
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
 #include "web_portal_state.h"
+#include "version.h"
 
 #include <ArduinoJson.h>
 
@@ -20,8 +21,8 @@ namespace {
 constexpr uint32_t kCameraConfigSaveTimeoutMs = 5000;
 constexpr size_t kCameraConfigMaxBodyBytes = 2048;
 constexpr size_t kCameraConfigResponseBytes = 2048;
-constexpr const char* kCameraPortalScript = "/portal-camera.js";
-constexpr const char* kCameraPortalStyle = "/portal-camera.css";
+constexpr const char* kCameraPortalScript = "/portal-camera.js?v=" FIRMWARE_VERSION;
+constexpr const char* kCameraPortalStyle = "/portal-camera.css?v=" FIRMWARE_VERSION;
 
 struct CameraConfigSaveRequest {
     bool update_capture_settings;

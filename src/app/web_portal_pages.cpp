@@ -8,6 +8,9 @@
 
 #include <string.h>
 
+static constexpr const char* kImmutableAssetCacheControl =
+	"public, max-age=31536000, immutable";
+
 // Serve a gzipped PROGMEM asset as a length-aware chunked stream rather than a
 // single beginResponse_P() blob. AsyncTCP only calls the filler when LWIP TX
 // buffer space is available, so the response is naturally paced and
@@ -141,7 +144,7 @@ void handlePortalAllCSS(AsyncWebServerRequest *request) {
 				"text/css",
 				portal_all_css_gz,
 				portal_all_css_gz_len,
-				"public, max-age=600"
+				kImmutableAssetCacheControl
 		);
 		request->send(response);
 }
@@ -161,7 +164,7 @@ void handlePortalJS(AsyncWebServerRequest *request) {
 				"application/javascript",
 				portal_js_gz,
 				portal_js_gz_len,
-				"public, max-age=600"
+				kImmutableAssetCacheControl
 		);
 		request->send(response);
 }
@@ -173,7 +176,7 @@ void handlePortalCameraJS(AsyncWebServerRequest *request) {
 				"application/javascript",
 				portal_camera_js_gz,
 				portal_camera_js_gz_len,
-				"public, max-age=600"
+				kImmutableAssetCacheControl
 		);
 		request->send(response);
 }
@@ -184,7 +187,7 @@ void handlePortalCameraCSS(AsyncWebServerRequest *request) {
 				"text/css",
 				portal_camera_css_gz,
 				portal_camera_css_gz_len,
-				"public, max-age=600"
+				kImmutableAssetCacheControl
 		);
 		request->send(response);
 }

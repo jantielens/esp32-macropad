@@ -1929,6 +1929,8 @@ Resolve `[scheme:params]` binding tokens against the device's **live** data and 
 - Reduces flash storage and bandwidth by ~80%
 - Assets served with `Content-Encoding: gzip` header
 - Browser automatically decompresses (transparent to user)
+- Shell and fragment HTML use `Cache-Control: no-store`, so a portal reload always discovers the firmware's current asset URLs.
+- JavaScript and CSS asset URLs include the firmware version, for example `/portal.js?v=1.28.0`, and use `Cache-Control: public, max-age=31536000, immutable`. Each released firmware version therefore loads current portal assets while repeat visits retain browser caching.
 
 ### Concurrent Request Throttling
 

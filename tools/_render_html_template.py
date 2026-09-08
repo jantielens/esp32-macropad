@@ -8,7 +8,8 @@ project-name substitutions.
 Substitution sources:
   - Each {{KEY}} is replaced by the contents of $WEB_DIR/<file> per the
     TEMPLATES mapping below. Missing files substitute the empty string.
-  - {{PROJECT_NAME}} and {{PROJECT_DISPLAY_NAME}} come from CLI args.
+  - {{PROJECT_NAME}}, {{PROJECT_DISPLAY_NAME}}, and {{FIRMWARE_VERSION}} come
+    from CLI args.
 
 Minification:
   - Strip HTML comments
@@ -50,7 +51,8 @@ def load_template(web_dir: Path, filename: str) -> str:
 
 
 def render(input_path: Path, web_dir: Path,
-           project_name: str, project_display_name: str) -> str:
+           project_name: str, project_display_name: str,
+           firmware_version: str) -> str:
     html = input_path.read_text()
 
     for key, filename in TEMPLATES:
@@ -58,6 +60,7 @@ def render(input_path: Path, web_dir: Path,
 
     html = html.replace("{{PROJECT_NAME}}", project_name)
     html = html.replace("{{PROJECT_DISPLAY_NAME}}", project_display_name)
+    html = html.replace("{{FIRMWARE_VERSION}}", firmware_version)
 
     html = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
     html = re.sub(r"\s+", " ", html)
@@ -73,10 +76,12 @@ def main() -> int:
                    help="HTML file to render")
     p.add_argument("--project-name", required=True)
     p.add_argument("--project-display-name", required=True)
+    p.add_argument("--firmware-version", required=True)
     args = p.parse_args()
 
     sys.stdout.write(render(args.input, args.web_dir,
-                            args.project_name, args.project_display_name))
+                            args.project_name, args.project_display_name,
+                            args.firmware_version))
     return 0
 
 

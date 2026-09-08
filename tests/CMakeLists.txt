@@ -257,6 +257,7 @@ add_host_legacy_test(test_pad_cache_transaction SOURCES test_pad_cache_transacti
 add_host_legacy_test(test_wifi_reconnect SOURCES test_wifi_reconnect.cpp ${PROJECT_SOURCE_DIR}/src/app/wifi_reconnect.cpp)
 add_host_legacy_test(test_screen_saver_schedule SOURCES test_screen_saver_schedule.cpp)
 add_host_legacy_test(test_component_registry SOURCES test_component_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp stubs.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_command_test(test_portal_asset_cache bash ${PROJECT_SOURCE_DIR}/tests/test_portal_asset_cache.sh)
 
 add_host_legacy_test(test_timer_binding_target
     SOURCES test_timer_binding_target.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_engine.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp

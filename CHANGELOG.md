@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Portal updates no longer use cached JavaScript or CSS from an earlier firmware**: the fresh portal shell now references static assets by firmware version, while those versioned assets remain cached for repeat visits.
 * **Pad image-source passwords no longer leak through the portal API**: `GET /api/pad` now removes each button's HTTP password and supplies a stored-state marker instead. Saving an unchanged button retains its stored password, while a non-empty replacement still takes effect.
 
 ## [1.28.0] - 2026-09-07
