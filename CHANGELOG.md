@@ -16,15 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **Correlated e-paper wake diagnostics**: e-paper devices now publish one non-retained MQTT event per wake at `devices/<name>/epaper/wake`. Every event includes its RTC-retained wake ID, wake reason, refresh outcome, radio context, image source, and a correlated breakdown of WiFi, refresh, fetch, panel-draw, NTP, and pre-telemetry timings. Home Assistant can archive the raw events through its File integration; the e-paper guide documents the working append-mode automation.
+* **E-paper wake diagnostics**: non-retained MQTT events at `devices/<name>/epaper/wake` provide correlated WiFi, image, panel, NTP, MQTT, and end-to-end timing for each wake. Events include stable session and wake identifiers, refresh outcome, radio context, image source, and journal status. Home Assistant can archive the raw events through its File integration.
+* **E-paper offline diagnostics**: a 16-record RTC journal retains failed, interrupted, and unconfirmed MQTT wake events for oldest-first delivery after connectivity returns. Deferred events preserve their original refresh outcome and report journal overflow.
 
 ### Changed
 
-* **E-paper Home Assistant timing telemetry is intentionally compact**: retained state now exposes one `wake_loop_ms` dashboard metric. The detailed timing discovery entities are explicitly removed on the next cold boot, avoiding stale Home Assistant entities while per-stage diagnostics remain available in the wake event.
+* **E-paper Home Assistant telemetry**: retained state exposes `wake_loop_ms` as the routine dashboard metric, while complete diagnostic timing is available from the wake-event archive. Retired detailed timing entities are removed automatically.
 
 ### Fixed
 
-* **E-paper dependency stalls no longer extend wakes unpredictably**: MQTT connection attempts apply the five-second caller budget to the socket timeout. reTerminal next-image requests and stalled response bodies time out after seven seconds, and only explicit transient service responses (`405` or `5xx`) can make one additional request. Timing state is reset and finalized before telemetry publishes, so each reported wake now contains a self-consistent current-cycle snapshot.
+* **E-paper wake duration and MQTT behavior**: MQTT connection attempts, reTerminal image requests, and stalled response bodies have bounded timeouts. The e-paper telemetry connection avoids availability, discovery, health, and control traffic, reducing radio-on time during duty-cycle wakes.
 
 ## [1.28.0] - 2026-09-08
 

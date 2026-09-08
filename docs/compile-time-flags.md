@@ -736,6 +736,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_timing.cpp
   - src/app/device_classes/epaper/epaper_timing.h
   - src/app/device_classes/epaper_device_class.cpp
+  - src/app/mqtt_manager.cpp
   - src/app/portal_components.cpp
 - **HAS_EPAPER_FRONTLIGHT**
   - src/app/board_config.h

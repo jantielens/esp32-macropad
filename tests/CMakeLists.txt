@@ -444,6 +444,12 @@ add_host_gtest(test_epaper_next_client_logic
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_transport_crc32.cpp
 )
 
+add_host_gtest(test_epaper_wake_journal
+        test_epaper_wake_journal.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_timing.cpp
+)
+target_compile_definitions(test_epaper_wake_journal PRIVATE HAS_EPAPER=1)
+
 add_host_gtest(test_mp3_metadata
     test_mp3_metadata.cpp
     ${PROJECT_SOURCE_DIR}/src/app/mp3_metadata.cpp

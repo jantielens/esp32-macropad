@@ -644,7 +644,11 @@ static bool epaper_ntp_stop() {
 // block plus the splash decisions that lived in app.ino).
 // ---------------------------------------------------------------------------
 static bool run_duty_cycle_hook(DeviceConfig *config) {
-		epaper_timing_begin_wake();
+		const bool is_cold_boot = !power_manager_is_deep_sleep_wake();
+		const bool is_button_wake = epaper_button_is_button_wake();
+		const EpaperWakeReason wake_reason = is_button_wake ? EpaperWakeReason::Button :
+				is_cold_boot ? EpaperWakeReason::ColdBoot : EpaperWakeReason::Timer;
+		epaper_timing_begin_wake(wake_reason);
 		// Splash policy (moved from app.ino):
 		//   - Cold boot: always show the boot splash so a freshly plugged-in
 		//     device gets proof of life.
@@ -653,8 +657,6 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		//   - Button wake on a slow panel: skip; the extra full refresh would
 		//     dominate the time-to-new-image budget.
 		//   - Timer wake: never any splash -- periodic refreshes are silent.
-		const bool is_cold_boot = !power_manager_is_deep_sleep_wake();
-		const bool is_button_wake = epaper_button_is_button_wake();
 		const bool show_boot_splash    = is_cold_boot;
 		const bool show_manual_refresh = (EPAPER_FAST_REFRESH && is_button_wake);
 		if (show_boot_splash || show_manual_refresh) {
@@ -681,6 +683,9 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				epaper_screen_low_battery(mv, pct);
 				epaper_driver_display();
 				epaper_driver_sleep();
+				epaper_timing_last.total_active_ms = millis();
+				epaper_wake_journal_checkpoint(EpaperWakeStage::Battery);
+				epaper_wake_journal_finalize(EpaperWakeResult::LowBattery, mv, 0);
 				power_manager_sleep_for(600);
 		};
 
@@ -729,6 +734,8 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						config->wifi_backoff_max_seconds);
 				epaper_timing_last.boot_to_wifi_ms = millis();
 				epaper_timing_last.total_active_ms = millis();
+				epaper_wake_journal_checkpoint(EpaperWakeStage::Wifi);
+				epaper_wake_journal_finalize(EpaperWakeResult::WifiFailed, 0, 0);
 				power_manager_sleep_for(backoff);
 				return false;
 		}
@@ -758,6 +765,56 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		const uint32_t t_wifi_done = millis();
 		epaper_timing_last.boot_to_wifi_ms = t_wifi_done;
 		epaper_timing_last.wifi_rssi = (int16_t)WiFi.RSSI();
+		epaper_wake_journal_checkpoint(EpaperWakeStage::Wifi);
+
+#if HAS_MQTT
+		auto publish_wake_telemetry = [&](const EpaperRefreshOutcome *outcome) {
+			if (strlen(config->mqtt_host) == 0) {
+				epaper_timing_last.draw_to_mqtt_ms = 0;
+				return;
+			}
+
+			const uint32_t mqtt_start = millis();
+			uint32_t mqtt_connect_ms = 0;
+			char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
+			config_manager_sanitize_device_name(config->device_name, sanitized, sizeof(sanitized));
+			mqtt_manager.begin(config, config->device_name, sanitized);
+			epaper_wake_journal_checkpoint(EpaperWakeStage::MqttConnect);
+			if (!mqtt_manager.connectBlockingMinimal(5000)) {
+				mqtt_connect_ms = millis() - mqtt_start;
+				LOGW("Epaper", "MQTT unreachable (5s timeout); retaining wake diagnostics");
+				epaper_timing_last.total_active_ms = millis();
+				epaper_wake_journal_checkpoint(EpaperWakeStage::MqttConnect);
+				epaper_wake_journal_mark_delivery_failed(EpaperWakeResult::MqttConnectFailed);
+				epaper_timing_last.draw_to_mqtt_ms = mqtt_connect_ms;
+				epaper_wake_journal_complete_delivery(mqtt_connect_ms, 0, millis());
+				return;
+			}
+			mqtt_connect_ms = millis() - mqtt_start;
+
+			if (!epaper_mqtt_discovery_already_published()) {
+				if (epaper_mqtt_publish_ha_discovery(mqtt_manager)) {
+					epaper_mqtt_mark_discovery_published();
+				} else {
+					LOGW("Epaper", "Discovery publish incomplete; retrying next wake");
+				}
+			}
+			if (outcome) epaper_mqtt_publish_state(*outcome, &epaper_timing_last);
+
+			epaper_wake_journal_checkpoint(EpaperWakeStage::MqttPublish);
+			if (epaper_mqtt_prepare_wake_delivery()) {
+				epaper_mqtt_publish_pending_wakes(epaper_timing_last.wake_id);
+			} else {
+				LOGW("Epaper", "Wake delivery unconfirmed; retaining journal record");
+				epaper_wake_journal_mark_delivery_failed(EpaperWakeResult::MqttPublishUnconfirmed);
+			}
+			mqtt_manager.disconnect();
+			const uint32_t mqtt_total_ms = millis() - mqtt_start;
+			epaper_timing_last.draw_to_mqtt_ms = mqtt_total_ms;
+			epaper_wake_journal_complete_delivery(mqtt_connect_ms,
+					mqtt_total_ms - mqtt_connect_ms, millis());
+		};
+#endif
 
 		// A WAKE-button press always wins over the schedule: the user is
 		// actively looking at the panel and expects fresh content, so a button
@@ -776,6 +833,11 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				if (!epaper_schedule_should_refresh(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr))) {
 						uint32_t sleep_s = epaper_schedule_seconds_to_next(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr));
 						LOGI("Epaper", "Schedule: disabled at this hour; sleeping %u seconds", sleep_s);
+						epaper_timing_last.total_active_ms = millis();
+						epaper_wake_journal_finalize(EpaperWakeResult::ScheduleSuppressed, 0, 0);
+						#if HAS_MQTT
+						publish_wake_telemetry(nullptr);
+						#endif
 						power_manager_sleep_for(sleep_s);
 						return true;
 				}
@@ -796,6 +858,12 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				if (g_epaper_config.service_url[0] == '\0' ||
 						g_epaper_config.service_token[0] == '\0') {
 						LOGW("Epaper", "Refresh skipped: Service URL or token not configured");
+						epaper_timing_last.total_active_ms = millis();
+						epaper_wake_journal_checkpoint(EpaperWakeStage::Refresh);
+						epaper_wake_journal_finalize(EpaperWakeResult::SourceUnconfigured, 0, 0);
+						#if HAS_MQTT
+						publish_wake_telemetry(nullptr);
+						#endif
 						power_manager_sleep_for(g_epaper_config.service_interval_seconds);
 						return true;
 				}
@@ -803,6 +871,12 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		} else {
 				if (!epaper_resolve_current_url()) {
 						LOGW("Epaper", "Refresh skipped: no carousel URL configured");
+						epaper_timing_last.total_active_ms = millis();
+						epaper_wake_journal_checkpoint(EpaperWakeStage::Refresh);
+						epaper_wake_journal_finalize(EpaperWakeResult::SourceUnconfigured, 0, 0);
+						#if HAS_MQTT
+						publish_wake_telemetry(nullptr);
+						#endif
 						power_manager_sleep_for(kDefaultCarouselDurationS);
 						return true;
 				}
@@ -850,25 +924,19 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 
 		epaper_timing_last.total_active_ms = millis();
+		epaper_wake_journal_checkpoint(defer_ntp_resync ? EpaperWakeStage::Ntp : EpaperWakeStage::Refresh);
+		EpaperWakeResult wake_result = EpaperWakeResult::Updated;
+		switch (outcome.result) {
+				case EpaperRefreshResult::Skipped:     wake_result = EpaperWakeResult::Skipped; break;
+				case EpaperRefreshResult::FailedFetch: wake_result = EpaperWakeResult::FailedFetch; break;
+				case EpaperRefreshResult::FailedDraw:  wake_result = EpaperWakeResult::FailedDraw; break;
+				case EpaperRefreshResult::Disabled:    wake_result = EpaperWakeResult::SourceUnconfigured; break;
+				case EpaperRefreshResult::Updated:     break;
+		}
+		epaper_wake_journal_finalize(wake_result, outcome.battery_mv, outcome.sidecar_http_status);
 
 #if HAS_MQTT
-		if (strlen(config->mqtt_host) > 0) {
-			const uint32_t mqtt_start = millis();
-			char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
-			config_manager_sanitize_device_name(config->device_name, sanitized, sizeof(sanitized));
-			mqtt_manager.begin(config, config->device_name, sanitized);
-			if (mqtt_manager.connectAndPublishDiscoveryBlocking(5000)) {
-				epaper_mqtt_publish_state(outcome, &epaper_timing_last);
-				const char* wake_reason = button_wake ? "button" : cold_boot ? "cold_boot" : "timer";
-				epaper_mqtt_publish_wake(outcome, epaper_timing_last, wake_reason);
-			} else {
-				LOGW("Epaper", "MQTT unreachable (5s timeout); skipping telemetry");
-			}
-			mqtt_manager.disconnect();
-			epaper_timing_last.draw_to_mqtt_ms = millis() - mqtt_start;
-		} else {
-			epaper_timing_last.draw_to_mqtt_ms = 0;
-		}
+		publish_wake_telemetry(&outcome);
 #else
 		epaper_timing_last.draw_to_mqtt_ms = 0;
 #endif
@@ -935,8 +1003,11 @@ static void mqtt_discovery_hook(MqttManager &mqtt, bool *skip_generic) {
 		}
 		// First publish in this power cycle -- emit our entities now and mark
 		// the RTC flag. Generic core discovery still runs on this boot.
-		epaper_mqtt_publish_ha_discovery(mqtt);
-		epaper_mqtt_mark_discovery_published();
+		if (epaper_mqtt_publish_ha_discovery(mqtt)) {
+			epaper_mqtt_mark_discovery_published();
+		} else {
+			LOGW("MQTT", "E-paper discovery incomplete; retrying on next connection");
+		}
 }
 #endif
 

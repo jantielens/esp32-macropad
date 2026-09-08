@@ -340,8 +340,10 @@ When MQTT is configured, every wake updates a compact retained JSON document at
 The `wake_loop_ms` value is set before telemetry begins, so it always describes
 the current wake through panel work and any deferred NTP work. MQTT connection
 and body-request waits are bounded to prevent a failed dependency from keeping
-the radio awake for an extended period. A clean DISCONNECT is sent before deep
-sleep to avoid spurious LWT messages on the broker.
+the radio awake for an extended period. E-paper wakes use a minimal MQTT
+connection with no LWT, availability message, generic discovery, health
+publish, or control subscriptions, then send a clean `DISCONNECT` before deep
+sleep.
 
 The device also publishes one non-retained, correlated diagnostic event per
 wake at `<base>/epaper/wake`. This topic is intended for MQTT Explorer,
@@ -349,9 +351,14 @@ automations, or a time-series sink rather than Home Assistant sensor history:
 
 ```json
 {
+  "session_id": 1234567890123456789,
   "wake_id": 1842,
   "wake_reason": "timer",
   "result": "updated",
+  "last_stage": "mqtt_publish",
+  "delivery": "live",
+  "reported_by_wake_id": 1842,
+  "battery_mv": 3870,
   "sidecar_http_status": 200,
   "crc_fetch_attempts": 1,
   "wifi_rssi": -62,
@@ -368,11 +375,57 @@ automations, or a time-series sink rather than Home Assistant sensor history:
 }
 ```
 
+The event is journaled in RTC memory before WiFi work begins. Before publishing
+the event, the device subscribes to its own wake topic and waits up to 250 ms
+for the broker to echo the matching `session_id` and `wake_id`. A record is
+removed only after that echo arrives. When a wake cannot connect to WiFi or
+MQTT, or delivery is unconfirmed, its record remains pending and is published
+oldest-first during the next wake that does connect. Deferred records set
+`delivery` to `deferred` and identify the reporting wake with
+`reported_by_wake_id`.
+
+The event can also contain `previous_delivery`, which reports the exact final
+timing of the preceding wake after its MQTT connection, event publish, and
+clean disconnect completed. It contains the preceding `session_id` and
+`wake_id`, plus `mqtt_connect_ms`, `mqtt_publish_ms`, and `total_active_ms`.
+These values are necessarily reported one wake later because sending the
+current event precedes measuring its own final MQTT work. The block is absent
+on the first wake after RTC state is initialized.
+
+An MQTT disconnect after the broker receives an event but before its echo
+reaches the device can produce a duplicate event on the next wake. Archive
+consumers should therefore de-duplicate records by device topic, `session_id`,
+and `wake_id`. The random `session_id` persists through deep-sleep wakes and
+changes after RTC state is reset, so a wake counter restart after full power
+loss does not collide with archived records.
+
+For example, a previous wake that refreshed the panel but could not connect to
+the broker is reported later as:
+
+```json
+{
+  "session_id": 1234567890123456789,
+  "wake_id": 1841,
+  "result": "mqtt_connect_failed",
+  "refresh_result": "updated",
+  "last_stage": "mqtt_connect",
+  "delivery": "deferred",
+  "reported_by_wake_id": 1842
+}
+```
+
+The journal retains 16 records. An unexpected reset leaves the prior record as
+`result: "interrupted"` at its last completed stage. If more than 16 wakes are
+pending, the oldest records are discarded and the next published event includes
+`dropped_wake_records`, making the lost history explicit. A complete power loss
+can clear RTC memory, so it cannot be recovered without flash writes.
+
 ### Home Assistant Wake Archive
 
 Home Assistant can archive the non-retained wake events to a file without a
 custom integration or YAML notification platform. This preserves one complete
-diagnostic record for every wake, including correlated stage timings.
+diagnostic record for every reported wake, including correlated stage timings
+and deferred records that were offline when they occurred.
 
 1. In **Settings > Devices & services**, add the **File** integration.
 2. Configure it as a notification entity writing to
