@@ -14,13 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-* **Image Library portal workflow**: display builds can browse bounded local `/images` folders, upload or delete JPEG and PNG files up to 4 MiB with traversal-safe paths and atomic publication, configure slideshow folders and intervals, and select local button backgrounds or the `[image:current]` binding with cover or letterbox scaling.
-* **Firmware installer page**: board cards now show their distinguishing firmware capabilities alongside hardware specifications, searchable by capability. Cards group hardware, enabled features, and downloadable artifacts into labeled rows, with tooltips that explain each feature.
-* **Firmware installer update flow**: the Wi-Fi update path now clearly requires an already-installed firmware image, while new or recovery devices are directed to USB WebSerial flashing. Optional device authentication is collapsed by default.
-* **Extension catalog**: each Extension now has one card with P4 and S3 downloads, an optional GitHub README link, and a collapsed usage section.
-
 ## [1.30.0] - 2026-09-09
 
 ### Added
@@ -28,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **E-paper timer wake protection**: scheduled image refreshes now apply configurable overall, WiFi, image-download, and MQTT time limits. When an interruptible network stage exceeds its limit, the device keeps the existing panel image, records the outcome in its RTC journal, and returns to deep sleep. Button and cold-boot refreshes retain their existing best-effort behavior, and an active panel refresh is never interrupted.
 * **E-paper wake budget controls**: the **Images & Schedule** portal page now provides advanced controls for expected stage times, enforced limits, the total timer-wake limit, and an optional cutoff retry interval. Defaults are based on initial field telemetry and can be tuned without reflashing.
 * **E-paper budget telemetry**: wake events now report the active overall and per-stage limits, timing targets, remaining budget, and cutoff cause, making tuning possible from retained diagnostic archives.
+
+### Changed
+
+* **Image Library portal workflow**: display builds can browse bounded local `/images` folders, upload or delete JPEG and PNG files up to 4 MiB with traversal-safe paths and atomic publication, configure slideshow folders and intervals, and select local button backgrounds or the `[image:current]` binding with cover or letterbox scaling.
+* **Firmware installer page**: board cards now show their distinguishing firmware capabilities alongside hardware specifications, searchable by capability. Cards group hardware, enabled features, and downloadable artifacts into labeled rows, with tooltips that explain each feature.
+* **Firmware installer update flow**: the Wi-Fi update path now clearly requires an already-installed firmware image, while new or recovery devices are directed to USB WebSerial flashing. Optional device authentication is collapsed by default.
+* **Extension catalog**: each Extension now has one card with P4 and S3 downloads, an optional GitHub README link, and a collapsed usage section.
 
 ## [1.29.0] - 2026-09-08
 

@@ -782,11 +782,22 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_tile_builder.cpp
   - src/app/web_portal_firmware.cpp
 - **HAS_IMAGE_LIBRARY**
+  - src/app/actions/image_next_action.cpp
+  - src/app/actions/image_previous_action.cpp
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
   - src/app/board_config.h
+  - src/app/components/image_library_component.cpp
+  - src/app/image_binding.cpp
+  - src/app/image_binding.h
   - src/app/image_decoder.cpp
   - src/app/image_decoder.h
+  - src/app/image_library_config.cpp
+  - src/app/image_library_config.h
+  - src/app/image_library_runtime.cpp
+  - src/app/image_library_runtime.h
+  - src/app/local_image_loader.cpp
+  - src/app/local_image_loader.h
   - src/app/pad_validate.cpp
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
