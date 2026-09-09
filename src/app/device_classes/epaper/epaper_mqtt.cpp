@@ -3,6 +3,7 @@
 #if HAS_EPAPER && HAS_MQTT
 
 #include "epaper_battery.h"
+#include "epaper_wake_budget.h"
 #include "ha_discovery.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
@@ -52,6 +53,7 @@ static const char* wake_result_to_str(EpaperWakeResult result) {
 				case EpaperWakeResult::LowBattery:        return "low_battery";
 				case EpaperWakeResult::ScheduleSuppressed:return "schedule_suppressed";
 				case EpaperWakeResult::SourceUnconfigured:return "source_unconfigured";
+				case EpaperWakeResult::BudgetExceeded:     return "budget_exceeded";
 				case EpaperWakeResult::Interrupted:       return "interrupted";
 		}
 		return "unknown";
@@ -75,6 +77,17 @@ static const char* wake_stage_to_str(EpaperWakeStage stage) {
 				case EpaperWakeStage::Ntp:         return "ntp";
 				case EpaperWakeStage::MqttConnect: return "mqtt_connect";
 				case EpaperWakeStage::MqttPublish: return "mqtt_publish";
+		}
+		return "unknown";
+}
+
+static const char* budget_cut_to_str(uint8_t cut) {
+		switch (static_cast<EpaperWakeBudgetCut>(cut)) {
+				case EpaperWakeBudgetCut::None:    return "none";
+				case EpaperWakeBudgetCut::Wifi:    return "wifi_budget";
+				case EpaperWakeBudgetCut::Fetch:   return "fetch_budget";
+				case EpaperWakeBudgetCut::Mqtt:    return "mqtt_budget";
+				case EpaperWakeBudgetCut::Overall: return "overall_budget";
 		}
 		return "unknown";
 }
@@ -163,7 +176,7 @@ static bool publish_wake_record(const EpaperWakeRecord& record,
 		char topic[160];
 		snprintf(topic, sizeof(topic), "%s/epaper/wake", mqtt_manager.baseTopic());
 
-		StaticJsonDocument<768> doc;
+		StaticJsonDocument<896> doc;
 		doc["session_id"] = record.timing.session_id;
 		doc["wake_id"] = record.timing.wake_id;
 		doc["wake_reason"] = wake_reason_to_str(record.wake_reason);
@@ -197,6 +210,17 @@ static bool publish_wake_record(const EpaperWakeRecord& record,
 		stages["panel_draw"] = record.timing.draw_ms;
 		stages["ntp"] = record.timing.ntp_sync_ms;
 		stages["active_before_telemetry"] = record.timing.total_active_ms;
+		JsonObject budget = doc.createNestedObject("budget");
+		budget["overall_limit_ms"] = record.timing.overall_budget_ms;
+		budget["elapsed_ms"] = record.timing.budget_elapsed_ms;
+		budget["remaining_ms"] = record.timing.budget_remaining_ms;
+		budget["wifi_limit_ms"] = record.timing.wifi_limit_ms;
+		budget["fetch_limit_ms"] = record.timing.fetch_limit_ms;
+		budget["mqtt_limit_ms"] = record.timing.mqtt_limit_ms;
+		budget["wifi_target_ms"] = record.timing.wifi_target_ms;
+		budget["fetch_target_ms"] = record.timing.fetch_target_ms;
+		budget["mqtt_target_ms"] = record.timing.mqtt_target_ms;
+		budget["cut"] = budget_cut_to_str(record.timing.budget_cut);
 
 		return mqtt_manager.publishJson(topic, doc, false /*retained*/);
 }

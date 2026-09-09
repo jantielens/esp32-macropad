@@ -14,6 +14,9 @@
 #include "psram_json_allocator.h"
 #include "widgets/widget_registry.h"
 #include "action_validate.h"
+#if HAS_IMAGE_LIBRARY
+#include "image_library.h"
+#endif
 
 #include <ctype.h>
 #include <stdio.h>
@@ -171,6 +174,15 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     if ((e = check_max(b, "border_width", CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
     if ((e = check_max(b, "corner_radius",CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
     if ((e = check_max(b, "content_pad",  CONFIG_BINDABLE_SHORT_LEN, LEN_MSG_SHORT))) return e;
+    if ((e = check_max(b, "bg_image_path", CONFIG_BG_IMAGE_PATH_MAX_LEN,
+                       "bg_image_path too long (max 191 chars)"))) return e;
+#if HAS_IMAGE_LIBRARY
+    const char* bg_image_path = b["bg_image_path"] | "";
+    if (bg_image_path[0] && !strchr(bg_image_path, '[') &&
+        !ImageLibraryCatalog::is_image_path(bg_image_path)) {
+        return "bg_image_path must be a canonical image library path or binding";
+    }
+#endif
     if (b.containsKey("confirm_text") && !b["confirm_text"].is<const char*>()) return "confirm_text must be a string";
     if ((e = check_max(b, "confirm_text", CONFIG_CONFIRM_TEXT_MAX_LEN, LEN_MSG_CONFIRM))) return e;
     if (b.containsKey("confirm") && !b["confirm"].is<bool>()) return "confirm must be boolean";

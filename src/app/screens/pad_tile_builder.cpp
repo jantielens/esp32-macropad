@@ -45,12 +45,16 @@ void PadScreen::clearTiles() {
             tiles[i].widget_type->destroyUI(&tiles[i].widget_state);
             tiles[i].widget_type = nullptr;
         }
-#if HAS_IMAGE_FETCH
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
         // Cancel fetch slot first (stops background task from touching buffers)
+#if HAS_IMAGE_FETCH
         if (tiles[i].image_slot != IMAGE_SLOT_INVALID) {
             image_fetch_cancel(tiles[i].image_slot);
             tiles[i].image_slot = IMAGE_SLOT_INVALID;
         }
+#endif
+#if HAS_IMAGE_LIBRARY
+#endif
 #endif
         // Delete LVGL objects before freeing pixel data they reference
         if (tiles[i].tap_flash_timer) {
@@ -67,8 +71,23 @@ void PadScreen::clearTiles() {
         }
 #if HAS_IMAGE_FETCH
         tiles[i].bg_image = nullptr;
-        // Pixel data is owned by image_fetch's lvgl_buf (zero-copy);
-        // image_fetch_cancel() above releases it.
+#endif
+#if HAS_IMAGE_LIBRARY
+    tiles[i].local_bg_image = nullptr;
+    tiles[i].local_image_template[0] = '\0';
+    tiles[i].local_image_path[0] = '\0';
+    memset(&tiles[i].local_img_dsc, 0, sizeof(tiles[i].local_img_dsc));
+        if (tiles[i].local_image_slot != LOCAL_IMAGE_SLOT_INVALID) {
+            local_image_loader_cancel(tiles[i].local_image_slot);
+            tiles[i].local_image_slot = LOCAL_IMAGE_SLOT_INVALID;
+        }
+        if (tiles[i].local_image_pending_slot != LOCAL_IMAGE_SLOT_INVALID) {
+            local_image_loader_cancel(tiles[i].local_image_pending_slot);
+            tiles[i].local_image_pending_slot = LOCAL_IMAGE_SLOT_INVALID;
+        }
+#endif
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
+        // Pixel data is owned by the image loader's LVGL buffer.
         memset(&tiles[i].img_dsc, 0, sizeof(tiles[i].img_dsc));
 #endif
     }
@@ -553,17 +572,48 @@ void PadScreen::buildTiles() {
             btnStateBindingCount++;
         }
 
-#if HAS_IMAGE_FETCH
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
         // Request background image fetch if URL is configured
+#if HAS_IMAGE_FETCH
         tile.bg_image = nullptr;
         tile.image_slot = IMAGE_SLOT_INVALID;
+#endif
+#if HAS_IMAGE_LIBRARY
+        tile.local_bg_image = nullptr;
+        tile.local_image_slot = LOCAL_IMAGE_SLOT_INVALID;
+        tile.local_image_pending_slot = LOCAL_IMAGE_SLOT_INVALID;
+        strlcpy(tile.local_image_template, bcfg.bg_image_path, sizeof(tile.local_image_template));
+        tile.local_image_path[0] = '\0';
+        tile.local_image_scale_mode = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
+        tile.local_image_letterbox_color = lv_color_to_u16(rgb_to_lv(bg_def));
+        memset(&tile.local_img_dsc, 0, sizeof(tile.local_img_dsc));
+#endif
         memset(&tile.img_dsc, 0, sizeof(tile.img_dsc));
 
+#if HAS_IMAGE_LIBRARY
+        if (bcfg.bg_image_path[0] && !binding_template_has_bindings(bcfg.bg_image_path) &&
+            ImageLibraryCatalog::is_image_path(bcfg.bg_image_path)) {
+            tile.local_image_slot = local_image_loader_request(
+                bcfg.bg_image_path, r.w, r.h, tile.local_image_scale_mode,
+                tile.local_image_letterbox_color);
+            if (tile.local_image_slot != LOCAL_IMAGE_SLOT_INVALID) {
+                tile.local_bg_image = lv_image_create(obj);
+                lv_obj_set_size(tile.local_bg_image, r.w, r.h);
+                lv_obj_set_align(tile.local_bg_image, LV_ALIGN_CENTER);
+                lv_obj_clear_flag(tile.local_bg_image, LV_OBJ_FLAG_CLICKABLE);
+                lv_obj_move_to_index(tile.local_bg_image, 0);
+                strlcpy(tile.local_image_path, bcfg.bg_image_path, sizeof(tile.local_image_path));
+                LOGD(TAG, "Tile %u: local image slot %d for %.40s", i, tile.local_image_slot, bcfg.bg_image_path);
+            }
+        }
+#endif
+
+#if HAS_IMAGE_FETCH
         if (bcfg.bg_image_url[0]) {
             ImageScaleMode sm = bcfg.bg_image_letterbox ? IMAGE_SCALE_LETTERBOX : IMAGE_SCALE_COVER;
             tile.image_slot = image_fetch_request(
                 bcfg.bg_image_url, bcfg.bg_image_user, bcfg.bg_image_password,
-                r.w, r.h, bcfg.bg_image_interval_ms, sm);
+                r.w, r.h, bcfg.bg_image_interval_ms, sm, lv_color_to_u16(rgb_to_lv(bg_def)));
 
             if (tile.image_slot != IMAGE_SLOT_INVALID) {
                 // Create LVGL image widget as background (behind labels)
@@ -572,11 +622,18 @@ void PadScreen::buildTiles() {
                 lv_obj_set_align(tile.bg_image, LV_ALIGN_CENTER);
                 lv_obj_clear_flag(tile.bg_image, LV_OBJ_FLAG_CLICKABLE);
                 // Move to back so labels render on top
-                lv_obj_move_to_index(tile.bg_image, 0);
+                lv_obj_move_to_index(tile.bg_image,
+#if HAS_IMAGE_LIBRARY
+                                     tile.local_bg_image ? 1 : 0
+#else
+                                     0
+#endif
+                );
 
                 LOGD(TAG, "Tile %u: image slot %d for %.40s", i, tile.image_slot, bcfg.bg_image_url);
             }
         }
+#endif
 #endif
 
         // Tap overlay — semi-transparent sheet shown briefly on press.

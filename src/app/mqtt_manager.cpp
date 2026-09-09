@@ -100,13 +100,18 @@ bool MqttManager::connectBlockingMinimal(uint32_t timeout_ms) {
 		_client.setServer(_config->mqtt_host, resolvedPort());
 		const uint16_t socket_timeout_s = (uint16_t)((timeout_ms + 999) / 1000);
 		_client.setSocketTimeout(socket_timeout_s > 0 ? socket_timeout_s : 1);
+		_net.setTimeout(timeout_ms);
 		installCallback();
 
 		const uint32_t start = millis();
 		while (!_client.connected() && (millis() - start) < timeout_ms) {
 			if (attemptConnectWithLWT(false, true)) return true;
+			if ((millis() - start) >= timeout_ms) break;
 			LOGW("MQTT", "Minimal connect attempt failed (state %d)", _client.state());
-			delay(250);
+			const uint32_t elapsed_ms = millis() - start;
+			const uint32_t remaining_ms = elapsed_ms >= timeout_ms ? 0 : timeout_ms - elapsed_ms;
+			if (remaining_ms == 0) break;
+			delay(remaining_ms < 250 ? remaining_ms : 250);
 		}
 		LOGW("MQTT", "Minimal connect: broker unreachable after %ums", (unsigned)timeout_ms);
 		return false;

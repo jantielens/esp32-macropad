@@ -1,6 +1,6 @@
 #include "image_decoder.h"
 
-#if HAS_IMAGE_FETCH
+#if HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH
 
 #include "image_rgba_source.h"
 #include "log_manager.h"
@@ -30,6 +30,10 @@ static void* psram_alloc(size_t bytes) {
     return p;
 }
 
+static void fill_rgb565(uint16_t* pixels, size_t count, uint16_t color) {
+    for (size_t index = 0; index < count; ++index) pixels[index] = color;
+}
+
 // ============================================================================
 // ESP32-P4: Hardware JPEG decoder + PPA scaling
 // ============================================================================
@@ -50,8 +54,8 @@ static void* psram_alloc(size_t bytes) {
 // If no such m exists (unusual source/target ratio), falls back to SW.
 //
 // Letterbox scale: picks the largest m/16 ≤ min_scale so the scaled image
-// fits inside target dimensions.  Black padding is written by memset before
-// the PPA call, so the output buffer is always fully initialised.
+// fits inside target dimensions. Caller-provided padding fills the output
+// before the PPA call, so the buffer is always fully initialised.
 // ============================================================================
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
@@ -108,7 +112,11 @@ static bool hw_decode_jpeg(
     int aw = (int)info.width;
     int ah = (int)info.height;
     if (aw <= 0 || ah <= 0 || aw > 4096 || ah > 4096) {
-        LOGE(TAG, "HW JPEG: invalid dims %dx%d", aw, ah);
+        LOGD(TAG, "HW JPEG: unsupported header (%dx%d), using SW decoder", aw, ah);
+        return false;
+    }
+    if (info.sample_method == JPEG_DOWN_SAMPLING_GRAY) {
+        LOGD(TAG, "HW JPEG: grayscale unsupported, using SW decoder");
         return false;
     }
 
@@ -254,11 +262,11 @@ static bool ppa_cover_scale(
     return true;
 }
 
-// Letterbox scale via PPA SRM: scale whole source to fit, black bars fill rest.
+// Letterbox scale via PPA SRM: scale whole source to fit, padding fills the rest.
 static bool ppa_letterbox_scale(
     const uint16_t* src, int src_w, int src_h, int hw_src_w,
     uint16_t* out, size_t out_aligned_size,
-    uint16_t target_w, uint16_t target_h)
+    uint16_t target_w, uint16_t target_h, uint16_t letterbox_color)
 {
     float raw_scale_x = (float)target_w / src_w;
     float raw_scale_y = (float)target_h / src_h;
@@ -287,8 +295,7 @@ static bool ppa_letterbox_scale(
     int off_y = (target_h - out_block_h) / 2;
     float ppa_scale = found_m / 16.0f;
 
-    // Pre-fill with black so the bars are zeroed.
-    memset(out, 0, out_aligned_size);
+    fill_rgb565(out, out_aligned_size / sizeof(*out), letterbox_color);
 
     ppa_srm_oper_config_t srm = {};
     srm.in.buffer        = src;
@@ -328,14 +335,14 @@ static bool ppa_letterbox_scale(
 
 // Letterbox scale from HW-decoded RGB565 (with stride) using CPU bilinear.
 // Replaces PPA for letterbox because PPA's m/16 quantised scale undershoots
-// on most aspect ratios, producing unwanted black bars on both axes.
+// on most aspect ratios, producing unwanted padding on both axes.
 static bool letterbox_scale_rgb565_to_565(
     const uint16_t* src, int src_w, int src_h, int src_stride,
-    uint16_t* dst, int dst_w, int dst_h)
+    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
-    memset(dst, 0, (size_t)dst_w * dst_h * 2);
+    fill_rgb565(dst, (size_t)dst_w * dst_h, letterbox_color);
 
     float scale_x = (float)dst_w / (float)src_w;
     float scale_y = (float)dst_h / (float)src_h;
@@ -401,7 +408,7 @@ static bool hw_decode_and_scale(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
     ImageScaleMode scale_mode,
-    uint16_t* out, size_t out_aligned_size)
+    uint16_t* out, size_t out_aligned_size, uint16_t letterbox_color)
 {
     if (!hw_init_once()) return false;
 
@@ -419,7 +426,7 @@ static bool hw_decode_and_scale(
         // CPU bilinear for letterbox — PPA's m/16 quantisation undershoots
         // on most aspect ratios, producing unwanted bars on both axes.
         ok = letterbox_scale_rgb565_to_565(decoded, actual_w, actual_h, decoded_w,
-                                           out, target_w, target_h);
+                                           out, target_w, target_h, letterbox_color);
     } else {
         ok = ppa_cover_scale(decoded, actual_w, actual_h, decoded_w,
                               out, out_aligned_size, target_w, target_h);
@@ -586,18 +593,17 @@ static bool cover_scale_rgba8888_to_565(
 }
 
 // ============================================================================
-// Letterbox-mode scale: bilinear resample + fit inside + black bars → RGB565
+// Letterbox-mode scale: bilinear resample + fit inside + padding → RGB565
 // ============================================================================
 // Source is RGB888 (3 bytes/pixel, BGR byte order from tjpgd).
 
 static bool letterbox_scale_rgb888_to_565(
     const uint8_t* src, int src_w, int src_h,
-    uint16_t* dst, int dst_w, int dst_h)
+    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
-    // Pre-fill with black
-    memset(dst, 0, (size_t)dst_w * dst_h * 2);
+    fill_rgb565(dst, (size_t)dst_w * dst_h, letterbox_color);
 
     // Fit: use min scale so the entire image is visible
     float scale_x = (float)dst_w / (float)src_w;
@@ -656,11 +662,11 @@ static bool letterbox_scale_rgb888_to_565(
 // Same but for RGBA8888 source (4 bytes/pixel, alpha discarded)
 static bool letterbox_scale_rgba8888_to_565(
     const uint8_t* src, int src_w, int src_h, size_t src_stride,
-    uint16_t* dst, int dst_w, int dst_h)
+    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
-    memset(dst, 0, (size_t)dst_w * dst_h * 2);
+    fill_rgb565(dst, (size_t)dst_w * dst_h, letterbox_color);
 
     float scale_x = (float)dst_w / (float)src_w;
     float scale_y = (float)dst_h / (float)src_h;
@@ -797,7 +803,8 @@ static bool decode_jpeg(const uint8_t* data, size_t len,
     JDEC jd;
     JRESULT res = jd_prepare(&jd, jpeg_input_func, work, kWorkSize, &session);
     if (res != JDR_OK) {
-        LOGE(TAG, "JPEG prepare err=%d", (int)res);
+        LOGE(TAG, "JPEG prepare err=%d%s", (int)res,
+             res == JDR_FMT3 ? " (unsupported JPEG standard, such as progressive)" : "");
         heap_caps_free(work);
         return false;
     }
@@ -856,6 +863,21 @@ static bool decode_png(const uint8_t* data, size_t len,
     unsigned char* decoded = nullptr;
     unsigned pw = 0, ph = 0;
 
+    LodePNGState state;
+    lodepng_state_init(&state);
+    const unsigned inspect_err = lodepng_inspect(&pw, &ph, &state, data, len);
+    lodepng_state_cleanup(&state);
+    if (inspect_err) {
+        LOGE(TAG, "PNG header err=%u: %s", inspect_err, lodepng_error_text(inspect_err));
+        return false;
+    }
+    if (pw == 0 || ph == 0 || pw > 4096 || ph > 4096 ||
+        (uint64_t)pw * ph > IMAGE_LIBRARY_MAX_PNG_PIXELS) {
+        LOGE(TAG, "PNG source dimensions unsupported: %ux%u (limit %lu pixels)",
+             pw, ph, (unsigned long)IMAGE_LIBRARY_MAX_PNG_PIXELS);
+        return false;
+    }
+
     unsigned err = lodepng_decode32(&decoded, &pw, &ph, data, len);
     if (err) {
         LOGE(TAG, "PNG err=%u: %s", err, lodepng_error_text(err));
@@ -911,7 +933,7 @@ bool image_decode_to_rgb565(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
     ImageScaleMode scale_mode,
-    uint16_t** out_pixels, size_t* out_size)
+    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color)
 {
     if (out_pixels) *out_pixels = nullptr;
     if (out_size) *out_size = 0;
@@ -948,7 +970,7 @@ bool image_decode_to_rgb565(
 #ifdef CONFIG_IDF_TARGET_ESP32P4
         // Try hardware decode + PPA scale first; fall through to SW on failure.
         if (hw_decode_and_scale(data, len, target_w, target_h, scale_mode,
-                                out, out_aligned_size)) {
+                                out, out_aligned_size, letterbox_color)) {
             if (out_pixels) *out_pixels = out;
             if (out_size)   *out_size   = out_bytes;
             return true;
@@ -959,7 +981,8 @@ bool image_decode_to_rgb565(
         int src_w = 0, src_h = 0;
         if (decode_jpeg(data, len, &rgb888, &src_w, &src_h)) {
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
-                ok = letterbox_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
+                ok = letterbox_scale_rgb888_to_565(
+                    rgb888, src_w, src_h, out, target_w, target_h, letterbox_color);
             } else {
                 ok = cover_scale_rgb888_to_565(rgb888, src_w, src_h, out, target_w, target_h);
             }
@@ -972,7 +995,7 @@ bool image_decode_to_rgb565(
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
                 ok = letterbox_scale_rgba8888_to_565(
                     draw_buf->data, src_w, src_h, draw_buf->header.stride,
-                    out, target_w, target_h);
+                    out, target_w, target_h, letterbox_color);
             } else {
                 ok = cover_scale_rgba8888_to_565(
                     draw_buf->data, src_w, src_h, draw_buf->header.stride,
@@ -992,4 +1015,4 @@ bool image_decode_to_rgb565(
     return true;
 }
 
-#endif // HAS_IMAGE_FETCH
+#endif // HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH

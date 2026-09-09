@@ -21,6 +21,7 @@
 #include "epaper/epaper_schedule.h"
 #include "epaper/epaper_screens.h"
 #include "epaper/epaper_timing.h"
+#include "epaper/epaper_wake_budget.h"
 #include "log_manager.h"
 #include "power_config.h"
 #include "power_manager.h"
@@ -60,6 +61,14 @@ static const char *kKeySourceMode     = "ep_src_mode";
 static const char *kKeyServiceUrl     = "ep_svc_url";
 static const char *kKeyServiceToken   = "ep_token";
 static const char *kKeyServiceInt     = "ep_svc_int";
+static const char *kKeyWakeBudget     = "ep_wake_ms";
+static const char *kKeyWakeWifiTarget = "ep_w_tar";
+static const char *kKeyWakeWifiBudget = "ep_w_cap";
+static const char *kKeyWakeFetchTarget = "ep_f_tar";
+static const char *kKeyWakeFetchBudget = "ep_f_cap";
+static const char *kKeyWakeMqttTarget = "ep_m_tar";
+static const char *kKeyWakeMqttBudget = "ep_m_cap";
+static const char *kKeyWakeCutRetry   = "ep_cut_retry";
 static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
 static const char *kKeyCrcEnabled     = "ep_crc_en";
@@ -79,6 +88,29 @@ static_assert(sizeof("ep_src_mode") - 1 <= 14, "NVS key too long");
 static_assert(sizeof("ep_svc_url") - 1 <= 14, "NVS key too long");
 static_assert(sizeof("ep_token") - 1 <= 14, "NVS key too long");
 static_assert(sizeof("ep_svc_int") - 1 <= 14, "NVS key too long");
+
+static uint32_t clamp_wake_setting(uint32_t value, uint32_t minimum, uint32_t maximum) {
+		if (value < minimum) return minimum;
+		if (value > maximum) return maximum;
+		return value;
+}
+
+static void normalize_wake_settings() {
+		g_epaper_config.wake_budget_ms = clamp_wake_setting(g_epaper_config.wake_budget_ms, 5000, 60000);
+		g_epaper_config.wake_wifi_budget_ms = clamp_wake_setting(g_epaper_config.wake_wifi_budget_ms, 500, 30000);
+		g_epaper_config.wake_fetch_budget_ms = clamp_wake_setting(g_epaper_config.wake_fetch_budget_ms, 500, 30000);
+		g_epaper_config.wake_mqtt_budget_ms = clamp_wake_setting(g_epaper_config.wake_mqtt_budget_ms, 500, 30000);
+		g_epaper_config.wake_wifi_target_ms = clamp_wake_setting(g_epaper_config.wake_wifi_target_ms, 100, g_epaper_config.wake_wifi_budget_ms);
+		g_epaper_config.wake_fetch_target_ms = clamp_wake_setting(g_epaper_config.wake_fetch_target_ms, 100, g_epaper_config.wake_fetch_budget_ms);
+		g_epaper_config.wake_mqtt_target_ms = clamp_wake_setting(g_epaper_config.wake_mqtt_target_ms, 100, g_epaper_config.wake_mqtt_budget_ms);
+		g_epaper_config.wake_cutoff_retry_seconds = clamp_wake_setting(g_epaper_config.wake_cutoff_retry_seconds, 0, 3600);
+}
+
+static uint32_t epaper_config_uint(JsonObject &body, const char *key, uint32_t fallback) {
+		return body[key].is<const char*>()
+				? (uint32_t)strtoul(body[key].as<const char*>(), nullptr, 10)
+				: (uint32_t)(body[key] | fallback);
+}
 
 static bool epaper_service_supported() {
 #if defined(BOARD_RETERMINAL_E1003)
@@ -124,6 +156,12 @@ static uint32_t epaper_current_refresh_duration_seconds() {
 		return epaper_source_refresh_interval(g_epaper_config.source_mode,
 				g_epaper_config.service_interval_seconds,
 				epaper_current_slot_duration_seconds());
+}
+
+static uint32_t epaper_budget_cut_sleep_seconds() {
+		return g_epaper_config.wake_cutoff_retry_seconds > 0
+				? g_epaper_config.wake_cutoff_retry_seconds
+				: epaper_current_refresh_duration_seconds();
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +239,14 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.service_url[0] = '\0';
 		g_epaper_config.service_token[0] = '\0';
 		g_epaper_config.service_interval_seconds = kDefaultCarouselDurationS;
+		g_epaper_config.wake_budget_ms = EPAPER_TIMER_WAKE_BUDGET_MS;
+		g_epaper_config.wake_wifi_target_ms = EPAPER_WIFI_TARGET_MS;
+		g_epaper_config.wake_wifi_budget_ms = EPAPER_WIFI_BUDGET_MS;
+		g_epaper_config.wake_fetch_target_ms = EPAPER_FETCH_TARGET_MS;
+		g_epaper_config.wake_fetch_budget_ms = EPAPER_FETCH_BUDGET_MS;
+		g_epaper_config.wake_mqtt_target_ms = EPAPER_MQTT_TARGET_MS;
+		g_epaper_config.wake_mqtt_budget_ms = EPAPER_MQTT_BUDGET_MS;
+		g_epaper_config.wake_cutoff_retry_seconds = 0;
 		g_epaper_config.epaper_rotation = 0;
 		g_epaper_config.epaper_last_crc32 = 0;
 		g_epaper_config.epaper_crc32_enabled = false;
@@ -240,6 +286,15 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		if (g_epaper_config.service_interval_seconds == 0) {
 				g_epaper_config.service_interval_seconds = kDefaultCarouselDurationS;
 		}
+		g_epaper_config.wake_budget_ms = prefs.getUInt(kKeyWakeBudget, EPAPER_TIMER_WAKE_BUDGET_MS);
+		g_epaper_config.wake_wifi_target_ms = prefs.getUInt(kKeyWakeWifiTarget, EPAPER_WIFI_TARGET_MS);
+		g_epaper_config.wake_wifi_budget_ms = prefs.getUInt(kKeyWakeWifiBudget, EPAPER_WIFI_BUDGET_MS);
+		g_epaper_config.wake_fetch_target_ms = prefs.getUInt(kKeyWakeFetchTarget, EPAPER_FETCH_TARGET_MS);
+		g_epaper_config.wake_fetch_budget_ms = prefs.getUInt(kKeyWakeFetchBudget, EPAPER_FETCH_BUDGET_MS);
+		g_epaper_config.wake_mqtt_target_ms = prefs.getUInt(kKeyWakeMqttTarget, EPAPER_MQTT_TARGET_MS);
+		g_epaper_config.wake_mqtt_budget_ms = prefs.getUInt(kKeyWakeMqttBudget, EPAPER_MQTT_BUDGET_MS);
+		g_epaper_config.wake_cutoff_retry_seconds = prefs.getUInt(kKeyWakeCutRetry, 0);
+		normalize_wake_settings();
 
 		g_epaper_config.epaper_rotation = prefs.getUChar(kKeyRotation, 0);
 		if (g_epaper_config.epaper_rotation > 3) g_epaper_config.epaper_rotation = 0;
@@ -284,6 +339,14 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putString(kKeyServiceUrl, g_epaper_config.service_url);
 		prefs.putString(kKeyServiceToken, g_epaper_config.service_token);
 		prefs.putUInt(kKeyServiceInt, g_epaper_config.service_interval_seconds);
+		prefs.putUInt(kKeyWakeBudget, g_epaper_config.wake_budget_ms);
+		prefs.putUInt(kKeyWakeWifiTarget, g_epaper_config.wake_wifi_target_ms);
+		prefs.putUInt(kKeyWakeWifiBudget, g_epaper_config.wake_wifi_budget_ms);
+		prefs.putUInt(kKeyWakeFetchTarget, g_epaper_config.wake_fetch_target_ms);
+		prefs.putUInt(kKeyWakeFetchBudget, g_epaper_config.wake_fetch_budget_ms);
+		prefs.putUInt(kKeyWakeMqttTarget, g_epaper_config.wake_mqtt_target_ms);
+		prefs.putUInt(kKeyWakeMqttBudget, g_epaper_config.wake_mqtt_budget_ms);
+		prefs.putUInt(kKeyWakeCutRetry, g_epaper_config.wake_cutoff_retry_seconds);
 		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_rotation);
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_last_crc32);
 		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_crc32_enabled);
@@ -322,6 +385,14 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 				? "service" : "slot-carousel";
 		root["epaper_service_url"] = g_epaper_config.service_url;
 		root["epaper_service_interval_seconds"] = g_epaper_config.service_interval_seconds;
+		root["epaper_wake_budget_ms"] = g_epaper_config.wake_budget_ms;
+		root["epaper_wake_wifi_target_ms"] = g_epaper_config.wake_wifi_target_ms;
+		root["epaper_wake_wifi_budget_ms"] = g_epaper_config.wake_wifi_budget_ms;
+		root["epaper_wake_fetch_target_ms"] = g_epaper_config.wake_fetch_target_ms;
+		root["epaper_wake_fetch_budget_ms"] = g_epaper_config.wake_fetch_budget_ms;
+		root["epaper_wake_mqtt_target_ms"] = g_epaper_config.wake_mqtt_target_ms;
+		root["epaper_wake_mqtt_budget_ms"] = g_epaper_config.wake_mqtt_budget_ms;
+		root["epaper_wake_cutoff_retry_seconds"] = g_epaper_config.wake_cutoff_retry_seconds;
 		root["epaper_service_token_set"] = g_epaper_config.service_token[0] != '\0';
 		root["epaper_rotation"] = g_epaper_config.epaper_rotation;
 		root["epaper_crc32_enabled"] = g_epaper_config.epaper_crc32_enabled;
@@ -379,6 +450,15 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 				g_epaper_config.service_interval_seconds = interval > 0
 						? interval : kDefaultCarouselDurationS;
 		}
+			if (body.containsKey("epaper_wake_budget_ms")) g_epaper_config.wake_budget_ms = epaper_config_uint(body, "epaper_wake_budget_ms", EPAPER_TIMER_WAKE_BUDGET_MS);
+			if (body.containsKey("epaper_wake_wifi_target_ms")) g_epaper_config.wake_wifi_target_ms = epaper_config_uint(body, "epaper_wake_wifi_target_ms", EPAPER_WIFI_TARGET_MS);
+			if (body.containsKey("epaper_wake_wifi_budget_ms")) g_epaper_config.wake_wifi_budget_ms = epaper_config_uint(body, "epaper_wake_wifi_budget_ms", EPAPER_WIFI_BUDGET_MS);
+			if (body.containsKey("epaper_wake_fetch_target_ms")) g_epaper_config.wake_fetch_target_ms = epaper_config_uint(body, "epaper_wake_fetch_target_ms", EPAPER_FETCH_TARGET_MS);
+			if (body.containsKey("epaper_wake_fetch_budget_ms")) g_epaper_config.wake_fetch_budget_ms = epaper_config_uint(body, "epaper_wake_fetch_budget_ms", EPAPER_FETCH_BUDGET_MS);
+			if (body.containsKey("epaper_wake_mqtt_target_ms")) g_epaper_config.wake_mqtt_target_ms = epaper_config_uint(body, "epaper_wake_mqtt_target_ms", EPAPER_MQTT_TARGET_MS);
+			if (body.containsKey("epaper_wake_mqtt_budget_ms")) g_epaper_config.wake_mqtt_budget_ms = epaper_config_uint(body, "epaper_wake_mqtt_budget_ms", EPAPER_MQTT_BUDGET_MS);
+			if (body.containsKey("epaper_wake_cutoff_retry_seconds")) g_epaper_config.wake_cutoff_retry_seconds = epaper_config_uint(body, "epaper_wake_cutoff_retry_seconds", 0);
+			normalize_wake_settings();
 		if (body.containsKey("epaper_rotation")) {
 				uint8_t v = body["epaper_rotation"].is<const char*>()
 						? (uint8_t)atoi(body["epaper_rotation"].as<const char*>())
@@ -649,6 +729,21 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		const EpaperWakeReason wake_reason = is_button_wake ? EpaperWakeReason::Button :
 				is_cold_boot ? EpaperWakeReason::ColdBoot : EpaperWakeReason::Timer;
 		epaper_timing_begin_wake(wake_reason);
+		const EpaperWakeBudget wake_budget = epaper_wake_budget_begin(
+				wake_reason == EpaperWakeReason::Timer, g_epaper_config.wake_budget_ms);
+		epaper_timing_last.overall_budget_ms = wake_budget.overall_budget_ms;
+		epaper_timing_last.wifi_target_ms = g_epaper_config.wake_wifi_target_ms;
+		epaper_timing_last.fetch_target_ms = g_epaper_config.wake_fetch_target_ms;
+		epaper_timing_last.mqtt_target_ms = g_epaper_config.wake_mqtt_target_ms;
+		auto record_budget_cut = [&](EpaperWakeBudgetCut cut, EpaperWakeStage stage) {
+			epaper_timing_last.total_active_ms = millis();
+			epaper_timing_last.budget_elapsed_ms = wake_budget.elapsed_ms(millis());
+			epaper_timing_last.budget_remaining_ms = wake_budget.remaining_ms(millis());
+			epaper_timing_last.budget_cut = static_cast<uint8_t>(cut);
+			epaper_wake_journal_checkpoint(stage);
+			epaper_wake_journal_finalize(EpaperWakeResult::BudgetExceeded, 0, 0);
+			epaper_wake_journal_mark_delivery_failed(EpaperWakeResult::BudgetExceeded);
+		};
 		// Splash policy (moved from app.ino):
 		//   - Cold boot: always show the boot splash so a freshly plugged-in
 		//     device gets proof of life.
@@ -720,7 +815,9 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// the RTC-retained timing budget so the portal can show a per-cycle
 		// breakdown. On early-battery boards the background panel init started
 		// above runs concurrently with this association.
-		const bool connected = wifi_manager_connect(config, true);
+		const uint32_t wifi_limit_ms = wake_budget.stage_limit_ms(millis(), g_epaper_config.wake_wifi_budget_ms);
+		epaper_timing_last.wifi_limit_ms = wifi_limit_ms;
+		const bool connected = wifi_limit_ms > 0 && wifi_manager_connect(config, true, wifi_limit_ms);
 
 		// Ensure panel init has finished (and reap its task) before any later
 		// draw. No-op on boards where begin() ran synchronously above.
@@ -729,6 +826,11 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		}
 
 		if (!connected) {
+			if (wake_budget.expired(millis()) || wifi_limit_ms == 0) {
+				record_budget_cut(EpaperWakeBudgetCut::Wifi, EpaperWakeStage::Wifi);
+				power_manager_sleep_for(epaper_budget_cut_sleep_seconds());
+				return false;
+			}
 				const uint32_t backoff = power_manager_note_wifi_failure(
 						epaper_current_refresh_duration_seconds(),
 						config->wifi_backoff_max_seconds);
@@ -780,12 +882,22 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 			config_manager_sanitize_device_name(config->device_name, sanitized, sizeof(sanitized));
 			mqtt_manager.begin(config, config->device_name, sanitized);
 			epaper_wake_journal_checkpoint(EpaperWakeStage::MqttConnect);
-			if (!mqtt_manager.connectBlockingMinimal(5000)) {
+			const uint32_t mqtt_limit_ms = wake_budget.stage_limit_ms(millis(), g_epaper_config.wake_mqtt_budget_ms);
+			epaper_timing_last.mqtt_limit_ms = mqtt_limit_ms;
+			if (mqtt_limit_ms == 0) {
+				record_budget_cut(EpaperWakeBudgetCut::Overall, EpaperWakeStage::MqttConnect);
+				return;
+			}
+			if (!mqtt_manager.connectBlockingMinimal(mqtt_limit_ms)) {
 				mqtt_connect_ms = millis() - mqtt_start;
-				LOGW("Epaper", "MQTT unreachable (5s timeout); retaining wake diagnostics");
+				LOGW("Epaper", "MQTT unreachable (%ums timeout); retaining wake diagnostics", (unsigned)mqtt_limit_ms);
 				epaper_timing_last.total_active_ms = millis();
 				epaper_wake_journal_checkpoint(EpaperWakeStage::MqttConnect);
-				epaper_wake_journal_mark_delivery_failed(EpaperWakeResult::MqttConnectFailed);
+				if (mqtt_connect_ms >= mqtt_limit_ms) {
+					record_budget_cut(EpaperWakeBudgetCut::Mqtt, EpaperWakeStage::MqttConnect);
+				} else {
+					epaper_wake_journal_mark_delivery_failed(EpaperWakeResult::MqttConnectFailed);
+				}
 				epaper_timing_last.draw_to_mqtt_ms = mqtt_connect_ms;
 				epaper_wake_journal_complete_delivery(mqtt_connect_ms, 0, millis());
 				return;
@@ -888,7 +1000,21 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// Clear the per-draw sub-step timings so a CRC-skip wake (no fetch/draw)
 		// reports zeros rather than the previous cycle's resolve/fetch/draw.
 		epaper_timing_reset_draw_steps();
-		const EpaperRefreshOutcome outcome = epaper_refresh_run(config, force_refresh);
+		const uint32_t fetch_limit_ms = wake_budget.stage_limit_ms(millis(), g_epaper_config.wake_fetch_budget_ms);
+		epaper_timing_last.fetch_limit_ms = fetch_limit_ms;
+		if (fetch_limit_ms == 0) {
+			record_budget_cut(EpaperWakeBudgetCut::Overall, EpaperWakeStage::Refresh);
+			power_manager_sleep_for(epaper_budget_cut_sleep_seconds());
+			return true;
+		}
+		const uint32_t fetch_started_ms = millis();
+		const EpaperRefreshOutcome outcome = epaper_refresh_run(config, force_refresh, fetch_limit_ms);
+		if (outcome.result == EpaperRefreshResult::FailedFetch &&
+				(millis() - fetch_started_ms) >= fetch_limit_ms) {
+			record_budget_cut(EpaperWakeBudgetCut::Fetch, EpaperWakeStage::Refresh);
+			power_manager_sleep_for(epaper_budget_cut_sleep_seconds());
+			return true;
+		}
 		const uint32_t t_draw_done = millis();
 		epaper_timing_last.crc_retry_count = outcome.crc_retry_count;
 		if (defer_ntp_resync) {
@@ -953,8 +1079,10 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				LOGI("Epaper", "Using carousel slot %u duration: %u seconds", active_slot_index, target_s);
 		}
 
-		uint32_t sleep_s = target_s;
-		if (target_s > 0) {
+		uint32_t sleep_s = epaper_timing_last.budget_cut != static_cast<uint8_t>(EpaperWakeBudgetCut::None)
+				? epaper_budget_cut_sleep_seconds()
+				: target_s;
+		if (target_s > 0 && epaper_timing_last.budget_cut == static_cast<uint8_t>(EpaperWakeBudgetCut::None)) {
 				const uint32_t active_s = epaper_timing_last.total_active_ms / 1000u;
 				sleep_s = (active_s < target_s) ? (target_s - active_s) : 10u;
 				if (sleep_s < 10u) sleep_s = 10u;
@@ -1063,5 +1191,6 @@ void epaper_device_class_register() {
 #include "epaper/epaper_screens.cpp"
 #include "epaper/epaper_sd_cache.cpp"
 #include "epaper/epaper_timing.cpp"
+#include "epaper/epaper_wake_budget.cpp"
 
 #endif // HAS_EPAPER

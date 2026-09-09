@@ -15,6 +15,9 @@
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
 #endif
+#if HAS_IMAGE_LIBRARY
+#include "../local_image_loader.h"
+#endif
 #include "../device_class.h"
 
 #include <esp_heap_caps.h>
@@ -240,22 +243,24 @@ void PadScreen::update() {
     uint32_t gen = pad_config_get_generation();
     if (tilesBuilt && gen == cachedGeneration) {
         // Config unchanged — poll bindings in priority order
-#if HAS_MQTT
+#if HAS_MQTT || HAS_IMAGE_LIBRARY
         // Set page context so [pad:] tokens in bindings can resolve
+#if HAS_MQTT
         pad_binding_set_bindings(pageBindings, pageBindingCount);
 #endif
         pollBtnStateBindings();   // Visibility/interactivity first
         pollMqttBindings();
         pollColorBindings();
         pollNumberBindings();
+    #if HAS_MQTT
         mqtt_sub_store_clear_dirty();
-#if HAS_MQTT
         pad_binding_set_bindings(nullptr, 0);
 #endif
-#if HAS_IMAGE_FETCH
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
         pollImageFrames();
 #endif
         return;
+    #endif
     }
 
     cachedGeneration = gen;

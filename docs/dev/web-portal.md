@@ -549,19 +549,38 @@ whole-second fast duration when available. `duration_estimated` is `true` only
 when duration was derived from the first-frame CBR bitrate; Xing/Info and VBRI
 durations are frame-count based.
 
+### Image Library
+
+Display builds with `HAS_IMAGE_LIBRARY` provide the Image Library component for
+local JPEG and PNG backgrounds plus shared slideshow configuration. The image library
+uses `/images` and allows files directly in that root or one immediate child
+directory. It does not recurse into nested directories.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/api/images?directory=/images[/album]` | Lists up to 128 supported files in one canonical image directory and immediate child directories when browsing `/images` |
+| `POST` | `/api/images?path=/images[/album]/name.png` | Streams a JPEG or PNG up to 4 MiB to a temporary file, rejects PNG sources above 2 million pixels, then atomically renames it and rebuilds the runtime catalog |
+| `DELETE` | `/api/images?path=/images[/album]/name.png` | Deletes one canonical local image and rebuilds the runtime catalog |
+
+All paths are decoded then validated as canonical `/images` paths. Traversal,
+empty path segments, nested albums, control characters, and non-JPEG/PNG
+extensions are rejected. Existing destinations return `409`; uploads and
+deletes also return `409` while an image mutation is in progress. Upload state
+is request-owned and partial uploads are removed on disconnect. PNGs are
+decoded at their full source resolution before scaling, so they are limited to
+2 million pixels to preserve enough PSRAM for the active display and source
+buffers.
+
 ```json
 {
+  "directory": "/images",
+  "available": true,
+  "overflow": false,
+  "total_found": 1,
   "files": [
-    {
-      "path": "/media/01-example.mp3",
-      "title": "Example",
-      "artist": "Artist",
-      "duration_s": 213,
-      "duration_estimated": false
-    }
+    "/images/01-example.png"
   ],
-  "count": 1,
-  "limit": 32
+  "directories": []
 }
 ```
 

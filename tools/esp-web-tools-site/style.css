@@ -29,6 +29,7 @@
 html, body {
   margin: 0;
   padding: 0;
+  overflow-x: clip;
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -137,6 +138,13 @@ code {
   opacity: 1;
 }
 
+.ota-prerequisite {
+  margin: 0 0 12px;
+  color: rgb(253, 186, 116);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
 .dot {
   opacity: 0.5;
 }
@@ -227,6 +235,9 @@ code {
   .form-grid .field:first-child {
     grid-column: span 2;
   }
+  .auth-grid .field:first-child {
+    grid-column: auto;
+  }
 }
 
 .field label {
@@ -256,6 +267,20 @@ code {
   color: var(--muted);
   font-size: 12px;
   margin-top: 6px;
+}
+
+.auth-details {
+  margin-top: 12px;
+}
+
+.auth-details summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.auth-details .auth-grid {
+  margin-top: 10px;
 }
 
 .status {
@@ -308,6 +333,10 @@ code {
   font-weight: 650;
 }
 
+.board-content {
+  flex: 1;
+}
+
 .board-desc {
   margin-top: 4px;
   color: var(--muted);
@@ -317,16 +346,108 @@ code {
 
 .board-specs {
   margin-top: 8px;
+}
+
+.pill-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 4px;
 }
 
-.board-specs .badge {
+.pill-row .badge {
   padding: 4px 8px;
   font-size: 12px;
   border-radius: 999px;
   box-shadow: none;
+}
+
+.row-label {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.hardware-label {
+  color: var(--muted);
+}
+
+.board-capabilities {
+  margin-top: 6px;
+}
+
+.capabilities-label {
+  color: rgb(94, 234, 212);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.board-capabilities .capability-badge {
+  position: relative;
+  padding: 4px 8px;
+  border-color: rgba(45, 212, 191, 0.45);
+  background: rgba(20, 184, 166, 0.18);
+  box-shadow: none;
+  font-size: 12px;
+  cursor: help;
+}
+
+.board-downloads {
+  margin-top: 8px;
+}
+
+.downloads-label {
+  color: rgb(253, 186, 116);
+}
+
+.board-downloads .download-badge {
+  padding: 4px 8px;
+  border-color: rgba(251, 146, 60, 0.45);
+  background: rgba(234, 88, 12, 0.18);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.board-downloads .download-badge:hover,
+.board-downloads .download-badge:focus-visible {
+  border-color: rgba(253, 186, 116, 0.9);
+}
+
+.capability-badge:focus {
+  outline: 2px solid rgba(45, 212, 191, 0.85);
+  outline-offset: 2px;
+}
+
+.capability-badge::after {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 64px));
+  padding: 7px 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px var(--shadow);
+  color: var(--text);
+  content: attr(data-tooltip);
+  display: none;
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: normal;
+}
+
+.capability-badge:hover::after,
+.capability-badge:focus::after {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .board-category {
@@ -391,22 +512,17 @@ code {
   }
 }
 
-.board-links {
-  margin-top: 8px;
+.board-install {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
 }
 
-.board-links a {
-  color: var(--text);
-  opacity: 0.85;
-  text-decoration: none;
-  border-bottom: 1px dotted rgba(127,127,127,0.35);
-}
-
-.board-links a:hover {
-  opacity: 1;
+.install-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .extensions {
@@ -422,6 +538,8 @@ code {
 }
 
 .extension {
+  display: flex;
+  flex-direction: column;
   padding: 14px;
   border: 1px solid var(--panel-border);
   border-radius: 14px;
@@ -439,6 +557,21 @@ code {
   line-height: 1.4;
 }
 
+.extension-readme {
+  align-self: flex-start;
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 13px;
+  opacity: 0.85;
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(127, 127, 127, 0.35);
+}
+
+.extension-readme:hover,
+.extension-readme:focus-visible {
+  opacity: 1;
+}
+
 .extension-specs {
   display: flex;
   flex-wrap: wrap;
@@ -453,35 +586,55 @@ code {
   box-shadow: none;
 }
 
-.extension-usage-label {
+.extension-usage-details {
   margin-top: 12px;
+}
+
+.extension-usage-details summary {
   color: var(--muted);
+  cursor: pointer;
   font-size: 12px;
   font-weight: 650;
 }
 
 .extension-usage {
   margin: 4px 0 0;
-  padding: 8px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  background: var(--notes);
-  color: var(--text);
-  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.extension-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
 }
 
 .extension-download {
-  display: inline-block;
-  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid rgba(251, 146, 60, 0.45);
+  border-radius: 999px;
+  background: rgba(234, 88, 12, 0.18);
   color: var(--text);
+  font-size: 13px;
   text-decoration: none;
-  border-bottom: 1px dotted rgba(127,127,127,0.35);
 }
 
-.extension-download:hover {
-  opacity: 0.8;
+.extension-download span {
+  color: rgb(253, 186, 116);
+  font-size: 12px;
+}
+
+.extension-download:hover,
+.extension-download:focus-visible {
+  border-color: rgba(253, 186, 116, 0.9);
 }
 
 .ota-btn {

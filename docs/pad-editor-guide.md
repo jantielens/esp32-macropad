@@ -343,14 +343,27 @@ Spanned buttons automatically claim the grid cells they cover. Other buttons in 
 
 ### Background Images and Camera Feeds
 
-Any button can display an image or live camera stream fetched from a URL, rendered as the button background behind labels and icons.
+Any button can display a local library image, a dynamic local-image binding, or
+an image or live camera stream fetched from a URL, rendered as the button
+background behind labels and icons.
 
 | Setting | Description |
 |---------|-------------|
 | **Image or Stream URL** | HTTP or HTTPS URL to a JPEG, PNG, or MJPEG stream (`multipart/x-mixed-replace`) |
 | **Auth User / Password** | HTTP Basic Auth credentials for protected sources |
 | **Refresh Interval** | How often to re-fetch in milliseconds. `0` = fetch once (or stream continuously for MJPEG) |
-| **Letterbox** | When enabled, the image fits inside the button with black bars. When off, the image covers the full button area (cropping if needed) |
+| **Letterbox** | When enabled, the image fits inside the button with bars matching its background color. When off, the image covers the full button area (cropping if needed) |
+
+For uploaded local images, choose a path from the **Local Image** list. The
+list contains JPEG and PNG files under `/images`. Use `[image:current]` in
+**Local Image Binding** to render the shared current slideshow image.
+Use `[image:error]` in a label to show the most recent local image upload or
+display failure since boot; it reads `ok` until a failure occurs.
+**Background Image Scale** applies to uploaded local images and Camera Feed or
+Remote Image backgrounds. It selects **Cover** to fill and crop or
+**Letterbox** to preserve the whole image with bars matching the button
+background. The Camera Preview widget has its own scale setting. URL settings remain
+available for remote JPEG, PNG, and MJPEG sources.
 
 **MJPEG streaming (recommended for cameras):**
 

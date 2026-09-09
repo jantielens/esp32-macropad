@@ -46,7 +46,8 @@
 
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
-#define CONFIG_IDLE_SCREEN_PAD_MAX_LEN 8
+// Stored identifier for an idle screen. Legacy configurations use pad_N IDs.
+#define CONFIG_IDLE_SCREEN_PAD_MAX_LEN 32
 
 // Audio feedback beep pattern (may also be defined in pad_config.h)
 #ifndef CONFIG_BEEP_PATTERN_MAX_LEN

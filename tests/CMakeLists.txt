@@ -151,6 +151,11 @@ add_host_legacy_test(test_music_catalog
         ${PROJECT_SOURCE_DIR}/src/app/mp3_metadata.cpp
 )
 
+add_host_gtest(test_image_library
+    test_image_library.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/image_library.cpp
+)
+
 add_host_legacy_test(test_music_binding
     SOURCES test_music_binding.cpp
         ${PROJECT_SOURCE_DIR}/src/app/music_binding.cpp
@@ -450,6 +455,12 @@ add_host_gtest(test_epaper_wake_journal
         ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_timing.cpp
 )
 target_compile_definitions(test_epaper_wake_journal PRIVATE HAS_EPAPER=1)
+
+add_host_gtest(test_epaper_wake_budget
+    test_epaper_wake_budget.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_wake_budget.cpp
+)
+target_compile_definitions(test_epaper_wake_budget PRIVATE HAS_EPAPER=1)
 
 add_host_gtest(test_mp3_metadata
     test_mp3_metadata.cpp

@@ -5,6 +5,36 @@
 var PAD_SPARKLINE_MAX_WINDOW_SECONDS = 7 * 86400;
 var PAD_SPARKLINE_MAX_POINTS = 1024;
 var PAD_SPARKLINE_MIN_INTERVAL_SECONDS = 0.1;
+var padImageLibraryFiles = [];
+
+function padPopulateLocalImageOptions(selected) {
+    var select = document.getElementById('pad-edit-bg-image-path');
+    if (!select) return;
+    select.replaceChildren();
+    var empty = document.createElement('option');
+    empty.value = ''; empty.textContent = '(none)'; select.appendChild(empty);
+    padImageLibraryFiles.forEach(function (path) {
+        var option = document.createElement('option');
+        option.value = path; option.textContent = path; select.appendChild(option);
+    });
+    select.value = selected || '';
+}
+
+function padLoadLocalImageOptions(selected) {
+    return fetch('/api/images?directory=' + encodeURIComponent('/images'))
+        .then(function (response) {
+            if (!response.ok) throw new Error('Image library unavailable');
+            return response.json();
+        })
+        .then(function (catalog) {
+            padImageLibraryFiles = Array.isArray(catalog.files) ? catalog.files : [];
+            padPopulateLocalImageOptions(selected);
+        })
+        .catch(function () {
+            var group = document.getElementById('pad-edit-local-image-group');
+            if (group) group.style.display = 'none';
+        });
+}
 
 function padConfirmChanged() {
     var enabled = document.getElementById('pad-edit-confirm').checked;
@@ -258,14 +288,20 @@ function padDialogOpen(col, row) {
     padConfirmChanged();
 
     // Image background
+    var localImageGroup = document.getElementById('pad-edit-local-image-group');
+    if (localImageGroup) localImageGroup.style.display = '';
+    padLoadLocalImageOptions(btn.bg_image_path || '');
+    document.getElementById('pad-edit-bg-image-binding').value =
+        btn.bg_image_path && btn.bg_image_path.indexOf('[') !== -1 ? btn.bg_image_path : '';
     document.getElementById('pad-edit-bg-image-url').value = btn.bg_image_url || '';
     document.getElementById('pad-edit-bg-image-user').value = btn.bg_image_user || '';
     updateWriteOnlySecretField('pad-edit-bg-image-password',
         'pad-edit-bg-image-password-status', btn.bg_image_password_set === true,
         'Not configured.', 'password');
     document.getElementById('pad-edit-bg-image-interval').value = (btn.bg_image_interval_ms !== undefined) ? btn.bg_image_interval_ms : 0;
-    document.getElementById('pad-edit-bg-image-letterbox').checked = !!btn.bg_image_letterbox;
-    document.getElementById('pad-edit-image-section').open = !!btn.bg_image_url;
+    document.getElementById('pad-edit-bg-image-scale').value = btn.bg_image_letterbox ? 'letterbox' : 'cover';
+    document.getElementById('pad-edit-image-section').open = !!btn.bg_image_path;
+    document.getElementById('pad-edit-camera-feed-section').open = !!btn.bg_image_url;
 
     // Icon
     const iconParsed = padIconIdToType(btn.icon_id || '');
@@ -554,6 +590,11 @@ function padDialogOk(keepOpen) {
 
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();
+    const localImageBinding = document.getElementById('pad-edit-bg-image-binding').value.trim();
+    const localImagePath = document.getElementById('pad-edit-bg-image-path').value;
+    if (localImageBinding) btn.bg_image_path = localImageBinding;
+    else if (localImagePath) btn.bg_image_path = localImagePath;
+    if (document.getElementById('pad-edit-bg-image-scale').value === 'letterbox') btn.bg_image_letterbox = true;
     if (imgUrl) {
         btn.bg_image_url = imgUrl;
         const imgUser = document.getElementById('pad-edit-bg-image-user').value.trim();
@@ -566,7 +607,6 @@ function padDialogOk(keepOpen) {
         }
         const imgInterval = parseInt(document.getElementById('pad-edit-bg-image-interval').value);
         if (!isNaN(imgInterval) && imgInterval >= 0) btn.bg_image_interval_ms = imgInterval;
-        if (document.getElementById('pad-edit-bg-image-letterbox').checked) btn.bg_image_letterbox = true;
     }
 
     // Icon

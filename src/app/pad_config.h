@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "image_library.h"
 
 // ============================================================================
 // Pad Config — per-pad button configuration stored on LittleFS
@@ -46,6 +47,7 @@
 #define CONFIG_BTN_STATE_MAX_LEN      192
 #define CONFIG_CONFIRM_TEXT_MAX_LEN   128
 #define CONFIG_BG_IMAGE_URL_MAX_LEN   256
+#define CONFIG_BG_IMAGE_PATH_MAX_LEN  IMAGE_LIBRARY_PATH_MAX_LEN
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
 #define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
 #define CONFIG_LABEL_STYLE_MAX_LEN    128
@@ -144,6 +146,8 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_CYCLE_PAD "cycle_pad"
 #define ACTION_TYPE_DELAY    "delay"
 #define ACTION_TYPE_CAMERA_CAPTURE "camera_capture"
+#define ACTION_TYPE_IMAGE_NEXT "image_next"
+#define ACTION_TYPE_IMAGE_PREVIOUS "image_previous"
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
 
@@ -374,12 +378,13 @@ struct ScreenButtonConfig {
     bool confirm;                                  // require confirmation before either action list
     char confirm_text[CONFIG_CONFIRM_TEXT_MAX_LEN]; // optional confirmation prompt
 
-    // Background image (fetched from URL, displayed as tile background)
+    // Background image sources, displayed as tile backgrounds.
     char bg_image_url[CONFIG_BG_IMAGE_URL_MAX_LEN];       // empty = no image
+    char bg_image_path[CONFIG_BG_IMAGE_PATH_MAX_LEN];     // canonical local image path, or binding template
     char bg_image_user[CONFIG_BG_IMAGE_USER_MAX_LEN];     // HTTP Basic Auth user
     char bg_image_password[CONFIG_BG_IMAGE_PASS_MAX_LEN]; // HTTP Basic Auth password
     uint32_t bg_image_interval_ms;                        // 0 = fetch once, >0 = periodic
-    bool bg_image_letterbox;                              // true = letterbox (fit + black bars), false = cover (fill + crop)
+    bool bg_image_letterbox;                              // true = letterbox (fit + button-color bars), false = cover (fill + crop)
 
     // Widget type (bar_chart, gauge, etc.) — empty = normal button
     WidgetConfig widget;

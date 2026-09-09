@@ -133,7 +133,7 @@ bool read_and_validate_body(HTTPClient& http, const ShowMetadata& metadata,
 }
 
 EpaperNextPayload follow_redirect(const String& location, const ShowMetadata& metadata,
-		bool cache_enabled) {
+		bool cache_enabled, uint32_t timeout_ms) {
 		EpaperNextPayload payload = empty_payload(EpaperNextResult::FailedFetch);
 		strlcpy(payload.image_key, metadata.image_key, sizeof(payload.image_key));
 		payload.content_crc32 = metadata.content_crc32;
@@ -142,7 +142,7 @@ EpaperNextPayload follow_redirect(const String& location, const ShowMetadata& me
 		WiFiClientSecure secure;
 		HTTPClient http;
 		if (!begin_request(http, plain, secure, location)) return payload;
-		http.setTimeout(kServiceHttpTimeoutMs);
+		http.setTimeout(timeout_ms);
 		collect_service_headers(http);
 		const int status = http.GET();
 		if (status != HTTP_CODE_OK || !valid_content_headers(
@@ -168,12 +168,14 @@ EpaperNextPayload follow_redirect(const String& location, const ShowMetadata& me
 
 EpaperNextPayload epaper_next_client_fetch(const char* service_base,
 		const char* bearer_token, const EpaperCurrentFingerprint& current,
-		bool cache_enabled, uint8_t max_cycles) {
+		bool cache_enabled, uint8_t max_cycles, uint32_t timeout_ms) {
 		if (!service_base || !*service_base || !bearer_token || !*bearer_token) {
 				return empty_payload(EpaperNextResult::FailedFetch);
 		}
 		if (max_cycles == 0) return empty_payload(EpaperNextResult::FailedFetch);
 		if (max_cycles > 2) max_cycles = 2;
+		const uint32_t request_timeout_ms = timeout_ms > 0 ? timeout_ms : kServiceHttpTimeoutMs;
+		if (timeout_ms > 0) max_cycles = 1;
 		const String url = next_url(service_base);
 		for (uint8_t attempt = 0; attempt < max_cycles; ++attempt) {
 				WiFiClient plain;
@@ -182,7 +184,7 @@ EpaperNextPayload epaper_next_client_fetch(const char* service_base,
 				if (!begin_request(http, plain, secure, url)) {
 						return empty_payload(EpaperNextResult::FailedFetch);
 				}
-				http.setTimeout(kServiceHttpTimeoutMs);
+				http.setTimeout(request_timeout_ms);
 				collect_service_headers(http);
 				http.addHeader("Authorization", String("Bearer ") + bearer_token);
 				if (current.valid) {
@@ -230,7 +232,7 @@ EpaperNextPayload epaper_next_client_fetch(const char* service_base,
 						const String location = http.header("Location");
 						http.end();
 						if (location.length() == 0) return empty_payload(EpaperNextResult::FailedFetch);
-						return follow_redirect(location, metadata, cache_enabled);
+						return follow_redirect(location, metadata, cache_enabled, request_timeout_ms);
 				}
 
 				EpaperNextPayload payload = empty_payload(EpaperNextResult::FailedContent);

@@ -5,6 +5,7 @@
   "chip_family": "ESP32-P4",
   "flash_mb": 16,
   "psram_mb": 32,
+  "capabilities": ["mcp", "ble_hid", "camera", "audio", "extensions", "sd_card"],
   "wireless": {
     "wifi": true,
     "ble": true,

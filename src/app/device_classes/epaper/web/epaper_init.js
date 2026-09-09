@@ -11,6 +11,11 @@ if (typeof window.registerConfigFields === 'function') {
         'epaper_source_mode',
         'epaper_service_url', 'epaper_service_token',
         'epaper_service_interval_seconds',
+        'epaper_wake_budget_ms',
+        'epaper_wake_wifi_target_ms', 'epaper_wake_wifi_budget_ms',
+        'epaper_wake_fetch_target_ms', 'epaper_wake_fetch_budget_ms',
+        'epaper_wake_mqtt_target_ms', 'epaper_wake_mqtt_budget_ms',
+        'epaper_wake_cutoff_retry_seconds',
         'epaper_rotation',
         'epaper_crc32_enabled',
         'epaper_sd_cache_enabled',
@@ -273,6 +278,14 @@ window.init_epaper_image_fragment = function () {
                 }
                 setNamedValue('epaper_service_url', cfg.epaper_service_url || '');
                 setNamedValue('epaper_service_interval_seconds', cfg.epaper_service_interval_seconds || 900);
+                setNamedValue('epaper_wake_budget_ms', cfg.epaper_wake_budget_ms || 15000);
+                setNamedValue('epaper_wake_wifi_target_ms', cfg.epaper_wake_wifi_target_ms || 4000);
+                setNamedValue('epaper_wake_wifi_budget_ms', cfg.epaper_wake_wifi_budget_ms || 5500);
+                setNamedValue('epaper_wake_fetch_target_ms', cfg.epaper_wake_fetch_target_ms || 2000);
+                setNamedValue('epaper_wake_fetch_budget_ms', cfg.epaper_wake_fetch_budget_ms || 3500);
+                setNamedValue('epaper_wake_mqtt_target_ms', cfg.epaper_wake_mqtt_target_ms || 750);
+                setNamedValue('epaper_wake_mqtt_budget_ms', cfg.epaper_wake_mqtt_budget_ms || 1500);
+                setNamedValue('epaper_wake_cutoff_retry_seconds', cfg.epaper_wake_cutoff_retry_seconds || 0);
                 updateWriteOnlySecretField('epaper_service_token', 'epaper-service-token-status',
                     serviceTokenSet, 'Not configured.', 'token');
                 updateSourceSections();
@@ -370,6 +383,11 @@ window.init_epaper_image_fragment = function () {
             'epaper_source_mode',
             'epaper_service_url', 'epaper_service_token',
             'epaper_service_interval_seconds',
+            'epaper_wake_budget_ms',
+            'epaper_wake_wifi_target_ms', 'epaper_wake_wifi_budget_ms',
+            'epaper_wake_fetch_target_ms', 'epaper_wake_fetch_budget_ms',
+            'epaper_wake_mqtt_target_ms', 'epaper_wake_mqtt_budget_ms',
+            'epaper_wake_cutoff_retry_seconds',
             'epaper_rotation',
             'epaper_crc32_enabled',
             'epaper_sd_cache_enabled',

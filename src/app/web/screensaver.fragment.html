@@ -18,7 +18,7 @@
         <div class="screensaver-timeline-step" id="screensaver-timeline-idle" hidden>
           <span class="screensaver-timeline-dot" aria-hidden="true"></span>
           <span class="screensaver-timeline-time" id="screensaver-timeline-idle-time"></span>
-          <strong id="screensaver-timeline-idle-title">Standby pad</strong>
+          <strong id="screensaver-timeline-idle-title">Idle screen</strong>
           <small>Shows until activity</small>
         </div>
         <div class="screensaver-timeline-step" id="screensaver-timeline-sleep" hidden>
@@ -39,19 +39,19 @@
   <div class="card-body">
     <div class="form-check mb-3">
       <input type="checkbox" class="form-check-input" id="idle_screen_enabled" name="idle_screen_enabled">
-      <label class="form-check-label" for="idle_screen_enabled">Show a standby pad</label>
+      <label class="form-check-label" for="idle_screen_enabled">Show an idle screen</label>
       <div class="form-text">Temporarily show a pad after inactivity, then return to the previous screen on activity.</div>
     </div>
     <div class="row">
       <div class="col-md-6 mb-3">
-        <label class="form-label" for="idle_screen_timeout_seconds">Show standby pad after</label>
+        <label class="form-label" for="idle_screen_timeout_seconds">Show idle screen after</label>
         <input type="number" class="form-control" id="idle_screen_timeout_seconds" name="idle_screen_timeout_seconds" min="0" max="65535" placeholder="300">
         <div class="form-text">Must be greater than 0, and shorter than Display Sleep when it is enabled.</div>
       </div>
       <div class="col-md-6 mb-3">
-        <label class="form-label" for="idle_screen_pad">Standby pad</label>
+        <label class="form-label" for="idle_screen_pad">Idle screen</label>
         <select class="form-select" id="idle_screen_pad" name="idle_screen_pad">
-          <option value="">(select a pad)</option>
+          <option value="">(select a screen)</option>
         </select>
       </div>
     </div>

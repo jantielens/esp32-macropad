@@ -5,6 +5,7 @@
   "chip_family": "ESP32",
   "flash_mb": 4,
   "psram_mb": 0,
+  "capabilities": ["mcp", "ble_hid", "image_fetch"],
   "wireless": {
     "wifi": true,
     "ble": true

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 277
+Total flags: 278
 
 ### Features (HAS_*)
 
@@ -43,6 +43,7 @@ Total flags: 277
 - **HAS_ES7210_MIC** default: `false` — Enable ES7210 microphone ADC initialization on the shared I2S transport.
 - **HAS_HA_HISTORY** default: `(HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)` — Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
+- **HAS_IMAGE_LIBRARY** default: `HAS_DISPLAY` — Enable local Storage-backed image loading for pad buttons and slideshows.
 - **HAS_MCP** default: `true` — the feature out entirely (saves flash on constrained or locked-down builds).
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
 - **HAS_MUSIC_ANALYSIS** default: `false` — Demand-driven Music MP3 RMS, peak, and spectrum bindings.
@@ -324,28 +325,28 @@ Total flags: 277
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_ES7210_MIC | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
-| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
-| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32c3-withsensors |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  |
-| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |
-| inkplate5v2 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
-| inkplate6flick |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
-| reterminal-e1003 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  | ✅ |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
+| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_VCOM | HAS_EPAPER_WAKE_BUTTON | HAS_ES7210_MIC | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
+| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
+| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
+| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
+| esp32c3-withsensors |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? | ✅ | ✅ |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  |
+| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |
+| inkplate5v2 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
+| inkplate6flick |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
+| reterminal-e1003 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -739,6 +740,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_sd_cache.h
   - src/app/device_classes/epaper/epaper_timing.cpp
   - src/app/device_classes/epaper/epaper_timing.h
+  - src/app/device_classes/epaper/epaper_wake_budget.cpp
+  - src/app/device_classes/epaper/epaper_wake_budget.h
   - src/app/device_classes/epaper_device_class.cpp
   - src/app/mqtt_manager.cpp
   - src/app/portal_components.cpp
@@ -778,6 +781,29 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen_poll.cpp
   - src/app/screens/pad_tile_builder.cpp
   - src/app/web_portal_firmware.cpp
+- **HAS_IMAGE_LIBRARY**
+  - src/app/actions/image_next_action.cpp
+  - src/app/actions/image_previous_action.cpp
+  - src/app/app.ino
+  - src/app/binding_builtin_schemes.cpp
+  - src/app/board_config.h
+  - src/app/components/image_library_component.cpp
+  - src/app/image_binding.cpp
+  - src/app/image_binding.h
+  - src/app/image_decoder.cpp
+  - src/app/image_decoder.h
+  - src/app/image_library_config.cpp
+  - src/app/image_library_config.h
+  - src/app/image_library_runtime.cpp
+  - src/app/image_library_runtime.h
+  - src/app/local_image_loader.cpp
+  - src/app/local_image_loader.h
+  - src/app/pad_validate.cpp
+  - src/app/portal_components.cpp
+  - src/app/screens/pad_screen.cpp
+  - src/app/screens/pad_screen.h
+  - src/app/screens/pad_screen_poll.cpp
+  - src/app/screens/pad_tile_builder.cpp
 - **HAS_MCP**
   - src/app/board_config.h
   - src/app/config_manager.cpp

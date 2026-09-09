@@ -5,5 +5,6 @@
   "chip_family": "ESP32-C6",
   "flash_mb": 4,
   "psram_mb": 0,
+  "capabilities": ["mcp", "bthome", "mqtt"],
   "wireless": {"wifi": true, "ble": true}
 }

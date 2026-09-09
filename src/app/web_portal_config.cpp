@@ -48,6 +48,13 @@ static uint32_t parseUintField(const JsonVariantConst& field, uint32_t default_v
 		return (uint32_t)(field | default_value);
 }
 
+static bool is_idle_pad_id(const char* id) {
+	if (!id || strncmp(id, "pad_", 4) != 0 || !id[4]) return false;
+	char* end = nullptr;
+	const long index = strtol(id + 4, &end, 10);
+	return end && !*end && index >= 0 && index < MAX_PADS;
+}
+
 // /api/config body accumulator (chunk-safe)
 static portMUX_TYPE g_config_post_mux = portMUX_INITIALIZER_UNLOCKED;
 static struct {
@@ -658,6 +665,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#if HAS_DISPLAY
 		if (current_config->idle_screen_enabled &&
 				(!current_config->idle_screen_pad[0] ||
+					!is_idle_pad_id(current_config->idle_screen_pad) ||
 					current_config->idle_screen_timeout_seconds == 0 ||
 					(current_config->screen_saver_enabled &&
 						current_config->idle_screen_timeout_seconds >= current_config->screen_saver_timeout_seconds))) {

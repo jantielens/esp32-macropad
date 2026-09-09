@@ -33,6 +33,16 @@ struct EpaperTimingBudget {
 		uint32_t fetch_ms;          // image bytes: SD cache read OR HTTP download
 		uint32_t draw_ms;           // framebuffer upload + panel GC16 refresh
 		uint8_t  image_from_cache;  // 1 = served from SD cache, 0 = downloaded
+		uint32_t overall_budget_ms; // 0 = budget not enforced for this wake
+		uint32_t budget_elapsed_ms; // elapsed when the wake record was finalized
+		uint32_t budget_remaining_ms;
+		uint32_t wifi_limit_ms;
+		uint32_t fetch_limit_ms;
+		uint32_t mqtt_limit_ms;
+		uint32_t wifi_target_ms;
+		uint32_t fetch_target_ms;
+		uint32_t mqtt_target_ms;
+		uint8_t budget_cut;         // EpaperWakeBudgetCut encoded as uint8_t
 };
 
 extern EpaperTimingBudget epaper_timing_last;
@@ -65,6 +75,7 @@ enum class EpaperWakeResult : uint8_t {
 		LowBattery,
 		ScheduleSuppressed,
 		SourceUnconfigured,
+		BudgetExceeded,
 		Interrupted,
 };
 

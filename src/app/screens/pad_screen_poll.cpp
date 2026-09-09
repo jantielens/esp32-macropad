@@ -3,7 +3,12 @@
 #include "../display_driver.h"
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
-#include <esp_heap_caps.h>
+#endif
+#if HAS_IMAGE_LIBRARY
+#include "../local_image_loader.h"
+#include "../image_library.h"
+#endif
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
 #include <string.h>
 #endif
 
@@ -15,9 +20,9 @@
 // ============================================================================
 
 void PadScreen::pollMqttBindings() {
-#if HAS_MQTT
+#if HAS_MQTT || HAS_IMAGE_LIBRARY
     char resolved[BINDING_TEMPLATE_MAX_LEN];
-
+#if HAS_MQTT
     for (uint16_t i = 0; i < bindingCount; i++) {
         RuntimeLabelBinding& rb = bindings[i];
         if (!rb.active || !rb.label) continue;
@@ -88,6 +93,45 @@ void PadScreen::pollMqttBindings() {
         }
     }
 #endif
+
+#if HAS_IMAGE_LIBRARY
+    for (uint8_t i = 0; i < tileCount; i++) {
+        ButtonTile& tile = tiles[i];
+        if (!tile.local_image_template[0] || !binding_template_has_bindings(tile.local_image_template)) continue;
+
+        binding_template_resolve(tile.local_image_template, resolved, sizeof(resolved));
+        if (strcmp(resolved, tile.local_image_path) == 0) continue;
+
+        if (tile.local_image_pending_slot != LOCAL_IMAGE_SLOT_INVALID) {
+            local_image_loader_cancel(tile.local_image_pending_slot);
+            tile.local_image_pending_slot = LOCAL_IMAGE_SLOT_INVALID;
+        }
+        strlcpy(tile.local_image_path, resolved, sizeof(tile.local_image_path));
+        if (!ImageLibraryCatalog::is_image_path(resolved) || !tile.obj) continue;
+
+        const lv_coord_t width = lv_obj_get_width(tile.obj);
+        const lv_coord_t height = lv_obj_get_height(tile.obj);
+        if (width <= 0 || height <= 0) continue;
+        const local_image_slot_t replacement_slot = local_image_loader_request(
+            resolved, (uint16_t)width, (uint16_t)height, tile.local_image_scale_mode,
+            tile.local_image_letterbox_color);
+        if (replacement_slot == LOCAL_IMAGE_SLOT_INVALID) continue;
+        if (tile.local_image_slot == LOCAL_IMAGE_SLOT_INVALID) {
+            tile.local_image_slot = replacement_slot;
+        } else {
+            tile.local_image_pending_slot = replacement_slot;
+            continue;
+        }
+
+        if (tile.local_bg_image) continue;
+        tile.local_bg_image = lv_image_create(tile.obj);
+        lv_obj_set_size(tile.local_bg_image, width, height);
+        lv_obj_set_align(tile.local_bg_image, LV_ALIGN_CENTER);
+        lv_obj_clear_flag(tile.local_bg_image, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_move_to_index(tile.local_bg_image, 0);
+    }
+#endif
+#endif
 }
 
 // ============================================================================
@@ -138,8 +182,36 @@ void PadScreen::pollColorBindings() {
         ButtonTile& tile = tiles[ti];
 
         switch (cb.target) {
-        case 0: // bg
+        case 0: { // bg
             lv_obj_set_style_bg_color(tile.obj, rgb_to_lv(color), 0);
+			const uint16_t letterbox_color = lv_color_to_u16(rgb_to_lv(color));
+#if HAS_IMAGE_LIBRARY
+            if (tile.local_image_scale_mode == IMAGE_SCALE_LETTERBOX &&
+                ImageLibraryCatalog::is_image_path(tile.local_image_path)) {
+				tile.local_image_letterbox_color = letterbox_color;
+                if (tile.local_image_pending_slot != LOCAL_IMAGE_SLOT_INVALID) {
+                    local_image_loader_cancel(tile.local_image_pending_slot);
+                    tile.local_image_pending_slot = LOCAL_IMAGE_SLOT_INVALID;
+                }
+                const lv_coord_t width = lv_obj_get_width(tile.obj);
+                const lv_coord_t height = lv_obj_get_height(tile.obj);
+                if (width > 0 && height > 0) {
+                    const local_image_slot_t replacement_slot = local_image_loader_request(
+                        tile.local_image_path, (uint16_t)width, (uint16_t)height,
+                        tile.local_image_scale_mode, tile.local_image_letterbox_color);
+                    if (replacement_slot != LOCAL_IMAGE_SLOT_INVALID) {
+                        if (tile.local_image_slot == LOCAL_IMAGE_SLOT_INVALID) tile.local_image_slot = replacement_slot;
+                        else tile.local_image_pending_slot = replacement_slot;
+                    }
+                }
+            }
+#endif
+
+#if HAS_IMAGE_FETCH
+			if (tile.image_slot != IMAGE_SLOT_INVALID) {
+				image_fetch_set_letterbox_color(tile.image_slot, letterbox_color);
+			}
+#endif
             if (tile.shadow_follows_background) {
                 const uint32_t shadow_color = button_shadow_darken_color(
                     color, tile.shadow_darken_pct);
@@ -153,6 +225,7 @@ void PadScreen::pollColorBindings() {
                 lv_obj_set_style_bg_opa(tile.tap_overlay, is_light ? TAP_OVERLAY_DARK_OPA : TAP_OVERLAY_LIGHT_OPA, 0);
             }
             break;
+        }
         case 1: // fg (labels + mono icon recolor)
             // Per-label color overrides win: skip a label's text color if it has its
             // own color (static or binding). Icon recolor is NOT gated by the mask.
@@ -303,7 +376,7 @@ void PadScreen::pollBtnStateBindings() {
 // Image Frame Polling
 // ============================================================================
 
-#if HAS_IMAGE_FETCH
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
 void PadScreen::pollImageFrames() {
     // Defer image frame hand-off while a DMA2D flush is actively transferring.
     // lv_image_set_src + lv_obj_invalidate would add PSRAM bandwidth pressure
@@ -313,30 +386,69 @@ void PadScreen::pollImageFrames() {
 
     for (uint8_t i = 0; i < tileCount; i++) {
         ButtonTile& tile = tiles[i];
-        if (tile.image_slot == IMAGE_SLOT_INVALID || !tile.bg_image) continue;
-
-        if (!image_fetch_has_new_frame(tile.image_slot)) continue;
-
-        // Zero-copy hand-off: image_fetch owns a per-slot lvgl_buf that it
-        // never touches between get_frame calls (see image_fetch.cpp). Point
-        // LVGL directly at it \u2014 no realloc, no memcpy on the LVGL task.
-        uint16_t fw = 0, fh = 0;
-        const uint16_t* pixels = image_fetch_get_frame(tile.image_slot, &fw, &fh);
-        if (!pixels || fw == 0 || fh == 0) continue;
-
-        lv_image_dsc_t& dsc = tile.img_dsc;
-        dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-        dsc.header.cf = LV_COLOR_FORMAT_RGB565;
-        dsc.header.flags = 0;
-        dsc.header.w = fw;
-        dsc.header.h = fh;
-        dsc.header.stride = fw * 2;
-        dsc.data_size = (uint32_t)fw * fh * 2;
-        dsc.data = (const uint8_t*)pixels;
-
-        lv_image_set_src(tile.bg_image, &dsc);
-        // Force LVGL to re-render even though the dsc pointer is unchanged.
-        lv_obj_invalidate(tile.bg_image);
+#if HAS_IMAGE_FETCH
+        if (tile.image_slot != IMAGE_SLOT_INVALID && tile.bg_image &&
+            image_fetch_has_new_frame(tile.image_slot)) {
+            uint16_t fw = 0, fh = 0;
+            const uint16_t* pixels = image_fetch_get_frame(tile.image_slot, &fw, &fh);
+            if (pixels && fw && fh) {
+                lv_image_dsc_t& dsc = tile.img_dsc;
+                dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+                dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+                dsc.header.flags = 0;
+                dsc.header.w = fw;
+                dsc.header.h = fh;
+                dsc.header.stride = fw * 2;
+                dsc.data_size = (uint32_t)fw * fh * 2;
+                dsc.data = (const uint8_t*)pixels;
+                lv_image_set_src(tile.bg_image, &dsc);
+                lv_obj_invalidate(tile.bg_image);
+            }
+        }
+#endif
+#if HAS_IMAGE_LIBRARY
+        if (tile.local_image_pending_slot != LOCAL_IMAGE_SLOT_INVALID && tile.local_bg_image &&
+            local_image_loader_has_new_frame(tile.local_image_pending_slot)) {
+            uint16_t fw = 0, fh = 0;
+            const uint16_t* pixels = local_image_loader_get_frame(tile.local_image_pending_slot, &fw, &fh);
+            if (pixels && fw && fh) {
+                lv_image_dsc_t& dsc = tile.local_img_dsc;
+                dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+                dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+                dsc.header.flags = 0;
+                dsc.header.w = fw;
+                dsc.header.h = fh;
+                dsc.header.stride = fw * 2;
+                dsc.data_size = (uint32_t)fw * fh * 2;
+                dsc.data = (const uint8_t*)pixels;
+                lv_image_set_src(tile.local_bg_image, &dsc);
+                lv_obj_invalidate(tile.local_bg_image);
+                if (tile.local_image_slot != LOCAL_IMAGE_SLOT_INVALID) {
+                    local_image_loader_cancel(tile.local_image_slot);
+                }
+                tile.local_image_slot = tile.local_image_pending_slot;
+                tile.local_image_pending_slot = LOCAL_IMAGE_SLOT_INVALID;
+            }
+        }
+        if (tile.local_image_slot != LOCAL_IMAGE_SLOT_INVALID && tile.local_bg_image &&
+            local_image_loader_has_new_frame(tile.local_image_slot)) {
+            uint16_t fw = 0, fh = 0;
+            const uint16_t* pixels = local_image_loader_get_frame(tile.local_image_slot, &fw, &fh);
+            if (pixels && fw && fh) {
+                lv_image_dsc_t& dsc = tile.local_img_dsc;
+                dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+                dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+                dsc.header.flags = 0;
+                dsc.header.w = fw;
+                dsc.header.h = fh;
+                dsc.header.stride = fw * 2;
+                dsc.data_size = (uint32_t)fw * fh * 2;
+                dsc.data = (const uint8_t*)pixels;
+                lv_image_set_src(tile.local_bg_image, &dsc);
+                lv_obj_invalidate(tile.local_bg_image);
+            }
+        }
+#endif
     }
 }
 #endif

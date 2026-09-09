@@ -114,6 +114,7 @@ Each board may declare presentation metadata in `src/boards/<board>/metadata.jso
   "chip_family": "ESP32-S3",
   "flash_mb": 16,
   "psram_mb": 8,
+  "capabilities": ["mcp", "ble_hid", "image_fetch", "extensions"],
   "wireless": { "wifi": true, "ble": true },
   "display": { "size": "3.6\"", "resolution": "360x360", "type": "IPS", "touch": true }
 }
@@ -122,7 +123,12 @@ Each board may declare presentation metadata in `src/boards/<board>/metadata.jso
 Conventions:
 
 - `device_class` **must** match the class the board compiles into. The flash-page generator validates this against the whitelist and warns if it sees an unknown value.
-- `description` is for **hardware only** — brand, model, and physically distinguishing features. Firmware capabilities belong to the class-level description in `tools/esp-web-tools-site/app.js`, not the board card.
+- `description` is for **hardware only** — brand, model, and physically distinguishing features. Firmware capabilities belong in the board's `capabilities` list; the device-class description in `tools/esp-web-tools-site/app.js` communicates the primary use case shared by that class.
+- `capabilities` is an optional list of firmware features shown as tooltip-enabled
+  badges. Supported values are `mcp`, `ble_hid`, `bthome`, `image_fetch`,
+  `camera`, `audio`, `microphone`, `extensions`, `sd_card`, and `mqtt`.
+  Keep the list limited to features that distinguish one firmware image from
+  another; the device-class section already communicates the primary use case.
 - Missing metadata file falls back to `device_class=macropad` and `board_label=<board>` with a one-line `INFO` log.
 - `tools/build-esp-web-tools-site.sh` HTML-escapes `board_label` and `description` before injection — safe to include `&`, `<`, `>`, `"`, `'`.
 
