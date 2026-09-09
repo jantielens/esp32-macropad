@@ -424,8 +424,9 @@ can clear RTC memory, so it cannot be recovered without flash writes.
 
 Home Assistant can archive the non-retained wake events to a file without a
 custom integration or YAML notification platform. This preserves one complete
-diagnostic record for every reported wake, including correlated stage timings
-and deferred records that were offline when they occurred.
+diagnostic record for every reported wake, including its source MQTT topic,
+correlated stage timings, and deferred records that were offline when they
+occurred.
 
 1. In **Settings > Devices & services**, add the **File** integration.
 2. Configure it as a notification entity writing to
@@ -436,8 +437,8 @@ and deferred records that were offline when they occurred.
    path.
 4. Create an automation with an MQTT trigger for `devices/+/epaper/wake`.
 5. Add the **Notifications: Send a notification message** action, select the
-   File notification entity (normally `notify.file`), and set its message to
-   `{{ trigger.payload }}`.
+  File notification entity (normally `notify.file`), and set its message to a
+  JSON object containing `trigger.topic` and `trigger.payload_json`.
 
 The automation editor accepts this YAML:
 
@@ -454,18 +455,28 @@ actions:
     target:
       entity_id: notify.file
     data:
-      message: "{{ trigger.payload }}"
+      message: >-
+        {{ {
+          "topic": trigger.topic,
+          "event": trigger.payload_json
+        } | to_json }}
 ```
 
 The File integration adds a two-line banner when it creates the file. Every
-following line is the unmodified JSON MQTT payload and can be analyzed as
-JSONL. The archive is served from `/local/media/epaper_wakes.jsonl`. To create
-a strictly JSONL copy for external analysis, retain only lines beginning with
+following line is a JSON object containing the source topic and event payload.
+The archive is served from `/local/media/epaper_wakes.jsonl`. To create a
+strictly JSONL copy for external analysis, retain only lines beginning with
 `{`:
 
 ```bash
 grep '^{' epaper_wakes.jsonl > epaper_wakes_clean.jsonl
 jq -s '.' epaper_wakes_clean.jsonl > epaper_wakes.json
+```
+
+Filter one device by topic before analysis:
+
+```bash
+jq 'select(.topic == "devices/e1003-1/epaper/wake")' epaper_wakes_clean.jsonl
 ```
 
 ### Home Assistant Auto-Discovery
