@@ -46,6 +46,12 @@
       description:
         'Touch-screen enlarger timer for analog darkroom printing. Controls enlarger and safelight relays over Wi-Fi (Shelly), meters paper exposure with a TSL2591 light sensor, and runs configurable print timing sequences from the web portal.',
     },
+    {
+      key: 'voice_assistant',
+      title: 'Voice Assistant',
+      description:
+        'Touch-screen voice interface with microphone input, cloud transcription, configurable voice actions, and Home Assistant integration.',
+    },
   ];
 
   const initialBoards = Array.from(container.querySelectorAll(':scope > .board'));
@@ -95,7 +101,8 @@
     for (const el of cards) {
       const name = (el.getAttribute('data-board') || '').toLowerCase();
       const chip = (el.getAttribute('data-chip') || '').toLowerCase();
-      const match = !q || name.includes(q) || chip.includes(q);
+      const details = (el.textContent || '').toLowerCase();
+      const match = !q || name.includes(q) || chip.includes(q) || details.includes(q);
       el.style.display = match ? '' : 'none';
       if (match) visible++;
     }

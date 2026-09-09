@@ -12,6 +12,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+* **Firmware installer page**: board cards now show their distinguishing firmware capabilities alongside hardware specifications, searchable by capability. Cards group hardware, enabled features, and downloadable artifacts into labeled rows, with tooltips that explain each feature.
+* **Firmware installer update flow**: the Wi-Fi update path now clearly requires an already-installed firmware image, while new or recovery devices are directed to USB WebSerial flashing. Optional device authentication is collapsed by default.
+* **Extension catalog**: each Extension now has one card with P4 and S3 downloads, an optional GitHub README link, and a collapsed usage section.
+
 ## [1.30.0] - 2026-09-09
 
 ### Added

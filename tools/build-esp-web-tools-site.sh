@@ -84,12 +84,42 @@ find_boot_app0_bin() {
 # break attribute or text contexts: & < > " '
 html_escape() {
   local s="$1"
-  s="${s//&/&amp;}"
-  s="${s//</&lt;}"
-  s="${s//>/&gt;}"
-  s="${s//\"/&quot;}"
-  s="${s//\'/&#39;}"
+  s="${s//&/\&amp;}"
+  s="${s//</\&lt;}"
+  s="${s//>/\&gt;}"
+  s="${s//\"/\&quot;}"
+  s="${s//\'/\&#39;}"
   printf '%s' "$s"
+}
+
+get_capability_label() {
+  case "$1" in
+    mcp) echo "MCP" ;;
+    ble_hid) echo "BLE HID" ;;
+    bthome) echo "BTHome" ;;
+    image_fetch) echo "Images" ;;
+    camera) echo "Camera" ;;
+    audio) echo "Audio" ;;
+    microphone) echo "Microphone" ;;
+    extensions) echo "Extensions" ;;
+    sd_card) echo "SD card" ;;
+    mqtt) echo "MQTT / HA" ;;
+  esac
+}
+
+get_capability_tooltip() {
+  case "$1" in
+    mcp) echo "Includes a local MCP server that you can enable in the device portal for compatible AI assistants." ;;
+    ble_hid) echo "Acts as a Bluetooth keyboard for a paired computer, tablet, or phone." ;;
+    bthome) echo "Broadcasts sensor readings as Bluetooth Low Energy telemetry." ;;
+    image_fetch) echo "Downloads and displays images from HTTP or HTTPS URLs." ;;
+    camera) echo "Captures still images from the connected camera." ;;
+    audio) echo "Plays tones, alerts, and audio through the board's speaker output." ;;
+    microphone) echo "Captures microphone audio for voice features." ;;
+    extensions) echo "Runs installable native visual extensions." ;;
+    sd_card) echo "Stores files and media on a microSD card." ;;
+    mqtt) echo "Connects to MQTT and Home Assistant for telemetry and control." ;;
+  esac
 }
 
 get_app_offset_dec_from_partitions_bin() {
@@ -269,8 +299,16 @@ for board_name in "${!FQBN_TARGETS[@]}"; do
     echo "Skipping beta board: $board_name" >&2
     continue
   fi
+  if [[ -n "${BOARD_FILTER:-}" && ",${BOARD_FILTER}," != *",${board_name},"* ]]; then
+    continue
+  fi
   boards+=("$board_name")
 done
+
+if [[ ${#boards[@]} -eq 0 ]]; then
+  echo "ERROR: BOARD_FILTER selected no configured boards" >&2
+  exit 1
+fi
 
 # Sort for stable output
 IFS=$'\n' boards=($(sort <<<"${boards[*]}"))
@@ -341,6 +379,7 @@ for board_name in "${boards[@]}"; do
   flash_mb=""
   psram_mb=""
   display_size=""
+  capabilities=()
 
   if [[ -f "$metadata_file" ]]; then
     if ! jq empty "$metadata_file" 2>/dev/null; then
@@ -353,6 +392,14 @@ for board_name in "${boards[@]}"; do
     flash_mb=$(jq -r '(.flash_mb // "") | tostring' "$metadata_file")
     psram_mb=$(jq -r '(.psram_mb // "") | tostring' "$metadata_file")
     display_size=$(jq -r '.display.size // ""' "$metadata_file")
+
+    if ! jq -e '(.capabilities // []) | type == "array" and all(.[]; type == "string")' "$metadata_file" >/dev/null; then
+      echo "ERROR: capabilities must be an array of strings in $metadata_file" >&2
+      exit 1
+    fi
+    while IFS= read -r capability; do
+      capabilities+=("$capability")
+    done < <(jq -r '.capabilities[]?' "$metadata_file")
 
     case "$device_class" in
       macropad|epaper|headless|shutter_tester|coffee_scale|darkroom_timer|voice_assistant) ;;
@@ -415,10 +462,31 @@ EOF
 EOF
 
   # Build spec badges (only emit non-empty ones)
-  badges_html="<span class=\"badge\">Chip: <code>${chip_family}</code></span>"
+  badges_html="<div class=\"row-label hardware-label\">⚙️ Hardware</div><div class=\"pill-row\"><span class=\"badge\">Chip: <code>${chip_family}</code></span>"
   [[ -n "$flash_mb" && "$flash_mb" != "null" ]] && badges_html="${badges_html}<span class=\"badge\">${flash_mb} MB Flash</span>"
   [[ -n "$psram_mb" && "$psram_mb" != "null" && "$psram_mb" != "0" ]] && badges_html="${badges_html}<span class=\"badge\">${psram_mb} MB PSRAM</span>"
   [[ -n "$display_size" && "$display_size" != "null" ]] && badges_html="${badges_html}<span class=\"badge\">${display_size} Display</span>"
+  badges_html="${badges_html}</div>"
+
+  capability_badges_html=""
+  for capability in "${capabilities[@]}"; do
+    capability_label="$(get_capability_label "$capability")"
+    capability_tooltip="$(get_capability_tooltip "$capability")"
+    if [[ -z "$capability_label" || -z "$capability_tooltip" ]]; then
+      echo "ERROR: Unknown capability '$capability' in $metadata_file" >&2
+      exit 1
+    fi
+    capability_label_esc="$(html_escape "$capability_label")"
+    capability_tooltip_esc="$(html_escape "$capability_tooltip")"
+    capability_badges_html="${capability_badges_html}<span class=\"badge capability-badge\" tabindex=\"0\" aria-label=\"${capability_label_esc}: ${capability_tooltip_esc}\" data-tooltip=\"${capability_tooltip_esc}\">${capability_label_esc}</span>"
+  done
+
+  capabilities_html=""
+  if [[ -n "$capability_badges_html" ]]; then
+    capabilities_html="<div class=\"board-capabilities\"><div class=\"capabilities-label\">✨ Enabled features</div><div class=\"pill-row\">${capability_badges_html}</div></div>"
+  fi
+
+  downloads_html="<div class=\"board-downloads\"><div class=\"row-label downloads-label\">⬇️ Downloads</div><div class=\"pill-row\"><a class=\"badge download-badge\" href=\"./manifests/${board_name}.json\">Installer</a><a class=\"badge download-badge\" href=\"./firmware/${board_name}/app.bin\">Firmware</a><a class=\"badge download-badge\" href=\"./ota/${board_name}.json\">OTA info</a></div></div>"
 
   desc_html=""
   if [[ -n "$description" && "$description" != "null" ]]; then
@@ -429,17 +497,15 @@ EOF
 
   cat >> "$board_fragment_tmp" <<EOF
           <div class="board" data-board="${board_name}" data-chip="${chip_family}" data-class="${device_class}">
-            <div>
+            <div class="board-content">
               <div class="board-title">${board_display_name_esc}</div>
               ${desc_html}
               <div class="board-specs">${badges_html}</div>
-              <div class="board-links">
-                <a href="./manifests/${board_name}.json">manifest</a>
-                <a href="./firmware/${board_name}/app.bin">app</a>
-                <a href="./ota/${board_name}.json">ota</a>
-              </div>
+              ${capabilities_html}
+              ${downloads_html}
             </div>
-            <div>
+            <div class="board-install">
+              <span class="install-label">🔌 Flash via USB</span>
               <esp-web-install-button manifest="./manifests/${board_name}.json"></esp-web-install-button>
             </div>
           </div>
@@ -452,6 +518,8 @@ while IFS= read -r source; do
   package_base="${package_base%.elf}"
   title="$(python3 "$REPO_ROOT/tools/extension_package_name.py" --title "$source")"
   metadata_file="$(dirname "$source")/metadata.json"
+  extension_dir="$(basename "$(dirname "$source")")"
+  readme_file="$(dirname "$source")/README.md"
 
   if [[ ! -f "$metadata_file" ]]; then
     echo "ERROR: Missing extension catalog metadata: $metadata_file" >&2
@@ -463,6 +531,11 @@ while IFS= read -r source; do
   fi
   summary="$(jq -r '.summary' "$metadata_file")"
   usage="$(jq -r '.usage' "$metadata_file")"
+  extension_downloads_html=""
+  extension_readme_html=""
+  if [[ -n "$repo_owner" && -n "$repo_name" && -f "$readme_file" ]]; then
+    extension_readme_html="<a class=\"extension-readme\" href=\"https://github.com/${repo_owner}/${repo_name}/blob/main/extensions/${extension_dir}/README.md\" target=\"_blank\" rel=\"noreferrer\">README on GitHub</a>"
+  fi
   for target in p4 s3; do
     package_name="$package_base-$target.ext"
     package_file="$BUILD_DIR/extensions/$package_name"
@@ -472,18 +545,22 @@ while IFS= read -r source; do
     fi
     package_size="$(stat -c%s "$package_file")"
     cp "$package_file" "$OUT_DIR/extensions/$package_name"
+    target_label="${target^^} download"
+    extension_downloads_html="${extension_downloads_html}<a class=\"extension-download\" href=\"./extensions/$package_name\" download>${target_label}<span>$((package_size / 1024)) KiB</span></a>"
+  done
 
-    cat >> "$extension_fragment_tmp" <<EOF
+  cat >> "$extension_fragment_tmp" <<EOF
           <article class="extension">
-            <div class="extension-title">$(html_escape "$title") ($target)</div>
+            <div class="extension-title">$(html_escape "$title")</div>
             <div class="extension-summary">$(html_escape "$summary")</div>
-            <div class="extension-specs"><span class="badge">$(html_escape "$package_name")</span><span class="badge">$((package_size / 1024)) KiB</span></div>
-            <div class="extension-usage-label">Usage</div>
-            <pre class="extension-usage">$(html_escape "$usage")</pre>
-            <a class="extension-download" href="./extensions/$package_name" download>Download extension</a>
+            ${extension_readme_html}
+            <details class="extension-usage-details">
+              <summary>Usage</summary>
+              <div class="extension-usage">$(html_escape "$usage")</div>
+            </details>
+            <div class="extension-downloads">${extension_downloads_html}</div>
           </article>
 EOF
-  done
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$REPO_ROOT/extensions"/*/ | sort)
 
 # Copy static assets and render index.html from template

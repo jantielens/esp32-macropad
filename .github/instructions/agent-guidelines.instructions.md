@@ -81,6 +81,7 @@ If the build fails:
 - Library management changed → Update `docs/dev/library-management.md`
 - Build workflow modified → Update `README.md` CI/CD section and `docs/dev/build-and-release-process.md`
 - Board configuration system changed → Update `README.md` board configuration section and `docs/dev/build-and-release-process.md`
+- Board feature flags changed → Review the board's `src/boards/<board>/metadata.json` `capabilities` list. Update it when the installer should display a different user-facing capability; this metadata is manual and is not generated from `HAS_*` or `IS_*` flags.
 - Release workflow modified → Update `docs/dev/build-and-release-process.md` and `README.md` release section
 - New requirement added → Update `README.md` prerequisites
 - REST API endpoint added/changed → Update `docs/dev/web-portal.md` and `README.md` API table

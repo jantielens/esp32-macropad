@@ -5,6 +5,7 @@
   "chip_family": "ESP32-S3",
   "flash_mb": 32,
   "psram_mb": 8,
+  "capabilities": ["mcp", "mqtt"],
   "wireless": {
     "wifi": true,
     "ble": false

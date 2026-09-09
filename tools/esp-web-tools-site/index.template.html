@@ -18,7 +18,7 @@
         <div class="badges">
           <a class="badge badge-link" href="{{VERSION_HREF}}" target="_blank" rel="noreferrer">Version <code>{{DISPLAY_VERSION}}</code></a>
           <a class="badge badge-link" href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noreferrer">Powered by ESP Web Tools</a>
-          <a class="badge badge-link" href="./dashboard.html">Device Health Dashboard</a>
+          <a class="badge badge-link" href="./dashboard.html">📊 Device Health Dashboard</a>
         </div>
       </div>
     </header>
@@ -33,25 +33,31 @@
       </section>
 
       <section class="panel panel-ota" id="ota-panel">
-        <div class="panel-title">Device Update (Wi-Fi)</div>
+        <div class="panel-title">📡 Device Update (Wi-Fi)</div>
         <div class="panel-sub">
-          This flow updates a device with an older firmware, that is already on your network.
+          Update a device that is already running ESP32 Macropad firmware and connected to your network.
         </div>
+        <p class="ota-prerequisite"><strong>Existing firmware required:</strong> New devices and recovery flashes must use USB Flash (WebSerial) below.</p>
         <div class="form-grid">
           <div class="field">
             <label for="deviceBase">Device URL</label>
             <input id="deviceBase" type="url" placeholder="http://192.168.1.50" autocomplete="off" />
             <small>Enter the device base URL (IP or mDNS). Example: http://esp32.local</small>
           </div>
+        </div>
+        <details class="auth-details">
+          <summary>🔐 Device authentication (optional)</summary>
+          <div class="form-grid auth-grid">
           <div class="field">
-            <label for="authUsername">Basic Auth Username (required if your device has authentication enabled)</label>
+            <label for="authUsername">Username</label>
             <input id="authUsername" type="text" autocomplete="username" />
           </div>
           <div class="field">
-            <label for="authPassword">Basic Auth Password (required if your device has authentication enabled)</label>
+            <label for="authPassword">Password</label>
             <input id="authPassword" type="password" autocomplete="current-password" />
           </div>
-        </div>
+          </div>
+        </details>
         <div class="ota-actions">
           <button id="ota-update-btn" class="ota-btn" type="button">Update device</button>
         </div>
@@ -61,7 +67,7 @@
       <div class="panel-sep" role="separator" aria-hidden="true"></div>
 
       <section class="panel">
-        <div class="panel-title">USB Flash (WebSerial)</div>
+        <div class="panel-title">🔌 USB Flash (WebSerial)</div>
         <div class="panel-sub">Use this flow when the device is connected via USB.</div>
         <div class="toolbar">
           <input id="boardFilter" class="filter" type="search" placeholder="Filter boards…" autocomplete="off" />
@@ -74,7 +80,7 @@
       </section>
 
       <section class="panel">
-        <div class="panel-title">Extensions</div>
+        <div class="panel-title">🧩 Extensions</div>
         <div class="panel-sub">Download an extension, then upload it from your device's Extensions page.</div>
         <div class="extensions">
 {{EXTENSION_ENTRIES}}
@@ -82,7 +88,7 @@
       </section>
 
       <section class="panel" id="release-notes-panel">
-        <div class="panel-title">Release notes</div>
+        <div class="panel-title">📝 Release notes</div>
         <div class="panel-sub">
           <a href="{{VERSION_HREF}}" target="_blank" rel="noreferrer">View release</a>
           <span class="dot">•</span>
