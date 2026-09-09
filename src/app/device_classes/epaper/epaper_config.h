@@ -34,6 +34,14 @@ struct EpaperConfig {
 		char service_url[CONFIG_EPAPER_URL_MAX_LEN];  // service base URL; /api/v1/next is appended at request time
 		char service_token[CONFIG_EPAPER_TOKEN_MAX_LEN]; // write-only bearer credential
 		uint32_t service_interval_seconds;             // single wake interval for Service mode
+		uint32_t wake_budget_ms;                       // timer wake total cap
+		uint32_t wake_wifi_target_ms;                  // expected WiFi association duration
+		uint32_t wake_wifi_budget_ms;                  // WiFi association cap
+		uint32_t wake_fetch_target_ms;                 // expected image fetch duration
+		uint32_t wake_fetch_budget_ms;                 // image fetch cap
+		uint32_t wake_mqtt_target_ms;                  // expected MQTT delivery duration
+		uint32_t wake_mqtt_budget_ms;                  // MQTT delivery cap
+		uint32_t wake_cutoff_retry_seconds;            // 0 = use normal refresh interval
 		uint8_t epaper_rotation;                      // 0..3, default 0
 		uint32_t epaper_last_crc32;                   // CRC32 of last successfully rendered image (0 = none)
 		bool epaper_crc32_enabled;                    // fetch "<url>.crc32" sidecar to skip unchanged refreshes (default false)

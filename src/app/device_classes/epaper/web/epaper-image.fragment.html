@@ -249,6 +249,58 @@
   </div>
 </div>
 
+<div class="card mb-3">
+  <div class="card-header"><strong>Advanced: Timer Wake Protection</strong></div>
+  <div class="card-body">
+    <p class="form-text">Limits energy spent on scheduled refreshes when WiFi, the image service, or MQTT is slow or unavailable. When a limit is reached, the device keeps the image already on screen and returns to deep sleep. Manual button refreshes and cold boots are not limited. An in-progress panel refresh is never interrupted.</p>
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="epaper_wake_budget_ms">Maximum scheduled wake time (ms)</label>
+        <input type="number" class="form-control" id="epaper_wake_budget_ms" name="epaper_wake_budget_ms" min="5000" max="60000" step="100" placeholder="15000">
+        <div class="form-text">Sets the total time available for WiFi, image fetch, panel work, and telemetry.</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label" for="epaper_wake_cutoff_retry_seconds">Retry after a limit is reached (s)</label>
+        <input type="number" class="form-control" id="epaper_wake_cutoff_retry_seconds" name="epaper_wake_cutoff_retry_seconds" min="0" max="3600" step="1" placeholder="0">
+        <div class="form-text">Use 0 to wait until the normal next refresh. A positive value tries again sooner.</div>
+      </div>
+    </div>
+    <p class="form-text mb-2">For each network stage, <strong>Expected</strong> is recorded in wake telemetry to help tune the policy. <strong>Stop after</strong> is the enforced limit.</p>
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="epaper_wake_wifi_target_ms">WiFi connection (ms)</label>
+        <div class="input-group">
+          <span class="input-group-text">Expected</span>
+          <input type="number" class="form-control" id="epaper_wake_wifi_target_ms" name="epaper_wake_wifi_target_ms" min="100" max="30000" step="100" placeholder="4000" aria-label="Expected WiFi connection time">
+          <span class="input-group-text">Stop after</span>
+          <input type="number" class="form-control" id="epaper_wake_wifi_budget_ms" name="epaper_wake_wifi_budget_ms" min="500" max="30000" step="100" placeholder="5500" aria-label="WiFi connection limit">
+        </div>
+        <div class="form-text">Joining the configured WiFi network.</div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="epaper_wake_fetch_target_ms">Image download (ms)</label>
+        <div class="input-group">
+          <span class="input-group-text">Expected</span>
+          <input type="number" class="form-control" id="epaper_wake_fetch_target_ms" name="epaper_wake_fetch_target_ms" min="100" max="30000" step="100" placeholder="2000" aria-label="Expected image download time">
+          <span class="input-group-text">Stop after</span>
+          <input type="number" class="form-control" id="epaper_wake_fetch_budget_ms" name="epaper_wake_fetch_budget_ms" min="500" max="30000" step="100" placeholder="3500" aria-label="Image download limit">
+        </div>
+        <div class="form-text">Requesting and receiving the next image.</div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="epaper_wake_mqtt_target_ms">MQTT telemetry (ms)</label>
+        <div class="input-group">
+          <span class="input-group-text">Expected</span>
+          <input type="number" class="form-control" id="epaper_wake_mqtt_target_ms" name="epaper_wake_mqtt_target_ms" min="100" max="30000" step="50" placeholder="750" aria-label="Expected MQTT telemetry time">
+          <span class="input-group-text">Stop after</span>
+          <input type="number" class="form-control" id="epaper_wake_mqtt_budget_ms" name="epaper_wake_mqtt_budget_ms" min="500" max="30000" step="100" placeholder="1500" aria-label="MQTT telemetry limit">
+        </div>
+        <div class="form-text">Connecting and sending the wake report.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="save-bar">
   <button type="button" class="btn btn-primary btn-sm" id="epaper-image-save-btn">Save</button>
 </div>

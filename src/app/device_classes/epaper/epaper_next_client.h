@@ -33,7 +33,7 @@ struct EpaperNextPayload {
 
 EpaperNextPayload epaper_next_client_fetch(const char* service_base,
 		const char* bearer_token, const EpaperCurrentFingerprint& current,
-		bool cache_enabled, uint8_t max_cycles = 2);
+		bool cache_enabled, uint8_t max_cycles = 2, uint32_t timeout_ms = 0);
 void epaper_next_payload_release(EpaperNextPayload* payload);
 
 #endif

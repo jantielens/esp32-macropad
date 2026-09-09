@@ -43,7 +43,9 @@ struct WifiConnectionDiagnostics {
 // Call before wifi_manager_connect() to overlap hardware bring-up with other init.
 void wifi_manager_early_init();
 
-bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid);
+// timeout_ms=0 retains the normal board-specific retry policy.
+bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid,
+                          uint32_t timeout_ms = 0);
 void wifi_manager_start_mdns(const DeviceConfig *config);
 void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool is_ap_mode);
 

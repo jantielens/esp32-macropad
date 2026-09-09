@@ -451,6 +451,12 @@ add_host_gtest(test_epaper_wake_journal
 )
 target_compile_definitions(test_epaper_wake_journal PRIVATE HAS_EPAPER=1)
 
+add_host_gtest(test_epaper_wake_budget
+    test_epaper_wake_budget.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_wake_budget.cpp
+)
+target_compile_definitions(test_epaper_wake_budget PRIVATE HAS_EPAPER=1)
+
 add_host_gtest(test_mp3_metadata
     test_mp3_metadata.cpp
     ${PROJECT_SOURCE_DIR}/src/app/mp3_metadata.cpp

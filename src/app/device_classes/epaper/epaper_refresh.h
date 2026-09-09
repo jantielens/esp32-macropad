@@ -40,7 +40,8 @@ struct EpaperRefreshOutcome {
 // always powered down (einkOff) before this returns.
 //
 // The watchdog is disabled around the long drawImage() call.
-EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force);
+EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force,
+										 uint32_t fetch_timeout_ms = 0);
 
 // Immediately draw the provided image URL without changing the saved carousel
 // config and without CRC sidecar checks. Used by the Image & Schedule portal

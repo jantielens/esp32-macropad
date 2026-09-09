@@ -1,7 +1,7 @@
 ---
 title: E-Paper Guide
 description: Detailed guide for the ESP32 Macropad e-paper device class, including hardware model, wake behavior, image refresh flow, portal configuration, and current limitations.
-ms.date: 2026-07-26
+ms.date: 2026-09-09
 ms.topic: concept
 ---
 
@@ -63,6 +63,53 @@ flowchart TD
     Config --> Portal[Run web portal until idle timeout]
     Portal --> Sleep
 ```
+
+## Timer Wake Budget
+
+Timer wakes use a bounded active-time policy to avoid keeping the radio and
+panel powered during an upstream outage. Cold boots and WAKE-button refreshes
+retain the existing best-effort behavior because the user is actively waiting
+for a result.
+
+The initial defaults live in `src/app/device_classes/epaper/epaper_wake_budget.h`.
+They are persisted per device and can be adjusted in the portal's **Images &
+Schedule** page without reflashing:
+
+* Overall cap: total timer-wake ceiling, initially 15 s
+* WiFi, fetch, and MQTT target: expected duration, retained in wake telemetry for tuning
+* WiFi, fetch, and MQTT cap: hard limit supplied to that interruptible network stage
+* Cutoff retry interval: sleep interval after a cap breach; `0` uses the normal image refresh interval
+* `EPAPER_BUDGET_SHUTDOWN_RESERVE_MS` retains time to close owned resources before deep sleep
+
+The controller passes the lesser of a stage cap and the time left in the total
+budget to WiFi, the service fetch, and MQTT. A cap breach keeps the existing
+panel image, checkpoints a wake record in RTC memory, and returns to deep
+sleep. MQTT delivery is optional for the current wake: the existing RTC
+journal publishes the stored record on a later successful MQTT connection.
+
+Wake events include a `budget` object for field diagnostics:
+
+```json
+{
+  "budget": {
+    "overall_limit_ms": 15000,
+    "elapsed_ms": 15000,
+    "remaining_ms": 0,
+    "wifi_limit_ms": 5500,
+    "fetch_limit_ms": 3500,
+    "mqtt_limit_ms": 1500,
+    "wifi_target_ms": 4000,
+    "fetch_target_ms": 2000,
+    "mqtt_target_ms": 750,
+    "cut": "fetch_budget"
+  }
+}
+```
+
+The `cut` value is one of `none`, `wifi_budget`, `fetch_budget`,
+`mqtt_budget`, or `overall_budget`. Successful wakes retain the same fields
+with `cut` set to `none`, making target and cap changes observable from the
+same JSONL archive.
 
 ## Board Profile
 

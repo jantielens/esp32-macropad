@@ -199,12 +199,12 @@ static EpaperRefreshOutcome epaper_refresh_run_url(DeviceConfig* config, const c
 }
 
 #if defined(BOARD_RETERMINAL_E1003)
-static EpaperRefreshOutcome epaper_refresh_run_service(DeviceConfig* config) {
+static EpaperRefreshOutcome epaper_refresh_run_service(DeviceConfig* config, uint32_t fetch_timeout_ms) {
 		EpaperRefreshOutcome out = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 		const uint32_t started = millis();
 		EpaperNextPayload payload = epaper_next_client_fetch(
 				g_epaper_config.service_url, g_epaper_config.service_token,
-				g_service_fingerprint, g_epaper_config.epaper_sd_cache_enabled);
+				g_service_fingerprint, g_epaper_config.epaper_sd_cache_enabled, 2, fetch_timeout_ms);
 		out.crc_used = payload.content_crc32;
 		if (payload.result == EpaperNextResult::Keep) {
 				out.result = EpaperRefreshResult::Skipped;
@@ -297,11 +297,11 @@ static EpaperRefreshOutcome epaper_refresh_run_service(DeviceConfig* config) {
 }
 #endif
 
-EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force) {
+EpaperRefreshOutcome epaper_refresh_run(DeviceConfig* config, bool force, uint32_t fetch_timeout_ms) {
 		if (epaper_source_uses_service(g_epaper_config.source_mode)) {
 #if defined(BOARD_RETERMINAL_E1003)
 				(void)force;
-				return epaper_refresh_run_service(config);
+				return epaper_refresh_run_service(config, fetch_timeout_ms);
 #else
 				EpaperRefreshOutcome unsupported = {
 						EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};

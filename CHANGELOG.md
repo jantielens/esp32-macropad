@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-08
+ms.date: 2026-09-09
 ms.topic: reference
 ---
 
@@ -11,6 +11,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.30.0] - 2026-09-09
+
+### Added
+
+* **E-paper timer wake protection**: scheduled image refreshes now apply configurable overall, WiFi, image-download, and MQTT time limits. When an interruptible network stage exceeds its limit, the device keeps the existing panel image, records the outcome in its RTC journal, and returns to deep sleep. Button and cold-boot refreshes retain their existing best-effort behavior, and an active panel refresh is never interrupted.
+* **E-paper wake budget controls**: the **Images & Schedule** portal page now provides advanced controls for expected stage times, enforced limits, the total timer-wake limit, and an optional cutoff retry interval. Defaults are based on initial field telemetry and can be tuned without reflashing.
+* **E-paper budget telemetry**: wake events now report the active overall and per-stage limits, timing targets, remaining budget, and cutoff cause, making tuning possible from retained diagnostic archives.
 
 ## [1.29.0] - 2026-09-08
 

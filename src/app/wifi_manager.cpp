@@ -284,8 +284,16 @@ void wifi_manager_early_init() {
 		#endif
 }
 
-bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
+bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, uint32_t timeout_ms) {
 		if (!config) return false;
+		const uint32_t connect_started_ms = millis();
+		auto remaining_timeout = [&](uint32_t default_timeout_ms) -> uint32_t {
+			if (timeout_ms == 0) return default_timeout_ms;
+			const uint32_t elapsed_ms = millis() - connect_started_ms;
+			if (elapsed_ms >= timeout_ms) return 0u;
+			const uint32_t remaining_ms = timeout_ms - elapsed_ms;
+			return remaining_ms < default_timeout_ms ? remaining_ms : default_timeout_ms;
+		};
 
 		LOGI("WiFi", "Connection start");
 		LOGI("WiFi", "SSID: %s", config->wifi_ssid);
@@ -307,7 +315,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 		LOGI("WiFi", "Waiting for ESP-Hosted link...");
 		{
 				const unsigned long hosted_start = millis();
-				const unsigned long HOSTED_TIMEOUT_MS = 8000;
+				const unsigned long HOSTED_TIMEOUT_MS = remaining_timeout(8000);
 				bool link_ready = false;
 				while (millis() - hosted_start < HOSTED_TIMEOUT_MS) {
 						String mac = WiFi.macAddress();
@@ -404,7 +412,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 				LOGI("WiFi", "Using cached AP: %s | Ch %u", bssid_str, (unsigned)g_cached_channel);
 
 				WiFi.begin(config->wifi_ssid, config->wifi_password, g_cached_channel, g_cached_bssid);
-				if (wait_for_connection(3000)) {
+				if (wait_for_connection(remaining_timeout(3000))) {
 						const int rssi = WiFi.RSSI();
 						if (rssi > WIFI_CACHED_RSSI_FLOOR_DBM) {
 								LOGI("WiFi", "Connected (cached AP, %d dBm)", rssi);
@@ -431,6 +439,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 		// Auto-reconnect doesn't propagate reliably over SDIO, so we
 		// re-issue WiFi.begin() on each attempt with a clean disconnect cycle.
 		for (int attempt = 0; attempt < WIFI_MAX_ATTEMPTS; attempt++) {
+				if (timeout_ms > 0 && remaining_timeout(1) == 0) break;
 				if (attempt > 0) {
 						WiFi.disconnect(false);
 						delay(500);
@@ -438,7 +447,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 				LOGI("WiFi", "Attempt %d/%d", attempt + 1, WIFI_MAX_ATTEMPTS);
 				WiFi.begin(config->wifi_ssid, config->wifi_password);
 
-				unsigned long timeout = WIFI_BACKOFF_BASE * (attempt + 1);
+				unsigned long timeout = remaining_timeout(WIFI_BACKOFF_BASE * (attempt + 1));
 				if (wait_for_connection(timeout)) {
 						LOGI("WiFi", "IP: %s", WiFi.localIP().toString().c_str());
 						LOGI("WiFi", "Hostname: %s", WiFi.getHostname());
@@ -472,7 +481,8 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid) {
 		}
 
 		for (int attempt = 0; attempt < WIFI_MAX_ATTEMPTS; attempt++) {
-				unsigned long backoff = WIFI_BACKOFF_BASE * (attempt + 1);
+				unsigned long backoff = remaining_timeout(WIFI_BACKOFF_BASE * (attempt + 1));
+				if (backoff == 0) break;
 				unsigned long start = millis();
 
 				LOGI("WiFi", "Attempt %d/%d (timeout %ds)", attempt + 1, WIFI_MAX_ATTEMPTS, backoff / 1000);

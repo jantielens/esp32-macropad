@@ -48,6 +48,23 @@ TEST(EpaperWakeJournal, PreservesRefreshResultOnDeliveryFailure) {
 		EXPECT_EQ(record.refresh_result, EpaperWakeResult::Updated);
 }
 
+TEST(EpaperWakeJournal, PreservesRefreshResultOnBudgetCut) {
+		clear_wake_journal();
+		epaper_timing_begin_wake(EpaperWakeReason::Timer);
+		epaper_wake_journal_finalize(EpaperWakeResult::Updated, 3840, 200);
+		epaper_timing_last.overall_budget_ms = 10000;
+		epaper_timing_last.budget_cut = 3;
+		epaper_wake_journal_checkpoint(EpaperWakeStage::MqttConnect);
+		epaper_wake_journal_mark_delivery_failed(EpaperWakeResult::BudgetExceeded);
+
+		EpaperWakeRecord record = {};
+		ASSERT_TRUE(epaper_wake_journal_peek(&record));
+		EXPECT_EQ(record.result, EpaperWakeResult::BudgetExceeded);
+		EXPECT_EQ(record.refresh_result, EpaperWakeResult::Updated);
+		EXPECT_EQ(record.timing.overall_budget_ms, 10000u);
+		EXPECT_EQ(record.timing.budget_cut, 3u);
+}
+
 TEST(EpaperWakeJournal, DropsOldestRecordWhenFull) {
 		clear_wake_journal();
 		const uint32_t first_wake_id = epaper_timing_last.wake_id + 1;
