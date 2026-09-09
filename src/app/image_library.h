@@ -1,4 +1,5 @@
-#pragma once
+#ifndef IMAGE_LIBRARY_H
+#define IMAGE_LIBRARY_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -62,3 +63,5 @@ private:
 // The scan is non-recursive and accepts /images itself as the default album.
 bool image_library_discover(const char* directory, ImageLibraryCatalog* catalog,
                             ImageLibrarySnapshot* target);
+
+#endif // IMAGE_LIBRARY_H
