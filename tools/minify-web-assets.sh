@@ -1026,7 +1026,7 @@ asset_feature_flag() {
     # Strip trailing _fragment suffix (no-op for JS stems).
     stem="${stem%_fragment}"
     case "$stem" in
-        pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|screen_preview|screensaver)
+        pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|screen_preview|screensaver|image_library|portal_image_library)
             echo "HAS_DISPLAY" ;;
         mqtt|ha_discovery)
             echo "HAS_MQTT" ;;

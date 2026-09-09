@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_IMAGE_FETCH
+#if HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH
 
 #include <stdint.h>
 #include <stddef.h>
@@ -15,7 +15,7 @@
 // pixel buffer sized exactly target_w × target_h.  Format is auto-detected
 // from magic bytes.  Two scale modes:
 //   - Cover (default): fill target rect, center-crop excess (CSS object-fit: cover)
-//   - Letterbox: fit inside target rect, black bars (CSS object-fit: contain)
+//   - Letterbox: fit inside target rect with caller-provided padding (CSS object-fit: contain)
 //
 // All intermediate buffers are allocated from PSRAM.  The returned output
 // buffer is also PSRAM-allocated; caller must free with heap_caps_free().
@@ -32,8 +32,12 @@ enum ImageFormat : uint8_t {
 
 enum ImageScaleMode : uint8_t {
     IMAGE_SCALE_COVER    = 0,   // Fill target, center-crop excess (CSS object-fit: cover)
-    IMAGE_SCALE_LETTERBOX = 1,  // Fit inside target, black bars (CSS object-fit: contain)
+    IMAGE_SCALE_LETTERBOX = 1,  // Fit inside target with caller-provided padding (CSS object-fit: contain)
 };
+
+// PNG decoding expands the entire source image to RGBA8888 before scaling.
+// Keep this bounded so source, decode, and display buffers fit in PSRAM together.
+#define IMAGE_LIBRARY_MAX_PNG_PIXELS 2000000UL
 
 // Detect image format from the first bytes of data.
 ImageFormat image_detect_format(const uint8_t* data, size_t len);
@@ -46,12 +50,13 @@ ImageFormat image_detect_format(const uint8_t* data, size_t len);
 //   scale_mode       — IMAGE_SCALE_COVER (fill+crop) or IMAGE_SCALE_LETTERBOX (fit+bars)
 //   out_pixels       — receives heap_caps_malloc'd RGB565 buffer (PSRAM)
 //   out_size         — receives byte count of the output buffer
+//   letterbox_color  — RGB565 color for letterbox padding (defaults to black)
 //
 // Returns true on success.  On failure, *out_pixels is NULL.
 bool image_decode_to_rgb565(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
     ImageScaleMode scale_mode,
-    uint16_t** out_pixels, size_t* out_size);
+    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color = 0);
 
-#endif // HAS_IMAGE_FETCH
+#endif // HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH

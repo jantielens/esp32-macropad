@@ -77,7 +77,7 @@ function padRenderCellContent(cell, btn) {
     } else if (hasBottom) {
         cell.appendChild(document.createElement('div'));
     }
-    if (btn.bg_image_url) {
+    if (btn.bg_image_url || btn.bg_image_path) {
         const img = document.createElement('div');
         img.className = 'pad-cell-image-placeholder';
         img.textContent = '\u{1F5BC}';
@@ -133,7 +133,7 @@ function padRenderCellContent(cell, btn) {
                 cell.appendChild(elc);
             }
         }
-    } else if (!btn.bg_image_url) {
+    } else if (!btn.bg_image_url && !btn.bg_image_path) {
         const centerText = btn.label_center || '\u2022';
         const elc = document.createElement('div');
         elc.className = 'pad-cell-label-center';

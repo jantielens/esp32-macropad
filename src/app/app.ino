@@ -55,6 +55,12 @@
 #include "image_fetch.h"
 #endif
 
+#if HAS_IMAGE_LIBRARY
+#include "image_library_config.h"
+#include "image_library_runtime.h"
+#include "local_image_loader.h"
+#endif
+
 #if HAS_BLE_HID
 #include "ble_hid.h"
 #endif
@@ -576,6 +582,10 @@ void setup()
 	#endif
 
 	#if HAS_DISPLAY
+	#if HAS_IMAGE_LIBRARY
+	image_library_config_init();
+	image_library_runtime_init();
+	#endif
 	binding_builtin_schemes_init();
 	timer_config_init();
 	#endif
@@ -655,6 +665,9 @@ void loop()
 	#if HAS_DISPLAY
 	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_SCREEN_SAVER);
 	screen_saver_manager_loop();
+		#if HAS_IMAGE_LIBRARY
+	image_library_runtime_tick(millis());
+		#endif
 	#endif
 
 	#if HAS_DISPLAY || HAS_BUTTON

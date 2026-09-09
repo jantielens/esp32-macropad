@@ -51,7 +51,7 @@ DisplayManager* displayManager = nullptr;
 DisplayManager::DisplayManager(DeviceConfig* cfg) 
 		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), pendingScreen(nullptr),
 		screenHistoryCount(0), skipHistoryPush(false), transientResumeScreen(nullptr), transientScreenActive(false),
-			infoScreen(cfg, this), testScreen(this), fpsScreen(this),
+					 infoScreen(cfg, this), testScreen(this), fpsScreen(this),
 			#if HAS_TOUCH && LV_USE_CANVAS
 			touchTestScreen(this),
 			#endif

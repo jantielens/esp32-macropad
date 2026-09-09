@@ -349,12 +349,38 @@
                     </div>
                 </details>
 
-                <!-- Image Background -->
                 <details class="editor-group" id="pad-edit-image-section">
-                    <summary>Image / Camera Feed</summary>
+                    <summary>Local Image</summary>
                     <div class="editor-group-body">
-                        <small style="display:block; margin-bottom:12px; color:#86868b;">Fetch a JPEG, PNG, or MJPEG stream from a URL and display it as the button background. For live camera feeds, point the URL at an MJPEG stream for best performance.</small>
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Use an uploaded image or a dynamic image binding as the button background.</small>
 
+                        <div id="pad-edit-local-image-group" class="form-group">
+                            <label for="pad-edit-bg-image-path">Local Image</label>
+                            <div style="display:flex; gap:8px;">
+                                <select id="pad-edit-bg-image-path" style="flex:1;"></select>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="pad-edit-bg-image-refresh" title="Refresh image library">Refresh</button>
+                            </div>
+                            <small>Select an uploaded image or enter <code>[image:current]</code> below to follow the slideshow image.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-bg-image-binding">Local Image Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <input type="text" id="pad-edit-bg-image-binding" maxlength="191" placeholder="e.g. [image:current]">
+                        </div>
+                        <div class="form-group" style="margin-top:8px;">
+                            <label for="pad-edit-bg-image-scale">Background Image Scale</label>
+                            <select id="pad-edit-bg-image-scale">
+                                <option value="cover">Cover (fill and crop)</option>
+                                <option value="letterbox">Letterbox (fit with button-color bars)</option>
+                            </select>
+                            <small>Applies to uploaded images and Camera Feed or Remote Image backgrounds. Camera Preview has its own scale setting.</small>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="editor-group" id="pad-edit-camera-feed-section">
+                    <summary>Camera Feed or Remote Image</summary>
+                    <div class="editor-group-body">
+                        <small style="display:block; margin-bottom:12px; color:#86868b;">Use an HTTP JPEG, PNG, or MJPEG stream as the button background.</small>
                         <div class="form-group">
                             <label for="pad-edit-bg-image-url">Image or Stream URL</label>
                             <input type="text" id="pad-edit-bg-image-url" maxlength="255" placeholder="e.g. http://192.168.1.10/stream.mjpeg or /snap.jpg">
@@ -374,13 +400,6 @@
                             <label for="pad-edit-bg-image-interval">Refresh Interval (ms)</label>
                             <input type="number" id="pad-edit-bg-image-interval" min="0" max="86400000" value="0" placeholder="0 = fetch once / stream">
                             <small>For MJPEG streams: set to <code>0</code> — the stream runs continuously. For snapshots: e.g. <code>5000</code> = refresh every 5 s.</small>
-                        </div>
-                        <div class="form-group" style="margin-top:8px;">
-                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                <input type="checkbox" id="pad-edit-bg-image-letterbox" style="width:18px; height:18px;">
-                                Letterbox (fit image, black bars)
-                            </label>
-                            <small>When checked, the image fits inside the button area with black bars. Otherwise it fills and crops.</small>
                         </div>
                     </div>
                 </details>

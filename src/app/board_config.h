@@ -825,6 +825,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define HAS_IMAGE_FETCH HAS_DISPLAY
 #endif
 
+// Enable local Storage-backed image loading for pad buttons and slideshows.
+#ifndef HAS_IMAGE_LIBRARY
+#define HAS_IMAGE_LIBRARY HAS_DISPLAY
+#endif
+
 // Enable onboard camera hardware support.
 #ifndef HAS_CAMERA
 #define HAS_CAMERA false

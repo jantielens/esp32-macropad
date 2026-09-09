@@ -189,6 +189,10 @@ async function padInit() {
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
     document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
+    var imageRefresh = document.getElementById('pad-edit-bg-image-refresh');
+    if (imageRefresh) imageRefresh.addEventListener('click', function () {
+        padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value);
+    });
 
     // Wire appearance field input listeners for reset-hint visibility (once)
     PAD_APPEARANCE_FIELDS.forEach(function(f) {
@@ -418,7 +422,7 @@ function padWidgetTypeChanged() {
         extensionSection.style.display = wtype === 'external' ? '' : 'none';
         if (wtype === 'external') extensionSection.open = true;
     }
-    ['pad-edit-labels-section', 'pad-edit-icon-section', 'pad-edit-image-section'].forEach(function (id) {
+    ['pad-edit-labels-section', 'pad-edit-icon-section', 'pad-edit-image-section', 'pad-edit-camera-feed-section'].forEach(function (id) {
         var section = document.getElementById(id);
         if (section) section.style.display = wtype === 'external' ? 'none' : '';
     });

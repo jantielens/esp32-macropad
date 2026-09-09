@@ -14,6 +14,10 @@
 #include "notify_action.cpp"
 #include "visual_alert_action.cpp"
 #include "timer_action.cpp"
+#if HAS_IMAGE_LIBRARY
+#include "image_next_action.cpp"
+#include "image_previous_action.cpp"
+#endif
 #if HAS_CAMERA
 #include "camera_capture_action.cpp"
 #endif

@@ -54,10 +54,14 @@ void image_fetch_init();
 //   target_w/h  — desired pixel dimensions
 //   interval_ms — 0 = fetch once, >0 = periodic refresh
 //   scale_mode  — IMAGE_SCALE_COVER or IMAGE_SCALE_LETTERBOX
+//   letterbox_color — RGB565 color for letterbox padding
 image_slot_t image_fetch_request(
     const char* url, const char* user, const char* pass,
     uint16_t target_w, uint16_t target_h, uint32_t interval_ms,
-    ImageScaleMode scale_mode = IMAGE_SCALE_COVER);
+    ImageScaleMode scale_mode = IMAGE_SCALE_COVER, uint16_t letterbox_color = 0);
+
+// Changes the letterbox padding color and schedules a refresh when needed.
+void image_fetch_set_letterbox_color(image_slot_t slot, uint16_t color);
 
 // Cancel a slot and free its PSRAM buffers.
 void image_fetch_cancel(image_slot_t slot);

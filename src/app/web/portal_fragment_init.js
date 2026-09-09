@@ -721,16 +721,16 @@ window.init_screensaver_fragment = function () {
         rail.dataset.stageCount = (hasIdle ? 1 : 0) + (hasSleep ? 1 : 0);
         if (hasIdle) {
             idleTime.textContent = formatDuration(idleSeconds);
-            idleTitle.textContent = idleName ? idleName.textContent : 'Standby pad';
+            idleTitle.textContent = idleName ? idleName.textContent : 'Idle screen';
         }
         if (hasSleep) sleepTime.textContent = formatDuration(sleepSeconds);
 
         if (!hasIdle && !hasSleep) {
             summary.textContent = 'The current screen stays visible until activity.';
         } else if (hasIdle && hasSleep) {
-            summary.textContent = 'The standby pad appears first, then the display turns off.';
+            summary.textContent = 'The idle screen appears first, then the display turns off.';
         } else if (hasIdle) {
-            summary.textContent = 'The standby pad remains visible until activity.';
+            summary.textContent = 'The idle screen remains visible until activity.';
         } else {
             summary.textContent = 'The display turns off after the selected delay.';
         }

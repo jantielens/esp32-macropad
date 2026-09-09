@@ -85,6 +85,7 @@ portal_extensions.js
 
 # [chunk:pad HAS_DISPLAY]
 # Pad editor — only consumed by the pad editor fragment on display boards.
+portal_image_library.js
 portal_pad_colors.js
 portal_pad_io.js
 portal_pad_blocks.js

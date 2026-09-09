@@ -4,6 +4,7 @@
 #include "camera_binding.h"
 #include "expr_binding.h"
 #include "health_binding.h"
+#include "image_binding.h"
 #include "list_binding.h"
 #include "music_binding.h"
 #include "net_binding.h"
@@ -14,6 +15,9 @@
 void binding_builtin_schemes_init() {
 #if HAS_CAMERA && HAS_DISPLAY
     camera_binding_init();
+#endif
+#if HAS_IMAGE_LIBRARY
+    image_binding_init();
 #endif
     health_binding_init();
     time_binding_init();

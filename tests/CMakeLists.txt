@@ -151,6 +151,11 @@ add_host_legacy_test(test_music_catalog
         ${PROJECT_SOURCE_DIR}/src/app/mp3_metadata.cpp
 )
 
+add_host_gtest(test_image_library
+    test_image_library.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/image_library.cpp
+)
+
 add_host_legacy_test(test_music_binding
     SOURCES test_music_binding.cpp
         ${PROJECT_SOURCE_DIR}/src/app/music_binding.cpp

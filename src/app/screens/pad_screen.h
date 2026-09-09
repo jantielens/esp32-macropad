@@ -9,6 +9,9 @@
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
 #endif
+#if HAS_IMAGE_LIBRARY
+#include "../local_image_loader.h"
+#endif
 #include <lvgl.h>
 
 class DisplayManager;
@@ -116,8 +119,20 @@ struct ButtonTile {
 #if HAS_IMAGE_FETCH
     lv_obj_t* bg_image;       // Background image widget (or nullptr)
     image_slot_t image_slot;  // Image fetch slot (-1 = none)
+#endif
+#if HAS_IMAGE_LIBRARY
+    lv_obj_t* local_bg_image;             // Local background image widget (or nullptr)
+    local_image_slot_t local_image_slot;  // Local image loader slot (-1 = none)
+    local_image_slot_t local_image_pending_slot; // Fully decoded replacement awaiting presentation
+    char local_image_template[CONFIG_BG_IMAGE_PATH_MAX_LEN]; // Configured path or binding template
+    char local_image_path[CONFIG_BG_IMAGE_PATH_MAX_LEN]; // Last resolved path
+    ImageScaleMode local_image_scale_mode;
+    uint16_t local_image_letterbox_color;
+    lv_image_dsc_t local_img_dsc;          // Descriptor for the local loader's frame
+#endif
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
     lv_image_dsc_t img_dsc;   // LVGL image descriptor for current frame.
-                              // dsc.data points into image_fetch's lvgl_buf
+                              // dsc.data points into the loader's lvgl_buf
                               // (zero-copy hand-off); tile does not own pixels.
 #endif
 };
@@ -192,7 +207,7 @@ private:
     void pollColorBindings();
     void pollNumberBindings();
     void pollBtnStateBindings();
-#if HAS_IMAGE_FETCH
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
     void pollImageFrames();
 #endif
 

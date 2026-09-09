@@ -41,6 +41,7 @@ struct ImageSlot {
     uint32_t last_fetch_ms;    // millis() of last successful fetch
     bool fetched_once;         // true after first successful fetch
     ImageScaleMode scale_mode; // Cover or letterbox
+    uint16_t letterbox_color;  // RGB565 padding color for letterbox mode
 
     // Triple-buffered pixel data — fetch task rotates front/back;
     // image_fetch_get_frame() swaps front<->lvgl under g_mutex so LVGL has
@@ -549,6 +550,7 @@ static void fetch_task(void* param) {
         uint16_t tw = slot.target_w;
         uint16_t th = slot.target_h;
         ImageScaleMode sm = slot.scale_mode;
+        uint16_t letterbox_color = slot.letterbox_color;
         strlcpy(url, slot.url, sizeof(url));
         strlcpy(user, slot.user, sizeof(user));
         strlcpy(pass, slot.pass, sizeof(pass));
@@ -628,7 +630,8 @@ static void fetch_task(void* param) {
         uint16_t* pixels = nullptr;
         size_t pixel_size = 0;
 
-        bool decoded = image_decode_to_rgb565(raw_data, raw_len, tw, th, sm, &pixels, &pixel_size);
+        bool decoded = image_decode_to_rgb565(
+            raw_data, raw_len, tw, th, sm, &pixels, &pixel_size, letterbox_color);
         heap_caps_free(raw_data);
 
         if (!decoded || !pixels) {
@@ -721,7 +724,7 @@ void image_fetch_init() {
 image_slot_t image_fetch_request(
     const char* url, const char* user, const char* pass,
     uint16_t target_w, uint16_t target_h, uint32_t interval_ms,
-    ImageScaleMode scale_mode)
+    ImageScaleMode scale_mode, uint16_t letterbox_color)
 {
     if (!url || !url[0] || target_w == 0 || target_h == 0) return IMAGE_SLOT_INVALID;
     if (!g_mutex) return IMAGE_SLOT_INVALID;
@@ -753,11 +756,24 @@ image_slot_t image_fetch_request(
     s.target_h = target_h;
     s.interval_ms = interval_ms;
     s.scale_mode = scale_mode;
+    s.letterbox_color = letterbox_color;
 
     xSemaphoreGive(g_mutex);
 
     LOGI(TAG, "Slot %d: %.60s %ux%u interval=%ums", id, url, target_w, target_h, (unsigned)interval_ms);
     return id;
+}
+
+void image_fetch_set_letterbox_color(image_slot_t slot, uint16_t color) {
+    if (!g_slots || slot < 0 || slot >= IMAGE_SLOT_MAX || !g_mutex) return;
+    xSemaphoreTake(g_mutex, portMAX_DELAY);
+    ImageSlot& image_slot = g_slots[slot];
+    if (image_slot.active && image_slot.scale_mode == IMAGE_SCALE_LETTERBOX &&
+        image_slot.letterbox_color != color) {
+        image_slot.letterbox_color = color;
+        image_slot.fetched_once = false;
+    }
+    xSemaphoreGive(g_mutex);
 }
 
 void image_fetch_cancel(image_slot_t slot) {

@@ -1,0 +1,37 @@
+<div class="section-header">
+  <h2>Image Library</h2>
+  <p>Upload and organize local JPEG and PNG backgrounds for pads.</p>
+</div>
+<div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Local Images</h5></div>
+  <div class="card-body">
+    <p class="form-text mb-3">Upload JPEG and PNG files for button backgrounds. PNG images are limited to 2 million pixels. Select them in the Pad editor, or use <code>[image:current]</code> to follow the current slideshow image.</p>
+    <div class="row g-2 align-items-end mb-3">
+      <div class="col-sm-8">
+        <label class="form-label" for="image-library-file">JPEG or PNG</label>
+        <input class="form-control" type="file" id="image-library-file" accept=".jpg,.jpeg,.png,image/jpeg,image/png">
+      </div>
+      <div class="col-sm-4">
+        <button type="button" class="btn btn-primary w-100" id="image-library-upload">Upload</button>
+      </div>
+    </div>
+    <div id="image-library-status" class="form-text mb-2">Loading image library...</div>
+    <div id="image-library-files" class="list-group"></div>
+  </div>
+</div>
+<div class="card">
+  <div class="card-header"><h5 class="mb-0">Slideshow</h5></div>
+  <div class="card-body">
+    <p class="form-text mb-3">Controls how often the shared slideshow image advances. Any button using <code>[image:current]</code> updates with the current image. Image Next and Image Previous actions also control the shared cursor.</p>
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-9">
+        <label class="form-label" for="image-library-interval">Interval (seconds)</label>
+        <input class="form-control" type="number" id="image-library-interval" min="0" max="3600" step="1">
+      </div>
+      <div class="col-sm-3">
+        <button type="button" class="btn btn-outline-primary w-100" id="image-library-save">Save</button>
+      </div>
+    </div>
+    <div class="form-text mt-2">Set 0 to advance only with Image Next and Image Previous actions.</div>
+  </div>
+</div>

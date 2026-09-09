@@ -137,6 +137,20 @@ Alerts do not block library management. After a successful upload or delete,
 the list refreshes automatically. The portal validates the destination path and
 publishes the uploaded bytes without decoding the entire MP3 first.
 
+## Image Library
+
+Display builds that include the local image library show an **Image Library**
+page under **Display**. Upload JPEG or PNG files up to 4 MiB to `/images`.
+PNGs are also limited to 2 million source pixels because they are fully decoded
+before being scaled for a button. Remove images you no longer need. The page
+refreshes after each completed upload or delete.
+
+The **Slideshow** controls set the shared image cursor advance interval from 0
+to 3600 seconds. Set it to `0` to disable automatic advancement; Image Next and
+Image Previous actions continue to control the shared cursor manually. Any pad
+button using `[image:current]` follows that cursor in its own layout, while a
+selected local image remains fixed.
+
 ---
 
 ## Home Page
@@ -327,21 +341,21 @@ captures; lower subsampling reduces transfer size at the cost of color detail.
 
 ### Screen Saver (Burn-in Prevention)
 
-The screen saver has two optional features, both measured from the most recent user activity. **Idle Screen** temporarily shows a configured pad, which can host an animated clock or extension. **Display Sleep** turns off the panel to protect it from burn-in. Either can be used alone, or Idle Screen can lead into Display Sleep. A built-in pixel-shift mechanism moves content slightly each Display Sleep cycle to prevent ghosting. The portal shows a live timeline of the current settings above the controls.
+The screen saver has two optional features, both measured from the most recent user activity. **Idle Screen** temporarily shows a configured pad. **Display Sleep** turns off the panel to protect it from burn-in. Either can be used alone, or Idle Screen can lead into Display Sleep. A built-in pixel-shift mechanism moves content slightly each Display Sleep cycle to prevent ghosting. The portal shows a live timeline of the current settings above the controls.
 
 | Setting | Description |
 |---------|-------------|
 | **Turn off display after inactivity** | Turn automatic panel sleep on or off |
 | **Turn off display after** | Seconds of inactivity before panel sleep (0 = disabled) |
-| **Show a standby pad** | Enable a transient pad when the device is idle, with or without Display Sleep |
-| **Show standby pad after** | Seconds of inactivity before the configured pad appears (0 = disabled) |
-| **Standby pad** | Pad to show while idle; it remains available as a normal pad elsewhere |
+| **Show an idle screen** | Enable a transient pad when the device is idle, with or without Display Sleep |
+| **Show idle screen after** | Seconds of inactivity before the configured screen appears (0 = disabled) |
+| **Idle screen** | Pad to show while idle; pads remain available during normal use |
 | **Fade Out** | Fade-to-black duration when entering Display Sleep (ms, 0 = instant) |
 | **Fade In** | Fade-from-black duration when leaving Display Sleep (ms, 0 = instant) |
 | **Wake on touch press** | One touch fully exits Idle Screen or wakes Display Sleep |
 | **MQTT Wake and Keep Awake Binding** | An ON binding fully exits Idle Screen or wakes Display Sleep, and keeps both stages off while it remains ON (e.g. `[mqtt:devices/node/presence/state]`) |
 
-For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds shows the selected pad after five minutes, then turns off the panel after 30 minutes total. The first wake interaction is consumed and returns to the screen that was active before the Idle Screen appeared, so the temporary pad is not added to navigation history.
+For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds shows the selected screen after five minutes, then turns off the panel after 30 minutes total. The first wake interaction is consumed and returns to the screen that was active before the Idle Screen appeared, so the temporary screen is not added to navigation history.
 
 ### Swipe Actions
 

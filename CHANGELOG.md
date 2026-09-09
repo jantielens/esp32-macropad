@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Image Library portal workflow**: display builds can browse bounded local `/images` folders, upload or delete JPEG and PNG files up to 4 MiB with traversal-safe paths and atomic publication, configure slideshow folders and intervals, and select local button backgrounds or the `[image:current]` binding with cover or letterbox scaling.
 * **Firmware installer page**: board cards now show their distinguishing firmware capabilities alongside hardware specifications, searchable by capability. Cards group hardware, enabled features, and downloadable artifacts into labeled rows, with tooltips that explain each feature.
 * **Firmware installer update flow**: the Wi-Fi update path now clearly requires an already-installed firmware image, while new or recovery devices are directed to USB WebSerial flashing. Optional device authentication is collapsed by default.
 * **Extension catalog**: each Extension now has one card with P4 and S3 downloads, an optional GitHub README link, and a collapsed usage section.
