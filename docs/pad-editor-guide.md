@@ -1618,6 +1618,10 @@ Expressions let you do math, comparisons, and conditional logic on binding resul
 
 Ternary branches can return numbers or `"quoted strings"`.
 
+Expressions support up to 12 nested groups, unary operators, ternary branches,
+or function expressions. Deeper nesting returns `ERR:depth` instead of being
+evaluated.
+
 **Practical examples:**
 
 *Unit conversion* — show kilobytes instead of bytes:

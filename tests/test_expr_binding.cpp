@@ -87,6 +87,16 @@ static void mock_health_collect(const char* params, void* user_data) {
 }
 
 // ============================================================================
+// Mock time resolver
+// ============================================================================
+
+static BindingResolverStatus mock_time_resolve(const char* params, char* out, size_t out_len) {
+    if (strcmp(params, "%u") != 0) return BINDING_RESOLVER_UNKNOWN;
+    snprintf(out, out_len, "1");
+    return BINDING_RESOLVER_RESOLVED;
+}
+
+// ============================================================================
 // expr resolver — reimplemented here since expr_binding.cpp has ESP32 deps
 // ============================================================================
 // This mirrors the logic in expr_binding.cpp but without the ESP32 includes.
@@ -285,6 +295,14 @@ static void test_conditional_text() {
 
     g_mqtt_values["sensor/temp;value"] = "30";
     check("[expr:[mqtt:sensor/temp;value] >= 30 ? \"Hot\" : \"OK\"]", "Hot", "temp >=30");
+}
+
+static void test_issue_89_labels() {
+    printf("--- Issue #89 labels ---\n");
+    check("[expr:[time:%u]==1?\"Segunda\":[time:%u]==2?\"Terça\":[time:%u]==3?\"Quarta\":[time:%u]==4?\"Quinta\":[time:%u]==5?\"Sexta\":[time:%u]==6?\"Sábado\":\"Domingo\"]",
+          "Segunda", "nested weekday ternary");
+    check("[expr:threshold([time:%u],\"Segunda\",2,\"Terça\",3,\"Quarta\",4,\"Quinta\",5,\"Sexta\",6,\"Sábado\",7,\"Domingo\")]",
+          "Segunda", "weekday threshold");
 }
 
 static void test_cross_binding_math() {
@@ -631,10 +649,12 @@ int main() {
     const BindingSchemeSpec expression = { 1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr };
     binding_template_register("mqtt",   mock_mqtt_resolve,   mock_mqtt_collect, free_form);
     binding_template_register("health", mock_health_resolve, mock_health_collect, free_form);
+    binding_template_register("time",   mock_time_resolve,   nullptr,            free_form);
     binding_template_register("expr",   expr_test_resolve,   expr_test_collect, expression);
 
     test_unit_conversion();
     test_conditional_text();
+    test_issue_89_labels();
     test_cross_binding_math();
     test_health_binding_in_expr();
     test_mixed_static_text();

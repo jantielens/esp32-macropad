@@ -690,6 +690,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_icons.h
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_pad.h
+  - src/app/web_portal_recipes.cpp
+  - src/app/web_portal_recipes.h
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_screenshot.cpp
   - src/app/web_portal_screenshot.h

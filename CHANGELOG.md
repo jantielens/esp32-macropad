@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* **Deep expression bindings no longer reboot the device**: expression evaluation now bounds recursive nesting and reports `ERR:depth` for unsupported depth instead of exhausting the main-loop task stack. Valid nested ternary and `threshold()` expressions continue to evaluate normally.
+
 ## [1.31.0] - 2026-09-21
 
 ### Added
