@@ -11,7 +11,7 @@ vm.runInContext(
     context
 );
 
-const fixture = fs.readFileSync('tests/recipe_catalog_fixture.json', 'utf8');
+const fixture = fs.readFileSync('docs/samples/recipe-catalog.json', 'utf8');
 const catalog = context.recipeLoadCatalogJson(fixture);
 assert.strictEqual(catalog.recipes.length, 2);
 assert.strictEqual(catalog.recipes[0].id, 'pomodoro');

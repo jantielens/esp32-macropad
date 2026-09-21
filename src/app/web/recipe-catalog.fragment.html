@@ -1,0 +1,19 @@
+<section id="recipe-catalog-root">
+  <div class="section-header">
+    <h2>Recipe Catalog</h2>
+    <p>Manage the recipe definitions stored on this device.</p>
+    <p><a href="https://github.com/jantielens/esp32-macropad/blob/main/docs/samples/recipe-catalog.json" target="_blank" rel="noopener">View the Pomodoro and Home Energy sample catalog</a>.</p>
+  </div>
+
+  <section class="card mb-3">
+    <div class="card-body">
+      <label for="recipe-catalog-input">Catalog JSON</label>
+      <textarea id="recipe-catalog-input" class="form-control" rows="20" spellcheck="false"></textarea>
+      <div id="recipe-catalog-status" class="form-text mt-2" aria-live="polite"></div>
+      <div class="d-flex gap-2 mt-3">
+        <button type="button" id="recipe-catalog-save" class="btn btn-primary">Save to Device</button>
+        <button type="button" id="recipe-catalog-revert" class="btn btn-outline-secondary">Revert</button>
+      </div>
+    </div>
+  </section>
+</section>

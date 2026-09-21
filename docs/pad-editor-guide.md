@@ -142,15 +142,16 @@ After all recipe configuration, icon upload, and pad saving completes, the
 installation panel offers **Show Pad** and **Navigate to Pad Editor** for the
 target pad.
 
-The initial recipe catalog is empty. For development, open `/?dev=1#recipes`
-and use **Recipe Lab** to paste one complete catalog JSON document. The
-override is stored only for the current browser session and follows the same
-strict JSON contract used by the recipe installer.
+The device starts with an empty recipe catalog. Open **Recipe Catalog** in the
+Pads section to edit and save one complete catalog JSON document on the device.
+The Recipes page loads that saved catalog. The repository provides
+[Pomodoro and Home Energy examples](samples/recipe-catalog.json) as a starting
+point; copy and adapt them in Recipe Catalog before saving.
 
 ```json
 {
   "schema": 1,
-  "catalog_version": "2026-09-09-dev",
+  "catalog_version": "device",
   "recipes": []
 }
 ```

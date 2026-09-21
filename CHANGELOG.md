@@ -18,9 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **Portal Recipes**: display boards now include a Recipes portal page for installing declarative scenarios into a selected pad. Recipes support fixed and adaptive layouts based on the target pad's rendered button geometry, optional typed parameters, shared icon generation/upload, and session-only developer catalog overrides through Recipe Lab.
-* **Recipe provisioning and recovery**: recipes can add named pad bindings and deeply merge component settings, including timer expiry actions, while rejecting conflicting binding names. When a recipe cannot be placed, the portal can propose the smallest supported grid increase or, when existing buttons are the only obstruction, confirm clearing buttons before the user chooses a placement and installs separately.
-* **Recipe completion shortcuts**: a completed recipe installation can show its target pad immediately or open that exact pad in the Pad Editor.
+* **Recipes**: display boards now include a device-persisted Recipe Catalog for managing declarative pad setups. Recipes support fixed or adaptive layouts, optional parameters, named pad bindings, component configuration, safe placement and recovery options, and post-install navigation. Pomodoro and Home Energy examples are available in `docs/samples/recipe-catalog.json`.
 
 ## [1.30.0] - 2026-09-09
 

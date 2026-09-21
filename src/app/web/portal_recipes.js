@@ -3,7 +3,6 @@
 // the authority for component and pad validation when each change is saved.
 
 const RECIPE_CATALOG_SCHEMA = 1;
-const RECIPE_CATALOG_STORAGE_KEY = 'esp32-macropad.recipe-catalog';
 const RECIPE_CATALOG_MAX_BYTES = 64 * 1024;
 
 let recipeState = {
@@ -158,10 +157,11 @@ function recipeLoadCatalogJson(text) {
     return recipeValidateCatalog(catalog);
 }
 
-function recipeActiveCatalog() {
-    const text = sessionStorage.getItem(RECIPE_CATALOG_STORAGE_KEY);
-    if (!text) return { catalog: { schema: RECIPE_CATALOG_SCHEMA, catalog_version: 'empty', recipes: [] }, source: 'Empty catalog' };
-    return { catalog: recipeLoadCatalogJson(text), source: 'Pasted catalog override' };
+async function recipeLoadDeviceCatalog() {
+    const response = await fetch('/api/recipes/catalog');
+    if (!response.ok) throw new Error('Failed to load recipe catalog: HTTP ' + response.status);
+    recipeState.catalog = recipeLoadCatalogJson(await response.text());
+    return recipeState.catalog;
 }
 
 function recipeSupports(recipe) {
@@ -197,17 +197,18 @@ function recipeRenderCatalog() {
     const list = document.getElementById('recipes-list');
     const empty = document.getElementById('recipes-empty');
     if (!source || !list || !empty) return;
-    const active = recipeActiveCatalog();
-    recipeState.catalog = active.catalog;
+    const catalog = recipeState.catalog || {
+        schema: RECIPE_CATALOG_SCHEMA, catalog_version: 'device', recipes: [],
+    };
     if (recipeState.selected) {
-        recipeState.selected = active.catalog.recipes.find(function (recipe) {
+        recipeState.selected = catalog.recipes.find(function (recipe) {
             return recipe.id === recipeState.selected.id;
         }) || null;
     }
-    source.textContent = active.source + ' | Version ' + active.catalog.catalog_version;
+    source.textContent = 'Device catalog | Version ' + catalog.catalog_version;
     list.innerHTML = '';
-    empty.hidden = active.catalog.recipes.length !== 0;
-    active.catalog.recipes.forEach(function (recipe) {
+    empty.hidden = catalog.recipes.length !== 0;
+    catalog.recipes.forEach(function (recipe) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'recipes-list-item';
@@ -789,26 +790,6 @@ window.init_recipes_fragment = async function () {
     recipeState.placement = null;
     document.getElementById('recipe-detail').hidden = true;
     document.getElementById('recipe-progress').hidden = true;
-    const lab = document.getElementById('recipe-lab');
-    const isDev = new URLSearchParams(window.location.search).get('dev') === '1';
-    lab.hidden = !isDev;
-    if (isDev) {
-        document.getElementById('recipe-catalog-input').value = sessionStorage.getItem(RECIPE_CATALOG_STORAGE_KEY) || '';
-        document.getElementById('recipe-catalog-apply').onclick = function () {
-            try {
-                const text = document.getElementById('recipe-catalog-input').value;
-                recipeLoadCatalogJson(text);
-                sessionStorage.setItem(RECIPE_CATALOG_STORAGE_KEY, text);
-                recipeRenderCatalog();
-                showMessage('Pasted catalog override enabled', 'success');
-            } catch (error) { showMessage(error.message, 'error'); }
-        };
-        document.getElementById('recipe-catalog-clear').onclick = function () {
-            sessionStorage.removeItem(RECIPE_CATALOG_STORAGE_KEY);
-            document.getElementById('recipe-catalog-input').value = '';
-            recipeRenderCatalog();
-        };
-    }
     document.getElementById('recipe-install-btn').onclick = recipeInstall;
     document.getElementById('recipe-show-pad-btn').onclick = recipeShowInstalledPad;
     document.getElementById('recipe-open-pad-editor-btn').onclick = recipeOpenInstalledPadEditor;
@@ -819,6 +800,48 @@ window.init_recipes_fragment = async function () {
         recipeState.placement = null;
         document.getElementById('recipe-detail').hidden = true;
     };
-    try { recipeRenderCatalog(); }
-    catch (error) { showMessage('Recipe catalog override rejected: ' + error.message, 'error'); sessionStorage.removeItem(RECIPE_CATALOG_STORAGE_KEY); recipeRenderCatalog(); }
+    try {
+        await recipeLoadDeviceCatalog();
+        recipeRenderCatalog();
+    } catch (error) {
+        showMessage('Recipe catalog rejected: ' + error.message, 'error');
+        recipeState.catalog = { schema: RECIPE_CATALOG_SCHEMA, catalog_version: 'device', recipes: [] };
+        recipeRenderCatalog();
+    }
+};
+
+window.init_recipe_catalog_fragment = async function () {
+    const input = document.getElementById('recipe-catalog-input');
+    const status = document.getElementById('recipe-catalog-status');
+    const setCatalog = async function () {
+        const catalog = await recipeLoadDeviceCatalog();
+        input.value = JSON.stringify(catalog, null, 2);
+        status.textContent = catalog.recipes.length + ' recipe' + (catalog.recipes.length === 1 ? '' : 's') + ' in the device catalog.';
+    };
+    document.getElementById('recipe-catalog-save').onclick = async function () {
+        try {
+            const catalog = recipeLoadCatalogJson(input.value);
+            const response = await fetch('/api/recipes/catalog', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: input.value,
+            });
+            if (!response.ok) throw new Error('Failed to save recipe catalog: HTTP ' + response.status);
+            recipeState.catalog = catalog;
+            status.textContent = 'Saved ' + catalog.recipes.length + ' recipe' + (catalog.recipes.length === 1 ? '' : 's') + ' to the device.';
+            showMessage('Recipe catalog saved', 'success');
+        } catch (error) {
+            status.textContent = error.message;
+            showMessage('Recipe catalog was not saved: ' + error.message, 'error');
+        }
+    };
+    document.getElementById('recipe-catalog-revert').onclick = function () {
+        setCatalog().catch(function (error) {
+            status.textContent = error.message;
+            showMessage(error.message, 'error');
+        });
+    };
+    try { await setCatalog(); }
+    catch (error) {
+        status.textContent = error.message;
+        showMessage(error.message, 'error');
+    }
 };
