@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 // ============================================================================
 // Value type — tagged union for numbers and strings
@@ -20,14 +21,16 @@ typedef enum { VAL_NUM, VAL_STR, VAL_ERR } ExprValType;
 typedef struct {
     ExprValType type;
     double      num;
-    char        str[EXPR_STR_MAX];
+    const char* str;
+    size_t      str_len;
 } ExprVal;
 
 static ExprVal make_num(double v) {
     ExprVal r;
     r.type = VAL_NUM;
     r.num  = v;
-    r.str[0] = '\0';
+    r.str = NULL;
+    r.str_len = 0;
     return r;
 }
 
@@ -36,8 +39,8 @@ static ExprVal make_str(const char* s, size_t len) {
     r.type = VAL_STR;
     r.num  = 0;
     if (len >= EXPR_STR_MAX) len = EXPR_STR_MAX - 1;
-    memcpy(r.str, s, len);
-    r.str[len] = '\0';
+    r.str = s;
+    r.str_len = len;
     return r;
 }
 
@@ -45,13 +48,14 @@ static ExprVal make_err(const char* msg) {
     ExprVal r;
     r.type = VAL_ERR;
     r.num  = 0;
-    snprintf(r.str, EXPR_STR_MAX, "ERR:%s", msg);
+    r.str = msg;
+    r.str_len = strlen(msg);
     return r;
 }
 
 static bool val_is_truthy(const ExprVal* v) {
     if (v->type == VAL_NUM) return v->num != 0.0;
-    if (v->type == VAL_STR) return v->str[0] != '\0';
+    if (v->type == VAL_STR) return v->str_len != 0;
     return false;
 }
 
@@ -62,6 +66,7 @@ static bool val_is_truthy(const ExprVal* v) {
 typedef struct {
     const char* src;
     int         pos;
+    uint8_t     nesting;
 } Parser;
 
 static void skip_ws(Parser* p) {
@@ -86,6 +91,14 @@ static bool match_char(Parser* p, char c) {
 
 static ExprVal parse_ternary(Parser* p);
 
+static ExprVal parse_nested_ternary(Parser* p) {
+    if (p->nesting >= EXPR_MAX_NESTING) return make_err("depth");
+    p->nesting++;
+    ExprVal value = parse_ternary(p);
+    p->nesting--;
+    return value;
+}
+
 // ============================================================================
 // Primary: number, string literal, parenthesized expression
 // ============================================================================
@@ -95,7 +108,7 @@ static ExprVal parse_primary(Parser* p) {
     char c = p->src[p->pos];
 
     // Built-in function: threshold(value, color0, t1, color1, ..., tN, colorN)
-    // Stream-processed to avoid large stack allocation (ExprVal is ~140 bytes).
+    // Stream-processed so variable-length calls use fixed stack space.
     if (strncmp(p->src + p->pos, "threshold(", 10) == 0) {
         p->pos += 10; // skip "threshold("
 
@@ -104,7 +117,7 @@ static ExprVal parse_primary(Parser* p) {
         if (p->src[p->pos] == ')') return make_err("threshold: need value+color");
 
         // Parse value (first arg, must be numeric)
-        ExprVal value_arg = parse_ternary(p);
+        ExprVal value_arg = parse_nested_ternary(p);
         if (value_arg.type == VAL_ERR) return value_arg;
         if (value_arg.type != VAL_NUM) return make_err("threshold: value must be number");
 
@@ -113,7 +126,7 @@ static ExprVal parse_primary(Parser* p) {
             return make_err("threshold: need value, color [, thresh, color]*");
 
         // Parse base color (second arg)
-        ExprVal result = parse_ternary(p);
+        ExprVal result = parse_nested_ternary(p);
         if (result.type == VAL_ERR) return result;
         if (result.type != VAL_STR) return make_err("threshold: color must be string");
 
@@ -124,7 +137,7 @@ static ExprVal parse_primary(Parser* p) {
 
         // Parse threshold-color pairs
         while (match_char(p, ',')) {
-            ExprVal thresh = parse_ternary(p);
+            ExprVal thresh = parse_nested_ternary(p);
             if (thresh.type == VAL_ERR) return thresh;
             if (thresh.type != VAL_NUM)
                 return make_err("threshold: threshold must be number");
@@ -137,7 +150,7 @@ static ExprVal parse_primary(Parser* p) {
             if (!match_char(p, ','))
                 return make_err("threshold: need value, color [, thresh, color]*");
 
-            ExprVal color = parse_ternary(p);
+            ExprVal color = parse_nested_ternary(p);
             if (color.type == VAL_ERR) return color;
             if (color.type != VAL_STR)
                 return make_err("threshold: color must be string");
@@ -158,7 +171,7 @@ static ExprVal parse_primary(Parser* p) {
     // Parenthesized expression
     if (c == '(') {
         p->pos++;
-        ExprVal v = parse_ternary(p);
+        ExprVal v = parse_nested_ternary(p);
         if (v.type == VAL_ERR) return v;
         if (!match_char(p, ')')) return make_err("missing ')'");
         return v;
@@ -199,19 +212,17 @@ static ExprVal parse_primary(Parser* p) {
 
 static ExprVal parse_unary(Parser* p) {
     skip_ws(p);
-    if (p->src[p->pos] == '-') {
+    char op = p->src[p->pos];
+    if (op == '-' || op == '+') {
         p->pos++;
+        if (p->nesting >= EXPR_MAX_NESTING) return make_err("depth");
+        p->nesting++;
         ExprVal v = parse_unary(p);
+        p->nesting--;
         if (v.type == VAL_ERR) return v;
-        if (v.type != VAL_NUM) return make_err("unary - on non-number");
-        return make_num(-v.num);
-    }
-    if (p->src[p->pos] == '+') {
-        p->pos++;
-        ExprVal v = parse_unary(p);
-        if (v.type == VAL_ERR) return v;
-        if (v.type != VAL_NUM) return make_err("unary + on non-number");
-        return v;
+        if (v.type != VAL_NUM)
+            return make_err(op == '-' ? "unary - on non-number" : "unary + on non-number");
+        return op == '-' ? make_num(-v.num) : v;
     }
     return parse_primary(p);
 }
@@ -303,8 +314,9 @@ static ExprVal parse_comparison(Parser* p) {
     // String equality/inequality
     if (op == 5 || op == 6) {
         if (left.type == VAL_STR && right.type == VAL_STR) {
-            int cmp = strcmp(left.str, right.str);
-            return make_num(op == 5 ? (cmp == 0 ? 1.0 : 0.0) : (cmp != 0 ? 1.0 : 0.0));
+            bool equal = left.str_len == right.str_len &&
+                         memcmp(left.str, right.str, left.str_len) == 0;
+            return make_num(op == 5 ? (equal ? 1.0 : 0.0) : (equal ? 0.0 : 1.0));
         }
     }
 
@@ -334,12 +346,12 @@ static ExprVal parse_ternary(Parser* p) {
 
     if (!match_char(p, '?')) return cond; // no ternary — return as-is
 
-    ExprVal then_val = parse_ternary(p); // right-associative
+    ExprVal then_val = parse_nested_ternary(p); // right-associative
     if (then_val.type == VAL_ERR) return then_val;
 
     if (!match_char(p, ':')) return make_err("missing ':' in ternary");
 
-    ExprVal else_val = parse_ternary(p);
+    ExprVal else_val = parse_nested_ternary(p);
     if (else_val.type == VAL_ERR) return else_val;
 
     return val_is_truthy(&cond) ? then_val : else_val;
@@ -379,6 +391,7 @@ bool expr_eval(const char* expression, char* out, size_t out_len) {
     Parser parser;
     parser.src = expression;
     parser.pos = 0;
+    parser.nesting = 0;
 
     ExprVal result = parse_ternary(&parser);
 
@@ -389,12 +402,12 @@ bool expr_eval(const char* expression, char* out, size_t out_len) {
     }
 
     if (result.type == VAL_ERR) {
-        snprintf(out, out_len, "%s", result.str);
+        snprintf(out, out_len, "ERR:%s", result.str);
         return false;
     }
 
     if (result.type == VAL_STR) {
-        snprintf(out, out_len, "%s", result.str);
+        snprintf(out, out_len, "%.*s", (int)result.str_len, result.str);
     } else {
         format_number(result.num, out, out_len);
     }

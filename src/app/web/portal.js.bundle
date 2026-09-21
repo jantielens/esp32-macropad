@@ -89,6 +89,7 @@ portal_image_library.js
 portal_pad_colors.js
 portal_pad_io.js
 portal_pad_blocks.js
+portal_recipes.js
 portal_pad_icons.js
 portal_pad_defaults.js
 portal_pad_grid.js

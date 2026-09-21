@@ -144,6 +144,35 @@ static void test_edge_cases() {
     check_ok("((42))",          "42",      "nested parens");
 }
 
+static void test_issue_89_regressions() {
+    printf("--- Issue #89 regressions ---\n");
+    check_ok("1 == 1 ? \"Segunda\" : 1 == 2 ? \"Terça\" : 1 == 3 ? \"Quarta\" : 1 == 4 ? \"Quinta\" : 1 == 5 ? \"Sexta\" : 1 == 6 ? \"Sábado\" : \"Domingo\"",
+             "Segunda", "nested weekday ternary");
+    check_ok("threshold(1, \"Segunda\", 2, \"Terça\", 3, \"Quarta\", 4, \"Quinta\", 5, \"Sexta\", 6, \"Sábado\", 7, \"Domingo\")",
+             "Segunda", "weekday threshold");
+}
+
+static void test_nesting_limit() {
+    printf("--- Nesting limit ---\n");
+    char expression[64] = "1";
+
+    for (int index = 0; index < EXPR_MAX_NESTING; index++) {
+        size_t length = strlen(expression);
+        memmove(expression + 1, expression, length + 1);
+        expression[0] = '(';
+        expression[length + 1] = ')';
+        expression[length + 2] = '\0';
+    }
+    check_ok(expression, "1", "maximum parenthesis nesting");
+
+    size_t length = strlen(expression);
+    memmove(expression + 1, expression, length + 1);
+    expression[0] = '(';
+    expression[length + 1] = ')';
+    expression[length + 2] = '\0';
+    check_err(expression, "ERR:depth", "parenthesis nesting over limit");
+}
+
 static void test_errors() {
     printf("--- Errors ---\n");
     check_err("",                "ERR:",    "empty");
@@ -286,6 +315,8 @@ int main() {
     test_string_equality();
     test_realistic_expressions();
     test_edge_cases();
+    test_issue_89_regressions();
+    test_nesting_limit();
     test_errors();
     test_threshold_basic();
     test_threshold_variable_arity();

@@ -43,6 +43,8 @@
 #include "components/display_component.cpp"
 #include "components/screensaver_component.cpp"
 #include "components/pad_editor_component.cpp"
+#include "components/recipes_component.cpp"
+#include "components/recipe_catalog_component.cpp"
 #include "components/swipe_actions_component.cpp"
 #include "components/boot_actions_component.cpp"
 #include "components/button_defaults_component.cpp"

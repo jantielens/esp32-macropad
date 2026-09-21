@@ -23,7 +23,8 @@
 
 #include <stddef.h>
 
-#define EXPR_STR_MAX 128   // Max string result length
+#define EXPR_STR_MAX 128       // Max string result length
+#define EXPR_MAX_NESTING 12    // Max recursive parser nesting
 
 #ifdef __cplusplus
 extern "C" {

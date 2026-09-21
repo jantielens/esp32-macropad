@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-09
+ms.date: 2026-09-21
 ms.topic: reference
 ---
 
@@ -12,7 +12,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.31.0] - 2026-09-21
+
+### Added
+
+* **Recipes**: display boards now include a device-persisted Recipe Catalog for managing declarative pad setups. Recipes support fixed or adaptive layouts, optional parameters, named pad bindings, component configuration, safe placement and recovery options, and post-install navigation. Pomodoro and Home Energy examples are available in `docs/samples/recipe-catalog.json`.
+
+### Fixed
+
+* **Deep expression bindings no longer reboot the device**: expression evaluation now bounds recursive nesting and reports `ERR:depth` for unsupported depth instead of exhausting the main-loop task stack. Valid nested ternary and `threshold()` expressions continue to evaluate normally.
 
 ## [1.30.0] - 2026-09-09
 

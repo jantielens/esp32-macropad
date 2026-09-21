@@ -15,6 +15,23 @@
   color-scheme: dark;
 }
 
+/* Recipes: independent compact pad placement picker. */
+.recipes-list { display: grid; gap: 8px; margin-bottom: 16px; }
+.recipes-list-item { display: grid; gap: 3px; width: 100%; padding: 12px; text-align: left; border: 1px solid var(--portal-border); border-radius: 6px; background: var(--portal-surface); color: var(--portal-text); }
+.recipes-list-item:not(:disabled):hover { border-color: var(--portal-primary); background: var(--portal-surface-alt); }
+.recipes-list-item.selected { border-color: var(--portal-primary); box-shadow: inset 3px 0 0 var(--portal-primary); }
+.recipes-list-item span, .recipes-empty, .recipe-placement-status, .recipe-impact-summary { color: var(--portal-text-muted); font-size: 13px; }
+.recipe-impact-summary { padding: 8px 10px; border-left: 3px solid var(--portal-primary); background: var(--portal-surface-alt); }
+.recipes-empty { padding: 18px; border: 1px dashed var(--portal-border); border-radius: 6px; text-align: center; }
+.recipe-placement-grid { display: grid; gap: 4px; width: min(100%, 360px); padding: 6px; border: 1px solid var(--portal-border); border-radius: 6px; background: var(--portal-editor-bg); }
+.recipe-placement-cell { min-width: 0; border: 1px solid var(--portal-border); border-radius: 3px; background: var(--portal-surface-alt); }
+.recipe-placement-cell.occupied { background: color-mix(in srgb, var(--portal-text-muted) 55%, var(--portal-editor-bg)); border-color: var(--portal-text-muted); opacity: 0.8; }
+.recipe-placement-cell.available:not(.occupied) { cursor: pointer; border-color: #2a9d8f; background: color-mix(in srgb, #2a9d8f 18%, var(--portal-surface)); }
+.recipe-placement-cell.selected { outline: 2px solid var(--portal-primary); outline-offset: 1px; background: color-mix(in srgb, var(--portal-primary) 32%, var(--portal-surface)); }
+.recipe-progress-list li { color: var(--portal-text-muted); margin-bottom: 6px; }
+.recipe-progress-list li.complete { color: #2a9d8f; }
+.recipe-progress-list li.failed { color: #dc3545; }
+
 /* Pad appearance and layout diagram */
 .pad-layout-diagram {
   --layout-shift: 4px;
