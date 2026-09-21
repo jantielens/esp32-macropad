@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-09
+ms.date: 2026-09-21
 ms.topic: reference
 ---
 
@@ -13,6 +13,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.31.0] - 2026-09-21
+
+### Added
+
+* **Portal Recipes**: display boards now include a Recipes portal page for installing declarative scenarios into a selected pad. Recipes support fixed and adaptive layouts based on the target pad's rendered button geometry, optional typed parameters, shared icon generation/upload, and session-only developer catalog overrides through Recipe Lab.
+* **Recipe provisioning and recovery**: recipes can add named pad bindings and deeply merge component settings, including timer expiry actions, while rejecting conflicting binding names. When a recipe cannot be placed, the portal can propose the smallest supported grid increase or, when existing buttons are the only obstruction, confirm clearing buttons before the user chooses a placement and installs separately.
+* **Recipe completion shortcuts**: a completed recipe installation can show its target pad immediately or open that exact pad in the Pad Editor.
 
 ## [1.30.0] - 2026-09-09
 

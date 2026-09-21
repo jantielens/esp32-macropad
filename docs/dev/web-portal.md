@@ -337,6 +337,7 @@ every component in that custom section to the same category ID.
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
+- **Recipes** (display boards): Installs a declared scenario into a selected pad without changing existing buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked cell is the recipe's top-left anchor; adaptive recipes may use a smaller fitting footprint when no larger forward footprint fits. The placement grid previews the resolved group and reports its bounds. Fixed-offset recipes remain supported. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase that can. If the current empty grid can host it but existing buttons block every placement, it offers a confirmed **Clear Buttons** action that retains the other pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The initial catalog is empty; developers can open `/?dev=1#recipes` and paste a complete strict catalog envelope into Recipe Lab. The override lasts for the browser session and uses the identical loader, schema, and installer intended for the future hosted catalog.
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
 - **Pad save controls**: The bottom action bar provides Save Pad, Show on Device, and More. A fixed Save Pad button appears while the current pad has unsaved changes, so repeated edits do not require scrolling to the action bar.
 
@@ -1898,6 +1899,42 @@ Return the building block catalog, currently including System Info. Each block c
 ```
 
 Each button's `col_offset` / `row_offset` is relative to the placement anchor cell. The editor adds the anchor position to compute absolute grid coordinates.
+
+Recipes may instead use adaptive flow layouts as described in the Recipes entry in
+the Pads page section above.
+
+#### Recipe Provisioning
+
+Recipes may declare a `provision` object for configuration that accompanies their
+buttons. `${parameter}` templates expand recursively throughout this object.
+
+```json
+{
+  "provision": {
+    "pad": {
+      "bindings": {
+        "grid": "${grid_power}",
+        "solar": "${solar_power}",
+        "home": "[expr:${grid_power} + ${solar_power}]"
+      }
+    },
+    "components": {
+      "timers": {
+        "1": {
+          "expire_actions": []
+        }
+      }
+    }
+  }
+}
+```
+
+The portal reads each component's existing configuration, then recursively merges
+the declared object. Arrays are replaced by the recipe value. Pad provisioning is
+intentionally limited to named bindings: a missing name is added, an identical
+name/value pair is accepted, and an existing name with a different value rejects
+the installation. This prevents a recipe from silently changing data sources used
+by existing buttons.
 
 
 #### `POST /api/pad/resolve`

@@ -119,6 +119,64 @@ After placing a block, all its buttons become regular buttons — you can edit, 
 
 > **Tip**: Building blocks and template pads serve different purposes. Use **template pads** to share common buttons (like navigation) across many pads. Use **building blocks** to quickly add a self-contained functional group (like a timer control panel) to a specific pad.
 
+## Recipes
+
+Recipes install a complete scenario, such as a Pomodoro timer or home-energy
+dashboard, into a selected pad. Normal installation does not overwrite existing
+buttons. Select a recipe, provide its parameters, choose a target pad, then
+select one of the available positions in the recipe placement grid. A position
+is available only when the full recipe layout fits within the pad and all
+required positions are empty. The clicked cell is always the recipe's top-left
+anchor.
+
+The portal keeps the selected recipe visible in the catalog. For adaptive
+layouts, it may use a smaller forward-fitting footprint near an edge when a
+larger footprint does not fit. If an empty current grid cannot host the recipe,
+the portal offers the smallest supported row/column increase that can. If the
+current empty grid fits but existing buttons block every position, **Clear
+Buttons** saves an empty button list after confirmation; you can then choose a
+placement and install the recipe separately. Clearing retains the pad's other
+settings.
+
+After all recipe configuration, icon upload, and pad saving completes, the
+installation panel offers **Show Pad** and **Navigate to Pad Editor** for the
+target pad.
+
+The initial recipe catalog is empty. For development, open `/?dev=1#recipes`
+and use **Recipe Lab** to paste one complete catalog JSON document. The
+override is stored only for the current browser session and follows the same
+strict JSON contract used by the recipe installer.
+
+```json
+{
+  "schema": 1,
+  "catalog_version": "2026-09-09-dev",
+  "recipes": []
+}
+```
+
+Each recipe requires `id`, `name`, `description`, and a `layout.buttons` array.
+Buttons use normal pad-button JSON fields. A layout has one of these forms:
+
+* An adaptive layout sets `flow` to `row` or `column`. Each button specifies a
+  `shape` (`square`, `wide`, `tall`, `very_wide`, or `very_tall`) and a `size`
+  (`S`, `M`, or `L`). The portal packs buttons in declaration order from the
+  selected anchor. Size and shape select the closest visual aspect ratio using
+  the device's rendered button dimensions. For example, an `M` square can
+  resolve to 2x3 on a pad with wide grid cells, and an `L` very-tall button
+  requires at least five rows. Adaptive recipes need an existing target pad
+  because its configured grid dimensions are required.
+* A fixed layout omits `flow`. Each button uses `col_offset` and `row_offset`
+  to describe its relative position and may specify `col_span` or `row_span`.
+  This remains available for exact layouts and existing catalogs.
+
+Optional `parameters` declare an `id`, `label`, `type` (`string` or `number`),
+and `default`; values are referenced as `${parameter_id}`. A `provision` object
+can add named pad bindings and merge existing component configuration, such as
+timer `expire_actions`. Component objects merge recursively, arrays replace,
+and a named binding rejects the installation if the pad already uses that name
+with a different value.
+
 ---
 
 ## Moving Buttons

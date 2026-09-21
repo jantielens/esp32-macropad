@@ -257,7 +257,13 @@ async function padInit() {
         padPopulateScreenDropdown();
         if (deviceInfoCache.has_sound_player === true) padFetchSoundList();
         padLoadButtonDefaultsFromDevice();
-        padLoadPage(0);
+        const requestedPage = Number(sessionStorage.getItem('esp32-macropad.recipe-pad-editor-page'));
+        sessionStorage.removeItem('esp32-macropad.recipe-pad-editor-page');
+        const initialPage = Number.isInteger(requestedPage) && requestedPage >= 0 &&
+            requestedPage < deviceInfoCache.max_pads ? requestedPage : 0;
+        padState.page = initialPage;
+        document.getElementById('pad-page-select').value = initialPage;
+        padLoadPage(initialPage);
         padLoadBlockCatalog();
         padRefreshDropdownLabels();
     } else {

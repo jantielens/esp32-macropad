@@ -1,0 +1,56 @@
+<section id="recipes-root">
+  <div class="section-header">
+    <h2>Recipes</h2>
+    <p>Install a complete setup into an existing pad without changing its current buttons.</p>
+  </div>
+
+  <div id="recipes-source" class="form-text mb-3"></div>
+  <div id="recipes-empty" class="recipes-empty" hidden>No recipes are available.</div>
+  <div id="recipes-list" class="recipes-list"></div>
+
+  <section id="recipe-detail" class="card mb-3" hidden>
+    <div class="card-header"><h5 id="recipe-detail-name" class="mb-0"></h5></div>
+    <div class="card-body">
+      <p id="recipe-detail-description" class="mb-3"></p>
+      <div id="recipe-impact-summary" class="recipe-impact-summary mb-3"></div>
+      <div id="recipe-parameters"></div>
+      <div class="form-group mb-3">
+        <label for="recipe-pad-select">Target Pad</label>
+        <select id="recipe-pad-select" class="form-select"></select>
+      </div>
+      <div id="recipe-placement-status" class="form-text mb-2"></div>
+      <div id="recipe-placement-grid" class="recipe-placement-grid" aria-label="Choose recipe placement"></div>
+      <div id="recipe-recovery-actions" class="d-flex gap-2 mt-3" hidden>
+        <button type="button" id="recipe-resize-grid-btn" class="btn btn-outline-secondary" hidden></button>
+        <button type="button" id="recipe-clear-buttons-btn" class="btn btn-outline-danger" hidden>Clear Buttons</button>
+      </div>
+      <div class="d-flex gap-2 mt-3">
+        <button type="button" id="recipe-install-btn" class="btn btn-primary" disabled>Install Recipe</button>
+        <button type="button" id="recipe-cancel-btn" class="btn btn-outline-secondary">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="recipe-progress" class="card mb-3" hidden>
+    <div class="card-header"><h5 class="mb-0">Installation</h5></div>
+    <div class="card-body">
+      <ol id="recipe-progress-list" class="recipe-progress-list mb-0"></ol>
+      <div id="recipe-post-install-actions" class="d-flex gap-2 mt-3" hidden>
+        <button type="button" id="recipe-show-pad-btn" class="btn btn-outline-secondary">Show Pad</button>
+        <button type="button" id="recipe-open-pad-editor-btn" class="btn btn-primary">Navigate to Pad Editor</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="recipe-lab" class="card mb-3" hidden>
+    <div class="card-header"><h5 class="mb-0">Recipe Lab</h5></div>
+    <div class="card-body">
+      <label for="recipe-catalog-input">Catalog JSON override</label>
+      <textarea id="recipe-catalog-input" class="form-control" rows="12" spellcheck="false"></textarea>
+      <div class="d-flex gap-2 mt-3">
+        <button type="button" id="recipe-catalog-apply" class="btn btn-primary btn-sm">Use Pasted Catalog</button>
+        <button type="button" id="recipe-catalog-clear" class="btn btn-outline-secondary btn-sm">Clear Override</button>
+      </div>
+    </div>
+  </section>
+</section>

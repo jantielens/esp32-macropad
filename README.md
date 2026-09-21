@@ -59,6 +59,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 
 ### Web configuration portal
 - **Visual pad editor** — drag-to-move and drag-to-resize buttons, live preview matching your device's aspect ratio
+- **Recipes** — install a declared setup into a selected pad with adaptive placement, optional parameters, and safe grid-size or clear-buttons recovery when space is unavailable
 - **Copy/paste & import/export** — clone buttons, pads, or entire device configurations to JSON
 - **Browser-based setup** — Wi-Fi, MQTT, security, and all device settings, no tools needed
 - **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status

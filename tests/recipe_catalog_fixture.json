@@ -1,0 +1,165 @@
+{
+  "schema": 1,
+  "catalog_version": "2026-09-09-dev",
+  "recipes": [
+    {
+      "id": "pomodoro",
+      "name": "Pomodoro",
+      "description": "A 25-minute focus timer with pause, reset, and an alert on completion.",
+      "requires": ["display"],
+      "layout": {
+        "flow": "row",
+        "buttons": [
+          {
+            "size": "M",
+            "shape": "wide",
+            "label_center": "[timer:1;mm:ss]",
+            "label_bottom": "(tap to toggle, \nhold to reset)",
+            "label_center_style": "font_family:dseg7",
+            "label_bottom_style": "color:999999",
+            "icon_id": "mi_timer",
+            "icon_scale_pct": 50,
+            "icon_position": "left",
+            "actions": [
+              {
+                "type": "timer",
+                "timer_id": 1,
+                "timer_command": "toggle",
+                "timer_mode": "down",
+                "timer_value": "1500"
+              }
+            ],
+            "lp_actions": [
+              { "type": "timer", "timer_id": 1, "timer_command": "reset" }
+            ]
+          }
+        ]
+      },
+      "provision": {
+        "components": {
+          "timers": {
+            "1": {
+              "expire_actions": [
+                {
+                  "type": "sound_alert",
+                  "sound_alert_kind": "tone",
+                  "sound_alert_pattern": "880:200;0:100;880:200"
+                },
+                { "type": "notify", "notify_text": "Focus session complete" }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "home-energy",
+      "name": "Home Energy",
+      "description": "Grid, solar, and home power with a live gauge and six-hour history.",
+      "requires": ["display", "mqtt"],
+      "parameters": [
+        { "id": "grid_power", "label": "Grid power binding", "description": "MQTT value for imported and exported grid power in kW.", "type": "string", "default": "[mqtt:homeassistant/sensor/net_power/state]" },
+        { "id": "solar_power", "label": "Solar power binding", "description": "MQTT value for live solar production in kW.", "type": "string", "default": "[mqtt:homeassistant/sensor/solar_power/state]" },
+        { "id": "grid_history_entity", "label": "Grid history entity", "description": "Home Assistant statistic entity used to backfill the grid history.", "type": "string", "default": "sensor.utility_meter_total_active_power" },
+        { "id": "solar_history_entity", "label": "Solar history entity", "description": "Home Assistant statistic entity used to backfill solar history.", "type": "string", "default": "sensor.solar_power" },
+        { "id": "home_history_entity", "label": "Home history entity", "description": "Home Assistant statistic entity used to backfill total home power history.", "type": "string", "default": "sensor.total_power" }
+      ],
+      "layout": {
+        "buttons": [
+          {
+            "col_offset": 0,
+            "row_offset": 0,
+            "label_center": "[pad:grid;%.1f] kw",
+            "label_bottom": "grid",
+            "fg_color": "03A9F4",
+            "icon_id": "mi_power",
+            "icon_scale_pct": 50
+          },
+          {
+            "col_offset": 1,
+            "row_offset": 0,
+            "label_center": "[pad:solar;%.1f] kw",
+            "label_bottom": "solar",
+            "fg_color": "FF9800",
+            "icon_id": "mi_sunny",
+            "icon_scale_pct": 50
+          },
+          {
+            "col_offset": 2,
+            "row_offset": 0,
+            "label_center": "[pad:home;%.1f] kw",
+            "label_bottom": "home",
+            "fg_color": "F44336",
+            "icon_id": "mi_home",
+            "icon_scale_pct": 50
+          },
+          {
+            "col_offset": 0,
+            "row_offset": 1,
+            "col_span": 3,
+            "row_span": 2,
+            "widget_type": "gauge",
+            "widget_data_binding": "[pad:grid]",
+            "widget_data_binding_2": "[pad:solar]",
+            "widget_data_binding_3": "[pad:home]",
+            "widget_gauge_start_label": "grid",
+            "widget_gauge_start_label_2": "solar",
+            "widget_gauge_start_label_3": "home",
+            "widget_gauge_min": -3,
+            "widget_gauge_max": 3,
+            "widget_gauge_degrees": 180,
+            "widget_gauge_start_angle": 180,
+            "widget_gauge_zero_centered": true,
+            "widget_gauge_show_needle": false,
+            "widget_arc_color": "#03A9F4",
+            "widget_arc_color_2": "#FF9800",
+            "widget_arc_color_3": "#F44336",
+            "widget_gauge_track_color": "#1A1A1A",
+            "widget_gauge_arc_width_pct": 15,
+            "widget_gauge_ticks": 5
+          },
+          {
+            "col_offset": 0,
+            "row_offset": 3,
+            "col_span": 3,
+            "widget_type": "sparkline",
+            "widget_data_binding": "[pad:grid]",
+            "widget_data_binding_2": "[pad:solar]",
+            "widget_data_binding_3": "[pad:home]",
+            "widget_sparkline_min": -4,
+            "widget_sparkline_max": 4,
+            "widget_sparkline_window": 21600,
+            "widget_sparkline_slots": 360,
+            "widget_sparkline_ha_entity": "${grid_history_entity}",
+            "widget_sparkline_ha_stat": "mean",
+            "widget_sparkline_ha_entity_2": "${solar_history_entity}",
+            "widget_sparkline_ha_stat_2": "mean",
+            "widget_sparkline_ha_entity_3": "${home_history_entity}",
+            "widget_sparkline_ha_stat_3": "mean",
+            "widget_sparkline_line_color": "#03A9F4",
+            "widget_sparkline_line_color_2": "#FF9800",
+            "widget_sparkline_line_color_3": "#F44336",
+            "widget_sparkline_line_width": 2,
+            "widget_sparkline_smooth": 8,
+            "widget_sparkline_unified_scale": true,
+            "widget_sparkline_current_label": "grid",
+            "widget_sparkline_current_label_2": "solar",
+            "widget_sparkline_current_label_3": "home",
+            "widget_sparkline_ref_1_y": 0,
+            "widget_sparkline_ref_1_color": "#888888",
+            "widget_sparkline_ref_1_pattern": 2
+          }
+        ]
+      },
+      "provision": {
+        "pad": {
+          "bindings": {
+            "grid": "${grid_power}",
+            "solar": "${solar_power}",
+            "home": "[expr:${grid_power} + ${solar_power}]"
+          }
+        }
+      }
+    }
+  ]
+}
