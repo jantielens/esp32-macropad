@@ -809,7 +809,7 @@ static void bar_chart_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
 
         int16_t cur_px = slot->last_anim_px;
-        bool should_animate = had_data && cfg->anim_ms > 0
+        bool should_animate = !DISPLAY_DISABLE_ANIMATIONS && had_data && cfg->anim_ms > 0
                               && cur_px != target_px && !rapid_update;
         if (should_animate) {
             lv_anim_t a;

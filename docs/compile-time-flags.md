@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 278
+Total flags: 284
 
 ### Features (HAS_*)
 
@@ -66,8 +66,8 @@ Total flags: 278
 
 - **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
-- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
-- **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
+- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
 
@@ -146,6 +146,8 @@ Total flags: 278
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
 - **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
+- **ICON_MAX_DIMENSION** default: `(no default)` — Keep decoded ARGB icon buffers modest on the classic ESP32's 8 MB PSRAM.
+- **INKPLATE_MIN_REFRESH_MS** default: `(no default)` — Minimum interval between completed panel waveforms.
 - **JD9165_DSI_DPI_CLK_HZ** default: `51200000L` — DPI pixel clock in Hz.
 - **LOOP_TASK_STACK_SIZE** default: `(no default)` — Measured under portal, MQTT, and pad load: 4704 bytes remained from 8192.
 - **LVGL_BUFFER_PREFER_INTERNAL** default: `false` — Prefer internal RAM over PSRAM for LVGL draw buffer allocation.
@@ -213,6 +215,7 @@ Total flags: 278
 - **DISPLAY_DEBIAS_CYCLES** default: `3` — Number of white↔black inversion cycles per de-bias refresh.
 - **DISPLAY_DEBIAS_HOLD_MS** default: `80` — Dwell time (ms) per half-cycle (white, then black) during de-bias.
 - **DISPLAY_DEBIAS_SETTLE_MS** default: `300` — Soft-landing VCOM settle (ms) at the end of each de-bias refresh; 0 disables.
+- **DISPLAY_DISABLE_ANIMATIONS** default: `false` — Suppress visual transitions on slow-refresh displays while preserving state updates.
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 - **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP** default: `false` — Keep the MIPI-DSI panel powered (Display On, black) during screensaver sleep; no DCS power-down.
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
@@ -224,6 +227,7 @@ Total flags: 278
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
 - **HW_BUTTON_HOLD_MS** default: `500` — the "hold" action; a shorter press fires the "tap" action on release).
+- **INKPLATE_REFRESH_SETTLE_MS** default: `(no default)` — Briefly coalesce an action's final layout and binding updates before display().
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
@@ -249,6 +253,8 @@ Total flags: 278
 - **LVGL_DRAW_BUF_COUNT** default: `1` — is being flushed (useful with async DMA2D or PPA rotation pipelines).
 - **LVGL_TASK_CORE** default: `0` — Core to pin the LVGL render task to on dual-core chips (0 or 1).
 - **LVGL_TASK_PRIORITY** default: `4` — Default 4 matches ESP-IDF BSP convention; keeps rendering above WiFi (pri 2-3).
+- **LVGL_TASK_USE_PSRAM_STACK** default: `true` — Disable on targets whose FreeRTOS port rejects external static task stacks.
+- **LVGL_THEME_DARK_MODE** default: `true` — light theme to avoid a full-screen black background.
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
 - **NUM_HW_BUTTONS** default: `0` — Number of buttons actually declared by the board (0 = none).
 - **PORTAL_PRIMARY_CATEGORY** default: `""` — Custom nav category ID promoted to first position (empty = standard behavior).
@@ -346,6 +352,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 | inkplate6flick |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
+| inkplate6flick-lvgl |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |  |  |  |  |  |  |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
 | reterminal-e1003 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
@@ -373,6 +380,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | firebeetle2-esp32c6-aht10 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
 | inkplate5v2 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
 | inkplate6flick | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
+| inkplate6flick-lvgl | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_INKPLATE6FLICK | TOUCH_DRIVER_INKPLATE6FLICK |
 | reterminal-e1003 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
@@ -1155,6 +1163,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **DISPLAY_DEBIAS_SETTLE_MS**
   - src/app/board_config.h
   - src/app/drivers/mipi_dsi_driver.cpp
+- **DISPLAY_DISABLE_ANIMATIONS**
+  - src/app/board_config.h
 - **DISPLAY_HARD_RESET_ON_SLEEP**
   - src/app/board_config.h
   - src/app/drivers/mipi_dsi_driver.cpp
@@ -1208,6 +1218,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
 - **HX711_SCK_PIN**
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
+- **ICON_MAX_DIMENSION**
+  - src/app/icon_store.h
 - **IS_COFFEE_SCALE**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
@@ -1366,6 +1378,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **LVGL_TASK_CORE**
   - src/app/board_config.h
 - **LVGL_TASK_PRIORITY**
+  - src/app/board_config.h
+- **LVGL_TASK_USE_PSRAM_STACK**
+  - src/app/board_config.h
+  - src/app/display_manager.cpp
+- **LVGL_THEME_DARK_MODE**
   - src/app/board_config.h
 - **LVGL_TICK_PERIOD_MS**
   - src/app/board_config.h

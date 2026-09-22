@@ -221,13 +221,16 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				// Flush canvas buffer only when LVGL produced draw data.
 				if (mgr->flushPending) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_FLUSH);
-						if (mgr->driver->renderMode() == DisplayDriver::RenderMode::Buffered
-								&& mgr->presentSem) {
+					bool flushAccepted = false;
+					if (mgr->driver->renderMode() == DisplayDriver::RenderMode::Buffered) {
+						if (mgr->presentSem) {
 								// Buffered mode: delegate present() to the async present task.
 								// This frees the LVGL mutex during the slow QSPI panel transfer,
 								// allowing touch input and animations to continue processing.
 								mgr->sharedLvTimerUs = lv_timer_us;
 								xSemaphoreGive(mgr->presentSem);
+							flushAccepted = true;
+						}
 						} else {
 								// Direct mode: present() is a no-op. Update perf stats inline.
 								const uint32_t now_ms = millis();
@@ -253,8 +256,11 @@ void DisplayManager::lvglTask(void* pvParameter) {
 										g_perf_window_start_ms = now_ms;
 										g_perf_frames_in_window = 0;
 								}
+									flushAccepted = true;
 						}
-						mgr->flushPending = false;
+								// The render task can begin before the buffered present task exists.
+								// Retain the first invalidated frame until a consumer accepts it.
+								if (flushAccepted) mgr->flushPending = false;
 				}
 
 				mgr->unlock();

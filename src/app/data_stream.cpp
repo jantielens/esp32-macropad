@@ -13,6 +13,7 @@
 #endif
 #include <esp_heap_caps.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
@@ -54,7 +55,7 @@ struct DataStream {
 #endif
 };
 
-static DataStream g_streams[DATA_STREAM_MAX_STREAMS];
+static DataStream* g_streams = nullptr;
 static bool g_initialized = false;
 static uint32_t g_next_uid = 1;
 #if HAS_HA_HISTORY
@@ -278,7 +279,17 @@ static void hydrate_streams() {
 #endif // HAS_HA_HISTORY
 
 void data_stream_init() {
-    memset(g_streams, 0, sizeof(g_streams));
+    if (!g_streams) {
+        g_streams = static_cast<DataStream*>(heap_caps_calloc(
+            DATA_STREAM_MAX_STREAMS, sizeof(*g_streams), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (!g_streams) g_streams = static_cast<DataStream*>(calloc(DATA_STREAM_MAX_STREAMS, sizeof(*g_streams)));
+        if (!g_streams) {
+            LOGE(TAG, "Failed to allocate stream registry");
+            return;
+        }
+    }
+
+    memset(g_streams, 0, DATA_STREAM_MAX_STREAMS * sizeof(*g_streams));
     for (int i = 0; i < DATA_STREAM_MAX_STREAMS; i++) {
         g_streams[i].in_use = false;
         g_streams[i].samples = nullptr;
@@ -291,7 +302,7 @@ void data_stream_init() {
 }
 
 void data_stream_rebuild() {
-    if (!g_initialized) return;
+    if (!g_initialized || !g_streams) return;
 
     // Mark all streams for potential removal
     bool keep[DATA_STREAM_MAX_STREAMS] = {};
@@ -407,7 +418,7 @@ void data_stream_rebuild() {
 }
 
 void data_stream_poll() {
-    if (!g_initialized) return;
+    if (!g_initialized || !g_streams) return;
 
     char resolved[BINDING_TEMPLATE_MAX_LEN];
 
@@ -461,7 +472,7 @@ data_stream_handle_t data_stream_find(const char* binding,
                                       uint16_t slot_count,
                                       const char* ha_entity,
                                       uint8_t ha_stat) {
-    if (!binding || !binding[0]) return DATA_STREAM_INVALID;
+    if (!g_streams || !binding || !binding[0]) return DATA_STREAM_INVALID;
 #if !HAS_HA_HISTORY
     (void)ha_entity;
     (void)ha_stat;
@@ -483,7 +494,7 @@ data_stream_handle_t data_stream_find(const char* binding,
 }
 
 bool data_stream_get(data_stream_handle_t handle, DataStreamSnapshot* out) {
-    if (handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
+    if (!g_streams || handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
     const DataStream* s = &g_streams[handle];
     if (!s->in_use || !s->samples) return false;
 
@@ -501,7 +512,7 @@ bool data_stream_get(data_stream_handle_t handle, DataStreamSnapshot* out) {
 #if HAS_HA_HISTORY
 
 uint32_t data_stream_uid(data_stream_handle_t handle) {
-    if (handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return 0;
+    if (!g_streams || handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return 0;
     const DataStream* s = &g_streams[handle];
     return s->in_use ? s->uid : 0;
 }
@@ -509,7 +520,7 @@ uint32_t data_stream_uid(data_stream_handle_t handle) {
 bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
                                uint64_t end_bucket, const float* values,
                                uint16_t count) {
-    if (handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
+    if (!g_streams || handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
     DataStream* s = &g_streams[handle];
     if (!s->in_use || !s->samples) return false;
     if (s->uid != uid) return false;          // Stream was rebuilt or re-anchored
@@ -536,7 +547,7 @@ bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
 }
 
 bool data_stream_finish_history(data_stream_handle_t handle, uint32_t uid) {
-    if (handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
+    if (!g_streams || handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
     DataStream* s = &g_streams[handle];
     if (!s->in_use || s->uid != uid) return false;
     s->hydrate_done = true;

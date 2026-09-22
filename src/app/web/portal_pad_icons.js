@@ -300,6 +300,7 @@ async function padUploadPageIcons(context) {
     const btnSizes = await padGetButtonSizes(context.cols, context.rows);
     const baseW = btnSizes.button_w - btnSizes.padding * 2;
     const baseH = btnSizes.button_h - btnSizes.padding * 2;
+    const maxIconDimension = Number(deviceInfoCache && deviceInfoCache.icon_max_dimension) || 720;
 
     const needsMi = iconButtons.some(b => b.icon_id.startsWith('mi_'));
     if (needsMi) await padEnsureMaterialSymbols();
@@ -341,9 +342,9 @@ async function padUploadPageIcons(context) {
 
         // Make icon square — glyph is sized to min dimension anyway,
         // avoids transparent padding in the taller axis
-        var iconSize = Math.min(iconW, iconH);
-        iconW = iconSize;
-        iconH = iconSize;
+        const iconSize = Math.min(iconW, iconH);
+        iconW = Math.min(iconSize, maxIconDimension);
+        iconH = iconW;
 
         padRenderIconOnCanvas(canvas, btn.icon_id, iconW, iconH);
         const pngBlob = await padCanvasToPNG(canvas);

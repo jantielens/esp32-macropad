@@ -23,7 +23,7 @@
 
 struct IconEntry {
     char id[CONFIG_ICON_ID_MAX_LEN];
-    lv_draw_buf_t* draw_buf;  // LVGL draw buffer (never freed — LVGL holds refs)
+    lv_draw_buf_t* draw_buf;
     IconKind kind;
 };
 
@@ -31,11 +31,18 @@ static IconEntry* g_entries = nullptr;
 static uint16_t g_count = 0;
 static uint16_t g_capacity = 0;
 
-// Guards g_entries / g_count / g_capacity against concurrent access by the
-// LVGL render task (icon_store_lookup) and the async web server task
-// (icon_store_install -> cache_entry_buf, icon_store_delete_page_icons,
-// icon_store_enumerate_cache). Created in icon_store_init(). Critical sections
-// cover only the in-memory table touches — never PNG decode or file I/O.
+struct RetiredIconBuffer {
+    uint8_t page;
+    lv_draw_buf_t* draw_buf;
+};
+
+static RetiredIconBuffer* g_retired = nullptr;
+static uint16_t g_retired_count = 0;
+static uint16_t g_retired_capacity = 0;
+
+// Guards cache and retired-buffer state against concurrent access by the LVGL
+// render task and the async web server task. Created in icon_store_init().
+// Critical sections cover only in-memory state — never PNG decode or file I/O.
 static SemaphoreHandle_t g_cache_mutex = nullptr;
 
 static inline void cache_lock() {
@@ -74,6 +81,45 @@ static bool ensure_capacity() {
     return true;
 }
 
+static bool ensure_retired_capacity() {
+    if (g_retired_count < g_retired_capacity) return true;
+
+    uint16_t new_capacity = g_retired_capacity == 0 ? 16 : g_retired_capacity * 2;
+    size_t new_size = (size_t)new_capacity * sizeof(RetiredIconBuffer);
+    RetiredIconBuffer* new_retired = nullptr;
+    if (psramFound()) {
+        new_retired = (RetiredIconBuffer*)heap_caps_realloc(
+            g_retired, new_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    if (!new_retired) {
+        new_retired = (RetiredIconBuffer*)realloc(g_retired, new_size);
+    }
+    if (!new_retired) {
+        LOGE(TAG, "Failed to grow retired cache to %u buffers", new_capacity);
+        return false;
+    }
+
+    g_retired = new_retired;
+    g_retired_capacity = new_capacity;
+    return true;
+}
+
+static uint8_t page_from_icon_id(const char* id) {
+    unsigned page = 0;
+    if (!id || sscanf(id, "pad_%u_", &page) != 1 || page >= MAX_PADS) {
+        return UINT8_MAX;
+    }
+    return (uint8_t)page;
+}
+
+static bool retire_buffer(uint8_t page, lv_draw_buf_t* draw_buf) {
+    if (!draw_buf) return true;
+    if (!ensure_retired_capacity()) return false;
+
+    g_retired[g_retired_count++] = {page, draw_buf};
+    return true;
+}
+
 static int find_entry(const char* id) {
     for (uint16_t i = 0; i < g_count; i++) {
         if (strcmp(g_entries[i].id, id) == 0) return (int)i;
@@ -81,10 +127,9 @@ static int find_entry(const char* id) {
     return -1;
 }
 
-// Remove cache entries from the lookup table without freeing the draw buffers.
-// LVGL image objects may still reference the old pixel memory until their
-// screens are rebuilt, so invalidation only drops the key->buffer mapping.
-static uint16_t invalidate_entries_with_prefix(const char* prefix) {
+// Remove cache entries from the lookup table and retire their buffers until
+// the corresponding LVGL pad screen deletes its image widgets.
+static uint16_t invalidate_entries_with_prefix(const char* prefix, uint8_t page) {
     if (!prefix || !prefix[0]) return 0;
 
     const size_t prefix_len = strlen(prefix);
@@ -93,6 +138,9 @@ static uint16_t invalidate_entries_with_prefix(const char* prefix) {
     cache_lock();
     for (uint16_t i = 0; i < g_count; ) {
         if (strncmp(g_entries[i].id, prefix, prefix_len) == 0) {
+            if (!retire_buffer(page, g_entries[i].draw_buf)) {
+                break;
+            }
             if (i != g_count - 1) {
                 g_entries[i] = g_entries[g_count - 1];
             }
@@ -112,6 +160,26 @@ static bool validate_png(const uint8_t* data, size_t len) {
     if (len < 8) return false;
     return (data[0] == 0x89 && data[1] == 0x50 &&
             data[2] == 0x4E && data[3] == 0x47);
+}
+
+static uint32_t read_be32(const uint8_t* data) {
+    return ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) |
+           ((uint32_t)data[2] << 8) | data[3];
+}
+
+static bool png_dimensions_allowed(const uint8_t* data, size_t len,
+                                   unsigned* width, unsigned* height) {
+    if (!validate_png(data, len) || len < 24 ||
+        read_be32(data + 8) != 13 || memcmp(data + 12, "IHDR", 4) != 0) {
+        return false;
+    }
+
+    const uint32_t png_width = read_be32(data + 16);
+    const uint32_t png_height = read_be32(data + 20);
+    if (width) *width = png_width;
+    if (height) *height = png_height;
+    return png_width > 0 && png_height > 0 &&
+           png_width <= ICON_MAX_DIMENSION && png_height <= ICON_MAX_DIMENSION;
 }
 
 // lodepng outputs RGBA byte order; LVGL ARGB8888 expects BGRA. Swap R↔B.
@@ -169,9 +237,12 @@ static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
     // Check if entry already exists (update in place)
     int idx = find_entry(id);
     if (idx >= 0) {
-        // Old draw_buf is orphaned — LVGL image widgets hold raw pointers to it.
-        // Leak is bounded by max button count (MAX_PADS × MAX_PAD_BUTTONS).
         IconEntry& e = g_entries[idx];
+        if (!retire_buffer(page_from_icon_id(id), e.draw_buf)) {
+            cache_unlock();
+            lv_draw_buf_destroy(buf);
+            return false;
+        }
         e.draw_buf = buf;
         e.kind = kind;
         cache_unlock();
@@ -241,9 +312,12 @@ static bool load_from_fs(const char* fs_id, IconKind kind,
         return false;
     }
 
-    if (!validate_png(buf, file_size)) {
+    unsigned width = 0;
+    unsigned height = 0;
+    if (!png_dimensions_allowed(buf, file_size, &width, &height)) {
         free(buf);
-        LOGW(TAG, "Invalid PNG in '%s'", fs_id);
+        LOGW(TAG, "PNG rejected for '%s': %ux%u exceeds %u px limit or has invalid IHDR",
+             fs_id, width, height, ICON_MAX_DIMENSION);
         return false;
     }
 
@@ -290,8 +364,11 @@ bool icon_store_install(const char* id, IconKind kind,
                         const uint8_t* png_data, size_t png_len) {
     if (!id || !id[0] || !png_data || png_len < 8) return false;
 
-    if (!validate_png(png_data, png_len)) {
-        LOGW(TAG, "Install rejected: not a valid PNG for '%s'", id);
+    unsigned width = 0;
+    unsigned height = 0;
+    if (!png_dimensions_allowed(png_data, png_len, &width, &height)) {
+        LOGW(TAG, "Install rejected for '%s': %ux%u exceeds %u px limit or has invalid IHDR",
+             id, width, height, ICON_MAX_DIMENSION);
         return false;
     }
 
@@ -348,7 +425,7 @@ bool icon_store_lookup(const char* id, IconRef* out) {
 }
 
 // Preload icons for a single pad (with template fallback).
-static uint16_t preload_pad_icons(uint8_t page, PadConfig* cfg) {
+static uint16_t preload_pad_icons(uint8_t page, const PadConfig* cfg) {
     uint16_t loaded = 0;
     for (uint8_t i = 0; i < cfg->button_count; i++) {
         if (!cfg->buttons[i].icon_id[0]) continue;
@@ -358,6 +435,8 @@ static uint16_t preload_pad_icons(uint8_t page, PadConfig* cfg) {
                              cfg->buttons[i].row, key, sizeof(key));
 
         IconKind kind = kind_from_icon_id(cfg->buttons[i].icon_id);
+        IconRef existing;
+        if (icon_store_lookup(key, &existing)) continue;
         if (load_from_fs(key, kind)) { loaded++; continue; }
 
         // Fallback: if this pad uses a template, try loading icon from
@@ -378,19 +457,11 @@ void icon_store_preload_pad_pages() {
     uint16_t loaded = 0;
 
     for (uint8_t page = 0; page < MAX_PADS; page++) {
-        PadConfig* cfg = (PadConfig*)heap_caps_malloc(
-            sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
+        const PadConfig* cfg = pad_config_acquire(page);
         if (!cfg) continue;
 
-        memset(cfg, 0, sizeof(PadConfig));
-        if (!pad_config_load(page, cfg)) {
-            free(cfg);
-            continue;
-        }
-
         loaded += preload_pad_icons(page, cfg);
-        free(cfg);
+        pad_config_release(cfg);
     }
 
     LOGI(TAG, "Preload complete: %u icons loaded, %u total cached",
@@ -400,19 +471,11 @@ void icon_store_preload_pad_pages() {
 void icon_store_preload_pad(uint8_t page) {
     if (page >= MAX_PADS) return;
 
-    PadConfig* cfg = (PadConfig*)heap_caps_malloc(
-        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
+    const PadConfig* cfg = pad_config_acquire(page);
     if (!cfg) return;
 
-    memset(cfg, 0, sizeof(PadConfig));
-    if (!pad_config_load(page, cfg)) {
-        free(cfg);
-        return;
-    }
-
     uint16_t loaded = preload_pad_icons(page, cfg);
-    free(cfg);
+    pad_config_release(cfg);
 
     if (loaded > 0) {
         LOGI(TAG, "Preload pad %u: %u icons loaded", page, loaded);
@@ -451,12 +514,29 @@ void icon_store_delete_page_icons(uint8_t page) {
         Storage.remove(path);
     }
 
-    uint16_t invalidated = invalidate_entries_with_prefix(prefix);
+    uint16_t invalidated = invalidate_entries_with_prefix(prefix, page);
 
     if (del_count > 0 || invalidated > 0) {
         LOGI(TAG, "Deleted %u icon files and invalidated %u cache entries for page %u",
              del_count, invalidated, page);
     }
+}
+
+void icon_store_collect_retired(uint8_t page) {
+    cache_lock();
+    for (uint16_t i = 0; i < g_retired_count; ) {
+        if (g_retired[i].page != page) {
+            i++;
+            continue;
+        }
+
+        lv_draw_buf_destroy(g_retired[i].draw_buf);
+        if (i != g_retired_count - 1) {
+            g_retired[i] = g_retired[g_retired_count - 1];
+        }
+        g_retired_count--;
+    }
+    cache_unlock();
 }
 
 uint16_t icon_store_cache_count() {

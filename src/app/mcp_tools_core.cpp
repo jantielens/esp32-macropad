@@ -210,26 +210,22 @@ static void append_pad_buttons(JsonObject po, const PadConfig* cfg) {
 }
 
 static bool tool_list_pads(const JsonObject& args, JsonObject& result, String& err) {
-    // Enumerates configured pads on the web task: each existing pad is loaded
-    // from flash into a single reused PadConfig buffer (PSRAM-preferred). Work is
-    // bounded by MAX_PADS and skipped for non-existent pads; pass the optional
-    // "screen" filter (e.g. "pad_2") to inspect a single pad and avoid loading
-    // every pad on large multi-pad configs.
+    // Enumerates immutable cached configs. Work is bounded by MAX_PADS and
+    // skipped for non-existent pads; pass the optional "screen" filter
+    // (e.g. "pad_2") to inspect one pad.
     const char* filter = args["screen"] | (const char*)nullptr;
     int filter_page = -1;
     if (filter && strncmp(filter, "pad_", 4) == 0) {
         filter_page = atoi(filter + 4);
     }
 
-    PadConfig* cfg = (PadConfig*)mcp_psram_alloc(sizeof(PadConfig));
-    if (!cfg) return tool_fail(result, err, TOOL_ERR_INTERNAL, "out of memory");
-
     JsonArray pads = result.createNestedArray("pads");
     char sid[16];
     for (uint8_t pg = 0; pg < MAX_PADS; ++pg) {
         if (filter_page >= 0 && pg != filter_page) continue;
         if (!pad_config_exists(pg)) continue;
-        if (!pad_config_load(pg, cfg)) continue;
+        const PadConfig* cfg = pad_config_acquire(pg);
+        if (!cfg) continue;
 
         snprintf(sid, sizeof(sid), "pad_%u", (unsigned)pg);
         JsonObject po = pads.createNestedObject();
@@ -238,8 +234,8 @@ static bool tool_list_pads(const JsonObject& args, JsonObject& result, String& e
         if (pad_config_read_name(pg, nm, sizeof(nm))) po["name"] = nm;  // friendly label
         po["button_count"] = cfg->button_count;
         append_pad_buttons(po, cfg);
+        pad_config_release(cfg);
     }
-    free(cfg);
     return true;
 }
 
@@ -363,11 +359,8 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
     const PressCtx* c = (const PressCtx*)ctx;
     *ok = false;
 
-    PadConfig* cfg = (PadConfig*)mcp_psram_alloc(sizeof(PadConfig));
-    if (!cfg) { strlcpy(msg, "out of memory", msg_len); return; }
-
-    if (!pad_config_load(c->page, cfg)) {
-        free(cfg);
+    const PadConfig* cfg = pad_config_acquire(c->page);
+    if (!cfg) {
         strlcpy(msg, "pad not found", msg_len);
         return;
     }
@@ -383,14 +376,14 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
     }
 
     if (idx < 0) {
-        free(cfg);
+        pad_config_release(cfg);
         strlcpy(msg, "button not found", msg_len);
         return;
     }
 
     const ScreenButtonConfig& btn = cfg->buttons[idx];
     if (btn.action_count == 0) {
-        free(cfg);
+        pad_config_release(cfg);
         strlcpy(msg, "button has no action", msg_len);
         *ok = true;  // pressing a no-action button is a valid no-op
         return;
@@ -403,17 +396,17 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
         btn.actions, btn.action_count, PRESS_DISPATCH_OPS, nullptr,
         &execution_id);
     if (dispatch == MCP_PRESS_DISPATCH_BUSY) {
-        free(cfg);
+        pad_config_release(cfg);
         strlcpy(msg, PRESS_HA_BUSY, msg_len);
         return;
     }
     if (dispatch == MCP_PRESS_DISPATCH_INVALID) {
-        free(cfg);
+        pad_config_release(cfg);
         strlcpy(msg, "invalid button action count", msg_len);
         return;
     }
     screen_saver_manager_notify_activity(true);
-    free(cfg);
+    pad_config_release(cfg);
     *ok = true;
     if (dispatch == MCP_PRESS_DISPATCH_COMPLETED) {
         strlcpy(msg, "pressed", msg_len);

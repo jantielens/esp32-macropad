@@ -242,25 +242,8 @@ void PadScreen::update() {
     // Check if config has changed
     uint32_t gen = pad_config_get_generation();
     if (tilesBuilt && gen == cachedGeneration) {
-        // Config unchanged — poll bindings in priority order
-#if HAS_MQTT || HAS_IMAGE_LIBRARY
-        // Set page context so [pad:] tokens in bindings can resolve
-#if HAS_MQTT
-        pad_binding_set_bindings(pageBindings, pageBindingCount);
-#endif
-        pollBtnStateBindings();   // Visibility/interactivity first
-        pollMqttBindings();
-        pollColorBindings();
-        pollNumberBindings();
-    #if HAS_MQTT
-        mqtt_sub_store_clear_dirty();
-        pad_binding_set_bindings(nullptr, 0);
-#endif
-#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
-        pollImageFrames();
-#endif
-        return;
-    #endif
+    pollLiveData();
+    return;
     }
 
     cachedGeneration = gen;
@@ -271,6 +254,30 @@ void PadScreen::update() {
     // pad's show(), and (b) live config rebuilds that add or remove a
     // device-class binding while the pad is visible.
     reconcilePadHold("pad_screen");
+
+    // Resolve the first frame before LVGL renders it. Slow-refresh displays
+    // should never spend a full waveform showing placeholder binding values.
+    pollLiveData();
+}
+
+void PadScreen::pollLiveData() {
+#if HAS_MQTT || HAS_IMAGE_LIBRARY
+    // Set page context so [pad:] tokens in bindings can resolve
+#if HAS_MQTT
+    pad_binding_set_bindings(pageBindings, pageBindingCount);
+#endif
+    pollBtnStateBindings();   // Visibility/interactivity first
+    pollMqttBindings();
+    pollColorBindings();
+    pollNumberBindings();
+    #if HAS_MQTT
+    mqtt_sub_store_clear_dirty();
+    pad_binding_set_bindings(nullptr, 0);
+#endif
+#if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
+    pollImageFrames();
+#endif
+#endif
 }
 
 // ============================================================================

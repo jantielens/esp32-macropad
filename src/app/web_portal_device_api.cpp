@@ -26,6 +26,7 @@ extern DeviceConfig device_config;
 
 #if HAS_DISPLAY
 #include "display_manager.h"
+#include "icon_store.h"
 #include "pad_config.h"
 #endif
 
@@ -86,6 +87,10 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(ESP.getFlashChipSize());
 		response->print(",\"psram_size\":");
 		response->print(ESP.getPsramSize());
+#if HAS_DISPLAY
+		response->print(",\"icon_max_dimension\":");
+		response->print(ICON_MAX_DIMENSION);
+#endif
 		response->print(",\"free_heap\":");
 		response->print(ESP.getFreeHeap());
 		response->print(",\"sketch_size\":");

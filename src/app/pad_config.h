@@ -14,7 +14,7 @@
 // ============================================================================
 // Each pad (0..MAX_PADS-1) is stored as /config/pad_N.json on LittleFS.
 // The REST API saves raw JSON to preserve all fields (including future ones).
-// pad_config_load() parses only the fields needed for rendering.
+// Runtime pad configs are parsed from JSON and cached as immutable snapshots.
 
 // MAX_PADS is defined in board_config.h (overridable per board, default 16)
 // MAX_PAD_BUTTONS, MAX_GRID_COLS, MAX_GRID_ROWS are overridable per board.
@@ -471,6 +471,8 @@ struct ButtonDefaults {
 
 // Per-pad config
 struct PadConfig {
+    uint16_t ref_count;                    // cache/readers; managed by pad_config_acquire/release
+    uint8_t button_capacity;               // allocated entries in buttons
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
@@ -495,7 +497,7 @@ struct PadConfig {
     uint8_t pad_action_count;
 
     uint8_t button_count;
-    ScreenButtonConfig buttons[MAX_PAD_BUTTONS];
+    ScreenButtonConfig* buttons;           // exact-size trailing allocation
 };
 
 // Compact copy for data stream registration. It retains only the widget
@@ -514,10 +516,13 @@ extern "C" {
 // Mount LittleFS filesystem. Call once at boot. Returns true on success.
 bool pad_config_init();
 
-// Load pad config from LittleFS JSON. Caller provides PadConfig buffer.
-// On success, out is populated and returns true. On failure (file missing,
-// parse error), out is zeroed and returns false.
-bool pad_config_load(uint8_t page, PadConfig* out);
+// Acquire the immutable in-memory config for a page. The returned reference
+// remains valid until paired with pad_config_release(). Returns nullptr when
+// the page is not configured.
+const PadConfig* pad_config_acquire(uint8_t page);
+
+// Release a reference returned by pad_config_acquire().
+void pad_config_release(const PadConfig* config);
 
 // Copy the widget and binding fields required for data-stream registration.
 // The result is protected from concurrent pad cache replacement.

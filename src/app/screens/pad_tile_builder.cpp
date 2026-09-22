@@ -26,6 +26,47 @@ static PadGridLayoutSpace pad_layout_space(const PadLayoutSettings& layout) {
     return space;
 }
 
+static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
+                                  const PadRect& rect, int16_t padding,
+                                  const UIScaleInfo& scale,
+                                  const IconRef& icon) {
+    const uint32_t source_width = icon.dsc->header.w;
+    const uint32_t source_height = icon.dsc->header.h;
+    if (source_width != ICON_MAX_DIMENSION && source_height != ICON_MAX_DIMENSION) {
+        return LV_SCALE_NONE;
+    }
+
+    const int16_t border_width = (int16_t)strtol(button.border_width, nullptr, 10);
+    int32_t target_width = rect.w - 2 * padding - 2 * border_width;
+    int32_t target_height = rect.h - 2 * padding - 2 * border_width;
+
+    if (button.label_top[0]) {
+        target_height -= lv_font_get_line_height(
+            pad_resolve_font(button.style_top, scale.font_small));
+    }
+    if (button.label_bottom[0]) {
+        target_height -= lv_font_get_line_height(
+            pad_resolve_font(button.style_bottom, scale.font_small));
+    }
+    if (strcmp(button.widget.type, "bar_chart") == 0) target_height /= 2;
+    if (strcmp(button.widget.type, "gauge") == 0) {
+        target_width = target_width * 4 / 10;
+        target_height = target_height * 4 / 10;
+    }
+    if (button.icon_scale_pct > 0) {
+        const uint8_t percent = min<uint8_t>(button.icon_scale_pct, 250);
+        target_width = target_width * percent / 100;
+        target_height = target_height * percent / 100;
+    }
+
+    const uint32_t target_size = max<int32_t>(1, min(target_width, target_height));
+    const uint32_t source_size = max(source_width, source_height);
+    if (target_size <= source_size) return LV_SCALE_NONE;
+
+    const uint32_t image_scale = target_size * LV_SCALE_NONE / source_size;
+    return (uint16_t)min<uint32_t>(image_scale, UINT16_MAX);
+}
+
 // TAG, perceived_luminance(), rgb_to_lv(), and tile/tap-flash constants are
 // defined in pad_screen.cpp which is #included before this file in screens.cpp.
 
@@ -38,7 +79,12 @@ void PadScreen::clearTiles() {
     free(padActions);
     padActions = nullptr;
     padActionCount = 0;
-    if (!tiles) { tileCount = 0; tilesBuilt = false; return; }
+    if (!tiles) {
+        tileCount = 0;
+        tilesBuilt = false;
+        icon_store_collect_retired(pageIndex);
+        return;
+    }
     for (uint8_t i = 0; i < tileCount; i++) {
         // Destroy widget state before LVGL objects are deleted
         if (tiles[i].widget_type && tiles[i].widget_type->destroyUI) {
@@ -97,6 +143,7 @@ void PadScreen::clearTiles() {
     numberBindingCount = 0;
     btnStateBindingCount = 0;
     tilesBuilt = false;
+    icon_store_collect_retired(pageIndex);
 }
 
 void PadScreen::buildTiles() {
@@ -111,26 +158,9 @@ void PadScreen::buildTiles() {
         return;
     }
 
-    // Allocate PadConfig in PSRAM (temporary — freed at end of this function)
-    PadConfig* cfg = nullptr;
-    if (psramFound()) {
-        cfg = (PadConfig*)heap_caps_malloc(sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    }
+    const PadConfig* cfg = pad_config_acquire(pageIndex);
     if (!cfg) {
-        cfg = (PadConfig*)malloc(sizeof(PadConfig));
-    }
-    if (!cfg) {
-        LOGE(TAG, "OOM for PadConfig");
-        tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
-        return;
-    }
-
-    bool loaded = pad_config_load(pageIndex, cfg);
-    if (!loaded) {
-        wakeScreen[0] = '\0';
-        pageBgTemplate[0] = '\0';
-        pageBgDefault = 0x000000;
-        free(cfg);
+        LOGE(TAG, "Pad %u config unavailable", pageIndex);
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
@@ -158,7 +188,7 @@ void PadScreen::buildTiles() {
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {
         LOGW(TAG, "Page %u: unsupported layout '%s', skipping", pageIndex, cfg->layout);
-        free(cfg);
+        pad_config_release(cfg);
         tilesBuilt = true;
         return;
     }
@@ -298,6 +328,7 @@ void PadScreen::buildTiles() {
 
         // Icon image (shown when icon_id is set and icon is cached)
         lv_obj_t* icon_img = nullptr;
+        uint16_t icon_scale = LV_SCALE_NONE;
         if (bcfg.icon_id[0]) {
             char icon_key[CONFIG_ICON_ID_MAX_LEN];
             icon_store_build_key(pageIndex, bcfg.col, bcfg.row,
@@ -306,6 +337,8 @@ void PadScreen::buildTiles() {
             if (icon_store_lookup(icon_key, &ref)) {
                 icon_img = lv_image_create(obj);
                 lv_image_set_src(icon_img, ref.dsc);
+                icon_scale = capped_icon_scale(bcfg, r, pad, scale, ref);
+                lv_image_set_scale(icon_img, icon_scale);
                 lv_obj_clear_flag(icon_img, LV_OBJ_FLAG_CLICKABLE);
                 if (ref.kind == ICON_KIND_MONO) {
                     lv_obj_set_style_image_recolor(icon_img, fg, 0);
@@ -322,8 +355,8 @@ void PadScreen::buildTiles() {
             // Force layout to get actual dimensions
             lv_obj_update_layout(icon_img);
             lv_obj_update_layout(lbl_center);
-            const int16_t icon_h = (int16_t)lv_obj_get_height(icon_img);
-            const int16_t icon_w = (int16_t)lv_obj_get_width(icon_img);
+            const int16_t icon_h = (int16_t)(lv_obj_get_height(icon_img) * icon_scale / LV_SCALE_NONE);
+            const int16_t icon_w = (int16_t)(lv_obj_get_width(icon_img) * icon_scale / LV_SCALE_NONE);
             const int16_t lbl_h = (int16_t)lv_obj_get_height(lbl_center);
 
             const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small);
@@ -687,7 +720,7 @@ void PadScreen::buildTiles() {
     }
 #endif
 
-    free(cfg);
+    pad_config_release(cfg);
 
     // Detect device-class engine-hold consumers: any registered device class
     // that declares a pad_hold_scheme (e.g. "[shutter:") whose binding token

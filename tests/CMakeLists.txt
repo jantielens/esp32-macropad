@@ -258,7 +258,7 @@ add_host_legacy_test(test_camera_capture_action
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 add_host_legacy_test(test_pad_cycle SOURCES test_pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
-add_host_legacy_test(test_pad_cache_transaction SOURCES test_pad_cache_transaction.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cache_transaction.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_pad_config_dynamic_layout SOURCES test_pad_config_dynamic_layout.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_wifi_reconnect SOURCES test_wifi_reconnect.cpp ${PROJECT_SOURCE_DIR}/src/app/wifi_reconnect.cpp)
 add_host_legacy_test(test_screen_saver_schedule SOURCES test_screen_saver_schedule.cpp)
 add_host_legacy_test(test_component_registry SOURCES test_component_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp stubs.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)

@@ -649,6 +649,7 @@ Returns comprehensive device information.
   "cpu_freq": 160,
   "flash_chip_size": 4194304,
   "psram_size": 0,
+  "icon_max_dimension": 720,
   "health_poll_interval_ms": 5000,
   "health_history_seconds": 300,
   "health_history_available": true,
@@ -712,6 +713,8 @@ Returns comprehensive device information.
 
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution
+- `icon_max_dimension`: Largest accepted PNG width or height. The Pad editor
+  rasterizes larger icons at this limit and the device scales them to fit.
 - `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
 - `current_screen`: ID of the currently displayed screen
 

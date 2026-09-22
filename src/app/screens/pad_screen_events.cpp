@@ -89,6 +89,7 @@ void PadScreen::tapFlashTimerCb(lv_timer_t* timer) {
 // zone: 0 = full button, 1 = zone A (top/left), 2 = zone B (bottom/right)
 // horizontal: only meaningful when zone != 0
 static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = false) {
+    if (DISPLAY_DISABLE_ANIMATIONS) return;
     if (!tile->tap_overlay) return;
 
     lv_obj_t* ov = tile->tap_overlay;
@@ -133,6 +134,7 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
 // Pixel-based tap flash: resize overlay to a pixel band of the tile.
 // px_start/px_end are tile-relative pixel offsets along the given axis.
 static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool horizontal) {
+    if (DISPLAY_DISABLE_ANIMATIONS) return;
     if (!tile->tap_overlay) return;
 
     lv_obj_t* ov = tile->tap_overlay;
@@ -455,6 +457,7 @@ void PadScreen::padActionFlashTimerCb(lv_timer_t* timer) {
 }
 
 void PadScreen::showPadActionFlash() {
+    if (DISPLAY_DISABLE_ANIMATIONS) return;
     if (!padActionOverlay) return;
     if (padActionFlashTimer) {
         lv_timer_delete(padActionFlashTimer);

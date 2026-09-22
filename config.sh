@@ -74,6 +74,7 @@ declare -A FQBN_TARGETS=(
     ["firebeetle2-esp32c6-aht10"]="esp32:esp32:dfrobot_beetle_esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app" # DFRobot FireBeetle 2 ESP32-C6 v1.2 headless battery sensor node (AHT10; 4MB flash; no OTA)
     ["inkplate5v2"]="Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb" # Soldered Inkplate 5V2 (ESP32 classic, 5.17" 720x1280 3-bit grayscale e-paper; 4MB flash + 4MB QSPI PSRAM)
     ["inkplate6flick"]="Inkplate_Boards:esp32:Inkplate6Flick:PartitionScheme=min_spiffs" # Soldered Inkplate 6FLICK (ESP32 classic, 6.0" 1024x758 3-bit grayscale e-paper touchscreen + frontlight; 4MB flash + 8MB PSRAM). min_spiffs = 1.9MB APP with OTA (6FLICK variant has no ota_1_9mb scheme)
+        ["inkplate6flick-lvgl"]="Inkplate_Boards:esp32:Inkplate6Flick:PartitionScheme=huge_app" # Experimental Inkplate 6FLICK always-on LVGL monochrome UI; 3MB no-OTA application partition
     ["reterminal-e1003"]="esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default" # Seeed reTerminal E1003 (ESP32-S3, 10.3" 1404x1872 16-level grayscale IT8951 e-paper; 32MB flash + 8MB OPI PSRAM). Serial is a CH340 USB-UART bridge on UART0 (GPIO43/44), NOT native USB — use CDCOnBoot=default, no USBMode=hwcdc, or Serial.print blocks on the disconnected USB-CDC FIFO and the device appears to hang.
 )
 
