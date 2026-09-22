@@ -470,7 +470,10 @@ static void poll_touch_activity() {
 
 		// Avoid competing with LVGL's indev polling while awake.
 		// Only poll the raw touch state to wake the backlight when sleeping/dimming.
-		if ((g_state == ScreenSaverState::Awake && !g_idle_screen_active) || g_state == ScreenSaverState::FadingIn) return;
+		if ((g_state == ScreenSaverState::Awake && !g_idle_screen_active) || g_state == ScreenSaverState::FadingIn) {
+			g_prev_touch = false;
+			return;
+		}
 
 		const bool touched = touch_manager_is_touched();
 		const bool pressedEdge = touched && !g_prev_touch;
@@ -616,6 +619,12 @@ ScreenSaverStatus screen_saver_manager_get_status() {
 }
 
 void screen_saver_manager_get_pixel_shift(int* dx, int* dy) {
+		#if SCREENSAVER_BACKLIGHT_ONLY
+		if (dx) *dx = 0;
+		if (dy) *dy = 0;
+		return;
+		#endif
+
 		const uint8_t distance = button_defaults_get_pixel_shift_distance();
 		if (distance == 0) {
 			if (dx) *dx = 0;

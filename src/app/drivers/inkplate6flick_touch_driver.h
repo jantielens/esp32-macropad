@@ -3,9 +3,12 @@
 
 #include "../touch_driver.h"
 
+#include <freertos/semphr.h>
+
 class Inkplate6Flick_TouchDriver : public TouchDriver {
 public:
 		Inkplate6Flick_TouchDriver();
+		~Inkplate6Flick_TouchDriver() override;
 
 		void init() override;
 		bool isTouched() override;
@@ -15,8 +18,10 @@ public:
 
 private:
 		bool initialized;
+		bool touched;
 		uint16_t lastX;
 		uint16_t lastY;
+		SemaphoreHandle_t mutex;
 };
 
 #endif

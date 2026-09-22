@@ -6,9 +6,21 @@
 #include <Inkplate.h>
 
 Inkplate6Flick_TouchDriver::Inkplate6Flick_TouchDriver()
-		: initialized(false), lastX(0), lastY(0) {}
+		: initialized(false), touched(false), lastX(0), lastY(0), mutex(nullptr) {}
+
+Inkplate6Flick_TouchDriver::~Inkplate6Flick_TouchDriver() {
+		if (mutex) {
+			vSemaphoreDelete(mutex);
+		}
+}
 
 void Inkplate6Flick_TouchDriver::init() {
+		mutex = xSemaphoreCreateMutex();
+		if (!mutex) {
+			LOGE("InkplateTouch", "touch mutex allocation failed");
+			return;
+		}
+
 		Inkplate* display = inkplate6flick_lvgl_instance();
 		if (!display) {
 			LOGE("InkplateTouch", "display is unavailable");
@@ -26,19 +38,34 @@ bool Inkplate6Flick_TouchDriver::isTouched() {
 
 bool Inkplate6Flick_TouchDriver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure) {
 		if (pressure) *pressure = 0;
-		if (!initialized || !x || !y) return false;
+		if (!initialized || !x || !y || !mutex) return false;
+		if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) return false;
 
 		Inkplate* display = inkplate6flick_lvgl_instance();
-		if (!display) return false;
-		uint16_t touchX[2] = {};
-		uint16_t touchY[2] = {};
-		if (display->touchscreen.getData(touchX, touchY) == 0) return false;
+		if (!display) {
+			xSemaphoreGive(mutex);
+			return false;
+		}
 
-		lastX = touchX[0];
-		lastY = touchY[0];
+		// Cypress reports are interrupt-driven: getData() returns zero both for
+		// an explicit release and when no new report is pending. Preserve the last
+		// reported state until the controller sends the next report.
+		if (display->touchscreen.available()) {
+			uint16_t touchX[2] = {};
+			uint16_t touchY[2] = {};
+			const uint8_t touchCount = display->touchscreen.getData(touchX, touchY);
+			touched = touchCount > 0;
+			if (touched) {
+				lastX = touchX[0];
+				lastY = touchY[0];
+			}
+		}
+
 		*x = lastX;
 		*y = lastY;
-		return true;
+		const bool isTouched = touched;
+		xSemaphoreGive(mutex);
+		return isTouched;
 }
 
 void Inkplate6Flick_TouchDriver::setCalibration(uint16_t, uint16_t, uint16_t, uint16_t) {}
