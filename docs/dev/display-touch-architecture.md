@@ -52,6 +52,15 @@ graph TD
 
 ## Display Driver HAL
 
+### Inkplate 6 Flick LVGL
+
+`inkplate6flick-lvgl` is an experimental always-on e-paper target. Its Inkplate
+driver is buffered: LVGL flushes update a framebuffer, then a presentation task
+coalesces changes before a physical waveform. B/W mode uses partial updates with
+periodic full refreshes; grayscale uses full waveforms. The Cypress touch driver
+continues polling while a presentation is pending. This target uses a no-OTA
+partition and must be updated over USB.
+
 ### Purpose
 
 The DisplayDriver interface decouples LVGL from specific display libraries, allowing support for TFT_eSPI, LovyanGFX, or custom drivers without changing DisplayManager code.

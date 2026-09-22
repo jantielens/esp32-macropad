@@ -12,6 +12,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+* **Experimental Inkplate 6 Flick LVGL target**: `inkplate6flick-lvgl` provides an always-on touch pad interface with MQTT and configurable B/W or grayscale presentation modes. It uses the 3 MB no-OTA application partition, so firmware updates require USB flashing.
+
 ## [1.31.0] - 2026-09-21
 
 ### Added
