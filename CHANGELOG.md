@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-21
+ms.date: 2026-09-22
 ms.topic: reference
 ---
 
@@ -12,16 +12,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [1.32.0] - 2026-09-22
 
 ### Added
 
-* **Experimental Inkplate 6 Flick LVGL target**: `inkplate6flick-lvgl` provides an always-on touch pad interface with MQTT and configurable B/W or grayscale presentation modes. It uses the 3 MB no-OTA application partition, so firmware updates require USB flashing.
+* **LVGL e-paper display support**: buffered presentation, configurable B/W or grayscale modes, and e-paper-specific refresh controls are now available. `inkplate6flick-lvgl` is the first board to use this support; its always-on firmware uses the 3 MB no-OTA application partition, so firmware updates require USB flashing.
+* **Display animation policy**: boards can set `DISPLAY_DISABLE_ANIMATIONS` to suppress visual transitions while retaining immediate state updates, with existing boards unchanged by the default-off setting.
 
 ### Fixed
 
-* **Inkplate presentation settings**: persisted presentation intervals are validated, invalid stored values fall back to safe defaults, and live consumers read synchronized settings snapshots.
-* **Inkplate full refreshes**: manual refresh requests now report unavailable or failed queue operations, and failed presentation initialization is exposed as unavailable.
+* **E-paper presentation settings**: persisted presentation intervals are validated, invalid stored values fall back to safe defaults, and live consumers read synchronized settings snapshots.
+* **E-paper full refreshes**: manual refresh requests now report unavailable or failed queue operations, and failed presentation initialization is exposed as unavailable.
+* **PNG icon validation**: invalid or oversized PNG icon uploads are rejected before decoding, and display builds report their accepted icon dimension limit.
 
 ## [1.31.0] - 2026-09-21
 
