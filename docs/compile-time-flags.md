@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 285
+Total flags: 287
 
 ### Features (HAS_*)
 
@@ -228,6 +228,8 @@ Total flags: 285
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
 - **HW_BUTTON_HOLD_MS** default: `500` — the "hold" action; a shorter press fires the "tap" action on release).
+- **INKPLATE_BW_FULL_UPDATE_THRESHOLD** default: `10` — Number of B/W partial updates before the Inkplate library performs a full refresh.
+- **INKPLATE_LVGL_DEFAULT_MODE** default: `INKPLATE_LVGL_MODE_GRAYSCALE` — Default panel mode for the experimental Inkplate LVGL driver.
 - **INKPLATE_REFRESH_SETTLE_MS** default: `(no default)` — Resettable quiet period that coalesces final layout and binding updates before display().
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
@@ -354,6 +356,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate5v2 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 | inkplate6flick |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 | inkplate6flick-lvgl |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |  |  |  |  |  |  |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
+| inkplate6flick-lvgl-bw |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |  |  |  |  |  |  |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
 | reterminal-e1003 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
@@ -382,6 +385,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate5v2 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
 | inkplate6flick | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
 | inkplate6flick-lvgl | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_INKPLATE6FLICK | TOUCH_DRIVER_INKPLATE6FLICK |
+| inkplate6flick-lvgl-bw | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_INKPLATE6FLICK | TOUCH_DRIVER_INKPLATE6FLICK |
 | reterminal-e1003 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
@@ -1224,6 +1228,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/coffee_scale/coffee_scale_defaults.h
 - **ICON_MAX_DIMENSION**
   - src/app/icon_store.h
+- **INKPLATE_BW_FULL_UPDATE_THRESHOLD**
+  - src/app/board_config.h
+- **INKPLATE_LVGL_DEFAULT_MODE**
+  - src/app/board_config.h
 - **IS_COFFEE_SCALE**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

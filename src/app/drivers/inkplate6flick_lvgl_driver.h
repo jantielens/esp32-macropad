@@ -40,15 +40,19 @@ private:
 		uint16_t currentW;
 		uint16_t currentH;
 		uint8_t rotation;
+		uint8_t panelMode;
 		uint32_t lastRefreshMs;
 		uint32_t lastChangeMs;
 		uint8_t* presentedFramebuffer;
 		uint32_t refreshCount;
+		uint32_t partialUpdateCount;
 		uint32_t noOpSkipCount;
 		bool pendingChanges;
-		bool hasPresentedFramebuffer;
+		bool hasPresentedFrame;
 
 		void writePixel(int16_t x, int16_t y, uint16_t rgb565);
+		bool usesBwMode() const;
+		uint8_t* framebuffer() const;
 		size_t framebufferBytes() const;
 };
 

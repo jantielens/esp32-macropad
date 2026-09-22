@@ -37,6 +37,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | inkplate5v2 | ? | ? | ? | ?×? | ? | none |  |
 | inkplate6flick | ? | ? | ? | ?×? | ? | none |  |
 | inkplate6flick-lvgl | INKPLATE6FLICK | ? | ? | 1024×758 | 0 | INKPLATE6FLICK |  |
+| inkplate6flick-lvgl-bw | INKPLATE6FLICK | ? | ? | 1024×758 | 0 | INKPLATE6FLICK |  |
 | jc1060p470c | JD9165_DSI | JD9165 | DSI | 1024×600 | 1 | GT911 |  |
 | jc1060p470c-sd | JD9165_DSI | JD9165 | DSI | 1024×600 | 1 | GT911 |  |
 | jc3248w535 | ARDUINO_GFX | AXS15231B | QSPI | 320×480 | 1 | AXS15231B |  |

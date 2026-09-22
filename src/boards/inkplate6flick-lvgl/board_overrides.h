@@ -46,6 +46,8 @@
 #define LVGL_THEME_DARK_MODE false
 // Intermediate visual states are not useful with full-panel grayscale waveforms.
 #define DISPLAY_DISABLE_ANIMATIONS true
+// Use the Inkplate 6FLICK 3-bit grayscale waveform for this target.
+#define INKPLATE_LVGL_DEFAULT_MODE INKPLATE_LVGL_MODE_GRAYSCALE
 // Hold passive binding-driven visual updates for the latest useful state.
 #define DISPLAY_BINDING_REFRESH_INTERVAL_MS 60000
 
