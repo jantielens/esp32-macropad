@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 284
+Total flags: 285
 
 ### Features (HAS_*)
 
@@ -211,6 +211,7 @@ Total flags: 284
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
 - **DEVICE_TELEMETRY_CPU_MONITOR** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
 - **DEVICE_TELEMETRY_HEALTH_WINDOW** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable health-window min/max sampling timer.
+- **DISPLAY_BINDING_REFRESH_INTERVAL_MS** default: `0` — Wall-clock-aligned interval between passive pad binding refreshes; 0 keeps every LVGL-cycle refresh.
 - **DISPLAY_BLANK_ON_SAVE** default: `false` — (LittleFS + lodepng). The browser blanks/restores via /api/display/brightness.
 - **DISPLAY_DEBIAS_CYCLES** default: `3` — Number of white↔black inversion cycles per de-bias refresh.
 - **DISPLAY_DEBIAS_HOLD_MS** default: `80` — Dwell time (ms) per half-cycle (white, then black) during de-bias.
@@ -227,7 +228,7 @@ Total flags: 284
 - **HEALTH_HISTORY_SECONDS** default: `300` — How much client-side history (sparklines) to keep.
 - **HEALTH_POLL_INTERVAL_MS** default: `5000` — How often the web UI polls /api/health.
 - **HW_BUTTON_HOLD_MS** default: `500` — the "hold" action; a shorter press fires the "tap" action on release).
-- **INKPLATE_REFRESH_SETTLE_MS** default: `(no default)` — Briefly coalesce an action's final layout and binding updates before display().
+- **INKPLATE_REFRESH_SETTLE_MS** default: `(no default)` — Resettable quiet period that coalesces final layout and binding updates before display().
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
@@ -1154,6 +1155,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **DEVICE_TELEMETRY_HEALTH_WINDOW**
   - src/app/app.ino
   - src/app/board_config.h
+- **DISPLAY_BINDING_REFRESH_INTERVAL_MS**
+  - src/app/board_config.h
+  - src/app/screens/pad_screen.cpp
 - **DISPLAY_BLANK_ON_SAVE**
   - src/app/board_config.h
 - **DISPLAY_DEBIAS_CYCLES**

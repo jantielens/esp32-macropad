@@ -4,6 +4,9 @@
 #include "../log_manager.h"
 
 #include <Inkplate.h>
+#include <esp_heap_caps.h>
+
+#include <cstring>
 
 static Inkplate* s_inkplate = nullptr;
 
@@ -14,10 +17,12 @@ Inkplate* inkplate6flick_lvgl_instance() {
 Inkplate6Flick_LVGL_Driver::Inkplate6Flick_LVGL_Driver()
 		: display(nullptr), framebufferMutex(nullptr), currentX(0), currentY(0),
 			currentW(0), currentH(0), rotation(0), lastRefreshMs(0),
-			pendingChanges(false) {}
+			lastChangeMs(0), presentedFramebuffer(nullptr), refreshCount(0),
+			noOpSkipCount(0), pendingChanges(false), hasPresentedFramebuffer(false) {}
 
 Inkplate6Flick_LVGL_Driver::~Inkplate6Flick_LVGL_Driver() {
 		if (framebufferMutex) vSemaphoreDelete(framebufferMutex);
+		if (presentedFramebuffer) heap_caps_free(presentedFramebuffer);
 }
 
 void Inkplate6Flick_LVGL_Driver::init() {
@@ -34,6 +39,10 @@ void Inkplate6Flick_LVGL_Driver::init() {
 		if (!framebufferMutex) {
 			LOGE("Inkplate", "framebuffer mutex allocation failed");
 			return;
+		}
+		presentedFramebuffer = (uint8_t*)heap_caps_malloc(framebufferBytes(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+		if (!presentedFramebuffer) {
+			LOGW("Inkplate", "no-op refresh suppression disabled: snapshot allocation failed");
 		}
 		LOGI("Inkplate", "6FLICK LVGL spike initialized (%dx%d, 3-bit grayscale)", width(), height());
 }
@@ -72,6 +81,10 @@ void Inkplate6Flick_LVGL_Driver::writePixel(int16_t x, int16_t y, uint16_t rgb56
 		display->drawPixel(x, y, gray);
 }
 
+size_t Inkplate6Flick_LVGL_Driver::framebufferBytes() const {
+		return (size_t)DISPLAY_WIDTH * DISPLAY_HEIGHT / 2;
+}
+
 void Inkplate6Flick_LVGL_Driver::pushColors(uint16_t* data, uint32_t, bool) {
 		if (!display || !framebufferMutex || !data) return;
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
@@ -83,27 +96,56 @@ void Inkplate6Flick_LVGL_Driver::pushColors(uint16_t* data, uint32_t, bool) {
 			}
 		}
 		pendingChanges = true;
+		lastChangeMs = millis();
 		xSemaphoreGive(framebufferMutex);
 }
 
 void Inkplate6Flick_LVGL_Driver::present() {
 		if (!display || !framebufferMutex) return;
-		const uint32_t elapsed = millis() - lastRefreshMs;
-		if (lastRefreshMs && elapsed < INKPLATE_MIN_REFRESH_MS) {
-			vTaskDelay(pdMS_TO_TICKS(INKPLATE_MIN_REFRESH_MS - elapsed));
-		}
-		if (INKPLATE_REFRESH_SETTLE_MS > 0) {
-			vTaskDelay(pdMS_TO_TICKS(INKPLATE_REFRESH_SETTLE_MS));
+		while (true) {
+			xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+			if (!pendingChanges) {
+				xSemaphoreGive(framebufferMutex);
+				return;
+			}
+			const uint32_t now = millis();
+			const uint32_t refreshWait = lastRefreshMs && now - lastRefreshMs < INKPLATE_MIN_REFRESH_MS
+					? INKPLATE_MIN_REFRESH_MS - (now - lastRefreshMs) : 0;
+			const uint32_t quietWait = INKPLATE_REFRESH_SETTLE_MS > 0 && now - lastChangeMs < INKPLATE_REFRESH_SETTLE_MS
+					? INKPLATE_REFRESH_SETTLE_MS - (now - lastChangeMs) : 0;
+
+			const uint32_t waitMs = refreshWait > quietWait ? refreshWait : quietWait;
+			if (waitMs == 0) {
+				break;
+			}
+			xSemaphoreGive(framebufferMutex);
+			const TickType_t waitTicks = pdMS_TO_TICKS(waitMs);
+			vTaskDelay(waitTicks ? waitTicks : 1);
 		}
 
-		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
 		if (!pendingChanges) {
 			xSemaphoreGive(framebufferMutex);
 			return;
 		}
-		LOGD("Inkplate", "Grayscale full panel refresh");
+		if (presentedFramebuffer && hasPresentedFramebuffer &&
+				memcmp(display->DMemory4Bit, presentedFramebuffer, framebufferBytes()) == 0) {
+			pendingChanges = false;
+			noOpSkipCount++;
+			LOGI("Inkplate", "refresh skipped=no-op count=%lu", (unsigned long)noOpSkipCount);
+			xSemaphoreGive(framebufferMutex);
+			return;
+		}
+
+		const uint32_t refreshStartMs = millis();
 		display->display();
+		if (presentedFramebuffer) {
+			memcpy(presentedFramebuffer, display->DMemory4Bit, framebufferBytes());
+			hasPresentedFramebuffer = true;
+		}
 		pendingChanges = false;
 		lastRefreshMs = millis();
+		refreshCount++;
+		LOGI("Inkplate", "grayscale refresh count=%lu dur=%lums", (unsigned long)refreshCount,
+				(unsigned long)(lastRefreshMs - refreshStartMs));
 		xSemaphoreGive(framebufferMutex);
 }

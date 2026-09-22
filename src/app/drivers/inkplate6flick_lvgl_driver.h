@@ -41,9 +41,15 @@ private:
 		uint16_t currentH;
 		uint8_t rotation;
 		uint32_t lastRefreshMs;
+		uint32_t lastChangeMs;
+		uint8_t* presentedFramebuffer;
+		uint32_t refreshCount;
+		uint32_t noOpSkipCount;
 		bool pendingChanges;
+		bool hasPresentedFramebuffer;
 
 		void writePixel(int16_t x, int16_t y, uint16_t rgb565);
+		size_t framebufferBytes() const;
 };
 
 #endif

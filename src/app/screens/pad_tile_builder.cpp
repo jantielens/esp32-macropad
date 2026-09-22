@@ -142,6 +142,7 @@ void PadScreen::clearTiles() {
     colorBindingCount = 0;
     numberBindingCount = 0;
     btnStateBindingCount = 0;
+    hasTimeBinding = false;
     tilesBuilt = false;
     icon_store_collect_retired(pageIndex);
 }
@@ -743,6 +744,8 @@ void PadScreen::buildTiles() {
                  pageIndex, dc->name);
         }
     }
+
+    hasTimeBinding = containsTimeBinding();
 
     tilesBuilt = true;
 

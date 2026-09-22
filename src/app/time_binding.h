@@ -15,3 +15,6 @@ void time_binding_init();
 // Start NTP time sync.  Call once after WiFi is connected.
 // Uses pool.ntp.org with UTC as the default timezone.
 void time_binding_start_ntp();
+
+// True once the system clock has received a valid NTP time.
+bool time_binding_is_synced();

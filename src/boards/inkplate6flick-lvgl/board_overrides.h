@@ -46,9 +46,11 @@
 #define LVGL_THEME_DARK_MODE false
 // Intermediate visual states are not useful with full-panel grayscale waveforms.
 #define DISPLAY_DISABLE_ANIMATIONS true
+// Hold passive binding-driven visual updates for the latest useful state.
+#define DISPLAY_BINDING_REFRESH_INTERVAL_MS 60000
 
 // Grayscale requires a full-panel waveform; partial updates are unsupported.
 // Minimum interval between completed panel waveforms.
 #define INKPLATE_MIN_REFRESH_MS 1500
-// Briefly coalesce an action's final layout and binding updates before display().
+// Resettable quiet period that coalesces final layout and binding updates before display().
 #define INKPLATE_REFRESH_SETTLE_MS 150

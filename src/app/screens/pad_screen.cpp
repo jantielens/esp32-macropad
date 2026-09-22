@@ -6,6 +6,7 @@
 #include "../swipe_actions.h"
 #include "../pad_layout.h"
 #include "../timer_engine.h"
+#include "../time_binding.h"
 #if HAS_MQTT
 #include "../mqtt_manager.h"
 #include "../mqtt_sub_store.h"
@@ -22,6 +23,7 @@
 
 #include <esp_heap_caps.h>
 #include <string.h>
+#include <sys/time.h>
 
 #define TAG "PadScr"
 
@@ -67,7 +69,9 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
     padActions(nullptr), padActionCount(0),
     padActionOverlay(nullptr), padActionFlashTimer(nullptr),
       arraysAllocated(false),
-      cachedGeneration(UINT32_MAX), tilesBuilt(false),
+        cachedGeneration(UINT32_MAX),
+        lastPassiveBindingSlot(UINT64_MAX), lastTimeBindingMinute(UINT64_MAX),
+        hasTimeBinding(false), clockWasSynced(false), tilesBuilt(false),
       padHoldMask(0), padHeldMask(0) {
     wakeScreen[0] = '\0';
     pageBgTemplate[0] = '\0';
@@ -203,6 +207,9 @@ void PadScreen::show() {
     for (uint16_t i = 0; i < numberBindingCount; i++) {
         numberBindings[i].lastApplied = INT16_MIN; // Force re-apply
     }
+    lastPassiveBindingSlot = UINT64_MAX;
+    lastTimeBindingMinute = UINT64_MAX;
+    clockWasSynced = false;
 
 #if HAS_IMAGE_FETCH
     for (uint8_t i = 0; i < tileCount; i++) {
@@ -257,10 +264,31 @@ void PadScreen::update() {
 
     // Resolve the first frame before LVGL renders it. Slow-refresh displays
     // should never spend a full waveform showing placeholder binding values.
-    pollLiveData();
+    pollLiveData(true);
 }
 
-void PadScreen::pollLiveData() {
+void PadScreen::pollLiveData(bool force) {
+#if DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
+    struct timeval tv;
+    const bool clockSynced = time_binding_is_synced();
+    const uint64_t nowMs = clockSynced && gettimeofday(&tv, nullptr) == 0
+        ? (uint64_t)tv.tv_sec * 1000ULL + (uint64_t)(tv.tv_usec / 1000)
+        : (uint64_t)millis();
+    const uint64_t passiveSlot = nowMs / DISPLAY_BINDING_REFRESH_INTERVAL_MS;
+    const uint64_t timeMinute = nowMs / 60000ULL;
+    const bool passiveDue = passiveSlot != lastPassiveBindingSlot;
+    const bool timeDue = hasTimeBinding && clockSynced && timeMinute != lastTimeBindingMinute;
+    const bool clockJustSynced = clockSynced && !clockWasSynced;
+    clockWasSynced = clockSynced;
+
+    if (!force && !passiveDue && !timeDue && !clockJustSynced) return;
+
+    lastPassiveBindingSlot = passiveSlot;
+    if (hasTimeBinding && clockSynced) lastTimeBindingMinute = timeMinute;
+#else
+    (void)force;
+#endif
+
 #if HAS_MQTT || HAS_IMAGE_LIBRARY
     // Set page context so [pad:] tokens in bindings can resolve
 #if HAS_MQTT
@@ -278,6 +306,24 @@ void PadScreen::pollLiveData() {
     pollImageFrames();
 #endif
 #endif
+}
+
+bool PadScreen::containsTimeBinding() const {
+    static constexpr const char* TIME_SCHEME = "[time:";
+    for (uint16_t i = 0; i < bindingCount; i++)
+        if (strstr(bindings[i].templ, TIME_SCHEME)) return true;
+    for (uint16_t i = 0; i < colorBindingCount; i++)
+        if (strstr(colorBindings[i].templ, TIME_SCHEME)) return true;
+    for (uint16_t i = 0; i < numberBindingCount; i++)
+        if (strstr(numberBindings[i].templ, TIME_SCHEME)) return true;
+    for (uint16_t i = 0; i < btnStateBindingCount; i++)
+        if (strstr(btnStateBindings[i].templ, TIME_SCHEME)) return true;
+    for (uint8_t i = 0; i < tileCount; i++)
+        for (uint8_t binding = 0; binding < MAX_WIDGET_BINDINGS; binding++)
+            if (strstr(tiles[i].widget_binding[binding], TIME_SCHEME)) return true;
+    for (uint8_t i = 0; i < pageBindingCount; i++)
+        if (strstr(pageBindings[i].value, TIME_SCHEME)) return true;
+    return false;
 }
 
 // ============================================================================
