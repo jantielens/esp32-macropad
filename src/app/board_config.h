@@ -1251,6 +1251,26 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // ============================================================================
 // Screensaver
 // ============================================================================
+// Keep the display content active during logical sleep and only turn off the backlight.
+#ifndef SCREENSAVER_BACKLIGHT_ONLY
+#define SCREENSAVER_BACKLIGHT_ONLY false
+#endif
+
+// Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).
+#ifndef SCREENSAVER_DEFAULT_TIMEOUT_SECONDS
+#define SCREENSAVER_DEFAULT_TIMEOUT_SECONDS 300
+#endif
+
+// Default backlight fade-out duration when the screen saver activates (ms).
+#ifndef SCREENSAVER_DEFAULT_FADE_OUT_MS
+#define SCREENSAVER_DEFAULT_FADE_OUT_MS 800
+#endif
+
+// Default backlight fade-in duration when the screen saver wakes (ms).
+#ifndef SCREENSAVER_DEFAULT_FADE_IN_MS
+#define SCREENSAVER_DEFAULT_FADE_IN_MS 400
+#endif
+
 // LVGL task loop delay while the screensaver is fully asleep (ms).
 // Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 #ifndef SCREENSAVER_SLEEP_TICK_MS

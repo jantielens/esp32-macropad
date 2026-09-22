@@ -272,8 +272,13 @@ async function loadConfig() {
         
         // Display settings - backlight brightness
         const brightness = config.backlight_brightness !== undefined ? config.backlight_brightness : 100;
+        const brightnessMin = config.backlight_brightness_min !== undefined ? config.backlight_brightness_min : 5;
+        const brightnessSlider = document.getElementById('backlight_brightness');
+        if (brightnessSlider) brightnessSlider.min = brightnessMin;
         setValueIfExists('backlight_brightness', brightness);
         setTextIfExists('brightness-value', brightness);
+        const backlightTimeoutSettings = document.getElementById('backlight-timeout-settings');
+        if (backlightTimeoutSettings) backlightTimeoutSettings.hidden = config.screen_saver_backlight_only !== true;
 
         // Screen saver settings
         setCheckedIfExists('screen_saver_enabled', config.screen_saver_enabled);

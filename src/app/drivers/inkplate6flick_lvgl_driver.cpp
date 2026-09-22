@@ -25,7 +25,8 @@ Inkplate6Flick_LVGL_Driver::Inkplate6Flick_LVGL_Driver(DeviceConfig* cfg)
 		: display(nullptr), config(cfg), framebufferMutex(nullptr), currentX(0), currentY(0),
 			currentW(0), currentH(0), rotation(0), panelMode(cfg ? cfg->panel_mode : INKPLATE_LVGL_DEFAULT_MODE),
 			lastRefreshMs(0), lastChangeMs(0), presentedFramebuffer(nullptr), refreshCount(0), partialUpdateCount(0),
-			bwPartialUpdatesSinceFull(0), noOpSkipCount(0), pendingChanges(false), fullRefreshRequested(false), hasPresentedFrame(false) {}
+			bwPartialUpdatesSinceFull(0), noOpSkipCount(0), backlightBrightness(0), frontlightLevel(0), pendingChanges(false),
+			frontlightEnabled(false), fullRefreshRequested(false), hasPresentedFrame(false) {}
 
 Inkplate6Flick_LVGL_Driver::~Inkplate6Flick_LVGL_Driver() {
 		if (framebufferMutex) vSemaphoreDelete(framebufferMutex);
@@ -70,10 +71,39 @@ void Inkplate6Flick_LVGL_Driver::setRotation(uint8_t value) {
 
 int Inkplate6Flick_LVGL_Driver::width() { return (rotation & 1) ? DISPLAY_HEIGHT : DISPLAY_WIDTH; }
 int Inkplate6Flick_LVGL_Driver::height() { return (rotation & 1) ? DISPLAY_WIDTH : DISPLAY_HEIGHT; }
-void Inkplate6Flick_LVGL_Driver::setBacklight(bool) {}
-void Inkplate6Flick_LVGL_Driver::setBacklightBrightness(uint8_t) {}
-uint8_t Inkplate6Flick_LVGL_Driver::getBacklightBrightness() { return 0; }
-bool Inkplate6Flick_LVGL_Driver::hasBacklightControl() { return false; }
+void Inkplate6Flick_LVGL_Driver::setBacklight(bool on) {
+		setBacklightBrightness(on ? (backlightBrightness ? backlightBrightness : 100) : 0);
+}
+
+void Inkplate6Flick_LVGL_Driver::setBacklightBrightness(uint8_t brightness) {
+		if (!display) return;
+		if (brightness > 100) brightness = 100;
+
+		if (framebufferMutex) xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+		if (brightness == 0) {
+			if (frontlightEnabled) {
+				display->frontlight.setState(false);
+			}
+			backlightBrightness = 0;
+			frontlightLevel = 0;
+			frontlightEnabled = false;
+		} else {
+			const uint8_t level = (uint16_t(brightness) * 63 + 50) / 100;
+			if (!frontlightEnabled || frontlightLevel != level) {
+				display->frontlight.setBrightness(level);
+			}
+			if (!frontlightEnabled) {
+				display->frontlight.setState(true);
+			}
+			backlightBrightness = brightness;
+			frontlightLevel = level;
+			frontlightEnabled = true;
+		}
+		if (framebufferMutex) xSemaphoreGive(framebufferMutex);
+}
+
+uint8_t Inkplate6Flick_LVGL_Driver::getBacklightBrightness() { return backlightBrightness; }
+bool Inkplate6Flick_LVGL_Driver::hasBacklightControl() { return true; }
 void Inkplate6Flick_LVGL_Driver::applyDisplayFixes() {}
 void Inkplate6Flick_LVGL_Driver::startWrite() {}
 void Inkplate6Flick_LVGL_Driver::endWrite() {}

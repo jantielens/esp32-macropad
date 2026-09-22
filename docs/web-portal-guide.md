@@ -315,6 +315,14 @@ The firmware exposes two BLE health signals for bindings and diagnostics:
 |---------|-------------|
 | **Backlight Brightness** | Slider (0–100%). Changes take effect immediately; save to persist across reboots |
 
+On the Inkplate 6FLICK LVGL target, Brightness also contains **Turn off
+backlight after** and the MQTT backlight wake/keep-on binding. Set the timeout
+to `0` to keep the frontlight on. When the timeout expires, the e-paper panel
+continues to render and refresh bindings; touching the screen, a configured
+MQTT binding, and display wake actions turn the frontlight back on. This target
+does not show the separate Screen Saver page because panel-sleep and burn-in
+controls do not apply to e-paper.
+
 ### E-paper Presentation
 
 *Shown only on boards with configurable e-paper presentation support.*

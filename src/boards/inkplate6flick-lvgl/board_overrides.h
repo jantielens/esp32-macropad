@@ -15,7 +15,14 @@
 #define HAS_IMAGE_LIBRARY false
 #define HAS_CUSTOM_FONTS true
 #define HAS_BUTTON false
-#define HAS_BACKLIGHT false
+#define HAS_BACKLIGHT true
+// The frontlight can be shut off without disconnecting the e-paper panel.
+#define MIN_USER_BRIGHTNESS 0
+// Keep e-paper updates active while the frontlight timeout is in effect.
+#define SCREENSAVER_BACKLIGHT_ONLY true
+#define SCREENSAVER_DEFAULT_TIMEOUT_SECONDS 0
+#define SCREENSAVER_DEFAULT_FADE_OUT_MS 0
+#define SCREENSAVER_DEFAULT_FADE_IN_MS 0
 
 // Keep decoded ARGB icon buffers modest on the classic ESP32's 8 MB PSRAM.
 #define ICON_MAX_DIMENSION 128

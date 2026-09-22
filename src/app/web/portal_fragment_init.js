@@ -483,6 +483,7 @@ window.init_brightness_fragment = function () {
     initConfigFragment('brightness-save-btn', false);
     var slider = document.getElementById('backlight_brightness');
     if (slider) slider.addEventListener('input', handleBrightnessChange);
+    if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
 };
 
 // ============================================================================

@@ -929,6 +929,7 @@ Returns current device configuration (passwords excluded).
   "mcp_token_set": false,
 
   "backlight_brightness": 100,
+  "screen_saver_backlight_only": false,
   "panel_mode": "grayscale",
   "grayscale_binding_refresh_interval_ms": 60000,
   "bw_binding_refresh_interval_ms": 1000,
@@ -973,6 +974,12 @@ Returns current device configuration (passwords excluded).
 **Notes:**
 - Some fields are build-time gated.
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
+  - `screen_saver_backlight_only` is true on targets that retain display
+    rendering during logical sleep and turn off only the backlight. Their
+    portal moves the timeout and MQTT wake binding into Brightness and omits
+    the Screen Saver navigation component. On these targets,
+    `screen_saver_enabled` is always reported as true; set the timeout to `0`
+    to disable automatic backlight shutdown.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
@@ -1251,6 +1258,8 @@ touch, BLE, audio, and safety-critical device-class loops remain operational.
 
 The screen saver owns an independent image-fetch suspension. OTA activity never
 re-enables image fetching while the screen saver still holds that suspension.
+Targets using `SCREENSAVER_BACKLIGHT_ONLY` do not suspend image fetching because
+their display continues rendering while the backlight is off.
 
 **CORS:**
 - The device responds with `Access-Control-Allow-Origin: https://<owner>.github.io`.
@@ -1293,10 +1302,13 @@ Get screen saver status.
 #### `POST /api/display/sleep`
 
 Force Display Sleep now (fade backlight to 0). This bypasses the optional Idle Screen.
+On `SCREENSAVER_BACKLIGHT_ONLY` targets, it turns off only the backlight and
+leaves rendering active.
 
 #### `POST /api/display/wake`
 
-Force wake now (fade backlight back to configured brightness).
+Force wake now (fade backlight back to configured brightness). On
+`SCREENSAVER_BACKLIGHT_ONLY` targets, the change is immediate.
 
 #### `POST /api/display/activity`
 

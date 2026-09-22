@@ -41,7 +41,9 @@
 // --- Display-gated components ---
 #if HAS_DISPLAY
 #include "components/display_component.cpp"
+#if !SCREENSAVER_BACKLIGHT_ONLY
 #include "components/screensaver_component.cpp"
+#endif
 #include "components/pad_editor_component.cpp"
 #include "components/recipes_component.cpp"
 #include "components/recipe_catalog_component.cpp"

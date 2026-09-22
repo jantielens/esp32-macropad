@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 288
+Total flags: 292
 
 ### Features (HAS_*)
 
@@ -163,6 +163,7 @@ Total flags: 288
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
 - **MIN_USER_BRIGHTNESS** default: `5` — The screen saver bypasses this floor to allow sleep (brightness 0).
+- **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS** default: `300` — Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).
 - **SDMMC_MAX_FREQUENCY_KHZ** default: `20000` — SDMMC maximum bus frequency in kHz.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
@@ -267,6 +268,9 @@ Total flags: 288
 - **PORTAL_PRIMARY_LABEL** default: `""` — Display name for the primary portal category in the nav sidebar.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
+- **SCREENSAVER_BACKLIGHT_ONLY** default: `false` — Keep the display content active during logical sleep and only turn off the backlight.
+- **SCREENSAVER_DEFAULT_FADE_IN_MS** default: `400` — Default backlight fade-in duration when the screen saver wakes (ms).
+- **SCREENSAVER_DEFAULT_FADE_OUT_MS** default: `800` — Default backlight fade-out duration when the screen saver activates (ms).
 - **SCREENSAVER_SLEEP_REFRESH_MS** default: `900000` — Interval in ms between periodic asleep-display refresh calls (0 = disabled).
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
@@ -356,7 +360,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  |  | ? | ? | ? | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |
 | inkplate5v2 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  | ✅ | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 | inkplate6flick |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  | ✅ | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
-| inkplate6flick-lvgl |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |  | ✅ |  |  |  |  |  |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
+| inkplate6flick-lvgl |  |  | ✅ |  |  |  |  |  | ? | ✅ | ✅ |  |  | ✅ |  |  |  |  |  |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
 | reterminal-e1003 |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  |  |  | ✅ |  | ? |  | ? | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
@@ -491,6 +495,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/brightness_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
+  - src/app/actions/display_refresh_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
   - src/app/actions/mqtt_action.cpp
@@ -576,6 +581,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/brightness_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
+  - src/app/actions/display_refresh_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
   - src/app/actions/mqtt_action.cpp
@@ -765,6 +771,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/epaper_driver.h
   - src/app/device_classes/epaper_device_class.cpp
 - **HAS_EPAPER_PRESENTATION**
+  - src/app/actions/display_refresh_action.cpp
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
@@ -1437,6 +1444,19 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/power_manager.cpp
 - **PROJECT_DISPLAY_NAME**
+  - src/app/board_config.h
+- **SCREENSAVER_BACKLIGHT_ONLY**
+  - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/mcp_tools_config.cpp
+  - src/app/portal_components.cpp
+  - src/app/screen_saver_manager.cpp
+  - src/app/web_portal_config.cpp
+- **SCREENSAVER_DEFAULT_FADE_IN_MS**
+  - src/app/board_config.h
+- **SCREENSAVER_DEFAULT_FADE_OUT_MS**
+  - src/app/board_config.h
+- **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS**
   - src/app/board_config.h
 - **SCREENSAVER_SLEEP_REFRESH_MS**
   - src/app/board_config.h

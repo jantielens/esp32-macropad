@@ -62,6 +62,7 @@ static uint32_t g_last_sleep_refresh_ms = 0;
 
 // Centralised state-entry helpers so sleep/wake side-effects live in one place.
 static void enter_asleep() {
+		#if !SCREENSAVER_BACKLIGHT_ONLY
 		const uint8_t distance = button_defaults_get_pixel_shift_distance();
 		const uint16_t side = 2 * distance + 1;
 		g_pixel_shift_counter = distance ? (g_pixel_shift_counter + 1) % (side * side) : 0;
@@ -80,9 +81,9 @@ static void enter_asleep() {
 		if (displayManager && !g_idle_screen_active) {
 				displayManager->handleSleepScreenRedirect();
 		}
+		#endif
 
-		// Set state last so the LVGL task doesn't throttle until all
-		// transition work (overlay, panel sleep, redirect) is complete.
+		// Set state last so wake sources observe a fully completed transition.
 		g_state = ScreenSaverState::Asleep;
 		g_last_sleep_refresh_ms = millis();
 }
@@ -135,13 +136,21 @@ static uint32_t idle_screen_timeout_ms() {
 }
 
 static uint16_t fade_out_ms() {
+		#if SCREENSAVER_BACKLIGHT_ONLY
+		return 0;
+		#else
 		if (!g_config) return 0;
 		return g_config->screen_saver_fade_out_ms;
+		#endif
 }
 
 static uint16_t fade_in_ms() {
+		#if SCREENSAVER_BACKLIGHT_ONLY
+		return 0;
+		#else
 		if (!g_config) return 0;
 		return g_config->screen_saver_fade_in_ms;
+		#endif
 }
 
 static uint8_t config_brightness() {
@@ -174,7 +183,7 @@ static void start_fade(ScreenSaverState newState, uint8_t from, uint8_t to, uint
 		g_fade_to = to;
 		g_target_brightness = to;
 
-#if HAS_IMAGE_FETCH
+#if HAS_IMAGE_FETCH && !SCREENSAVER_BACKLIGHT_ONLY
 		// Suspend/unsuspend image fetching on sleep/wake transitions.
 		// Uses the global gate so per-slot pause state (page visibility) is preserved.
 		if (newState == ScreenSaverState::FadingOut) {
@@ -433,7 +442,7 @@ static void maybe_auto_sleep() {
 // VCOM drift on IPS panels during multi-hour idle. SCREENSAVER_SLEEP_REFRESH_MS
 // of 0 disables the periodic refresh entirely.
 static void maybe_refresh_asleep() {
-#if SCREENSAVER_SLEEP_REFRESH_MS > 0
+#if SCREENSAVER_SLEEP_REFRESH_MS > 0 && !SCREENSAVER_BACKLIGHT_ONLY
 		if (g_state != ScreenSaverState::Asleep) return;
 		if (!displayManager || !displayManager->getDriver()) return;
 
@@ -574,6 +583,10 @@ bool screen_saver_manager_is_asleep() {
 
 bool screen_saver_manager_is_fully_asleep() {
 		return g_state == ScreenSaverState::Asleep;
+}
+
+bool screen_saver_manager_is_rendering_suspended() {
+		return g_state == ScreenSaverState::Asleep && !SCREENSAVER_BACKLIGHT_ONLY;
 }
 
 bool screen_saver_manager_input_ready() {

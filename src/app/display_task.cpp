@@ -144,7 +144,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						mgr->currentScreen = target;
 						mgr->currentScreen->show();
 						mgr->pendingScreen = nullptr;
-						if (!screen_saver_manager_is_fully_asleep()) {
+						if (!screen_saver_manager_is_rendering_suspended()) {
 							// Build an evicted pad before LVGL renders the newly loaded screen.
 							mgr->currentScreen->update();
 							updated_after_screen_switch = true;
@@ -213,7 +213,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 				// Update current screen (data refresh)
 				if (!updated_after_screen_switch && mgr->currentScreen
-						&& !screen_saver_manager_is_fully_asleep()) {
+						&& !screen_saver_manager_is_rendering_suspended()) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_UPDATE);
 						mgr->currentScreen->update();
 				}
@@ -270,9 +270,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				if (delayMs < 1) delayMs = 1;
 				if (delayMs > 20) delayMs = 20;
 
-				// Throttle the render loop while the screensaver is fully asleep.
+				// Throttle the render loop only when the screensaver suspends rendering.
 				// The display is blanked and panel is sleeping — no need for fast ticks.
-				if (screen_saver_manager_is_fully_asleep()) {
+				if (screen_saver_manager_is_rendering_suspended()) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SLEEP);
 						delayMs = SCREENSAVER_SLEEP_TICK_MS;
 

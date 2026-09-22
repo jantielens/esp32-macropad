@@ -174,6 +174,8 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				// Display settings
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
+				(*doc)["backlight_brightness_min"] = MIN_USER_BRIGHTNESS;
+							(*doc)["screen_saver_backlight_only"] = SCREENSAVER_BACKLIGHT_ONLY;
 				#if HAS_EPAPER_PRESENTATION
 				(*doc)["panel_mode"] = current_config->panel_mode == INKPLATE_LVGL_MODE_BW ? "bw" : "grayscale";
 				(*doc)["grayscale_binding_refresh_interval_ms"] = current_config->grayscale_binding_refresh_interval_ms;
@@ -632,7 +634,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#if HAS_DISPLAY
 		// Screen saver settings
 		if (doc.containsKey("screen_saver_enabled")) {
+							#if !SCREENSAVER_BACKLIGHT_ONLY
 				current_config->screen_saver_enabled = parseBoolField(doc, "screen_saver_enabled");
+							#endif
 		}
 
 		if (doc.containsKey("screen_saver_timeout_seconds")) {

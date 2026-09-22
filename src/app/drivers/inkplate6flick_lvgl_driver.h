@@ -52,7 +52,10 @@ private:
 		uint32_t partialUpdateCount;
 		uint16_t bwPartialUpdatesSinceFull;
 		uint32_t noOpSkipCount;
+		uint8_t backlightBrightness;
+		uint8_t frontlightLevel;
 		bool pendingChanges;
+		bool frontlightEnabled;
 		portMUX_TYPE fullRefreshRequestMux = portMUX_INITIALIZER_UNLOCKED;
 		bool fullRefreshRequested;
 		bool hasPresentedFrame;

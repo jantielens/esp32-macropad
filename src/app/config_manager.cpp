@@ -230,9 +230,9 @@ bool config_manager_load(DeviceConfig *config) {
 				#if HAS_DISPLAY
 				// Screen saver defaults
 				config->screen_saver_enabled = true;
-				config->screen_saver_timeout_seconds = 300;
-				config->screen_saver_fade_out_ms = 800;
-				config->screen_saver_fade_in_ms = 400;
+				config->screen_saver_timeout_seconds = SCREENSAVER_DEFAULT_TIMEOUT_SECONDS;
+				config->screen_saver_fade_out_ms = SCREENSAVER_DEFAULT_FADE_OUT_MS;
+				config->screen_saver_fade_in_ms = SCREENSAVER_DEFAULT_FADE_IN_MS;
 				#if HAS_TOUCH
 				config->screen_saver_wake_on_touch = true;
 				#else
@@ -367,10 +367,14 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_DISPLAY
 		// Load screen saver settings
+		#if SCREENSAVER_BACKLIGHT_ONLY
+		config->screen_saver_enabled = true;
+		#else
 		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, true);
-		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, 300);
-		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, 800);
-		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, 400);
+		#endif
+		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, SCREENSAVER_DEFAULT_TIMEOUT_SECONDS);
+		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, SCREENSAVER_DEFAULT_FADE_OUT_MS);
+		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, SCREENSAVER_DEFAULT_FADE_IN_MS);
 		#if HAS_TOUCH
 		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, true);
 		#else
