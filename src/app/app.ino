@@ -233,9 +233,19 @@ void setup()
 	sd_probe_run();
 	#endif
 
+	// Load persisted settings before creating the display. The Inkplate driver
+	// samples its panel mode during initialization and never changes it live.
+	config_manager_init();
+	config_loaded = config_manager_load(&device_config);
+	if (!config_loaded) {
+		String default_name = config_manager_get_default_device_name();
+		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
+		device_config.magic = CONFIG_MAGIC;
+	}
+
 	#if HAS_DISPLAY
 	display_manager_init(&device_config);
-	display_manager_set_splash_status("Loading config...");
+	display_manager_set_splash_status("Loading device...");
 	#endif
 
 	#if USE_SD_STORAGE
@@ -273,12 +283,6 @@ void setup()
 	camera_feed_init();
 	#endif
 
-	// Initialize configuration manager
-	#if HAS_DISPLAY
-	display_manager_set_splash_status("Init NVS...");
-	#endif
-	config_manager_init();
-
 	// Cache flash/sketch metadata early to avoid concurrent access from different tasks later
 	// (e.g., MQTT publish + web API calls).
 	device_telemetry_init();
@@ -290,19 +294,6 @@ void setup()
 	#if DEVICE_TELEMETRY_HEALTH_WINDOW
 	device_telemetry_start_health_window_sampling();
 	#endif
-
-	// Try to load saved configuration
-	#if HAS_DISPLAY
-	display_manager_set_splash_status("Reading config...");
-	#endif
-	config_loaded = config_manager_load(&device_config);
-
-	if (!config_loaded) {
-		// No config found - set default device name
-		String default_name = config_manager_get_default_device_name();
-		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
-		device_config.magic = CONFIG_MAGIC;
-	}
 
 	#if HAS_CAMERA
 	if (!camera_set_capture_settings({

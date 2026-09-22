@@ -21,11 +21,11 @@ Inkplate* inkplate6flick_lvgl_instance() {
 		return s_inkplate;
 }
 
-Inkplate6Flick_LVGL_Driver::Inkplate6Flick_LVGL_Driver()
-		: display(nullptr), framebufferMutex(nullptr), currentX(0), currentY(0),
-			currentW(0), currentH(0), rotation(0), panelMode(INKPLATE_LVGL_DEFAULT_MODE),
+Inkplate6Flick_LVGL_Driver::Inkplate6Flick_LVGL_Driver(DeviceConfig* cfg)
+		: display(nullptr), config(cfg), framebufferMutex(nullptr), currentX(0), currentY(0),
+			currentW(0), currentH(0), rotation(0), panelMode(cfg ? cfg->panel_mode : INKPLATE_LVGL_DEFAULT_MODE),
 			lastRefreshMs(0), lastChangeMs(0), presentedFramebuffer(nullptr), refreshCount(0), partialUpdateCount(0),
-			noOpSkipCount(0), pendingChanges(false), hasPresentedFrame(false) {}
+			bwPartialUpdatesSinceFull(0), noOpSkipCount(0), pendingChanges(false), fullRefreshRequested(false), hasPresentedFrame(false) {}
 
 Inkplate6Flick_LVGL_Driver::~Inkplate6Flick_LVGL_Driver() {
 		if (framebufferMutex) vSemaphoreDelete(framebufferMutex);
@@ -46,7 +46,9 @@ void Inkplate6Flick_LVGL_Driver::init() {
 		}
 		display->begin();
 		display->selectDisplayMode(inkplateMode);
-		if (usesBwMode()) display->setFullUpdateThreshold(INKPLATE_BW_FULL_UPDATE_THRESHOLD);
+		// The library's threshold setter blocks its next partial update, so the
+		// driver owns the cadence and leaves the library's automatic threshold off.
+		if (usesBwMode()) display->setFullUpdateThreshold(0);
 		display->clearDisplay();
 		framebufferMutex = xSemaphoreCreateMutex();
 		if (!framebufferMutex) {
@@ -112,6 +114,21 @@ size_t Inkplate6Flick_LVGL_Driver::framebufferBytes() const {
 		return (size_t)DISPLAY_WIDTH * DISPLAY_HEIGHT / (usesBwMode() ? 8 : 2);
 }
 
+bool Inkplate6Flick_LVGL_Driver::fullRefreshPending() {
+		portENTER_CRITICAL(&fullRefreshRequestMux);
+		const bool pending = fullRefreshRequested;
+		portEXIT_CRITICAL(&fullRefreshRequestMux);
+		return pending;
+}
+
+bool Inkplate6Flick_LVGL_Driver::consumeFullRefreshRequest() {
+		portENTER_CRITICAL(&fullRefreshRequestMux);
+		const bool requested = fullRefreshRequested;
+		fullRefreshRequested = false;
+		portEXIT_CRITICAL(&fullRefreshRequestMux);
+		return requested;
+}
+
 void Inkplate6Flick_LVGL_Driver::pushColors(uint16_t* data, uint32_t, bool) {
 		if (!display || !framebufferMutex || !data) return;
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
@@ -131,13 +148,16 @@ void Inkplate6Flick_LVGL_Driver::present() {
 		if (!display || !framebufferMutex) return;
 		while (true) {
 			xSemaphoreTake(framebufferMutex, portMAX_DELAY);
-			if (!pendingChanges) {
+			if (!pendingChanges && !fullRefreshPending()) {
 				xSemaphoreGive(framebufferMutex);
 				return;
 			}
 			const uint32_t now = millis();
-			const uint32_t refreshWait = lastRefreshMs && now - lastRefreshMs < INKPLATE_MIN_REFRESH_MS
-					? INKPLATE_MIN_REFRESH_MS - (now - lastRefreshMs) : 0;
+			const uint32_t minRefreshMs = config
+					? (usesBwMode() ? config->bw_min_presentation_interval_ms : config->grayscale_min_presentation_interval_ms)
+					: INKPLATE_MIN_REFRESH_MS;
+			const uint32_t refreshWait = lastRefreshMs && now - lastRefreshMs < minRefreshMs
+					? minRefreshMs - (now - lastRefreshMs) : 0;
 			const uint32_t quietWait = INKPLATE_REFRESH_SETTLE_MS > 0 && now - lastChangeMs < INKPLATE_REFRESH_SETTLE_MS
 					? INKPLATE_REFRESH_SETTLE_MS - (now - lastChangeMs) : 0;
 
@@ -150,11 +170,12 @@ void Inkplate6Flick_LVGL_Driver::present() {
 			vTaskDelay(waitTicks ? waitTicks : 1);
 		}
 
-		if (!pendingChanges) {
+		const bool forceFullRefresh = consumeFullRefreshRequest();
+		if (!pendingChanges && !forceFullRefresh) {
 			xSemaphoreGive(framebufferMutex);
 			return;
 		}
-		if (presentedFramebuffer && hasPresentedFrame &&
+		if (!forceFullRefresh && presentedFramebuffer && hasPresentedFrame &&
 				memcmp(framebuffer(), presentedFramebuffer, framebufferBytes()) == 0) {
 			pendingChanges = false;
 			noOpSkipCount++;
@@ -163,10 +184,19 @@ void Inkplate6Flick_LVGL_Driver::present() {
 			return;
 		}
 
+		const uint16_t fullUpdateThreshold = config
+				? config->bw_full_update_threshold : INKPLATE_BW_FULL_UPDATE_THRESHOLD;
+		const bool scheduledFullRefresh = usesBwMode() && fullUpdateThreshold > 0 &&
+				bwPartialUpdatesSinceFull >= fullUpdateThreshold;
 		const uint32_t refreshStartMs = millis();
-		if (usesBwMode() && hasPresentedFrame) {
+		if (forceFullRefresh || scheduledFullRefresh) {
+			display->display();
+			refreshCount++;
+			bwPartialUpdatesSinceFull = 0;
+		} else if (usesBwMode() && hasPresentedFrame) {
 			display->partialUpdate(false);
 			partialUpdateCount++;
+			bwPartialUpdatesSinceFull++;
 		} else {
 			display->display();
 			refreshCount++;
@@ -181,4 +211,12 @@ void Inkplate6Flick_LVGL_Driver::present() {
 				(unsigned long)refreshCount, (unsigned long)partialUpdateCount,
 				(unsigned long)(lastRefreshMs - refreshStartMs));
 		xSemaphoreGive(framebufferMutex);
+}
+
+bool Inkplate6Flick_LVGL_Driver::requestFullRefresh() {
+		if (!display) return false;
+		portENTER_CRITICAL(&fullRefreshRequestMux);
+		fullRefreshRequested = true;
+		portEXIT_CRITICAL(&fullRefreshRequestMux);
+		return true;
 }

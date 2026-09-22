@@ -86,6 +86,15 @@ uint8_t display_manager_get_backlight_brightness() {
 		return 100;
 }
 
+bool display_manager_request_full_refresh() {
+		return displayManager && displayManager->requestFullRefresh();
+}
+
+int display_manager_get_presentation_mode() {
+		return displayManager && displayManager->getDriver()
+				? displayManager->getDriver()->presentationMode() : -1;
+}
+
 void display_manager_lock() {
 		if (displayManager) {
 				displayManager->lock();

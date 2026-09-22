@@ -77,6 +77,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/portal-camera.js", HTTP_GET, handlePortalCameraJS);
 		server->on("/portal-camera.css", HTTP_GET, handlePortalCameraCSS);
 		#endif
+		#if HAS_EPAPER_PRESENTATION
+		server->on("/portal-epaper-presentation.js", HTTP_GET, handlePortalEpaperPresentationJS);
+		#endif
 		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints

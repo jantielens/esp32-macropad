@@ -7,6 +7,9 @@
 #include "../pad_layout.h"
 #include "../timer_engine.h"
 #include "../time_binding.h"
+#if HAS_EPAPER_PRESENTATION
+extern DeviceConfig device_config;
+#endif
 #if HAS_MQTT
 #include "../mqtt_manager.h"
 #include "../mqtt_sub_store.h"
@@ -268,16 +271,26 @@ void PadScreen::update() {
 }
 
 void PadScreen::pollLiveData(bool force) {
-#if DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
+#if HAS_EPAPER_PRESENTATION
+    const int activePanelMode = display_manager_get_presentation_mode();
+    const uint32_t refreshIntervalMs = activePanelMode == INKPLATE_LVGL_MODE_BW
+        ? device_config.bw_binding_refresh_interval_ms
+        : device_config.grayscale_binding_refresh_interval_ms;
+    const bool refreshClockOnMinute = device_config.refresh_clock_values_on_minute_boundary;
+#elif DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
+    constexpr uint32_t refreshIntervalMs = DISPLAY_BINDING_REFRESH_INTERVAL_MS;
+    constexpr bool refreshClockOnMinute = true;
+#endif
+#if HAS_EPAPER_PRESENTATION || DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
     struct timeval tv;
     const bool clockSynced = time_binding_is_synced();
     const uint64_t nowMs = clockSynced && gettimeofday(&tv, nullptr) == 0
         ? (uint64_t)tv.tv_sec * 1000ULL + (uint64_t)(tv.tv_usec / 1000)
         : (uint64_t)millis();
-    const uint64_t passiveSlot = nowMs / DISPLAY_BINDING_REFRESH_INTERVAL_MS;
+    const uint64_t passiveSlot = refreshIntervalMs ? nowMs / refreshIntervalMs : nowMs;
     const uint64_t timeMinute = nowMs / 60000ULL;
     const bool passiveDue = passiveSlot != lastPassiveBindingSlot;
-    const bool timeDue = hasTimeBinding && clockSynced && timeMinute != lastTimeBindingMinute;
+    const bool timeDue = refreshClockOnMinute && hasTimeBinding && clockSynced && timeMinute != lastTimeBindingMinute;
     const bool clockJustSynced = clockSynced && !clockWasSynced;
     clockWasSynced = clockSynced;
 

@@ -119,6 +119,11 @@ struct HwButtonDef {
 #define HAS_EPAPER false
 #endif
 
+// Enable configurable e-paper presentation controls in the web portal.
+#ifndef HAS_EPAPER_PRESENTATION
+#define HAS_EPAPER_PRESENTATION false
+#endif
+
 // Shutter-tester product variant. When true the firmware compiles the
 // 3-or-4 sensor photodiode capture engine, shutter binding schemes, session
 // storage, and portal pages — and the device identifies as the
@@ -831,7 +836,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #ifndef INKPLATE_LVGL_DEFAULT_MODE
 #define INKPLATE_LVGL_DEFAULT_MODE INKPLATE_LVGL_MODE_GRAYSCALE
 #endif
-// Number of B/W partial updates before the Inkplate library performs a full refresh.
+// Number of B/W partial updates before this driver performs a full refresh.
 #ifndef INKPLATE_BW_FULL_UPDATE_THRESHOLD
 #define INKPLATE_BW_FULL_UPDATE_THRESHOLD 10
 #endif

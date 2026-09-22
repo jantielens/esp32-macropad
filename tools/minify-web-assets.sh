@@ -1042,6 +1042,8 @@ asset_feature_flag() {
             echo "HAS_STORAGE_BROWSER" ;;
         epaper_status|epaper_image|epaper_overlay|epaper_vcom|epaper_init)
             echo "HAS_EPAPER" ;;
+        epaper_presentation|portal_epaper_presentation)
+            echo "HAS_EPAPER_PRESENTATION" ;;
         shutter|shutter_tests|shutter_sessions|shutter_session_actions)
             echo "IS_SHUTTER_TESTER" ;;
         scale|brews|brew_templates|portal_action_editor_scale|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)

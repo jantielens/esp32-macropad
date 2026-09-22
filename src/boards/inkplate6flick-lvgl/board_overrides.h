@@ -6,6 +6,7 @@
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_EPAPER false
+#define HAS_EPAPER_PRESENTATION true
 #define HAS_AUDIO false
 #define HAS_SOUND_PLAYER false
 #define HAS_BLE_HID false
@@ -42,17 +43,17 @@
 #define CONFIG_ASYNC_TCP_STACK_SIZE 8192
 // Classic ESP32 FreeRTOS rejects PSRAM-backed static task stacks.
 #define LVGL_TASK_USE_PSRAM_STACK false
-// A white canvas minimizes full-panel black refreshes on grayscale e-paper.
+// A white canvas minimizes black coverage on both e-paper modes.
 #define LVGL_THEME_DARK_MODE false
-// Intermediate visual states are not useful with full-panel grayscale waveforms.
+// Intermediate visual states are not useful with slow e-paper waveforms.
 #define DISPLAY_DISABLE_ANIMATIONS true
-// Use the Inkplate 6FLICK 3-bit grayscale waveform for this target.
-#define INKPLATE_LVGL_DEFAULT_MODE INKPLATE_LVGL_MODE_GRAYSCALE
-// Hold passive binding-driven visual updates for the latest useful state.
-#define DISPLAY_BINDING_REFRESH_INTERVAL_MS 60000
+// Use 1-bit B/W partial updates by default. Users can persist grayscale mode
+// through the portal, which takes effect after restart.
+#define INKPLATE_LVGL_DEFAULT_MODE INKPLATE_LVGL_MODE_BW
+// Partial updates make current binding values useful without full waveforms.
+#define DISPLAY_BINDING_REFRESH_INTERVAL_MS 1000
 
-// Grayscale requires a full-panel waveform; partial updates are unsupported.
-// Minimum interval between completed panel waveforms.
-#define INKPLATE_MIN_REFRESH_MS 1500
+// A short floor prevents action-driven partial-update bursts.
+#define INKPLATE_MIN_REFRESH_MS 250
 // Resettable quiet period that coalesces final layout and binding updates before display().
 #define INKPLATE_REFRESH_SETTLE_MS 150

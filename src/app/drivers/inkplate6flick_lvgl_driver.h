@@ -2,6 +2,7 @@
 #define INKPLATE6FLICK_LVGL_DRIVER_H
 
 #include "../display_driver.h"
+#include "../config_manager.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -12,7 +13,7 @@ Inkplate* inkplate6flick_lvgl_instance();
 
 class Inkplate6Flick_LVGL_Driver : public DisplayDriver {
 public:
-		Inkplate6Flick_LVGL_Driver();
+		Inkplate6Flick_LVGL_Driver(DeviceConfig* config);
 		~Inkplate6Flick_LVGL_Driver() override;
 
 		void init() override;
@@ -31,9 +32,12 @@ public:
 
 		RenderMode renderMode() const override { return RenderMode::Buffered; }
 		void present() override;
+		bool requestFullRefresh() override;
+		int presentationMode() const override { return panelMode; }
 
 private:
 		Inkplate* display;
+		DeviceConfig* config;
 		SemaphoreHandle_t framebufferMutex;
 		int16_t currentX;
 		int16_t currentY;
@@ -46,14 +50,19 @@ private:
 		uint8_t* presentedFramebuffer;
 		uint32_t refreshCount;
 		uint32_t partialUpdateCount;
+		uint16_t bwPartialUpdatesSinceFull;
 		uint32_t noOpSkipCount;
 		bool pendingChanges;
+		portMUX_TYPE fullRefreshRequestMux = portMUX_INITIALIZER_UNLOCKED;
+		bool fullRefreshRequested;
 		bool hasPresentedFrame;
 
 		void writePixel(int16_t x, int16_t y, uint16_t rgb565);
 		bool usesBwMode() const;
 		uint8_t* framebuffer() const;
 		size_t framebufferBytes() const;
+		bool fullRefreshPending();
+		bool consumeFullRefreshRequest();
 };
 
 #endif

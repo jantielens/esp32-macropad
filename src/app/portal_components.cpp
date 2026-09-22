@@ -49,6 +49,9 @@
 #include "components/boot_actions_component.cpp"
 #include "components/button_defaults_component.cpp"
 #include "components/timers_component.cpp"
+#if HAS_EPAPER_PRESENTATION
+#include "components/epaper_presentation_component.cpp"
+#endif
 #if HAS_IMAGE_LIBRARY
 #include "components/image_library_component.cpp"
 #endif

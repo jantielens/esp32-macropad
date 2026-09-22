@@ -311,6 +311,7 @@ every component in that custom section to the same category ID.
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
 - **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview, and screen saver configuration
+  - Boards with `HAS_EPAPER_PRESENTATION` additionally expose persisted e-paper presentation settings: boot-only panel mode, mode-specific passive binding and minimum presentation intervals, optional clock refreshes at minute boundaries, and the B/W scheduled full-refresh threshold. A zero threshold disables scheduled B/W full refreshes and can cause ghosting.
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
@@ -928,6 +929,13 @@ Returns current device configuration (passwords excluded).
   "mcp_token_set": false,
 
   "backlight_brightness": 100,
+  "panel_mode": "grayscale",
+  "grayscale_binding_refresh_interval_ms": 60000,
+  "bw_binding_refresh_interval_ms": 1000,
+  "grayscale_min_presentation_interval_ms": 1500,
+  "bw_min_presentation_interval_ms": 250,
+  "refresh_clock_values_on_minute_boundary": true,
+  "bw_full_update_threshold": 10,
 
   "screen_saver_enabled": false,
   "screen_saver_timeout_seconds": 300,
@@ -1009,6 +1017,13 @@ Save new configuration. Device reboots after successful save.
   "mcp_generate_token": true,
 
   "backlight_brightness": 70,
+  "panel_mode": "bw",
+  "grayscale_binding_refresh_interval_ms": 60000,
+  "bw_binding_refresh_interval_ms": 1000,
+  "grayscale_min_presentation_interval_ms": 1500,
+  "bw_min_presentation_interval_ms": 250,
+  "refresh_clock_values_on_minute_boundary": true,
+  "bw_full_update_threshold": 10,
 
   "screen_saver_enabled": true,
   "screen_saver_timeout_seconds": 300,
@@ -1055,6 +1070,7 @@ Save new configuration. Device reboots after successful save.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
+- E-paper presentation fields are available only when `HAS_EPAPER_PRESENTATION` is enabled. `panel_mode` is read at boot and requires a restart. The intervals, minute-boundary setting, and B/W full-refresh threshold apply live. Both binding intervals accept `0`; a B/W threshold of `0` disables scheduled full refreshes and can increase ghosting.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 
@@ -1288,6 +1304,21 @@ Reset the idle timer; optionally request wake.
 
 - `POST /api/display/activity` (just resets timer)
 - `POST /api/display/activity?wake=1` (resets timer + wake)
+
+#### `POST /api/component/epaper-presentation/full-refresh`
+
+Queue a full waveform presentation of the current framebuffer. Available only
+when `HAS_EPAPER_PRESENTATION` is enabled. The response returns after queuing;
+it does not wait for the physical waveform to complete.
+
+**Response:** `202 Accepted`
+
+```json
+{ "success": true, "message": "Full refresh queued" }
+```
+
+The same operation is available to pad actions, MCP, and automation through
+the `display_refresh` action with `{ "mode": "full" }`.
 
 #### `PUT /api/display/screen`
 

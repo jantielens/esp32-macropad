@@ -94,6 +94,15 @@
 #define KEY_IDLE_SCREEN_TIMEOUT "idle_to"
 #define KEY_IDLE_SCREEN_PAD "idle_pad"
 #endif
+#if HAS_EPAPER_PRESENTATION
+#define KEY_INKPLATE_PANEL_MODE "ip_mode"
+#define KEY_INKPLATE_GRAY_BIND "ip_g_bind"
+#define KEY_INKPLATE_BW_BIND "ip_b_bind"
+#define KEY_INKPLATE_GRAY_MIN "ip_g_min"
+#define KEY_INKPLATE_BW_MIN "ip_b_min"
+#define KEY_INKPLATE_CLOCK_MINUTE "ip_clock"
+#define KEY_INKPLATE_BW_THRESHOLD "ip_b_thr"
+#endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
 #define KEY_TAP_BEEP       "tap_beep"
@@ -235,6 +244,20 @@ bool config_manager_load(DeviceConfig *config) {
 				config->idle_screen_pad[0] = '\0';
 				#endif
 
+				#if HAS_EPAPER_PRESENTATION
+				config->panel_mode = INKPLATE_LVGL_DEFAULT_MODE;
+				config->grayscale_binding_refresh_interval_ms =
+						INKPLATE_LVGL_DEFAULT_MODE == INKPLATE_LVGL_MODE_GRAYSCALE ? DISPLAY_BINDING_REFRESH_INTERVAL_MS : 60000;
+				config->bw_binding_refresh_interval_ms =
+						INKPLATE_LVGL_DEFAULT_MODE == INKPLATE_LVGL_MODE_BW ? DISPLAY_BINDING_REFRESH_INTERVAL_MS : 1000;
+				config->grayscale_min_presentation_interval_ms =
+						INKPLATE_LVGL_DEFAULT_MODE == INKPLATE_LVGL_MODE_GRAYSCALE ? INKPLATE_MIN_REFRESH_MS : 1500;
+				config->bw_min_presentation_interval_ms =
+						INKPLATE_LVGL_DEFAULT_MODE == INKPLATE_LVGL_MODE_BW ? INKPLATE_MIN_REFRESH_MS : 250;
+				config->refresh_clock_values_on_minute_boundary = true;
+				config->bw_full_update_threshold = INKPLATE_BW_FULL_UPDATE_THRESHOLD;
+				#endif
+
 				#if HAS_CAMERA
 				config->camera_jpeg_quality = CAMERA_JPEG_QUALITY_DEFAULT;
 				config->camera_feed_target_fps = CAMERA_FEED_TARGET_FPS_DEFAULT;
@@ -357,6 +380,20 @@ bool config_manager_load(DeviceConfig *config) {
 		config->idle_screen_enabled = preferences.getBool(KEY_IDLE_SCREEN_ENABLED, false);
 		config->idle_screen_timeout_seconds = preferences.getUShort(KEY_IDLE_SCREEN_TIMEOUT, 300);
 		preferences.getString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad, CONFIG_IDLE_SCREEN_PAD_MAX_LEN);
+		#endif
+
+		#if HAS_EPAPER_PRESENTATION
+		config->panel_mode = preferences.getUChar(KEY_INKPLATE_PANEL_MODE, INKPLATE_LVGL_DEFAULT_MODE);
+		config->grayscale_binding_refresh_interval_ms = preferences.getUInt(KEY_INKPLATE_GRAY_BIND,
+				INKPLATE_LVGL_DEFAULT_MODE == INKPLATE_LVGL_MODE_GRAYSCALE ? DISPLAY_BINDING_REFRESH_INTERVAL_MS : 60000);
+		config->bw_binding_refresh_interval_ms = preferences.getUInt(KEY_INKPLATE_BW_BIND,
+				INKPLATE_LVGL_DEFAULT_MODE == INKPLATE_LVGL_MODE_BW ? DISPLAY_BINDING_REFRESH_INTERVAL_MS : 1000);
+		config->grayscale_min_presentation_interval_ms = preferences.getUInt(KEY_INKPLATE_GRAY_MIN,
+				INKPLATE_LVGL_DEFAULT_MODE == INKPLATE_LVGL_MODE_GRAYSCALE ? INKPLATE_MIN_REFRESH_MS : 1500);
+		config->bw_min_presentation_interval_ms = preferences.getUInt(KEY_INKPLATE_BW_MIN,
+				INKPLATE_LVGL_DEFAULT_MODE == INKPLATE_LVGL_MODE_BW ? INKPLATE_MIN_REFRESH_MS : 250);
+		config->refresh_clock_values_on_minute_boundary = preferences.getBool(KEY_INKPLATE_CLOCK_MINUTE, true);
+		config->bw_full_update_threshold = preferences.getUShort(KEY_INKPLATE_BW_THRESHOLD, INKPLATE_BW_FULL_UPDATE_THRESHOLD);
 		#endif
 
 		#if HAS_CAMERA
@@ -506,6 +543,16 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putBool(KEY_IDLE_SCREEN_ENABLED, config->idle_screen_enabled);
 		preferences.putUShort(KEY_IDLE_SCREEN_TIMEOUT, config->idle_screen_timeout_seconds);
 		preferences.putString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad);
+		#endif
+
+		#if HAS_EPAPER_PRESENTATION
+		preferences.putUChar(KEY_INKPLATE_PANEL_MODE, config->panel_mode);
+		preferences.putUInt(KEY_INKPLATE_GRAY_BIND, config->grayscale_binding_refresh_interval_ms);
+		preferences.putUInt(KEY_INKPLATE_BW_BIND, config->bw_binding_refresh_interval_ms);
+		preferences.putUInt(KEY_INKPLATE_GRAY_MIN, config->grayscale_min_presentation_interval_ms);
+		preferences.putUInt(KEY_INKPLATE_BW_MIN, config->bw_min_presentation_interval_ms);
+		preferences.putBool(KEY_INKPLATE_CLOCK_MINUTE, config->refresh_clock_values_on_minute_boundary);
+		preferences.putUShort(KEY_INKPLATE_BW_THRESHOLD, config->bw_full_update_threshold);
 		#endif
 
 		#if HAS_CAMERA
@@ -791,6 +838,15 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		if (strlen(config->screen_saver_wake_binding) > 0) {
 				LOGI("Config", "SS wake binding: %s", config->screen_saver_wake_binding);
 		}
+#endif
+
+#if HAS_EPAPER_PRESENTATION
+		LOGI("Config", "Inkplate: mode=%s bind=%lums min=%lums clock_minute=%s bw_threshold=%u",
+				config->panel_mode == INKPLATE_LVGL_MODE_BW ? "bw" : "grayscale",
+				(unsigned long)(config->panel_mode == INKPLATE_LVGL_MODE_BW ? config->bw_binding_refresh_interval_ms : config->grayscale_binding_refresh_interval_ms),
+				(unsigned long)(config->panel_mode == INKPLATE_LVGL_MODE_BW ? config->bw_min_presentation_interval_ms : config->grayscale_min_presentation_interval_ms),
+				config->refresh_clock_values_on_minute_boundary ? "on" : "off",
+				config->bw_full_update_threshold);
 #endif
 
 #if HAS_CAMERA

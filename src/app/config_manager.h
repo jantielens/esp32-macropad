@@ -144,6 +144,17 @@ struct DeviceConfig {
 		char idle_screen_pad[CONFIG_IDLE_SCREEN_PAD_MAX_LEN]; // transient pad shown while idle
 #endif
 
+#if HAS_EPAPER_PRESENTATION
+		// E-paper presentation settings. Panel mode is sampled only at boot.
+		uint8_t panel_mode;
+		uint32_t grayscale_binding_refresh_interval_ms;
+		uint32_t bw_binding_refresh_interval_ms;
+		uint32_t grayscale_min_presentation_interval_ms;
+		uint32_t bw_min_presentation_interval_ms;
+		bool refresh_clock_values_on_minute_boundary;
+		uint16_t bw_full_update_threshold;
+#endif
+
 #if HAS_CAMERA
 		uint8_t camera_jpeg_quality;             // default CAMERA_JPEG_QUALITY_DEFAULT
 		uint8_t camera_feed_target_fps;          // default CAMERA_FEED_TARGET_FPS_DEFAULT

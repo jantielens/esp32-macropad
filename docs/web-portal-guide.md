@@ -315,6 +315,26 @@ The firmware exposes two BLE health signals for bindings and diagnostics:
 |---------|-------------|
 | **Backlight Brightness** | Slider (0–100%). Changes take effect immediately; save to persist across reboots |
 
+### E-paper Presentation
+
+*Shown only on boards with configurable e-paper presentation support.*
+
+Use this section to select **Grayscale** or **Black & white** panel mode. The
+choice applies after restart. Each mode retains its own passive binding interval
+and minimum presentation interval, but the page displays controls only for the
+selected mode. Set the active mode's binding interval to `0` to resolve bindings
+every display cycle.
+
+Enable **Refresh clock values on minute boundary** to update pads containing
+time bindings at the minute edge. When disabled, those values update through
+the active mode's passive interval.
+
+Black & white mode exposes its full-refresh threshold and **Full refresh now**.
+Set the threshold to `0` only when you accept the ghosting risk because
+scheduled full refreshes are disabled. The manual control queues a full waveform
+for the current framebuffer; the portal returns immediately while the display
+completes it.
+
 ### Screen Preview
 
 Select the active screen and capture the current device framebuffer in the

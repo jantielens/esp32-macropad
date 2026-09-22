@@ -20,6 +20,9 @@ void handlePortalAllCSS(AsyncWebServerRequest *request);
 void handlePortalCameraJS(AsyncWebServerRequest *request);
 void handlePortalCameraCSS(AsyncWebServerRequest *request);
 #endif
+#if HAS_EPAPER_PRESENTATION
+void handlePortalEpaperPresentationJS(AsyncWebServerRequest *request);
+#endif
 
 // Shell handler (new single-page root)
 void handleShell(AsyncWebServerRequest *request);

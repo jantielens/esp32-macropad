@@ -174,6 +174,16 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				// Display settings
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
+				#if HAS_EPAPER_PRESENTATION
+				(*doc)["panel_mode"] = current_config->panel_mode == INKPLATE_LVGL_MODE_BW ? "bw" : "grayscale";
+				(*doc)["grayscale_binding_refresh_interval_ms"] = current_config->grayscale_binding_refresh_interval_ms;
+				(*doc)["bw_binding_refresh_interval_ms"] = current_config->bw_binding_refresh_interval_ms;
+				(*doc)["grayscale_min_presentation_interval_ms"] = current_config->grayscale_min_presentation_interval_ms;
+				(*doc)["bw_min_presentation_interval_ms"] = current_config->bw_min_presentation_interval_ms;
+				(*doc)["refresh_clock_values_on_minute_boundary"] = current_config->refresh_clock_values_on_minute_boundary;
+				(*doc)["bw_full_update_threshold"] = current_config->bw_full_update_threshold;
+				caps["epaper_presentation"] = true;
+				#endif
 
 				#if HAS_BLE_HID
 				(*doc)["ble_enabled"] = current_config->ble_enabled;
@@ -596,6 +606,28 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				screen_saver_manager_notify_activity(true);
 				#endif
 		}
+
+		#if HAS_EPAPER_PRESENTATION
+		if (doc.containsKey("panel_mode")) {
+			const char* mode = doc["panel_mode"] | "";
+			if (!strcmp(mode, "bw")) current_config->panel_mode = INKPLATE_LVGL_MODE_BW;
+			else if (!strcmp(mode, "grayscale")) current_config->panel_mode = INKPLATE_LVGL_MODE_GRAYSCALE;
+			else {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"panel_mode must be grayscale or bw\"}");
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+			}
+		}
+		if (doc.containsKey("grayscale_binding_refresh_interval_ms")) current_config->grayscale_binding_refresh_interval_ms = parseUintField(doc["grayscale_binding_refresh_interval_ms"], 0);
+		if (doc.containsKey("bw_binding_refresh_interval_ms")) current_config->bw_binding_refresh_interval_ms = parseUintField(doc["bw_binding_refresh_interval_ms"], 0);
+		if (doc.containsKey("grayscale_min_presentation_interval_ms")) current_config->grayscale_min_presentation_interval_ms = parseUintField(doc["grayscale_min_presentation_interval_ms"], 0);
+		if (doc.containsKey("bw_min_presentation_interval_ms")) current_config->bw_min_presentation_interval_ms = parseUintField(doc["bw_min_presentation_interval_ms"], 0);
+		if (doc.containsKey("refresh_clock_values_on_minute_boundary")) current_config->refresh_clock_values_on_minute_boundary = parseBoolField(doc, "refresh_clock_values_on_minute_boundary");
+		if (doc.containsKey("bw_full_update_threshold")) {
+			const uint32_t threshold = parseUintField(doc["bw_full_update_threshold"], 0);
+			current_config->bw_full_update_threshold = threshold > UINT16_MAX ? UINT16_MAX : (uint16_t)threshold;
+		}
+		#endif
 
 		#if HAS_DISPLAY
 		// Screen saver settings

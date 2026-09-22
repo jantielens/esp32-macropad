@@ -82,7 +82,7 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 		driver = new JD9165_DSI_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
-		driver = new Inkplate6Flick_LVGL_Driver();
+		driver = new Inkplate6Flick_LVGL_Driver(config);
 		#else
 		#error "No display driver selected or unknown driver type"
 		#endif
@@ -195,6 +195,12 @@ DisplayManager::~DisplayManager() {
 
 DeferredDispatchSlot<DISPLAY_TASK_DISPATCH_CTX_BYTES>& DisplayManager::displayJobSlot() {
 		return g_display_job;
+}
+
+bool DisplayManager::requestFullRefresh() {
+		if (!driver || !driver->requestFullRefresh()) return false;
+		if (presentSem) xSemaphoreGive(presentSem);
+		return true;
 }
 
 // ============================================================================

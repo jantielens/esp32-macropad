@@ -97,7 +97,7 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Soldered Inkplate 6FLICK LVGL B/W (experimental)** | ESP32 | 6.0" black-and-white e-paper touch UI | 1024 × 758 | Landscape |
 | **Seeed reTerminal E1003** | ESP32-S3 | 10.3" 16-level grayscale e-paper | 1404 × 1872 | Portrait |
 
-Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are non-touch, duty-cycled e-paper targets. The `inkplate6flick-lvgl` target is an experimental 3-bit grayscale touch UI with throttled full-panel waveforms. The `inkplate6flick-lvgl-bw` target uses 1-bit partial updates with periodic full refreshes. Both use a 3 MB no-OTA application partition.
+Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are non-touch, duty-cycled e-paper targets. The `inkplate6flick-lvgl` target is an experimental touch UI that defaults to 1-bit B/W partial updates with periodic full refreshes. Its persisted portal settings can switch the next boot to 3-bit grayscale with throttled full-panel waveforms. It uses a 3 MB no-OTA application partition.
 
 ### Headless Sensor Targets
 
