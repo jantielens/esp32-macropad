@@ -329,9 +329,8 @@ controls do not apply to e-paper.
 
 Use this section to select **Grayscale** or **Black & white** panel mode. The
 choice applies after restart. Each mode retains its own passive binding interval
-and minimum presentation interval, but the page displays controls only for the
-selected mode. Set the active mode's binding interval to `0` to resolve bindings
-every display cycle.
+(100 to 60,000 ms) and minimum presentation interval (250 to 60,000 ms), but
+the page displays controls only for the selected mode.
 
 Enable **Refresh clock values on minute boundary** to update pads containing
 time bindings at the minute edge. When disabled, those values update through

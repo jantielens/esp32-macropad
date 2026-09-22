@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **Experimental Inkplate 6 Flick LVGL target**: `inkplate6flick-lvgl` provides an always-on touch pad interface with MQTT and configurable B/W or grayscale presentation modes. It uses the 3 MB no-OTA application partition, so firmware updates require USB flashing.
 
+### Fixed
+
+* **Inkplate presentation settings**: persisted presentation intervals are validated, invalid stored values fall back to safe defaults, and live consumers read synchronized settings snapshots.
+
 ## [1.31.0] - 2026-09-21
 
 ### Added

@@ -610,6 +610,15 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 		#if HAS_EPAPER_PRESENTATION
+		const EpaperPresentationSettings previous_presentation_settings = {
+				current_config->panel_mode,
+				current_config->grayscale_binding_refresh_interval_ms,
+				current_config->bw_binding_refresh_interval_ms,
+				current_config->grayscale_min_presentation_interval_ms,
+				current_config->bw_min_presentation_interval_ms,
+				current_config->refresh_clock_values_on_minute_boundary,
+				current_config->bw_full_update_threshold,
+		};
 		if (doc.containsKey("panel_mode")) {
 			const char* mode = doc["panel_mode"] | "";
 			if (!strcmp(mode, "bw")) current_config->panel_mode = INKPLATE_LVGL_MODE_BW;
@@ -629,6 +638,27 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 			const uint32_t threshold = parseUintField(doc["bw_full_update_threshold"], 0);
 			current_config->bw_full_update_threshold = threshold > UINT16_MAX ? UINT16_MAX : (uint16_t)threshold;
 		}
+		if (!config_manager_validate_epaper_presentation_settings({
+				current_config->panel_mode,
+				current_config->grayscale_binding_refresh_interval_ms,
+				current_config->bw_binding_refresh_interval_ms,
+				current_config->grayscale_min_presentation_interval_ms,
+				current_config->bw_min_presentation_interval_ms,
+				current_config->refresh_clock_values_on_minute_boundary,
+				current_config->bw_full_update_threshold,
+		})) {
+			current_config->panel_mode = previous_presentation_settings.panel_mode;
+			current_config->grayscale_binding_refresh_interval_ms = previous_presentation_settings.grayscale_binding_refresh_interval_ms;
+			current_config->bw_binding_refresh_interval_ms = previous_presentation_settings.bw_binding_refresh_interval_ms;
+			current_config->grayscale_min_presentation_interval_ms = previous_presentation_settings.grayscale_min_presentation_interval_ms;
+			current_config->bw_min_presentation_interval_ms = previous_presentation_settings.bw_min_presentation_interval_ms;
+			current_config->refresh_clock_values_on_minute_boundary = previous_presentation_settings.refresh_clock_values_on_minute_boundary;
+			current_config->bw_full_update_threshold = previous_presentation_settings.bw_full_update_threshold;
+			request->send(400, "application/json", "{\"success\":false,\"message\":\"invalid e-paper presentation settings\"}");
+			portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+			return;
+		}
+		config_manager_publish_epaper_presentation_settings(current_config);
 		#endif
 
 		#if HAS_DISPLAY

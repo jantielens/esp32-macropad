@@ -65,6 +65,18 @@
 #endif
 
 // Configuration structure
+#if HAS_EPAPER_PRESENTATION
+struct EpaperPresentationSettings {
+		uint8_t panel_mode;
+		uint32_t grayscale_binding_refresh_interval_ms;
+		uint32_t bw_binding_refresh_interval_ms;
+		uint32_t grayscale_min_presentation_interval_ms;
+		uint32_t bw_min_presentation_interval_ms;
+		bool refresh_clock_values_on_minute_boundary;
+		uint16_t bw_full_update_threshold;
+};
+#endif
+
 struct DeviceConfig {
 		// WiFi credentials
 		char wifi_ssid[CONFIG_SSID_MAX_LEN];
@@ -190,6 +202,14 @@ bool config_manager_is_valid(const DeviceConfig *config); // Check if config is 
 void config_manager_print(const DeviceConfig *config); // Debug print config
 void config_manager_sanitize_device_name(const char *input, char *output, size_t max_len); // Sanitize name for mDNS
 String config_manager_get_default_device_name();      // Get default device name with chip ID
+
+#if HAS_EPAPER_PRESENTATION
+void config_manager_apply_epaper_presentation_defaults(DeviceConfig* config);
+bool config_manager_validate_epaper_presentation_settings(const EpaperPresentationSettings& settings);
+bool config_manager_normalize_epaper_presentation_settings(DeviceConfig* config);
+void config_manager_publish_epaper_presentation_settings(const DeviceConfig* config);
+EpaperPresentationSettings config_manager_get_epaper_presentation_settings();
+#endif
 
 #if HAS_BLE_HID
 bool config_manager_get_ble_owner_claimed();            // Persistent "device has an owner" flag

@@ -272,11 +272,12 @@ void PadScreen::update() {
 
 void PadScreen::pollLiveData(bool force) {
 #if HAS_EPAPER_PRESENTATION
+	const EpaperPresentationSettings presentationSettings = config_manager_get_epaper_presentation_settings();
     const int activePanelMode = display_manager_get_presentation_mode();
     const uint32_t refreshIntervalMs = activePanelMode == INKPLATE_LVGL_MODE_BW
-        ? device_config.bw_binding_refresh_interval_ms
-        : device_config.grayscale_binding_refresh_interval_ms;
-    const bool refreshClockOnMinute = device_config.refresh_clock_values_on_minute_boundary;
+			? presentationSettings.bw_binding_refresh_interval_ms
+			: presentationSettings.grayscale_binding_refresh_interval_ms;
+	const bool refreshClockOnMinute = presentationSettings.refresh_clock_values_on_minute_boundary;
 #elif DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
     constexpr uint32_t refreshIntervalMs = DISPLAY_BINDING_REFRESH_INTERVAL_MS;
     constexpr bool refreshClockOnMinute = true;

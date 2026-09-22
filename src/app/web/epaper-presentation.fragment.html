@@ -18,20 +18,20 @@
     <section id="epaper-grayscale-settings" hidden>
       <h3>Grayscale settings</h3>
       <label class="form-label" for="grayscale_binding_refresh_interval_ms">Passive binding interval (ms)</label>
-      <input class="form-control" type="number" min="0" id="grayscale_binding_refresh_interval_ms" name="grayscale_binding_refresh_interval_ms">
-      <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates; 0 checks on every display cycle.</div>
+      <input class="form-control" type="number" min="100" max="60000" id="grayscale_binding_refresh_interval_ms" name="grayscale_binding_refresh_interval_ms">
+      <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates.</div>
       <label class="form-label mt-3" for="grayscale_min_presentation_interval_ms">Minimum presentation interval (ms)</label>
-      <input class="form-control" type="number" min="0" id="grayscale_min_presentation_interval_ms" name="grayscale_min_presentation_interval_ms">
+      <input class="form-control" type="number" min="250" max="60000" id="grayscale_min_presentation_interval_ms" name="grayscale_min_presentation_interval_ms">
       <div class="form-text">The shortest delay between physical panel updates. Higher values combine rapid changes into one waveform.</div>
     </section>
 
     <section id="epaper-bw-settings" hidden>
       <h3>Black &amp; white settings</h3>
       <label class="form-label" for="bw_binding_refresh_interval_ms">Passive binding interval (ms)</label>
-      <input class="form-control" type="number" min="0" id="bw_binding_refresh_interval_ms" name="bw_binding_refresh_interval_ms">
-      <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates; 0 checks on every display cycle.</div>
+      <input class="form-control" type="number" min="100" max="60000" id="bw_binding_refresh_interval_ms" name="bw_binding_refresh_interval_ms">
+      <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates.</div>
       <label class="form-label mt-3" for="bw_min_presentation_interval_ms">Minimum presentation interval (ms)</label>
-      <input class="form-control" type="number" min="0" id="bw_min_presentation_interval_ms" name="bw_min_presentation_interval_ms">
+      <input class="form-control" type="number" min="250" max="60000" id="bw_min_presentation_interval_ms" name="bw_min_presentation_interval_ms">
       <div class="form-text">The shortest delay between physical panel updates. Higher values combine rapid changes into one update.</div>
       <label class="form-label mt-3" for="bw_full_update_threshold">Full-refresh threshold</label>
       <input class="form-control" type="number" min="0" max="65535" id="bw_full_update_threshold" name="bw_full_update_threshold">

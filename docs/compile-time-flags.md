@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 292
+Total flags: 297
 
 ### Features (HAS_*)
 
@@ -144,6 +144,10 @@ Total flags: 292
 - **CAMERA_MJPEG_MAX_CLIENTS** default: `1` — Maximum simultaneous MJPEG clients; boards with constrained WiFi or PSRAM can keep the default.
 - **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
+- **EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS** default: `60000` — Maximum permitted passive e-paper binding refresh interval.
+- **EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS** default: `100` — physical limits in the owning e-paper driver configuration.
+- **EPAPER_PRESENTATION_INTERVAL_MAX_MS** default: `60000` — Maximum permitted physical e-paper presentation interval.
+- **EPAPER_PRESENTATION_INTERVAL_MIN_MS** default: `250` — Minimum permitted physical e-paper presentation interval.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
 - **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
@@ -224,6 +228,7 @@ Total flags: 292
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
 - **EPAPER_BATTERY_DIVIDER** default: `(no default)` — Voltage divider ratio applied to the raw ADC millivolt reading.
+- **EPAPER_BW_FULL_UPDATE_THRESHOLD_MAX** default: `65535` — Maximum permitted B/W partial-refresh count before a scheduled full refresh.
 - **EPAPER_FAST_REFRESH** default: `false` — button wakes skip straight to the image fetch to avoid the second waveform.
 - **HEALTH_HISTORY_ENABLED** default: `1` — Enable device-side health history ring buffer for charting in the web portal
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
@@ -1205,9 +1210,19 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_BATTERY_ENABLE_PIN**
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp
+- **EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS**
+  - src/app/board_config.h
+- **EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS**
+  - src/app/board_config.h
 - **EPAPER_BUTTON_PIN**
   - src/app/board_config.h
+- **EPAPER_BW_FULL_UPDATE_THRESHOLD_MAX**
+  - src/app/board_config.h
 - **EPAPER_FAST_REFRESH**
+  - src/app/board_config.h
+- **EPAPER_PRESENTATION_INTERVAL_MAX_MS**
+  - src/app/board_config.h
+- **EPAPER_PRESENTATION_INTERVAL_MIN_MS**
   - src/app/board_config.h
 - **EPAPER_SD_CS_PIN**
   - src/app/device_classes/epaper/drivers/reterminal_e1003_driver.cpp

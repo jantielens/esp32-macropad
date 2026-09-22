@@ -1077,7 +1077,7 @@ Save new configuration. Device reboots after successful save.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
-- E-paper presentation fields are available only when `HAS_EPAPER_PRESENTATION` is enabled. `panel_mode` is read at boot and requires a restart. The intervals, minute-boundary setting, and B/W full-refresh threshold apply live. Both binding intervals accept `0`; a B/W threshold of `0` disables scheduled full refreshes and can increase ghosting.
+- E-paper presentation fields are available only when `HAS_EPAPER_PRESENTATION` is enabled. `panel_mode` is read at boot and requires a restart. The intervals, minute-boundary setting, and B/W full-refresh threshold apply live. Binding intervals must be 100 to 60,000 ms and presentation intervals must be 250 to 60,000 ms. A B/W threshold of `0` disables scheduled full refreshes and can increase ghosting.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 
