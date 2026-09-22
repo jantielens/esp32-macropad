@@ -280,11 +280,13 @@ TEST(brightness_empty_value_not_serialized) {
     ASSERT_TRUE(obj.containsKey("brightness_mode"));
 }
 
+#if HAS_EPAPER_PRESENTATION
 TEST(display_refresh_action_round_trip) {
     ButtonAction act = round_trip("{\"type\":\"display_refresh\",\"mode\":\"full\"}");
     ASSERT_STR(act.type, "display_refresh");
     ASSERT_STR(act.payload.display_refresh.mode, "full");
 }
+#endif
 
 // ============================================================================
 // Timer action
@@ -729,7 +731,9 @@ int main() {
     RUN(brightness_set_action_parse);
     RUN(brightness_adjust_action_round_trip);
     RUN(brightness_empty_value_not_serialized);
+    #if HAS_EPAPER_PRESENTATION
     RUN(display_refresh_action_round_trip);
+    #endif
 
     printf("\n--- Timer action ---\n");
     RUN(timer_action_parse);
