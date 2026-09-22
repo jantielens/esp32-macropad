@@ -235,6 +235,12 @@ struct DisplayPerfStats {
 		uint32_t present_us;
 };
 
+enum DisplayRefreshRequestResult : uint8_t {
+		DISPLAY_REFRESH_QUEUED,
+		DISPLAY_REFRESH_UNAVAILABLE,
+		DISPLAY_REFRESH_FAILED,
+};
+
 // Global instance (managed by app.ino)
 extern DisplayManager* displayManager;
 
@@ -251,7 +257,7 @@ const ScreenInfo* display_manager_get_available_screens(size_t* count);
 void display_manager_set_splash_status(const char* text);
 void display_manager_set_backlight_brightness(uint8_t brightness);  // 0-100%
 uint8_t display_manager_get_backlight_brightness();  // 0-100%
-bool display_manager_request_full_refresh();
+DisplayRefreshRequestResult display_manager_request_full_refresh();
 int display_manager_get_presentation_mode();
 
 // Serialization helpers for code running outside the LVGL task.

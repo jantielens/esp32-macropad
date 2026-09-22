@@ -198,7 +198,8 @@ DeferredDispatchSlot<DISPLAY_TASK_DISPATCH_CTX_BYTES>& DisplayManager::displayJo
 }
 
 bool DisplayManager::requestFullRefresh() {
-		if (!driver || !driver->requestFullRefresh()) return false;
+		if (!driver || !driver->isAvailable()) return false;
+		if (!driver->requestFullRefresh()) return false;
 		if (presentSem) xSemaphoreGive(presentSem);
 		return true;
 }

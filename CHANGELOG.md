@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * **Inkplate presentation settings**: persisted presentation intervals are validated, invalid stored values fall back to safe defaults, and live consumers read synchronized settings snapshots.
+* **Inkplate full refreshes**: manual refresh requests now report unavailable or failed queue operations, and failed presentation initialization is exposed as unavailable.
 
 ## [1.31.0] - 2026-09-21
 

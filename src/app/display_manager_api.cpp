@@ -86,8 +86,11 @@ uint8_t display_manager_get_backlight_brightness() {
 		return 100;
 }
 
-bool display_manager_request_full_refresh() {
-		return displayManager && displayManager->requestFullRefresh();
+DisplayRefreshRequestResult display_manager_request_full_refresh() {
+		if (!displayManager || !displayManager->getDriver() || !displayManager->getDriver()->isAvailable()) {
+				return DISPLAY_REFRESH_UNAVAILABLE;
+		}
+		return displayManager->requestFullRefresh() ? DISPLAY_REFRESH_QUEUED : DISPLAY_REFRESH_FAILED;
 }
 
 int display_manager_get_presentation_mode() {

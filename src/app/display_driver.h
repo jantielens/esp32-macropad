@@ -100,6 +100,10 @@ public:
 		// e-paper drivers override this; other drivers report unsupported.
 		virtual bool requestFullRefresh() { return false; }
 
+		// Returns false when initialization failed and the driver cannot serve
+		// display or presentation requests.
+		virtual bool isAvailable() const { return true; }
+
 		// Returns the active panel presentation mode, or -1 when not applicable.
 		virtual int presentationMode() const { return -1; }
 

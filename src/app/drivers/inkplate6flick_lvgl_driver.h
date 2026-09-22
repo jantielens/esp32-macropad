@@ -33,6 +33,7 @@ public:
 		RenderMode renderMode() const override { return RenderMode::Buffered; }
 		void present() override;
 		bool requestFullRefresh() override;
+		bool isAvailable() const override { return initialized; }
 		int presentationMode() const override { return panelMode; }
 
 private:
@@ -47,6 +48,7 @@ private:
 		uint8_t panelMode;
 		uint32_t lastRefreshMs;
 		uint32_t lastChangeMs;
+		uint8_t* drawingFramebuffer;
 		uint8_t* presentedFramebuffer;
 		uint32_t refreshCount;
 		uint32_t partialUpdateCount;
@@ -59,11 +61,13 @@ private:
 		portMUX_TYPE fullRefreshRequestMux = portMUX_INITIALIZER_UNLOCKED;
 		bool fullRefreshRequested;
 		bool hasPresentedFrame;
+		bool initialized;
 
 		void writePixel(int16_t x, int16_t y, uint16_t rgb565);
 		bool usesBwMode() const;
 		uint8_t* framebuffer() const;
 		size_t framebufferBytes() const;
+		void setPresentationFramebuffer();
 		bool fullRefreshPending();
 		bool consumeFullRefreshRequest();
 };

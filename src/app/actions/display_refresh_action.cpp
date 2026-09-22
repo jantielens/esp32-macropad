@@ -21,11 +21,17 @@ void serialize_display_refresh(const ButtonAction& act, JsonObject action) {
 
 ActionResult dispatch_display_refresh(const ButtonAction& act, const char* label, uint32_t) {
 #if defined(ARDUINO) && HAS_EPAPER_PRESENTATION
-    if (display_manager_request_full_refresh()) {
+    const DisplayRefreshRequestResult result = display_manager_request_full_refresh();
+    if (result == DISPLAY_REFRESH_QUEUED) {
         LOGI(kDisplayRefreshActionTag, "%s display_refresh: queued full waveform", label);
-    } else {
-        LOGW(kDisplayRefreshActionTag, "%s display_refresh: unavailable", label);
+        return ACTION_COMPLETE;
     }
+    if (result == DISPLAY_REFRESH_UNAVAILABLE) {
+        LOGW(kDisplayRefreshActionTag, "%s display_refresh: unavailable", label);
+    } else {
+        LOGW(kDisplayRefreshActionTag, "%s display_refresh: failed to queue", label);
+    }
+    return ACTION_FAILED;
 #else
     (void)act;
     LOGW(kDisplayRefreshActionTag, "%s display_refresh: unsupported", label);
