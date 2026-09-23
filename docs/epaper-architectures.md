@@ -58,6 +58,7 @@ Board targets use product behavior rather than a graphics-library implementation
 * `inkplate6flick-frame`
 * `reterminal-e1003-frame`
 * `inkplate6flick-interactive`
+* `reterminal-e1003-interactive`
 
 The `-interactive` suffix stays stable even if the rendering implementation
 changes. LVGL is an implementation detail of the current interactive stack.

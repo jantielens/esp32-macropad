@@ -95,9 +95,10 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Soldered Inkplate 6FLICK** | ESP32 | 6.0" 3-bit grayscale e-paper | 1024 × 758 | Landscape |
 | **Soldered Inkplate 6FLICK LVGL (experimental)** | ESP32 | 6.0" 3-bit grayscale e-paper touch UI | 1024 × 758 | Landscape |
 | **Soldered Inkplate 6FLICK LVGL B/W (experimental)** | ESP32 | 6.0" black-and-white e-paper touch UI | 1024 × 758 | Landscape |
-| **Seeed reTerminal E1003** | ESP32-S3 | 10.3" 16-level grayscale e-paper | 1404 × 1872 | Portrait |
+| **Seeed reTerminal E1003 Frame** | ESP32-S3 | 10.3" 16-level grayscale e-paper dashboard | 1404 × 1872 | Portrait |
+| **Seeed reTerminal E1003 Interactive** | ESP32-S3 | 10.3" 16-level grayscale e-paper touch UI | 1404 × 1872 | Portrait |
 
-Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are sleep-first E-Paper Frame targets. The `inkplate6flick-interactive` target is an Interactive E-Paper touch UI that defaults to 1-bit B/W partial updates with periodic full refreshes. Its persisted portal settings can switch the next boot to 3-bit grayscale with throttled full-panel waveforms. It uses a 3 MB no-OTA application partition.
+Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and `reterminal-e1003-frame` are sleep-first E-Paper Frame targets. The `inkplate6flick-interactive` and `reterminal-e1003-interactive` targets are Interactive E-Paper touch UIs with persisted B/W and grayscale render-mode settings. E1003 B/W mode uses the IT8951's DU waveform between scheduled GC16 full refreshes; grayscale always uses GC16. The E1003 targets use the 8 MB OTA application partition.
 
 ### Headless Sensor Targets
 

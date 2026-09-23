@@ -5,7 +5,7 @@ The ESP32 Macropad firmware compiles for multiple hardware classes from a single
 
 | Class            | Brand prefix              | Default boards                                            | Highlights                                                                                                  |
 |------------------|---------------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `macropad`       | `ESP32 Macropad`          | `jc4880p433`, `jc3636w518`, `jc3248w535`, `esp32-p4-lcd4b`, `jc1060p470c`, `esp32-4848S040` | Touch-screen control surface with configurable buttons, widgets, MQTT, BLE HID.                             |
+| `macropad`       | `ESP32 Macropad`          | `jc4880p433`, `jc3636w518`, `jc3248w535`, `esp32-p4-lcd4b`, `jc1060p470c`, `esp32-4848S040`, `reterminal-e1003-interactive` | Touch-screen control surface with configurable buttons, widgets, MQTT, BLE HID.                             |
 | `epaper_frame`   | `ESP32-MP E-Paper Frame`        | `inkplate5v2-frame`, `inkplate6flick-frame`, `reterminal-e1003-frame`      | Battery-powered image frame with schedules and a carousel.                                                   |
 | `headless`       | `ESP32-MP Headless`       | `esp32c3-withsensors`                                     | Sensor / bridge node — MQTT telemetry, BTHome BLE beacons, no display.                                      |
 | `shutter_tester` | `ESP32-MP Shutter Tester` | `jc4880p433-shutter`                                      | Specialized capture rig measuring camera shutter speeds via an ADC sensor array. See [shutter-tester/](shutter-tester/README.md). |

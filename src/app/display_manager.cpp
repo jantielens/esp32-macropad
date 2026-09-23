@@ -33,6 +33,8 @@
 #include "drivers/jd9165_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_epaper_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
+#include "drivers/reterminal_e1003_epaper_driver.h"
 #endif
 
 #include <SPI.h>
@@ -83,6 +85,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new JD9165_DSI_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 		driver = new Inkplate6FlickEpaperDriver(config);
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
+		driver = new ReTerminalE1003EpaperDriver(config);
 		#else
 		#error "No display driver selected or unknown driver type"
 		#endif

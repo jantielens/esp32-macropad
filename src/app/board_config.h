@@ -953,6 +953,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 //   DISPLAY_DRIVER_JD9165_DSI (10) - Direct ESP-IDF JD9165 MIPI-DSI (JC1060P470C, ESP32-P4)
 //   DISPLAY_DRIVER_ARDUINO_GFX_NV3041A (11) - Arduino_GFX NV3041A QSPI (JC4827W543C)
 //   DISPLAY_DRIVER_INKPLATE6FLICK (12) - InkplateLibrary monochrome e-paper (experimental)
+//   DISPLAY_DRIVER_RETERMINAL_E1003 (13) - IT8951 grayscale e-paper (reTerminal E1003)
 #define DISPLAY_DRIVER_TFT_ESPI 1
 #define DISPLAY_DRIVER_LOVYANGFX 3
 #define DISPLAY_DRIVER_ARDUINO_GFX 4
@@ -963,6 +964,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER_JD9165_DSI 10
 #define DISPLAY_DRIVER_ARDUINO_GFX_NV3041A 11
 #define DISPLAY_DRIVER_INKPLATE6FLICK 12
+#define DISPLAY_DRIVER_RETERMINAL_E1003 13
 
 // Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 #ifndef DISPLAY_DRIVER

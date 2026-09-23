@@ -27,6 +27,8 @@
 #include "drivers/jd9165_dsi_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_epaper_driver.cpp"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
+#include "drivers/reterminal_e1003_epaper_driver.cpp"
 #else
 #error "No display driver selected or unknown driver type"
 #endif

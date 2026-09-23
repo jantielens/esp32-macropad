@@ -50,6 +50,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | jc4880p433-sd | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-shutter | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | reterminal-e1003-frame | ? | ? | ? | ?×? | ? | none |  |
+| reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | ? | 1872×1404 | 1 | GT911 |  |
 
 <!-- BOARD_DRIVER_TABLE_END -->
 

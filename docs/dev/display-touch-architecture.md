@@ -74,6 +74,18 @@ itself a release: it can also mean that no event is pending. The touch driver
 reads only pending events, retains contact state between them, and serializes
 controller reads so a one-shot report cannot be consumed by another observer.
 
+### reTerminal E1003 LVGL
+
+`reterminal-e1003-interactive` is an always-on IT8951 e-paper Macropad target.
+Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
+It copies a settled LVGL frame under the framebuffer mutex, then uploads and
+refreshes the presentation snapshot outside that mutex so later LVGL flushes
+remain queued. Grayscale uses full-panel GC16. B/W uses ordered dithering and
+coalesces LVGL flush rectangles into one aligned IT8951 region, which it uploads
+and refreshes with DU. Scheduled and forced ghosting-control updates, initial
+presentation, and grayscale mode use full-panel GC16. Touch uses the existing
+GT911 driver on the E1003's shared GPIO19/GPIO20 I2C lines.
+
 ### Purpose
 
 The DisplayDriver interface decouples LVGL from specific display libraries, allowing support for TFT_eSPI, LovyanGFX, or custom drivers without changing DisplayManager code.

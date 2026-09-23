@@ -70,7 +70,8 @@ The render mode selects the Inkplate library framebuffer at boot:
 * **B/W** uses the 1-bit framebuffer. The driver converts RGB565 pixels with a
    stable 4x4 Bayer dither. `partialUpdate()` is available only in this mode;
    the first presentation and scheduled ghosting-control refreshes use a full
-   waveform.
+   waveform. The Inkplate library's partial update still scans the entire
+   panel; it does not provide regional transport.
 * **Grayscale** uses the 3-bit framebuffer. The library cannot perform a
    partial update in this mode, so every physical presentation is a full
    waveform.
@@ -84,6 +85,26 @@ The frontlight is independent of panel presentation. Brightness `0` switches it
 off without changing the panel state; nonzero brightness maps to the controller's
 63-step range. This board uses `SCREENSAVER_BACKLIGHT_ONLY` and disables display
 animations to avoid wasting slow panel waveforms on transient states.
+
+## reTerminal E1003 Profile
+
+`reterminal-e1003-interactive` is the normal Macropad profile for the Seeed
+reTerminal E1003. It retains the board's 32 MB flash and OTA partition while
+using a PSRAM-backed 4-bit grayscale drawing buffer and a second snapshot for
+physical presentation.
+
+The driver uploads the snapshot through the IT8951 and releases its framebuffer
+mutex before starting a waveform. Grayscale mode uses a full-panel GC16
+waveform for each presentation. B/W mode unions LVGL flush rectangles, aligns
+the resulting native-panel region for the IT8951, and uploads and refreshes only
+that region with the faster DU waveform. Forced refreshes, scheduled
+ghosting-control refreshes, the initial presentation, and grayscale mode use a
+full-panel GC16 presentation. The E1003 firmware requires the IT8951 VCOM write
+selector `0x0002`; selector `0x0001` only reads the configured value.
+
+The GT911 touch controller is at `0x5D` on GPIO19/GPIO20, with GPIO2 interrupt
+and GPIO16 reset. It shares the physical I2C lines with the SHT4x and RTC, but
+uses the project's `Wire1` path to avoid Wi-Fi ISR contention on `Wire`.
 
 ## Inkplate Touch Contract
 

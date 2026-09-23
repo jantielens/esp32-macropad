@@ -67,7 +67,7 @@ Total flags: 298
 
 - **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
-- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_RETERMINAL_E1003, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
@@ -368,6 +368,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 | inkplate6flick-interactive |  |  | ✅ |  |  |  |  |  | ? | ✅ | ✅ |  |  | ✅ |  |  |  |  |  | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
 | reterminal-e1003-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ |  |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
+| reterminal-e1003-interactive |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ |  |  | ✅ |  |  | ? |  |  | ✅ | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -396,6 +397,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
 | inkplate6flick-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_INKPLATE6FLICK | TOUCH_DRIVER_INKPLATE6FLICK |
 | reterminal-e1003-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
+| reterminal-e1003-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_RETERMINAL_E1003 | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)

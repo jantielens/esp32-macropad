@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-22
+ms.date: 2026-09-23
 ms.topic: reference
 ---
 
@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 * **Interactive E-Paper display support**: buffered rendering, configurable B/W or grayscale modes, and E-Paper-specific refresh controls are now available. `inkplate6flick-interactive` is the first Interactive E-Paper board; its always-on firmware uses the 3 MB no-OTA application partition, so firmware updates require USB flashing.
+* **Seeed reTerminal E1003 Interactive E-Paper board**: the new
+  `reterminal-e1003-interactive` ESP32-S3 Macropad target supports the 10.3-inch
+  1872 by 1404 IT8951 panel and GT911 touch. It offers full-panel GC16 grayscale
+  refreshes and regional DU B/W refreshes, with scheduled B/W full refreshes to
+  manage ghosting.
 * **Display animation policy**: boards can set `DISPLAY_DISABLE_ANIMATIONS` to suppress visual transitions while retaining immediate state updates, with existing boards unchanged by the default-off setting.
 
 ### Changed
@@ -29,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Interactive E-Paper refresh settings**: persisted refresh intervals are validated, invalid stored values fall back to safe defaults, and live consumers read synchronized settings snapshots.
 * **Interactive E-Paper full refreshes**: manual refresh requests now report unavailable or failed queue operations, and failed refresh initialization is exposed as unavailable.
 * **PNG icon validation**: invalid or oversized PNG icon uploads are rejected before decoding, and display builds report their accepted icon dimension limit.
+* **E1003 icon memory use**: uploaded icons are capped at 192 pixels per side so
+  decoded ARGB caches remain within the PSRAM headroom left by the e-paper framebuffers.
 
 ## [1.31.0] - 2026-09-21
 
