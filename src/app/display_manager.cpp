@@ -32,7 +32,7 @@
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 #include "drivers/jd9165_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
-#include "drivers/inkplate6flick_lvgl_driver.h"
+#include "drivers/inkplate6flick_epaper_driver.h"
 #endif
 
 #include <SPI.h>
@@ -82,7 +82,7 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 		driver = new JD9165_DSI_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
-		driver = new Inkplate6Flick_LVGL_Driver(config);
+		driver = new Inkplate6FlickEpaperDriver(config);
 		#else
 		#error "No display driver selected or unknown driver type"
 		#endif

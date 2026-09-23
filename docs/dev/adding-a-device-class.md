@@ -71,7 +71,7 @@ The next sections cover each touchpoint in detail, plus optional touchpoints
 ```cpp
 enum class DeviceClass {
     MACROPAD,
-    EPAPER,
+  EPAPER_FRAME,
     HEADLESS,
     SHUTTER_TESTER,
     FOO,                  // <-- add
@@ -92,8 +92,8 @@ DeviceClass device_class_detect() {
     return DeviceClass::FOO;
 #elif IS_SHUTTER_TESTER
     return DeviceClass::SHUTTER_TESTER;
-#elif HAS_EPAPER
-    return DeviceClass::EPAPER;
+#elif HAS_EPAPER_PANEL
+    return DeviceClass::EPAPER_FRAME;
 #elif !HAS_DISPLAY
     return DeviceClass::HEADLESS;
 #else
@@ -109,7 +109,7 @@ in `config.sh`:
 ```cpp
 static const DeviceClassDescriptor DESCRIPTORS[] = {
     { DeviceClass::MACROPAD,       "Macropad",       "MACROPAD", "ESP32 Macropad"          },
-    { DeviceClass::EPAPER,         "E-Paper",        "EPAPER",   "ESP32-MP E-Paper"        },
+    { DeviceClass::EPAPER_FRAME,   "E-Paper Frame", "EPAPER_FRAME", "ESP32-MP E-Paper Frame" },
     { DeviceClass::HEADLESS,       "Headless",       "HEADLESS", "ESP32-MP Headless"       },
     { DeviceClass::SHUTTER_TESTER, "Shutter Tester", "SHUTTER",  "ESP32-MP Shutter Tester" },
     { DeviceClass::FOO,            "Foo",            "FOO",      "ESP32-MP Foo"            }, // <-- add
@@ -127,7 +127,7 @@ The bash helpers are mirrored manually; drift is caught by
 device_class_brand_prefix() {
     case "$1" in
         macropad)       echo "ESP32 Macropad" ;;
-        epaper)         echo "ESP32-MP E-Paper" ;;
+        epaper_frame)   echo "ESP32-MP E-Paper Frame" ;;
         headless)       echo "ESP32-MP Headless" ;;
         shutter_tester) echo "ESP32-MP Shutter Tester" ;;
         foo)            echo "ESP32-MP Foo" ;;            # <-- add
@@ -243,8 +243,8 @@ fill in only what you need.
 #endif
 
 void device_classes_register_all() {
-#if HAS_EPAPER
-    epaper_device_class_register();
+#if HAS_EPAPER_PANEL
+    epaper_frame_device_class_register();
 #endif
 #if IS_SHUTTER_TESTER
     shutter_tester_device_class_register();

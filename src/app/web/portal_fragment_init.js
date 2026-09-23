@@ -403,7 +403,7 @@ window.init_mode_fragment = function () {
         var caps = (window.__device_caps || {});
         var bleOpt = document.getElementById('mode_opt_duty_cycle_ble');
         if (bleOpt) bleOpt.style.display = caps.ble ? '' : 'none';
-        var epOpt = document.getElementById('mode_opt_duty_cycle_epaper');
+        var epOpt = document.getElementById('mode_opt_duty_cycle_epaper_frame');
         if (epOpt) epOpt.style.display = caps.epaper ? '' : 'none';
         // If BLE was the persisted choice but the build no longer supports it,
         // fall back to always_on.
@@ -415,7 +415,7 @@ window.init_mode_fragment = function () {
             }
         }
         if (!caps.epaper) {
-            var epRadio = document.getElementById('operating_mode_duty_cycle_epaper');
+            var epRadio = document.getElementById('operating_mode_duty_cycle_epaper_frame');
             if (epRadio && epRadio.checked) {
                 var alwaysOn = document.getElementById('operating_mode_always_on');
                 if (alwaysOn) alwaysOn.checked = true;
@@ -432,7 +432,7 @@ window.init_mode_fragment = function () {
         var mode = getSelectedMode();
         var isDutyMqtt = (mode === 'duty_cycle_mqtt');
         var isDutyBle = (mode === 'duty_cycle_ble');
-        var isDutyEpaper = (mode === 'duty_cycle_epaper');
+        var isDutyEpaper = (mode === 'duty_cycle_epaper_frame');
         var isAnyDuty = isDutyMqtt || isDutyBle || isDutyEpaper;
 
         var dc = document.getElementById('duty-cycle-settings');

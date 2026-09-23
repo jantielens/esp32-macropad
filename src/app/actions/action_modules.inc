@@ -13,7 +13,7 @@
 #include "sound_alert_action.cpp"
 #include "notify_action.cpp"
 #include "visual_alert_action.cpp"
-#if HAS_EPAPER_PRESENTATION
+#if HAS_LVGL_EPAPER
 #include "display_refresh_action.cpp"
 #endif
 #include "timer_action.cpp"

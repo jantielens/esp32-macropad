@@ -159,12 +159,12 @@ check_scenario "classes-only" IS_SHUTTER_TESTER IS_COFFEE_SCALE IS_DARKROOM_TIME
 
 # The real portal.js set today: 2 independent + 3 device classes -> 16 variants
 # (the case from issue #31; the old 2^N generator produced 32).
-check_scenario "portal-js-today" HAS_DISPLAY HAS_EPAPER \
+check_scenario "portal-js-today" HAS_DISPLAY HAS_EPAPER_PANEL \
     IS_SHUTTER_TESTER IS_COFFEE_SCALE IS_DARKROOM_TIMER
 
 # Forward-looking: a 4th device class would have tripped the old cap (6 flags
 # -> 64 variants); the exclusive-group model keeps it at 2^2 * 5 = 20.
-check_scenario "four-classes" HAS_DISPLAY HAS_EPAPER \
+check_scenario "four-classes" HAS_DISPLAY HAS_EPAPER_PANEL \
     IS_SHUTTER_TESTER IS_COFFEE_SCALE IS_DARKROOM_TIMER IS_FUTURE_CLASS
 
 echo

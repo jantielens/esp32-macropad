@@ -176,15 +176,15 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
 				(*doc)["backlight_brightness_min"] = MIN_USER_BRIGHTNESS;
 							(*doc)["screen_saver_backlight_only"] = SCREENSAVER_BACKLIGHT_ONLY;
-				#if HAS_EPAPER_PRESENTATION
-				(*doc)["panel_mode"] = current_config->panel_mode == INKPLATE_LVGL_MODE_BW ? "bw" : "grayscale";
-				(*doc)["grayscale_binding_refresh_interval_ms"] = current_config->grayscale_binding_refresh_interval_ms;
-				(*doc)["bw_binding_refresh_interval_ms"] = current_config->bw_binding_refresh_interval_ms;
-				(*doc)["grayscale_min_presentation_interval_ms"] = current_config->grayscale_min_presentation_interval_ms;
-				(*doc)["bw_min_presentation_interval_ms"] = current_config->bw_min_presentation_interval_ms;
-				(*doc)["refresh_clock_values_on_minute_boundary"] = current_config->refresh_clock_values_on_minute_boundary;
-				(*doc)["bw_full_update_threshold"] = current_config->bw_full_update_threshold;
-				caps["epaper_presentation"] = true;
+				#if HAS_LVGL_EPAPER
+				(*doc)["epaper_render_mode"] = current_config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale";
+				(*doc)["epaper_grayscale_binding_refresh_interval_ms"] = current_config->epaper_grayscale_binding_refresh_interval_ms;
+				(*doc)["epaper_bw_binding_refresh_interval_ms"] = current_config->epaper_bw_binding_refresh_interval_ms;
+				(*doc)["epaper_grayscale_min_refresh_interval_ms"] = current_config->epaper_grayscale_min_refresh_interval_ms;
+				(*doc)["epaper_bw_min_refresh_interval_ms"] = current_config->epaper_bw_min_refresh_interval_ms;
+				(*doc)["epaper_refresh_clock_on_minute_boundary"] = current_config->epaper_refresh_clock_on_minute_boundary;
+				(*doc)["epaper_bw_full_refresh_threshold"] = current_config->epaper_bw_full_refresh_threshold;
+				caps["epaper_refresh"] = true;
 				#endif
 
 				#if HAS_BLE_HID
@@ -609,56 +609,56 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				#endif
 		}
 
-		#if HAS_EPAPER_PRESENTATION
-		const EpaperPresentationSettings previous_presentation_settings = {
-				current_config->panel_mode,
-				current_config->grayscale_binding_refresh_interval_ms,
-				current_config->bw_binding_refresh_interval_ms,
-				current_config->grayscale_min_presentation_interval_ms,
-				current_config->bw_min_presentation_interval_ms,
-				current_config->refresh_clock_values_on_minute_boundary,
-				current_config->bw_full_update_threshold,
+		#if HAS_LVGL_EPAPER
+		const EpaperRefreshSettings previous_presentation_settings = {
+				current_config->epaper_render_mode,
+				current_config->epaper_grayscale_binding_refresh_interval_ms,
+				current_config->epaper_bw_binding_refresh_interval_ms,
+				current_config->epaper_grayscale_min_refresh_interval_ms,
+				current_config->epaper_bw_min_refresh_interval_ms,
+				current_config->epaper_refresh_clock_on_minute_boundary,
+				current_config->epaper_bw_full_refresh_threshold,
 		};
-		if (doc.containsKey("panel_mode")) {
-			const char* mode = doc["panel_mode"] | "";
-			if (!strcmp(mode, "bw")) current_config->panel_mode = INKPLATE_LVGL_MODE_BW;
-			else if (!strcmp(mode, "grayscale")) current_config->panel_mode = INKPLATE_LVGL_MODE_GRAYSCALE;
+		if (doc.containsKey("epaper_render_mode")) {
+			const char* mode = doc["epaper_render_mode"] | "";
+			if (!strcmp(mode, "bw")) current_config->epaper_render_mode = EPAPER_RENDER_MODE_BW;
+			else if (!strcmp(mode, "grayscale")) current_config->epaper_render_mode = EPAPER_RENDER_MODE_GRAYSCALE;
 			else {
-				request->send(400, "application/json", "{\"success\":false,\"message\":\"panel_mode must be grayscale or bw\"}");
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"epaper_render_mode must be grayscale or bw\"}");
 				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
 				return;
 			}
 		}
-		if (doc.containsKey("grayscale_binding_refresh_interval_ms")) current_config->grayscale_binding_refresh_interval_ms = parseUintField(doc["grayscale_binding_refresh_interval_ms"], 0);
-		if (doc.containsKey("bw_binding_refresh_interval_ms")) current_config->bw_binding_refresh_interval_ms = parseUintField(doc["bw_binding_refresh_interval_ms"], 0);
-		if (doc.containsKey("grayscale_min_presentation_interval_ms")) current_config->grayscale_min_presentation_interval_ms = parseUintField(doc["grayscale_min_presentation_interval_ms"], 0);
-		if (doc.containsKey("bw_min_presentation_interval_ms")) current_config->bw_min_presentation_interval_ms = parseUintField(doc["bw_min_presentation_interval_ms"], 0);
-		if (doc.containsKey("refresh_clock_values_on_minute_boundary")) current_config->refresh_clock_values_on_minute_boundary = parseBoolField(doc, "refresh_clock_values_on_minute_boundary");
-		if (doc.containsKey("bw_full_update_threshold")) {
-			const uint32_t threshold = parseUintField(doc["bw_full_update_threshold"], 0);
-			current_config->bw_full_update_threshold = threshold > UINT16_MAX ? UINT16_MAX : (uint16_t)threshold;
+		if (doc.containsKey("epaper_grayscale_binding_refresh_interval_ms")) current_config->epaper_grayscale_binding_refresh_interval_ms = parseUintField(doc["epaper_grayscale_binding_refresh_interval_ms"], 0);
+		if (doc.containsKey("epaper_bw_binding_refresh_interval_ms")) current_config->epaper_bw_binding_refresh_interval_ms = parseUintField(doc["epaper_bw_binding_refresh_interval_ms"], 0);
+		if (doc.containsKey("epaper_grayscale_min_refresh_interval_ms")) current_config->epaper_grayscale_min_refresh_interval_ms = parseUintField(doc["epaper_grayscale_min_refresh_interval_ms"], 0);
+		if (doc.containsKey("epaper_bw_min_refresh_interval_ms")) current_config->epaper_bw_min_refresh_interval_ms = parseUintField(doc["epaper_bw_min_refresh_interval_ms"], 0);
+		if (doc.containsKey("epaper_refresh_clock_on_minute_boundary")) current_config->epaper_refresh_clock_on_minute_boundary = parseBoolField(doc, "epaper_refresh_clock_on_minute_boundary");
+		if (doc.containsKey("epaper_bw_full_refresh_threshold")) {
+			const uint32_t threshold = parseUintField(doc["epaper_bw_full_refresh_threshold"], 0);
+			current_config->epaper_bw_full_refresh_threshold = threshold > UINT16_MAX ? UINT16_MAX : (uint16_t)threshold;
 		}
-		if (!config_manager_validate_epaper_presentation_settings({
-				current_config->panel_mode,
-				current_config->grayscale_binding_refresh_interval_ms,
-				current_config->bw_binding_refresh_interval_ms,
-				current_config->grayscale_min_presentation_interval_ms,
-				current_config->bw_min_presentation_interval_ms,
-				current_config->refresh_clock_values_on_minute_boundary,
-				current_config->bw_full_update_threshold,
+		if (!config_manager_validate_epaper_refresh_settings({
+				current_config->epaper_render_mode,
+				current_config->epaper_grayscale_binding_refresh_interval_ms,
+				current_config->epaper_bw_binding_refresh_interval_ms,
+				current_config->epaper_grayscale_min_refresh_interval_ms,
+				current_config->epaper_bw_min_refresh_interval_ms,
+				current_config->epaper_refresh_clock_on_minute_boundary,
+				current_config->epaper_bw_full_refresh_threshold,
 		})) {
-			current_config->panel_mode = previous_presentation_settings.panel_mode;
-			current_config->grayscale_binding_refresh_interval_ms = previous_presentation_settings.grayscale_binding_refresh_interval_ms;
-			current_config->bw_binding_refresh_interval_ms = previous_presentation_settings.bw_binding_refresh_interval_ms;
-			current_config->grayscale_min_presentation_interval_ms = previous_presentation_settings.grayscale_min_presentation_interval_ms;
-			current_config->bw_min_presentation_interval_ms = previous_presentation_settings.bw_min_presentation_interval_ms;
-			current_config->refresh_clock_values_on_minute_boundary = previous_presentation_settings.refresh_clock_values_on_minute_boundary;
-			current_config->bw_full_update_threshold = previous_presentation_settings.bw_full_update_threshold;
+			current_config->epaper_render_mode = previous_presentation_settings.epaper_render_mode;
+			current_config->epaper_grayscale_binding_refresh_interval_ms = previous_presentation_settings.epaper_grayscale_binding_refresh_interval_ms;
+			current_config->epaper_bw_binding_refresh_interval_ms = previous_presentation_settings.epaper_bw_binding_refresh_interval_ms;
+			current_config->epaper_grayscale_min_refresh_interval_ms = previous_presentation_settings.epaper_grayscale_min_refresh_interval_ms;
+			current_config->epaper_bw_min_refresh_interval_ms = previous_presentation_settings.epaper_bw_min_refresh_interval_ms;
+			current_config->epaper_refresh_clock_on_minute_boundary = previous_presentation_settings.epaper_refresh_clock_on_minute_boundary;
+			current_config->epaper_bw_full_refresh_threshold = previous_presentation_settings.epaper_bw_full_refresh_threshold;
 			request->send(400, "application/json", "{\"success\":false,\"message\":\"invalid e-paper presentation settings\"}");
 			portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
 			return;
 		}
-		config_manager_publish_epaper_presentation_settings(current_config);
+		config_manager_publish_epaper_refresh_settings(current_config);
 		#endif
 
 		#if HAS_DISPLAY

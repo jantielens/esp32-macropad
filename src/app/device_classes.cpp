@@ -7,8 +7,8 @@
 
 #include "board_config.h"
 
-#if HAS_EPAPER
-#include "device_classes/epaper_device_class.cpp"
+#if IS_EPAPER_FRAME
+#include "device_classes/epaper_frame_device_class.cpp"
 #endif
 
 #if IS_SHUTTER_TESTER
@@ -31,8 +31,8 @@
 // implementation registers itself with the runtime registry. Keeps
 // registration explicit and ordered rather than relying on global ctors.
 void device_classes_register_all() {
-#if HAS_EPAPER
-		epaper_device_class_register();
+#if IS_EPAPER_FRAME
+		epaper_frame_device_class_register();
 #endif
 #if IS_SHUTTER_TESTER
                 shutter_tester_device_class_register();

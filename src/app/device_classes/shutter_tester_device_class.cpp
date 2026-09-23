@@ -3,7 +3,7 @@
 // arduino-cli only compiles `.cpp` files in the sketch root. All shutter-tester
 // translation units live under `device_classes/shutter_tester/` and are pulled
 // into the build by `#include`-ing them here under the `IS_SHUTTER_TESTER` gate,
-// mirroring the e-paper aggregation pattern (see `epaper_device_class.cpp`).
+// mirroring the e-paper aggregation pattern (see `epaper_frame_device_class.cpp`).
 //
 // Ripping out the shutter tester device class requires deleting this file,
 // the `device_classes/shutter_tester/` folder, and the small number of

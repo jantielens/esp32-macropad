@@ -112,16 +112,28 @@ struct HwButtonDef {
 #define HAS_BLE_HID true
 #endif
 
-// Enable e-paper device class (Inkplate-style refresh-on-wake dashboards).
-// When true the firmware compiles the e-paper HAL, the DutyCycleEpaper mode,
-// Enable the e-paper refresh path and E-Paper portal page.
-#ifndef HAS_EPAPER
-#define HAS_EPAPER false
+// Board has a physical e-paper panel.
+#ifndef HAS_EPAPER_PANEL
+#define HAS_EPAPER_PANEL false
 #endif
 
-// Enable configurable e-paper presentation controls in the web portal.
-#ifndef HAS_EPAPER_PRESENTATION
-#define HAS_EPAPER_PRESENTATION false
+// Enable the interactive LVGL e-paper refresh pipeline and portal controls.
+#ifndef HAS_LVGL_EPAPER
+#define HAS_LVGL_EPAPER false
+#endif
+// Select the sleep-first E-Paper Frame product class.
+#ifndef IS_EPAPER_FRAME
+#define IS_EPAPER_FRAME false
+#endif
+
+// Interactive LVGL e-paper requires both an e-paper panel and the display stack.
+#if HAS_LVGL_EPAPER && (!HAS_EPAPER_PANEL || !HAS_DISPLAY)
+#error "HAS_LVGL_EPAPER requires HAS_EPAPER_PANEL and HAS_DISPLAY."
+#endif
+
+// The E-Paper Frame runtime owns the sleep-first image-refresh lifecycle.
+#if IS_EPAPER_FRAME && (!HAS_EPAPER_PANEL || HAS_DISPLAY)
+#error "IS_EPAPER_FRAME requires HAS_EPAPER_PANEL and no LVGL display."
 #endif
 
 // Shutter-tester product variant. When true the firmware compiles the
@@ -171,14 +183,14 @@ struct HwButtonDef {
 #endif
 
 // Enable e-paper wake-button handling (ext1 wake plus short/long press).
-#ifndef HAS_EPAPER_WAKE_BUTTON
-#define HAS_EPAPER_WAKE_BUTTON false
+#ifndef HAS_EPAPER_FRAME_WAKE_BUTTON
+#define HAS_EPAPER_FRAME_WAKE_BUTTON false
 #endif
 
 // GPIO used for the e-paper wake button. Must be an RTC-capable input pin
 // (typical Inkplate wiring uses GPIO36 with an external pullup).
-#ifndef EPAPER_BUTTON_PIN
-#define EPAPER_BUTTON_PIN 36
+#ifndef EPAPER_FRAME_BUTTON_PIN
+#define EPAPER_FRAME_BUTTON_PIN 36
 #endif
 
 // Enable e-paper frontlight control on boards with frontlight hardware.
@@ -197,8 +209,8 @@ struct HwButtonDef {
 // a short "Refreshing" splash on button wakes (OG inkplate-dashboard pattern).
 // When false (default — most e-paper panels need 6-10 s per full refresh),
 // button wakes skip straight to the image fetch to avoid the second waveform.
-#ifndef EPAPER_FAST_REFRESH
-#define EPAPER_FAST_REFRESH false
+#ifndef EPAPER_FRAME_FAST_REFRESH
+#define EPAPER_FRAME_FAST_REFRESH false
 #endif
 
 // Recovery / config portal first-boot auto-sleep default (seconds). Boards
@@ -828,20 +840,20 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_BINDING_REFRESH_INTERVAL_MS 0
 #endif
 
-// Inkplate LVGL panel-mode value for 1-bit black-and-white rendering.
-#define INKPLATE_LVGL_MODE_BW 0
-// Inkplate LVGL panel-mode value for 3-bit grayscale rendering.
-#define INKPLATE_LVGL_MODE_GRAYSCALE 1
-// Default panel mode for the experimental Inkplate LVGL driver.
-#ifndef INKPLATE_LVGL_DEFAULT_MODE
-#define INKPLATE_LVGL_DEFAULT_MODE INKPLATE_LVGL_MODE_GRAYSCALE
+// E-paper panel-mode value for 1-bit black-and-white rendering.
+#define EPAPER_RENDER_MODE_BW 0
+// E-paper panel-mode value for 3-bit grayscale rendering.
+#define EPAPER_RENDER_MODE_GRAYSCALE 1
+// Default panel mode for an interactive LVGL e-paper driver.
+#ifndef EPAPER_DEFAULT_RENDER_MODE
+#define EPAPER_DEFAULT_RENDER_MODE EPAPER_RENDER_MODE_GRAYSCALE
 #endif
 // Number of B/W partial updates before this driver performs a full refresh.
-#ifndef INKPLATE_BW_FULL_UPDATE_THRESHOLD
-#define INKPLATE_BW_FULL_UPDATE_THRESHOLD 10
+#ifndef EPAPER_DEFAULT_BW_FULL_REFRESH_THRESHOLD
+#define EPAPER_DEFAULT_BW_FULL_REFRESH_THRESHOLD 10
 #endif
 
-// Bounds for persisted e-paper presentation settings. Keep controller-specific
+// Bounds for persisted e-paper refresh settings. Keep controller-specific
 // physical limits in the owning e-paper driver configuration.
 #ifndef EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS
 #define EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS 100
@@ -851,12 +863,12 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS 60000
 #endif
 // Minimum permitted physical e-paper presentation interval.
-#ifndef EPAPER_PRESENTATION_INTERVAL_MIN_MS
-#define EPAPER_PRESENTATION_INTERVAL_MIN_MS 250
+#ifndef EPAPER_REFRESH_INTERVAL_MIN_MS
+#define EPAPER_REFRESH_INTERVAL_MIN_MS 250
 #endif
 // Maximum permitted physical e-paper presentation interval.
-#ifndef EPAPER_PRESENTATION_INTERVAL_MAX_MS
-#define EPAPER_PRESENTATION_INTERVAL_MAX_MS 60000
+#ifndef EPAPER_REFRESH_INTERVAL_MAX_MS
+#define EPAPER_REFRESH_INTERVAL_MAX_MS 60000
 #endif
 // Maximum permitted B/W partial-refresh count before a scheduled full refresh.
 #ifndef EPAPER_BW_FULL_UPDATE_THRESHOLD_MAX

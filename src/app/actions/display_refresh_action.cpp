@@ -20,7 +20,7 @@ void serialize_display_refresh(const ButtonAction& act, JsonObject action) {
 }
 
 ActionResult dispatch_display_refresh(const ButtonAction& act, const char* label, uint32_t) {
-#if defined(ARDUINO) && HAS_EPAPER_PRESENTATION
+#if defined(ARDUINO) && HAS_LVGL_EPAPER
     const DisplayRefreshRequestResult result = display_manager_request_full_refresh();
     if (result == DISPLAY_REFRESH_QUEUED) {
         LOGI(kDisplayRefreshActionTag, "%s display_refresh: queued full waveform", label);
@@ -40,7 +40,7 @@ ActionResult dispatch_display_refresh(const ButtonAction& act, const char* label
 }
 
 bool display_refresh_available() {
-    return HAS_DISPLAY && HAS_EPAPER_PRESENTATION;
+    return HAS_DISPLAY && HAS_LVGL_EPAPER;
 }
 
 const char* validate_display_refresh(const JsonObjectConst action) {

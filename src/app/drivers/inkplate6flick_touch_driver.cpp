@@ -1,6 +1,6 @@
 #include "inkplate6flick_touch_driver.h"
 
-#include "inkplate6flick_lvgl_driver.h"
+#include "inkplate6flick_epaper_driver.h"
 #include "../log_manager.h"
 
 #include <Inkplate.h>

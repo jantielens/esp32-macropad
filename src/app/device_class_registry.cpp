@@ -22,8 +22,8 @@ DeviceClass device_class_detect() {
     return DeviceClass::DARKROOM_TIMER;
 #elif IS_VOICE_ASSISTANT
     return DeviceClass::VOICE_ASSISTANT;
-#elif HAS_EPAPER
-    return DeviceClass::EPAPER;
+#elif IS_EPAPER_FRAME
+    return DeviceClass::EPAPER_FRAME;
 #elif !HAS_DISPLAY
     return DeviceClass::HEADLESS;
 #else
@@ -37,7 +37,7 @@ DeviceClass device_class_detect() {
 // and expects one row per device class.
 static const DeviceClassDescriptor DESCRIPTORS[] = {
     { DeviceClass::MACROPAD,       "Macropad",       "MACROPAD", "ESP32 Macropad"          },
-    { DeviceClass::EPAPER,         "E-Paper",        "EPAPER",   "ESP32-MP E-Paper"        },
+    { DeviceClass::EPAPER_FRAME, "E-Paper Frame", "EPAPER_FRAME", "ESP32-MP E-Paper Frame" },
     { DeviceClass::HEADLESS,       "Headless",       "HEADLESS", "ESP32-MP Headless"       },
     { DeviceClass::SHUTTER_TESTER, "Shutter Tester", "SHUTTER",  "ESP32-MP Shutter Tester" },
     { DeviceClass::COFFEE_SCALE,   "Coffee Scale",   "SCALE",    "ESP32-MP Coffee Scale"   },

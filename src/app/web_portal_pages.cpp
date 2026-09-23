@@ -193,13 +193,13 @@ void handlePortalCameraCSS(AsyncWebServerRequest *request) {
 }
 #endif
 
-#if HAS_EPAPER_PRESENTATION
-void handlePortalEpaperPresentationJS(AsyncWebServerRequest *request) {
+#if HAS_LVGL_EPAPER
+void handlePortalEpaperRefreshJS(AsyncWebServerRequest *request) {
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,
 				"application/javascript",
-				portal_epaper_presentation_js_gz,
-				portal_epaper_presentation_js_gz_len,
+				portal_epaper_refresh_js_gz,
+				portal_epaper_refresh_js_gz_len,
 				kImmutableAssetCacheControl
 		);
 		request->send(response);

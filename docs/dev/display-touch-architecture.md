@@ -54,12 +54,25 @@ graph TD
 
 ### Inkplate 6 Flick LVGL
 
-`inkplate6flick-lvgl` is an experimental always-on e-paper target. Its Inkplate
+`inkplate6flick-interactive` is an experimental always-on e-paper target. Its Inkplate
 driver is buffered: LVGL flushes update a framebuffer, then a presentation task
 coalesces changes before a physical waveform. B/W mode uses partial updates with
 periodic full refreshes; grayscale uses full waveforms. The Cypress touch driver
 continues polling while a presentation is pending. This target uses a no-OTA
 partition and must be updated over USB.
+
+The driver copies the mode-specific drawing framebuffer into a PSRAM presentation
+snapshot while holding its mutex, then releases the mutex before the blocking
+waveform. That preserves writes made during the waveform for the next
+presentation and permits no-op detection against the last presented frame. B/W
+pixels use ordered dithering and can use `partialUpdate()`; 3-bit grayscale can
+only use full waveforms. The driver, rather than InkplateLibrary's automatic
+threshold, owns the periodic B/W full-refresh cadence.
+
+The Cypress controller is an event stream. `getData()` returning zero is not by
+itself a release: it can also mean that no event is pending. The touch driver
+reads only pending events, retains contact state between them, and serializes
+controller reads so a one-shot report cannot be consumed by another observer.
 
 ### Purpose
 

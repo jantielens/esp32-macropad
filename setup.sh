@@ -67,7 +67,7 @@ echo "Installing ESP32 board support (esp32:esp32@${ESP32_CORE_VERSION})..."
 arduino-cli core install "esp32:esp32@${ESP32_CORE_VERSION}"
 
 # Install Soldered (Inkplate) board support. Required for the Inkplate 5V2
-# target; bundles the InkplateLibrary sources used by HAS_EPAPER builds.
+# target; bundles the InkplateLibrary sources used by HAS_EPAPER_PANEL builds.
 # Skipped silently if no Inkplate board is present in FQBN_TARGETS.
 SCRIPT_DIR_EARLY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if grep -q '"Inkplate_Boards' "$SCRIPT_DIR_EARLY/config.sh" \
@@ -82,13 +82,13 @@ fi
 # NOT in the Arduino registry (only upstream GxEPD2, which lacks IT8951
 # support), so it is installed from git. Skipped silently if no reTerminal
 # board is present in FQBN_TARGETS.
-if grep -q '"reterminal-e1003"' "$SCRIPT_DIR_EARLY/config.sh" \
-        || ([[ -f "$SCRIPT_DIR_EARLY/config.project.sh" ]] && grep -q '"reterminal-e1003"' "$SCRIPT_DIR_EARLY/config.project.sh"); then
+if grep -q '"reterminal-e1003-frame"' "$SCRIPT_DIR_EARLY/config.sh" \
+        || ([[ -f "$SCRIPT_DIR_EARLY/config.project.sh" ]] && grep -q '"reterminal-e1003-frame"' "$SCRIPT_DIR_EARLY/config.project.sh"); then
     echo "Installing Seeed_GxEPD2 (git; reTerminal E1003 IT8951 support)..."
     # git-url installs require the unsafe-install flag.
     arduino-cli config set library.enable_unsafe_install true
     arduino-cli lib install --git-url https://github.com/Seeed-Projects/Seeed_GxEPD2.git \
-        || echo "Warning: Seeed_GxEPD2 install failed (reterminal-e1003 builds will fail until installed)"
+        || echo "Warning: Seeed_GxEPD2 install failed (reterminal-e1003-frame builds will fail until installed)"
 fi
 
 # Install/register template-provided custom partition schemes.

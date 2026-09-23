@@ -12,7 +12,7 @@
 //
 // Detection precedence (first match wins) lives in device_class_detect():
 //   1. IS_* product variant flags (future: IS_DARKROOM_TIMER, IS_SHUTTER_TESTER, ...)
-//   2. HAS_EPAPER hardware flag           -> EPAPER
+//   2. IS_EPAPER_FRAME product flag             -> EPAPER_FRAME
 //   3. !HAS_DISPLAY hardware flag         -> HEADLESS
 //   4. default                            -> MACROPAD
 //
@@ -21,7 +21,7 @@
 
 enum class DeviceClass {
     MACROPAD,
-    EPAPER,
+    EPAPER_FRAME,
     HEADLESS,
     SHUTTER_TESTER,
     COFFEE_SCALE,

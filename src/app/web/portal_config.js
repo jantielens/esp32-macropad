@@ -292,7 +292,7 @@ async function loadConfig() {
         setValueIfExists('idle_screen_pad', config.idle_screen_pad);
         if (typeof window.screensaverTimelineUpdate === 'function') window.screensaverTimelineUpdate();
 
-        // E-paper settings (only present when firmware has HAS_EPAPER)
+        // E-paper settings (only present when firmware has HAS_EPAPER_PANEL)
         if (config.epaper_url !== undefined) {
             setValueIfExists('epaper_url', config.epaper_url);
         }

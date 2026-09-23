@@ -7,7 +7,7 @@
 #include "../pad_layout.h"
 #include "../timer_engine.h"
 #include "../time_binding.h"
-#if HAS_EPAPER_PRESENTATION
+#if HAS_LVGL_EPAPER
 extern DeviceConfig device_config;
 #endif
 #if HAS_MQTT
@@ -271,18 +271,18 @@ void PadScreen::update() {
 }
 
 void PadScreen::pollLiveData(bool force) {
-#if HAS_EPAPER_PRESENTATION
-	const EpaperPresentationSettings presentationSettings = config_manager_get_epaper_presentation_settings();
+#if HAS_LVGL_EPAPER
+	const EpaperRefreshSettings presentationSettings = config_manager_get_epaper_refresh_settings();
     const int activePanelMode = display_manager_get_presentation_mode();
-    const uint32_t refreshIntervalMs = activePanelMode == INKPLATE_LVGL_MODE_BW
-			? presentationSettings.bw_binding_refresh_interval_ms
-			: presentationSettings.grayscale_binding_refresh_interval_ms;
-	const bool refreshClockOnMinute = presentationSettings.refresh_clock_values_on_minute_boundary;
+    const uint32_t refreshIntervalMs = activePanelMode == EPAPER_RENDER_MODE_BW
+			? presentationSettings.epaper_bw_binding_refresh_interval_ms
+			: presentationSettings.epaper_grayscale_binding_refresh_interval_ms;
+	const bool refreshClockOnMinute = presentationSettings.epaper_refresh_clock_on_minute_boundary;
 #elif DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
     constexpr uint32_t refreshIntervalMs = DISPLAY_BINDING_REFRESH_INTERVAL_MS;
     constexpr bool refreshClockOnMinute = true;
 #endif
-#if HAS_EPAPER_PRESENTATION || DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
+#if HAS_LVGL_EPAPER || DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
     struct timeval tv;
     const bool clockSynced = time_binding_is_synced();
     const uint64_t nowMs = clockSynced && gettimeofday(&tv, nullptr) == 0

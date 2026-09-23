@@ -97,7 +97,7 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Soldered Inkplate 6FLICK LVGL B/W (experimental)** | ESP32 | 6.0" black-and-white e-paper touch UI | 1024 × 758 | Landscape |
 | **Seeed reTerminal E1003** | ESP32-S3 | 10.3" 16-level grayscale e-paper | 1404 × 1872 | Portrait |
 
-Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are non-touch, duty-cycled e-paper targets. The `inkplate6flick-lvgl` target is an experimental touch UI that defaults to 1-bit B/W partial updates with periodic full refreshes. Its persisted portal settings can switch the next boot to 3-bit grayscale with throttled full-panel waveforms. It uses a 3 MB no-OTA application partition.
+Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and Seeed reTerminal E1003 are sleep-first E-Paper Frame targets. The `inkplate6flick-interactive` target is an Interactive E-Paper touch UI that defaults to 1-bit B/W partial updates with periodic full refreshes. Its persisted portal settings can switch the next boot to 3-bit grayscale with throttled full-panel waveforms. It uses a 3 MB no-OTA application partition.
 
 ### Headless Sensor Targets
 
@@ -131,7 +131,7 @@ The firmware auto-detects a device class at build time based on board capability
 | Device Class | Detection | Brand Prefix | SSID Format | Boards |
 |---|---|---|---|---|
 | **Macropad** | `HAS_DISPLAY` (default) | `ESP32 Macropad` | `ESP32-MACROPAD-XXXXXX` | All touch-screen boards listed above |
-| **E-Paper** | `HAS_EPAPER` | `ESP32-MP E-Paper` | `ESP32-MP-EPAPER-XXXXXX` | Inkplate 5V2, Inkplate 6FLICK, Seeed reTerminal E1003 |
+| **E-Paper Frame** | `IS_EPAPER_FRAME` | `ESP32-MP E-Paper Frame` | `ESP32-MP-EPAPER_FRAME-XXXXXX` | Inkplate 5V2, Inkplate 6FLICK, Seeed reTerminal E1003 |
 | **Headless** | `!HAS_DISPLAY` | `ESP32-MP Headless` | `ESP32-MP-HEADLESS-XXXXXX` | Sensor-only boards (e.g. `esp32c3-withsensors`, `firebeetle2-esp32c6-aht10`) |
 | **Shutter Tester** | `IS_SHUTTER_TESTER` | `ESP32-MP Shutter Tester` | `ESP32-MP-SHUTTER-XXXXXX` | `jc4880p433-shutter` — see [docs/device-classes/shutter-tester/](docs/device-classes/shutter-tester/README.md) |
 | **Coffee Scale** | `IS_COFFEE_SCALE` | `ESP32-MP Coffee Scale` | `ESP32-MP-SCALE-XXXXXX` | `jc4880p433-nau7802`, `jc4880p433-hx711` — see [docs/device-classes/coffee-scale/](docs/device-classes/coffee-scale/README.md) |
@@ -192,7 +192,7 @@ The pad editor lets you design button layouts visually: drag-to-move and drag-to
 | [First-Time Setup](docs/first-time-setup.md) | Initial configuration after flashing |
 | [Web Portal Guide](docs/web-portal-guide.md) | Complete guide to all portal features |
 | [MCP Server Guide](docs/mcp-guide.md) | Connect a local AI assistant to inspect and control the device over MCP |
-| [E-Paper Guide](docs/epaper-guide.md) | Detailed guide for the e-paper device class, carousel/schedule model, wake behavior, and status semantics |
+| [E-Paper Frame Guide](docs/epaper-frame-guide.md) | Detailed guide for the E-Paper Frame device class, carousel/schedule model, wake behavior, and status semantics |
 | [Home Assistant Integration](docs/ha-integration-guide.md) | HA entity reference, audio control, and automation examples |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |
 | [Extension Developer Guide](docs/dev/extensions.md) | Build, install, and author trusted native ESP32-P4 and ESP32-S3 Extensions |

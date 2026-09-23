@@ -17,7 +17,7 @@
 
 class Preferences;
 struct DeviceConfig;
-enum class PowerMode { AlwaysOn, DutyCycle, DutyCycleBle, DutyCycleEpaper, Config, Ap };
+enum class PowerMode { AlwaysOn, DutyCycle, DutyCycleBle, DutyCycleEpaperFrame, Config, Ap };
 enum class MqttPublishScope { SensorsOnly };
 
 const char* device_class_get_full_name() { return "ESP32 Macropad"; }
