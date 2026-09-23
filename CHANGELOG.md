@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-09-23
+
+### Added
+
+* **E-Paper Frame offline image queue**: Service mode can prefetch up to 16
+  upcoming SD-cached images during an online synchronization, then render them
+  on subsequent timer wakes without initializing Wi-Fi or MQTT. The new
+  **Offline refreshes between syncs** setting makes the battery/latency tradeoff
+  explicit; button refreshes, cache clears, and relevant configuration changes
+  discard the best-effort retained queue.
+
 ## [1.32.0] - 2026-09-23
 
 ### Added
