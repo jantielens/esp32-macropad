@@ -8,7 +8,10 @@
 #include "epaper_frame_driver.h"
 #if defined(BOARD_RETERMINAL_E1003_FRAME)
 #include "epaper_frame_next_client.h"
+#include "epaper_frame_offline_queue.h"
 #include "epaper_frame_sd_cache.h"
+#include "epaper_frame_timing.h"
+#include "epaper_frame_transport_crc32.h"
 #endif
 #include "epaper_frame_overlay.h"
 #include "epaper_frame_screens.h"
@@ -199,100 +202,349 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_url(DeviceConfig* config, c
 }
 
 #if defined(BOARD_RETERMINAL_E1003_FRAME)
-static EpaperRefreshOutcome epaper_frame_refresh_run_service(DeviceConfig* config, uint32_t fetch_timeout_ms) {
-		EpaperRefreshOutcome out = {EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
+static uint32_t service_remaining_timeout(uint32_t started,
+		uint32_t timeout_ms) {
+		if (timeout_ms == 0) return 0;
+		const uint32_t elapsed = millis() - started;
+		return elapsed < timeout_ms ? timeout_ms - elapsed : 0;
+}
+
+static bool epaper_frame_refresh_draw_service_payload(
+		EpaperNextPayload* payload, EpaperRefreshOutcome* out,
+		uint32_t started) {
+		if (!payload || !out || payload->result != EpaperNextResult::Show ||
+				!epaper_frame_driver_begin()) {
+				return false;
+		}
+		epaper_frame_driver_set_rotation(0);
+		epaper_frame_driver_clear();
+		out->battery_mv = epaper_frame_driver_battery_mv();
+		const bool wdt_was_attached = esp_task_wdt_status(nullptr) == ESP_OK;
+		if (wdt_was_attached) esp_task_wdt_delete(nullptr);
+
+		epaper_frame_driver_set_sd_cache_enabled(
+				g_epaper_config.epaper_frame_sd_cache_enabled);
+		bool drew = epaper_frame_driver_draw_service_blob(
+				payload->data, payload->len,
+				payload->media_type[0] ? payload->media_type : nullptr,
+				payload->prepared_data, payload->prepared_len);
+		if (drew) {
+				epaper_frame_driver_set_rotation(
+						g_epaper_config.epaper_frame_rotation);
+				epaper_frame_overlay_render(out->battery_mv, millis() - started);
+				if (!payload->from_cache &&
+						g_epaper_config.epaper_frame_sd_cache_enabled) {
+						epaper_frame_sd_cache_stage_pending(
+								payload->content_crc32, payload->data, payload->len);
+						payload->data = nullptr;
+						payload->len = 0;
+				}
+				drew = epaper_frame_driver_display();
+				if (drew) {
+						epaper_frame_driver_cache_flush();
+						g_service_fingerprint.valid = true;
+						strlcpy(g_service_fingerprint.image_key,
+								payload->image_key,
+								sizeof(g_service_fingerprint.image_key));
+						g_service_fingerprint.content_crc32 =
+								payload->content_crc32;
+				} else {
+						epaper_frame_sd_cache_discard_pending();
+				}
+		}
+		if (wdt_was_attached) esp_task_wdt_add(nullptr);
+		epaper_frame_driver_sleep();
+		return drew;
+}
+
+static void epaper_frame_refresh_finish_service(
+		EpaperRefreshOutcome* out, uint32_t started) {
+		out->elapsed_ms = millis() - started;
+		if (out->result == EpaperRefreshResult::Updated) {
+				const time_t now = time(nullptr);
+				if (now >= (time_t)kEpaperMinValidEpoch) {
+						g_last_refresh_unix = (uint32_t)now;
+				}
+				++g_refresh_count;
+				LOGI("Epaper", "Service refresh complete: %ums, CRC=%08x",
+						(unsigned)out->elapsed_ms, (unsigned)out->crc_used);
+		}
+		s_last_outcome = *out;
+}
+
+static void epaper_frame_queue_batch_extras(
+		const EpaperBatchManifest& manifest, uint32_t sync_started,
+		uint32_t fetch_timeout_ms) {
+		epaper_frame_offline_queue_begin_sync();
+		for (uint8_t index = 1; index < manifest.count; ++index) {
+				const uint32_t remaining =
+						service_remaining_timeout(sync_started, fetch_timeout_ms);
+				if (fetch_timeout_ms > 0 && remaining == 0) {
+						LOGW("Epaper", "Batch prefetch stopped at wake budget");
+						break;
+				}
+				EpaperNextPayload queued =
+						epaper_frame_next_client_fetch_batch_entry(
+								g_epaper_config.service_url,
+								g_epaper_config.service_token,
+								manifest.entries[index], true, remaining);
+				if (queued.result != EpaperNextResult::Show) {
+						epaper_frame_next_payload_release(&queued);
+						LOGW("Epaper", "Batch prefetch stopped at entry %u",
+								(unsigned)index);
+						break;
+				}
+				bool cached = queued.from_cache;
+				if (!cached) {
+						cached = epaper_frame_sd_cache_store(
+								queued.content_crc32, queued.data, queued.len);
+				}
+				if (!cached) {
+						epaper_frame_next_payload_release(&queued);
+						LOGW("Epaper", "Batch prefetch cache write failed");
+						break;
+				}
+				EpaperOfflineQueueEntry entry = {};
+				strlcpy(entry.image_key, manifest.entries[index].image_key,
+						sizeof(entry.image_key));
+				strlcpy(entry.media_type, manifest.entries[index].media_type,
+						sizeof(entry.media_type));
+				entry.content_crc32 = manifest.entries[index].content_crc32;
+				entry.content_length = manifest.entries[index].content_length;
+				const bool appended =
+						epaper_frame_offline_queue_append_validated(entry);
+				epaper_frame_next_payload_release(&queued);
+				if (!appended) break;
+		}
+		LOGI("Epaper", "Offline queue ready with %u entries",
+				(unsigned)epaper_frame_offline_queue_count());
+}
+
+static EpaperRefreshOutcome epaper_frame_refresh_run_service(
+		DeviceConfig* /*config*/, uint32_t fetch_timeout_ms) {
+		EpaperRefreshOutcome out = {
+				EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 		const uint32_t started = millis();
-		EpaperNextPayload payload = epaper_frame_next_client_fetch(
-				g_epaper_config.service_url, g_epaper_config.service_token,
-				g_service_fingerprint, g_epaper_config.epaper_frame_sd_cache_enabled, 2, fetch_timeout_ms);
+		const bool batch_enabled =
+				g_epaper_config.offline_refreshes_between_syncs > 0 &&
+				g_epaper_config.epaper_frame_sd_cache_enabled;
+		EpaperBatchManifest* manifest = nullptr;
+		EpaperNextPayload payload = {};
+		payload.result = EpaperNextResult::FailedFetch;
+		bool batch_first = false;
+
+		if (batch_enabled) {
+				epaper_frame_offline_queue_invalidate();
+				uint8_t batch_count = 0;
+				if (epaper_frame_offline_batch_count(
+						g_epaper_config.offline_refreshes_between_syncs,
+						&batch_count)) {
+						const uint32_t manifest_timeout =
+								service_remaining_timeout(
+										started, fetch_timeout_ms);
+						const EpaperNextResult batch_result =
+								fetch_timeout_ms > 0 && manifest_timeout == 0
+								? EpaperNextResult::FailedFetch :
+								epaper_frame_next_client_fetch_batch_manifest(
+										g_epaper_config.service_url,
+										g_epaper_config.service_token,
+										g_service_fingerprint, batch_count,
+										&manifest,
+										manifest_timeout);
+						if (batch_result == EpaperNextResult::Show &&
+								manifest && manifest->count > 0) {
+								const uint32_t first_timeout =
+										service_remaining_timeout(
+												started, fetch_timeout_ms);
+								if (fetch_timeout_ms > 0 &&
+										first_timeout == 0) {
+										payload.result =
+												EpaperNextResult::FailedFetch;
+								} else {
+								payload =
+										epaper_frame_next_client_fetch_batch_entry(
+												g_epaper_config.service_url,
+												g_epaper_config.service_token,
+												manifest->entries[0], true,
+												first_timeout);
+								}
+								batch_first =
+										payload.result == EpaperNextResult::Show;
+						}
+				}
+				if (!batch_first) {
+						epaper_frame_next_payload_release(&payload);
+						epaper_frame_batch_manifest_release(manifest);
+						manifest = nullptr;
+						LOGW("Epaper", "Batch first image unavailable; falling back to /next");
+				}
+		}
+
+		if (!batch_first) {
+				const uint32_t fallback_timeout =
+						service_remaining_timeout(started, fetch_timeout_ms);
+				if (fetch_timeout_ms > 0 && fallback_timeout == 0) {
+						payload = {};
+						payload.result = EpaperNextResult::FailedFetch;
+				} else {
+						payload = epaper_frame_next_client_fetch(
+						g_epaper_config.service_url,
+						g_epaper_config.service_token,
+						g_service_fingerprint,
+						g_epaper_config.epaper_frame_sd_cache_enabled,
+						batch_enabled ? 1 : 2,
+						fallback_timeout);
+				}
+		}
 		out.crc_used = payload.content_crc32;
 		if (payload.result == EpaperNextResult::Keep) {
 				out.result = EpaperRefreshResult::Skipped;
-				out.elapsed_ms = millis() - started;
-				s_last_outcome = out;
+				epaper_frame_next_payload_release(&payload);
+				epaper_frame_batch_manifest_release(manifest);
+				epaper_frame_refresh_finish_service(&out, started);
 				LOGI("Epaper", "Service returned 204 keep");
 				return out;
 		}
 		if (payload.result != EpaperNextResult::Show) {
 				out.result = payload.result == EpaperNextResult::FailedContent
-						? EpaperRefreshResult::FailedDraw : EpaperRefreshResult::FailedFetch;
-				out.elapsed_ms = millis() - started;
-				s_last_outcome = out;
-				LOGW("Epaper", "Service refresh failed (result=%u)", (unsigned)payload.result);
-				return out;
-		}
-
-		if (!epaper_frame_driver_begin()) {
+						? EpaperRefreshResult::FailedDraw
+						: EpaperRefreshResult::FailedFetch;
 				epaper_frame_next_payload_release(&payload);
-				out.result = EpaperRefreshResult::FailedDraw;
-				out.elapsed_ms = millis() - started;
-				s_last_outcome = out;
+				epaper_frame_batch_manifest_release(manifest);
+				epaper_frame_refresh_finish_service(&out, started);
+				LOGW("Epaper", "Service refresh failed (result=%u)",
+						(unsigned)payload.result);
 				return out;
 		}
-		epaper_frame_driver_set_rotation(0);
-		epaper_frame_driver_clear();
-		out.battery_mv = epaper_frame_driver_battery_mv();
-		const bool wdt_was_attached = esp_task_wdt_status(nullptr) == ESP_OK;
-		if (wdt_was_attached) esp_task_wdt_delete(nullptr);
 
-		epaper_frame_driver_set_sd_cache_enabled(g_epaper_config.epaper_frame_sd_cache_enabled);
-		bool drew = epaper_frame_driver_draw_service_blob(
-				payload.data, payload.len, payload.media_type[0] ? payload.media_type : nullptr,
-				payload.prepared_data, payload.prepared_len);
+		bool drew = epaper_frame_refresh_draw_service_payload(
+				&payload, &out, started);
 		bool skipped = false;
-		if (!drew && payload.from_cache) {
+		if (!drew && batch_first) {
+				if (payload.from_cache) {
+						epaper_frame_sd_cache_remove(payload.content_crc32);
+				}
+				epaper_frame_next_payload_release(&payload);
+				epaper_frame_batch_manifest_release(manifest);
+				manifest = nullptr;
+				batch_first = false;
+				LOGW("Epaper", "Batch first image failed to render; falling back to /next");
+				const uint32_t fallback_timeout =
+						service_remaining_timeout(started, fetch_timeout_ms);
+				if (fetch_timeout_ms == 0 || fallback_timeout > 0) {
+						payload = epaper_frame_next_client_fetch(
+								g_epaper_config.service_url,
+								g_epaper_config.service_token,
+								g_service_fingerprint,
+								g_epaper_config.epaper_frame_sd_cache_enabled,
+								1, fallback_timeout);
+						out.crc_used = payload.content_crc32;
+						if (payload.result == EpaperNextResult::Show) {
+								drew = epaper_frame_refresh_draw_service_payload(
+										&payload, &out, started);
+						} else if (payload.result == EpaperNextResult::Keep) {
+								skipped = true;
+						}
+				}
+		} else if (!drew && payload.from_cache && !batch_enabled) {
 				epaper_frame_sd_cache_remove(payload.content_crc32);
 				epaper_frame_next_payload_release(&payload);
 				LOGW("Epaper", "Cached service image failed decode; retrying without cache");
 				payload = epaper_frame_next_client_fetch(
-						g_epaper_config.service_url, g_epaper_config.service_token,
-						g_service_fingerprint, false /*cache_enabled*/, 1 /*max_cycles*/);
+						g_epaper_config.service_url,
+						g_epaper_config.service_token,
+						g_service_fingerprint, false, 1,
+						service_remaining_timeout(started, fetch_timeout_ms));
 				out.crc_used = payload.content_crc32;
-				const EpaperRetryDecision retry = epaper_frame_next_retry_decision(payload.result);
-				if (retry == EpaperRetryDecision::Draw) {
-						drew = epaper_frame_driver_draw_service_blob(
-								payload.data, payload.len,
-								payload.media_type[0] ? payload.media_type : nullptr,
-								payload.prepared_data, payload.prepared_len);
-				} else if (retry == EpaperRetryDecision::Skip) {
+				if (payload.result == EpaperNextResult::Show) {
+						drew = epaper_frame_refresh_draw_service_payload(
+								&payload, &out, started);
+				} else if (payload.result == EpaperNextResult::Keep) {
 						skipped = true;
-						LOGI("Epaper", "Service cache retry returned 204 keep");
 				}
 		}
-		if (drew) {
-			epaper_frame_driver_set_rotation(g_epaper_config.epaper_frame_rotation);
-			epaper_frame_overlay_render(out.battery_mv, millis() - started);
-			if (!payload.from_cache && g_epaper_config.epaper_frame_sd_cache_enabled) {
-					epaper_frame_sd_cache_stage_pending(payload.content_crc32, payload.data, payload.len);
-					payload.data = nullptr;
-					payload.len = 0;
-			}
-			drew = epaper_frame_driver_display();
-			if (drew) {
-				epaper_frame_driver_cache_flush();
-				g_service_fingerprint.valid = true;
-				strlcpy(g_service_fingerprint.image_key, payload.image_key,
-						sizeof(g_service_fingerprint.image_key));
-				g_service_fingerprint.content_crc32 = payload.content_crc32;
-			} else {
-				epaper_frame_sd_cache_discard_pending();
-			}
-		}
 		epaper_frame_next_payload_release(&payload);
-		if (wdt_was_attached) esp_task_wdt_add(nullptr);
-		epaper_frame_driver_sleep();
-
 		out.result = skipped ? EpaperRefreshResult::Skipped
-				: drew ? EpaperRefreshResult::Updated : EpaperRefreshResult::FailedDraw;
-		out.elapsed_ms = millis() - started;
-		if (drew) {
-				const time_t now = time(nullptr);
-				if (now >= (time_t)kEpaperMinValidEpoch) g_last_refresh_unix = (uint32_t)now;
-				++g_refresh_count;
-				LOGI("Epaper", "Service refresh complete: %ums, CRC=%08x",
-						(unsigned)out.elapsed_ms, (unsigned)out.crc_used);
+				: drew ? EpaperRefreshResult::Updated
+				: EpaperRefreshResult::FailedDraw;
+		if (drew && batch_first && manifest) {
+				epaper_frame_queue_batch_extras(
+						*manifest, started, fetch_timeout_ms);
 		}
-		s_last_outcome = out;
+		epaper_frame_batch_manifest_release(manifest);
+		epaper_frame_refresh_finish_service(&out, started);
+		return out;
+}
+
+EpaperRefreshOutcome epaper_frame_refresh_run_offline(DeviceConfig* /*config*/) {
+		EpaperRefreshOutcome out = {
+				EpaperRefreshResult::FailedFetch, 0, 0, 0, 0, 0};
+		const uint32_t started = millis();
+		const EpaperOfflineQueueEntry* retained =
+				epaper_frame_offline_queue_peek();
+		if (!retained) {
+				epaper_frame_offline_queue_invalidate();
+				epaper_frame_refresh_finish_service(&out, started);
+				return out;
+		}
+		const EpaperOfflineQueueEntry entry = *retained;
+		if (!epaper_frame_driver_begin()) {
+				epaper_frame_offline_queue_invalidate();
+				out.result = EpaperRefreshResult::FailedDraw;
+				epaper_frame_refresh_finish_service(&out, started);
+				LOGW("Epaper", "Offline queue panel initialization failed");
+				return out;
+		}
+		uint8_t* data = nullptr;
+		size_t length = 0;
+		const uint32_t cache_started = millis();
+		if (!epaper_frame_sd_cache_read(entry.content_crc32, &data, &length) ||
+				length != entry.content_length ||
+				epaper_frame_transport_crc32(data, length) !=
+						entry.content_crc32) {
+				if (data) heap_caps_free(data);
+				epaper_frame_sd_cache_remove(entry.content_crc32);
+				epaper_frame_offline_queue_invalidate();
+				epaper_frame_refresh_finish_service(&out, started);
+				LOGW("Epaper", "Offline queue head cache validation failed");
+				return out;
+		}
+
+		EpaperNextPayload payload = {};
+		payload.result = EpaperNextResult::Show;
+		payload.data = data;
+		payload.len = length;
+		payload.content_crc32 = entry.content_crc32;
+		payload.from_cache = true;
+		strlcpy(payload.image_key, entry.image_key,
+				sizeof(payload.image_key));
+		strlcpy(payload.media_type, entry.media_type,
+				sizeof(payload.media_type));
+		if (!epaper_frame_driver_prepare_service_blob(
+				payload.data, payload.len, payload.media_type,
+				&payload.prepared_data, &payload.prepared_len)) {
+				epaper_frame_next_payload_release(&payload);
+				epaper_frame_sd_cache_remove(entry.content_crc32);
+				epaper_frame_offline_queue_invalidate();
+				out.result = EpaperRefreshResult::FailedDraw;
+				epaper_frame_refresh_finish_service(&out, started);
+				LOGW("Epaper", "Offline queue head media validation failed");
+				return out;
+		}
+		epaper_frame_timing_set_fetch_source(
+				millis() - cache_started, EpaperImageSource::OfflineQueue);
+		out.crc_used = entry.content_crc32;
+		const bool drew = epaper_frame_refresh_draw_service_payload(
+				&payload, &out, started);
+		epaper_frame_next_payload_release(&payload);
+		if (drew) {
+				epaper_frame_offline_queue_complete(true);
+				out.result = EpaperRefreshResult::Updated;
+		} else {
+				epaper_frame_offline_queue_invalidate();
+				out.result = EpaperRefreshResult::FailedDraw;
+		}
+		epaper_frame_refresh_finish_service(&out, started);
 		return out;
 }
 #endif
@@ -300,7 +552,7 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(DeviceConfig* confi
 EpaperRefreshOutcome epaper_frame_refresh_run(DeviceConfig* config, bool force, uint32_t fetch_timeout_ms) {
 		if (epaper_frame_source_uses_service(g_epaper_config.source_mode)) {
 #if defined(BOARD_RETERMINAL_E1003_FRAME)
-				(void)force;
+				if (force) epaper_frame_offline_queue_invalidate();
 				return epaper_frame_refresh_run_service(config, fetch_timeout_ms);
 #else
 				EpaperRefreshOutcome unsupported = {
@@ -313,6 +565,9 @@ EpaperRefreshOutcome epaper_frame_refresh_run(DeviceConfig* config, bool force, 
 }
 
 EpaperRefreshOutcome epaper_frame_refresh_show_url(DeviceConfig* config, const char* image_url) {
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+		epaper_frame_offline_queue_invalidate();
+#endif
 		return epaper_frame_refresh_run_url(config, image_url,
 				true /*force*/, false /*allow_crc*/, false /*persist_crc*/);
 }

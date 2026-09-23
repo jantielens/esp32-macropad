@@ -3,6 +3,7 @@
 #if IS_EPAPER_FRAME && HAS_MQTT
 
 #include "epaper_frame_battery.h"
+#include "epaper_frame_offline_queue_logic.h"
 #include "epaper_frame_wake_budget.h"
 #include "ha_discovery.h"
 #include "log_manager.h"
@@ -14,6 +15,8 @@
 #include <esp_attr.h>
 
 RTC_DATA_ATTR static bool g_epaper_discovery_published = false;
+RTC_DATA_ATTR static EpaperOfflineTelemetryAggregate
+		g_epaper_offline_telemetry = {};
 
 constexpr uint32_t kWakeDeliveryAckTimeoutMs = 250;
 static char g_wake_topic[160] = {};
@@ -38,6 +41,15 @@ static const char* refresh_result_to_str(EpaperRefreshResult result) {
 				case EpaperRefreshResult::Disabled:    return "disabled";
 		}
 		return "unknown";
+}
+
+void epaper_frame_mqtt_record_offline_cycle(
+		const EpaperRefreshOutcome& outcome, const char* image_key) {
+		epaper_frame_offline_telemetry_record(
+				&g_epaper_offline_telemetry,
+				static_cast<uint8_t>(outcome.result),
+				outcome.elapsed_ms, outcome.battery_mv, outcome.crc_used,
+				image_key);
 }
 
 static const char* wake_result_to_str(EpaperWakeResult result) {
@@ -103,7 +115,7 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		char topic[160];
 		snprintf(topic, sizeof(topic), "%s/epaper/state", mqtt_manager.baseTopic());
 
-		StaticJsonDocument<1024> doc;
+		StaticJsonDocument<1280> doc;
 		doc["battery_mv"]      = outcome.battery_mv;
 		doc["battery_pct"]     = epaper_frame_battery_percent(outcome.battery_mv);
 		doc["wifi_rssi"]       = timing ? timing->wifi_rssi : (int16_t)WiFi.RSSI();
@@ -128,9 +140,26 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		doc["schedule_tz_offset"] = g_epaper_config.schedule_tz_offset;
 
 		if (timing) doc["wake_loop_ms"] = timing->total_active_ms;
+		if (g_epaper_offline_telemetry.count > 0) {
+				JsonObject offline = doc.createNestedObject("offline_cycles");
+				offline["count"] = g_epaper_offline_telemetry.count;
+				offline["latest_result"] = refresh_result_to_str(
+						static_cast<EpaperRefreshResult>(
+								g_epaper_offline_telemetry.latest_result));
+				offline["latest_elapsed_ms"] =
+						g_epaper_offline_telemetry.latest_elapsed_ms;
+				offline["latest_battery_mv"] =
+						g_epaper_offline_telemetry.latest_battery_mv;
+				offline["latest_image_crc32"] =
+						g_epaper_offline_telemetry.latest_content_crc32;
+				offline["latest_image_key"] =
+						g_epaper_offline_telemetry.latest_image_key;
+		}
 
 		const bool ok = mqtt_manager.publishJson(topic, doc, true /*retained*/);
 		if (ok) {
+				epaper_frame_offline_telemetry_publish_complete(
+						&g_epaper_offline_telemetry, true);
 				LOGI("Epaper", "Published telemetry to %s", topic);
 		} else {
 				LOGW("Epaper", "MQTT telemetry publish failed");
@@ -188,7 +217,18 @@ static bool publish_wake_record(const EpaperWakeRecord& record,
 		doc["sidecar_http_status"] = record.sidecar_http_status;
 		doc["crc_fetch_attempts"] = record.timing.crc_retry_count;
 		doc["wifi_rssi"] = record.timing.wifi_rssi;
-		doc["image_source"] = record.timing.image_from_cache ? "cache" : "download";
+		switch (static_cast<EpaperImageSource>(record.timing.image_from_cache)) {
+				case EpaperImageSource::OnlineCache:
+						doc["image_source"] = "cache";
+						break;
+				case EpaperImageSource::OfflineQueue:
+						doc["image_source"] = "offline_queue";
+						break;
+				case EpaperImageSource::Download:
+				default:
+						doc["image_source"] = "download";
+						break;
+		}
 		if (record.refresh_result != record.result) {
 			doc["refresh_result"] = wake_result_to_str(record.refresh_result);
 		}

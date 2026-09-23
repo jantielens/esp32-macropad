@@ -7,6 +7,7 @@ import re
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import PurePosixPath
 from typing import Optional
 
 import blobstore as bs
@@ -18,6 +19,7 @@ SETTINGS_BLOB = "settings.json"
 TELEMETRY_BLOB = "telemetry.json"
 SIDECAR_NAME = "sidecar.json"
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_CRC_RE = re.compile(r"^[0-9a-f]{8}$")
 _DEVICE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
@@ -27,6 +29,11 @@ def is_valid_id(image_id: str) -> bool:
 
 def is_valid_device_id(device_id: str) -> bool:
     return bool(_DEVICE_ID_RE.fullmatch(device_id))
+
+
+def is_valid_blob_name(blob_name: str) -> bool:
+    return bool(blob_name and blob_name not in (".", "..")
+                and PurePosixPath(blob_name).name == blob_name)
 
 
 def image_prefix(device_id: str) -> str:
@@ -143,6 +150,7 @@ class PhotoIndex:
         fresh_window_days: int,
         max_temp_share_pct: int,
         fingerprint: tuple[str, str] | None,
+        excluded_fingerprints: set[tuple[str, str]] | None = None,
     ) -> Optional[TransportDescriptor]:
         with self._lock:
             now = datetime.now(timezone.utc)
@@ -156,10 +164,10 @@ class PhotoIndex:
                     chosen_variant = next(
                         (
                             variant for variant in variants
-                            if int(variant.get("format_code", 0)) == code
-                            and int(variant.get("width", 0)) == width
-                            and int(variant.get("height", 0)) == height
+                            if isinstance(variant, dict)
+                            and self._variant_matches(variant, code, width, height)
                             and variant.get("profile_key") == variant_keys[code]
+                            and self._descriptor(image_id, variant) is not None
                         ),
                         None,
                     )
@@ -168,6 +176,11 @@ class PhotoIndex:
                 if chosen_variant is not None:
                     eligible[image_id] = (meta, chosen_variant)
 
+            if excluded_fingerprints:
+                eligible = {
+                    image_id: item for image_id, item in eligible.items()
+                    if (image_id, str(item[1].get("content_crc32"))) not in excluded_fingerprints
+                }
             if fingerprint and len(eligible) > 1:
                 eligible = {
                     image_id: item for image_id, item in eligible.items()
@@ -202,26 +215,81 @@ class PhotoIndex:
             if selected_id is None:
                 return None
 
-            meta, variant = eligible[selected_id]
-            code = int(variant["format_code"])
-            return TransportDescriptor(
-                image_key=selected_id,
-                content_crc32=str(variant["content_crc32"]),
-                format_code=code,
-                media_type=MEDIA_TYPES[code],
-                width=int(variant["width"]),
-                height=int(variant["height"]),
-                blob_name=str(variant["blob_name"]),
-                content_length=int(variant["content_length"]),
-                schedule_countdown=new_countdown,
-            )
+            variant = eligible[selected_id][1]
+            return self._descriptor(selected_id, variant, new_countdown)
 
-    def commit_selection(self, device_id: str, descriptor: TransportDescriptor) -> None:
+    def descriptor_for_reference(
+        self,
+        *,
+        device_id: str,
+        image_key: str,
+        content_crc32: str,
+        format_code: int,
+        content_length: int,
+        width: int,
+        height: int,
+        profile_key: str,
+    ) -> Optional[TransportDescriptor]:
+        with self._lock:
+            meta = self._photos.get(device_id, {}).get(image_key)
+            if meta is None:
+                return None
+            for variant in meta.get("variants") or []:
+                if (isinstance(variant, dict)
+                        and self._variant_matches(variant, format_code, width, height)
+                        and variant.get("profile_key") == profile_key
+                        and variant.get("content_crc32") == content_crc32):
+                    descriptor = self._descriptor(image_key, variant)
+                    if descriptor is not None and descriptor.content_length == content_length:
+                        return descriptor
+            return None
+
+    @staticmethod
+    def _variant_matches(variant: dict, code: int, width: int, height: int) -> bool:
+        try:
+            return (int(variant.get("format_code", 0)) == code
+                    and int(variant.get("width", 0)) == width
+                    and int(variant.get("height", 0)) == height)
+        except (TypeError, ValueError):
+            return False
+
+    @staticmethod
+    def _descriptor(
+        image_key: str,
+        variant: dict,
+        schedule_countdown: Optional[int] = None,
+    ) -> Optional[TransportDescriptor]:
+        try:
+            code = int(variant["format_code"])
+            content_length = int(variant["content_length"])
+            width = int(variant["width"])
+            height = int(variant["height"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        content_crc32 = str(variant.get("content_crc32", ""))
+        blob_name = str(variant.get("blob_name", ""))
+        if (code not in MEDIA_TYPES or content_length <= 0 or width <= 0 or height <= 0
+                or not _CRC_RE.fullmatch(content_crc32)
+                or not is_valid_blob_name(blob_name)):
+            return None
+        return TransportDescriptor(
+            image_key=image_key,
+            content_crc32=content_crc32,
+            format_code=code,
+            media_type=MEDIA_TYPES[code],
+            width=width,
+            height=height,
+            blob_name=blob_name,
+            content_length=content_length,
+            schedule_countdown=schedule_countdown,
+        )
+
+    def commit_selection(self, device_id: str, descriptor: TransportDescriptor) -> bool:
         with config.data_transaction_lock():
             with self._lock:
                 meta = self._photos.get(device_id, {}).get(descriptor.image_key)
                 if meta is None:
-                    return
+                    return False
                 updated = dict(meta)
                 if updated.get("permanent", False):
                     updated["last_shown_at"] = now_iso()
@@ -233,6 +301,7 @@ class PhotoIndex:
                 if descriptor.schedule_countdown is not None:
                     write_schedule(device_id, descriptor.schedule_countdown)
                 queue_remove(device_id, descriptor.image_key)
+                return True
 
 
 def read_queue(device_id: str) -> list[str]:

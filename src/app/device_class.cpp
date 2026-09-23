@@ -114,6 +114,29 @@ void device_class_dispatch_config_api_set(DeviceConfig *config, JsonObject &body
 		}
 }
 
+const char *device_class_dispatch_config_api_validate(const DeviceConfig *config,
+		JsonObject &body) {
+		for (unsigned i = 0; i < g_count; ++i) {
+				const DeviceClass *c = g_classes[i];
+				if (!c || !c->config_api_validate) continue;
+				const char *error = c->config_api_validate(config, body);
+				if (error) return error;
+		}
+		return nullptr;
+}
+
+bool device_class_dispatch_defer_wifi_init(const DeviceConfig *config,
+		PowerMode boot_mode) {
+		for (unsigned i = 0; i < g_count; ++i) {
+				const DeviceClass *c = g_classes[i];
+				if (c && c->defer_wifi_init &&
+						c->defer_wifi_init(config, boot_mode)) {
+						return true;
+				}
+		}
+		return false;
+}
+
 // MQTT ------------------------------------------------------------------------
 void device_class_dispatch_mqtt_discovery(MqttManager &mqtt, bool *skip_generic) {
 		for (unsigned i = 0; i < g_count; ++i) {

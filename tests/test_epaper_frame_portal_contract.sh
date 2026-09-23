@@ -25,6 +25,7 @@ for key in \
     epaper_frame_service_url \
     epaper_frame_service_token \
     epaper_frame_service_interval_seconds \
+    epaper_frame_offline_refreshes_between_syncs \
     epaper_frame_wake_budget_ms \
     epaper_frame_wake_wifi_target_ms \
     epaper_frame_wake_wifi_budget_ms \

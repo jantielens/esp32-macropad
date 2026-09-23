@@ -133,7 +133,19 @@ static void epaper_frame_status_get(AsyncWebServerRequest* request) {
     t["resolve_ms"]      = epaper_frame_timing_last.resolve_ms;
     t["fetch_ms"]        = epaper_frame_timing_last.fetch_ms;
     t["draw_ms"]         = epaper_frame_timing_last.draw_ms;
-    t["image_source"]    = epaper_frame_timing_last.image_from_cache ? "cache" : "download";
+    switch (static_cast<EpaperImageSource>(
+            epaper_frame_timing_last.image_from_cache)) {
+        case EpaperImageSource::OnlineCache:
+            t["image_source"] = "cache";
+            break;
+        case EpaperImageSource::OfflineQueue:
+            t["image_source"] = "offline_queue";
+            break;
+        case EpaperImageSource::Download:
+        default:
+            t["image_source"] = "download";
+            break;
+    }
 
 #if defined(BOARD_RETERMINAL_E1003_FRAME)
     const EpaperDriverDiagnostics& diagnostics = epaper_frame_driver_diagnostics();

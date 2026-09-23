@@ -216,6 +216,11 @@ bool epaper_frame_sd_cache_remove(uint32_t content_crc32) {
 		return ok;
 }
 
+bool epaper_frame_sd_cache_store(uint32_t content_crc32,
+		const uint8_t* data, size_t len) {
+		return sd_cache_write(content_crc32, data, len);
+}
+
 void epaper_frame_sd_cache_stage_pending(uint32_t content_crc32, uint8_t* buf, size_t len) {
 		// Free any blob staged by a previous draw that was never flushed.
 		epaper_frame_sd_cache_discard_pending();

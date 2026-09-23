@@ -102,7 +102,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 		}
 
 		// Create JSON response (don't include passwords)
-		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(2304);
+		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(2560);
 		if (doc && doc->capacity() > 0) {
 				(*doc)["wifi_ssid"] = current_config->wifi_ssid;
 				(*doc)["wifi_password"] = ""; // Don't send password
@@ -328,7 +328,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (body) body[body_len] = 0;
 		portEXIT_CRITICAL(&g_config_post_mux);
 
-		BasicJsonDocument<PsramJsonAllocator> doc(2304);
+		BasicJsonDocument<PsramJsonAllocator> doc(2560);
 		DeserializationError error = deserializeJson(doc, body, body_len);
 
 		if (error) {
@@ -360,6 +360,24 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				config_post_reset();
 				portEXIT_CRITICAL(&g_config_post_mux);
 				return;
+		}
+
+		{
+				JsonObject body_object = doc.as<JsonObject>();
+				const char *validation_error =
+						device_class_dispatch_config_api_validate(current_config, body_object);
+				if (validation_error) {
+						StaticJsonDocument<192> response;
+						response["success"] = false;
+						response["message"] = validation_error;
+						String response_body;
+						serializeJson(response, response_body);
+						request->send(400, "application/json", response_body);
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
 		}
 
 		// Partial update: only update fields that are present in the request

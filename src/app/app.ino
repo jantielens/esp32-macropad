@@ -186,11 +186,6 @@ void setup()
 	LOGI("SYS", "Chip: %s (Rev %d)", ESP.getChipModel(), ESP.getChipRevision());
 	LOGI("SYS", "CPU: %d MHz", ESP.getCpuFreqMHz());
 	LOGI("SYS", "Flash: %d MB", ESP.getFlashChipSize() / (1024 * 1024));
-	// On ESP32-P4 WiFi.macAddress() triggers ESP-Hosted SDIO init which may not
-	// be ready yet; the MAC is logged later upon successful WiFi connection.
-	#ifndef CONFIG_IDF_TARGET_ESP32P4
-	LOGI("SYS", "MAC: %s", WiFi.macAddress().c_str());
-	#endif
 	#if HAS_BUILTIN_LED
 	LOGI("SYS", "LED: GPIO%d (active %s)", LED_PIN, LED_ACTIVE_HIGH ? "HIGH" : "LOW");
 	#endif
@@ -263,10 +258,31 @@ void setup()
 	}
 	#endif
 
+	const bool force_config_mode_burst = power_manager_should_force_config_mode();
+	if (force_config_mode_burst) {
+		LOGI("Power", "Reset burst detected - entering Config Mode");
+	}
+	const bool force_config_mode_button = check_config_mode_button();
+	const bool force_config_mode =
+			force_config_mode_burst || force_config_mode_button;
+	power_manager_configure(&device_config, config_loaded, force_config_mode);
+	PowerMode boot_mode = power_manager_get_boot_mode();
+	power_manager_set_current_mode(boot_mode);
+	power_manager_led_set_mode(boot_mode);
+
 	// Start WiFi hardware after required storage is known to be available.
 	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
 	// which can run in the background while touch, config, and pads initialize.
-	wifi_manager_early_init();
+	const bool defer_wifi_init =
+			device_class_dispatch_defer_wifi_init(&device_config, boot_mode);
+	if (!defer_wifi_init) {
+		wifi_manager_early_init();
+		#ifndef CONFIG_IDF_TARGET_ESP32P4
+		LOGI("SYS", "MAC: %s", WiFi.macAddress().c_str());
+		#endif
+	} else {
+		LOGI("WiFi", "Early init deferred for offline e-paper wake");
+	}
 
 	#if HAS_TOUCH || HAS_CAMERA
 	// Initialize Wire bus mutex before touch, audio, and camera SCCB access.
@@ -367,18 +383,6 @@ void setup()
 	audio_input_meter_init();
 	#endif
 	#endif
-
-	const bool force_config_mode_burst = power_manager_should_force_config_mode();
-	if (force_config_mode_burst) {
-		LOGI("Power", "Reset burst detected - entering Config Mode");
-	}
-
-	const bool force_config_mode_button = check_config_mode_button();
-	const bool force_config_mode = force_config_mode_burst || force_config_mode_button;
-	power_manager_configure(&device_config, config_loaded, force_config_mode);
-	PowerMode boot_mode = power_manager_get_boot_mode();
-	power_manager_set_current_mode(boot_mode);
-	power_manager_led_set_mode(boot_mode);
 
 	// Let registered device classes hook in before any network / display init.
 	device_class_dispatch_setup_early(&device_config, boot_mode);

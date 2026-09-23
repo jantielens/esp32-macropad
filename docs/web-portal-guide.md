@@ -449,6 +449,14 @@ The E-Paper page configures the battery-oriented image workflow:
 
 Duration is per slot and applies while that slot is active. The page does not expose a separate "wake every" control.
 
+On the reTerminal E1003 in **Photoframe Next Image API** Service mode, the page
+also exposes **Offline refreshes between syncs**. It is available only while SD
+image caching is supported and enabled. Choose `0` (the default) through `16`:
+the device fetches up to the selected number of later images during an online
+sync, then displays them on later timer wakes without Wi-Fi. The hint calculates
+the resulting approximate online-sync cadence from the Service refresh interval.
+Higher values save battery but delay new server selections and MQTT telemetry.
+
 ---
 
 ## Pads Page

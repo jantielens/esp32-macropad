@@ -2170,7 +2170,11 @@ DNS server redirects all requests to device IP in AP mode:
     write-oriented: the config GET hook returns `epaper_service_token_set`, never
     the token value. Service controls are exposed only when
     `epaper_service_supported` is true; current firmware sets that capability only
-    for the reTerminal E1003.
+    for the reTerminal E1003. `epaper_frame_offline_refreshes_between_syncs`
+    is additionally gated by Service mode, SD-cache capability, and enabled SD
+    caching. It accepts only `0..16`; the UI supplies an interval-based cadence
+    hint and explains that longer offline runs delay new server content and MQTT
+    telemetry.
 
 2. Rebuild to embed assets:
    ```bash

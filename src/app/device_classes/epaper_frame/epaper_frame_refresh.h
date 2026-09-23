@@ -43,6 +43,12 @@ struct EpaperRefreshOutcome {
 EpaperRefreshOutcome epaper_frame_refresh_run(DeviceConfig* config, bool force,
 										 uint32_t fetch_timeout_ms = 0);
 
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+// Render the retained queue head entirely from the SD cache. The queue advances
+// only after the panel confirms a successful refresh.
+EpaperRefreshOutcome epaper_frame_refresh_run_offline(DeviceConfig* config);
+#endif
+
 // Immediately draw the provided image URL without changing the saved carousel
 // config and without CRC sidecar checks. Used by the Image & Schedule portal
 // row-level "Show now" action for rapid testing.

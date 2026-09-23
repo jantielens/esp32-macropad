@@ -396,6 +396,18 @@ function validateConfig(config) {
             return { valid: false, message: 'Basic Auth password is required the first time you enable it' };
         }
     }
+
+    if (config.epaper_frame_offline_refreshes_between_syncs !== undefined) {
+        const offlineRefreshes = Number(config.epaper_frame_offline_refreshes_between_syncs);
+        if (!Number.isInteger(offlineRefreshes) || offlineRefreshes < 0 || offlineRefreshes > 16) {
+            return { valid: false, message: 'Offline refreshes between syncs must be an integer from 0 to 16' };
+        }
+        if (offlineRefreshes > 0 &&
+            (config.epaper_frame_source_mode !== 'service' ||
+             config.epaper_frame_sd_cache_enabled !== true)) {
+            return { valid: false, message: 'Offline refreshes require Service mode and SD image caching' };
+        }
+    }
     
     return { valid: true };
 }
@@ -517,4 +529,3 @@ async function handleScreenChange(event) {
         return false;
     }
 }
-

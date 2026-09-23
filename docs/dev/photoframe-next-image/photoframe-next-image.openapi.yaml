@@ -52,6 +52,59 @@ paths:
           $ref: "#/components/responses/TemporaryFailure"
       security:
         - frameToken: []
+  /next-batch:
+    get:
+      operationId: getNextImageBatch
+      summary: Select an ordered batch of exact image references
+      description: >-
+        Returns up to count distinct valid selections in order. The reported
+        current fingerprint and earlier entries in the same batch are excluded.
+        Included entries are committed as selected, not displayed.
+      parameters:
+        - $ref: "#/components/parameters/BatchCount"
+        - $ref: "#/components/parameters/CurrentImageKey"
+        - $ref: "#/components/parameters/CurrentContentCrc32"
+      responses:
+        "200":
+          $ref: "#/components/responses/BatchManifest"
+        "204":
+          $ref: "#/components/responses/KeepDisplay"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        5XX:
+          $ref: "#/components/responses/TemporaryFailure"
+      security:
+        - frameToken: []
+  /content/{image_key}/{format_code}/{content_length}/{content_crc32}:
+    get:
+      operationId: getSelectedImageContent
+      summary: Fetch one batch-selected exact transport
+      description: >-
+        Resolves only the immutable descriptor identified by the path for the
+        authenticated frame. Length and CRC32 are rechecked before delivery;
+        another image or variant is never substituted.
+      parameters:
+        - $ref: "#/components/parameters/ReferencedImageKey"
+        - $ref: "#/components/parameters/ReferencedFormatCode"
+        - $ref: "#/components/parameters/ReferencedContentLength"
+        - $ref: "#/components/parameters/ReferencedContentCrc32"
+      responses:
+        "200":
+          $ref: "#/components/responses/InlineImage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/ReferenceNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        5XX:
+          $ref: "#/components/responses/TemporaryFailure"
+      security:
+        - frameToken: []
 components:
   securitySchemes:
     frameToken:
@@ -80,7 +133,61 @@ components:
       description: >-
         Exact transport bytes. Binary layouts and validation requirements are
         defined only in contract.md.
+    FormatCode:
+      type: integer
+      enum: [1, 2, 3]
+      description: Registered exact-byte transport format.
+    BatchEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - image_key
+        - content_crc32
+        - media_type
+        - content_length
+        - content_url
+      properties:
+        image_key:
+          $ref: "#/components/schemas/ImageKey"
+        content_crc32:
+          $ref: "#/components/schemas/ContentCrc32"
+        media_type:
+          type: string
+          enum:
+            - image/jpeg
+            - application/vnd.photoframe.g16p
+            - application/vnd.photoframe.g16z
+        content_length:
+          type: integer
+          minimum: 1
+        content_url:
+          type: string
+          format: uri-reference
+          description: >-
+            Bearer-authenticated immutable reference for this selected
+            descriptor and expected fingerprint.
+    BatchManifest:
+      type: object
+      additionalProperties: false
+      required:
+        - images
+      properties:
+        images:
+          type: array
+          minItems: 1
+          maxItems: 17
+          items:
+            $ref: "#/components/schemas/BatchEntry"
   parameters:
+    BatchCount:
+      name: count
+      in: query
+      required: true
+      description: Total number of ordered image entries requested.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 17
     CurrentImageKey:
       name: Photoframe-Current-Image-Key
       in: header
@@ -98,6 +205,31 @@ components:
       description: >-
         Advisory transport CRC of the last image successfully displayed. The key
         and CRC headers form one optional pair.
+      schema:
+        $ref: "#/components/schemas/ContentCrc32"
+    ReferencedImageKey:
+      name: image_key
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ImageKey"
+    ReferencedFormatCode:
+      name: format_code
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/FormatCode"
+    ReferencedContentLength:
+      name: content_length
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ReferencedContentCrc32:
+      name: content_crc32
+      in: path
+      required: true
       schema:
         $ref: "#/components/schemas/ContentCrc32"
   headers:
@@ -148,6 +280,17 @@ components:
         type: string
         const: GET
   responses:
+    BatchManifest:
+      description: Ordered, distinct, validated exact-content references.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BatchManifest"
     InlineImage:
       description: Exact desired image transport bytes.
       headers:
@@ -203,6 +346,20 @@ components:
       headers:
         WWW-Authenticate:
           $ref: "#/components/headers/WwwAuthenticate"
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+    BadRequest:
+      description: A required request value is missing, malformed, or outside its bounds.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/CacheControl"
+        Vary:
+          $ref: "#/components/headers/VaryAuthorization"
+    ReferenceNotFound:
+      description: The immutable content reference does not exist for this frame.
+      headers:
         Cache-Control:
           $ref: "#/components/headers/CacheControl"
         Vary:

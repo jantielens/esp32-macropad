@@ -10,6 +10,9 @@
 #include "component_registry.h"
 #include "config_manager.h"
 #include "device_classes/epaper_frame/epaper_frame_driver.h"
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+#include "device_classes/epaper_frame/epaper_frame_offline_queue.h"
+#endif
 #include "device_classes/epaper_frame/epaper_frame_refresh.h"
 #include "log_manager.h"
 #include "main_loop_bridge.h"
@@ -72,6 +75,9 @@ static void epaper_frame_image_show_url_post(AsyncWebServerRequest* request) {
 }
 
 static void epaper_frame_image_clear_cache_exec(const void*, bool* ok, char*, size_t) {
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+    epaper_frame_offline_queue_invalidate();
+#endif
     *ok = epaper_frame_driver_sd_cache_clear();
     LOGI("Epaper", "SD cache clear %s", *ok ? "complete" : "failed");
 }

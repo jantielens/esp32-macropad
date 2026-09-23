@@ -144,7 +144,7 @@ Slot-carousel mode uses this sequence:
 12. Put the panel to sleep.
 13. Enter ESP32 deep sleep until the next wake.
 
-Service mode is available only on the reTerminal E1003. Each wake sends one bounded request cycle to `/api/v1/next`, validates the response before display, and then sleeps. A `204 No Content` response keeps the retained panel image without a redraw. A failed response can trigger at most one additional retrieval cycle during that wake.
+Service mode is available only on the reTerminal E1003. Each ordinary online wake sends one bounded request cycle to `/api/v1/next`, validates the response before display, and then sleeps. A `204 No Content` response keeps the retained panel image without a redraw. A failed response can trigger at most one additional retrieval cycle during that wake.
 
 On the Inkplate 5V2 and Inkplate 6FLICK, the image is fetched and decoded by the Inkplate library. On the reTerminal E1003, the firmware fetches the blob over HTTP(S): a G16P payload is copied straight into the 16-level grayscale framebuffer (no decode), while a baseline JPEG is decoded with JPEGDEC and Floyd–Steinberg dithered into the framebuffer. Either way the image is drawn at the panel's native resolution with no scaling.
 
@@ -217,6 +217,29 @@ Service responses use these outcomes:
 * `405` and `5xx` keep the current image and use bounded recovery
 
 For every image response, the client verifies `Photoframe-Content-CRC32` over the exact transport bytes. It then enforces the media format, panel geometry, baseline JPEG requirement, G16P payload CRC, and strict G16Z framing before cache admission or display. This strict contract applies only to Service mode.
+
+### Offline refreshes between syncs
+
+On the reTerminal E1003, Service mode can prefetch a short ordered batch while
+Wi-Fi is already connected. Set **Offline refreshes between syncs** from `0` to
+`16` on the E-Paper page. With the default `0`, every scheduled refresh remains
+online. With `N`, the next online synchronization requests up to `N + 1`
+distinct candidates, displays the first, and stores up to `N` validated
+transport blobs on the SD card for later timer wakes.
+
+Each queued timer wake validates the next SD blob and refreshes the panel without
+initializing Wi-Fi or MQTT. For example, 5 offline refreshes at a five-minute
+interval means one online synchronization about every 30 minutes. Larger values
+save battery, but also delay newly selected server content and MQTT telemetry;
+choose the value deliberately.
+
+This is a best-effort optimization, not durable playback state. It requires
+Service mode and **Cache images on SD card**. A button refresh always clears the
+queue and synchronizes online. Clearing the SD cache or changing the Service
+URL, token, source mode, cache setting, or offline-refresh count also discards
+it. A cold boot has no queue. Disabled schedule hours preserve queued entries
+without consuming them. A missing, corrupt, stale, or failed queued item clears
+the queue and uses the normal bounded online refresh path in that same wake.
 
 ## Wake Button Behavior
 
