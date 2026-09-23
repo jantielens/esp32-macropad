@@ -59,8 +59,11 @@ void SplashScreen::create() {
 		
 		// Create screen
 		screen = lv_obj_create(NULL);
-		// Override theme background to pure black
+		#if HAS_LVGL_EPAPER
+		lv_obj_set_style_bg_color(screen, lv_color_white(), 0);
+		#else
 		lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+		#endif
 
 		// Scale tier based on display resolution
 		const int tier = getScaleTier((int)lv_obj_get_width(screen));
@@ -75,7 +78,11 @@ void SplashScreen::create() {
 		lv_label_set_long_mode(statusLabel, LV_LABEL_LONG_WRAP);
 		lv_obj_set_width(statusLabel, (lv_coord_t)(lv_obj_get_width(screen) - 24));
 		lv_obj_set_style_text_align(statusLabel, LV_TEXT_ALIGN_CENTER, 0);
+		#if HAS_LVGL_EPAPER
+		lv_obj_set_style_text_color(statusLabel, lv_color_black(), 0);
+		#else
 		lv_obj_set_style_text_color(statusLabel, lv_color_make(100, 100, 100), 0);
+		#endif
 		if (tier == 2) {
 				lv_obj_set_style_text_font(statusLabel, &lv_font_montserrat_24, 0);
 		} else if (tier == 1) {
@@ -90,9 +97,14 @@ void SplashScreen::create() {
 	spinner = lv_spinner_create(screen);
 	lv_spinner_set_anim_params(spinner, 1000, 270);
 		lv_obj_set_size(spinner, spinner_sz, spinner_sz);
+		#if HAS_LVGL_EPAPER
+		lv_obj_set_style_arc_color(spinner, lv_color_black(), LV_PART_INDICATOR);
+		lv_obj_set_style_arc_color(spinner, lv_color_make(200, 200, 200), LV_PART_MAIN);
+		#else
 		lv_obj_set_style_arc_color(spinner, lv_color_make(0, 150, 255), LV_PART_INDICATOR);
-		lv_obj_set_style_arc_width(spinner, arc_w, LV_PART_INDICATOR);
 		lv_obj_set_style_arc_color(spinner, lv_color_make(40, 40, 40), LV_PART_MAIN);
+		#endif
+		lv_obj_set_style_arc_width(spinner, arc_w, LV_PART_INDICATOR);
 		lv_obj_set_style_arc_width(spinner, arc_w, LV_PART_MAIN);
 
 		// Position the whole block.

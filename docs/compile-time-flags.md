@@ -802,6 +802,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/lv_conf.h
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
+  - src/app/screens/splash_screen.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_pages.cpp
   - src/app/web_portal_pages.h
