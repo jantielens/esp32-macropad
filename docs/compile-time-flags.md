@@ -1299,6 +1299,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper_frame/epaper_frame_mqtt.h
   - src/app/device_classes/epaper_frame/epaper_frame_next_client.cpp
   - src/app/device_classes/epaper_frame/epaper_frame_next_client.h
+  - src/app/device_classes/epaper_frame/epaper_frame_offline_queue.cpp
+  - src/app/device_classes/epaper_frame/epaper_frame_offline_queue.h
   - src/app/device_classes/epaper_frame/epaper_frame_overlay.cpp
   - src/app/device_classes/epaper_frame/epaper_frame_overlay.h
   - src/app/device_classes/epaper_frame/epaper_frame_refresh.cpp
