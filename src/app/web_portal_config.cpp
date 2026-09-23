@@ -174,6 +174,9 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				// Display settings
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
+				#if HAS_DISPLAY
+				(*doc)["display_rotation"] = current_config->display_rotation;
+				#endif
 				(*doc)["backlight_brightness_min"] = MIN_USER_BRIGHTNESS;
 							(*doc)["screen_saver_backlight_only"] = SCREENSAVER_BACKLIGHT_ONLY;
 				#if HAS_LVGL_EPAPER
@@ -344,9 +347,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
-		// Partial update: only update fields that are present in the request
-		// This allows different pages to update only their relevant fields
-
 		// Security hardening: never allow changing Basic Auth settings in AP/core
 		// mode AFTER initial setup. Otherwise, an attacker near the device could
 		// wait for fallback AP mode and lock out the owner. EXCEPTION: during
@@ -361,6 +361,29 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				portEXIT_CRITICAL(&g_config_post_mux);
 				return;
 		}
+
+		// Partial update: only update fields that are present in the request
+		// This allows different pages to update only their relevant fields
+		#if HAS_DISPLAY
+		if (doc.containsKey("display_rotation")) {
+				JsonVariant rotation_value = doc["display_rotation"];
+				int rotation = -1;
+				if (rotation_value.is<int>()) {
+						rotation = rotation_value.as<int>();
+				} else if (rotation_value.is<const char*>()) {
+						const char* value = rotation_value.as<const char*>();
+						if (value && value[0] >= '0' && value[0] <= '3' && value[1] == '\0') rotation = value[0] - '0';
+				}
+				if (rotation < 0 || rotation > 3) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"display_rotation must be 0-3\"}");
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+				current_config->display_rotation = (uint8_t)rotation;
+		}
+		#endif
 
 		// WiFi SSID - only update if field exists in JSON
 		if (doc.containsKey("wifi_ssid")) {

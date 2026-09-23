@@ -271,6 +271,7 @@ async function loadConfig() {
         }
         
         // Display settings - backlight brightness
+        setValueIfExists('display_rotation', config.display_rotation !== undefined ? config.display_rotation : 0);
         const brightness = config.backlight_brightness !== undefined ? config.backlight_brightness : 100;
         const brightnessMin = config.backlight_brightness_min !== undefined ? config.backlight_brightness_min : 5;
         const brightnessSlider = document.getElementById('backlight_brightness');

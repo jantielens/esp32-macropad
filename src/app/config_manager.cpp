@@ -43,6 +43,7 @@
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
+#define KEY_DISPLAY_ROTATION "disp_rot"
 #if HAS_CAMERA
 #define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
 #define KEY_CAMERA_FEED_TARGET_FPS "cam_fps"
@@ -407,7 +408,10 @@ bool config_manager_load(DeviceConfig *config) {
 		
 		// Load display settings
 		config->backlight_brightness = preferences.getUChar(KEY_BACKLIGHT_BRIGHTNESS, 100);
+		config->display_rotation = preferences.getUChar(KEY_DISPLAY_ROTATION, 0);
+		if (config->display_rotation > 3) config->display_rotation = 0;
 		LOGI("Config", "Loaded brightness: %d%%", config->backlight_brightness);
+		LOGI("Config", "Display rotation offset: %u quarter turns", config->display_rotation);
 
 		// Load Basic Auth settings
 		config->basic_auth_enabled = preferences.getBool(KEY_BASIC_AUTH_ENABLED, false);
@@ -587,6 +591,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		// Save display settings
 		LOGI("Config", "Saving brightness: %d%%", config->backlight_brightness);
 		preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness);
+		preferences.putUChar(KEY_DISPLAY_ROTATION, config->display_rotation);
 
 		// Save Basic Auth settings
 		preferences.putBool(KEY_BASIC_AUTH_ENABLED, config->basic_auth_enabled);

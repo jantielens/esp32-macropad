@@ -16,7 +16,7 @@
 #endif
 
 Arduino_GFX_ST77916_Driver::Arduino_GFX_ST77916_Driver()
-		: bus(nullptr), gfx(nullptr), currentBrightness(100), backlightPwmAttached(false),
+		: bus(nullptr), gfx(nullptr), currentBrightness(100), displayRotation(DISPLAY_ROTATION), backlightPwmAttached(false),
 			currentX(0), currentY(0), currentW(0), currentH(0) {
 }
 
@@ -101,20 +101,21 @@ void Arduino_GFX_ST77916_Driver::init() {
 }
 
 void Arduino_GFX_ST77916_Driver::setRotation(uint8_t rotation) {
+		displayRotation = rotation & 3;
 		// Delegate to Arduino_GFX which uses MADCTL for hardware rotation.
 		// ST77916 supports MADCTL rotation, unlike AXS15231B.
 		if (gfx) {
-				gfx->setRotation(rotation);
+				gfx->setRotation(displayRotation);
 		}
 		LOGI("GFX_ST77916", "Rotation set to %d (hardware MADCTL)", rotation);
 }
 
 int Arduino_GFX_ST77916_Driver::width() {
-		return (int)DISPLAY_WIDTH;
+		return (displayRotation & 1) ? DISPLAY_HEIGHT : DISPLAY_WIDTH;
 }
 
 int Arduino_GFX_ST77916_Driver::height() {
-		return (int)DISPLAY_HEIGHT;
+		return (displayRotation & 1) ? DISPLAY_WIDTH : DISPLAY_HEIGHT;
 }
 
 void Arduino_GFX_ST77916_Driver::setBacklight(bool on) {

@@ -275,7 +275,7 @@ void setup()
 
 	#if HAS_TOUCH
 	// Initialize touch after display is ready
-	touch_manager_init();
+	touch_manager_init((DISPLAY_ROTATION + device_config.display_rotation) & 3);
 	#endif
 
 	#if HAS_CAMERA

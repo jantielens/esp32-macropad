@@ -310,7 +310,10 @@ every component in that custom section to the same category ID.
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
-- **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview, and screen saver configuration
+- **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview,
+  and screen saver configuration. Interactive display builds expose screen
+  rotation as a separate Rotation component under Display; changes take effect
+  after reboot.
   - Boards with `HAS_LVGL_EPAPER` additionally expose persisted e-paper presentation settings: boot-only panel mode, mode-specific passive binding and minimum presentation intervals, optional clock refreshes at minute boundaries, and the B/W scheduled full-refresh threshold. A zero threshold disables scheduled B/W full refreshes and can cause ghosting.
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
@@ -929,6 +932,7 @@ Returns current device configuration (passwords excluded).
   "mcp_token_set": false,
 
   "backlight_brightness": 100,
+  "display_rotation": 0,
   "screen_saver_backlight_only": false,
   "epaper_render_mode": "grayscale",
   "epaper_binding_refresh_interval_ms": 1000,
@@ -1022,6 +1026,7 @@ Save new configuration. Device reboots after successful save.
   "mcp_generate_token": true,
 
   "backlight_brightness": 70,
+  "display_rotation": 1,
   "epaper_render_mode": "bw",
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,

@@ -306,8 +306,12 @@ void DisplayManager::initHardware() {
 		LOGI("Display", "Init start");
 		
 		// Initialize display driver
+		const uint8_t rotation = (DISPLAY_ROTATION + config->display_rotation) & 3;
+		#if DISPLAY_DRIVER != DISPLAY_DRIVER_TFT_ESPI
+		driver->setRotation(rotation);
+		#endif
 		driver->init();
-		driver->setRotation(DISPLAY_ROTATION);
+		driver->setRotation(rotation);
 		
 		// Apply saved brightness from config (or default to 100%)
 		#if HAS_BACKLIGHT
@@ -322,7 +326,7 @@ void DisplayManager::initHardware() {
 		#endif
 		
 		LOGI("Display", "Resolution: %dx%d", DISPLAY_WIDTH, DISPLAY_HEIGHT);
-		LOGI("Display", "Rotation: %d", DISPLAY_ROTATION);
+		LOGI("Display", "Rotation: %d", rotation);
 		
 		// Apply display-specific settings (inversion, gamma, etc.)
 		driver->applyDisplayFixes();
@@ -393,7 +397,7 @@ void DisplayManager::initLVGL() {
 		lv_display_set_buffers(display, buf, buf2, buf_size_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
 		
 		// Let driver set up hardware-specific LVGL configuration
-		driver->configureLVGL(display, DISPLAY_ROTATION);
+		driver->configureLVGL(display, (DISPLAY_ROTATION + config->display_rotation) & 3);
 		
 		// Initialize the board-selected default theme with custom primary color.
 		// v9: lv_theme_default_init takes lv_display_t* (not NULL)

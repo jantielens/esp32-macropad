@@ -157,4 +157,5 @@ static ComponentDef display_component = {
 };
 
 REGISTER_COMPONENT(display);
+REGISTER_NAV_COMPONENT(rotation, "rotation", "display", "Rotation", 12, "rotation")
 REGISTER_NAV_COMPONENT(screen_preview, "screen-preview", "display", "Screen Preview", 15, "screen-preview")

@@ -21,6 +21,7 @@ private:
 		bool touched;
 		uint16_t lastX;
 		uint16_t lastY;
+		uint8_t rotation;
 		SemaphoreHandle_t mutex;
 };
 

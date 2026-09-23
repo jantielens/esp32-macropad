@@ -189,6 +189,15 @@ void MipiDsiDriver::configureLVGL(lv_display_t* disp, uint8_t rotation) {
 ```
 
 **DisplayManager Integration:**
+
+Interactive displays store `display_rotation` as a 0-3 quarter-turn offset from
+the board's `DISPLAY_ROTATION` default. Config loads before display startup;
+DisplayManager applies `(DISPLAY_ROTATION + display_rotation) & 3` before driver
+initialization (for drivers that allocate rotation buffers), and again after
+initialization (for hardware rotation). TouchManager receives the same effective
+rotation. The saved value only takes effect after reboot. E-paper frame mode
+uses a separate rotation setting for status screens and overlays.
+
 ```cpp
 void DisplayManager::initLVGL() {
     lv_init();
@@ -203,7 +212,7 @@ void DisplayManager::initLVGL() {
     lv_display_set_buffers(display, buf, buf2, buf_size_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
     
     // Call driver's LVGL configuration hook
-    driver->configureLVGL(display, DISPLAY_ROTATION);
+    driver->configureLVGL(display, (DISPLAY_ROTATION + config->display_rotation) & 3);
 }
 ```
 

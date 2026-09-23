@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Interactive display boards can set screen rotation to 0, 90, 180, or 270
+  degrees relative to their built-in orientation under **Display > Rotation**
+  in the web portal. The setting is saved across reboots and applies to the
+  display and touch input after restarting; E-Paper Frame rotation is separate.
+
 ### Fixed
 
 * **Pad editor button outlines**: configured buttons and widgets now have solid outlines, while empty positions and ghost previews retain dashed outlines.

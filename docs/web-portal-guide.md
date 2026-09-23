@@ -323,6 +323,14 @@ MQTT binding, and display wake actions turn the frontlight back on. This target
 does not show the separate Screen Saver page because panel-sleep and burn-in
 controls do not apply to e-paper.
 
+### Rotation
+
+*Shown only on interactive boards with a display.*
+
+Choose 0, 90, 180, or 270 degrees clockwise relative to the board's built-in
+orientation. Zero preserves the board default. Save the setting, then reboot to
+apply it to both the screen and touch input.
+
 ### E-paper Presentation
 
 *Shown only on boards with configurable e-paper presentation support.*

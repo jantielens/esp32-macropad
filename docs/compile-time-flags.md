@@ -1167,8 +1167,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP**
   - src/app/board_config.h
   - src/app/drivers/mipi_dsi_driver.cpp
-- **DISPLAY_ROTATION**
-  - src/app/touch_manager.cpp
 - **DISPLAY_SHAPE**
   - src/app/board_config.h
 - **EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS**

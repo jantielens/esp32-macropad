@@ -116,6 +116,7 @@ struct DeviceConfig {
 		
 		// Display settings
 		uint8_t backlight_brightness;  // 0-100%, default 100
+		uint8_t display_rotation;      // Quarter turns relative to the board default, 0-3
 
 		// Web portal Basic Auth (optional; enforced in STA/full mode only)
 		bool basic_auth_enabled;

@@ -22,6 +22,7 @@ private:
 		Arduino_DataBus* bus;
 		Arduino_GFX* gfx;
 		uint8_t currentBrightness;
+		uint8_t displayRotation;
 		bool backlightPwmAttached;
 
 		// Current drawing area (set by setAddrWindow, used by pushColors)

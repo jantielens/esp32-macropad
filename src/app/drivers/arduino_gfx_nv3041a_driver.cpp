@@ -11,7 +11,7 @@
 #endif
 
 Arduino_GFX_NV3041A_Driver::Arduino_GFX_NV3041A_Driver()
-		: bus(nullptr), gfx(nullptr), currentBrightness(100), currentX(0), currentY(0),
+		: bus(nullptr), gfx(nullptr), currentBrightness(100), displayRotation(DISPLAY_ROTATION), currentX(0), currentY(0),
 			currentW(0), currentH(0) {
 }
 
@@ -52,11 +52,12 @@ void Arduino_GFX_NV3041A_Driver::init() {
 }
 
 void Arduino_GFX_NV3041A_Driver::setRotation(uint8_t rotation) {
-		if (gfx) gfx->setRotation(rotation);
+		displayRotation = rotation & 3;
+		if (gfx) gfx->setRotation(displayRotation);
 }
 
-int Arduino_GFX_NV3041A_Driver::width() { return DISPLAY_WIDTH; }
-int Arduino_GFX_NV3041A_Driver::height() { return DISPLAY_HEIGHT; }
+int Arduino_GFX_NV3041A_Driver::width() { return (displayRotation & 1) ? DISPLAY_HEIGHT : DISPLAY_WIDTH; }
+int Arduino_GFX_NV3041A_Driver::height() { return (displayRotation & 1) ? DISPLAY_WIDTH : DISPLAY_HEIGHT; }
 
 void Arduino_GFX_NV3041A_Driver::setBacklight(bool on) {
 		setBacklightBrightness(on ? 100 : 0);

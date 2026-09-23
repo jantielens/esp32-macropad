@@ -6,7 +6,7 @@
 #include <Inkplate.h>
 
 Inkplate6Flick_TouchDriver::Inkplate6Flick_TouchDriver()
-		: initialized(false), touched(false), lastX(0), lastY(0), mutex(nullptr) {}
+		: initialized(false), touched(false), lastX(0), lastY(0), rotation(0), mutex(nullptr) {}
 
 Inkplate6Flick_TouchDriver::~Inkplate6Flick_TouchDriver() {
 		if (mutex) {
@@ -61,12 +61,16 @@ bool Inkplate6Flick_TouchDriver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pr
 			}
 		}
 
-		*x = lastX;
-		*y = lastY;
+		switch (rotation) {
+				case 1: *x = lastY; *y = DISPLAY_WIDTH - 1 - lastX; break;
+				case 2: *x = DISPLAY_WIDTH - 1 - lastX; *y = DISPLAY_HEIGHT - 1 - lastY; break;
+				case 3: *x = DISPLAY_HEIGHT - 1 - lastY; *y = lastX; break;
+				default: *x = lastX; *y = lastY; break;
+		}
 		const bool isTouched = touched;
 		xSemaphoreGive(mutex);
 		return isTouched;
 }
 
 void Inkplate6Flick_TouchDriver::setCalibration(uint16_t, uint16_t, uint16_t, uint16_t) {}
-void Inkplate6Flick_TouchDriver::setRotation(uint8_t) {}
+void Inkplate6Flick_TouchDriver::setRotation(uint8_t value) { rotation = value & 3; }

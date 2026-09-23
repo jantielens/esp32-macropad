@@ -150,6 +150,7 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
     // Display.
     result["backlight_brightness"] = c->backlight_brightness;
 #if HAS_DISPLAY
+    result["display_rotation"]              = c->display_rotation;
     result["screen_saver_enabled"]          = c->screen_saver_enabled;
     result["screen_saver_timeout_seconds"]  = c->screen_saver_timeout_seconds;
     result["screen_saver_fade_out_ms"]      = c->screen_saver_fade_out_ms;

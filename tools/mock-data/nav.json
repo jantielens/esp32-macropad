@@ -18,6 +18,7 @@
       "icon": "🖥️",
       "items": [
         { "id": "brightness", "display_name": "Brightness" },
+        { "id": "rotation", "display_name": "Rotation" },
         { "id": "screensaver", "display_name": "Screen Saver" }
       ]
     },
