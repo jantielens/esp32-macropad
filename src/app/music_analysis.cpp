@@ -274,22 +274,15 @@ void music_analysis_collect_pad_demand(const PadConfig* config, uint8_t* demand)
 }
 
 void music_analysis_rebuild_demand() {
-    PadConfig* config = (PadConfig*)heap_caps_malloc(
-        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!config) {
-        config = (PadConfig*)heap_caps_malloc(
-            sizeof(PadConfig), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    }
-    if (!config) return;
-
     uint8_t demand = MUSIC_ANALYSIS_NONE;
     for (uint8_t page = 0; page < MAX_PADS; ++page) {
-        if (pad_config_load(page, config)) {
+        const PadConfig* config = pad_config_acquire(page);
+        if (config) {
             music_analysis_collect_pad_demand(config, &demand);
+            pad_config_release(config);
         }
     }
     music_analysis_set_demand(demand);
-    heap_caps_free(config);
 }
 
 #endif

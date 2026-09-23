@@ -72,9 +72,11 @@ declare -A FQBN_TARGETS=(
     ["jc1060p470c-sd"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC1060P470C SDMMC primary-storage variant with native extension partition
     ["esp32c3-withsensors"]="esp32:esp32:nologo_esp32c3_super_mini:CDCOnBoot=cdc,PartitionScheme=ota_2mb" # ESP32-C3 Super Mini headless sensor node (no display; HAS_BLE + sensors)
     ["firebeetle2-esp32c6-aht10"]="esp32:esp32:dfrobot_beetle_esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app" # DFRobot FireBeetle 2 ESP32-C6 v1.2 headless battery sensor node (AHT10; 4MB flash; no OTA)
-    ["inkplate5v2"]="Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb" # Soldered Inkplate 5V2 (ESP32 classic, 5.17" 720x1280 3-bit grayscale e-paper; 4MB flash + 4MB QSPI PSRAM)
-    ["inkplate6flick"]="Inkplate_Boards:esp32:Inkplate6Flick:PartitionScheme=min_spiffs" # Soldered Inkplate 6FLICK (ESP32 classic, 6.0" 1024x758 3-bit grayscale e-paper touchscreen + frontlight; 4MB flash + 8MB PSRAM). min_spiffs = 1.9MB APP with OTA (6FLICK variant has no ota_1_9mb scheme)
-    ["reterminal-e1003"]="esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default" # Seeed reTerminal E1003 (ESP32-S3, 10.3" 1404x1872 16-level grayscale IT8951 e-paper; 32MB flash + 8MB OPI PSRAM). Serial is a CH340 USB-UART bridge on UART0 (GPIO43/44), NOT native USB — use CDCOnBoot=default, no USBMode=hwcdc, or Serial.print blocks on the disconnected USB-CDC FIFO and the device appears to hang.
+    ["inkplate5v2-frame"]="Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb" # Soldered Inkplate 5V2 (ESP32 classic, 5.17" 720x1280 3-bit grayscale e-paper; 4MB flash + 4MB QSPI PSRAM)
+    ["inkplate6flick-frame"]="Inkplate_Boards:esp32:Inkplate6Flick:PartitionScheme=min_spiffs" # Inkplate 6FLICK low-power e-paper firmware (sleep-first lifecycle, no LVGL; 1.9MB OTA application partition). ESP32 classic with 6.0" 1024x758 3-bit grayscale touchscreen + frontlight, 4MB flash, and 8MB PSRAM; this variant has no ota_1_9mb scheme.
+    ["inkplate6flick-interactive"]="Inkplate_Boards:esp32:Inkplate6Flick:PartitionScheme=huge_app" # Inkplate 6FLICK interactive LVGL firmware (always-on lifecycle; defaults to B/W partial updates and can switch to grayscale through persisted settings; 3MB no-OTA application partition).
+    ["reterminal-e1003-frame"]="esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default" # Seeed reTerminal E1003 (ESP32-S3, 10.3" 1404x1872 16-level grayscale IT8951 e-paper; 32MB flash + 8MB OPI PSRAM). Serial is a CH340 USB-UART bridge on UART0 (GPIO43/44), NOT native USB — use CDCOnBoot=default, no USBMode=hwcdc, or Serial.print blocks on the disconnected USB-CDC FIFO and the device appears to hang.
+    ["reterminal-e1003-interactive"]="esp32:esp32:esp32s3:FlashSize=32M,PSRAM=opi,PartitionScheme=ota_8mb_32MB,CDCOnBoot=default" # Seeed reTerminal E1003 interactive LVGL firmware (GT911 touch, IT8951 grayscale/B-W e-paper; 32MB flash + 8MB OPI PSRAM). Serial is a CH340 USB-UART bridge on UART0 (GPIO43/44), NOT native USB — use CDCOnBoot=default, no USBMode=hwcdc.
 )
 
 # Default board (used when only one board is configured)
@@ -236,7 +238,7 @@ get_fqbn_for_board() {
     return 1
 }
 
-# Map a device class slug ("macropad" | "epaper" | "headless") to the
+# Map a device class slug ("macropad" | "epaper_frame" | "headless") to the
 # user-facing brand prefix. Mirrors the DESCRIPTORS[] table in
 # src/app/device_class_registry.cpp (full_name field) but does NOT include
 # any per-board suffix. Unknown classes return empty so callers can decide
@@ -245,7 +247,7 @@ get_fqbn_for_board() {
 device_class_brand_prefix() {
     case "$1" in
         macropad)       echo "ESP32 Macropad" ;;
-        epaper)         echo "ESP32-MP E-Paper" ;;
+        epaper_frame)   echo "ESP32-MP E-Paper Frame" ;;
         headless)       echo "ESP32-MP Headless" ;;
         shutter_tester) echo "ESP32-MP Shutter Tester" ;;
         coffee_scale)   echo "ESP32-MP Coffee Scale" ;;
@@ -259,7 +261,7 @@ device_class_brand_prefix() {
 # board_overrides.h file. Mirrors the compile-time precedence in
 # src/app/device_class_registry.cpp :: device_class_detect():
 #   IS_* product variants (future) -> product-specific class
-#   HAS_EPAPER  -> "epaper"
+#   IS_EPAPER_FRAME   -> "epaper_frame"
 #   !HAS_DISPLAY -> "headless"
 #   otherwise   -> "macropad"
 device_class_for_board() {
@@ -283,8 +285,8 @@ device_class_for_board() {
             echo "voice_assistant"
             return
         fi
-        if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_EPAPER[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
-            echo "epaper"
+        if grep -qE '^[[:space:]]*#define[[:space:]]+IS_EPAPER_FRAME[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+            echo "epaper_frame"
             return
         fi
         if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_DISPLAY[[:space:]]+false[[:space:]]*$' "$overrides_file"; then

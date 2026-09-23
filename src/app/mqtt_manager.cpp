@@ -18,8 +18,8 @@
 #include "log_manager.h"
 #include "net_activity.h"
 #include "ota_activity.h"
-#if HAS_EPAPER
-#include "device_classes/epaper/epaper_mqtt.h"
+#if IS_EPAPER_FRAME
+#include "device_classes/epaper_frame/epaper_frame_mqtt.h"
 #endif
 
 MqttManager::MqttManager() : _client(_net) {}
@@ -194,8 +194,8 @@ void MqttManager::installCallback() {
 				mqtt_audio_on_message(topic, payload, length);
 			mqtt_camera_on_message(topic, payload, length);
 				mqtt_notify_on_message(topic, payload, length);
-#if HAS_EPAPER
-			epaper_mqtt_on_message(topic, payload, length);
+#if IS_EPAPER_FRAME
+			epaper_frame_mqtt_on_message(topic, payload, length);
 #endif
 #if MQTT_TRIGGERS_ENABLED
 				mqtt_triggers_on_message(topic, payload, length);

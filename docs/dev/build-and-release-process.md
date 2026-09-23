@@ -53,7 +53,7 @@ Used for user-facing text and branding:
 | **Default device name** | First-time device name | `"ESP32 Template 1A2B"` |
 | **API response** | `/api/info` endpoint | `{"project_display_name": "ESP32 Template"}` |
 
-> **Per-board override (device-class branding):** `build.sh` re-runs `tools/minify-web-assets.sh` per board with a device-class-aware `PROJECT_DISPLAY_NAME` ("ESP32 Macropad", "ESP32-MP E-Paper", "ESP32-MP Headless") instead of the project-wide value. The class is derived from the board's `HAS_EPAPER` / `HAS_DISPLAY` flags via `device_class_for_board()` in `config.sh`; the prefix mapping lives in `device_class_brand_prefix()` in the same file. The C++ side mirrors this through the registry in `src/app/device_class_registry.{h,cpp}` (see [Device Class Branding](#device-class-branding) below) so that the embedded HTML, runtime device name, SSID, and HA model strings all stay consistent for the same board.
+> **Per-board override (device-class branding):** `build.sh` re-runs `tools/minify-web-assets.sh` per board with a device-class-aware `PROJECT_DISPLAY_NAME` ("ESP32 Macropad", "ESP32-MP E-Paper Frame", "ESP32-MP Headless") instead of the project-wide value. The class is derived from the board's `IS_EPAPER_FRAME` / `HAS_DISPLAY` flags via `device_class_for_board()` in `config.sh`; the prefix mapping lives in `device_class_brand_prefix()` in the same file. The C++ side mirrors this through the registry in `src/app/device_class_registry.{h,cpp}` (see [Device Class Branding](#device-class-branding) below) so that the embedded HTML, runtime device name, SSID, and HA model strings all stay consistent for the same board.
 
 ### Customizing for Your Project
 
@@ -92,12 +92,12 @@ The firmware auto-detects a **device class** at build time from the board's capa
 | Class      | Detection (compile-time)              | Brand prefix         | SSID format                       |
 |------------|---------------------------------------|----------------------|-----------------------------------|
 | `macropad` | `HAS_DISPLAY` (default)               | `ESP32 Macropad`     | `ESP32-MACROPAD-XXXXXX`           |
-| `epaper`   | `HAS_EPAPER`                          | `ESP32-MP E-Paper`   | `ESP32-MP-EPAPER-XXXXXX`          |
+| `epaper_frame` | `IS_EPAPER_FRAME`                       | `ESP32-MP E-Paper Frame`   | `ESP32-MP-EPAPER_FRAME-XXXXXX`    |
 | `headless` | `!HAS_DISPLAY`                        | `ESP32-MP Headless`  | `ESP32-MP-HEADLESS-XXXXXX`        |
 
-`XXXXXX` is the low 24 bits of the eFuse chip ID as fixed-width uppercase hex. The same precedence (`HAS_EPAPER` wins over `HAS_DISPLAY`) is enforced on both sides:
+`XXXXXX` is the low 24 bits of the eFuse chip ID as fixed-width uppercase hex. The same precedence (`IS_EPAPER_FRAME` wins over `HAS_DISPLAY`) is enforced on both sides:
 
-- **C++ runtime** — `src/app/device_class_registry.{h,cpp}` owns the single `#if HAS_EPAPER / !HAS_DISPLAY / default` detection ladder (`device_class_detect()`) and the `DESCRIPTORS[]` table that holds every branding string for every class. `src/app/class_branding.{h,cpp}` exposes the thin convenience wrappers `device_class_get_display_name()`, `device_class_get_slug()`, and `device_class_get_full_name()`, used by `web_portal_ap.cpp` (SSID), `web_portal_auth.cpp` (HTTP realm), `web_portal_device_api.cpp` (`/api/info`), `ha_discovery.cpp` (HA `mdl` field), and `config_manager.cpp` (default device name).
+- **C++ runtime** — `src/app/device_class_registry.{h,cpp}` owns the single `#if IS_EPAPER_FRAME / !HAS_DISPLAY / default` detection ladder (`device_class_detect()`) and the `DESCRIPTORS[]` table that holds every branding string for every class. `src/app/class_branding.{h,cpp}` exposes the thin convenience wrappers `device_class_get_display_name()`, `device_class_get_slug()`, and `device_class_get_full_name()`, used by `web_portal_ap.cpp` (SSID), `web_portal_auth.cpp` (HTTP realm), `web_portal_device_api.cpp` (`/api/info`), `ha_discovery.cpp` (HA `mdl` field), and `config_manager.cpp` (default device name).
 - **Build-time bash** — `config.sh` exposes `device_class_for_board <board>` and `device_class_brand_prefix <class>`. Used by `build.sh` to pick the per-board `PROJECT_DISPLAY_NAME` and by `tools/build-esp-web-tools-site.sh` to label boards on the flash page.
 
 When changing the brand-prefix mapping, update **both** sides — the bash helper `device_class_brand_prefix()` in `config.sh` and the corresponding row in the `DESCRIPTORS[]` table in `src/app/device_class_registry.cpp` — and verify the affected boards still build. `tests/test_branding_mirror.sh` (registered in CTest) walks the `DESCRIPTORS[]` table and the bash helper and fails loud on drift.

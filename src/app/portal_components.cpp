@@ -14,12 +14,12 @@
 #include "components/wifi_component.cpp"
 #include "components/device_name_component.cpp"
 #include "components/network_component.cpp"
-#if !HAS_EPAPER
-// On e-paper boards the Power Mode page is suppressed — e-paper devices
-// always run in duty_cycle_epaper, and that mode is set automatically when
+ #if !IS_EPAPER_FRAME
+// On E-Paper Frame boards the Power Mode page is suppressed because frames
+// always run in duty_cycle_epaper_frame, and that mode is set automatically when
 // the E-Paper fragment is saved (hidden operating_mode field).
-// TODO: allow mode override for debugging on e-paper builds (show mode page
-// with duty_cycle_epaper preselected and a "debug only" note).
+// TODO: allow mode override for debugging on frame builds (show mode page
+// with duty_cycle_epaper_frame preselected and a "debug only" note).
 #include "components/mode_component.cpp"
 #endif
 #include "components/factory_reset_component.cpp"
@@ -41,7 +41,9 @@
 // --- Display-gated components ---
 #if HAS_DISPLAY
 #include "components/display_component.cpp"
+#if !SCREENSAVER_BACKLIGHT_ONLY
 #include "components/screensaver_component.cpp"
+#endif
 #include "components/pad_editor_component.cpp"
 #include "components/recipes_component.cpp"
 #include "components/recipe_catalog_component.cpp"
@@ -49,6 +51,9 @@
 #include "components/boot_actions_component.cpp"
 #include "components/button_defaults_component.cpp"
 #include "components/timers_component.cpp"
+#if HAS_LVGL_EPAPER
+#include "components/epaper_refresh_component.cpp"
+#endif
 #if HAS_IMAGE_LIBRARY
 #include "components/image_library_component.cpp"
 #endif
@@ -118,13 +123,13 @@
 #include "device_classes/voice_assistant/components/voice_component.cpp"
 #endif // IS_VOICE_ASSISTANT
 
-// --- E-Paper-gated components ---
+// --- E-Paper Frame components ---
 // Split into one component per nav entry (Status / Image & Schedule /
-// Status Overlay / VCOM) — all share the "epaper" category. Image and
+// Status Overlay / VCOM) — all share the "epaper-frame" category. Image and
 // Overlay are nav-only; their settings are saved via /api/config.
-#if HAS_EPAPER
-#include "device_classes/epaper/components/epaper_status_component.cpp"
-#include "device_classes/epaper/components/epaper_image_component.cpp"
-#include "device_classes/epaper/components/epaper_overlay_component.cpp"
-#include "device_classes/epaper/components/epaper_vcom_component.cpp"
-#endif // HAS_EPAPER
+#if IS_EPAPER_FRAME
+#include "device_classes/epaper_frame/components/epaper_status_component.cpp"
+#include "device_classes/epaper_frame/components/epaper_image_component.cpp"
+#include "device_classes/epaper_frame/components/epaper_overlay_component.cpp"
+#include "device_classes/epaper_frame/components/epaper_vcom_component.cpp"
+#endif // IS_EPAPER_FRAME

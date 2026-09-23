@@ -857,7 +857,7 @@ static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
         int32_t zero_angle_int = (int32_t)roundf(zero_angle);
         int32_t val_angle_int  = (int32_t)roundf(val_angle);
 
-        if (animate) {
+        if (animate && !DISPLAY_DISABLE_ANIMATIONS) {
             // Determine current fill angle from arc state.
             // In zc mode one edge is always pinned to zero_angle;
             // the fill point is whichever edge is NOT at zero_angle.
@@ -884,7 +884,7 @@ static void gauge_update_ring(lv_obj_t* arc, const GaugeConfig* cfg,
         float fill_angle = ratio * (float)cfg->arc_degrees;
         int32_t fill_angle_int = (int32_t)roundf(fill_angle);
 
-        if (animate) {
+        if (animate && !DISPLAY_DISABLE_ANIMATIONS) {
             int32_t cur_angle = (int32_t)lv_arc_get_angle_end(arc);
             lv_anim_t a;
             lv_anim_init(&a);

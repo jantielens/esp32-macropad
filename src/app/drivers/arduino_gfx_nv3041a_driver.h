@@ -17,6 +17,7 @@ private:
 		Arduino_DataBus* bus;
 		Arduino_GFX* gfx;
 		uint8_t currentBrightness;
+		uint8_t displayRotation;
 		int16_t currentX;
 		int16_t currentY;
 		uint16_t currentW;

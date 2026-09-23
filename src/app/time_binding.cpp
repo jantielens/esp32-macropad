@@ -15,6 +15,8 @@
 
 #define TAG "TimeBind"
 
+static constexpr time_t TIME_BINDING_VALID_EPOCH = 1704067200L;
+
 // ============================================================================
 // Olson → POSIX TZ lookup table
 // ============================================================================
@@ -142,7 +144,7 @@ static BindingResolverStatus time_binding_resolve(const char* params, char* out,
 
     // Check if NTP has synced (time > 2024-01-01)
     time_t now = time(nullptr);
-    if (now < 1704067200L) {
+    if (now < TIME_BINDING_VALID_EPOCH) {
         strlcpy(out, "--:--", out_len);
         return BINDING_RESOLVER_RESOLVED;
     }
@@ -231,9 +233,14 @@ void time_binding_start_ntp() {
     LOGI(TAG, "NTP sync started (pool.ntp.org)");
 }
 
+bool time_binding_is_synced() {
+    return time(nullptr) >= TIME_BINDING_VALID_EPOCH;
+}
+
 #else // !HAS_DISPLAY
 
 void time_binding_init() {}
 void time_binding_start_ntp() {}
+bool time_binding_is_synced() { return false; }
 
 #endif

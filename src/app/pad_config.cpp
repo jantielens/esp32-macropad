@@ -9,7 +9,6 @@
 #include "fs_health.h"
 #include "icon_store.h"
 #include "log_manager.h"
-#include "pad_cache_transaction.h"
 #include "pad_cycle.h"
 #include "widgets/widget.h"
 
@@ -53,9 +52,9 @@ static void publish_eligibility(uint8_t page, bool eligible) {
     }
 }
 
-// Forward declaration — defined after pad_config_init()
-static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
-                                       bool skip_template = false);
+// Forward declaration — defined after pad_config_init().
+static PadConfig* pad_config_load_from_flash(uint8_t page,
+                                             bool skip_template = false);
 
 // ============================================================================
 // Helpers
@@ -63,6 +62,68 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
 
 static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
     snprintf(buf, buf_len, "/config/pad_%u.json", page);
+}
+
+static PadConfig* pad_config_create(uint8_t button_capacity) {
+    if (button_capacity > MAX_PAD_BUTTONS) return nullptr;
+
+    const size_t size = sizeof(PadConfig) +
+                        (size_t)button_capacity * sizeof(ScreenButtonConfig);
+    PadConfig* config = nullptr;
+    if (psramFound()) {
+        config = (PadConfig*)heap_caps_malloc(
+            size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
+    if (!config) config = (PadConfig*)malloc(size);
+    if (!config) return nullptr;
+
+    memset(config, 0, size);
+    config->ref_count = 1;
+    config->button_capacity = button_capacity;
+    config->buttons = (ScreenButtonConfig*)(config + 1);
+    return config;
+}
+
+static void pad_config_destroy(PadConfig* config) {
+    free(config);
+}
+
+static bool pad_config_resize(PadConfig** config_ptr, uint8_t button_capacity) {
+    PadConfig* config = *config_ptr;
+    if (!config || button_capacity < config->button_count ||
+        button_capacity > MAX_PAD_BUTTONS) {
+        return false;
+    }
+    if (button_capacity == config->button_capacity) return true;
+
+    PadConfig* replacement = pad_config_create(button_capacity);
+    if (!replacement) return false;
+    memcpy(replacement, config, sizeof(PadConfig));
+    replacement->ref_count = 1;
+    replacement->button_capacity = button_capacity;
+    replacement->buttons = (ScreenButtonConfig*)(replacement + 1);
+    memcpy(replacement->buttons, config->buttons,
+           (size_t)config->button_count * sizeof(ScreenButtonConfig));
+    pad_config_destroy(config);
+    *config_ptr = replacement;
+    return true;
+}
+
+static void cache_replace(uint8_t page, PadConfig* replacement) {
+    cache_lock();
+    PadConfig* old = g_cache[page];
+    g_cache[page] = replacement;
+    cache_unlock();
+    if (old) pad_config_release(old);
+}
+
+static bool cache_uses_template(uint8_t page, uint8_t template_page) {
+    cache_lock();
+    const PadConfig* config = g_cache[page];
+    const bool uses_template = config &&
+                               config->template_pad == (int8_t)template_page;
+    cache_unlock();
+    return uses_template;
 }
 
 // ============================================================================
@@ -339,21 +400,13 @@ bool pad_config_init() {
         char path[32];
         pad_config_path(i, path, sizeof(path));
         if (Storage.exists(path)) {
-            PadConfig* cfg = (PadConfig*)heap_caps_malloc(
-                sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
+            PadConfig* cfg = pad_config_load_from_flash(i);
             if (cfg) {
-                // Temporarily call the flash-reading parse logic directly
-                memset(cfg, 0, sizeof(PadConfig));
-                if (pad_config_load_from_flash(i, cfg)) {
-                    g_cache[i] = cfg;
-                    publish_eligibility(i, cfg->button_count > 0 ||
-                                           cfg->pad_action_count > 0);
-                    any_loaded = true;
-                    LOGD(TAG, "Cached page %u", i);
-                } else {
-                    free(cfg);
-                }
+                g_cache[i] = cfg;
+                publish_eligibility(i, cfg->button_count > 0 ||
+                                       cfg->pad_action_count > 0);
+                any_loaded = true;
+                LOGD(TAG, "Cached page %u", i);
             }
         }
     }
@@ -376,20 +429,21 @@ bool pad_config_init() {
 
 // Merge buttons from a template pad into empty grid positions.
 // Target pad's own buttons always win on col/row conflict.
-static void merge_template_buttons(uint8_t page, PadConfig* out) {
+static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
+    PadConfig* out = *out_ptr;
     int8_t tpl = out->template_pad;
     if (tpl < 0 || tpl >= MAX_PADS || tpl == (int8_t)page) return;
 
-    PadConfig* tpl_cfg = (PadConfig*)heap_caps_malloc(
-        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!tpl_cfg) tpl_cfg = (PadConfig*)malloc(sizeof(PadConfig));
+    // Load template pad with skip_template=true to prevent chaining
+    PadConfig* tpl_cfg = pad_config_load_from_flash((uint8_t)tpl, true);
     if (!tpl_cfg) return;
 
-    // Load template pad with skip_template=true to prevent chaining
-    if (!pad_config_load_from_flash((uint8_t)tpl, tpl_cfg, true)) {
-        free(tpl_cfg);
+    if (!pad_config_resize(out_ptr, (uint8_t)(out->button_count + tpl_cfg->button_count))) {
+        LOGW(TAG, "Page %u: OOM reserving template buttons", page);
+        pad_config_release(tpl_cfg);
         return;
     }
+    out = *out_ptr;
 
     // Build occupancy set for target pad's own buttons
     bool occupied[MAX_GRID_COLS][MAX_GRID_ROWS] = {};
@@ -459,23 +513,13 @@ static void merge_template_buttons(uint8_t page, PadConfig* out) {
         LOGI(TAG, "Page %u: merged %u buttons from template pad %d", page, merged, tpl);
     }
 
-    free(tpl_cfg);
+    // Trim capacity back to the number of entries actually merged.
+    (void)pad_config_resize(out_ptr, out->button_count);
+    pad_config_release(tpl_cfg);
 }
 
-static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
-                                       bool skip_template) {
-    if (!out) return false;
-    memset(out, 0, sizeof(PadConfig));
-
-    strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
-    out->cols = 3;
-    out->rows = 3;
-    out->template_pad = -1;
-    out->button_shadow = BUTTON_SHADOW_INHERIT;
-    out->shadow = button_defaults_get()->shadow;
-    out->layout_settings = button_defaults_get()->layout;
-    if (page >= MAX_PADS) return false;
-    if (!g_fs_mounted) return false;
+static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
+    if (page >= MAX_PADS || !g_fs_mounted) return nullptr;
 
     char path[32];
     pad_config_path(page, path, sizeof(path));
@@ -483,14 +527,14 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     File f = Storage.open(path, "r");
     if (!f) {
         LOGD(TAG, "Page %u config not found", page);
-        return false;
+        return nullptr;
     }
 
     size_t file_size = f.size();
     if (file_size == 0 || file_size > 64 * 1024) {
         LOGW(TAG, "Page %u: invalid file size %u", page, (unsigned)file_size);
         f.close();
-        return false;
+        return nullptr;
     }
 
     char* buf = nullptr;
@@ -503,7 +547,7 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     if (!buf) {
         LOGE(TAG, "Page %u: OOM for %u bytes", page, (unsigned)file_size);
         f.close();
-        return false;
+        return nullptr;
     }
 
     size_t read = f.readBytes(buf, file_size);
@@ -516,8 +560,24 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
 
     if (err) {
         LOGE(TAG, "Page %u: JSON parse error: %s", page, err.c_str());
-        return false;
+        return nullptr;
     }
+
+    JsonArray buttons = doc["buttons"];
+    uint8_t button_capacity = buttons.isNull() ? 0 :
+        (uint8_t)min((size_t)MAX_PAD_BUTTONS, buttons.size());
+    PadConfig* out = pad_config_create(button_capacity);
+    if (!out) {
+        LOGE(TAG, "Page %u: OOM for %u buttons", page, button_capacity);
+        return nullptr;
+    }
+    strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
+    out->cols = 3;
+    out->rows = 3;
+    out->template_pad = -1;
+    out->button_shadow = BUTTON_SHADOW_INHERIT;
+    out->shadow = button_defaults_get()->shadow;
+    out->layout_settings = button_defaults_get()->layout;
 
     strlcpy(out->layout, doc["layout"] | "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
     out->cols = doc["cols"] | (uint8_t)3;
@@ -572,7 +632,6 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
     const ButtonDefaults* defs = nullptr;
 #endif
 
-    JsonArray buttons = doc["buttons"];
     out->button_count = 0;
     for (JsonObject btn_obj : buttons) {
         if (out->button_count >= MAX_PAD_BUTTONS) break;
@@ -582,37 +641,25 @@ static bool pad_config_load_from_flash(uint8_t page, PadConfig* out,
 
     // Merge template pad buttons into empty grid positions
     if (!skip_template) {
-        merge_template_buttons(page, out);
+        merge_template_buttons(page, &out);
     }
 
     LOGI(TAG, "Page %u loaded: layout=%s cols=%u rows=%u buttons=%u",
          page, out->layout, out->cols, out->rows, out->button_count);
-    return true;
+    return out;
 }
 
 // Update the in-RAM cache for a page (parse from flash).
 // Call from a task with internal-RAM stack (web server, main task).
-static PadConfig* allocate_cache_psram() {
-    return (PadConfig*)heap_caps_malloc(
-        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-}
-
-static PadConfig* allocate_cache_fallback() {
-    return (PadConfig*)malloc(sizeof(PadConfig));
-}
-
-static bool load_cache_from_flash(uint8_t page, PadConfig* config) {
-    return pad_config_load_from_flash(page, config);
-}
-
 static bool cache_update(uint8_t page) {
-    PadCacheRefreshResult result = pad_cache_refresh(
-        &g_cache[page], page, allocate_cache_psram, allocate_cache_fallback,
-        load_cache_from_flash, publish_eligibility, cache_lock, cache_unlock);
-    if (result == PadCacheRefreshResult::AllocationFailed) {
+    PadConfig* replacement = pad_config_load_from_flash(page);
+    if (!replacement) {
         LOGE(TAG, "Pad %u: cache allocation failed", page);
         return false;
     }
+    cache_replace(page, replacement);
+    publish_eligibility(page, replacement->button_count > 0 ||
+                               replacement->pad_action_count > 0);
     return true;
 }
 
@@ -630,37 +677,36 @@ void pad_config_rebuild_all_caches() {
     }
 }
 
-bool pad_config_load(uint8_t page, PadConfig* out) {
-    if (!out) return false;
-    memset(out, 0, sizeof(PadConfig));
+const PadConfig* pad_config_acquire(uint8_t page) {
+    if (page >= MAX_PADS) return nullptr;
 
-    strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
-    out->cols = 3;
-    out->rows = 3;
-    out->template_pad = -1;
+    cache_lock();
+    PadConfig* config = g_cache[page];
+    if (config) config->ref_count++;
+    cache_unlock();
+    return config;
+}
 
-    if (page >= MAX_PADS) return false;
+void pad_config_release(const PadConfig* config) {
+    if (!config) return;
 
-    // Serve from RAM cache — safe to call from any task (including PSRAM-stack LVGL task)
-    if (g_cache[page]) {
-        memcpy(out, g_cache[page], sizeof(PadConfig));
-        return true;
+    PadConfig* mutable_config = const_cast<PadConfig*>(config);
+    bool destroy = false;
+    cache_lock();
+    if (mutable_config->ref_count > 0) {
+        mutable_config->ref_count--;
+        destroy = mutable_config->ref_count == 0;
     }
-
-    // No cache entry — page not configured
-    return false;
+    cache_unlock();
+    if (destroy) pad_config_destroy(mutable_config);
 }
 
 bool pad_config_get_data_stream_snapshot(uint8_t page,
                                          PadDataStreamSnapshot* out) {
     if (!out || page >= MAX_PADS) return false;
 
-    cache_lock();
-    const PadConfig* config = g_cache[page];
-    if (!config) {
-        cache_unlock();
-        return false;
-    }
+    const PadConfig* config = pad_config_acquire(page);
+    if (!config) return false;
 
     out->binding_count = config->binding_count;
     memcpy(out->bindings, config->bindings, sizeof(out->bindings));
@@ -668,7 +714,7 @@ bool pad_config_get_data_stream_snapshot(uint8_t page,
     for (uint8_t button = 0; button < out->button_count; button++) {
         out->widgets[button] = config->buttons[button].widget;
     }
-    cache_unlock();
+    pad_config_release(config);
     return true;
 }
 
@@ -711,7 +757,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
     bool refresh_ok = true;
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         if (i == page) continue;
-        if (g_cache[i] && g_cache[i]->template_pad == (int8_t)page) {
+        if (cache_uses_template(i, page)) {
             if (!cache_update(i)) {
                 refresh_ok = false;
                 continue;
@@ -752,14 +798,14 @@ bool pad_config_delete(uint8_t page) {
     PadConfig* old = g_cache[page];
     g_cache[page] = nullptr;
     cache_unlock();
-    free(old);
+    pad_config_release(old);
     publish_eligibility(page, false);
 
     // Refresh any pad that referenced this page as its template_pad
     bool refresh_ok = true;
     for (uint8_t i = 0; i < MAX_PADS; i++) {
         if (i == page) continue;
-        if (g_cache[i] && g_cache[i]->template_pad == (int8_t)page) {
+        if (cache_uses_template(i, page)) {
             if (!cache_update(i)) refresh_ok = false;
         }
     }

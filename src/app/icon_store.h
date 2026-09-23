@@ -25,10 +25,11 @@
 // On load, PNG is decoded by LVGL's bundled lodepng into an ARGB8888
 // lv_draw_buf_t and cached in PSRAM.
 //
-// Cache is a non-evicting growable list in PSRAM. Entries are never freed
-// because LVGL image objects hold raw pointers to cached pixel data.
+// Cache entries are retained while their pad's LVGL image objects use them.
 
+#ifndef ICON_MAX_DIMENSION
 #define ICON_MAX_DIMENSION      720
+#endif
 #define ICON_MAX_PNG_SIZE       (512 * 1024)
 
 // Icon kind — affects LVGL rendering (recolor for mono icons)
@@ -72,6 +73,10 @@ void icon_store_preload_pad(uint8_t page);
 // Delete all icon files for a page (pad_<page>_*.png).
 // Call before installing new icons when a pad page is saved.
 void icon_store_delete_page_icons(uint8_t page);
+
+// Release buffers retired by replacements for a pad after its LVGL tiles have
+// been deleted. Must be called from the LVGL task.
+void icon_store_collect_retired(uint8_t page);
 
 // Return the number of icons currently in the cache.
 uint16_t icon_store_cache_count();

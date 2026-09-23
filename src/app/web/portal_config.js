@@ -271,9 +271,15 @@ async function loadConfig() {
         }
         
         // Display settings - backlight brightness
+        setValueIfExists('display_rotation', config.display_rotation !== undefined ? config.display_rotation : 0);
         const brightness = config.backlight_brightness !== undefined ? config.backlight_brightness : 100;
+        const brightnessMin = config.backlight_brightness_min !== undefined ? config.backlight_brightness_min : 5;
+        const brightnessSlider = document.getElementById('backlight_brightness');
+        if (brightnessSlider) brightnessSlider.min = brightnessMin;
         setValueIfExists('backlight_brightness', brightness);
         setTextIfExists('brightness-value', brightness);
+        const backlightTimeoutSettings = document.getElementById('backlight-timeout-settings');
+        if (backlightTimeoutSettings) backlightTimeoutSettings.hidden = config.screen_saver_backlight_only !== true;
 
         // Screen saver settings
         setCheckedIfExists('screen_saver_enabled', config.screen_saver_enabled);
@@ -287,7 +293,7 @@ async function loadConfig() {
         setValueIfExists('idle_screen_pad', config.idle_screen_pad);
         if (typeof window.screensaverTimelineUpdate === 'function') window.screensaverTimelineUpdate();
 
-        // E-paper settings (only present when firmware has HAS_EPAPER)
+        // E-paper settings (only present when firmware has HAS_EPAPER_PANEL)
         if (config.epaper_url !== undefined) {
             setValueIfExists('epaper_url', config.epaper_url);
         }

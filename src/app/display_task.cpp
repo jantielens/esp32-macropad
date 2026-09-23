@@ -144,7 +144,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						mgr->currentScreen = target;
 						mgr->currentScreen->show();
 						mgr->pendingScreen = nullptr;
-						if (!screen_saver_manager_is_fully_asleep()) {
+						if (!screen_saver_manager_is_rendering_suspended()) {
 							// Build an evicted pad before LVGL renders the newly loaded screen.
 							mgr->currentScreen->update();
 							updated_after_screen_switch = true;
@@ -213,7 +213,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 				// Update current screen (data refresh)
 				if (!updated_after_screen_switch && mgr->currentScreen
-						&& !screen_saver_manager_is_fully_asleep()) {
+						&& !screen_saver_manager_is_rendering_suspended()) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_UPDATE);
 						mgr->currentScreen->update();
 				}
@@ -221,13 +221,16 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				// Flush canvas buffer only when LVGL produced draw data.
 				if (mgr->flushPending) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_FLUSH);
-						if (mgr->driver->renderMode() == DisplayDriver::RenderMode::Buffered
-								&& mgr->presentSem) {
+					bool flushAccepted = false;
+					if (mgr->driver->renderMode() == DisplayDriver::RenderMode::Buffered) {
+						if (mgr->presentSem) {
 								// Buffered mode: delegate present() to the async present task.
 								// This frees the LVGL mutex during the slow QSPI panel transfer,
 								// allowing touch input and animations to continue processing.
 								mgr->sharedLvTimerUs = lv_timer_us;
 								xSemaphoreGive(mgr->presentSem);
+							flushAccepted = true;
+						}
 						} else {
 								// Direct mode: present() is a no-op. Update perf stats inline.
 								const uint32_t now_ms = millis();
@@ -253,8 +256,11 @@ void DisplayManager::lvglTask(void* pvParameter) {
 										g_perf_window_start_ms = now_ms;
 										g_perf_frames_in_window = 0;
 								}
+									flushAccepted = true;
 						}
-						mgr->flushPending = false;
+								// The render task can begin before the buffered present task exists.
+								// Retain the first invalidated frame until a consumer accepts it.
+								if (flushAccepted) mgr->flushPending = false;
 				}
 
 				mgr->unlock();
@@ -264,9 +270,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				if (delayMs < 1) delayMs = 1;
 				if (delayMs > 20) delayMs = 20;
 
-				// Throttle the render loop while the screensaver is fully asleep.
+				// Throttle the render loop only when the screensaver suspends rendering.
 				// The display is blanked and panel is sleeping — no need for fast ticks.
-				if (screen_saver_manager_is_fully_asleep()) {
+				if (screen_saver_manager_is_rendering_suspended()) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SLEEP);
 						delayMs = SCREENSAVER_SLEEP_TICK_MS;
 

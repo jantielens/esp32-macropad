@@ -13,14 +13,6 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
-#include <string>
-
-// relay_controller.h (pulled in transitively by expose_timer.cpp) includes
-// <Arduino.h> and declares a String-typed config accessor. The host Arduino.h
-// stub has no String, so alias it to std::string for the declarations we never
-// call. expose_timer.cpp itself only uses the relay_request()/relay_is_on()
-// surface, which is stubbed below.
-using String = std::string;
 
 // Pre-define config_manager.h guard to block the real header
 #define CONFIG_MANAGER_H

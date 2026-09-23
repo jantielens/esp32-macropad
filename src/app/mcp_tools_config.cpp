@@ -47,6 +47,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MCP_CONFIG_STRINGIFY_INNER(value) #value
+#define MCP_CONFIG_STRINGIFY(value) MCP_CONFIG_STRINGIFY_INNER(value)
+
 // Building a ButtonAction to reuse the shared action dispatch path (DRY with the
 // pad editor / physical taps). ACTION_TYPE_* and ButtonAction are always defined.
 #include "pad_config.h"
@@ -147,6 +150,7 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
     // Display.
     result["backlight_brightness"] = c->backlight_brightness;
 #if HAS_DISPLAY
+    result["display_rotation"]              = c->display_rotation;
     result["screen_saver_enabled"]          = c->screen_saver_enabled;
     result["screen_saver_timeout_seconds"]  = c->screen_saver_timeout_seconds;
     result["screen_saver_fade_out_ms"]      = c->screen_saver_fade_out_ms;
@@ -701,7 +705,9 @@ static void exec_set_config(const void* ctx, bool* ok, char* msg, size_t msg_len
     if (q->has_pub_interval) cfg->mqtt_publish_interval_seconds = q->pub_interval;
     if (q->has_pub_scope)    strlcpy(cfg->mqtt_publish_scope, q->pub_scope, CONFIG_MQTT_SCOPE_MAX_LEN);
 #if HAS_DISPLAY
+    #if !SCREENSAVER_BACKLIGHT_ONLY
     if (q->has_ss_enabled)    cfg->screen_saver_enabled = q->ss_enabled;
+    #endif
     if (q->has_ss_timeout)    cfg->screen_saver_timeout_seconds = q->ss_timeout;
     if (q->has_ss_fade_out)   cfg->screen_saver_fade_out_ms = q->ss_fade_out;
     if (q->has_ss_fade_in)    cfg->screen_saver_fade_in_ms = q->ss_fade_in;
@@ -753,7 +759,9 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
         int b = args["backlight_brightness"] | -1;
         if (b < MIN_USER_BRIGHTNESS || b > 100) {
             heap_caps_free(q);
-            return cfg_fail(result, err, CFG_ERR_PARAMS, "backlight_brightness must be 5-100");
+            char message[64];
+            snprintf(message, sizeof(message), "backlight_brightness must be %d-100", MIN_USER_BRIGHTNESS);
+            return cfg_fail(result, err, CFG_ERR_PARAMS, message);
         }
         q->has_brightness = true; q->brightness = (uint8_t)b;
         applied.add("backlight_brightness");
@@ -968,7 +976,7 @@ REGISTER_MCP_TOOL(s_tool_timer_control);
 static const McpTool s_tool_set_config = {
     "set_config",
     "Write a curated, SAFE subset of device settings that apply live without a reboot or dropping this MCP "
-    "session: device_name, backlight_brightness (5-100), the screen_saver_* group "
+    "session: device_name, backlight_brightness (" MCP_CONFIG_STRINGIFY(MIN_USER_BRIGHTNESS) "-100), the screen_saver_* group "
     "(screen_saver_enabled, screen_saver_timeout_seconds, screen_saver_fade_out_ms, screen_saver_fade_in_ms, "
     "screen_saver_wake_on_touch, screen_saver_wake_binding), mqtt_publish_interval_seconds, "
     "mqtt_publish_scope (sensors_only|diagnostics_only|all), and audio_volume (0-100). Send only the fields "
@@ -978,7 +986,7 @@ static const McpTool s_tool_set_config = {
     "writable here (they can disconnect this session) — change those in the web portal.",
     "{\"type\":\"object\",\"properties\":{"
     "\"device_name\":{\"type\":\"string\"},"
-    "\"backlight_brightness\":{\"type\":\"integer\",\"minimum\":5,\"maximum\":100},"
+    "\"backlight_brightness\":{\"type\":\"integer\",\"minimum\":" MCP_CONFIG_STRINGIFY(MIN_USER_BRIGHTNESS) ",\"maximum\":100},"
     "\"mqtt_publish_interval_seconds\":{\"type\":\"integer\",\"minimum\":0},"
     "\"mqtt_publish_scope\":{\"type\":\"string\",\"enum\":[\"sensors_only\",\"diagnostics_only\",\"all\"]},"
     "\"audio_volume\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100},"
@@ -1012,7 +1020,9 @@ void mcp_config_capabilities(JsonObject& out) {
 #endif
     JsonObject sc = out.createNestedObject("set_config_fields");
     sc["device_name"] = "string (mDNS/hostname refreshes on next reboot)";
-    sc["backlight_brightness"] = "int 5-100 (persisted + applied live)";
+    char brightness_description[64];
+    snprintf(brightness_description, sizeof(brightness_description), "int %d-100 (persisted + applied live)", MIN_USER_BRIGHTNESS);
+    sc["backlight_brightness"] = brightness_description;
     sc["mqtt_publish_interval_seconds"] = "int seconds (0 = disabled)";
     sc["mqtt_publish_scope"] = "sensors_only | diagnostics_only | all";
 #if HAS_AUDIO

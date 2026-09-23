@@ -258,7 +258,7 @@ add_host_legacy_test(test_camera_capture_action
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 add_host_legacy_test(test_pad_cycle SOURCES test_pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
-add_host_legacy_test(test_pad_cache_transaction SOURCES test_pad_cache_transaction.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cache_transaction.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_pad_config_dynamic_layout SOURCES test_pad_config_dynamic_layout.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_wifi_reconnect SOURCES test_wifi_reconnect.cpp ${PROJECT_SOURCE_DIR}/src/app/wifi_reconnect.cpp)
 add_host_legacy_test(test_screen_saver_schedule SOURCES test_screen_saver_schedule.cpp)
 add_host_legacy_test(test_component_registry SOURCES test_component_registry.cpp ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp stubs.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
@@ -310,8 +310,8 @@ add_host_legacy_test(test_shutter_session_actions
 
 add_host_legacy_test(test_list_provider SOURCES test_list_provider.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_net_activity SOURCES test_net_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/net_activity.cpp)
-add_host_legacy_test(test_epaper_battery SOURCES test_epaper_battery.cpp)
-add_host_legacy_test(test_epaper_media_conformance SOURCES test_epaper_media_conformance.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_media_validation.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_transport_crc32.cpp LIBRARIES z)
+add_host_legacy_test(test_epaper_frame_battery SOURCES test_epaper_frame_battery.cpp)
+add_host_legacy_test(test_epaper_frame_media_conformance SOURCES test_epaper_frame_media_conformance.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_media_validation.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_transport_crc32.cpp LIBRARIES z)
 add_host_legacy_test(test_coffee_scale_cmd_len SOURCES test_coffee_scale_cmd_len.cpp DEFINITIONS IS_COFFEE_SCALE=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_expose_dry_down SOURCES test_expose_dry_down.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 HAS_AUDIO=0 LIBRARIES m)
 add_host_legacy_test(test_meter_mag SOURCES test_meter_mag.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
@@ -371,7 +371,8 @@ foreach(script
     test_camera_preview_widget.sh test_camera_motion.sh test_mcp_scheme_parity.sh
     test_action_catalog_completeness.sh test_mcp_storage_parity.sh test_display_safe_telemetry.sh
     test_rtos_task_stack_helpers.sh
-    test_sd_wifi_order.sh test_photoframe_vector_drift.sh test_esp_web_tools_site.sh
+    test_sd_wifi_order.sh test_photoframe_vector_drift.sh test_epaper_frame_portal_contract.sh
+    test_epaper_macro_contract.sh test_esp_web_tools_site.sh
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} bash ${PROJECT_SOURCE_DIR}/tests/${script})
@@ -395,17 +396,17 @@ foreach(script portal_action_editor.js portal_binding_validator.js portal_pad_di
     add_host_command_test(check_${name}_syntax node --check ${PROJECT_SOURCE_DIR}/src/app/web/${script})
 endforeach()
 
-add_host_gtest(test_epaper_carousel
-    test_epaper_carousel.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_carousel.cpp
+add_host_gtest(test_epaper_frame_carousel
+    test_epaper_frame_carousel.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_carousel.cpp
 )
-target_compile_definitions(test_epaper_carousel PRIVATE HAS_EPAPER=1)
+target_compile_definitions(test_epaper_frame_carousel PRIVATE IS_EPAPER_FRAME=1)
 
-add_host_gtest(test_epaper_schedule
-    test_epaper_schedule.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_schedule.cpp
+add_host_gtest(test_epaper_frame_schedule
+    test_epaper_frame_schedule.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_schedule.cpp
 )
-target_compile_definitions(test_epaper_schedule PRIVATE HAS_EPAPER=1)
+target_compile_definitions(test_epaper_frame_schedule PRIVATE IS_EPAPER_FRAME=1)
 
 add_host_gtest(test_button_shadow_color
     test_button_shadow_color.cpp
@@ -444,23 +445,28 @@ add_host_gtest(test_voice_tts_request
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_tts_request.cpp
 )
 
-add_host_gtest(test_epaper_next_client_logic
-    test_epaper_next_client_logic.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_next_client_logic.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_transport_crc32.cpp
+add_host_gtest(test_epaper_frame_next_client_logic
+    test_epaper_frame_next_client_logic.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_next_client_logic.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_transport_crc32.cpp
 )
 
-add_host_gtest(test_epaper_wake_journal
-        test_epaper_wake_journal.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_timing.cpp
+add_host_gtest(test_power_config
+    test_power_config.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/power_config.cpp
 )
-target_compile_definitions(test_epaper_wake_journal PRIVATE HAS_EPAPER=1)
 
-add_host_gtest(test_epaper_wake_budget
-    test_epaper_wake_budget.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper/epaper_wake_budget.cpp
+add_host_gtest(test_epaper_frame_wake_journal
+        test_epaper_frame_wake_journal.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_timing.cpp
 )
-target_compile_definitions(test_epaper_wake_budget PRIVATE HAS_EPAPER=1)
+target_compile_definitions(test_epaper_frame_wake_journal PRIVATE IS_EPAPER_FRAME=1)
+
+add_host_gtest(test_epaper_frame_wake_budget
+    test_epaper_frame_wake_budget.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_wake_budget.cpp
+)
+target_compile_definitions(test_epaper_frame_wake_budget PRIVATE IS_EPAPER_FRAME=1)
 
 add_host_gtest(test_mp3_metadata
     test_mp3_metadata.cpp

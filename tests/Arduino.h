@@ -11,6 +11,8 @@
 #include <cstddef>
 #include <cstring>
 
+class String;
+
 // Controllable millis() mock for timer tests
 #ifdef __cplusplus
 extern "C" {

@@ -31,6 +31,10 @@
 #include "drivers/st7701_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 #include "drivers/jd9165_dsi_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
+#include "drivers/inkplate6flick_epaper_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
+#include "drivers/reterminal_e1003_epaper_driver.h"
 #endif
 
 #include <SPI.h>
@@ -79,6 +83,10 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new ST7701_DSI_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_JD9165_DSI
 		driver = new JD9165_DSI_Driver();
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
+		driver = new Inkplate6FlickEpaperDriver(config);
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
+		driver = new ReTerminalE1003EpaperDriver(config);
 		#else
 		#error "No display driver selected or unknown driver type"
 		#endif
@@ -193,6 +201,13 @@ DeferredDispatchSlot<DISPLAY_TASK_DISPATCH_CTX_BYTES>& DisplayManager::displayJo
 		return g_display_job;
 }
 
+bool DisplayManager::requestFullRefresh() {
+		if (!driver || !driver->isAvailable()) return false;
+		if (!driver->requestFullRefresh()) return false;
+		if (presentSem) xSemaphoreGive(presentSem);
+		return true;
+}
+
 // ============================================================================
 // LRU Pad Cache
 // ============================================================================
@@ -291,8 +306,12 @@ void DisplayManager::initHardware() {
 		LOGI("Display", "Init start");
 		
 		// Initialize display driver
+		const uint8_t rotation = (DISPLAY_ROTATION + config->display_rotation) & 3;
+		#if DISPLAY_DRIVER != DISPLAY_DRIVER_TFT_ESPI
+		driver->setRotation(rotation);
+		#endif
 		driver->init();
-		driver->setRotation(DISPLAY_ROTATION);
+		driver->setRotation(rotation);
 		
 		// Apply saved brightness from config (or default to 100%)
 		#if HAS_BACKLIGHT
@@ -307,7 +326,7 @@ void DisplayManager::initHardware() {
 		#endif
 		
 		LOGI("Display", "Resolution: %dx%d", DISPLAY_WIDTH, DISPLAY_HEIGHT);
-		LOGI("Display", "Rotation: %d", DISPLAY_ROTATION);
+		LOGI("Display", "Rotation: %d", rotation);
 		
 		// Apply display-specific settings (inversion, gamma, etc.)
 		driver->applyDisplayFixes();
@@ -378,19 +397,19 @@ void DisplayManager::initLVGL() {
 		lv_display_set_buffers(display, buf, buf2, buf_size_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
 		
 		// Let driver set up hardware-specific LVGL configuration
-		driver->configureLVGL(display, DISPLAY_ROTATION);
+		driver->configureLVGL(display, (DISPLAY_ROTATION + config->display_rotation) & 3);
 		
-		// Initialize default theme (dark mode with custom primary color)
+		// Initialize the board-selected default theme with custom primary color.
 		// v9: lv_theme_default_init takes lv_display_t* (not NULL)
 		lv_theme_t* theme = lv_theme_default_init(
 				display,                        // Display
 				lv_color_hex(0x3399FF),        // Primary color (light blue)
 				lv_color_hex(0x303030),        // Secondary color (dark gray)
-				true,                           // Dark mode
+				LVGL_THEME_DARK_MODE,           // Dark mode
 				LV_FONT_DEFAULT                // Default font
 		);
 		lv_display_set_theme(display, theme);
-		LOGI("Display", "Theme: Default dark mode initialized");
+		LOGI("Display", "Theme: Default %s mode initialized", LVGL_THEME_DARK_MODE ? "dark" : "light");
 		
 		// Override LVGL refresh period if board specifies a custom value.
 		#ifdef LVGL_REFR_PERIOD_MS
@@ -442,22 +461,45 @@ void DisplayManager::init() {
 		// for lv_image with RGB565 source needs ~10-12 KB with transforms).
 		// On dual-core: pin to configured core (LVGL_TASK_CORE)
 		// On single-core: runs on Core 0 (time-sliced with Arduino loop)
-		// Stack allocated in PSRAM when available to save internal RAM.
+		// Stack location is selected per board. Classic ESP32 targets must keep
+		// static task stacks in internal RAM.
 		static constexpr uint32_t kLvglStackBytes = 16384;
 		lvglTaskStopped = false;
 		#if CONFIG_FREERTOS_UNICORE
-	if (!rtos_create_task_psram_stack(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc)) {
+		#if LVGL_TASK_USE_PSRAM_STACK
+		const bool lvglTaskCreated = rtos_create_task_psram_stack(
+				lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY,
+				&lvglTaskHandle, &lvglTaskAlloc);
+		const char* lvglStackLocation = "PSRAM";
+		#else
+		const bool lvglTaskCreated = rtos_create_task_internal_stack(
+				lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY,
+				&lvglTaskHandle, &lvglTaskAlloc);
+		const char* lvglStackLocation = "internal";
+		#endif
+		if (!lvglTaskCreated) {
 				xTaskCreate(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);
 				LOGI("Display", "Rendering task created (single-core, internal stack)");
 		} else {
-				LOGI("Display", "Rendering task created (single-core, PSRAM stack)");
+				LOGI("Display", "Rendering task created (single-core, %s stack)", lvglStackLocation);
 		}
 		#else
-		if (!rtos_create_task_psram_stack_pinned(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE)) {
+		#if LVGL_TASK_USE_PSRAM_STACK
+		const bool lvglTaskCreated = rtos_create_task_psram_stack_pinned(
+				lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY,
+				&lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE);
+		const char* lvglStackLocation = "PSRAM";
+		#else
+		const bool lvglTaskCreated = rtos_create_task_internal_stack_pinned(
+				lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY,
+				&lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE);
+		const char* lvglStackLocation = "internal";
+		#endif
+		if (!lvglTaskCreated) {
 				xTaskCreatePinnedToCore(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, LVGL_TASK_CORE);
 				LOGI("Display", "Rendering task created (Core %d, internal stack)", LVGL_TASK_CORE);
 		} else {
-				LOGI("Display", "Rendering task created (Core %d, PSRAM stack)", LVGL_TASK_CORE);
+				LOGI("Display", "Rendering task created (Core %d, %s stack)", LVGL_TASK_CORE, lvglStackLocation);
 		}
 		#endif
 		
@@ -472,19 +514,41 @@ void DisplayManager::init() {
 		if (driver->renderMode() == DisplayDriver::RenderMode::Buffered) {
 				presentSem = xSemaphoreCreateBinary();
 				#if CONFIG_FREERTOS_UNICORE
-				if (!rtos_create_task_psram_stack(presentTask, "Present", 4096, this, 1, &presentTaskHandle, &presentTaskAlloc)) {
+				#if LVGL_TASK_USE_PSRAM_STACK
+				const bool presentTaskCreated = rtos_create_task_psram_stack(
+						presentTask, "Present", 4096, this, 1,
+						&presentTaskHandle, &presentTaskAlloc);
+				const char* presentStackLocation = "PSRAM";
+				#else
+				const bool presentTaskCreated = rtos_create_task_internal_stack(
+						presentTask, "Present", 4096, this, 1,
+						&presentTaskHandle, &presentTaskAlloc);
+				const char* presentStackLocation = "internal";
+				#endif
+				if (!presentTaskCreated) {
 						xTaskCreate(presentTask, "Present", 4096, this, 1, &presentTaskHandle);
 						LOGI("Display", "Present task created (single-core, internal stack)");
 				} else {
-						LOGI("Display", "Present task created (single-core, PSRAM stack)");
+						LOGI("Display", "Present task created (single-core, %s stack)", presentStackLocation);
 				}
 				#else
 				const BaseType_t presentCore = 1 - LVGL_TASK_CORE;
-				if (!rtos_create_task_psram_stack_pinned(presentTask, "Present", 4096, this, 1, &presentTaskHandle, &presentTaskAlloc, presentCore)) {
+				#if LVGL_TASK_USE_PSRAM_STACK
+				const bool presentTaskCreated = rtos_create_task_psram_stack_pinned(
+						presentTask, "Present", 4096, this, 1,
+						&presentTaskHandle, &presentTaskAlloc, presentCore);
+				const char* presentStackLocation = "PSRAM";
+				#else
+				const bool presentTaskCreated = rtos_create_task_internal_stack_pinned(
+						presentTask, "Present", 4096, this, 1,
+						&presentTaskHandle, &presentTaskAlloc, presentCore);
+				const char* presentStackLocation = "internal";
+				#endif
+				if (!presentTaskCreated) {
 						xTaskCreatePinnedToCore(presentTask, "Present", 4096, this, 1, &presentTaskHandle, presentCore);
 						LOGI("Display", "Present task created (Core %d, internal stack)", presentCore);
 				} else {
-						LOGI("Display", "Present task created (Core %d, PSRAM stack)", presentCore);
+						LOGI("Display", "Present task created (Core %d, %s stack)", presentCore, presentStackLocation);
 				}
 				#endif
 		}

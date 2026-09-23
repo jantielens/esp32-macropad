@@ -43,6 +43,7 @@
 #define KEY_WIFI_BACKOFF_MAX "wifi_bomax"
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
+#define KEY_DISPLAY_ROTATION "disp_rot"
 #if HAS_CAMERA
 #define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
 #define KEY_CAMERA_FEED_TARGET_FPS "cam_fps"
@@ -94,6 +95,13 @@
 #define KEY_IDLE_SCREEN_TIMEOUT "idle_to"
 #define KEY_IDLE_SCREEN_PAD "idle_pad"
 #endif
+#if HAS_LVGL_EPAPER
+#define KEY_EPAPER_PANEL_MODE "ep_mode"
+#define KEY_EPAPER_BIND "ep_bind"
+#define KEY_EPAPER_MIN "ep_min"
+#define KEY_EPAPER_CLOCK_MINUTE "ep_clock"
+#define KEY_EPAPER_THRESHOLD "ep_thr"
+#endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
 #define KEY_TAP_BEEP       "tap_beep"
@@ -102,6 +110,90 @@
 #define KEY_MAGIC          "magic"
 
 static Preferences preferences;
+
+#if HAS_LVGL_EPAPER
+static portMUX_TYPE epaper_refresh_settings_mux = portMUX_INITIALIZER_UNLOCKED;
+static EpaperRefreshSettings epaper_refresh_settings = {};
+
+static EpaperRefreshSettings epaper_refresh_defaults() {
+		return {
+				EPAPER_DEFAULT_RENDER_MODE,
+				DISPLAY_BINDING_REFRESH_INTERVAL_MS,
+				EPAPER_MIN_REFRESH_INTERVAL_MS,
+				true,
+				EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD,
+		};
+}
+
+void config_manager_apply_epaper_refresh_defaults(DeviceConfig* config) {
+		if (!config) return;
+		const EpaperRefreshSettings defaults = epaper_refresh_defaults();
+		config->epaper_render_mode = defaults.epaper_render_mode;
+		config->epaper_binding_refresh_interval_ms = defaults.epaper_binding_refresh_interval_ms;
+		config->epaper_min_refresh_interval_ms = defaults.epaper_min_refresh_interval_ms;
+		config->epaper_refresh_clock_on_minute_boundary = defaults.epaper_refresh_clock_on_minute_boundary;
+		config->epaper_full_refresh_threshold = defaults.epaper_full_refresh_threshold;
+}
+
+static EpaperRefreshSettings epaper_refresh_from_config(const DeviceConfig* config) {
+		return {
+				config->epaper_render_mode,
+				config->epaper_binding_refresh_interval_ms,
+				config->epaper_min_refresh_interval_ms,
+				config->epaper_refresh_clock_on_minute_boundary,
+				config->epaper_full_refresh_threshold,
+		};
+}
+
+bool config_manager_validate_epaper_refresh_settings(const EpaperRefreshSettings& settings) {
+		return (settings.epaper_render_mode == EPAPER_RENDER_MODE_BW ||
+						settings.epaper_render_mode == EPAPER_RENDER_MODE_GRAYSCALE) &&
+				settings.epaper_binding_refresh_interval_ms >= EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS &&
+				settings.epaper_binding_refresh_interval_ms <= EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS &&
+				settings.epaper_min_refresh_interval_ms >= EPAPER_REFRESH_INTERVAL_MIN_MS &&
+				settings.epaper_min_refresh_interval_ms <= EPAPER_REFRESH_INTERVAL_MAX_MS;
+}
+
+bool config_manager_normalize_epaper_refresh_settings(DeviceConfig* config) {
+		if (!config) return false;
+		const EpaperRefreshSettings defaults = epaper_refresh_defaults();
+		bool changed = false;
+		if (config->epaper_render_mode != EPAPER_RENDER_MODE_BW && config->epaper_render_mode != EPAPER_RENDER_MODE_GRAYSCALE) {
+				config->epaper_render_mode = defaults.epaper_render_mode;
+				changed = true;
+		}
+		const auto normalize_interval = [&changed](uint32_t& value, uint32_t min_value, uint32_t max_value,
+																				uint32_t default_value) {
+				if (value < min_value || value > max_value) {
+						value = default_value;
+						changed = true;
+				}
+		};
+		normalize_interval(config->epaper_binding_refresh_interval_ms,
+				EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS, EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS,
+				defaults.epaper_binding_refresh_interval_ms);
+		normalize_interval(config->epaper_min_refresh_interval_ms,
+				EPAPER_REFRESH_INTERVAL_MIN_MS, EPAPER_REFRESH_INTERVAL_MAX_MS,
+				defaults.epaper_min_refresh_interval_ms);
+		return changed;
+}
+
+void config_manager_publish_epaper_refresh_settings(const DeviceConfig* config) {
+		if (!config) return;
+		const EpaperRefreshSettings settings = epaper_refresh_from_config(config);
+		portENTER_CRITICAL(&epaper_refresh_settings_mux);
+		epaper_refresh_settings = settings;
+		portEXIT_CRITICAL(&epaper_refresh_settings_mux);
+}
+
+EpaperRefreshSettings config_manager_get_epaper_refresh_settings() {
+		EpaperRefreshSettings settings;
+		portENTER_CRITICAL(&epaper_refresh_settings_mux);
+		settings = epaper_refresh_settings;
+		portEXIT_CRITICAL(&epaper_refresh_settings_mux);
+		return settings;
+}
+#endif
 
 // Initialize NVS
 void config_manager_init() {
@@ -221,9 +313,9 @@ bool config_manager_load(DeviceConfig *config) {
 				#if HAS_DISPLAY
 				// Screen saver defaults
 				config->screen_saver_enabled = true;
-				config->screen_saver_timeout_seconds = 300;
-				config->screen_saver_fade_out_ms = 800;
-				config->screen_saver_fade_in_ms = 400;
+				config->screen_saver_timeout_seconds = SCREENSAVER_DEFAULT_TIMEOUT_SECONDS;
+				config->screen_saver_fade_out_ms = SCREENSAVER_DEFAULT_FADE_OUT_MS;
+				config->screen_saver_fade_in_ms = SCREENSAVER_DEFAULT_FADE_IN_MS;
 				#if HAS_TOUCH
 				config->screen_saver_wake_on_touch = true;
 				#else
@@ -233,6 +325,11 @@ bool config_manager_load(DeviceConfig *config) {
 				config->idle_screen_enabled = false;
 				config->idle_screen_timeout_seconds = 300;
 				config->idle_screen_pad[0] = '\0';
+				#endif
+
+				#if HAS_LVGL_EPAPER
+				config_manager_apply_epaper_refresh_defaults(config);
+				config_manager_publish_epaper_refresh_settings(config);
 				#endif
 
 				#if HAS_CAMERA
@@ -310,7 +407,10 @@ bool config_manager_load(DeviceConfig *config) {
 		
 		// Load display settings
 		config->backlight_brightness = preferences.getUChar(KEY_BACKLIGHT_BRIGHTNESS, 100);
+		config->display_rotation = preferences.getUChar(KEY_DISPLAY_ROTATION, 0);
+		if (config->display_rotation > 3) config->display_rotation = 0;
 		LOGI("Config", "Loaded brightness: %d%%", config->backlight_brightness);
+		LOGI("Config", "Display rotation offset: %u quarter turns", config->display_rotation);
 
 		// Load Basic Auth settings
 		config->basic_auth_enabled = preferences.getBool(KEY_BASIC_AUTH_ENABLED, false);
@@ -344,10 +444,14 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_DISPLAY
 		// Load screen saver settings
+		#if SCREENSAVER_BACKLIGHT_ONLY
+		config->screen_saver_enabled = true;
+		#else
 		config->screen_saver_enabled = preferences.getBool(KEY_SCREEN_SAVER_ENABLED, true);
-		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, 300);
-		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, 800);
-		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, 400);
+		#endif
+		config->screen_saver_timeout_seconds = preferences.getUShort(KEY_SCREEN_SAVER_TIMEOUT, SCREENSAVER_DEFAULT_TIMEOUT_SECONDS);
+		config->screen_saver_fade_out_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_OUT, SCREENSAVER_DEFAULT_FADE_OUT_MS);
+		config->screen_saver_fade_in_ms = preferences.getUShort(KEY_SCREEN_SAVER_FADE_IN, SCREENSAVER_DEFAULT_FADE_IN_MS);
 		#if HAS_TOUCH
 		config->screen_saver_wake_on_touch = preferences.getBool(KEY_SCREEN_SAVER_WAKE_TOUCH, true);
 		#else
@@ -357,6 +461,18 @@ bool config_manager_load(DeviceConfig *config) {
 		config->idle_screen_enabled = preferences.getBool(KEY_IDLE_SCREEN_ENABLED, false);
 		config->idle_screen_timeout_seconds = preferences.getUShort(KEY_IDLE_SCREEN_TIMEOUT, 300);
 		preferences.getString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad, CONFIG_IDLE_SCREEN_PAD_MAX_LEN);
+		#endif
+
+		#if HAS_LVGL_EPAPER
+		config_manager_apply_epaper_refresh_defaults(config);
+		config->epaper_render_mode = preferences.getUChar(KEY_EPAPER_PANEL_MODE, config->epaper_render_mode);
+		config->epaper_binding_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_BIND, config->epaper_binding_refresh_interval_ms);
+		config->epaper_min_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_MIN, config->epaper_min_refresh_interval_ms);
+		config->epaper_refresh_clock_on_minute_boundary = preferences.getBool(KEY_EPAPER_CLOCK_MINUTE, config->epaper_refresh_clock_on_minute_boundary);
+		config->epaper_full_refresh_threshold = preferences.getUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
+		if (config_manager_normalize_epaper_refresh_settings(config)) {
+				LOGW("Config", "Normalized invalid persisted e-paper presentation settings");
+		}
 		#endif
 
 		#if HAS_CAMERA
@@ -403,6 +519,9 @@ bool config_manager_load(DeviceConfig *config) {
 				LOGE("Config", "Invalid config");
 				return false;
 		}
+		#if HAS_LVGL_EPAPER
+		config_manager_publish_epaper_refresh_settings(config);
+		#endif
 		
 		config_manager_print(config);
 		LOGI("Config", "Load complete");
@@ -471,6 +590,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		// Save display settings
 		LOGI("Config", "Saving brightness: %d%%", config->backlight_brightness);
 		preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness);
+		preferences.putUChar(KEY_DISPLAY_ROTATION, config->display_rotation);
 
 		// Save Basic Auth settings
 		preferences.putBool(KEY_BASIC_AUTH_ENABLED, config->basic_auth_enabled);
@@ -506,6 +626,14 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putBool(KEY_IDLE_SCREEN_ENABLED, config->idle_screen_enabled);
 		preferences.putUShort(KEY_IDLE_SCREEN_TIMEOUT, config->idle_screen_timeout_seconds);
 		preferences.putString(KEY_IDLE_SCREEN_PAD, config->idle_screen_pad);
+		#endif
+
+		#if HAS_LVGL_EPAPER
+		preferences.putUChar(KEY_EPAPER_PANEL_MODE, config->epaper_render_mode);
+		preferences.putUInt(KEY_EPAPER_BIND, config->epaper_binding_refresh_interval_ms);
+		preferences.putUInt(KEY_EPAPER_MIN, config->epaper_min_refresh_interval_ms);
+		preferences.putBool(KEY_EPAPER_CLOCK_MINUTE, config->epaper_refresh_clock_on_minute_boundary);
+		preferences.putUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
 		#endif
 
 		#if HAS_CAMERA
@@ -693,6 +821,9 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 				if (strlen(config->basic_auth_username) == 0) return false;
 				if (strlen(config->basic_auth_password) == 0) return false;
 		}
+			#if HAS_LVGL_EPAPER
+			if (!config_manager_validate_epaper_refresh_settings(epaper_refresh_from_config(config))) return false;
+			#endif
 		return true;
 }
 
@@ -791,6 +922,15 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		if (strlen(config->screen_saver_wake_binding) > 0) {
 				LOGI("Config", "SS wake binding: %s", config->screen_saver_wake_binding);
 		}
+#endif
+
+#if HAS_LVGL_EPAPER
+		LOGI("Config", "E-paper: mode=%s bind=%lums min=%lums clock_minute=%s full_threshold=%u",
+				config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale",
+				(unsigned long)config->epaper_binding_refresh_interval_ms,
+				(unsigned long)config->epaper_min_refresh_interval_ms,
+				config->epaper_refresh_clock_on_minute_boundary ? "on" : "off",
+				config->epaper_full_refresh_threshold);
 #endif
 
 #if HAS_CAMERA

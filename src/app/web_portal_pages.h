@@ -20,6 +20,9 @@ void handlePortalAllCSS(AsyncWebServerRequest *request);
 void handlePortalCameraJS(AsyncWebServerRequest *request);
 void handlePortalCameraCSS(AsyncWebServerRequest *request);
 #endif
+#if HAS_LVGL_EPAPER
+void handlePortalEpaperRefreshJS(AsyncWebServerRequest *request);
+#endif
 
 // Shell handler (new single-page root)
 void handleShell(AsyncWebServerRequest *request);

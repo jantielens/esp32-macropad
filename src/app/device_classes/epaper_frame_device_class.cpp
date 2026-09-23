@@ -1,0 +1,1196 @@
+// E-paper DeviceClass implementation.
+//
+// All e-paper-specific lifecycle (NVS load/save, REST API, wake button
+// classification, boot splashes, duty cycle, MQTT discovery) lives in this
+// translation unit. Aggregated into the build via device_classes.cpp under
+// the IS_EPAPER_FRAME gate. The core firmware never touches e-paper symbols
+// directly; it dispatches through the DeviceClass registry.
+
+#include "board_config.h"
+
+#if IS_EPAPER_FRAME
+
+#include "epaper_frame/epaper_frame_config.h"
+
+#include "config_manager.h"
+#include "device_class.h"
+#include "epaper_frame/epaper_frame_battery.h"
+#include "epaper_frame/epaper_frame_carousel.h"
+#include "epaper_frame/epaper_frame_driver.h"
+#include "epaper_frame/epaper_frame_refresh.h"
+#include "epaper_frame/epaper_frame_schedule.h"
+#include "epaper_frame/epaper_frame_screens.h"
+#include "epaper_frame/epaper_frame_timing.h"
+#include "epaper_frame/epaper_frame_wake_budget.h"
+#include "log_manager.h"
+#include "power_config.h"
+#include "power_manager.h"
+#include "version.h"
+#include "wifi_manager.h"
+
+#if HAS_MQTT
+#include "epaper_frame/epaper_frame_mqtt.h"
+#include "mqtt_manager.h"
+extern MqttManager mqtt_manager;
+#endif
+
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include <Preferences.h>
+#include <WiFi.h>
+#include <esp_sleep.h>
+#include <esp_sntp.h>
+#include <time.h>
+#if HAS_EPAPER_FRAME_WAKE_BUTTON
+#include <driver/rtc_io.h>  // rtc_gpio_pullup_en for deep-sleep button wake
+#endif
+#if HAS_EPAPER_FRONTLIGHT
+#include <esp_task_wdt.h>
+#endif
+
+// Global e-paper config instance (declared extern in epaper_frame_config.h).
+EpaperConfig g_epaper_config = {};
+
+// ---------------------------------------------------------------------------
+// NVS keys. Each is <= 15 chars (NVS limit). Kept identical to the keys the
+// core used to write before the Phase 2 split so existing devices keep their
+// stored values across the upgrade.
+// ---------------------------------------------------------------------------
+static const char *kNvsNamespace      = "device_cfg";
+static const char *kKeySourceMode     = "ep_src_mode";
+static const char *kKeyServiceUrl     = "ep_svc_url";
+static const char *kKeyServiceToken   = "ep_token";
+static const char *kKeyServiceInt     = "ep_svc_int";
+static const char *kKeyWakeBudget     = "ep_wake_ms";
+static const char *kKeyWakeWifiTarget = "ep_w_tar";
+static const char *kKeyWakeWifiBudget = "ep_w_cap";
+static const char *kKeyWakeFetchTarget = "ep_f_tar";
+static const char *kKeyWakeFetchBudget = "ep_f_cap";
+static const char *kKeyWakeMqttTarget = "ep_m_tar";
+static const char *kKeyWakeMqttBudget = "ep_m_cap";
+static const char *kKeyWakeCutRetry   = "ep_cut_retry";
+static const char *kKeyRotation       = "ep_rot";
+static const char *kKeyCrc32          = "ep_crc32";
+static const char *kKeyCrcEnabled     = "ep_crc_en";
+static const char *kKeySdCacheEn      = "ep_sd_en";
+static const char *kKeyOverlayEn      = "ep_ovl_en";
+static const char *kKeyOverlayPos     = "ep_ovl_pos";
+static const char *kKeyOverlayCol     = "ep_ovl_col";
+static const char *kKeyOverlayItems   = "ep_ovl_it";
+static const char *kKeyFrontBright    = "ep_fl_b";
+static const char *kKeyFrontDuration  = "ep_fl_d";
+// Carousel and schedule keys (PRD B)
+static const char *kKeyCarouselCount  = "ep_c_cnt";
+static const char *kKeyScheduleHours  = "ep_sch_hrs";
+static const char *kKeyScheduleTzOff  = "ep_sch_tz";
+static const uint32_t kDefaultCarouselDurationS = 900;
+static_assert(sizeof("ep_src_mode") - 1 <= 14, "NVS key too long");
+static_assert(sizeof("ep_svc_url") - 1 <= 14, "NVS key too long");
+static_assert(sizeof("ep_token") - 1 <= 14, "NVS key too long");
+static_assert(sizeof("ep_svc_int") - 1 <= 14, "NVS key too long");
+
+static uint32_t clamp_wake_setting(uint32_t value, uint32_t minimum, uint32_t maximum) {
+		if (value < minimum) return minimum;
+		if (value > maximum) return maximum;
+		return value;
+}
+
+static void normalize_wake_settings() {
+		g_epaper_config.wake_budget_ms = clamp_wake_setting(g_epaper_config.wake_budget_ms, 5000, 60000);
+		g_epaper_config.wake_wifi_budget_ms = clamp_wake_setting(g_epaper_config.wake_wifi_budget_ms, 500, 30000);
+		g_epaper_config.wake_fetch_budget_ms = clamp_wake_setting(g_epaper_config.wake_fetch_budget_ms, 500, 30000);
+		g_epaper_config.wake_mqtt_budget_ms = clamp_wake_setting(g_epaper_config.wake_mqtt_budget_ms, 500, 30000);
+		g_epaper_config.wake_wifi_target_ms = clamp_wake_setting(g_epaper_config.wake_wifi_target_ms, 100, g_epaper_config.wake_wifi_budget_ms);
+		g_epaper_config.wake_fetch_target_ms = clamp_wake_setting(g_epaper_config.wake_fetch_target_ms, 100, g_epaper_config.wake_fetch_budget_ms);
+		g_epaper_config.wake_mqtt_target_ms = clamp_wake_setting(g_epaper_config.wake_mqtt_target_ms, 100, g_epaper_config.wake_mqtt_budget_ms);
+		g_epaper_config.wake_cutoff_retry_seconds = clamp_wake_setting(g_epaper_config.wake_cutoff_retry_seconds, 0, 3600);
+}
+
+static uint32_t epaper_frame_config_uint(JsonObject &body, const char *key, uint32_t fallback) {
+		return body[key].is<const char*>()
+				? (uint32_t)strtoul(body[key].as<const char*>(), nullptr, 10)
+				: (uint32_t)(body[key] | fallback);
+}
+
+static bool epaper_frame_service_supported() {
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+		return true;
+#else
+		return false;
+#endif
+}
+
+bool epaper_frame_resolve_current_url() {
+		if (g_epaper_config.carousel_count == 0) {
+				g_epaper_config.epaper_frame_url[0] = '\0';
+				return false;
+		}
+
+		if (g_epaper_carousel_index >= g_epaper_config.carousel_count) {
+				LOGW("Epaper", "Carousel index %u >= count %u; clamping to 0", g_epaper_carousel_index, g_epaper_config.carousel_count);
+				g_epaper_carousel_index = 0;
+		}
+
+		const char *slot_url = g_epaper_config.carousel[g_epaper_carousel_index].url;
+		if (!slot_url || slot_url[0] == '\0') {
+				g_epaper_config.epaper_frame_url[0] = '\0';
+				return false;
+		}
+
+		strlcpy(g_epaper_config.epaper_frame_url, slot_url, CONFIG_EPAPER_URL_MAX_LEN);
+		return true;
+}
+
+static uint32_t epaper_frame_current_slot_duration_seconds() {
+		if (g_epaper_config.carousel_count == 0) {
+				return kDefaultCarouselDurationS;
+		}
+		if (g_epaper_carousel_index >= g_epaper_config.carousel_count) {
+				g_epaper_carousel_index = 0;
+		}
+		const uint32_t duration = g_epaper_config.carousel[g_epaper_carousel_index].interval_seconds;
+		return (duration > 0) ? duration : kDefaultCarouselDurationS;
+}
+
+static uint32_t epaper_frame_current_refresh_duration_seconds() {
+		return epaper_frame_source_refresh_interval(g_epaper_config.source_mode,
+				g_epaper_config.service_interval_seconds,
+				epaper_frame_current_slot_duration_seconds());
+}
+
+static uint32_t epaper_frame_budget_cut_sleep_seconds() {
+		return g_epaper_config.wake_cutoff_retry_seconds > 0
+				? g_epaper_config.wake_cutoff_retry_seconds
+				: epaper_frame_current_refresh_duration_seconds();
+}
+
+// ---------------------------------------------------------------------------
+// Wake-button classification (formerly in power_manager.cpp).
+// ---------------------------------------------------------------------------
+#if HAS_EPAPER_FRAME_WAKE_BUTTON
+static EpaperButtonWakeAction g_button_wake_action_boot = EpaperButtonWakeAction::None;
+
+static EpaperButtonWakeAction classify_button_wake(uint32_t threshold_ms) {
+		// The wake button is armed via esp_sleep_enable_ext1_wakeup() in
+		// sleep_prepare_hook(), so a button wake reports ESP_SLEEP_WAKEUP_EXT1.
+		if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_EXT1) {
+				return EpaperButtonWakeAction::None;
+		}
+		pinMode(EPAPER_FRAME_BUTTON_PIN, INPUT);
+		const unsigned long start = millis();
+		while (digitalRead(EPAPER_FRAME_BUTTON_PIN) == LOW) {
+				if ((millis() - start) >= threshold_ms) {
+						return EpaperButtonWakeAction::Config;
+				}
+				delay(10);
+		}
+		return EpaperButtonWakeAction::Refresh;
+}
+
+static bool classify_cold_boot_config_hold(uint32_t threshold_ms) {
+		// Button wakes (ext1) are handled by classify_button_wake(); this path is
+		// only for a genuine cold boot (power-on) hold.
+		if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
+				return false;
+		}
+
+		// On cold boot the wake button doubles as the "enter Config Mode"
+		// button. Keep parity with pre-refactor behavior: a sustained hold
+		// enters Config Mode even when HAS_BUTTON is false on e-paper boards.
+		pinMode(EPAPER_FRAME_BUTTON_PIN, INPUT);
+		const unsigned long start = millis();
+		while ((millis() - start) < threshold_ms) {
+				if (digitalRead(EPAPER_FRAME_BUTTON_PIN) != LOW) return false;
+				delay(10);
+		}
+		return true;
+}
+
+bool epaper_frame_button_is_button_wake() {
+		return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1;
+}
+
+EpaperButtonWakeAction epaper_frame_button_wake_action() {
+		return g_button_wake_action_boot;
+}
+#else
+bool epaper_frame_button_is_button_wake() { return false; }
+EpaperButtonWakeAction epaper_frame_button_wake_action() { return EpaperButtonWakeAction::None; }
+#endif
+
+// Single-key CRC persist so the refresh pipeline doesn't have to rewrite the
+// entire config (and wear NVS) on every successful redraw.
+void epaper_frame_config_persist_crc(uint32_t crc) {
+		Preferences prefs;
+		if (!prefs.begin(kNvsNamespace, false)) {
+				LOGW("EpaperCfg", "CRC persist: NVS open failed");
+				return;
+		}
+		prefs.putUInt(kKeyCrc32, crc);
+		prefs.end();
+}
+
+// ---------------------------------------------------------------------------
+// Config hooks (defaults / load / save / API).
+// ---------------------------------------------------------------------------
+static void config_defaults_hook(DeviceConfig * /*cfg*/) {
+		g_epaper_config.source_mode = EpaperSourceMode::SlotCarousel;
+		g_epaper_config.epaper_frame_url[0] = '\0';
+		g_epaper_config.service_url[0] = '\0';
+		g_epaper_config.service_token[0] = '\0';
+		g_epaper_config.service_interval_seconds = kDefaultCarouselDurationS;
+		g_epaper_config.wake_budget_ms = EPAPER_FRAME_TIMER_WAKE_BUDGET_MS;
+		g_epaper_config.wake_wifi_target_ms = EPAPER_FRAME_WIFI_TARGET_MS;
+		g_epaper_config.wake_wifi_budget_ms = EPAPER_FRAME_WIFI_BUDGET_MS;
+		g_epaper_config.wake_fetch_target_ms = EPAPER_FRAME_FETCH_TARGET_MS;
+		g_epaper_config.wake_fetch_budget_ms = EPAPER_FRAME_FETCH_BUDGET_MS;
+		g_epaper_config.wake_mqtt_target_ms = EPAPER_FRAME_MQTT_TARGET_MS;
+		g_epaper_config.wake_mqtt_budget_ms = EPAPER_FRAME_MQTT_BUDGET_MS;
+		g_epaper_config.wake_cutoff_retry_seconds = 0;
+		g_epaper_config.epaper_frame_rotation = 0;
+		g_epaper_config.epaper_frame_last_crc32 = 0;
+		g_epaper_config.epaper_frame_crc32_enabled = false;
+		g_epaper_config.epaper_frame_sd_cache_enabled = false;
+		g_epaper_config.epaper_frame_overlay_enabled = false;
+		g_epaper_config.epaper_frame_overlay_position = 3;
+		g_epaper_config.epaper_frame_overlay_color = 0;
+		g_epaper_config.epaper_frame_overlay_items = 0x7; // batt-icon | batt-% | time
+		g_epaper_config.epaper_frame_frontlight_brightness = 0;
+		g_epaper_config.epaper_frame_frontlight_duration_s = 30;
+
+		// Carousel: legacy single-URL mode by default
+		g_epaper_config.carousel_count = 0;
+		for (int i = 0; i < 5; ++i) {
+				g_epaper_config.carousel[i].url[0] = '\0';
+				g_epaper_config.carousel[i].interval_seconds = 0;
+				g_epaper_config.carousel[i].stay = false;
+		}
+
+		// Schedule: all hours enabled (no schedule active) by default
+		g_epaper_config.schedule_hours = 0x00FFFFFF;
+		g_epaper_config.schedule_tz_offset = 0;
+}
+
+static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
+		// Defaults so missing keys land on sane values.
+		config_defaults_hook(nullptr);
+		const uint8_t source_mode = prefs.getUChar(kKeySourceMode, 0);
+		g_epaper_config.source_mode = source_mode == 1 && epaper_frame_service_supported()
+				? EpaperSourceMode::Service : EpaperSourceMode::SlotCarousel;
+		String service_url = prefs.getString(kKeyServiceUrl, "");
+		strlcpy(g_epaper_config.service_url, service_url.c_str(), sizeof(g_epaper_config.service_url));
+		String service_token = prefs.getString(kKeyServiceToken, "");
+		strlcpy(g_epaper_config.service_token, service_token.c_str(), sizeof(g_epaper_config.service_token));
+		g_epaper_config.service_interval_seconds = prefs.getUInt(
+				kKeyServiceInt, kDefaultCarouselDurationS);
+		if (g_epaper_config.service_interval_seconds == 0) {
+				g_epaper_config.service_interval_seconds = kDefaultCarouselDurationS;
+		}
+		g_epaper_config.wake_budget_ms = prefs.getUInt(kKeyWakeBudget, EPAPER_FRAME_TIMER_WAKE_BUDGET_MS);
+		g_epaper_config.wake_wifi_target_ms = prefs.getUInt(kKeyWakeWifiTarget, EPAPER_FRAME_WIFI_TARGET_MS);
+		g_epaper_config.wake_wifi_budget_ms = prefs.getUInt(kKeyWakeWifiBudget, EPAPER_FRAME_WIFI_BUDGET_MS);
+		g_epaper_config.wake_fetch_target_ms = prefs.getUInt(kKeyWakeFetchTarget, EPAPER_FRAME_FETCH_TARGET_MS);
+		g_epaper_config.wake_fetch_budget_ms = prefs.getUInt(kKeyWakeFetchBudget, EPAPER_FRAME_FETCH_BUDGET_MS);
+		g_epaper_config.wake_mqtt_target_ms = prefs.getUInt(kKeyWakeMqttTarget, EPAPER_FRAME_MQTT_TARGET_MS);
+		g_epaper_config.wake_mqtt_budget_ms = prefs.getUInt(kKeyWakeMqttBudget, EPAPER_FRAME_MQTT_BUDGET_MS);
+		g_epaper_config.wake_cutoff_retry_seconds = prefs.getUInt(kKeyWakeCutRetry, 0);
+		normalize_wake_settings();
+
+		g_epaper_config.epaper_frame_rotation = prefs.getUChar(kKeyRotation, 0);
+		if (g_epaper_config.epaper_frame_rotation > 3) g_epaper_config.epaper_frame_rotation = 0;
+		g_epaper_config.epaper_frame_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
+		g_epaper_config.epaper_frame_crc32_enabled = prefs.getBool(kKeyCrcEnabled, false);
+		g_epaper_config.epaper_frame_sd_cache_enabled = prefs.getBool(kKeySdCacheEn, false);
+
+		g_epaper_config.epaper_frame_overlay_enabled = prefs.getBool(kKeyOverlayEn, false);
+		g_epaper_config.epaper_frame_overlay_position = prefs.getUChar(kKeyOverlayPos, 3);
+		if (g_epaper_config.epaper_frame_overlay_position > 3) g_epaper_config.epaper_frame_overlay_position = 3;
+		g_epaper_config.epaper_frame_overlay_color = prefs.getUChar(kKeyOverlayCol, 0);
+		if (g_epaper_config.epaper_frame_overlay_color > 3) g_epaper_config.epaper_frame_overlay_color = 0;
+		g_epaper_config.epaper_frame_overlay_items = prefs.getUChar(kKeyOverlayItems, 0x7);
+
+		g_epaper_config.epaper_frame_frontlight_brightness = prefs.getUChar(kKeyFrontBright, 0);
+		if (g_epaper_config.epaper_frame_frontlight_brightness > 63) g_epaper_config.epaper_frame_frontlight_brightness = 63;
+		g_epaper_config.epaper_frame_frontlight_duration_s = prefs.getUShort(kKeyFrontDuration, 30);
+
+		// Load carousel
+		g_epaper_config.carousel_count = prefs.getUChar(kKeyCarouselCount, 0);
+		if (g_epaper_config.carousel_count > 5) g_epaper_config.carousel_count = 5;
+		for (int i = 0; i < 5; ++i) {
+				char key_url[16], key_int[16], key_stay[16];
+				snprintf(key_url, sizeof(key_url), "ep_c%d_url", i);
+				snprintf(key_int, sizeof(key_int), "ep_c%d_int", i);
+				snprintf(key_stay, sizeof(key_stay), "ep_c%d_stay", i);
+				String carousel_url = prefs.getString(key_url, "");
+				strlcpy(g_epaper_config.carousel[i].url, carousel_url.c_str(), CONFIG_EPAPER_URL_MAX_LEN);
+				g_epaper_config.carousel[i].interval_seconds = prefs.getUInt(key_int, 0);
+				g_epaper_config.carousel[i].stay = prefs.getBool(key_stay, false);
+		}
+
+		// Load schedule
+		g_epaper_config.schedule_hours = prefs.getUInt(kKeyScheduleHours, 0x00FFFFFF);
+		g_epaper_config.schedule_tz_offset = prefs.getChar(kKeyScheduleTzOff, 0);
+		if (g_epaper_config.schedule_tz_offset < -12) g_epaper_config.schedule_tz_offset = -12;
+		if (g_epaper_config.schedule_tz_offset > 14) g_epaper_config.schedule_tz_offset = 14;
+}
+
+static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
+		prefs.putUChar(kKeySourceMode, (uint8_t)g_epaper_config.source_mode);
+		prefs.putString(kKeyServiceUrl, g_epaper_config.service_url);
+		prefs.putString(kKeyServiceToken, g_epaper_config.service_token);
+		prefs.putUInt(kKeyServiceInt, g_epaper_config.service_interval_seconds);
+		prefs.putUInt(kKeyWakeBudget, g_epaper_config.wake_budget_ms);
+		prefs.putUInt(kKeyWakeWifiTarget, g_epaper_config.wake_wifi_target_ms);
+		prefs.putUInt(kKeyWakeWifiBudget, g_epaper_config.wake_wifi_budget_ms);
+		prefs.putUInt(kKeyWakeFetchTarget, g_epaper_config.wake_fetch_target_ms);
+		prefs.putUInt(kKeyWakeFetchBudget, g_epaper_config.wake_fetch_budget_ms);
+		prefs.putUInt(kKeyWakeMqttTarget, g_epaper_config.wake_mqtt_target_ms);
+		prefs.putUInt(kKeyWakeMqttBudget, g_epaper_config.wake_mqtt_budget_ms);
+		prefs.putUInt(kKeyWakeCutRetry, g_epaper_config.wake_cutoff_retry_seconds);
+		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_frame_rotation);
+		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_frame_last_crc32);
+		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_frame_crc32_enabled);
+		prefs.putBool(kKeySdCacheEn, g_epaper_config.epaper_frame_sd_cache_enabled);
+		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_frame_overlay_enabled);
+		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_frame_overlay_position);
+		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_frame_overlay_color);
+		prefs.putUChar(kKeyOverlayItems, g_epaper_config.epaper_frame_overlay_items);
+		prefs.putUChar(kKeyFrontBright, g_epaper_config.epaper_frame_frontlight_brightness);
+		prefs.putUShort(kKeyFrontDuration, g_epaper_config.epaper_frame_frontlight_duration_s);
+
+		// Save carousel (only write non-empty entries to save NVS space)
+		prefs.putUChar(kKeyCarouselCount, g_epaper_config.carousel_count);
+		for (int i = 0; i < 5; ++i) {
+				char key_url[16], key_int[16], key_stay[16];
+				snprintf(key_url, sizeof(key_url), "ep_c%d_url", i);
+				snprintf(key_int, sizeof(key_int), "ep_c%d_int", i);
+				snprintf(key_stay, sizeof(key_stay), "ep_c%d_stay", i);
+				// Only write non-empty carousel entries
+				if (g_epaper_config.carousel[i].url[0] != '\0') {
+						prefs.putString(key_url, g_epaper_config.carousel[i].url);
+						prefs.putUInt(key_int, g_epaper_config.carousel[i].interval_seconds);
+						prefs.putBool(key_stay, g_epaper_config.carousel[i].stay);
+				}
+		}
+
+		// Save schedule
+		prefs.putUInt(kKeyScheduleHours, g_epaper_config.schedule_hours);
+		prefs.putChar(kKeyScheduleTzOff, g_epaper_config.schedule_tz_offset);
+}
+
+static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) {
+		root["caps"]["epaper_frame"] = true;
+		root["epaper_frame_service_supported"] = epaper_frame_service_supported();
+		root["epaper_frame_source_mode"] = epaper_frame_source_uses_service(g_epaper_config.source_mode)
+				? "service" : "slot-carousel";
+		root["epaper_frame_service_url"] = g_epaper_config.service_url;
+		root["epaper_frame_service_interval_seconds"] = g_epaper_config.service_interval_seconds;
+		root["epaper_frame_wake_budget_ms"] = g_epaper_config.wake_budget_ms;
+		root["epaper_frame_wake_wifi_target_ms"] = g_epaper_config.wake_wifi_target_ms;
+		root["epaper_frame_wake_wifi_budget_ms"] = g_epaper_config.wake_wifi_budget_ms;
+		root["epaper_frame_wake_fetch_target_ms"] = g_epaper_config.wake_fetch_target_ms;
+		root["epaper_frame_wake_fetch_budget_ms"] = g_epaper_config.wake_fetch_budget_ms;
+		root["epaper_frame_wake_mqtt_target_ms"] = g_epaper_config.wake_mqtt_target_ms;
+		root["epaper_frame_wake_mqtt_budget_ms"] = g_epaper_config.wake_mqtt_budget_ms;
+		root["epaper_frame_wake_cutoff_retry_seconds"] = g_epaper_config.wake_cutoff_retry_seconds;
+		root["epaper_frame_service_token_set"] = g_epaper_config.service_token[0] != '\0';
+		root["epaper_frame_rotation"] = g_epaper_config.epaper_frame_rotation;
+		root["epaper_frame_crc32_enabled"] = g_epaper_config.epaper_frame_crc32_enabled;
+		root["epaper_frame_sd_cache_enabled"] = g_epaper_config.epaper_frame_sd_cache_enabled;
+		root["epaper_frame_sd_cache_supported"] = (bool)
+#ifdef EPAPER_FRAME_SD_CS_PIN
+			true
+#else
+			false
+#endif
+			;
+		root["epaper_frame_overlay_enabled"] = g_epaper_config.epaper_frame_overlay_enabled;
+		root["epaper_frame_overlay_position"] = g_epaper_config.epaper_frame_overlay_position;
+		root["epaper_frame_overlay_color"] = g_epaper_config.epaper_frame_overlay_color;
+		root["epaper_frame_overlay_items"] = g_epaper_config.epaper_frame_overlay_items;
+		root["epaper_frame_frontlight_brightness"] = g_epaper_config.epaper_frame_frontlight_brightness;
+		root["epaper_frame_frontlight_duration_s"] = g_epaper_config.epaper_frame_frontlight_duration_s;
+		root["epaper_frame_frontlight_supported"] = (bool)HAS_EPAPER_FRONTLIGHT;
+
+		// Carousel
+		root["epaper_frame_carousel_count"] = g_epaper_config.carousel_count;
+		JsonArray carousel_array = root.createNestedArray("epaper_frame_carousel");
+		for (int i = 0; i < g_epaper_config.carousel_count; ++i) {
+				JsonObject entry = carousel_array.createNestedObject();
+				entry["url"] = g_epaper_config.carousel[i].url;
+				entry["interval_seconds"] = g_epaper_config.carousel[i].interval_seconds;
+				entry["stay"] = g_epaper_config.carousel[i].stay;
+		}
+
+		// Schedule
+		root["epaper_frame_schedule_hours"] = g_epaper_config.schedule_hours;
+		root["epaper_frame_schedule_tz_offset"] = g_epaper_config.schedule_tz_offset;
+}
+
+static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
+		if (body.containsKey("epaper_frame_source_mode")) {
+				const char* mode = body["epaper_frame_source_mode"] | "slot-carousel";
+				g_epaper_config.source_mode = strcmp(mode, "service") == 0 && epaper_frame_service_supported()
+						? EpaperSourceMode::Service : EpaperSourceMode::SlotCarousel;
+		}
+		if (body.containsKey("epaper_frame_service_url")) {
+				strlcpy(g_epaper_config.service_url,
+						body["epaper_frame_service_url"] | "", sizeof(g_epaper_config.service_url));
+		}
+		if (body.containsKey("epaper_frame_service_token")) {
+				const char* token = body["epaper_frame_service_token"] | "";
+				if (token[0] != '\0') {
+						strlcpy(g_epaper_config.service_token, token, sizeof(g_epaper_config.service_token));
+				}
+		}
+		if (body.containsKey("epaper_frame_service_interval_seconds")) {
+				uint32_t interval = body["epaper_frame_service_interval_seconds"].is<const char*>()
+						? (uint32_t)strtoul(body["epaper_frame_service_interval_seconds"].as<const char*>(), nullptr, 10)
+						: (uint32_t)(body["epaper_frame_service_interval_seconds"] | kDefaultCarouselDurationS);
+				g_epaper_config.service_interval_seconds = interval > 0
+						? interval : kDefaultCarouselDurationS;
+		}
+			if (body.containsKey("epaper_frame_wake_budget_ms")) g_epaper_config.wake_budget_ms = epaper_frame_config_uint(body, "epaper_frame_wake_budget_ms", EPAPER_FRAME_TIMER_WAKE_BUDGET_MS);
+			if (body.containsKey("epaper_frame_wake_wifi_target_ms")) g_epaper_config.wake_wifi_target_ms = epaper_frame_config_uint(body, "epaper_frame_wake_wifi_target_ms", EPAPER_FRAME_WIFI_TARGET_MS);
+			if (body.containsKey("epaper_frame_wake_wifi_budget_ms")) g_epaper_config.wake_wifi_budget_ms = epaper_frame_config_uint(body, "epaper_frame_wake_wifi_budget_ms", EPAPER_FRAME_WIFI_BUDGET_MS);
+			if (body.containsKey("epaper_frame_wake_fetch_target_ms")) g_epaper_config.wake_fetch_target_ms = epaper_frame_config_uint(body, "epaper_frame_wake_fetch_target_ms", EPAPER_FRAME_FETCH_TARGET_MS);
+			if (body.containsKey("epaper_frame_wake_fetch_budget_ms")) g_epaper_config.wake_fetch_budget_ms = epaper_frame_config_uint(body, "epaper_frame_wake_fetch_budget_ms", EPAPER_FRAME_FETCH_BUDGET_MS);
+			if (body.containsKey("epaper_frame_wake_mqtt_target_ms")) g_epaper_config.wake_mqtt_target_ms = epaper_frame_config_uint(body, "epaper_frame_wake_mqtt_target_ms", EPAPER_FRAME_MQTT_TARGET_MS);
+			if (body.containsKey("epaper_frame_wake_mqtt_budget_ms")) g_epaper_config.wake_mqtt_budget_ms = epaper_frame_config_uint(body, "epaper_frame_wake_mqtt_budget_ms", EPAPER_FRAME_MQTT_BUDGET_MS);
+			if (body.containsKey("epaper_frame_wake_cutoff_retry_seconds")) g_epaper_config.wake_cutoff_retry_seconds = epaper_frame_config_uint(body, "epaper_frame_wake_cutoff_retry_seconds", 0);
+			normalize_wake_settings();
+		if (body.containsKey("epaper_frame_rotation")) {
+				uint8_t v = body["epaper_frame_rotation"].is<const char*>()
+						? (uint8_t)atoi(body["epaper_frame_rotation"].as<const char*>())
+						: (uint8_t)(body["epaper_frame_rotation"] | 0);
+				if (v > 3) v = 0;
+				g_epaper_config.epaper_frame_rotation = v;
+		}		if (body.containsKey("epaper_frame_crc32_enabled")) {
+			g_epaper_config.epaper_frame_crc32_enabled = body["epaper_frame_crc32_enabled"] | false;
+		}		if (body.containsKey("epaper_frame_sd_cache_enabled")) {
+			g_epaper_config.epaper_frame_sd_cache_enabled = body["epaper_frame_sd_cache_enabled"] | false;
+		}		if (body.containsKey("epaper_frame_overlay_enabled")) {
+				g_epaper_config.epaper_frame_overlay_enabled = body["epaper_frame_overlay_enabled"] | false;
+		}
+		if (body.containsKey("epaper_frame_overlay_position")) {
+				uint8_t v = body["epaper_frame_overlay_position"].is<const char*>()
+						? (uint8_t)atoi(body["epaper_frame_overlay_position"].as<const char*>())
+						: (uint8_t)(body["epaper_frame_overlay_position"] | 3);
+				if (v > 3) v = 3;
+				g_epaper_config.epaper_frame_overlay_position = v;
+		}
+		if (body.containsKey("epaper_frame_overlay_color")) {
+				uint8_t v = body["epaper_frame_overlay_color"].is<const char*>()
+						? (uint8_t)atoi(body["epaper_frame_overlay_color"].as<const char*>())
+						: (uint8_t)(body["epaper_frame_overlay_color"] | 0);
+				if (v > 3) v = 0;
+				g_epaper_config.epaper_frame_overlay_color = v;
+		}
+		if (body.containsKey("epaper_frame_overlay_items")) {
+				g_epaper_config.epaper_frame_overlay_items = body["epaper_frame_overlay_items"].is<const char*>()
+						? (uint8_t)atoi(body["epaper_frame_overlay_items"].as<const char*>())
+						: (uint8_t)(body["epaper_frame_overlay_items"] | 0x7);
+		}
+		if (body.containsKey("epaper_frame_frontlight_brightness")) {
+				uint8_t v = body["epaper_frame_frontlight_brightness"].is<const char*>()
+						? (uint8_t)atoi(body["epaper_frame_frontlight_brightness"].as<const char*>())
+						: (uint8_t)(body["epaper_frame_frontlight_brightness"] | 0);
+				if (v > 63) v = 63;
+				g_epaper_config.epaper_frame_frontlight_brightness = v;
+		}
+		if (body.containsKey("epaper_frame_frontlight_duration_s")) {
+				g_epaper_config.epaper_frame_frontlight_duration_s = body["epaper_frame_frontlight_duration_s"].is<const char*>()
+						? (uint16_t)atoi(body["epaper_frame_frontlight_duration_s"].as<const char*>())
+						: (uint16_t)(body["epaper_frame_frontlight_duration_s"] | 30);
+		}
+
+		// Parse carousel
+		if (body.containsKey("epaper_frame_carousel")) {
+				JsonArray carousel_array = body["epaper_frame_carousel"];
+				uint8_t count = 0;
+				for (int i = 0; i < 5; ++i) {
+						if (i < (int)carousel_array.size() && carousel_array[i].is<JsonObject>()) {
+								JsonObject entry = carousel_array[i].as<JsonObject>();
+								const char *url = entry["url"] | "";
+								if (url[0] != '\0') {
+										strlcpy(g_epaper_config.carousel[i].url, url, CONFIG_EPAPER_URL_MAX_LEN);
+										uint32_t interval = entry["interval_seconds"] | 0;
+										if (interval == 0) interval = kDefaultCarouselDurationS;
+										g_epaper_config.carousel[i].interval_seconds = interval;
+										g_epaper_config.carousel[i].stay = entry["stay"] | false;
+										count = (uint8_t)(i + 1);
+								} else {
+										g_epaper_config.carousel[i].url[0] = '\0';
+										g_epaper_config.carousel[i].interval_seconds = 0;
+										g_epaper_config.carousel[i].stay = false;
+								}
+						} else {
+								g_epaper_config.carousel[i].url[0] = '\0';
+								g_epaper_config.carousel[i].interval_seconds = 0;
+								g_epaper_config.carousel[i].stay = false;
+						}
+				}
+				g_epaper_config.carousel_count = count;
+		}
+
+		// Parse schedule
+		if (body.containsKey("epaper_frame_schedule_hours")) {
+				uint32_t v = body["epaper_frame_schedule_hours"].is<const char*>()
+						? (uint32_t)strtoul(body["epaper_frame_schedule_hours"].as<const char*>(), nullptr, 10)
+						: (uint32_t)(body["epaper_frame_schedule_hours"] | 0xFFFFFF);
+				g_epaper_config.schedule_hours = v & 0xFFFFFF;
+		}
+		if (body.containsKey("epaper_frame_schedule_tz_offset")) {
+				int8_t v = body["epaper_frame_schedule_tz_offset"].is<const char*>()
+						? (int8_t)atoi(body["epaper_frame_schedule_tz_offset"].as<const char*>())
+						: (int8_t)(body["epaper_frame_schedule_tz_offset"] | 0);
+				if (v < -12) v = -12;
+				if (v > 14) v = 14;
+				g_epaper_config.schedule_tz_offset = v;
+		}
+}
+
+// ---------------------------------------------------------------------------
+// Wake classification + sleep prep hooks.
+// ---------------------------------------------------------------------------
+static void wake_classify_hook(bool *handled, bool *force_config) {
+#if HAS_EPAPER_FRAME_WAKE_BUTTON
+		g_button_wake_action_boot = classify_button_wake(2500);
+		const bool cold_boot_hold_config = classify_cold_boot_config_hold(2500);
+		if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1) {
+				if (handled) *handled = true;
+		}
+		if (g_button_wake_action_boot == EpaperButtonWakeAction::Config || cold_boot_hold_config) {
+				g_button_wake_action_boot = EpaperButtonWakeAction::Config;
+				if (cold_boot_hold_config) {
+						LOGI("Power", "E-paper wake button held on cold boot - entering Config Mode");
+				}
+				if (force_config) *force_config = true;
+		}
+#else
+		(void)handled;
+		(void)force_config;
+#endif
+}
+
+static void sleep_prepare_hook(uint32_t *seconds_inout) {
+		// E-paper button-only mode: when wake_seconds is 0, keep it at 0 so
+		// power_manager_sleep_for() can skip timer wake and rely on class-owned
+		// wake sources (ext1 here). The core clamps 0->1 only when no class owns
+		// the active power mode.
+		(void)seconds_inout;
+#if HAS_EPAPER_FRAME_WAKE_BUTTON
+		// Match the Seeed reTerminal LowPower_DeepSleep reference: use ext1 (more
+		// robust than ext0 on the ESP32-S3) and enable the RTC-domain pull-up so
+		// the active-low button line stays HIGH while asleep. The board's HW
+		// pull-up is disabled in the RTC domain during deep sleep, so without
+		// rtc_gpio_pullup_en() the line can drift and the falling edge is never
+		// latched -- the press appears to do nothing.
+		const gpio_num_t wake_pin = (gpio_num_t)EPAPER_FRAME_BUTTON_PIN;
+		rtc_gpio_pullup_en(wake_pin);
+		rtc_gpio_pulldown_dis(wake_pin);
+		// The original ESP32 (Inkplate) only defines ESP_EXT1_WAKEUP_ALL_LOW; the
+		// ANY_LOW logic mode is S3/C-series only. For a single-GPIO wake mask the
+		// two are semantically identical (one selected pin going low satisfies both
+		// "all" and "any"), so pick whichever the target SoC's enum exposes.
+#if CONFIG_IDF_TARGET_ESP32
+		esp_sleep_enable_ext1_wakeup(1ULL << EPAPER_FRAME_BUTTON_PIN, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
+		esp_sleep_enable_ext1_wakeup(1ULL << EPAPER_FRAME_BUTTON_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// Setup hooks: ack splash and post-WiFi config-mode screen.
+// ---------------------------------------------------------------------------
+static void on_setup_early_hook(DeviceConfig * /*cfg*/, PowerMode boot_mode) {
+		// Immediate ack when entering Config / AP mode so the user sees their
+		// long-press / reset-burst was registered without waiting for Wi-Fi.
+		if (EPAPER_FRAME_FAST_REFRESH && (boot_mode == PowerMode::Config || boot_mode == PowerMode::Ap)) {
+				epaper_frame_show_status(g_epaper_config.epaper_frame_rotation, []() {
+						epaper_frame_screen_config_mode_starting();
+				});
+		}
+}
+
+static void on_setup_late_hook(DeviceConfig *cfg, PowerMode current_mode) {
+		if (current_mode != PowerMode::Config && current_mode != PowerMode::Ap) return;
+		const bool is_ap = (current_mode == PowerMode::Ap);
+		epaper_frame_show_status(g_epaper_config.epaper_frame_rotation, [is_ap, cfg]() {
+				if (is_ap) {
+						const String ip = WiFi.softAPIP().toString();
+						const String ssid = WiFi.softAPSSID();
+						epaper_frame_screen_config_mode(ssid.c_str(), ip.c_str(), true);
+				} else {
+						const String ip = WiFi.localIP().toString();
+						epaper_frame_screen_config_mode(cfg->wifi_ssid, ip.c_str(), false);
+				}
+		});
+}
+
+// ---------------------------------------------------------------------------
+// Loop hook: poll wake button while in Config / AP and reboot on press.
+// ---------------------------------------------------------------------------
+#if HAS_EPAPER_FRAME_WAKE_BUTTON
+static void on_loop_hook() {
+		static bool s_armed = false;
+		static unsigned long s_arm_at_ms = 0;
+		static bool s_last_released = true;
+
+		const PowerMode now_mode = power_manager_get_current_mode();
+		const bool in_config = (now_mode == PowerMode::Config || now_mode == PowerMode::Ap);
+		if (!in_config) {
+				s_armed = false;
+				return;
+		}
+
+		if (!s_armed) {
+				pinMode(EPAPER_FRAME_BUTTON_PIN, INPUT);
+				s_arm_at_ms = millis() + 1500;
+				s_last_released = true;
+				s_armed = true;
+				return;
+		}
+		if ((long)(millis() - s_arm_at_ms) < 0) return;
+
+		const bool released = (digitalRead(EPAPER_FRAME_BUTTON_PIN) != LOW);
+		if (!released && s_last_released) {
+				delay(20);
+				if (digitalRead(EPAPER_FRAME_BUTTON_PIN) == LOW) {
+						LOGI("Power", "Wake button pressed in Config/AP mode - rebooting to normal");
+						epaper_frame_show_status(g_epaper_config.epaper_frame_rotation, []() {
+								epaper_frame_screen_returning_to_normal();
+						});
+						delay(100);
+						ESP.restart();
+				}
+		}
+		s_last_released = released;
+}
+#endif
+
+// UTC epoch of the last successful NTP fetch, retained across deep sleep so we
+// can throttle real resyncs to once per interval instead of every wake.
+RTC_DATA_ATTR static time_t s_epaper_last_ntp_epoch = 0;
+
+static portMUX_TYPE s_epaper_ntp_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool s_epaper_ntp_synced = false;
+static bool s_epaper_ntp_active = false;
+
+static const uint32_t kEpaperNtpDeferredMaxWaitMs = 5000;
+static const time_t kEpaperNtpResyncIntervalS = 2 * 60 * 60;
+
+static void epaper_frame_ntp_sync_cb(struct timeval *tv) {
+		portENTER_CRITICAL(&s_epaper_ntp_mux);
+		s_epaper_last_ntp_epoch = tv->tv_sec;
+		s_epaper_ntp_synced = true;
+		portEXIT_CRITICAL(&s_epaper_ntp_mux);
+}
+
+static time_t epaper_frame_ntp_last_sync_epoch() {
+		portENTER_CRITICAL(&s_epaper_ntp_mux);
+		const time_t epoch = s_epaper_last_ntp_epoch;
+		portEXIT_CRITICAL(&s_epaper_ntp_mux);
+		return epoch;
+}
+
+static bool epaper_frame_ntp_is_synced() {
+		portENTER_CRITICAL(&s_epaper_ntp_mux);
+		const bool synced = s_epaper_ntp_synced;
+		portEXIT_CRITICAL(&s_epaper_ntp_mux);
+		return synced;
+}
+
+static void epaper_frame_ntp_start() {
+		portENTER_CRITICAL(&s_epaper_ntp_mux);
+		s_epaper_ntp_synced = false;
+		portEXIT_CRITICAL(&s_epaper_ntp_mux);
+		sntp_set_time_sync_notification_cb(epaper_frame_ntp_sync_cb);
+		configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+		s_epaper_ntp_active = true;
+}
+
+static bool epaper_frame_ntp_stop() {
+		if (!s_epaper_ntp_active) return epaper_frame_ntp_is_synced();
+		esp_sntp_stop();
+		sntp_set_time_sync_notification_cb(nullptr);
+		s_epaper_ntp_active = false;
+		return epaper_frame_ntp_is_synced();
+}
+
+// ---------------------------------------------------------------------------
+// Duty cycle: full pipeline (was duty_cycle.cpp's `if (mode == DutyCycleEpaperFrame)`
+// block plus the splash decisions that lived in app.ino).
+// ---------------------------------------------------------------------------
+static bool run_duty_cycle_hook(DeviceConfig *config) {
+		const bool is_cold_boot = !power_manager_is_deep_sleep_wake();
+		const bool is_button_wake = epaper_frame_button_is_button_wake();
+		const EpaperWakeReason wake_reason = is_button_wake ? EpaperWakeReason::Button :
+				is_cold_boot ? EpaperWakeReason::ColdBoot : EpaperWakeReason::Timer;
+		epaper_frame_timing_begin_wake(wake_reason);
+		const EpaperWakeBudget wake_budget = epaper_frame_wake_budget_begin(
+				wake_reason == EpaperWakeReason::Timer, g_epaper_config.wake_budget_ms);
+		epaper_frame_timing_last.overall_budget_ms = wake_budget.overall_budget_ms;
+		epaper_frame_timing_last.wifi_target_ms = g_epaper_config.wake_wifi_target_ms;
+		epaper_frame_timing_last.fetch_target_ms = g_epaper_config.wake_fetch_target_ms;
+		epaper_frame_timing_last.mqtt_target_ms = g_epaper_config.wake_mqtt_target_ms;
+		auto record_budget_cut = [&](EpaperWakeBudgetCut cut, EpaperWakeStage stage) {
+			epaper_frame_timing_last.total_active_ms = millis();
+			epaper_frame_timing_last.budget_elapsed_ms = wake_budget.elapsed_ms(millis());
+			epaper_frame_timing_last.budget_remaining_ms = wake_budget.remaining_ms(millis());
+			epaper_frame_timing_last.budget_cut = static_cast<uint8_t>(cut);
+			epaper_frame_wake_journal_checkpoint(stage);
+			epaper_frame_wake_journal_finalize(EpaperWakeResult::BudgetExceeded, 0, 0);
+			epaper_frame_wake_journal_mark_delivery_failed(EpaperWakeResult::BudgetExceeded);
+		};
+		// Splash policy (moved from app.ino):
+		//   - Cold boot: always show the boot splash so a freshly plugged-in
+		//     device gets proof of life.
+		//   - Button wake on a fast panel (EPAPER_FRAME_FAST_REFRESH=true): show a
+		//     brief "Refreshing" splash for immediate feedback.
+		//   - Button wake on a slow panel: skip; the extra full refresh would
+		//     dominate the time-to-new-image budget.
+		//   - Timer wake: never any splash -- periodic refreshes are silent.
+		const bool show_boot_splash    = is_cold_boot;
+		const bool show_manual_refresh = (EPAPER_FRAME_FAST_REFRESH && is_button_wake);
+		if (show_boot_splash || show_manual_refresh) {
+				epaper_frame_show_status(g_epaper_config.epaper_frame_rotation, [show_boot_splash, config]() {
+						if (show_boot_splash) {
+								epaper_frame_screen_boot_splash(config->device_name, FIRMWARE_VERSION);
+						} else {
+								epaper_frame_screen_manual_refresh(nullptr);
+						}
+				});
+		}
+
+		// Low-battery gate: read the cell voltage before burning ~80 mA on WiFi
+		// for 5+ seconds. Below 3.2 V the panel waveform + radio together risk a
+		// brownout reset, so paint a "low battery" status frame and go back to
+		// sleep. Boards whose battery sense is independent of the panel (E1003)
+		// read the cell up front and then overlap the slow panel init with the
+		// WiFi connect; boards whose sense is gated behind begin() (Inkplate)
+		// must power the panel up first.
+
+		auto low_battery_sleep = [&](uint16_t mv) {
+				const uint8_t pct = epaper_frame_battery_percent(mv);
+				epaper_frame_driver_set_rotation(g_epaper_config.epaper_frame_rotation);
+				epaper_frame_screen_low_battery(mv, pct);
+				epaper_frame_driver_display();
+				epaper_frame_driver_sleep();
+				epaper_frame_timing_last.total_active_ms = millis();
+				epaper_frame_wake_journal_checkpoint(EpaperWakeStage::Battery);
+				epaper_frame_wake_journal_finalize(EpaperWakeResult::LowBattery, mv, 0);
+				power_manager_sleep_for(600);
+		};
+
+		bool begin_started = false;  // true once begin_async() has been kicked off
+		if (epaper_frame_driver_battery_ready_before_begin()) {
+				const uint16_t mv = epaper_frame_driver_battery_mv();
+				LOGI("Epaper", "Battery %u mV (early read)", mv);
+				if (mv > 0 && mv < 3200) {
+						epaper_frame_driver_begin();  // bring panel up to paint the status frame
+						low_battery_sleep(mv);
+						return true;
+				}
+				// Healthy: start panel init on a background task so it overlaps the
+				// WiFi connect below. Joined before the first draw.
+				epaper_frame_driver_begin_async();
+				begin_started = true;
+		} else if (epaper_frame_driver_begin()) {
+				const uint16_t mv = epaper_frame_driver_battery_mv();
+				LOGI("Epaper", "Battery %u mV", mv);
+				if (mv > 0 && mv < 3200) {
+						low_battery_sleep(mv);
+						return true;
+				}
+				// Healthy: panel already up; leave it powered through the WiFi connect
+				// so the draw-path power_on() collapses to a guarded no-op (the slow
+				// ~1.6 s IT8951 power-on is paid once, here, not again in the draw).
+		} else {
+				LOGW("Epaper", "driver begin returned false");
+		}
+
+		// WiFi -> CRC check -> conditional draw -> sleep. Each checkpoint feeds
+		// the RTC-retained timing budget so the portal can show a per-cycle
+		// breakdown. On early-battery boards the background panel init started
+		// above runs concurrently with this association.
+		const uint32_t wifi_limit_ms = wake_budget.stage_limit_ms(millis(), g_epaper_config.wake_wifi_budget_ms);
+		epaper_frame_timing_last.wifi_limit_ms = wifi_limit_ms;
+		const bool connected = wifi_limit_ms > 0 && wifi_manager_connect(config, true, wifi_limit_ms);
+
+		// Ensure panel init has finished (and reap its task) before any later
+		// draw. No-op on boards where begin() ran synchronously above.
+		if (begin_started && !epaper_frame_driver_begin_join()) {
+				LOGW("Epaper", "driver begin returned false");
+		}
+
+		if (!connected) {
+			if (wake_budget.expired(millis()) || wifi_limit_ms == 0) {
+				record_budget_cut(EpaperWakeBudgetCut::Wifi, EpaperWakeStage::Wifi);
+				power_manager_sleep_for(epaper_frame_budget_cut_sleep_seconds());
+				return false;
+			}
+				const uint32_t backoff = power_manager_note_wifi_failure(
+						epaper_frame_current_refresh_duration_seconds(),
+						config->wifi_backoff_max_seconds);
+				epaper_frame_timing_last.boot_to_wifi_ms = millis();
+				epaper_frame_timing_last.total_active_ms = millis();
+				epaper_frame_wake_journal_checkpoint(EpaperWakeStage::Wifi);
+				epaper_frame_wake_journal_finalize(EpaperWakeResult::WifiFailed, 0, 0);
+				power_manager_sleep_for(backoff);
+				return false;
+		}
+		power_manager_note_wifi_success();
+
+		// The schedule is fail-open when the clock is invalid, so NTP never needs
+		// to block the image path. If no successful sync is recent, defer one
+		// bounded attempt until after the panel draw to avoid DNS/UDP contention
+		// with the image fetch.
+		bool defer_ntp_resync = false;
+		uint32_t deferred_ntp_start_ms = 0;
+		{
+				const time_t now = time(nullptr);
+				const time_t last_sync = epaper_frame_ntp_last_sync_epoch();
+				const bool clock_valid = (now >= (time_t)EPAPER_FRAME_SCHEDULE_MIN_VALID_EPOCH);
+				defer_ntp_resync = !clock_valid || last_sync == 0 || now < last_sync ||
+						(now - last_sync) >= kEpaperNtpResyncIntervalS;
+				epaper_frame_timing_last.ntp_sync_ms = 0;
+				if (defer_ntp_resync) {
+						LOGI("Epaper", "NTP resync due; deferring until after panel draw");
+				} else {
+						LOGI("Epaper", "NTP resync skipped (last sync %lds ago)",
+								 (long)(now - last_sync));
+				}
+		}
+
+		const uint32_t t_wifi_done = millis();
+		epaper_frame_timing_last.boot_to_wifi_ms = t_wifi_done;
+		epaper_frame_timing_last.wifi_rssi = (int16_t)WiFi.RSSI();
+		epaper_frame_wake_journal_checkpoint(EpaperWakeStage::Wifi);
+
+#if HAS_MQTT
+		auto publish_wake_telemetry = [&](const EpaperRefreshOutcome *outcome) {
+			if (strlen(config->mqtt_host) == 0) {
+				epaper_frame_timing_last.draw_to_mqtt_ms = 0;
+				return;
+			}
+
+			const uint32_t mqtt_start = millis();
+			uint32_t mqtt_connect_ms = 0;
+			char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
+			config_manager_sanitize_device_name(config->device_name, sanitized, sizeof(sanitized));
+			mqtt_manager.begin(config, config->device_name, sanitized);
+			epaper_frame_wake_journal_checkpoint(EpaperWakeStage::MqttConnect);
+			const uint32_t mqtt_limit_ms = wake_budget.stage_limit_ms(millis(), g_epaper_config.wake_mqtt_budget_ms);
+			epaper_frame_timing_last.mqtt_limit_ms = mqtt_limit_ms;
+			if (mqtt_limit_ms == 0) {
+				record_budget_cut(EpaperWakeBudgetCut::Overall, EpaperWakeStage::MqttConnect);
+				return;
+			}
+			if (!mqtt_manager.connectBlockingMinimal(mqtt_limit_ms)) {
+				mqtt_connect_ms = millis() - mqtt_start;
+				LOGW("Epaper", "MQTT unreachable (%ums timeout); retaining wake diagnostics", (unsigned)mqtt_limit_ms);
+				epaper_frame_timing_last.total_active_ms = millis();
+				epaper_frame_wake_journal_checkpoint(EpaperWakeStage::MqttConnect);
+				if (mqtt_connect_ms >= mqtt_limit_ms) {
+					record_budget_cut(EpaperWakeBudgetCut::Mqtt, EpaperWakeStage::MqttConnect);
+				} else {
+					epaper_frame_wake_journal_mark_delivery_failed(EpaperWakeResult::MqttConnectFailed);
+				}
+				epaper_frame_timing_last.draw_to_mqtt_ms = mqtt_connect_ms;
+				epaper_frame_wake_journal_complete_delivery(mqtt_connect_ms, 0, millis());
+				return;
+			}
+			mqtt_connect_ms = millis() - mqtt_start;
+
+			if (!epaper_frame_mqtt_discovery_already_published()) {
+				if (epaper_frame_mqtt_publish_ha_discovery(mqtt_manager)) {
+					epaper_frame_mqtt_mark_discovery_published();
+				} else {
+					LOGW("Epaper", "Discovery publish incomplete; retrying next wake");
+				}
+			}
+			if (outcome) epaper_frame_mqtt_publish_state(*outcome, &epaper_frame_timing_last);
+
+			epaper_frame_wake_journal_checkpoint(EpaperWakeStage::MqttPublish);
+			if (epaper_frame_mqtt_prepare_wake_delivery()) {
+				epaper_frame_mqtt_publish_pending_wakes(epaper_frame_timing_last.wake_id);
+			} else {
+				LOGW("Epaper", "Wake delivery unconfirmed; retaining journal record");
+				epaper_frame_wake_journal_mark_delivery_failed(EpaperWakeResult::MqttPublishUnconfirmed);
+			}
+			mqtt_manager.disconnect();
+			const uint32_t mqtt_total_ms = millis() - mqtt_start;
+			epaper_frame_timing_last.draw_to_mqtt_ms = mqtt_total_ms;
+			epaper_frame_wake_journal_complete_delivery(mqtt_connect_ms,
+					mqtt_total_ms - mqtt_connect_ms, millis());
+		};
+#endif
+
+		// A WAKE-button press always wins over the schedule: the user is
+		// actively looking at the panel and expects fresh content, so a button
+		// wake bypasses the schedule gate below and forces a refresh even
+		// outside the enabled hours.
+		const bool cold_boot = !power_manager_is_deep_sleep_wake();
+#if HAS_EPAPER_FRAME_WAKE_BUTTON
+		const bool button_wake = epaper_frame_button_is_button_wake();
+#else
+		const bool button_wake = false;
+#endif
+
+		// Schedule check BEFORE image fetch: if disabled at this hour, sleep and
+		// skip refresh. Skipped on a button wake so the button always refreshes.
+		if (g_epaper_config.schedule_hours != 0x00FFFFFF && !button_wake) {
+				if (!epaper_frame_schedule_should_refresh(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr))) {
+						uint32_t sleep_s = epaper_frame_schedule_seconds_to_next(g_epaper_config.schedule_hours, g_epaper_config.schedule_tz_offset, time(nullptr));
+						LOGI("Epaper", "Schedule: disabled at this hour; sleeping %u seconds", sleep_s);
+						epaper_frame_timing_last.total_active_ms = millis();
+						epaper_frame_wake_journal_finalize(EpaperWakeResult::ScheduleSuppressed, 0, 0);
+						#if HAS_MQTT
+						publish_wake_telemetry(nullptr);
+						#endif
+						power_manager_sleep_for(sleep_s);
+						return true;
+				}
+		}
+
+		// Cold boot forces a refresh: the panel currently shows only the boot
+		// splash, so a CRC-match skip would leave the user staring at the
+		// splash. Button wakes also force a refresh -- the user is actively
+		// looking at the panel and expects fresh content.
+#if HAS_EPAPER_FRAME_WAKE_BUTTON
+		const bool force_refresh = cold_boot || button_wake;
+#else
+		const bool force_refresh = cold_boot;
+#endif
+
+
+		if (epaper_frame_source_uses_service(g_epaper_config.source_mode)) {
+				if (g_epaper_config.service_url[0] == '\0' ||
+						g_epaper_config.service_token[0] == '\0') {
+						LOGW("Epaper", "Refresh skipped: Service URL or token not configured");
+						epaper_frame_timing_last.total_active_ms = millis();
+						epaper_frame_wake_journal_checkpoint(EpaperWakeStage::Refresh);
+						epaper_frame_wake_journal_finalize(EpaperWakeResult::SourceUnconfigured, 0, 0);
+						#if HAS_MQTT
+						publish_wake_telemetry(nullptr);
+						#endif
+						power_manager_sleep_for(g_epaper_config.service_interval_seconds);
+						return true;
+				}
+				LOGI("Epaper", "Service: requesting next image");
+		} else {
+				if (!epaper_frame_resolve_current_url()) {
+						LOGW("Epaper", "Refresh skipped: no carousel URL configured");
+						epaper_frame_timing_last.total_active_ms = millis();
+						epaper_frame_wake_journal_checkpoint(EpaperWakeStage::Refresh);
+						epaper_frame_wake_journal_finalize(EpaperWakeResult::SourceUnconfigured, 0, 0);
+						#if HAS_MQTT
+						publish_wake_telemetry(nullptr);
+						#endif
+						power_manager_sleep_for(kDefaultCarouselDurationS);
+						return true;
+				}
+				LOGI("Epaper", "Carousel: using slot %u URL: %s",
+						g_epaper_carousel_index, g_epaper_config.epaper_frame_url);
+		}
+		const uint8_t active_slot_index = g_epaper_carousel_index;
+
+		// Clear the per-draw sub-step timings so a CRC-skip wake (no fetch/draw)
+		// reports zeros rather than the previous cycle's resolve/fetch/draw.
+		epaper_frame_timing_reset_draw_steps();
+		const uint32_t fetch_limit_ms = wake_budget.stage_limit_ms(millis(), g_epaper_config.wake_fetch_budget_ms);
+		epaper_frame_timing_last.fetch_limit_ms = fetch_limit_ms;
+		if (fetch_limit_ms == 0) {
+			record_budget_cut(EpaperWakeBudgetCut::Overall, EpaperWakeStage::Refresh);
+			power_manager_sleep_for(epaper_frame_budget_cut_sleep_seconds());
+			return true;
+		}
+		const uint32_t fetch_started_ms = millis();
+		const EpaperRefreshOutcome outcome = epaper_frame_refresh_run(config, force_refresh, fetch_limit_ms);
+		if (outcome.result == EpaperRefreshResult::FailedFetch &&
+				(millis() - fetch_started_ms) >= fetch_limit_ms) {
+			record_budget_cut(EpaperWakeBudgetCut::Fetch, EpaperWakeStage::Refresh);
+			power_manager_sleep_for(epaper_frame_budget_cut_sleep_seconds());
+			return true;
+		}
+		const uint32_t t_draw_done = millis();
+		epaper_frame_timing_last.crc_retry_count = outcome.crc_retry_count;
+		if (defer_ntp_resync) {
+			deferred_ntp_start_ms = millis();
+			epaper_frame_ntp_start();
+			LOGI("Epaper", "NTP deferred resync started after panel draw");
+		}
+
+		// Carousel: advance index after refresh (on success or skip)
+		if (epaper_frame_source_advances_carousel(
+				g_epaper_config.source_mode, g_epaper_config.carousel_count)) {
+				uint8_t next_idx = epaper_frame_carousel_next_index(
+						g_epaper_carousel_index,
+						g_epaper_config.carousel_count,
+						g_epaper_config.carousel[g_epaper_carousel_index].stay);
+				g_epaper_carousel_index = next_idx;
+				LOGI("Epaper", "Carousel: advanced to slot %u", next_idx);
+		}
+		epaper_frame_timing_last.crc_to_draw_ms = t_draw_done - t_wifi_done;
+		if (defer_ntp_resync) {
+			while (millis() - deferred_ntp_start_ms < kEpaperNtpDeferredMaxWaitMs &&
+					!epaper_frame_ntp_is_synced()) {
+				delay(50);
+			}
+			const bool synced = epaper_frame_ntp_stop();
+			const uint32_t elapsed_ms = millis() - deferred_ntp_start_ms;
+			if (synced) {
+				LOGI("Epaper", "NTP deferred resync completed in %ums", elapsed_ms);
+			} else {
+				LOGW("Epaper", "NTP deferred resync incomplete after %ums", elapsed_ms);
+			}
+			epaper_frame_timing_last.ntp_sync_ms = elapsed_ms;
+		}
+
+		epaper_frame_timing_last.total_active_ms = millis();
+		epaper_frame_wake_journal_checkpoint(defer_ntp_resync ? EpaperWakeStage::Ntp : EpaperWakeStage::Refresh);
+		EpaperWakeResult wake_result = EpaperWakeResult::Updated;
+		switch (outcome.result) {
+				case EpaperRefreshResult::Skipped:     wake_result = EpaperWakeResult::Skipped; break;
+				case EpaperRefreshResult::FailedFetch: wake_result = EpaperWakeResult::FailedFetch; break;
+				case EpaperRefreshResult::FailedDraw:  wake_result = EpaperWakeResult::FailedDraw; break;
+				case EpaperRefreshResult::Disabled:    wake_result = EpaperWakeResult::SourceUnconfigured; break;
+				case EpaperRefreshResult::Updated:     break;
+		}
+		epaper_frame_wake_journal_finalize(wake_result, outcome.battery_mv, outcome.sidecar_http_status);
+
+#if HAS_MQTT
+		publish_wake_telemetry(&outcome);
+#else
+		epaper_frame_timing_last.draw_to_mqtt_ms = 0;
+#endif
+
+		// Sleep-time compensation: subtract active loop duration so wake-to-wake
+		// cadence approximates duty_cycle_wake_seconds. Skip when target is 0
+		// (button-only mode) so we don't accidentally re-arm the timer.
+		// Per-entry interval: if carousel active, use current entry's interval (if > 0)
+		uint32_t target_s = epaper_frame_current_refresh_duration_seconds();
+		if (!epaper_frame_source_uses_service(g_epaper_config.source_mode) &&
+				g_epaper_config.carousel_count > 0) {
+				target_s = g_epaper_config.carousel[active_slot_index].interval_seconds;
+				if (target_s == 0) target_s = kDefaultCarouselDurationS;
+				LOGI("Epaper", "Using carousel slot %u duration: %u seconds", active_slot_index, target_s);
+		}
+
+		uint32_t sleep_s = epaper_frame_timing_last.budget_cut != static_cast<uint8_t>(EpaperWakeBudgetCut::None)
+				? epaper_frame_budget_cut_sleep_seconds()
+				: target_s;
+		if (target_s > 0 && epaper_frame_timing_last.budget_cut == static_cast<uint8_t>(EpaperWakeBudgetCut::None)) {
+				const uint32_t active_s = epaper_frame_timing_last.total_active_ms / 1000u;
+				sleep_s = (active_s < target_s) ? (target_s - active_s) : 10u;
+				if (sleep_s < 10u) sleep_s = 10u;
+		}
+
+#if HAS_EPAPER_FRONTLIGHT && HAS_EPAPER_FRAME_WAKE_BUTTON
+		// Frontlight runs only on button wakes so periodic refreshes don't
+		// drain the battery lighting an empty room.
+		if (g_epaper_config.epaper_frame_frontlight_brightness > 0
+		    && g_epaper_config.epaper_frame_frontlight_duration_s > 0
+		    && epaper_frame_button_is_button_wake()) {
+				LOGI("Duty", "Frontlight on (brightness=%u duration=%us)",
+				     (unsigned)g_epaper_config.epaper_frame_frontlight_brightness,
+				     (unsigned)g_epaper_config.epaper_frame_frontlight_duration_s);
+				epaper_frame_driver_begin();
+				epaper_frame_driver_frontlight_on(g_epaper_config.epaper_frame_frontlight_brightness);
+				uint32_t remaining_ms = (uint32_t)g_epaper_config.epaper_frame_frontlight_duration_s * 1000u;
+				while (remaining_ms > 0) {
+						const uint32_t slice_ms = (remaining_ms > 1000u) ? 1000u : remaining_ms;
+						delay(slice_ms);
+						if (esp_task_wdt_status(nullptr) == ESP_OK) {
+								esp_task_wdt_reset();
+						}
+						remaining_ms -= slice_ms;
+				}
+				epaper_frame_driver_frontlight_off();
+				epaper_frame_driver_sleep();
+		}
+#endif
+
+		power_manager_sleep_for(sleep_s);
+		return true;
+}
+
+// ---------------------------------------------------------------------------
+// MQTT discovery hook: publish e-paper-specific HA entities once per cold
+// boot, and signal the core to skip the generic discovery burst on the wakes
+// where we've already done it (HA retains the configs on the broker).
+// ---------------------------------------------------------------------------
+#if HAS_MQTT
+static void mqtt_discovery_hook(MqttManager &mqtt, bool *skip_generic) {
+		if (epaper_frame_mqtt_discovery_already_published()) {
+				LOGI("MQTT", "Skipping discovery (e-paper RTC flag set; retained configs persist)");
+				if (skip_generic) *skip_generic = true;
+				return;
+		}
+		// First publish in this power cycle -- emit our entities now and mark
+		// the RTC flag. Generic core discovery still runs on this boot.
+		if (epaper_frame_mqtt_publish_ha_discovery(mqtt)) {
+			epaper_frame_mqtt_mark_discovery_published();
+		} else {
+			LOGW("MQTT", "E-paper discovery incomplete; retrying on next connection");
+		}
+}
+#endif
+
+// ---------------------------------------------------------------------------
+// Class instance + registration.
+// ---------------------------------------------------------------------------
+static const DeviceClass kEpaperClass = {
+		/* name */              "epaper_frame",
+		/* owned_mode */        PowerMode::DutyCycleEpaperFrame,
+		/* on_setup_early */    on_setup_early_hook,
+		/* on_setup_late */     on_setup_late_hook,
+#if HAS_EPAPER_FRAME_WAKE_BUTTON
+		/* on_loop */           on_loop_hook,
+#else
+		/* on_loop */           nullptr,
+#endif
+		/* run_duty_cycle */    run_duty_cycle_hook,
+		/* on_wake_classify */  wake_classify_hook,
+		/* on_sleep_prepare */  sleep_prepare_hook,
+		/* config_defaults */   config_defaults_hook,
+		/* config_load */       config_load_hook,
+		/* config_save */       config_save_hook,
+		/* config_api_get */    config_api_get_hook,
+		/* config_api_set */    config_api_set_hook,
+#if HAS_MQTT
+		/* mqtt_on_discovery */ mqtt_discovery_hook,
+#else
+		/* mqtt_on_discovery */ nullptr,
+#endif
+		/* mqtt_publish_state */ nullptr,
+};
+
+void epaper_frame_device_class_register() {
+		device_class_register(&kEpaperClass);
+}
+
+// Aggregate the rest of the e-paper translation units into this build.
+// arduino-cli only compiles `.cpp` files in the sketch root; everything
+// under device_classes/epaper_frame/ is brought in via these #includes so the
+// whole device class lives in one folder.
+#include "epaper_frame/epaper_frame_crc32.cpp"
+#include "epaper_frame/epaper_frame_carousel.cpp"
+#include "epaper_frame/epaper_frame_http.cpp"
+#include "epaper_frame/epaper_frame_media_validation.cpp"
+#include "epaper_frame/epaper_frame_next_client.cpp"
+#include "epaper_frame/epaper_frame_next_client_logic.cpp"
+#include "epaper_frame/epaper_frame_transport_crc32.cpp"
+#include "epaper_frame/epaper_frame_drivers.cpp"
+#include "epaper_frame/epaper_frame_mqtt.cpp"
+#include "epaper_frame/epaper_frame_overlay.cpp"
+#include "epaper_frame/epaper_frame_refresh.cpp"
+#include "epaper_frame/epaper_frame_schedule.cpp"
+#include "epaper_frame/epaper_frame_screens.cpp"
+#include "epaper_frame/epaper_frame_sd_cache.cpp"
+#include "epaper_frame/epaper_frame_timing.cpp"
+#include "epaper_frame/epaper_frame_wake_budget.cpp"
+
+#endif // IS_EPAPER_FRAME

@@ -310,7 +310,11 @@ every component in that custom section to the same category ID.
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
 - **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
-- **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview, and screen saver configuration
+- **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview,
+  and screen saver configuration. Interactive display builds expose screen
+  rotation as a separate Rotation component under Display; changes take effect
+  after reboot.
+  - Boards with `HAS_LVGL_EPAPER` additionally expose persisted e-paper presentation settings: boot-only panel mode, mode-specific passive binding and minimum presentation intervals, optional clock refreshes at minute boundaries, and the B/W scheduled full-refresh threshold. A zero threshold disables scheduled B/W full refreshes and can cause ghosting.
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
@@ -649,6 +653,7 @@ Returns comprehensive device information.
   "cpu_freq": 160,
   "flash_chip_size": 4194304,
   "psram_size": 0,
+  "icon_max_dimension": 720,
   "health_poll_interval_ms": 5000,
   "health_history_seconds": 300,
   "health_history_available": true,
@@ -712,6 +717,8 @@ Returns comprehensive device information.
 
 **Display Fields** (only when `has_display` is `true`):
 - `display_coord_width` / `display_coord_height`: Display resolution
+- `icon_max_dimension`: Largest accepted PNG width or height. The Pad editor
+  rasterizes larger icons at this limit and the device scales them to fit.
 - `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
 - `current_screen`: ID of the currently displayed screen
 
@@ -925,6 +932,13 @@ Returns current device configuration (passwords excluded).
   "mcp_token_set": false,
 
   "backlight_brightness": 100,
+  "display_rotation": 0,
+  "screen_saver_backlight_only": false,
+  "epaper_render_mode": "grayscale",
+  "epaper_binding_refresh_interval_ms": 1000,
+  "epaper_min_refresh_interval_ms": 250,
+  "epaper_refresh_clock_on_minute_boundary": true,
+  "epaper_full_refresh_threshold": 10,
 
   "screen_saver_enabled": false,
   "screen_saver_timeout_seconds": 300,
@@ -962,6 +976,12 @@ Returns current device configuration (passwords excluded).
 **Notes:**
 - Some fields are build-time gated.
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
+  - `screen_saver_backlight_only` is true on targets that retain display
+    rendering during logical sleep and turn off only the backlight. Their
+    portal moves the timeout and MQTT wake binding into Brightness and omits
+    the Screen Saver navigation component. On these targets,
+    `screen_saver_enabled` is always reported as true; set the timeout to `0`
+    to disable automatic backlight shutdown.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
@@ -1006,6 +1026,12 @@ Save new configuration. Device reboots after successful save.
   "mcp_generate_token": true,
 
   "backlight_brightness": 70,
+  "display_rotation": 1,
+  "epaper_render_mode": "bw",
+  "epaper_binding_refresh_interval_ms": 1000,
+  "epaper_min_refresh_interval_ms": 250,
+  "epaper_refresh_clock_on_minute_boundary": true,
+  "epaper_full_refresh_threshold": 10,
 
   "screen_saver_enabled": true,
   "screen_saver_timeout_seconds": 300,
@@ -1052,6 +1078,7 @@ Save new configuration. Device reboots after successful save.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
+- Interactive E-Paper fields are available only when `HAS_LVGL_EPAPER` is enabled. `epaper_render_mode` is read at boot and requires a restart. The shared intervals, minute-boundary setting, and full-refresh threshold apply live. Binding intervals must be 100 to 60,000 ms and refresh intervals must be 250 to 60,000 ms. An `epaper_full_refresh_threshold` of `0` disables scheduled full refreshes and can increase ghosting. Inkplate grayscale always refreshes the full panel and does not use the threshold.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 
@@ -1232,6 +1259,8 @@ touch, BLE, audio, and safety-critical device-class loops remain operational.
 
 The screen saver owns an independent image-fetch suspension. OTA activity never
 re-enables image fetching while the screen saver still holds that suspension.
+Targets using `SCREENSAVER_BACKLIGHT_ONLY` do not suspend image fetching because
+their display continues rendering while the backlight is off.
 
 **CORS:**
 - The device responds with `Access-Control-Allow-Origin: https://<owner>.github.io`.
@@ -1274,10 +1303,13 @@ Get screen saver status.
 #### `POST /api/display/sleep`
 
 Force Display Sleep now (fade backlight to 0). This bypasses the optional Idle Screen.
+On `SCREENSAVER_BACKLIGHT_ONLY` targets, it turns off only the backlight and
+leaves rendering active.
 
 #### `POST /api/display/wake`
 
-Force wake now (fade backlight back to configured brightness).
+Force wake now (fade backlight back to configured brightness). On
+`SCREENSAVER_BACKLIGHT_ONLY` targets, the change is immediate.
 
 #### `POST /api/display/activity`
 
@@ -1285,6 +1317,21 @@ Reset the idle timer; optionally request wake.
 
 - `POST /api/display/activity` (just resets timer)
 - `POST /api/display/activity?wake=1` (resets timer + wake)
+
+#### `POST /api/component/epaper-refresh/full-refresh`
+
+Queue a full waveform presentation of the current framebuffer. Available only
+when `HAS_LVGL_EPAPER` is enabled. The response returns after queuing;
+it does not wait for the physical waveform to complete.
+
+**Response:** `202 Accepted`
+
+```json
+{ "success": true, "message": "Full refresh queued" }
+```
+
+The same operation is available to pad actions, MCP, and automation through
+the `display_refresh` action with `{ "mode": "full" }`.
 
 #### `PUT /api/display/screen`
 

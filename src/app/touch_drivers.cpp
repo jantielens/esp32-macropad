@@ -15,6 +15,8 @@
 #include "drivers/wire_cst816s_touch_driver.cpp"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 #include "drivers/gt911_touch_driver.cpp"
+#elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
+#include "drivers/inkplate6flick_touch_driver.cpp"
 #else
 #error "No touch driver selected or unknown driver type"
 #endif

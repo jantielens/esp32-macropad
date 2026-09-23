@@ -24,6 +24,8 @@
 #include "drivers/wire_cst816s_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 #include "drivers/gt911_touch_driver.h"
+#elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
+#include "drivers/inkplate6flick_touch_driver.h"
 #endif
 
 // Global instance
@@ -177,7 +179,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		}
 }
 
-void TouchManager::init() {
+void TouchManager::init(uint8_t rotation) {
 		LOGI("Touch", "Manager init start");
 		
 		// Create standalone touch driver (no dependency on display)
@@ -189,6 +191,8 @@ void TouchManager::init() {
 		driver = new Wire_CST816S_TouchDriver();
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 		driver = new GT911_TouchDriver();
+		#elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
+		driver = new Inkplate6Flick_TouchDriver();
 		#else
 		#error "No touch driver selected or unknown driver type"
 		#endif
@@ -202,10 +206,8 @@ void TouchManager::init() {
 		#endif
 		
 		// Set rotation to match display
-		#ifdef DISPLAY_ROTATION
-		driver->setRotation(DISPLAY_ROTATION);
-		LOGI("Touch", "Rotation: %d", DISPLAY_ROTATION);
-		#endif
+		driver->setRotation(rotation);
+		LOGI("Touch", "Rotation: %d", rotation);
 
 		// Register with LVGL as input device.
 		// Do NOT block boot indefinitely if the LVGL task/mutex is stuck; defer and retry.
@@ -263,11 +265,11 @@ bool TouchManager::getTouch(uint16_t* x, uint16_t* y) {
 }
 
 // C-style interface for app.ino
-void touch_manager_init() {
+void touch_manager_init(uint8_t rotation) {
 		if (!touchManager) {
 				touchManager = new TouchManager();
 		}
-		touchManager->init();
+		touchManager->init(rotation);
 }
 
 void touch_manager_loop() {

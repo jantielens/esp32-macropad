@@ -102,9 +102,9 @@ portal_nav.js
 portal_fragment_init.js
 portal.js
 
-# [chunk:epaper HAS_EPAPER]
+# [chunk:epaper-frame IS_EPAPER_FRAME]
 # E-paper portal fragment init handlers. Lives under
-# src/app/device_classes/epaper/web/ — the asset bundler also scans
+# src/app/device_classes/epaper_frame/web/ — the asset bundler also scans
 # device_classes/*/web/ for *.js files and *.fragment.html. Functions are
 # only invoked when an e-paper fragment is loaded, so ordering relative to
 # the shell chunk is immaterial.

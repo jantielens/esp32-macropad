@@ -18,11 +18,9 @@
  * surface a global pending-reboot banner via setPendingReboot(); the user
  * can batch several changes and click "Reboot Now" once at the end.
  *
- * @param {boolean} requiresReboot - True if this fragment's settings need a
- *                                   reboot to take effect (wifi, network,
- *                                   device name, mode, mqtt, ble, auth).
- *                                   When true, the pending-reboot banner is
- *                                   shown after a successful save.
+ * @param {boolean|Function} requiresReboot - Whether saving needs a reboot.
+ *   A function receives the submitted config and returns true when a reboot
+ *   is needed; the pending-reboot banner appears after a successful save.
  */
 async function saveFragmentConfig(requiresReboot) {
     // Build config from DOM elements that exist in the current fragment
@@ -39,7 +37,7 @@ async function saveFragmentConfig(requiresReboot) {
         'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',
         'ble_enabled',
         'audio_volume', 'tap_beep', 'lp_beep',
-        'backlight_brightness',
+        'backlight_brightness', 'display_rotation',
         'screen_saver_enabled', 'screen_saver_timeout_seconds',
         'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms',
         'screen_saver_wake_on_touch', 'screen_saver_wake_binding',
@@ -91,7 +89,11 @@ async function saveFragmentConfig(requiresReboot) {
         if (!response.ok) throw new Error('Failed to save configuration');
         var result = await response.json();
         if (result.success) {
-            if (requiresReboot) {
+            var needsReboot = typeof requiresReboot === 'function' ? requiresReboot(config) : requiresReboot;
+            if (config.display_rotation !== undefined && window.deviceConfig) {
+                window.deviceConfig.display_rotation = Number(config.display_rotation);
+            }
+            if (needsReboot) {
                 // Banner is the user feedback — skip the toast so it doesn't
                 // cover the freshly-appeared "reboot required" banner.
                 if (typeof setPendingReboot === 'function') setPendingReboot();
@@ -109,8 +111,8 @@ async function saveFragmentConfig(requiresReboot) {
 /**
  * Wire loadConfig() + a save button for the common config-fragment pattern.
  * @param {string} saveBtnId - ID of the save button element
- * @param {boolean} requiresReboot - True if this fragment's settings need a
- *   reboot to take effect; false for live-apply settings (brightness, etc.).
+ * @param {boolean|Function} requiresReboot - Whether this fragment's settings
+ *   need a reboot; a function can inspect the submitted config.
  */
 function initConfigFragment(saveBtnId, requiresReboot) {
     loadConfig();
@@ -403,7 +405,7 @@ window.init_mode_fragment = function () {
         var caps = (window.__device_caps || {});
         var bleOpt = document.getElementById('mode_opt_duty_cycle_ble');
         if (bleOpt) bleOpt.style.display = caps.ble ? '' : 'none';
-        var epOpt = document.getElementById('mode_opt_duty_cycle_epaper');
+        var epOpt = document.getElementById('mode_opt_duty_cycle_epaper_frame');
         if (epOpt) epOpt.style.display = caps.epaper ? '' : 'none';
         // If BLE was the persisted choice but the build no longer supports it,
         // fall back to always_on.
@@ -415,7 +417,7 @@ window.init_mode_fragment = function () {
             }
         }
         if (!caps.epaper) {
-            var epRadio = document.getElementById('operating_mode_duty_cycle_epaper');
+            var epRadio = document.getElementById('operating_mode_duty_cycle_epaper_frame');
             if (epRadio && epRadio.checked) {
                 var alwaysOn = document.getElementById('operating_mode_always_on');
                 if (alwaysOn) alwaysOn.checked = true;
@@ -432,7 +434,7 @@ window.init_mode_fragment = function () {
         var mode = getSelectedMode();
         var isDutyMqtt = (mode === 'duty_cycle_mqtt');
         var isDutyBle = (mode === 'duty_cycle_ble');
-        var isDutyEpaper = (mode === 'duty_cycle_epaper');
+        var isDutyEpaper = (mode === 'duty_cycle_epaper_frame');
         var isAnyDuty = isDutyMqtt || isDutyBle || isDutyEpaper;
 
         var dc = document.getElementById('duty-cycle-settings');
@@ -483,6 +485,13 @@ window.init_brightness_fragment = function () {
     initConfigFragment('brightness-save-btn', false);
     var slider = document.getElementById('backlight_brightness');
     if (slider) slider.addEventListener('input', handleBrightnessChange);
+    if (typeof bindingInitStaticInputs === 'function') bindingInitStaticInputs();
+};
+
+window.init_rotation_fragment = function () {
+    initConfigFragment('rotation-save-btn', function (config) {
+        return Number(config.display_rotation) !== Number(window.deviceConfig ? window.deviceConfig.display_rotation : 0);
+    });
 };
 
 // ============================================================================

@@ -5,8 +5,8 @@ The ESP32 Macropad firmware compiles for multiple hardware classes from a single
 
 | Class            | Brand prefix              | Default boards                                            | Highlights                                                                                                  |
 |------------------|---------------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `macropad`       | `ESP32 Macropad`          | `jc4880p433`, `jc3636w518`, `jc3248w535`, `esp32-p4-lcd4b`, `jc1060p470c`, `esp32-4848S040` | Touch-screen control surface with configurable buttons, widgets, MQTT, BLE HID.                             |
-| `epaper`         | `ESP32-MP E-Paper`        | `inkplate5v2`, `inkplate6flick`, `reterminal-e1003`      | Battery-powered e-paper display with hourly schedules and image carousel.                                   |
+| `macropad`       | `ESP32 Macropad`          | `jc4880p433`, `jc3636w518`, `jc3248w535`, `esp32-p4-lcd4b`, `jc1060p470c`, `esp32-4848S040`, `reterminal-e1003-interactive` | Touch-screen control surface with configurable buttons, widgets, MQTT, BLE HID.                             |
+| `epaper_frame`   | `ESP32-MP E-Paper Frame`        | `inkplate5v2-frame`, `inkplate6flick-frame`, `reterminal-e1003-frame`      | Battery-powered image frame with schedules and a carousel.                                                   |
 | `headless`       | `ESP32-MP Headless`       | `esp32c3-withsensors`                                     | Sensor / bridge node — MQTT telemetry, BTHome BLE beacons, no display.                                      |
 | `shutter_tester` | `ESP32-MP Shutter Tester` | `jc4880p433-shutter`                                      | Specialized capture rig measuring camera shutter speeds via an ADC sensor array. See [shutter-tester/](shutter-tester/README.md). |
 | `coffee_scale`   | `ESP32-MP Coffee Scale`   | `jc4880p433-nau7802`, `jc4880p433-hx711`                  | Connected espresso / pour-over scale with a stage-based brew engine and weight logging. See [coffee-scale/](coffee-scale/README.md). |
@@ -20,10 +20,11 @@ flowchart TD
     Flags -->|IS_SHUTTER_TESTER| Shutter[shutter_tester]
     Flags -->|IS_COFFEE_SCALE| Coffee[coffee_scale]
     Flags -->|IS_DARKROOM_TIMER| Darkroom[darkroom_timer]
-    Flags -->|HAS_EPAPER| EPaper[epaper]
-    Flags -->|HAS_DISPLAY| Macropad[macropad]
-    Flags -->|else| Headless[headless]
-    Shutter & Coffee & Darkroom & EPaper & Macropad & Headless --> Reg[device_class_registry.cpp DESCRIPTORS]
+    Flags -->|IS_VOICE_ASSISTANT| Voice[voice_assistant]
+    Flags -->|IS_EPAPER_FRAME| EPaperFrame[epaper_frame]
+    Flags -->|!HAS_DISPLAY| Headless[headless]
+    Flags -->|else| Macropad[macropad]
+    Shutter & Coffee & Darkroom & Voice & EPaperFrame & Macropad & Headless --> Reg[device_class_registry.cpp DESCRIPTORS]
     Reg --> Brand[Branding, default device name, AP SSID, HA mdl, web portal title]
 ```
 

@@ -94,6 +94,7 @@ enum PadLabelAnchorY : uint8_t {
 static inline void pad_apply_font_upscale(lv_obj_t* lbl, const LabelStyle& style, PadLabelAnchorY anchor_y) {
     if (style.font_upscale == 0) return;
 
+    lv_obj_update_layout(lbl);
     const lv_coord_t w = lv_obj_get_width(lbl);
     lv_coord_t h = lv_obj_get_height(lbl);
     if (h <= 0) {

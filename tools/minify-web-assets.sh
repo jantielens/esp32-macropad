@@ -34,7 +34,7 @@ escape_c_string() {
 # blob per *reachable* combination of a bundle's chunk flags. Two flag kinds
 # behave very differently:
 #
-#   * Independent flags (e.g. HAS_DISPLAY, HAS_EPAPER) can each be on/off
+#   * Independent flags (e.g. HAS_DISPLAY, HAS_EPAPER_PANEL) can each be on/off
 #     freely, so k of them yield 2^k combinations.
 #   * Device-class flags (IS_*) are mutually exclusive — a board is exactly
 #     one device class (see device_class_detect()'s #if ladder). c of them
@@ -56,7 +56,7 @@ is_device_class_flag() {
 # Enumerate the reachable variants for a set of unique chunk flags.
 # Emits one line per variant to stdout, tab-separated:
 #   <if_expr>\t<space-separated flags that are ON in this variant>
-# The if_expr is a C preprocessor expression (e.g. "HAS_DISPLAY && !HAS_EPAPER
+# The if_expr is a C preprocessor expression (e.g. "HAS_DISPLAY && !HAS_EPAPER_PANEL
 # && IS_COFFEE_SCALE && !IS_SHUTTER_TESTER && !IS_DARKROOM_TIMER"), or the
 # literal "ALWAYS" when there are no flags. Independent flags expand 2^k;
 # device-class flags form one (c + 1)-way exclusive group. Every positive
@@ -1026,7 +1026,7 @@ asset_feature_flag() {
     # Strip trailing _fragment suffix (no-op for JS stems).
     stem="${stem%_fragment}"
     case "$stem" in
-        pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|screen_preview|screensaver|image_library|portal_image_library)
+        pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|rotation|screen_preview|screensaver|image_library|portal_image_library)
             echo "HAS_DISPLAY" ;;
         mqtt|ha_discovery)
             echo "HAS_MQTT" ;;
@@ -1041,7 +1041,9 @@ asset_feature_flag() {
         storage)
             echo "HAS_STORAGE_BROWSER" ;;
         epaper_status|epaper_image|epaper_overlay|epaper_vcom|epaper_init)
-            echo "HAS_EPAPER" ;;
+            echo "HAS_EPAPER_PANEL" ;;
+        epaper_refresh|portal_epaper_refresh)
+            echo "HAS_LVGL_EPAPER" ;;
         shutter|shutter_tests|shutter_sessions|shutter_session_actions)
             echo "IS_SHUTTER_TESTER" ;;
         scale|brews|brew_templates|portal_action_editor_scale|portal_brews|portal_brews_charts|portal_brews_init|portal_brews_templates)

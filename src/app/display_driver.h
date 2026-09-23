@@ -96,6 +96,17 @@ public:
 				// Override in buffered drivers (e.g., Arduino_GFX canvas)
 		}
 
+		// Queue a full physical refresh of the current framebuffer. Buffered
+		// e-paper drivers override this; other drivers report unsupported.
+		virtual bool requestFullRefresh() { return false; }
+
+		// Returns false when initialization failed and the driver cannot serve
+		// display or presentation requests.
+		virtual bool isAvailable() const { return true; }
+
+		// Returns the active panel presentation mode, or -1 when not applicable.
+		virtual int presentationMode() const { return -1; }
+
 		// Panel-level sleep/wake.  Sends standard display sleep commands (0x10/0x11,
 		// 0x28/0x29) where supported.  Reduces panel power consumption and provides
 		// true panel protection beyond backlight-off.

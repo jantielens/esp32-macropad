@@ -177,6 +177,10 @@ private:
 
     // --- Lightweight state (kept even when evicted) ---
     uint32_t cachedGeneration; // Last seen pad_config generation
+    uint64_t lastPassiveBindingSlot;
+    uint64_t lastTimeBindingMinute;
+    bool hasTimeBinding;
+    bool clockWasSynced;
     bool tilesBuilt;
     // Bitmask (by device-class registration index) of registered device
     // classes whose pad_hold_scheme binding token appears on this pad.
@@ -203,10 +207,12 @@ private:
     // Build/destroy tile LVGL objects from config
     void buildTiles();
     void clearTiles();
+    void pollLiveData(bool force = false);
     void pollMqttBindings();
     void pollColorBindings();
     void pollNumberBindings();
     void pollBtnStateBindings();
+    bool containsTimeBinding() const;
 #if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
     void pollImageFrames();
 #endif

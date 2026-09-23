@@ -40,8 +40,8 @@
 #define CONFIG_HA_URL_MAX_LEN 48
 #define CONFIG_HA_TOKEN_MAX_LEN 184
 
-// Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble | duty_cycle_epaper). Sized to fit longest value + NUL.
-#define CONFIG_OPERATING_MODE_MAX_LEN 20
+// Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble | duty_cycle_epaper_frame). Sized to fit longest value + NUL.
+#define CONFIG_OPERATING_MODE_MAX_LEN 32
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
 
 // Screen saver MQTT wake binding
@@ -65,6 +65,16 @@
 #endif
 
 // Configuration structure
+#if HAS_LVGL_EPAPER
+struct EpaperRefreshSettings {
+		uint8_t epaper_render_mode;
+		uint32_t epaper_binding_refresh_interval_ms;
+		uint32_t epaper_min_refresh_interval_ms;
+		bool epaper_refresh_clock_on_minute_boundary;
+		uint16_t epaper_full_refresh_threshold;
+};
+#endif
+
 struct DeviceConfig {
 		// WiFi credentials
 		char wifi_ssid[CONFIG_SSID_MAX_LEN];
@@ -91,7 +101,7 @@ struct DeviceConfig {
 		char ha_token[CONFIG_HA_TOKEN_MAX_LEN];  // HA long-lived access token
 
 		// Operating mode (user-selectable transport / wake behaviour)
-		char operating_mode[CONFIG_OPERATING_MODE_MAX_LEN];    // always_on | duty_cycle_mqtt | duty_cycle_ble
+		char operating_mode[CONFIG_OPERATING_MODE_MAX_LEN];    // always_on | duty_cycle_mqtt | duty_cycle_ble | duty_cycle_epaper_frame
 		uint16_t duty_cycle_wake_seconds;                      // default 120; deep-sleep duration in any duty-cycle mode (0 = wake immediately)
 		uint16_t mqtt_publish_interval_seconds;                // default 120; periodic MQTT publish cadence in Always-On (0 = disabled)
 		uint16_t portal_idle_timeout_seconds;                  // default 120; auto-sleep timeout in Config/AP mode
@@ -106,6 +116,7 @@ struct DeviceConfig {
 		
 		// Display settings
 		uint8_t backlight_brightness;  // 0-100%, default 100
+		uint8_t display_rotation;      // Quarter turns relative to the board default, 0-3
 
 		// Web portal Basic Auth (optional; enforced in STA/full mode only)
 		bool basic_auth_enabled;
@@ -144,6 +155,15 @@ struct DeviceConfig {
 		char idle_screen_pad[CONFIG_IDLE_SCREEN_PAD_MAX_LEN]; // transient pad shown while idle
 #endif
 
+#if HAS_LVGL_EPAPER
+		// E-paper presentation settings. Panel mode is sampled only at boot.
+		uint8_t epaper_render_mode;
+		uint32_t epaper_binding_refresh_interval_ms;
+		uint32_t epaper_min_refresh_interval_ms;
+		bool epaper_refresh_clock_on_minute_boundary;
+		uint16_t epaper_full_refresh_threshold;
+#endif
+
 #if HAS_CAMERA
 		uint8_t camera_jpeg_quality;             // default CAMERA_JPEG_QUALITY_DEFAULT
 		uint8_t camera_feed_target_fps;          // default CAMERA_FEED_TARGET_FPS_DEFAULT
@@ -179,6 +199,14 @@ bool config_manager_is_valid(const DeviceConfig *config); // Check if config is 
 void config_manager_print(const DeviceConfig *config); // Debug print config
 void config_manager_sanitize_device_name(const char *input, char *output, size_t max_len); // Sanitize name for mDNS
 String config_manager_get_default_device_name();      // Get default device name with chip ID
+
+#if HAS_LVGL_EPAPER
+void config_manager_apply_epaper_refresh_defaults(DeviceConfig* config);
+bool config_manager_validate_epaper_refresh_settings(const EpaperRefreshSettings& settings);
+bool config_manager_normalize_epaper_refresh_settings(DeviceConfig* config);
+void config_manager_publish_epaper_refresh_settings(const DeviceConfig* config);
+EpaperRefreshSettings config_manager_get_epaper_refresh_settings();
+#endif
 
 #if HAS_BLE_HID
 bool config_manager_get_ble_owner_claimed();            // Persistent "device has an owner" flag

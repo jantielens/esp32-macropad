@@ -741,9 +741,12 @@ void device_telemetry_init() {
 				const uint32_t dma_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 				const uint32_t dma_largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 				const uint32_t int_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+				const uint32_t psram_free = (uint32_t)heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+				const uint32_t psram_largest = (uint32_t)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 				esp_rom_printf(
-					"\n[ALLOC-FAIL] size=%u caps=0x%08x dma_internal_free=%u dma_internal_largest=%u internal_free=%u caller=%s\n",
+					"\n[ALLOC-FAIL] size=%u caps=0x%08x psram_free=%u psram_largest=%u dma_internal_free=%u dma_internal_largest=%u internal_free=%u caller=%s\n",
 					(unsigned)size, (unsigned)caps,
+					(unsigned)psram_free, (unsigned)psram_largest,
 					(unsigned)dma_free, (unsigned)dma_largest, (unsigned)int_free,
 					function_name ? function_name : "?"
 				);

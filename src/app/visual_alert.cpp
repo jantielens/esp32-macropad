@@ -81,6 +81,10 @@ static void destroy_overlay() {
 // Cancel the pulse, fade the tint to transparent, then destroy.
 static void fade_out_and_destroy() {
     if (!s_overlay) return;
+    if (DISPLAY_DISABLE_ANIMATIONS) {
+        destroy_overlay();
+        return;
+    }
     // Stop pulsing sources so the fade is monotonic.
     lv_anim_delete(s_overlay, nullptr);
     if (s_pulse_timer)   { lv_timer_delete(s_pulse_timer);   s_pulse_timer = nullptr; }
@@ -153,11 +157,11 @@ static void create_overlay(const VisualAlertParams* p) {
     lv_obj_add_flag(s_overlay, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(s_overlay, on_overlay_clicked, LV_EVENT_CLICKED, nullptr);
 
-    s_pattern   = p->pattern;
+    s_pattern   = DISPLAY_DISABLE_ANIMATIONS ? VA_PATTERN_SOLID : p->pattern;
     s_period_ms = p->period_ms > 0 ? p->period_ms : VA_DEFAULT_PERIOD_MS;
     s_cur_opa   = -1;  // force the first opacity write on the fresh overlay
 
-    switch (p->pattern) {
+    switch (s_pattern) {
         case VA_PATTERN_SOLID:
             set_overlay_opa(s_max_opa);
             break;

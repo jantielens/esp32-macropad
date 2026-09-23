@@ -174,6 +174,19 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				// Display settings
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
+				#if HAS_DISPLAY
+				(*doc)["display_rotation"] = current_config->display_rotation;
+				#endif
+				(*doc)["backlight_brightness_min"] = MIN_USER_BRIGHTNESS;
+							(*doc)["screen_saver_backlight_only"] = SCREENSAVER_BACKLIGHT_ONLY;
+				#if HAS_LVGL_EPAPER
+				(*doc)["epaper_render_mode"] = current_config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale";
+				(*doc)["epaper_binding_refresh_interval_ms"] = current_config->epaper_binding_refresh_interval_ms;
+				(*doc)["epaper_min_refresh_interval_ms"] = current_config->epaper_min_refresh_interval_ms;
+				(*doc)["epaper_refresh_clock_on_minute_boundary"] = current_config->epaper_refresh_clock_on_minute_boundary;
+				(*doc)["epaper_full_refresh_threshold"] = current_config->epaper_full_refresh_threshold;
+				caps["epaper_refresh"] = true;
+				#endif
 
 				#if HAS_BLE_HID
 				(*doc)["ble_enabled"] = current_config->ble_enabled;
@@ -334,9 +347,6 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
-		// Partial update: only update fields that are present in the request
-		// This allows different pages to update only their relevant fields
-
 		// Security hardening: never allow changing Basic Auth settings in AP/core
 		// mode AFTER initial setup. Otherwise, an attacker near the device could
 		// wait for fallback AP mode and lock out the owner. EXCEPTION: during
@@ -351,6 +361,29 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				portEXIT_CRITICAL(&g_config_post_mux);
 				return;
 		}
+
+		// Partial update: only update fields that are present in the request
+		// This allows different pages to update only their relevant fields
+		#if HAS_DISPLAY
+		if (doc.containsKey("display_rotation")) {
+				JsonVariant rotation_value = doc["display_rotation"];
+				int rotation = -1;
+				if (rotation_value.is<int>()) {
+						rotation = rotation_value.as<int>();
+				} else if (rotation_value.is<const char*>()) {
+						const char* value = rotation_value.as<const char*>();
+						if (value && value[0] >= '0' && value[0] <= '3' && value[1] == '\0') rotation = value[0] - '0';
+				}
+				if (rotation < 0 || rotation > 3) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"display_rotation must be 0-3\"}");
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+				current_config->display_rotation = (uint8_t)rotation;
+		}
+		#endif
 
 		// WiFi SSID - only update if field exists in JSON
 		if (doc.containsKey("wifi_ssid")) {
@@ -597,10 +630,56 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				#endif
 		}
 
+		#if HAS_LVGL_EPAPER
+		const EpaperRefreshSettings previous_presentation_settings = {
+				current_config->epaper_render_mode,
+				current_config->epaper_binding_refresh_interval_ms,
+				current_config->epaper_min_refresh_interval_ms,
+				current_config->epaper_refresh_clock_on_minute_boundary,
+				current_config->epaper_full_refresh_threshold,
+		};
+		if (doc.containsKey("epaper_render_mode")) {
+			const char* mode = doc["epaper_render_mode"] | "";
+			if (!strcmp(mode, "bw")) current_config->epaper_render_mode = EPAPER_RENDER_MODE_BW;
+			else if (!strcmp(mode, "grayscale")) current_config->epaper_render_mode = EPAPER_RENDER_MODE_GRAYSCALE;
+			else {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"epaper_render_mode must be grayscale or bw\"}");
+				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+			}
+		}
+		if (doc.containsKey("epaper_binding_refresh_interval_ms")) current_config->epaper_binding_refresh_interval_ms = parseUintField(doc["epaper_binding_refresh_interval_ms"], 0);
+		if (doc.containsKey("epaper_min_refresh_interval_ms")) current_config->epaper_min_refresh_interval_ms = parseUintField(doc["epaper_min_refresh_interval_ms"], 0);
+		if (doc.containsKey("epaper_refresh_clock_on_minute_boundary")) current_config->epaper_refresh_clock_on_minute_boundary = parseBoolField(doc, "epaper_refresh_clock_on_minute_boundary");
+		if (doc.containsKey("epaper_full_refresh_threshold")) {
+			const uint32_t threshold = parseUintField(doc["epaper_full_refresh_threshold"], 0);
+			current_config->epaper_full_refresh_threshold = threshold > UINT16_MAX ? UINT16_MAX : (uint16_t)threshold;
+		}
+		if (!config_manager_validate_epaper_refresh_settings({
+				current_config->epaper_render_mode,
+				current_config->epaper_binding_refresh_interval_ms,
+				current_config->epaper_min_refresh_interval_ms,
+				current_config->epaper_refresh_clock_on_minute_boundary,
+				current_config->epaper_full_refresh_threshold,
+		})) {
+			current_config->epaper_render_mode = previous_presentation_settings.epaper_render_mode;
+			current_config->epaper_binding_refresh_interval_ms = previous_presentation_settings.epaper_binding_refresh_interval_ms;
+			current_config->epaper_min_refresh_interval_ms = previous_presentation_settings.epaper_min_refresh_interval_ms;
+			current_config->epaper_refresh_clock_on_minute_boundary = previous_presentation_settings.epaper_refresh_clock_on_minute_boundary;
+			current_config->epaper_full_refresh_threshold = previous_presentation_settings.epaper_full_refresh_threshold;
+			request->send(400, "application/json", "{\"success\":false,\"message\":\"invalid e-paper presentation settings\"}");
+			portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+			return;
+		}
+		config_manager_publish_epaper_refresh_settings(current_config);
+		#endif
+
 		#if HAS_DISPLAY
 		// Screen saver settings
 		if (doc.containsKey("screen_saver_enabled")) {
+							#if !SCREENSAVER_BACKLIGHT_ONLY
 				current_config->screen_saver_enabled = parseBoolField(doc, "screen_saver_enabled");
+							#endif
 		}
 
 		if (doc.containsKey("screen_saver_timeout_seconds")) {

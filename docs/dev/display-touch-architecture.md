@@ -52,6 +52,41 @@ graph TD
 
 ## Display Driver HAL
 
+### Inkplate 6 Flick LVGL
+
+`inkplate6flick-interactive` is an experimental always-on e-paper target. Its Inkplate
+driver is buffered: LVGL flushes update a framebuffer, then a presentation task
+coalesces changes before a physical waveform. B/W mode uses partial updates with
+periodic full refreshes; grayscale uses full waveforms. The Cypress touch driver
+continues polling while a presentation is pending. This target uses a no-OTA
+partition and must be updated over USB.
+
+The driver copies the mode-specific drawing framebuffer into a PSRAM presentation
+snapshot while holding its mutex, then releases the mutex before the blocking
+waveform. That preserves writes made during the waveform for the next
+presentation and permits no-op detection against the last presented frame. B/W
+pixels use ordered dithering and can use `partialUpdate()`; 3-bit grayscale can
+only use full waveforms. The driver, rather than InkplateLibrary's automatic
+threshold, owns the periodic B/W full-refresh cadence.
+
+The Cypress controller is an event stream. `getData()` returning zero is not by
+itself a release: it can also mean that no event is pending. The touch driver
+reads only pending events, retains contact state between them, and serializes
+controller reads so a one-shot report cannot be consumed by another observer.
+
+### reTerminal E1003 LVGL
+
+`reterminal-e1003-interactive` is an always-on IT8951 e-paper Macropad target.
+Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
+It copies a settled LVGL frame under the framebuffer mutex, then uploads and
+refreshes the presentation snapshot outside that mutex so later LVGL flushes
+remain queued. Both modes coalesce LVGL flush rectangles into one aligned IT8951
+region. B/W uses ordered dithering and regional DU; grayscale uses regional GC16.
+Initial and forced presentations use full-panel GC16, as do scheduled refreshes
+in both modes. Regional grayscale quality still needs hardware validation.
+Touch uses the existing GT911 driver on the E1003's shared
+GPIO19/GPIO20 I2C lines.
+
 ### Purpose
 
 The DisplayDriver interface decouples LVGL from specific display libraries, allowing support for TFT_eSPI, LovyanGFX, or custom drivers without changing DisplayManager code.
@@ -154,6 +189,15 @@ void MipiDsiDriver::configureLVGL(lv_display_t* disp, uint8_t rotation) {
 ```
 
 **DisplayManager Integration:**
+
+Interactive displays store `display_rotation` as a 0-3 quarter-turn offset from
+the board's `DISPLAY_ROTATION` default. Config loads before display startup;
+DisplayManager applies `(DISPLAY_ROTATION + display_rotation) & 3` before driver
+initialization (for drivers that allocate rotation buffers), and again after
+initialization (for hardware rotation). TouchManager receives the same effective
+rotation. The saved value only takes effect after reboot. E-paper frame mode
+uses a separate rotation setting for status screens and overlays.
+
 ```cpp
 void DisplayManager::initLVGL() {
     lv_init();
@@ -168,7 +212,7 @@ void DisplayManager::initLVGL() {
     lv_display_set_buffers(display, buf, buf2, buf_size_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
     
     // Call driver's LVGL configuration hook
-    driver->configureLVGL(display, DISPLAY_ROTATION);
+    driver->configureLVGL(display, (DISPLAY_ROTATION + config->display_rotation) & 3);
 }
 ```
 

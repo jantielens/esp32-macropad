@@ -60,8 +60,12 @@ static void destroy_bubble() {
 
 static void on_dismiss_timer(lv_timer_t* timer) {
     (void)timer;
-    // Fade out then destroy
+    // Slow-refresh displays remove the bubble directly instead of animating it.
     if (s_container) {
+        if (DISPLAY_DISABLE_ANIMATIONS) {
+            destroy_bubble();
+            return;
+        }
         lv_anim_t a;
         lv_anim_init(&a);
         lv_anim_set_var(&a, s_container);
@@ -173,17 +177,21 @@ static void create_bubble(const MessageBubbleParams* p) {
     lv_obj_add_flag(s_container, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(s_container, on_bubble_clicked, LV_EVENT_CLICKED, nullptr);
 
-    // Start invisible, fade in
-    lv_obj_set_style_opa(s_container, LV_OPA_TRANSP, 0);
-    lv_anim_t a;
-    lv_anim_init(&a);
-    lv_anim_set_var(&a, s_container);
-    lv_anim_set_values(&a, LV_OPA_TRANSP, LV_OPA_COVER);
-    lv_anim_set_duration(&a, FADE_MS);
-    lv_anim_set_exec_cb(&a, [](void* obj, int32_t v) {
-        lv_obj_set_style_opa((lv_obj_t*)obj, (lv_opa_t)v, 0);
-    });
-    lv_anim_start(&a);
+    if (DISPLAY_DISABLE_ANIMATIONS) {
+        lv_obj_set_style_opa(s_container, LV_OPA_COVER, 0);
+    } else {
+        // Start invisible, fade in.
+        lv_obj_set_style_opa(s_container, LV_OPA_TRANSP, 0);
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, s_container);
+        lv_anim_set_values(&a, LV_OPA_TRANSP, LV_OPA_COVER);
+        lv_anim_set_duration(&a, FADE_MS);
+        lv_anim_set_exec_cb(&a, [](void* obj, int32_t v) {
+            lv_obj_set_style_opa((lv_obj_t*)obj, (lv_opa_t)v, 0);
+        });
+        lv_anim_start(&a);
+    }
 
     // Auto-dismiss timer
     if (p->duration_ms > 0) {

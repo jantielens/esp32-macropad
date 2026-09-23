@@ -338,7 +338,11 @@
 #define LV_USE_LODEPNG 1
 #define LV_USE_LIBPNG 0
 #define LV_USE_BMP 0
+#if HAS_LVGL_EPAPER
+#define LV_USE_TJPGD 0
+#else
 #define LV_USE_TJPGD 1
+#endif
 #define LV_USE_LIBJPEG_TURBO 0
 #define LV_USE_GIF 0
 

@@ -32,7 +32,7 @@ public:
 		~TouchManager();
 		
 		// Initialize touch hardware and register with LVGL
-		void init();
+		void init(uint8_t rotation);
 
 		// Retry deferred LVGL registration (non-blocking)
 		void loop();
@@ -44,7 +44,7 @@ public:
 };
 
 // C-style interface for app.ino
-void touch_manager_init();
+void touch_manager_init(uint8_t rotation);
 void touch_manager_loop();
 bool touch_manager_is_touched();
 

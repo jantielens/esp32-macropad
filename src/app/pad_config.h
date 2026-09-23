@@ -14,7 +14,7 @@
 // ============================================================================
 // Each pad (0..MAX_PADS-1) is stored as /config/pad_N.json on LittleFS.
 // The REST API saves raw JSON to preserve all fields (including future ones).
-// pad_config_load() parses only the fields needed for rendering.
+// Runtime pad configs are parsed from JSON and cached as immutable snapshots.
 
 // MAX_PADS is defined in board_config.h (overridable per board, default 16)
 // MAX_PAD_BUTTONS, MAX_GRID_COLS, MAX_GRID_ROWS are overridable per board.
@@ -148,6 +148,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_CAMERA_CAPTURE "camera_capture"
 #define ACTION_TYPE_IMAGE_NEXT "image_next"
 #define ACTION_TYPE_IMAGE_PREVIOUS "image_previous"
+#define ACTION_TYPE_DISPLAY_REFRESH "display_refresh"
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
 
@@ -244,6 +245,9 @@ struct DelayPayload {
 struct CameraCapturePayload {
     char save_to[7];                               // "latest", "roll", or "both"
 };
+struct DisplayRefreshPayload {
+    char mode[5];                                  // "full"
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -277,6 +281,7 @@ union ActionPayload {
     CyclePadPayload   cycle_pad;    // type == ACTION_TYPE_CYCLE_PAD
     DelayPayload      delay;        // type == ACTION_TYPE_DELAY
     CameraCapturePayload camera_capture; // type == ACTION_TYPE_CAMERA_CAPTURE
+    DisplayRefreshPayload display_refresh; // type == ACTION_TYPE_DISPLAY_REFRESH
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, and "" (none) carry no payload data — only the type tag.
@@ -471,6 +476,8 @@ struct ButtonDefaults {
 
 // Per-pad config
 struct PadConfig {
+    uint16_t ref_count;                    // cache/readers; managed by pad_config_acquire/release
+    uint8_t button_capacity;               // allocated entries in buttons
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
@@ -495,7 +502,7 @@ struct PadConfig {
     uint8_t pad_action_count;
 
     uint8_t button_count;
-    ScreenButtonConfig buttons[MAX_PAD_BUTTONS];
+    ScreenButtonConfig* buttons;           // exact-size trailing allocation
 };
 
 // Compact copy for data stream registration. It retains only the widget
@@ -514,10 +521,13 @@ extern "C" {
 // Mount LittleFS filesystem. Call once at boot. Returns true on success.
 bool pad_config_init();
 
-// Load pad config from LittleFS JSON. Caller provides PadConfig buffer.
-// On success, out is populated and returns true. On failure (file missing,
-// parse error), out is zeroed and returns false.
-bool pad_config_load(uint8_t page, PadConfig* out);
+// Acquire the immutable in-memory config for a page. The returned reference
+// remains valid until paired with pad_config_release(). Returns nullptr when
+// the page is not configured.
+const PadConfig* pad_config_acquire(uint8_t page);
+
+// Release a reference returned by pad_config_acquire().
+void pad_config_release(const PadConfig* config);
 
 // Copy the widget and binding fields required for data-stream registration.
 // The result is protected from concurrent pad cache replacement.

@@ -219,17 +219,9 @@ void mqtt_sub_store_subscribe_all() {
     };
 
 #if HAS_DISPLAY
-    // Temp config buffer
-    PadConfig* cfg = (PadConfig*)heap_caps_malloc(
-        sizeof(PadConfig), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!cfg) cfg = (PadConfig*)malloc(sizeof(PadConfig));
-    if (!cfg) {
-        free(unique);
-        return;
-    }
-
     for (uint8_t page = 0; page < MAX_PADS; page++) {
-        if (!pad_config_load(page, cfg)) continue;
+        const PadConfig* cfg = pad_config_acquire(page);
+        if (!cfg) continue;
         // Set page context so [pad:] collector can resolve named bindings
         pad_binding_set_page(cfg);
         // Scan page-level background color for binding tokens
@@ -263,10 +255,9 @@ void mqtt_sub_store_subscribe_all() {
                 action_collect_binding_topics(btn.lp_actions[a], &ctx);
             }
         }
+        pad_config_release(cfg);
     }
     pad_binding_set_page(nullptr);
-
-    free(cfg);
 
     // Scan screen saver wake binding for MQTT topics
     {

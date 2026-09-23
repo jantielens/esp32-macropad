@@ -34,8 +34,9 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | esp32-p4-lcd4b-voice | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
 | esp32c3-withsensors | ? | ? | ? | ?×? | ? | none |  |
 | firebeetle2-esp32c6-aht10 | ? | ? | ? | ?×? | ? | none |  |
-| inkplate5v2 | ? | ? | ? | ?×? | ? | none |  |
-| inkplate6flick | ? | ? | ? | ?×? | ? | none |  |
+| inkplate5v2-frame | ? | ? | ? | ?×? | ? | none |  |
+| inkplate6flick-frame | ? | ? | ? | ?×? | ? | none |  |
+| inkplate6flick-interactive | INKPLATE6FLICK | ? | ? | 1024×758 | 0 | INKPLATE6FLICK |  |
 | jc1060p470c | JD9165_DSI | JD9165 | DSI | 1024×600 | 1 | GT911 |  |
 | jc1060p470c-sd | JD9165_DSI | JD9165 | DSI | 1024×600 | 1 | GT911 |  |
 | jc3248w535 | ARDUINO_GFX | AXS15231B | QSPI | 320×480 | 1 | AXS15231B |  |
@@ -48,7 +49,8 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | jc4880p433-nau7802 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-sd | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-shutter | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
-| reterminal-e1003 | ? | ? | ? | ?×? | ? | none |  |
+| reterminal-e1003-frame | ? | ? | ? | ?×? | ? | none |  |
+| reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | ? | 1872×1404 | 1 | GT911 |  |
 
 <!-- BOARD_DRIVER_TABLE_END -->
 

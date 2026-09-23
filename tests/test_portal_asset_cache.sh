@@ -24,6 +24,6 @@ grep -Fq "src=\"/portal.js?v=$version\"" "$rendered_shell"
 grep -Fq '"/portal-camera.js?v=" FIRMWARE_VERSION' src/app/components/camera_component.cpp
 grep -Fq '"/portal-camera.css?v=" FIRMWARE_VERSION' src/app/components/camera_component.cpp
 grep -Fq '"public, max-age=31536000, immutable"' src/app/web_portal_pages.cpp
-test "$(grep -c 'kImmutableAssetCacheControl' src/app/web_portal_pages.cpp)" -eq 5
+test "$(grep -c 'kImmutableAssetCacheControl' src/app/web_portal_pages.cpp)" -eq 6
 
 echo "PASS: portal asset cache policy"

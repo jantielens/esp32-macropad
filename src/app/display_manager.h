@@ -212,6 +212,7 @@ public:
 				DisplayTaskExec exec, DisplayTaskCleanup cleanup,
 				const void* ctx, size_t ctxLen,
 				uint32_t timeoutMs, bool* outOk, char* outMsg, size_t outMsgLen);
+		bool requestFullRefresh();
 
 		// Active LVGL logical resolution (post driver->configureLVGL()).
 		// Prefer using these instead of calling LVGL APIs from non-LVGL tasks.
@@ -234,6 +235,12 @@ struct DisplayPerfStats {
 		uint32_t present_us;
 };
 
+enum DisplayRefreshRequestResult : uint8_t {
+		DISPLAY_REFRESH_QUEUED,
+		DISPLAY_REFRESH_UNAVAILABLE,
+		DISPLAY_REFRESH_FAILED,
+};
+
 // Global instance (managed by app.ino)
 extern DisplayManager* displayManager;
 
@@ -250,6 +257,8 @@ const ScreenInfo* display_manager_get_available_screens(size_t* count);
 void display_manager_set_splash_status(const char* text);
 void display_manager_set_backlight_brightness(uint8_t brightness);  // 0-100%
 uint8_t display_manager_get_backlight_brightness();  // 0-100%
+DisplayRefreshRequestResult display_manager_request_full_refresh();
+int display_manager_get_presentation_mode();
 
 // Serialization helpers for code running outside the LVGL task.
 // Use these to avoid concurrent access to buffered display backends (e.g., Arduino_GFX canvas).

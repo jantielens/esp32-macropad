@@ -315,6 +315,42 @@ The firmware exposes two BLE health signals for bindings and diagnostics:
 |---------|-------------|
 | **Backlight Brightness** | Slider (0–100%). Changes take effect immediately; save to persist across reboots |
 
+On the Inkplate 6FLICK LVGL target, Brightness also contains **Turn off
+backlight after** and the MQTT backlight wake/keep-on binding. Set the timeout
+to `0` to keep the frontlight on. When the timeout expires, the e-paper panel
+continues to render and refresh bindings; touching the screen, a configured
+MQTT binding, and display wake actions turn the frontlight back on. This target
+does not show the separate Screen Saver page because panel-sleep and burn-in
+controls do not apply to e-paper.
+
+### Rotation
+
+*Shown only on interactive boards with a display.*
+
+Choose 0, 90, 180, or 270 degrees clockwise relative to the board's built-in
+orientation. Zero preserves the board default. Save the setting, then reboot to
+apply it to both the screen and touch input.
+
+### E-paper Presentation
+
+*Shown only on boards with configurable e-paper presentation support.*
+
+Use this section to select **Grayscale** or **Black & white** panel mode. The
+choice applies after restart. Both modes share one passive binding interval
+(100 to 60,000 ms) and minimum presentation interval (250 to 60,000 ms).
+
+Enable **Refresh clock values on minute boundary** to update pads containing
+time bindings at the minute edge. When disabled, those values update through
+the shared passive interval.
+
+The full-refresh threshold and **Full refresh now** are available in both modes.
+Set the threshold to `0` only when you accept the ghosting risk because
+scheduled full refreshes are disabled. The manual control queues a full waveform
+for the current framebuffer; the portal returns immediately while the display
+completes it.
+Inkplate grayscale always refreshes the full panel, so the threshold has no
+effect in that mode.
+
 ### Screen Preview
 
 Select the active screen and capture the current device framebuffer in the
