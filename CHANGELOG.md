@@ -14,41 +14,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-* Interactive display boards can set screen rotation to 0, 90, 180, or 270
-  degrees relative to their built-in orientation under **Display > Rotation**
-  in the web portal. The setting is saved across reboots and applies to the
-  display and touch input after restarting; E-Paper Frame rotation is separate.
-
-### Fixed
-
-* **Pad editor button outlines**: configured buttons and widgets now have solid outlines, while empty positions and ghost previews retain dashed outlines.
-
-## [1.32.0] - 2026-09-22
+## [1.32.0] - 2026-09-23
 
 ### Added
 
-* **Interactive E-Paper display support**: buffered rendering, configurable B/W or grayscale modes, and E-Paper-specific refresh controls are now available. `inkplate6flick-interactive` is the first Interactive E-Paper board; its always-on firmware uses the 3 MB no-OTA application partition, so firmware updates require USB flashing.
+* **Interactive E-Paper displays**: always-on Macropad boards can now render
+  with buffered B/W or grayscale output and configurable refresh controls.
+  `inkplate6flick-interactive` is the first supported board; its 3 MB no-OTA
+  application partition requires USB flashing for firmware updates.
 * **Seeed reTerminal E1003 Interactive E-Paper board**: the new
   `reterminal-e1003-interactive` ESP32-S3 Macropad target supports the 10.3-inch
-  1872 by 1404 IT8951 panel and GT911 touch. It offers regional DU B/W and GC16
-  grayscale updates, with scheduled full-panel GC16 refreshes to manage ghosting.
-* **E1003 regional grayscale refreshes**: changed grayscale updates use regional
-  GC16; initial, manual, and scheduled refreshes still use full-panel GC16.
-* **Display animation policy**: boards can set `DISPLAY_DISABLE_ANIMATIONS` to suppress visual transitions while retaining immediate state updates, with existing boards unchanged by the default-off setting.
+  1872 by 1404 IT8951 panel and GT911 touch. Changed regions use DU B/W or GC16
+  grayscale updates; initial, manual, and scheduled grayscale refreshes use
+  full-panel GC16 to manage ghosting.
+* **Interactive E-Paper refresh controls**: B/W and grayscale share a configurable
+  passive binding interval, minimum presentation interval, and full-refresh
+  threshold. Inkplate grayscale always uses full waveforms and ignores the threshold.
+* **Screen rotation**: interactive display boards can choose 0, 90, 180, or 270
+  degrees relative to their built-in orientation under **Display > Rotation**
+  in the web portal. The setting persists across reboots and rotates both the
+  display and touch input after restarting; E-Paper Frame rotation is separate.
+* **Display animation policy**: boards can set `DISPLAY_DISABLE_ANIMATIONS` to
+  suppress visual transitions while retaining immediate state updates. Existing
+  boards are unchanged by the default-off setting.
 
 ### Changed
 
 * **Breaking E-Paper naming migration**: `HAS_EPAPER_PANEL` now describes only physical panel capability. The sleep-first product class is **E-Paper Frame**, selected with `IS_EPAPER_FRAME` and identified by the `epaper_frame` device-class slug; the always-on LVGL profile is **Interactive E-Paper**, selected with `HAS_LVGL_EPAPER` and remaining a Macropad device class. Frame targets now use the `-frame` suffix, and the Interactive E-Paper target is `inkplate6flick-interactive`.
-* **Breaking E-Paper Frame contract migration**: renamed frame modules, device-class branding, board macros, portal category, and the persisted operating mode from `duty_cycle_epaper` to `duty_cycle_epaper_frame`. The Interactive E-Paper settings and API fields now use the `epaper_` prefix, including `epaper_render_mode` and refresh intervals. There are no compatibility aliases or persisted-setting migrations for retired names.
-* **Interactive E-Paper refresh controls**: B/W and grayscale now share one passive binding interval, minimum presentation interval, and full-refresh threshold. Inkplate grayscale always uses full waveforms and ignores the threshold. Previous per-mode NVS settings and API fields are not migrated.
+* **Breaking E-Paper Frame contract migration**: renamed frame modules, device-class branding, board macros, portal category, and the persisted operating mode from `duty_cycle_epaper` to `duty_cycle_epaper_frame`. The Interactive E-Paper settings and API fields now use the `epaper_` prefix, including `epaper_render_mode` and refresh intervals. There are no compatibility aliases or persisted-setting migrations for retired names, including previous per-mode refresh settings.
 
 ### Fixed
 
+* **Pad editor button outlines**: configured buttons and widgets now have solid outlines, while empty positions and ghost previews retain dashed outlines.
+* **PNG icon validation**: invalid or oversized PNG icon uploads are rejected before decoding, and display builds report their accepted icon dimension limit.
 * **Interactive E-Paper refresh settings**: persisted refresh intervals are validated, invalid stored values fall back to safe defaults, and live consumers read synchronized settings snapshots.
 * **Interactive E-Paper full refreshes**: manual refresh requests now report unavailable or failed queue operations, and failed refresh initialization is exposed as unavailable.
-* **PNG icon validation**: invalid or oversized PNG icon uploads are rejected before decoding, and display builds report their accepted icon dimension limit.
 * **E1003 icon memory use**: uploaded icons are capped at 192 pixels per side so
   decoded ARGB caches remain within the PSRAM headroom left by the e-paper framebuffers.
 

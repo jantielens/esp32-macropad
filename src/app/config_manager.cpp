@@ -151,8 +151,7 @@ bool config_manager_validate_epaper_refresh_settings(const EpaperRefreshSettings
 				settings.epaper_binding_refresh_interval_ms >= EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS &&
 				settings.epaper_binding_refresh_interval_ms <= EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS &&
 				settings.epaper_min_refresh_interval_ms >= EPAPER_REFRESH_INTERVAL_MIN_MS &&
-				settings.epaper_min_refresh_interval_ms <= EPAPER_REFRESH_INTERVAL_MAX_MS &&
-				settings.epaper_full_refresh_threshold <= EPAPER_FULL_REFRESH_THRESHOLD_MAX;
+				settings.epaper_min_refresh_interval_ms <= EPAPER_REFRESH_INTERVAL_MAX_MS;
 }
 
 bool config_manager_normalize_epaper_refresh_settings(DeviceConfig* config) {
