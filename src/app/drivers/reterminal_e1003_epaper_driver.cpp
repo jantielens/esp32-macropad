@@ -347,6 +347,7 @@ void ReTerminalE1003EpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
 		pendingChanges = true;
 		lastChangeMs = millis();
 		xSemaphoreGive(framebufferMutex);
+		if ((uint32_t)currentW * currentH >= 1024) vTaskDelay(1);
 }
 
 void ReTerminalE1003EpaperDriver::present() {
