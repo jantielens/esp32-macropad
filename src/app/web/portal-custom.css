@@ -1680,8 +1680,8 @@ body {
 .pad-cell:active      { transform: scale(0.96); }
 .pad-cell-empty       { background: transparent; color: #636366; font-size: 20px; }
 .pad-cell-empty:hover { background: rgba(255,255,255,0.04); }
+.pad-cell-btn         { border: none; outline-style: solid; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 .pad-cell-ghost       { opacity: 0.35; outline: 2px dashed rgba(255,255,255,0.35); outline-offset: -2px; }
-.pad-cell-btn         { border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 .pad-cell-btn:hover   { box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
 
 .pad-cell-image-placeholder {
