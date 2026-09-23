@@ -204,7 +204,7 @@ bool refreshPanel(const PanelRegion& region, uint8_t waveform) {
 ReTerminalE1003EpaperDriver::ReTerminalE1003EpaperDriver(DeviceConfig* cfg)
 		: config(cfg), currentX(0), currentY(0), currentW(0), currentH(0), rotation(0),
 			panelMode(cfg ? cfg->epaper_render_mode : EPAPER_DEFAULT_RENDER_MODE), lastRefreshMs(0), lastChangeMs(0),
-			bwPartialUpdatesSinceFull(0), drawingFramebuffer(nullptr), presentedFramebuffer(nullptr), framebufferMutex(nullptr),
+			bwPartialUpdatesSinceFull(0), grayscalePartialUpdatesSinceFull(0), drawingFramebuffer(nullptr), presentedFramebuffer(nullptr), framebufferMutex(nullptr),
 			pendingChanges(false), fullRefreshRequested(false), hasPresentedFrame(false), initialized(false), dirtyRegionValid(false),
 			dirtyX(0), dirtyY(0), dirtyX2(0), dirtyY2(0) {}
 
@@ -358,7 +358,7 @@ void ReTerminalE1003EpaperDriver::present() {
 				return;
 			}
 			const EpaperRefreshSettings settings = config_manager_get_epaper_refresh_settings();
-			const uint32_t minRefreshMs = usesBwMode() ? settings.epaper_bw_min_refresh_interval_ms : settings.epaper_grayscale_min_refresh_interval_ms;
+			const uint32_t minRefreshMs = settings.epaper_min_refresh_interval_ms;
 			const uint32_t now = millis();
 			const uint32_t refreshWait = lastRefreshMs && now - lastRefreshMs < minRefreshMs ? minRefreshMs - (now - lastRefreshMs) : 0;
 			const uint32_t settleWait = EPAPER_REFRESH_SETTLE_MS && now - lastChangeMs < EPAPER_REFRESH_SETTLE_MS ? EPAPER_REFRESH_SETTLE_MS - (now - lastChangeMs) : 0;
@@ -380,8 +380,8 @@ void ReTerminalE1003EpaperDriver::present() {
 			return;
 		}
 		const EpaperRefreshSettings settings = config_manager_get_epaper_refresh_settings();
-		const bool scheduledFull = usesBwMode() && settings.epaper_bw_full_refresh_threshold > 0 &&
-				bwPartialUpdatesSinceFull >= settings.epaper_bw_full_refresh_threshold;
+		const bool scheduledFull = settings.epaper_full_refresh_threshold > 0 &&
+				(usesBwMode() ? bwPartialUpdatesSinceFull : grayscalePartialUpdatesSinceFull) >= settings.epaper_full_refresh_threshold;
 		PanelRegion region = {dirtyX, dirtyY, (uint16_t)(dirtyX2 - dirtyX + 1), (uint16_t)(dirtyY2 - dirtyY + 1)};
 		const uint16_t regionEnd = region.x + region.width;
 		region.x &= ~0x03;
@@ -390,9 +390,9 @@ void ReTerminalE1003EpaperDriver::present() {
 		const uint32_t regionPixels = (uint32_t)region.width * region.height;
 		const uint32_t panelPixels = (uint32_t)kPanelWidth * kPanelHeight;
 		const uint32_t dirtyCoveragePercent = (regionPixels * 100 + panelPixels - 1) / panelPixels;
-		const bool fullRefresh = forceFull || scheduledFull || !usesBwMode() || !hasPresentedFrame;
+		const bool fullRefresh = forceFull || scheduledFull || !hasPresentedFrame;
 		const PanelRegion dirtyRegion = region;
-		const uint32_t partialCountBefore = bwPartialUpdatesSinceFull;
+		const uint32_t partialCountBefore = usesBwMode() ? bwPartialUpdatesSinceFull : grayscalePartialUpdatesSinceFull;
 		if (fullRefresh) region = {0, 0, kPanelWidth, kPanelHeight};
 		memcpy(presentedFramebuffer, drawingFramebuffer, framebufferBytes());
 		pendingChanges = false;
@@ -400,7 +400,7 @@ void ReTerminalE1003EpaperDriver::present() {
 		xSemaphoreGive(framebufferMutex);
 
 		const uint32_t startMs = millis();
-		const bool presented = uploadFramebuffer(presentedFramebuffer, region) && refreshPanel(region, fullRefresh ? kWaveformGc16 : kWaveformDu);
+		const bool presented = uploadFramebuffer(presentedFramebuffer, region) && refreshPanel(region, fullRefresh || !usesBwMode() ? kWaveformGc16 : kWaveformDu);
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
 		if (!presented) {
 			pendingChanges = true;
@@ -413,12 +413,17 @@ void ReTerminalE1003EpaperDriver::present() {
 		} else {
 			hasPresentedFrame = true;
 			lastRefreshMs = millis();
-			if (fullRefresh) bwPartialUpdatesSinceFull = 0;
-			else ++bwPartialUpdatesSinceFull;
+			if (fullRefresh) {
+				bwPartialUpdatesSinceFull = 0;
+				grayscalePartialUpdatesSinceFull = 0;
+			} else if (usesBwMode()) ++bwPartialUpdatesSinceFull;
+			else ++grayscalePartialUpdatesSinceFull;
 			LOGI("Epaper", "%s refresh %ux%u completed in %lums (dirty=%ux%u@%u,%u %lu%%; forced=%d scheduled=%d; partials=%lu/%u)",
-					fullRefresh ? "full" : "B/W partial", region.width, region.height, (unsigned long)(lastRefreshMs - startMs),
+					fullRefresh ? "full GC16" : (usesBwMode() ? "B/W partial DU" : "grayscale partial GC16"),
+					region.width, region.height, (unsigned long)(lastRefreshMs - startMs),
 					dirtyRegion.width, dirtyRegion.height, dirtyRegion.x, dirtyRegion.y, (unsigned long)dirtyCoveragePercent,
-					forceFull, scheduledFull, (unsigned long)partialCountBefore, settings.epaper_bw_full_refresh_threshold);
+					forceFull, scheduledFull, (unsigned long)partialCountBefore,
+					settings.epaper_full_refresh_threshold);
 		}
 		xSemaphoreGive(framebufferMutex);
 }

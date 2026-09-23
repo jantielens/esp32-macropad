@@ -19,15 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **Interactive E-Paper display support**: buffered rendering, configurable B/W or grayscale modes, and E-Paper-specific refresh controls are now available. `inkplate6flick-interactive` is the first Interactive E-Paper board; its always-on firmware uses the 3 MB no-OTA application partition, so firmware updates require USB flashing.
 * **Seeed reTerminal E1003 Interactive E-Paper board**: the new
   `reterminal-e1003-interactive` ESP32-S3 Macropad target supports the 10.3-inch
-  1872 by 1404 IT8951 panel and GT911 touch. It offers full-panel GC16 grayscale
-  refreshes and regional DU B/W refreshes, with scheduled B/W full refreshes to
-  manage ghosting.
+  1872 by 1404 IT8951 panel and GT911 touch. It offers regional DU B/W and GC16
+  grayscale updates, with scheduled full-panel GC16 refreshes to manage ghosting.
+* **E1003 regional grayscale refreshes**: changed grayscale updates use regional
+  GC16; initial, manual, and scheduled refreshes still use full-panel GC16.
 * **Display animation policy**: boards can set `DISPLAY_DISABLE_ANIMATIONS` to suppress visual transitions while retaining immediate state updates, with existing boards unchanged by the default-off setting.
 
 ### Changed
 
 * **Breaking E-Paper naming migration**: `HAS_EPAPER_PANEL` now describes only physical panel capability. The sleep-first product class is **E-Paper Frame**, selected with `IS_EPAPER_FRAME` and identified by the `epaper_frame` device-class slug; the always-on LVGL profile is **Interactive E-Paper**, selected with `HAS_LVGL_EPAPER` and remaining a Macropad device class. Frame targets now use the `-frame` suffix, and the Interactive E-Paper target is `inkplate6flick-interactive`.
 * **Breaking E-Paper Frame contract migration**: renamed frame modules, device-class branding, board macros, portal category, and the persisted operating mode from `duty_cycle_epaper` to `duty_cycle_epaper_frame`. The Interactive E-Paper settings and API fields now use the `epaper_` prefix, including `epaper_render_mode` and refresh intervals. There are no compatibility aliases or persisted-setting migrations for retired names.
+* **Interactive E-Paper refresh controls**: B/W and grayscale now share one passive binding interval, minimum presentation interval, and full-refresh threshold. Inkplate grayscale always uses full waveforms and ignores the threshold. Previous per-mode NVS settings and API fields are not migrated.
 
 ### Fixed
 

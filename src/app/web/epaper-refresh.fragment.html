@@ -12,31 +12,18 @@
         <input type="radio" class="btn-check" name="epaper_render_mode" id="panel-mode-bw" value="bw">
         <label class="btn btn-outline-secondary" for="panel-mode-bw">Black &amp; white</label>
       </div>
-      <div class="form-text">The selected mode is used after the next restart. Each mode keeps its own refresh settings.</div>
+      <div class="form-text">The selected mode is used after the next restart. Refresh settings apply to both modes.</div>
     </div>
 
-    <section id="epaper-grayscale-settings" hidden>
-      <h3>Grayscale settings</h3>
-      <label class="form-label" for="epaper_grayscale_binding_refresh_interval_ms">Passive binding interval (ms)</label>
-      <input class="form-control" type="number" min="100" max="60000" id="epaper_grayscale_binding_refresh_interval_ms" name="epaper_grayscale_binding_refresh_interval_ms">
-      <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates.</div>
-      <label class="form-label mt-3" for="epaper_grayscale_min_refresh_interval_ms">Minimum presentation interval (ms)</label>
-      <input class="form-control" type="number" min="250" max="60000" id="epaper_grayscale_min_refresh_interval_ms" name="epaper_grayscale_min_refresh_interval_ms">
-      <div class="form-text">The shortest delay between physical panel updates. Higher values combine rapid changes into one waveform.</div>
-    </section>
-
-    <section id="epaper-bw-settings" hidden>
-      <h3>Black &amp; white settings</h3>
-      <label class="form-label" for="epaper_bw_binding_refresh_interval_ms">Passive binding interval (ms)</label>
-      <input class="form-control" type="number" min="100" max="60000" id="epaper_bw_binding_refresh_interval_ms" name="epaper_bw_binding_refresh_interval_ms">
-      <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates.</div>
-      <label class="form-label mt-3" for="epaper_bw_min_refresh_interval_ms">Minimum presentation interval (ms)</label>
-      <input class="form-control" type="number" min="250" max="60000" id="epaper_bw_min_refresh_interval_ms" name="epaper_bw_min_refresh_interval_ms">
-      <div class="form-text">The shortest delay between physical panel updates. Higher values combine rapid changes into one update.</div>
-      <label class="form-label mt-3" for="epaper_bw_full_refresh_threshold">Full-refresh threshold</label>
-      <input class="form-control" type="number" min="0" max="65535" id="epaper_bw_full_refresh_threshold" name="epaper_bw_full_refresh_threshold">
-      <div class="form-text">Run a full waveform after this many partial updates to clear ghosting. Set 0 to disable scheduled full refreshes.</div>
-    </section>
+    <label class="form-label" for="epaper_binding_refresh_interval_ms">Passive binding interval (ms)</label>
+    <input class="form-control" type="number" min="100" max="60000" id="epaper_binding_refresh_interval_ms" name="epaper_binding_refresh_interval_ms">
+    <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates.</div>
+    <label class="form-label mt-3" for="epaper_min_refresh_interval_ms">Minimum presentation interval (ms)</label>
+    <input class="form-control" type="number" min="250" max="60000" id="epaper_min_refresh_interval_ms" name="epaper_min_refresh_interval_ms">
+    <div class="form-text">The shortest delay between physical panel updates. Higher values combine rapid changes into one update.</div>
+    <label class="form-label mt-3" for="epaper_full_refresh_threshold">Full-refresh threshold</label>
+    <input class="form-control" type="number" min="0" max="65535" id="epaper_full_refresh_threshold" name="epaper_full_refresh_threshold">
+    <div class="form-text">Run a full waveform after this many regional updates. Set 0 to disable scheduled full refreshes. Inkplate grayscale always refreshes the full panel.</div>
 
     <div class="form-check mt-3">
       <input class="form-check-input" type="checkbox" id="epaper_refresh_clock_on_minute_boundary" name="epaper_refresh_clock_on_minute_boundary">
@@ -45,7 +32,7 @@
     </div>
     <div class="save-bar mt-3">
       <button type="button" class="btn btn-primary btn-sm" id="epaper-refresh-save-btn">Save</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="epaper-full-refresh-btn" hidden>Full refresh now</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="epaper-full-refresh-btn">Full refresh now</button>
     </div>
   </div>
 </div>

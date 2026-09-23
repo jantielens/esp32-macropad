@@ -43,6 +43,7 @@ private:
 		uint32_t lastRefreshMs;
 		uint32_t lastChangeMs;
 		uint32_t bwPartialUpdatesSinceFull;
+		uint32_t grayscalePartialUpdatesSinceFull;
 		uint8_t* drawingFramebuffer;
 		uint8_t* presentedFramebuffer;
 		SemaphoreHandle_t framebufferMutex;

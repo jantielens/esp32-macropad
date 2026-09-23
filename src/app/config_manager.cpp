@@ -96,12 +96,10 @@
 #endif
 #if HAS_LVGL_EPAPER
 #define KEY_EPAPER_PANEL_MODE "ep_mode"
-#define KEY_EPAPER_GRAY_BIND "ep_g_bind"
-#define KEY_EPAPER_BW_BIND "ep_b_bind"
-#define KEY_EPAPER_GRAY_MIN "ep_g_min"
-#define KEY_EPAPER_BW_MIN "ep_b_min"
+#define KEY_EPAPER_BIND "ep_bind"
+#define KEY_EPAPER_MIN "ep_min"
 #define KEY_EPAPER_CLOCK_MINUTE "ep_clock"
-#define KEY_EPAPER_BW_THRESHOLD "ep_b_thr"
+#define KEY_EPAPER_THRESHOLD "ep_thr"
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
@@ -119,16 +117,10 @@ static EpaperRefreshSettings epaper_refresh_settings = {};
 static EpaperRefreshSettings epaper_refresh_defaults() {
 		return {
 				EPAPER_DEFAULT_RENDER_MODE,
-				EPAPER_DEFAULT_RENDER_MODE == EPAPER_RENDER_MODE_GRAYSCALE
-						? DISPLAY_BINDING_REFRESH_INTERVAL_MS : 60000,
-				EPAPER_DEFAULT_RENDER_MODE == EPAPER_RENDER_MODE_BW
-						? DISPLAY_BINDING_REFRESH_INTERVAL_MS : 1000,
-				EPAPER_DEFAULT_RENDER_MODE == EPAPER_RENDER_MODE_GRAYSCALE
-						? EPAPER_MIN_REFRESH_INTERVAL_MS : 1500,
-				EPAPER_DEFAULT_RENDER_MODE == EPAPER_RENDER_MODE_BW
-						? EPAPER_MIN_REFRESH_INTERVAL_MS : 250,
+				DISPLAY_BINDING_REFRESH_INTERVAL_MS,
+				EPAPER_MIN_REFRESH_INTERVAL_MS,
 				true,
-				EPAPER_DEFAULT_BW_FULL_REFRESH_THRESHOLD,
+				EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD,
 		};
 }
 
@@ -136,38 +128,30 @@ void config_manager_apply_epaper_refresh_defaults(DeviceConfig* config) {
 		if (!config) return;
 		const EpaperRefreshSettings defaults = epaper_refresh_defaults();
 		config->epaper_render_mode = defaults.epaper_render_mode;
-		config->epaper_grayscale_binding_refresh_interval_ms = defaults.epaper_grayscale_binding_refresh_interval_ms;
-		config->epaper_bw_binding_refresh_interval_ms = defaults.epaper_bw_binding_refresh_interval_ms;
-		config->epaper_grayscale_min_refresh_interval_ms = defaults.epaper_grayscale_min_refresh_interval_ms;
-		config->epaper_bw_min_refresh_interval_ms = defaults.epaper_bw_min_refresh_interval_ms;
+		config->epaper_binding_refresh_interval_ms = defaults.epaper_binding_refresh_interval_ms;
+		config->epaper_min_refresh_interval_ms = defaults.epaper_min_refresh_interval_ms;
 		config->epaper_refresh_clock_on_minute_boundary = defaults.epaper_refresh_clock_on_minute_boundary;
-		config->epaper_bw_full_refresh_threshold = defaults.epaper_bw_full_refresh_threshold;
+		config->epaper_full_refresh_threshold = defaults.epaper_full_refresh_threshold;
 }
 
 static EpaperRefreshSettings epaper_refresh_from_config(const DeviceConfig* config) {
 		return {
 				config->epaper_render_mode,
-				config->epaper_grayscale_binding_refresh_interval_ms,
-				config->epaper_bw_binding_refresh_interval_ms,
-				config->epaper_grayscale_min_refresh_interval_ms,
-				config->epaper_bw_min_refresh_interval_ms,
+				config->epaper_binding_refresh_interval_ms,
+				config->epaper_min_refresh_interval_ms,
 				config->epaper_refresh_clock_on_minute_boundary,
-				config->epaper_bw_full_refresh_threshold,
+				config->epaper_full_refresh_threshold,
 		};
 }
 
 bool config_manager_validate_epaper_refresh_settings(const EpaperRefreshSettings& settings) {
 		return (settings.epaper_render_mode == EPAPER_RENDER_MODE_BW ||
 						settings.epaper_render_mode == EPAPER_RENDER_MODE_GRAYSCALE) &&
-				settings.epaper_grayscale_binding_refresh_interval_ms >= EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS &&
-				settings.epaper_grayscale_binding_refresh_interval_ms <= EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS &&
-				settings.epaper_bw_binding_refresh_interval_ms >= EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS &&
-				settings.epaper_bw_binding_refresh_interval_ms <= EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS &&
-				settings.epaper_grayscale_min_refresh_interval_ms >= EPAPER_REFRESH_INTERVAL_MIN_MS &&
-				settings.epaper_grayscale_min_refresh_interval_ms <= EPAPER_REFRESH_INTERVAL_MAX_MS &&
-				settings.epaper_bw_min_refresh_interval_ms >= EPAPER_REFRESH_INTERVAL_MIN_MS &&
-				settings.epaper_bw_min_refresh_interval_ms <= EPAPER_REFRESH_INTERVAL_MAX_MS &&
-				settings.epaper_bw_full_refresh_threshold <= EPAPER_BW_FULL_UPDATE_THRESHOLD_MAX;
+				settings.epaper_binding_refresh_interval_ms >= EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS &&
+				settings.epaper_binding_refresh_interval_ms <= EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS &&
+				settings.epaper_min_refresh_interval_ms >= EPAPER_REFRESH_INTERVAL_MIN_MS &&
+				settings.epaper_min_refresh_interval_ms <= EPAPER_REFRESH_INTERVAL_MAX_MS &&
+				settings.epaper_full_refresh_threshold <= EPAPER_FULL_REFRESH_THRESHOLD_MAX;
 }
 
 bool config_manager_normalize_epaper_refresh_settings(DeviceConfig* config) {
@@ -185,18 +169,12 @@ bool config_manager_normalize_epaper_refresh_settings(DeviceConfig* config) {
 						changed = true;
 				}
 		};
-		normalize_interval(config->epaper_grayscale_binding_refresh_interval_ms,
+		normalize_interval(config->epaper_binding_refresh_interval_ms,
 				EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS, EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS,
-				defaults.epaper_grayscale_binding_refresh_interval_ms);
-		normalize_interval(config->epaper_bw_binding_refresh_interval_ms,
-				EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS, EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS,
-				defaults.epaper_bw_binding_refresh_interval_ms);
-		normalize_interval(config->epaper_grayscale_min_refresh_interval_ms,
+				defaults.epaper_binding_refresh_interval_ms);
+		normalize_interval(config->epaper_min_refresh_interval_ms,
 				EPAPER_REFRESH_INTERVAL_MIN_MS, EPAPER_REFRESH_INTERVAL_MAX_MS,
-				defaults.epaper_grayscale_min_refresh_interval_ms);
-		normalize_interval(config->epaper_bw_min_refresh_interval_ms,
-				EPAPER_REFRESH_INTERVAL_MIN_MS, EPAPER_REFRESH_INTERVAL_MAX_MS,
-				defaults.epaper_bw_min_refresh_interval_ms);
+				defaults.epaper_min_refresh_interval_ms);
 		return changed;
 }
 
@@ -485,12 +463,10 @@ bool config_manager_load(DeviceConfig *config) {
 		#if HAS_LVGL_EPAPER
 		config_manager_apply_epaper_refresh_defaults(config);
 		config->epaper_render_mode = preferences.getUChar(KEY_EPAPER_PANEL_MODE, config->epaper_render_mode);
-		config->epaper_grayscale_binding_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_GRAY_BIND, config->epaper_grayscale_binding_refresh_interval_ms);
-		config->epaper_bw_binding_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_BW_BIND, config->epaper_bw_binding_refresh_interval_ms);
-		config->epaper_grayscale_min_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_GRAY_MIN, config->epaper_grayscale_min_refresh_interval_ms);
-		config->epaper_bw_min_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_BW_MIN, config->epaper_bw_min_refresh_interval_ms);
+		config->epaper_binding_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_BIND, config->epaper_binding_refresh_interval_ms);
+		config->epaper_min_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_MIN, config->epaper_min_refresh_interval_ms);
 		config->epaper_refresh_clock_on_minute_boundary = preferences.getBool(KEY_EPAPER_CLOCK_MINUTE, config->epaper_refresh_clock_on_minute_boundary);
-		config->epaper_bw_full_refresh_threshold = preferences.getUShort(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_full_refresh_threshold);
+		config->epaper_full_refresh_threshold = preferences.getUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
 		if (config_manager_normalize_epaper_refresh_settings(config)) {
 				LOGW("Config", "Normalized invalid persisted e-paper presentation settings");
 		}
@@ -650,12 +626,10 @@ bool config_manager_save(const DeviceConfig *config) {
 
 		#if HAS_LVGL_EPAPER
 		preferences.putUChar(KEY_EPAPER_PANEL_MODE, config->epaper_render_mode);
-		preferences.putUInt(KEY_EPAPER_GRAY_BIND, config->epaper_grayscale_binding_refresh_interval_ms);
-		preferences.putUInt(KEY_EPAPER_BW_BIND, config->epaper_bw_binding_refresh_interval_ms);
-		preferences.putUInt(KEY_EPAPER_GRAY_MIN, config->epaper_grayscale_min_refresh_interval_ms);
-		preferences.putUInt(KEY_EPAPER_BW_MIN, config->epaper_bw_min_refresh_interval_ms);
+		preferences.putUInt(KEY_EPAPER_BIND, config->epaper_binding_refresh_interval_ms);
+		preferences.putUInt(KEY_EPAPER_MIN, config->epaper_min_refresh_interval_ms);
 		preferences.putBool(KEY_EPAPER_CLOCK_MINUTE, config->epaper_refresh_clock_on_minute_boundary);
-		preferences.putUShort(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_full_refresh_threshold);
+		preferences.putUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
 		#endif
 
 		#if HAS_CAMERA
@@ -947,12 +921,12 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 #endif
 
 #if HAS_LVGL_EPAPER
-		LOGI("Config", "Inkplate: mode=%s bind=%lums min=%lums clock_minute=%s bw_threshold=%u",
+		LOGI("Config", "E-paper: mode=%s bind=%lums min=%lums clock_minute=%s full_threshold=%u",
 				config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale",
-				(unsigned long)(config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? config->epaper_bw_binding_refresh_interval_ms : config->epaper_grayscale_binding_refresh_interval_ms),
-				(unsigned long)(config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? config->epaper_bw_min_refresh_interval_ms : config->epaper_grayscale_min_refresh_interval_ms),
+				(unsigned long)config->epaper_binding_refresh_interval_ms,
+				(unsigned long)config->epaper_min_refresh_interval_ms,
 				config->epaper_refresh_clock_on_minute_boundary ? "on" : "off",
-				config->epaper_bw_full_refresh_threshold);
+				config->epaper_full_refresh_threshold);
 #endif
 
 #if HAS_CAMERA

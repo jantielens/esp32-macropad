@@ -328,19 +328,20 @@ controls do not apply to e-paper.
 *Shown only on boards with configurable e-paper presentation support.*
 
 Use this section to select **Grayscale** or **Black & white** panel mode. The
-choice applies after restart. Each mode retains its own passive binding interval
-(100 to 60,000 ms) and minimum presentation interval (250 to 60,000 ms), but
-the page displays controls only for the selected mode.
+choice applies after restart. Both modes share one passive binding interval
+(100 to 60,000 ms) and minimum presentation interval (250 to 60,000 ms).
 
 Enable **Refresh clock values on minute boundary** to update pads containing
 time bindings at the minute edge. When disabled, those values update through
-the active mode's passive interval.
+the shared passive interval.
 
-Black & white mode exposes its full-refresh threshold and **Full refresh now**.
+The full-refresh threshold and **Full refresh now** are available in both modes.
 Set the threshold to `0` only when you accept the ghosting risk because
 scheduled full refreshes are disabled. The manual control queues a full waveform
 for the current framebuffer; the portal returns immediately while the display
 completes it.
+Inkplate grayscale always refreshes the full panel, so the threshold has no
+effect in that mode.
 
 ### Screen Preview
 

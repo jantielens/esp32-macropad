@@ -273,10 +273,7 @@ void PadScreen::update() {
 void PadScreen::pollLiveData(bool force) {
 #if HAS_LVGL_EPAPER
 	const EpaperRefreshSettings presentationSettings = config_manager_get_epaper_refresh_settings();
-    const int activePanelMode = display_manager_get_presentation_mode();
-    const uint32_t refreshIntervalMs = activePanelMode == EPAPER_RENDER_MODE_BW
-			? presentationSettings.epaper_bw_binding_refresh_interval_ms
-			: presentationSettings.epaper_grayscale_binding_refresh_interval_ms;
+    const uint32_t refreshIntervalMs = presentationSettings.epaper_binding_refresh_interval_ms;
 	const bool refreshClockOnMinute = presentationSettings.epaper_refresh_clock_on_minute_boundary;
 #elif DISPLAY_BINDING_REFRESH_INTERVAL_MS > 0
     constexpr uint32_t refreshIntervalMs = DISPLAY_BINDING_REFRESH_INTERVAL_MS;

@@ -220,8 +220,7 @@ void Inkplate6FlickEpaperDriver::present() {
 			}
 			const uint32_t now = millis();
 			const EpaperRefreshSettings settings = config_manager_get_epaper_refresh_settings();
-			const uint32_t minRefreshMs = usesBwMode()
-					? settings.epaper_bw_min_refresh_interval_ms : settings.epaper_grayscale_min_refresh_interval_ms;
+			const uint32_t minRefreshMs = settings.epaper_min_refresh_interval_ms;
 			const uint32_t refreshWait = lastRefreshMs && now - lastRefreshMs < minRefreshMs
 					? minRefreshMs - (now - lastRefreshMs) : 0;
 			const uint32_t quietWait = EPAPER_REFRESH_SETTLE_MS > 0 && now - lastChangeMs < EPAPER_REFRESH_SETTLE_MS
@@ -251,7 +250,7 @@ void Inkplate6FlickEpaperDriver::present() {
 		}
 
 		const EpaperRefreshSettings settings = config_manager_get_epaper_refresh_settings();
-		const uint16_t fullUpdateThreshold = settings.epaper_bw_full_refresh_threshold;
+		const uint16_t fullUpdateThreshold = settings.epaper_full_refresh_threshold;
 		const bool scheduledFullRefresh = usesBwMode() && fullUpdateThreshold > 0 &&
 				bwPartialUpdatesSinceFull >= fullUpdateThreshold;
 		memcpy(presentedFramebuffer, framebuffer(), framebufferBytes());

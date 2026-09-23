@@ -178,12 +178,10 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 							(*doc)["screen_saver_backlight_only"] = SCREENSAVER_BACKLIGHT_ONLY;
 				#if HAS_LVGL_EPAPER
 				(*doc)["epaper_render_mode"] = current_config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale";
-				(*doc)["epaper_grayscale_binding_refresh_interval_ms"] = current_config->epaper_grayscale_binding_refresh_interval_ms;
-				(*doc)["epaper_bw_binding_refresh_interval_ms"] = current_config->epaper_bw_binding_refresh_interval_ms;
-				(*doc)["epaper_grayscale_min_refresh_interval_ms"] = current_config->epaper_grayscale_min_refresh_interval_ms;
-				(*doc)["epaper_bw_min_refresh_interval_ms"] = current_config->epaper_bw_min_refresh_interval_ms;
+				(*doc)["epaper_binding_refresh_interval_ms"] = current_config->epaper_binding_refresh_interval_ms;
+				(*doc)["epaper_min_refresh_interval_ms"] = current_config->epaper_min_refresh_interval_ms;
 				(*doc)["epaper_refresh_clock_on_minute_boundary"] = current_config->epaper_refresh_clock_on_minute_boundary;
-				(*doc)["epaper_bw_full_refresh_threshold"] = current_config->epaper_bw_full_refresh_threshold;
+				(*doc)["epaper_full_refresh_threshold"] = current_config->epaper_full_refresh_threshold;
 				caps["epaper_refresh"] = true;
 				#endif
 
@@ -612,12 +610,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#if HAS_LVGL_EPAPER
 		const EpaperRefreshSettings previous_presentation_settings = {
 				current_config->epaper_render_mode,
-				current_config->epaper_grayscale_binding_refresh_interval_ms,
-				current_config->epaper_bw_binding_refresh_interval_ms,
-				current_config->epaper_grayscale_min_refresh_interval_ms,
-				current_config->epaper_bw_min_refresh_interval_ms,
+				current_config->epaper_binding_refresh_interval_ms,
+				current_config->epaper_min_refresh_interval_ms,
 				current_config->epaper_refresh_clock_on_minute_boundary,
-				current_config->epaper_bw_full_refresh_threshold,
+				current_config->epaper_full_refresh_threshold,
 		};
 		if (doc.containsKey("epaper_render_mode")) {
 			const char* mode = doc["epaper_render_mode"] | "";
@@ -629,31 +625,25 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 			}
 		}
-		if (doc.containsKey("epaper_grayscale_binding_refresh_interval_ms")) current_config->epaper_grayscale_binding_refresh_interval_ms = parseUintField(doc["epaper_grayscale_binding_refresh_interval_ms"], 0);
-		if (doc.containsKey("epaper_bw_binding_refresh_interval_ms")) current_config->epaper_bw_binding_refresh_interval_ms = parseUintField(doc["epaper_bw_binding_refresh_interval_ms"], 0);
-		if (doc.containsKey("epaper_grayscale_min_refresh_interval_ms")) current_config->epaper_grayscale_min_refresh_interval_ms = parseUintField(doc["epaper_grayscale_min_refresh_interval_ms"], 0);
-		if (doc.containsKey("epaper_bw_min_refresh_interval_ms")) current_config->epaper_bw_min_refresh_interval_ms = parseUintField(doc["epaper_bw_min_refresh_interval_ms"], 0);
+		if (doc.containsKey("epaper_binding_refresh_interval_ms")) current_config->epaper_binding_refresh_interval_ms = parseUintField(doc["epaper_binding_refresh_interval_ms"], 0);
+		if (doc.containsKey("epaper_min_refresh_interval_ms")) current_config->epaper_min_refresh_interval_ms = parseUintField(doc["epaper_min_refresh_interval_ms"], 0);
 		if (doc.containsKey("epaper_refresh_clock_on_minute_boundary")) current_config->epaper_refresh_clock_on_minute_boundary = parseBoolField(doc, "epaper_refresh_clock_on_minute_boundary");
-		if (doc.containsKey("epaper_bw_full_refresh_threshold")) {
-			const uint32_t threshold = parseUintField(doc["epaper_bw_full_refresh_threshold"], 0);
-			current_config->epaper_bw_full_refresh_threshold = threshold > UINT16_MAX ? UINT16_MAX : (uint16_t)threshold;
+		if (doc.containsKey("epaper_full_refresh_threshold")) {
+			const uint32_t threshold = parseUintField(doc["epaper_full_refresh_threshold"], 0);
+			current_config->epaper_full_refresh_threshold = threshold > UINT16_MAX ? UINT16_MAX : (uint16_t)threshold;
 		}
 		if (!config_manager_validate_epaper_refresh_settings({
 				current_config->epaper_render_mode,
-				current_config->epaper_grayscale_binding_refresh_interval_ms,
-				current_config->epaper_bw_binding_refresh_interval_ms,
-				current_config->epaper_grayscale_min_refresh_interval_ms,
-				current_config->epaper_bw_min_refresh_interval_ms,
+				current_config->epaper_binding_refresh_interval_ms,
+				current_config->epaper_min_refresh_interval_ms,
 				current_config->epaper_refresh_clock_on_minute_boundary,
-				current_config->epaper_bw_full_refresh_threshold,
+				current_config->epaper_full_refresh_threshold,
 		})) {
 			current_config->epaper_render_mode = previous_presentation_settings.epaper_render_mode;
-			current_config->epaper_grayscale_binding_refresh_interval_ms = previous_presentation_settings.epaper_grayscale_binding_refresh_interval_ms;
-			current_config->epaper_bw_binding_refresh_interval_ms = previous_presentation_settings.epaper_bw_binding_refresh_interval_ms;
-			current_config->epaper_grayscale_min_refresh_interval_ms = previous_presentation_settings.epaper_grayscale_min_refresh_interval_ms;
-			current_config->epaper_bw_min_refresh_interval_ms = previous_presentation_settings.epaper_bw_min_refresh_interval_ms;
+			current_config->epaper_binding_refresh_interval_ms = previous_presentation_settings.epaper_binding_refresh_interval_ms;
+			current_config->epaper_min_refresh_interval_ms = previous_presentation_settings.epaper_min_refresh_interval_ms;
 			current_config->epaper_refresh_clock_on_minute_boundary = previous_presentation_settings.epaper_refresh_clock_on_minute_boundary;
-			current_config->epaper_bw_full_refresh_threshold = previous_presentation_settings.epaper_bw_full_refresh_threshold;
+			current_config->epaper_full_refresh_threshold = previous_presentation_settings.epaper_full_refresh_threshold;
 			request->send(400, "application/json", "{\"success\":false,\"message\":\"invalid e-paper presentation settings\"}");
 			portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
 			return;

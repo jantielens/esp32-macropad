@@ -931,12 +931,10 @@ Returns current device configuration (passwords excluded).
   "backlight_brightness": 100,
   "screen_saver_backlight_only": false,
   "epaper_render_mode": "grayscale",
-  "epaper_grayscale_binding_refresh_interval_ms": 60000,
-  "epaper_bw_binding_refresh_interval_ms": 1000,
-  "epaper_grayscale_min_refresh_interval_ms": 1500,
-  "epaper_bw_min_refresh_interval_ms": 250,
+  "epaper_binding_refresh_interval_ms": 1000,
+  "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
-  "epaper_bw_full_refresh_threshold": 10,
+  "epaper_full_refresh_threshold": 10,
 
   "screen_saver_enabled": false,
   "screen_saver_timeout_seconds": 300,
@@ -1025,12 +1023,10 @@ Save new configuration. Device reboots after successful save.
 
   "backlight_brightness": 70,
   "epaper_render_mode": "bw",
-  "epaper_grayscale_binding_refresh_interval_ms": 60000,
-  "epaper_bw_binding_refresh_interval_ms": 1000,
-  "epaper_grayscale_min_refresh_interval_ms": 1500,
-  "epaper_bw_min_refresh_interval_ms": 250,
+  "epaper_binding_refresh_interval_ms": 1000,
+  "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
-  "epaper_bw_full_refresh_threshold": 10,
+  "epaper_full_refresh_threshold": 10,
 
   "screen_saver_enabled": true,
   "screen_saver_timeout_seconds": 300,
@@ -1077,7 +1073,7 @@ Save new configuration. Device reboots after successful save.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
-- Interactive E-Paper fields are available only when `HAS_LVGL_EPAPER` is enabled. `epaper_render_mode` is read at boot and requires a restart. The intervals, minute-boundary setting, and B/W full-refresh threshold apply live. Binding intervals must be 100 to 60,000 ms and refresh intervals must be 250 to 60,000 ms. An `epaper_bw_full_refresh_threshold` of `0` disables scheduled full refreshes and can increase ghosting.
+- Interactive E-Paper fields are available only when `HAS_LVGL_EPAPER` is enabled. `epaper_render_mode` is read at boot and requires a restart. The shared intervals, minute-boundary setting, and full-refresh threshold apply live. Binding intervals must be 100 to 60,000 ms and refresh intervals must be 250 to 60,000 ms. An `epaper_full_refresh_threshold` of `0` disables scheduled full refreshes and can increase ghosting. Inkplate grayscale always refreshes the full panel and does not use the threshold.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 

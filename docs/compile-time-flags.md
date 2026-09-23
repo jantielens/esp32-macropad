@@ -227,11 +227,11 @@ Total flags: 298
 - **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP** default: `false` — Keep the MIPI-DSI panel powered (Display On, black) during screensaver sleep; no DCS power-down.
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
-- **EPAPER_BW_FULL_UPDATE_THRESHOLD_MAX** default: `65535` — Maximum permitted B/W partial-refresh count before a scheduled full refresh.
-- **EPAPER_DEFAULT_BW_FULL_REFRESH_THRESHOLD** default: `10` — Number of B/W partial updates before this driver performs a full refresh.
+- **EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD** default: `10` — Number of regional updates before a full refresh on supporting e-paper drivers.
 - **EPAPER_DEFAULT_RENDER_MODE** default: `EPAPER_RENDER_MODE_GRAYSCALE` — Default panel mode for an interactive LVGL e-paper driver.
 - **EPAPER_FRAME_BATTERY_DIVIDER** default: `(no default)` — Voltage divider ratio applied to the raw ADC millivolt reading.
 - **EPAPER_FRAME_FAST_REFRESH** default: `false` — button wakes skip straight to the image fetch to avoid the second waveform.
+- **EPAPER_FULL_REFRESH_THRESHOLD_MAX** default: `65535` — Maximum permitted regional-refresh count before a scheduled full refresh.
 - **EPAPER_REFRESH_SETTLE_MS** default: `(no default)` — Resettable quiet period that coalesces final layout and binding updates before display().
 - **HEALTH_HISTORY_ENABLED** default: `1` — Enable device-side health history ring buffer for charting in the web portal
 - **HEALTH_HISTORY_SAMPLES** default: `((HEALTH_HISTORY_SECONDS * 1000) / HEALTH_HISTORY_PERIOD_MS)` — Derived number of samples.
@@ -1174,9 +1174,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS**
   - src/app/board_config.h
-- **EPAPER_BW_FULL_UPDATE_THRESHOLD_MAX**
-  - src/app/board_config.h
-- **EPAPER_DEFAULT_BW_FULL_REFRESH_THRESHOLD**
+- **EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD**
   - src/app/board_config.h
 - **EPAPER_DEFAULT_RENDER_MODE**
   - src/app/board_config.h
@@ -1199,6 +1197,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_FRAME_SD_EN_PIN**
   - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
+- **EPAPER_FULL_REFRESH_THRESHOLD_MAX**
+  - src/app/board_config.h
 - **EPAPER_REFRESH_INTERVAL_MAX_MS**
   - src/app/board_config.h
 - **EPAPER_REFRESH_INTERVAL_MIN_MS**

@@ -55,9 +55,11 @@ configuration. Use `EpaperRefreshSettings` and the `EPAPER_*` constants:
 * `EPAPER_MIN_REFRESH_INTERVAL_MS`
 * `EPAPER_REFRESH_SETTLE_MS`
 
-The portal exposes explicit `epaper_*` fields. The render mode is boot-only;
-refresh cadence and the B/W full-refresh threshold apply live through the
-synchronized configuration snapshot.
+The portal exposes one shared passive binding interval, minimum presentation
+interval, and full-refresh threshold for both modes. The render mode is
+boot-only; refresh cadence and threshold apply live through the synchronized
+configuration snapshot. Inkplate grayscale always uses full waveforms, so its
+full-refresh threshold has no effect in that mode.
 
 ## Inkplate 6FLICK Profile
 
@@ -94,13 +96,13 @@ using a PSRAM-backed 4-bit grayscale drawing buffer and a second snapshot for
 physical presentation.
 
 The driver uploads the snapshot through the IT8951 and releases its framebuffer
-mutex before starting a waveform. Grayscale mode uses a full-panel GC16
-waveform for each presentation. B/W mode unions LVGL flush rectangles, aligns
-the resulting native-panel region for the IT8951, and uploads and refreshes only
-that region with the faster DU waveform. Forced refreshes, scheduled
-ghosting-control refreshes, the initial presentation, and grayscale mode use a
-full-panel GC16 presentation. The E1003 firmware requires the IT8951 VCOM write
-selector `0x0002`; selector `0x0001` only reads the configured value.
+mutex before starting a waveform. Both modes union LVGL flush rectangles and
+align the resulting native-panel region for regional uploads. B/W refreshes the
+region with DU; grayscale uses regional GC16. The initial presentation and
+forced refreshes use full-panel GC16, as do scheduled refreshes in both modes.
+The E1003 firmware requires the IT8951 VCOM write selector `0x0002`;
+selector `0x0001` only reads the configured value. Regional grayscale GC16
+requires hardware validation for visual quality and update timing.
 
 The GT911 touch controller is at `0x5D` on GPIO19/GPIO20, with GPIO2 interrupt
 and GPIO16 reset. It shares the physical I2C lines with the SHT4x and RTC, but

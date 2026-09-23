@@ -68,12 +68,10 @@
 #if HAS_LVGL_EPAPER
 struct EpaperRefreshSettings {
 		uint8_t epaper_render_mode;
-		uint32_t epaper_grayscale_binding_refresh_interval_ms;
-		uint32_t epaper_bw_binding_refresh_interval_ms;
-		uint32_t epaper_grayscale_min_refresh_interval_ms;
-		uint32_t epaper_bw_min_refresh_interval_ms;
+		uint32_t epaper_binding_refresh_interval_ms;
+		uint32_t epaper_min_refresh_interval_ms;
 		bool epaper_refresh_clock_on_minute_boundary;
-		uint16_t epaper_bw_full_refresh_threshold;
+		uint16_t epaper_full_refresh_threshold;
 };
 #endif
 
@@ -159,12 +157,10 @@ struct DeviceConfig {
 #if HAS_LVGL_EPAPER
 		// E-paper presentation settings. Panel mode is sampled only at boot.
 		uint8_t epaper_render_mode;
-		uint32_t epaper_grayscale_binding_refresh_interval_ms;
-		uint32_t epaper_bw_binding_refresh_interval_ms;
-		uint32_t epaper_grayscale_min_refresh_interval_ms;
-		uint32_t epaper_bw_min_refresh_interval_ms;
+		uint32_t epaper_binding_refresh_interval_ms;
+		uint32_t epaper_min_refresh_interval_ms;
 		bool epaper_refresh_clock_on_minute_boundary;
-		uint16_t epaper_bw_full_refresh_threshold;
+		uint16_t epaper_full_refresh_threshold;
 #endif
 
 #if HAS_CAMERA

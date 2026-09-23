@@ -848,9 +848,9 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #ifndef EPAPER_DEFAULT_RENDER_MODE
 #define EPAPER_DEFAULT_RENDER_MODE EPAPER_RENDER_MODE_GRAYSCALE
 #endif
-// Number of B/W partial updates before this driver performs a full refresh.
-#ifndef EPAPER_DEFAULT_BW_FULL_REFRESH_THRESHOLD
-#define EPAPER_DEFAULT_BW_FULL_REFRESH_THRESHOLD 10
+// Number of regional updates before a full refresh on supporting e-paper drivers.
+#ifndef EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD
+#define EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD 10
 #endif
 
 // Bounds for persisted e-paper refresh settings. Keep controller-specific
@@ -870,9 +870,9 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #ifndef EPAPER_REFRESH_INTERVAL_MAX_MS
 #define EPAPER_REFRESH_INTERVAL_MAX_MS 60000
 #endif
-// Maximum permitted B/W partial-refresh count before a scheduled full refresh.
-#ifndef EPAPER_BW_FULL_UPDATE_THRESHOLD_MAX
-#define EPAPER_BW_FULL_UPDATE_THRESHOLD_MAX 65535
+// Maximum permitted regional-refresh count before a scheduled full refresh.
+#ifndef EPAPER_FULL_REFRESH_THRESHOLD_MAX
+#define EPAPER_FULL_REFRESH_THRESHOLD_MAX 65535
 #endif
 
 // Enable custom display fonts (DSEG7, Bebas Neue, Doto).
