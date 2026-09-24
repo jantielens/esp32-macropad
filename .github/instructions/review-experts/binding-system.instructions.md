@@ -1,6 +1,5 @@
 ---
 description: "Binding system expert — identifies binding template, scheme registration, and data flow issues in diffs"
-applyTo: "**"
 ---
 
 # Binding System Expert

@@ -1,6 +1,5 @@
 ---
 description: "Naming and comments expert — identifies misleading names, outdated comments, and unresolved markers in diffs"
-applyTo: "**"
 ---
 
 # Naming and Comments Expert
