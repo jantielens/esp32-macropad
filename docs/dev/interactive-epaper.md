@@ -1,7 +1,7 @@
 ---
 title: Interactive E-Paper Developer Guide
 description: Add an always-on LVGL e-paper board with correct refresh ownership, configuration, and validation.
-ms.date: 2026-09-23
+ms.date: 2026-09-24
 ms.topic: how-to
 ---
 
@@ -94,6 +94,19 @@ animations to avoid wasting slow panel waveforms on transient states.
 reTerminal E1003. It retains the board's 32 MB flash and OTA partition while
 using a PSRAM-backed 4-bit grayscale drawing buffer and a second snapshot for
 physical presentation.
+
+The interactive profile supports three signed ESP32-S3 native Extension slots
+(56 KiB, 56 KiB, and 120 KiB of usable ELF capacity). Its dedicated
+`ota_8mb_e1003_ext_32MB` partition scheme reserves the final 256 KiB of flash
+for Extensions without changing the storage partition's starting offset. Back
+up stored pads and other files before flashing this profile over an older
+E1003 build: the storage partition becomes 256 KiB smaller, and mounting an
+existing larger LittleFS volume asserts and reboots instead of formatting it.
+After backing up the old volume, erase the storage region before flashing the
+new partition table; then restore the files to the freshly formatted volume.
+Run `./tools/install-custom-partitions.sh` after
+updating the repository, or `./setup.sh` for a fresh installation. Prefer
+slow-changing Extension widgets because frequent updates are costly on e-paper.
 
 The driver uploads the snapshot through the IT8951 and releases its framebuffer
 mutex before starting a waveform. Both modes union LVGL flush rectangles and

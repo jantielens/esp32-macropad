@@ -98,7 +98,7 @@ ESP32 Macropad runs on these ESP32 development boards:
 | **Seeed reTerminal E1003 Frame** | ESP32-S3 | 10.3" 16-level grayscale e-paper dashboard | 1404 × 1872 | Portrait |
 | **Seeed reTerminal E1003 Interactive** | ESP32-S3 | 10.3" 16-level grayscale e-paper touch UI | 1404 × 1872 | Portrait |
 
-Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and `reterminal-e1003-frame` are sleep-first E-Paper Frame targets. The `inkplate6flick-interactive` and `reterminal-e1003-interactive` targets are Interactive E-Paper touch UIs with persisted B/W and grayscale render-mode settings. E1003 B/W mode uses the IT8951's DU waveform between scheduled GC16 full refreshes; grayscale always uses GC16. The E1003 targets use the 8 MB OTA application partition.
+Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and `reterminal-e1003-frame` are sleep-first E-Paper Frame targets. The `inkplate6flick-interactive` and `reterminal-e1003-interactive` targets are Interactive E-Paper touch UIs with persisted B/W and grayscale render-mode settings. E1003 B/W mode uses the IT8951's DU waveform between scheduled GC16 full refreshes; grayscale always uses GC16. The E1003 targets use the 8 MB OTA application partition; the interactive profile also reserves three native Extension slots. Back up its stored files before upgrading from the older partition layout: mounting the old, larger LittleFS volume with the new layout causes a boot loop until the storage volume is erased or the old partition layout is restored.
 
 ### Headless Sensor Targets
 

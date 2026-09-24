@@ -7,7 +7,7 @@ ms.topic: how-to
 
 ## Overview
 
-Extensions are trusted native ELF modules for ESP32-P4 and 16 MB ESP32-S3
+Extensions are trusted native ELF modules for supported ESP32-P4 and ESP32-S3
 display boards. P4 packages use RISC-V and execute from flash. S3 packages
 use Xtensa; their code is relocated into executable internal RAM and their
 data is relocated into PSRAM. An Extension source is built into one signed

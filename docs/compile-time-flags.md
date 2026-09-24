@@ -367,7 +367,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | inkplate6flick-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
 | inkplate6flick-interactive |  |  | ✅ |  |  |  |  |  | ? | ✅ | ✅ |  |  | ✅ |  |  |  |  |  | ✅ |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
 | reterminal-e1003-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ |  |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
-| reterminal-e1003-interactive |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ |  |  | ✅ |  |  | ? |  |  | ✅ | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
+| reterminal-e1003-interactive |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ |  |  | ✅ |  |  | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
