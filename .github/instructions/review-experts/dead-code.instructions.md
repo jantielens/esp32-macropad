@@ -1,6 +1,5 @@
 ---
 description: "Dead code detection expert — identifies unused code, unreachable branches, and stale artifacts in diffs"
-applyTo: "**"
 ---
 
 # Dead Code Expert

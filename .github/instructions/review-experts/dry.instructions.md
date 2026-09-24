@@ -1,6 +1,5 @@
 ---
 description: "DRY expert — identifies code duplication, magic values, and copy-paste patterns in diffs"
-applyTo: "**"
 ---
 
 # DRY Expert

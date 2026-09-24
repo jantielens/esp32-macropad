@@ -1,6 +1,5 @@
 ---
 description: "Performance expert — identifies memory allocation, render pipeline, hot path, and timing issues in diffs"
-applyTo: "**"
 ---
 
 # Performance Expert

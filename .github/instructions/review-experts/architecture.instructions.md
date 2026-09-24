@@ -1,6 +1,5 @@
 ---
 description: "Architecture expert — identifies separation of concerns violations, thread safety issues, and design problems in diffs"
-applyTo: "**"
 ---
 
 # Architecture Expert

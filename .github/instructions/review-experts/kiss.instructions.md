@@ -1,6 +1,5 @@
 ---
 description: "KISS expert — identifies over-engineering, unnecessary indirection, and premature generalization in diffs"
-applyTo: "**"
 ---
 
 # KISS Expert

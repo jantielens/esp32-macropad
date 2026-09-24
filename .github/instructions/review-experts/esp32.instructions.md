@@ -1,6 +1,5 @@
 ---
 description: "ESP32 embedded expert — identifies FreeRTOS, PSRAM, ISR, and embedded-specific issues in diffs"
-applyTo: "**"
 ---
 
 # ESP32 Embedded Expert

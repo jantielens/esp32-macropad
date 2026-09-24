@@ -1,6 +1,5 @@
 ---
 description: "Documentation expert — identifies doc-code inconsistencies and missing documentation updates in diffs"
-applyTo: "**"
 ---
 
 # Documentation Expert
