@@ -366,14 +366,6 @@
                             <label for="pad-edit-bg-image-binding">Local Image Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <input type="text" id="pad-edit-bg-image-binding" maxlength="191" placeholder="e.g. [image:current]">
                         </div>
-                        <div class="form-group" style="margin-top:8px;">
-                            <label for="pad-edit-bg-image-scale">Background Image Scale</label>
-                            <select id="pad-edit-bg-image-scale">
-                                <option value="cover">Cover (fill and crop)</option>
-                                <option value="letterbox">Letterbox (fit with button-color bars)</option>
-                            </select>
-                            <small>Applies to uploaded images and Camera Feed or Remote Image backgrounds. Camera Preview has its own scale setting.</small>
-                        </div>
                     </div>
                 </details>
 
@@ -403,6 +395,15 @@
                         </div>
                     </div>
                 </details>
+
+                <div class="form-group" id="pad-edit-bg-image-scale-group" style="margin-top:8px;">
+                    <label for="pad-edit-bg-image-scale">Background Image Scale</label>
+                    <select id="pad-edit-bg-image-scale">
+                        <option value="cover">Cover (fill and crop)</option>
+                        <option value="letterbox">Letterbox (fit with button-color bars)</option>
+                    </select>
+                    <small>Applies to uploaded images and Camera Feed or Remote Image backgrounds. Camera Preview has its own scale setting.</small>
+                </div>
 
                 <!-- Appearance -->
                 <details class="editor-group" id="pad-edit-colors-section">

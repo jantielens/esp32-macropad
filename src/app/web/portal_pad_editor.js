@@ -71,6 +71,15 @@ async function padRequestSave() {
 const DEVICE_CONFIG_FORMAT = 'esp32-macropad-config';
 const DEVICE_CONFIG_VERSION = 1;
 
+function padSetImageCapabilityVisibility(info, hideForWidget) {
+    const imageFetch = !hideForWidget && info && info.has_image_fetch === true;
+    const imageLibrary = !hideForWidget && info && info.has_image_library === true;
+    document.getElementById('pad-edit-camera-feed-section').style.display = imageFetch ? '' : 'none';
+    document.getElementById('pad-edit-image-section').style.display = imageLibrary ? '' : 'none';
+    document.getElementById('pad-edit-bg-image-scale-group').style.display =
+        imageFetch || imageLibrary ? '' : 'none';
+}
+
 async function padInit() {
     const section = document.getElementById('pad-config-section');
     if (!section) return;
@@ -86,6 +95,7 @@ async function padInit() {
     const cameraPreviewOption = document.getElementById('pad-edit-camera-preview-widget-option');
     if (cameraPreviewOption) cameraPreviewOption.style.display =
         deviceInfoCache && deviceInfoCache.has_camera === true ? '' : 'none';
+    padSetImageCapabilityVisibility(deviceInfoCache);
     if (nativeExtensions && typeof extensionFetchSlots === 'function') {
         try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
     }
@@ -428,10 +438,11 @@ function padWidgetTypeChanged() {
         extensionSection.style.display = wtype === 'external' ? '' : 'none';
         if (wtype === 'external') extensionSection.open = true;
     }
-    ['pad-edit-labels-section', 'pad-edit-icon-section', 'pad-edit-image-section', 'pad-edit-camera-feed-section'].forEach(function (id) {
+    ['pad-edit-labels-section', 'pad-edit-icon-section'].forEach(function (id) {
         var section = document.getElementById(id);
         if (section) section.style.display = wtype === 'external' ? 'none' : '';
     });
+    padSetImageCapabilityVisibility(deviceInfoCache, wtype === 'external');
     var confirmGroup = document.getElementById('pad-edit-confirm-group');
     var confirmInput = document.getElementById('pad-edit-confirm');
     if (confirmGroup) confirmGroup.style.display = wtype ? 'none' : '';

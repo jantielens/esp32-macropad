@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refreshes, cache clears, and relevant configuration changes discard the
   best-effort retained queue.
 
+### Fixed
+
+* **Pad editor image controls**: remote image and local image backgrounds are
+  offered only when the connected board supports image fetching or the image
+  library, respectively. The attached-camera preview remains independent, and
+  background image scaling remains available when either background is supported.
+
 ## [1.32.0] - 2026-09-23
 
 ### Added

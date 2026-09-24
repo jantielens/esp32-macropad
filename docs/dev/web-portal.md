@@ -672,6 +672,9 @@ Returns comprehensive device information.
   "has_display": true,
   "has_audio": true,
   "has_sound_player": true,
+  "has_camera": false,
+  "has_image_fetch": true,
+  "has_image_library": true,
   "catalog": [
     {
       "type": "timer",
@@ -706,6 +709,11 @@ Returns comprehensive device information.
 
 **Portal Mode Field:**
 - `ap_active`: `true` when the device is running in AP / captive-portal mode, `false` in full STA mode. Portal JS derives `portalMode` (`"core"` vs `"full"`) from this flag. (Replaces the removed `GET /api/mode` endpoint.)
+
+**Button Image Capabilities:**
+- `has_image_fetch`: Enables remote image and camera-feed backgrounds in the pad editor.
+- `has_image_library`: Enables local image backgrounds in the pad editor.
+- `has_camera`: Enables the separate Camera Preview widget for an attached camera.
 
 **Action Catalog:**
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.

@@ -21,6 +21,7 @@ function padPopulateLocalImageOptions(selected) {
 }
 
 function padLoadLocalImageOptions(selected) {
+    if (!deviceInfoCache || deviceInfoCache.has_image_library !== true) return Promise.resolve();
     return fetch('/api/images?directory=' + encodeURIComponent('/images'))
         .then(function (response) {
             if (!response.ok) throw new Error('Image library unavailable');

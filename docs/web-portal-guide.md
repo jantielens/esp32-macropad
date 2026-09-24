@@ -151,6 +151,11 @@ Image Previous actions continue to control the shared cursor manually. Any pad
 button using `[image:current]` follows that cursor in its own layout, while a
 selected local image remains fixed.
 
+In the pad editor, **Local Image** is available only when the board includes
+the image library. **Camera Feed or Remote Image** requires remote image fetching,
+which is separate from support for an attached camera. Background Image Scale is
+available when either type of button background is supported.
+
 ---
 
 ## Home Page
