@@ -32,7 +32,7 @@ Personal and extension-provided customizations are outside the repository invent
   Have the review workflow explicitly load the relevant lenses; keep universal
   conventions such as terminology automatically attached. Confirm review still
   loads each selected lens and unrelated edits do not load review-only rules.
-* [ ] P1: Update the [configuration settings checklist](.github/instructions/adding-config-settings.instructions.md)
+* [x] P1: Update the [configuration settings checklist](.github/instructions/adding-config-settings.instructions.md)
   to point at [web_portal_config.cpp](src/app/web_portal_config.cpp),
   [saveFragmentConfig()](src/app/web/portal_fragment_init.js), and
   [portal_config.js](src/app/web/portal_config.js). Account for
@@ -69,6 +69,7 @@ Personal and extension-provided customizations are outside the repository invent
 | 2026-09-24 | P1   | Complete | Removed global `applyTo` from all nine expert lenses. The reviewer read an explicit lens after the change; an unrelated task reported no expert bodies loaded automatically. |
 | 2026-09-24 | P1   | Complete | Renamed the parent to Review Panel and its private worker to Expert Reviewer; check discovery under the new names. |
 | 2026-09-24 | P2   | Complete | Reduced the main instructions from 223 lines to 49. Moved action and OTA contracts to scoped instructions; an action-authoring task retained the registry/manifest/test steps before and after, and a background OTA task found its safety rules. |
+| 2026-09-24 | P1   | Complete | Updated the NVS/API/fragment checklist and discovery paths. Traced `ha_url` through config storage, GET/POST, registered fragment loading, and shared save wiring. |
 
 ## References
 

@@ -1,93 +1,83 @@
 ---
-description: "Step-by-step checklist for adding new NVS configuration settings to backend, REST API, and web portal frontend"
-applyTo: "**/config_manager.*, **/web_portal.cpp, **/web_portal.h, **/web/*.html, **/web/portal.js"
+description: "Use when adding NVS settings, /api/config fields, or web portal configuration controls. Covers storage, config API, fragment load/save, and field registration."
+applyTo: "**/config_manager.*, **/web_portal_config.*, **/web/*.fragment.html, **/web/portal_core.js, **/web/portal_config.js, **/web/portal_fragment_init.js"
 ---
 
 # Adding New Configuration Settings
 
-When adding new configuration settings (e.g., MQTT, custom features), follow this complete checklist. For more details on the web portal architecture and REST API, see `docs/dev/web-portal.md`.
+When adding a setting, follow its storage, API, and fragment paths. See
+`docs/dev/web-portal.md` for portal architecture and REST API details.
 
 ## 1. Backend: Configuration Storage
 
-**Update `config_manager.h`:**
+**Update `src/app/config_manager.h`:**
 
-- Add `#define` constants for maximum field lengths (e.g., `CONFIG_MQTT_BROKER_MAX_LEN`)
-- Add new fields to the `DeviceConfig` struct
-- For strings: Use `char field_name[CONFIG_XXX_MAX_LEN]`
-- For numbers: Use appropriate types (`uint16_t`, `int`, `float`, etc.)
+* Add a field to `DeviceConfig` and a maximum length constant for strings.
+* Use the appropriate type for numeric or boolean settings.
 
-**Update `config_manager.cpp`:**
+**Update `src/app/config_manager.cpp`:**
 
-- Add `#define` keys for NVS storage (e.g., `KEY_MQTT_BROKER "mqtt_broker"`)
-- Update `config_manager_load()` to load new fields from NVS
-  - Use `preferences.getString()` for strings
-  - Use `preferences.getUShort()`, `preferences.getInt()`, etc. for numbers
-  - Provide sensible defaults (second parameter)
-- Update `config_manager_save()` to save new fields to NVS
-  - Use `preferences.putString()` for strings
-  - Use `preferences.putUShort()`, `preferences.putInt()`, etc. for numbers
-- Update `config_manager_print()` to log new settings for debugging
+* Add an NVS key and update `config_manager_load()` and
+  `config_manager_save()` with a suitable default and matching get/put types.
+* Add non-secret settings to `config_manager_print()` when useful; never log
+  passwords or tokens.
 
 ## 2. Backend: Web API
 
-**Update `web_portal.cpp`:**
+**Update `src/app/web_portal_config.cpp`:**
 
-- In `handleGetConfig()`: Add new fields to JSON response
-  - Use `doc["field_name"] = config->field_name`
-  - For passwords: Return empty string (`doc["password_field"] = ""`)
-- In `handlePostConfig()`: Handle new fields from JSON request
-  - Use `if (doc.containsKey("field_name"))` for partial updates
-  - Use `doc["field_name"] | default_value` syntax for safe extraction
-  - Handle passwords specially (only update if non-empty)
+* Add the field to `handleGetConfig()` and process it in `handlePostConfig()`.
+  Guard updates with `doc.containsKey()` so omitted fields remain unchanged;
+  validate and bound values according to the field type.
+* For secrets, return an empty value plus a `_set` status flag; only replace
+  the stored secret when a non-empty value is submitted.
 
 ## 3. Frontend: HTML Form
 
-**Update appropriate HTML page (e.g., `network.html`, `home.html`):**
+**Update the relevant `src/app/web/*.fragment.html`:**
 
-- Add form section with descriptive heading
-- Add input fields with proper attributes:
-  - `id` and `name` must match the backend field name exactly
-  - `type` (text, number, password, etc.)
-  - `maxlength` should match the backend max length constant
-  - `placeholder` with helpful examples
-  - `required` attribute if field is mandatory
-- Add `<small>` helper text under each field
-- Use `.grid-2col` class for side-by-side layout on desktop
+* Give the input a `name` matching the API key; use the same `id` for loading
+  registered fields. Set type, bounds/maxlength, labels, and help text as
+  appropriate. String `maxlength` is at most the buffer size minus one.
+* Place it in the relevant fragment with a save button; follow a neighboring
+  fragment's layout and initialization pattern.
 
 ## 4. Frontend: JavaScript
 
-**Update `portal.js`:**
+**Update the shared frontend path:**
 
-- In `buildConfigFromForm()` function:
-  - Add new field names to the `fields` array
-  - Fields are automatically read from form inputs by the existing code
-- In `loadConfig()` function:
-  - Add `setValueIfExists('field_name', config.field_name)` calls
-  - For passwords: Set placeholder text if saved, leave value empty
-  - For numbers: Use `setValueIfExists()` with numeric values
-- Optionally add validation in `validateConfig()` if needed
+* For core settings, add the name to `saveFragmentConfig()`'s field list in
+  `src/app/web/portal_fragment_init.js` and populate it in `loadConfig()` in
+  `src/app/web/portal_config.js` (use the matching input, checkbox, or radio
+  helper). Add validation in `validateConfig()` where needed.
+* For feature or device-class fields, call `registerConfigFields([...])` from
+  the feature's init/module before `loadConfig()` runs. It is defined in
+  `src/app/web/portal_core.js`; both save and load use its registered names.
+  Registered inputs need matching `id` and `name` and are populated directly
+  from `/api/config`. Handle write-only secrets separately: leave the input
+  empty and display the `_set` status.
+* In `src/app/web/portal_fragment_init.js`, wire the fragment's save button
+  via `initConfigFragment(saveBtnId, requiresReboot)` or its existing custom
+  initializer. The shared save helper posts only fields present in the DOM to
+  `/api/config?no_reboot=1`; choose the reboot flag for the setting's effect.
 
 ## 5. Usage in Application Code
 
-**Initialize with loaded config:**
-
-```cpp
-// In setup() or after config_manager_load()
-if (strlen(device_config.mqtt_broker) > 0) {
-    some_manager_init(&device_config);
-}
-```
-
-**Access configuration:**
-
-```cpp
-Serial.printf("Broker: %s:%d\n", device_config.mqtt_broker, device_config.mqtt_port);
-```
+Read the new field from the loaded `DeviceConfig` at the owning subsystem's
+initialization or update point; handle settings that take effect only after a
+reboot accordingly.
 
 ## Common Mistakes to Avoid
 
-- Forgetting to update `portal.js` fields array — settings won't be saved
-- Mismatched field names between HTML `id`, JS, and backend — data won't transfer
-- Not rebuilding after HTML/JS changes — old code still embedded in firmware
-- Missing default values in load function — uninitialized data
-- Not using `doc.containsKey()` in POST handler — can't do partial updates
+* Check a representative round trip before finishing. For `ha_url`,
+  `config_manager_load()`/`config_manager_save()` persist the NVS key,
+  `handleGetConfig()`/`handlePostConfig()` expose it, and
+  `ha-discovery.fragment.html` supplies `id="ha_url" name="ha_url"`.
+  `init_ha_discovery_fragment()` registers it before `initConfigFragment()`;
+  `loadConfig()` populates it and `saveFragmentConfig()` posts it.
+* Verify the mapping from NVS key to API field and keep the API name
+  consistent across registration and DOM. Never expose secrets in GET
+  responses or logs.
+* For actual firmware/UI changes, run focused checks and follow
+  [build verification](agent-guidelines.instructions.md); instruction-only
+  edits do not need a firmware build.
