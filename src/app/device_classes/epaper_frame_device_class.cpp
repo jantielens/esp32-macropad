@@ -878,9 +878,9 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		epaper_frame_timing_begin_wake(wake_reason);
 		const EpaperWakeBudget wake_budget = epaper_frame_wake_budget_begin(
 				wake_reason == EpaperWakeReason::Timer, g_epaper_config.wake_budget_ms);
-		LOGI("Epaper", "Wake limits: overall=%ums (enforced=%s), WiFi=%u/%ums, image=%u/%ums per request, MQTT=%u/%ums (expected/stop), offline=%u, retry=%us",
+		LOGI("Epaper", "Wake: cap=%u enforced=%u wifi=%u/%u img/req=%u/%u mqtt=%u/%u ms(expected/stop) offline=%u retry=%us",
 				(unsigned)g_epaper_config.wake_budget_ms,
-				wake_reason == EpaperWakeReason::Timer ? "yes" : "no",
+				(unsigned)(wake_reason == EpaperWakeReason::Timer),
 				(unsigned)g_epaper_config.wake_wifi_target_ms,
 				(unsigned)g_epaper_config.wake_wifi_budget_ms,
 				(unsigned)g_epaper_config.wake_fetch_target_ms,
