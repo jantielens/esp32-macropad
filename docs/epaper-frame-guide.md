@@ -75,17 +75,19 @@ The initial defaults live in `src/app/device_classes/epaper_frame/epaper_wake_bu
 They are persisted per device and can be adjusted in the portal's **Images &
 Schedule** page without reflashing:
 
-* Overall cap: total timer-wake ceiling, initially 15 s
+* Overall cap: total timer-wake ceiling, initially 15 s, adjustable up to 10 minutes
 * WiFi, fetch, and MQTT target: expected duration, retained in wake telemetry for tuning
-* WiFi, fetch, and MQTT cap: hard limit supplied to that interruptible network stage
+* WiFi and MQTT cap: hard limit supplied to that interruptible network stage
+* Image download cap: per-request limit for the manifest and each image in a Service batch
 * Cutoff retry interval: sleep interval after a cap breach; `0` uses the normal image refresh interval
 * `EPAPER_BUDGET_SHUTDOWN_RESERVE_MS` retains time to close owned resources before deep sleep
 
 The controller passes the lesser of a stage cap and the time left in the total
-budget to WiFi, the service fetch, and MQTT. A cap breach keeps the existing
-panel image, checkpoints a wake record in RTC memory, and returns to deep
-sleep. MQTT delivery is optional for the current wake: the existing RTC
-journal publishes the stored record on a later successful MQTT connection.
+budget to WiFi, each Service batch request, and MQTT. Panel refreshes already
+in progress finish before sleep. A cap breach keeps the existing panel image,
+checkpoints a wake record in RTC memory, and returns to deep sleep. MQTT
+delivery is optional for the current wake: the existing RTC journal publishes
+the stored record on a later successful MQTT connection.
 
 Wake events include a `budget` object for field diagnostics:
 
@@ -226,6 +228,14 @@ Wi-Fi is already connected. Set **Offline refreshes between syncs** from `0` to
 online. With `N`, the next online synchronization requests up to `N + 1`
 distinct candidates, displays the first, and stores up to `N` validated
 transport blobs on the SD card for later timer wakes.
+
+Changing the offline count or a WiFi, image, or MQTT timing field in the portal
+recalculates **Maximum scheduled wake time**. The estimate counts the first
+image and all offline images, uses the midpoint of each stage's expected and
+stop-after values, and adds 10 seconds for panel work and NTP. You can edit
+the maximum afterward to override it; loading saved settings does not replace
+the saved maximum. The overall maximum remains authoritative even when an
+individual image is allowed more time.
 
 Each queued timer wake validates the next SD blob and refreshes the panel without
 initializing Wi-Fi or MQTT. For example, 5 offline refreshes at a five-minute

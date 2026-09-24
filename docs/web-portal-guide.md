@@ -456,6 +456,11 @@ the device fetches up to the selected number of later images during an online
 sync, then displays them on later timer wakes without Wi-Fi. The hint calculates
 the resulting approximate online-sync cadence from the Service refresh interval.
 Higher values save battery but delay new server selections and MQTT telemetry.
+Changing the offline count or network timing fields automatically recalculates
+**Maximum scheduled wake time** for the first and queued images. Edit the
+maximum last to override the estimate; reopening the page preserves the saved
+value. The image download stop limit applies to each image request, while the
+overall scheduled wake limit (up to 10 minutes) remains the final safeguard.
 
 ---
 

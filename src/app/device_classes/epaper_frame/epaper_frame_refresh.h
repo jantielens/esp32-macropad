@@ -41,7 +41,8 @@ struct EpaperRefreshOutcome {
 //
 // The watchdog is disabled around the long drawImage() call.
 EpaperRefreshOutcome epaper_frame_refresh_run(DeviceConfig* config, bool force,
-										 uint32_t fetch_timeout_ms = 0);
+										 uint32_t fetch_timeout_ms = 0,
+										 uint32_t overall_timeout_ms = 0);
 
 #if defined(BOARD_RETERMINAL_E1003_FRAME)
 // Render the retained queue head entirely from the SD cache. The queue advances

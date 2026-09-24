@@ -193,6 +193,7 @@ window.init_epaper_image_fragment = function () {
     var offlineRefreshesRow = document.getElementById('epaper-offline-refreshes-row');
     var offlineRefreshesHint = document.getElementById('epaper-offline-refreshes-hint');
     var sdCacheEnabled = document.getElementById('epaper_frame_sd_cache_enabled');
+    var wakeMaximum = document.getElementById('epaper_frame_wake_budget_ms');
     var serviceSupported = false;
     var serviceTokenSet = false;
     var offlineQueueSupported = false;
@@ -201,6 +202,30 @@ window.init_epaper_image_fragment = function () {
         if (seconds % 3600 === 0) return (seconds / 3600) + '-hour';
         if (seconds % 60 === 0) return (seconds / 60) + '-minute';
         return seconds + '-second';
+    }
+
+    function recalculateWakeMaximum() {
+        if (!wakeMaximum) return;
+        if (offlineRefreshes && !offlineRefreshes.disabled && offlineRefreshes.value.trim() === '') return;
+        var imageCount = sourceMode && sourceMode.value === 'service' &&
+            sdCacheEnabled && sdCacheEnabled.checked && offlineRefreshes && !offlineRefreshes.disabled
+            ? Number(offlineRefreshes.value) + 1 : 1;
+        if (!Number.isInteger(imageCount) || imageCount < 1 || imageCount > 17) return;
+        var stages = [
+            ['wifi', 1], ['fetch', imageCount], ['mqtt', 1]
+        ];
+        var estimate = 10000;
+        for (var index = 0; index < stages.length; index++) {
+            var target = document.getElementById('epaper_frame_wake_' + stages[index][0] + '_target_ms');
+            var limit = document.getElementById('epaper_frame_wake_' + stages[index][0] + '_budget_ms');
+            var expected = target ? Number(target.value) : NaN;
+            var stopAfter = limit ? Number(limit.value) : NaN;
+            if (!Number.isFinite(expected) || expected <= 0 ||
+                !Number.isFinite(stopAfter) || stopAfter <= 0) return;
+            estimate += stages[index][1] * (Math.min(expected, stopAfter) + stopAfter) / 2;
+        }
+        wakeMaximum.value = String(Math.min(600000, Math.max(5000,
+            Math.ceil(estimate / 100) * 100)));
     }
 
     function updateOfflineQueueUi() {
@@ -388,10 +413,25 @@ window.init_epaper_image_fragment = function () {
     if (workBtn) workBtn.addEventListener('click', function () {
         setQuickHours(8, 17);
     });
-    if (sourceMode) sourceMode.addEventListener('change', updateSourceSections);
-    if (sdCacheEnabled) sdCacheEnabled.addEventListener('change', updateOfflineQueueUi);
+    if (sourceMode) sourceMode.addEventListener('change', function () {
+        updateSourceSections();
+        recalculateWakeMaximum();
+    });
+    if (sdCacheEnabled) sdCacheEnabled.addEventListener('change', function () {
+        updateOfflineQueueUi();
+        recalculateWakeMaximum();
+    });
     if (serviceInterval) serviceInterval.addEventListener('input', updateOfflineQueueUi);
-    if (offlineRefreshes) offlineRefreshes.addEventListener('input', updateOfflineQueueUi);
+    if (offlineRefreshes) offlineRefreshes.addEventListener('input', function () {
+        updateOfflineQueueUi();
+        recalculateWakeMaximum();
+    });
+    ['wifi', 'fetch', 'mqtt'].forEach(function (stage) {
+        ['target', 'budget'].forEach(function (setting) {
+            var field = document.getElementById('epaper_frame_wake_' + stage + '_' + setting + '_ms');
+            if (field) field.addEventListener('input', recalculateWakeMaximum);
+        });
+    });
 
     var clearSdBtn = document.getElementById('epaper_clear_sd_cache');
     if (clearSdBtn) clearSdBtn.addEventListener('click', function () {

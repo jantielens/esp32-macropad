@@ -101,7 +101,7 @@ static uint32_t clamp_wake_setting(uint32_t value, uint32_t minimum, uint32_t ma
 }
 
 static void normalize_wake_settings() {
-		g_epaper_config.wake_budget_ms = clamp_wake_setting(g_epaper_config.wake_budget_ms, 5000, 60000);
+		g_epaper_config.wake_budget_ms = clamp_wake_setting(g_epaper_config.wake_budget_ms, 5000, 600000);
 		g_epaper_config.wake_wifi_budget_ms = clamp_wake_setting(g_epaper_config.wake_wifi_budget_ms, 500, 30000);
 		g_epaper_config.wake_fetch_budget_ms = clamp_wake_setting(g_epaper_config.wake_fetch_budget_ms, 500, 30000);
 		g_epaper_config.wake_mqtt_budget_ms = clamp_wake_setting(g_epaper_config.wake_mqtt_budget_ms, 500, 30000);
@@ -878,6 +878,17 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		epaper_frame_timing_begin_wake(wake_reason);
 		const EpaperWakeBudget wake_budget = epaper_frame_wake_budget_begin(
 				wake_reason == EpaperWakeReason::Timer, g_epaper_config.wake_budget_ms);
+		LOGI("Epaper", "Wake limits: overall=%ums (enforced=%s), WiFi=%u/%ums, image=%u/%ums per request, MQTT=%u/%ums (expected/stop), offline=%u, retry=%us",
+				(unsigned)g_epaper_config.wake_budget_ms,
+				wake_reason == EpaperWakeReason::Timer ? "yes" : "no",
+				(unsigned)g_epaper_config.wake_wifi_target_ms,
+				(unsigned)g_epaper_config.wake_wifi_budget_ms,
+				(unsigned)g_epaper_config.wake_fetch_target_ms,
+				(unsigned)g_epaper_config.wake_fetch_budget_ms,
+				(unsigned)g_epaper_config.wake_mqtt_target_ms,
+				(unsigned)g_epaper_config.wake_mqtt_budget_ms,
+				(unsigned)g_epaper_config.offline_refreshes_between_syncs,
+				(unsigned)g_epaper_config.wake_cutoff_retry_seconds);
 		epaper_frame_timing_last.overall_budget_ms = wake_budget.overall_budget_ms;
 		epaper_frame_timing_last.wifi_target_ms = g_epaper_config.wake_wifi_target_ms;
 		epaper_frame_timing_last.fetch_target_ms = g_epaper_config.wake_fetch_target_ms;
@@ -1249,15 +1260,23 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// Clear the per-draw sub-step timings so a CRC-skip wake (no fetch/draw)
 		// reports zeros rather than the previous cycle's resolve/fetch/draw.
 		epaper_frame_timing_reset_draw_steps();
-		const uint32_t fetch_limit_ms = wake_budget.stage_limit_ms(millis(), g_epaper_config.wake_fetch_budget_ms);
-		epaper_frame_timing_last.fetch_limit_ms = fetch_limit_ms;
+		const bool batch_enabled = epaper_frame_source_uses_service(g_epaper_config.source_mode) &&
+				g_epaper_config.epaper_frame_sd_cache_enabled &&
+				g_epaper_config.offline_refreshes_between_syncs > 0;
+		const uint32_t fetch_limit_ms = wake_budget.stage_limit_ms(millis(),
+				batch_enabled ? UINT32_MAX : g_epaper_config.wake_fetch_budget_ms);
+		epaper_frame_timing_last.fetch_limit_ms = batch_enabled &&
+				fetch_limit_ms > g_epaper_config.wake_fetch_budget_ms
+				? g_epaper_config.wake_fetch_budget_ms : fetch_limit_ms;
 		if (fetch_limit_ms == 0) {
 			record_budget_cut(EpaperWakeBudgetCut::Overall, EpaperWakeStage::Refresh);
 			power_manager_sleep_for(epaper_frame_budget_cut_sleep_seconds());
 			return true;
 		}
 		const uint32_t fetch_started_ms = millis();
-		const EpaperRefreshOutcome outcome = epaper_frame_refresh_run(config, force_refresh, fetch_limit_ms);
+		const EpaperRefreshOutcome outcome = epaper_frame_refresh_run(config, force_refresh,
+				batch_enabled ? g_epaper_config.wake_fetch_budget_ms : fetch_limit_ms,
+				batch_enabled ? fetch_limit_ms : 0);
 		if (outcome.result == EpaperRefreshResult::FailedFetch &&
 				(millis() - fetch_started_ms) >= fetch_limit_ms) {
 			record_budget_cut(EpaperWakeBudgetCut::Fetch, EpaperWakeStage::Refresh);

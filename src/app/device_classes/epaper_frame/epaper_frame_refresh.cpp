@@ -209,6 +209,14 @@ static uint32_t service_remaining_timeout(uint32_t started,
 		return elapsed < timeout_ms ? timeout_ms - elapsed : 0;
 }
 
+static uint32_t service_request_timeout(uint32_t started,
+		uint32_t overall_timeout_ms, uint32_t per_image_timeout_ms) {
+		if (overall_timeout_ms == 0) return per_image_timeout_ms;
+		const uint32_t remaining = service_remaining_timeout(started, overall_timeout_ms);
+		return per_image_timeout_ms == 0 || remaining < per_image_timeout_ms
+				? remaining : per_image_timeout_ms;
+}
+
 static bool epaper_frame_refresh_draw_service_payload(
 		EpaperNextPayload* payload, EpaperRefreshOutcome* out,
 		uint32_t started) {
@@ -274,12 +282,13 @@ static void epaper_frame_refresh_finish_service(
 
 static void epaper_frame_queue_batch_extras(
 		const EpaperBatchManifest& manifest, uint32_t sync_started,
-		uint32_t fetch_timeout_ms) {
+		uint32_t overall_timeout_ms, uint32_t per_image_timeout_ms) {
 		epaper_frame_offline_queue_begin_sync();
 		for (uint8_t index = 1; index < manifest.count; ++index) {
 				const uint32_t remaining =
-						service_remaining_timeout(sync_started, fetch_timeout_ms);
-				if (fetch_timeout_ms > 0 && remaining == 0) {
+						service_request_timeout(sync_started, overall_timeout_ms,
+								per_image_timeout_ms);
+				if (overall_timeout_ms > 0 && remaining == 0) {
 						LOGW("Epaper", "Batch prefetch stopped at wake budget");
 						break;
 				}
@@ -321,7 +330,8 @@ static void epaper_frame_queue_batch_extras(
 }
 
 static EpaperRefreshOutcome epaper_frame_refresh_run_service(
-		DeviceConfig* /*config*/, uint32_t fetch_timeout_ms) {
+		DeviceConfig* /*config*/, uint32_t fetch_timeout_ms,
+		uint32_t overall_timeout_ms) {
 		EpaperRefreshOutcome out = {
 				EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
 		const uint32_t started = millis();
@@ -340,10 +350,10 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 						g_epaper_config.offline_refreshes_between_syncs,
 						&batch_count)) {
 						const uint32_t manifest_timeout =
-								service_remaining_timeout(
-										started, fetch_timeout_ms);
+								service_request_timeout(started, overall_timeout_ms,
+										fetch_timeout_ms);
 						const EpaperNextResult batch_result =
-								fetch_timeout_ms > 0 && manifest_timeout == 0
+								overall_timeout_ms > 0 && manifest_timeout == 0
 								? EpaperNextResult::FailedFetch :
 								epaper_frame_next_client_fetch_batch_manifest(
 										g_epaper_config.service_url,
@@ -354,9 +364,9 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 						if (batch_result == EpaperNextResult::Show &&
 								manifest && manifest->count > 0) {
 								const uint32_t first_timeout =
-										service_remaining_timeout(
-												started, fetch_timeout_ms);
-								if (fetch_timeout_ms > 0 &&
+										service_request_timeout(started, overall_timeout_ms,
+												fetch_timeout_ms);
+								if (overall_timeout_ms > 0 &&
 										first_timeout == 0) {
 										payload.result =
 												EpaperNextResult::FailedFetch;
@@ -382,8 +392,11 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 
 		if (!batch_first) {
 				const uint32_t fallback_timeout =
-						service_remaining_timeout(started, fetch_timeout_ms);
-				if (fetch_timeout_ms > 0 && fallback_timeout == 0) {
+						batch_enabled
+						? service_request_timeout(started, overall_timeout_ms,
+								fetch_timeout_ms)
+						: service_remaining_timeout(started, fetch_timeout_ms);
+				if ((batch_enabled ? overall_timeout_ms : fetch_timeout_ms) > 0 && fallback_timeout == 0) {
 						payload = {};
 						payload.result = EpaperNextResult::FailedFetch;
 				} else {
@@ -430,8 +443,9 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 				batch_first = false;
 				LOGW("Epaper", "Batch first image failed to render; falling back to /next");
 				const uint32_t fallback_timeout =
-						service_remaining_timeout(started, fetch_timeout_ms);
-				if (fetch_timeout_ms == 0 || fallback_timeout > 0) {
+						service_request_timeout(started, overall_timeout_ms,
+								fetch_timeout_ms);
+				if (overall_timeout_ms == 0 || fallback_timeout > 0) {
 						payload = epaper_frame_next_client_fetch(
 								g_epaper_config.service_url,
 								g_epaper_config.service_token,
@@ -469,7 +483,7 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 				: EpaperRefreshResult::FailedDraw;
 		if (drew && batch_first && manifest) {
 				epaper_frame_queue_batch_extras(
-						*manifest, started, fetch_timeout_ms);
+						*manifest, started, overall_timeout_ms, fetch_timeout_ms);
 		}
 		epaper_frame_batch_manifest_release(manifest);
 		epaper_frame_refresh_finish_service(&out, started);
@@ -549,11 +563,13 @@ EpaperRefreshOutcome epaper_frame_refresh_run_offline(DeviceConfig* /*config*/) 
 }
 #endif
 
-EpaperRefreshOutcome epaper_frame_refresh_run(DeviceConfig* config, bool force, uint32_t fetch_timeout_ms) {
+EpaperRefreshOutcome epaper_frame_refresh_run(DeviceConfig* config, bool force,
+		uint32_t fetch_timeout_ms, uint32_t overall_timeout_ms) {
 		if (epaper_frame_source_uses_service(g_epaper_config.source_mode)) {
 #if defined(BOARD_RETERMINAL_E1003_FRAME)
 				if (force) epaper_frame_offline_queue_invalidate();
-				return epaper_frame_refresh_run_service(config, fetch_timeout_ms);
+				return epaper_frame_refresh_run_service(config, fetch_timeout_ms,
+						overall_timeout_ms);
 #else
 				EpaperRefreshOutcome unsupported = {
 						EpaperRefreshResult::Disabled, 0, 0, 0, 0, 0};
