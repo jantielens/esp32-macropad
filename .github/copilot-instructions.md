@@ -178,9 +178,9 @@ ownership. If a new subsystem needs a checkpoint, add focused coverage to
 
 ### Code Review Infrastructure
 
-- `.github/prompts/sanitycheck.prompt.md` — Pre-commit expert panel code review prompt
-- `.github/agents/code-review.agent.md` — Code Review agent with batch triage workflow
-- `.github/agents/subagents/code-reviewer.agent.md` — Expert reviewer subagent (non-user-invocable)
+- `.github/skills/sanitycheck/SKILL.md` — On-demand pre-commit expert panel review skill
+- `.github/agents/review-panel.agent.md` — Review Panel agent with batch triage workflow
+- `.github/agents/expert-reviewer.agent.md` — Expert Reviewer subagent (non-user-invocable)
 - `.github/instructions/review-experts/*.instructions.md` — Expert reviewer instruction files
 
 ## Library Management
