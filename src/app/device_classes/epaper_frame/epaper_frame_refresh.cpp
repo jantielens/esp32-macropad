@@ -284,6 +284,7 @@ static void epaper_frame_queue_batch_extras(
 		const EpaperBatchManifest& manifest, uint32_t sync_started,
 		uint32_t overall_timeout_ms, uint32_t per_image_timeout_ms) {
 		epaper_frame_offline_queue_begin_sync();
+		epaper_frame_sd_cache_begin_batch();
 		for (uint8_t index = 1; index < manifest.count; ++index) {
 				const uint32_t remaining =
 						service_request_timeout(sync_started, overall_timeout_ms,
@@ -325,6 +326,7 @@ static void epaper_frame_queue_batch_extras(
 				epaper_frame_next_payload_release(&queued);
 				if (!appended) break;
 		}
+		epaper_frame_sd_cache_end_batch();
 		LOGI("Epaper", "Offline queue ready with %u entries",
 				(unsigned)epaper_frame_offline_queue_count());
 }

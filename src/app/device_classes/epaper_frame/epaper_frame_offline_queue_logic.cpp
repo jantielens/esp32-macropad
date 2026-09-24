@@ -35,20 +35,20 @@ bool valid_image_key(const char* value) {
 		return true;
 }
 
-bool valid_media_type(const char* value) {
+bool valid_entry(const EpaperOfflineQueueEntry& entry) {
+		return valid_image_key(entry.image_key) &&
+				epaper_frame_service_media_type_valid(entry.media_type) &&
+				entry.content_length > 0;
+}
+
+} // namespace
+
+bool epaper_frame_service_media_type_valid(const char* value) {
 		return value && (
 				strcmp(value, "image/jpeg") == 0 ||
 				strcmp(value, "application/vnd.photoframe.g16p") == 0 ||
 				strcmp(value, "application/vnd.photoframe.g16z") == 0);
 }
-
-bool valid_entry(const EpaperOfflineQueueEntry& entry) {
-		return valid_image_key(entry.image_key) &&
-				valid_media_type(entry.media_type) &&
-				entry.content_length > 0;
-}
-
-} // namespace
 
 bool epaper_frame_offline_refresh_count_valid(uint32_t value) {
 		return value <= EPAPER_FRAME_OFFLINE_QUEUE_CAPACITY;
@@ -82,7 +82,7 @@ EpaperOfflineWakeDecision epaper_frame_offline_wake_decision(
 		if (timer_wake && !inputs.schedule_allowed) {
 				return EpaperOfflineWakeDecision::ScheduleSuppressed;
 		}
-		const bool prerequisites = inputs.supported && inputs.service_mode &&
+		const bool prerequisites = inputs.service_mode &&
 				inputs.sd_cache_enabled && inputs.offline_refreshes > 0 &&
 				epaper_frame_offline_refresh_count_valid(inputs.offline_refreshes);
 		return timer_wake && prerequisites && inputs.queue_valid

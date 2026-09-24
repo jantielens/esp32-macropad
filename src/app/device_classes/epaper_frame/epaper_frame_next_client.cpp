@@ -51,9 +51,14 @@ String batch_url(const char* service_base, uint8_t count) {
 		return url;
 }
 
+uint32_t request_time_left(uint32_t started_ms, uint32_t timeout_ms) {
+		const uint32_t elapsed_ms = millis() - started_ms;
+		return elapsed_ms >= timeout_ms ? 0 : timeout_ms - elapsed_ms;
+}
+
 String resolve_content_ref(const char* service_base, const char* content_ref) {
 		String ref = content_ref ? content_ref : "";
-		if (ref.startsWith("http://") || ref.startsWith("https://")) return ref;
+		if (ref.startsWith("http://") || ref.startsWith("https://")) return String();
 		String base = service_base ? service_base : "";
 		if (!ref.startsWith("/")) {
 				while (base.endsWith("/")) base.remove(base.length() - 1);
@@ -69,6 +74,7 @@ String resolve_content_ref(const char* service_base, const char* content_ref) {
 bool begin_request(HTTPClient& http, WiFiClient& plain,
 		WiFiClientSecure& secure, const String& url) {
 		http.useHTTP10(true);
+		http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
 		if (url.startsWith("https://")) {
 				secure.setInsecure();
 				return http.begin(secure, url);
@@ -119,10 +125,7 @@ bool valid_content_headers(HTTPClient& http, char* media_type,
 		if (encoding.length() > 0 &&
 				!encoding.equalsIgnoreCase("identity")) return false;
 		const String type = http.header("Content-Type");
-		const bool supported = type == "image/jpeg" ||
-				type == "application/vnd.photoframe.g16p" ||
-				type == "application/vnd.photoframe.g16z";
-		if (!supported) return false;
+		if (!epaper_frame_service_media_type_valid(type.c_str())) return false;
 		strlcpy(media_type, type.c_str(), media_type_size);
 		return true;
 }
@@ -157,14 +160,17 @@ bool try_cache(uint32_t content_crc32, const char* media_type,
 bool read_and_validate_body(HTTPClient& http,
 		const ShowMetadata& metadata, const char* media_type,
 		EpaperNextPayload* payload, uint32_t expected_length = 0,
-		uint32_t idle_timeout_ms = kServiceHttpTimeoutMs) {
+		uint32_t timeout_ms = kServiceHttpTimeoutMs,
+		uint32_t request_started_ms = 0) {
 		const uint32_t started = millis();
+		const uint32_t remaining_ms = request_time_left(request_started_ms, timeout_ms);
+		if (remaining_ms == 0) return false;
 		uint8_t* data = nullptr;
 		size_t len = 0;
 		size_t body_bytes_read = 0;
 		if (!epaper_frame_http_read_body(
 				http, &data, &len, &body_bytes_read,
-				expected_length > 0, idle_timeout_ms)) {
+				expected_length > 0, remaining_ms)) {
 				return false;
 		}
 		payload->body_bytes_read = body_bytes_read;
@@ -191,14 +197,10 @@ bool parse_batch_entry(JsonObjectConst source, EpaperBatchEntry* entry) {
 		const char* content_ref = source["content_url"] | "";
 		if (!*content_ref) content_ref = source["content_ref"] | "";
 		uint32_t content_crc32 = 0;
-		const bool media_supported =
-				strcmp(media_type, "image/jpeg") == 0 ||
-				strcmp(media_type, "application/vnd.photoframe.g16p") == 0 ||
-				strcmp(media_type, "application/vnd.photoframe.g16z") == 0;
 		if (!epaper_frame_next_valid_image_key(image_key) ||
 				!epaper_frame_next_parse_crc32(
 						crc_text, &content_crc32) ||
-				!media_supported || !*content_ref ||
+				!epaper_frame_service_media_type_valid(media_type) || !*content_ref ||
 				strlen(content_ref) >= sizeof(entry->content_ref) ||
 				!source["content_length"].is<uint32_t>()) {
 				return false;
@@ -226,6 +228,7 @@ EpaperNextPayload follow_redirect(const String& location,
 		WiFiClient plain;
 		WiFiClientSecure secure;
 		HTTPClient http;
+		const uint32_t request_started_ms = millis();
 		if (!begin_request(http, plain, secure, location)) return payload;
 		http.setTimeout(timeout_ms);
 		collect_service_headers(http);
@@ -245,7 +248,7 @@ EpaperNextPayload follow_redirect(const String& location,
 		}
 		const bool ok = read_and_validate_body(
 				http, metadata, payload.media_type, &payload,
-				0, timeout_ms);
+				0, timeout_ms, request_started_ms);
 		http.end();
 		delay(100);
 		payload.result = ok ? EpaperNextResult::Show
@@ -273,6 +276,7 @@ EpaperNextPayload epaper_frame_next_client_fetch(
 				WiFiClient plain;
 				WiFiClientSecure secure;
 				HTTPClient http;
+				const uint32_t request_started_ms = millis();
 				if (!begin_request(http, plain, secure, url)) {
 						return empty_payload(EpaperNextResult::FailedFetch);
 				}
@@ -293,7 +297,7 @@ EpaperNextPayload epaper_frame_next_client_fetch(
 								http.header("WWW-Authenticate") == "Bearer";
 						http.end();
 						LOGW("Epaper", "Service authentication failed%s",
-								bearer_challenge ? "" : " (missing ******");
+										bearer_challenge ? "" : " (missing Bearer challenge)");
 						return empty_payload(EpaperNextResult::AuthFailed);
 				}
 				if (action == EpaperNextAction::UnsupportedMajor) {
@@ -347,7 +351,7 @@ EpaperNextPayload epaper_frame_next_client_fetch(
 				}
 				const bool valid = read_and_validate_body(
 						http, metadata, payload.media_type, &payload,
-						0, request_timeout_ms);
+						0, request_timeout_ms, request_started_ms);
 				http.end();
 				delay(100);
 				LOGI("Epaper", "Service body_bytes_read=%u",
@@ -374,6 +378,7 @@ EpaperNextResult epaper_frame_next_client_fetch_batch_manifest(
 		WiFiClient plain;
 		WiFiClientSecure secure;
 		HTTPClient http;
+		const uint32_t request_started_ms = millis();
 		if (!begin_request(http, plain, secure,
 				batch_url(service_base, requested_count))) {
 				return EpaperNextResult::FailedFetch;
@@ -404,9 +409,11 @@ EpaperNextResult epaper_frame_next_client_fetch_batch_manifest(
 		uint8_t* body = nullptr;
 		size_t body_length = 0;
 		size_t body_bytes_read = 0;
-		if (!epaper_frame_http_read_body(
+		const uint32_t remaining_ms = request_time_left(
+				request_started_ms, request_timeout_ms);
+		if (remaining_ms == 0 || !epaper_frame_http_read_body(
 				http, &body, &body_length, &body_bytes_read,
-				true, request_timeout_ms)) {
+				true, remaining_ms)) {
 				http.end();
 				return EpaperNextResult::FailedFetch;
 		}
@@ -491,6 +498,7 @@ EpaperNextPayload epaper_frame_next_client_fetch_batch_entry(
 		WiFiClient plain;
 		WiFiClientSecure secure;
 		HTTPClient http;
+		const uint32_t request_started_ms = millis();
 		if (!begin_request(http, plain, secure, url)) return payload;
 		http.setTimeout(request_timeout_ms);
 		collect_service_headers(http);
@@ -519,7 +527,7 @@ EpaperNextPayload epaper_frame_next_client_fetch_batch_entry(
 		}
 		const bool valid = read_and_validate_body(
 				http, response_metadata, entry.media_type, &payload,
-				entry.content_length, request_timeout_ms);
+				entry.content_length, request_timeout_ms, request_started_ms);
 		http.end();
 		delay(100);
 		payload.result = valid ? EpaperNextResult::Show

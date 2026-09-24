@@ -26,6 +26,7 @@ EpaperSdCacheConfig s_cfg = {nullptr, -1, -1, -1, nullptr, nullptr};
 
 bool s_enabled = false;  // runtime toggle, set from config before draw
 bool s_mounted = false;
+bool s_batch_active = false;
 
 // Blob staged by the last successful download, awaiting write-back to SD after
 // the frame is on screen. Owned here; freed by flush/discard.
@@ -93,7 +94,7 @@ bool sd_cache_mount() {
 }
 
 void sd_cache_unmount() {
-		if (!s_mounted) return;
+		if (!s_mounted || s_batch_active) return;
 		SD.end();
 		s_mounted = false;
 		// SD.end() tears the shared SPI bus down; the panel driver must re-init it
@@ -219,6 +220,15 @@ bool epaper_frame_sd_cache_remove(uint32_t content_crc32) {
 bool epaper_frame_sd_cache_store(uint32_t content_crc32,
 		const uint8_t* data, size_t len) {
 		return sd_cache_write(content_crc32, data, len);
+}
+
+void epaper_frame_sd_cache_begin_batch() {
+		s_batch_active = true;
+}
+
+void epaper_frame_sd_cache_end_batch() {
+		s_batch_active = false;
+		sd_cache_unmount();
 }
 
 void epaper_frame_sd_cache_stage_pending(uint32_t content_crc32, uint8_t* buf, size_t len) {

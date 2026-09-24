@@ -1,7 +1,7 @@
 ---
 title: Photoframe Next Image Contract
 description: Proposed transport-neutral contract for selecting and delivering the next photoframe image
-ms.date: 2026-09-23
+ms.date: 2026-09-24
 ms.topic: reference
 keywords:
   - photoframe
@@ -371,20 +371,25 @@ A non-empty batch uses `200 OK` and `application/json`:
       "content_crc32": "89abcdef",
       "media_type": "application/vnd.photoframe.g16z",
       "content_length": 612345,
-      "content_url": "/api/v1/content/M7x4qQ2V0A/3/612345/89abcdef"
+      "content_url": "/api/v1/content/M7x4qQ2V0A/3/612345/89abcdef?blob=transport-example.g16z&sig=<64-hex-digit-HMAC>"
     }
   ]
 }
 ```
 
 Entries are ordered and distinct by `(image_key, content_crc32)`.
-`content_url` is an immutable reference to the selected descriptor and expected
-fingerprint, not a mutable current-image lookup. When no valid entry can be
-selected, the service returns `204 No Content`.
+`content_url` is a same-origin, path-relative reference to the exact selected
+blob and expected fingerprint, not a mutable current-image lookup. The service
+authenticates it with a frame-bound signature over the descriptor and blob name;
+clients MUST NOT send their bearer credential to an absolute or redirected
+batch URL. When no valid entry can be selected, the service returns
+`204 No Content`.
 
 The client fetches each `content_url` with the same frame bearer credential. The
-service MUST authenticate every fetch, enforce frame isolation, resolve only the
-referenced selected descriptor, and recheck its length and CRC32 at fetch time.
+service MUST authenticate every fetch, enforce frame isolation, verify that the
+reference was issued for the selected descriptor, and recheck that blob's
+length and CRC32 at fetch time. Changing current-image metadata MUST NOT change
+which blob a previously issued reference fetches.
 It returns the exact bytes with their media type plus
 `Photoframe-Image-Key` and `Photoframe-Content-CRC32`. If the reference is
 unknown for that frame, it returns `404 Not Found`. If the referenced blob is

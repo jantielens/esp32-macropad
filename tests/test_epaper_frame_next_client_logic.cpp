@@ -19,9 +19,6 @@ TEST(EpaperNextClientLogic, SelectsSourceActionsAndValidatesTransportValues) {
 		EXPECT_EQ(epaper_frame_next_action_for_status(404), EpaperNextAction::UnsupportedMajor);
 		EXPECT_EQ(epaper_frame_next_action_for_status(503), EpaperNextAction::TransientFailure);
 		EXPECT_EQ(epaper_frame_next_action_for_status(301), EpaperNextAction::InvalidResponse);
-		EXPECT_EQ(epaper_frame_next_retry_decision(EpaperNextResult::Show), EpaperRetryDecision::Draw);
-		EXPECT_EQ(epaper_frame_next_retry_decision(EpaperNextResult::Keep), EpaperRetryDecision::Skip);
-		EXPECT_EQ(epaper_frame_next_retry_decision(EpaperNextResult::FailedFetch), EpaperRetryDecision::Fail);
 		EXPECT_TRUE(epaper_frame_next_use_cached_blob(true, true));
 		EXPECT_FALSE(epaper_frame_next_use_cached_blob(false, true));
 

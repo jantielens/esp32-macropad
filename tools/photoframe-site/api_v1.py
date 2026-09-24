@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import re
+import hashlib
+import hmac
 import zlib
+from urllib.parse import quote
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.background import BackgroundTask
 
 import blobstore as bs
+import config as site_config
 import store
 from store import TransportDescriptor
 
@@ -66,6 +70,14 @@ def _content_headers(descriptor: TransportDescriptor) -> dict[str, str]:
         "Photoframe-Image-Key": descriptor.image_key,
         "Photoframe-Content-CRC32": descriptor.content_crc32,
     }
+
+
+def _reference_signature(device_id: str, descriptor: TransportDescriptor, secret: str) -> str:
+    fields = (device_id, descriptor.image_key, str(descriptor.format_code),
+              str(descriptor.content_length), descriptor.content_crc32, descriptor.blob_name)
+    return hmac.new(secret.encode("utf-8"),
+                    ("photoframe-content-v1\0" + "\0".join(fields)).encode("utf-8"),
+                    hashlib.sha256).hexdigest()
 
 
 def _parse_batch_count(request: Request) -> int | None:
@@ -130,21 +142,35 @@ def get_next_batch(request: Request) -> Response:
     if fingerprint is not None:
         excluded.add(fingerprint)
     entries = []
-    with request.app.state.next_images.selection_transaction():
-        while len(entries) < count:
+    secret = site_config.session_secret(request.app.state.data_root)
+    selection_conflicts = 0
+    while len(entries) < count:
+        with request.app.state.next_images.selection_transaction():
             descriptor = request.app.state.next_images.select(
                 frame, None, excluded_fingerprints=excluded
             )
-            if descriptor is None:
-                break
-            descriptor_fingerprint = (descriptor.image_key, descriptor.content_crc32)
+        if descriptor is None:
+            break
+        descriptor_fingerprint = (descriptor.image_key, descriptor.content_crc32)
+        payload = _descriptor_payload(frame.device_id, descriptor)
+        if payload is None:
             excluded.add(descriptor_fingerprint)
-            payload = _descriptor_payload(frame.device_id, descriptor)
-            if payload is None:
+            continue
+        del payload
+        with request.app.state.next_images.selection_transaction():
+            current = request.app.state.next_images.select(
+                frame, None, excluded_fingerprints=excluded
+            )
+            if current != descriptor:
+                selection_conflicts += 1
+                if selection_conflicts >= 8:
+                    break
                 continue
-            del payload
+            selection_conflicts = 0
             if not request.app.state.index.commit_selection(frame.device_id, descriptor):
+                excluded.add(descriptor_fingerprint)
                 continue
+            excluded.add(descriptor_fingerprint)
             entries.append({
                 "image_key": descriptor.image_key,
                 "content_crc32": descriptor.content_crc32,
@@ -153,6 +179,8 @@ def get_next_batch(request: Request) -> Response:
                 "content_url": (
                     f"/api/v1/content/{descriptor.image_key}/{descriptor.format_code}/"
                     f"{descriptor.content_length}/{descriptor.content_crc32}"
+                    f"?blob={quote(descriptor.blob_name, safe='')}"
+                    f"&sig={_reference_signature(frame.device_id, descriptor, secret)}"
                 ),
             })
 
@@ -187,14 +215,23 @@ def get_exact_content(
         return Response("Not Found", status_code=404, media_type="text/plain",
                         headers=PROTOCOL_HEADERS)
 
-    descriptor = request.app.state.next_images.resolve_reference(
-        frame,
-        image_key=image_key,
-        format_code=int(format_code),
-        content_length=int(content_length),
-        content_crc32=content_crc32,
+    blob_values = request.query_params.getlist("blob")
+    signature_values = request.query_params.getlist("sig")
+    if (len(blob_values) != 1 or len(signature_values) != 1
+            or not store.is_valid_blob_name(blob_values[0])
+            or not re.fullmatch(r"[0-9a-f]{64}", signature_values[0])
+            or int(format_code) not in frame.format_codes):
+        return Response("Not Found", status_code=404, media_type="text/plain",
+                        headers=PROTOCOL_HEADERS)
+    descriptor = TransportDescriptor(
+        image_key=image_key, format_code=int(format_code),
+        content_length=int(content_length), content_crc32=content_crc32,
+        blob_name=blob_values[0], media_type=store.MEDIA_TYPES[int(format_code)],
+        width=frame.width, height=frame.height,
     )
-    if descriptor is None:
+    expected = _reference_signature(
+        frame.device_id, descriptor, site_config.session_secret(request.app.state.data_root))
+    if not hmac.compare_digest(signature_values[0], expected):
         return Response("Not Found", status_code=404, media_type="text/plain",
                         headers=PROTOCOL_HEADERS)
     payload = _descriptor_payload(frame.device_id, descriptor)

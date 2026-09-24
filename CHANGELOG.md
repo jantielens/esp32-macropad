@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-23
+ms.date: 2026-09-24
 ms.topic: reference
 ---
 
@@ -12,8 +12,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
 ## [1.33.0] - 2026-09-23
 
 ### Added
@@ -22,8 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upcoming SD-cached images during an online synchronization, then render them
   on subsequent timer wakes without initializing Wi-Fi or MQTT. The new
   **Offline refreshes between syncs** setting makes the battery/latency tradeoff
-  explicit; button refreshes, cache clears, and relevant configuration changes
-  discard the best-effort retained queue.
+  explicit. Prefetched content is authenticated and validated before use;
+  offline-cycle telemetry is reported on the next connected wake. Button
+  refreshes, cache clears, and relevant configuration changes discard the
+  best-effort retained queue.
 
 ## [1.32.0] - 2026-09-23
 

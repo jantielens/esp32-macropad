@@ -35,7 +35,6 @@ enum class EpaperOfflineWakeDecision : uint8_t {
 };
 
 struct EpaperOfflineWakeInputs {
-		bool supported;
 		bool service_mode;
 		bool sd_cache_enabled;
 		uint32_t offline_refreshes;
@@ -55,6 +54,7 @@ struct EpaperOfflineTelemetryAggregate {
 };
 
 bool epaper_frame_offline_refresh_count_valid(uint32_t value);
+bool epaper_frame_service_media_type_valid(const char* value);
 bool epaper_frame_offline_batch_count(uint32_t offline_refreshes, uint8_t* total_count);
 uint32_t epaper_frame_offline_config_identity(uint8_t source_mode,
 		const char* service_url, const char* service_token,

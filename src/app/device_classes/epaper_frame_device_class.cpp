@@ -756,7 +756,6 @@ static bool defer_wifi_init_hook(const DeviceConfig * /*config*/,
 						g_epaper_config.schedule_tz_offset,
 						time(nullptr));
 		const EpaperOfflineWakeInputs inputs = {
-				/* supported */ true,
 				/* service_mode */ epaper_frame_source_uses_service(
 						g_epaper_config.source_mode),
 				/* sd_cache_enabled */
@@ -914,7 +913,6 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						g_epaper_config.schedule_tz_offset,
 						time(nullptr));
 		const EpaperOfflineWakeInputs offline_inputs = {
-				/* supported */ true,
 				/* service_mode */ epaper_frame_source_uses_service(
 						g_epaper_config.source_mode),
 				/* sd_cache_enabled */

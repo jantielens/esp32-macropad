@@ -23,6 +23,9 @@ static char g_wake_topic[160] = {};
 static uint64_t g_pending_wake_ack_session_id = 0;
 static uint32_t g_pending_wake_ack_id = 0;
 static bool g_pending_wake_ack_received = false;
+static char g_offline_state_topic[160] = {};
+static uint32_t g_pending_offline_ack_id = 0;
+static bool g_pending_offline_ack_received = false;
 
 bool epaper_frame_mqtt_discovery_already_published() {
 		return g_epaper_discovery_published;
@@ -141,8 +144,14 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 
 		if (timing) doc["wake_loop_ms"] = timing->total_active_ms;
 		if (g_epaper_offline_telemetry.count > 0) {
+				if (!mqtt_manager.subscribe(topic)) return false;
+				strlcpy(g_offline_state_topic, topic, sizeof(g_offline_state_topic));
+				g_pending_offline_ack_id = esp_random();
+				if (g_pending_offline_ack_id == 0) g_pending_offline_ack_id = 1;
+				g_pending_offline_ack_received = false;
 				JsonObject offline = doc.createNestedObject("offline_cycles");
 				offline["count"] = g_epaper_offline_telemetry.count;
+				offline["delivery_id"] = g_pending_offline_ack_id;
 				offline["latest_result"] = refresh_result_to_str(
 						static_cast<EpaperRefreshResult>(
 								g_epaper_offline_telemetry.latest_result));
@@ -158,13 +167,25 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 
 		const bool ok = mqtt_manager.publishJson(topic, doc, true /*retained*/);
 		if (ok) {
+				if (g_pending_offline_ack_id != 0) {
+						const uint32_t started_ms = millis();
+						while (!g_pending_offline_ack_received &&
+								(millis() - started_ms) < kWakeDeliveryAckTimeoutMs) {
+								mqtt_manager.loop();
+								delay(10);
+						}
+				}
 				epaper_frame_offline_telemetry_publish_complete(
-						&g_epaper_offline_telemetry, true);
+						&g_epaper_offline_telemetry,
+						g_pending_offline_ack_id == 0 || g_pending_offline_ack_received);
 				LOGI("Epaper", "Published telemetry to %s", topic);
 		} else {
 				LOGW("Epaper", "MQTT telemetry publish failed");
 		}
-		return ok;
+		const bool confirmed = g_pending_offline_ack_id == 0 || g_pending_offline_ack_received;
+		g_pending_offline_ack_id = 0;
+		if (ok && !confirmed) LOGW("Epaper", "Offline telemetry delivery unconfirmed; retaining aggregate");
+		return ok && confirmed;
 }
 
 bool epaper_frame_mqtt_prepare_wake_delivery() {
@@ -184,6 +205,16 @@ bool epaper_frame_mqtt_prepare_wake_delivery() {
 }
 
 void epaper_frame_mqtt_on_message(const char* topic, const uint8_t* payload, unsigned int length) {
+		if (topic && payload && g_pending_offline_ack_id != 0 &&
+				strcmp(topic, g_offline_state_topic) == 0) {
+				StaticJsonDocument<1280> state;
+				if (!deserializeJson(state, payload, length) &&
+						state["offline_cycles"]["delivery_id"].as<uint32_t>() ==
+								g_pending_offline_ack_id) {
+						g_pending_offline_ack_received = true;
+				}
+				return;
+		}
 		if (!topic || !payload || g_pending_wake_ack_id == 0 ||
 				strcmp(topic, g_wake_topic) != 0) return;
 
@@ -217,7 +248,7 @@ static bool publish_wake_record(const EpaperWakeRecord& record,
 		doc["sidecar_http_status"] = record.sidecar_http_status;
 		doc["crc_fetch_attempts"] = record.timing.crc_retry_count;
 		doc["wifi_rssi"] = record.timing.wifi_rssi;
-		switch (static_cast<EpaperImageSource>(record.timing.image_from_cache)) {
+		switch (static_cast<EpaperImageSource>(record.timing.image_source)) {
 				case EpaperImageSource::OnlineCache:
 						doc["image_source"] = "cache";
 						break;

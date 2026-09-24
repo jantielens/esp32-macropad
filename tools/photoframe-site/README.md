@@ -1,7 +1,7 @@
 ---
 title: Local E-paper Photoframe Site
 description: Run and deploy the local FastAPI image service for e-paper photoframes
-ms.date: 2026-09-23
+ms.date: 2026-09-24
 ms.topic: how-to
 keywords:
   - photoframe
@@ -445,9 +445,10 @@ type, content length, and `content_url`. The service validates and commits every
 included selection before responding. It returns `204` when no valid
 non-current entry is available and `400` for an invalid count.
 
-Fetch each `content_url` with the same frame bearer credential. The route is
-scoped to that frame and descriptor, rechecks length and CRC32, and returns an
-error rather than substituting changed, missing, or cross-frame content.
+Fetch each same-origin `content_url` with the same frame bearer credential.
+The signed reference binds the selected descriptor and exact blob to that
+frame, rechecks length and CRC32, and returns an error rather than substituting
+changed, missing, or cross-frame content.
 
 ## Verify
 

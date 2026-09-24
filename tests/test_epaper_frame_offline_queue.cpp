@@ -19,7 +19,7 @@ EpaperOfflineQueueEntry entry(const char* key, uint32_t crc,
 
 EpaperOfflineWakeInputs valid_wake() {
 		return {
-				true, true, true, 5,
+				true, true, 5,
 				true, false, true, true,
 		};
 }
@@ -56,10 +56,6 @@ TEST(EpaperOfflineQueue, SelectsOfflineOnlyForValidTimerWake) {
 				EpaperOfflineWakeDecision::Online);
 		inputs = valid_wake();
 		inputs.deep_sleep_wake = false;
-		EXPECT_EQ(epaper_frame_offline_wake_decision(inputs),
-				EpaperOfflineWakeDecision::Online);
-		inputs = valid_wake();
-		inputs.supported = false;
 		EXPECT_EQ(epaper_frame_offline_wake_decision(inputs),
 				EpaperOfflineWakeDecision::Online);
 		inputs = valid_wake();

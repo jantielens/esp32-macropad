@@ -11,6 +11,7 @@ import zlib
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from site_client import TestClient
 
@@ -159,11 +160,25 @@ def test_short_batch_excludes_current_duplicates_and_invalid_blobs() -> None:
 def test_exact_content_is_authenticated_isolated_and_never_substituted() -> None:
     with _client("content", two_frames=True) as (client, root):
         image_a = _add_image(root, "frame-a", "shared-key", b"frame-a-bytes")
+        _add_image(root, "frame-a", "unselected", b"unselected-bytes")
         _add_image(root, "frame-b", "shared-key", b"frame-b-bytes")
         client.app.state.index.rebuild()
         batch = client.get("/api/v1/next-batch?count=1", headers=AUTH_A)
         entry = batch.json()["images"][0]
         content_url = entry["content_url"]
+        assert len(content_url) < 384
+
+        guessed = (
+            "/api/v1/content/unselected/2/16/"
+            f"{zlib.crc32(b'unselected-bytes') & 0xffffffff:08x}"
+        )
+        assert client.get(guessed, headers=AUTH_A).status_code == 404
+        parsed = urlsplit(content_url)
+        query = parse_qs(parsed.query)
+        query["blob"] = ["transport-unselected.g16p"]
+        tampered = urlunsplit((parsed.scheme, parsed.netloc, parsed.path,
+                             urlencode(query, doseq=True), parsed.fragment))
+        assert client.get(tampered, headers=AUTH_A).status_code == 404
 
         assert client.get(content_url).status_code == 401
         assert client.get(content_url, headers=AUTH_B).status_code == 404
@@ -175,6 +190,9 @@ def test_exact_content_is_authenticated_isolated_and_never_substituted() -> None
         assert content.headers["photoframe-content-crc32"] == entry["content_crc32"]
 
         blob_name = json.loads((image_a / "sidecar.json").read_text())["variants"][0]["blob_name"]
+        (image_a / "sidecar.json").write_text('{"variants": []}', encoding="utf-8")
+        client.app.state.index.rebuild()
+        assert client.get(content_url, headers=AUTH_A).content == b"frame-a-bytes"
         (image_a / blob_name).write_bytes(b"changed-after-selection")
         changed = client.get(content_url, headers=AUTH_A)
         assert changed.status_code == 500

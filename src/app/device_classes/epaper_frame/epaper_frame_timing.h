@@ -32,7 +32,7 @@ struct EpaperTimingBudget {
 		uint32_t resolve_ms;        // URL/API redirect round-trip (0 if no resolve)
 		uint32_t fetch_ms;          // image bytes: SD cache read OR HTTP download
 		uint32_t draw_ms;           // framebuffer upload + panel GC16 refresh
-		uint8_t  image_from_cache;  // EpaperImageSource encoded below
+		uint8_t  image_source;  // EpaperImageSource encoded below
 		uint32_t overall_budget_ms; // 0 = budget not enforced for this wake
 		uint32_t budget_elapsed_ms; // elapsed when the wake record was finalized
 		uint32_t budget_remaining_ms;

@@ -134,7 +134,7 @@ static void epaper_frame_status_get(AsyncWebServerRequest* request) {
     t["fetch_ms"]        = epaper_frame_timing_last.fetch_ms;
     t["draw_ms"]         = epaper_frame_timing_last.draw_ms;
     switch (static_cast<EpaperImageSource>(
-            epaper_frame_timing_last.image_from_cache)) {
+             epaper_frame_timing_last.image_source)) {
         case EpaperImageSource::OnlineCache:
             t["image_source"] = "cache";
             break;

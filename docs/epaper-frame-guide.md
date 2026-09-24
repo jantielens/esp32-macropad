@@ -1,7 +1,7 @@
 ---
 title: E-Paper Frame Guide
 description: Detailed guide for the ESP32 Macropad E-Paper Frame device class, including hardware model, wake behavior, image refresh flow, portal configuration, and current limitations.
-ms.date: 2026-09-09
+ms.date: 2026-09-24
 ms.topic: concept
 ---
 
@@ -249,7 +249,9 @@ queue and synchronizes online. Clearing the SD cache or changing the Service
 URL, token, source mode, cache setting, or offline-refresh count also discards
 it. A cold boot has no queue. Disabled schedule hours preserve queued entries
 without consuming them. A missing, corrupt, stale, or failed queued item clears
-the queue and uses the normal bounded online refresh path in that same wake.
+the queue and tries the normal online refresh path in that same wake if time
+remains in the configured wake budget. Otherwise it reports the failure and
+waits for the next scheduled online refresh.
 
 ## Wake Button Behavior
 
@@ -472,6 +474,10 @@ These values are necessarily reported one wake later because sending the
 current event precedes measuring its own final MQTT work. The block is absent
 on the first wake after RTC state is initialized.
 
+Offline-cycle aggregate state is also retained until the broker echoes the
+matching delivery ID on its state topic; if that echo does not arrive within
+250 ms, the aggregate is retried on the next connected wake.
+
 An MQTT disconnect after the broker receives an event but before its echo
 reaches the device can produce a duplicate event on the next wake. Archive
 consumers should therefore de-duplicate records by device topic, `session_id`,
@@ -575,9 +581,11 @@ the retained state topic above:
 | E-Paper Frame Sidecar HTTP Status     | `sidecar_http_status`            |      |
 | E-Paper Frame Wake Loop Time          | `wake_loop_ms`                   | ms   |
 
-Offline Cycles counts offline refresh attempts since the previous successful
-state publish. It appears on the next MQTT-connected wake, then returns to zero
-on a subsequent online report; it is not a lifetime total.
+Offline Cycles counts offline refresh attempts since the last state publish
+confirmed by a matching broker echo. It appears on the next MQTT-connected
+wake and returns to zero on a subsequent confirmed online report; it is not a
+lifetime total. If delivery is unconfirmed, the aggregate is retained and
+retried on the next connected wake.
 
 WiFi RSSI is intentionally not duplicated &mdash; the generic `WiFi RSSI` entity from the shared health discovery already updates on every wake.
 
@@ -598,7 +606,7 @@ On the Inkplate board, the default portal idle timeout is 300 seconds. That give
 
 The SD image cache is a **device-class capability** for E-Paper Frame boards that expose a microSD slot on the *same* SPI bus as the panel controller. It is gated by the `EPAPER_FRAME_SD_CS_PIN` compile-time flag and lives in the shared `epaper_frame/epaper_frame_sd_cache` module, so any future E-Paper Frame board can opt in from its `board_overrides.h` without touching a driver. Among the current targets only the reTerminal E1003 qualifies; the Inkplate 5V2 has no shared-bus SD slot, so the entire cache is compiled out there.
 
-It is a Service-mode transport cache, not a generic image store or an offline carousel. It stores the exact transport bytes under the lowercase transport CRC as `/cache/<content_crc32>.blob`. Two logical images with the same transport CRC have identical cached bytes for admission purposes.
+It is a Service-mode transport cache, not a generic image store. It stores the exact transport bytes under the lowercase transport CRC as `/cache/<content_crc32>.blob`. Two logical images with the same transport CRC have identical cached bytes for admission purposes. On the reTerminal E1003, the optional offline queue uses these validated blobs for scheduled timer wakes between online synchronizations.
 
 How a cached refresh works:
 
@@ -622,7 +630,7 @@ Current limitations include:
 
 * Slot carousel requires public image URLs; Service mode uses one bearer-authenticated endpoint
 * Full refresh only, no partial-update pipeline
-* No offline image fallback when the network is unreachable (the SD blob cache speeds up repeated images on boards with a shared-bus microSD slot, but is not an offline carousel)
+* Offline playback requires a prefetched queue on the reTerminal E1003; an empty or invalid queue requires an online refresh and cannot fetch new content without a network connection
 * No touch UI runtime
 * Carousel slots all point to remote URLs; the Service cache stores only previously validated contract payloads, not user-managed local images
 * Hourly schedule uses a fixed UTC offset rather than full timezone rules (DST must be adjusted manually)
