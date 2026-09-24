@@ -12,18 +12,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.33.0] - 2026-09-23
+## [1.33.0] - 2026-09-24
 
 ### Added
 
-* **Extension canvas upscaling**: per-button 1x to 4x canvas scaling reduces
-  memory usage for canvas-based Extensions; allocation failures show a specific
-  message with a suggested adjustment.
-* **reTerminal E1003 Interactive Extensions**: the ESP32-S3 interactive profile
-  supports three native Extension slots. Its dedicated partition layout retains
-  the 8 MiB OTA slots but shrinks LittleFS by 256 KiB. Back up files before
-  upgrading: mounting an existing larger filesystem with the new layout can
-  assert and reboot until the old layout is restored or storage is erased.
 * **E-Paper Frame offline image queue**: Service mode can prefetch up to 16
   upcoming SD-cached images during an online synchronization, then render them
   on subsequent timer wakes without initializing Wi-Fi or MQTT. The new
@@ -32,11 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   offline-cycle telemetry is reported on the next connected wake. Button
   refreshes, cache clears, and relevant configuration changes discard the
   best-effort retained queue.
+* **reTerminal E1003 Interactive Extensions**: the ESP32-S3 interactive profile
+  supports three native Extension slots, including portal upload slots on
+  audio-disabled boards. Its dedicated partition layout retains the 8 MiB OTA
+  slots but shrinks LittleFS by 256 KiB. Back up files before upgrading:
+  mounting an existing larger filesystem with the new layout can assert and
+  reboot until the old layout is restored or storage is erased.
+* **Extension canvas upscaling**: per-button 1x to 4x canvas scaling reduces
+  memory usage for canvas-based Extensions; allocation failures show a specific
+  message with a suggested adjustment.
 
 ### Fixed
 
-* **Extensions portal on audio-disabled boards**: the upload slots now render
-  even when sound playback is disabled.
 * **Pad editor image controls**: remote image and local image backgrounds are
   offered only when the connected board supports image fetching or the image
   library, respectively. The attached-camera preview remains independent, and
