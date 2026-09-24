@@ -376,6 +376,8 @@ bool epaper_frame_mqtt_publish_ha_discovery(MqttManager& mqtt) {
 		delay(1);
 		publish_sensor("epaper_frame_refresh_count", "E-Paper Refresh Count",
 									 "{{ value_json.refresh_count }}", "", "", "total_increasing");
+		publish_sensor("epaper_frame_offline_cycles", "E-Paper Offline Cycles (Last Report)",
+									 "{{ value_json.offline_cycles.count if value_json.offline_cycles is defined else 0 }}", "", "", "measurement");
 		publish_sensor("epaper_frame_last_result", "E-Paper Last Refresh Result",
 									 "{{ value_json.refresh_result }}", "", "", "");
 		delay(1);

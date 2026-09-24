@@ -561,7 +561,7 @@ jq 'select(.topic == "devices/e1003-1/epaper/wake")' epaper_wakes_clean.jsonl
 
 ### Home Assistant Auto-Discovery
 
-Seven sensor entities are auto-discovered into Home Assistant, all reading from
+Eight sensor entities are auto-discovered into Home Assistant, all reading from
 the retained state topic above:
 
 | Entity                          | JSON field                       | Unit |
@@ -569,10 +569,15 @@ the retained state topic above:
 | Battery                         | `battery_pct`                    | %    |
 | Battery Voltage                 | `battery_mv`                     | mV   |
 | E-Paper Frame Refresh Count           | `refresh_count`                  |      |
+| E-Paper Offline Cycles (Last Report) | `offline_cycles.count`          |      |
 | E-Paper Frame Last Refresh Result     | `refresh_result`                 |      |
 | E-Paper Frame Image CRC               | `image_crc32` (formatted as hex) |      |
 | E-Paper Frame Sidecar HTTP Status     | `sidecar_http_status`            |      |
 | E-Paper Frame Wake Loop Time          | `wake_loop_ms`                   | ms   |
+
+Offline Cycles counts offline refresh attempts since the previous successful
+state publish. It appears on the next MQTT-connected wake, then returns to zero
+on a subsequent online report; it is not a lifetime total.
 
 WiFi RSSI is intentionally not duplicated &mdash; the generic `WiFi RSSI` entity from the shared health discovery already updates on every wake.
 
