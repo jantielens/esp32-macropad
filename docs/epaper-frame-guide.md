@@ -1,7 +1,7 @@
 ---
 title: E-Paper Frame Guide
 description: Detailed guide for the ESP32 Macropad E-Paper Frame device class, including hardware model, wake behavior, image refresh flow, portal configuration, and current limitations.
-ms.date: 2026-09-09
+ms.date: 2026-09-24
 ms.topic: concept
 ---
 
@@ -75,17 +75,19 @@ The initial defaults live in `src/app/device_classes/epaper_frame/epaper_wake_bu
 They are persisted per device and can be adjusted in the portal's **Images &
 Schedule** page without reflashing:
 
-* Overall cap: total timer-wake ceiling, initially 15 s
+* Overall cap: total timer-wake ceiling, initially 15 s, adjustable up to 10 minutes
 * WiFi, fetch, and MQTT target: expected duration, retained in wake telemetry for tuning
-* WiFi, fetch, and MQTT cap: hard limit supplied to that interruptible network stage
+* WiFi and MQTT cap: hard limit supplied to that interruptible network stage
+* Image download cap: per-request limit for the manifest and each image in a Service batch
 * Cutoff retry interval: sleep interval after a cap breach; `0` uses the normal image refresh interval
 * `EPAPER_BUDGET_SHUTDOWN_RESERVE_MS` retains time to close owned resources before deep sleep
 
 The controller passes the lesser of a stage cap and the time left in the total
-budget to WiFi, the service fetch, and MQTT. A cap breach keeps the existing
-panel image, checkpoints a wake record in RTC memory, and returns to deep
-sleep. MQTT delivery is optional for the current wake: the existing RTC
-journal publishes the stored record on a later successful MQTT connection.
+budget to WiFi, each Service batch request, and MQTT. Panel refreshes already
+in progress finish before sleep. A cap breach keeps the existing panel image,
+checkpoints a wake record in RTC memory, and returns to deep sleep. MQTT
+delivery is optional for the current wake: the existing RTC journal publishes
+the stored record on a later successful MQTT connection.
 
 Wake events include a `budget` object for field diagnostics:
 
@@ -144,7 +146,7 @@ Slot-carousel mode uses this sequence:
 12. Put the panel to sleep.
 13. Enter ESP32 deep sleep until the next wake.
 
-Service mode is available only on the reTerminal E1003. Each wake sends one bounded request cycle to `/api/v1/next`, validates the response before display, and then sleeps. A `204 No Content` response keeps the retained panel image without a redraw. A failed response can trigger at most one additional retrieval cycle during that wake.
+Service mode is available only on the reTerminal E1003. Each ordinary online wake sends one bounded request cycle to `/api/v1/next`, validates the response before display, and then sleeps. A `204 No Content` response keeps the retained panel image without a redraw. A failed response can trigger at most one additional retrieval cycle during that wake.
 
 On the Inkplate 5V2 and Inkplate 6FLICK, the image is fetched and decoded by the Inkplate library. On the reTerminal E1003, the firmware fetches the blob over HTTP(S): a G16P payload is copied straight into the 16-level grayscale framebuffer (no decode), while a baseline JPEG is decoded with JPEGDEC and Floyd–Steinberg dithered into the framebuffer. Either way the image is drawn at the panel's native resolution with no scaling.
 
@@ -217,6 +219,39 @@ Service responses use these outcomes:
 * `405` and `5xx` keep the current image and use bounded recovery
 
 For every image response, the client verifies `Photoframe-Content-CRC32` over the exact transport bytes. It then enforces the media format, panel geometry, baseline JPEG requirement, G16P payload CRC, and strict G16Z framing before cache admission or display. This strict contract applies only to Service mode.
+
+### Offline refreshes between syncs
+
+On the reTerminal E1003, Service mode can prefetch a short ordered batch while
+Wi-Fi is already connected. Set **Offline refreshes between syncs** from `0` to
+`16` on the E-Paper page. With the default `0`, every scheduled refresh remains
+online. With `N`, the next online synchronization requests up to `N + 1`
+distinct candidates, displays the first, and stores up to `N` validated
+transport blobs on the SD card for later timer wakes.
+
+Changing the offline count or a WiFi, image, or MQTT timing field in the portal
+recalculates **Maximum scheduled wake time**. The estimate counts the first
+image and all offline images, uses the midpoint of each stage's expected and
+stop-after values, and adds 10 seconds for panel work and NTP. You can edit
+the maximum afterward to override it; loading saved settings does not replace
+the saved maximum. The overall maximum remains authoritative even when an
+individual image is allowed more time.
+
+Each queued timer wake validates the next SD blob and refreshes the panel without
+initializing Wi-Fi or MQTT. For example, 5 offline refreshes at a five-minute
+interval means one online synchronization about every 30 minutes. Larger values
+save battery, but also delay newly selected server content and MQTT telemetry;
+choose the value deliberately.
+
+This is a best-effort optimization, not durable playback state. It requires
+Service mode and **Cache images on SD card**. A button refresh always clears the
+queue and synchronizes online. Clearing the SD cache or changing the Service
+URL, token, source mode, cache setting, or offline-refresh count also discards
+it. A cold boot has no queue. Disabled schedule hours preserve queued entries
+without consuming them. A missing, corrupt, stale, or failed queued item clears
+the queue and tries the normal online refresh path in that same wake if time
+remains in the configured wake budget. Otherwise it reports the failure and
+waits for the next scheduled online refresh.
 
 ## Wake Button Behavior
 
@@ -439,6 +474,10 @@ These values are necessarily reported one wake later because sending the
 current event precedes measuring its own final MQTT work. The block is absent
 on the first wake after RTC state is initialized.
 
+Offline-cycle aggregate state is also retained until the broker echoes the
+matching delivery ID on its state topic; if that echo does not arrive within
+250 ms, the aggregate is retried on the next connected wake.
+
 An MQTT disconnect after the broker receives an event but before its echo
 reaches the device can produce a duplicate event on the next wake. Archive
 consumers should therefore de-duplicate records by device topic, `session_id`,
@@ -528,7 +567,7 @@ jq 'select(.topic == "devices/e1003-1/epaper/wake")' epaper_wakes_clean.jsonl
 
 ### Home Assistant Auto-Discovery
 
-Seven sensor entities are auto-discovered into Home Assistant, all reading from
+Eight sensor entities are auto-discovered into Home Assistant, all reading from
 the retained state topic above:
 
 | Entity                          | JSON field                       | Unit |
@@ -536,10 +575,17 @@ the retained state topic above:
 | Battery                         | `battery_pct`                    | %    |
 | Battery Voltage                 | `battery_mv`                     | mV   |
 | E-Paper Frame Refresh Count           | `refresh_count`                  |      |
+| E-Paper Offline Cycles (Last Report) | `offline_cycles.count`          |      |
 | E-Paper Frame Last Refresh Result     | `refresh_result`                 |      |
 | E-Paper Frame Image CRC               | `image_crc32` (formatted as hex) |      |
 | E-Paper Frame Sidecar HTTP Status     | `sidecar_http_status`            |      |
 | E-Paper Frame Wake Loop Time          | `wake_loop_ms`                   | ms   |
+
+Offline Cycles counts offline refresh attempts since the last state publish
+confirmed by a matching broker echo. It appears on the next MQTT-connected
+wake and returns to zero on a subsequent confirmed online report; it is not a
+lifetime total. If delivery is unconfirmed, the aggregate is retained and
+retried on the next connected wake.
 
 WiFi RSSI is intentionally not duplicated &mdash; the generic `WiFi RSSI` entity from the shared health discovery already updates on every wake.
 
@@ -560,7 +606,7 @@ On the Inkplate board, the default portal idle timeout is 300 seconds. That give
 
 The SD image cache is a **device-class capability** for E-Paper Frame boards that expose a microSD slot on the *same* SPI bus as the panel controller. It is gated by the `EPAPER_FRAME_SD_CS_PIN` compile-time flag and lives in the shared `epaper_frame/epaper_frame_sd_cache` module, so any future E-Paper Frame board can opt in from its `board_overrides.h` without touching a driver. Among the current targets only the reTerminal E1003 qualifies; the Inkplate 5V2 has no shared-bus SD slot, so the entire cache is compiled out there.
 
-It is a Service-mode transport cache, not a generic image store or an offline carousel. It stores the exact transport bytes under the lowercase transport CRC as `/cache/<content_crc32>.blob`. Two logical images with the same transport CRC have identical cached bytes for admission purposes.
+It is a Service-mode transport cache, not a generic image store. It stores the exact transport bytes under the lowercase transport CRC as `/cache/<content_crc32>.blob`. Two logical images with the same transport CRC have identical cached bytes for admission purposes. On the reTerminal E1003, the optional offline queue uses these validated blobs for scheduled timer wakes between online synchronizations.
 
 How a cached refresh works:
 
@@ -584,7 +630,7 @@ Current limitations include:
 
 * Slot carousel requires public image URLs; Service mode uses one bearer-authenticated endpoint
 * Full refresh only, no partial-update pipeline
-* No offline image fallback when the network is unreachable (the SD blob cache speeds up repeated images on boards with a shared-bus microSD slot, but is not an offline carousel)
+* Offline playback requires a prefetched queue on the reTerminal E1003; an empty or invalid queue requires an online refresh and cannot fetch new content without a network connection
 * No touch UI runtime
 * Carousel slots all point to remote URLs; the Service cache stores only previously validated contract payloads, not user-managed local images
 * Hourly schedule uses a fixed UTC offset rather than full timezone rules (DST must be adjusted manually)

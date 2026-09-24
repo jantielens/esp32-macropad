@@ -80,6 +80,7 @@ portal_storage.js
 # [chunk:music HAS_SOUND_PLAYER]
 portal_music.js
 
+# [chunk:extensions]
 # Extensions manager is safe to ship on all variants; navigation is firmware-gated.
 portal_extensions.js
 

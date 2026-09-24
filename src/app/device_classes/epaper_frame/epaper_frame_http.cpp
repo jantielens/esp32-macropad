@@ -43,9 +43,14 @@ bool epaper_frame_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* ou
 		}
 
 		size_t total = 0;
-		uint32_t last_progress_ms = millis();
+		const uint32_t started_ms = millis();
 		while ((http.connected() || stream->available()) &&
 				(length_hint < 0 || total < (size_t)length_hint)) {
+			if (millis() - started_ms >= idle_timeout_ms) {
+				LOGW("Epaper", "image download deadline reached after %u bytes", (unsigned)total);
+				heap_caps_free(buffer);
+				return false;
+			}
 				size_t available = stream->available();
 				if (available) {
 						if (length_hint > 0) {
@@ -68,14 +73,8 @@ bool epaper_frame_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* ou
 						if (count <= 0) break;
 						total += (size_t)count;
 						if (body_bytes_read) *body_bytes_read += (size_t)count;
-						last_progress_ms = millis();
 				} else {
 						if (length_hint > 0 && total >= (size_t)length_hint) break;
-						if (millis() - last_progress_ms > idle_timeout_ms) {
-								LOGW("Epaper", "image download stalled after %u bytes", (unsigned)total);
-								heap_caps_free(buffer);
-								return false;
-						}
 						delay(1);
 				}
 		}

@@ -101,6 +101,16 @@ struct DeviceClass {
 		const char *pad_hold_scheme;
 		bool (*pad_hold_acquire)(const char *holder);
 		void (*pad_hold_release)(const char *holder);
+
+		// Optional early request validation for device-class fields in
+		// POST /api/config. Return nullptr when valid or a static error message.
+		const char *(*config_api_validate)(const DeviceConfig *config,
+				JsonObject &body);
+
+		// Return true when this class can decide and complete the current wake
+		// without starting WiFi. wifi_manager_connect() remains responsible for
+		// lazy initialization if that deferred path later needs an online fallback.
+		bool (*defer_wifi_init)(const DeviceConfig *config, PowerMode boot_mode);
 };
 
 // Registration ----------------------------------------------------------------
@@ -127,6 +137,10 @@ void device_class_dispatch_config_load(DeviceConfig *config, Preferences &prefer
 void device_class_dispatch_config_save(const DeviceConfig *config, Preferences &preferences);
 void device_class_dispatch_config_api_get(const DeviceConfig *config, JsonObject &root);
 void device_class_dispatch_config_api_set(DeviceConfig *config, JsonObject &body);
+const char *device_class_dispatch_config_api_validate(const DeviceConfig *config,
+		JsonObject &body);
+bool device_class_dispatch_defer_wifi_init(const DeviceConfig *config,
+		PowerMode boot_mode);
 // MQTT
 void device_class_dispatch_mqtt_discovery(MqttManager &mqtt, bool *skip_generic);
 void device_class_dispatch_mqtt_state(MqttManager &mqtt);

@@ -1,0 +1,11 @@
+# Custom partition table for the 32MB reTerminal E1003 interactive board.
+# Keep the storage offset unchanged; reserve the final 256KB for extensions.
+# Existing LittleFS contents may require backup and restore after shrinking it.
+# Name,       Type, SubType, Offset,     Size,       Flags
+nvs,          data, nvs,      0x9000,     0x5000,
+otadata,      data, ota,      0xE000,     0x2000,
+app0,         app,  ota_0,    0x10000,    0x800000,
+app1,         app,  ota_1,    0x810000,   0x800000,
+coredump,     data, coredump,0x1010000,  0x10000,
+storage,      data, spiffs,  0x1020000,  0xFA0000,
+extensions,   data, 0x40,     0x1FC0000,  0x40000,

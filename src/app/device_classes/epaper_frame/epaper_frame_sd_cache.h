@@ -69,6 +69,16 @@ bool epaper_frame_sd_cache_read(uint32_t content_crc32, uint8_t** out_buf, size_
 // Remove one corrupt or stale cache entry.
 bool epaper_frame_sd_cache_remove(uint32_t content_crc32);
 
+// Persist one already validated batch blob immediately using the same atomic
+// cache write path. The caller retains ownership of `data`.
+bool epaper_frame_sd_cache_store(uint32_t content_crc32,
+		const uint8_t* data, size_t len);
+
+// Keep the shared bus mounted while validating and storing a prefetched batch.
+// Call end on every path before the panel is used again.
+void epaper_frame_sd_cache_begin_batch();
+void epaper_frame_sd_cache_end_batch();
+
 // Take ownership of a freshly downloaded PSRAM blob and stage it for write-back
 // on the next flush. Any previously staged blob is freed first. `buf` must be a
 // heap_caps_malloc allocation; the cache frees it on flush/discard.

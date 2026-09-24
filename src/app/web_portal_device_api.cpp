@@ -169,6 +169,10 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
 		response->print(",\"has_camera\":");
 		response->print(HAS_CAMERA ? "true" : "false");
+		response->print(",\"has_image_fetch\":");
+		response->print(HAS_IMAGE_FETCH ? "true" : "false");
+		response->print(",\"has_image_library\":");
+		response->print(HAS_IMAGE_LIBRARY ? "true" : "false");
 
 		// Action authoring catalog: only computed and sent when explicitly
 		// requested, so the bare response used by reboot connection polling

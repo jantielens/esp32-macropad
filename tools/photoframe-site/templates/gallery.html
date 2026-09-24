@@ -102,7 +102,7 @@
           {% endif %}
         </div>
         <p class="card-text small text-body-secondary mb-0">
-          {% if item.last_shown_at %}Shown {{ item.last_shown_at[:16] }}{% else %}Never shown{% endif %}
+          {% if item.last_shown_at %}Selected &middot; <time class="selection-time text-nowrap" datetime="{{ item.last_shown_at }}">{{ item.last_shown_at }}</time>{% else %}Never selected{% endif %}
         </p>
       </div>
       <div class="card-footer bg-transparent">
@@ -154,4 +154,14 @@
 {% else %}
 <div class="alert alert-info">No images yet. <a href="/upload?device_id={{ device_id }}">Upload one</a>.</div>
 {% endif %}
+<script>
+  const selectionTimeFormat = new Intl.DateTimeFormat(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+  });
+  document.querySelectorAll('time.selection-time').forEach((element) => {
+    const date = new Date(element.dateTime);
+    if (!Number.isNaN(date.getTime())) element.textContent = selectionTimeFormat.format(date);
+  });
+</script>
 {% endblock %}

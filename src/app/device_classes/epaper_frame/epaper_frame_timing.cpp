@@ -152,7 +152,7 @@ void epaper_frame_timing_reset_draw_steps() {
 		epaper_frame_timing_last.resolve_ms = 0;
 		epaper_frame_timing_last.fetch_ms = 0;
 		epaper_frame_timing_last.draw_ms = 0;
-		epaper_frame_timing_last.image_from_cache = 0;
+		epaper_frame_timing_last.image_source = 0;
 }
 
 void epaper_frame_timing_set_resolve_ms(uint32_t ms) {
@@ -160,8 +160,14 @@ void epaper_frame_timing_set_resolve_ms(uint32_t ms) {
 }
 
 void epaper_frame_timing_set_fetch(uint32_t ms, bool from_cache) {
+		epaper_frame_timing_set_fetch_source(ms, from_cache
+				? EpaperImageSource::OnlineCache : EpaperImageSource::Download);
+}
+
+void epaper_frame_timing_set_fetch_source(uint32_t ms, EpaperImageSource source) {
 		epaper_frame_timing_last.fetch_ms = ms;
-		epaper_frame_timing_last.image_from_cache = from_cache ? 1 : 0;
+		epaper_frame_timing_last.image_source =
+				static_cast<uint8_t>(source);
 }
 
 void epaper_frame_timing_set_draw_ms(uint32_t ms) {

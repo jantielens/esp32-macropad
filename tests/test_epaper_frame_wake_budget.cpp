@@ -14,6 +14,16 @@ TEST(EpaperWakeBudget, LimitsStageToRemainingBudget) {
                 EXPECT_EQ(budget.stage_limit_ms(9000, 2000), 1800u);
 }
 
+TEST(EpaperWakeBudget, PerImageLimitResetsButOverallDeadlineDoesNot) {
+        const EpaperWakeBudget budget = {1000, 10000, 200};
+
+        EXPECT_EQ(budget.stage_limit_ms(4000, UINT32_MAX), 6800u);
+        EXPECT_EQ(budget.stage_limit_ms(4000, 3000), 3000u);
+        EXPECT_EQ(budget.stage_limit_ms(7000, 3000), 3000u);
+        EXPECT_EQ(budget.stage_limit_ms(9500, 3000), 1300u);
+        EXPECT_EQ(budget.stage_limit_ms(10800, 3000), 0u);
+}
+
 TEST(EpaperWakeBudget, RefusesWorkInsideShutdownReserve) {
         const EpaperWakeBudget budget = {1000, 10000, 200};
 

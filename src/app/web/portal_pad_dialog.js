@@ -21,6 +21,7 @@ function padPopulateLocalImageOptions(selected) {
 }
 
 function padLoadLocalImageOptions(selected) {
+    if (!deviceInfoCache || deviceInfoCache.has_image_library !== true) return Promise.resolve();
     return fetch('/api/images?directory=' + encodeURIComponent('/images'))
         .then(function (response) {
             if (!response.ok) throw new Error('Image library unavailable');
@@ -483,6 +484,7 @@ function padDialogOpen(col, row) {
     }
     document.getElementById('pad-edit-extension-config').value = btn.extension_config || '';
     document.getElementById('pad-edit-extension-tick-interval').value = btn.extension_tick_interval_ms || '';
+    document.getElementById('pad-edit-extension-upscale').value = btn.extension_upscale || 1;
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -843,6 +845,7 @@ function padDialogOk(keepOpen) {
             if (!isNaN(extensionTickInterval)) {
                 btn.extension_tick_interval_ms = Math.max(33, Math.min(1000, extensionTickInterval));
             }
+            btn.extension_upscale = Number(document.getElementById('pad-edit-extension-upscale').value);
         }
     }
 

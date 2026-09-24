@@ -11,6 +11,7 @@
 #define HAS_TOUCH true
 #define HAS_EPAPER_PANEL true
 #define HAS_LVGL_EPAPER true
+#define HAS_NATIVE_EXTENSIONS true
 #define HAS_AUDIO false
 #define HAS_SOUND_PLAYER false
 #define HAS_IMAGE_LIBRARY false

@@ -390,6 +390,23 @@ This template automates the installation:
 - For boards using `PartitionScheme=...`, `upload.sh` defaults to a full flash (`--full`) to ensure the partition layout on the device matches what was built.
 - If you see errors like “offset not aligned” or “sketch too big”, verify your offsets are 0x10000-aligned (except NVS/otadata) and that your firmware fits in the configured app partition size.
 
+### reTerminal E1003 Interactive Extensions
+
+`reterminal-e1003-interactive` uses `ota_8mb_e1003_ext_32MB` to retain two
+8 MiB OTA app partitions and the existing storage offset while reserving the
+final 256 KiB of flash for three native Extension slots. The sleep-first
+`reterminal-e1003-frame` keeps its original `ota_8mb_32MB` layout. Install
+the new partition scheme with `./tools/install-custom-partitions.sh` before
+building on an existing development machine. Back up files on the interactive
+device before upgrading: its LittleFS partition is 256 KiB smaller, and a
+mount of the older, larger volume asserts and reboots. Full uploading updates
+the partition table but does not migrate filesystem contents. If the device
+already reboots, flash only the old `reterminal-e1003-frame` partition binary
+at `0x8000` to restore the original storage geometry, then back up its files.
+After the backup, erase the old storage region (`0x1020000` for `0xFE0000`
+bytes), flash the interactive firmware with its new partition table, and
+restore the files. Erasing storage before a backup loses those files.
+
 ### ESP32-P4 Extension Flash Limit
 
 The ESP32-P4 LCD4B and LCD4B Voice boards contain 32 MB flash, but their

@@ -730,6 +730,11 @@ when the Extension returns pass-through from tap or long press. See the
 [Extension developer guide](dev/extensions.md) for package and lifecycle
 details.
 
+For a canvas-based Extension that cannot allocate its full-size canvas, set
+**Upscale** to 2x, 3x, or 4x. This reduces the canvas dimensions and scales the
+result to fill the button, trading detail for memory. The default 1x preserves
+the original appearance. Non-canvas Extension controls are not scaled.
+
 ### Rocker
 
 The rocker widget splits a button into two tap zones — tap the top half to trigger one set of actions, tap the bottom half to trigger another. This turns a single button into a directional control, ideal for brightness up/down, volume +/−, thermostat setpoints, or any value you want to nudge from one place.

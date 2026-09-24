@@ -1,7 +1,7 @@
 ---
 title: Local E-paper Photoframe Site
 description: Run and deploy the local FastAPI image service for e-paper photoframes
-ms.date: 2026-07-27
+ms.date: 2026-09-24
 ms.topic: how-to
 keywords:
   - photoframe
@@ -13,12 +13,14 @@ keywords:
 ## Overview
 
 The site stores source photos, pre-encodes frame-specific transport variants,
-and serves the selected bytes inline through `GET /api/v1/next`. It has one
-local filesystem backend and no external storage dependency.
+and serves one selected transport through `GET /api/v1/next` or an ordered
+manifest through `GET /api/v1/next-batch`. It has one local filesystem backend
+and no external storage dependency.
 
 The frame API implements the locked
 [Photoframe Next Image Version 1 contract](../../docs/dev/photoframe-next-image/contract.md).
-There is no unversioned endpoint and no redirect delivery mode.
+There is no unversioned endpoint and no redirect delivery mode. Batch manifests
+reference frame-authenticated immutable exact-content routes.
 
 ```mermaid
 flowchart LR
@@ -435,6 +437,18 @@ Every API response prevents shared-cache reuse with
 `Cache-Control: private, no-cache` and `Vary: Authorization`. A `200` response
 also carries `Photoframe-Image-Key` and the lowercase CRC-32 of the exact body
 in `Photoframe-Content-CRC32`.
+
+For a cache-filling synchronization, request a total of `1..17` entries from
+`GET /api/v1/next-batch?count=N`. The JSON manifest can be shorter than
+requested and contains ordered, distinct entries with image key, CRC32, media
+type, content length, and `content_url`. The service validates and commits every
+included selection before responding. It returns `204` when no valid
+non-current entry is available and `400` for an invalid count.
+
+Fetch each same-origin `content_url` with the same frame bearer credential.
+The signed reference binds the selected descriptor and exact blob to that
+frame, rechecks length and CRC32, and returns an error rather than substituting
+changed, missing, or cross-frame content.
 
 ## Verify
 

@@ -1,7 +1,7 @@
 ---
 title: Photoframe Next Image Contract
 description: Proposed transport-neutral contract for selecting and delivering the next photoframe image
-ms.date: 2026-07-25
+ms.date: 2026-09-24
 ms.topic: reference
 keywords:
   - photoframe
@@ -24,12 +24,13 @@ normative requirements.
 Version 1 makes these deliberate choices:
 
 * One `next` operation returns image content or a reference to it
+* An optional `next-batch` operation returns up to 17 ordered exact-content references
 * Selection is best effort, with no display acknowledgement
 * A failed request or display may cause an image to be skipped or repeated
 * A frame may report its current displayed-content fingerprint as advisory input
 * One bearer token both identifies and authenticates a frame
 * The token binds to the frame's media capabilities and exact panel geometry
-* HTTP uses `/api/v1/next`; the path is the HTTP protocol-version signal
+* HTTP uses `/api/v1/next` and optional `/api/v1/next-batch`; the path carries the protocol major
 * Successful responses carry a stable opaque image key and content CRC32
 * The media type identifies the transport-byte format
 * Inline delivery and manually followed `302 Found` redirects are conforming
@@ -90,6 +91,10 @@ client downloaded or displayed the previous result.
 
 The contract does not distinguish selected, served, downloaded, and displayed.
 Any service-side history is selection history, not proof of display.
+
+Batch-prefetched entries are committed to selection history before the manifest
+is returned. That commit means selected, not displayed. A client still reports
+only the fingerprint of content that it successfully rendered.
 
 Consequences are intentional:
 
@@ -324,6 +329,77 @@ headers are optional. Their value syntax matches the corresponding image-result
 headers. The service parses them only after authentication. A malformed or
 incomplete pair is ignored as though both headers were absent and MUST NOT block
 image delivery.
+
+### Optional batch selection
+
+A service MAY provide ordered best-effort batch selection:
+
+```http
+GET /api/v1/next-batch?count=6 HTTP/1.1
+Host: photoframe.local
+Authorization: ******
+Photoframe-Current-Image-Key: M7x4qQ2V0A
+Photoframe-Current-Content-CRC32: 89abcdef
+```
+
+`count` is required and is the total requested number of entries. It MUST be a
+decimal integer from `1` through `17`. Missing, malformed, repeated, zero,
+negative, or larger values produce `400 Bad Request`. Authentication precedes
+count and fingerprint parsing.
+
+Selection and its history commits MUST be serialized against competing
+selections. The service selects entries in order, excluding the reported current
+fingerprint and every fingerprint already included in the batch. These
+exclusions are unconditional: a batch MUST NOT repeat the current fingerprint
+when it is the only eligible content. A batch can be shorter than `count`.
+
+Before including an entry, the service MUST read that descriptor's referenced
+transport blob and validate its exact length and CRC32. It MUST skip invalid
+entries without committing them and MUST NOT retain multiple transport bodies
+while validating the batch. Each included entry is committed using the
+service's existing selection-history policy before the manifest is returned.
+Selection is not evidence of download, rendering, or display and is not rolled
+back after a client failure.
+
+A non-empty batch uses `200 OK` and `application/json`:
+
+```json
+{
+  "images": [
+    {
+      "image_key": "M7x4qQ2V0A",
+      "content_crc32": "89abcdef",
+      "media_type": "application/vnd.photoframe.g16z",
+      "content_length": 612345,
+      "content_url": "/api/v1/content/M7x4qQ2V0A/3/612345/89abcdef?blob=transport-example.g16z&sig=<64-hex-digit-HMAC>"
+    }
+  ]
+}
+```
+
+Entries are ordered and distinct by `(image_key, content_crc32)`.
+`content_url` is a same-origin, path-relative reference to the exact selected
+blob and expected fingerprint, not a mutable current-image lookup. The service
+authenticates it with a frame-bound signature over the descriptor and blob name;
+clients MUST NOT send their bearer credential to an absolute or redirected
+batch URL. When no valid entry can be selected, the service returns
+`204 No Content`.
+
+The client fetches each `content_url` with the same frame bearer credential. The
+service MUST authenticate every fetch, enforce frame isolation, verify that the
+reference was issued for the selected descriptor, and recheck that blob's
+length and CRC32 at fetch time. Changing current-image metadata MUST NOT change
+which blob a previously issued reference fetches.
+It returns the exact bytes with their media type plus
+`Photoframe-Image-Key` and `Photoframe-Content-CRC32`. If the reference is
+unknown for that frame, it returns `404 Not Found`. If the referenced blob is
+missing or no longer matches, it returns a bounded `5xx` error. It MUST NOT
+substitute a different image, variant, or newer encoding.
+
+Batch references differ from `302` redirect targets: they are authenticated
+protocol operations and therefore carry the bearer credential. The optional
+batch extension does not change `/api/v1/next`, its response forms, or clients
+that implement only single-image retrieval.
 
 The service MUST prevent shared HTTP caches from serving one frame's result to
 another frame. Version 1 responses use:

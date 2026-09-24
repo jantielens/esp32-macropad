@@ -18,14 +18,6 @@ EpaperNextAction epaper_frame_next_action_for_status(int status) {
 		}
 }
 
-EpaperRetryDecision epaper_frame_next_retry_decision(EpaperNextResult result) {
-		switch (result) {
-				case EpaperNextResult::Show: return EpaperRetryDecision::Draw;
-				case EpaperNextResult::Keep: return EpaperRetryDecision::Skip;
-				default: return EpaperRetryDecision::Fail;
-		}
-}
-
 bool epaper_frame_source_uses_service(EpaperSourceMode mode) {
 		return mode == EpaperSourceMode::Service;
 }

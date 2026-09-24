@@ -3,6 +3,7 @@
 #if IS_EPAPER_FRAME && HAS_MQTT
 
 #include "epaper_frame_battery.h"
+#include "epaper_frame_offline_queue_logic.h"
 #include "epaper_frame_wake_budget.h"
 #include "ha_discovery.h"
 #include "log_manager.h"
@@ -14,12 +15,17 @@
 #include <esp_attr.h>
 
 RTC_DATA_ATTR static bool g_epaper_discovery_published = false;
+RTC_DATA_ATTR static EpaperOfflineTelemetryAggregate
+		g_epaper_offline_telemetry = {};
 
 constexpr uint32_t kWakeDeliveryAckTimeoutMs = 250;
 static char g_wake_topic[160] = {};
 static uint64_t g_pending_wake_ack_session_id = 0;
 static uint32_t g_pending_wake_ack_id = 0;
 static bool g_pending_wake_ack_received = false;
+static char g_offline_state_topic[160] = {};
+static uint32_t g_pending_offline_ack_id = 0;
+static bool g_pending_offline_ack_received = false;
 
 bool epaper_frame_mqtt_discovery_already_published() {
 		return g_epaper_discovery_published;
@@ -38,6 +44,15 @@ static const char* refresh_result_to_str(EpaperRefreshResult result) {
 				case EpaperRefreshResult::Disabled:    return "disabled";
 		}
 		return "unknown";
+}
+
+void epaper_frame_mqtt_record_offline_cycle(
+		const EpaperRefreshOutcome& outcome, const char* image_key) {
+		epaper_frame_offline_telemetry_record(
+				&g_epaper_offline_telemetry,
+				static_cast<uint8_t>(outcome.result),
+				outcome.elapsed_ms, outcome.battery_mv, outcome.crc_used,
+				image_key);
 }
 
 static const char* wake_result_to_str(EpaperWakeResult result) {
@@ -103,7 +118,7 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		char topic[160];
 		snprintf(topic, sizeof(topic), "%s/epaper/state", mqtt_manager.baseTopic());
 
-		StaticJsonDocument<1024> doc;
+		StaticJsonDocument<1280> doc;
 		doc["battery_mv"]      = outcome.battery_mv;
 		doc["battery_pct"]     = epaper_frame_battery_percent(outcome.battery_mv);
 		doc["wifi_rssi"]       = timing ? timing->wifi_rssi : (int16_t)WiFi.RSSI();
@@ -128,14 +143,49 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 		doc["schedule_tz_offset"] = g_epaper_config.schedule_tz_offset;
 
 		if (timing) doc["wake_loop_ms"] = timing->total_active_ms;
+		if (g_epaper_offline_telemetry.count > 0) {
+				if (!mqtt_manager.subscribe(topic)) return false;
+				strlcpy(g_offline_state_topic, topic, sizeof(g_offline_state_topic));
+				g_pending_offline_ack_id = esp_random();
+				if (g_pending_offline_ack_id == 0) g_pending_offline_ack_id = 1;
+				g_pending_offline_ack_received = false;
+				JsonObject offline = doc.createNestedObject("offline_cycles");
+				offline["count"] = g_epaper_offline_telemetry.count;
+				offline["delivery_id"] = g_pending_offline_ack_id;
+				offline["latest_result"] = refresh_result_to_str(
+						static_cast<EpaperRefreshResult>(
+								g_epaper_offline_telemetry.latest_result));
+				offline["latest_elapsed_ms"] =
+						g_epaper_offline_telemetry.latest_elapsed_ms;
+				offline["latest_battery_mv"] =
+						g_epaper_offline_telemetry.latest_battery_mv;
+				offline["latest_image_crc32"] =
+						g_epaper_offline_telemetry.latest_content_crc32;
+				offline["latest_image_key"] =
+						g_epaper_offline_telemetry.latest_image_key;
+		}
 
 		const bool ok = mqtt_manager.publishJson(topic, doc, true /*retained*/);
 		if (ok) {
+				if (g_pending_offline_ack_id != 0) {
+						const uint32_t started_ms = millis();
+						while (!g_pending_offline_ack_received &&
+								(millis() - started_ms) < kWakeDeliveryAckTimeoutMs) {
+								mqtt_manager.loop();
+								delay(10);
+						}
+				}
+				epaper_frame_offline_telemetry_publish_complete(
+						&g_epaper_offline_telemetry,
+						g_pending_offline_ack_id == 0 || g_pending_offline_ack_received);
 				LOGI("Epaper", "Published telemetry to %s", topic);
 		} else {
 				LOGW("Epaper", "MQTT telemetry publish failed");
 		}
-		return ok;
+		const bool confirmed = g_pending_offline_ack_id == 0 || g_pending_offline_ack_received;
+		g_pending_offline_ack_id = 0;
+		if (ok && !confirmed) LOGW("Epaper", "Offline telemetry delivery unconfirmed; retaining aggregate");
+		return ok && confirmed;
 }
 
 bool epaper_frame_mqtt_prepare_wake_delivery() {
@@ -155,6 +205,16 @@ bool epaper_frame_mqtt_prepare_wake_delivery() {
 }
 
 void epaper_frame_mqtt_on_message(const char* topic, const uint8_t* payload, unsigned int length) {
+		if (topic && payload && g_pending_offline_ack_id != 0 &&
+				strcmp(topic, g_offline_state_topic) == 0) {
+				StaticJsonDocument<1280> state;
+				if (!deserializeJson(state, payload, length) &&
+						state["offline_cycles"]["delivery_id"].as<uint32_t>() ==
+								g_pending_offline_ack_id) {
+						g_pending_offline_ack_received = true;
+				}
+				return;
+		}
 		if (!topic || !payload || g_pending_wake_ack_id == 0 ||
 				strcmp(topic, g_wake_topic) != 0) return;
 
@@ -188,7 +248,18 @@ static bool publish_wake_record(const EpaperWakeRecord& record,
 		doc["sidecar_http_status"] = record.sidecar_http_status;
 		doc["crc_fetch_attempts"] = record.timing.crc_retry_count;
 		doc["wifi_rssi"] = record.timing.wifi_rssi;
-		doc["image_source"] = record.timing.image_from_cache ? "cache" : "download";
+		switch (static_cast<EpaperImageSource>(record.timing.image_source)) {
+				case EpaperImageSource::OnlineCache:
+						doc["image_source"] = "cache";
+						break;
+				case EpaperImageSource::OfflineQueue:
+						doc["image_source"] = "offline_queue";
+						break;
+				case EpaperImageSource::Download:
+				default:
+						doc["image_source"] = "download";
+						break;
+		}
 		if (record.refresh_result != record.result) {
 			doc["refresh_result"] = wake_result_to_str(record.refresh_result);
 		}
@@ -336,6 +407,8 @@ bool epaper_frame_mqtt_publish_ha_discovery(MqttManager& mqtt) {
 		delay(1);
 		publish_sensor("epaper_frame_refresh_count", "E-Paper Refresh Count",
 									 "{{ value_json.refresh_count }}", "", "", "total_increasing");
+		publish_sensor("epaper_frame_offline_cycles", "E-Paper Offline Cycles (Last Report)",
+									 "{{ value_json.offline_cycles.count if value_json.offline_cycles is defined else 0 }}", "", "", "measurement");
 		publish_sensor("epaper_frame_last_result", "E-Paper Last Refresh Result",
 									 "{{ value_json.refresh_result }}", "", "", "");
 		delay(1);

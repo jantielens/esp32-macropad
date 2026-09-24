@@ -151,6 +151,11 @@ Image Previous actions continue to control the shared cursor manually. Any pad
 button using `[image:current]` follows that cursor in its own layout, while a
 selected local image remains fixed.
 
+In the pad editor, **Local Image** is available only when the board includes
+the image library. **Camera Feed or Remote Image** requires remote image fetching,
+which is separate from support for an attached camera. Background Image Scale is
+available when either type of button background is supported.
+
 ---
 
 ## Home Page
@@ -449,6 +454,19 @@ The E-Paper page configures the battery-oriented image workflow:
 
 Duration is per slot and applies while that slot is active. The page does not expose a separate "wake every" control.
 
+On the reTerminal E1003 in **Photoframe Next Image API** Service mode, the page
+also exposes **Offline refreshes between syncs**. It is available only while SD
+image caching is supported and enabled. Choose `0` (the default) through `16`:
+the device fetches up to the selected number of later images during an online
+sync, then displays them on later timer wakes without Wi-Fi. The hint calculates
+the resulting approximate online-sync cadence from the Service refresh interval.
+Higher values save battery but delay new server selections and MQTT telemetry.
+Changing the offline count or network timing fields automatically recalculates
+**Maximum scheduled wake time** for the first and queued images. Edit the
+maximum last to override the estimate; reopening the page preserves the saved
+value. The image download stop limit applies to each image request, while the
+overall scheduled wake limit (up to 10 minutes) remains the final safeguard.
+
 ---
 
 ## Pads Page
@@ -500,7 +518,8 @@ that matches the device, then reboot to install it into executable flash.
 The package contains the Extension ELF and its first-party signature; unsigned
 or modified packages are rejected. Select **Extension** as a button's widget,
 choose an enabled installed extension, and optionally provide per-button
-configuration text.
+configuration text. Canvas-based Extensions can use **Upscale** (2x to 4x) in
+the button editor to reduce canvas memory use at the cost of image detail.
 
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 

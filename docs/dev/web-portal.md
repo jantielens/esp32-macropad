@@ -515,6 +515,10 @@ Energy definitions.
 
 ### Extensions
 
+The button editor's Extension widget stores `extension_upscale` (integer 1 to
+4, default 1) in the pad JSON. The host scales direct child RGB565 canvases
+from the reduced Extension root back to the full button size.
+
 ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native Extensions. The
 Extensions page exposes two small slots (56 KiB each) and one large slot
 (120 KiB). Upload a signed package named `<extension-id>@<version>-p4.ext` or
@@ -672,6 +676,9 @@ Returns comprehensive device information.
   "has_display": true,
   "has_audio": true,
   "has_sound_player": true,
+  "has_camera": false,
+  "has_image_fetch": true,
+  "has_image_library": true,
   "catalog": [
     {
       "type": "timer",
@@ -706,6 +713,11 @@ Returns comprehensive device information.
 
 **Portal Mode Field:**
 - `ap_active`: `true` when the device is running in AP / captive-portal mode, `false` in full STA mode. Portal JS derives `portalMode` (`"core"` vs `"full"`) from this flag. (Replaces the removed `GET /api/mode` endpoint.)
+
+**Button Image Capabilities:**
+- `has_image_fetch`: Enables remote image and camera-feed backgrounds in the pad editor.
+- `has_image_library`: Enables local image backgrounds in the pad editor.
+- `has_camera`: Enables the separate Camera Preview widget for an attached camera.
 
 **Action Catalog:**
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
@@ -2170,7 +2182,11 @@ DNS server redirects all requests to device IP in AP mode:
     write-oriented: the config GET hook returns `epaper_service_token_set`, never
     the token value. Service controls are exposed only when
     `epaper_service_supported` is true; current firmware sets that capability only
-    for the reTerminal E1003.
+    for the reTerminal E1003. `epaper_frame_offline_refreshes_between_syncs`
+    is additionally gated by Service mode, SD-cache capability, and enabled SD
+    caching. It accepts only `0..16`; the UI supplies an interval-based cadence
+    hint and explains that longer offline runs delay new server content and MQTT
+    telemetry.
 
 2. Rebuild to embed assets:
    ```bash

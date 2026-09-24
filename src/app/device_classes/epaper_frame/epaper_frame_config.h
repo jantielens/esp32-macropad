@@ -42,6 +42,7 @@ struct EpaperConfig {
 		uint32_t wake_mqtt_target_ms;                  // expected MQTT delivery duration
 		uint32_t wake_mqtt_budget_ms;                  // MQTT delivery cap
 		uint32_t wake_cutoff_retry_seconds;            // 0 = use normal refresh interval
+		uint8_t offline_refreshes_between_syncs;        // Service + SD cache only; 0..16
 		uint8_t epaper_frame_rotation;                      // 0..3, default 0
 		uint32_t epaper_frame_last_crc32;                   // CRC32 of last successfully rendered image (0 = none)
 		bool epaper_frame_crc32_enabled;                    // fetch "<url>.crc32" sidecar to skip unchanged refreshes (default false)

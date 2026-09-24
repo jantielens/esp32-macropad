@@ -35,16 +35,22 @@ static void external_parse(const JsonObject& btn, uint8_t* data) {
     config->tick_interval_ms = interval_ms <= 0 ? 0 : static_cast<uint16_t>(clamp_val(
         interval_ms, static_cast<int32_t>(NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS),
         static_cast<int32_t>(NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS)));
+    const int32_t upscale = btn["extension_upscale"] | 1;
+    config->upscale = static_cast<uint8_t>(clamp_val(upscale, static_cast<int32_t>(1), static_cast<int32_t>(4)));
 }
 
 static bool external_create_instance(ExternalWidgetState* external) {
     if (!external || !external->config || !external->root) return false;
+    bool allocation_failed = false;
     if (!native_extension_create_instance(external->config->extension_id, external->instance_id,
-                                          external->root, external->config->config)) {
+                                          external->root, external->config->config, &allocation_failed)) {
         external->retry_after_stop = native_extension_is_stopping(external->config->extension_id);
         if (external->status_label) {
             lv_label_set_text(external->status_label,
-                              external->retry_after_stop ? "Extension restarting" : "Extension unavailable");
+                              external->retry_after_stop ? "Extension restarting" :
+                              allocation_failed ? (external->config->upscale < 4
+                                  ? "Not enough memory - increase Upscale"
+                                  : "Not enough memory - reduce button size") : "Extension unavailable");
             lv_obj_center(external->status_label);
         }
         return false;
@@ -102,8 +108,23 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
 
     lv_obj_update_layout(tile);
     external->root = lv_obj_create(tile);
-    lv_obj_set_size(external->root, lv_obj_get_content_width(tile), lv_obj_get_content_height(tile));
+    const ExternalWidgetConfig* config = external_widget_config(cfg);
+    const uint8_t upscale = config->upscale >= 1 && config->upscale <= 4 ? config->upscale : 1;
+    lv_obj_set_size(external->root,
+                    (lv_obj_get_content_width(tile) + upscale - 1) / upscale,
+                    (lv_obj_get_content_height(tile) + upscale - 1) / upscale);
     lv_obj_set_pos(external->root, 0, 0);
+    if (upscale > 1) {
+        lv_obj_add_flag(external->root, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        lv_obj_add_event_cb(external->root, [](lv_event_t* event) {
+            lv_obj_t* root = lv_event_get_current_target_obj(event);
+            lv_obj_t* tile = lv_obj_get_parent(root);
+            const int32_t extra_width = lv_obj_get_content_width(tile) - lv_obj_get_width(root);
+            const int32_t extra_height = lv_obj_get_content_height(tile) - lv_obj_get_height(root);
+            lv_event_set_ext_draw_size(event, extra_width > extra_height ? extra_width : extra_height);
+        }, LV_EVENT_REFR_EXT_DRAW_SIZE, nullptr);
+        lv_obj_refresh_ext_draw_size(external->root);
+    }
     lv_obj_set_style_bg_opa(external->root, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(external->root, 0, 0);
     lv_obj_set_style_pad_all(external->root, 0, 0);
@@ -113,7 +134,6 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
 
     const ButtonTile* button = reinterpret_cast<const ButtonTile*>(
         reinterpret_cast<const uint8_t*>(state) - offsetof(ButtonTile, widget_state));
-    const ExternalWidgetConfig* config = external_widget_config(cfg);
     external->config = config;
     external->tick_interval_ms = config->tick_interval_ms
         ? config->tick_interval_ms
@@ -126,7 +146,10 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
         LOGI("EXT", "create id=%s instance=%08lx root=%dx%d rect=%ux%u",
             config->extension_id, static_cast<unsigned long>(external->instance_id),
             lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
-    external->status_label = lv_label_create(external->root);
+    external->status_label = lv_label_create(tile);
+    lv_obj_set_width(external->status_label, lv_obj_get_content_width(tile));
+    lv_label_set_long_mode(external->status_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(external->status_label, LV_TEXT_ALIGN_CENTER, 0);
     external_create_instance(external);
     external->timer = lv_timer_create(external_timer_cb, external->tick_interval_ms, external);
     if (external->retry_after_stop) {

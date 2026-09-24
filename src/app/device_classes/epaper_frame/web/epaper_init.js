@@ -11,6 +11,7 @@ if (typeof window.registerConfigFields === 'function') {
         'epaper_frame_source_mode',
         'epaper_frame_service_url', 'epaper_frame_service_token',
         'epaper_frame_service_interval_seconds',
+        'epaper_frame_offline_refreshes_between_syncs',
         'epaper_frame_wake_budget_ms',
         'epaper_frame_wake_wifi_target_ms', 'epaper_frame_wake_wifi_budget_ms',
         'epaper_frame_wake_fetch_target_ms', 'epaper_frame_wake_fetch_budget_ms',
@@ -187,13 +188,79 @@ window.init_epaper_image_fragment = function () {
     var serviceSettings = document.getElementById('epaper-service-settings');
     var serviceToken = document.getElementById('epaper_frame_service_token');
     var serviceTokenStatus = document.getElementById('epaper-service-token-status');
+    var serviceInterval = document.getElementById('epaper_frame_service_interval_seconds');
+    var offlineRefreshes = document.getElementById('epaper_frame_offline_refreshes_between_syncs');
+    var offlineRefreshesRow = document.getElementById('epaper-offline-refreshes-row');
+    var offlineRefreshesHint = document.getElementById('epaper-offline-refreshes-hint');
+    var sdCacheEnabled = document.getElementById('epaper_frame_sd_cache_enabled');
+    var wakeMaximum = document.getElementById('epaper_frame_wake_budget_ms');
     var serviceSupported = false;
     var serviceTokenSet = false;
+    var offlineQueueSupported = false;
+
+    function formatSyncPeriod(seconds) {
+        if (seconds % 3600 === 0) return (seconds / 3600) + '-hour';
+        if (seconds % 60 === 0) return (seconds / 60) + '-minute';
+        return seconds + '-second';
+    }
+
+    function recalculateWakeMaximum() {
+        if (!wakeMaximum) return;
+        if (offlineRefreshes && !offlineRefreshes.disabled && offlineRefreshes.value.trim() === '') return;
+        var imageCount = sourceMode && sourceMode.value === 'service' &&
+            sdCacheEnabled && sdCacheEnabled.checked && offlineRefreshes && !offlineRefreshes.disabled
+            ? Number(offlineRefreshes.value) + 1 : 1;
+        if (!Number.isInteger(imageCount) || imageCount < 1 || imageCount > 17) return;
+        var stages = [
+            ['wifi', 1], ['fetch', imageCount], ['mqtt', 1]
+        ];
+        var estimate = 10000;
+        for (var index = 0; index < stages.length; index++) {
+            var target = document.getElementById('epaper_frame_wake_' + stages[index][0] + '_target_ms');
+            var limit = document.getElementById('epaper_frame_wake_' + stages[index][0] + '_budget_ms');
+            var expected = target ? Number(target.value) : NaN;
+            var stopAfter = limit ? Number(limit.value) : NaN;
+            if (!Number.isFinite(expected) || expected <= 0 ||
+                !Number.isFinite(stopAfter) || stopAfter <= 0) return;
+            estimate += stages[index][1] * (Math.min(expected, stopAfter) + stopAfter) / 2;
+        }
+        wakeMaximum.value = String(Math.min(600000, Math.max(5000,
+            Math.ceil(estimate / 100) * 100)));
+    }
+
+    function updateOfflineQueueUi() {
+        var service = serviceSupported && sourceMode && sourceMode.value === 'service';
+        var available = service && offlineQueueSupported;
+        if (offlineRefreshesRow) offlineRefreshesRow.hidden = !available;
+        if (!offlineRefreshes) return;
+        var cacheEnabled = !!(sdCacheEnabled && sdCacheEnabled.checked);
+        offlineRefreshes.disabled = !available || !cacheEnabled;
+        var count = parseInt(offlineRefreshes.value || '0', 10);
+        var interval = parseInt(serviceInterval && serviceInterval.value || '0', 10);
+        if (isNaN(count) || count < 0) count = 0;
+        if (isNaN(interval) || interval < 1) interval = 0;
+        if (!cacheEnabled) {
+            if (offlineRefreshesHint) offlineRefreshesHint.textContent =
+                'Enable SD image caching to use offline refreshes.';
+            return;
+        }
+        if (offlineRefreshesHint) {
+            if (count > 0 && interval > 0) {
+                offlineRefreshesHint.textContent = count + ' offline refreshes at a ' +
+                    formatSyncPeriod(interval) + ' interval means one online synchronization about every ' +
+                    Math.round(((count + 1) * interval) / 60) + ' minutes. Larger values delay newly selected server content and MQTT telemetry.';
+            } else {
+                offlineRefreshesHint.textContent =
+                    '0 keeps every scheduled refresh online. Larger values reduce WiFi use but delay newly selected server content and MQTT telemetry.';
+            }
+        }
+    }
 
     function updateSourceSections() {
         var service = serviceSupported && sourceMode && sourceMode.value === 'service';
         if (carouselSettings) carouselSettings.hidden = service;
         if (serviceSettings) serviceSettings.hidden = !service;
+        updateOfflineQueueUi();
     }
 
     function setShowNowStatus(text, isErr) {
@@ -270,6 +337,7 @@ window.init_epaper_image_fragment = function () {
                 if (!cfg) return;
 
                 serviceSupported = cfg.epaper_frame_service_supported === true;
+                offlineQueueSupported = cfg.epaper_frame_offline_queue_supported === true;
                 serviceTokenSet = cfg.epaper_frame_service_token_set === true;
                 if (sourceModeRow) sourceModeRow.hidden = !serviceSupported;
                 if (sourceMode) {
@@ -278,6 +346,8 @@ window.init_epaper_image_fragment = function () {
                 }
                 setNamedValue('epaper_frame_service_url', cfg.epaper_frame_service_url || '');
                 setNamedValue('epaper_frame_service_interval_seconds', cfg.epaper_frame_service_interval_seconds || 900);
+                setNamedValue('epaper_frame_offline_refreshes_between_syncs',
+                    cfg.epaper_frame_offline_refreshes_between_syncs || 0);
                 setNamedValue('epaper_frame_wake_budget_ms', cfg.epaper_frame_wake_budget_ms || 15000);
                 setNamedValue('epaper_frame_wake_wifi_target_ms', cfg.epaper_frame_wake_wifi_target_ms || 4000);
                 setNamedValue('epaper_frame_wake_wifi_budget_ms', cfg.epaper_frame_wake_wifi_budget_ms || 5500);
@@ -305,6 +375,7 @@ window.init_epaper_image_fragment = function () {
                 var sdRow = document.getElementById('epaper_sd_cache_row');
                 if (sdRow) sdRow.hidden = !cfg.epaper_frame_sd_cache_supported;
                 setNamedValue('epaper_frame_sd_cache_enabled', !!cfg.epaper_frame_sd_cache_enabled);
+                updateOfflineQueueUi();
 
                 var arr = Array.isArray(cfg.epaper_frame_carousel) ? cfg.epaper_frame_carousel : [];
                 for (var i = 0; i < 5; i++) {
@@ -342,7 +413,25 @@ window.init_epaper_image_fragment = function () {
     if (workBtn) workBtn.addEventListener('click', function () {
         setQuickHours(8, 17);
     });
-    if (sourceMode) sourceMode.addEventListener('change', updateSourceSections);
+    if (sourceMode) sourceMode.addEventListener('change', function () {
+        updateSourceSections();
+        recalculateWakeMaximum();
+    });
+    if (sdCacheEnabled) sdCacheEnabled.addEventListener('change', function () {
+        updateOfflineQueueUi();
+        recalculateWakeMaximum();
+    });
+    if (serviceInterval) serviceInterval.addEventListener('input', updateOfflineQueueUi);
+    if (offlineRefreshes) offlineRefreshes.addEventListener('input', function () {
+        updateOfflineQueueUi();
+        recalculateWakeMaximum();
+    });
+    ['wifi', 'fetch', 'mqtt'].forEach(function (stage) {
+        ['target', 'budget'].forEach(function (setting) {
+            var field = document.getElementById('epaper_frame_wake_' + stage + '_' + setting + '_ms');
+            if (field) field.addEventListener('input', recalculateWakeMaximum);
+        });
+    });
 
     var clearSdBtn = document.getElementById('epaper_clear_sd_cache');
     if (clearSdBtn) clearSdBtn.addEventListener('click', function () {
@@ -383,6 +472,7 @@ window.init_epaper_image_fragment = function () {
             'epaper_frame_source_mode',
             'epaper_frame_service_url', 'epaper_frame_service_token',
             'epaper_frame_service_interval_seconds',
+            'epaper_frame_offline_refreshes_between_syncs',
             'epaper_frame_wake_budget_ms',
             'epaper_frame_wake_wifi_target_ms', 'epaper_frame_wake_wifi_budget_ms',
             'epaper_frame_wake_fetch_target_ms', 'epaper_frame_wake_fetch_budget_ms',
@@ -405,6 +495,17 @@ window.init_epaper_image_fragment = function () {
         config.epaper_frame_schedule_tz_offset = tzSelect ? parseInt(tzSelect.value || '0', 10) : 0;
         if (isNaN(config.epaper_frame_schedule_tz_offset)) config.epaper_frame_schedule_tz_offset = 0;
         var usingService = config.epaper_frame_source_mode === 'service';
+        var cacheEnabled = !!(document.getElementById('epaper_frame_sd_cache_enabled') &&
+            document.getElementById('epaper_frame_sd_cache_enabled').checked);
+        var offlineText = offlineRefreshes ? offlineRefreshes.value.trim() : '0';
+        var offlineCount = Number(offlineText);
+        if (offlineText === '' || !Number.isInteger(offlineCount) ||
+            offlineCount < 0 || offlineCount > 16) {
+            showMessage('Offline refreshes between syncs must be an integer from 0 to 16.', 'error');
+            return;
+        }
+        if (!usingService || !cacheEnabled) offlineCount = 0;
+        config.epaper_frame_offline_refreshes_between_syncs = offlineCount;
         if (usingService) {
             if (!config.epaper_frame_service_url || !String(config.epaper_frame_service_url).trim()) {
                 showMessage('Service URL is required.', 'error');

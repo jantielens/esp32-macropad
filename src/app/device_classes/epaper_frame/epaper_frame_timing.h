@@ -32,7 +32,7 @@ struct EpaperTimingBudget {
 		uint32_t resolve_ms;        // URL/API redirect round-trip (0 if no resolve)
 		uint32_t fetch_ms;          // image bytes: SD cache read OR HTTP download
 		uint32_t draw_ms;           // framebuffer upload + panel GC16 refresh
-		uint8_t  image_from_cache;  // 1 = served from SD cache, 0 = downloaded
+		uint8_t  image_source;  // EpaperImageSource encoded below
 		uint32_t overall_budget_ms; // 0 = budget not enforced for this wake
 		uint32_t budget_elapsed_ms; // elapsed when the wake record was finalized
 		uint32_t budget_remaining_ms;
@@ -43,6 +43,12 @@ struct EpaperTimingBudget {
 		uint32_t fetch_target_ms;
 		uint32_t mqtt_target_ms;
 		uint8_t budget_cut;         // EpaperWakeBudgetCut encoded as uint8_t
+};
+
+enum class EpaperImageSource : uint8_t {
+		Download = 0,
+		OnlineCache = 1,
+		OfflineQueue = 2,
 };
 
 extern EpaperTimingBudget epaper_frame_timing_last;
@@ -121,6 +127,7 @@ void epaper_frame_wake_journal_clear_dropped_count();
 void epaper_frame_timing_reset_draw_steps();
 void epaper_frame_timing_set_resolve_ms(uint32_t ms);
 void epaper_frame_timing_set_fetch(uint32_t ms, bool from_cache);
+void epaper_frame_timing_set_fetch_source(uint32_t ms, EpaperImageSource source);
 void epaper_frame_timing_set_draw_ms(uint32_t ms);
 
 #endif // IS_EPAPER_FRAME

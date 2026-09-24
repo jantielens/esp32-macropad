@@ -7,7 +7,7 @@ ms.topic: how-to
 
 ## Overview
 
-Extensions are trusted native ELF modules for ESP32-P4 and 16 MB ESP32-S3
+Extensions are trusted native ELF modules for supported ESP32-P4 and ESP32-S3
 display boards. P4 packages use RISC-V and execute from flash. S3 packages
 use Xtensa; their code is relocated into executable internal RAM and their
 data is relocated into PSRAM. An Extension source is built into one signed
@@ -155,6 +155,15 @@ extern "C" const NativeExtensionDescriptor native_extension_descriptor = {
 External Widget configuration can override this default with
 `extension_tick_interval_ms`, allowing the same package to run at an
 appropriate cadence for each placement.
+
+Canvas-based Extensions can use the button's `extension_upscale` setting (1 to
+4, default 1). The host gives the Extension a root with dimensions divided by
+the factor, rounded up, then scales direct child RGB565 canvases to fill the
+button. A 2x setting uses approximately one-quarter the canvas memory; 4x uses
+approximately one-sixteenth. Rendering becomes coarser, and non-canvas UI is
+not scaled. The setting does not change the Extension ABI, so existing packages
+can use it without rebuilding. If a host allocation fails during creation, the
+button shows a memory-specific message instead of "Extension unavailable".
 
 The loader requires the descriptor, then verifies its ID and package version
 against the filename as well as its ABI and target ABI against firmware. Package

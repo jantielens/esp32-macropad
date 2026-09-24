@@ -17,6 +17,10 @@
 #include "epaper_frame/epaper_frame_battery.h"
 #include "epaper_frame/epaper_frame_carousel.h"
 #include "epaper_frame/epaper_frame_driver.h"
+#include "epaper_frame/epaper_frame_offline_queue_logic.h"
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+#include "epaper_frame/epaper_frame_offline_queue.h"
+#endif
 #include "epaper_frame/epaper_frame_refresh.h"
 #include "epaper_frame/epaper_frame_schedule.h"
 #include "epaper_frame/epaper_frame_screens.h"
@@ -69,6 +73,7 @@ static const char *kKeyWakeFetchBudget = "ep_f_cap";
 static const char *kKeyWakeMqttTarget = "ep_m_tar";
 static const char *kKeyWakeMqttBudget = "ep_m_cap";
 static const char *kKeyWakeCutRetry   = "ep_cut_retry";
+static const char *kKeyOfflineSyncs   = "ep_off_sync";
 static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
 static const char *kKeyCrcEnabled     = "ep_crc_en";
@@ -96,7 +101,7 @@ static uint32_t clamp_wake_setting(uint32_t value, uint32_t minimum, uint32_t ma
 }
 
 static void normalize_wake_settings() {
-		g_epaper_config.wake_budget_ms = clamp_wake_setting(g_epaper_config.wake_budget_ms, 5000, 60000);
+		g_epaper_config.wake_budget_ms = clamp_wake_setting(g_epaper_config.wake_budget_ms, 5000, 600000);
 		g_epaper_config.wake_wifi_budget_ms = clamp_wake_setting(g_epaper_config.wake_wifi_budget_ms, 500, 30000);
 		g_epaper_config.wake_fetch_budget_ms = clamp_wake_setting(g_epaper_config.wake_fetch_budget_ms, 500, 30000);
 		g_epaper_config.wake_mqtt_budget_ms = clamp_wake_setting(g_epaper_config.wake_mqtt_budget_ms, 500, 30000);
@@ -110,6 +115,39 @@ static uint32_t epaper_frame_config_uint(JsonObject &body, const char *key, uint
 		return body[key].is<const char*>()
 				? (uint32_t)strtoul(body[key].as<const char*>(), nullptr, 10)
 				: (uint32_t)(body[key] | fallback);
+}
+
+static bool epaper_frame_config_parse_uint(JsonVariantConst value, uint32_t* parsed) {
+		if (!parsed) return false;
+		if (value.is<const char*>()) {
+				const char* text = value.as<const char*>();
+				if (!text || !*text) return false;
+				uint32_t result = 0;
+				for (const char* cursor = text; *cursor; ++cursor) {
+						if (*cursor < '0' || *cursor > '9') return false;
+						const uint32_t digit = (uint32_t)(*cursor - '0');
+						if (result > (UINT32_MAX - digit) / 10U) return false;
+						result = result * 10U + digit;
+				}
+				*parsed = result;
+				return true;
+		}
+		if (!value.is<uint32_t>()) return false;
+		*parsed = value.as<uint32_t>();
+		return true;
+}
+
+static bool epaper_frame_config_parse_bool(JsonVariantConst value, bool fallback) {
+		if (value.is<const char*>()) {
+				const char* text = value.as<const char*>();
+				if (!text) return fallback;
+				if (strcmp(text, "true") == 0 || strcmp(text, "1") == 0 ||
+						strcmp(text, "on") == 0) return true;
+				if (strcmp(text, "false") == 0 || strcmp(text, "0") == 0 ||
+						strcmp(text, "off") == 0) return false;
+				return fallback;
+		}
+		return value.is<bool>() ? value.as<bool>() : fallback;
 }
 
 static bool epaper_frame_service_supported() {
@@ -247,6 +285,7 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.wake_mqtt_target_ms = EPAPER_FRAME_MQTT_TARGET_MS;
 		g_epaper_config.wake_mqtt_budget_ms = EPAPER_FRAME_MQTT_BUDGET_MS;
 		g_epaper_config.wake_cutoff_retry_seconds = 0;
+		g_epaper_config.offline_refreshes_between_syncs = 0;
 		g_epaper_config.epaper_frame_rotation = 0;
 		g_epaper_config.epaper_frame_last_crc32 = 0;
 		g_epaper_config.epaper_frame_crc32_enabled = false;
@@ -301,6 +340,14 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		g_epaper_config.epaper_frame_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
 		g_epaper_config.epaper_frame_crc32_enabled = prefs.getBool(kKeyCrcEnabled, false);
 		g_epaper_config.epaper_frame_sd_cache_enabled = prefs.getBool(kKeySdCacheEn, false);
+		const uint8_t offline_refreshes = prefs.getUChar(kKeyOfflineSyncs, 0);
+		const bool offline_prerequisites = epaper_frame_service_supported() &&
+				epaper_frame_source_uses_service(g_epaper_config.source_mode) &&
+				g_epaper_config.epaper_frame_sd_cache_enabled;
+		g_epaper_config.offline_refreshes_between_syncs =
+				epaper_frame_offline_refresh_count_valid(offline_refreshes) &&
+				(offline_refreshes == 0 || offline_prerequisites)
+				? offline_refreshes : 0;
 
 		g_epaper_config.epaper_frame_overlay_enabled = prefs.getBool(kKeyOverlayEn, false);
 		g_epaper_config.epaper_frame_overlay_position = prefs.getUChar(kKeyOverlayPos, 3);
@@ -347,6 +394,7 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUInt(kKeyWakeMqttTarget, g_epaper_config.wake_mqtt_target_ms);
 		prefs.putUInt(kKeyWakeMqttBudget, g_epaper_config.wake_mqtt_budget_ms);
 		prefs.putUInt(kKeyWakeCutRetry, g_epaper_config.wake_cutoff_retry_seconds);
+		prefs.putUChar(kKeyOfflineSyncs, g_epaper_config.offline_refreshes_between_syncs);
 		prefs.putUChar(kKeyRotation, g_epaper_config.epaper_frame_rotation);
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_frame_last_crc32);
 		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_frame_crc32_enabled);
@@ -393,6 +441,8 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 		root["epaper_frame_wake_mqtt_target_ms"] = g_epaper_config.wake_mqtt_target_ms;
 		root["epaper_frame_wake_mqtt_budget_ms"] = g_epaper_config.wake_mqtt_budget_ms;
 		root["epaper_frame_wake_cutoff_retry_seconds"] = g_epaper_config.wake_cutoff_retry_seconds;
+		root["epaper_frame_offline_refreshes_between_syncs"] =
+				g_epaper_config.offline_refreshes_between_syncs;
 		root["epaper_frame_service_token_set"] = g_epaper_config.service_token[0] != '\0';
 		root["epaper_frame_rotation"] = g_epaper_config.epaper_frame_rotation;
 		root["epaper_frame_crc32_enabled"] = g_epaper_config.epaper_frame_crc32_enabled;
@@ -404,6 +454,14 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 			false
 #endif
 			;
+		root["epaper_frame_offline_queue_supported"] =
+				epaper_frame_service_supported() &&
+#ifdef EPAPER_FRAME_SD_CS_PIN
+				true
+#else
+				false
+#endif
+				;
 		root["epaper_frame_overlay_enabled"] = g_epaper_config.epaper_frame_overlay_enabled;
 		root["epaper_frame_overlay_position"] = g_epaper_config.epaper_frame_overlay_position;
 		root["epaper_frame_overlay_color"] = g_epaper_config.epaper_frame_overlay_color;
@@ -427,7 +485,48 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 		root["epaper_frame_schedule_tz_offset"] = g_epaper_config.schedule_tz_offset;
 }
 
+static const char *config_api_validate_hook(const DeviceConfig * /*cfg*/,
+		JsonObject &body) {
+		uint32_t offline_refreshes =
+				g_epaper_config.offline_refreshes_between_syncs;
+		if (body.containsKey("epaper_frame_offline_refreshes_between_syncs") &&
+				!epaper_frame_config_parse_uint(
+						body["epaper_frame_offline_refreshes_between_syncs"],
+						&offline_refreshes)) {
+				return "Offline refreshes between syncs must be an integer from 0 to 16";
+		}
+		if (!epaper_frame_offline_refresh_count_valid(offline_refreshes)) {
+				return "Offline refreshes between syncs must be from 0 to 16";
+		}
+
+		bool service_mode =
+				epaper_frame_source_uses_service(g_epaper_config.source_mode);
+		if (body.containsKey("epaper_frame_source_mode")) {
+				const char* mode = body["epaper_frame_source_mode"] | "";
+				if (strcmp(mode, "service") != 0 &&
+						strcmp(mode, "slot-carousel") != 0) {
+						return "E-paper source mode must be service or slot-carousel";
+				}
+				service_mode = strcmp(mode, "service") == 0;
+		}
+		bool cache_enabled = g_epaper_config.epaper_frame_sd_cache_enabled;
+		if (body.containsKey("epaper_frame_sd_cache_enabled")) {
+				cache_enabled = epaper_frame_config_parse_bool(
+						body["epaper_frame_sd_cache_enabled"], cache_enabled);
+		}
+		if (offline_refreshes > 0 &&
+				(!epaper_frame_service_supported() || !service_mode ||
+						!cache_enabled)) {
+				return "Offline refreshes require Service mode and SD image caching";
+		}
+		return nullptr;
+}
+
 static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+		const uint32_t old_queue_identity =
+				epaper_frame_offline_queue_current_identity();
+#endif
 		if (body.containsKey("epaper_frame_source_mode")) {
 				const char* mode = body["epaper_frame_source_mode"] | "slot-carousel";
 				g_epaper_config.source_mode = strcmp(mode, "service") == 0 && epaper_frame_service_supported()
@@ -459,6 +558,16 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 			if (body.containsKey("epaper_frame_wake_mqtt_budget_ms")) g_epaper_config.wake_mqtt_budget_ms = epaper_frame_config_uint(body, "epaper_frame_wake_mqtt_budget_ms", EPAPER_FRAME_MQTT_BUDGET_MS);
 			if (body.containsKey("epaper_frame_wake_cutoff_retry_seconds")) g_epaper_config.wake_cutoff_retry_seconds = epaper_frame_config_uint(body, "epaper_frame_wake_cutoff_retry_seconds", 0);
 			normalize_wake_settings();
+		if (body.containsKey("epaper_frame_offline_refreshes_between_syncs")) {
+				uint32_t offline_refreshes = 0;
+				if (epaper_frame_config_parse_uint(
+						body["epaper_frame_offline_refreshes_between_syncs"],
+						&offline_refreshes) &&
+						epaper_frame_offline_refresh_count_valid(offline_refreshes)) {
+						g_epaper_config.offline_refreshes_between_syncs =
+								static_cast<uint8_t>(offline_refreshes);
+				}
+		}
 		if (body.containsKey("epaper_frame_rotation")) {
 				uint8_t v = body["epaper_frame_rotation"].is<const char*>()
 						? (uint8_t)atoi(body["epaper_frame_rotation"].as<const char*>())
@@ -548,6 +657,11 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 				if (v > 14) v = 14;
 				g_epaper_config.schedule_tz_offset = v;
 		}
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+		if (old_queue_identity != epaper_frame_offline_queue_current_identity()) {
+				epaper_frame_offline_queue_invalidate();
+		}
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -627,6 +741,38 @@ static void on_setup_late_hook(DeviceConfig *cfg, PowerMode current_mode) {
 						epaper_frame_screen_config_mode(cfg->wifi_ssid, ip.c_str(), false);
 				}
 		});
+}
+
+static bool defer_wifi_init_hook(const DeviceConfig * /*config*/,
+		PowerMode boot_mode) {
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+		if (boot_mode != PowerMode::DutyCycleEpaperFrame) return false;
+		const bool button_wake = epaper_frame_button_is_button_wake();
+		const bool schedule_allowed =
+				g_epaper_config.schedule_hours == 0x00FFFFFF ||
+				button_wake ||
+				epaper_frame_schedule_should_refresh(
+						g_epaper_config.schedule_hours,
+						g_epaper_config.schedule_tz_offset,
+						time(nullptr));
+		const EpaperOfflineWakeInputs inputs = {
+				/* service_mode */ epaper_frame_source_uses_service(
+						g_epaper_config.source_mode),
+				/* sd_cache_enabled */
+						g_epaper_config.epaper_frame_sd_cache_enabled,
+				/* offline_refreshes */
+						g_epaper_config.offline_refreshes_between_syncs,
+				/* deep_sleep_wake */ power_manager_is_deep_sleep_wake(),
+				/* button_wake */ button_wake,
+				/* schedule_allowed */ schedule_allowed,
+				/* queue_valid */ epaper_frame_offline_queue_has_valid_entries(),
+		};
+		return epaper_frame_offline_wake_decision(inputs) !=
+				EpaperOfflineWakeDecision::Online;
+#else
+		(void)boot_mode;
+		return false;
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -731,6 +877,17 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		epaper_frame_timing_begin_wake(wake_reason);
 		const EpaperWakeBudget wake_budget = epaper_frame_wake_budget_begin(
 				wake_reason == EpaperWakeReason::Timer, g_epaper_config.wake_budget_ms);
+		LOGI("Epaper", "Wake: cap=%u enforced=%u wifi=%u/%u img/req=%u/%u mqtt=%u/%u ms(expected/stop) offline=%u retry=%us",
+				(unsigned)g_epaper_config.wake_budget_ms,
+				(unsigned)(wake_reason == EpaperWakeReason::Timer),
+				(unsigned)g_epaper_config.wake_wifi_target_ms,
+				(unsigned)g_epaper_config.wake_wifi_budget_ms,
+				(unsigned)g_epaper_config.wake_fetch_target_ms,
+				(unsigned)g_epaper_config.wake_fetch_budget_ms,
+				(unsigned)g_epaper_config.wake_mqtt_target_ms,
+				(unsigned)g_epaper_config.wake_mqtt_budget_ms,
+				(unsigned)g_epaper_config.offline_refreshes_between_syncs,
+				(unsigned)g_epaper_config.wake_cutoff_retry_seconds);
 		epaper_frame_timing_last.overall_budget_ms = wake_budget.overall_budget_ms;
 		epaper_frame_timing_last.wifi_target_ms = g_epaper_config.wake_wifi_target_ms;
 		epaper_frame_timing_last.fetch_target_ms = g_epaper_config.wake_fetch_target_ms;
@@ -744,6 +901,51 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 			epaper_frame_wake_journal_finalize(EpaperWakeResult::BudgetExceeded, 0, 0);
 			epaper_frame_wake_journal_mark_delivery_failed(EpaperWakeResult::BudgetExceeded);
 		};
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+		if (is_cold_boot || is_button_wake) {
+				epaper_frame_offline_queue_invalidate();
+		}
+		const bool queue_schedule_allowed =
+				g_epaper_config.schedule_hours == 0x00FFFFFF ||
+				is_button_wake ||
+				epaper_frame_schedule_should_refresh(
+						g_epaper_config.schedule_hours,
+						g_epaper_config.schedule_tz_offset,
+						time(nullptr));
+		const EpaperOfflineWakeInputs offline_inputs = {
+				/* service_mode */ epaper_frame_source_uses_service(
+						g_epaper_config.source_mode),
+				/* sd_cache_enabled */
+						g_epaper_config.epaper_frame_sd_cache_enabled,
+				/* offline_refreshes */
+						g_epaper_config.offline_refreshes_between_syncs,
+				/* deep_sleep_wake */ !is_cold_boot,
+				/* button_wake */ is_button_wake,
+				/* schedule_allowed */ queue_schedule_allowed,
+				/* queue_valid */ epaper_frame_offline_queue_has_valid_entries(),
+		};
+		const EpaperOfflineWakeDecision offline_decision =
+				epaper_frame_offline_wake_decision(offline_inputs);
+		if (offline_decision ==
+				EpaperOfflineWakeDecision::ScheduleSuppressed) {
+				const uint32_t sleep_s =
+						epaper_frame_schedule_seconds_to_next(
+								g_epaper_config.schedule_hours,
+								g_epaper_config.schedule_tz_offset,
+								time(nullptr));
+				LOGI("Epaper", "Schedule suppressed offline queue wake; retaining %u entries",
+						(unsigned)epaper_frame_offline_queue_count());
+				epaper_frame_timing_last.total_active_ms = millis();
+				epaper_frame_wake_journal_finalize(
+						EpaperWakeResult::ScheduleSuppressed, 0, 0);
+				power_manager_sleep_for(sleep_s);
+				return true;
+		}
+		const bool attempt_offline =
+				offline_decision == EpaperOfflineWakeDecision::Offline;
+#else
+		const bool attempt_offline = false;
+#endif
 		// Splash policy (moved from app.ino):
 		//   - Cold boot: always show the boot splash so a freshly plugged-in
 		//     device gets proof of life.
@@ -810,6 +1012,62 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		} else {
 				LOGW("Epaper", "driver begin returned false");
 		}
+
+#if defined(BOARD_RETERMINAL_E1003_FRAME)
+		if (attempt_offline) {
+				if (begin_started) {
+						if (!epaper_frame_driver_begin_join()) {
+								LOGW("Epaper", "driver begin returned false");
+						}
+						begin_started = false;
+				}
+				char offline_image_key[
+						EPAPER_FRAME_OFFLINE_IMAGE_KEY_SIZE] = {};
+				const EpaperOfflineQueueEntry* offline_head =
+						epaper_frame_offline_queue_peek();
+				if (offline_head) {
+						strlcpy(offline_image_key, offline_head->image_key,
+								sizeof(offline_image_key));
+				}
+				epaper_frame_timing_reset_draw_steps();
+				const EpaperRefreshOutcome offline_outcome =
+						epaper_frame_refresh_run_offline(config);
+#if HAS_MQTT
+				epaper_frame_mqtt_record_offline_cycle(
+						offline_outcome, offline_image_key);
+#endif
+				if (offline_outcome.result == EpaperRefreshResult::Updated) {
+						epaper_frame_timing_last.crc_to_draw_ms = millis();
+						epaper_frame_timing_last.total_active_ms = millis();
+						epaper_frame_wake_journal_checkpoint(
+								EpaperWakeStage::Refresh);
+						epaper_frame_wake_journal_finalize(
+								EpaperWakeResult::Updated,
+								offline_outcome.battery_mv, 0);
+						uint32_t sleep_s =
+								g_epaper_config.service_interval_seconds;
+						const uint32_t active_s =
+								epaper_frame_timing_last.total_active_ms / 1000U;
+						sleep_s = active_s < sleep_s
+								? sleep_s - active_s : 10U;
+						if (sleep_s < 10U) sleep_s = 10U;
+						LOGI("Epaper", "Offline queue refresh complete; %u entries remain",
+								(unsigned)epaper_frame_offline_queue_count());
+						power_manager_sleep_for(sleep_s);
+						return true;
+				}
+				LOGW("Epaper", "Offline queue refresh failed; falling back online");
+				if (wake_budget.stage_limit_ms(
+						millis(), g_epaper_config.wake_wifi_budget_ms) == 0) {
+						record_budget_cut(EpaperWakeBudgetCut::Overall,
+								EpaperWakeStage::Refresh);
+						power_manager_sleep_for(
+								epaper_frame_budget_cut_sleep_seconds());
+						return true;
+				}
+				wifi_manager_early_init();
+		}
+#endif
 
 		// WiFi -> CRC check -> conditional draw -> sleep. Each checkpoint feeds
 		// the RTC-retained timing budget so the portal can show a per-cycle
@@ -1000,15 +1258,23 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		// Clear the per-draw sub-step timings so a CRC-skip wake (no fetch/draw)
 		// reports zeros rather than the previous cycle's resolve/fetch/draw.
 		epaper_frame_timing_reset_draw_steps();
-		const uint32_t fetch_limit_ms = wake_budget.stage_limit_ms(millis(), g_epaper_config.wake_fetch_budget_ms);
-		epaper_frame_timing_last.fetch_limit_ms = fetch_limit_ms;
+		const bool batch_enabled = epaper_frame_source_uses_service(g_epaper_config.source_mode) &&
+				g_epaper_config.epaper_frame_sd_cache_enabled &&
+				g_epaper_config.offline_refreshes_between_syncs > 0;
+		const uint32_t fetch_limit_ms = wake_budget.stage_limit_ms(millis(),
+				batch_enabled ? UINT32_MAX : g_epaper_config.wake_fetch_budget_ms);
+		epaper_frame_timing_last.fetch_limit_ms = batch_enabled &&
+				fetch_limit_ms > g_epaper_config.wake_fetch_budget_ms
+				? g_epaper_config.wake_fetch_budget_ms : fetch_limit_ms;
 		if (fetch_limit_ms == 0) {
 			record_budget_cut(EpaperWakeBudgetCut::Overall, EpaperWakeStage::Refresh);
 			power_manager_sleep_for(epaper_frame_budget_cut_sleep_seconds());
 			return true;
 		}
 		const uint32_t fetch_started_ms = millis();
-		const EpaperRefreshOutcome outcome = epaper_frame_refresh_run(config, force_refresh, fetch_limit_ms);
+		const EpaperRefreshOutcome outcome = epaper_frame_refresh_run(config, force_refresh,
+				batch_enabled ? g_epaper_config.wake_fetch_budget_ms : fetch_limit_ms,
+				batch_enabled ? fetch_limit_ms : 0);
 		if (outcome.result == EpaperRefreshResult::FailedFetch &&
 				(millis() - fetch_started_ms) >= fetch_limit_ms) {
 			record_budget_cut(EpaperWakeBudgetCut::Fetch, EpaperWakeStage::Refresh);
@@ -1166,6 +1432,11 @@ static const DeviceClass kEpaperClass = {
 		/* mqtt_on_discovery */ nullptr,
 #endif
 		/* mqtt_publish_state */ nullptr,
+		/* pad_hold_scheme */    nullptr,
+		/* pad_hold_acquire */   nullptr,
+		/* pad_hold_release */   nullptr,
+		/* config_api_validate */ config_api_validate_hook,
+		/* defer_wifi_init */    defer_wifi_init_hook,
 };
 
 void epaper_frame_device_class_register() {
@@ -1182,6 +1453,8 @@ void epaper_frame_device_class_register() {
 #include "epaper_frame/epaper_frame_media_validation.cpp"
 #include "epaper_frame/epaper_frame_next_client.cpp"
 #include "epaper_frame/epaper_frame_next_client_logic.cpp"
+#include "epaper_frame/epaper_frame_offline_queue.cpp"
+#include "epaper_frame/epaper_frame_offline_queue_logic.cpp"
 #include "epaper_frame/epaper_frame_transport_crc32.cpp"
 #include "epaper_frame/epaper_frame_drivers.cpp"
 #include "epaper_frame/epaper_frame_mqtt.cpp"

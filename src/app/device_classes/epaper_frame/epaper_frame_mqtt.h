@@ -15,6 +15,11 @@ class MqttManager;
 bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 															 const EpaperTimingBudget* timing);
 
+// Compact RTC-retained summary for wakes that deliberately did not initialize
+// WiFi/MQTT. Cleared only after the next retained state publish succeeds.
+void epaper_frame_mqtt_record_offline_cycle(
+		const EpaperRefreshOutcome& outcome, const char* image_key);
+
 bool epaper_frame_mqtt_publish_pending_wakes(uint32_t reporting_wake_id);
 
 // Subscribe to the wake event topic before publishing so the broker's echoed

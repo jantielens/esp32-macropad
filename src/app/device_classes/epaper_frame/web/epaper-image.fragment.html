@@ -42,6 +42,11 @@
         <label class="form-label" for="epaper_frame_service_interval_seconds">Refresh interval (s)</label>
         <input type="number" class="form-control" id="epaper_frame_service_interval_seconds" name="epaper_frame_service_interval_seconds" min="1" max="86400" placeholder="900">
       </div>
+      <div class="mb-3" id="epaper-offline-refreshes-row" hidden>
+        <label class="form-label" for="epaper_frame_offline_refreshes_between_syncs">Offline refreshes between syncs</label>
+        <input type="number" class="form-control" id="epaper_frame_offline_refreshes_between_syncs" name="epaper_frame_offline_refreshes_between_syncs" min="0" max="16" step="1" value="0">
+        <div class="form-text" id="epaper-offline-refreshes-hint">Requires Service mode and SD image caching. Larger values delay newly selected server content and MQTT telemetry.</div>
+      </div>
     </div>
     <div id="epaper-carousel-settings">
     <div class="mb-3 form-check">
@@ -256,8 +261,8 @@
     <div class="row g-3 mb-3">
       <div class="col-12 col-md-6">
         <label class="form-label" for="epaper_frame_wake_budget_ms">Maximum scheduled wake time (ms)</label>
-        <input type="number" class="form-control" id="epaper_frame_wake_budget_ms" name="epaper_frame_wake_budget_ms" min="5000" max="60000" step="100" placeholder="15000">
-        <div class="form-text">Sets the total time available for WiFi, image fetch, panel work, and telemetry.</div>
+        <input type="number" class="form-control" id="epaper_frame_wake_budget_ms" name="epaper_frame_wake_budget_ms" min="5000" max="600000" step="100" placeholder="15000">
+        <div class="form-text">Recalculated when the offline image count or network timings change. Includes the first image, every offline image, and 10 seconds for panel work and NTP. Uses the midpoint of Expected and Stop after for each network stage. Edit this value last to override it. The overall limit always takes precedence.</div>
       </div>
       <div class="col-12 col-md-6">
         <label class="form-label" for="epaper_frame_wake_cutoff_retry_seconds">Retry after a limit is reached (s)</label>
@@ -265,7 +270,7 @@
         <div class="form-text">Use 0 to wait until the normal next refresh. A positive value tries again sooner.</div>
       </div>
     </div>
-    <p class="form-text mb-2">For each network stage, <strong>Expected</strong> is recorded in wake telemetry to help tune the policy. <strong>Stop after</strong> is the enforced limit.</p>
+    <p class="form-text mb-2">For each network stage, <strong>Expected</strong> is recorded in wake telemetry and used to estimate the maximum above. <strong>Stop after</strong> is enforced per connection, image request, or MQTT stage, subject to the overall wake limit. A panel refresh already in progress is allowed to finish.</p>
     <div class="row g-3">
       <div class="col-12 col-md-4">
         <label class="form-label" for="epaper_frame_wake_wifi_target_ms">WiFi connection (ms)</label>
@@ -285,7 +290,7 @@
           <span class="input-group-text">Stop after</span>
           <input type="number" class="form-control" id="epaper_frame_wake_fetch_budget_ms" name="epaper_frame_wake_fetch_budget_ms" min="500" max="30000" step="100" placeholder="3500" aria-label="Image download limit">
         </div>
-        <div class="form-text">Requesting and receiving the next image.</div>
+        <div class="form-text">Each image request, including offline batch prefetches. The first image also needs panel time.</div>
       </div>
       <div class="col-12 col-md-4">
         <label class="form-label" for="epaper_frame_wake_mqtt_target_ms">MQTT telemetry (ms)</label>

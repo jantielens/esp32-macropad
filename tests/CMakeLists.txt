@@ -451,6 +451,11 @@ add_host_gtest(test_epaper_frame_next_client_logic
     ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_transport_crc32.cpp
 )
 
+add_host_gtest(test_epaper_frame_offline_queue
+    test_epaper_frame_offline_queue.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/epaper_frame/epaper_frame_offline_queue_logic.cpp
+)
+
 add_host_gtest(test_power_config
     test_power_config.cpp
     ${PROJECT_SOURCE_DIR}/src/app/power_config.cpp
