@@ -66,7 +66,7 @@ bool native_extension_delete(uint8_t slot);
 
 // These APIs must only be called from the LVGL task.
 bool native_extension_create_instance(const char* extension_id, uint32_t instance_id,
-									  void* root, const char* config_json);
+									  void* root, const char* config_json, bool* allocation_failed = nullptr);
 void native_extension_set_instance_binding_context(const char* extension_id, uint32_t instance_id,
                                                    const PadBinding* bindings, uint8_t binding_count);
 void native_extension_set_instance_button_context(const char* extension_id, uint32_t instance_id,

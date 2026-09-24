@@ -515,6 +515,10 @@ Energy definitions.
 
 ### Extensions
 
+The button editor's Extension widget stores `extension_upscale` (integer 1 to
+4, default 1) in the pad JSON. The host scales direct child RGB565 canvases
+from the reduced Extension root back to the full button size.
+
 ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native Extensions. The
 Extensions page exposes two small slots (56 KiB each) and one large slot
 (120 KiB). Upload a signed package named `<extension-id>@<version>-p4.ext` or

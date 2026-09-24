@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Extension canvas upscaling**: per-button 1x to 4x canvas scaling reduces
+  memory usage for canvas-based Extensions; allocation failures show a specific
+  message with a suggested adjustment.
 * **reTerminal E1003 Interactive Extensions**: the ESP32-S3 interactive profile
   supports three native Extension slots. Its dedicated partition layout retains
   the 8 MiB OTA slots but shrinks LittleFS by 256 KiB. Back up files before

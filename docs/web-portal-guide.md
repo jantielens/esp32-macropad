@@ -518,7 +518,8 @@ that matches the device, then reboot to install it into executable flash.
 The package contains the Extension ELF and its first-party signature; unsigned
 or modified packages are rejected. Select **Extension** as a button's widget,
 choose an enabled installed extension, and optionally provide per-button
-configuration text.
+configuration text. Canvas-based Extensions can use **Upscale** (2x to 4x) in
+the button editor to reduce canvas memory use at the cost of image detail.
 
 Switching between pads or navigating away with unsaved changes shows a confirmation dialog to prevent accidental data loss.
 

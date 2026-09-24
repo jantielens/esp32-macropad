@@ -102,6 +102,7 @@ struct LoadedSlot {
 };
 LoadedSlot s_slots[NATIVE_EXTENSION_SLOT_COUNT] = {};
 CanvasBuffer s_canvas_buffers[MAX_EXTENSION_CANVASES] = {};
+bool* s_create_allocation_failed = nullptr;
 portMUX_TYPE s_worker_lock = portMUX_INITIALIZER_UNLOCKED;
 TaskHandle_t s_lvgl_task = nullptr;
 
@@ -189,7 +190,11 @@ void host_log(NativeExtensionLogLevel level, const char* message) {
 void* host_alloc(size_t size) {
     if (size == 0) return nullptr;
     void* memory = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    return memory ? memory : heap_caps_malloc(size, MALLOC_CAP_DEFAULT);
+    if (!memory) memory = heap_caps_malloc(size, MALLOC_CAP_DEFAULT);
+    if (!memory && xTaskGetCurrentTaskHandle() == s_lvgl_task && s_create_allocation_failed) {
+        *s_create_allocation_failed = true;
+    }
+    return memory;
 }
 void host_free(void* memory) { if (memory) heap_caps_free(memory); }
 void* host_context_get_data(void* extension_context) {
@@ -477,6 +482,20 @@ bool host_canvas_set_buffer(void* canvas, void* buffer, uint32_t width, uint32_t
     if (!canvas || !buffer || width == 0 || height == 0 || !register_canvas_buffer(canvas, buffer, width, height)) return false;
     memset(buffer, 0, host_canvas_buffer_size(width, height));
     lv_canvas_set_buffer(as_obj(canvas), buffer, width, height, LV_COLOR_FORMAT_RGB565);
+    lv_obj_t* root = lv_obj_get_parent(as_obj(canvas));
+    if (root && lv_obj_has_flag(root, LV_OBJ_FLAG_OVERFLOW_VISIBLE) &&
+        static_cast<int32_t>(width) == lv_obj_get_width(root) &&
+        static_cast<int32_t>(height) == lv_obj_get_height(root)) {
+        lv_obj_t* button = lv_obj_get_parent(root);
+        if (button) {
+            lv_image_set_pivot(as_obj(canvas), 0, 0);
+            lv_image_set_scale_x(as_obj(canvas),
+                                 lv_obj_get_content_width(button) * LV_SCALE_NONE / width);
+            lv_image_set_scale_y(as_obj(canvas),
+                                 lv_obj_get_content_height(button) * LV_SCALE_NONE / height);
+            lv_image_set_antialias(as_obj(canvas), false);
+        }
+    }
     return true;
 }
 void canvas_write_pixel(CanvasBuffer* entry, int32_t x, int32_t y, uint16_t color) {
@@ -1229,7 +1248,9 @@ bool native_extension_delete(uint8_t slot) {
     LOGI(TAG, "Delete pending for slot %u; reboot required", slot);
     return true;
 }
-bool native_extension_create_instance(const char* id, uint32_t instance_id, void* root, const char* config) {
+bool native_extension_create_instance(const char* id, uint32_t instance_id, void* root, const char* config,
+                                      bool* allocation_failed) {
+    if (allocation_failed) *allocation_failed = false;
     LoadedSlot* slot = loaded_by_id(id);
     if (!slot || !root) { LOGW(TAG, "Create unavailable: %s", id ? id : ""); return false; }
     bool unavailable = false;
@@ -1249,7 +1270,10 @@ bool native_extension_create_instance(const char* id, uint32_t instance_id, void
     }
     s_lvgl_task = xTaskGetCurrentTaskHandle();
     LOGI(TAG, "Create %s instance=%08lx", id, static_cast<unsigned long>(instance_id));
-    if (!slot->create(&HOST_API, slot, instance_id, root, config ? config : "")) return false;
+    s_create_allocation_failed = allocation_failed;
+    const bool created = slot->create(&HOST_API, slot, instance_id, root, config ? config : "");
+    s_create_allocation_failed = nullptr;
+    if (!created) return false;
     ++slot->active_instances;
     host_status_set(slot, NATIVE_EXTENSION_RUNTIME_RUNNING, "Widget instance active");
     return true;
