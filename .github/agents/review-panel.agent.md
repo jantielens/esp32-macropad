@@ -92,6 +92,13 @@ Collect the changes to review.
    treat its entire contents as added lines. Report any binary or unreadable
    files explicitly as excluded rather than claiming to have reviewed them.
    `staged` reviews include only staged content, not untracked files.
+  For `staged`, also collect full text for each changed file with
+  `git show ":<repo-relative-path>"`. For staged deletions, collect the
+  preimage with `git show "HEAD:<repo-relative-path>"` and label it deleted.
+  Use exact, safely quoted paths from the diff, including rename destinations.
+  Pass these labeled snapshots to experts; never substitute working-tree text.
+  Retrieve additional source context from the index too, including unchanged
+  dependencies. Report unavailable or unreadable context as a review limitation.
 3. If both the tracked diff and the untracked file list are empty, inform the
    user and ask for an alternative scope (branch comparison, specific files, etc.).
 4. Summarize what will be reviewed: file count, approximate line count, affected modules, and any excluded files.
@@ -105,12 +112,15 @@ Dispatch all expert reviewers in parallel and collect findings.
 
 1. For each expert instructions file discovered in Phase 1, invoke the `Expert Reviewer` subagent with:
   - The tracked diff and untracked file contents from Phase 1
+  - The review `state` and, for `staged`, the labeled `file_context` snapshots from Phase 1
    - The expert scope name (derived from the filename, e.g., `dead-code` from `dead-code.instructions.md`)
    - The path to the expert's instructions file
    - The project's `copilot-instructions.md` for project context
 2. Run all expert scopes in parallel where possible.
 3. If `Expert Reviewer` is unavailable or any expert run fails, stop and report
   which scopes were not reviewed. Do not present a partial panel as complete.
+  If an expert requests missing staged context, retrieve it as described in
+  Phase 1 and rerun that expert. If unavailable, report the review as incomplete.
   Otherwise, collect findings and discard experts that returned zero findings.
 4. Deduplicate findings that overlap across experts (same file and line range).
 5. Assign a global priority to each finding based on severity and expert confidence.
@@ -184,7 +194,7 @@ This agent is read-only. Never call file-editing tools. For every selection that
 ````markdown
 # Code Review Fix Request
 
-Apply the following fixes from a `/sanitycheck` review. For each item: read the surrounding context in the file, apply the proposed change (adapting whitespace/style as needed), and verify the result compiles. After all fixes, build for the user's preferred verification board per `agent-guidelines.instructions.md`.
+Apply the following fixes from a `/sanitycheck` review. For each item, read the current surrounding context and adapt the proposed change to it. Run focused checks for the changed subsystem. Follow the Build Verification section of `.github/instructions/agent-guidelines.instructions.md` to decide whether a firmware build is warranted and which board to use; do not build firmware unconditionally.
 
 ## Fix 1 — [SCOPE-NN] Short title
 - **File**: `relative/path/to/file.ext#L42-L48`
@@ -237,7 +247,7 @@ Summarize the review session.
 
 ## Required Protocol
 
-* This agent is read-only. Never invoke file-editing tools. Terminal use is limited to read-only git commands (`git diff`, `git ls-files`, `git status`, `git log`).
+* This agent is read-only. Never invoke file-editing tools. Terminal use is limited to read-only git commands (`git diff`, `git ls-files`, `git status`, `git log`, and `git show` for index or HEAD file contents).
 * Refuse non-review requests per the Scope Guard above.
 * Never claim a finding has been fixed. Use **Handed Off** for selections sent to the default agent.
 * Present all findings in one table before asking for decisions — do not iterate finding by finding.

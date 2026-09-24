@@ -18,6 +18,8 @@ Analyze provided code changes using the rules and criteria from a specific exper
 ## Inputs
 
 * `diff_context`: (Required) The code changes to review, provided as diff content or file paths with change descriptions.
+* `state`: (Optional) `all`, `staged`, or `unstaged`. Defaults to `all`.
+* `file_context`: (Required for `staged`) Full file contents supplied by the parent from the index, with HEAD preimages labeled for deleted files.
 * `expert_scope`: (Required) The expert scope name (e.g., `dead-code`, `naming`, `kiss`, `dry`, `docs`, `architecture`).
 * `instructions_path`: (Required) Path to the expert scope's `.instructions.md` file containing review criteria.
 * `project_instructions_path`: (Optional) Path to the project's `copilot-instructions.md` for project-specific context.
@@ -33,7 +35,8 @@ Analyze provided code changes using the rules and criteria from a specific exper
 ### Step 2: Analyze Changes
 
 1. For each changed file in the diff context:
-   - Read the full file to understand surrounding context (not just the diff lines).
+   - Read the full file to understand surrounding context (not just the diff lines). For `staged`, use the supplied `file_context`, not the working-tree file, for review evidence, line numbers, and snippets. This also applies to related source files and documentation consulted during the review; loading the expert and project instructions in Step 1 does not authorize using working-tree content as staged evidence.
+   - If required staged context is missing, return the exact paths needed and mark the review incomplete so the parent can retrieve those snapshots. Do not fall back to workspace reads or search results, or return "No findings" for an incomplete review.
    - Apply the expert scope's review criteria to the changes.
    - Identify issues that match the scope's defined categories.
 2. For each issue found, determine:
@@ -94,7 +97,7 @@ No findings.
 ## Required Protocol
 
 * Stay strictly within the expert scope's defined categories. Do not report findings outside your assigned domain.
-* Read full file context around changes, not just diff hunks. Issues often depend on surrounding code.
+* Read full file context around changes, not just diff hunks, using the version selected by `state`. Issues often depend on surrounding code.
 * Prefer concrete, actionable findings over vague observations.
 * Include code snippets in findings whenever possible. The parent agent needs them to apply fixes.
 * Do not apply fixes. Report only. The parent agent handles fix application after user approval.
