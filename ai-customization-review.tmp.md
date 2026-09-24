@@ -46,7 +46,7 @@ Personal and extension-provided customizations are outside the repository invent
   resolve, and the workflow handles untracked files. Replace self-targeting
   triage handoffs and copy/paste fix handoffs only after testing an explicit,
   user-confirmed transition to an editing agent.
-* [ ] P2: Shorten [project-wide instructions](.github/copilot-instructions.md).
+* [x] P2: Shorten [project-wide instructions](.github/copilot-instructions.md).
   Keep non-obvious architecture rules and build commands; link to maintained
   documentation or on-demand instructions for subsystem details. Test a common
   coding task for missing context before and after the reduction.
@@ -68,6 +68,7 @@ Personal and extension-provided customizations are outside the repository invent
 | 2026-09-24 | P1   | Complete | User confirmed `/sanitycheck` produced full-panel findings and selected a fix for follow-up. |
 | 2026-09-24 | P1   | Complete | Removed global `applyTo` from all nine expert lenses. The reviewer read an explicit lens after the change; an unrelated task reported no expert bodies loaded automatically. |
 | 2026-09-24 | P1   | Complete | Renamed the parent to Review Panel and its private worker to Expert Reviewer; check discovery under the new names. |
+| 2026-09-24 | P2   | Complete | Reduced the main instructions from 223 lines to 49. Moved action and OTA contracts to scoped instructions; an action-authoring task retained the registry/manifest/test steps before and after, and a background OTA task found its safety rules. |
 
 ## References
 
