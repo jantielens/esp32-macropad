@@ -128,7 +128,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
         fragment = query.get("fragment", ["welcome"])[0]
         shell = shell.replace(
             '<script src="/portal.js?v=dev-mock"></script>',
-            '<script>window.__portalDevFragment = ' + json.dumps(fragment) + ';</script>\n'
+            '<script>window.location.hash = ' + json.dumps("#" + fragment) + ';</script>\n'
             '<script src="/portal.js?v=dev-mock"></script>',
         )
         self._serve_bytes(shell.encode("utf-8"), "text/html; charset=utf-8")
@@ -150,9 +150,6 @@ class PortalHandler(SimpleHTTPRequestHandler):
             APP_WEB_DIR / "portal.js",
         ]
         bundle = "\n\n".join(path.read_text(encoding="utf-8") for path in files)
-        bundle += "\nwindow.addEventListener('DOMContentLoaded', function () {\n"
-        bundle += "  if (window.__portalDevFragment) window.location.hash = '#' + window.__portalDevFragment;\n"
-        bundle += "});\n"
         self._serve_bytes(bundle.encode("utf-8"), "application/javascript; charset=utf-8")
 
     def _serve_production_styles(self):
@@ -257,6 +254,26 @@ def main():
     server = HTTPServer(("", args.port), PortalHandler)
     server.mock_config = {
         "epaper_frame_rotation": 1,
+        "epaper_frame_service_supported": True,
+        "epaper_frame_offline_queue_supported": True,
+        "epaper_frame_source_mode": "service",
+        "epaper_frame_service_url": "https://frame.example.test",
+        "epaper_frame_service_token_set": True,
+        "epaper_frame_service_interval_seconds": 900,
+        "epaper_frame_offline_refreshes_between_syncs": 3,
+        "epaper_frame_sd_cache_supported": True,
+        "epaper_frame_sd_cache_enabled": True,
+        "epaper_frame_crc32_enabled": True,
+        "epaper_frame_frontlight_brightness": 24,
+        "epaper_frame_frontlight_duration_s": 30,
+        "epaper_frame_wake_budget_ms": 26900,
+        "epaper_frame_wake_wifi_target_ms": 4000,
+        "epaper_frame_wake_wifi_budget_ms": 5500,
+        "epaper_frame_wake_fetch_target_ms": 2000,
+        "epaper_frame_wake_fetch_budget_ms": 3500,
+        "epaper_frame_wake_mqtt_target_ms": 750,
+        "epaper_frame_wake_mqtt_budget_ms": 1500,
+        "epaper_frame_wake_cutoff_retry_seconds": 0,
         "ep_sch_hrs": (1 << 24) - 1,
         "ep_sch_tz": 0,
         "ep_c0_url": "https://images.example.test/frame-a.jpg",

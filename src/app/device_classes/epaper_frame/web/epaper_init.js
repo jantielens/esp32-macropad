@@ -202,10 +202,11 @@ window.init_epaper_image_fragment = function () {
         sleepCurrentMa: 0.35,
         activeCurrentMa: 150,
         panelCurrentMa: 120,
-        onlineWorkSeconds: 8.5,
-        cachedWorkSeconds: 1.5,
+        onlineWorkSeconds: 12,
+        cachedWorkSeconds: 2.5,
         newPhotoWorkSeconds: 4.5,
         cacheInvalidationSeconds: 0.75,
+        batchPayloadWorkSeconds: 5.25,
         panelRefreshSeconds: 3.6,
         manualWorkSeconds: 5
     };
@@ -269,9 +270,21 @@ window.init_epaper_image_fragment = function () {
         var cachedWakes = batch ? scheduledWakes - onlineWakes : 0;
         var crcEnabled = document.getElementById('epaper_frame_crc32_enabled');
         var crc = overrides.crc != null ? overrides.crc : !!(crcEnabled && crcEnabled.checked);
-        var panelRefreshes = crc ? Math.min(scheduledWakes, newPhotos) : scheduledWakes;
+        var expectedImageChanges = Math.min(scheduledWakes, newPhotos);
+        var crcApplies = !service && crc;
+        var panelRefreshes = service
+            ? (batch ? scheduledWakes : expectedImageChanges)
+            : (crcApplies ? expectedImageChanges : scheduledWakes);
         panelRefreshes += manualRefreshes;
-        var photoWorkSeconds = newPhotos * (estimatorConstants.newPhotoWorkSeconds + estimatorConstants.cacheInvalidationSeconds);
+        // Batch entries are resolved from SD before their content URL is
+        // requested. Only newly cached queued images pay the payload cost;
+        // every queued image still needs its local render and panel update.
+        var photoWorkCount = batch
+            ? Math.min(cachedWakes, expectedImageChanges)
+            : expectedImageChanges;
+        var photoWorkSeconds = photoWorkCount * (batch
+            ? estimatorConstants.batchPayloadWorkSeconds
+            : estimatorConstants.newPhotoWorkSeconds + estimatorConstants.cacheInvalidationSeconds);
         var onlineMah = (onlineWakes * estimatorConstants.onlineWorkSeconds + photoWorkSeconds) * estimatorConstants.activeCurrentMa / 3600;
         var cachedMah = cachedWakes * estimatorConstants.cachedWorkSeconds * estimatorConstants.activeCurrentMa / 3600;
         var panelMah = panelRefreshes * estimatorConstants.panelRefreshSeconds * estimatorConstants.panelCurrentMa / 3600;
@@ -295,9 +308,11 @@ window.init_epaper_image_fragment = function () {
             cachedWakes: cachedWakes,
             offlineRefreshes: offlineRefreshes,
             photoWorkSeconds: photoWorkSeconds,
+            photoWorkCount: photoWorkCount,
             batch: batch,
             service: service,
             crc: crc,
+            crcApplies: crcApplies,
             capacity: capacity,
             newPhotos: newPhotos,
             manualRefreshes: manualRefreshes
@@ -453,10 +468,14 @@ window.init_epaper_image_fragment = function () {
             assumptions.textContent = 'Precise estimate: ' + (Number.isFinite(model.days) ? model.days.toFixed(2) : 'more than 730') + ' days\n' +
                 'Mode: ' + mode + '\n' +
                 'Battery: ' + model.capacity + ' mAh (75% usable = ' + Math.round(model.capacity * 0.75) + ' mAh)\n' +
-                'New photos: ' + model.newPhotos + '/day; manual refreshes: ' + model.manualRefreshes + '/day\n' +
+                (model.batch
+                    ? 'Queued image cache misses: ' + Math.round(model.photoWorkCount) + '/day; manual refreshes: ' + model.manualRefreshes + '/day\n'
+                    : 'New photos: ' + model.newPhotos + '/day; manual refreshes: ' + model.manualRefreshes + '/day\n') +
                 modeSettings + '\n' +
                 'Schedule: ' + schedule + batchSettings + '\n' +
-                'CRC32 change detection: ' + (crc && crc.checked ? 'enabled' : 'disabled') + '\n' +
+                (model.service
+                    ? 'CRC32 change detection: not used by Next API; server Keep responses control skipped refreshes\n'
+                    : 'CRC32 change detection: ' + (model.crc ? 'enabled' : 'disabled') + '\n') +
                 'Frontlight brightness: ' + frontlight + '/63\n' +
                 'Estimated daily use: ' + model.dailyMah.toFixed(2) + ' mAh/day\n' +
                 'Timing assumptions: online ' + estimatorConstants.onlineWorkSeconds + ' s, new photo fetch/cache ' +

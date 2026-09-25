@@ -463,9 +463,13 @@ suggestion. Its compact **Battery Horizon** heading stays visible while you
 scroll the page, with the estimator controls immediately below it. On narrow
 screens, the heading keeps the live estimate while the wide timeline is hidden
 to avoid horizontal scrolling. Its hero color adapts continuously to the
-estimate, and each new photo adds estimated WiFi fetch and cache-invalidation
-work. Actual life depends on the battery, board leakage, WiFi conditions, and
-manual use.
+estimate. Direct image URLs can use CRC32 sidecars to skip unchanged panel
+updates. In Service mode, the server's `Keep` response controls skipped
+updates instead. Each queued offline image still uses a full e-paper panel
+refresh. Only queued images missing from the SD cache add image-payload work
+to the preceding online sync.
+Actual life depends on the battery, board leakage, WiFi conditions, and manual
+use.
 
 On the reTerminal E1003 in **Photoframe Next Image API** Service mode, the page
 also exposes **Offline refreshes between syncs**. It is available only while SD
@@ -473,7 +477,8 @@ image caching is supported and enabled. Choose `0` (the default) through `16`:
 the device fetches up to the selected number of later images during an online
 sync, then displays them on later timer wakes without Wi-Fi. The hint calculates
 the resulting approximate online-sync cadence from the Service refresh interval.
-Higher values save battery but delay new server selections and MQTT telemetry.
+Higher values avoid Wi-Fi on later wakes, but each queued image still refreshes
+the e-paper panel. They also delay new server selections and MQTT telemetry.
 Changing the offline count or network timing fields automatically recalculates
 **Maximum scheduled wake time** for the first and queued images. Edit the
 maximum last to override the estimate; reopening the page preserves the saved

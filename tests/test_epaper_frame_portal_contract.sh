@@ -106,6 +106,48 @@ vm.runInNewContext('recalculateWakeMaximum();', context);
 assert.equal(wakeMaximum.value, '40900', 'incomplete input preserves the previous value');
 NODE
 
+node <<'NODE'
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync('src/app/device_classes/epaper_frame/web/epaper_init.js', 'utf8');
+const calculation = source.match(/    var estimatorConstants = \{[\s\S]*?\n    \}\n\n    function estimateTimelinePosition/);
+assert.ok(calculation, 'battery estimator model exists');
+const fields = {
+    'epaper-estimator-capacity': {value: '2000'},
+    'epaper-estimator-new-photos': {value: '0'},
+    'epaper-estimator-manual-refreshes': {value: '0'},
+    epaper_frame_offline_refreshes_between_syncs: {value: '5'},
+    epaper_frame_crc32_enabled: {checked: true},
+    epaper_frame_service_interval_seconds: {value: '60'}
+};
+const context = {
+    sourceMode: {value: 'service'},
+    sdCacheEnabled: {checked: true},
+    readHoursMask: () => 0xffff,
+    hourEnabled: (mask, hour) => (mask & (1 << hour)) !== 0,
+    document: {
+        getElementById: (id) => fields[id] || null,
+        querySelector: () => null
+    }
+};
+vm.runInNewContext(calculation[0].replace(/\n    function estimateTimelinePosition[\s\S]*/, ''), context);
+let model = context.estimatorModel();
+assert.equal(model.scheduledWakes, 960, '16 enabled hours at 60 seconds');
+assert.equal(model.panelRefreshes, 960, 'queued service images always refresh the panel');
+assert.equal(model.crcApplies, false, 'CRC sidecars do not apply to the service API');
+assert.equal(model.photoWorkCount, 0, 'a warm queue does not redownload cached payloads');
+fields['epaper-estimator-new-photos'].value = '7';
+model = context.estimatorModel();
+assert.equal(model.photoWorkCount, 7, 'new queued content is charged as a cache miss');
+fields['epaper-estimator-new-photos'].value = '0';
+context.sourceMode.value = 'slot-carousel';
+context.sdCacheEnabled.checked = false;
+model = context.estimatorModel();
+assert.equal(model.panelRefreshes, 0, 'CRC can skip unchanged direct URLs');
+assert.equal(model.crcApplies, true, 'CRC applies to direct URLs');
+NODE
+
 if grep -R -nE '(name="epaper_(source_mode|service_|wake_|rotation|crc32_enabled|sd_cache_|overlay_|frontlight_)|cfg\.epaper_(source_mode|service_|wake_|rotation|crc32_enabled|sd_cache_|overlay_|frontlight_|carousel|schedule_))' \
     src/app/device_classes/epaper_frame/web; then
     echo "FAIL: retired E-Paper Frame portal config key found" >&2

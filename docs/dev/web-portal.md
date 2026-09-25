@@ -2222,7 +2222,11 @@ DNS server redirects all requests to device IP in AP mode:
     estimate. On narrow screens, the estimate remains visible while the wide
     timeline is hidden to prevent horizontal scrolling. Each configured new
     photo adds estimated fetch and cache-invalidation work without becoming a
-    persisted config field.
+    persisted config field. The calculation follows the active source mode:
+    direct image URLs can use CRC32 sidecars to skip unchanged panel updates,
+    while Next API Service mode relies on its `Keep` response. When Service
+    batching is enabled, every queued image is budgeted as a panel refresh and
+    only queued SD-cache misses add payload work to the preceding online sync.
 
 2. Rebuild to embed assets:
    ```bash
