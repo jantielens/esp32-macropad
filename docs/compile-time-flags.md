@@ -1023,6 +1023,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_sounds.cpp
   - src/app/web_portal_sounds.h
 - **HAS_STORAGE_BROWSER**
+  - src/app/app.ino
   - src/app/board_config.h
   - src/app/components/camera_component.cpp
   - src/app/components/storage_component.cpp

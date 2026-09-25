@@ -465,6 +465,9 @@ void setup()
 	// Initialize icon store and preload icons for all pads
 	icon_store_init();
 	icon_store_preload_pad_pages();
+	#elif HAS_STORAGE_BROWSER
+	// Headless portal boards still need the shared filesystem for Storage.
+	storage_mount();
 	#endif
 
 	#if CAMERA_MOTION_ACTIONS_ENABLED
