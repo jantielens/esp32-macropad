@@ -41,6 +41,22 @@ For device-class wiring and branding, use the
 [build/release guide](../docs/dev/build-and-release-process.md).
 The [MCP guide](../docs/mcp-guide.md) covers device control and pad authoring.
 
+## Local Portal Development
+
+For portal-only HTML, CSS, or JavaScript work, prefer the device-free portal
+server before building or flashing firmware:
+
+```bash
+python3 tools/portal-dev-server.py --port 8765
+```
+
+It serves production portal assets and fragments with deterministic in-memory
+API fixtures. Open `http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image`
+for the E-Paper Frame image workflow. Reload the browser for served asset
+changes; restart the server only after changing its Python source. Use focused
+portal checks for these changes. A firmware build is not required unless the
+firmware contract or native behavior also changes.
+
 ## Build And Tests
 
 * `./build.sh <board>` builds one board; bare `./build.sh` builds all boards

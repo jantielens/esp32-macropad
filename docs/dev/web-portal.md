@@ -5,6 +5,29 @@ description: Developer reference for the ESP32 Macropad web portal architecture,
 
 The ESP32 template includes a full-featured web portal for device configuration, monitoring, and firmware updates. The portal uses an async web server with captive portal support for initial setup.
 
+## Local Device-Free Development
+
+Use `tools/portal-dev-server.py` to iterate on portal UI without a connected
+device or firmware build. It serves the production portal shell, core CSS and
+JavaScript sources, and available fragments from `src/app`, while replacing
+device API requests with deterministic in-memory fixtures.
+
+```bash
+python3 tools/portal-dev-server.py --port 8765
+```
+
+Open a fragment directly by passing its profile and fragment ID. For example,
+the E-Paper Frame image workflow is available at:
+
+```text
+http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
+```
+
+Changes to served HTML, CSS, and JavaScript are applied on the next browser
+reload. Restart the server after changing `tools/portal-dev-server.py`. Mock
+configuration writes remain in memory for the server process and never reach a
+physical device.
+
 ## Overview
 
 The web portal provides:
@@ -2187,6 +2210,19 @@ DNS server redirects all requests to device IP in AP mode:
     caching. It accepts only `0..16`; the UI supplies an interval-based cadence
     hint and explains that longer offline runs delay new server content and MQTT
     telemetry.
+
+    The e-paper Image & Schedule fragment also contains a client-only Battery
+    Horizon estimator. Its battery capacity, new-photo, and manual-refresh
+    sliders are deliberately not registered configuration fields and are never
+    posted to `/api/config`. The estimator uses the current unsaved form values
+    to show a precise day estimate on a compressed timeline, an approximate
+    daily energy budget, detailed assumptions, and context-sensitive
+    battery-saving tips. Its Battery Horizon hero remains visible as a compact
+    sticky section above the estimator controls; the hero color adapts to the
+    estimate. On narrow screens, the estimate remains visible while the wide
+    timeline is hidden to prevent horizontal scrolling. Each configured new
+    photo adds estimated fetch and cache-invalidation work without becoming a
+    persisted config field.
 
 2. Rebuild to embed assets:
    ```bash

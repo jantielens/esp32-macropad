@@ -201,6 +201,7 @@ The pad editor lets you design button layouts visually: drag-to-move and drag-to
 ### Developer Documentation
 
 Building from source, contributing, or adding new board support? See the [developer docs](docs/dev/).
+For portal-only UI work, use the [device-free portal development server](docs/dev/web-portal.md#local-device-free-development) to work against production assets without flashing a board.
 
 ### Running Tests
 

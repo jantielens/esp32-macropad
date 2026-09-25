@@ -2,6 +2,30 @@
 
 This project includes several bash scripts to streamline ESP32 development workflow.
 
+## tools/portal-dev-server.py
+
+**Purpose:** Run the production portal UI locally without a device or firmware
+build. The server serves the production shell, core assets, and available
+fragments with deterministic in-memory API fixtures.
+
+**Usage:**
+
+```bash
+python3 tools/portal-dev-server.py --port 8765
+```
+
+Open a fragment with its profile and ID:
+
+```text
+http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
+```
+
+**Notes:**
+
+* Reload the browser after changing a served HTML, CSS, or JavaScript source.
+* Restart the server after changing `tools/portal-dev-server.py`.
+* Mock API writes are process-local and do not contact a device.
+
 ## config.sh
 
 **Purpose:** Common configuration and helper functions used by all scripts.

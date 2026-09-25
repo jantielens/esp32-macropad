@@ -448,11 +448,24 @@ The E-Paper page configures the battery-oriented image workflow:
 | **Hourly refresh window** | 24-hour local-time mask that can disable refreshes during selected hours to save battery |
 | **Timezone offset** | Fixed UTC offset used to evaluate the hourly window |
 | **WiFi Failure Backoff** | Maximum WiFi retry sleep after repeated failures |
+| **Battery Horizon** | Client-side estimate based on battery size, new photos per day, manual refreshes, and the current image settings |
 | **Status** | Read-only refresh counters, timing, battery, and manual refresh action |
 | **Overlay** | Status overlay position/color/fields drawn on the image |
 | **VCOM** | Inkplate TPS65186 calibration controls |
 
 Duration is per slot and applies while that slot is active. The page does not expose a separate "wake every" control.
+
+The **Battery Horizon** estimator is informational only. Its sliders are not
+saved to the device and do not change the image schedule. It uses a conservative
+planning model to show a precise day estimate on a compressed timeline, a daily
+energy budget, detailed assumptions, and a mode-specific battery-saving
+suggestion. Its compact **Battery Horizon** heading stays visible while you
+scroll the page, with the estimator controls immediately below it. On narrow
+screens, the heading keeps the live estimate while the wide timeline is hidden
+to avoid horizontal scrolling. Its hero color adapts continuously to the
+estimate, and each new photo adds estimated WiFi fetch and cache-invalidation
+work. Actual life depends on the battery, board leakage, WiFi conditions, and
+manual use.
 
 On the reTerminal E1003 in **Photoframe Next Image API** Service mode, the page
 also exposes **Offline refreshes between syncs**. It is available only while SD

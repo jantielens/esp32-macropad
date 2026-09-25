@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-24
+ms.date: 2026-09-25
 ms.topic: reference
 ---
 
@@ -11,6 +11,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+* **Device-free portal development server**: `python3 tools/portal-dev-server.py`
+  serves the production portal shell, core assets, and available fragments with
+  deterministic in-memory API fixtures. Developers can work on portal UI without
+  flashing or connecting a device, including deep links such as
+  `?profile=reterminal-e1003-frame&fragment=epaper-image`.
+* **E-Paper Frame Battery Horizon**: a client-side battery-life estimator now
+  combines battery capacity, image workload, refresh settings, and hourly
+  scheduling into a live day estimate, timeline, daily energy budget, detailed
+  assumptions, and context-aware battery-saving tips. The compact sticky horizon
+  remains visible with its controls while the page scrolls; schedule shortcuts
+  update the estimate immediately, and narrow screens hide the wide timeline to
+  avoid horizontal scrolling.
 
 ## [1.33.0] - 2026-09-24
 
