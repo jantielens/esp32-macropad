@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.34.0] - 2026-09-28
 
 ### Added
 
@@ -25,7 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ESP32-S3 and ESP32-P4. Inkplate 6FLICK Interactive is the first classic ESP32
   board to use it, with one 32 KiB ELF slot. Signed `-esp32.ext` packages are
   built and published without a catalog-wide size filter; each device enforces
-  its own slot capacity.
+  its own slot capacity. Inkplate 6FLICK Interactive uses a 3.5625 MiB no-OTA
+  app partition, 280 KiB LittleFS filesystem, and 40 KiB Extensions partition.
+  Back up stored files before serial-flashing the new layout and restore them
+  afterward; the smaller filesystem cannot preserve the old contents.
 * **E-Paper Frame wake diagnostics**: an optional, downloadable and clearable
   wake CSV records refresh outcomes, battery readings, batch request results,
   fallback timing, and the preceding wake's requested sleep interval. The
@@ -43,13 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains visible with its controls while the page scrolls; schedule shortcuts
   update the estimate immediately, and narrow screens hide the wide timeline to
   avoid horizontal scrolling.
-
-### Changed
-
-* Inkplate 6FLICK Interactive now uses a 3.5625 MiB no-OTA app partition,
-  280 KiB LittleFS filesystem, and 40 KiB Extensions partition. Back up stored
-  files before serial-flashing the new layout and restore them afterward; the
-  smaller filesystem cannot preserve the old contents.
 
 ### Fixed
 
