@@ -197,7 +197,7 @@ static void start_fade(ScreenSaverState newState, uint8_t from, uint8_t to, uint
 		if (duration_ms == 0) {
 				g_current_brightness = to;
 				apply_brightness(to);
-				if (to == 0) complete_fade_out();
+				if (newState == ScreenSaverState::FadingOut) complete_fade_out();
 				else enter_awake();
 				return;
 		}
@@ -391,7 +391,7 @@ static void update_fade() {
 		if (elapsed >= g_fade_duration_ms) {
 				g_current_brightness = g_fade_to;
 				apply_brightness(g_fade_to);
-				if (g_fade_to == 0) complete_fade_out();
+				if (g_state == ScreenSaverState::FadingOut) complete_fade_out();
 				else enter_awake();
 				return;
 		}

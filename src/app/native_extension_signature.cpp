@@ -4,6 +4,13 @@
 
 #include <mbedtls/ecdsa.h>
 #include <mbedtls/sha256.h>
+#include <mbedtls/version.h>
+
+#if MBEDTLS_VERSION_NUMBER < 0x03000000
+#define EXTENSION_ECP_FIELD(field) field
+#else
+#define EXTENSION_ECP_FIELD(field) MBEDTLS_PRIVATE(field)
+#endif
 
 namespace {
 
@@ -25,13 +32,18 @@ bool verify_with_key(const uint8_t* elf, size_t elf_size,
     uint8_t hash[32] = {};
     mbedtls_ecdsa_context context;
     mbedtls_ecdsa_init(&context);
+#if MBEDTLS_VERSION_NUMBER < 0x03000000
+    mbedtls_sha256(elf, elf_size, hash, 0);
+    const int hash_result = 0;
+#else
     const int hash_result = mbedtls_sha256(elf, elf_size, hash, 0);
+#endif
     const int group_result = hash_result == 0
-                                 ? mbedtls_ecp_group_load(&context.MBEDTLS_PRIVATE(grp), MBEDTLS_ECP_DP_SECP256R1)
+                                 ? mbedtls_ecp_group_load(&context.EXTENSION_ECP_FIELD(grp), MBEDTLS_ECP_DP_SECP256R1)
                                  : -1;
     const int point_result = group_result == 0
-                                 ? mbedtls_ecp_point_read_binary(&context.MBEDTLS_PRIVATE(grp),
-                                                                 &context.MBEDTLS_PRIVATE(Q),
+                                 ? mbedtls_ecp_point_read_binary(&context.EXTENSION_ECP_FIELD(grp),
+                                                                 &context.EXTENSION_ECP_FIELD(Q),
                                                                  public_key, public_key_size)
                                  : -1;
     mbedtls_mpi r;
@@ -46,8 +58,8 @@ bool verify_with_key(const uint8_t* elf, size_t elf_size,
                                                        NATIVE_EXTENSION_SIGNATURE_SIZE / 2)
                              : -1;
     const int verify_result = s_result == 0
-                                  ? mbedtls_ecdsa_verify(&context.MBEDTLS_PRIVATE(grp), hash, sizeof(hash),
-                                                         &context.MBEDTLS_PRIVATE(Q), &r, &s)
+                                  ? mbedtls_ecdsa_verify(&context.EXTENSION_ECP_FIELD(grp), hash, sizeof(hash),
+                                                         &context.EXTENSION_ECP_FIELD(Q), &r, &s)
                                   : -1;
     mbedtls_mpi_free(&s);
     mbedtls_mpi_free(&r);

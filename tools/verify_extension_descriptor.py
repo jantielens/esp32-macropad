@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate an ABI descriptor embedded in a 32-bit little-endian RISC-V ELF."""
+"""Validate an ABI descriptor embedded in a 32-bit little-endian ELF."""
 
 import re
 import struct
@@ -34,9 +34,9 @@ def main() -> None:
     target_abi = sys.argv[3] if len(sys.argv) == 4 else constant(header, "NATIVE_EXTENSION_TARGET_ABI").strip('"')
     descriptor_magic = int(re.search(r"0x[0-9A-Fa-f]+", constant(header, "NATIVE_EXTENSION_DESCRIPTOR_MAGIC")).group(), 16)
 
-    match = re.fullmatch(r"([a-z0-9-]+)@([0-9]+\.[0-9]+\.[0-9]+)(?:-(?:p4|s3))?\.elf", elf_path.name)
+    match = re.fullmatch(r"([a-z0-9-]+)@([0-9]+\.[0-9]+\.[0-9]+)(?:-(?:p4|s3|esp32))?\.elf", elf_path.name)
     if not match:
-        fail("filename must be <extension-id>@<package-semver>[-p4|-s3].elf")
+        fail("filename must be <extension-id>@<package-semver>[-p4|-s3|-esp32].elf")
     filename_id, filename_version = match.groups()
 
     data = elf_path.read_bytes()

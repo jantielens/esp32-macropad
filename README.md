@@ -9,7 +9,7 @@ ESP32 Macropad is open-source firmware that transforms affordable ESP32 developm
 ### Pads, buttons & widgets
 - **Up to 16 pads** with configurable grids (up to 8×8, board-dependent), per-pad backgrounds, and multi-cell button spans
 - **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols) with configurable icon position, background images, icon + center label co-display, and a per-label style DSL (font family, size, alignment, overflow)
-- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal, up to 4 bars with per-bar captions and gauge-style scale options), sparkline (multi-line with reference markers), table, list (scrollable item picker), **rocker** (split-button up/down or left/right), **numeric rocker** (4-zone fine/coarse adjustment), and trusted native **Extensions** on ESP32-P4 and supported ESP32-S3 boards
+- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal, up to 4 bars with per-bar captions and gauge-style scale options), sparkline (multi-line with reference markers), table, list (scrollable item picker), **rocker** (split-button up/down or left/right), **numeric rocker** (4-zone fine/coarse adjustment), and trusted native **Extensions** on ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive
 - **Home Assistant history for sparklines** — backfill long-term Recorder statistics after reboot, with wall-clock alignment and live readings taking precedence
 - **Smooth animations** — gauges, bars, and needles ease into new values instead of jumping
 - **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
@@ -65,7 +65,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status
 - **Optional HTTP Basic Auth** for portal access
 - **SD card support** — use a FAT32 MicroSD card for pad configurations, icons, sounds, and indexed data on supported boards
-- **Native Extensions** — install trusted native modules in explicit slots on ESP32-P4 and supported ESP32-S3 boards; P4 modules execute from flash, while S3 modules use executable internal RAM for code and PSRAM for data. Place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. Download the package that matches the device target from the [Firmware Installer](https://jantielens.github.io/esp32-macropad/), then upload it through the device portal. See the [Extension developer guide](docs/dev/extensions.md).
+- **Native Extensions** — install trusted native modules in explicit slots on ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive (one 32 KiB slot). P4 modules execute from flash; Xtensa modules use executable internal RAM for code and PSRAM for data. Place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. Download the package for your device target from the [Firmware Installer](https://jantielens.github.io/esp32-macropad/), then upload it through the device portal. Packages larger than a board's slot are rejected. See the [Extension developer guide](docs/dev/extensions.md).
 
 ## 💡 What Can You Build?
 
@@ -196,7 +196,7 @@ The pad editor lets you design button layouts visually: drag-to-move and drag-to
 | [E-Paper Frame Guide](docs/epaper-frame-guide.md) | Detailed guide for the E-Paper Frame device class, carousel/schedule model, wake behavior, and status semantics |
 | [Home Assistant Integration](docs/ha-integration-guide.md) | HA entity reference, audio control, and automation examples |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |
-| [Extension Developer Guide](docs/dev/extensions.md) | Build, install, and author trusted native ESP32-P4 and ESP32-S3 Extensions |
+| [Extension Developer Guide](docs/dev/extensions.md) | Build, install, and author trusted native ESP32-P4, ESP32-S3, and classic ESP32 Extensions |
 
 ### Developer Documentation
 

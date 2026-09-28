@@ -44,6 +44,7 @@ while IFS= read -r source; do
     package_name="$(python3 tools/extension_package_name.py "$source")"
     : > "$TMP_DIR/build/extensions/${package_name%.elf}-p4.ext"
     : > "$TMP_DIR/build/extensions/${package_name%.elf}-s3.ext"
+    : > "$TMP_DIR/build/extensions/${package_name%.elf}-esp32.ext"
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/ | sort)
 
 GITHUB_SHA=smoketest \
@@ -55,5 +56,7 @@ BUILD_DIR="$TMP_DIR/build" \
 test -f "$TMP_DIR/site/manifests/esp32-p4-lcd4b-voice.json"
 grep -q 'ESP32-MP Voice Assistant' "$TMP_DIR/site/index.html"
 find "$TMP_DIR/site/extensions" -maxdepth 1 -name '*.ext' -print -quit | grep -q .
+grep -q 'ESP32 download' "$TMP_DIR/site/index.html"
+test -f "$TMP_DIR/site/extensions/hello-world@1.0.0-esp32.ext"
 
 echo "ESP Web Tools site smoke test passed"

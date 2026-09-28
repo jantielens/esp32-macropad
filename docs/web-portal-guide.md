@@ -558,6 +558,10 @@ On ESP32-P4 and supported 16 MB ESP32-S3 display builds, the **Extensions** page
 has two small slots and one large slot for trusted native Extensions. Upload the
 signed package `extension-id@version-p4.ext` or `extension-id@version-s3.ext`
 that matches the device, then reboot to install it into executable flash.
+Inkplate 6FLICK Interactive has one 32 KiB slot and requires a signed
+`extension-id@version-esp32.ext` package. Before enabling Extensions on an
+existing Inkplate, back up stored data and serial-flash the new partition table;
+it reduces filesystem space.
 The package contains the Extension ELF and its first-party signature; unsigned
 or modified packages are rejected. Select **Extension** as a button's widget,
 choose an enabled installed extension, and optionally provide per-button

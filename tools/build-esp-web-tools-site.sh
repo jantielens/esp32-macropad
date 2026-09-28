@@ -536,7 +536,7 @@ while IFS= read -r source; do
   if [[ -n "$repo_owner" && -n "$repo_name" && -f "$readme_file" ]]; then
     extension_readme_html="<a class=\"extension-readme\" href=\"https://github.com/${repo_owner}/${repo_name}/blob/main/extensions/${extension_dir}/README.md\" target=\"_blank\" rel=\"noreferrer\">README on GitHub</a>"
   fi
-  for target in p4 s3; do
+  for target in p4 s3 esp32; do
     package_name="$package_base-$target.ext"
     package_file="$BUILD_DIR/extensions/$package_name"
     if [[ ! -f "$package_file" ]]; then

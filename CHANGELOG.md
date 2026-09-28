@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-25
+ms.date: 2026-09-28
 ms.topic: reference
 ---
 
@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Native Extension support now includes classic ESP32 devices alongside
+  ESP32-S3 and ESP32-P4. Inkplate 6FLICK Interactive is the first classic ESP32
+  board to use it, with one 32 KiB ELF slot. Signed `-esp32.ext` packages are
+  built and published without a catalog-wide size filter; each device enforces
+  its own slot capacity.
 * **E-Paper Frame wake diagnostics**: an optional, downloadable and clearable
   wake CSV records refresh outcomes, battery readings, batch request results,
   fallback timing, and the preceding wake's requested sleep interval. The
@@ -33,6 +38,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains visible with its controls while the page scrolls; schedule shortcuts
   update the estimate immediately, and narrow screens hide the wide timeline to
   avoid horizontal scrolling.
+
+### Changed
+
+* Inkplate 6FLICK Interactive now uses a 3.5625 MiB no-OTA app partition,
+  280 KiB LittleFS filesystem, and 40 KiB Extensions partition. Back up stored
+  files before serial-flashing the new layout and restore them afterward; the
+  smaller filesystem cannot preserve the old contents.
+
+### Fixed
+
+* Waking at 0% brightness now restores the awake state instead of treating the
+  unlit frontlight as Display Sleep. Extensions continue updating during
+  backlight-only sleep on e-paper, while LCD boards retain their rendering
+  pause during Display Sleep.
+* Word Clock can use the bundled 12-pixel Bebas font in compact buttons whose
+  letter cells are 11 pixels high, avoiding an unavailable widget on those
+  layouts.
+* Reinstalling an existing custom partition scheme now updates its registered
+  maximum app size to match the current CSV instead of retaining the old limit.
 
 ## [1.33.0] - 2026-09-24
 

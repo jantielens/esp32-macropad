@@ -542,11 +542,12 @@ The button editor's Extension widget stores `extension_upscale` (integer 1 to
 4, default 1) in the pad JSON. The host scales direct child RGB565 canvases
 from the reduced Extension root back to the full button size.
 
-ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native Extensions. The
-Extensions page exposes two small slots (56 KiB each) and one large slot
-(120 KiB). Upload a signed package named `<extension-id>@<version>-p4.ext` or
-`<extension-id>@<version>-s3.ext` that matches the device. It contains a
-relocation-free native ELF followed by its fixed 64-byte ECDSA P-256 signature;
+ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native
+Extensions in two 56 KiB slots and one 120 KiB slot. Inkplate 6FLICK
+Interactive provides one 32 KiB slot. Upload a signed package named
+`<extension-id>@<version>-p4.ext`, `<extension-id>@<version>-s3.ext`, or
+`<extension-id>@<version>-esp32.ext` that matches the device. It contains a
+native ELF followed by its fixed 64-byte ECDSA P-256 signature;
 it stages on the configured storage backend and installs into the selected
 executable flash slot during the next boot.
 
@@ -564,8 +565,10 @@ editor's **Extension** widget selects an enabled installed extension and passes
 its per-button configuration text to the native instance.
 
 Supported P4 and S3 boards use an `_ext` partition scheme, which reserves a
-256 KiB raw `extensions` partition. Flash the first firmware using this scheme
-over USB before attempting portal uploads.
+256 KiB raw `extensions` partition. Inkplate 6FLICK Interactive uses
+`huge_app_ext` with a 40 KiB partition carved out of its filesystem. Back up
+stored data and flash the first firmware using the new scheme over serial before
+attempting portal uploads.
 
 ### Music Library
 

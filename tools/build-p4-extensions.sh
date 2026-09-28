@@ -25,6 +25,7 @@ while IFS= read -r source; do
     package_base=${package_name%.elf}
     bash "$SCRIPT_DIR/build-extension.sh" p4 "$source" "$OUTPUT_DIR/$package_base-p4.elf"
     bash "$SCRIPT_DIR/build-extension.sh" s3 "$source" "$OUTPUT_DIR/$package_base-s3.elf"
+    bash "$SCRIPT_DIR/build-extension.sh" esp32 "$source" "$OUTPUT_DIR/$package_base-esp32.elf"
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/)
 
 if [[ $found -eq 0 ]]; then

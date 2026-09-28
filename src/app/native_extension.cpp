@@ -34,9 +34,15 @@ namespace {
 constexpr uint32_t SLOT_MAGIC = 0x34545845u;
 constexpr uint32_t STAGE_MAGIC = 0x33544753u;
 constexpr uint32_t ELF_OFFSET = 0x2000;
+#if defined(CONFIG_IDF_TARGET_ESP32)
+constexpr uint32_t SLOT_OFFSET[NATIVE_EXTENSION_SLOT_COUNT] = {0};
+constexpr uint32_t SLOT_SIZE[NATIVE_EXTENSION_SLOT_COUNT] = {0xA000};
+constexpr uint32_t SLOT_CAPACITY[NATIVE_EXTENSION_SLOT_COUNT] = {0x8000};
+#else
 constexpr uint32_t SLOT_OFFSET[NATIVE_EXTENSION_SLOT_COUNT] = {0x00000, 0x10000, 0x20000};
 constexpr uint32_t SLOT_SIZE[NATIVE_EXTENSION_SLOT_COUNT] = {0x10000, 0x10000, 0x20000};
 constexpr uint32_t SLOT_CAPACITY[NATIVE_EXTENSION_SLOT_COUNT] = {0xE000, 0xE000, 0x1E000};
+#endif
 constexpr uint16_t ELF_TYPE_EXEC = 2;
 constexpr uint16_t ELF_TYPE_DYN = 3;
 constexpr uint16_t ELF_MACHINE_RISCV = 243;
@@ -71,7 +77,9 @@ static_assert(sizeof(ElfHeader) == 52 && sizeof(ElfProgram) == 32 && sizeof(ElfS
 
 struct LoadedSlot {
     void* mapping;
+#if !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32)
     esp_partition_mmap_handle_t mapping_handle;
+#endif
     void* data_mapping;
     void* extension_data;
     uint8_t active_instances;
@@ -129,7 +137,7 @@ void clear_canvas_buffer(void* canvas) {
 bool valid_slot(uint8_t slot) { return slot < NATIVE_EXTENSION_SLOT_COUNT; }
 bool range_valid(size_t offset, size_t size, size_t total) { return offset <= total && size <= total - offset; }
 bool elf_symbol_section(uint32_t type) {
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32)
     return type == ELF_SHT_SYMTAB;
 #else
     return type == ELF_SHT_DYNSYM;
@@ -749,16 +757,19 @@ bool parse_filename(const char* filename, NativeExtensionSlotHeader* header) {
     if (!at || !dot || at == filename || at >= dot || strcmp(dot, ".ext") != 0 ||
         static_cast<size_t>(at - filename) >= sizeof(header->id) ||
         version_len >= sizeof(header->version)) return false;
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    constexpr const char* TARGET_SUFFIX = "-esp32";
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
     constexpr const char* TARGET_SUFFIX = "-s3";
 #else
     constexpr const char* TARGET_SUFFIX = "-p4";
 #endif
-    if (version_len >= 3 && version[version_len - 3] == '-' &&
-        (memcmp(version + version_len - 2, "p4", 2) == 0 ||
-         memcmp(version + version_len - 2, "s3", 2) == 0)) {
-        if (memcmp(version + version_len - 3, TARGET_SUFFIX, 3) != 0) return false;
-        version_len -= 3;
+    const char* suffix = strrchr(version, '-');
+    const size_t suffix_len = suffix && suffix < dot ? static_cast<size_t>(dot - suffix) : 0;
+    if ((suffix_len == 3 && (memcmp(suffix, "-p4", 3) == 0 || memcmp(suffix, "-s3", 3) == 0)) ||
+        (suffix_len == 6 && memcmp(suffix, "-esp32", 6) == 0)) {
+        if (strlen(TARGET_SUFFIX) != suffix_len || memcmp(suffix, TARGET_SUFFIX, suffix_len) != 0) return false;
+        version_len = static_cast<size_t>(suffix - version);
     }
     if (version_len == 0) return false;
     memset(header, 0, sizeof(*header));
@@ -858,7 +869,7 @@ bool read_descriptor(const uint8_t* file, size_t len, NativeExtensionDescriptor*
     return false;
 }
 
-bool s3_image_size(const ElfProgram* programs, uint16_t count, size_t* out_size) {
+bool xtensa_image_size(const ElfProgram* programs, uint16_t count, size_t* out_size) {
     size_t image_size = 0;
     for (uint16_t index = 0; index < count; ++index) {
         const ElfProgram& program = programs[index];
@@ -872,7 +883,7 @@ bool s3_image_size(const ElfProgram* programs, uint16_t count, size_t* out_size)
     return true;
 }
 
-bool s3_executable_image_size(const ElfSection* sections, uint16_t count, size_t* out_size) {
+bool xtensa_executable_image_size(const ElfSection* sections, uint16_t count, size_t* out_size) {
     size_t image_size = 0;
     for (uint16_t index = 0; index < count; ++index) {
         const ElfSection& section = sections[index];
@@ -886,7 +897,7 @@ bool s3_executable_image_size(const ElfSection* sections, uint16_t count, size_t
     return true;
 }
 
-bool s3_address_is_executable(const ElfSection* sections, uint16_t count, uint32_t address) {
+bool xtensa_address_is_executable(const ElfSection* sections, uint16_t count, uint32_t address) {
     for (uint16_t index = 0; index < count; ++index) {
         const ElfSection& section = sections[index];
         if (section.addr > UINT32_MAX - section.size) continue;
@@ -896,20 +907,20 @@ bool s3_address_is_executable(const ElfSection* sections, uint16_t count, uint32
     return false;
 }
 
-uint8_t* s3_runtime_address(uint8_t* executable_image, uint8_t* data_image,
+uint8_t* xtensa_runtime_address(uint8_t* executable_image, uint8_t* data_image,
                             const ElfSection* sections, uint16_t section_count,
                             uint32_t address) {
-    return (s3_address_is_executable(sections, section_count, address) ?
+    return (xtensa_address_is_executable(sections, section_count, address) ?
             executable_image : data_image) + address;
 }
 
-bool load_s3_image(const uint8_t* file, size_t len, const ElfHeader* elf,
+bool load_xtensa_image(const uint8_t* file, size_t len, const ElfHeader* elf,
                    const ElfProgram* programs, const ElfSection* sections,
                    void** out_executable_image, void** out_data_image) {
     size_t image_size = 0;
     size_t executable_image_size = 0;
-    if (!s3_image_size(programs, elf->phnum, &image_size) ||
-        !s3_executable_image_size(sections, elf->shnum, &executable_image_size) ||
+    if (!xtensa_image_size(programs, elf->phnum, &image_size) ||
+        !xtensa_executable_image_size(sections, elf->shnum, &executable_image_size) ||
         (image_size & 3)) return false;
     uint32_t* executable_image = static_cast<uint32_t*>(heap_caps_malloc(
         executable_image_size, MALLOC_CAP_EXEC | MALLOC_CAP_32BIT));
@@ -953,9 +964,9 @@ bool load_s3_image(const uint8_t* file, size_t len, const ElfHeader* elf,
                 heap_caps_free(data_image);
                 return false;
             }
-            uint32_t* target = reinterpret_cast<uint32_t*>(s3_runtime_address(
+            uint32_t* target = reinterpret_cast<uint32_t*>(xtensa_runtime_address(
                 reinterpret_cast<uint8_t*>(executable_image), data_image, sections, elf->shnum, relocation.offset));
-            *target = reinterpret_cast<uintptr_t>(s3_runtime_address(
+            *target = reinterpret_cast<uintptr_t>(xtensa_runtime_address(
                 reinterpret_cast<uint8_t*>(executable_image), data_image, sections, elf->shnum, *target));
         }
     }
@@ -968,7 +979,7 @@ bool valid_elf(const uint8_t* elf_data, size_t elf_size) {
     if (!elf_data || elf_size < sizeof(ElfHeader)) return false;
     const ElfHeader* elf = reinterpret_cast<const ElfHeader*>(elf_data);
     const bool expected_target =
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32)
     elf->type == ELF_TYPE_DYN && elf->machine == ELF_MACHINE_XTENSA;
 #else
         elf->type == ELF_TYPE_DYN && elf->machine == ELF_MACHINE_RISCV;
@@ -1012,11 +1023,13 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     const ElfProgram* programs = reinterpret_cast<const ElfProgram*>(metadata + elf->phoff);
     const ElfSection* sections = reinterpret_cast<const ElfSection*>(metadata + elf->shoff);
     const void* mapping = nullptr;
+#if !defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_IDF_TARGET_ESP32)
     esp_partition_mmap_handle_t mapping_handle = 0;
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#endif
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32)
     void* image = nullptr;
     void* data_image = nullptr;
-    if (!load_s3_image(metadata, header.elf_size, elf, programs, sections, &image, &data_image)) {
+    if (!load_xtensa_image(metadata, header.elf_size, elf, programs, sections, &image, &data_image)) {
         heap_caps_free(metadata);
         LOGW(TAG, "Skipped slot %u: could not relocate package", slot);
         return false;
@@ -1039,7 +1052,7 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     find_symbol(metadata, header.elf_size, elf, programs, sections, bias, "native_extension_tick", &tick);
     heap_caps_free(metadata);
         if (!required) {
-    #if defined(CONFIG_IDF_TARGET_ESP32S3)
+    #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32)
         heap_caps_free(const_cast<void*>(mapping));
         heap_caps_free(data_image);
     #else
@@ -1048,9 +1061,11 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
         return false;
         }
     LoadedSlot& loaded = s_slots[slot];
-    loaded.mapping = const_cast<void*>(mapping); loaded.mapping_handle = mapping_handle;
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    loaded.mapping = const_cast<void*>(mapping);
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32)
     loaded.data_mapping = data_image;
+#else
+    loaded.mapping_handle = mapping_handle;
 #endif
     loaded.create = reinterpret_cast<NativeExtensionCreateFn>(create); loaded.destroy = reinterpret_cast<NativeExtensionDestroyFn>(destroy); loaded.shutdown = reinterpret_cast<NativeExtensionShutdownFn>(shutdown); loaded.tap = reinterpret_cast<NativeExtensionEventFn>(tap); loaded.long_press = reinterpret_cast<NativeExtensionEventFn>(long_press); loaded.tick = reinterpret_cast<NativeExtensionTickFn>(tick);
     loaded.info = {slot, true, false, false, false, true, true, SLOT_CAPACITY[slot], header.elf_size, 0, header.abi_version, descriptor.tick_interval_ms, {}, {}, {}, {}, NATIVE_EXTENSION_RUNTIME_IDLE, {}};

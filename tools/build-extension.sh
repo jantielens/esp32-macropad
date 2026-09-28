@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
-    echo "Usage: $0 <p4|s3> <extension-source.cpp> <output.elf>" >&2
+    echo "Usage: $0 <p4|s3|esp32> <extension-source.cpp> <output.elf>" >&2
     exit 2
 fi
 
@@ -36,8 +36,18 @@ case "$TARGET" in
         TARGET_LIBS=(-lgcc)
         EXPECTED_MACHINE="Tensilica Xtensa Processor"
         ;;
+    esp32)
+        TOOLCHAIN_DIR=${ESP32_TOOLCHAIN_DIR:-"$HOME/.arduino15/packages/esp32/tools/esp-x32/2511/bin"}
+        CXX="$TOOLCHAIN_DIR/xtensa-esp32-elf-g++"
+        READELF="$TOOLCHAIN_DIR/xtensa-esp32-elf-readelf"
+        TARGET_ABI="xtensa-esp32"
+        TARGET_FLAGS=()
+        LINK_FLAGS=(-shared -Wl,-Bsymbolic)
+        TARGET_LIBS=(-lgcc)
+        EXPECTED_MACHINE="Tensilica Xtensa Processor"
+        ;;
     *)
-        echo "Unknown extension target: $TARGET (expected p4 or s3)" >&2
+        echo "Unknown extension target: $TARGET (expected p4, s3 or esp32)" >&2
         exit 2
         ;;
 esac
@@ -70,9 +80,9 @@ if ! "$READELF" -h "$OUTPUT" | grep -q "Machine:.*$EXPECTED_MACHINE"; then
     rm -f "$OUTPUT"
     exit 1
 fi
-if [[ "$TARGET" == "s3" ]]; then
+if [[ "$TARGET" == "s3" || "$TARGET" == "esp32" ]]; then
     if "$READELF" -rW "$OUTPUT" | grep -E 'R_' | grep -vq 'R_XTENSA_RELATIVE'; then
-        echo "S3 extension ELF contains unsupported relocations" >&2
+        echo "$TARGET extension ELF contains unsupported relocations" >&2
         rm -f "$OUTPUT"
         exit 1
     fi

@@ -87,8 +87,8 @@ struct HwButtonDef {
 #define HAS_MCP true
 #endif
 
-// Enable native extension packages on ESP32-P4 boards. Packages are compiled
-// RISC-V ELF modules loaded from persistent storage at startup.
+// Enable native extension packages on supported boards. Packages are compiled
+// ELF modules loaded from persistent storage at startup.
 #ifndef HAS_NATIVE_EXTENSIONS
 #  define HAS_NATIVE_EXTENSIONS false
 #endif
@@ -100,6 +100,10 @@ struct HwButtonDef {
 #if HAS_NATIVE_EXTENSIONS && defined(CONFIG_IDF_TARGET_ESP32S3)
 #  undef NATIVE_EXTENSION_TARGET_ABI
 #  define NATIVE_EXTENSION_TARGET_ABI "xtensa-esp32s3"
+#endif
+#if HAS_NATIVE_EXTENSIONS && defined(CONFIG_IDF_TARGET_ESP32)
+#  undef NATIVE_EXTENSION_TARGET_ABI
+#  define NATIVE_EXTENSION_TARGET_ABI "xtensa-esp32"
 #endif
 
 // Enable the portal and MCP browser for a filesystem partition or SD card.
