@@ -449,6 +449,7 @@ The E-Paper page configures the battery-oriented image workflow:
 | **Timezone offset** | Fixed UTC offset used to evaluate the hourly window |
 | **WiFi Failure Backoff** | Maximum WiFi retry sleep after repeated failures |
 | **Battery Horizon** | Client-side estimate based on battery size, new photos per day, manual refreshes, and the current image settings |
+| **Record wake diagnostics** | reTerminal E1003 only: append one completed wake as CSV to internal storage, with download and clear controls |
 | **Status** | Read-only refresh counters, timing, battery, and manual refresh action |
 | **Overlay** | Status overlay position/color/fields drawn on the image |
 | **VCOM** | Inkplate TPS65186 calibration controls |
@@ -484,6 +485,30 @@ Changing the offline count or network timing fields automatically recalculates
 maximum last to override the estimate; reopening the page preserves the saved
 value. The image download stop limit applies to each image request, while the
 overall scheduled wake limit (up to 10 minutes) remains the final safeguard.
+
+On the reTerminal E1003, **Record wake diagnostics** appends each completed
+wake to `/epaper-wake-log.csv` in internal storage. The CSV includes wake
+reason and result, battery reading, timing data, and Service batch cache,
+download, and failed-transfer totals. Download the file or clear it from Image
+& Schedule. `recorded_at_unix` is blank without a valid clock, and
+`sidecar_http_status` is blank in Service mode. `pre_delivery_ms` stops before
+logging and MQTT; `selected_image_fetch_ms` is only the chosen image's fetch.
+`batch_manifest_result` reports the manifest outcome (`not_attempted` if none),
+`batch_http_ms` sums manifest and batch-image HTTP attempts, and
+`batch_slowest_request_ms` identifies the longest one. These exclude cache
+reads, drawing, and `/next` fallback; `fallback_used` is 1 when that fallback
+is requested. Logging is diagnostic only: a storage error is reported on serial
+output but never blocks the image refresh or deep sleep.
+`batch_manifest_http_ms` and `batch_manifest_http_code` show the manifest
+request duration and GET result (positive HTTP status, negative client error,
+or 0 without a completed GET). `fallback_elapsed_ms` includes the entire
+`/next` client call, including cache access, and `fallback_http_code` is its
+last GET result; both are 0 if no fallback ran. `previous_sleep_requested`
+marks whether the preceding wake requested sleep, including zero seconds for
+button-only sleep. `previous_requested_sleep_s` is that requested duration,
+not an observed sleep interval; compare it with the current wake's reason and
+timestamps when checking early wakes. Clear an existing wake CSV before the
+next diagnostic run because earlier rows use the previous column layout.
 
 ---
 

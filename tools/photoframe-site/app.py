@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 import os
 import time
@@ -25,6 +26,12 @@ from next_image import NextImageService
 from store import PhotoIndex
 
 logger = logging.getLogger("epaper-photoframe")
+logger.setLevel(logging.INFO)
+logger.propagate = False
+log_handler = logging.StreamHandler()
+log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+logger.addHandler(log_handler)
+_request_ids = itertools.count(1)
 DATA_ROOT = Path(os.environ.get("PHOTOFRAME_DATA_DIR", Path(__file__).with_name("data")))
 _FORM_BODY_LIMIT = 1024 * 1024
 _IMAGE_BODY_LIMIT = 32 * 1024 * 1024
@@ -174,6 +181,25 @@ async def response_headers(request: Request, call_next):
         response.headers.setdefault("Cache-Control", "private, no-cache")
         response.headers.setdefault("Vary", "Authorization")
     return response
+
+
+@app.middleware("http")
+async def next_request_timing(request: Request, call_next):
+    route = request.url.path
+    if route not in ("/api/v1/next", "/api/v1/next-batch"):
+        return await call_next(request)
+    request_id = next(_request_ids)
+    request.state.next_request_id = request_id
+    started = time.monotonic()
+    status = 0
+    logger.info("next_request ingress id=%d route=%s", request_id, route)
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        logger.info("next_request complete id=%d route=%s status=%d elapsed_ms=%.1f",
+                    request_id, route, status, (time.monotonic() - started) * 1000)
 
 
 @app.exception_handler(StarletteHTTPException)

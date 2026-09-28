@@ -20,6 +20,7 @@ if (typeof window.registerConfigFields === 'function') {
         'epaper_frame_rotation',
         'epaper_frame_crc32_enabled',
         'epaper_frame_sd_cache_enabled',
+        'epaper_frame_wake_log_enabled',
         'epaper_frame_overlay_enabled', 'epaper_frame_overlay_position',
         'epaper_frame_overlay_color', 'epaper_frame_overlay_items',
         'epaper_frame_frontlight_brightness', 'epaper_frame_frontlight_duration_s',
@@ -689,6 +690,7 @@ window.init_epaper_image_fragment = function () {
                 var sdRow = document.getElementById('epaper_sd_cache_row');
                 if (sdRow) sdRow.hidden = !cfg.epaper_frame_sd_cache_supported;
                 setNamedValue('epaper_frame_sd_cache_enabled', !!cfg.epaper_frame_sd_cache_enabled);
+                setNamedValue('epaper_frame_wake_log_enabled', !!cfg.epaper_frame_wake_log_enabled);
                 updateOfflineQueueUi();
 
                 var arr = Array.isArray(cfg.epaper_frame_carousel) ? cfg.epaper_frame_carousel : [];
@@ -765,6 +767,20 @@ window.init_epaper_image_fragment = function () {
             .finally(function () { clearSdBtn.disabled = false; });
     });
 
+    var clearWakeLogBtn = document.getElementById('epaper_clear_wake_log');
+    if (clearWakeLogBtn) clearWakeLogBtn.addEventListener('click', function () {
+        if (!window.confirm('Delete all recorded wake diagnostics?')) return;
+        clearWakeLogBtn.disabled = true;
+        fetch('/api/component/epaper-image/clear-wake-log', { method: 'POST' })
+            .then(function (r) { return r.json().catch(function () { return null; }); })
+            .then(function (res) {
+                showMessage(res && res.success ? 'Wake diagnostics cleared' : 'Failed to clear wake diagnostics',
+                            res && res.success ? 'success' : 'error');
+            })
+            .catch(function () { showMessage('Failed to clear wake diagnostics', 'error'); })
+            .finally(function () { clearWakeLogBtn.disabled = false; });
+    });
+
     function buildCarouselPayload() {
         var out = [];
         for (var i = 0; i < 5; i++) {
@@ -799,6 +815,7 @@ window.init_epaper_image_fragment = function () {
             'epaper_frame_rotation',
             'epaper_frame_crc32_enabled',
             'epaper_frame_sd_cache_enabled',
+            'epaper_frame_wake_log_enabled',
             'wifi_backoff_max_seconds',
             'epaper_frame_frontlight_brightness', 'epaper_frame_frontlight_duration_s'
         ];

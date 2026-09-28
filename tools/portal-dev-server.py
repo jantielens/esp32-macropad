@@ -263,6 +263,7 @@ def main():
         "epaper_frame_offline_refreshes_between_syncs": 3,
         "epaper_frame_sd_cache_supported": True,
         "epaper_frame_sd_cache_enabled": True,
+        "epaper_frame_wake_log_enabled": False,
         "epaper_frame_crc32_enabled": True,
         "epaper_frame_frontlight_brightness": 24,
         "epaper_frame_frontlight_duration_s": 30,

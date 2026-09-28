@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **E-Paper Frame wake diagnostics**: an optional, downloadable and clearable
+  wake CSV records refresh outcomes, battery readings, batch request results,
+  fallback timing, and the preceding wake's requested sleep interval. The
+  photoframe site logs safe, correlated `/next` and `/next-batch` ingress,
+  completion, and batch phase timings without exposing signed content URLs.
 * **Device-free portal development server**: `python3 tools/portal-dev-server.py`
   serves the production portal shell, core assets, and available fragments with
   deterministic in-memory API fixtures. Developers can work on portal UI without

@@ -2227,6 +2227,34 @@ DNS server redirects all requests to device IP in AP mode:
     while Next API Service mode relies on its `Keep` response. When Service
     batching is enabled, every queued image is budgeted as a panel refresh and
     only queued SD-cache misses add payload work to the preceding online sync.
+    On the reTerminal E1003, **Record wake diagnostics** persists an append-only
+    CSV file at `/epaper-wake-log.csv` in internal storage. The Image & Schedule
+    fragment exposes authenticated download and clear actions. Each completed
+    wake records its outcome, battery reading, timing breakdown, and batch
+    cache/download aggregates, including failed transfer counts and partial
+    bytes. `recorded_at_unix` is blank until the clock is valid, and
+    `sidecar_http_status` is blank in Service mode. `pre_delivery_ms` ends
+    before CSV logging and MQTT; `selected_image_fetch_ms` covers only the
+    selected image's cache read or download, not all batch requests.
+    `batch_manifest_result` is `not_attempted` if no manifest request was
+    made. `batch_http_ms` sums manifest and batch-image HTTP setup and transfer
+    times (including failed attempts, excluding cache reads, parsing, SD writes,
+    drawing, and `/next` fallback). `batch_slowest_request_ms` is the maximum
+    of those requests; `fallback_used` is 1 when a batch refresh invokes
+    `/next`. `batch_manifest_http_ms` measures the manifest HTTP setup and
+    transfer alone; `batch_manifest_http_code` is the GET result (positive
+    response status, negative HTTPClient error, or 0 if no GET completed).
+    `fallback_elapsed_ms` includes the whole `/next` client call, including
+    cache access; `fallback_http_code` reports its last GET, including a
+    redirected content GET if applicable. Both are 0 when no fallback ran.
+    `previous_sleep_requested` distinguishes a valid zero-second sleep request
+    from no retained request; `previous_requested_sleep_s` belongs to the
+    preceding wake and is the value supplied to the sleep hook, not a measured
+    sleep duration. Compare it to the next row's `wake_reason` and timestamps
+    when investigating unexpectedly short intervals. Storage failures only
+    emit a serial warning and never interrupt the refresh or sleep path. Clear
+    any earlier wake CSV before collecting rows with these new columns; no
+    in-place schema migration is performed.
 
 2. Rebuild to embed assets:
    ```bash

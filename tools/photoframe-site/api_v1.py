@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import hashlib
 import hmac
+import logging
+import time
 import zlib
 from urllib.parse import quote
 
@@ -18,6 +20,7 @@ import store
 from store import TransportDescriptor
 
 router = APIRouter(prefix="/api/v1")
+logger = logging.getLogger("epaper-photoframe")
 
 PROTOCOL_HEADERS = {
     "Cache-Control": "private, no-cache",
@@ -144,32 +147,48 @@ def get_next_batch(request: Request) -> Response:
     entries = []
     secret = site_config.session_secret(request.app.state.data_root)
     selection_conflicts = 0
+    total_conflicts = 0
+    selection_ms = 0.0
+    blob_ms = 0.0
+    commit_ms = 0.0
+    blob_checks = 0
     while len(entries) < count:
+        phase_started = time.monotonic()
         with request.app.state.next_images.selection_transaction():
             descriptor = request.app.state.next_images.select(
                 frame, None, excluded_fingerprints=excluded
             )
+        selection_ms += (time.monotonic() - phase_started) * 1000
         if descriptor is None:
             break
         descriptor_fingerprint = (descriptor.image_key, descriptor.content_crc32)
+        phase_started = time.monotonic()
         payload = _descriptor_payload(frame.device_id, descriptor)
+        blob_ms += (time.monotonic() - phase_started) * 1000
+        blob_checks += 1
         if payload is None:
             excluded.add(descriptor_fingerprint)
             continue
         del payload
+        phase_started = time.monotonic()
         with request.app.state.next_images.selection_transaction():
             current = request.app.state.next_images.select(
                 frame, None, excluded_fingerprints=excluded
             )
+            selection_ms += (time.monotonic() - phase_started) * 1000
             if current != descriptor:
                 selection_conflicts += 1
+                total_conflicts += 1
                 if selection_conflicts >= 8:
                     break
                 continue
             selection_conflicts = 0
+            phase_started = time.monotonic()
             if not request.app.state.index.commit_selection(frame.device_id, descriptor):
+                commit_ms += (time.monotonic() - phase_started) * 1000
                 excluded.add(descriptor_fingerprint)
                 continue
+            commit_ms += (time.monotonic() - phase_started) * 1000
             excluded.add(descriptor_fingerprint)
             entries.append({
                 "image_key": descriptor.image_key,
@@ -184,6 +203,12 @@ def get_next_batch(request: Request) -> Response:
                 ),
             })
 
+    logger.info(
+        "next_batch phases id=%d requested=%d selected=%d blob_checks=%d conflicts=%d "
+        "selection_ms=%.1f blob_ms=%.1f commit_ms=%.1f",
+        request.state.next_request_id, count, len(entries), blob_checks, total_conflicts,
+        selection_ms, blob_ms, commit_ms,
+    )
     if not entries:
         return Response(
             status_code=204,

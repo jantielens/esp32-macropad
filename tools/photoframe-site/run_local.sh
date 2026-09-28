@@ -16,4 +16,4 @@ if [[ -z "${VIRTUAL_ENV:-}" ]]; then
 fi
 
 export PHOTOFRAME_DATA_DIR="${PHOTOFRAME_DATA_DIR:-$PWD/data}"
-exec uvicorn app:app --host 127.0.0.1 --port "${PORT:-8080}" --reload
+exec uvicorn app:app --host 127.0.0.1 --port "${PORT:-8080}" --reload --no-access-log

@@ -32,6 +32,22 @@ struct ShowMetadata {
 		uint32_t content_crc32;
 };
 
+struct BatchRequestTimer {
+		uint32_t started_ms = millis();
+		bool stopped = false;
+		uint32_t* duration_out = nullptr;
+
+		void stop() {
+				if (stopped) return;
+				stopped = true;
+				const uint32_t elapsed_ms = millis() - started_ms;
+				if (duration_out) *duration_out = elapsed_ms;
+				epaper_frame_timing_record_batch_request(elapsed_ms);
+		}
+
+		~BatchRequestTimer() { stop(); }
+};
+
 EpaperNextPayload empty_payload(EpaperNextResult result) {
 		EpaperNextPayload payload = {};
 		payload.result = result;
@@ -56,6 +72,19 @@ uint32_t request_time_left(uint32_t started_ms, uint32_t timeout_ms) {
 		return elapsed_ms >= timeout_ms ? 0 : timeout_ms - elapsed_ms;
 }
 
+void log_service_transfer(const char* operation, uint32_t request_started_ms,
+		uint32_t body_started_ms, size_t body_bytes, bool complete) {
+		const uint32_t now_ms = millis();
+		const uint32_t header_ms = body_started_ms - request_started_ms;
+		const uint32_t body_ms = now_ms - body_started_ms;
+		const uint32_t bytes_per_second = body_ms > 0
+				? (uint32_t)((body_bytes * 1000U) / body_ms) : 0;
+		LOGI("Epaper", "Service %s: headers=%ums body=%uB/%ums/%luB/s %s",
+				operation, (unsigned)header_ms, (unsigned)body_bytes,
+				(unsigned)body_ms, (unsigned long)bytes_per_second,
+				complete ? "complete" : "incomplete");
+}
+
 String resolve_content_ref(const char* service_base, const char* content_ref) {
 		String ref = content_ref ? content_ref : "";
 		if (ref.startsWith("http://") || ref.startsWith("https://")) return String();
@@ -73,7 +102,6 @@ String resolve_content_ref(const char* service_base, const char* content_ref) {
 
 bool begin_request(HTTPClient& http, WiFiClient& plain,
 		WiFiClientSecure& secure, const String& url) {
-		http.useHTTP10(true);
 		http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
 		if (url.startsWith("https://")) {
 				secure.setInsecure();
@@ -168,13 +196,16 @@ bool read_and_validate_body(HTTPClient& http,
 		uint8_t* data = nullptr;
 		size_t len = 0;
 		size_t body_bytes_read = 0;
-		if (!epaper_frame_http_read_body(
+		const bool body_read = epaper_frame_http_read_body(
 				http, &data, &len, &body_bytes_read,
-				expected_length > 0, remaining_ms)) {
+				true, remaining_ms);
+		payload->body_bytes_read = body_bytes_read;
+		if (!body_read) {
 				return false;
 		}
-		payload->body_bytes_read = body_bytes_read;
-		if ((expected_length > 0 && len != expected_length) ||
+		const int response_length = http.getSize();
+		if ((response_length > 0 && len != (size_t)response_length) ||
+				(expected_length > 0 && len != expected_length) ||
 				epaper_frame_transport_crc32(data, len) !=
 						metadata.content_crc32 ||
 				!epaper_frame_driver_prepare_service_blob(
@@ -218,7 +249,7 @@ bool parse_batch_entry(JsonObjectConst source, EpaperBatchEntry* entry) {
 
 EpaperNextPayload follow_redirect(const String& location,
 		const ShowMetadata& metadata, bool cache_enabled,
-		uint32_t timeout_ms) {
+		uint32_t timeout_ms, int16_t* http_code) {
 		EpaperNextPayload payload =
 				empty_payload(EpaperNextResult::FailedFetch);
 		strlcpy(payload.image_key, metadata.image_key,
@@ -233,6 +264,7 @@ EpaperNextPayload follow_redirect(const String& location,
 		http.setTimeout(timeout_ms);
 		collect_service_headers(http);
 		const int status = http.GET();
+		if (http_code) *http_code = status;
 		if (status != HTTP_CODE_OK ||
 				!valid_content_headers(http, payload.media_type,
 						sizeof(payload.media_type))) {
@@ -261,7 +293,8 @@ EpaperNextPayload follow_redirect(const String& location,
 EpaperNextPayload epaper_frame_next_client_fetch(
 		const char* service_base, const char* bearer_token,
 		const EpaperCurrentFingerprint& current, bool cache_enabled,
-		uint8_t max_cycles, uint32_t timeout_ms) {
+		uint8_t max_cycles, uint32_t timeout_ms, int16_t* http_code) {
+		if (http_code) *http_code = 0;
 		if (!service_base || !*service_base ||
 				!bearer_token || !*bearer_token || max_cycles == 0) {
 				return empty_payload(EpaperNextResult::FailedFetch);
@@ -286,8 +319,13 @@ EpaperNextPayload epaper_frame_next_client_fetch(
 						http, bearer_token, &current);
 
 				const int status = http.GET();
+				if (http_code) *http_code = status;
 				const EpaperNextAction action =
 						epaper_frame_next_action_for_status(status);
+				if (status < 0) {
+						LOGW("Epaper", "Service next GET=%d after %lums", status,
+								(unsigned long)(millis() - request_started_ms));
+				}
 				if (action == EpaperNextAction::Keep) {
 						http.end();
 						return empty_payload(EpaperNextResult::Keep);
@@ -329,7 +367,7 @@ EpaperNextPayload epaper_frame_next_client_fetch(
 										EpaperNextResult::FailedFetch);
 						}
 						return follow_redirect(location, metadata,
-								cache_enabled, request_timeout_ms);
+								cache_enabled, request_timeout_ms, http_code);
 				}
 
 				EpaperNextPayload payload =
@@ -349,13 +387,14 @@ EpaperNextPayload epaper_frame_next_client_fetch(
 						LOGI("Epaper", "Service cache hit; body_bytes_read=0");
 						return payload;
 				}
+				const uint32_t body_started_ms = millis();
 				const bool valid = read_and_validate_body(
 						http, metadata, payload.media_type, &payload,
 						0, request_timeout_ms, request_started_ms);
+				log_service_transfer("next", request_started_ms, body_started_ms,
+						payload.body_bytes_read, valid);
 				http.end();
 				delay(100);
-				LOGI("Epaper", "Service body_bytes_read=%u",
-						(unsigned)payload.body_bytes_read);
 				if (valid) payload.result = EpaperNextResult::Show;
 				return payload;
 		}
@@ -379,6 +418,8 @@ EpaperNextResult epaper_frame_next_client_fetch_batch_manifest(
 		WiFiClientSecure secure;
 		HTTPClient http;
 		const uint32_t request_started_ms = millis();
+		BatchRequestTimer batch_timer;
+		batch_timer.duration_out = &epaper_frame_timing_last.batch_manifest_http_ms;
 		if (!begin_request(http, plain, secure,
 				batch_url(service_base, requested_count))) {
 				return EpaperNextResult::FailedFetch;
@@ -387,15 +428,21 @@ EpaperNextResult epaper_frame_next_client_fetch_batch_manifest(
 		collect_service_headers(http);
 		add_request_auth_and_fingerprint(http, bearer_token, &current);
 		const int status = http.GET();
+		epaper_frame_timing_last.batch_manifest_http_code = status;
 		if (status == HTTP_CODE_NO_CONTENT) {
+				batch_timer.stop();
 				http.end();
 				return EpaperNextResult::Keep;
 		}
 		if (status == HTTP_CODE_UNAUTHORIZED) {
+				batch_timer.stop();
 				http.end();
 				return EpaperNextResult::AuthFailed;
 		}
 		if (status != HTTP_CODE_OK) {
+				LOGW("Epaper", "Service batch manifest GET=%d after %lums",
+						status, (unsigned long)(millis() - request_started_ms));
+				batch_timer.stop();
 				http.end();
 				return EpaperNextResult::FailedFetch;
 		}
@@ -403,6 +450,7 @@ EpaperNextResult epaper_frame_next_client_fetch_batch_manifest(
 		if (content_length <= 0 ||
 				static_cast<size_t>(content_length) >
 						kMaxBatchManifestBytes) {
+				batch_timer.stop();
 				http.end();
 				return EpaperNextResult::FailedContent;
 		}
@@ -411,9 +459,14 @@ EpaperNextResult epaper_frame_next_client_fetch_batch_manifest(
 		size_t body_bytes_read = 0;
 		const uint32_t remaining_ms = request_time_left(
 				request_started_ms, request_timeout_ms);
-		if (remaining_ms == 0 || !epaper_frame_http_read_body(
+		const uint32_t body_started_ms = millis();
+		const bool body_read = remaining_ms > 0 && epaper_frame_http_read_body(
 				http, &body, &body_length, &body_bytes_read,
-				true, remaining_ms)) {
+				true, remaining_ms);
+		log_service_transfer("batch manifest", request_started_ms,
+				body_started_ms, body_bytes_read, body_read);
+		batch_timer.stop();
+		if (!body_read) {
 				http.end();
 				return EpaperNextResult::FailedFetch;
 		}
@@ -499,13 +552,23 @@ EpaperNextPayload epaper_frame_next_client_fetch_batch_entry(
 		WiFiClientSecure secure;
 		HTTPClient http;
 		const uint32_t request_started_ms = millis();
+		BatchRequestTimer batch_timer;
 		if (!begin_request(http, plain, secure, url)) return payload;
 		http.setTimeout(request_timeout_ms);
 		collect_service_headers(http);
 		add_request_auth_and_fingerprint(http, bearer_token, nullptr);
 		const int status = http.GET();
-		if (status != HTTP_CODE_OK ||
-				http.getSize() != static_cast<int>(entry.content_length)) {
+		if (status != HTTP_CODE_OK) {
+				LOGW("Epaper", "Service batch content GET=%d after %lums",
+						status, (unsigned long)(millis() - request_started_ms));
+				batch_timer.stop();
+				http.end();
+				return payload;
+		}
+		if (http.getSize() != static_cast<int>(entry.content_length)) {
+				LOGW("Epaper", "Service batch content length=%d expected=%lu",
+						http.getSize(), (unsigned long)entry.content_length);
+				batch_timer.stop();
 				http.end();
 				return payload;
 		}
@@ -513,6 +576,7 @@ EpaperNextPayload epaper_frame_next_client_fetch_batch_entry(
 		if (!parse_show_metadata(http, &response_metadata) ||
 				strcmp(response_metadata.image_key, entry.image_key) != 0 ||
 				response_metadata.content_crc32 != entry.content_crc32) {
+				batch_timer.stop();
 				http.end();
 				payload.result = EpaperNextResult::FailedContent;
 				return payload;
@@ -521,13 +585,18 @@ EpaperNextPayload epaper_frame_next_client_fetch_batch_entry(
 		if (!valid_content_headers(http, response_media_type,
 				sizeof(response_media_type)) ||
 				strcmp(response_media_type, entry.media_type) != 0) {
+				batch_timer.stop();
 				http.end();
 				payload.result = EpaperNextResult::FailedContent;
 				return payload;
 		}
+		const uint32_t body_started_ms = millis();
 		const bool valid = read_and_validate_body(
 				http, response_metadata, entry.media_type, &payload,
 				entry.content_length, request_timeout_ms, request_started_ms);
+		log_service_transfer("batch content", request_started_ms,
+				body_started_ms, payload.body_bytes_read, valid);
+		batch_timer.stop();
 		http.end();
 		delay(100);
 		payload.result = valid ? EpaperNextResult::Show

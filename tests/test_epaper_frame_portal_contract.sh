@@ -37,12 +37,18 @@ for key in \
     epaper_frame_rotation \
     epaper_frame_crc32_enabled \
     epaper_frame_sd_cache_enabled \
+    epaper_frame_wake_log_enabled \
     epaper_frame_frontlight_brightness \
     epaper_frame_frontlight_duration_s; do
     require "$key" "$BACKEND"
     require "$key" "$PORTAL"
     require "name=\"$key\"" "$IMAGE_FRAGMENT"
 done
+
+if [[ $(grep -Fc "'epaper_frame_wake_log_enabled'" "$PORTAL") -lt 2 ]]; then
+    echo "FAIL: wake diagnostics field is not registered and saved by the image fragment" >&2
+    exit 1
+fi
 
 for key in \
     epaper_frame_overlay_enabled \

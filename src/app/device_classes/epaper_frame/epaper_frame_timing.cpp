@@ -1,4 +1,5 @@
 #include "epaper_frame_timing.h"
+#include "epaper_frame_wake_log.h"
 
 #if IS_EPAPER_FRAME
 
@@ -11,6 +12,8 @@
 RTC_DATA_ATTR EpaperTimingBudget epaper_frame_timing_last = {};
 RTC_DATA_ATTR static uint32_t s_epaper_wake_id = 0;
 RTC_DATA_ATTR static EpaperPreviousDelivery s_epaper_previous_delivery = {};
+RTC_DATA_ATTR static uint32_t s_epaper_requested_sleep_s = 0;
+RTC_DATA_ATTR static bool s_epaper_sleep_requested = false;
 
 struct EpaperWakeJournal {
 		uint32_t magic;
@@ -37,6 +40,8 @@ static void ensure_wake_journal() {
 		if (s_epaper_wake_journal.magic == kEpaperWakeJournalMagic) return;
 		s_epaper_wake_journal = {};
 		s_epaper_previous_delivery = {};
+		s_epaper_requested_sleep_s = 0;
+		s_epaper_sleep_requested = false;
 		s_epaper_wake_journal.magic = kEpaperWakeJournalMagic;
 		s_epaper_wake_journal.session_id = next_session_id();
 }
@@ -59,6 +64,11 @@ uint32_t epaper_frame_timing_begin_wake(EpaperWakeReason wake_reason) {
 		epaper_frame_timing_last = {};
 		epaper_frame_timing_last.session_id = s_epaper_wake_journal.session_id;
 		epaper_frame_timing_last.wake_id = next_wake_id;
+		if (s_epaper_sleep_requested) {
+			epaper_frame_timing_last.previous_requested_sleep_s = s_epaper_requested_sleep_s;
+			epaper_frame_timing_last.previous_sleep_requested = true;
+		}
+		s_epaper_sleep_requested = false;
 
 		if (s_epaper_wake_journal.count == EPAPER_FRAME_WAKE_JOURNAL_CAPACITY) {
 			s_epaper_wake_journal.head = (uint8_t)((s_epaper_wake_journal.head + 1) %
@@ -103,6 +113,7 @@ void epaper_frame_wake_journal_finalize(EpaperWakeResult result, uint16_t batter
 		record->sidecar_http_status = sidecar_http_status;
 		record->result = result;
 		record->refresh_result = result;
+		epaper_frame_wake_log_append(*record);
 }
 
 void epaper_frame_wake_journal_mark_delivery_failed(EpaperWakeResult result) {
@@ -172,6 +183,33 @@ void epaper_frame_timing_set_fetch_source(uint32_t ms, EpaperImageSource source)
 
 void epaper_frame_timing_set_draw_ms(uint32_t ms) {
 		epaper_frame_timing_last.draw_ms = ms;
+}
+
+void epaper_frame_timing_set_batch_manifest_count(uint8_t count) {
+		epaper_frame_timing_last.batch_manifest_count = count;
+}
+
+void epaper_frame_timing_record_batch_entry(bool cache_hit, bool succeeded,
+		size_t body_bytes) {
+		if (cache_hit) {
+			++epaper_frame_timing_last.batch_cache_hits;
+		} else {
+			++epaper_frame_timing_last.batch_cache_misses;
+			if (!succeeded) ++epaper_frame_timing_last.batch_download_failures;
+			epaper_frame_timing_last.batch_download_bytes += body_bytes;
+		}
+}
+
+void epaper_frame_timing_record_batch_request(uint32_t duration_ms) {
+		epaper_frame_timing_last.batch_http_ms += duration_ms;
+		if (duration_ms > epaper_frame_timing_last.batch_slowest_request_ms) {
+			epaper_frame_timing_last.batch_slowest_request_ms = duration_ms;
+		}
+}
+
+void epaper_frame_timing_record_sleep_request(uint32_t seconds) {
+		s_epaper_requested_sleep_s = seconds;
+		s_epaper_sleep_requested = true;
 }
 
 #endif // IS_EPAPER_FRAME
