@@ -65,7 +65,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status
 - **Optional HTTP Basic Auth** for portal access
 - **SD card support** — use a FAT32 MicroSD card for pad configurations, icons, sounds, and indexed data on supported boards
-- **Native Extensions** — install trusted native modules in explicit slots on ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive (one 32 KiB slot). P4 modules execute from flash; Xtensa modules use executable internal RAM for code and PSRAM for data. Place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. Download the package for your device target from the [Firmware Installer](https://jantielens.github.io/esp32-macropad/), then upload it through the device portal. Packages larger than a board's slot are rejected. See the [Extension developer guide](docs/dev/extensions.md).
+- **Native Extensions** — install trusted native modules in explicit slots on ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive (one 32 KiB slot). P4 modules execute from flash; Xtensa modules use executable internal RAM for code and PSRAM for data. Place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. Download the package for your device target from the [Extensions catalog](https://jantielens.github.io/esp32-macropad/extensions.html), then upload it through the device portal. Packages larger than a board's slot are rejected. See the [Extension developer guide](docs/dev/extensions.md).
 
 ## 💡 What Can You Build?
 
@@ -147,16 +147,15 @@ The firmware auto-detects a device class at build time based on board capability
 
 ### Install Firmware
 
-The easiest way to flash ESP32 Macropad is through the **online installer** — no tools or compilers needed:
+The easiest way to flash ESP32 Macropad is through the **online device guide**. No tools or compilers are needed:
 
 **👉 [ESP32 Macropad Firmware Installer](https://jantielens.github.io/esp32-macropad/)**
 
-1. Open the installer in **Chrome** or **Edge** (WebSerial required)
-2. Connect your board via USB
-3. Select your board and click **Install**
-4. Done! The firmware is flashed and ready to go
+1. Choose a device class, then select your exact board and firmware variant.
+2. Open the linked USB flash page in **Chrome** or **Edge** (WebSerial required).
+3. Connect your board via USB, click **Connect**, and follow the installer prompts.
 
-Already running ESP32 Macropad? You can also update over Wi-Fi (OTA) directly from the device's web portal or the installer site.
+Already running ESP32 Macropad? [Update over Wi-Fi](https://jantielens.github.io/esp32-macropad/update.html) from the site or use the device's web portal.
 
 ### First-Time Setup
 

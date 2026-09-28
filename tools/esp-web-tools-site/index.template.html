@@ -3,109 +3,36 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <title>ESP32 Firmware Installer</title>
+    <title>ESP32 Macropad | Find your device</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0" />
     <link rel="stylesheet" href="./style.css" />
-    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+    <script>
+      if (new URLSearchParams(location.search).has('device')) {
+        location.replace(`./update.html${location.search}${location.hash}`);
+      }
+    </script>
   </head>
-  <body>
-    <header class="header">
-      <div class="container">
-        <h1>ESP32 Firmware Installer</h1>
-        <p class="subhead">
-          Flash firmware from your browser using WebSerial (Chrome/Edge over HTTPS).
-        </p>
-        <div class="badges">
-          <a class="badge badge-link" href="{{VERSION_HREF}}" target="_blank" rel="noreferrer">Version <code>{{DISPLAY_VERSION}}</code></a>
-          <a class="badge badge-link" href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noreferrer">Powered by ESP Web Tools</a>
-          <a class="badge badge-link" href="./dashboard.html">📊 Device Health Dashboard</a>
-        </div>
-      </div>
+  <body class="site-page">
+    <header class="site-header">
+      <nav class="container site-nav" aria-label="Main navigation">
+        <a class="site-brand" href="./index.html"><img src="./assets/logo.png" alt="" /> ESP32 Macropad</a>
+        <div class="nav-links"><a aria-current="page" href="./index.html">Devices</a><a href="./flash.html">USB flash</a><a href="./update.html">Wi-Fi update</a><a href="./extensions.html">Extensions</a><a href="./dashboard.html">Health</a></div>
+      </nav>
     </header>
-
     <main class="container">
-      <section class="panel">
-        <div class="panel-title">Two ways to update firmware</div>
-        <ul class="panel-list">
-          <li><strong>Device Update (Wi‑Fi)</strong>: Use this when the device is already on your network and you want to update it over the air.</li>
-          <li><strong>USB Flash (WebSerial)</strong>: Use this when the device is connected via USB (first-time flashes or recovery).</li>
-        </ul>
+      <section class="site-intro">
+        <h1>What are you building?</h1>
+        <p>One firmware project, several kinds of devices. Find the right build for your hardware, then flash it from your browser.</p>
+        <div class="quick-actions"><a class="action-link" href="./flash.html">I know my board <span aria-hidden="true">&rarr;</span></a><a href="./update.html">Already running? Update over Wi-Fi</a></div>
       </section>
-
-      <section class="panel panel-ota" id="ota-panel">
-        <div class="panel-title">📡 Device Update (Wi-Fi)</div>
-        <div class="panel-sub">
-          Update a device that is already running ESP32 Macropad firmware and connected to your network.
-        </div>
-        <p class="ota-prerequisite"><strong>Existing firmware required:</strong> New devices and recovery flashes must use USB Flash (WebSerial) below.</p>
-        <div class="form-grid">
-          <div class="field">
-            <label for="deviceBase">Device URL</label>
-            <input id="deviceBase" type="url" placeholder="http://192.168.1.50" autocomplete="off" />
-            <small>Enter the device base URL (IP or mDNS). Example: http://esp32.local</small>
-          </div>
-        </div>
-        <details class="auth-details">
-          <summary>🔐 Device authentication (optional)</summary>
-          <div class="form-grid auth-grid">
-          <div class="field">
-            <label for="authUsername">Username</label>
-            <input id="authUsername" type="text" autocomplete="username" />
-          </div>
-          <div class="field">
-            <label for="authPassword">Password</label>
-            <input id="authPassword" type="password" autocomplete="current-password" />
-          </div>
-          </div>
-        </details>
-        <div class="ota-actions">
-          <button id="ota-update-btn" class="ota-btn" type="button">Update device</button>
-        </div>
-        <div id="ota-status" class="status">Ready.</div>
-      </section>
-
-      <div class="panel-sep" role="separator" aria-hidden="true"></div>
-
-      <section class="panel">
-        <div class="panel-title">🔌 USB Flash (WebSerial)</div>
-        <div class="panel-sub">Use this flow when the device is connected via USB.</div>
-        <div class="toolbar">
-          <input id="boardFilter" class="filter" type="search" placeholder="Filter boards…" autocomplete="off" />
-          <div id="boardCount" class="count"></div>
-        </div>
-
-        <div id="boards" class="boards">
+      <div class="directory">
 {{BOARD_ENTRIES}}
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-title">🧩 Extensions</div>
-        <div class="panel-sub">Download an extension, then upload it from your device's Extensions page.</div>
-        <div class="extensions">
-{{EXTENSION_ENTRIES}}
-        </div>
-      </section>
-
-      <section class="panel" id="release-notes-panel">
-        <div class="panel-title">📝 Release notes</div>
-        <div class="panel-sub">
-          <a href="{{VERSION_HREF}}" target="_blank" rel="noreferrer">View release</a>
-          <span class="dot">•</span>
-          <a href="{{CHANGELOG_HREF}}" target="_blank" rel="noreferrer">Full changelog</a>
-        </div>
-        <div id="releaseNotes" class="release-notes markdown">Loading release notes…</div>
-      </section>
-
-      <section class="footer">
-        <p>
-          Tip: if you flashed the wrong board variant, just flash again with the correct one.
-        </p>
+      </div>
+      <section class="site-next">
+        <div><h2>Already set up?</h2><p>Update a device on your network, find native Extensions, or check its health.</p></div>
+        <div class="next-links"><a href="./update.html">Update over Wi-Fi</a><a href="./extensions.html">Browse Extensions</a><a href="./dashboard.html">Device health</a></div>
       </section>
     </main>
-
-    <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
-    <script src="./app.js" defer></script>
+    <footer class="container site-footer"><span>ESP32 Macropad</span><a href="{{VERSION_HREF}}">Release {{DISPLAY_VERSION}}</a></footer>
   </body>
 </html>

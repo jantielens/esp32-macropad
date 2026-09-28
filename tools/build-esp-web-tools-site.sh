@@ -17,10 +17,12 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 OUT_DIR="${1:-$REPO_ROOT/site}"
+CLASS_CONTENT="$TEMPLATE_DIR/device-classes.json"
+class_slugs=(macropad headless epaper_frame coffee_scale darkroom_timer shutter_tester voice_assistant)
 
 # Only deploy “latest” (site output is overwritten each deploy)
 rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR/manifests" "$OUT_DIR/firmware" "$OUT_DIR/ota" "$OUT_DIR/extensions"
+mkdir -p "$OUT_DIR/manifests" "$OUT_DIR/firmware" "$OUT_DIR/ota" "$OUT_DIR/extensions" "$OUT_DIR/devices" "$OUT_DIR/assets"
 
 # Prevent GitHub Pages from invoking Jekyll processing
 : > "$OUT_DIR/.nojekyll"
@@ -317,7 +319,8 @@ unset IFS
 # Copy firmware + generate manifests
 board_fragment_tmp="$(mktemp)"
 extension_fragment_tmp="$(mktemp)"
-trap 'rm -f "$board_fragment_tmp" "$extension_fragment_tmp"' EXIT
+class_fragment_dir="$(mktemp -d)"
+trap 'rm -f "$board_fragment_tmp" "$extension_fragment_tmp"; rm -rf "$class_fragment_dir"' EXIT
 
 for board_name in "${boards[@]}"; do
   fqbn="${FQBN_TARGETS[$board_name]}"
@@ -402,7 +405,7 @@ for board_name in "${boards[@]}"; do
     done < <(jq -r '.capabilities[]?' "$metadata_file")
 
     case "$device_class" in
-      macropad|epaper|headless|shutter_tester|coffee_scale|darkroom_timer|voice_assistant) ;;
+      macropad|epaper_frame|headless|shutter_tester|coffee_scale|darkroom_timer|voice_assistant) ;;
       *)
         echo "WARNING: Unknown device_class '$device_class' in $metadata_file, defaulting to 'macropad'" >&2
         device_class="macropad"
@@ -486,7 +489,7 @@ EOF
     capabilities_html="<div class=\"board-capabilities\"><div class=\"capabilities-label\">✨ Enabled features</div><div class=\"pill-row\">${capability_badges_html}</div></div>"
   fi
 
-  downloads_html="<div class=\"board-downloads\"><div class=\"row-label downloads-label\">⬇️ Downloads</div><div class=\"pill-row\"><a class=\"badge download-badge\" href=\"./manifests/${board_name}.json\">Installer</a><a class=\"badge download-badge\" href=\"./firmware/${board_name}/app.bin\">Firmware</a><a class=\"badge download-badge\" href=\"./ota/${board_name}.json\">OTA info</a></div></div>"
+  downloads_html="<details class=\"board-downloads\"><summary>Advanced downloads</summary><div class=\"pill-row\"><a class=\"badge download-badge\" href=\"./manifests/${board_name}.json\">Flash manifest</a><a class=\"badge download-badge\" href=\"./firmware/${board_name}/app.bin\">OTA firmware</a><a class=\"badge download-badge\" href=\"./ota/${board_name}.json\">OTA metadata</a></div></details>"
 
   desc_html=""
   if [[ -n "$description" && "$description" != "null" ]]; then
@@ -509,6 +512,13 @@ EOF
               <esp-web-install-button manifest="./manifests/${board_name}.json"></esp-web-install-button>
             </div>
           </div>
+EOF
+
+  cat >> "$class_fragment_dir/$device_class" <<EOF
+          <article class="device-board">
+            <div><h3>${board_display_name_esc}</h3>${desc_html}</div>
+            <div class="device-board-actions"><span>${chip_family}${display_size:+ · $(html_escape "$display_size")}</span><a class="action-link" href="../flash.html?board=${board_name}">Flash this board <span aria-hidden="true">&rarr;</span></a></div>
+          </article>
 EOF
 
 done
@@ -568,7 +578,63 @@ cp "$TEMPLATE_DIR/style.css" "$OUT_DIR/style.css"
 cp "$TEMPLATE_DIR/app.js" "$OUT_DIR/app.js"
 cp "$TEMPLATE_DIR/dashboard.html" "$OUT_DIR/dashboard.html"
 cp "$TEMPLATE_DIR/dashboard.js" "$OUT_DIR/dashboard.js"
-render_index "$TEMPLATE_DIR/index.template.html" "$OUT_DIR/index.html" "$board_fragment_tmp" "$extension_fragment_tmp"
+cp "$REPO_ROOT/assets/png/logo.png" "$OUT_DIR/assets/logo.png"
+render_index "$TEMPLATE_DIR/flash.template.html" "$OUT_DIR/flash.html" "$board_fragment_tmp" "$extension_fragment_tmp"
+render_index "$TEMPLATE_DIR/update.template.html" "$OUT_DIR/update.html" "$board_fragment_tmp" "$extension_fragment_tmp"
+render_index "$TEMPLATE_DIR/extensions.template.html" "$OUT_DIR/extensions.html" "$board_fragment_tmp" "$extension_fragment_tmp"
+
+class_cards="$(mktemp)"
+trap 'rm -f "$board_fragment_tmp" "$extension_fragment_tmp" "$class_cards"; rm -rf "$class_fragment_dir"' EXIT
+for class_slug in "${class_slugs[@]}"; do
+  title="$(jq -r --arg slug "$class_slug" '.[$slug].title' "$CLASS_CONTENT")"
+  summary="$(jq -r --arg slug "$class_slug" '.[$slug].summary' "$CLASS_CONTENT")"
+  icon="$(jq -r --arg slug "$class_slug" '.[$slug].icon' "$CLASS_CONTENT")"
+  class_intro="$(jq -r --arg slug "$class_slug" '.[$slug].intro' "$CLASS_CONTENT")"
+  class_guidance="$(jq -r --arg slug "$class_slug" '.[$slug].guidance[]' "$CLASS_CONTENT" | while IFS= read -r item; do printf '<li>%s</li>\n' "$(html_escape "$item")"; done)"
+  if [[ "$class_slug" == macropad ]]; then
+    cat >> "$class_cards" <<'EOF'
+        <section class="firmware-group general" aria-labelledby="general-heading">
+          <div class="section-heading"><h2 id="general-heading">General-purpose firmware</h2><p>Build your own controls and automations.</p></div>
+          <div class="class-grid">
+EOF
+  elif [[ "$class_slug" == epaper_frame ]]; then
+    cat >> "$class_cards" <<'EOF'
+          </div>
+        </section>
+        <section class="firmware-group specialized" aria-labelledby="specialized-heading">
+          <div class="section-heading"><h2 id="specialized-heading">Specialized firmware</h2><p>Purpose-built tools for specific tasks.</p></div>
+          <div class="class-grid">
+EOF
+  fi
+  cat >> "$class_cards" <<EOF
+        <a class="class-card" href="./devices/${class_slug}.html"><span class="class-icon material-symbols-rounded" aria-hidden="true">$(html_escape "$icon")</span><h3>$(html_escape "$title")</h3><p>$(html_escape "$summary")</p></a>
+EOF
+  class_related=""
+  case "$class_slug" in
+    macropad) class_related='<a class="related-class" href="./epaper_frame.html">Prefer scheduled images and long battery life? Explore E-Paper Frame &rarr;</a>' ;;
+    epaper_frame) class_related='<a class="related-class" href="./macropad.html">Want an interactive e-paper pad? Explore Macropad &rarr;</a>' ;;
+  esac
+  if [[ ! -f "$class_fragment_dir/$class_slug" ]]; then
+    echo '<p>No builds for this device class are included in this preview.</p>' > "$class_fragment_dir/$class_slug"
+  fi
+  awk -v title="$(html_escape "$title")" -v intro="$(html_escape "$class_intro")" -v slug="$class_slug" \
+    -v icon="$(html_escape "$icon")" -v related="$class_related" -v guidance="$class_guidance" -v boards="$class_fragment_dir/$class_slug" '
+    { gsub(/{{CLASS_TITLE}}/, title); gsub(/{{CLASS_INTRO}}/, intro); gsub(/{{CLASS_SLUG}}/, slug); gsub(/{{CLASS_ICON}}/, icon) }
+    /{{CLASS_RELATED}}/ { print related; next }
+    /{{CLASS_GUIDANCE}}/ { print guidance; next }
+    /{{CLASS_BOARDS}}/ { while ((getline line < boards) > 0) print line; close(boards); next }
+    { print }
+  ' "$TEMPLATE_DIR/device.template.html" > "$OUT_DIR/devices/$class_slug.html"
+done
+cat >> "$class_cards" <<'EOF'
+          </div>
+        </section>
+EOF
+cat > "$OUT_DIR/devices/epaper.html" <<'EOF'
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta http-equiv="refresh" content="0; url=./epaper_frame.html" /><title>E-Paper Frame | ESP32 Macropad</title><script>location.replace('./epaper_frame.html' + location.search + location.hash);</script></head><body><a href="./epaper_frame.html">E-Paper Frame</a></body></html>
+EOF
+render_index "$TEMPLATE_DIR/index.template.html" "$OUT_DIR/index.html" "$class_cards" "$extension_fragment_tmp"
 
 echo "Built ESP Web Tools site at: $OUT_DIR" >&2
 echo "Manifests: $OUT_DIR/manifests" >&2

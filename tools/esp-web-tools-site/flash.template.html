@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>USB flash | ESP32 Macropad</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  </head>
+  <body class="site-page flash-page">
+    <header class="site-header"><nav class="container site-nav" aria-label="Main navigation"><a class="site-brand" href="./index.html"><img src="./assets/logo.png" alt="" /> ESP32 Macropad</a><div class="nav-links"><a href="./index.html">Devices</a><a aria-current="page" href="./flash.html">USB flash</a><a href="./update.html">Wi-Fi update</a><a href="./extensions.html">Extensions</a><a href="./dashboard.html">Health</a></div></nav></header>
+    <main class="container">
+      <div class="page-heading"><span class="intro-label">First installation or recovery</span><h1>Flash via USB</h1><p>Connect your board by USB, choose its exact model and firmware variant, then press Connect. Requires Chrome or Edge on a computer with WebSerial.</p></div>
+      <div class="flow-note"><strong>Already running?</strong> <a href="./update.html">Update over Wi-Fi instead</a>. Choosing the wrong board or storage variant can change the partition layout; check the hardware label before flashing.</div>
+      <section aria-labelledby="boards-heading"><div class="section-heading"><h2 id="boards-heading">Choose your board</h2><p>Not sure which firmware fits? <a href="./index.html">Explore device classes</a> first.</p></div>
+        <div class="toolbar"><label class="search-field" for="boardFilter">Search boards<input id="boardFilter" class="filter" type="search" placeholder="Board name, chip or feature" autocomplete="off" /></label><span id="boardCount" class="count" aria-live="polite"></span></div>
+        <p id="boardEmpty" class="empty-state" hidden>No boards match that search. Try the model number or clear the search.</p>
+        <div id="boards" class="boards">
+{{BOARD_ENTRIES}}
+        </div>
+      </section>
+      <p class="site-footnote">Flashed the wrong variant? Select the correct board and flash again. Some storage changes may require erasing data first.</p>
+    </main>
+    <footer class="container site-footer"><a href="./index.html">All devices</a><a href="{{VERSION_HREF}}">Release {{DISPLAY_VERSION}}</a></footer>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Device-class firmware installer**: the GitHub Pages site now offers
+  general-purpose and specialized firmware guides with board-specific flash
+  links, class icons, and setup guidance. Dedicated pages handle USB flashing,
+  Wi-Fi updates, Extensions, and device health; existing firmware downloads and
+  legacy installer links remain available.
 * Native Extension support now includes classic ESP32 devices alongside
   ESP32-S3 and ESP32-P4. Inkplate 6FLICK Interactive is the first classic ESP32
   board to use it, with one 32 KiB ELF slot. Signed `-esp32.ext` packages are

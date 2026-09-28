@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wi-Fi update | ESP32 Macropad</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body class="site-page update-page">
+    <header class="site-header"><nav class="container site-nav" aria-label="Main navigation"><a class="site-brand" href="./index.html"><img src="./assets/logo.png" alt="" /> ESP32 Macropad</a><div class="nav-links"><a href="./index.html">Devices</a><a href="./flash.html">USB flash</a><a aria-current="page" href="./update.html">Wi-Fi update</a><a href="./extensions.html">Extensions</a><a href="./dashboard.html">Health</a></div></nav></header>
+    <main class="container narrow-content">
+      <div class="page-heading"><span class="intro-label">For devices already on your network</span><h1>Update over Wi-Fi</h1><p>Enter your device address. The updater detects its board and selects the matching firmware automatically.</p></div>
+      <div class="flow-note"><strong>New device or recovery flash?</strong> Use <a href="./flash.html">USB flash</a> instead. Your device must already be running ESP32 Macropad firmware.</div>
+      <section class="workflow" aria-labelledby="update-heading"><h2 id="update-heading">Connect to your device</h2>
+        <div class="form-grid"><div class="field"><label for="deviceBase">Device URL</label><input id="deviceBase" type="url" placeholder="http://192.168.1.50" autocomplete="off" /><small>IP address or mDNS, for example http://esp32.local</small></div></div>
+        <details class="auth-details"><summary>Device authentication (optional)</summary><div class="form-grid auth-grid"><div class="field"><label for="authUsername">Username</label><input id="authUsername" type="text" autocomplete="username" /></div><div class="field"><label for="authPassword">Password</label><input id="authPassword" type="password" autocomplete="current-password" /></div></div></details>
+        <div class="ota-actions"><button id="ota-update-btn" class="ota-btn" type="button">Update device</button></div>
+        <div id="ota-status" class="status" role="status" aria-live="polite">Ready.</div>
+      </section>
+    </main>
+    <footer class="container site-footer"><a href="./index.html">All devices</a><a href="{{VERSION_HREF}}">Release {{DISPLAY_VERSION}}</a></footer>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

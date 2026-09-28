@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Extensions | ESP32 Macropad</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body class="site-page extensions-page">
+    <header class="site-header"><nav class="container site-nav" aria-label="Main navigation"><a class="site-brand" href="./index.html"><img src="./assets/logo.png" alt="" /> ESP32 Macropad</a><div class="nav-links"><a href="./index.html">Devices</a><a href="./flash.html">USB flash</a><a href="./update.html">Wi-Fi update</a><a aria-current="page" href="./extensions.html">Extensions</a><a href="./dashboard.html">Health</a></div></nav></header>
+    <main class="container">
+      <div class="page-heading"><span class="intro-label">Add to your pad</span><h1>Extensions</h1><p>Download a compatible native Extension package, then upload it through the Extensions page in your device's web portal.</p></div>
+      <div class="flow-note"><strong>Choose the right target:</strong> P4 for ESP32-P4 boards, S3 for ESP32-S3 boards, or ESP32 for supported classic ESP32 boards. Extensions require a supported firmware build and available slot space.</div>
+      <section aria-labelledby="catalog-heading"><div class="section-heading"><h2 id="catalog-heading">Available Extensions</h2><p>Open Usage on an Extension to see how to configure it.</p></div><div class="extensions">
+{{EXTENSION_ENTRIES}}
+      </div></section>
+    </main>
+    <footer class="container site-footer"><a href="./index.html">All devices</a><a href="{{VERSION_HREF}}">Release {{DISPLAY_VERSION}}</a></footer>
+  </body>
+</html>
