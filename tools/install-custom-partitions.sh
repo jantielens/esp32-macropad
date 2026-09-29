@@ -98,6 +98,10 @@ register_partition_scheme_if_needed() {
   local upload_max_size_dec="$5"
 
   if grep -q "^${board_id}\.menu\.PartitionScheme\.${scheme_id}=" "$boards_txt"; then
+    local maximum_size_key="${board_id}.menu.PartitionScheme.${scheme_id}.upload.maximum_size"
+    if ! grep -qxF "${maximum_size_key}=${upload_max_size_dec}" "$boards_txt"; then
+      sed -i "s/^${board_id}\.menu\.PartitionScheme\.${scheme_id}\.upload\.maximum_size=.*/${maximum_size_key}=${upload_max_size_dec}/" "$boards_txt"
+    fi
     echo "✓ PartitionScheme '$scheme_id' already registered for board '$board_id'"
     return 0
   fi

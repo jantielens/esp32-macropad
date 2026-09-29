@@ -20,6 +20,7 @@ if (typeof window.registerConfigFields === 'function') {
         'epaper_frame_rotation',
         'epaper_frame_crc32_enabled',
         'epaper_frame_sd_cache_enabled',
+        'epaper_frame_wake_log_enabled',
         'epaper_frame_overlay_enabled', 'epaper_frame_overlay_position',
         'epaper_frame_overlay_color', 'epaper_frame_overlay_items',
         'epaper_frame_frontlight_brightness', 'epaper_frame_frontlight_duration_s',
@@ -198,6 +199,319 @@ window.init_epaper_image_fragment = function () {
     var serviceTokenSet = false;
     var offlineQueueSupported = false;
 
+    var estimatorConstants = {
+        sleepCurrentMa: 0.35,
+        activeCurrentMa: 150,
+        panelCurrentMa: 120,
+        onlineWorkSeconds: 12,
+        cachedWorkSeconds: 2.5,
+        newPhotoWorkSeconds: 4.5,
+        cacheInvalidationSeconds: 0.75,
+        batchPayloadWorkSeconds: 5.25,
+        panelRefreshSeconds: 3.6,
+        manualWorkSeconds: 5
+    };
+    var estimatorTimelineMinDays = 0.5;
+    var estimatorTimelineMaxDays = 730;
+
+    function estimatorNumber(id, fallback) {
+        var element = document.getElementById(id);
+        var value = element ? Number(element.value) : NaN;
+        return Number.isFinite(value) ? value : fallback;
+    }
+
+    function estimatorEnabledHours() {
+        var mask = readHoursMask();
+        var enabled = 0;
+        for (var hour = 0; hour < 24; hour++) {
+            if (hourEnabled(mask, hour)) enabled++;
+        }
+        return enabled;
+    }
+
+    function estimatorSchedule(overrides) {
+        overrides = overrides || {};
+        var enabledHours = estimatorEnabledHours();
+        if (enabledHours === 0) return { wakes: 0, interval: 86400 };
+        var scheduleFactor = overrides.scheduleFactor != null ? overrides.scheduleFactor : enabledHours / 24;
+        var interval;
+        if (sourceMode && sourceMode.value === 'service') {
+            interval = overrides.interval != null
+                ? overrides.interval
+                : estimatorNumber('epaper_frame_service_interval_seconds', 900);
+        } else {
+            var intervals = [];
+            for (var index = 0; index < 5; index++) {
+                var url = document.querySelector('[name="ep_c' + index + '_url"]');
+                if (!url || !String(url.value || '').trim()) break;
+                intervals.push(estimatorNumber('ep_c' + index + '_int', 900));
+            }
+            if (intervals.length === 0) intervals.push(900);
+            interval = intervals.reduce(function (sum, value) { return sum + value; }, 0) / intervals.length;
+        }
+        interval = Math.max(1, interval);
+        return { wakes: (86400 / interval) * scheduleFactor, interval: interval };
+    }
+
+    function estimatorModel(overrides) {
+        overrides = overrides || {};
+        var capacity = estimatorNumber('epaper-estimator-capacity', 2000);
+        var newPhotos = estimatorNumber('epaper-estimator-new-photos', 6);
+        var manualRefreshes = estimatorNumber('epaper-estimator-manual-refreshes', 0);
+        var schedule = estimatorSchedule(overrides);
+        var service = sourceMode && sourceMode.value === 'service';
+        var cache = sdCacheEnabled && sdCacheEnabled.checked;
+        var offlineRefreshesValue = overrides.offlineRefreshes != null
+            ? overrides.offlineRefreshes
+            : estimatorNumber('epaper_frame_offline_refreshes_between_syncs', 0);
+        var batch = service && cache && offlineRefreshesValue > 0;
+        var offlineRefreshes = batch ? offlineRefreshesValue : 0;
+        var scheduledWakes = schedule.wakes;
+        var onlineWakes = batch ? scheduledWakes / (offlineRefreshes + 1) : scheduledWakes;
+        var cachedWakes = batch ? scheduledWakes - onlineWakes : 0;
+        var crcEnabled = document.getElementById('epaper_frame_crc32_enabled');
+        var crc = overrides.crc != null ? overrides.crc : !!(crcEnabled && crcEnabled.checked);
+        var expectedImageChanges = Math.min(scheduledWakes, newPhotos);
+        var crcApplies = !service && crc;
+        var panelRefreshes = service
+            ? (batch ? scheduledWakes : expectedImageChanges)
+            : (crcApplies ? expectedImageChanges : scheduledWakes);
+        panelRefreshes += manualRefreshes;
+        // Batch entries are resolved from SD before their content URL is
+        // requested. Only newly cached queued images pay the payload cost;
+        // every queued image still needs its local render and panel update.
+        var photoWorkCount = batch
+            ? Math.min(cachedWakes, expectedImageChanges)
+            : expectedImageChanges;
+        var photoWorkSeconds = photoWorkCount * (batch
+            ? estimatorConstants.batchPayloadWorkSeconds
+            : estimatorConstants.newPhotoWorkSeconds + estimatorConstants.cacheInvalidationSeconds);
+        var onlineMah = (onlineWakes * estimatorConstants.onlineWorkSeconds + photoWorkSeconds) * estimatorConstants.activeCurrentMa / 3600;
+        var cachedMah = cachedWakes * estimatorConstants.cachedWorkSeconds * estimatorConstants.activeCurrentMa / 3600;
+        var panelMah = panelRefreshes * estimatorConstants.panelRefreshSeconds * estimatorConstants.panelCurrentMa / 3600;
+        var manualMah = manualRefreshes * estimatorConstants.manualWorkSeconds * estimatorConstants.activeCurrentMa / 3600;
+        var activeSeconds = onlineWakes * estimatorConstants.onlineWorkSeconds +
+            photoWorkSeconds +
+            cachedWakes * estimatorConstants.cachedWorkSeconds +
+            panelRefreshes * estimatorConstants.panelRefreshSeconds +
+            manualRefreshes * estimatorConstants.manualWorkSeconds;
+        var sleepMah = Math.max(0, 24 - activeSeconds / 3600) * estimatorConstants.sleepCurrentMa;
+        var dailyMah = sleepMah + onlineMah + cachedMah + panelMah + manualMah;
+        var usableCapacity = Math.max(0, capacity * 0.75);
+        var days = dailyMah > 0 ? usableCapacity / dailyMah : Infinity;
+        return {
+            days: days,
+            dailyMah: dailyMah,
+            parts: { sleep: sleepMah, network: onlineMah, cache: cachedMah, panel: panelMah, manual: manualMah },
+            scheduledWakes: scheduledWakes,
+            panelRefreshes: panelRefreshes,
+            onlineWakes: onlineWakes,
+            cachedWakes: cachedWakes,
+            offlineRefreshes: offlineRefreshes,
+            photoWorkSeconds: photoWorkSeconds,
+            photoWorkCount: photoWorkCount,
+            batch: batch,
+            service: service,
+            crc: crc,
+            crcApplies: crcApplies,
+            capacity: capacity,
+            newPhotos: newPhotos,
+            manualRefreshes: manualRefreshes
+        };
+    }
+
+    function formatEstimateDays(days) {
+        if (!Number.isFinite(days)) return '730+ days';
+        if (days < 10) return days.toFixed(1) + ' days';
+        return Math.round(days) + ' days';
+    }
+
+    function estimateHeroColors(days) {
+        var stops = [
+            { days: 0.5, start: [255, 227, 223], end: [255, 210, 201] },
+            { days: 2, start: [255, 227, 223], end: [255, 210, 201] },
+            { days: 14, start: [255, 240, 210], end: [255, 226, 168] },
+            { days: 60, start: [224, 244, 229], end: [242, 248, 207] },
+            { days: 182, start: [220, 239, 240], end: [228, 229, 255] },
+            { days: 365, start: [238, 230, 255], end: [247, 233, 255] }
+        ];
+        var bounded = Math.max(stops[0].days, Math.min(stops[stops.length - 1].days, days));
+        var lower = stops[0];
+        var upper = stops[stops.length - 1];
+        for (var index = 1; index < stops.length; index++) {
+            if (bounded <= stops[index].days) {
+                lower = stops[index - 1];
+                upper = stops[index];
+                break;
+            }
+        }
+        var ratio = (Math.log(bounded) - Math.log(lower.days)) /
+            (Math.log(upper.days) - Math.log(lower.days));
+        function colorAt(lowerColor, upperColor) {
+            return lowerColor.map(function (value, index) {
+                return Math.round(value + (upperColor[index] - value) * ratio);
+            });
+        }
+        function colorText(color) { return 'rgb(' + color.join(', ') + ')'; }
+        var markerColor = colorAt(lower.end, upper.end).map(function (value, index) {
+            return Math.round(value * 0.3 + [23, 59, 43][index] * 0.7);
+        });
+        return {
+            start: colorText(colorAt(lower.start, upper.start)),
+            end: colorText(colorAt(lower.end, upper.end)),
+            marker: colorText(markerColor)
+        };
+    }
+
+    function estimateTimelinePosition(days) {
+        var bounded = Math.max(estimatorTimelineMinDays, Math.min(estimatorTimelineMaxDays, days));
+        var logMin = Math.log(estimatorTimelineMinDays);
+        var logMax = Math.log(estimatorTimelineMaxDays);
+        return ((Math.log(bounded) - logMin) / (logMax - logMin)) * 100;
+    }
+
+    function estimatorModeLabel(model) {
+        if (!model.service) return 'Carousel';
+        return model.batch ? 'Next API with batch' : 'Next API';
+    }
+
+    function updateEstimatorTip(model, tip, tipText) {
+        if (!tip || !tipText) return;
+        var suggestion = null;
+        if (!model.service) {
+            var crcElement = document.getElementById('epaper_frame_crc32_enabled');
+            if (crcElement && !crcElement.checked && model.scheduledWakes > model.newPhotos) {
+                var crcModel = estimatorModel({ crc: true });
+                if (crcModel.days > model.days * 1.15) {
+                    suggestion = 'Enabling CRC32 checks could increase estimated life from ' +
+                        formatEstimateDays(model.days) + ' to ' + formatEstimateDays(crcModel.days) + '.';
+                }
+            }
+            if (!suggestion && model.scheduledWakes > 2) {
+                var slowerCarousel = estimatorModel({ scheduleFactor: 0.5 });
+                if (slowerCarousel.days > model.days * 1.15) {
+                    suggestion = 'Doubling the carousel durations could increase estimated life to ' +
+                        formatEstimateDays(slowerCarousel.days) + '.';
+                }
+            }
+        } else if (model.batch && model.offlineRefreshes < 16) {
+            var moreOffline = estimatorModel({ offlineRefreshes: Math.min(16, Math.max(1, model.offlineRefreshes * 2)) });
+            if (moreOffline.days > model.days * 1.15) {
+                suggestion = 'Increasing offline refreshes from ' + model.offlineRefreshes +
+                    ' to ' + Math.min(16, Math.max(1, model.offlineRefreshes * 2)) +
+                    ' could increase estimated life to ' + formatEstimateDays(moreOffline.days) + '.';
+            }
+        } else {
+            var serviceInterval = estimatorNumber('epaper_frame_service_interval_seconds', 900);
+            var slowerService = estimatorModel({ interval: serviceInterval * 2 });
+            if (slowerService.days > model.days * 1.15) {
+                suggestion = 'Doubling the Next API refresh interval could increase estimated life to ' +
+                    formatEstimateDays(slowerService.days) + '.';
+            }
+        }
+        tip.hidden = !suggestion;
+        if (suggestion) tipText.textContent = suggestion;
+    }
+
+    function updateEstimator() {
+        var result = document.getElementById('epaper-estimate-result');
+        var dailyUse = document.getElementById('epaper-estimate-daily-use');
+        var cycleStats = document.getElementById('epaper-estimate-cycle-stats');
+        var budget = document.getElementById('epaper-estimate-budget');
+        var tip = document.getElementById('epaper-estimate-tip');
+        var tipText = document.getElementById('epaper-estimate-tip-text');
+        var marker = document.getElementById('epaper-estimate-marker');
+        var assumptions = document.getElementById('epaper-estimate-assumptions');
+        if (!result || !budget) return;
+
+        var model = estimatorModel();
+        var heroColors = estimateHeroColors(model.days);
+        result.textContent = formatEstimateDays(model.days);
+        if (dailyUse) dailyUse.textContent = model.dailyMah.toFixed(1) + ' mAh/day';
+        if (marker) marker.style.left = estimateTimelinePosition(model.days) + '%';
+        var estimator = document.getElementById('epaper-battery-estimator');
+        estimator.style.setProperty('--epaper-hero-start', heroColors.start);
+        estimator.style.setProperty('--epaper-hero-end', heroColors.end);
+        if (marker) marker.style.backgroundColor = heroColors.marker;
+        if (cycleStats) cycleStats.textContent = Math.round(model.onlineWakes) +
+            ' Wi-Fi wakes, ' + Math.round(model.cachedWakes) + ' cached wakes/day';
+
+        var total = Object.keys(model.parts).reduce(function (sum, key) { return sum + model.parts[key]; }, 0);
+        budget.innerHTML = '';
+        [
+            ['sleep', 'epaper-budget-sleep'],
+            ['network', 'epaper-budget-network'],
+            ['cache', 'epaper-budget-cache'],
+            ['panel', 'epaper-budget-panel'],
+            ['manual', 'epaper-budget-manual']
+        ].forEach(function (part) {
+            var element = document.createElement('span');
+            element.className = 'epaper-budget-part ' + part[1];
+            element.style.width = (total > 0 ? (model.parts[part[0]] / total * 100) : 0) + '%';
+            element.title = part[0] + ': ' + model.parts[part[0]].toFixed(1) + ' mAh/day';
+            budget.appendChild(element);
+        });
+
+        updateEstimatorTip(model, tip, tipText);
+
+        if (assumptions) {
+            var mode = estimatorModeLabel(model);
+            var schedule = estimatorEnabledHours() + '/24 hours enabled';
+            var modeSettings = mode === 'Carousel'
+                ? 'Carousel durations: ' + Math.round(estimatorSchedule().interval) + ' s average'
+                : 'Service interval: ' + estimatorNumber('epaper_frame_service_interval_seconds', 900) + ' s';
+            var batchSettings = model.service
+                ? '\nOffline refreshes: ' + (model.batch ? model.offlineRefreshes : 0) +
+                  ', SD cache: ' + (sdCacheEnabled && sdCacheEnabled.checked ? 'enabled' : 'disabled')
+                : '';
+            var crc = document.getElementById('epaper_frame_crc32_enabled');
+            var frontlight = estimatorNumber('epaper_frame_frontlight_brightness', 0);
+            assumptions.textContent = 'Precise estimate: ' + (Number.isFinite(model.days) ? model.days.toFixed(2) : 'more than 730') + ' days\n' +
+                'Mode: ' + mode + '\n' +
+                'Battery: ' + model.capacity + ' mAh (75% usable = ' + Math.round(model.capacity * 0.75) + ' mAh)\n' +
+                (model.batch
+                    ? 'Queued image cache misses: ' + Math.round(model.photoWorkCount) + '/day; manual refreshes: ' + model.manualRefreshes + '/day\n'
+                    : 'New photos: ' + model.newPhotos + '/day; manual refreshes: ' + model.manualRefreshes + '/day\n') +
+                modeSettings + '\n' +
+                'Schedule: ' + schedule + batchSettings + '\n' +
+                (model.service
+                    ? 'CRC32 change detection: not used by Next API; server Keep responses control skipped refreshes\n'
+                    : 'CRC32 change detection: ' + (model.crc ? 'enabled' : 'disabled') + '\n') +
+                'Frontlight brightness: ' + frontlight + '/63\n' +
+                'Estimated daily use: ' + model.dailyMah.toFixed(2) + ' mAh/day\n' +
+                'Timing assumptions: online ' + estimatorConstants.onlineWorkSeconds + ' s, new photo fetch/cache ' +
+                (estimatorConstants.newPhotoWorkSeconds + estimatorConstants.cacheInvalidationSeconds) + ' s/photo, cached ' +
+                estimatorConstants.cachedWorkSeconds + ' s, e-paper ' + estimatorConstants.panelRefreshSeconds +
+                ' s, deep sleep ' + estimatorConstants.sleepCurrentMa + ' mA.\n' +
+                'Actual life depends on battery condition, board leakage, WiFi signal, and manual use.';
+        }
+    }
+
+    function initEstimator() {
+        ['capacity', 'new-photos', 'manual-refreshes'].forEach(function (name) {
+            var input = document.getElementById('epaper-estimator-' + name);
+            var output = document.getElementById('epaper-estimator-' + name + '-output');
+            if (!input) return;
+            input.addEventListener('input', function () {
+                if (output) output.textContent = input.value + (name === 'capacity' ? ' mAh' : '');
+                updateEstimator();
+            });
+        });
+        ['epaper_frame_source_mode', 'epaper_frame_service_interval_seconds',
+            'epaper_frame_offline_refreshes_between_syncs', 'epaper_frame_sd_cache_enabled',
+            'epaper_frame_crc32_enabled', 'ep_sch_hrs', 'ep_c0_url', 'ep_c1_url',
+            'ep_c2_url', 'ep_c3_url', 'ep_c4_url', 'ep_c0_int', 'ep_c1_int',
+            'ep_c2_int', 'ep_c3_int', 'ep_c4_int'].forEach(function (id) {
+            var element = document.getElementById(id);
+            if (!element) element = document.querySelector('[name="' + id + '"]');
+            if (element) {
+                element.addEventListener('input', updateEstimator);
+                element.addEventListener('change', updateEstimator);
+            }
+        });
+        updateEstimator();
+    }
+
     function formatSyncPeriod(seconds) {
         if (seconds % 3600 === 0) return (seconds / 3600) + '-hour';
         if (seconds % 60 === 0) return (seconds / 60) + '-minute';
@@ -315,6 +629,7 @@ window.init_epaper_image_fragment = function () {
                 var enabled = !hourEnabled(mask, hour);
                 writeHoursMask(setHourEnabled(mask, hour, enabled));
                 renderHourButtons();
+                updateEstimator();
             });
             grid.appendChild(btn);
         }
@@ -375,6 +690,7 @@ window.init_epaper_image_fragment = function () {
                 var sdRow = document.getElementById('epaper_sd_cache_row');
                 if (sdRow) sdRow.hidden = !cfg.epaper_frame_sd_cache_supported;
                 setNamedValue('epaper_frame_sd_cache_enabled', !!cfg.epaper_frame_sd_cache_enabled);
+                setNamedValue('epaper_frame_wake_log_enabled', !!cfg.epaper_frame_wake_log_enabled);
                 updateOfflineQueueUi();
 
                 var arr = Array.isArray(cfg.epaper_frame_carousel) ? cfg.epaper_frame_carousel : [];
@@ -386,8 +702,9 @@ window.init_epaper_image_fragment = function () {
                 }
 
                 renderHourButtons();
+                updateEstimator();
             })
-            .catch(function () { /* keep defaults */ });
+            .catch(function () { updateEstimator(); });
     }
 
     function setQuickHours(startInclusive, endInclusive) {
@@ -397,6 +714,7 @@ window.init_epaper_image_fragment = function () {
         }
         writeHoursMask(mask);
         renderHourButtons();
+        updateEstimator();
     }
 
     var allBtn = document.getElementById('epaper-hours-all');
@@ -405,10 +723,12 @@ window.init_epaper_image_fragment = function () {
     if (allBtn) allBtn.addEventListener('click', function () {
         writeHoursMask(0x00FFFFFF);
         renderHourButtons();
+        updateEstimator();
     });
     if (noneBtn) noneBtn.addEventListener('click', function () {
         writeHoursMask(0);
         renderHourButtons();
+        updateEstimator();
     });
     if (workBtn) workBtn.addEventListener('click', function () {
         setQuickHours(8, 17);
@@ -447,6 +767,20 @@ window.init_epaper_image_fragment = function () {
             .finally(function () { clearSdBtn.disabled = false; });
     });
 
+    var clearWakeLogBtn = document.getElementById('epaper_clear_wake_log');
+    if (clearWakeLogBtn) clearWakeLogBtn.addEventListener('click', function () {
+        if (!window.confirm('Delete all recorded wake diagnostics?')) return;
+        clearWakeLogBtn.disabled = true;
+        fetch('/api/component/epaper-image/clear-wake-log', { method: 'POST' })
+            .then(function (r) { return r.json().catch(function () { return null; }); })
+            .then(function (res) {
+                showMessage(res && res.success ? 'Wake diagnostics cleared' : 'Failed to clear wake diagnostics',
+                            res && res.success ? 'success' : 'error');
+            })
+            .catch(function () { showMessage('Failed to clear wake diagnostics', 'error'); })
+            .finally(function () { clearWakeLogBtn.disabled = false; });
+    });
+
     function buildCarouselPayload() {
         var out = [];
         for (var i = 0; i < 5; i++) {
@@ -481,6 +815,7 @@ window.init_epaper_image_fragment = function () {
             'epaper_frame_rotation',
             'epaper_frame_crc32_enabled',
             'epaper_frame_sd_cache_enabled',
+            'epaper_frame_wake_log_enabled',
             'wifi_backoff_max_seconds',
             'epaper_frame_frontlight_brightness', 'epaper_frame_frontlight_duration_s'
         ];
@@ -607,6 +942,7 @@ window.init_epaper_image_fragment = function () {
 
     buildHourGrid();
     renderHourButtons();
+    initEstimator();
     loadCarouselAndSchedule();
 };
 

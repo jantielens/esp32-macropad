@@ -6,7 +6,20 @@
 
 #if IS_EPAPER_FRAME
 
+#include <stddef.h>
 #include <stdint.h>
+
+static constexpr uint32_t kEpaperMinValidEpoch = 1704067200U;
+
+enum class EpaperBatchManifestStatus : uint8_t {
+		NotAttempted,
+		Show,
+		Keep,
+		AuthFailed,
+		UnsupportedMajor,
+		FailedFetch,
+		FailedContent,
+};
 
 // Per-wake timing + diagnostic snapshot. Populated by the e-paper duty cycle,
 // retained across deep sleep in RTC memory so the portal can show "last cycle"
@@ -33,6 +46,21 @@ struct EpaperTimingBudget {
 		uint32_t fetch_ms;          // image bytes: SD cache read OR HTTP download
 		uint32_t draw_ms;           // framebuffer upload + panel GC16 refresh
 		uint8_t  image_source;  // EpaperImageSource encoded below
+		uint8_t  batch_manifest_count;
+		uint8_t  batch_cache_hits;
+		uint8_t  batch_cache_misses;
+		uint8_t  batch_download_failures;
+		uint32_t batch_download_bytes;
+		uint32_t batch_http_ms;
+		uint32_t batch_slowest_request_ms;
+		uint32_t batch_manifest_http_ms;
+		uint32_t fallback_elapsed_ms;
+		int16_t  batch_manifest_http_code;
+		int16_t  fallback_http_code;
+		EpaperBatchManifestStatus batch_manifest_status;
+		bool batch_fallback_used;
+		uint32_t previous_requested_sleep_s;
+		bool previous_sleep_requested;
 		uint32_t overall_budget_ms; // 0 = budget not enforced for this wake
 		uint32_t budget_elapsed_ms; // elapsed when the wake record was finalized
 		uint32_t budget_remaining_ms;
@@ -129,6 +157,11 @@ void epaper_frame_timing_set_resolve_ms(uint32_t ms);
 void epaper_frame_timing_set_fetch(uint32_t ms, bool from_cache);
 void epaper_frame_timing_set_fetch_source(uint32_t ms, EpaperImageSource source);
 void epaper_frame_timing_set_draw_ms(uint32_t ms);
+void epaper_frame_timing_set_batch_manifest_count(uint8_t count);
+void epaper_frame_timing_record_batch_entry(bool cache_hit, bool succeeded,
+		size_t body_bytes);
+void epaper_frame_timing_record_batch_request(uint32_t duration_ms);
+void epaper_frame_timing_record_sleep_request(uint32_t seconds);
 
 #endif // IS_EPAPER_FRAME
 

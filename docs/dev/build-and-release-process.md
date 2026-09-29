@@ -123,7 +123,7 @@ Each board may declare presentation metadata in `src/boards/<board>/metadata.jso
 Conventions:
 
 - `device_class` **must** match the class the board compiles into. The flash-page generator validates this against the whitelist and warns if it sees an unknown value.
-- `description` is for **hardware only** — brand, model, and physically distinguishing features. Firmware capabilities belong in the board's `capabilities` list; the device-class description in `tools/esp-web-tools-site/app.js` communicates the primary use case shared by that class.
+- `description` is for **hardware only** — brand, model, and physically distinguishing features. Firmware capabilities belong in the board's `capabilities` list; site copy for each device class lives in `tools/esp-web-tools-site/device-classes.json`.
 - `capabilities` is an optional list of firmware features shown as tooltip-enabled
   badges. Supported values are `mcp`, `ble_hid`, `bthome`, `image_fetch`,
   `camera`, `audio`, `microphone`, `extensions`, `sd_card`, and `mqtt`.
@@ -139,8 +139,8 @@ Conventions:
 3. Add a branch to the `device_class_detect()` `#if` ladder in `src/app/device_class_registry.cpp` (for product variants, gate on `IS_*` flags and put them before the `HAS_*` checks; first match wins).
 4. Mirror the brand prefix in `device_class_brand_prefix()` in `config.sh`.
 5. Mirror the detection rule in `device_class_for_board()` in `config.sh`.
-6. Add a category entry to `CATEGORY_ORDER` in `tools/esp-web-tools-site/app.js`.
-7. Add a `.board-category[data-class="<slug>"]` accent block (and light-mode override) to `tools/esp-web-tools-site/style.css`.
+6. Add the class slug and authored guide content to `tools/esp-web-tools-site/device-classes.json`, and add the slug to `class_slugs` in `tools/build-esp-web-tools-site.sh`.
+7. Add a category entry to `CATEGORY_ORDER` in `tools/esp-web-tools-site/app.js`.
 8. Whitelist the slug in the validation `case` in `tools/build-esp-web-tools-site.sh`.
 9. Update the Device Classes table in `README.md`.
 10. Run `./tests/run_tests.sh` — the branding mirror guard will fail loud if step 2 and step 4 drift.
@@ -473,7 +473,7 @@ development ELF and signed installable `.ext` package with the release.
 - **`tools/extract-changelog.sh`** - Parses CHANGELOG.md for version-specific notes
 - **`create-release.sh`** - Helper script to automate release preparation
 - **`tools/build-esp-web-tools-site.sh`** - Builds the static installer site (HTML + manifests + firmware copies)
-- **`tools/build-p4-extensions.sh`** - Builds P4 and S3 Extension ELFs and signed `.ext` packages
+- **`tools/build-p4-extensions.sh`** - Builds P4, S3, and ESP32 Extension ELFs and signed `.ext` packages
 - **`EXTENSION_SIGNING_PRIVATE_KEY`** - Repository Actions secret containing the first-party P-256 private-key PEM used by release builds
 - **`extensions/*/metadata.json`** - Catalog summary and usage text for each published Extension
 - **`src/version.h`** - Firmware version tracking
@@ -484,6 +484,19 @@ development ELF and signed installable `.ext` package with the release.
 ## Web Firmware Installer (GitHub Pages / ESP Web Tools)
 
 This repository includes a static firmware installer site (no backend) powered by ESP Web Tools. It is deployed to GitHub Pages from **stable GitHub Releases**.
+
+The homepage groups Macropad and Headless under general-purpose firmware and
+the other five device classes under specialized firmware, with a subtle tint
+on specialized cards. Each card uses a Material Symbol. Each generated
+`devices/<class>.html` guide offers board-specific USB flash links and a class
+icon. `flash.html` hosts the shared WebSerial board picker, `update.html`
+handles Wi-Fi updates, `extensions.html` lists native packages, and
+`dashboard.html` shows device health. Frame builds are listed under E-Paper
+Frame (`epaper_frame`), while Interactive E-Paper builds are listed under
+Macropad, matching firmware device-class metadata. The old
+`devices/epaper.html` URL redirects to the Frame guide. Existing
+`/?device=<address>` links from the device portal redirect to `update.html`
+with the address intact.
 
 ### Why multi-part flashing is required
 
@@ -513,7 +526,24 @@ To avoid CORS issues in browsers, the **installer page**, **manifest JSON**, and
     - `app.ino.partitions.bin`
     - `boot_app0.bin`
   - Copies Extension ELFs and signed `.ext` packages into `build/extensions/`.
-- **Output**: `tools/build-esp-web-tools-site.sh` generates `site/` (HTML, `manifests/*.json`, `firmware/<board>/*.bin`, and `extensions/*.ext`) which is deployed via GitHub Pages “Source: GitHub Actions”.
+- **Output**: `tools/build-esp-web-tools-site.sh` generates `site/` (HTML pages, `manifests/*.json`, `firmware/<board>/*.bin`, and `extensions/*.ext`) which is deployed via GitHub Pages "Source: GitHub Actions". Existing firmware and manifest paths remain unchanged.
+
+### Local site preview
+
+Build a preview from the firmware and Extension packages already present locally:
+
+```bash
+BOARD_FILTER=jc1060p470c-sd ./tools/build-esp-web-tools-site.sh build/site-preview
+python3 -m http.server 8767 --bind 127.0.0.1 --directory build/site-preview
+```
+
+Open `http://127.0.0.1:8767/`. Re-run the build command after editing a site
+template, stylesheet, script, or class copy, then reload the browser. A local
+preview can include multiple boards by passing a comma-separated `BOARD_FILTER`;
+only boards with compiled firmware artifacts can be included. Class pages without
+local builds display an unavailable-preview message. Run
+`bash tests/test_esp_web_tools_site.sh` for fixture-based coverage of every
+class without building firmware; the fixture binaries are not flashable.
 
 ---
 

@@ -14,10 +14,13 @@
 #include "device_classes/epaper_frame/epaper_frame_offline_queue.h"
 #endif
 #include "device_classes/epaper_frame/epaper_frame_refresh.h"
+#include "device_classes/epaper_frame/epaper_frame_wake_log.h"
 #include "log_manager.h"
 #include "main_loop_bridge.h"
+#include "storage.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
+#include "web_portal_utils.h"
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -100,9 +103,31 @@ static void epaper_frame_image_clear_cache_post(AsyncWebServerRequest* request) 
                   "{\"success\":true,\"message\":\"SD cache clear started\"}");
 }
 
+static void epaper_frame_image_wake_log_get(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
+    if (!storage_mount() || !Storage.exists(EPAPER_FRAME_WAKE_LOG_PATH)) {
+        request->send(404, "application/json",
+                      "{\"success\":false,\"message\":\"Wake diagnostics file not found\"}");
+        return;
+    }
+    sendFileThrottled(request, EPAPER_FRAME_WAKE_LOG_PATH, "text/csv");
+}
+
+static void epaper_frame_image_wake_log_clear_post(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
+    if (!epaper_frame_wake_log_clear()) {
+        request->send(500, "application/json",
+                      "{\"success\":false,\"message\":\"Could not clear wake diagnostics\"}");
+        return;
+    }
+    request->send(200, "application/json", "{\"success\":true}");
+}
+
 static const ComponentAction epaper_frame_image_actions[] = {
     {"show-url", HTTP_POST, epaper_frame_image_show_url_post, nullptr},
     {"clear-sd-cache", HTTP_POST, epaper_frame_image_clear_cache_post, nullptr},
+    {"wake-log", HTTP_GET, epaper_frame_image_wake_log_get, nullptr},
+    {"clear-wake-log", HTTP_POST, epaper_frame_image_wake_log_clear_post, nullptr},
 };
 
 static ComponentDef epaper_frame_image_component = {

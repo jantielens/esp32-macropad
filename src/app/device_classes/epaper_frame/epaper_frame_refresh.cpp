@@ -298,6 +298,10 @@ static void epaper_frame_queue_batch_extras(
 								g_epaper_config.service_url,
 								g_epaper_config.service_token,
 								manifest.entries[index], true, remaining);
+				epaper_frame_timing_record_batch_entry(
+						queued.from_cache,
+						queued.result == EpaperNextResult::Show,
+						queued.body_bytes_read);
 				if (queued.result != EpaperNextResult::Show) {
 						epaper_frame_next_payload_release(&queued);
 						LOGW("Epaper", "Batch prefetch stopped at entry %u",
@@ -329,6 +333,18 @@ static void epaper_frame_queue_batch_extras(
 		epaper_frame_sd_cache_end_batch();
 		LOGI("Epaper", "Offline queue ready with %u entries",
 				(unsigned)epaper_frame_offline_queue_count());
+}
+
+static EpaperBatchManifestStatus batch_manifest_status(EpaperNextResult result) {
+		switch (result) {
+				case EpaperNextResult::Show: return EpaperBatchManifestStatus::Show;
+				case EpaperNextResult::Keep: return EpaperBatchManifestStatus::Keep;
+				case EpaperNextResult::AuthFailed: return EpaperBatchManifestStatus::AuthFailed;
+				case EpaperNextResult::UnsupportedMajor: return EpaperBatchManifestStatus::UnsupportedMajor;
+				case EpaperNextResult::FailedFetch: return EpaperBatchManifestStatus::FailedFetch;
+				case EpaperNextResult::FailedContent: return EpaperBatchManifestStatus::FailedContent;
+		}
+		return EpaperBatchManifestStatus::FailedFetch;
 }
 
 static EpaperRefreshOutcome epaper_frame_refresh_run_service(
@@ -363,8 +379,13 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 										g_service_fingerprint, batch_count,
 										&manifest,
 										manifest_timeout);
+						if (overall_timeout_ms == 0 || manifest_timeout > 0) {
+								epaper_frame_timing_last.batch_manifest_status =
+										batch_manifest_status(batch_result);
+						}
 						if (batch_result == EpaperNextResult::Show &&
 								manifest && manifest->count > 0) {
+							epaper_frame_timing_set_batch_manifest_count(manifest->count);
 								const uint32_t first_timeout =
 										service_request_timeout(started, overall_timeout_ms,
 												fetch_timeout_ms);
@@ -382,6 +403,9 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 								}
 								batch_first =
 										payload.result == EpaperNextResult::Show;
+								epaper_frame_timing_record_batch_entry(
+										payload.from_cache, batch_first,
+										payload.body_bytes_read);
 						}
 				}
 				if (!batch_first) {
@@ -402,13 +426,17 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 						payload = {};
 						payload.result = EpaperNextResult::FailedFetch;
 				} else {
+						if (batch_enabled) epaper_frame_timing_last.batch_fallback_used = true;
+						const uint32_t fallback_started_ms = millis();
 						payload = epaper_frame_next_client_fetch(
 						g_epaper_config.service_url,
 						g_epaper_config.service_token,
 						g_service_fingerprint,
 						g_epaper_config.epaper_frame_sd_cache_enabled,
 						batch_enabled ? 1 : 2,
-						fallback_timeout);
+						fallback_timeout,
+						batch_enabled ? &epaper_frame_timing_last.fallback_http_code : nullptr);
+						if (batch_enabled) epaper_frame_timing_last.fallback_elapsed_ms = millis() - fallback_started_ms;
 				}
 		}
 		out.crc_used = payload.content_crc32;
@@ -448,12 +476,16 @@ static EpaperRefreshOutcome epaper_frame_refresh_run_service(
 						service_request_timeout(started, overall_timeout_ms,
 								fetch_timeout_ms);
 				if (overall_timeout_ms == 0 || fallback_timeout > 0) {
+						epaper_frame_timing_last.batch_fallback_used = true;
+						const uint32_t fallback_started_ms = millis();
 						payload = epaper_frame_next_client_fetch(
 								g_epaper_config.service_url,
 								g_epaper_config.service_token,
 								g_service_fingerprint,
 								g_epaper_config.epaper_frame_sd_cache_enabled,
-								1, fallback_timeout);
+								1, fallback_timeout,
+								&epaper_frame_timing_last.fallback_http_code);
+						epaper_frame_timing_last.fallback_elapsed_ms = millis() - fallback_started_ms;
 						out.crc_used = payload.content_crc32;
 						if (payload.result == EpaperNextResult::Show) {
 								drew = epaper_frame_refresh_draw_service_payload(

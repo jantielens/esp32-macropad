@@ -63,9 +63,10 @@ full-refresh threshold has no effect in that mode.
 
 ## Inkplate 6FLICK Profile
 
-`inkplate6flick-interactive` is an Interactive E-Paper target with a 3 MB,
-no-OTA application partition. Review its binary size before enabling additional
-features or libraries.
+`inkplate6flick-interactive` is an Interactive E-Paper target with a 3.5625 MiB,
+no-OTA application partition and 280 KiB LittleFS filesystem. Back up stored
+files before serial-flashing this partition layout; the smaller filesystem
+does not preserve files from the old layout.
 
 The render mode selects the Inkplate library framebuffer at boot:
 

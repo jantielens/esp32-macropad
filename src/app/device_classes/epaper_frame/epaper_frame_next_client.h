@@ -49,7 +49,8 @@ struct EpaperBatchManifest {
 
 EpaperNextPayload epaper_frame_next_client_fetch(const char* service_base,
 		const char* bearer_token, const EpaperCurrentFingerprint& current,
-		bool cache_enabled, uint8_t max_cycles = 2, uint32_t timeout_ms = 0);
+		bool cache_enabled, uint8_t max_cycles = 2, uint32_t timeout_ms = 0,
+		int16_t* http_code = nullptr);
 EpaperNextResult epaper_frame_next_client_fetch_batch_manifest(
 		const char* service_base, const char* bearer_token,
 		const EpaperCurrentFingerprint& current, uint8_t requested_count,

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import sys
@@ -224,6 +225,38 @@ def test_existing_next_endpoint_still_returns_inline_bytes() -> None:
         response = client.get("/api/v1/next", headers=AUTH_A)
         assert response.status_code == 200
         assert response.content == b"inline-bytes"
+
+
+def test_next_request_logs_are_timed_and_redacted() -> None:
+    messages = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            messages.append(record.getMessage())
+
+    logger = logging.getLogger("epaper-photoframe")
+    handler = CaptureHandler()
+    previous_level = logger.level
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    try:
+        with _client("timing") as (client, root):
+            _add_image(root, "frame-a", "first", b"first-bytes")
+            client.app.state.index.rebuild()
+            assert client.get("/api/v1/next-batch?count=1", headers=AUTH_A).status_code == 200
+            assert client.get("/api/v1/next", headers=AUTH_A).status_code == 200
+            assert client.get("/api/v1/next-batch?count=1").status_code == 401
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(previous_level)
+
+    assert len([line for line in messages if "next_request ingress" in line]) == 3
+    assert any("next_request complete" in line and "status=401" in line for line in messages)
+    assert any("next_batch phases id=" in line and "requested=1 selected=1 blob_checks=1" in line
+               and "selection_ms=" in line and "blob_ms=" in line and "commit_ms=" in line
+               for line in messages)
+    assert all(TOKEN_A not in line and "sig=" not in line and "blob=" not in line
+               for line in messages)
 
 
 if __name__ == "__main__":

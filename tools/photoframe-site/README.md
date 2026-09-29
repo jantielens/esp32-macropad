@@ -271,6 +271,18 @@ curl http://127.0.0.1:8080/healthz
 docker logs epaper-photoframe
 ```
 
+The container logs `next_request ingress` and `next_request complete` for
+`/api/v1/next` and `/api/v1/next-batch`, with a matching request ID, status,
+and time to prepare the response. `next_batch phases` reports aggregate
+selection, blob read/CRC validation, and commit times in milliseconds, plus
+the requested/selected counts and blob checks. Status 0 means the handler did
+not produce a response (for example, an exception or cancellation). These
+events omit authorization headers, content URLs, and query strings. Uvicorn
+access logging is disabled
+in the provided Docker and local launchers to avoid exposing signed content
+query strings; use the device wake CSV and these events to correlate a slow
+or missing request.
+
 For each later development update, run `./publish-dev.sh` on the devbox. Then
 run these commands in the LXC console:
 

@@ -3,11 +3,73 @@
   <p>Where the dashboard image is fetched from and how often the device wakes to refresh it. The device deep-sleeps between refreshes to save battery.</p>
 </div>
 
+<div class="epaper-estimator-hero" id="epaper-battery-estimator">
+  <div class="epaper-estimator-heading">
+    <p class="epaper-estimator-eyebrow">Battery Horizon</p>
+    <h3 class="epaper-estimator-result" id="epaper-estimate-result" aria-live="polite">21 days</h3>
+  </div>
+  <div class="epaper-horizon" aria-label="Battery life estimate scale">
+    <div class="epaper-horizon-scale">
+      <div class="epaper-horizon-axis"></div>
+      <span class="epaper-horizon-tick" style="left:7%">1 day</span>
+      <span class="epaper-horizon-tick" style="left:27%">1 week</span>
+      <span class="epaper-horizon-tick" style="left:35%">2 weeks</span>
+      <span class="epaper-horizon-tick" style="left:47%">1 month</span>
+      <span class="epaper-horizon-tick" style="left:58%">2 months</span>
+      <span class="epaper-horizon-tick" style="left:76%">6 months</span>
+      <span class="epaper-horizon-tick" style="left:89%">1 year</span>
+      <span class="epaper-horizon-marker" id="epaper-estimate-marker" aria-label="Current estimate"></span>
+    </div>
+  </div>
+</div>
+
+<div class="card epaper-estimator-body" id="epaper-estimator-details">
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-md-4 epaper-estimator-slider">
+        <label class="form-label" for="epaper-estimator-capacity">Battery size <output id="epaper-estimator-capacity-output" for="epaper-estimator-capacity">2000 mAh</output></label>
+        <input class="form-range" type="range" id="epaper-estimator-capacity" min="0" max="5000" step="50" value="2000">
+      </div>
+      <div class="col-12 col-md-4 epaper-estimator-slider">
+        <label class="form-label" for="epaper-estimator-new-photos">New photos per day <output id="epaper-estimator-new-photos-output" for="epaper-estimator-new-photos">6</output></label>
+        <input class="form-range" type="range" id="epaper-estimator-new-photos" min="0" max="100" step="1" value="6">
+      </div>
+      <div class="col-12 col-md-4 epaper-estimator-slider">
+        <label class="form-label" for="epaper-estimator-manual-refreshes">Manual refreshes per day <output id="epaper-estimator-manual-refreshes-output" for="epaper-estimator-manual-refreshes">0</output></label>
+        <input class="form-range" type="range" id="epaper-estimator-manual-refreshes" min="0" max="100" step="1" value="0">
+      </div>
+    </div>
+
+    <div class="mb-4">
+      <div class="d-flex justify-content-between align-items-baseline mb-2">
+        <strong>Daily energy budget <span class="epaper-estimate-cycle-stats" id="epaper-estimate-cycle-stats"></span></strong>
+        <span class="form-text" id="epaper-estimate-daily-use">0 mAh/day</span>
+      </div>
+      <div class="epaper-budget" id="epaper-estimate-budget" aria-label="Estimated daily energy budget"></div>
+      <div class="epaper-budget-legend">
+        <span class="epaper-legend-sleep">Sleep</span>
+        <span class="epaper-legend-network">Wi-Fi</span>
+        <span class="epaper-legend-cache">Cached work</span>
+        <span class="epaper-legend-panel">E-paper</span>
+        <span class="epaper-legend-manual">Manual</span>
+      </div>
+    </div>
+
+    <div class="epaper-estimator-tip p-3 mb-3" id="epaper-estimate-tip" hidden>
+      <strong>Battery-saving tip</strong>
+      <div id="epaper-estimate-tip-text"></div>
+    </div>
+
+    <details>
+      <summary>Estimator assumptions</summary>
+      <p class="form-text mt-2 mb-0 epaper-estimate-assumptions" id="epaper-estimate-assumptions">Uses a conservative planning model. Actual life depends on battery condition, board leakage, Wi-Fi signal, and manual use.</p>
+    </details>
+</div>
+
 <!-- Hidden: e-paper boards always run in this mode. Setting it on every Save
     ensures the device cannot drift out of duty_cycle_epaper_frame by accident. -->
   <input type="hidden" name="operating_mode" value="duty_cycle_epaper_frame">
 
-<div class="card mb-3">
+<div class="card mb-3" id="epaper-image-sources-card">
   <div class="card-header"><strong>Image sources</strong></div>
   <div class="card-body">
     <div class="mb-3">
@@ -177,6 +239,11 @@
         <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="epaper_clear_sd_cache">Clear SD cache</button>
       </div>
     </div>
+    <div class="mt-3 form-check">
+      <input type="checkbox" class="form-check-input" id="epaper_frame_wake_log_enabled" name="epaper_frame_wake_log_enabled">
+      <label class="form-check-label" for="epaper_frame_wake_log_enabled">Record wake diagnostics</label>
+      <div class="form-text">Appends one CSV row per wake to internal storage. <a href="/api/component/epaper-image/wake-log">Download</a> <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="epaper_clear_wake_log">Clear</button></div>
+    </div>
   </div>
 </div>
 
@@ -305,6 +372,48 @@
     </div>
   </div>
 </div>
+
+<style>
+  .epaper-estimator-hero { position: sticky; top: -0.75rem; z-index: 1020; margin-bottom: 1rem; padding: 0.7rem 0.85rem; border: 1px solid rgba(25, 135, 84, 0.3); border-radius: var(--bs-border-radius); color: #173b2b; background: linear-gradient(135deg, var(--epaper-hero-start, #d9f3e4), var(--epaper-hero-end, #fff4c7)); box-shadow: 0 0.35rem 1rem rgba(23, 59, 43, 0.18); }
+  .epaper-estimator-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+  .epaper-estimator-eyebrow { margin: 0; color: #337052; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .epaper-estimator-result { margin: 0; color: #173b2b; font-size: clamp(1.35rem, 4vw, 2rem); line-height: 1; white-space: nowrap; }
+  .epaper-horizon { overflow-x: auto; margin-top: 0.3rem; padding: 0.05rem 0.1rem 0; }
+  .epaper-horizon-scale { position: relative; min-width: 620px; height: 2.15rem; }
+  .epaper-horizon-axis { position: absolute; top: 0.95rem; right: 0; left: 0; height: 0.3rem; border-radius: 1rem; background: rgba(25, 135, 84, 0.25); }
+  .epaper-horizon-tick { position: absolute; top: 0; transform: translateX(-50%); color: #527064; font-size: 0.58rem; text-align: center; white-space: nowrap; }
+  .epaper-horizon-tick::after { display: block; width: 1px; height: 0.7rem; margin: 0.2rem auto 0; background: rgba(25, 135, 84, 0.45); content: ""; }
+  .epaper-horizon-tick.is-first { transform: none; }
+  .epaper-horizon-tick.is-last { transform: translateX(-100%); }
+  .epaper-horizon-marker { position: absolute; top: 0.625rem; z-index: 1; width: 0.95rem; height: 0.95rem; transform: translateX(-50%); border: 0.16rem solid #fff; border-radius: 50%; background: #198754; box-shadow: 0 0 0 0.1rem rgba(25, 135, 84, 0.35); transition: left 250ms ease; }
+  .epaper-estimator-body { margin-bottom: 1rem; padding: 1.25rem; background: rgba(255, 255, 255, 0.92); }
+  .epaper-estimator-slider output { color: #16794d; font-weight: 700; }
+  .epaper-estimator-body .form-label, .epaper-estimator-body .form-check-label, .epaper-estimator-body strong, .epaper-estimator-body summary { color: #29463a; }
+  .epaper-estimator-body .form-text { color: #46584d; }
+  .epaper-estimator-slider input[type="range"] { accent-color: #198754; }
+  .epaper-budget { display: flex; height: 1.5rem; overflow: hidden; border-radius: 0.4rem; background: #e9ecef; }
+  .epaper-budget-part { min-width: 2px; transition: width 250ms ease; }
+  .epaper-budget-sleep { background: #198754; }
+  .epaper-budget-network { background: #0d6efd; }
+  .epaper-budget-cache { background: #20c997; }
+  .epaper-budget-panel { background: #fd7e14; }
+  .epaper-budget-manual { background: #6f42c1; }
+  .epaper-budget-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-top: 0.6rem; color: #5c6870; font-size: 0.78rem; }
+  .epaper-budget-legend span::before { display: inline-block; width: 0.65rem; height: 0.65rem; margin-right: 0.3rem; border-radius: 50%; content: ""; }
+  .epaper-legend-sleep::before { background: #198754; }
+  .epaper-legend-network::before { background: #0d6efd; }
+  .epaper-legend-cache::before { background: #20c997; }
+  .epaper-legend-panel::before { background: #fd7e14; }
+  .epaper-legend-manual::before { background: #6f42c1; }
+  .epaper-estimator-tip { border-left: 0.3rem solid #fd7e14; background: rgba(255, 193, 7, 0.15); }
+  .epaper-estimator-tip strong { color: #7a4b00; }
+  .epaper-estimate-assumptions { white-space: pre-line; }
+  .epaper-estimate-cycle-stats { margin-left: 0.5rem; color: #46584d; font-size: 0.78rem; font-weight: 400; }
+  @media (max-width: 575.98px) {
+    .epaper-horizon { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .epaper-horizon-marker { transition: none; } }
+</style>
 
 <div class="save-bar">
   <button type="button" class="btn btn-primary btn-sm" id="epaper-image-save-btn">Save</button>

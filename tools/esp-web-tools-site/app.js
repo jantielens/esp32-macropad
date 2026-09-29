@@ -5,52 +5,41 @@
 
   if (!input || !container || !count) return;
 
-  // Group boards by device class on initial load. Boards arrive in the DOM
-  // as a flat list of `.board[data-class]` elements; rewrap them into per-
-  // class <section.board-category> blocks so the page surfaces device-class
-  // structure (Interactive Display / E-Paper / Headless).
   const CATEGORY_ORDER = [
     {
       key: 'macropad',
-      title: 'Macropad (with LCD display)',
-      description:
-        'Touch-screen control surface. Configurable grid of buttons with icons, colors, and actions; live data widgets (gauges, sparklines, bar charts) bound to MQTT topics; Home Assistant integration; optional BLE HID keyboard. Great as a desktop macro pad, smart-home remote, or always-on status dashboard.',
+      title: 'Macropad',
+      description: 'Interactive pads on compatible touch displays, including e-paper.',
     },
     {
-      key: 'epaper',
-      title: 'E-Paper',
-      description:
-        'Battery-powered, sunlight-readable display that sleeps between refreshes. Image carousel with hourly schedules and Home Assistant integration. Ideal for fridge dashboards, photo frames, family calendars, and other low-power info panels.',
+      key: 'epaper_frame',
+      title: 'E-Paper Frame',
+      description: 'Sleep-first image frames with scheduled refreshes.',
     },
     {
       key: 'headless',
       title: 'Headless',
-      description:
-        'No display \u2014 a sensor / bridge node. Publishes telemetry over MQTT, broadcasts BTHome BLE beacons, and exposes the same web portal for configuration. Useful for distributed sensors, BLE-to-MQTT bridges, and remote actuator nodes.',
+      description: 'Sensor and automation nodes without a display.',
     },
     {
       key: 'shutter_tester',
       title: 'Shutter Tester',
-      description:
-        'Specialized capture rig for measuring camera shutter speeds. ADC sensor array reads the light pulse from a film-plane LED bar, computes exposure times across the frame, and stores test sessions for review in the web portal.',
+      description: 'Film-plane shutter timing measurement.',
     },
     {
       key: 'coffee_scale',
       title: 'Coffee Scale',
-      description:
-        'Touch-screen kitchen scale for coffee brewing. Reads load-cell sensors (HX711 or NAU7802), runs configurable brew templates with pour-by-pour timing and weight targets, and logs brews to the web portal.',
+      description: 'Guided pours, weight targets, and brew logs.',
     },
     {
       key: 'darkroom_timer',
       title: 'Darkroom Timer',
-      description:
-        'Touch-screen enlarger timer for analog darkroom printing. Controls enlarger and safelight relays over Wi-Fi (Shelly), meters paper exposure with a TSL2591 light sensor, and runs configurable print timing sequences from the web portal.',
+      description: 'Light metering and print timing with relay control.',
     },
     {
       key: 'voice_assistant',
       title: 'Voice Assistant',
-      description:
-        'Touch-screen voice interface with microphone input, cloud transcription, configurable voice actions, and Home Assistant integration.',
+      description: 'Cloud transcription and configurable voice actions.',
     },
   ];
 
@@ -93,6 +82,13 @@
   }
 
   const cards = Array.from(container.querySelectorAll('[data-board]'));
+  const selectedBoard = new URLSearchParams(window.location.search).get('board');
+  const selectedCard = cards.find((card) => card.dataset.board === selectedBoard);
+  let showSelected = Boolean(selectedCard);
+  if (selectedCard) {
+    input.value = selectedBoard;
+    selectedCard.classList.add('is-selected');
+  }
 
   function update() {
     const q = (input.value || '').trim().toLowerCase();
@@ -102,7 +98,7 @@
       const name = (el.getAttribute('data-board') || '').toLowerCase();
       const chip = (el.getAttribute('data-chip') || '').toLowerCase();
       const details = (el.textContent || '').toLowerCase();
-      const match = !q || name.includes(q) || chip.includes(q) || details.includes(q);
+      const match = showSelected ? el === selectedCard : !q || name.includes(q) || chip.includes(q) || details.includes(q);
       el.style.display = match ? '' : 'none';
       if (match) visible++;
     }
@@ -115,46 +111,16 @@
     }
 
     count.textContent = `${visible} / ${cards.length} boards`;
+    const empty = document.getElementById('boardEmpty');
+    if (empty) empty.hidden = visible !== 0;
   }
 
-  input.addEventListener('input', update);
+  input.addEventListener('input', () => {
+    showSelected = false;
+    if (selectedCard) selectedCard.classList.remove('is-selected');
+    update();
+  });
   update();
-})();
-
-(() => {
-  const pre = document.getElementById('releaseNotes');
-  if (!pre) return;
-
-  fetch('./release-notes.md', { cache: 'no-store' })
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.text();
-    })
-    .then((text) => {
-      const trimmed = (text || '').trim();
-      if (!trimmed.length) {
-        pre.textContent = 'No release notes provided.';
-        return;
-      }
-
-      // If a markdown renderer is available, render to HTML.
-      // Otherwise, fall back to plain text.
-      const hasMarked = typeof window.marked !== 'undefined' && typeof window.marked.parse === 'function';
-      const hasPurify = typeof window.DOMPurify !== 'undefined' && typeof window.DOMPurify.sanitize === 'function';
-
-      if (hasMarked && hasPurify) {
-        const html = window.marked.parse(trimmed, {
-          mangle: false,
-          headerIds: false,
-        });
-        pre.innerHTML = window.DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
-      } else {
-        pre.textContent = trimmed;
-      }
-    })
-    .catch(() => {
-      pre.textContent = 'Release notes are not available here. Use the “View release” link above.';
-    });
 })();
 
 (() => {

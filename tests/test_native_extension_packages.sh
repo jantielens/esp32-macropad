@@ -26,6 +26,10 @@ build_package() {
             target_abi="xtensa-esp32s3"
             readelf="$HOME/.arduino15/packages/esp32/tools/esp-x32/2511/bin/xtensa-esp32s3-elf-readelf"
             ;;
+        esp32)
+            target_abi="xtensa-esp32"
+            readelf="$HOME/.arduino15/packages/esp32/tools/esp-x32/2511/bin/xtensa-esp32-elf-readelf"
+            ;;
         *)
             echo "Unknown test target: $target" >&2
             exit 1
@@ -38,7 +42,7 @@ build_package() {
         grep -q '[[:space:]]native_extension_descriptor$'
     "$readelf" -sW "$output" |
         grep -q '[[:space:]]native_extension_shutdown$'
-    if [[ "$target" == "s3" ]]; then
+    if [[ "$target" == "s3" || "$target" == "esp32" ]]; then
         ! "$readelf" -rW "$output" | grep -E 'R_' | grep -vq 'R_XTENSA_RELATIVE'
         "$readelf" -rW "$output" | grep -q 'R_XTENSA_RELATIVE'
     else
@@ -58,6 +62,7 @@ while IFS= read -r source; do
     base_name="${package_name%.elf}"
     build_package p4 "$source" "$TMP_DIR/$base_name-p4.elf"
     build_package s3 "$source" "$TMP_DIR/$base_name-s3.elf"
+    build_package esp32 "$source" "$TMP_DIR/$base_name-esp32.elf"
 done < <(grep -rl --include='*.cpp' 'native_extension_descriptor' "$PROJECT_DIR/extensions"/*/)
 
 first_package=$(find "$TMP_DIR" -maxdepth 1 -type f -name '*.ext' | head -n 1)

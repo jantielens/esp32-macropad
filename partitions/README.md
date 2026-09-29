@@ -89,6 +89,15 @@ The `ota_6mb_16MB_ext` and `ota_8mb_32MB_ext` schemes reserve a 256 KiB raw
 ESP32-P4 targets use an extension-aware partition scheme and require a serial
 flash when migrating from the corresponding non-extension partition table.
 
+The Inkplate 6FLICK Interactive `huge_app_ext` scheme has a 3.5625 MiB app
+partition, 280 KiB LittleFS volume (SPIFFS subtype), and 40 KiB `extensions`
+partition for
+one 32 KiB ELF. Re-run `./tools/install-custom-partitions.sh` on an existing
+development machine to update the board's maximum app size. Back up stored
+files before flashing the new partition table over serial. The smaller LittleFS
+volume does not preserve files from the old layout; restore them after flashing.
+This board does not support OTA.
+
 ## ESP32-P4 extension XIP limit
 
 The ESP32-P4 LCD4B and LCD4B Voice targets use `ota_6mb_16MB_ext` and set

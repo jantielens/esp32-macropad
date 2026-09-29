@@ -1,16 +1,16 @@
 ---
 title: Native Extensions
-description: Developer guide for creating and installing ESP32-P4 and ESP32-S3 native Extensions
+description: Developer guide for creating and installing native Extensions on supported ESP32 boards
 ms.date: 2026-09-07
 ms.topic: how-to
 ---
 
 ## Overview
 
-Extensions are trusted native ELF modules for supported ESP32-P4 and ESP32-S3
-display boards. P4 packages use RISC-V and execute from flash. S3 packages
-use Xtensa; their code is relocated into executable internal RAM and their
-data is relocated into PSRAM. An Extension source is built into one signed
+Extensions are trusted native ELF modules for supported ESP32-P4, ESP32-S3,
+and classic ESP32 display boards. P4 packages use RISC-V and execute from
+flash. S3 and classic ESP32 packages use Xtensa; their code is relocated into
+executable internal RAM and their data is relocated into PSRAM. An Extension source is built into one signed
 package per target. An Extension can be installed in one slot and placed on
 zero or more pad buttons through the **Extension** widget.
 
@@ -20,7 +20,7 @@ allocates through its own code.
 
 ## Slots
 
-The extension partition contains three fixed slots:
+P4 and S3 extension partitions contain three fixed slots:
 
 | Slot | Usable ELF capacity |
 | --- | ---: |
@@ -28,10 +28,14 @@ The extension partition contains three fixed slots:
 | Small 2 | 56 KiB |
 | Large | 120 KiB |
 
+Inkplate 6FLICK Interactive has one 32 KiB usable slot in a 40 KiB raw
+partition. It does not support the other two slots.
+
 Upload a signed package named `<extension-id>@<package-semver>-p4.ext` or
-`<extension-id>@<package-semver>-s3.ext`. The ID uses lowercase letters, digits,
+`<extension-id>@<package-semver>-s3.ext`, or
+`<extension-id>@<package-semver>-esp32.ext`. The ID uses lowercase letters, digits,
 and hyphens. A package contains an ELF followed by its 64-byte signature. P4
-ELFs are relocation-free. S3 ELFs may contain only `R_XTENSA_RELATIVE`
+ELFs are relocation-free. Xtensa ELFs may contain only `R_XTENSA_RELATIVE`
 relocations, which the loader applies while creating the in-memory image. The
 portal stages the upload on the configured storage backend; the next boot
 verifies the target ABI and commits it into the selected extension slot.
@@ -81,6 +85,8 @@ bash tools/build-extension.sh p4 extensions/hello-world/hello_world.cpp \
   build/extensions/hello-world@1.0.0-p4.elf
 bash tools/build-extension.sh s3 extensions/hello-world/hello_world.cpp \
   build/extensions/hello-world@1.0.0-s3.elf
+bash tools/build-extension.sh esp32 extensions/hello-world/hello_world.cpp \
+  build/extensions/hello-world@1.0.0-esp32.elf
 ```
 
 Release-ready packages require `EXTENSION_SIGNING_KEY` to point at the
@@ -92,14 +98,21 @@ EXTENSION_SIGNING_KEY="$HOME/.config/esp32-macropad/extension-signing-private.pe
   build/extensions/hello-world@1.0.0-p4.elf
 ```
 
-`tools/build-p4-extensions.sh` builds both P4 and S3 packages, while
-`tools/build-extension.sh` builds a single package for either target. It uses
-`.secrets/extension-signing-private.pem` when `EXTENSION_SIGNING_KEY` is unset
-and fails rather than creating unsigned packages if no key is available.
+`tools/build-p4-extensions.sh` builds signed P4, S3, and ESP32 packages for
+every Extension. Release builds publish all three targets to the GitHub Pages
+catalog without filtering by package size. `tools/build-extension.sh` builds a
+single package for the chosen target. Set `EXTENSION_SIGNING_KEY` to the
+project's signing key to create an uploadable `.ext` package; without it the
+command produces only an ELF. The
+Inkplate build requires the `huge_app_ext` partition scheme, installed with
+`./tools/install-custom-partitions.sh`. Back up stored data and flash the first
+firmware with this scheme over serial, since it reduces filesystem space.
 
 Each build creates a development ELF and its matching upload file, such as
-`hello-world@1.0.0-p4.ext` or `hello-world@1.0.0-s3.ext`. Upload the package
-matching the device target. Only generate a new P-256 key pair when establishing
+`hello-world@1.0.0-p4.ext`, `hello-world@1.0.0-s3.ext`, or
+`hello-world@1.0.0-esp32.ext`. Upload the package matching the device target;
+boards with smaller slots reject packages that exceed their slot capacity.
+Only generate a new P-256 key pair when establishing
 a project key or rotating it:
 
 ```bash
@@ -115,14 +128,14 @@ and ship firmware before uploading extensions signed by the new private key.
 Future firmware can add owner-approved third-party public keys using the same
 package format and verification path.
 
-The build scripts reject P4 ELF files containing relocations and reject S3
+The build scripts reject P4 ELF files containing relocations and reject Xtensa
 ELF files containing relocations other than `R_XTENSA_RELATIVE`. Rebuild and
-upload both target packages after a firmware update that changes
+upload packages for each target after a firmware update that changes
 `NATIVE_EXTENSION_ABI_VERSION`. Packages must use the current value declared in
 `native_extension_api.h`; packages built for a different ABI are intentionally
 unsupported.
 
-S3 executable internal RAM is limited. The loader only reserves the executable
+Xtensa executable internal RAM is limited. The loader only reserves the executable
 code span in internal RAM, while extension constants and writable data use
 PSRAM. A package whose executable code cannot fit in the largest available
 internal executable block is skipped at boot.
@@ -168,7 +181,8 @@ button shows a memory-specific message instead of "Extension unavailable".
 The loader requires the descriptor, then verifies its ID and package version
 against the filename as well as its ABI and target ABI against firmware. Package
 semantic versioning is independent from the firmware ABI: use
-`flight-radar@1.2.0-p4.elf` or `flight-radar@1.2.0-s3.elf`, not an ABI-derived
+`flight-radar@1.2.0-p4.elf`, `flight-radar@1.2.0-s3.elf`, or
+`flight-radar@1.2.0-esp32.elf`, not an ABI-derived
 version, when an ABI rebuild does not itself introduce a major package behavior
 change.
 

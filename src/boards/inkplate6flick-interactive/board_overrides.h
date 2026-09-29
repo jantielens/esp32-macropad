@@ -1,7 +1,7 @@
 #pragma once
 
 // Experimental Inkplate 6FLICK always-on LVGL mode. This target uses the
-// 3MB no-OTA partition; the existing inkplate6flick-frame board remains the
+// 3.5625MB no-OTA partition; the existing inkplate6flick-frame board remains the
 // duty-cycled grayscale dashboard.
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
@@ -14,6 +14,7 @@
 #define HAS_IMAGE_FETCH false
 #define HAS_IMAGE_LIBRARY false
 #define HAS_CUSTOM_FONTS true
+#define HAS_NATIVE_EXTENSIONS true
 #define HAS_BUTTON false
 #define HAS_BACKLIGHT true
 // The frontlight can be shut off without disconnecting the e-paper panel.

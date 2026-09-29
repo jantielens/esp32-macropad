@@ -2,6 +2,8 @@
 
 #include "device_classes/epaper_frame/epaper_frame_timing.h"
 
+void epaper_frame_wake_log_append(const EpaperWakeRecord&) {}
+
 static void clear_wake_journal() {
 		EpaperWakeRecord record = {};
 		while (epaper_frame_wake_journal_peek(&record)) {
@@ -46,6 +48,64 @@ TEST(EpaperWakeJournal, PreservesRefreshResultOnDeliveryFailure) {
 		ASSERT_TRUE(epaper_frame_wake_journal_peek(&record));
 		EXPECT_EQ(record.result, EpaperWakeResult::MqttPublishUnconfirmed);
 		EXPECT_EQ(record.refresh_result, EpaperWakeResult::Updated);
+}
+
+TEST(EpaperWakeJournal, RecordsBatchRequestsPerWake) {
+		clear_wake_journal();
+		epaper_frame_timing_begin_wake(EpaperWakeReason::Timer);
+		epaper_frame_timing_record_batch_request(120);
+		epaper_frame_timing_record_batch_request(300);
+		epaper_frame_timing_last.batch_manifest_status = EpaperBatchManifestStatus::FailedFetch;
+			epaper_frame_timing_last.batch_manifest_http_ms = 5000;
+			epaper_frame_timing_last.batch_manifest_http_code = -1;
+		epaper_frame_timing_last.batch_fallback_used = true;
+			epaper_frame_timing_last.fallback_elapsed_ms = 130;
+			epaper_frame_timing_last.fallback_http_code = 200;
+		epaper_frame_wake_journal_finalize(EpaperWakeResult::Updated, 3800, 0);
+
+		EpaperWakeRecord record = {};
+		ASSERT_TRUE(epaper_frame_wake_journal_peek(&record));
+		EXPECT_EQ(record.timing.batch_http_ms, 420u);
+		EXPECT_EQ(record.timing.batch_slowest_request_ms, 300u);
+		EXPECT_EQ(record.timing.batch_manifest_status, EpaperBatchManifestStatus::FailedFetch);
+			EXPECT_EQ(record.timing.batch_manifest_http_ms, 5000u);
+			EXPECT_EQ(record.timing.batch_manifest_http_code, -1);
+		EXPECT_TRUE(record.timing.batch_fallback_used);
+			EXPECT_EQ(record.timing.fallback_elapsed_ms, 130u);
+			EXPECT_EQ(record.timing.fallback_http_code, 200);
+
+		epaper_frame_timing_begin_wake(EpaperWakeReason::Timer);
+		EXPECT_EQ(epaper_frame_timing_last.batch_http_ms, 0u);
+		EXPECT_EQ(epaper_frame_timing_last.batch_slowest_request_ms, 0u);
+		EXPECT_EQ(epaper_frame_timing_last.batch_manifest_status, EpaperBatchManifestStatus::NotAttempted);
+			EXPECT_EQ(epaper_frame_timing_last.batch_manifest_http_ms, 0u);
+			EXPECT_EQ(epaper_frame_timing_last.batch_manifest_http_code, 0);
+		EXPECT_FALSE(epaper_frame_timing_last.batch_fallback_used);
+			EXPECT_EQ(epaper_frame_timing_last.fallback_elapsed_ms, 0u);
+			EXPECT_EQ(epaper_frame_timing_last.fallback_http_code, 0);
+}
+
+TEST(EpaperWakeJournal, ReportsPreviousSleepRequestOnNextWake) {
+		clear_wake_journal();
+		epaper_frame_timing_begin_wake(EpaperWakeReason::Timer);
+		epaper_frame_wake_journal_finalize(EpaperWakeResult::Updated, 3800, 0);
+		epaper_frame_timing_record_sleep_request(0);
+
+		epaper_frame_timing_begin_wake(EpaperWakeReason::Button);
+		EXPECT_TRUE(epaper_frame_timing_last.previous_sleep_requested);
+		EXPECT_EQ(epaper_frame_timing_last.previous_requested_sleep_s, 0u);
+		epaper_frame_wake_journal_finalize(EpaperWakeResult::Skipped, 3800, 0);
+		epaper_frame_timing_record_sleep_request(600);
+
+		epaper_frame_timing_begin_wake(EpaperWakeReason::Timer);
+		EpaperWakeRecord record = {};
+		epaper_frame_wake_journal_remove_oldest();
+		epaper_frame_wake_journal_remove_oldest();
+		ASSERT_TRUE(epaper_frame_wake_journal_peek(&record));
+		EXPECT_TRUE(record.timing.previous_sleep_requested);
+		EXPECT_EQ(record.timing.previous_requested_sleep_s, 600u);
+		epaper_frame_timing_begin_wake(EpaperWakeReason::Timer);
+		EXPECT_FALSE(epaper_frame_timing_last.previous_sleep_requested);
 }
 
 TEST(EpaperWakeJournal, PreservesRefreshResultOnBudgetCut) {

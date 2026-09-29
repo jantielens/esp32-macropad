@@ -70,7 +70,7 @@ static bool external_create_instance(ExternalWidgetState* external) {
 static void external_timer_cb(lv_timer_t* timer) {
     auto* external = static_cast<ExternalWidgetState*>(lv_timer_get_user_data(timer));
     if (!external || !external->config) return;
-    if (screen_saver_manager_is_fully_asleep()) return;
+    if (screen_saver_manager_is_rendering_suspended()) return;
     if (!external->created) {
         if (external->retry_after_stop) {
             external_create_instance(external);

@@ -44,15 +44,39 @@ bool epaper_frame_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* ou
 
 		size_t total = 0;
 		const uint32_t started_ms = millis();
+		uint32_t idle_started_ms = 0;
+		uint32_t idle_ms = 0;
+		uint32_t longest_idle_ms = 0;
+		uint32_t read_ms = 0;
+		uint32_t reads = 0;
+		size_t max_available = 0;
+		auto log_receive = [&](bool complete) {
+			if (total < 32768 && complete) return;
+			const uint32_t idle_gap_ms = idle_started_ms ? millis() - idle_started_ms : 0;
+			if (idle_gap_ms > longest_idle_ms) longest_idle_ms = idle_gap_ms;
+			LOGI("Epaper", "image receive: %uB/%lums idle=%lums max_gap=%lums read=%lums calls=%lu peak=%u %s",
+					(unsigned)total, (unsigned long)(millis() - started_ms),
+					(unsigned long)(idle_ms + idle_gap_ms), (unsigned long)longest_idle_ms,
+					(unsigned long)read_ms, (unsigned long)reads,
+					(unsigned)max_available, complete ? "complete" : "incomplete");
+		};
 		while ((http.connected() || stream->available()) &&
 				(length_hint < 0 || total < (size_t)length_hint)) {
 			if (millis() - started_ms >= idle_timeout_ms) {
+				log_receive(false);
 				LOGW("Epaper", "image download deadline reached after %u bytes", (unsigned)total);
 				heap_caps_free(buffer);
 				return false;
 			}
 				size_t available = stream->available();
 				if (available) {
+					if (idle_started_ms) {
+						const uint32_t gap_ms = millis() - idle_started_ms;
+						idle_ms += gap_ms;
+						if (gap_ms > longest_idle_ms) longest_idle_ms = gap_ms;
+						idle_started_ms = 0;
+					}
+					if (available > max_available) max_available = available;
 						if (length_hint > 0) {
 								const size_t remaining = (size_t)length_hint - total;
 								if (available > remaining) available = remaining;
@@ -69,15 +93,20 @@ bool epaper_frame_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* ou
 								buffer = grown;
 								capacity = new_capacity;
 						}
+						const uint32_t read_started_ms = millis();
 						const int count = stream->read(buffer + total, available);
+						read_ms += millis() - read_started_ms;
+						++reads;
 						if (count <= 0) break;
 						total += (size_t)count;
 						if (body_bytes_read) *body_bytes_read += (size_t)count;
 				} else {
 						if (length_hint > 0 && total >= (size_t)length_hint) break;
+						if (!idle_started_ms) idle_started_ms = millis();
 						delay(1);
 				}
 		}
+		log_receive(length_hint < 0 || total == (size_t)length_hint);
 		if (total < 4) {
 				heap_caps_free(buffer);
 				return false;

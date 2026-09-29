@@ -1,0 +1,79 @@
+{
+  "macropad": {
+    "title": "Macropad",
+    "icon": "grid_view",
+    "summary": "Build a custom pad with buttons, live data widgets, and smart-home controls. Use a compatible touch display, including interactive e-paper boards.",
+    "intro": "Turn a compatible touch display into a pad of customizable buttons and live data widgets. Assign shortcuts or smart-home actions, and choose an LCD or interactive e-paper board to suit your setup.",
+    "guidance": [
+      "Choose the exact display board model. SD variants use a different storage layout from their standard counterparts.",
+      "After flashing, connect to the device's web portal to configure Wi-Fi and build your first pad.",
+      "Interactive e-paper builds stay responsive and use more power than E-Paper Frame firmware. Other features such as audio, camera, BLE HID, and Extensions depend on the board."
+    ]
+  },
+  "epaper_frame": {
+    "title": "E-Paper Frame",
+    "icon": "wallpaper",
+    "summary": "Cycle through images on a sunlight-readable e-paper screen. Scheduled refreshes and deep sleep help preserve battery life.",
+    "intro": "Use a compatible e-paper device as a battery-powered image frame. It wakes to refresh the display on a schedule, then sleeps between updates to conserve power.",
+    "guidance": [
+      "Frame firmware favors long battery life and scheduled image refreshes. For a touch-first pad, choose the interactive build under Macropad instead.",
+      "Match the exact board model before flashing; the same hardware may have both Frame and Interactive builds.",
+      "Back up device files before switching between Frame and Interactive firmware because their partition layouts may differ."
+    ]
+  },
+  "headless": {
+    "title": "Headless",
+    "icon": "sensors",
+    "summary": "Publish sensor readings and trigger automations without a display. Supported boards can broadcast BTHome data or connect over MQTT.",
+    "intro": "Use a compact board without a screen to report sensor readings or trigger automations. Depending on the hardware, share data over MQTT or BTHome and configure the device from its web portal.",
+    "guidance": [
+      "Select the exact sensor board: the FireBeetle 2 build includes its AHT10 sensor and battery monitoring.",
+      "Configure Wi-Fi, MQTT, and automation through the device's web portal after flashing.",
+      "Check whether the chosen build supports over-the-air updates before relying on Wi-Fi updates."
+    ]
+  },
+  "coffee_scale": {
+    "title": "Coffee Scale",
+    "icon": "coffee",
+    "summary": "Follow guided pours with live weight and timing on a touch display. Save brew templates and review past brews in the web portal.",
+    "intro": "Connect a load cell to a compatible touch display for guided coffee brewing. Set up brew templates with pour times and weight targets, then review your completed brews in the web portal.",
+    "guidance": [
+      "Choose HX711 firmware for an HX711 load-cell amplifier or NAU7802 firmware for a NAU7802 I2C ADC. The firmware must match your wired hardware.",
+      "Calibrate the scale in the device's web portal before using brew templates.",
+      "Keep the scale stable and verify sensor wiring before starting a brew."
+    ]
+  },
+  "shutter_tester": {
+    "title": "Shutter Tester",
+    "icon": "photo_camera",
+    "summary": "Measure shutter speed and exposure variation across a camera's film plane. Review recorded measurement sessions in the web portal.",
+    "intro": "Use a film-plane light sensor array to measure shutter speed and compare exposure across the frame. Save measurement sessions and review the results in the web portal.",
+    "guidance": [
+      "This build expects a BPW34 photodiode sensor array and a compatible film-plane light source.",
+      "Connect the sensors and confirm their readings before measuring a shutter.",
+      "Review captured sessions from the device's web portal."
+    ]
+  },
+  "darkroom_timer": {
+    "title": "Darkroom Timer",
+    "icon": "timer",
+    "summary": "Time enlarger exposures and run repeatable print sequences from a touch display. Meter light and control compatible relays on your network.",
+    "intro": "Run timed exposures and repeatable print sequences from a compatible touch display. Use a light sensor to meter your setup and supported network relays to control the enlarger or safelight.",
+    "guidance": [
+      "This firmware expects a TSL2591 light sensor and compatible Shelly relays on your network.",
+      "Set up and test relay control in the web portal before connecting an enlarger or safelight.",
+      "Confirm safe relay behavior and sensor readings before starting a print sequence."
+    ]
+  },
+  "voice_assistant": {
+    "title": "Voice Assistant",
+    "icon": "record_voice_over",
+    "summary": "Capture spoken commands on a microphone-equipped display. Transcribe speech through a cloud service to run configured actions or control Home Assistant.",
+    "intro": "Capture speech on a microphone-equipped display and send it to a cloud transcription service. Use recognized commands to trigger configured actions or control Home Assistant.",
+    "guidance": [
+      "Use the ESP32-P4 LCD4B Voice build with microphone-equipped compatible hardware.",
+      "Configure network access and your transcription service in the device's web portal after flashing.",
+      "Cloud transcription requires network access and service credentials."
+    ]
+  }
+}

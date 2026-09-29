@@ -393,7 +393,8 @@ bool build_layout(const NativeExtensionHostApi* host, InstanceState* instance, u
         const uint8_t candidate = FONT_SIZES[index];
         if (candidate > maximum_size) continue;
         const int32_t widest = host->canvas->canvas_measure_text("W", instance->font_name, candidate);
-        if (widest > 0 && widest <= cell_width && candidate <= cell_height) {
+        const uint8_t required_height = candidate == 12 && text_equals(instance->font_name, "bebas") ? 11 : candidate;
+        if (widest > 0 && widest <= cell_width && required_height <= cell_height) {
             instance->font_size = candidate;
             instance->cell_width = cell_width;
             instance->cell_height = cell_height;

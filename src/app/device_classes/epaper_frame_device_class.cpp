@@ -78,6 +78,7 @@ static const char *kKeyRotation       = "ep_rot";
 static const char *kKeyCrc32          = "ep_crc32";
 static const char *kKeyCrcEnabled     = "ep_crc_en";
 static const char *kKeySdCacheEn      = "ep_sd_en";
+static const char *kKeyWakeLogEn      = "ep_wake_log";
 static const char *kKeyOverlayEn      = "ep_ovl_en";
 static const char *kKeyOverlayPos     = "ep_ovl_pos";
 static const char *kKeyOverlayCol     = "ep_ovl_col";
@@ -290,6 +291,7 @@ static void config_defaults_hook(DeviceConfig * /*cfg*/) {
 		g_epaper_config.epaper_frame_last_crc32 = 0;
 		g_epaper_config.epaper_frame_crc32_enabled = false;
 		g_epaper_config.epaper_frame_sd_cache_enabled = false;
+		g_epaper_config.epaper_frame_wake_log_enabled = false;
 		g_epaper_config.epaper_frame_overlay_enabled = false;
 		g_epaper_config.epaper_frame_overlay_position = 3;
 		g_epaper_config.epaper_frame_overlay_color = 0;
@@ -340,6 +342,7 @@ static void config_load_hook(DeviceConfig * /*cfg*/, Preferences &prefs) {
 		g_epaper_config.epaper_frame_last_crc32 = prefs.getUInt(kKeyCrc32, 0);
 		g_epaper_config.epaper_frame_crc32_enabled = prefs.getBool(kKeyCrcEnabled, false);
 		g_epaper_config.epaper_frame_sd_cache_enabled = prefs.getBool(kKeySdCacheEn, false);
+		g_epaper_config.epaper_frame_wake_log_enabled = prefs.getBool(kKeyWakeLogEn, false);
 		const uint8_t offline_refreshes = prefs.getUChar(kKeyOfflineSyncs, 0);
 		const bool offline_prerequisites = epaper_frame_service_supported() &&
 				epaper_frame_source_uses_service(g_epaper_config.source_mode) &&
@@ -399,6 +402,7 @@ static void config_save_hook(const DeviceConfig * /*cfg*/, Preferences &prefs) {
 		prefs.putUInt(kKeyCrc32, g_epaper_config.epaper_frame_last_crc32);
 		prefs.putBool(kKeyCrcEnabled, g_epaper_config.epaper_frame_crc32_enabled);
 		prefs.putBool(kKeySdCacheEn, g_epaper_config.epaper_frame_sd_cache_enabled);
+		prefs.putBool(kKeyWakeLogEn, g_epaper_config.epaper_frame_wake_log_enabled);
 		prefs.putBool(kKeyOverlayEn, g_epaper_config.epaper_frame_overlay_enabled);
 		prefs.putUChar(kKeyOverlayPos, g_epaper_config.epaper_frame_overlay_position);
 		prefs.putUChar(kKeyOverlayCol, g_epaper_config.epaper_frame_overlay_color);
@@ -447,6 +451,7 @@ static void config_api_get_hook(const DeviceConfig * /*cfg*/, JsonObject &root) 
 		root["epaper_frame_rotation"] = g_epaper_config.epaper_frame_rotation;
 		root["epaper_frame_crc32_enabled"] = g_epaper_config.epaper_frame_crc32_enabled;
 		root["epaper_frame_sd_cache_enabled"] = g_epaper_config.epaper_frame_sd_cache_enabled;
+		root["epaper_frame_wake_log_enabled"] = g_epaper_config.epaper_frame_wake_log_enabled;
 		root["epaper_frame_sd_cache_supported"] = (bool)
 #ifdef EPAPER_FRAME_SD_CS_PIN
 			true
@@ -578,6 +583,9 @@ static void config_api_set_hook(DeviceConfig * /*cfg*/, JsonObject &body) {
 			g_epaper_config.epaper_frame_crc32_enabled = body["epaper_frame_crc32_enabled"] | false;
 		}		if (body.containsKey("epaper_frame_sd_cache_enabled")) {
 			g_epaper_config.epaper_frame_sd_cache_enabled = body["epaper_frame_sd_cache_enabled"] | false;
+		} 		if (body.containsKey("epaper_frame_wake_log_enabled")) {
+			g_epaper_config.epaper_frame_wake_log_enabled = epaper_frame_config_parse_bool(
+					body["epaper_frame_wake_log_enabled"], false);
 		}		if (body.containsKey("epaper_frame_overlay_enabled")) {
 				g_epaper_config.epaper_frame_overlay_enabled = body["epaper_frame_overlay_enabled"] | false;
 		}
@@ -692,7 +700,7 @@ static void sleep_prepare_hook(uint32_t *seconds_inout) {
 		// power_manager_sleep_for() can skip timer wake and rely on class-owned
 		// wake sources (ext1 here). The core clamps 0->1 only when no class owns
 		// the active power mode.
-		(void)seconds_inout;
+		epaper_frame_timing_record_sleep_request(*seconds_inout);
 #if HAS_EPAPER_FRAME_WAKE_BUTTON
 		// Match the Seeed reTerminal LowPower_DeepSleep reference: use ext1 (more
 		// robust than ext0 on the ESP32-S3) and enable the RTC-domain pull-up so
@@ -1464,6 +1472,7 @@ void epaper_frame_device_class_register() {
 #include "epaper_frame/epaper_frame_screens.cpp"
 #include "epaper_frame/epaper_frame_sd_cache.cpp"
 #include "epaper_frame/epaper_frame_timing.cpp"
+#include "epaper_frame/epaper_frame_wake_log.cpp"
 #include "epaper_frame/epaper_frame_wake_budget.cpp"
 
 #endif // IS_EPAPER_FRAME

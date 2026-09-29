@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-24
+ms.date: 2026-09-28
 ms.topic: reference
 ---
 
@@ -11,6 +11,53 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.34.0] - 2026-09-28
+
+### Added
+
+* **Device-class firmware installer**: the GitHub Pages site now offers
+  general-purpose and specialized firmware guides with board-specific flash
+  links, class icons, and setup guidance. Dedicated pages handle USB flashing,
+  Wi-Fi updates, Extensions, and device health; existing firmware downloads and
+  legacy installer links remain available.
+* Native Extension support now includes classic ESP32 devices alongside
+  ESP32-S3 and ESP32-P4. Inkplate 6FLICK Interactive is the first classic ESP32
+  board to use it, with one 32 KiB ELF slot. Signed `-esp32.ext` packages are
+  built and published without a catalog-wide size filter; each device enforces
+  its own slot capacity. Inkplate 6FLICK Interactive uses a 3.5625 MiB no-OTA
+  app partition, 280 KiB LittleFS filesystem, and 40 KiB Extensions partition.
+  Back up stored files before serial-flashing the new layout and restore them
+  afterward; the smaller filesystem cannot preserve the old contents.
+* **E-Paper Frame wake diagnostics**: an optional, downloadable and clearable
+  wake CSV records refresh outcomes, battery readings, batch request results,
+  fallback timing, and the preceding wake's requested sleep interval. The
+  photoframe site logs safe, correlated `/next` and `/next-batch` ingress,
+  completion, and batch phase timings without exposing signed content URLs.
+* **Device-free portal development server**: `python3 tools/portal-dev-server.py`
+  serves the production portal shell, core assets, and available fragments with
+  deterministic in-memory API fixtures. Developers can work on portal UI without
+  flashing or connecting a device, including deep links such as
+  `?profile=reterminal-e1003-frame&fragment=epaper-image`.
+* **E-Paper Frame Battery Horizon**: a client-side battery-life estimator now
+  combines battery capacity, image workload, refresh settings, and hourly
+  scheduling into a live day estimate, timeline, daily energy budget, detailed
+  assumptions, and context-aware battery-saving tips. The compact sticky horizon
+  remains visible with its controls while the page scrolls; schedule shortcuts
+  update the estimate immediately, and narrow screens hide the wide timeline to
+  avoid horizontal scrolling.
+
+### Fixed
+
+* Waking at 0% brightness now restores the awake state instead of treating the
+  unlit frontlight as Display Sleep. Extensions continue updating during
+  backlight-only sleep on e-paper, while LCD boards retain their rendering
+  pause during Display Sleep.
+* Word Clock can use the bundled 12-pixel Bebas font in compact buttons whose
+  letter cells are 11 pixels high, avoiding an unavailable widget on those
+  layouts.
+* Reinstalling an existing custom partition scheme now updates its registered
+  maximum app size to match the current CSV instead of retaining the old limit.
 
 ## [1.33.0] - 2026-09-24
 

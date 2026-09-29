@@ -5,6 +5,29 @@ description: Developer reference for the ESP32 Macropad web portal architecture,
 
 The ESP32 template includes a full-featured web portal for device configuration, monitoring, and firmware updates. The portal uses an async web server with captive portal support for initial setup.
 
+## Local Device-Free Development
+
+Use `tools/portal-dev-server.py` to iterate on portal UI without a connected
+device or firmware build. It serves the production portal shell, core CSS and
+JavaScript sources, and available fragments from `src/app`, while replacing
+device API requests with deterministic in-memory fixtures.
+
+```bash
+python3 tools/portal-dev-server.py --port 8765
+```
+
+Open a fragment directly by passing its profile and fragment ID. For example,
+the E-Paper Frame image workflow is available at:
+
+```text
+http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
+```
+
+Changes to served HTML, CSS, and JavaScript are applied on the next browser
+reload. Restart the server after changing `tools/portal-dev-server.py`. Mock
+configuration writes remain in memory for the server process and never reach a
+physical device.
+
 ## Overview
 
 The web portal provides:
@@ -519,11 +542,12 @@ The button editor's Extension widget stores `extension_upscale` (integer 1 to
 4, default 1) in the pad JSON. The host scales direct child RGB565 canvases
 from the reduced Extension root back to the full button size.
 
-ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native Extensions. The
-Extensions page exposes two small slots (56 KiB each) and one large slot
-(120 KiB). Upload a signed package named `<extension-id>@<version>-p4.ext` or
-`<extension-id>@<version>-s3.ext` that matches the device. It contains a
-relocation-free native ELF followed by its fixed 64-byte ECDSA P-256 signature;
+ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native
+Extensions in two 56 KiB slots and one 120 KiB slot. Inkplate 6FLICK
+Interactive provides one 32 KiB slot. Upload a signed package named
+`<extension-id>@<version>-p4.ext`, `<extension-id>@<version>-s3.ext`, or
+`<extension-id>@<version>-esp32.ext` that matches the device. It contains a
+native ELF followed by its fixed 64-byte ECDSA P-256 signature;
 it stages on the configured storage backend and installs into the selected
 executable flash slot during the next boot.
 
@@ -541,8 +565,10 @@ editor's **Extension** widget selects an enabled installed extension and passes
 its per-button configuration text to the native instance.
 
 Supported P4 and S3 boards use an `_ext` partition scheme, which reserves a
-256 KiB raw `extensions` partition. Flash the first firmware using this scheme
-over USB before attempting portal uploads.
+256 KiB raw `extensions` partition. Inkplate 6FLICK Interactive uses
+`huge_app_ext` with a 40 KiB partition carved out of its filesystem. Back up
+stored data and flash the first firmware using the new scheme over serial before
+attempting portal uploads.
 
 ### Music Library
 
@@ -2187,6 +2213,51 @@ DNS server redirects all requests to device IP in AP mode:
     caching. It accepts only `0..16`; the UI supplies an interval-based cadence
     hint and explains that longer offline runs delay new server content and MQTT
     telemetry.
+
+    The e-paper Image & Schedule fragment also contains a client-only Battery
+    Horizon estimator. Its battery capacity, new-photo, and manual-refresh
+    sliders are deliberately not registered configuration fields and are never
+    posted to `/api/config`. The estimator uses the current unsaved form values
+    to show a precise day estimate on a compressed timeline, an approximate
+    daily energy budget, detailed assumptions, and context-sensitive
+    battery-saving tips. Its Battery Horizon hero remains visible as a compact
+    sticky section above the estimator controls; the hero color adapts to the
+    estimate. On narrow screens, the estimate remains visible while the wide
+    timeline is hidden to prevent horizontal scrolling. Each configured new
+    photo adds estimated fetch and cache-invalidation work without becoming a
+    persisted config field. The calculation follows the active source mode:
+    direct image URLs can use CRC32 sidecars to skip unchanged panel updates,
+    while Next API Service mode relies on its `Keep` response. When Service
+    batching is enabled, every queued image is budgeted as a panel refresh and
+    only queued SD-cache misses add payload work to the preceding online sync.
+    On the reTerminal E1003, **Record wake diagnostics** persists an append-only
+    CSV file at `/epaper-wake-log.csv` in internal storage. The Image & Schedule
+    fragment exposes authenticated download and clear actions. Each completed
+    wake records its outcome, battery reading, timing breakdown, and batch
+    cache/download aggregates, including failed transfer counts and partial
+    bytes. `recorded_at_unix` is blank until the clock is valid, and
+    `sidecar_http_status` is blank in Service mode. `pre_delivery_ms` ends
+    before CSV logging and MQTT; `selected_image_fetch_ms` covers only the
+    selected image's cache read or download, not all batch requests.
+    `batch_manifest_result` is `not_attempted` if no manifest request was
+    made. `batch_http_ms` sums manifest and batch-image HTTP setup and transfer
+    times (including failed attempts, excluding cache reads, parsing, SD writes,
+    drawing, and `/next` fallback). `batch_slowest_request_ms` is the maximum
+    of those requests; `fallback_used` is 1 when a batch refresh invokes
+    `/next`. `batch_manifest_http_ms` measures the manifest HTTP setup and
+    transfer alone; `batch_manifest_http_code` is the GET result (positive
+    response status, negative HTTPClient error, or 0 if no GET completed).
+    `fallback_elapsed_ms` includes the whole `/next` client call, including
+    cache access; `fallback_http_code` reports its last GET, including a
+    redirected content GET if applicable. Both are 0 when no fallback ran.
+    `previous_sleep_requested` distinguishes a valid zero-second sleep request
+    from no retained request; `previous_requested_sleep_s` belongs to the
+    preceding wake and is the value supplied to the sleep hook, not a measured
+    sleep duration. Compare it to the next row's `wake_reason` and timestamps
+    when investigating unexpectedly short intervals. Storage failures only
+    emit a serial warning and never interrupt the refresh or sleep path. Clear
+    any earlier wake CSV before collecting rows with these new columns; no
+    in-place schema migration is performed.
 
 2. Rebuild to embed assets:
    ```bash

@@ -448,11 +448,29 @@ The E-Paper page configures the battery-oriented image workflow:
 | **Hourly refresh window** | 24-hour local-time mask that can disable refreshes during selected hours to save battery |
 | **Timezone offset** | Fixed UTC offset used to evaluate the hourly window |
 | **WiFi Failure Backoff** | Maximum WiFi retry sleep after repeated failures |
+| **Battery Horizon** | Client-side estimate based on battery size, new photos per day, manual refreshes, and the current image settings |
+| **Record wake diagnostics** | reTerminal E1003 only: append one completed wake as CSV to internal storage, with download and clear controls |
 | **Status** | Read-only refresh counters, timing, battery, and manual refresh action |
 | **Overlay** | Status overlay position/color/fields drawn on the image |
 | **VCOM** | Inkplate TPS65186 calibration controls |
 
 Duration is per slot and applies while that slot is active. The page does not expose a separate "wake every" control.
+
+The **Battery Horizon** estimator is informational only. Its sliders are not
+saved to the device and do not change the image schedule. It uses a conservative
+planning model to show a precise day estimate on a compressed timeline, a daily
+energy budget, detailed assumptions, and a mode-specific battery-saving
+suggestion. Its compact **Battery Horizon** heading stays visible while you
+scroll the page, with the estimator controls immediately below it. On narrow
+screens, the heading keeps the live estimate while the wide timeline is hidden
+to avoid horizontal scrolling. Its hero color adapts continuously to the
+estimate. Direct image URLs can use CRC32 sidecars to skip unchanged panel
+updates. In Service mode, the server's `Keep` response controls skipped
+updates instead. Each queued offline image still uses a full e-paper panel
+refresh. Only queued images missing from the SD cache add image-payload work
+to the preceding online sync.
+Actual life depends on the battery, board leakage, WiFi conditions, and manual
+use.
 
 On the reTerminal E1003 in **Photoframe Next Image API** Service mode, the page
 also exposes **Offline refreshes between syncs**. It is available only while SD
@@ -460,12 +478,37 @@ image caching is supported and enabled. Choose `0` (the default) through `16`:
 the device fetches up to the selected number of later images during an online
 sync, then displays them on later timer wakes without Wi-Fi. The hint calculates
 the resulting approximate online-sync cadence from the Service refresh interval.
-Higher values save battery but delay new server selections and MQTT telemetry.
+Higher values avoid Wi-Fi on later wakes, but each queued image still refreshes
+the e-paper panel. They also delay new server selections and MQTT telemetry.
 Changing the offline count or network timing fields automatically recalculates
 **Maximum scheduled wake time** for the first and queued images. Edit the
 maximum last to override the estimate; reopening the page preserves the saved
 value. The image download stop limit applies to each image request, while the
 overall scheduled wake limit (up to 10 minutes) remains the final safeguard.
+
+On the reTerminal E1003, **Record wake diagnostics** appends each completed
+wake to `/epaper-wake-log.csv` in internal storage. The CSV includes wake
+reason and result, battery reading, timing data, and Service batch cache,
+download, and failed-transfer totals. Download the file or clear it from Image
+& Schedule. `recorded_at_unix` is blank without a valid clock, and
+`sidecar_http_status` is blank in Service mode. `pre_delivery_ms` stops before
+logging and MQTT; `selected_image_fetch_ms` is only the chosen image's fetch.
+`batch_manifest_result` reports the manifest outcome (`not_attempted` if none),
+`batch_http_ms` sums manifest and batch-image HTTP attempts, and
+`batch_slowest_request_ms` identifies the longest one. These exclude cache
+reads, drawing, and `/next` fallback; `fallback_used` is 1 when that fallback
+is requested. Logging is diagnostic only: a storage error is reported on serial
+output but never blocks the image refresh or deep sleep.
+`batch_manifest_http_ms` and `batch_manifest_http_code` show the manifest
+request duration and GET result (positive HTTP status, negative client error,
+or 0 without a completed GET). `fallback_elapsed_ms` includes the entire
+`/next` client call, including cache access, and `fallback_http_code` is its
+last GET result; both are 0 if no fallback ran. `previous_sleep_requested`
+marks whether the preceding wake requested sleep, including zero seconds for
+button-only sleep. `previous_requested_sleep_s` is that requested duration,
+not an observed sleep interval; compare it with the current wake's reason and
+timestamps when checking early wakes. Clear an existing wake CSV before the
+next diagnostic run because earlier rows use the previous column layout.
 
 ---
 
@@ -515,6 +558,10 @@ On ESP32-P4 and supported 16 MB ESP32-S3 display builds, the **Extensions** page
 has two small slots and one large slot for trusted native Extensions. Upload the
 signed package `extension-id@version-p4.ext` or `extension-id@version-s3.ext`
 that matches the device, then reboot to install it into executable flash.
+Inkplate 6FLICK Interactive has one 32 KiB slot and requires a signed
+`extension-id@version-esp32.ext` package. Before enabling Extensions on an
+existing Inkplate, back up stored data and serial-flash the new partition table;
+it reduces filesystem space.
 The package contains the Extension ELF and its first-party signature; unsigned
 or modified packages are rejected. Select **Extension** as a button's widget,
 choose an enabled installed extension, and optionally provide per-button
