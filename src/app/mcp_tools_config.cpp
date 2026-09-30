@@ -145,6 +145,7 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
 #if HAS_BLE
     result["ble_burst_count"]    = c->ble_burst_count;
     result["ble_adv_interval_ms"] = c->ble_adv_interval_ms;
+    result["ble_tx_power_dbm"] = c->ble_tx_power_dbm;
 #endif
 
     // Display.

@@ -274,6 +274,7 @@ void setup()
 	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
 	// which can run in the background while touch, config, and pads initialize.
 	const bool defer_wifi_init =
+			boot_mode == PowerMode::DutyCycleBle ||
 			device_class_dispatch_defer_wifi_init(&device_config, boot_mode);
 	if (!defer_wifi_init) {
 		wifi_manager_early_init();
@@ -281,7 +282,7 @@ void setup()
 		LOGI("SYS", "MAC: %s", WiFi.macAddress().c_str());
 		#endif
 	} else {
-		LOGI("WiFi", "Early init deferred for offline e-paper wake");
+		LOGI("WiFi", "Early init deferred for offline wake");
 	}
 
 	#if HAS_TOUCH || HAS_CAMERA
@@ -407,7 +408,7 @@ void setup()
 		// Initialize sensors (their update path buffers BLE telemetry values)
 		sensor_manager_init();
 
-		ble_telemetry_init(device_config.device_name);
+		ble_telemetry_init(device_config.device_name, device_config.ble_tx_power_dbm);
 
 		duty_cycle_run(&device_config);
 		return;

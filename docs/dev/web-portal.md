@@ -332,7 +332,11 @@ every component in that custom section to the same category ID.
 
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
-- **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
+- **BLE Advertising**: Burst count, advertising interval, and transmit power
+  selection (only shown in Duty-Cycle BLE mode when firmware enables BLE).
+  Defaults are three repeats, 100 ms, and +9 dBm. Normal BLE wakes skip early
+  Wi-Fi initialization; config/recovery modes retain it. Saving marks a reboot
+  pending, and the next boot applies the selected power.
 - **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview,
   and screen saver configuration. Interactive display builds expose screen
   rotation as a separate Rotation component under Display; changes take effect
@@ -959,6 +963,9 @@ Returns current device configuration (passwords excluded).
   "mqtt_publish_interval_seconds": 120,
   "portal_idle_timeout_seconds": 120,
   "wifi_backoff_max_seconds": 900,
+  "ble_burst_count": 3,
+  "ble_adv_interval_ms": 100,
+  "ble_tx_power_dbm": 9,
   "mqtt_publish_scope": "sensors_only",
 
   "basic_auth_enabled": false,
@@ -1030,6 +1037,9 @@ Returns current device configuration (passwords excluded).
   Assistant credentials. The e-paper service endpoint follows the same
   write-only pattern with `epaper_service_token_set`.
 - `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config`.
+- `ble_burst_count`, `ble_adv_interval_ms`, and `ble_tx_power_dbm` are present
+  only when `HAS_BLE` is enabled. TX power is a signed dBm value, not an ESP-IDF
+  enum index. It is stored in NVS and also exposed by MCP `get_config`.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
 
 #### `POST /api/config`
@@ -1108,6 +1118,11 @@ Save new configuration. Device reboots after successful save.
 
 **Notes:**
 - Only fields present in request are updated
+- `ble_tx_power_dbm` accepts an integer or integer string: `-12`, `-9`, `-6`,
+  `-3`, `0`, `3`, `6`, or `9`. Unsupported values return HTTP 400 before any
+  configuration fields are updated. Omission leaves the setting unchanged.
+  It takes effect at BLE initialization after reboot. Use `?no_reboot=1` to
+  save without immediately restarting, as the portal does.
 - Write-only credentials use the same preservation rule: an empty string keeps
   the existing value, while a non-empty value replaces it. `POST /api/config`
   cannot clear a stored credential.

@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-28
+ms.date: 2026-09-30
 ms.topic: reference
 ---
 
@@ -11,6 +11,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+* BLE telemetry transmit power is configurable in the Operating Mode portal
+  from -12 to +9 dBm in 3 dB steps, with help text explaining the battery and
+  reception tradeoff. The setting is persisted and applies after reboot.
+
+### Fixed
+
+* BLE-only duty-cycle wakes skip Wi-Fi initialization, removing its 700 ms
+  fixed delays and unnecessary station-mode startup. Config/recovery mode
+  retains Wi-Fi access.
+* BLE defaults are initialized before opening NVS, so first-time configuration
+  saves retain the +9 dBm default even when the read-only namespace is absent.
+  An explicitly saved 0 dBm setting is preserved.
 
 ## [1.34.0] - 2026-09-28
 

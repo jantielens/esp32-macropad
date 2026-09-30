@@ -177,6 +177,20 @@ Controls how the device operates:
 
 MQTT publish interval and payload scope live on the **Network** page under the **MQTT** card. The publish interval is only used in Always-On mode; in Duty-Cycle mode the device publishes once per wake.
 
+On boards with BLE telemetry, select **Duty-Cycle BLE** to send BTHome sensor
+advertisements without starting Wi-Fi on normal wakes. Config/recovery mode
+still starts Wi-Fi so you can access the portal.
+
+The **BLE Advertising** controls set Burst Count (default `3`), Advertising
+Interval (default `100` ms), and Transmit Power (default `+9` dBm). Power options
+are `-12`, `-9`, `-6`, `-3`, `0`, `+3`, `+6`, and `+9` dBm. Save the settings,
+then use **Reboot Now** to apply them; no firmware reflash is needed.
+
+For battery experiments, keep three repeats and try a `100` ms interval first.
+Then test `+3` or `0` dBm while monitoring missed updates. Lower transmit power
+can reduce reception reliability. Burst Count determines the advertising hold
+duration (`count * interval + 50` ms), not an exact transmitted packet count.
+
 ### BLE Keyboard
 
 *Shown only on boards with BLE HID support (ESP32-P4 boards). Not available on ESP32-S3 boards due to internal RAM constraints.*

@@ -143,6 +143,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				#if HAS_BLE
 				(*doc)["ble_burst_count"] = current_config->ble_burst_count;
 				(*doc)["ble_adv_interval_ms"] = current_config->ble_adv_interval_ms;
+				(*doc)["ble_tx_power_dbm"] = current_config->ble_tx_power_dbm;
 				#endif
 
 				// Build capability map so the portal UI can hide controls for
@@ -380,6 +381,31 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		}
 
+		#if HAS_BLE
+		int ble_tx_power_dbm = 0;
+		if (doc.containsKey("ble_tx_power_dbm")) {
+				JsonVariant value = doc["ble_tx_power_dbm"];
+				bool valid = false;
+				if (value.is<int>()) {
+						ble_tx_power_dbm = value.as<int>();
+						valid = true;
+				} else if (value.is<const char*>()) {
+						const char *text = value.as<const char*>();
+						char *end = nullptr;
+						const long parsed = strtol(text, &end, 10);
+						valid = end != text && *end == '\0' && parsed >= -12 && parsed <= 9;
+						if (valid) ble_tx_power_dbm = (int)parsed;
+				}
+				if (!valid || ble_tx_power_dbm < -12 || ble_tx_power_dbm > 9 || ble_tx_power_dbm % 3 != 0) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"BLE TX power must be -12 to +9 dBm in 3 dB steps\"}");
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+		}
+		#endif
+
 		// Partial update: only update fields that are present in the request
 		// This allows different pages to update only their relevant fields
 		#if HAS_DISPLAY
@@ -551,6 +577,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						: (uint16_t)(doc["ble_adv_interval_ms"] | 0);
 				if (v == 0) v = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
 				current_config->ble_adv_interval_ms = v;
+		}
+		if (doc.containsKey("ble_tx_power_dbm")) {
+				current_config->ble_tx_power_dbm = (int8_t)ble_tx_power_dbm;
 		}
 		#endif
 

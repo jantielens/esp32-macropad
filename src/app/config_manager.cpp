@@ -66,6 +66,7 @@
 #if HAS_BLE
 #define KEY_BLE_BURST_COUNT     "ble_brst"
 #define KEY_BLE_ADV_INTERVAL_MS "ble_adv"
+#define KEY_BLE_TX_POWER_DBM    "ble_tx_dbm"
 #endif
 
 // Web portal Basic Auth
@@ -263,6 +264,12 @@ bool config_manager_load(DeviceConfig *config) {
 				return false;
 		}
 
+		#if HAS_BLE
+		config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
+		config->ble_adv_interval_ms = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
+		config->ble_tx_power_dbm = CONFIG_DEFAULT_BLE_TX_POWER_DBM;
+		#endif
+
 		LOGI("Config", "Load start");
 
 		if (!preferences.begin(CONFIG_NAMESPACE, true)) { // Read-only mode
@@ -287,11 +294,6 @@ bool config_manager_load(DeviceConfig *config) {
 				config->wifi_backoff_max_seconds = 900;
 
 				strlcpy(config->mqtt_publish_scope, "sensors_only", CONFIG_MQTT_SCOPE_MAX_LEN);
-
-				#if HAS_BLE
-				config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
-				config->ble_adv_interval_ms = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
-				#endif
 
 				// Basic Auth defaults
 				config->basic_auth_enabled = false;
@@ -403,6 +405,7 @@ bool config_manager_load(DeviceConfig *config) {
 		#if HAS_BLE
 		config->ble_burst_count = preferences.getUChar(KEY_BLE_BURST_COUNT, BLE_TELEMETRY_DEFAULT_BURST_COUNT);
 		config->ble_adv_interval_ms = preferences.getUShort(KEY_BLE_ADV_INTERVAL_MS, BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS);
+		config->ble_tx_power_dbm = preferences.getChar(KEY_BLE_TX_POWER_DBM, CONFIG_DEFAULT_BLE_TX_POWER_DBM);
 		#endif
 		
 		// Load display settings
@@ -585,6 +588,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		#if HAS_BLE
 		preferences.putUChar(KEY_BLE_BURST_COUNT, config->ble_burst_count);
 		preferences.putUShort(KEY_BLE_ADV_INTERVAL_MS, config->ble_adv_interval_ms);
+		preferences.putChar(KEY_BLE_TX_POWER_DBM, config->ble_tx_power_dbm);
 		#endif
 
 		// Save display settings
@@ -858,6 +862,13 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 		);
 
 		LOGI("Config", "MQTT scope: %s", config->mqtt_publish_scope);
+
+#if HAS_BLE
+		LOGI("Config", "BLE telemetry: burst=%u interval=%ums TX=%+d dBm",
+			(unsigned)config->ble_burst_count,
+			(unsigned)config->ble_adv_interval_ms,
+			(int)config->ble_tx_power_dbm);
+#endif
 
 #if HAS_MQTT
 		if (strlen(config->mqtt_host) > 0) {

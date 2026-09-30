@@ -34,7 +34,7 @@
 // Initialize the Arduino-ESP32 BLE (Bluedroid) stack and prepare advertising.
 // Idempotent — safe to call multiple times. Must be called from a normal
 // (non-ISR) context after NVS.
-void ble_telemetry_init(const char *device_name);
+void ble_telemetry_init(const char *device_name, int8_t tx_power_dbm);
 
 // Stop advertising. Does NOT deinitialize the underlying BLE controller —
 // other Bluedroid users (e.g. BLE HID) may still hold it. Safe to call when

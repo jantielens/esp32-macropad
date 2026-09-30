@@ -253,6 +253,12 @@ def main():
 
     server = HTTPServer(("", args.port), PortalHandler)
     server.mock_config = {
+        "operating_mode": "always_on",
+        "duty_cycle_wake_seconds": 120,
+        "ble_burst_count": 3,
+        "ble_adv_interval_ms": 100,
+        "ble_tx_power_dbm": 9,
+        "caps": {"ble": True, "mqtt": True},
         "epaper_frame_rotation": 1,
         "epaper_frame_service_supported": True,
         "epaper_frame_offline_queue_supported": True,

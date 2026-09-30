@@ -215,6 +215,9 @@ async function loadConfig() {
         if (config.ble_adv_interval_ms !== undefined) {
             setValueIfExists('ble_adv_interval_ms', config.ble_adv_interval_ms);
         }
+        if (config.ble_tx_power_dbm !== undefined) {
+            setValueIfExists('ble_tx_power_dbm', config.ble_tx_power_dbm);
+        }
 
         // MQTT scope
         setValueIfExists('mqtt_publish_scope', config.mqtt_publish_scope);
@@ -394,6 +397,16 @@ function validateConfig(config) {
         // Only require a password if none is already set.
         if (!passwordAlreadySet && !pass) {
             return { valid: false, message: 'Basic Auth password is required the first time you enable it' };
+        }
+    }
+
+    if (config.ble_tx_power_dbm !== undefined) {
+        const value = config.ble_tx_power_dbm;
+        const power = Number(value);
+        if ((typeof value !== 'string' && typeof value !== 'number') ||
+            String(value).trim() === '' || !Number.isInteger(power) ||
+            power < -12 || power > 9 || power % 3 !== 0) {
+            return { valid: false, message: 'BLE TX power must be -12 to +9 dBm in 3 dB steps' };
         }
     }
 

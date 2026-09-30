@@ -31,7 +31,7 @@ async function saveFragmentConfig(requiresReboot) {
         'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
         'operating_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',
         'portal_idle_timeout_seconds', 'wifi_backoff_max_seconds',
-        'ble_burst_count', 'ble_adv_interval_ms',
+        'ble_burst_count', 'ble_adv_interval_ms', 'ble_tx_power_dbm',
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
         'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',

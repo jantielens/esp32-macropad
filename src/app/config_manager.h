@@ -43,6 +43,7 @@
 // Operating mode (always_on | duty_cycle_mqtt | duty_cycle_ble | duty_cycle_epaper_frame). Sized to fit longest value + NUL.
 #define CONFIG_OPERATING_MODE_MAX_LEN 32
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
+#define CONFIG_DEFAULT_BLE_TX_POWER_DBM 9
 
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
@@ -109,6 +110,7 @@ struct DeviceConfig {
 #if HAS_BLE
 		uint8_t ble_burst_count;                               // default BLE_TELEMETRY_DEFAULT_BURST_COUNT; advertising packets per wake
 		uint16_t ble_adv_interval_ms;                          // default BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS; ms between adv packets in a burst
+		int8_t ble_tx_power_dbm;
 #endif
 
 		// MQTT scope

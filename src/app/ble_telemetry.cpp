@@ -84,7 +84,7 @@ size_t build_payload(uint8_t *out, size_t out_cap) {
 
 } // namespace
 
-void ble_telemetry_init(const char *device_name) {
+void ble_telemetry_init(const char *device_name, int8_t tx_power_dbm) {
     if (g_initialized) return;
     const char *name = (device_name && device_name[0]) ? device_name : "esp32-telemetry";
     strlcpy(g_device_name, name, sizeof(g_device_name));
@@ -93,15 +93,24 @@ void ble_telemetry_init(const char *device_name) {
         LOGE(TAG, "BLE stack init failed");
         return;
     }
-    // Crank TX power to the max (+9 dBm). Default is ~0 dBm which is too weak
-    // for boards with poor PCB antennas (e.g. ESP32-C3 Super Mini) to reliably
-    // reach a BLE proxy like a Shelly across the room. ESP_PWR_LVL_P9 adds
-    // ~9 dB → roughly 2.5x range improvement and dramatically better odds of
-    // landing in a passive scanner's listen window.
-    BLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
-    BLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
+    esp_power_level_t power_level;
+    switch (tx_power_dbm) {
+        case -12: power_level = ESP_PWR_LVL_N12; break;
+        case -9: power_level = ESP_PWR_LVL_N9; break;
+        case -6: power_level = ESP_PWR_LVL_N6; break;
+        case -3: power_level = ESP_PWR_LVL_N3; break;
+        case 0: power_level = ESP_PWR_LVL_N0; break;
+        case 3: power_level = ESP_PWR_LVL_P3; break;
+        case 6: power_level = ESP_PWR_LVL_P6; break;
+        case 9: power_level = ESP_PWR_LVL_P9; break;
+        default:
+            LOGE(TAG, "Unsupported TX power: %d dBm", (int)tx_power_dbm);
+            return;
+    }
+    BLEDevice::setPower(power_level, ESP_BLE_PWR_TYPE_ADV);
+    BLEDevice::setPower(power_level, ESP_BLE_PWR_TYPE_DEFAULT);
     g_initialized = true;
-    LOGI(TAG, "BLE telemetry initialized as '%s' (TX +9 dBm)", g_device_name);
+    LOGI(TAG, "BLE telemetry initialized as '%s' (TX %+d dBm)", g_device_name, (int)tx_power_dbm);
 }
 
 void ble_telemetry_deinit() {
