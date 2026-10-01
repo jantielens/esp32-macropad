@@ -8,6 +8,7 @@
 // generic jc4880p433 macropad board and layers on the coffee-scale product
 // variant flag, HX711 amplifier pins, and the brews portal hero category.
 
+#define HAS_USB_HID false
 #include "../jc4880p433/board_overrides.h"
 
 // ============================================================================

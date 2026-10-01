@@ -10,6 +10,7 @@
 // secondary I2C bus. Enlarger and safelight switching is handled over Wi-Fi
 // through Shelly relays, so no relay GPIOs are needed on the board itself.
 
+#define HAS_USB_HID false
 #include "../jc4880p433/board_overrides.h"
 
 // ============================================================================

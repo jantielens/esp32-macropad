@@ -9,6 +9,7 @@
 // variant flag, NAU7802 I2C ADC pins (reused on the same physical 2-pin
 // header as the HX711 variant), and the brews portal hero category.
 
+#define HAS_USB_HID false
 #include "../jc4880p433/board_overrides.h"
 
 // ============================================================================

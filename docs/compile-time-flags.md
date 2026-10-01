@@ -352,15 +352,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
 | jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
 | jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
 | esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
-| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
-| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
 | jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
 | jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |  |
 | jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |  |
 | jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |  |
-| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
 | jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
 | esp32c3-withsensors |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  |  |
 | firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |  |
@@ -473,6 +473,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
   - src/app/health_binding.cpp
+  - src/app/keyboard_hid.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/portal_components.cpp
   - src/app/web_portal_ble.cpp
@@ -524,6 +525,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/hw_button_config.h
   - src/app/hw_buttons.cpp
   - src/app/hw_buttons.h
+  - src/app/keyboard_hid.cpp
   - src/app/mcp_press_button.cpp
   - src/app/mcp_press_button.h
   - src/app/mcp_tools_config.cpp
@@ -653,6 +655,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/keyboard_hid.cpp
   - src/app/label_style.cpp
   - src/app/list_binding.cpp
   - src/app/list_provider.cpp
@@ -1058,10 +1061,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
+  - src/app/keyboard_hid.cpp
   - src/app/log_manager.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/portal_components.cpp
+  - src/app/usb_hid.cpp
+  - src/app/usb_hid.h
   - src/app/web_portal_config.cpp
+  - src/boards/esp32-p4-lcd4b/board_overrides.h
+  - src/boards/jc1060p470c/board_overrides.h
+  - src/boards/jc4880p433/board_overrides.h
 - **AUDIO_OUTPUT_DRIVER**
   - src/app/audio_output_drivers.cpp
   - src/app/board_config.h

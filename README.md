@@ -52,7 +52,9 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Home Assistant service buttons** — call any HA service (toggle lights, run scenes, open covers) directly over the REST API from a button, swipe, or boot action
 - **MCP server for AI assistants** — a built-in [Model Context Protocol](docs/mcp-guide.md) endpoint lets a local LLM client (Claude Desktop, Cursor, VS Code Copilot Chat) inspect and control the device through chat; off by default, token-secured, with separate read and control permissions
 - **USB/BLE HID keyboard** - shared keystrokes, modifier combos, media keys,
-  and macros. Native USB is supported on `jc1060p470c-sd`. BLE keyboard support
+    and macros. Native USB is compiled for `jc1060p470c`, `jc1060p470c-sd`,
+    `jc4880p433`, `jc4880p433-sd`, and `esp32-p4-lcd4b`; hardware testing so far
+    covers `jc1060p470c-sd`. BLE keyboard support
   is board-dependent; some Macropad boards disable it to preserve internal RAM.
   Supported BLE builds offer single-owner pairing. Keyboard output defaults to
   Off. Select Off or an available transport in **Connectivity > Keyboard**, save,

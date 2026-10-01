@@ -199,9 +199,12 @@ duration (`count * interval + 50` ms), not an exact transmitted packet count.
 ### Keyboard
 
 Shown only when USB or BLE HID is compiled in. Native USB support is currently
-compiled only for `jc1060p470c-sd`; keyboard output defaults to Off. USB uses
-its high-speed USB-C connector. Use one powered
-USB cable; the board's connector power rails are shared.
+compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
+`esp32-p4-lcd4b`; keyboard output defaults to Off. Hardware validation so far
+covers `jc1060p470c-sd` only. Use the native USB device connector, not a USB-UART
+bridge or host-only connector; check the board's connector and power wiring.
+On JC1060P470C hardware, USB uses the high-speed USB-C connector. Use one powered
+USB cable on that board because its connector power rails are shared.
 
 The keyboard defaults to Off. Choose Off or a supported USB/BLE transport,
 save, and use the existing reboot-required banner. The displayed active

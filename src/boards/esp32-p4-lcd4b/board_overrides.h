@@ -11,6 +11,9 @@
 // ============================================================================
 // Capabilities
 // ============================================================================
+#ifndef HAS_USB_HID
+#define HAS_USB_HID true
+#endif
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_BACKLIGHT true

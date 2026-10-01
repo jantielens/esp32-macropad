@@ -16,11 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Native USB keyboard and consumer/media-key support on `jc1060p470c-sd`,
+* Native USB keyboard and consumer/media-key support on `jc1060p470c`,
+  `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and `esp32-p4-lcd4b`,
   selectable as an alternative to BLE through the Keyboard portal. Both
   transports reuse existing Send keys actions and keystroke macro syntax.
   USB CDC diagnostic logging remains available with USB, BLE, or Off selected;
   BLE and Off enumerate CDC only, without a USB keyboard interface.
+  The other JC4880 variants and LCD4B Voice retain their existing USB settings.
+  Hardware validation so far covers `jc1060p470c-sd` only.
 * BLE telemetry transmit power is configurable in the Operating Mode portal
   from -12 to +9 dBm in 3 dB steps, with help text explaining the battery and
   reception tradeoff. The setting is persisted and applies after reboot.

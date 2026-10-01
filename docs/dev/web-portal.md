@@ -1118,8 +1118,14 @@ BLE and Off modes expose CDC only. Off skips BLE keyboard initialization,
 rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
 telemetry remains unaffected. Ending HID reports cannot remove its descriptors,
 so this change also requires reboot. Windows may retain disconnected entries.
-USB is enabled only on the verified `jc1060p470c-sd` board. Review the core
-VID/PID distribution policy before release; no custom IDs are assigned.
+USB is compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`,
+`jc4880p433-sd`, and `esp32-p4-lcd4b`. The other JC4880 variants and LCD4B Voice
+explicitly disable inherited USB HID support and keep their existing serial
+build options. Only `jc1060p470c-sd` has hardware validation so far; the other
+targets still require connector/power checks and host testing. Compiled USB
+support retains TinyUSB's static internal RAM and starts CDC even when keyboard
+output is Off. Review the core VID/PID distribution policy before release;
+no custom IDs are assigned.
 
 Routine macro completions and BLE protocol/control/LED reports log at DEBUG.
 Startup and connection/pairing events remain at INFO; aborted macros and
