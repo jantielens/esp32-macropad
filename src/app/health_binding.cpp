@@ -325,15 +325,15 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
 #endif
 #if HAS_BLE_HID
     if (strcmp(key, "ble_status") == 0) {
-        strlcpy(out, device_config.ble_enabled ? ble_hid_status() : "disabled", out_len);
+        strlcpy(out, ble_hid_is_initialized() ? ble_hid_status() : "disabled", out_len);
         return true;
     }
     if (strcmp(key, "ble_state") == 0) {
-        strlcpy(out, device_config.ble_enabled ? ble_hid_state() : "disabled", out_len);
+        strlcpy(out, ble_hid_is_initialized() ? ble_hid_state() : "disabled", out_len);
         return true;
     }
     if (strcmp(key, "ble_name") == 0) {
-        if (!device_config.ble_enabled) {
+        if (!ble_hid_is_initialized()) {
             strlcpy(out, "?", out_len);
             return true;
         }

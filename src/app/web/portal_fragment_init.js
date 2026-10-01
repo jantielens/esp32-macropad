@@ -35,7 +35,7 @@ async function saveFragmentConfig(requiresReboot) {
         'mqtt_publish_scope',
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
         'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',
-        'ble_enabled',
+        'keyboard_transport',
         'audio_volume', 'tap_beep', 'lp_beep',
         'backlight_brightness', 'display_rotation',
         'screen_saver_enabled', 'screen_saver_timeout_seconds',
@@ -92,6 +92,10 @@ async function saveFragmentConfig(requiresReboot) {
             var needsReboot = typeof requiresReboot === 'function' ? requiresReboot(config) : requiresReboot;
             if (config.display_rotation !== undefined && window.deviceConfig) {
                 window.deviceConfig.display_rotation = Number(config.display_rotation);
+            }
+            if (config.keyboard_transport !== undefined && window.deviceConfig) {
+                window.deviceConfig.keyboard_transport = config.keyboard_transport;
+                updateKeyboardTransportSetting();
             }
             if (needsReboot) {
                 // Banner is the user feedback — skip the toast so it doesn't
@@ -810,13 +814,11 @@ window.init_mqtt_fragment = function () {
 };
 
 // ============================================================================
-// BLE Keyboard
+// Keyboard
 // ============================================================================
 
-window.init_ble_fragment = function () {
-    initConfigFragment('ble-save-btn', true);
-    // Start BLE status polling
-    if (typeof loadBleStatus === 'function') loadBleStatus();
+window.init_hid_fragment = function () {
+    initConfigFragment('hid-save-btn', true);
 };
 
 // ============================================================================

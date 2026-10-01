@@ -29,7 +29,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Dynamic colors** — background, text, border, and widget colors all accept binding expressions
 - **Dynamic state** — `enabled` / `disabled` / `hidden` per button via the same binding system
 - **Real-time syntax validator** in the pad editor catches typos and invalid expressions as you type
-- **Action values** — MQTT payloads, BLE key sequences, beep patterns, volume/brightness values, and timer values all resolve bindings at dispatch time
+- **Action values** - MQTT payloads, USB/BLE key sequences, beep patterns, volume/brightness values, and timer values all resolve bindings at dispatch time
 
 ### Inputs & automation
 - **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
@@ -51,7 +51,12 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **MQTT with Home Assistant auto-discovery** — registers as a full HA device with sensors, buttons, siren, volume, screen selector, and notification entities (no YAML needed)
 - **Home Assistant service buttons** — call any HA service (toggle lights, run scenes, open covers) directly over the REST API from a button, swipe, or boot action
 - **MCP server for AI assistants** — a built-in [Model Context Protocol](docs/mcp-guide.md) endpoint lets a local LLM client (Claude Desktop, Cursor, VS Code Copilot Chat) inspect and control the device through chat; off by default, token-secured, with separate read and control permissions
-- **Bluetooth HID keyboard** (ESP32-P4) — send keystrokes, modifier combos, media keys, and multi-step sequences to any paired host with single-owner pairing
+- **USB/BLE HID keyboard** - shared keystrokes, modifier combos, media keys,
+  and macros. Native USB is supported on `jc1060p470c-sd`. BLE keyboard support
+  is board-dependent; some Macropad boards disable it to preserve internal RAM.
+  Supported BLE builds offer single-owner pairing. Keyboard output defaults to
+  Off. Select Off or an available transport in **Connectivity > Keyboard**, save,
+  then reboot. There is no automatic fallback or broadcast.
 - **Remote control from HA** — switch screens, trigger beeps, play tones, set volume, send notifications
 - **Resilient WiFi** — event-driven tiered reconnect keeps the display responsive through outages, with gateway-ping liveness detection
 - **Live camera feeds** — OV02C10 JPEG snapshots and **MJPEG streaming** at up to 4 fps on supported ESP32-P4 camera boards

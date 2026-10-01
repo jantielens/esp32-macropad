@@ -5,6 +5,8 @@
 
 #define DISPLAY_BINDING_REFRESH_INTERVAL_MS 100
 
+#define HAS_USB_HID true
+
 // SDMMC slot 0 is provided by the ESP32-P4 FQBN on GPIO39-44. The shared
 // FQBN also reserves GPIO45 for its active-low startup pulse; it is not an
 // application-controlled card-power GPIO on this board.

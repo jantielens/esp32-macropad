@@ -869,6 +869,17 @@ for fragment_file in "${FRAGMENT_FILES[@]}"; do
     gzipped=$(gzip_to_c_array "$minified")
     FRAGMENT_GZIP_CONTENTS["$filename"]="$gzipped"
     gzipped_size=$(echo -n "$minified" | gzip -9 -c | wc -c)
+
+    if [[ "$stem" == "hid" ]]; then
+        without_ble=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
+            --web-dir "$WEB_DIR" \
+            --input "$fragment_file" \
+            --project-name "$PROJECT_NAME" \
+            --project-display-name "$PROJECT_DISPLAY_NAME" \
+            --firmware-version "$FIRMWARE_VERSION" \
+            --without-ble-hid)
+        FRAGMENT_GZIP_CONTENTS["${filename}_without_ble"]=$(gzip_to_c_array "$without_ble")
+    fi
     
     ORIGINAL_SIZES["frag_$filename"]=$original_size
     PROCESSED_SIZES["frag_$filename"]=$minified_size
@@ -1030,8 +1041,8 @@ asset_feature_flag() {
             echo "HAS_DISPLAY" ;;
         mqtt|ha_discovery)
             echo "HAS_MQTT" ;;
-        ble)
-            echo "HAS_BLE_HID" ;;
+        hid)
+            echo "HAS_BLE_HID || HAS_USB_HID" ;;
         volume)
             echo "HAS_AUDIO" ;;
         camera|camera_snapshots|portal_camera|portal_camera_snapshots)
@@ -1074,13 +1085,26 @@ for filename in "${!FRAGMENT_CONTENTS[@]}"; do
     if [[ -n "$flag" ]]; then
         echo "#if $flag" >> "$OUTPUT_FILE"
     fi
-    cat >> "$OUTPUT_FILE" << EOF
+    fragment_variants=("$filename")
+    if [[ -n "${FRAGMENT_GZIP_CONTENTS[${filename}_without_ble]:-}" ]]; then
+        fragment_variants+=("${filename}_without_ble")
+        echo "#if HAS_BLE_HID" >> "$OUTPUT_FILE"
+    fi
+    for fragment_variant in "${fragment_variants[@]}"; do
+        if [[ "$fragment_variant" != "$filename" ]]; then
+            echo "#else" >> "$OUTPUT_FILE"
+        fi
+        cat >> "$OUTPUT_FILE" << EOF
 // Fragment from src/app/web/${filename%.fragment*}.fragment.html (gzipped)
 const uint8_t ${filename}_html_gz[] PROGMEM = {
-${FRAGMENT_GZIP_CONTENTS[$filename]}
+${FRAGMENT_GZIP_CONTENTS[$fragment_variant]}
 };
 
 EOF
+    done
+    if [[ ${#fragment_variants[@]} -gt 1 ]]; then
+        echo "#endif // HAS_BLE_HID" >> "$OUTPUT_FILE"
+    fi
     if [[ -n "$flag" ]]; then
         echo "#endif // $flag" >> "$OUTPUT_FILE"
         echo >> "$OUTPUT_FILE"

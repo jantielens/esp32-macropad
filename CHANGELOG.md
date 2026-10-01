@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-30
+ms.date: 2026-10-01
 ms.topic: reference
 ---
 
@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Native USB keyboard and consumer/media-key support on `jc1060p470c-sd`,
+  selectable as an alternative to BLE through the Keyboard portal. Both
+  transports reuse existing Send keys actions and keystroke macro syntax.
+  USB CDC diagnostic logging remains available with USB, BLE, or Off selected;
+  BLE and Off enumerate CDC only, without a USB keyboard interface.
 * BLE telemetry transmit power is configurable in the Operating Mode portal
   from -12 to +9 dBm in 3 dB steps, with help text explaining the battery and
   reception tradeoff. The setting is persisted and applies after reboot.
@@ -26,6 +31,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Keyboard configuration replaces `ble_enabled` with persisted, reboot-applied
+  `keyboard_transport` choices: Off (`none`) and the compiled USB/BLE backends.
+  Devices without a saved transport choice default to Off, including upgrades
+  from the old BLE toggle; explicitly saved valid USB/BLE choices are preserved.
+  Off rejects key actions without initializing a keyboard backend. Independent
+  BLE telemetry remains unaffected.
+* USB and BLE macros share one owned, non-blocking executor instead of the
+  blocking BLE path. Only one request can be pending or running; busy requests
+  are rejected. Disconnects, USB suspension, failed reports, OTA activity, and
+  the 60-second deadline fail the action continuation without replay, fallback,
+  or delivery to a new host session.
+* The Keyboard portal uses the generic `hid` fragment identifier instead of
+  `ble`, separates the saved preference from the active connection, shows
+  pending-reboot status, and disables unchanged saves. Configuration and health
+  APIs and MCP configuration/capability responses expose transport and status;
+  transport selection remains portal-only for MCP clients.
+* Keyboard device names append ` USB` or ` BLE` to the configured friendly
+  name, distinguishing transports without changing the saved name or stable
+  USB serial identity. Routine macro and BLE protocol/control/LED logs use DEBUG
+  rather than INFO; periodic keyboard diagnostic counters are removed.
+* Macro storage is allocated lazily on the first accepted request, using PSRAM
+  when available and internal RAM otherwise. PSRAM workspaces are reused until
+  reboot; internal-only workspaces are freed on completion or cancellation.
+  Removing a redundant sequence copy and static workspace saves about 1.6 KiB
+  of static internal RAM on `jc1060p470c-sd`; its runtime workspace uses 1,380 bytes.
+  Off allocates no macro workspace, and allocation failure rejects the request
+  without leaving the keyboard busy or silently falling back from PSRAM.
 * Gauge captions skip repeated layout work when their resolved text is
   unchanged, and apply caption colors only when changed. Configuration
   rebuilds still refresh caption geometry and fonts.
@@ -37,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Keyboard neutral-report recovery sends at most one report per main-loop pass,
+  with USB lock and completion waits each limited to 5 ms. Builds without either
+  HID backend omit the keyboard loop call and Send keys action registration;
+  USB-only builds omit BLE pairing and bond-detail markup from the HID fragment.
 * Display update FPS is normalized by actual elapsed sampling time and returns
   zero in quiet windows instead of retaining an old active value. The FPS
   Benchmark screen shows measured cycle time rather than adding overlapping

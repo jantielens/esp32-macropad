@@ -196,24 +196,55 @@ Then test `+3` or `0` dBm while monitoring missed updates. Lower transmit power
 can reduce reception reliability. Burst Count determines the advertising hold
 duration (`count * interval + 50` ms), not an exact transmitted packet count.
 
-### BLE Keyboard
+### Keyboard
 
-*Shown only on boards with BLE HID support (ESP32-P4 boards). Not available on ESP32-S3 boards due to internal RAM constraints.*
+Shown only when USB or BLE HID is compiled in. Native USB support is currently
+compiled only for `jc1060p470c-sd`; keyboard output defaults to Off. USB uses
+its high-speed USB-C connector. Use one powered
+USB cable; the board's connector power rails are shared.
 
-The BLE Keyboard section lets you enable/disable the Bluetooth keyboard and manage pairing.
+The keyboard defaults to Off. Choose Off or a supported USB/BLE transport,
+save, and use the existing reboot-required banner. The displayed active
+transport remains unchanged until reboot. Single-backend builds offer Off and
+their supported transport; builds with neither backend hide keyboard settings
+and **Send keys**. Explicitly saved USB/BLE choices remain unchanged after
+updating; devices without a saved choice become Off. Off disables keyboard
+output and rejects key actions while retaining USB serial logging and
+independent BLE telemetry.
 
 | Element | Description |
 |---------|-------------|
-| **Enable BLE Keyboard** | Checkbox to enable or disable BLE. Disabled by default to save ~70 KB RAM. Requires a reboot to take effect |
-| **Status indicator** | Reflects the compact `ble_status`: disabled, ready, pairing, connected, or error |
-| **Name** | Shows the current BLE keyboard name (same as the configured device name) |
+| **Transport** | Off plus supported USB/BLE transports. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
+| **Active connection** | Separate section showing the running USB/BLE backend and `ready`, `busy`, or `disconnected` status, or Keyboard disabled when Off; changing the selector does not change this section |
+| **BLE status indicator** | Shown when BLE is active: disabled, ready, pairing, connected, or error |
+| **Name** | Shows the configured device name plus ` USB` or ` BLE` for the active connection |
 | **Bonded / Encrypted badges** | Shown when a host is connected |
 | **Peer address** | The connected host's Bluetooth address |
 | **Pair New Device** | Clears the previous bond and opens a fresh 60-second pairing window — no reboot required |
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 
-The BLE keyboard always advertises with the configured device name and the chip's stable hardware address, so the host always sees the same device.
+USB exposes keyboard and consumer HID alongside the serial console when USB is
+selected. With BLE or Off selected, USB exposes only the serial console after reboot,
+not a keyboard. Its product name uses the configured friendly device name plus
+` USB` after reboot, its manufacturer
+uses project branding, and its serial number uses the stable chip address.
+Windows can cache names, retain disconnected device entries, or show a generic
+HID keyboard label. Reconnect USB or remove and re-pair BLE if Windows keeps an
+old name. The section's navigation ID is `hid`; its label is Keyboard.
+
+Both transports use the same macro syntax and US ASCII mapping. Only one macro
+may be pending or running; extra requests fail instead of queueing. A
+disconnect, USB suspension, report failure, OTA activity, or 60-second deadline
+aborts execution and fails the remaining action-list suffix. Interrupted macros
+never replay on reconnect, and neither transport falls back to the other host.
+The user has confirmed USB and BLE input, serial logging, and CDC-only BLE-mode
+enumeration. Hardware checks for media keys and sleep/reconnect reliability
+remain pending.
+
+The BLE keyboard advertises with the configured device name plus ` BLE` and the
+chip's stable hardware address. Transport suffixes distinguish the two Windows
+device entries without changing the saved name or hardware identity.
 
 > **Re-pairing tip:** Before pairing a new host (or re-pairing the same host), remove the device from the old host's Bluetooth settings first. If you skip this step the old host may keep trying to reconnect with stale keys for a short while — this is normal BLE behavior and will eventually stop, but removing the device avoids the noise.
 

@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import sys
+from _render_html_template import render
 from urllib.parse import parse_qs, urlparse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -85,6 +86,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
             ]
             for frag in candidates:
                 if frag.is_file():
+                    if fragment == "hid":
+                        html = render(frag, APP_WEB_DIR, "esp32-macropad", "ESP32 Macropad (Local Mock)",
+                                      "dev-mock", self.server.mock_config["caps"]["ble_hid"])
+                        self._serve_bytes(html.encode("utf-8"), "text/html; charset=utf-8")
+                        return
                     self._serve_file(frag)
                     return
             self.send_error(404, f"Fragment not found: {fragment}")
@@ -105,6 +111,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 return
             self._serve_json({"success": True, "message": "Saved to local mock"})
         elif path == "/api/reboot":
+            self.server.mock_config["keyboard_active_transport"] = self.server.mock_config["keyboard_transport"]
+            self.server.mock_config["keyboard_status"] = "disabled" if self.server.mock_config["keyboard_transport"] == "none" else "ready"
             self._serve_json({"success": True, "message": "Mock reboot complete"})
         elif path in (
             "/api/component/epaper-status/refresh",
@@ -165,6 +173,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def _navigation(self, profile):
         nav = json.loads((MOCK_DIR / "nav.json").read_text(encoding="utf-8"))
+        for category in nav["categories"]:
+            for item in category["items"]:
+                if item["id"] == "ble":
+                    item["id"] = "hid"
+                    item["display_name"] = "Keyboard"
         nav["primary"] = {"fragment": "epaper-image", "label": "E-paper Frame", "icon": "🖼️"}
         nav["categories"].insert(1, {
             "id": "e-paper",
@@ -189,13 +202,17 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
             "ap_active": False, "has_mqtt": True}
 
-    @staticmethod
-    def _health():
+    def _health(self):
+        transport = self.server.mock_config["keyboard_active_transport"]
         return {"cpu_usage": 3, "free_heap": 251392, "free_psram": 29753344,
                 "cpu_cores": 2, "uptime_seconds": 93752, "reset_reason": "Power-on",
             "cpu_temperature": 38.2, "flash_used": 41, "flash_total": 100,
                 "filesystem_used": 18, "filesystem_total": 100, "ip_address": "127.0.0.1",
-                "wifi_rssi": -42, "mqtt_connected": False, "mqtt_enabled": False}
+                "wifi_rssi": -42, "mqtt_connected": False, "mqtt_enabled": False,
+                "keyboard_transport": transport, "keyboard_status": "disabled" if transport == "none" else "ready",
+                "ble_status": "connected" if transport == "ble" else "disabled",
+                "ble_name": self.server.mock_config["device_name"] + " BLE",
+                "ble_bonded": transport == "ble", "ble_encrypted": transport == "ble"}
 
     @staticmethod
     def _health_history():
@@ -253,12 +270,16 @@ def main():
 
     server = HTTPServer(("", args.port), PortalHandler)
     server.mock_config = {
+        "device_name": "Kitchen Pad",
         "operating_mode": "always_on",
         "duty_cycle_wake_seconds": 120,
         "ble_burst_count": 3,
         "ble_adv_interval_ms": 100,
         "ble_tx_power_dbm": 9,
-        "caps": {"ble": True, "mqtt": True},
+        "caps": {"ble": True, "mqtt": True, "ble_hid": True, "usb_hid": True},
+        "keyboard_transport": "none",
+        "keyboard_active_transport": "none",
+        "keyboard_status": "disabled",
         "epaper_frame_rotation": 1,
         "epaper_frame_service_supported": True,
         "epaper_frame_offline_queue_supported": True,

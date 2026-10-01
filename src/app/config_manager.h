@@ -20,6 +20,7 @@
 
 #include <Arduino.h>
 #include "board_config.h"
+#include "keyboard_transport.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -133,9 +134,8 @@ struct DeviceConfig {
 		char mcp_token[CONFIG_MCP_TOKEN_MAX_LEN];      // bearer token; empty = none (fail closed)
 #endif
 
-#if HAS_BLE_HID
-		// BLE Keyboard (runtime toggle; saves ~70 KB internal RAM when disabled)
-		bool ble_enabled;                        // default false
+#if HAS_BLE_HID || HAS_USB_HID
+		KeyboardTransport keyboard_transport;
 #endif
 
 #if HAS_AUDIO

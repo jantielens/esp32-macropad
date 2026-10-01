@@ -133,6 +133,24 @@ function updateWriteOnlySecretField(fieldId, statusId, isSet, emptyMessage, valu
 /**
  * Load current configuration from device
  */
+function keyboardTransportLabel(transport) {
+    return transport === 'none' ? 'Off' : (transport || '').toUpperCase();
+}
+
+function updateKeyboardTransportSetting() {
+    const config = window.deviceConfig || {};
+    const selected = document.querySelector('input[type="radio"][name="keyboard_transport"]:checked');
+    const save = document.getElementById('hid-save-btn');
+    if (save) save.disabled = !selected || selected.disabled || selected.value === config.keyboard_transport;
+    const pending = document.getElementById('keyboard-pending');
+    if (pending) {
+        const needsReboot = config.keyboard_transport && config.keyboard_active_transport &&
+            config.keyboard_transport !== config.keyboard_active_transport;
+        pending.style.display = needsReboot ? '' : 'none';
+        pending.textContent = needsReboot ? keyboardTransportLabel(config.keyboard_transport) + ' pending reboot' : '';
+    }
+}
+
 async function loadConfig() {
     try {
         
@@ -230,12 +248,35 @@ async function loadConfig() {
         // Basic Auth settings
         setCheckedIfExists('basic_auth_enabled', config.basic_auth_enabled);
 
-        // BLE Keyboard settings
-        if (config.ble_enabled !== undefined) {
-            setCheckedIfExists('ble_enabled', config.ble_enabled);
-            const bleSection = document.getElementById('ble-section');
-            if (bleSection) bleSection.style.display = 'block';
-            toggleBleContent();
+        if (config.keyboard_transport !== undefined) {
+            const caps = config.caps || {};
+            const selectable = !!(caps.ble_hid || caps.usb_hid);
+            ['none', 'usb', 'ble'].forEach(function (transport) {
+                const available = transport === 'none' ? selectable : !!caps[transport + '_hid'];
+                const radio = document.getElementById('keyboard-transport-' + transport);
+                if (radio) {
+                    radio.checked = config.keyboard_transport === transport;
+                    radio.disabled = !available;
+                }
+                const label = document.querySelector('label[for="keyboard-transport-' + transport + '"]');
+                if (label) {
+                    label.style.display = available ? '' : 'none';
+                }
+            });
+            ['keyboard-transport-choice', 'keyboard-save-bar'].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el) el.style.display = selectable ? '' : 'none';
+            });
+            const active = config.keyboard_active_transport || config.keyboard_transport;
+            setTextIfExists('keyboard-active-transport', keyboardTransportLabel(active));
+            setTextIfExists('keyboard-status', config.keyboard_status || 'Disconnected');
+            setTextIfExists('keyboard-active-heading', active === 'none' ? 'Keyboard disabled' : 'Active ' + keyboardTransportLabel(active) + ' Connection');
+            setTextIfExists('keyboard-device-name', (config.device_name || 'Keyboard') + ' USB');
+            const content = document.getElementById('ble-content');
+            if (content) content.style.display = config.keyboard_active_transport === 'ble' ? 'block' : 'none';
+            const usbContent = document.getElementById('usb-content');
+            if (usbContent) usbContent.style.display = config.keyboard_active_transport === 'usb' ? 'block' : 'none';
+            updateKeyboardTransportSetting();
         }
 
         // Audio settings

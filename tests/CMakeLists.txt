@@ -210,7 +210,31 @@ add_host_legacy_test(test_tone_alert_overlay
 
 add_host_legacy_test(test_key_sequence
     SOURCES test_key_sequence.cpp ${PROJECT_SOURCE_DIR}/src/app/key_sequence.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/key_sequence_executor.cpp
 )
+
+foreach(transport IN ITEMS both usb ble none)
+    if(transport STREQUAL "usb" OR transport STREQUAL "both")
+        set(test_usb_transport 1)
+    else()
+        set(test_usb_transport 0)
+    endif()
+    if(transport STREQUAL "ble" OR transport STREQUAL "both")
+        set(test_ble_transport 1)
+    else()
+        set(test_ble_transport 0)
+    endif()
+    add_host_legacy_test(test_key_action_${transport}
+        SOURCES test_key_action_transport.cpp ${PROJECT_SOURCE_DIR}/src/app/key_sequence.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/key_sequence_executor.cpp
+        INCLUDES ${HOST_ARDUINOJSON_DIR}
+        DEFINITIONS ARDUINO=1 TEST_USB_TRANSPORT=${test_usb_transport} TEST_BLE_TRANSPORT=${test_ble_transport}
+            ARDUINOJSON_ENABLE_PROGMEM=0 ARDUINOJSON_ENABLE_ARDUINO_STRING=0
+            ARDUINOJSON_ENABLE_ARDUINO_STREAM=0 ARDUINOJSON_ENABLE_ARDUINO_PRINT=0
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        OPTIONS -Wno-deprecated-declarations
+    )
+endforeach()
 
 set(ACTION_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/src/app/actions.cpp ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp

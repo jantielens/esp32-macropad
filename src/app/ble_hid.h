@@ -1,6 +1,7 @@
 #pragma once
 
 #include "board_config.h"
+#include "key_sequence.h"
 #include <stdint.h>
 
 #if HAS_BLE_HID
@@ -21,21 +22,10 @@ void ble_hid_start_pairing();
 // Clears bonds and reopens the 60-second pairing window.
 void ble_hid_request_pairing();
 
-// Request a key sequence — safe to call from any task (deferred to ble_hid_loop).
-// The sequence string is copied internally.
-void ble_hid_request_sequence(const char* sequence);
-
 // Process pending BLE HID requests. Call from main loop() (non-PSRAM stack).
 void ble_hid_loop();
-
-// Send a keyboard key press + release.
-// `usage` is a USB HID keyboard usage code (0x04 = 'a', 0x28 = Enter, etc.).
-// `modifiers` is a bitmask of modifier keys (KS_MOD_LCTRL, etc.).
-void ble_hid_send_key(uint16_t usage, uint8_t modifiers);
-
-// Send a consumer control key press + release.
-// `usage` is a USB HID consumer usage code (0x00E9 = volume up, etc.).
-void ble_hid_send_consumer(uint16_t usage);
+bool ble_hid_send_report(KsUsageType type, uint16_t usage, uint8_t modifiers);
+uint32_t ble_hid_epoch();
 
 // Returns true when a BLE HID host is connected.
 bool ble_hid_is_connected();
@@ -69,9 +59,5 @@ const char* ble_hid_state();
 
 // Returns a compact user-facing BLE status string.
 const char* ble_hid_status();
-
-// Execute a parsed key sequence (called from action dispatch).
-// The sequence string is parsed on-the-fly and executed synchronously.
-void ble_hid_execute_sequence(const char* sequence);
 
 #endif // HAS_BLE_HID

@@ -190,6 +190,7 @@ const char* voice_status_name(VoiceStatus) { return "idle"; }
 const char* ble_hid_status() { return "disabled"; }
 const char* ble_hid_state() { return "disabled"; }
 const char* ble_hid_name() { return ""; }
+bool ble_hid_is_initialized() { return false; }
 bool ble_hid_is_pairing() { return false; }
 bool ble_hid_is_bonded() { return false; }
 bool ble_hid_is_encrypted() { return false; }

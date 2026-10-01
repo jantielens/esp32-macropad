@@ -44,6 +44,7 @@
 #include "ble_hid.h"
 extern DeviceConfig device_config;
 #endif
+#include "keyboard_hid.h"
 
 // Temperature sensor support (ESP32-C3, ESP32-S2, ESP32-S3, ESP32-C2, ESP32-C6, ESP32-H2)
 #if SOC_TEMP_SENSOR_SUPPORTED
@@ -633,9 +634,9 @@ void device_telemetry_fill_api(JsonDocument &doc) {
 
 		// BLE HID state (API-only)
 		#if HAS_BLE_HID
-		doc["ble_state"] = device_config.ble_enabled ? ble_hid_state() : "disabled";
-		doc["ble_status"] = device_config.ble_enabled ? ble_hid_status() : "disabled";
-		if (device_config.ble_enabled && ble_hid_is_initialized()) {
+		doc["ble_state"] = ble_hid_is_initialized() ? ble_hid_state() : "disabled";
+		doc["ble_status"] = ble_hid_is_initialized() ? ble_hid_status() : "disabled";
+		if (ble_hid_is_initialized()) {
 				doc["ble_name"] = ble_hid_name();
 				doc["ble_bonded"] = ble_hid_is_bonded();
 				doc["ble_encrypted"] = ble_hid_is_encrypted();
@@ -643,6 +644,11 @@ void device_telemetry_fill_api(JsonDocument &doc) {
 				doc["ble_peer_addr"] = ble_hid_peer_addr();
 				doc["ble_peer_id_addr"] = ble_hid_peer_id_addr();
 		}
+		#endif
+
+		#if HAS_BLE_HID || HAS_USB_HID
+		doc["keyboard_transport"] = keyboard_transport_name(keyboard_hid_transport());
+		doc["keyboard_status"] = keyboard_hid_status();
 		#endif
 
 		// =====================================================================

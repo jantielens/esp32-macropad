@@ -314,6 +314,16 @@ Active records are never evicted. When all four records are active or retained,
   Binding scheme names, parameter limits, and finite keys are serialized from the
   same live registry used by `GET /api/bindings` for the portal, so the manifest
   reflects the current board and device class without a separate MCP catalog.
+  Its `device_config.keyboard` section lists compiled `transports`, the default
+  and active transport, and ready/busy status. `get_config` returns
+  `keyboard_transport` (saved), `keyboard_active_transport`, and
+  `keyboard_status`. Transport selection is portal-only and requires reboot;
+  it is not a live `set_config` field. The generic `key` action is labeled
+  **Send keys**, uses either backend, and is absent when neither is compiled.
+  `none` means Off and is the default on every keyboard build. It is advertised
+  alongside supported USB/BLE choices. Off rejects key actions, retains USB
+  serial logging and independent BLE telemetry, and requires reboot to apply.
+  There is no fallback or broadcast.
   On microphone-input boards, it also advertises the read-only `[audio:input.rms]`,
   `[audio:input.peak]`, and `[audio:input.active]` bindings. RMS and peak are
   sound levels from 0 to 100; `active` is `true` while the resolver-driven meter

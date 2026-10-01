@@ -469,8 +469,8 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | Navigation | **Navigate pad sequence** | Move to the next or previous configured, non-empty pad. Optionally wrap at the boundary and exclude specific 1-based pad numbers. |
 | Connectivity | **Publish MQTT message** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
 | Connectivity | **Call Home Assistant service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
-| BLE | **Send BLE keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
-| BLE | **Start BLE pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
+| Keyboard | **Send keys** | Send a HID sequence through the active USB or BLE backend (see [Key Sequences](#key-sequences)). The sequence field supports binding templates. Hidden when neither backend is available. |
+| BLE | **Start BLE pairing** | Clear the existing bond and open a 60-second pairing window. Available on builds with BLE keyboard support; requires BLE to be the active transport and no macro to be busy. Remove the device from the old host's Bluetooth settings before re-pairing. |
 | Audio | **Music** | Command: Play/Pause, Next track, Previous track, or Stop. Available on boards with the sound player enabled. |
 | Audio | **Play sound alert** | Play a **Tone Alert** from a beep pattern (for example, `1000:200 100 1000:200`) or an **MP3 Alert** from an uploaded sound file. Both accept an optional volume override; the tone pattern supports binding templates. ESP32-P4 boards only. |
 | Audio | **Volume** | Command: Set volume to an absolute value (0–100), or Adjust volume by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. ESP32-P4 boards only. |
@@ -531,9 +531,19 @@ For directional navigation, assign **Navigate pad sequence → Previous** to the
 **Navigate pad sequence → Next** to the right swipe, with Wrap enabled on both. Existing swipe
 defaults are unchanged until you configure these actions.
 
-### BLE Key Sequences
+### Key Sequences
 
-The **BLE Key** action sends keystrokes over Bluetooth to a paired host device. The sequence field accepts a compact DSL:
+The **Send keys** action sends keystrokes through the device's selected USB or
+BLE transport. Both use the same DSL and US ASCII mapping. Native USB is enabled
+on `jc1060p470c-sd`; choose a supported transport under **Connectivity > Keyboard**,
+save, then reboot. Off is the initial default and rejects key actions.
+Single-backend builds offer Off and their supported backend. There is no
+automatic fallback to another transport.
+
+One macro can be pending or running. Disabled, busy, or disconnected requests fail;
+execution failure stops the remaining action-list suffix. Reconnection never
+replays an interrupted macro, and switching hosts during a macro is not allowed.
+Macros have a 60-second total deadline. The sequence field accepts a compact DSL:
 
 **Single keys:**
 - `a`, `enter`, `tab`, `esc`, `space`, `backspace`, `delete`
@@ -1309,7 +1319,7 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `table` | Structured table payload (standard schema) | `{"title":"Status","columns":[...],"rows":[...]}` |
 | `extended_table` | Structured table payload (extended schema) | `{"title":"Status","columns":[...],"rows":[...],"styles":...}` |
 | `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
-| `ble_name` | Current BLE keyboard name | `Kitchen Pad EEFF` |
+| `ble_name` | Current BLE keyboard name | `Kitchen Pad BLE` |
 | `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
 | `ble_pairing` | BLE pairing mode active | `ON` / `OFF` |
 | `ble_bonded` | Current connection is bonded | `ON` / `OFF` |
@@ -1327,12 +1337,12 @@ Values are cached for up to 2 seconds to keep the CPU impact low.
 
 | Signal | Value | Meaning |
 |--------|-------|---------|
-| `ble_status` | `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ble_status` | `disabled` | BLE keyboard is not initialized, including when USB is selected |
 | `ble_status` | `ready` | BLE keyboard is enabled and available, but not currently in pairing mode or in an active secured session |
 | `ble_status` | `pairing` | BLE keyboard is in the 60-second pairing window and accepting a new owner |
 | `ble_status` | `connected` | A host is connected and the BLE link is encrypted and usable for HID input |
 | `ble_status` | `error` | BLE initialization failed or the stack is in a fault state |
-| `ble_state` | `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ble_state` | `disabled` | BLE keyboard is not initialized, including when USB is selected |
 | `ble_state` | `idle` | BLE stack is initialized but not actively advertising a user-relevant state |
 | `ble_state` | `advertising` | BLE is advertising without an owner claim yet |
 | `ble_state` | `pairing` | BLE is in pairing mode and waiting for a new host |
@@ -1372,7 +1382,7 @@ refresh coalescing.
 | `mqtt_tx` | Outbound MQTT publishes |
 | `mqtt` | Either MQTT direction — active on `mqtt_rx` or `mqtt_tx` |
 | `http` | Outbound HTTP client (image fetch, Home Assistant REST) |
-| `ble` | BLE HID reports (ESP32-P4 only) |
+| `ble` | BLE HID reports on builds with BLE keyboard support |
 | `ota` | Firmware OTA flash writes |
 | `any` | Aggregate — active when *any* channel is active |
 

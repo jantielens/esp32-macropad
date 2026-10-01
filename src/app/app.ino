@@ -65,6 +65,11 @@
 #include "ble_hid.h"
 #endif
 
+#if HAS_USB_HID
+#include "usb_hid.h"
+#endif
+#include "keyboard_hid.h"
+
 #if HAS_AUDIO
 #include "audio.h"
 #endif
@@ -237,6 +242,13 @@ void setup()
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		device_config.magic = CONFIG_MAGIC;
 	}
+
+	#if HAS_USB_HID
+	usb_hid_init(device_config.device_name, device_config.keyboard_transport == KeyboardTransport::Usb);
+	#endif
+	#if HAS_BLE_HID || HAS_USB_HID
+	keyboard_hid_init(device_config.keyboard_transport);
+	#endif
 
 	#if HAS_DISPLAY
 	display_manager_init(&device_config);
@@ -542,7 +554,7 @@ void setup()
 	// BLE HID keyboard — guarded by ble_hid_init() which bails gracefully
 	// (init_error = true) if the NimBLE stack fails to allocate.
 	#if HAS_BLE_HID
-	if (!in_ap_mode && device_config.ble_enabled) {
+	if (!in_ap_mode && keyboard_hid_transport() == KeyboardTransport::Ble) {
 		ble_hid_init(device_config.device_name, false);
 	} else if (!in_ap_mode) {
 		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
@@ -691,9 +703,13 @@ void loop()
 	#endif
 
 	#if HAS_BLE_HID
-	if (device_config.ble_enabled) {
+	if (keyboard_hid_transport() == KeyboardTransport::Ble) {
 		ble_hid_loop();
 	}
+	#endif
+
+	#if HAS_BLE_HID || HAS_USB_HID
+	keyboard_hid_loop();
 	#endif
 
 	// Handle web portal (DNS for captive portal)

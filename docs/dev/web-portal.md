@@ -894,7 +894,9 @@ not report a PSRAM largest-block value on those boards.
   screen-saver rendering suspension.
 - `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
 - `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
-- `ble_name`: current BLE keyboard name (same as the configured device name)
+- `ble_name`: configured device name plus ` BLE`; present when the BLE keyboard is initialized
+- `keyboard_transport`: active `usb` or `ble` backend, or `none` when Off; present when keyboard support is compiled in. Unlike `/api/config`, this health field reports the running backend, not the saved preference
+- `keyboard_status`: `disabled` when Off, otherwise `ready`, `busy`, `disconnected`, or `unavailable`; keyboard reports require a mounted, awake USB host or a secured BLE link
 - `cpu_usage`: `null` when FreeRTOS runtime stats are unavailable/disabled
 - `cpu_usage_core_0` / `cpu_usage_core_1`: optional current per-core percentages, returned only when runtime statistics are available on a multicore target
 - `cpu_temperature`: `null` on chips without an internal temperature sensor
@@ -1064,6 +1066,67 @@ Returns current device configuration (passwords excluded).
   only when `HAS_BLE` is enabled. TX power is a signed dBm value, not an ESP-IDF
   enum index. It is stored in NVS and also exposed by MCP `get_config`.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
+
+Keyboard builds expose `keyboard_transport` (saved preference),
+`keyboard_active_transport` (running backend), and `keyboard_status`.
+`caps.usb_hid` and `caps.ble_hid` describe compiled support, not host connection.
+All keyboard builds default to Off (`none`) and persist selection. The selector
+offers Off plus compiled transports, including on single-backend boards.
+Explicitly saved USB/BLE choices remain unchanged; devices without a saved
+choice become Off after updating. With neither backend compiled, keyboard
+fields, navigation, and the key action are absent. The `hid` fragment displays
+**Keyboard**. Its active connection section follows the running backend, not
+the selector. Save is disabled for an unchanged preference; a saved preference
+that differs from the active backend displays a pending-reboot message.
+USB-only builds omit the BLE pairing and bond-detail markup from the embedded
+HID fragment; BLE-capable builds include it through the `HID_BLE` partial.
+
+`POST /api/config` accepts `keyboard_transport: "none" | "usb" | "ble"` when
+keyboard support is compiled; USB/BLE choices require their compiled backend.
+Invalid or unsupported values return 400; a transport change
+while busy returns 409, before configuration mutation. Saving does not switch
+the running stack: fragment saves use `no_reboot=1` and the existing reboot hint.
+The old `ble_enabled` toggle is removed; no migration is provided.
+
+`keyboard_hid.cpp` owns a single atomically published request and polls the
+shared `key_sequence_executor.cpp` from the main loop. USB and BLE only deliver
+checked raw reports. Lifecycle epochs prevent replay or delivery to a new
+session; cancellation, failed reports, OTA, and the continuation deadline fail
+the action suffix. There is no fallback, broadcast, or live transport switching.
+Neutral recovery sends at most one report per loop pass. USB report lock and
+completion waits each use a 5 ms timeout.
+
+The shared macro workspace is allocated on the first accepted request, not at
+boot or connection time. PSRAM workspaces are retained for reuse until reboot;
+internal-only workspaces are freed when the request completes or aborts, before
+request ownership is released. The workspace holds the
+pending sequence and the executor's owned source and parsed steps; only active
+request metadata remains in static internal RAM. Boards with PSRAM allocate the
+workspace there; boards without PSRAM use internal RAM. Allocation failure
+rejects the request without leaving the keyboard busy, and does not fall back
+to internal RAM when PSRAM is present. Off allocates no macro workspace.
+
+Native USB requires `HAS_USB_HID`, `USBMode=default`, and `CDCOnBoot=default`.
+An explicit CDC instance provides logging; configuration loads before
+`usb_hid_init(device_name, enable_hid)` starts USB. The USB product name is the
+friendly name plus ` USB`; BLE advertises the friendly name plus ` BLE`.
+The saved device name is unchanged. USB manufacturer follows branding, and
+serial is stable chip-derived identity.
+Name changes require reboot. HID objects are constructed only when USB is
+selected, before enumeration: USB mode exposes keyboard, consumer HID, and CDC;
+BLE and Off modes expose CDC only. Off skips BLE keyboard initialization,
+rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
+telemetry remains unaffected. Ending HID reports cannot remove its descriptors,
+so this change also requires reboot. Windows may retain disconnected entries.
+USB is enabled only on the verified `jc1060p470c-sd` board. Review the core
+VID/PID distribution policy before release; no custom IDs are assigned.
+
+Routine macro completions and BLE protocol/control/LED reports log at DEBUG.
+Startup and connection/pairing events remain at INFO; aborted macros and
+delivery failures remain warnings. There are no periodic keyboard diagnostic
+counters. Windows testing on `jc1060p470c-sd` confirmed USB/BLE switching, serial
+logging, and CDC-only USB enumeration with BLE selected. Media keys and extended
+sleep/reconnect reliability still require hardware validation.
 
 #### `POST /api/config`
 

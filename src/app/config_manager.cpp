@@ -80,8 +80,10 @@
 #define KEY_MCP_AUTH_EN        "mcp_auth_en"
 #define KEY_MCP_TOKEN          "mcp_token"
 #endif
+#if HAS_BLE_HID || HAS_USB_HID
+#define KEY_KEYBOARD_TRANSPORT "kbd_transport"
+#endif
 #if HAS_BLE_HID
-#define KEY_BLE_ENABLED    "ble_en"
 #define KEY_BLE_OWNER      "ble_owner"
 #define KEY_BLE_OWNER_ADDR "ble_oaddr"
 #endif
@@ -270,6 +272,10 @@ bool config_manager_load(DeviceConfig *config) {
 		config->ble_tx_power_dbm = CONFIG_DEFAULT_BLE_TX_POWER_DBM;
 		#endif
 
+		#if HAS_BLE_HID || HAS_USB_HID
+		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
+		#endif
+
 		LOGI("Config", "Load start");
 
 		if (!preferences.begin(CONFIG_NAMESPACE, true)) { // Read-only mode
@@ -308,8 +314,8 @@ bool config_manager_load(DeviceConfig *config) {
 				config->mcp_token[0] = '\0';
 #endif
 
-				#if HAS_BLE_HID
-				config->ble_enabled = false;
+				#if HAS_BLE_HID || HAS_USB_HID
+				config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
 				#endif
 
 				#if HAS_DISPLAY
@@ -429,8 +435,11 @@ bool config_manager_load(DeviceConfig *config) {
 		preferences.getString(KEY_MCP_TOKEN, config->mcp_token, CONFIG_MCP_TOKEN_MAX_LEN);
 #endif
 
-		#if HAS_BLE_HID
-		config->ble_enabled = preferences.getBool(KEY_BLE_ENABLED, false);
+		#if HAS_BLE_HID || HAS_USB_HID
+		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
+		config->keyboard_transport = keyboard_transport_resolve(
+			static_cast<KeyboardTransport>(preferences.getUChar(KEY_KEYBOARD_TRANSPORT,
+				static_cast<uint8_t>(config->keyboard_transport))), HAS_BLE_HID, HAS_USB_HID);
 		#endif
 
 		#if HAS_AUDIO
@@ -609,8 +618,8 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putString(KEY_MCP_TOKEN, config->mcp_token);
 #endif
 
-		#if HAS_BLE_HID
-		preferences.putBool(KEY_BLE_ENABLED, config->ble_enabled);
+		#if HAS_BLE_HID || HAS_USB_HID
+		preferences.putUChar(KEY_KEYBOARD_TRANSPORT, static_cast<uint8_t>(config->keyboard_transport));
 		#endif
 
 		#if HAS_AUDIO
@@ -896,8 +905,8 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 				LOGI("Config", "HA REST: disabled");
 		}
 
-#if HAS_BLE_HID
-		LOGI("Config", "BLE Keyboard: %s", config->ble_enabled ? "enabled" : "disabled");
+#if HAS_BLE_HID || HAS_USB_HID
+		LOGI("Config", "Keyboard transport: %s", keyboard_transport_name(config->keyboard_transport));
 #endif
 
 #if HAS_AUDIO
