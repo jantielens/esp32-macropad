@@ -271,6 +271,7 @@ void PadScreen::update() {
 }
 
 void PadScreen::pollLiveData(bool force) {
+    bool refreshPassive = true;
 #if HAS_LVGL_EPAPER
 	const EpaperRefreshSettings presentationSettings = config_manager_get_epaper_refresh_settings();
     const uint32_t refreshIntervalMs = presentationSettings.epaper_binding_refresh_interval_ms;
@@ -292,10 +293,14 @@ void PadScreen::pollLiveData(bool force) {
     const bool clockJustSynced = clockSynced && !clockWasSynced;
     clockWasSynced = clockSynced;
 
-    if (!force && !passiveDue && !timeDue && !clockJustSynced) return;
-
-    lastPassiveBindingSlot = passiveSlot;
-    if (hasTimeBinding && clockSynced) lastTimeBindingMinute = timeMinute;
+    refreshPassive = force || passiveDue || timeDue || clockJustSynced;
+#if HAS_LVGL_EPAPER
+    if (!refreshPassive) return;
+#endif
+    if (refreshPassive) {
+        lastPassiveBindingSlot = passiveSlot;
+        if (hasTimeBinding && clockSynced) lastTimeBindingMinute = timeMinute;
+    }
 #else
     (void)force;
 #endif
@@ -306,9 +311,11 @@ void PadScreen::pollLiveData(bool force) {
     pad_binding_set_bindings(pageBindings, pageBindingCount);
 #endif
     pollBtnStateBindings();   // Visibility/interactivity first
-    pollMqttBindings();
-    pollColorBindings();
-    pollNumberBindings();
+    pollMqttBindings(refreshPassive);
+    if (refreshPassive) {
+        pollColorBindings();
+        pollNumberBindings();
+    }
     #if HAS_MQTT
     mqtt_sub_store_clear_dirty();
     pad_binding_set_bindings(nullptr, 0);
@@ -316,6 +323,8 @@ void PadScreen::pollLiveData(bool force) {
 #if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY
     pollImageFrames();
 #endif
+#else
+    (void)refreshPassive;
 #endif
 }
 

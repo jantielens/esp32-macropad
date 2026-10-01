@@ -305,8 +305,8 @@ static lv_obj_t* gauge_create_start_label(lv_obj_t* tile, const lv_font_t* font,
     return label;
 }
 
-static void gauge_set_start_label_text(lv_obj_t* label, const char* templ) {
-    if (!label || !templ) return;
+static bool gauge_set_start_label_text(lv_obj_t* label, const char* templ) {
+    if (!label || !templ) return false;
 
     char resolved[CONFIG_BINDABLE_SHORT_LEN];
     resolved[0] = '\0';
@@ -319,12 +319,14 @@ static void gauge_set_start_label_text(lv_obj_t* label, const char* templ) {
         strlcpy(resolved, templ, sizeof(resolved));
     }
 
-    if (strcmp(lv_label_get_text(label), resolved) != 0) {
+    const bool changed = strcmp(lv_label_get_text(label), resolved) != 0;
+    if (changed) {
         lv_label_set_text(label, resolved);
     }
 
     if (resolved[0]) lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+    return changed;
 }
 
 static void gauge_place_start_label(lv_obj_t* label, const GaugeConfig* cfg,
@@ -389,8 +391,16 @@ static void gauge_update_start_label(lv_obj_t* label, const char* templ,
                                      const GaugeConfig* cfg, const GaugeState* st,
                                      uint8_t slot_index) {
     if (!label || !templ || !templ[0]) return;
-    gauge_set_start_label_text(label, templ);
-    gauge_place_start_label(label, cfg, st, slot_index);
+    if (gauge_set_start_label_text(label, templ)) {
+        gauge_place_start_label(label, cfg, st, slot_index);
+    }
+}
+
+static void gauge_sync_start_label_color(lv_obj_t* label, lv_obj_t* arc) {
+    const lv_color_t color = lv_obj_get_style_arc_color(arc, LV_PART_INDICATOR);
+    if (!lv_color_eq(lv_obj_get_style_text_color(label, LV_PART_MAIN), color)) {
+        lv_obj_set_style_text_color(label, color, 0);
+    }
 }
 
 // ---- WidgetType callbacks ----
@@ -1108,7 +1118,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_set_style_arc_color(st->arc_bg, clr, LV_PART_INDICATOR);
     if (st->start_label_1) {
         gauge_update_start_label(st->start_label_1, cfg->start_label, cfg, st, st->start_label_slot_1);
-        lv_obj_set_style_text_color(st->start_label_1, lv_obj_get_style_arc_color(st->arc_bg, LV_PART_INDICATOR), 0);
+        gauge_sync_start_label_color(st->start_label_1, st->arc_bg);
     }
     if (st->arc_ring2) {
         const char* arc2_color = st->dual_pair_1_active ? cfg->arc_color_3 : cfg->arc_color_2;
@@ -1119,7 +1129,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (st->start_label_2) {
             const char* sl2 = st->dual_pair_1_active ? cfg->start_label_3 : cfg->start_label_2;
             gauge_update_start_label(st->start_label_2, sl2, cfg, st, st->start_label_slot_2);
-            lv_obj_set_style_text_color(st->start_label_2, lv_obj_get_style_arc_color(st->arc_ring2, LV_PART_INDICATOR), 0);
+            gauge_sync_start_label_color(st->start_label_2, st->arc_ring2);
         }
     }
     if (st->arc_ring3) {
@@ -1131,7 +1141,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (st->start_label_3) {
             const char* sl3 = st->dual_pair_1_active ? cfg->start_label_4 : cfg->start_label_3;
             gauge_update_start_label(st->start_label_3, sl3, cfg, st, st->start_label_slot_3);
-            lv_obj_set_style_text_color(st->start_label_3, lv_obj_get_style_arc_color(st->arc_ring3, LV_PART_INDICATOR), 0);
+            gauge_sync_start_label_color(st->start_label_3, st->arc_ring3);
         }
     }
     if (st->arc_ring4) {
@@ -1139,7 +1149,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
             lv_obj_set_style_arc_color(st->arc_ring4, clr, LV_PART_INDICATOR);
         if (st->start_label_4) {
             gauge_update_start_label(st->start_label_4, cfg->start_label_4, cfg, st, st->start_label_slot_4);
-            lv_obj_set_style_text_color(st->start_label_4, lv_obj_get_style_arc_color(st->arc_ring4, LV_PART_INDICATOR), 0);
+            gauge_sync_start_label_color(st->start_label_4, st->arc_ring4);
         }
     }
     if (st->arc_dual_1_neg) {

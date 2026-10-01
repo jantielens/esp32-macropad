@@ -1357,7 +1357,12 @@ WiFi: [health:rssi] dBm                               → WiFi: -54 dBm
 
 **Syntax:** `[net:channel]` or `[net:channel;age]`
 
-Exposes live network / transport activity so labels, icon colors, and widget inputs can react with a subtle visual cue whenever the device sends or receives data. Each channel tracks the time of its most recent activity; the binding is resolved on-screen every frame, so an icon flashes on activity and settles back when idle.
+Exposes live network / transport activity so labels, icon colors, and widget inputs can react with a subtle visual cue whenever the device sends or receives data. Each channel tracks the time of its most recent activity; the binding is resolved when its consuming label, color, or widget refreshes, so an icon flashes on activity and settles back when idle.
+
+On `jc1060p470c-sd`, passive labels and button colors refresh at a 100 ms
+interval. Other LCD targets retain their default every-cycle passive refresh,
+while LCD widget inputs remain live. Interactive e-paper retains its existing
+refresh coalescing.
 
 | Channel | Activity tracked |
 |---------|------------------|
@@ -1669,7 +1674,11 @@ Color fields throughout the button editor accept binding expressions, making but
 - **Button colors** — background, text, and border
 - **Widget colors** — bar chart bar color, gauge arc/track/needle/tick colors, sparkline line colors, reference line colors, min/max marker colors
 
-All color bindings update live every display cycle — you don't need new data to arrive for a color change to take effect.
+Button and pad color bindings resolve at the passive refresh cadence: 100 ms
+on `jc1060p470c-sd`, with other LCD targets retaining their default every-cycle
+refresh. LCD widget color bindings remain live, and interactive e-paper retains
+its existing refresh coalescing. No new network data needs to arrive for a
+color change to take effect.
 
 **Basic pattern** — change color based on a threshold:
 

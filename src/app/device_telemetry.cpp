@@ -1125,14 +1125,28 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 						DisplayPerfStats stats;
 						if (display_manager_get_perf_stats(&stats)) {
 								doc["display_fps"] = stats.fps;
+								JsonObject perf = doc["display_perf"].to<JsonObject>();
+								perf["lv_timer_us"] = stats.lv_timer_us;
+								perf["present_us"] = stats.present_us;
+								perf["data_stream_us"] = stats.data_stream_us;
+								perf["screen_update_us"] = stats.screen_update_us;
+								perf["cycle_us"] = stats.cycle_us;
+								perf["lv_timer_peak_us"] = stats.lv_timer_peak_us;
+								perf["present_peak_us"] = stats.present_peak_us;
+								perf["data_stream_peak_us"] = stats.data_stream_peak_us;
+								perf["screen_update_peak_us"] = stats.screen_update_peak_us;
+								perf["cycle_peak_us"] = stats.cycle_peak_us;
 						} else {
 								doc["display_fps"] = nullptr;
+								doc["display_perf"] = nullptr;
 						}
 				} else {
 						doc["display_fps"] = nullptr;
+						doc["display_perf"] = nullptr;
 				}
 				#else
 				doc["display_fps"] = nullptr;
+				doc["display_perf"] = nullptr;
 				#endif
 		}
 

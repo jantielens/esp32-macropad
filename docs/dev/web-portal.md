@@ -269,7 +269,7 @@ Real-time device health monitoring integrated as a header badge with expandable 
 - **Flash Usage**: Used firmware space
 - **Filesystem**: FFat presence/mounted/usage (nullable when no partition present)
 - **MQTT**: Enabled/connected/publish age
-- **Display**: FPS + timing (when display present)
+- Display update FPS when a display is present; detailed timings are API-only
 - **RSSI / IP Address**: Network signal and IP (when connected)
 - Click `✕` to close
 - Same polling cadence as configured by firmware
@@ -812,8 +812,18 @@ Returns real-time device health statistics.
   "mqtt_last_health_publish_ms": 1234567,
   "mqtt_health_publish_age_ms": 4000,
   "display_fps": 30,
-  "display_lv_timer_us": 250,
-  "display_present_us": 1200,
+  "display_perf": {
+    "lv_timer_us": 250,
+    "present_us": 1200,
+    "data_stream_us": 50,
+    "screen_update_us": 100,
+    "cycle_us": 450,
+    "lv_timer_peak_us": 500,
+    "present_peak_us": 2000,
+    "data_stream_peak_us": 100,
+    "screen_update_peak_us": 200,
+    "cycle_peak_us": 900
+  },
 
   "runtime": {
     "main_phase": "portal",
@@ -869,6 +879,19 @@ internal-heap measurements that can be up to 30 seconds old. The endpoint does
 not report a PSRAM largest-block value on those boards.
 
 **Notes:**
+- `display_fps`: update activity per second, normalized by actual elapsed time.
+  Direct drivers count LVGL cycles producing flush data; buffered drivers count
+  completed `present()` calls. This is not the panel scanout frequency. Quiet
+  sampling windows report zero rather than retaining the last active FPS.
+- `display_perf`: timing snapshot in microseconds, published approximately once
+  per second. `lv_timer_us`, `data_stream_us`, `screen_update_us`, and `cycle_us`
+  are averages per LVGL cycle; `present_us` is the average per buffered
+  presentation call. Corresponding `*_peak_us` fields are window maxima.
+  `cycle_us` measures work while holding the display mutex, excluding lock wait
+  and task sleep. Asynchronous presentation overlaps rendering, so its duration
+  must not be added to cycle time. Both display fields are API-only, are `null`
+  before stats are available or without a display, and report zeros during
+  screen-saver rendering suspension.
 - `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
 - `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
 - `ble_name`: current BLE keyboard name (same as the configured device name)

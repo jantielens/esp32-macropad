@@ -1197,6 +1197,32 @@ Each board compiles with its own display driver and settings.
 
 ### Rendering Performance
 
+Display performance snapshots use a shared sampling window protected by the
+performance spinlock. FPS is normalized by actual elapsed time and counts LVGL
+flush-producing cycles for direct drivers or completed `present()` calls for
+buffered drivers, not physical panel scanout. Quiet windows and screen-saver
+rendering suspension report zero FPS.
+
+The API-only `display_perf` object reports per-cycle average and peak durations
+for `lv_timer_handler()`, data-stream polling, current-screen updates, and the
+total display-mutex-held cycle. Buffered presentation is measured separately.
+The FPS screen shows average Render, Present, and Cycle times; Cycle excludes
+lock wait and task sleep and does not sum concurrent rendering and presentation.
+
+On LCD boards, `DISPLAY_BINDING_REFRESH_INTERVAL_MS` throttles passive labels,
+colors, numeric styles, and local-image path templates independently of button
+visibility, widget-value updates, widget ticks, and image-frame handoff. Zero
+retains every-cycle passive resolution. The `jc1060p470c-sd` target uses 100 ms;
+other LCD targets retain their defaults. Initial/rebuilt pads, pad navigation,
+clock synchronization, and configured minute boundaries refresh passive values
+immediately. Interactive e-paper retains its existing all-content coalescing.
+
+Gauge captions reuse their current resolved text to skip unchanged placement.
+Fonts and gauge geometry are fixed when the widget is created; configuration
+changes rebuild the widget and place captions again. Unchanged captions avoid
+layout, trigonometry, and transform/position setters, and caption colors are
+applied only when changed.
+
 **Typical metrics (320x240 @ 40 MHz SPI):**
 - Full screen refresh: ~30-40ms (24 buffer flushes)
 - LVGL task overhead: ~1-2% CPU (5ms interval)

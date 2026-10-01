@@ -4,6 +4,7 @@
 #include "board_config.h"
 #include "config_manager.h"
 #include "display_driver.h"
+#include "display_perf.h"
 #include "deferred_dispatch_slot.h"
 #include "screens/screen.h"
 #include "screens/splash_screen.h"
@@ -88,7 +89,6 @@ private:
 		TaskHandle_t presentTaskHandle;
 		RtosTaskPsramAlloc presentTaskAlloc;
 		SemaphoreHandle_t presentSem;
-		volatile uint32_t sharedLvTimerUs;  // Latest lv_timer_handler() duration for perf stats
 		
 		// Screen management
 		Screen* currentScreen;
@@ -226,13 +226,6 @@ public:
 		// Check if the current screen wants to redirect on screensaver sleep.
 		// If so, navigate to the target screen (invisible under sleep overlay).
 		void handleSleepScreenRedirect();
-};
-
-// Lightweight rendering/perf snapshot (best-effort).
-struct DisplayPerfStats {
-		uint16_t fps;
-		uint32_t lv_timer_us;
-		uint32_t present_us;
 };
 
 enum DisplayRefreshRequestResult : uint8_t {

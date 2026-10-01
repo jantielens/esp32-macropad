@@ -43,8 +43,13 @@ The orange **CPU** badge in the header shows real-time CPU usage with a breathin
 - **Flash usage** — firmware size
 - **Filesystem** — active storage backend, mount state, and usage. SD primary-storage variants also report card type.
 - **MQTT** — connection status and publish timing
-- **Display** — FPS and render timing
+- **Display** — update FPS, not physical panel scanout frequency
 - **Wi-Fi signal** — RSSI and IP address
+
+The device's FPS Benchmark screen shows Render, Present, and Cycle timings.
+Detailed average and peak timings are available through the API-only
+`display_perf` object in `/api/health`; they are not additional health-overlay
+controls. Quiet screens can report zero FPS even while the panel keeps scanning.
 
 ---
 

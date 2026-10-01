@@ -62,7 +62,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Recipes** — install a declared setup into a selected pad with adaptive placement, optional parameters, and safe grid-size or clear-buttons recovery when space is unavailable
 - **Copy/paste & import/export** — clone buttons, pads, or entire device configurations to JSON
 - **Browser-based setup** — Wi-Fi, MQTT, security, and all device settings, no tools needed
-- **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status
+- **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status; API-only display timing diagnostics include cycle averages and peaks
 - **Optional HTTP Basic Auth** for portal access
 - **SD card support** — use a FAT32 MicroSD card for pad configurations, icons, sounds, and indexed data on supported boards
 - **Native Extensions** — install trusted native modules in explicit slots on ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive (one 32 KiB slot). P4 modules execute from flash; Xtensa modules use executable internal RAM for code and PSRAM for data. Place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. Download the package for your device target from the [Extensions catalog](https://jantielens.github.io/esp32-macropad/extensions.html), then upload it through the device portal. Packages larger than a board's slot are rejected. See the [Extension developer guide](docs/dev/extensions.md).

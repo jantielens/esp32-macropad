@@ -24,7 +24,7 @@ class DisplayManager;
 // generation counter changes.
 
 // Runtime MQTT label binding — template-based
-// Labels containing [scheme:params] tokens are resolved each poll cycle.
+// Labels containing [scheme:params] tokens are resolved on passive refresh.
 struct RuntimeLabelBinding {
     lv_obj_t* label;                                  // LVGL label to update
     char templ[CONFIG_LABEL_MAX_LEN];                 // Original label text (template)
@@ -35,7 +35,7 @@ struct RuntimeLabelBinding {
 };
 
 // Runtime color binding — a color field that may contain binding templates.
-// Resolved each poll cycle; only applies LVGL style on change.
+// Resolved on passive refresh; only applies LVGL style on change.
 struct RuntimeColorBinding {
     uint8_t tileIndex;                                // index into tiles[]
     char templ[CONFIG_COLOR_MAX_LEN];                 // Original color string (template or static)
@@ -64,7 +64,7 @@ struct RuntimeBtnStateBinding {
 };
 
 // Runtime number binding — a numeric field (border_width, corner_radius) that may contain binding templates.
-// Resolved each poll cycle; only applies LVGL style on change.
+// Resolved on passive refresh; only applies LVGL style on change.
 struct RuntimeNumberBinding {
     uint8_t tileIndex;                                // index into tiles[]
     char templ[CONFIG_BINDABLE_SHORT_LEN];            // Original string (number or binding template)
@@ -208,7 +208,7 @@ private:
     void buildTiles();
     void clearTiles();
     void pollLiveData(bool force = false);
-    void pollMqttBindings();
+    void pollMqttBindings(bool refreshPassive);
     void pollColorBindings();
     void pollNumberBindings();
     void pollBtnStateBindings();

@@ -19,11 +19,11 @@
 // MQTT Label Binding Polling
 // ============================================================================
 
-void PadScreen::pollMqttBindings() {
+void PadScreen::pollMqttBindings(bool refreshPassive) {
 #if HAS_MQTT || HAS_IMAGE_LIBRARY
     char resolved[BINDING_TEMPLATE_MAX_LEN];
 #if HAS_MQTT
-    for (uint16_t i = 0; i < bindingCount; i++) {
+    for (uint16_t i = 0; refreshPassive && i < bindingCount; i++) {
         RuntimeLabelBinding& rb = bindings[i];
         if (!rb.active || !rb.label) continue;
 
@@ -97,7 +97,7 @@ void PadScreen::pollMqttBindings() {
 #if HAS_IMAGE_LIBRARY
     for (uint8_t i = 0; i < tileCount; i++) {
         ButtonTile& tile = tiles[i];
-        if (!tile.local_image_template[0] || !binding_template_has_bindings(tile.local_image_template)) continue;
+        if (!refreshPassive || !tile.local_image_template[0] || !binding_template_has_bindings(tile.local_image_template)) continue;
 
         binding_template_resolve(tile.local_image_template, resolved, sizeof(resolved));
         if (strcmp(resolved, tile.local_image_path) == 0) continue;
@@ -131,6 +131,9 @@ void PadScreen::pollMqttBindings() {
         lv_obj_move_to_index(tile.local_bg_image, 0);
     }
 #endif
+#endif
+#if !HAS_MQTT && !HAS_IMAGE_LIBRARY
+    (void)refreshPassive;
 #endif
 }
 

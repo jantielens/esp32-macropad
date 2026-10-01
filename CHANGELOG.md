@@ -19,9 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * BLE telemetry transmit power is configurable in the Operating Mode portal
   from -12 to +9 dBm in 3 dB steps, with help text explaining the battery and
   reception tradeoff. The setting is persisted and applies after reboot.
+* API-only display diagnostics in `/api/health` now include a `display_perf`
+  snapshot with sampling-window average and peak timings for the LVGL handler,
+  data-stream polling, screen updates, the display-mutex-held cycle, and
+  buffered presentation.
+
+### Changed
+
+* Gauge captions skip repeated layout work when their resolved text is
+  unchanged, and apply caption colors only when changed. Configuration
+  rebuilds still refresh caption geometry and fonts.
+* LCD passive binding refresh is independent of live widget updates, button
+  visibility/enabled state, and image-frame handoff. The `jc1060p470c-sd` target
+  uses a 100 ms passive interval; other LCD defaults and existing e-paper
+  coalescing remain unchanged. Initial pad display and rebuilds still refresh
+  passive content immediately.
 
 ### Fixed
 
+* Display update FPS is normalized by actual elapsed sampling time and returns
+  zero in quiet windows instead of retaining an old active value. The FPS
+  Benchmark screen shows measured cycle time rather than adding overlapping
+  rendering and presentation times; update FPS is not panel scanout frequency.
 * BLE-only duty-cycle wakes skip Wi-Fi initialization, removing its 700 ms
   fixed delays and unnecessary station-mode startup. Config/recovery mode
   retains Wi-Fi access.
