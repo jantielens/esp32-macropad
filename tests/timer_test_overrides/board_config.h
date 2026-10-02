@@ -6,6 +6,7 @@
 #define HAS_MQTT 0
 #define HAS_MCP 1
 #define HAS_BLE_HID 0
+#define HAS_USB_HID 0
 #define HAS_AUDIO 0
 #define HAS_SOUND_PLAYER 0
 #define HAS_VISUAL_ALERT 0

@@ -98,6 +98,7 @@ get_capability_label() {
   case "$1" in
     mcp) echo "MCP" ;;
     ble_hid) echo "BLE HID" ;;
+    usb_hid) echo "USB HID" ;;
     bthome) echo "BTHome" ;;
     image_fetch) echo "Images" ;;
     camera) echo "Camera" ;;
@@ -113,6 +114,7 @@ get_capability_tooltip() {
   case "$1" in
     mcp) echo "Includes a local MCP server that you can enable in the device portal for compatible AI assistants." ;;
     ble_hid) echo "Acts as a Bluetooth keyboard for a paired computer, tablet, or phone." ;;
+    usb_hid) echo "Acts as a USB keyboard and mouse for a connected computer." ;;
     bthome) echo "Broadcasts sensor readings as Bluetooth Low Energy telemetry." ;;
     image_fetch) echo "Downloads and displays images from HTTP or HTTPS URLs." ;;
     camera) echo "Captures still images from the connected camera." ;;

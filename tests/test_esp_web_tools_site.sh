@@ -113,6 +113,7 @@ done
 ! grep -q 'class-card-arrow' "$TMP_DIR/site/index.html"
 grep -q 'location.replace(`./update.html' "$TMP_DIR/site/index.html"
 grep -q 'ESP32-MP Voice Assistant' "$TMP_DIR/site/flash.html"
+grep -q 'aria-label="USB HID: Acts as a USB keyboard and mouse for a connected computer."' "$TMP_DIR/site/flash.html"
 grep -q 'data-board="inkplate6flick-frame".*data-class="epaper_frame"' "$TMP_DIR/site/flash.html"
 grep -q 'data-board="inkplate6flick-interactive".*data-class="macropad"' "$TMP_DIR/site/flash.html"
 grep -q 'data-board="reterminal-e1003-frame".*data-class="epaper_frame"' "$TMP_DIR/site/flash.html"
