@@ -5,7 +5,7 @@
   "chip_family": "ESP32-S3",
   "flash_mb": 16,
   "psram_mb": 8,
-  "capabilities": ["extensions"],
+  "capabilities": ["usb_hid", "extensions"],
   "wireless": {
     "wifi": true,
     "ble": true

@@ -39,12 +39,18 @@ void Wire_CST816S_TouchDriver::init() {
 		// Initialize I2C bus
 		wire = &Wire;
 		#if defined(TOUCH_I2C_SDA) && defined(TOUCH_I2C_SCL)
-		wire->begin(TOUCH_I2C_SDA, TOUCH_I2C_SCL, 400000);
+		const bool bus_ready = wire->begin(TOUCH_I2C_SDA, TOUCH_I2C_SCL, 400000);
 		LOGI("CST816S", "I2C init: SDA=%d, SCL=%d, 400kHz", TOUCH_I2C_SDA, TOUCH_I2C_SCL);
 		#else
-		wire->begin();
+		const bool bus_ready = wire->begin();
 		LOGI("CST816S", "I2C init: default pins, default freq");
 		#endif
+
+		if (!bus_ready) {
+				wire = nullptr;
+				LOGE("CST816S", "I2C initialization failed");
+				return;
+		}
 
 		// Verify the chip responds
 		wire->beginTransmission(CST816S_I2C_ADDR);
@@ -59,15 +65,21 @@ void Wire_CST816S_TouchDriver::init() {
 		// Without this, the CST816S sleeps after ~5s of no touch and
 		// stops responding to I2C reads until a touch interrupt fires.
 		wire->beginTransmission(CST816S_I2C_ADDR);
-		wire->write(0xFE);   // DisAutoSleep register
-		wire->write(0x01);   // 1 = disable auto-sleep
-		wire->endTransmission();
-
-		LOGI("CST816S", "Init complete (auto-sleep disabled)");
+		const size_t register_written = wire->write(0xFE);
+		const size_t value_written = wire->write(0x01);
+		const uint8_t sleep_result = wire->endTransmission();
+		if (register_written != 1 || value_written != 1 || sleep_result != 0) {
+				wire = nullptr;
+				LOGW("CST816S", "Failed to disable auto-sleep (err=%d)", sleep_result);
+		} else {
+				LOGI("CST816S", "Init complete (auto-sleep disabled)");
+		}
 }
 
-bool Wire_CST816S_TouchDriver::readTouchRaw(uint16_t& x, uint16_t& y) {
-		if (!wire) return false;
+TouchSample Wire_CST816S_TouchDriver::readTouchRaw() {
+		TouchSample sample;
+		sample.status = TouchReadStatus::Error;
+		if (!wire) return sample;
 
 		// Read touch registers: 5 bytes starting at 0x02
 		//   reg 0x02: numPoints (0 or 1)
@@ -76,35 +88,48 @@ bool Wire_CST816S_TouchDriver::readTouchRaw(uint16_t& x, uint16_t& y) {
 		//   reg 0x05: touchID[7:4] | yH[3:0]
 		//   reg 0x06: yL[7:0]
 		wire->beginTransmission(CST816S_I2C_ADDR);
-		wire->write(CST816S_REG_TOUCH);
-		if (wire->endTransmission(false) != 0) return false;
-
-		if (wire->requestFrom((uint8_t)CST816S_I2C_ADDR, (uint8_t)5) != 5) return false;
-
-		uint8_t numPoints = wire->read();  // 0x02: number of touch points
-		uint8_t xH        = wire->read();  // 0x03: event[7:6] | x[11:8]
-		uint8_t xL        = wire->read();  // 0x04: x[7:0]
-		uint8_t yH        = wire->read();  // 0x05: touchID[7:4] | y[11:8]
-		uint8_t yL        = wire->read();  // 0x06: y[7:0]
-
-		if (numPoints == 0) return false;
-
-		x = (uint16_t)(((xH & 0x0F) << 8) | xL);
-		y = (uint16_t)(((yH & 0x0F) << 8) | yL);
-		return true;
+		const size_t written = wire->write(CST816S_REG_TOUCH);
+		const uint8_t result = wire->endTransmission(false);
+		if (written != 1 || result != 0) return sample;
+		uint8_t data[5];
+		if (wire->requestFrom((uint8_t)CST816S_I2C_ADDR, (uint8_t)sizeof(data)) != sizeof(data) ||
+				wire->available() < (int)sizeof(data)) return sample;
+		for (size_t index = 0; index < sizeof(data); ++index) {
+				const int value = wire->read();
+				if (value < 0) return sample;
+				data[index] = (uint8_t)value;
+		}
+		const uint8_t event = data[1] >> 6;
+		if (data[0] > 1 || (data[0] && event == 3)) return sample;
+		sample.status = TouchReadStatus::Fresh;
+		sample.pressed = data[0] != 0 && event != 1;
+		if (sample.pressed) {
+				sample.horizontal = (uint16_t)(((data[1] & 0x0F) << 8) | data[2]);
+				sample.vertical = (uint16_t)(((data[3] & 0x0F) << 8) | data[4]);
+		}
+		return sample;
 }
 
 bool Wire_CST816S_TouchDriver::isTouched() {
-		uint16_t x, y;
-		return readTouchRaw(x, y);
+		const TouchSample sample = readSample();
+		return sample.status != TouchReadStatus::Error && sample.pressed;
 }
 
 bool Wire_CST816S_TouchDriver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure) {
 		if (pressure) *pressure = 0;
 		if (!x || !y) return false;
 
-		uint16_t tx, ty;
-		if (!readTouchRaw(tx, ty)) return false;
+		const TouchSample sample = readSample();
+		if (sample.status == TouchReadStatus::Error || !sample.pressed) return false;
+		*x = sample.horizontal;
+		*y = sample.vertical;
+		return true;
+}
+
+TouchSample Wire_CST816S_TouchDriver::readSample() {
+		TouchSample sample = readTouchRaw();
+		if (sample.status == TouchReadStatus::Error || !sample.pressed) return sample;
+		uint16_t tx = sample.horizontal, ty = sample.vertical;
 
 		// Apply calibration mapping
 		if (calibrationEnabled && calXMax > calXMin && calYMax > calYMin) {
@@ -121,9 +146,9 @@ bool Wire_CST816S_TouchDriver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pres
 
 		applyRotation(tx, ty);
 
-		*x = tx;
-		*y = ty;
-		return true;
+		sample.horizontal = tx;
+		sample.vertical = ty;
+		return sample;
 }
 
 void Wire_CST816S_TouchDriver::setCalibration(uint16_t x_min, uint16_t x_max, uint16_t y_min, uint16_t y_max) {

@@ -1134,7 +1134,10 @@ rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
 telemetry remains unaffected. Ending HID reports cannot remove its descriptors,
 so this change also requires reboot. Windows may retain disconnected entries.
 USB is compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`,
-`jc4880p433-sd`, and `esp32-p4-lcd4b`. The other JC4880 variants and LCD4B Voice
+`jc4880p433-sd`, `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
+Both JC3636W518 variants explicitly disable `HAS_BLE` and `HAS_BLE_HID` and
+use TinyUSB with application-managed CDC instead of hardware CDC.
+The other JC4880 variants and LCD4B Voice
 explicitly disable inherited USB HID support and keep their existing serial
 build options. Only `jc1060p470c-sd` has hardware validation so far; the other
 targets still require connector/power checks and host testing. Compiled USB

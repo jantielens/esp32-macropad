@@ -535,7 +535,8 @@ defaults are unchanged until you configure these actions.
 
 The **Send keys** action sends keystrokes through the device's selected USB or
 BLE transport. Both use the same DSL and US ASCII mapping. Native USB is enabled
-on `jc1060p470c-sd`; choose a supported transport under **Connectivity > Keyboard & Mouse**,
+on supported builds, including `jc1060p470c-sd`, `jc3636w518`, and `jc3636w518-sd`.
+Both JC3636W518 variants disable BLE. Choose a supported transport under **Connectivity > Keyboard & Mouse**,
 save, then reboot. Off is the initial default and rejects key actions.
 Single-backend builds offer Off and their supported backend. There is no
 automatic fallback to another transport.
@@ -921,9 +922,13 @@ Disconnected USB, OTA, or exhausted capacity fails the action.
 
 Pad exit/replacement, disconnect/reconnect, and OTA clear holds and pending
 taps, without replay. Widgets also release on hide, disable, destruction, or
-touch cancellation. GT911 read failures cancel after 100 ms and require a
-physical release before another press; a valid scan with no new data keeps a
-stationary contact held. Legacy touch drivers retain their existing read behavior.
+touch cancellation. GT911, AXS15231B, and CST816S detected read failures cancel
+after 100 ms and require a physical release before another press. Stationary
+contacts remain held between valid reports. XPT2046 applies the same cancellation
+to invalid samples, but its SPI library cannot identify every bus failure.
+Inkplate/Cypress retains its legacy behavior and is not covered by this checked
+error handling. These driver changes do not enable USB HID on additional boards;
+gamepad widgets still require the existing display, touch, and USB HID capabilities.
 
 For hardware diagnostics, use the normal INFO-level device logs. `GamepadJoystick`
 and `GamepadButton` report creation, capture, rejection, and release reasons.

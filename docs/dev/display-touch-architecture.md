@@ -627,6 +627,30 @@ preserving a stationary hold. Failed or incomplete transfers return `Error`
 without committing partial data. Initialization also checks the pending-data
 clear and does not report successful initialization if that write fails.
 
+AXS15231B checks the complete command and eight-byte response before updating
+contact state or coordinates. Idle reads without an interrupt are `Unchanged`;
+held contacts are polled so stationary bus failures and missed release interrupts
+can be detected. Failed reports are retried without requiring another interrupt.
+Zero contacts or an up event release the contact; stale move events after release
+do not start another press.
+
+CST816S polls its five-byte report and distinguishes checked transfer failures
+from zero-contact or up-event releases. Calibration and rotation apply only to
+valid pressed samples. Initialization checks bus startup and the auto-sleep
+configuration write. Either failure leaves touch unavailable until successful
+reinitialization, preventing holds on a controller that may stop updating.
+
+XPT2046 retains the last contact as `Unchanged` while the library's sample buffer
+is still fresh. Invalid coordinate/pressure samples are `Error`; low pressure
+or the library's cleared interrupt-wake state reports release. The SPI library
+does not expose transfer errors, so a bus fault resembling valid zero pressure
+cannot be distinguished from a physical release.
+
+Inkplate/Cypress remains deferred. Its adapter preserves contacts between
+interrupt reports, but the external reader conflates some failures with release
+and can wait indefinitely after a short I2C read. It does not provide the checked
+error-cancellation guarantee. No installed Inkplate library files are patched.
+
 ### Implementations
 
 **XPT2046_Driver** ([`src/app/drivers/xpt2046_driver.h/cpp`](../src/app/drivers/xpt2046_driver.cpp))
@@ -693,7 +717,8 @@ For physical LVGL input, `readCallback()` passes `driver->readSample()` through
 contact via `lv_indev_reset()`, reports release, and blocks further presses
 until a fresh released sample arrives. `Unchanged` samples do not end an
 error episode; a fresh sample does. This protection requires a driver that
-reports checked statuses, currently GT911, rather than the legacy adapter.
+reports `Error`, as GT911, AXS15231B, CST816S, and the noise-aware XPT2046 path do,
+rather than the legacy adapter. XPT2046 still has the SPI limitation noted above.
 
 ### Touch Event Flow
 

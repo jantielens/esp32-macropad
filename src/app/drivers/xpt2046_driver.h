@@ -26,6 +26,9 @@ private:
 		uint16_t cal_x_min, cal_x_max;
 		uint16_t cal_y_min, cal_y_max;
 		uint8_t rotation;
+		bool initialized = false;
+		TouchSample lastSample;
+		uint16_t lastPressure = 0;
 		
 public:
 		// Constructor initializes standalone XPT2046 controller
@@ -35,6 +38,7 @@ public:
 		void init() override;
 		bool isTouched() override;
 		bool getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure = nullptr) override;
+		TouchSample readSample() override;
 		void setCalibration(uint16_t x_min, uint16_t x_max, uint16_t y_min, uint16_t y_max) override;
 		void setRotation(uint8_t rotation) override;
 };

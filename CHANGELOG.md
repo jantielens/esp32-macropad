@@ -30,6 +30,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the existing ` USB` suffix instead of TinyUSB labels.
 * Gamepad Button reuses ordinary button visual feedback while held, flashes
   briefly on release, and clears feedback on cancellation.
+* `jc3636w518` and `jc3636w518-sd` enable native USB keyboard, consumer,
+  mouse, and gamepad HID with application-managed CDC logging. Both explicitly
+  disable BLE and BLE HID; output still defaults to Off until USB is selected.
+
+### Fixed
+
+* AXS15231B preserves stationary holds, polls active contacts, and retries failed
+  reports without another interrupt. AXS15231B and CST816S distinguish checked
+  I2C failures from releases; persistent errors cancel holds after 100 ms and
+  require a fresh released sample before another press.
+* CST816S leaves touch unavailable after failed bus initialization or auto-sleep
+  configuration, until successful reinitialization.
+* XPT2046 preserves buffered contacts and routes invalid samples through touch
+  error cancellation. Its SPI library cannot distinguish every bus failure
+  from release. Inkplate/Cypress changes remain deferred.
 
 ## [1.35.0] - 2026-10-02
 

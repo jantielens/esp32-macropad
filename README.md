@@ -45,8 +45,9 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   Gamepad Button widgets provide analog movement and automatically released
   held controls; Gamepad actions provide tap/down/up operations.
   BLE supports keyboard control only. Native USB is compiled for
-  `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
-  `esp32-p4-lcd4b`; keyboard/mouse hardware testing so far covers `jc1060p470c-sd`.
+  `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
+  `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard/mouse hardware
+  testing so far covers `jc1060p470c-sd`. Both JC3636W518 variants disable BLE.
   Gamepad Windows enumeration and application compatibility remain unverified.
   BLE keyboard support is board-dependent; some Macropad boards disable it to
   preserve internal RAM. Supported BLE builds offer single-owner pairing.

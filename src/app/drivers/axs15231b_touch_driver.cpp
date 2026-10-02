@@ -47,7 +47,8 @@ void AXS15231B_TouchDriver::init() {
 				DISPLAY_ROTATION
 		);
 		
-		if (!touch->begin()) {
+		initialized = touch->begin();
+		if (!initialized) {
 				LOGE("AXS15231B", "Failed to initialize touch controller");
 				return;
 		}
@@ -66,25 +67,33 @@ void AXS15231B_TouchDriver::init() {
 }
 
 bool AXS15231B_TouchDriver::isTouched() {
-		if (!touch) return false;
-		return touch->touched();
+		const TouchSample sample = readSample();
+		return sample.status != TouchReadStatus::Error && sample.pressed;
+}
+
+TouchSample AXS15231B_TouchDriver::readSample() {
+		TouchSample sample;
+		if (!touch || !initialized) {
+				sample.status = TouchReadStatus::Error;
+				return sample;
+		}
+		const auto status = touch->readSample();
+		sample.status = status == AXS15231B_Touch::ReadStatus::Fresh ? TouchReadStatus::Fresh :
+				status == AXS15231B_Touch::ReadStatus::Unchanged ? TouchReadStatus::Unchanged : TouchReadStatus::Error;
+		sample.pressed = touch->isPressed();
+		touch->readData(&sample.horizontal, &sample.vertical);
+		return sample;
 }
 
 bool AXS15231B_TouchDriver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure) {
-		if (!touch) return false;
-		
-		if (touch->touched()) {
-				touch->readData(x, y);
-				
-				// AXS15231B doesn't provide pressure, set to max if requested
-				if (pressure) {
-						*pressure = 1000;
-				}
-				
-				return true;
-		}
-		
-		return false;
+		if (pressure) *pressure = 0;
+		if (!x || !y) return false;
+		const TouchSample sample = readSample();
+		if (sample.status == TouchReadStatus::Error || !sample.pressed) return false;
+		*x = sample.horizontal;
+		*y = sample.vertical;
+		if (pressure) *pressure = 1000;
+		return true;
 }
 
 void AXS15231B_TouchDriver::setCalibration(uint16_t x_min, uint16_t x_max, uint16_t y_min, uint16_t y_max) {

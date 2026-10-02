@@ -199,8 +199,11 @@ duration (`count * interval + 50` ms), not an exact transmitted packet count.
 ### Keyboard
 
 Shown only when USB or BLE HID is compiled in. Native USB support is currently
-compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
-`esp32-p4-lcd4b`; keyboard output defaults to Off. Hardware validation so far
+compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
+`jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard output defaults to Off.
+Both JC3636W518 variants disable BLE and offer only Off or USB. Switching their
+firmware from hardware CDC to TinyUSB may assign a different Windows COM port.
+Hardware validation so far
 covers `jc1060p470c-sd` only. Use the native USB device connector, not a USB-UART
 bridge or host-only connector; check the board's connector and power wiring.
 On JC1060P470C hardware, USB uses the high-speed USB-C connector. Use one powered

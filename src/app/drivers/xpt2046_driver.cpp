@@ -2,7 +2,7 @@
 #include "../log_manager.h"
 
 XPT2046_Driver::XPT2046_Driver(uint8_t cs, uint8_t irq) 
-		: ts(cs, irq), cs_pin(cs), irq_pin(irq), rotation(1), touchSPI(nullptr) {
+		: ts(cs, irq), touchSPI(nullptr), cs_pin(cs), irq_pin(irq), rotation(1) {
 		// Default calibration values (will be overridden by board config)
 		cal_x_min = 300;
 		cal_x_max = 3900;
@@ -19,6 +19,8 @@ XPT2046_Driver::~XPT2046_Driver() {
 
 void XPT2046_Driver::init() {
 		LOGI("XPT2046", "Initializing (CS=%d, IRQ=%d)", cs_pin, irq_pin);
+		lastSample = TouchSample{};
+		lastPressure = 0;
 		
 		// Configure SPI bus for touch controller (CYD uses separate VSPI bus)
 		#if defined(TOUCH_MOSI) && defined(TOUCH_MISO) && defined(TOUCH_SCLK)
@@ -28,11 +30,15 @@ void XPT2046_Driver::init() {
 									 TOUCH_MOSI, TOUCH_MISO, TOUCH_SCLK, TOUCH_CS);
 		
 		// Initialize XPT2046 touchscreen library with custom SPI
-		ts.begin(*touchSPI);
+		initialized = ts.begin(*touchSPI);
 		#else
 		// Use default SPI bus
-		ts.begin();
+		initialized = ts.begin();
 		#endif
+		if (!initialized) {
+				LOGE("XPT2046", "Touch controller initialization failed");
+				return;
+		}
 		
 		ts.setRotation(rotation);
 		
@@ -42,28 +48,48 @@ void XPT2046_Driver::init() {
 }
 
 bool XPT2046_Driver::isTouched() {
-		return ts.touched();
+		const TouchSample sample = readSample();
+		return sample.status != TouchReadStatus::Error && sample.pressed;
 }
 
 bool XPT2046_Driver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure) {
-		// Check if screen is being touched
-		if (!ts.tirqTouched() && ts.bufferEmpty()) {
-				return false;
+		if (pressure) *pressure = 0;
+		if (!x || !y) return false;
+		const TouchSample sample = readSample();
+		if (sample.status == TouchReadStatus::Error || !sample.pressed) return false;
+		*x = sample.horizontal;
+		*y = sample.vertical;
+		if (pressure) *pressure = lastPressure;
+		return true;
+}
+
+TouchSample XPT2046_Driver::readSample() {
+		TouchSample sample = lastSample;
+		sample.status = TouchReadStatus::Fresh;
+		if (!initialized) {
+				sample.status = TouchReadStatus::Error;
+				return sample;
 		}
-		
-		// Get raw coordinates from XPT2046
+		if (!ts.tirqTouched()) {
+				sample.pressed = false;
+				lastPressure = 0;
+				lastSample = sample;
+				return sample;
+		}
+		if (ts.bufferEmpty()) {
+				sample.status = TouchReadStatus::Unchanged;
+				return sample;
+		}
 		TS_Point p = ts.getPoint();
-		
-		// Validate raw values (should be in 0-4095 range, not max noise values)
-		if (p.x >= 8000 || p.y >= 8000 || p.z >= 4000) {
-				// Invalid/noise - touch controller not responding properly
-				return false;
+		if (p.x < 0 || p.y < 0 || p.z < 0 || p.x >= 8000 || p.y >= 8000 || p.z >= 4000) {
+				sample.status = TouchReadStatus::Error;
+				return sample;
 		}
-		
-		// Filter by pressure - XPT2046 needs minimum pressure to be valid touch
-		// z=0 is electrical noise, not actual touch
-		if (p.z < 200) {  // Minimum pressure threshold
-				return false;
+		if (p.z < 200) {
+				sample.pressed = false;
+				lastPressure = 0;
+				lastSample = sample;
+				return sample;
 		}
 		
 		// Map raw coordinates (0-4095) to calibrated screen coordinates
@@ -71,15 +97,12 @@ bool XPT2046_Driver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure) {
 		int32_t mapped_y = map(p.y, cal_y_min, cal_y_max, 0, DISPLAY_HEIGHT - 1);
 		
 		// Clamp to display bounds
-		*x = constrain(mapped_x, 0, DISPLAY_WIDTH - 1);
-		*y = constrain(mapped_y, 0, DISPLAY_HEIGHT - 1);
-		
-		// Optionally return pressure (Z coordinate)
-		if (pressure) {
-				*pressure = p.z;
-		}
-		
-		return true;
+		sample.horizontal = constrain(mapped_x, 0, DISPLAY_WIDTH - 1);
+		sample.vertical = constrain(mapped_y, 0, DISPLAY_HEIGHT - 1);
+		sample.pressed = true;
+		lastPressure = p.z;
+		lastSample = sample;
+		return sample;
 }
 
 void XPT2046_Driver::setCalibration(uint16_t x_min, uint16_t x_max, 
