@@ -38,11 +38,17 @@ static void mousepad_parse(const JsonObject& btn, uint8_t* data) {
 
 static void mousepad_event(lv_event_t* event) {
     auto* state = static_cast<MousepadState*>(lv_event_get_user_data(event));
-    lv_point_t point;
-    if (!state->touch.process(event, state->input, point)) return;
+    lv_point_t point{};
+    if (!state->touch.process(event, state->input, point)) {
+        if (lv_event_get_code(event) == LV_EVENT_PRESSED && lv_indev_active() && mouse_hid_is_ready()) {
+            mouse_hid_trace_begin(point.x, point.y, state->movement_threshold, state->sensitivity, state->acceleration);
+        }
+        return;
+    }
     int dx, dy;
     state->input.move(point.x, point.y, state->sensitivity, dx, dy,
                       lv_tick_get(), state->acceleration, state->movement_threshold);
+    mouse_hid_trace_input(point.x, point.y, dx, dy, lv_event_get_code(event) == LV_EVENT_RELEASED);
     if (dx || dy) mouse_hid_move(dx, dy, state->touch.epoch);
     if (lv_event_get_code(event) == LV_EVENT_RELEASED && state->input.release(lv_tick_get())) {
         mouse_hid_click(state->touch.epoch);

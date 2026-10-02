@@ -3,6 +3,9 @@
 
 #include "../touch_driver.h"
 #include "../board_config.h"
+#if HAS_USB_HID
+#include "../mouse_hid_trace.h"
+#endif
 
 #include <Wire.h>
 
@@ -57,12 +60,20 @@ private:
 		bool lastTouched;
 		uint16_t lastX;
 		uint16_t lastY;
+		uint8_t traceIoErrors = 0;
+		#if HAS_USB_HID
+		MouseTraceAckSchedule traceAckSchedule;
+		#endif
 
 		// Low-level GT911 I2C operations (Wire1)
 		void gt911Read();
+		void logDiagnostics();
+		#if TOUCH_GT911_FILTER >= 0
+		void configureFilter();
+		#endif
 		void writeReg(uint16_t reg, uint8_t val);
 		uint8_t readReg(uint16_t reg);
-		void readBlock(uint16_t reg, uint8_t* buf, uint8_t len);
+		bool readBlock(uint16_t reg, uint8_t* buf, uint8_t len);
 
 		void applyRotation(uint16_t& x, uint16_t& y) const;
 };

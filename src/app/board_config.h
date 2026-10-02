@@ -1237,6 +1237,16 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define TOUCH_RST -1
 #endif
 
+// GT911 raw coordinate-filter register override (-1 preserves controller configuration).
+#ifndef TOUCH_GT911_FILTER
+#define TOUCH_GT911_FILTER -1
+#endif
+
+// Experimental GT911 configuration-version reset when applying a filter override.
+#ifndef TOUCH_GT911_RESET_CONFIG_VERSION
+#define TOUCH_GT911_RESET_CONFIG_VERSION false
+#endif
+
 // I2C bus for touch controller: 0 = Wire, 1 = Wire1.
 // Default: Wire1 to avoid ISR contention with WiFi on dual-core ESP32.
 // ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.

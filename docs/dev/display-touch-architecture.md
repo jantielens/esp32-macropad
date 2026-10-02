@@ -1459,6 +1459,135 @@ Widget hide/destroy and connection-epoch changes cancel stale input. A click
 release has priority over subsequent movement; OTA clears input while still
 allowing a neutral release report.
 
+Temporary movement diagnostics log the active I2C address and raw controller
+identity (`0x8140`-`0x814A`), including product ID, firmware version, output
+dimensions, and sensor/vendor byte at boot. Before any optional configuration
+write, the driver captures the standard GT911 configuration window
+(`0x8047`-`0x8100`) and reads it again to check stability. The extended window
+(`0x8101`-`0x813F`) is captured and checked separately; an unsupported extended
+read does not discard the standard snapshot. Hex dumps preserve the raw data.
+Decoded fields are explicitly labeled as GT911-layout interpretations: verify
+the product ID before applying that layout to another controller variant.
+They include configuration version, dimensions, contact count, checksum,
+apply flag, debounce, filter bitfields, reporting period, and touch levels.
+`MouseTrace` buffers up to 256 widget, raw GT911, and USB send/retry samples
+from the first five seconds of each of the first three Mousepad gestures
+after boot. Unchanged widget coordinates and GT911 polls are sampled every
+50 ms when callbacks continue; changes, I2C errors, and I2C waits or reads
+of at least 10 ms are recorded immediately. All callbacks and polls update
+summary counters within the capture window even if the sample buffer fills.
+It prints after release/cancellation and queue drainage (or USB disconnection),
+outside the input callback and queue lock. Sample times are offsets from the
+gesture's `start` timestamp, not the later log-print times; `truncated=1`
+indicates the time or capacity limit was reached. USB samples use `dx`/`dy`;
+their `x`/`y` fields are unused. Reboot to rearm the trace.
+
+Each gesture starts with the actual threshold, sensitivity, and acceleration,
+followed by summaries of widget callback cadence, GT911 poll cadence, and
+USB main-loop cadence. The summaries include maximum gaps, first raw and
+widget coordinate changes, first widget output, and first accepted USB
+movement. `through-first-change` includes the first changed callback;
+`through-first-raw-change` includes the first successful changed touch report.
+The associated `change-seen`, `output-seen`, and `sent-seen` flags distinguish
+an unobserved event from an event at time zero. GT911 summaries separate ready
+reports, polls without ready data, and polls with I2C errors. Raw samples
+include status, contact ID and size, all eight contact bytes and their read
+validity, bus-lock wait and read duration in
+microseconds, and error bits (`0x01`: address/write failure; `0x02`: short
+read). Raw coordinates precede calibration and rotation; widget coordinates
+follow both. GT911 samples are captured under the I2C lock and published
+after unlocking. Within the active capture window, an additional status read
+immediately after the existing acknowledgement records whether the ready bit
+cleared or remained set. Probe errors, duration, and whether the probe ran are
+recorded separately; an unchecked or failed probe is not counted as cleared
+or ready. Summaries cover the whole window and the interval through the first
+raw coordinate change. Messages are split to fit the logger's 127-character
+body limit. The trace does not change filtering or pointer calculations, but
+the additional status read adds I2C time during the bounded capture window.
+
+Sparse delayed probes pair the immediate status read with another status read
+and all eight contact bytes, targeting 1, 3, or 8 ms after acknowledgement.
+The targets rotate, with probe starts at least 100 ms apart, only during the
+active capture window and after a successful normal contact read and
+acknowledgement. No second acknowledgement is issued, and delayed coordinates
+never update the pointer's cached position. Every delayed probe requests a
+buffered sample, subject to the same capacity and time limits; per-target
+summaries continue counting after the buffer fills and also cover the interval
+through the first normal raw coordinate change.
+
+The `target` is a minimum interval from completion of the host's acknowledgement
+write to starting the delayed read; `elapsed` ends when the status read
+completes. The delayed `read` duration covers status and contact reads, not the
+intentional wait. Status errors and contact errors/validity are independent.
+A valid contact read establishes transaction success, not a fresh scan;
+coordinates may remain in the register window even when ready is clear.
+Normal report timestamps and read durations are captured before the delayed
+probe. The shared I2C lock remains held across the wait and reads to prevent
+another host touch read from acknowledging between them. These probes add up
+to an 8 ms intentional wait plus I2C time to selected touch callbacks and can
+also delay other devices on the shared bus. Account for this instrumentation
+when comparing callback gaps and raw-to-widget or USB latency.
+
+To investigate the initial dead zone, use threshold 0, sensitivity 1,
+acceleration 0, and short, slow gestures starting immediately after contact.
+Regular widget callbacks and successful stationary GT911 reads place the pause
+before widget arithmetic. A ready bit before acknowledgement alone does not
+prove an independently fresh scan: a report can remain latched until cleared.
+A cleared post-acknowledgement bit confirms that it was clear at that instant;
+a set bit could be a retained report or a new scan racing the probe, including
+the delayed probes. Repeated polls without ready data show a reporting pause.
+After accounting for intentional probe waits, large callback or
+poll gaps, long I2C waits, or I2C errors instead point to processing or bus
+delays. Changed coordinates without widget output indicate threshold or
+fractional suppression; output followed by delayed or retried USB reports
+indicates delivery latency. These measurements cannot establish when physical
+finger movement began or prove which controller filter caused a pause.
+
+Experimental writes are disabled on `jc1060p470c-sd`: it now uses the defaults
+`TOUCH_GT911_FILTER=-1` and `TOUCH_GT911_RESET_CONFIG_VERSION=false`.
+The attempted filter value `1` was never verified active; the tested panel
+retained the raw `0x8050` value `0x08`. The guide defines its upper two bits as
+the first filter and lower six bits as the normal filter, so `0x08` means
+first filter 0 and normal filter 8, not a proven eight-pixel dead zone.
+The X/Y threshold fields (`0x8057`/`0x8058`) are marked reserved in the guide.
+
+The opt-in filter implementation remains available. The driver requires
+two identical complete configuration reads and plausible output dimensions
+and contact count, changes the filter byte and checksum, sends all 186
+bytes (configuration, checksum, and apply flag) in one I2C transaction, and
+verifies all configuration data bytes by readback. The shared Wire buffer is
+expanded to fit the packet and its two-byte register address. The checksum is
+regenerated for transmission rather than used to reject a live configuration
+read, matching Linux's Goodix driver. Readback verification excludes the
+checksum byte. Without the experimental version reset, it preserves the
+version. Both paths preserve the reporting period, debounce, and remaining
+panel parameters. The override affects touch on all screens and may increase jitter.
+GT911 configuration can persist across resets: to roll back this experiment,
+set the board override to `8`, rebuild, and boot once to apply it. Removing the
+override alone does not guarantee restoration of the controller's old value.
+Verify filter `0x08` by readback; restoration of the original version is not
+guaranteed.
+
+The vendor GT9xx driver treats configuration versions of 90 or higher as
+fixed and skips sending configuration. This is a driver policy, not proof
+of hardware write protection. The tested panel reports version `0x63` (99)
+and retained filter `0x08` after an attempted version-preserving update.
+
+`TOUCH_GT911_RESET_CONFIG_VERSION` defaults to `false` and requires an explicit
+board override to enable the version-reset experiment.
+When the filter differs from its target, this opt-in bypasses the vendor-policy
+guard and sends configuration version `0x00` along with the filter change.
+The GT911 register guide documents that version `0x00` initializes the version
+to `'A'` (`0x41`). The checksum is regenerated after changing both fields;
+readback must show version `0x41`, the requested filter, and every remaining
+data byte unchanged. There is one write attempt per initialization, no retry,
+and no write if the requested filter is already active. Logs distinguish the
+outgoing version from the verified version. If verification fails, controller
+state remains unverified; the experiment does not automatically roll back.
+The physical panel also rejected this version-reset attempt: readback remained
+version `0x63` and filter `0x08`, rather than the expected version `0x41` and
+filter `1`. Neither experiment established an active filter change.
+
 Scrollpad uses the same event isolation, press lock, and lifecycle callbacks.
 `ScrollpadInput` tracks the selected axis only and accumulates fractional
 wheel steps at one step per 20 device pixels at sensitivity 1. Release/cancel

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 298
+Total flags: 300
 
 ### Features (HAS_*)
 
@@ -326,6 +326,8 @@ Total flags: 298
 - **TOUCH_CAL_X_MIN** default: `(no default)` — Touch calibration: X minimum.
 - **TOUCH_CAL_Y_MAX** default: `(no default)` — Touch calibration: Y maximum.
 - **TOUCH_CAL_Y_MIN** default: `(no default)` — Touch calibration: Y minimum.
+- **TOUCH_GT911_FILTER** default: `-1` — GT911 raw coordinate-filter register override (-1 preserves controller configuration).
+- **TOUCH_GT911_RESET_CONFIG_VERSION** default: `false` — Experimental GT911 configuration-version reset when applying a filter override.
 - **TOUCH_I2C_ADDR** default: `(no default)` — Touch I2C address.
 - **TOUCH_I2C_ADDR_ALT** default: `(no default)` — Optional alternate address (GT911 can be 0x5D or 0x14 depending on INT strap).
 - **TOUCH_I2C_BUS** default: `1` — ESP32-P4 can use Wire (bus 0) since WiFi runs on external C6 over SDIO.
@@ -1071,6 +1073,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
+  - src/app/drivers/gt911_touch_driver.cpp
+  - src/app/drivers/gt911_touch_driver.h
   - src/app/keyboard_hid.cpp
   - src/app/log_manager.cpp
   - src/app/mcp_tools_config.cpp
@@ -1664,6 +1668,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **TOUCH_CAL_Y_MIN**
   - src/app/touch_manager.cpp
+- **TOUCH_GT911_FILTER**
+  - src/app/board_config.h
+  - src/app/drivers/gt911_touch_driver.cpp
+  - src/app/drivers/gt911_touch_driver.h
+- **TOUCH_GT911_RESET_CONFIG_VERSION**
+  - src/app/board_config.h
 - **TOUCH_I2C_ADDR**
   - src/app/drivers/axs15231b_touch_driver.cpp
 - **TOUCH_I2C_ADDR_ALT**
