@@ -227,6 +227,7 @@ private:
 
     // Event callbacks
     static void onPress(lv_event_t* e);
+    static void onWidgetPressFeedback(lv_event_t* e);
     static void onTap(lv_event_t* e);
     static void onLongPress(lv_event_t* e);
     static void onPadActionTap(lv_event_t* e);

@@ -113,6 +113,10 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     const char* wt = b["widget_type"] | "";
     const WidgetType* wtype = wt[0] ? widget_find(wt) : nullptr;
     if (wt[0] && !wtype) return "unknown widget type";
+    if (wtype && wtype->validateConfig) {
+        const char* widget_error = wtype->validateConfig(b);
+        if (widget_error) return widget_error;
+    }
     if (wt[0] && (b["confirm"] | false)) return "confirm is only supported on normal buttons";
     // Widget config field length limits, enforced from the widget's own
     // describeSchema (single source): each field may declare its own "max"

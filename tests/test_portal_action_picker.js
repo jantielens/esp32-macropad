@@ -53,6 +53,7 @@ const FIXTURE_CATALOG = [
     { type: 'screen', group: 'Navigation', label: 'Navigate to screen' },
     { type: 'back', group: 'Navigation', label: 'Navigate back' },
     { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
+    { type: 'gamepad', group: 'Gamepad', label: 'Gamepad', button_count: 16 },
     {
         type: 'mouse_button', group: 'Mouse', label: 'Mouse button',
         commands: [{ id: 'left', label: 'Left' }, { id: 'right', label: 'Right' }, { id: 'middle', label: 'Middle' }],
@@ -137,6 +138,20 @@ assert(optionsHtml.includes('<optgroup label="Connectivity">'));
 assert(optionsHtml.includes('<option value="mqtt">Publish MQTT message</option>'));
 assert(optionsHtml.includes('<optgroup label="Mouse">'));
 assert(optionsHtml.includes('<option value="mouse_button">Mouse button</option>'));
+assert(optionsHtml.includes('<option value="gamepad">Gamepad</option>'));
+for (const action of [
+    { type: 'gamepad', control: 'button', button: 16, operation: 'tap' },
+    { type: 'gamepad', control: 'hat', direction: 'left', operation: 'down' },
+    { type: 'gamepad', control: 'trigger', trigger: 'right', operation: 'up' }
+]) {
+    context.actionEditorLoad('gamepad-test', action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('gamepad-test'))), action);
+}
+context.actionEditorLoadGamepad('held-test', { control: 'hat', direction: 'up' });
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuildGamepad('held-test', true))),
+    { type: 'gamepad', control: 'hat', direction: 'up', operation: 'down' });
+context.actionEditorLoadGamepad('held-test', { control: 'button', button: 17 });
+assert.throws(() => context.actionEditorBuildGamepad('held-test', true), /1-16/);
 const mouseCommands = context.actionEditorCommandOptionsHTML('mouse_button');
 for (const button of ['Left', 'Right', 'Middle']) {
     assert(mouseCommands.includes('<option value="' + button.toLowerCase() + '">' + button + '</option>'));

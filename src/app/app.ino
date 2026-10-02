@@ -68,6 +68,7 @@
 #if HAS_USB_HID
 #include "usb_hid.h"
 #include "mouse_hid.h"
+#include "gamepad_hid.h"
 #endif
 #include "keyboard_hid.h"
 
@@ -715,6 +716,7 @@ void loop()
 
 	#if HAS_USB_HID
 	mouse_hid_loop();
+	gamepad_hid_loop();
 	#endif
 
 	// Handle web portal (DNS for captive portal)

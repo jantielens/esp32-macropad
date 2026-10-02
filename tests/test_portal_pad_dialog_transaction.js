@@ -73,6 +73,29 @@ const savedCredentialButton = {
     bg_image_url: 'https://camera.example/stream',
     bg_image_password_set: true
 };
+document.getElementById('pad-edit-widget-type').value = 'gamepad_stick';
+document.getElementById('pad-edit-gamepad-stick').value = 'right';
+document.getElementById('pad-edit-gamepad-center').value = 'floating';
+document.getElementById('pad-edit-gamepad-dead-zone').value = '20';
+document.getElementById('pad-edit-gamepad-invert-x').checked = true;
+context.actionEditorBuild = function() { throw new Error('Joystick must not dispatch actions'); };
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].widget_gamepad_stick, 'right');
+assert.strictEqual(context.padState.buttons[0].widget_gamepad_center, 'floating');
+assert.strictEqual(context.padState.buttons[0].widget_gamepad_dead_zone, .2);
+assert.strictEqual(context.padState.buttons[0].widget_gamepad_invert_x, true);
+assert.strictEqual(context.padState.buttons[0].actions, undefined);
+document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
+context.actionEditorBuildGamepad = function(prefix, held) {
+    assert.strictEqual(held, true);
+    return { type: 'gamepad', control: 'trigger', trigger: 'left', operation: 'down' };
+};
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].actions.length, 1);
+assert.strictEqual(context.padState.buttons[0].actions[0].trigger, 'left');
+assert.strictEqual(context.padState.buttons[0].lp_actions, undefined);
+document.getElementById('pad-edit-widget-type').value = '';
+context.actionEditorBuild = function() { return {}; };
 context.padState.buttons = [savedCredentialButton];
 context.padFindButton = function(col, row) {
     return context.padState.buttons.find(function(button) {

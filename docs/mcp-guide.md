@@ -341,6 +341,14 @@ Active records are never evicted. When all four records are active or retained,
   At sensitivity 1 it accumulates one step per 20 device pixels; conventional
   direction is finger up/right scrolls up/right. There is no separate mouse
   movement, scroll, or click tool.
+  USB HID builds also advertise the `gamepad` tap/down/up action and
+  `device_config.usb_gamepad` with readiness, ranges, and the single-contact
+  limit. Touch builds expose `gamepad_stick` and `gamepad_button`; the latter
+  requires exactly one Gamepad down action with automatic release. There is
+  no independent gamepad enable setting or direct movement tool. Standalone
+  holds share one latch per control, separate from widget owners; see the
+  [Gamepad guide](pad-editor-guide.md#gamepad-controls) for exact fields and
+  limitations.
   Its `device_config.keyboard` section lists compiled `transports`, the default
   and active transport, and ready/busy status. `get_config` returns
   `keyboard_transport` (saved), `keyboard_active_transport`, and

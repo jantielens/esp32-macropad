@@ -42,6 +42,7 @@ struct WidgetType {
     void (*describeSchema)(JsonObject& out);
     void (*onShow)(WidgetState* state);
     void (*onHide)(WidgetState* state);
+    const char* (*validateConfig)(JsonObjectConst button);
 };
 
 const WidgetType* widget_find(const char* type_name);

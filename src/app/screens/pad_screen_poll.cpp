@@ -318,10 +318,18 @@ static BtnState parse_btn_state(const char* resolved) {
 
 static void apply_btn_state(ButtonTile& tile, BtnState state) {
     if (!tile.obj) return;
+    const bool was_inactive = lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
+        lv_obj_has_state(tile.obj, LV_STATE_DISABLED);
+    if (state != BTN_STATE_ENABLED && tile.widget_type && tile.widget_type->onHide) {
+        tile.widget_type->onHide(&tile.widget_state);
+    }
     switch (state) {
     case BTN_STATE_ENABLED:
         lv_obj_clear_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_state(tile.obj, LV_STATE_DISABLED);
+        if (was_inactive && tile.widget_type && tile.widget_type->onShow) {
+            tile.widget_type->onShow(&tile.widget_state);
+        }
         break;
     case BTN_STATE_DISABLED:
         lv_obj_clear_flag(tile.obj, LV_OBJ_FLAG_HIDDEN);

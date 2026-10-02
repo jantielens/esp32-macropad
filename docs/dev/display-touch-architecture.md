@@ -601,12 +601,31 @@ public:
     virtual void init() = 0;
     virtual bool isTouched() = 0;
     virtual bool getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure = nullptr) = 0;
+    virtual TouchSample readSample() {
+        TouchSample sample;
+        sample.pressed = getTouch(&sample.horizontal, &sample.vertical);
+        return sample;
+    }
     virtual void setCalibration(uint16_t x_min, uint16_t x_max, 
                                  uint16_t y_min, uint16_t y_max) = 0;
     virtual void setRotation(uint8_t rotation) = 0;
     virtual ~TouchDriver() = default;
 };
 ```
+
+`readSample()` is the LVGL input contract. `TouchSample` contains screen-space
+coordinates, a pressed flag, and `TouchReadStatus::Fresh`, `Unchanged`, or
+`Error`. The default adapter above treats each `getTouch()` result as a fresh
+sample, including `false` as a release. Legacy drivers therefore retain their
+existing behavior; they do not distinguish a read failure from a release.
+`isTouched()` and `getTouch()` remain available for compatibility and non-LVGL
+touch detection.
+
+GT911 overrides `readSample()` with checked I2C reads. A fresh controller report
+updates its cached contact; no new report returns that contact as `Unchanged`,
+preserving a stationary hold. Failed or incomplete transfers return `Error`
+without committing partial data. Initialization also checks the pending-data
+clear and does not report successful initialization if that write fails.
 
 ### Implementations
 
@@ -669,23 +688,30 @@ TouchManager ([`src/app/touch_manager.h/cpp`](../src/app/touch_manager.cpp)) han
 - Coordinate translation for LVGL events
 - Calibration application from board config
 
+For physical LVGL input, `readCallback()` passes `driver->readSample()` through
+`TouchSampleFilter`. A read-error episode reaching 100 ms cancels an active
+contact via `lv_indev_reset()`, reports release, and blocks further presses
+until a fresh released sample arrives. `Unchanged` samples do not end an
+error episode; a fresh sample does. This protection requires a driver that
+reports checked statuses, currently GT911, rather than the legacy adapter.
+
 ### Touch Event Flow
 
 ```mermaid
 flowchart TD
     A["1. User touches screen"]
-    B["2. Hardware detects<br/>(IRQ pin or polling at LV_INDEV_DEF_READ_PERIOD)"]
+    B["2. Hardware detects<br/>(IRQ pin or polling at LV_DEF_INDEV_READ_PERIOD)"]
     C["3. LVGL timer calls TouchManager::readCallback()<br/>(every ~10ms)"]
-    D["4. TouchDriver::getTouch() reads I2C/SPI data"]
-    E["5. Driver validates event field / pressure<br/>(driver-specific)"]
-    F["6. Raw coordinates mapped to screen pixels<br/>via calibration"]
-    G["7. LVGL receives LV_INDEV_STATE_PRESSED + coordinates"]
-    H["8. LVGL dispatches LV_EVENT_CLICKED to screen object"]
-    I["9. Screen's touchEventCallback() handles navigation"]
+    D["4. TouchDriver::readSample() reads I2C/SPI data<br/>and maps coordinates to screen pixels"]
+    E["5. Driver returns Fresh, Unchanged, or Error"]
+    F["6. TouchSampleFilter preserves contact<br/>or cancels after a 100 ms error episode"]
+    G["7. LVGL receives pressed/released state<br/>and coordinates; cancellation resets input"]
+    H["8. LVGL dispatches touch events<br/>to the owning button, widget, or screen"]
+    I["9. Owner handles its interaction<br/>and allows or consumes normal actions"]
     A --> B --> C --> D --> E --> F --> G --> H --> I
 ```
 
-**Polling rate**: `LV_INDEV_DEF_READ_PERIOD` is set to 10 ms (default 30) in `lv_conf.h` for responsive touch input.
+**Polling rate**: `LV_DEF_INDEV_READ_PERIOD` is set to 10 ms (default 30) in `lv_conf.h` for responsive touch input.
 
 ### Touch Integration Pattern
 
@@ -1490,6 +1516,40 @@ mask through the same sender. It has no touch callback or widget lifecycle;
 the action-list host decides when to dispatch it. It does not enable pointer
 movement or hold-to-drag. The sender stores up to eight clicks in FIFO order
 and retries a neutral release between each click.
+
+### Gamepad Ownership And Touch Safety
+
+`GamepadHidState` keeps complete absolute controller state, up to 64 private
+interaction owners, a shared standalone latch per discrete control, and a
+128-entry discrete-transition FIFO. Accepted holds reserve room for release.
+Axes coalesce to the latest value while discrete press/release edges survive
+short interactions and failed submissions. Hat directions compose, opposing
+directions cancel, and triggers remain independent. Each stick uses first-owner
+capture until release.
+
+`gamepad_hid_loop()` snapshots under the state lock, submits a nonblocking
+TinyUSB report outside it, and acknowledges only matching generation/sequence
+state. USB and OTA epochs invalidate stale input; neutral recovery precedes
+new output. Pad hide/replacement resets standalone and widget holds. A bounded
+tap waits for press submission, holds 50 ms, then completes its continuation
+only after release submission. Reset fails unconsumed completions. Report
+cadence and end-to-end latency remain hardware measurement items.
+
+`GamepadJoystickInput` isolates geometry from LVGL and transport ownership.
+`GamepadSurfaceTouch` maps single-contact LVGL events to press/move/release/cancel,
+captures ownership only at press, consumes ordinary actions/gestures, and handles
+both `PRESS_LOST` and `INDEV_RESET`. Lifecycle hooks clear owners and visuals;
+destroy removes callbacks before destroying widget state. Widget validators
+run independently of MCP. The registry has 16 slots for fully featured boards.
+
+`TouchDriver::readSample()` distinguishes fresh, unchanged, and error samples;
+legacy drivers adapt their existing boolean read. GT911 checks I2C transactions,
+short reads, and status acknowledgement before updating its cache. A valid
+unchanged scan preserves contact. `TouchSampleFilter` tolerates errors for
+100 ms, then cancels through `lv_indev_reset()` and ignores presses until a
+fresh physical release. No multi-contact HAL or router is introduced in phase 1;
+phase 2 can extend contact routing without changing joystick geometry or HID
+ownership.
 
 ### Touch Calibration
 

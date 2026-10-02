@@ -7,6 +7,7 @@
 #include "screen_action.cpp"
 #include "key_action.cpp"
 #include "mouse_button_action.cpp"
+#include "gamepad_action.cpp"
 #include "ble_pair_action.cpp"
 #include "cycle_pad_action.cpp"
 #include "mqtt_action.cpp"

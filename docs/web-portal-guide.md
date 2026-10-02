@@ -217,7 +217,7 @@ independent BLE telemetry.
 
 | Element | Description |
 |---------|-------------|
-| **Transport** | In Connectivity > Keyboard & Mouse: USB enables keyboard and mouse control, BLE enables keyboard only, and Off disables both. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
+| **Transport** | In Connectivity > Keyboard & Mouse: USB enables keyboard, mouse, and gamepad control, BLE enables keyboard only, and Off disables all HID output. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
 | **Active connection** | Separate section showing the running USB/BLE backend and `ready`, `busy`, or `disconnected` status, or Keyboard disabled when Off; changing the selector does not change this section |
 | **BLE status indicator** | Shown when BLE is active: disabled, ready, pairing, connected, or error |
 | **Name** | Shows the configured device name plus ` USB` or ` BLE` for the active connection |
@@ -227,9 +227,9 @@ independent BLE telemetry.
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 
-USB exposes keyboard, consumer HID, and a relative mouse alongside the serial console when USB is
+USB exposes keyboard, consumer HID, a relative mouse, and a generic HID gamepad alongside the serial console when USB is
 selected. With BLE or Off selected, USB exposes only the serial console after reboot,
-not a keyboard or mouse. Add a **Mousepad** widget in the pad editor on
+not a keyboard, mouse, or gamepad. Add a **Mousepad** widget in the pad editor on
 touch-enabled USB HID devices for finger movement and tap-to-left-click;
 **Sensitivity** and **Acceleration** (0-5, default 0/off) are configurable
 per button. See the
@@ -242,6 +242,11 @@ stops coasting.
 Assign a [Mouse Button action](pad-editor-guide.md#mouse-button) for Left,
 Right, or Middle clicks to an ordinary button or action-dispatching widget;
 it does not change Mousepad gestures.
+Add [Gamepad Joystick or Gamepad Button widgets](pad-editor-guide.md#gamepad-controls)
+for single-touch analog movement or held controls with automatic release.
+Gamepad actions provide button, hat, or binary-trigger Tap/Down/Up operations.
+This is not XInput; Windows gamepad enumeration and application testing remain
+pending hardware acceptance.
 Its product name uses the configured friendly device name plus
 ` USB` after reboot, its manufacturer
 uses project branding, and its serial number uses the stable chip address.
@@ -468,7 +473,7 @@ For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds sho
 
 *Shown only on boards with a display.*
 
-Configure what happens when you swipe in each direction. Swipe gestures work on all screens and use the same action system as buttons (screen navigation, MQTT publish, BLE key sequence, beep, sound, etc.).
+Configure what happens when you swipe in each direction. Screens use the same action system as buttons (screen navigation, MQTT publish, BLE key sequence, beep, sound, etc.), except when a touch-consuming widget owns the contact. Touches starting inside Mousepad, Scrollpad, Gamepad Joystick, or Gamepad Button are handled by that widget and do not trigger screen or pad swipe actions. See [Gamepad Controls](pad-editor-guide.md#gamepad-controls) for capture and release behavior.
 
 Each of the four directions (left, right, up, down) can have one action. By default, swipe right navigates back.
 

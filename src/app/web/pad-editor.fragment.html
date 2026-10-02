@@ -183,6 +183,8 @@
                                 <option value="list">List</option>
                                 <option value="mousepad" id="pad-edit-mousepad-widget-option" hidden disabled>Mousepad</option>
                                 <option value="scrollpad" id="pad-edit-scrollpad-widget-option" hidden disabled>Scrollpad</option>
+                                <option value="gamepad_stick" id="pad-edit-gamepad_stick-widget-option" hidden disabled>Gamepad Joystick</option>
+                                <option value="gamepad_button" id="pad-edit-gamepad_button-widget-option" hidden disabled>Gamepad Button</option>
                                 <option value="camera_preview" id="pad-edit-camera-preview-widget-option" style="display:none;">Camera Preview</option>
                                 <option value="external" id="pad-edit-external-widget-option" style="display:none;">Extension</option>
                             </select>
@@ -198,6 +200,31 @@
                             </div>
                         </div>
                     </div>
+                </details>
+
+                <details class="editor-group" id="pad-edit-gamepad-stick-section" style="display:none;">
+                    <summary>Gamepad Joystick</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-gamepad-stick">Stick</label>
+                            <select id="pad-edit-gamepad-stick"><option value="left">Left</option><option value="right">Right</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gamepad-center">Center</label>
+                            <select id="pad-edit-gamepad-center"><option value="fixed">Fixed</option><option value="floating">Floating</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gamepad-dead-zone">Dead zone (%)</label>
+                            <input type="number" id="pad-edit-gamepad-dead-zone" min="0" max="90" step="1" value="10">
+                        </div>
+                        <div class="form-group"><label><input type="checkbox" id="pad-edit-gamepad-invert-x"> Invert X</label></div>
+                        <div class="form-group"><label><input type="checkbox" id="pad-edit-gamepad-invert-y"> Invert Y</label></div>
+                    </div>
+                </details>
+
+                <details class="editor-group" id="pad-edit-gamepad-button-section" style="display:none;">
+                    <summary>Gamepad Button</summary>
+                    <div class="editor-group-body" id="pad-edit-gamepad-button-fields"></div>
                 </details>
 
                 <details class="editor-group" id="pad-edit-mousepad-section" style="display:none;">

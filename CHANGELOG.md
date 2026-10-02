@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Generic composite USB HID gamepad with two sticks, independent triggers,
+  an eight-direction hat, and 16 buttons, enabled by USB keyboard transport.
+* Single-touch Gamepad Joystick and automatically released Gamepad Button
+  widgets, Gamepad tap/down/up actions, portal editing, MCP metadata, bounded
+  ownership/retry handling, and checked GT911 reads with error cancellation.
+  Windows enumeration, application compatibility, and report latency remain
+  pending hardware acceptance. Multitouch and XInput are not included.
+
+### Changed
+
+* USB HID interface and configuration names use the device friendly name with
+  the existing ` USB` suffix instead of TinyUSB labels.
+* Gamepad Button reuses ordinary button visual feedback while held, flashes
+  briefly on release, and clears feedback on cancellation.
+
 ## [1.35.0] - 2026-10-02
 
 ### Added

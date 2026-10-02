@@ -39,6 +39,7 @@ static bool g_prev_lvgl_pressed = false;
 // This prevents stale "touched" state in drivers (e.g., GT911 lastTouched flag)
 // from replaying as a phantom click.
 static bool g_require_release = false;
+static TouchSampleFilter g_touch_sample_filter;
 
 #if HAS_DISPLAY
 enum class SyntheticTapState : uint8_t {
@@ -131,8 +132,16 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 				return;
 		}
 		
-		uint16_t x, y;
-		const bool touched = manager->driver->getTouch(&x, &y);
+		const TouchSample sample = g_touch_sample_filter.update(manager->driver->readSample(), now);
+		const bool touched = sample.pressed;
+		const uint16_t x = sample.horizontal;
+		const uint16_t y = sample.vertical;
+		if (g_touch_sample_filter.canceled) {
+				lv_indev_reset(indev, nullptr);
+				data->state = LV_INDEV_STATE_RELEASED;
+				g_prev_lvgl_pressed = false;
+				return;
+		}
 
 		// After suppression ends, wait for a genuine release before forwarding presses.
 		// Drivers like GT911 can retain stale "touched" state across the suppression window.

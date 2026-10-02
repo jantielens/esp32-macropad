@@ -31,6 +31,9 @@
 
 #include "config_manager.h"
 #include "keyboard_hid.h"
+#if HAS_USB_HID
+#include "gamepad_hid.h"
+#endif
 #include "log_manager.h"
 #if HAS_STORAGE_BROWSER
 #include "storage_browser.h"
@@ -1030,6 +1033,22 @@ void mcp_config_capabilities(JsonObject& out) {
     keyboard["ready"] = keyboard_hid_is_ready();
     keyboard["busy"] = keyboard_hid_is_busy();
     keyboard["selection"] = "portal-only keyboard_transport setting; none disables keyboard; default off; reboot required; no fallback or broadcast";
+#if HAS_USB_HID
+    JsonObject gamepad = out.createNestedObject("usb_gamepad");
+    gamepad["protocol"] = "generic USB HID, not XInput";
+    gamepad["selection"] = "enabled with USB keyboard transport after reboot; unavailable in BLE or none";
+    gamepad["ready"] = gamepad_hid_is_ready();
+    gamepad["sticks"] = gamepad_protocol::stick_count;
+    gamepad["stick_min"] = gamepad_protocol::axis_min;
+    gamepad["stick_max"] = gamepad_protocol::axis_max;
+    gamepad["triggers"] = gamepad_protocol::trigger_count;
+    gamepad["trigger_min"] = 0;
+    gamepad["trigger_max"] = gamepad_protocol::trigger_max;
+    gamepad["buttons"] = gamepad_protocol::button_count;
+    gamepad["hat_directions"] = gamepad_protocol::hat_position_count;
+    gamepad["hat_neutral"] = gamepad_protocol::hat_neutral;
+    gamepad["touch_contacts"] = 1;
+#endif
 #if HAS_STORAGE_BROWSER
     JsonObject storage = out.createNestedObject("storage");
     storage["status_tool"] = "get_storage_status";

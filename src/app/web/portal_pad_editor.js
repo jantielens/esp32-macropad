@@ -80,9 +80,9 @@ function padSetImageCapabilityVisibility(info, hideForWidget) {
         imageFetch || imageLibrary ? '' : 'none';
 }
 
-function padSetMouseWidgetCapabilityVisibility(info) {
+function padSetHidWidgetCapabilityVisibility(info) {
     const supported = !!(info && info.has_touch === true && info.has_usb_hid === true);
-    ['mousepad', 'scrollpad'].forEach(function(type) {
+    ['mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'].forEach(function(type) {
         const option = document.getElementById('pad-edit-' + type + '-widget-option');
         if (!option) return;
         option.hidden = !supported;
@@ -105,7 +105,8 @@ async function padInit() {
     const cameraPreviewOption = document.getElementById('pad-edit-camera-preview-widget-option');
     if (cameraPreviewOption) cameraPreviewOption.style.display =
         deviceInfoCache && deviceInfoCache.has_camera === true ? '' : 'none';
-    padSetMouseWidgetCapabilityVisibility(deviceInfoCache);
+    padSetHidWidgetCapabilityVisibility(deviceInfoCache);
+    document.getElementById('pad-edit-gamepad-button-fields').innerHTML = actionEditorGamepadHTML('pad-edit-gamepad-hold', true);
     padSetImageCapabilityVisibility(deviceInfoCache);
     if (nativeExtensions && typeof extensionFetchSlots === 'function') {
         try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
@@ -436,7 +437,7 @@ function padPopulateSoundDropdown() {
     actionEditorPopulateSounds(prefixes, padSoundListCache);
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad'];
+const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'];
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
@@ -472,6 +473,8 @@ function padWidgetTypeChanged() {
     var isRocker = (wtype === 'rocker');
     var isNumericRocker = (wtype === 'numericrocker');
     var isMouseWidget = (wtype === 'mousepad' || wtype === 'scrollpad');
+    var isGamepadWidget = (wtype === 'gamepad_stick' || wtype === 'gamepad_button');
+    var consumesActions = isMouseWidget || isGamepadWidget;
     var axis = 'vertical';
     if (isRocker) {
         var axSel = document.getElementById('pad-edit-rocker-axis');
@@ -486,12 +489,12 @@ function padWidgetTypeChanged() {
 
     // Numeric rocker uses a dedicated adjustment action instead of long-press actions.
     var lpActionsContainer = document.getElementById('pad-edit-lp-actions');
-    if (lpActionsContainer) lpActionsContainer.style.display = isNumericRocker || isMouseWidget ? 'none' : '';
+    if (lpActionsContainer) lpActionsContainer.style.display = isNumericRocker || consumesActions ? 'none' : '';
     var lpHeading = document.getElementById('pad-edit-lp-heading');
-    if (lpHeading) lpHeading.style.display = isNumericRocker || isMouseWidget ? 'none' : '';
+    if (lpHeading) lpHeading.style.display = isNumericRocker || consumesActions ? 'none' : '';
     ['pad-edit-tap-heading', 'pad-edit-tap-actions'].forEach(function(id) {
         var element = document.getElementById(id);
-        if (element) element.style.display = isMouseWidget ? 'none' : '';
+        if (element) element.style.display = consumesActions ? 'none' : '';
     });
 
     // Numeric rocker: show adjustment action editor in widget settings

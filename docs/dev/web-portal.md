@@ -752,7 +752,7 @@ Returns comprehensive device information.
 
 **Mouse Capability:**
 - `has_usb_hid` reports compiled native USB HID support, not host readiness.
-  The pad editor offers Mousepad and Scrollpad only when both `has_usb_hid` and `has_touch`
+  The pad editor offers Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button only when both `has_usb_hid` and `has_touch`
   are true. The action catalog exposes Mouse Button on USB HID builds, without
   requiring touch. Mouse output requires the active USB keyboard transport.
 
@@ -1154,6 +1154,42 @@ import/export preserve all three fields through the existing JSON path.
 The editor consumes ordinary
 button actions for this widget and hides their controls. MCP advertises its
 schema through the widget registry without a separate mouse control tool.
+
+Gamepad Joystick and Gamepad Button use the same display/touch/USB gates and
+existing USB keyboard transport setting, with no new NVS toggle. USB registers
+a custom generic-HID gamepad descriptor before startup alongside keyboard,
+consumer control, and mouse. Its packed report is 13 bytes: four signed 16-bit
+stick axes, two unsigned 8-bit triggers, an 8-bit null-state hat, and 16 button
+bits. BLE and Off retain CDC-only enumeration after reboot.
+
+USB HID interface and configuration strings reference the product string,
+which uses the configured device name plus ` USB`. Arduino supplies hardcoded
+TinyUSB interface labels, so firmware disconnects after descriptor construction,
+updates only these string indices, and reconnects before normal operation.
+The report descriptors, endpoints, CDC interface strings, and serial identity
+are unchanged. Windows can cache earlier device labels.
+
+`gamepad_stick` uses flat `widget_gamepad_stick` (`left`/`right`),
+`widget_gamepad_center` (`fixed`/`floating`), `widget_gamepad_dead_zone`
+(0-0.9, default 0.1), and boolean `widget_gamepad_invert_x`/`_invert_y` fields.
+`gamepad_button` stores exactly one `gamepad` action with `operation:"down"`
+in `actions`, with automatic release and no long-press/legacy actions.
+Accepted holds notify the pad through `LV_EVENT_VALUE_CHANGED` with a press,
+release, or cancellation event code. The pad keeps its existing tap overlay
+visible during the hold, reuses the 100 ms release flash, and clears feedback on
+cancellation without dispatching ordinary actions. `DISPLAY_DISABLE_ANIMATIONS`
+still suppresses the overlay.
+Shared pad validation invokes an optional widget validation callback even
+when MCP is disabled. The editor hides ordinary action lists for both widgets
+and provides a dedicated held-control selector. The shared action editor
+emits only the selected control family's target fields. See the
+[Gamepad authoring guide](../pad-editor-guide.md#gamepad-controls) for JSON and
+ownership semantics. `get_capabilities` advertises action/widget schemas plus
+`device_config.usb_gamepad` ranges, readiness, and the single-contact limit.
+The lean gamepad action catalog also exposes `button_count`; the shared action
+editor uses it for button choices and validation. Descriptor dimensions,
+native validation, catalog metadata, and MCP capabilities share the constants
+in `gamepad_hid_state.h`.
 
 Scrollpad has the same display/touch/USB gates and lifecycle. Its flat widget
 fields are `widget_scrollpad_axis` (`vertical` by default, or `horizontal`),

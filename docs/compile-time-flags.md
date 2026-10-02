@@ -62,7 +62,7 @@ Total flags: 298
 - **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
 - **HAS_STORAGE_BROWSER** default: `true` — Enable the portal and MCP browser for a filesystem partition or SD card.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
-- **HAS_USB_HID** default: `false` — Enable native USB HID keyboard, consumer-control, and mouse output.
+- **HAS_USB_HID** default: `false` — Enable native USB HID keyboard, consumer-control, mouse, and gamepad output.
 
 ### Selectors (*_DRIVER)
 
@@ -505,6 +505,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/display_refresh_action.cpp
+  - src/app/actions/gamepad_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
   - src/app/actions/mouse_button_action.cpp
@@ -520,6 +521,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/components/hw_buttons_component.cpp
+  - src/app/gamepad_hid.cpp
   - src/app/ha_service.cpp
   - src/app/ha_service.h
   - src/app/hw_button_config.cpp
@@ -593,6 +595,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/display_refresh_action.cpp
+  - src/app/actions/gamepad_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
   - src/app/actions/mouse_button_action.cpp
@@ -650,6 +653,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_task.cpp
   - src/app/expr_binding.cpp
   - src/app/fs_indexed_store.cpp
+  - src/app/gamepad_hid.cpp
   - src/app/ha_discovery.cpp
   - src/app/ha_service.cpp
   - src/app/ha_service.h
@@ -729,6 +733,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/camera_preview_widget.cpp
+  - src/app/widgets/gamepad_button_widget.cpp
+  - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/list_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
@@ -852,6 +858,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_config.cpp
   - src/app/widgets/bar_chart_widget.cpp
   - src/app/widgets/camera_preview_widget.cpp
+  - src/app/widgets/gamepad_button_widget.cpp
+  - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/list_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
@@ -1061,9 +1069,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_screenshot.cpp
   - src/app/web_portal_screenshot.h
   - src/app/widgets.cpp
+  - src/app/widgets/gamepad_button_widget.cpp
+  - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
 - **HAS_USB_HID**
+  - src/app/actions/gamepad_action.cpp
   - src/app/actions/key_action.cpp
   - src/app/actions/mouse_button_action.cpp
   - src/app/app.ino
@@ -1071,16 +1082,21 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
+  - src/app/gamepad_hid.cpp
+  - src/app/gamepad_hid.h
   - src/app/keyboard_hid.cpp
   - src/app/log_manager.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/mouse_hid.cpp
   - src/app/mouse_hid.h
   - src/app/portal_components.cpp
+  - src/app/screens/pad_screen.cpp
   - src/app/usb_hid.cpp
   - src/app/usb_hid.h
   - src/app/web_portal_config.cpp
   - src/app/widgets.cpp
+  - src/app/widgets/gamepad_button_widget.cpp
+  - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/scrollpad_widget.cpp
   - src/boards/esp32-p4-lcd4b/board_overrides.h

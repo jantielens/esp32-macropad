@@ -61,14 +61,14 @@ const scrollpadOption = { hidden: true, disabled: true };
 elements.set('pad-edit-scrollpad-widget-option', scrollpadOption);
 for (const touch of [false, true]) {
 	for (const usb of [false, true]) {
-		context.padSetMouseWidgetCapabilityVisibility({ has_touch: touch, has_usb_hid: usb });
+		context.padSetHidWidgetCapabilityVisibility({ has_touch: touch, has_usb_hid: usb });
 		assert.strictEqual(mousepadOption.hidden, !(touch && usb));
 		assert.strictEqual(mousepadOption.disabled, !(touch && usb));
 		assert.strictEqual(scrollpadOption.hidden, !(touch && usb));
 		assert.strictEqual(scrollpadOption.disabled, !(touch && usb));
 	}
 }
-context.padSetMouseWidgetCapabilityVisibility(null);
+context.padSetHidWidgetCapabilityVisibility(null);
 assert.strictEqual(mousepadOption.disabled, true);
 assert.strictEqual(scrollpadOption.disabled, true);
 for (const id of ['pad-edit-mousepad-section', 'pad-edit-scrollpad-section', 'pad-edit-tap-heading', 'pad-edit-tap-actions',
@@ -92,7 +92,7 @@ assert.strictEqual(elements.get('pad-edit-lp-actions').style.display, '');
 const devInfo = JSON.parse(execFileSync('python3', ['-c',
 	"import json, runpy, sys; sys.path.insert(0, 'tools'); print(json.dumps(runpy.run_path('tools/portal-dev-server.py')['PortalHandler']._device_info()))"
 ], { encoding: 'utf8' }));
-context.padSetMouseWidgetCapabilityVisibility(devInfo);
+context.padSetHidWidgetCapabilityVisibility(devInfo);
 for (const type of ['mousepad', 'scrollpad']) {
 	const option = elements.get('pad-edit-' + type + '-widget-option');
 	assert.strictEqual(option.hidden, false);

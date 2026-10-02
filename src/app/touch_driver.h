@@ -15,6 +15,7 @@
 #define TOUCH_DRIVER_H
 
 #include <Arduino.h>
+#include "touch_sample.h"
 
 // ============================================================================
 // Touch Driver Interface
@@ -40,6 +41,12 @@ public:
 		//   pressure: Optional pressure value (nullptr if not needed)
 		// Returns: true if valid touch data was read
 		virtual bool getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure = nullptr) = 0;
+
+		virtual TouchSample readSample() {
+				TouchSample sample;
+				sample.pressed = getTouch(&sample.horizontal, &sample.vertical);
+				return sample;
+		}
 		
 		// Calibration settings
 		// Set min/max raw values for coordinate mapping

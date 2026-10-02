@@ -40,9 +40,14 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   shortcuts and text entry over USB or BLE. Optional USB mouse support adds
   Mousepad movement and tap-to-left-click with acceleration, vertical/horizontal
   Scrollpad scrolling with inertia, and Left/Right/Middle Mouse Button actions.
+  USB also exposes a generic HID gamepad with two sticks, two triggers, an
+  eight-direction hat, and 16 buttons. Single-touch Gamepad Joystick and
+  Gamepad Button widgets provide analog movement and automatically released
+  held controls; Gamepad actions provide tap/down/up operations.
   BLE supports keyboard control only. Native USB is compiled for
   `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
-  `esp32-p4-lcd4b`; hardware testing so far covers `jc1060p470c-sd`.
+  `esp32-p4-lcd4b`; keyboard/mouse hardware testing so far covers `jc1060p470c-sd`.
+  Gamepad Windows enumeration and application compatibility remain unverified.
   BLE keyboard support is board-dependent; some Macropad boards disable it to
   preserve internal RAM. Supported BLE builds offer single-owner pairing.
   HID output defaults to Off. Select a supported transport in
@@ -50,7 +55,8 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   fallback or broadcast. See the [Key Sequences guide](docs/pad-editor-guide.md#key-sequences),
   [Mousepad guide](docs/pad-editor-guide.md#mousepad),
   [Scrollpad guide](docs/pad-editor-guide.md#scrollpad), and
-  [Mouse Button action guide](docs/pad-editor-guide.md#mouse-button).
+  [Mouse Button action guide](docs/pad-editor-guide.md#mouse-button), and
+  [Gamepad guide](docs/pad-editor-guide.md#gamepad-controls).
 - **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
 - **Hardware buttons** — map a board's physical GPIO buttons to tap and long-press action chains (works on headless boards too)
 - **Boot actions** — run a sequence of actions automatically when the device starts

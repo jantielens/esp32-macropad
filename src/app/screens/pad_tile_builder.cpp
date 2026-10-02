@@ -687,6 +687,9 @@ void PadScreen::buildTiles() {
             lv_obj_clear_flag(ov, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
             lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
             tile.tap_overlay = ov;
+            if (strcmp(tile.widget_cfg.type, "gamepad_button") == 0) {
+                lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
+            }
         }
 
         tileCount++;
