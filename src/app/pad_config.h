@@ -133,6 +133,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_MQTT     "mqtt"
 #define ACTION_TYPE_BACK     "back"
 #define ACTION_TYPE_KEY      "key"
+#define ACTION_TYPE_MOUSE_BUTTON "mouse_button"
 #define ACTION_TYPE_BLE_PAIR "ble_pair"
 #define ACTION_TYPE_MUSIC    "music"
 #define ACTION_TYPE_SOUND_ALERT "sound_alert"
@@ -184,6 +185,9 @@ struct MqttPayload {
 };
 struct KeyPayload {
     char key_sequence[CONFIG_KEY_SEQ_MAX_LEN];       // DSL key sequence
+};
+struct MouseButtonPayload {
+    char button[7];
 };
 struct MusicPayload {
     char music_command[12];
@@ -269,6 +273,7 @@ union ActionPayload {
     ScreenPayload     screen;       // type == ACTION_TYPE_SCREEN
     MqttPayload       mqtt;         // type == ACTION_TYPE_MQTT
     KeyPayload        key;          // type == ACTION_TYPE_KEY
+    MouseButtonPayload mouse_button;
     MusicPayload      music;        // type == ACTION_TYPE_MUSIC
     SoundAlertPayload sound_alert;  // type == ACTION_TYPE_SOUND_ALERT
     VolumePayload     volume;       // type == ACTION_TYPE_VOLUME
@@ -309,6 +314,7 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  ScreenPayload     = %zu\n", sizeof(ScreenPayload));     \
     printf_fn("  MqttPayload       = %zu\n", sizeof(MqttPayload));       \
     printf_fn("  KeyPayload        = %zu\n", sizeof(KeyPayload));        \
+    printf_fn("  MouseButtonPayload= %zu\n", sizeof(MouseButtonPayload)); \
     printf_fn("  MusicPayload      = %zu\n", sizeof(MusicPayload));      \
     printf_fn("  SoundAlertPayload = %zu\n", sizeof(SoundAlertPayload)); \
     printf_fn("  VolumePayload     = %zu\n", sizeof(VolumePayload));     \

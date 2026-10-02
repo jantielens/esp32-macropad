@@ -1,6 +1,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
+const { execFileSync } = require('child_process');
 
 const context = {
 	console,
@@ -53,5 +54,49 @@ context.padWidgetTypeChanged();
 assert.strictEqual(elements.get('pad-edit-camera-feed-section').style.display, 'none');
 assert.strictEqual(elements.get('pad-edit-image-section').style.display, 'none');
 assert.strictEqual(elements.get('pad-edit-bg-image-scale-group').style.display, 'none');
+
+const mousepadOption = { hidden: true, disabled: true };
+elements.set('pad-edit-mousepad-widget-option', mousepadOption);
+const scrollpadOption = { hidden: true, disabled: true };
+elements.set('pad-edit-scrollpad-widget-option', scrollpadOption);
+for (const touch of [false, true]) {
+	for (const usb of [false, true]) {
+		context.padSetMouseWidgetCapabilityVisibility({ has_touch: touch, has_usb_hid: usb });
+		assert.strictEqual(mousepadOption.hidden, !(touch && usb));
+		assert.strictEqual(mousepadOption.disabled, !(touch && usb));
+		assert.strictEqual(scrollpadOption.hidden, !(touch && usb));
+		assert.strictEqual(scrollpadOption.disabled, !(touch && usb));
+	}
+}
+context.padSetMouseWidgetCapabilityVisibility(null);
+assert.strictEqual(mousepadOption.disabled, true);
+assert.strictEqual(scrollpadOption.disabled, true);
+for (const id of ['pad-edit-mousepad-section', 'pad-edit-scrollpad-section', 'pad-edit-tap-heading', 'pad-edit-tap-actions',
+	'pad-edit-lp-heading', 'pad-edit-lp-actions']) elements.set(id, { style: {} });
+for (const type of ['mousepad', 'scrollpad']) {
+	elements.get('pad-edit-widget-type').value = type;
+	context.padWidgetTypeChanged();
+	assert.strictEqual(elements.get('pad-edit-' + type + '-section').style.display, '');
+	assert.strictEqual(elements.get('pad-edit-' + type + '-section').open, true);
+	for (const id of ['pad-edit-tap-heading', 'pad-edit-tap-actions', 'pad-edit-lp-heading', 'pad-edit-lp-actions']) {
+		assert.strictEqual(elements.get(id).style.display, 'none');
+	}
+}
+elements.get('pad-edit-widget-type').value = '';
+context.padWidgetTypeChanged();
+assert.strictEqual(elements.get('pad-edit-mousepad-section').style.display, 'none');
+assert.strictEqual(elements.get('pad-edit-scrollpad-section').style.display, 'none');
+assert.strictEqual(elements.get('pad-edit-tap-actions').style.display, '');
+assert.strictEqual(elements.get('pad-edit-lp-actions').style.display, '');
+
+const devInfo = JSON.parse(execFileSync('python3', ['-c',
+	"import json, runpy, sys; sys.path.insert(0, 'tools'); print(json.dumps(runpy.run_path('tools/portal-dev-server.py')['PortalHandler']._device_info()))"
+], { encoding: 'utf8' }));
+context.padSetMouseWidgetCapabilityVisibility(devInfo);
+for (const type of ['mousepad', 'scrollpad']) {
+	const option = elements.get('pad-edit-' + type + '-widget-option');
+	assert.strictEqual(option.hidden, false);
+	assert.strictEqual(option.disabled, false);
+}
 
 console.log('portal_pad_dirty: PASS');

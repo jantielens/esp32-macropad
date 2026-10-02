@@ -5,11 +5,14 @@
 #include "log_manager.h"
 #include "keyboard_transport.h"
 #include "project_branding.h"
+#include "mouse_hid_state.h"
+#include "ota_activity.h"
 
 #include <USB.h>
 #include <USBHID.h>
 #include <USBHIDKeyboard.h>
 #include <USBHIDConsumerControl.h>
+#include <USBHIDMouse.h>
 #include <atomic>
 #include <esp_mac.h>
 #include <tusb.h>
@@ -53,6 +56,22 @@ bool usb_hid_send_report(KsUsageType type, uint16_t usage, uint8_t modifiers) {
     return sent;
 }
 
+bool usb_hid_send_mouse_report(const MouseHidReport& mouse_report, uint32_t expected_epoch,
+                              uint32_t expected_ota_epoch) {
+    if (!usb_hid_is_ready() || !hid->ready() || tud_hid_n_get_protocol(0) == HID_PROTOCOL_BOOT) return false;
+    hid_mouse_report_t report = {};
+    report.buttons = mouse_report.buttons;
+    report.x = mouse_report.dx;
+    report.y = mouse_report.dy;
+    report.wheel = mouse_report.wheel;
+    report.pan = mouse_report.pan;
+    const bool ota_active = ota_activity_is_active();
+    const uint32_t live_ota_epoch = ota_activity_epoch();
+    if (!mouse_report.can_submit(expected_epoch, usb_hid_epoch(), expected_ota_epoch,
+                                 live_ota_epoch, ota_active)) return false;
+    return tud_hid_n_report(0, HID_REPORT_ID_MOUSE, &report, sizeof(report));
+}
+
 void usb_hid_init(const char* device_name, bool enable_hid) {
     char product_name[40];
     keyboard_transport_device_name(product_name, sizeof(product_name),
@@ -71,9 +90,11 @@ void usb_hid_init(const char* device_name, bool enable_hid) {
         static USBHID active_hid(HID_ITF_PROTOCOL_KEYBOARD);
         static USBHIDKeyboard keyboard;
         static USBHIDConsumerControl consumer;
+        static USBHIDMouse mouse;
         hid = &active_hid;
         keyboard.begin();
         consumer.begin();
+        mouse.begin();
     }
     initialized.store(USB.begin());
     LOGI(kUsbHidTag, "Initialized=%d HID=%d product='%s'", initialized.load(), enable_hid, USB.productName());

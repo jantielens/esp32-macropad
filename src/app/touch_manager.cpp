@@ -242,6 +242,7 @@ bool TouchManager::tryRegisterWithLVGL() {
 				lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
 				lv_indev_set_read_cb(indev, TouchManager::readCallback);
 				lv_indev_set_user_data(indev, this);
+				lv_timer_set_period(lv_indev_get_read_timer(indev), LV_DEF_INDEV_READ_PERIOD);
 		}
 
 		#if HAS_DISPLAY

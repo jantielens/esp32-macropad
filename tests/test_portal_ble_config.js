@@ -172,6 +172,11 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.strictEqual(elements['keyboard-pending'].textContent, 'Off pending reboot');
     assert.strictEqual(elements['keyboard-active-heading'].textContent, 'Active USB Connection');
     const hidFragment = fs.readFileSync('src/app/web/hid.fragment.html', 'utf8');
+    assert.match(hidFragment, /<h2>.*Keyboard &amp; Mouse<\/h2>/);
+    const hidComponent = fs.readFileSync('src/app/components/hid_component.cpp', 'utf8');
+    assert.match(hidComponent, /REGISTER_NAV_COMPONENT\(hid, "hid", "connectivity", "Keyboard & Mouse", 20, "hid"\)/);
+    assert.match(hidFragment, /aria-describedby="keyboard-transport-help"/);
+    assert.match(hidFragment, /id="keyboard-transport-help">USB enables keyboard and mouse control\. BLE enables keyboard control only\. Off disables keyboard and mouse control\./);
     assert.match(hidFragment, /gap:12px/);
     assert.match(hidFragment, /<section[^>]*id="keyboard-transport-choice"/);
     assert.match(hidFragment, /<section[^>]*aria-labelledby="keyboard-active-heading"/);
@@ -202,6 +207,11 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.match(logger, /usb_diagnostics.begin\(baud\);/);
     const usbBackend = fs.readFileSync('src/app/usb_hid.cpp', 'utf8');
     assert.match(usbBackend, /kReportTimeoutMs = 5;/);
+    const mouseBackend = usbBackend.slice(usbBackend.indexOf('bool usb_hid_send_mouse_report('),
+        usbBackend.indexOf('void usb_hid_init('));
+    assert.match(mouseBackend, /can_submit\([\s\S]*return tud_hid_n_report\(0, HID_REPORT_ID_MOUSE/);
+    assert.match(mouseBackend, /HID_PROTOCOL_BOOT/);
+    assert(!mouseBackend.includes('hid->SendReport'));
     assert.match(startup, /#if HAS_BLE_HID \|\| HAS_USB_HID\s*keyboard_hid_loop\(\);\s*#endif/);
     assert.match(usbBackend, /if \(enable_hid\) \{\s*static USBHID active_hid[\s\S]*static USBHIDKeyboard keyboard;[\s\S]*static USBHIDConsumerControl consumer;/);
     assert.match(startup, /usb_hid_init\(device_config.device_name, device_config.keyboard_transport == KeyboardTransport::Usb\);/);

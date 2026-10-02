@@ -7,6 +7,12 @@ var PAD_SPARKLINE_MAX_POINTS = 1024;
 var PAD_SPARKLINE_MIN_INTERVAL_SECONDS = 0.1;
 var padImageLibraryFiles = [];
 
+function padGetBoundedWidgetNumber(id, fallback, minimum, maximum) {
+    const raw = document.getElementById(id).value;
+    const number = raw.trim() === '' ? fallback : Number(raw);
+    return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
+}
+
 function padPopulateLocalImageOptions(selected) {
     var select = document.getElementById('pad-edit-bg-image-path');
     if (!select) return;
@@ -451,6 +457,20 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-rocker-color').value = btn.widget_rocker_color || '#FFFFFF';
     document.getElementById('pad-edit-rocker-opacity').value = (btn.widget_rocker_opacity !== undefined) ? btn.widget_rocker_opacity : 80;
 
+    document.getElementById('pad-edit-mousepad-sensitivity').value =
+        (btn.widget_mousepad_sensitivity !== undefined) ? btn.widget_mousepad_sensitivity : 1;
+    document.getElementById('pad-edit-mousepad-acceleration').value =
+        (btn.widget_mousepad_acceleration !== undefined) ? btn.widget_mousepad_acceleration : 0;
+    document.getElementById('pad-edit-mousepad-movement-threshold').value =
+        (btn.widget_mousepad_movement_threshold !== undefined) ? btn.widget_mousepad_movement_threshold : 3;
+    document.getElementById('pad-edit-scrollpad-axis').value =
+        btn.widget_scrollpad_axis === 'horizontal' ? 'horizontal' : 'vertical';
+    document.getElementById('pad-edit-scrollpad-sensitivity').value =
+        (btn.widget_scrollpad_sensitivity !== undefined) ? btn.widget_scrollpad_sensitivity : 1;
+    document.getElementById('pad-edit-scrollpad-reverse').checked = btn.widget_scrollpad_reverse === true;
+    document.getElementById('pad-edit-scrollpad-inertia').value =
+        (btn.widget_scrollpad_inertia !== undefined) ? btn.widget_scrollpad_inertia : 0;
+
     // Numeric Rocker widget fields
     document.getElementById('pad-edit-numericrocker-axis').value = btn.widget_numericrocker_axis || 'horizontal';
     document.getElementById('pad-edit-numericrocker-small-step').value = (btn.widget_numericrocker_small_step !== undefined) ? btn.widget_numericrocker_small_step : 1;
@@ -577,11 +597,13 @@ function padDialogOk(keepOpen) {
     if (buttonShadow !== 'inherit') btn.button_shadow = buttonShadow;
 
     // Tap actions (array)
-    var tapArr = actionEditorListBuild(padActionPrefixes('tap'));
+    const wtype = document.getElementById('pad-edit-widget-type').value;
+    const isMouseWidget = wtype === 'mousepad' || wtype === 'scrollpad';
+    var tapArr = isMouseWidget ? [] : actionEditorListBuild(padActionPrefixes('tap'));
     if (tapArr.length) btn.actions = tapArr;
 
     // Long-press actions (array)
-    var lpArr = actionEditorListBuild(padActionPrefixes('lp'));
+    var lpArr = isMouseWidget ? [] : actionEditorListBuild(padActionPrefixes('lp'));
     if (lpArr.length) btn.lp_actions = lpArr;
 
     if (document.getElementById('pad-edit-confirm').checked) {
@@ -626,9 +648,20 @@ function padDialogOk(keepOpen) {
     }
 
     // Widget type
-    const wtype = document.getElementById('pad-edit-widget-type').value;
     if (wtype) {
         btn.widget_type = wtype;
+        if (wtype === 'scrollpad') {
+            btn.widget_scrollpad_axis = document.getElementById('pad-edit-scrollpad-axis').value === 'horizontal'
+                ? 'horizontal' : 'vertical';
+            btn.widget_scrollpad_sensitivity = padGetBoundedWidgetNumber('pad-edit-scrollpad-sensitivity', 1, 0.1, 5);
+            btn.widget_scrollpad_reverse = document.getElementById('pad-edit-scrollpad-reverse').checked;
+            btn.widget_scrollpad_inertia = padGetBoundedWidgetNumber('pad-edit-scrollpad-inertia', 0, 0, 5);
+        }
+        if (wtype === 'mousepad') {
+            btn.widget_mousepad_sensitivity = padGetBoundedWidgetNumber('pad-edit-mousepad-sensitivity', 1, 0.1, 5);
+            btn.widget_mousepad_acceleration = padGetBoundedWidgetNumber('pad-edit-mousepad-acceleration', 0, 0, 5);
+            btn.widget_mousepad_movement_threshold = padGetBoundedWidgetNumber('pad-edit-mousepad-movement-threshold', 3, 0, 12);
+        }
         if (wtype === 'bar_chart') {
             const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
             if (wDataBinding) btn.widget_data_binding = wDataBinding;

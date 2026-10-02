@@ -62,7 +62,7 @@ Total flags: 298
 - **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
 - **HAS_STORAGE_BROWSER** default: `true` — Enable the portal and MCP browser for a filesystem partition or SD card.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
-- **HAS_USB_HID** default: `false` — Enable native USB HID keyboard and consumer-control output.
+- **HAS_USB_HID** default: `false` — Enable native USB HID keyboard, consumer-control, and mouse output.
 
 ### Selectors (*_DRIVER)
 
@@ -507,6 +507,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/display_refresh_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
+  - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/notify_action.cpp
@@ -594,6 +595,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/display_refresh_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
+  - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/notify_action.cpp
@@ -729,8 +731,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/camera_preview_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/list_widget.cpp
+  - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.cpp
@@ -850,8 +854,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/camera_preview_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/list_widget.cpp
+  - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.h
@@ -1054,8 +1060,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_screenshot.cpp
   - src/app/web_portal_screenshot.h
+  - src/app/widgets.cpp
+  - src/app/widgets/mousepad_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
 - **HAS_USB_HID**
   - src/app/actions/key_action.cpp
+  - src/app/actions/mouse_button_action.cpp
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
@@ -1064,10 +1074,15 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/keyboard_hid.cpp
   - src/app/log_manager.cpp
   - src/app/mcp_tools_config.cpp
+  - src/app/mouse_hid.cpp
+  - src/app/mouse_hid.h
   - src/app/portal_components.cpp
   - src/app/usb_hid.cpp
   - src/app/usb_hid.h
   - src/app/web_portal_config.cpp
+  - src/app/widgets.cpp
+  - src/app/widgets/mousepad_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
   - src/boards/esp32-p4-lcd4b/board_overrides.h
   - src/boards/jc1060p470c/board_overrides.h
   - src/boards/jc4880p433/board_overrides.h

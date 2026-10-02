@@ -535,7 +535,7 @@ defaults are unchanged until you configure these actions.
 
 The **Send keys** action sends keystrokes through the device's selected USB or
 BLE transport. Both use the same DSL and US ASCII mapping. Native USB is enabled
-on `jc1060p470c-sd`; choose a supported transport under **Connectivity > Keyboard**,
+on `jc1060p470c-sd`; choose a supported transport under **Connectivity > Keyboard & Mouse**,
 save, then reboot. Off is the initial default and rejects key actions.
 Single-backend builds offer Off and their supported backend. There is no
 automatic fallback to another transport.
@@ -726,6 +726,114 @@ Buttons use the device-level beep patterns configured on the Home page. To play 
 ## Widgets
 
 Widgets replace the standard button rendering with specialized visualizations or interaction modes. Select the widget type in the button editor.
+
+### Mousepad
+
+On devices with touch and USB HID support, select **Mousepad** to turn a
+button into a relative USB mouse surface. Select **USB** in
+**Connectivity > Keyboard & Mouse**, save, and reboot. Connect the device's native
+USB device port to your computer using a data cable. No companion application
+is required; keyboard and mouse share the connection.
+
+Slide one finger to move the computer's pointer. Lift and touch elsewhere to
+continue moving without jumping to an absolute position. A stationary tap
+lasting at most 250 ms sends a left-button press and release. Movement beyond
+the configured threshold begins pointer movement and cancels tap eligibility,
+even if the finger returns to its starting point.
+
+Set **Movement threshold (px)** from 0 to 12 (default 3 device pixels),
+independently for each Mousepad. Lower values start pointer movement sooner;
+0 removes the dead zone. Small finger movements can then cancel taps more
+easily. The threshold is independent of sensitivity and acceleration.
+
+Set **Sensitivity** from 0.1 to 5 (default 1). Larger values move the pointer
+farther for the same finger movement; the computer's own pointer settings
+also affect the result. Increase the button's row and column spans for a
+larger mousepad. Labels, icons, and appearance remain customizable.
+
+Set **Acceleration** from 0 to 5 (default 0, off). Higher values amplify fast
+finger movement while retaining slow-movement precision. Sensitivity remains
+independent; the computer's own pointer acceleration can compound the effect.
+
+Touches starting inside the mousepad remain owned by it until release,
+including movement outside its edges. They do not trigger pad swipes,
+ordinary button actions, or long-press actions. The editor hides those action
+sections. Pending input is cleared when the pad hides or USB reconnects.
+BLE and Off disable USB mouse output. Dragging, right click, scrolling, and
+multitouch are not Mousepad gestures. Use a separate button with a Mouse Button
+action for right or middle clicks, or a Scrollpad widget for scrolling.
+
+### Scrollpad
+
+On devices with touch and USB HID support, select **Scrollpad** to turn a button
+into a USB mouse scroll surface. Use the USB transport and native USB data
+connection described above for Mousepad. Set row/column spans to make a tall,
+narrow strip beside your Mousepad, or a wide strip underneath it. Labels,
+icons, and colors remain customizable; this is not a scrollbar displaying the
+computer's scroll position.
+
+Choose **Axis**: **Vertical** (default) or **Horizontal**. Sliding up scrolls
+upward; sliding right scrolls rightward. Perpendicular movement is ignored.
+Enable **Reverse direction** to flip this behavior; it is off by default.
+
+Set **Sensitivity** from 0.1 to 5 (default 1), independently for each Scrollpad.
+At 1, finger travel of 20 device pixels produces one wheel step. Fractional
+steps accumulate within a touch, so slow slides work too. Lift and reposition
+to continue scrolling without a jump; any remaining fraction is discarded on
+release. The computer's scroll settings and application affect the result.
+Horizontal wheel support varies by application.
+
+Set **Inertia** from 0 to 5 (default 0, off). A moving release starts decaying
+scrolling; higher values coast longer. Pause before lifting to avoid coasting.
+A new touch on either Scrollpad or Mousepad stops coasting, as do pad hide,
+USB disconnect/reconnect, and OTA. Coasting is rate-limited and lasts at most
+three seconds; it stops if mouse polling stalls for more than 100 ms.
+
+Touches starting inside Scrollpad remain owned by it until release, even
+outside its bounds. Taps and stationary holds do nothing. It does not move the
+pointer, click, or trigger pad swipes or ordinary button actions.
+The editor hides tap and long-press action sections. Hide/destroy, USB
+reconnection, and OTA clear pending input. BLE and Off disable output.
+
+For JSON authoring:
+
+```json
+{
+  "widget_type": "scrollpad",
+  "widget_scrollpad_axis": "vertical",
+  "widget_scrollpad_sensitivity": 1,
+  "widget_scrollpad_reverse": false,
+  "widget_scrollpad_inertia": 0
+}
+```
+
+Missing or unrecognized axis values default to `"vertical"`. Sensitivity is
+clamped to 0.1-5; missing or non-finite values default to 1. Reverse direction
+defaults to false. `widget_scrollpad_inertia` and
+`widget_mousepad_acceleration` are clamped to 0-5; missing or non-finite values
+default to 0, preserving the behavior of existing pads.
+
+### Mouse Button
+
+On devices with USB HID support, select the **Mouse button** action under
+**Mouse**, then choose **Left**, **Right**, or **Middle** in its **Button**
+setting. Left is the default. Use the same USB transport and native USB
+connection described above for Mousepad. Touch is not required for this action.
+
+Assign it to an ordinary button's tap or long-press action, an action-dispatching
+widget such as a Rocker, or another action-list host such as a hardware button.
+The host decides when to trigger it; the action adds no separate tap threshold
+or gesture handling. Mousepad and Scrollpad consume their own gestures and do not
+dispatch these action lists. Labels, icons, colors, and spans work as usual.
+
+Each invocation queues the selected mouse button's press and release, not a
+held button. It does not move the pointer or enable dragging. BLE and Off
+disable its output, and requests fail when USB is disconnected, the queue is
+full, or OTA is active. USB reconnection or OTA clears pending input.
+
+For JSON authoring, use `{"type":"mouse_button","button":"right"}` in an
+action list. `button` accepts `"left"`, `"right"`, or `"middle"`; omitted values
+default to `"left"`, while invalid values are rejected.
 
 ### Extension
 

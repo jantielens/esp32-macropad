@@ -18,6 +18,10 @@
 #include "widgets/rocker_widget.cpp"
 #include "widgets/numericrocker_widget.cpp"
 #include "widgets/list_widget.cpp"
+#if HAS_TOUCH && HAS_USB_HID
+#include "widgets/mousepad_widget.cpp"
+#include "widgets/scrollpad_widget.cpp"
+#endif
 #if HAS_CAMERA
 #include "widgets/camera_preview_widget.cpp"
 #endif

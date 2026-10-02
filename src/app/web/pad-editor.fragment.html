@@ -181,6 +181,8 @@
                                 <option value="rocker">Rocker</option>
                                 <option value="numericrocker">Numeric Rocker</option>
                                 <option value="list">List</option>
+                                <option value="mousepad" id="pad-edit-mousepad-widget-option" hidden disabled>Mousepad</option>
+                                <option value="scrollpad" id="pad-edit-scrollpad-widget-option" hidden disabled>Scrollpad</option>
                                 <option value="camera_preview" id="pad-edit-camera-preview-widget-option" style="display:none;">Camera Preview</option>
                                 <option value="external" id="pad-edit-external-widget-option" style="display:none;">Extension</option>
                             </select>
@@ -194,6 +196,48 @@
                                 <label for="pad-edit-row-span">Row Span</label>
                                 <select id="pad-edit-row-span"></select>
                             </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="editor-group" id="pad-edit-mousepad-section" style="display:none;">
+                    <summary>Mousepad</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-mousepad-sensitivity">Sensitivity</label>
+                            <input type="number" id="pad-edit-mousepad-sensitivity" min="0.1" max="5" step="0.1" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-mousepad-acceleration">Acceleration</label>
+                            <input type="number" id="pad-edit-mousepad-acceleration" min="0" max="5" step="1" value="0" title="0 = off">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-mousepad-movement-threshold">Movement threshold (px)</label>
+                            <input type="number" id="pad-edit-mousepad-movement-threshold" min="0" max="12" step="1" value="3">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="editor-group" id="pad-edit-scrollpad-section" style="display:none;">
+                    <summary>Scrollpad</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-scrollpad-axis">Axis</label>
+                            <select id="pad-edit-scrollpad-axis">
+                                <option value="vertical">Vertical</option>
+                                <option value="horizontal">Horizontal</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-scrollpad-sensitivity">Sensitivity</label>
+                            <input type="number" id="pad-edit-scrollpad-sensitivity" min="0.1" max="5" step="0.1" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-scrollpad-inertia">Inertia</label>
+                            <input type="number" id="pad-edit-scrollpad-inertia" min="0" max="5" step="1" value="0" title="0 = off">
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-scrollpad-reverse"> Reverse direction</label>
                         </div>
                     </div>
                 </details>

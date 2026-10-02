@@ -59,7 +59,7 @@
  * This is the compile-time default; runtime override uses lv_display_set_refr_period(). */
 #define LV_DEF_REFR_PERIOD 33
 
-/* Input device read period [ms] */
+/* Input device read period [ms], applied by TouchManager to the LVGL input timer. */
 #define LV_DEF_INDEV_READ_PERIOD 10
 
 /*=========================

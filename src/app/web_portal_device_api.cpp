@@ -169,6 +169,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
 		response->print(",\"has_camera\":");
 		response->print(HAS_CAMERA ? "true" : "false");
+		response->print(",\"has_usb_hid\":");
+		response->print(HAS_USB_HID ? "true" : "false");
 		response->print(",\"has_image_fetch\":");
 		response->print(HAS_IMAGE_FETCH ? "true" : "false");
 		response->print(",\"has_image_library\":");

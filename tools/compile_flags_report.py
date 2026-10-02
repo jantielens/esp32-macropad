@@ -401,8 +401,8 @@ def parse_define_descriptions(header: Path) -> Dict[str, str]:
     return descriptions
 
 
-def _iter_git_tracked_files(root: Path, under: Path) -> Optional[List[Path]]:
-    """Return a list of git-tracked files under 'under', or None if unavailable."""
+def _iter_git_source_files(root: Path, under: Path) -> Optional[List[Path]]:
+    """Return tracked and non-ignored untracked files under 'under', or None if unavailable."""
 
     git_dir = root / ".git"
     if not git_dir.exists():
@@ -411,7 +411,7 @@ def _iter_git_tracked_files(root: Path, under: Path) -> Optional[List[Path]]:
     under_rel = rel_posix(under, root)
     try:
         p = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z", "--", under_rel],
+            ["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", under_rel],
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -441,8 +441,8 @@ def iter_source_files(src_root: Path, root: Path) -> Iterable[Path]:
         "__pycache__",
     }
 
-    # Prefer git-tracked files so local-only generated/ignored files don't affect output.
-    candidates = _iter_git_tracked_files(root, src_root)
+    # Use git's source inventory so ignored generated files don't affect output.
+    candidates = _iter_git_source_files(root, src_root)
     if candidates is None:
         candidates = list(src_root.rglob("*"))
 

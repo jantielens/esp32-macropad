@@ -212,12 +212,12 @@ transport remains unchanged until reboot. Single-backend builds offer Off and
 their supported transport; builds with neither backend hide keyboard settings
 and **Send keys**. Explicitly saved USB/BLE choices remain unchanged after
 updating; devices without a saved choice become Off. Off disables keyboard
-output and rejects key actions while retaining USB serial logging and
+and mouse output and rejects key actions while retaining USB serial logging and
 independent BLE telemetry.
 
 | Element | Description |
 |---------|-------------|
-| **Transport** | Off plus supported USB/BLE transports. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
+| **Transport** | In Connectivity > Keyboard & Mouse: USB enables keyboard and mouse control, BLE enables keyboard only, and Off disables both. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
 | **Active connection** | Separate section showing the running USB/BLE backend and `ready`, `busy`, or `disconnected` status, or Keyboard disabled when Off; changing the selector does not change this section |
 | **BLE status indicator** | Shown when BLE is active: disabled, ready, pairing, connected, or error |
 | **Name** | Shows the configured device name plus ` USB` or ` BLE` for the active connection |
@@ -227,9 +227,22 @@ independent BLE telemetry.
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 
-USB exposes keyboard and consumer HID alongside the serial console when USB is
+USB exposes keyboard, consumer HID, and a relative mouse alongside the serial console when USB is
 selected. With BLE or Off selected, USB exposes only the serial console after reboot,
-not a keyboard. Its product name uses the configured friendly device name plus
+not a keyboard or mouse. Add a **Mousepad** widget in the pad editor on
+touch-enabled USB HID devices for finger movement and tap-to-left-click;
+**Sensitivity** and **Acceleration** (0-5, default 0/off) are configurable
+per button. See the
+[Mousepad guide](pad-editor-guide.md#mousepad) for setup and limitations.
+Add a [Scrollpad widget](pad-editor-guide.md#scrollpad) beside or below it for
+vertical or horizontal scrolling. Axis, Sensitivity, Reverse direction, and
+**Inertia** (0-5, default 0/off) are configured independently per Scrollpad.
+Higher inertia coasts longer after release; touching either mouse surface
+stops coasting.
+Assign a [Mouse Button action](pad-editor-guide.md#mouse-button) for Left,
+Right, or Middle clicks to an ordinary button or action-dispatching widget;
+it does not change Mousepad gestures.
+Its product name uses the configured friendly device name plus
 ` USB` after reboot, its manufacturer
 uses project branding, and its serial number uses the stable chip address.
 Windows can cache names, retain disconnected device entries, or show a generic

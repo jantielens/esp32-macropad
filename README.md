@@ -1,4 +1,7 @@
-# ESP32 Macropad
+---
+title: ESP32 Macropad
+description: Configurable ESP32 control surfaces, dashboards, and USB/BLE input devices.
+---
 
 Turn your ESP32 display board into a powerful, fully customizable smart home control panel with no coding required.
 
@@ -33,6 +36,21 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 
 ### Inputs & automation
 - **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
+- **USB/BLE HID** - keyboard macros, modifier combos, and media keys for
+  shortcuts and text entry over USB or BLE. Optional USB mouse support adds
+  Mousepad movement and tap-to-left-click with acceleration, vertical/horizontal
+  Scrollpad scrolling with inertia, and Left/Right/Middle Mouse Button actions.
+  BLE supports keyboard control only. Native USB is compiled for
+  `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
+  `esp32-p4-lcd4b`; hardware testing so far covers `jc1060p470c-sd`.
+  BLE keyboard support is board-dependent; some Macropad boards disable it to
+  preserve internal RAM. Supported BLE builds offer single-owner pairing.
+  HID output defaults to Off. Select a supported transport in
+  **Connectivity > Keyboard & Mouse**, save, then reboot. There is no automatic
+  fallback or broadcast. See the [Key Sequences guide](docs/pad-editor-guide.md#key-sequences),
+  [Mousepad guide](docs/pad-editor-guide.md#mousepad),
+  [Scrollpad guide](docs/pad-editor-guide.md#scrollpad), and
+  [Mouse Button action guide](docs/pad-editor-guide.md#mouse-button).
 - **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
 - **Hardware buttons** — map a board's physical GPIO buttons to tap and long-press action chains (works on headless boards too)
 - **Boot actions** — run a sequence of actions automatically when the device starts
@@ -51,14 +69,6 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **MQTT with Home Assistant auto-discovery** — registers as a full HA device with sensors, buttons, siren, volume, screen selector, and notification entities (no YAML needed)
 - **Home Assistant service buttons** — call any HA service (toggle lights, run scenes, open covers) directly over the REST API from a button, swipe, or boot action
 - **MCP server for AI assistants** — a built-in [Model Context Protocol](docs/mcp-guide.md) endpoint lets a local LLM client (Claude Desktop, Cursor, VS Code Copilot Chat) inspect and control the device through chat; off by default, token-secured, with separate read and control permissions
-- **USB/BLE HID keyboard** - shared keystrokes, modifier combos, media keys,
-    and macros. Native USB is compiled for `jc1060p470c`, `jc1060p470c-sd`,
-    `jc4880p433`, `jc4880p433-sd`, and `esp32-p4-lcd4b`; hardware testing so far
-    covers `jc1060p470c-sd`. BLE keyboard support
-  is board-dependent; some Macropad boards disable it to preserve internal RAM.
-  Supported BLE builds offer single-owner pairing. Keyboard output defaults to
-  Off. Select Off or an available transport in **Connectivity > Keyboard**, save,
-  then reboot. There is no automatic fallback or broadcast.
 - **Remote control from HA** — switch screens, trigger beeps, play tones, set volume, send notifications
 - **Resilient WiFi** — event-driven tiered reconnect keeps the display responsive through outages, with gateway-ping liveness detection
 - **Live camera feeds** — OV02C10 JPEG snapshots and **MJPEG streaming** at up to 4 fps on supported ESP32-P4 camera boards

@@ -8,6 +8,7 @@
 #define TEST_HEAP_CAPS_ALLOCATOR
 #include "esp_heap_caps.h"
 #include "../src/app/actions/key_action.cpp"
+#include "../src/app/actions/mouse_button_action.cpp"
 #include "../src/app/keyboard_hid.cpp"
 #include "../src/app/key_sequence.h"
 
@@ -32,6 +33,10 @@ unsigned usb_calls = 0;
 unsigned ble_calls = 0;
 uint32_t finished_token = 0;
 bool finished_success = false;
+bool mouse_queue_accepts = true;
+unsigned mouse_calls = 0;
+uint8_t mouse_buttons = 0;
+uint32_t mouse_epoch = 0;
 std::vector<uint16_t> usages;
 }
 
@@ -57,6 +62,12 @@ bool action_continuation_complete(uint32_t token, bool success) {
 }
 bool usb_hid_is_ready() { return backend_connected; }
 uint32_t usb_hid_epoch() { return test_epoch; }
+bool mouse_hid_click(uint32_t epoch, uint8_t buttons) {
+    ++mouse_calls;
+    mouse_epoch = epoch;
+    mouse_buttons = buttons;
+    return mouse_queue_accepts;
+}
 bool usb_hid_send_report(KsUsageType, uint16_t usage, uint8_t) {
     ++usb_calls;
     usages.push_back(usage);
@@ -92,7 +103,28 @@ void poll_until_ready() {
 int main() {
     keyboard_hid_init(KeyboardTransport::None);
     keyboard_hid_loop();
-    assert(registered_actions == unsigned(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
+    assert(registered_actions == 1 + unsigned(TEST_USB_TRANSPORT || TEST_BLE_TRANSPORT));
+    assert(mouse_button_available() == bool(TEST_USB_TRANSPORT));
+    ButtonAction mouse_action = {};
+    const char* buttons[] = { "left", "right", "middle" };
+    for (unsigned index = 0; index < 3; ++index) {
+        strlcpy(mouse_action.payload.mouse_button.button, buttons[index], sizeof(mouse_action.payload.mouse_button.button));
+        const ActionResult result = dispatch_mouse_button(mouse_action, "mouse test", 0);
+#if TEST_USB_TRANSPORT
+        assert(result == ACTION_COMPLETE);
+        assert(mouse_buttons == (1 << index));
+        assert(mouse_epoch == test_epoch);
+#else
+        assert(result == ACTION_FAILED);
+        assert(mouse_calls == 0);
+#endif
+    }
+#if TEST_USB_TRANSPORT
+    assert(mouse_calls == 3);
+    mouse_queue_accepts = false;
+    assert(dispatch_mouse_button(mouse_action, "rejected", 0) == ACTION_FAILED);
+    mouse_queue_accepts = true;
+#endif
     assert(keyboard_hid_transport() == keyboard_transport_default(TEST_BLE_TRANSPORT, TEST_USB_TRANSPORT));
     ButtonAction action = {};
     strlcpy(action.payload.key.key_sequence, "a 100ms b", sizeof(action.payload.key.key_sequence));

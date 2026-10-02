@@ -1,4 +1,7 @@
-# Display & Touch Architecture
+---
+title: Display & Touch Architecture
+description: Display and touch drivers, rendering, screen lifecycle, and input ownership.
+---
 
 This document describes the display and touch subsystem architecture, design patterns, and extension points for adding new displays, touch controllers, and screens.
 
@@ -1417,6 +1420,76 @@ lv_obj_add_event_cb(btn, button_callback, LV_EVENT_CLICKED, this);
 lv_obj_t* slider = lv_slider_create(screen);
 lv_obj_add_event_cb(slider, slider_callback, LV_EVENT_VALUE_CHANGED, this);
 ```
+
+### Mousepad And Scrollpad Touch Ownership
+
+Touch registration explicitly sets LVGL's input read timer to
+`LV_DEF_INDEV_READ_PERIOD` (10 ms, nominally 100 Hz), independently of display
+refresh. LVGL 9.5 otherwise creates the input timer with `LV_DEF_REFR_PERIOD`
+(33 ms); defining the input-period macro alone does not change its timer.
+Actual fresh coordinate rates remain limited by the touch controller and
+LVGL task load.
+
+The Mousepad widget uses the existing single-contact touch interface and LVGL
+coordinates. It registers its event callback during widget creation, before
+PadScreen's ordinary button handlers. It consumes press, pressing, release,
+click, long-press, and gesture events; clears `LV_OBJ_FLAG_GESTURE_BUBBLE`;
+and uses `LV_OBJ_FLAG_PRESS_LOCK` to retain touches that leave the button.
+No touch-driver or native Extension ABI changes are needed.
+
+`MousepadInput` owns the relative movement baseline, fractional sensitivity
+remainders, movement threshold, and time-based acceleration.
+`widget_mousepad_movement_threshold` sets the initial activation distance in
+device pixels (0-12, default 3), before sensitivity or acceleration. Exactly
+the threshold remains tap-eligible; once exceeded, subsequent movement has
+no dead zone. Acceleration uses raw finger speed before sensitivity, with a
+fixed speed threshold and bounded gain;
+`widget_mousepad_acceleration` is 0-5, default 0/off.
+The widget submits deltas and left clicks to
+`mouse_hid`, never sending USB reports while holding LVGL's display mutex.
+The main loop submits mouse reports directly to TinyUSB without waiting for
+Arduino's report semaphore. Rejected submissions retain queued input; accepted
+submissions are acknowledged once. USB and OTA epochs are checked immediately
+before submission; neutral release remains allowed during OTA. Reports already
+accepted by TinyUSB cannot be recalled. Keyboard boot protocol does not carry
+mouse reports.
+`MouseSurfaceTouch` shares event isolation, press setup, USB/OTA gesture epoch
+checks, object flags, and show/hide cancellation between both widgets.
+Widget hide/destroy and connection-epoch changes cancel stale input. A click
+release has priority over subsequent movement; OTA clears input while still
+allowing a neutral release report.
+
+Scrollpad uses the same event isolation, press lock, and lifecycle callbacks.
+`ScrollpadInput` tracks the selected axis only and accumulates fractional
+wheel steps at one step per 20 device pixels at sensitivity 1. Release/cancel
+discards fractions, and a new press establishes a fresh relative baseline.
+Vertical coordinates are inverted for finger-up/scroll-up; horizontal pan
+uses finger-right/scroll-right. Reverse direction flips either sign.
+There is no click recognition or pointer movement. Widget callbacks
+queue scroll deltas through `mouse_hid_scroll()`; the main loop emits wheel
+and pan in the existing relative mouse report alongside any pointer deltas.
+Failed sends retain all four axes, and neutral release precedes scrolling.
+
+`ScrollpadInput` estimates recent axis velocity using a time-based filter.
+Release after an 80 ms stationary pause does not coast. With
+`widget_scrollpad_inertia` (0-5, default 0/off), release passes velocity to the
+shared `MouseHidState`. The main loop snapshots it under the queue lock,
+integrates exponential decay outside the critical section, and commits only if
+the inertia revision is still current. Touch, reset, and a new coast invalidate
+older calculations; unrelated movement and clicks are preserved. Fractional
+coast steps are retained. Higher inertia increases the decay
+time. Initial speed is capped at 40 steps/second, lifetime at three seconds,
+and polling gaps above 100 ms stop coasting. No additional task or LVGL timer
+is needed. Touching either mouse surface clears scrolling/coasting without
+dropping pointer deltas or queued clicks; a scroll generation prevents stale
+acknowledgements from consuming newly queued scroll steps. Hide/destroy,
+USB epoch changes, and OTA reset both coasting and pending input.
+
+The Mouse Button action queues the configured Left, Right, or Middle button
+mask through the same sender. It has no touch callback or widget lifecycle;
+the action-list host decides when to dispatch it. It does not enable pointer
+movement or hold-to-drag. The sender stores up to eight clicks in FIFO order
+and retries a neutral release between each click.
 
 ### Touch Calibration
 

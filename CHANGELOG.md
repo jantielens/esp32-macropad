@@ -16,6 +16,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Relative USB mouse support alongside the USB keyboard, with an optional
+  single-touch Mousepad widget, adjustable sensitivity, optional acceleration
+  (one 0-5 control, default off), and tap-to-left-click.
+  The widget consumes pad swipes and ordinary button actions. Mouse output
+  follows the USB keyboard transport selection; BLE mouse and dragging are
+  not included.
+* Single-touch Scrollpad widget for vertical (default) or horizontal USB mouse
+  scrolling, with per-widget sensitivity, reverse direction, and optional
+  inertia (one 0-5 control, default off). It retains
+  touches outside its bounds, consumes ordinary actions and pad swipes, and
+  preserves fractional wheel steps without adding clicks. Coasting stops on
+  touch on either mouse surface, pad hide, USB disconnect/reconnect, or OTA.
+* Mouse Button action for complete Left, Right, or Middle USB mouse clicks,
+  usable by ordinary buttons, action-dispatching widgets, and other action-list
+  hosts. It follows the host's gesture rules without changing Mousepad gestures
+  or adding hold-to-drag.
 * Native USB keyboard and consumer/media-key support on `jc1060p470c`,
   `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and `esp32-p4-lcd4b`,
   selectable as an alternative to BLE through the Keyboard portal. Both
@@ -34,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Touch registration explicitly applies the configured 10 ms LVGL input
+  timer period instead of inheriting the 33 ms display refresh period.
+  Display refresh remains unchanged.
+* Mousepad movement begins beyond 3 device pixels instead of 6, reducing the
+  initial dead zone while retaining tap-to-click.
 * Keyboard configuration replaces `ble_enabled` with persisted, reboot-applied
   `keyboard_transport` choices: Off (`none`) and the compiled USB/BLE backends.
   Devices without a saved transport choice default to Off, including upgrades

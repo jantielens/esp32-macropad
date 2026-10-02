@@ -177,7 +177,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             for item in category["items"]:
                 if item["id"] == "ble":
                     item["id"] = "hid"
-                    item["display_name"] = "Keyboard"
+                    item["display_name"] = "Keyboard & Mouse"
         nav["primary"] = {"fragment": "epaper-image", "label": "E-paper Frame", "icon": "🖼️"}
         nav["categories"].insert(1, {
             "id": "e-paper",
@@ -200,7 +200,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "chip_model": "ESP32-P4", "chip_revision": 100, "chip_cores": 2,
             "cpu_freq": 360, "flash_chip_size": 16 * 1024 * 1024,
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
-            "ap_active": False, "has_mqtt": True}
+            "ap_active": False, "has_mqtt": True,
+            "has_touch": True, "has_usb_hid": True}
 
     def _health(self):
         transport = self.server.mock_config["keyboard_active_transport"]

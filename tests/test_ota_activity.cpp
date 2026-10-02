@@ -14,13 +14,17 @@ static void check(bool condition, const char* message) {
 }
 
 int main() {
+    const uint32_t initial_epoch = ota_activity_epoch();
     check(!ota_activity_is_active(), "initially inactive");
     check(ota_activity_try_begin(), "first acquisition succeeds");
     check(ota_activity_is_active(), "active after acquisition");
+    check(ota_activity_epoch() == initial_epoch + 1, "successful begin increments epoch");
     check(!ota_activity_try_begin(), "second acquisition fails");
+    check(ota_activity_epoch() == initial_epoch + 1, "failed begin preserves epoch");
     ota_activity_finish();
     ota_activity_finish();
     check(!ota_activity_is_active(), "finish is idempotent");
+    check(ota_activity_epoch() == initial_epoch + 1, "finished OTA remains detectable through epoch");
 
     std::atomic<unsigned> acquisitions = 0;
     std::vector<std::thread> contenders;
@@ -31,6 +35,7 @@ int main() {
     }
     for (std::thread& contender : contenders) contender.join();
     check(acquisitions.load() == 1, "exactly one concurrent acquisition succeeds");
+    check(ota_activity_epoch() == initial_epoch + 2, "concurrent begins increment epoch only once");
     ota_activity_finish();
 
     if (failures == 0) std::puts("OTA activity tests passed");

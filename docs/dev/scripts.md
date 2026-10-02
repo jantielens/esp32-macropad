@@ -323,6 +323,9 @@ This script manages the full lifecycle of custom display fonts: downloading TTF 
 
 **Purpose:** Generate a compile-time flags report (flag list + per-board matrices + per-file preprocessor usage map) and print the active flags for a specific board.
 
+The source inventory includes tracked and non-ignored untracked files, so new
+implementation files appear before staging. Ignored generated files are excluded.
+
 **Outputs:**
 - Documentation report: `docs/compile-time-flags.md`
 - Build-time summary: printed to stdout
