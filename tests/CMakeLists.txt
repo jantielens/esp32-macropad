@@ -214,6 +214,10 @@ add_host_legacy_test(test_key_sequence
     SOURCES test_key_sequence.cpp ${PROJECT_SOURCE_DIR}/src/app/key_sequence.cpp
         ${PROJECT_SOURCE_DIR}/src/app/key_sequence_executor.cpp
 )
+add_host_command_test(check_keyboard_transport_cpp11
+    ${CMAKE_CXX_COMPILER} -std=c++11 -pedantic-errors -Wall -Wextra -Werror
+    -include ${PROJECT_SOURCE_DIR}/src/app/keyboard_transport.h -x c++ -fsyntax-only /dev/null
+)
 
 foreach(transport IN ITEMS both usb ble none)
     if(transport STREQUAL "usb" OR transport STREQUAL "both")

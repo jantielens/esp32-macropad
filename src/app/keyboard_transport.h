@@ -16,12 +16,10 @@ constexpr KeyboardTransport keyboard_transport_default(bool, bool) {
 }
 
 constexpr KeyboardTransport keyboard_transport_resolve(KeyboardTransport selected, bool has_ble, bool has_usb) {
-    if (selected == KeyboardTransport::None ||
-        (selected == KeyboardTransport::Ble && has_ble) ||
-        (selected == KeyboardTransport::Usb && has_usb)) {
-        return selected;
-    }
-    return keyboard_transport_default(has_ble, has_usb);
+    return selected == KeyboardTransport::None ||
+           (selected == KeyboardTransport::Ble && has_ble) ||
+           (selected == KeyboardTransport::Usb && has_usb)
+        ? selected : keyboard_transport_default(has_ble, has_usb);
 }
 
 inline const char* keyboard_transport_name(KeyboardTransport transport) {
