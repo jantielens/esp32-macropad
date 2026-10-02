@@ -177,6 +177,43 @@ TEST(key_action_round_trip) {
     ASSERT_STR(act.payload.key.key_sequence, "Alt+Tab");
 }
 
+TEST(mouse_button_action_round_trip) {
+    for (const char* button : {"left", "right", "middle"}) {
+        char json[100];
+        snprintf(json, sizeof(json), "{\"type\":\"mouse_button\",\"button\":\"%s\"}", button);
+        ButtonAction act = round_trip(json);
+        ASSERT_STR(act.type, "mouse_button");
+        ASSERT_STR(act.payload.mouse_button.button, button);
+    }
+    ButtonAction act = round_trip("{\"type\":\"mouse_button\"}");
+    ASSERT_STR(act.payload.mouse_button.button, "left");
+}
+
+TEST(mouse_button_validation_and_catalog) {
+    const ActionTypeDef* type = action_type_find(ACTION_TYPE_MOUSE_BUTTON);
+    ASSERT_TRUE(type != nullptr);
+    ASSERT_EQ(type->available(), HAS_USB_HID);
+    ASSERT_TRUE(type->value_field == nullptr);
+    for (const char* value : {"\"invalid\"", "\"\"", "3", "null", "true"}) {
+        char json[100];
+        snprintf(json, sizeof(json), "{\"type\":\"mouse_button\",\"button\":%s}", value);
+        JsonDocument doc;
+        deserializeJson(doc, json);
+        ASSERT_TRUE(action_type_validate(type, doc.as<JsonObjectConst>()) != nullptr);
+        ButtonAction act = parse_from_string(json);
+        ASSERT_STR(act.type, "");
+    }
+    JsonDocument doc;
+    JsonObject catalog = doc.to<JsonObject>();
+    type->describe(catalog);
+    ASSERT_EQ(catalog["commands"].size(), 3);
+    ASSERT_STR(catalog["commands"][0]["id"].as<const char*>(), "left");
+    ASSERT_STR(catalog["commands"][1]["id"].as<const char*>(), "right");
+    ASSERT_STR(catalog["commands"][2]["id"].as<const char*>(), "middle");
+    ASSERT_STR(catalog["editor_fields"][0]["name"].as<const char*>(), "button");
+    ASSERT_TRUE(catalog["editor_fields"][0]["command_options"].as<bool>());
+}
+
 // ============================================================================
 // Music action
 // ============================================================================
@@ -712,6 +749,8 @@ int main() {
     printf("\n--- Key action ---\n");
     RUN(key_action_parse);
     RUN(key_action_round_trip);
+    RUN(mouse_button_action_round_trip);
+    RUN(mouse_button_validation_and_catalog);
 
     printf("\n--- Music action ---\n");
     RUN(music_action_parse);

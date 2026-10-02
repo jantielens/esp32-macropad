@@ -30,6 +30,7 @@
 #if HAS_MCP
 
 #include "config_manager.h"
+#include "keyboard_hid.h"
 #include "log_manager.h"
 #if HAS_STORAGE_BROWSER
 #include "storage_browser.h"
@@ -145,6 +146,7 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
 #if HAS_BLE
     result["ble_burst_count"]    = c->ble_burst_count;
     result["ble_adv_interval_ms"] = c->ble_adv_interval_ms;
+    result["ble_tx_power_dbm"] = c->ble_tx_power_dbm;
 #endif
 
     // Display.
@@ -176,8 +178,10 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
     result["mcp_authoring_enabled"]  = c->mcp_authoring_enabled;
     result["mcp_token_set"]          = (bool)(c->mcp_token[0] != '\0');
 #endif
-#if HAS_BLE_HID
-    result["ble_enabled"] = c->ble_enabled;
+#if HAS_BLE_HID || HAS_USB_HID
+    result["keyboard_transport"] = keyboard_transport_name(c->keyboard_transport);
+    result["keyboard_active_transport"] = keyboard_transport_name(keyboard_hid_transport());
+    result["keyboard_status"] = keyboard_hid_status();
 #endif
 
     result["writable_note"] =
@@ -1009,6 +1013,23 @@ REGISTER_MCP_TOOL(s_tool_set_config);
 // fields and the read/write component list without probing each tool schema.
 // Board-accurate: the component list is the same s_comps table the tools use.
 void mcp_config_capabilities(JsonObject& out) {
+    JsonObject keyboard = out.createNestedObject("keyboard");
+    JsonArray transports = keyboard.createNestedArray("transports");
+#if HAS_BLE_HID || HAS_USB_HID
+    transports.add("none");
+#endif
+#if HAS_USB_HID
+    transports.add("usb");
+#endif
+#if HAS_BLE_HID
+    transports.add("ble");
+#endif
+    keyboard["default_transport"] = keyboard_transport_name(keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID));
+    keyboard["active_transport"] = keyboard_transport_name(keyboard_hid_transport());
+    keyboard["status"] = keyboard_hid_status();
+    keyboard["ready"] = keyboard_hid_is_ready();
+    keyboard["busy"] = keyboard_hid_is_busy();
+    keyboard["selection"] = "portal-only keyboard_transport setting; none disables keyboard; default off; reboot required; no fallback or broadcast";
 #if HAS_STORAGE_BROWSER
     JsonObject storage = out.createNestedObject("storage");
     storage["status_tool"] = "get_storage_status";

@@ -9,6 +9,7 @@
 #define HAS_DISPLAY true
 #define HAS_MQTT    true
 #define HAS_BLE_HID true
+#define HAS_USB_HID false
 #define IS_SHUTTER_TESTER true
 
 // Host tests exercise the PSRAM-gated feature set (mirrors a PSRAM board).

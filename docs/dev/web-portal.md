@@ -269,7 +269,7 @@ Real-time device health monitoring integrated as a header badge with expandable 
 - **Flash Usage**: Used firmware space
 - **Filesystem**: FFat presence/mounted/usage (nullable when no partition present)
 - **MQTT**: Enabled/connected/publish age
-- **Display**: FPS + timing (when display present)
+- Display update FPS when a display is present; detailed timings are API-only
 - **RSSI / IP Address**: Network signal and IP (when connected)
 - Click `✕` to close
 - Same polling cadence as configured by firmware
@@ -332,7 +332,11 @@ every component in that custom section to the same category ID.
 
 **Sections:**
 - **⚡ Operating Mode**: Mode selection, duty-cycle wake interval, Wi-Fi backoff cap, and the recovery-portal auto-sleep. MQTT publish interval and payload scope live on the Network page in the MQTT card.
-- **BLE Advertising**: Burst timing controls (only shown when firmware enables BLE)
+- **BLE Advertising**: Burst count, advertising interval, and transmit power
+  selection (only shown in Duty-Cycle BLE mode when firmware enables BLE).
+  Defaults are three repeats, 100 ms, and +9 dBm. Normal BLE wakes skip early
+  Wi-Fi initialization; config/recovery modes retain it. Saving marks a reboot
+  pending, and the next boot applies the selected power.
 - **Sensor & Display settings**: Thresholds, brightness, on-demand screen preview,
   and screen saver configuration. Interactive display builds expose screen
   rotation as a separate Rotation component under Display; changes take effect
@@ -703,6 +707,7 @@ Returns comprehensive device information.
   "has_audio": true,
   "has_sound_player": true,
   "has_camera": false,
+  "has_usb_hid": false,
   "has_image_fetch": true,
   "has_image_library": true,
   "catalog": [
@@ -744,6 +749,12 @@ Returns comprehensive device information.
 - `has_image_fetch`: Enables remote image and camera-feed backgrounds in the pad editor.
 - `has_image_library`: Enables local image backgrounds in the pad editor.
 - `has_camera`: Enables the separate Camera Preview widget for an attached camera.
+
+**Mouse Capability:**
+- `has_usb_hid` reports compiled native USB HID support, not host readiness.
+  The pad editor offers Mousepad and Scrollpad only when both `has_usb_hid` and `has_touch`
+  are true. The action catalog exposes Mouse Button on USB HID builds, without
+  requiring touch. Mouse output requires the active USB keyboard transport.
 
 **Action Catalog:**
 - Add `?catalog=1` to request the optional `catalog` array. The bare `/api/info` response omits it to keep startup and polling responses small.
@@ -808,8 +819,18 @@ Returns real-time device health statistics.
   "mqtt_last_health_publish_ms": 1234567,
   "mqtt_health_publish_age_ms": 4000,
   "display_fps": 30,
-  "display_lv_timer_us": 250,
-  "display_present_us": 1200,
+  "display_perf": {
+    "lv_timer_us": 250,
+    "present_us": 1200,
+    "data_stream_us": 50,
+    "screen_update_us": 100,
+    "cycle_us": 450,
+    "lv_timer_peak_us": 500,
+    "present_peak_us": 2000,
+    "data_stream_peak_us": 100,
+    "screen_update_peak_us": 200,
+    "cycle_peak_us": 900
+  },
 
   "runtime": {
     "main_phase": "portal",
@@ -865,9 +886,24 @@ internal-heap measurements that can be up to 30 seconds old. The endpoint does
 not report a PSRAM largest-block value on those boards.
 
 **Notes:**
+- `display_fps`: update activity per second, normalized by actual elapsed time.
+  Direct drivers count LVGL cycles producing flush data; buffered drivers count
+  completed `present()` calls. This is not the panel scanout frequency. Quiet
+  sampling windows report zero rather than retaining the last active FPS.
+- `display_perf`: timing snapshot in microseconds, published approximately once
+  per second. `lv_timer_us`, `data_stream_us`, `screen_update_us`, and `cycle_us`
+  are averages per LVGL cycle; `present_us` is the average per buffered
+  presentation call. Corresponding `*_peak_us` fields are window maxima.
+  `cycle_us` measures work while holding the display mutex, excluding lock wait
+  and task sleep. Asynchronous presentation overlaps rendering, so its duration
+  must not be added to cycle time. Both display fields are API-only, are `null`
+  before stats are available or without a display, and report zeros during
+  screen-saver rendering suspension.
 - `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
 - `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
-- `ble_name`: current BLE keyboard name (same as the configured device name)
+- `ble_name`: configured device name plus ` BLE`; present when the BLE keyboard is initialized
+- `keyboard_transport`: active `usb` or `ble` backend, or `none` when Off; present when keyboard support is compiled in. Unlike `/api/config`, this health field reports the running backend, not the saved preference
+- `keyboard_status`: `disabled` when Off, otherwise `ready`, `busy`, `disconnected`, or `unavailable`; keyboard reports require a mounted, awake USB host or a secured BLE link
 - `cpu_usage`: `null` when FreeRTOS runtime stats are unavailable/disabled
 - `cpu_usage_core_0` / `cpu_usage_core_1`: optional current per-core percentages, returned only when runtime statistics are available on a multicore target
 - `cpu_temperature`: `null` on chips without an internal temperature sensor
@@ -959,6 +995,9 @@ Returns current device configuration (passwords excluded).
   "mqtt_publish_interval_seconds": 120,
   "portal_idle_timeout_seconds": 120,
   "wifi_backoff_max_seconds": 900,
+  "ble_burst_count": 3,
+  "ble_adv_interval_ms": 100,
+  "ble_tx_power_dbm": 9,
   "mqtt_publish_scope": "sensors_only",
 
   "basic_auth_enabled": false,
@@ -1030,7 +1069,133 @@ Returns current device configuration (passwords excluded).
   Assistant credentials. The e-paper service endpoint follows the same
   write-only pattern with `epaper_service_token_set`.
 - `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config`.
+- `ble_burst_count`, `ble_adv_interval_ms`, and `ble_tx_power_dbm` are present
+  only when `HAS_BLE` is enabled. TX power is a signed dBm value, not an ESP-IDF
+  enum index. It is stored in NVS and also exposed by MCP `get_config`.
 - MCP fields (`mcp_enabled`, `mcp_control_enabled`, `mcp_token_set`) are present when `HAS_MCP` is enabled. The MCP bearer token itself is never returned — only `mcp_token_set` (boolean) indicates whether one has been generated. A `caps.mcp` flag in the capability map reflects the build flag so the portal can hide the MCP card when compiled out.
+
+Keyboard builds expose `keyboard_transport` (saved preference),
+`keyboard_active_transport` (running backend), and `keyboard_status`.
+`caps.usb_hid` and `caps.ble_hid` describe compiled support, not host connection.
+All keyboard builds default to Off (`none`) and persist selection. The selector
+offers Off plus compiled transports, including on single-backend boards.
+Explicitly saved USB/BLE choices remain unchanged; devices without a saved
+choice become Off after updating. With neither backend compiled, keyboard
+fields, navigation, and the key action are absent. The `hid` fragment displays
+**Keyboard & Mouse** in both navigation and the fragment heading. The transport
+note explains that USB enables keyboard and mouse control, BLE enables keyboard
+control only, and Off disables both. Its active connection section follows the
+running backend, not the selector. Save is disabled for an unchanged preference; a saved preference
+that differs from the active backend displays a pending-reboot message.
+USB-only builds omit the BLE pairing and bond-detail markup from the embedded
+HID fragment; BLE-capable builds include it through the `HID_BLE` partial.
+
+`POST /api/config` accepts `keyboard_transport: "none" | "usb" | "ble"` when
+keyboard support is compiled; USB/BLE choices require their compiled backend.
+Invalid or unsupported values return 400; a transport change
+while busy returns 409, before configuration mutation. Saving does not switch
+the running stack: fragment saves use `no_reboot=1` and the existing reboot hint.
+The old `ble_enabled` toggle is removed; no migration is provided.
+
+`keyboard_hid.cpp` owns a single atomically published request and polls the
+shared `key_sequence_executor.cpp` from the main loop. USB and BLE only deliver
+checked raw reports. Lifecycle epochs prevent replay or delivery to a new
+session; cancellation, failed reports, OTA, and the continuation deadline fail
+the action suffix. There is no fallback, broadcast, or live transport switching.
+Neutral recovery sends at most one report per loop pass. USB keyboard report
+lock and completion waits each use a 5 ms timeout. Mouse reports use nonblocking
+TinyUSB submission after validating their USB and OTA epochs, so Arduino's
+semaphore wait cannot delay a stale mouse snapshot until a later session.
+Unaccepted reports remain queued; accepted reports are acknowledged once.
+Neutral mouse release is permitted during OTA. Already-submitted reports cannot
+be recalled, and keyboard boot protocol does not carry mouse reports.
+
+The shared macro workspace is allocated on the first accepted request, not at
+boot or connection time. PSRAM workspaces are retained for reuse until reboot;
+internal-only workspaces are freed when the request completes or aborts, before
+request ownership is released. The workspace holds the
+pending sequence and the executor's owned source and parsed steps; only active
+request metadata remains in static internal RAM. Boards with PSRAM allocate the
+workspace there; boards without PSRAM use internal RAM. Allocation failure
+rejects the request without leaving the keyboard busy, and does not fall back
+to internal RAM when PSRAM is present. Off allocates no macro workspace.
+
+Native USB requires `HAS_USB_HID`, `USBMode=default`, and `CDCOnBoot=default`.
+An explicit CDC instance provides logging; configuration loads before
+`usb_hid_init(device_name, enable_hid)` starts USB. The USB product name is the
+friendly name plus ` USB`; BLE advertises the friendly name plus ` BLE`.
+The saved device name is unchanged. USB manufacturer follows branding, and
+serial is stable chip-derived identity.
+Name changes require reboot. HID objects are constructed only when USB is
+selected, before enumeration: USB mode exposes keyboard, consumer HID, relative
+mouse, and CDC;
+BLE and Off modes expose CDC only. Off skips BLE keyboard initialization,
+rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
+telemetry remains unaffected. Ending HID reports cannot remove its descriptors,
+so this change also requires reboot. Windows may retain disconnected entries.
+USB is compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`,
+`jc4880p433-sd`, and `esp32-p4-lcd4b`. The other JC4880 variants and LCD4B Voice
+explicitly disable inherited USB HID support and keep their existing serial
+build options. Only `jc1060p470c-sd` has hardware validation so far; the other
+targets still require connector/power checks and host testing. Compiled USB
+support retains TinyUSB's static internal RAM and starts CDC even when keyboard
+output is Off. Review the core VID/PID distribution policy before release;
+no custom IDs are assigned.
+
+The Mousepad widget is registered only with `HAS_DISPLAY && HAS_TOUCH &&
+HAS_USB_HID`. Its `widget_mousepad_sensitivity` JSON field accepts finite
+values from 0.1 to 5, defaulting to 1. `widget_mousepad_acceleration` accepts
+finite values from 0 to 5, defaulting to 0/off; it amplifies fast movement
+independently of sensitivity. `widget_mousepad_movement_threshold` accepts
+finite values clamped to 0-12 device pixels, defaulting to 3 when missing or
+non-finite. Movement beyond this distance from the press starts pointer
+movement and cancels taps; 0 removes the dead zone. Pad storage and
+import/export preserve all three fields through the existing JSON path.
+The editor consumes ordinary
+button actions for this widget and hides their controls. MCP advertises its
+schema through the widget registry without a separate mouse control tool.
+
+Scrollpad has the same display/touch/USB gates and lifecycle. Its flat widget
+fields are `widget_scrollpad_axis` (`vertical` by default, or `horizontal`),
+`widget_scrollpad_sensitivity` (0.1-5, default 1),
+`widget_scrollpad_reverse` (boolean, default false), and
+`widget_scrollpad_inertia` (0-5, default 0/off). An unrecognized axis
+defaults to vertical; non-finite sensitivity defaults to 1. The pad editor
+loads/saves all four fields and hides/omits ordinary action lists. MCP
+describes them through the widget registry. It submits vertical wheel or
+horizontal pan steps, not pointer movement or clicks, with a fractional
+accumulator at one step per 20 device pixels at sensitivity 1. Reverse flips
+the sign; normally finger up scrolls up and finger right scrolls right.
+
+Inertia starts from recent release velocity and decays in the shared main-loop
+mouse sender. Higher values coast longer. Touch on either mouse surface, pad
+hide/destroy, USB disconnect/reconnect, and OTA stop coasting. Missing or
+non-finite acceleration/inertia defaults to 0, and finite values are clamped
+to 0-5. Neither feature adds an enable toggle or changes USB descriptors.
+
+The self-registering `mouse_button` action module is available with
+`HAS_USB_HID` and uses flat JSON `{"type":"mouse_button","button":"right"}`.
+The `button` field accepts `left`, `right`, or `middle` (default `left` when
+omitted); validation rejects invalid names and non-string values. This fixed
+option set is not bindable. Its catalog metadata drives the shared portal
+selector and MCP action schema. Dispatch returns complete when a click is
+accepted by the queue, or failed if unavailable, disconnected, full, or in OTA.
+It requires neither touch nor a dedicated widget and uses its host's gesture
+rules. It does not wait for delivery before the next action in a list.
+
+`mouse_hid_loop()` follows keyboard polling in the main loop and sends at
+most one bounded mouse report per pass. Pending pointer and wheel/pan movement
+is coalesced and split into signed 8-bit deltas; failed sends retain pending data. Click
+button masks are stored in an eight-entry FIFO, with a release between clicks.
+Release is retried before subsequent pointer or scroll movement, and connection-epoch changes,
+pad hide, or OTA clear queued input and request a neutral report.
+
+Routine macro completions and BLE protocol/control/LED reports log at DEBUG.
+Startup and connection/pairing events remain at INFO; aborted macros and
+delivery failures remain warnings. There are no periodic keyboard diagnostic
+counters. Windows testing on `jc1060p470c-sd` confirmed USB/BLE switching, serial
+logging, and CDC-only USB enumeration with BLE selected. Media keys and extended
+sleep/reconnect reliability still require hardware validation.
 
 #### `POST /api/config`
 
@@ -1108,6 +1273,11 @@ Save new configuration. Device reboots after successful save.
 
 **Notes:**
 - Only fields present in request are updated
+- `ble_tx_power_dbm` accepts an integer or integer string: `-12`, `-9`, `-6`,
+  `-3`, `0`, `3`, `6`, or `9`. Unsupported values return HTTP 400 before any
+  configuration fields are updated. Omission leaves the setting unchanged.
+  It takes effect at BLE initialization after reboot. Use `?no_reboot=1` to
+  save without immediately restarting, as the portal does.
 - Write-only credentials use the same preservation rule: an empty string keeps
   the existing value, while a non-empty value replaces it. `POST /api/config`
   cannot clear a stored credential.

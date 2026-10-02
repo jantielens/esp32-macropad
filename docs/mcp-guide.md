@@ -1,4 +1,7 @@
-# MCP Server Guide
+---
+title: MCP Server Guide
+description: Device control and pad authoring through the built-in MCP server.
+---
 
 The firmware includes a built-in **Model Context Protocol (MCP)** server. It lets a
 local AI assistant — Claude Desktop, Cursor, VS Code Copilot Chat, Continue, and
@@ -314,6 +317,40 @@ Active records are never evicted. When all four records are active or retained,
   Binding scheme names, parameter limits, and finite keys are serialized from the
   same live registry used by `GET /api/bindings` for the portal, so the manifest
   reflects the current board and device class without a separate MCP catalog.
+  On touch-enabled USB HID builds, the widget manifest also advertises
+  `mousepad` with `widget_mousepad_sensitivity` (0.1-5, default 1),
+  `widget_mousepad_acceleration` (0-5, default 0/off), and
+  `widget_mousepad_movement_threshold` (0-12 device pixels, default 3).
+  Movement beyond this threshold starts pointer movement and cancels tap
+  eligibility; 0 removes the dead zone. Higher acceleration
+  amplifies fast finger movement independently of sensitivity. It provides
+  relative movement and tap-to-left-click only when USB keyboard transport is
+  active, and consumes ordinary button actions and pad swipes. On USB HID
+  builds, the action catalog advertises `mouse_button` with `button` set to
+  `left` (default), `right`, or `middle` for complete clicks, without movement
+  or hold-to-drag. Use `{"type":"mouse_button","button":"right"}` in existing
+  action lists; its host decides when it fires and touch is not required.
+  The widget manifest also advertises `scrollpad` on touch-enabled USB HID
+  builds, with `widget_scrollpad_axis` (`vertical` default, or `horizontal`),
+  `widget_scrollpad_sensitivity` (0.1-5, default 1),
+  `widget_scrollpad_reverse` (boolean, default false), and
+  `widget_scrollpad_inertia` (0-5, default 0/off). Higher inertia coasts longer
+  after a moving release. Touch on either mouse surface, pad hide,
+  USB disconnect/reconnect, and OTA stop coasting. It sends wheel/pan
+  steps without clicks or pointer movement and consumes actions and pad swipes.
+  At sensitivity 1 it accumulates one step per 20 device pixels; conventional
+  direction is finger up/right scrolls up/right. There is no separate mouse
+  movement, scroll, or click tool.
+  Its `device_config.keyboard` section lists compiled `transports`, the default
+  and active transport, and ready/busy status. `get_config` returns
+  `keyboard_transport` (saved), `keyboard_active_transport`, and
+  `keyboard_status`. Transport selection is portal-only and requires reboot;
+  it is not a live `set_config` field. The generic `key` action is labeled
+  **Send keys**, uses either backend, and is absent when neither is compiled.
+  `none` means Off and is the default on every keyboard build. It is advertised
+  alongside supported USB/BLE choices. Off rejects key actions, retains USB
+  serial logging and independent BLE telemetry, and requires reboot to apply.
+  There is no fallback or broadcast.
   On microphone-input boards, it also advertises the read-only `[audio:input.rms]`,
   `[audio:input.peak]`, and `[audio:input.active]` bindings. RMS and peak are
   sound levels from 0 to 100; `active` is `true` while the resolver-driven meter

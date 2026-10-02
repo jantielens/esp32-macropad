@@ -116,6 +116,11 @@ struct HwButtonDef {
 #define HAS_BLE_HID true
 #endif
 
+// Enable native USB HID keyboard, consumer-control, and mouse output.
+#ifndef HAS_USB_HID
+#define HAS_USB_HID false
+#endif
+
 // Board has a physical e-paper panel.
 #ifndef HAS_EPAPER_PANEL
 #define HAS_EPAPER_PANEL false

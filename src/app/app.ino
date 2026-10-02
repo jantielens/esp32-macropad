@@ -65,6 +65,12 @@
 #include "ble_hid.h"
 #endif
 
+#if HAS_USB_HID
+#include "usb_hid.h"
+#include "mouse_hid.h"
+#endif
+#include "keyboard_hid.h"
+
 #if HAS_AUDIO
 #include "audio.h"
 #endif
@@ -238,6 +244,13 @@ void setup()
 		device_config.magic = CONFIG_MAGIC;
 	}
 
+	#if HAS_USB_HID
+	usb_hid_init(device_config.device_name, device_config.keyboard_transport == KeyboardTransport::Usb);
+	#endif
+	#if HAS_BLE_HID || HAS_USB_HID
+	keyboard_hid_init(device_config.keyboard_transport);
+	#endif
+
 	#if HAS_DISPLAY
 	display_manager_init(&device_config);
 	display_manager_set_splash_status("Loading device...");
@@ -274,6 +287,7 @@ void setup()
 	// On ESP32-P4 this kicks off the SDIO link to the C6 co-processor (~2-5 s)
 	// which can run in the background while touch, config, and pads initialize.
 	const bool defer_wifi_init =
+			boot_mode == PowerMode::DutyCycleBle ||
 			device_class_dispatch_defer_wifi_init(&device_config, boot_mode);
 	if (!defer_wifi_init) {
 		wifi_manager_early_init();
@@ -281,7 +295,7 @@ void setup()
 		LOGI("SYS", "MAC: %s", WiFi.macAddress().c_str());
 		#endif
 	} else {
-		LOGI("WiFi", "Early init deferred for offline e-paper wake");
+		LOGI("WiFi", "Early init deferred for offline wake");
 	}
 
 	#if HAS_TOUCH || HAS_CAMERA
@@ -407,7 +421,7 @@ void setup()
 		// Initialize sensors (their update path buffers BLE telemetry values)
 		sensor_manager_init();
 
-		ble_telemetry_init(device_config.device_name);
+		ble_telemetry_init(device_config.device_name, device_config.ble_tx_power_dbm);
 
 		duty_cycle_run(&device_config);
 		return;
@@ -541,7 +555,7 @@ void setup()
 	// BLE HID keyboard — guarded by ble_hid_init() which bails gracefully
 	// (init_error = true) if the NimBLE stack fails to allocate.
 	#if HAS_BLE_HID
-	if (!in_ap_mode && device_config.ble_enabled) {
+	if (!in_ap_mode && keyboard_hid_transport() == KeyboardTransport::Ble) {
 		ble_hid_init(device_config.device_name, false);
 	} else if (!in_ap_mode) {
 		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
@@ -690,9 +704,17 @@ void loop()
 	#endif
 
 	#if HAS_BLE_HID
-	if (device_config.ble_enabled) {
+	if (keyboard_hid_transport() == KeyboardTransport::Ble) {
 		ble_hid_loop();
 	}
+	#endif
+
+	#if HAS_BLE_HID || HAS_USB_HID
+	keyboard_hid_loop();
+	#endif
+
+	#if HAS_USB_HID
+	mouse_hid_loop();
 	#endif
 
 	// Handle web portal (DNS for captive portal)

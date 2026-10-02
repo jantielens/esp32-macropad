@@ -40,6 +40,7 @@ TEMPLATES = [
     ("STYLE_HELP", "_style_help.html"),
     ("HEALTH_WIDGET", "_health_widget.html"),
     ("REBOOT_OVERLAY", "_reboot_overlay.html"),
+    ("HID_BLE", "_hid_ble.html"),
 ]
 
 
@@ -52,11 +53,12 @@ def load_template(web_dir: Path, filename: str) -> str:
 
 def render(input_path: Path, web_dir: Path,
            project_name: str, project_display_name: str,
-           firmware_version: str) -> str:
+           firmware_version: str, has_ble_hid: bool = True) -> str:
     html = input_path.read_text()
 
     for key, filename in TEMPLATES:
-        html = html.replace("{{" + key + "}}", load_template(web_dir, filename))
+        template = "" if key == "HID_BLE" and not has_ble_hid else load_template(web_dir, filename)
+        html = html.replace("{{" + key + "}}", template)
 
     html = html.replace("{{PROJECT_NAME}}", project_name)
     html = html.replace("{{PROJECT_DISPLAY_NAME}}", project_display_name)
@@ -77,11 +79,12 @@ def main() -> int:
     p.add_argument("--project-name", required=True)
     p.add_argument("--project-display-name", required=True)
     p.add_argument("--firmware-version", required=True)
+    p.add_argument("--without-ble-hid", action="store_true")
     args = p.parse_args()
 
     sys.stdout.write(render(args.input, args.web_dir,
                             args.project_name, args.project_display_name,
-                            args.firmware_version))
+                            args.firmware_version, not args.without_ble_hid))
     return 0
 
 

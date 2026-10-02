@@ -82,6 +82,20 @@
           <input type="number" class="form-control" id="ble_adv_interval_ms" name="ble_adv_interval_ms" min="20" max="10240" placeholder="100">
           <div class="form-text">Time between adv packets within the burst (20&ndash;10240 ms).</div>
         </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="ble_tx_power_dbm">Transmit Power</label>
+          <select class="form-select" id="ble_tx_power_dbm" name="ble_tx_power_dbm" aria-describedby="ble_tx_power_help">
+            <option value="-12">-12 dBm</option>
+            <option value="-9">-9 dBm</option>
+            <option value="-6">-6 dBm</option>
+            <option value="-3">-3 dBm</option>
+            <option value="0">0 dBm</option>
+            <option value="3">+3 dBm</option>
+            <option value="6">+6 dBm</option>
+            <option value="9" selected>+9 dBm</option>
+          </select>
+          <div class="form-text" id="ble_tx_power_help">BLE radio output power. Higher values can improve range and reception but use more transmit power. Lower values can save battery power but may cause missed updates.</div>
+        </div>
       </div>
   </div>
 </div>

@@ -50,6 +50,8 @@ endfunction()
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
+add_host_gtest(test_mousepad test_mousepad.cpp)
+
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
     OPTIONS -pthread
@@ -210,7 +212,35 @@ add_host_legacy_test(test_tone_alert_overlay
 
 add_host_legacy_test(test_key_sequence
     SOURCES test_key_sequence.cpp ${PROJECT_SOURCE_DIR}/src/app/key_sequence.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/key_sequence_executor.cpp
 )
+add_host_command_test(check_keyboard_transport_cpp11
+    ${CMAKE_CXX_COMPILER} -std=c++11 -pedantic-errors -Wall -Wextra -Werror
+    -include ${PROJECT_SOURCE_DIR}/src/app/keyboard_transport.h -x c++ -fsyntax-only /dev/null
+)
+
+foreach(transport IN ITEMS both usb ble none)
+    if(transport STREQUAL "usb" OR transport STREQUAL "both")
+        set(test_usb_transport 1)
+    else()
+        set(test_usb_transport 0)
+    endif()
+    if(transport STREQUAL "ble" OR transport STREQUAL "both")
+        set(test_ble_transport 1)
+    else()
+        set(test_ble_transport 0)
+    endif()
+    add_host_legacy_test(test_key_action_${transport}
+        SOURCES test_key_action_transport.cpp ${PROJECT_SOURCE_DIR}/src/app/key_sequence.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/key_sequence_executor.cpp
+        INCLUDES ${HOST_ARDUINOJSON_DIR}
+        DEFINITIONS ARDUINO=1 TEST_USB_TRANSPORT=${test_usb_transport} TEST_BLE_TRANSPORT=${test_ble_transport}
+            ARDUINOJSON_ENABLE_PROGMEM=0 ARDUINOJSON_ENABLE_ARDUINO_STRING=0
+            ARDUINOJSON_ENABLE_ARDUINO_STREAM=0 ARDUINOJSON_ENABLE_ARDUINO_PRINT=0
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+        OPTIONS -Wno-deprecated-declarations
+    )
+endforeach()
 
 set(ACTION_TEST_SOURCES
     ${PROJECT_SOURCE_DIR}/src/app/actions.cpp ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp
@@ -380,12 +410,17 @@ endforeach()
 
 add_host_command_test(test_portal_component_capacity_matrix python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_component_capacity_matrix.py)
 add_host_command_test(test_widget_schema python3 ${PROJECT_SOURCE_DIR}/tools/lint_widget_schema.py)
+add_host_command_test(test_gauge_caption_cache python3 ${PROJECT_SOURCE_DIR}/tests/test_gauge_caption_cache.py)
+add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp)
+add_host_command_test(test_pad_refresh_schedule python3 ${PROJECT_SOURCE_DIR}/tests/test_pad_refresh_schedule.py)
+add_host_command_test(test_display_perf_api python3 ${PROJECT_SOURCE_DIR}/tests/test_display_perf_api.py)
 add_host_command_test(test_timer_mcp_integration python3 ${PROJECT_SOURCE_DIR}/tests/test_timer_mcp_integration.py)
 
 foreach(script
     test_timer_action_editor.js test_portal_action_editor_cycle.js test_portal_action_picker.js
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
+    test_portal_ble_config.js
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} node ${PROJECT_SOURCE_DIR}/tests/${script})

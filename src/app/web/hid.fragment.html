@@ -1,0 +1,40 @@
+<div class="section-header">
+  <h2>⌨️ Keyboard &amp; Mouse</h2>
+</div>
+<div id="hid-section">
+  <section class="card mb-3" id="keyboard-transport-choice" aria-labelledby="keyboard-transport-label" style="display:none;">
+    <div class="card-body">
+      <div class="mb-3">
+        <div class="d-flex align-items-center flex-wrap" style="gap:12px;">
+          <label class="form-label mb-0" id="keyboard-transport-label">Transport</label>
+          <div class="btn-group" role="group" aria-labelledby="keyboard-transport-label" aria-describedby="keyboard-transport-help">
+            <input type="radio" class="btn-check" id="keyboard-transport-none" name="keyboard_transport" value="none" autocomplete="off" onchange="updateKeyboardTransportSetting()" disabled>
+            <label class="btn btn-outline-primary" for="keyboard-transport-none">Off</label>
+            <input type="radio" class="btn-check" id="keyboard-transport-usb" name="keyboard_transport" value="usb" autocomplete="off" onchange="updateKeyboardTransportSetting()" disabled>
+            <label class="btn btn-outline-primary" for="keyboard-transport-usb">USB</label>
+            <input type="radio" class="btn-check" id="keyboard-transport-ble" name="keyboard_transport" value="ble" autocomplete="off" onchange="updateKeyboardTransportSetting()" disabled>
+            <label class="btn btn-outline-primary" for="keyboard-transport-ble">BLE</label>
+          </div>
+        </div>
+        <div class="form-text mt-2" id="keyboard-transport-help">USB enables keyboard and mouse control. BLE enables keyboard control only. Off disables keyboard and mouse control.</div>
+        <div class="form-text mt-2">Changes take effect after saving and rebooting.</div>
+        <div class="form-text text-warning mt-2" id="keyboard-pending" role="status" style="display:none;"></div>
+      </div>
+      <div class="save-bar" id="keyboard-save-bar" style="display:none;">
+        <button type="button" class="btn btn-primary btn-sm" id="hid-save-btn" disabled>Save</button>
+      </div>
+    </div>
+  </section>
+  <section class="card mb-3" aria-labelledby="keyboard-active-heading">
+    <div class="card-body">
+      <h3 class="h5 mb-3" id="keyboard-active-heading">Active Connection</h3>
+      <div class="d-flex align-items-center gap-2 mb-3" role="status">
+        <strong id="keyboard-active-transport" class="visually-hidden"></strong>
+        <span>Status:</span>
+        <span id="keyboard-status"></span>
+      </div>
+      <div id="usb-content" class="form-text" style="display:none;">Name: <code id="keyboard-device-name"></code></div>
+      {{HID_BLE}}
+    </div>
+  </section>
+</div>

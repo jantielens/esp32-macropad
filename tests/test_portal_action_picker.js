@@ -54,6 +54,11 @@ const FIXTURE_CATALOG = [
     { type: 'back', group: 'Navigation', label: 'Navigate back' },
     { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
     {
+        type: 'mouse_button', group: 'Mouse', label: 'Mouse button',
+        commands: [{ id: 'left', label: 'Left' }, { id: 'right', label: 'Right' }, { id: 'middle', label: 'Middle' }],
+        editor_fields: [{ name: 'button', label: 'Button', type: 'select', default: 'left', command_options: true }]
+    },
+    {
         type: 'volume', group: 'Audio', label: 'Volume',
         commands: [{ id: 'set', label: 'Set volume' }, { id: 'adjust', label: 'Adjust volume' }],
         editor_fields: [
@@ -130,6 +135,12 @@ assert(optionsHtml.includes('<option value="back">Navigate back</option>'));
 assert(optionsHtml.includes('<option value="delay">Delay</option>'));
 assert(optionsHtml.includes('<optgroup label="Connectivity">'));
 assert(optionsHtml.includes('<option value="mqtt">Publish MQTT message</option>'));
+assert(optionsHtml.includes('<optgroup label="Mouse">'));
+assert(optionsHtml.includes('<option value="mouse_button">Mouse button</option>'));
+const mouseCommands = context.actionEditorCommandOptionsHTML('mouse_button');
+for (const button of ['Left', 'Right', 'Middle']) {
+    assert(mouseCommands.includes('<option value="' + button.toLowerCase() + '">' + button + '</option>'));
+}
 assert(optionsHtml.includes('<optgroup label="Shutter Tester">'));
 assert(optionsHtml.includes('<option value="shutter">Shutter tester</option>'));
 
@@ -167,6 +178,13 @@ assert(editorHtml.includes('picker-generic-brightness-brightness_mode'));
 assert(editorHtml.includes('picker-generic-brightness-brightness_value'));
 assert(editorHtml.includes('picker-generic-system-system_command'));
 assert(editorHtml.includes('picker-generic-music-music_command'));
+assert(editorHtml.includes('picker-generic-mouse_button-button'));
+for (const button of ['left', 'right', 'middle', undefined]) {
+    context.actionEditorLoad(prefix, { type: 'mouse_button', button: button });
+    const mouseAction = context.actionEditorBuild(prefix);
+    assert.strictEqual(mouseAction.type, 'mouse_button');
+    assert.strictEqual(mouseAction.button, button || 'left');
+}
 assert(!editorHtml.includes('picker-system-command'));
 assert(!editorHtml.includes('picker-music-command'));
 context.actionEditorLoad(prefix, { type: 'volume', volume_mode: 'adjust', volume_value: '{step}' });

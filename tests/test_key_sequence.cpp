@@ -5,15 +5,19 @@
 //
 // Build:
 //   g++ -std=c++17 tests/test_key_sequence.cpp src/app/key_sequence.cpp
+//       src/app/key_sequence_executor.cpp
 //       -o tests/bin/test_key_sequence
 // Run:
 //   ./tests/bin/test_key_sequence
 
 #include "../src/app/key_sequence.h"
+#include "../src/app/key_sequence_executor.h"
+#include "../src/app/keyboard_transport.h"
 
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -366,7 +370,129 @@ static void test_whitespace_handling() {
 // Main
 // ============================================================================
 
+struct ExecutorReport {
+    KsUsageType type;
+    uint16_t usage;
+    uint8_t modifiers;
+};
+
+static void test_executor() {
+    std::vector<ExecutorReport> reports;
+    const auto sink = [](void* context, KsUsageType type, uint16_t usage, uint8_t modifiers) {
+        static_cast<std::vector<ExecutorReport>*>(context)->push_back({type, usage, modifiers});
+        return true;
+    };
+    KeySequenceExecutor executor;
+    char sequence[] = "ctrl+a 100ms \"B\" enter";
+    assert(executor.start(sequence, 0));
+    sequence[0] = 'x';
+    assert(!executor.start("a", 0));
+    assert(executor.poll(0, sink, &reports) == KeySequenceExecutor::Result::Running);
+    assert(reports.size() == 1 && reports[0].usage == 0x04 && reports[0].modifiers == KS_MOD_LCTRL);
+    executor.poll(19, sink, &reports);
+    assert(reports.size() == 1);
+    executor.poll(20, sink, &reports);
+    assert(reports.size() == 2 && reports.back().usage == 0 && reports.back().modifiers == 0);
+    executor.poll(20, sink, &reports);
+    executor.poll(119, sink, &reports);
+    assert(reports.size() == 2);
+    executor.poll(120, sink, &reports);
+    assert(reports.back().usage == 0x05 && reports.back().modifiers == KS_MOD_LSHIFT);
+    executor.poll(140, sink, &reports);
+    executor.poll(159, sink, &reports);
+    assert(reports.size() == 4);
+    executor.poll(160, sink, &reports);
+    assert(reports.back().usage == 0x28);
+    executor.poll(180, sink, &reports);
+    assert(executor.poll(180, sink, &reports) == KeySequenceExecutor::Result::Success);
+    assert(reports.size() == 6);
+
+    reports.clear();
+    assert(executor.start("\"aa\\\"\" mute", 0));
+    for (uint32_t now = 0; now < 200 && executor.active(); ++now) {
+        executor.poll(now, sink, &reports);
+    }
+    assert(!executor.active() && reports.size() == 8);
+    assert(reports[0].usage == 0x04 && reports[2].usage == 0x04);
+    assert(reports[4].usage == 0x34 && reports[4].modifiers == KS_MOD_LSHIFT);
+    assert(reports[6].type == KS_USAGE_CONSUMER && reports[6].usage == 0xE2);
+    assert(reports[7].type == KS_USAGE_CONSUMER && reports[7].usage == 0);
+
+    assert(executor.start("a", UINT32_MAX - 10));
+    executor.poll(UINT32_MAX - 10, sink, &reports);
+    const size_t before_release = reports.size();
+    executor.poll(8, sink, &reports);
+    assert(reports.size() == before_release);
+    executor.poll(9, sink, &reports);
+    assert(reports.size() == before_release + 1);
+    executor.cancel(sink, &reports);
+    assert(!executor.active());
+
+    assert(executor.start("ctrl+a", 0));
+    executor.poll(0, sink, &reports);
+    executor.cancel(sink, &reports);
+    assert(reports.back().usage == 0 && reports.back().modifiers == 0);
+    assert(!executor.active());
+    assert(!executor.start("no_such_key", 0));
+    assert(!executor.start("", 0));
+    char oversized[257];
+    memset(oversized, 'a', sizeof(oversized) - 1);
+    oversized[sizeof(oversized) - 1] = '\0';
+    assert(!executor.start(oversized, 0));
+    assert(executor.start("a", 0));
+    const auto failing_sink = [](void*, KsUsageType, uint16_t, uint8_t) { return false; };
+    assert(executor.poll(0, failing_sink, nullptr) == KeySequenceExecutor::Result::Failed);
+    assert(!executor.active());
+
+    assert(executor.start("ctrl+a", 0));
+    executor.poll(0, sink, &reports);
+    assert(executor.poll(20, failing_sink, nullptr) == KeySequenceExecutor::Result::Failed);
+    assert(!executor.active());
+    assert(executor.poll(40, sink, &reports) == KeySequenceExecutor::Result::Idle);
+
+    reports.clear();
+    assert(executor.start("1000ms a", 0));
+    executor.poll(0, sink, &reports);
+    executor.cancel(sink, &reports);
+    assert(executor.poll(2000, sink, &reports) == KeySequenceExecutor::Result::Idle);
+    assert(reports.empty());
+    g_pass++;
+}
+
 int main() {
+    char device_name[40];
+    keyboard_transport_device_name(device_name, sizeof(device_name), "Kitchen Pad", KeyboardTransport::Usb);
+    assert(strcmp(device_name, "Kitchen Pad USB") == 0);
+    keyboard_transport_device_name(device_name, sizeof(device_name), "Kitchen Pad", KeyboardTransport::Ble);
+    assert(strcmp(device_name, "Kitchen Pad BLE") == 0);
+    keyboard_transport_device_name(device_name, sizeof(device_name), nullptr, KeyboardTransport::Ble);
+    assert(strcmp(device_name, "Keyboard BLE") == 0);
+    keyboard_transport_device_name(device_name, sizeof(device_name), "", KeyboardTransport::Usb);
+    assert(strcmp(device_name, "Keyboard USB") == 0);
+    const char* maximum_device_name = "1234567890123456789012345678901";
+    keyboard_transport_device_name(device_name, sizeof(device_name), maximum_device_name, KeyboardTransport::Usb);
+    assert(strcmp(device_name, "1234567890123456789012345678901 USB") == 0);
+    keyboard_transport_device_name(device_name, sizeof(device_name), maximum_device_name, KeyboardTransport::Ble);
+    assert(strcmp(device_name, "1234567890123456789012345678901 BLE") == 0);
+    for (bool has_ble : {false, true}) {
+        for (bool has_usb : {false, true}) {
+            const KeyboardTransport expected = KeyboardTransport::None;
+            assert(keyboard_transport_default(has_ble, has_usb) == expected);
+            assert(keyboard_transport_resolve(KeyboardTransport::None, has_ble, has_usb) == expected);
+            assert(keyboard_transport_resolve(static_cast<KeyboardTransport>(99), has_ble, has_usb) == expected);
+            assert(keyboard_transport_resolve(KeyboardTransport::Ble, has_ble, has_usb) ==
+                     (has_ble ? KeyboardTransport::Ble : expected));
+                 assert(keyboard_transport_resolve(KeyboardTransport::Usb, has_ble, has_usb) ==
+                     (has_usb ? KeyboardTransport::Usb : expected));
+        }
+    }
+    KeyboardTransport parsed_transport;
+    assert(keyboard_transport_parse("none", &parsed_transport) && parsed_transport == KeyboardTransport::None);
+    assert(keyboard_transport_parse("usb", &parsed_transport) && parsed_transport == KeyboardTransport::Usb);
+    assert(keyboard_transport_parse("ble", &parsed_transport) && parsed_transport == KeyboardTransport::Ble);
+    assert(!keyboard_transport_parse("auto", &parsed_transport));
+    assert(!keyboard_transport_parse(nullptr, &parsed_transport));
+    test_executor();
     printf("=== Key Sequence DSL Parser Tests ===\n\n");
 
     test_simple_keys();

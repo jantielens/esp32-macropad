@@ -89,4 +89,73 @@ context.padDialogOk(true);
 assert.strictEqual(context.padState.buttons[0].bg_image_password_set, true);
 assert.strictEqual(context.padState.buttons[0].bg_image_password, undefined);
 
+document.getElementById('pad-edit-widget-type').value = 'mousepad';
+document.getElementById('pad-edit-mousepad-sensitivity').value = '1.5';
+context.actionEditorBuild = function() { throw new Error('Mousepad must not build button actions'); };
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].widget_type, 'mousepad');
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, 1.5);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_acceleration, 0);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_movement_threshold, 3);
+assert.strictEqual(context.padState.buttons[0].actions, undefined);
+assert.strictEqual(context.padState.buttons[0].lp_actions, undefined);
+document.getElementById('pad-edit-mousepad-sensitivity').value = '10';
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, 5);
+document.getElementById('pad-edit-mousepad-sensitivity').value = 'Infinity';
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, 1);
+
+for (const [input, expected] of [['', 1], ['   ', 1], ['0', 0.1], ['-1', 0.1], ['NaN', 1]]) {
+    document.getElementById('pad-edit-mousepad-sensitivity').value = input;
+    context.padDialogOk(true);
+    assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, expected);
+}
+
+for (const [input, expected] of [['3', 3], ['10', 5], ['-1', 0], ['Infinity', 0], ['NaN', 0], ['', 0]]) {
+    document.getElementById('pad-edit-mousepad-acceleration').value = input;
+    context.padDialogOk(true);
+    assert.strictEqual(context.padState.buttons[0].widget_mousepad_acceleration, expected);
+}
+
+for (const [input, expected] of [['0', 0], ['3', 3], ['6', 6], ['12', 12], ['20', 12],
+    ['-1', 0], ['Infinity', 3], ['NaN', 3], ['', 3], ['   ', 3]]) {
+    document.getElementById('pad-edit-mousepad-movement-threshold').value = input;
+    context.padDialogOk(true);
+    assert.strictEqual(context.padState.buttons[0].widget_mousepad_movement_threshold, expected);
+}
+
+document.getElementById('pad-edit-widget-type').value = 'scrollpad';
+context.actionEditorBuild = function() { throw new Error('Scrollpad must not build button actions'); };
+for (const axis of ['vertical', 'horizontal', 'invalid', '']) {
+    for (const reverse of [false, true]) {
+        document.getElementById('pad-edit-scrollpad-axis').value = axis;
+        document.getElementById('pad-edit-scrollpad-sensitivity').value = '1.5';
+        document.getElementById('pad-edit-scrollpad-reverse').checked = reverse;
+        context.padDialogOk(true);
+        const saved = context.padState.buttons[0];
+        assert.strictEqual(saved.widget_type, 'scrollpad');
+        assert.strictEqual(saved.widget_scrollpad_axis, axis === 'horizontal' ? axis : 'vertical');
+        assert.strictEqual(saved.widget_scrollpad_sensitivity, 1.5);
+        assert.strictEqual(saved.widget_scrollpad_inertia, 0);
+        assert.strictEqual(saved.widget_scrollpad_reverse, reverse);
+        assert.strictEqual(saved.widget_mousepad_sensitivity, undefined);
+        assert.strictEqual(saved.widget_mousepad_acceleration, undefined);
+        assert.strictEqual(saved.widget_mousepad_movement_threshold, undefined);
+        assert.strictEqual(saved.actions, undefined);
+        assert.strictEqual(saved.lp_actions, undefined);
+    }
+}
+for (const [input, expected] of [['10', 5], ['0', 0.1], ['-1', 0.1], ['Infinity', 1], ['NaN', 1], ['', 1]]) {
+    document.getElementById('pad-edit-scrollpad-sensitivity').value = input;
+    context.padDialogOk(true);
+    assert.strictEqual(context.padState.buttons[0].widget_scrollpad_sensitivity, expected);
+}
+
+for (const [input, expected] of [['3', 3], ['10', 5], ['-1', 0], ['Infinity', 0], ['NaN', 0], ['', 0]]) {
+    document.getElementById('pad-edit-scrollpad-inertia').value = input;
+    context.padDialogOk(true);
+    assert.strictEqual(context.padState.buttons[0].widget_scrollpad_inertia, expected);
+}
+
 console.log('portal_pad_dialog_transaction: PASS');

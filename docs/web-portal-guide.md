@@ -43,8 +43,13 @@ The orange **CPU** badge in the header shows real-time CPU usage with a breathin
 - **Flash usage** — firmware size
 - **Filesystem** — active storage backend, mount state, and usage. SD primary-storage variants also report card type.
 - **MQTT** — connection status and publish timing
-- **Display** — FPS and render timing
+- **Display** — update FPS, not physical panel scanout frequency
 - **Wi-Fi signal** — RSSI and IP address
+
+The device's FPS Benchmark screen shows Render, Present, and Cycle timings.
+Detailed average and peak timings are available through the API-only
+`display_perf` object in `/api/health`; they are not additional health-overlay
+controls. Quiet screens can report zero FPS even while the panel keeps scanning.
 
 ---
 
@@ -177,24 +182,85 @@ Controls how the device operates:
 
 MQTT publish interval and payload scope live on the **Network** page under the **MQTT** card. The publish interval is only used in Always-On mode; in Duty-Cycle mode the device publishes once per wake.
 
-### BLE Keyboard
+On boards with BLE telemetry, select **Duty-Cycle BLE** to send BTHome sensor
+advertisements without starting Wi-Fi on normal wakes. Config/recovery mode
+still starts Wi-Fi so you can access the portal.
 
-*Shown only on boards with BLE HID support (ESP32-P4 boards). Not available on ESP32-S3 boards due to internal RAM constraints.*
+The **BLE Advertising** controls set Burst Count (default `3`), Advertising
+Interval (default `100` ms), and Transmit Power (default `+9` dBm). Power options
+are `-12`, `-9`, `-6`, `-3`, `0`, `+3`, `+6`, and `+9` dBm. Save the settings,
+then use **Reboot Now** to apply them; no firmware reflash is needed.
 
-The BLE Keyboard section lets you enable/disable the Bluetooth keyboard and manage pairing.
+For battery experiments, keep three repeats and try a `100` ms interval first.
+Then test `+3` or `0` dBm while monitoring missed updates. Lower transmit power
+can reduce reception reliability. Burst Count determines the advertising hold
+duration (`count * interval + 50` ms), not an exact transmitted packet count.
+
+### Keyboard
+
+Shown only when USB or BLE HID is compiled in. Native USB support is currently
+compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
+`esp32-p4-lcd4b`; keyboard output defaults to Off. Hardware validation so far
+covers `jc1060p470c-sd` only. Use the native USB device connector, not a USB-UART
+bridge or host-only connector; check the board's connector and power wiring.
+On JC1060P470C hardware, USB uses the high-speed USB-C connector. Use one powered
+USB cable on that board because its connector power rails are shared.
+
+The keyboard defaults to Off. Choose Off or a supported USB/BLE transport,
+save, and use the existing reboot-required banner. The displayed active
+transport remains unchanged until reboot. Single-backend builds offer Off and
+their supported transport; builds with neither backend hide keyboard settings
+and **Send keys**. Explicitly saved USB/BLE choices remain unchanged after
+updating; devices without a saved choice become Off. Off disables keyboard
+and mouse output and rejects key actions while retaining USB serial logging and
+independent BLE telemetry.
 
 | Element | Description |
 |---------|-------------|
-| **Enable BLE Keyboard** | Checkbox to enable or disable BLE. Disabled by default to save ~70 KB RAM. Requires a reboot to take effect |
-| **Status indicator** | Reflects the compact `ble_status`: disabled, ready, pairing, connected, or error |
-| **Name** | Shows the current BLE keyboard name (same as the configured device name) |
+| **Transport** | In Connectivity > Keyboard & Mouse: USB enables keyboard and mouse control, BLE enables keyboard only, and Off disables both. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
+| **Active connection** | Separate section showing the running USB/BLE backend and `ready`, `busy`, or `disconnected` status, or Keyboard disabled when Off; changing the selector does not change this section |
+| **BLE status indicator** | Shown when BLE is active: disabled, ready, pairing, connected, or error |
+| **Name** | Shows the configured device name plus ` USB` or ` BLE` for the active connection |
 | **Bonded / Encrypted badges** | Shown when a host is connected |
 | **Peer address** | The connected host's Bluetooth address |
 | **Pair New Device** | Clears the previous bond and opens a fresh 60-second pairing window — no reboot required |
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 
-The BLE keyboard always advertises with the configured device name and the chip's stable hardware address, so the host always sees the same device.
+USB exposes keyboard, consumer HID, and a relative mouse alongside the serial console when USB is
+selected. With BLE or Off selected, USB exposes only the serial console after reboot,
+not a keyboard or mouse. Add a **Mousepad** widget in the pad editor on
+touch-enabled USB HID devices for finger movement and tap-to-left-click;
+**Sensitivity** and **Acceleration** (0-5, default 0/off) are configurable
+per button. See the
+[Mousepad guide](pad-editor-guide.md#mousepad) for setup and limitations.
+Add a [Scrollpad widget](pad-editor-guide.md#scrollpad) beside or below it for
+vertical or horizontal scrolling. Axis, Sensitivity, Reverse direction, and
+**Inertia** (0-5, default 0/off) are configured independently per Scrollpad.
+Higher inertia coasts longer after release; touching either mouse surface
+stops coasting.
+Assign a [Mouse Button action](pad-editor-guide.md#mouse-button) for Left,
+Right, or Middle clicks to an ordinary button or action-dispatching widget;
+it does not change Mousepad gestures.
+Its product name uses the configured friendly device name plus
+` USB` after reboot, its manufacturer
+uses project branding, and its serial number uses the stable chip address.
+Windows can cache names, retain disconnected device entries, or show a generic
+HID keyboard label. Reconnect USB or remove and re-pair BLE if Windows keeps an
+old name. The section's navigation ID is `hid`; its label is Keyboard.
+
+Both transports use the same macro syntax and US ASCII mapping. Only one macro
+may be pending or running; extra requests fail instead of queueing. A
+disconnect, USB suspension, report failure, OTA activity, or 60-second deadline
+aborts execution and fails the remaining action-list suffix. Interrupted macros
+never replay on reconnect, and neither transport falls back to the other host.
+The user has confirmed USB and BLE input, serial logging, and CDC-only BLE-mode
+enumeration. Hardware checks for media keys and sleep/reconnect reliability
+remain pending.
+
+The BLE keyboard advertises with the configured device name plus ` BLE` and the
+chip's stable hardware address. Transport suffixes distinguish the two Windows
+device entries without changing the saved name or hardware identity.
 
 > **Re-pairing tip:** Before pairing a new host (or re-pairing the same host), remove the device from the old host's Bluetooth settings first. If you skip this step the old host may keep trying to reconnect with stale keys for a short while — this is normal BLE behavior and will eventually stop, but removing the device avoids the noise.
 

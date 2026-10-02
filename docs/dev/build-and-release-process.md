@@ -437,6 +437,7 @@ This repository includes tooling to keep compile-time configuration discoverable
 
 - Generated report: `docs/compile-time-flags.md` (flag list, per-board matrices, and per-file preprocessor usage map)
 - Generator: `tools/compile_flags_report.py`
+- Source inventory includes tracked and non-ignored untracked source files; ignored generated files are excluded.
 - Build logs: `build.sh` prints a per-board "Compile-time flags summary" so you can see which `HAS_*` features and key selectors are active for the board being built
 
 **Update the report locally:**

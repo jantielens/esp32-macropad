@@ -1,6 +1,7 @@
 #ifndef BOARD_OVERRIDES_ESP32_P4_LCD4B_VOICE_H
 #define BOARD_OVERRIDES_ESP32_P4_LCD4B_VOICE_H
 
+#define HAS_USB_HID false
 #include "../esp32-p4-lcd4b/board_overrides.h"
 
 #define IS_VOICE_ASSISTANT true

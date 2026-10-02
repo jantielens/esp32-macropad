@@ -9,6 +9,7 @@
 // product variant flag, photodiode ADC pins, capture buffer tuning, and
 // portal hero category.
 
+#define HAS_USB_HID false
 #include "../jc4880p433/board_overrides.h"
 
 // ============================================================================

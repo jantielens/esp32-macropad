@@ -24,9 +24,8 @@
 extern portMUX_TYPE g_splash_status_mux;
 extern portMUX_TYPE g_perf_mux;
 extern DisplayPerfStats g_perf;
+extern DisplayPerfWindow g_perf_window;
 extern bool g_perf_ready;
-extern uint32_t g_perf_window_start_ms;
-extern uint16_t g_perf_frames_in_window;
 
 DisplayTaskDispatchResult DisplayManager::dispatch(
 		DisplayTaskExec exec, DisplayTaskCleanup cleanup,
@@ -82,10 +81,16 @@ void DisplayManager::lvglTask(void* pvParameter) {
 		DisplayManager* mgr = (DisplayManager*)pvParameter;
 		
 		LOGI("Display", "LVGL render task start (core %d)", xPortGetCoreID());
+		portENTER_CRITICAL(&g_perf_mux);
+		g_perf_window.reset(millis());
+		g_perf_ready = false;
+		portEXIT_CRITICAL(&g_perf_mux);
 		
 		while (true) {
 				device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_WAIT_LOCK);
 				mgr->lock();
+				const uint64_t cycle_start_us = esp_timer_get_time();
+				uint32_t screen_update_us = 0;
 				bool updated_after_screen_switch = false;
 				if (mgr->lvglStopRequested) {
 						mgr->unlock();
@@ -146,7 +151,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						mgr->pendingScreen = nullptr;
 						if (!screen_saver_manager_is_rendering_suspended()) {
 							// Build an evicted pad before LVGL renders the newly loaded screen.
+							const uint64_t update_start_us = esp_timer_get_time();
 							mgr->currentScreen->update();
+							screen_update_us = static_cast<uint32_t>(esp_timer_get_time() - update_start_us);
 							updated_after_screen_switch = true;
 						}
 
@@ -182,11 +189,13 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 				// Check countdown timer expiry (fire beep on edge)
 				timer_engine_tick();
-				
+
+				uint32_t data_stream_us = 0;
 #if HAS_MQTT
 				// Poll data stream registry (background ring buffers for
 				// history-based widgets, independent of active screen).
 				{
+						const uint64_t stream_start_us = esp_timer_get_time();
 						static uint32_t s_ds_generation = UINT32_MAX;
 						uint32_t gen = pad_config_get_generation();
 						if (gen != s_ds_generation) {
@@ -197,6 +206,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 #endif
 						}
 						data_stream_poll();
+						data_stream_us = static_cast<uint32_t>(esp_timer_get_time() - stream_start_us);
 				}
 #endif
 
@@ -215,7 +225,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				if (!updated_after_screen_switch && mgr->currentScreen
 						&& !screen_saver_manager_is_rendering_suspended()) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_UPDATE);
+						const uint64_t update_start_us = esp_timer_get_time();
 						mgr->currentScreen->update();
+						screen_update_us = static_cast<uint32_t>(esp_timer_get_time() - update_start_us);
 				}
 				
 				// Flush canvas buffer only when LVGL produced draw data.
@@ -227,35 +239,14 @@ void DisplayManager::lvglTask(void* pvParameter) {
 								// Buffered mode: delegate present() to the async present task.
 								// This frees the LVGL mutex during the slow QSPI panel transfer,
 								// allowing touch input and animations to continue processing.
-								mgr->sharedLvTimerUs = lv_timer_us;
 								xSemaphoreGive(mgr->presentSem);
 							flushAccepted = true;
 						}
 						} else {
 								// Direct mode: present() is a no-op. Update perf stats inline.
-								const uint32_t now_ms = millis();
-								if (g_perf_window_start_ms == 0) {
-										g_perf_window_start_ms = now_ms;
-										g_perf_frames_in_window = 0;
-								}
-
-								g_perf_frames_in_window++;
-
-								const uint32_t elapsed = now_ms - g_perf_window_start_ms;
-								if (elapsed >= 1000) {
-										const uint16_t fps = g_perf_frames_in_window;
-										
-
-										portENTER_CRITICAL(&g_perf_mux);
-										g_perf.fps = fps;
-										g_perf.lv_timer_us = lv_timer_us;
-										g_perf.present_us = 0;
-										g_perf_ready = true;
-										portEXIT_CRITICAL(&g_perf_mux);
-
-										g_perf_window_start_ms = now_ms;
-										g_perf_frames_in_window = 0;
-								}
+								portENTER_CRITICAL(&g_perf_mux);
+								++g_perf_window.frames;
+								portEXIT_CRITICAL(&g_perf_mux);
 									flushAccepted = true;
 						}
 								// The render task can begin before the buffered present task exists.
@@ -263,6 +254,15 @@ void DisplayManager::lvglTask(void* pvParameter) {
 								if (flushAccepted) mgr->flushPending = false;
 				}
 
+				const uint32_t cycle_us = static_cast<uint32_t>(esp_timer_get_time() - cycle_start_us);
+				const uint32_t sample_ms = millis();
+				portENTER_CRITICAL(&g_perf_mux);
+				g_perf_window.lv_timer.add(lv_timer_us);
+				g_perf_window.data_stream.add(data_stream_us);
+				g_perf_window.screen_update.add(screen_update_us);
+				g_perf_window.cycle.add(cycle_us);
+				if (g_perf_window.publish(sample_ms, g_perf)) g_perf_ready = true;
+				portEXIT_CRITICAL(&g_perf_mux);
 				mgr->unlock();
 				
 				// Sleep based on LVGL's suggested next timer deadline.
@@ -279,16 +279,11 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						// No rendering during sleep — publish fps=0 so /api/health
 						// doesn't show a stale value from before the screensaver.
 						portENTER_CRITICAL(&g_perf_mux);
-						g_perf.fps = 0;
-						g_perf.lv_timer_us = 0;
-						g_perf.present_us = 0;
+						g_perf = {};
+						g_perf_window.reset(millis());
 						g_perf_ready = true;
 						portEXIT_CRITICAL(&g_perf_mux);
 
-						// Reset the perf window so the first frame after wake
-						// starts a clean count (no partial-window spike).
-						g_perf_window_start_ms = 0;
-						g_perf_frames_in_window = 0;
 				}
 
 				vTaskDelay(pdMS_TO_TICKS(delayMs));
@@ -315,30 +310,12 @@ void DisplayManager::presentTask(void* pvParameter) {
 				mgr->driver->present();
 				const uint32_t present_us = (uint32_t)(esp_timer_get_time() - start_us);
 				
-				// Update perf stats (frame count + periodic publish).
-				// These statics are only accessed from one task context per board
-				// (either here for Buffered, or inline in lvglTask for Direct).
-				const uint32_t now_ms = millis();
-				if (g_perf_window_start_ms == 0) {
-						g_perf_window_start_ms = now_ms;
-						g_perf_frames_in_window = 0;
+				portENTER_CRITICAL(&g_perf_mux);
+				if (!screen_saver_manager_is_rendering_suspended()) {
+						g_perf_window.present.add(present_us);
+						++g_perf_window.frames;
 				}
-				g_perf_frames_in_window++;
-				
-				const uint32_t elapsed = now_ms - g_perf_window_start_ms;
-				if (elapsed >= 1000) {
-						const uint16_t fps = g_perf_frames_in_window;
-						const uint32_t lv_us = mgr->sharedLvTimerUs;
-						portENTER_CRITICAL(&g_perf_mux);
-						g_perf.fps = fps;
-						g_perf.lv_timer_us = lv_us;
-						g_perf.present_us = present_us;
-						g_perf_ready = true;
-						portEXIT_CRITICAL(&g_perf_mux);
-						
-						g_perf_window_start_ms = now_ms;
-						g_perf_frames_in_window = 0;
-				}
+				portEXIT_CRITICAL(&g_perf_mux);
 		}
 }
 

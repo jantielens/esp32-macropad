@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 297
+Total flags: 298
 
 ### Features (HAS_*)
 
@@ -62,6 +62,7 @@ Total flags: 297
 - **HAS_SOUND_PLAYER** default: `HAS_AUDIO` — Defaults to HAS_AUDIO — enable audio to get sound player support.
 - **HAS_STORAGE_BROWSER** default: `true` — Enable the portal and MCP browser for a filesystem partition or SD card.
 - **HAS_TOUCH** default: `false` — Enable touch input support.
+- **HAS_USB_HID** default: `false` — Enable native USB HID keyboard, consumer-control, and mouse output.
 
 ### Selectors (*_DRIVER)
 
@@ -344,30 +345,30 @@ Total flags: 297
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |
-| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |
-| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |
-| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |
-| esp32c3-withsensors |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  |
-| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |
-| inkplate5v2-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
-| inkplate6flick-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
-| inkplate6flick-interactive |  |  | ✅ |  |  |  |  |  | ? | ✅ | ✅ |  |  | ✅ |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
-| reterminal-e1003-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ |  |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |
-| reterminal-e1003-interactive |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ |  |  | ✅ |  |  | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |
+| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_USB_HID |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |  |
+| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |  |
+| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |  |
+| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| esp32c3-withsensors |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  |  |
+| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |  |
+| inkplate5v2-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
+| inkplate6flick-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
+| inkplate6flick-interactive |  |  | ✅ |  |  |  |  |  | ? | ✅ | ✅ |  |  | ✅ |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |  |
+| reterminal-e1003-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ |  |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
+| reterminal-e1003-interactive |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ |  |  | ✅ |  |  | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -472,6 +473,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.h
   - src/app/device_telemetry.cpp
   - src/app/health_binding.cpp
+  - src/app/keyboard_hid.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/portal_components.cpp
   - src/app/web_portal_ble.cpp
@@ -505,6 +507,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/display_refresh_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
+  - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/notify_action.cpp
@@ -523,6 +526,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/hw_button_config.h
   - src/app/hw_buttons.cpp
   - src/app/hw_buttons.h
+  - src/app/keyboard_hid.cpp
   - src/app/mcp_press_button.cpp
   - src/app/mcp_press_button.h
   - src/app/mcp_tools_config.cpp
@@ -591,6 +595,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/display_refresh_action.cpp
   - src/app/actions/ha_service_action.cpp
   - src/app/actions/key_action.cpp
+  - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/notify_action.cpp
@@ -652,6 +657,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/health_table_builder.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
+  - src/app/keyboard_hid.cpp
   - src/app/label_style.cpp
   - src/app/list_binding.cpp
   - src/app/list_provider.cpp
@@ -725,8 +731,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/camera_preview_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/list_widget.cpp
+  - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.cpp
@@ -846,8 +854,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/camera_preview_widget.cpp
   - src/app/widgets/gauge_widget.cpp
   - src/app/widgets/list_widget.cpp
+  - src/app/widgets/mousepad_widget.cpp
   - src/app/widgets/numericrocker_widget.cpp
   - src/app/widgets/rocker_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
   - src/app/widgets/sparkline_widget.cpp
   - src/app/widgets/table_widget.cpp
   - src/app/widgets/widget.h
@@ -1050,6 +1060,32 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_screenshot.cpp
   - src/app/web_portal_screenshot.h
+  - src/app/widgets.cpp
+  - src/app/widgets/mousepad_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
+- **HAS_USB_HID**
+  - src/app/actions/key_action.cpp
+  - src/app/actions/mouse_button_action.cpp
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/device_telemetry.cpp
+  - src/app/keyboard_hid.cpp
+  - src/app/log_manager.cpp
+  - src/app/mcp_tools_config.cpp
+  - src/app/mouse_hid.cpp
+  - src/app/mouse_hid.h
+  - src/app/portal_components.cpp
+  - src/app/usb_hid.cpp
+  - src/app/usb_hid.h
+  - src/app/web_portal_config.cpp
+  - src/app/widgets.cpp
+  - src/app/widgets/mousepad_widget.cpp
+  - src/app/widgets/scrollpad_widget.cpp
+  - src/boards/esp32-p4-lcd4b/board_overrides.h
+  - src/boards/jc1060p470c/board_overrides.h
+  - src/boards/jc4880p433/board_overrides.h
 - **AUDIO_OUTPUT_DRIVER**
   - src/app/audio_output_drivers.cpp
   - src/app/board_config.h

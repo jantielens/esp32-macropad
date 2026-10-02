@@ -4,6 +4,8 @@
 
 #include "config_manager.h"
 #include "key_sequence.h"
+#include "keyboard_transport.h"
+#include <atomic>
 #include "net_activity.h"
 
 #include <BLEDevice.h>
@@ -138,8 +140,7 @@ static const ble_uuid16_t uuidReport = BLE_UUID16_INIT(0x2A4D);
 static const ble_uuid16_t uuidReportReference = BLE_UUID16_INIT(0x2908);
 
 static volatile bool pending_pairing = false;
-static char pending_sequence[256] = {};
-static volatile bool has_pending_sequence = false;
+static std::atomic<uint32_t> connection_epoch{1};
 
 // Single-owner BLE policy state
 static const unsigned long PAIRING_TIMEOUT_MS = 60000;  // 60s pairing window
@@ -247,7 +248,7 @@ static int hid_access(uint16_t, uint16_t attr_handle, struct ble_gatt_access_ctx
             return BLE_ATT_ERR_UNLIKELY;
         }
         protocolMode = value;
-        LOGI(TAG, "Protocol mode=%u", protocolMode);
+        LOGD(TAG, "Protocol mode=%u", protocolMode);
         return 0;
     }
 
@@ -262,7 +263,7 @@ static int hid_access(uint16_t, uint16_t attr_handle, struct ble_gatt_access_ctx
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
         hidControlPoint = value;
-        LOGI(TAG, "HID control point=0x%02X", hidControlPoint);
+        LOGD(TAG, "HID control point=0x%02X", hidControlPoint);
         return 0;
     }
 
@@ -285,7 +286,7 @@ static int hid_access(uint16_t, uint16_t attr_handle, struct ble_gatt_access_ctx
             return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
         keyboardLedState = value;
-        LOGI(TAG, "Keyboard LED output=0x%02X", keyboardLedState);
+        LOGD(TAG, "Keyboard LED output=0x%02X", keyboardLedState);
         return 0;
     }
 
@@ -325,15 +326,15 @@ static bool init_hid_service() {
     return true;
 }
 
-static void send_report_notification(uint16_t value_handle, const void* data, uint16_t size) {
+static bool send_report_notification(uint16_t value_handle, const void* data, uint16_t size) {
     if (!connected || !hid_service_ready || value_handle == 0 || bleServer == nullptr) {
-        return;
+        return false;
     }
 
     struct os_mbuf* om = ble_hs_mbuf_from_flat(data, size);
     if (om == nullptr) {
         LOGW(TAG, "Failed to allocate HID report mbuf (handle=%u size=%u)", value_handle, size);
-        return;
+        return false;
     }
 
     const int rc = ble_gatts_notify_custom(bleServer->getConnId(), value_handle, om);
@@ -342,6 +343,7 @@ static void send_report_notification(uint16_t value_handle, const void* data, ui
     } else {
         net_activity_mark(NET_CH_BLE);
     }
+    return rc == 0;
 }
 
 class HidCallbacks : public BLEServerCallbacks {
@@ -352,6 +354,7 @@ class HidCallbacks : public BLEServerCallbacks {
             return;
         }
         connected = true;
+        connection_epoch.fetch_add(1);
         advertising_active = false;
         active_conn_handle = desc->conn_handle;
         format_ble_addr(desc->peer_ota_addr.val, peer_addr_str, sizeof(peer_addr_str));
@@ -361,6 +364,7 @@ class HidCallbacks : public BLEServerCallbacks {
     void onDisconnect(BLEServer*, ble_gap_conn_desc* desc) override {
         if (desc->conn_handle != active_conn_handle) return;
         connected = false;
+        connection_epoch.fetch_add(1);
         active_conn_handle = 0xFFFF;
         clear_peer_metadata();
         LOGI(TAG, "Host disconnected");
@@ -467,14 +471,7 @@ static void clear_all_bonds() {
 #endif
 }
 
-static void send_keyboard_report(const KeyReport& report) {
-    keyboardInputReport = report;
-    send_report_notification(keyboardInputHandle, &keyboardInputReport, sizeof(keyboardInputReport));
-}
-
 void ble_hid_init(const char* device_name, bool force_pairing_mode) {
-    LOGI(TAG, "Initializing BLE HID keyboard as '%s'", device_name);
-
     init_error = false;
     connected = false;
     peer_encrypted = false;
@@ -486,8 +483,8 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
         LOGI(TAG, "Stored owner addr: %s", owner_id_addr_str);
     }
 
-    const char* name = (device_name && device_name[0]) ? device_name : "BLE Keyboard";
-    strlcpy(ble_name_str, name, sizeof(ble_name_str));
+    keyboard_transport_device_name(ble_name_str, sizeof(ble_name_str), device_name, KeyboardTransport::Ble);
+    LOGI(TAG, "Initializing BLE HID keyboard as '%s'", ble_name_str);
 
     BLEDevice::init(ble_name_str);
     if (!BLEDevice::getInitialized()) {
@@ -550,6 +547,7 @@ void ble_hid_init(const char* device_name, bool force_pairing_mode) {
 
 void ble_hid_start_pairing() {
     LOGI(TAG, "Starting live BLE re-pairing");
+    connection_epoch.fetch_add(1);
 
     // 1. Disconnect any active peer
     if (connected && active_conn_handle != 0xFFFF) {
@@ -586,111 +584,28 @@ bool ble_hid_is_connected() {
     return connected;
 }
 
-void ble_hid_send_key(uint16_t usage, uint8_t modifiers) {
-    if (!connected) {
-        LOGD(TAG, "Not connected - key 0x%04X dropped", usage);
-        return;
-    }
+uint32_t ble_hid_epoch() { return connection_epoch.load(); }
 
+bool ble_hid_send_report(KsUsageType type, uint16_t usage, uint8_t modifiers) {
+    if (type == KS_USAGE_CONSUMER) {
+        consumerInputReport.usage = usage;
+        return send_report_notification(consumerInputHandle, &consumerInputReport, sizeof(consumerInputReport));
+    }
     KeyReport report = {};
     report.modifiers = modifiers;
-    report.keys[0] = static_cast<uint8_t>(usage & 0xFF);
-    send_keyboard_report(report);
-
-    delay(KS_DEFAULT_DELAY_MS);
-
-    KeyReport released = {};
-    send_keyboard_report(released);
-}
-
-void ble_hid_send_consumer(uint16_t usage) {
-    if (!connected) {
-        LOGD(TAG, "Not connected - consumer 0x%04X dropped", usage);
-        return;
-    }
-
-    consumerInputReport.usage = usage;
-    send_report_notification(consumerInputHandle, &consumerInputReport, sizeof(consumerInputReport));
-
-    delay(KS_DEFAULT_DELAY_MS);
-
-    consumerInputReport.usage = 0;
-    send_report_notification(consumerInputHandle, &consumerInputReport, sizeof(consumerInputReport));
-}
-
-void ble_hid_execute_sequence(const char* sequence) {
-    if (!sequence || !sequence[0]) {
-        return;
-    }
-
-    KsSequence seq;
-    if (!ks_parse(sequence, &seq)) {
-        LOGW(TAG, "Parse error: %s", seq.error);
-        return;
-    }
-
-    for (uint8_t i = 0; i < seq.count; i++) {
-        const KsStep& step = seq.steps[i];
-
-        switch (step.type) {
-        case KS_STEP_KEY:
-            if (step.key.usage_type == KS_USAGE_CONSUMER) {
-                ble_hid_send_consumer(step.key.usage);
-            } else {
-                ble_hid_send_key(step.key.usage, step.key.modifiers);
-            }
-            break;
-
-        case KS_STEP_TEXT:
-            for (uint16_t c = 0; c < step.text.length; c++) {
-                char ch = step.text.start[c];
-                if (ch == '\\' && c + 1 < step.text.length && step.text.start[c + 1] == '"') {
-                    ch = '"';
-                    c++;
-                }
-
-                uint16_t usage;
-                uint8_t mods;
-                if (ks_ascii_to_hid(ch, &usage, &mods)) {
-                    ble_hid_send_key(usage, mods);
-                }
-            }
-            break;
-
-        case KS_STEP_DELAY:
-            delay(step.delay.ms);
-            break;
-        }
-
-        if (step.type != KS_STEP_DELAY && i + 1 < seq.count && seq.steps[i + 1].type != KS_STEP_DELAY) {
-            delay(KS_DEFAULT_DELAY_MS);
-        }
-    }
+    report.keys[0] = static_cast<uint8_t>(usage);
+    keyboardInputReport = report;
+    return send_report_notification(keyboardInputHandle, &keyboardInputReport, sizeof(keyboardInputReport));
 }
 
 void ble_hid_request_pairing() {
     pending_pairing = true;
 }
 
-void ble_hid_request_sequence(const char* sequence) {
-    if (!sequence || !sequence[0]) {
-        return;
-    }
-
-    strlcpy(pending_sequence, sequence, sizeof(pending_sequence));
-    has_pending_sequence = true;
-}
-
 void ble_hid_loop() {
     if (pending_pairing) {
         pending_pairing = false;
         ble_hid_start_pairing();
-    }
-
-    if (has_pending_sequence) {
-        has_pending_sequence = false;
-        ble_hid_execute_sequence(pending_sequence);
-        pending_sequence[0] = '\0';
     }
 
     // Auto-close pairing window on timeout

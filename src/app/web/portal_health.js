@@ -424,9 +424,26 @@ function renderSensorsSection(health) {
     });
 }
 
-function renderBleSection(health) {
-    const section = document.getElementById('ble-section');
+function renderHidSection(health) {
+    const section = document.getElementById('hid-section');
     if (!section) return;
+
+    const keyboardTransport = document.getElementById('keyboard-active-transport');
+    const keyboardStatus = document.getElementById('keyboard-status');
+    const bleContent = document.getElementById('ble-content');
+    if (typeof health.keyboard_transport === 'string') {
+        if (keyboardTransport) keyboardTransport.textContent = keyboardTransportLabel(health.keyboard_transport);
+        if (keyboardStatus) keyboardStatus.textContent = health.keyboard_status || 'disconnected';
+        if (bleContent) bleContent.style.display = health.keyboard_transport === 'ble' ? 'block' : 'none';
+        const heading = document.getElementById('keyboard-active-heading');
+        if (heading) heading.textContent = health.keyboard_transport === 'none' ? 'Keyboard disabled' : 'Active ' + keyboardTransportLabel(health.keyboard_transport) + ' Connection';
+        const usbContent = document.getElementById('usb-content');
+        if (usbContent) usbContent.style.display = health.keyboard_transport === 'usb' ? 'block' : 'none';
+        if (window.deviceConfig) {
+            window.deviceConfig.keyboard_active_transport = health.keyboard_transport;
+            updateKeyboardTransportSetting();
+        }
+    }
 
     // Update BLE status only when health payload contains BLE data
     const hasBle = (typeof health.ble_status === 'string') || (typeof health.ble_state === 'string');
@@ -502,15 +519,9 @@ function renderBleSection(health) {
 
     // Disable pair button while pairing
     if (pairBtn) {
-        pairBtn.disabled = isPairing || isDisabled;
+        pairBtn.disabled = isPairing || isDisabled || health.keyboard_status === 'busy';
         pairBtn.textContent = isPairing ? 'Pairing\u2026' : 'Pair New Device';
     }
-}
-
-function toggleBleContent() {
-    const cb = document.getElementById('ble_enabled');
-    const content = document.getElementById('ble-content');
-    if (cb && content) content.style.display = cb.checked ? 'block' : 'none';
 }
 
 async function startBlePairing() {
@@ -579,7 +590,7 @@ async function updateHealth() {
 
         renderHealth(health);
         renderSensorsSection(health);
-        renderBleSection(health);
+        renderHidSection(health);
         if (healthExpanded) {
             await updateHealthHistory({ hasPsram });
         }

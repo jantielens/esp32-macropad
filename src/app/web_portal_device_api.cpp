@@ -169,6 +169,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
 		response->print(",\"has_camera\":");
 		response->print(HAS_CAMERA ? "true" : "false");
+		response->print(",\"has_usb_hid\":");
+		response->print(HAS_USB_HID ? "true" : "false");
 		response->print(",\"has_image_fetch\":");
 		response->print(HAS_IMAGE_FETCH ? "true" : "false");
 		response->print(",\"has_image_library\":");
@@ -293,7 +295,7 @@ void handleGetBindings(AsyncWebServerRequest *request) {
 void handleGetHealth(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 
-		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(2048);
+		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (doc && doc->capacity() > 0) {
 				device_telemetry_fill_api(*doc);
 				if (doc->overflowed()) {

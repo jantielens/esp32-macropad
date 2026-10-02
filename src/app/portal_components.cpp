@@ -80,9 +80,9 @@
 #endif // HAS_MCP
 
 // --- BLE-gated components ---
-#if HAS_BLE_HID
-#include "components/ble_component.cpp"
-#endif // HAS_BLE_HID
+#if HAS_BLE_HID || HAS_USB_HID
+#include "components/hid_component.cpp"
+#endif
 
 // --- Audio-gated components ---
 #if HAS_AUDIO

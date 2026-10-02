@@ -1,4 +1,7 @@
-# ESP32 Macropad
+---
+title: ESP32 Macropad
+description: Configurable ESP32 control surfaces, dashboards, and USB/BLE input devices.
+---
 
 Turn your ESP32 display board into a powerful, fully customizable smart home control panel with no coding required.
 
@@ -29,10 +32,25 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Dynamic colors** — background, text, border, and widget colors all accept binding expressions
 - **Dynamic state** — `enabled` / `disabled` / `hidden` per button via the same binding system
 - **Real-time syntax validator** in the pad editor catches typos and invalid expressions as you type
-- **Action values** — MQTT payloads, BLE key sequences, beep patterns, volume/brightness values, and timer values all resolve bindings at dispatch time
+- **Action values** - MQTT payloads, USB/BLE key sequences, beep patterns, volume/brightness values, and timer values all resolve bindings at dispatch time
 
 ### Inputs & automation
 - **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
+- **USB/BLE HID** - keyboard macros, modifier combos, and media keys for
+  shortcuts and text entry over USB or BLE. Optional USB mouse support adds
+  Mousepad movement and tap-to-left-click with acceleration, vertical/horizontal
+  Scrollpad scrolling with inertia, and Left/Right/Middle Mouse Button actions.
+  BLE supports keyboard control only. Native USB is compiled for
+  `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
+  `esp32-p4-lcd4b`; hardware testing so far covers `jc1060p470c-sd`.
+  BLE keyboard support is board-dependent; some Macropad boards disable it to
+  preserve internal RAM. Supported BLE builds offer single-owner pairing.
+  HID output defaults to Off. Select a supported transport in
+  **Connectivity > Keyboard & Mouse**, save, then reboot. There is no automatic
+  fallback or broadcast. See the [Key Sequences guide](docs/pad-editor-guide.md#key-sequences),
+  [Mousepad guide](docs/pad-editor-guide.md#mousepad),
+  [Scrollpad guide](docs/pad-editor-guide.md#scrollpad), and
+  [Mouse Button action guide](docs/pad-editor-guide.md#mouse-button).
 - **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
 - **Hardware buttons** — map a board's physical GPIO buttons to tap and long-press action chains (works on headless boards too)
 - **Boot actions** — run a sequence of actions automatically when the device starts
@@ -51,7 +69,6 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **MQTT with Home Assistant auto-discovery** — registers as a full HA device with sensors, buttons, siren, volume, screen selector, and notification entities (no YAML needed)
 - **Home Assistant service buttons** — call any HA service (toggle lights, run scenes, open covers) directly over the REST API from a button, swipe, or boot action
 - **MCP server for AI assistants** — a built-in [Model Context Protocol](docs/mcp-guide.md) endpoint lets a local LLM client (Claude Desktop, Cursor, VS Code Copilot Chat) inspect and control the device through chat; off by default, token-secured, with separate read and control permissions
-- **Bluetooth HID keyboard** (ESP32-P4) — send keystrokes, modifier combos, media keys, and multi-step sequences to any paired host with single-owner pairing
 - **Remote control from HA** — switch screens, trigger beeps, play tones, set volume, send notifications
 - **Resilient WiFi** — event-driven tiered reconnect keeps the display responsive through outages, with gateway-ping liveness detection
 - **Live camera feeds** — OV02C10 JPEG snapshots and **MJPEG streaming** at up to 4 fps on supported ESP32-P4 camera boards
@@ -62,7 +79,7 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
 - **Recipes** — install a declared setup into a selected pad with adaptive placement, optional parameters, and safe grid-size or clear-buttons recovery when space is unavailable
 - **Copy/paste & import/export** — clone buttons, pads, or entire device configurations to JSON
 - **Browser-based setup** — Wi-Fi, MQTT, security, and all device settings, no tools needed
-- **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status
+- **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status; API-only display timing diagnostics include cycle averages and peaks
 - **Optional HTTP Basic Auth** for portal access
 - **SD card support** — use a FAT32 MicroSD card for pad configurations, icons, sounds, and indexed data on supported boards
 - **Native Extensions** — install trusted native modules in explicit slots on ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive (one 32 KiB slot). P4 modules execute from flash; Xtensa modules use executable internal RAM for code and PSRAM for data. Place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. Download the package for your device target from the [Extensions catalog](https://jantielens.github.io/esp32-macropad/extensions.html), then upload it through the device portal. Packages larger than a board's slot are rejected. See the [Extension developer guide](docs/dev/extensions.md).

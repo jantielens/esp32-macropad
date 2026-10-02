@@ -7,7 +7,7 @@
 FpsScreen::FpsScreen(DisplayManager* manager)
 		: screen(nullptr), displayMgr(manager),
 			fpsValueLabel(nullptr), fpsUnitLabel(nullptr),
-			presentLabel(nullptr), renderLabel(nullptr), frameLabel(nullptr),
+			presentLabel(nullptr), renderLabel(nullptr), cycleLabel(nullptr),
 			arc(nullptr), arcAngle(0) {}
 
 FpsScreen::~FpsScreen() {
@@ -68,12 +68,12 @@ void FpsScreen::create() {
 		lv_obj_align(renderLabel, LV_ALIGN_CENTER, 0, 73);
 		lv_obj_clear_flag(renderLabel, LV_OBJ_FLAG_CLICKABLE);
 
-		frameLabel = lv_label_create(screen);
-		lv_label_set_text(frameLabel, "Frame:    -- ms");
-		lv_obj_set_style_text_color(frameLabel, lv_color_hex(0xBBBBBB), 0);
-		lv_obj_set_style_text_font(frameLabel, &lv_font_montserrat_14, 0);
-		lv_obj_align(frameLabel, LV_ALIGN_CENTER, 0, 91);
-		lv_obj_clear_flag(frameLabel, LV_OBJ_FLAG_CLICKABLE);
+		cycleLabel = lv_label_create(screen);
+		lv_label_set_text(cycleLabel, "Cycle:    -- ms");
+		lv_obj_set_style_text_color(cycleLabel, lv_color_hex(0xBBBBBB), 0);
+		lv_obj_set_style_text_font(cycleLabel, &lv_font_montserrat_14, 0);
+		lv_obj_align(cycleLabel, LV_ALIGN_CENTER, 0, 91);
+		lv_obj_clear_flag(cycleLabel, LV_OBJ_FLAG_CLICKABLE);
 
 		// Add touch event handler - tap anywhere to go back
 		lv_obj_add_event_cb(screen, touchEventCallback, LV_EVENT_CLICKED, this);
@@ -93,7 +93,7 @@ void FpsScreen::destroy() {
 				fpsUnitLabel = nullptr;
 				presentLabel = nullptr;
 				renderLabel = nullptr;
-				frameLabel = nullptr;
+				cycleLabel = nullptr;
 				arc = nullptr;
 		}
 }
@@ -126,7 +126,7 @@ void FpsScreen::update() {
 		lv_arc_set_angles(arc, arcAngle, arcAngle + 90);
 
 		// Force LVGL to redraw the entire screen every frame.
-		// This ensures we measure the maximum achievable panel refresh rate
+		// This ensures we measure the maximum achievable update rate
 		// rather than only counting frames with organic UI changes.
 		lv_obj_invalidate(lv_screen_active());
 
@@ -140,7 +140,7 @@ void FpsScreen::update() {
 
 				uint32_t present_ms = (stats.present_us + 500) / 1000;
 				uint32_t render_ms  = (stats.lv_timer_us + 500) / 1000;
-				uint32_t frame_ms   = present_ms + render_ms;
+				uint32_t cycle_ms   = (stats.cycle_us + 500) / 1000;
 
 				snprintf(buf, sizeof(buf), "Present:  %lu ms", (unsigned long)present_ms);
 				lv_label_set_text(presentLabel, buf);
@@ -148,7 +148,7 @@ void FpsScreen::update() {
 				snprintf(buf, sizeof(buf), "Render:   %lu ms", (unsigned long)render_ms);
 				lv_label_set_text(renderLabel, buf);
 
-				snprintf(buf, sizeof(buf), "Frame:    %lu ms", (unsigned long)frame_ms);
-				lv_label_set_text(frameLabel, buf);
+				snprintf(buf, sizeof(buf), "Cycle:    %lu ms", (unsigned long)cycle_ms);
+				lv_label_set_text(cycleLabel, buf);
 		}
 }

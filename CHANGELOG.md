@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-09-28
+ms.date: 2026-10-02
 ms.topic: reference
 ---
 
@@ -11,6 +11,92 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.35.0] - 2026-10-02
+
+### Added
+
+* Native USB keyboard and consumer/media-key support on `jc1060p470c`,
+  `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and `esp32-p4-lcd4b`,
+  selectable as an alternative to BLE through the Keyboard portal. Both
+  transports reuse existing Send keys actions and keystroke macro syntax.
+  USB CDC diagnostic logging remains available with USB, BLE, or Off selected;
+  BLE and Off enumerate CDC only, without a USB keyboard interface.
+  The other JC4880 variants and LCD4B Voice retain their existing USB settings.
+  Hardware validation so far covers `jc1060p470c-sd` only.
+  The Keyboard portal separates the saved preference from the active connection
+  and shows pending-reboot status. Configuration and health APIs and MCP
+  responses expose transport and status; selection remains portal-only for MCP
+  clients. Device names append ` USB` or ` BLE` without changing the saved name
+  or stable USB serial identity. USB-only builds omit BLE pairing controls.
+  Both transports share one non-blocking macro executor that rejects busy
+  requests and cancels on disconnect, USB suspension, failed reports, OTA, or
+  the 60-second deadline, without replay or fallback to another host session.
+  Neutral-report recovery is limited to one report per main-loop pass, with
+  USB lock and completion waits each limited to 5 ms. Macro storage is allocated
+  lazily in PSRAM when available, or released after use on internal-only boards;
+  Off allocates no workspace and allocation failures reject the request.
+* Relative USB mouse support alongside the USB keyboard, with an optional
+  single-touch Mousepad widget, adjustable sensitivity, optional acceleration
+  (one 0-5 control, default off), and tap-to-left-click.
+  Movement begins beyond 3 device pixels. The widget consumes pad swipes and
+  ordinary button actions. Mouse output follows the USB keyboard transport
+  selection; BLE mouse and dragging are not included.
+* Single-touch Scrollpad widget for vertical (default) or horizontal USB mouse
+  scrolling, with per-widget sensitivity, reverse direction, and optional
+  inertia (one 0-5 control, default off). It retains
+  touches outside its bounds, consumes ordinary actions and pad swipes, and
+  preserves fractional wheel steps without adding clicks. Coasting stops on
+  touch on either mouse surface, pad hide, USB disconnect/reconnect, or OTA.
+* Mouse Button action for complete Left, Right, or Middle USB mouse clicks,
+  usable by ordinary buttons, action-dispatching widgets, and other action-list
+  hosts. It follows the host's gesture rules without changing Mousepad gestures
+  or adding hold-to-drag.
+* BLE telemetry transmit power is configurable in the Operating Mode portal
+  from -12 to +9 dBm in 3 dB steps, with help text explaining the battery and
+  reception tradeoff. The setting is persisted and applies after reboot.
+  First-time configuration saves retain the +9 dBm default, while an explicitly
+  saved 0 dBm setting is preserved.
+* API-only display diagnostics in `/api/health` now include a `display_perf`
+  snapshot with sampling-window average and peak timings for the LVGL handler,
+  data-stream polling, screen updates, the display-mutex-held cycle, and
+  buffered presentation.
+
+### Changed
+
+* Keyboard configuration replaces `ble_enabled` with persisted, reboot-applied
+  `keyboard_transport` choices: Off (`none`) and the compiled USB/BLE backends.
+  Devices without a saved transport choice default to Off, including upgrades
+  from the old BLE toggle; explicitly saved valid USB/BLE choices are preserved.
+  Off rejects key actions without initializing a keyboard backend. Independent
+  BLE telemetry remains unaffected.
+  The portal fragment identifier changes from `ble` to `hid`. Routine macro and
+  BLE protocol/control/LED logs now use DEBUG instead of INFO, and periodic
+  keyboard diagnostic counters are removed. Builds without a HID backend omit
+  the keyboard loop and Send keys action registration.
+* Touch registration explicitly applies the configured 10 ms LVGL input
+  timer period instead of inheriting the 33 ms display refresh period.
+  Display refresh remains unchanged.
+* Gauge captions skip repeated layout work when their resolved text is
+  unchanged, and apply caption colors only when changed. Configuration
+  rebuilds still refresh caption geometry and fonts.
+* LCD passive binding refresh is independent of live widget updates, button
+  visibility/enabled state, and image-frame handoff. The `jc1060p470c-sd` target
+  uses a 100 ms passive interval; other LCD defaults and existing e-paper
+  coalescing remain unchanged. Initial pad display and rebuilds still refresh
+  passive content immediately.
+
+### Fixed
+
+* Display update FPS is normalized by actual elapsed sampling time and returns
+  zero in quiet windows instead of retaining an old active value. The FPS
+  Benchmark screen shows measured cycle time rather than adding overlapping
+  rendering and presentation times; update FPS is not panel scanout frequency.
+* BLE-only duty-cycle wakes skip Wi-Fi initialization, removing its 700 ms
+  fixed delays and unnecessary station-mode startup. Config/recovery mode
+  retains Wi-Fi access.
 
 ## [1.34.0] - 2026-09-28
 

@@ -217,7 +217,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '</select>';
     h += '<small id="' + prefix + '-context" class="action-context" style="display:none; color:#86868b;"></small>';
     if (opts.showBleHint) {
-        h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Requires BLE Keyboard support on your board and BLE enabled in <b>Home &rarr; Operating Mode</b>.</small>';
+        h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Keyboard unavailable on this board.</small>';
     }
     h += '</div>';
     // Screen target

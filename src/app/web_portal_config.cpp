@@ -6,6 +6,7 @@
 
 #include "board_config.h"
 #include "config_manager.h"
+#include "keyboard_hid.h"
 #include "device_class.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
@@ -143,6 +144,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				#if HAS_BLE
 				(*doc)["ble_burst_count"] = current_config->ble_burst_count;
 				(*doc)["ble_adv_interval_ms"] = current_config->ble_adv_interval_ms;
+				(*doc)["ble_tx_power_dbm"] = current_config->ble_tx_power_dbm;
 				#endif
 
 				// Build capability map so the portal UI can hide controls for
@@ -152,6 +154,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["mqtt"] = (bool)HAS_MQTT;
 				caps["display"] = (bool)HAS_DISPLAY;
 				caps["ble_hid"] = (bool)HAS_BLE_HID;
+				caps["usb_hid"] = (bool)HAS_USB_HID;
 				caps["mcp"] = (bool)HAS_MCP;
 				caps["ha_history"] = (bool)HAS_HA_HISTORY;
 
@@ -188,8 +191,10 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["epaper_refresh"] = true;
 				#endif
 
-				#if HAS_BLE_HID
-				(*doc)["ble_enabled"] = current_config->ble_enabled;
+				#if HAS_BLE_HID || HAS_USB_HID
+				(*doc)["keyboard_transport"] = keyboard_transport_name(current_config->keyboard_transport);
+				(*doc)["keyboard_active_transport"] = keyboard_transport_name(keyboard_hid_transport());
+				(*doc)["keyboard_status"] = keyboard_hid_status();
 				#endif
 
 				#if HAS_AUDIO
@@ -380,6 +385,48 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		}
 
+		#if HAS_BLE
+		int ble_tx_power_dbm = 0;
+		if (doc.containsKey("ble_tx_power_dbm")) {
+				JsonVariant value = doc["ble_tx_power_dbm"];
+				bool valid = false;
+				if (value.is<int>()) {
+						ble_tx_power_dbm = value.as<int>();
+						valid = true;
+				} else if (value.is<const char*>()) {
+						const char *text = value.as<const char*>();
+						char *end = nullptr;
+						const long parsed = strtol(text, &end, 10);
+						valid = end != text && *end == '\0' && parsed >= -12 && parsed <= 9;
+						if (valid) ble_tx_power_dbm = (int)parsed;
+				}
+				if (!valid || ble_tx_power_dbm < -12 || ble_tx_power_dbm > 9 || ble_tx_power_dbm % 3 != 0) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"BLE TX power must be -12 to +9 dBm in 3 dB steps\"}");
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+		}
+		#endif
+
+		KeyboardTransport requested_transport = KeyboardTransport::None;
+		if (doc.containsKey("keyboard_transport")) {
+				const bool valid = (HAS_BLE_HID || HAS_USB_HID) && doc["keyboard_transport"].is<const char*>() &&
+						keyboard_transport_parse(doc["keyboard_transport"].as<const char*>(), &requested_transport) &&
+						keyboard_transport_resolve(requested_transport, HAS_BLE_HID, HAS_USB_HID) == requested_transport;
+				const bool busy_change = valid && requested_transport != keyboard_hid_transport() && keyboard_hid_is_busy();
+				if (!valid || busy_change) {
+						request->send(busy_change ? 409 : 400, "application/json", busy_change ?
+								"{\"success\":false,\"message\":\"Keyboard is busy; try again when the macro finishes\"}" :
+								"{\"success\":false,\"message\":\"Keyboard transport must be none or an available usb or ble backend\"}");
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+		}
+
 		// Partial update: only update fields that are present in the request
 		// This allows different pages to update only their relevant fields
 		#if HAS_DISPLAY
@@ -552,6 +599,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				if (v == 0) v = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
 				current_config->ble_adv_interval_ms = v;
 		}
+		if (doc.containsKey("ble_tx_power_dbm")) {
+				current_config->ble_tx_power_dbm = (int8_t)ble_tx_power_dbm;
+		}
 		#endif
 
 		// Basic Auth enabled
@@ -559,9 +609,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				current_config->basic_auth_enabled = parseBoolField(doc, "basic_auth_enabled");
 		}
 
-		#if HAS_BLE_HID
-		if (doc.containsKey("ble_enabled")) {
-				current_config->ble_enabled = parseBoolField(doc, "ble_enabled");
+		#if HAS_BLE_HID || HAS_USB_HID
+		if (doc.containsKey("keyboard_transport")) {
+				current_config->keyboard_transport = requested_transport;
 		}
 		#endif
 

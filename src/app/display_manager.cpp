@@ -42,10 +42,9 @@
 portMUX_TYPE g_splash_status_mux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE g_perf_mux = portMUX_INITIALIZER_UNLOCKED;
 
-DisplayPerfStats g_perf = {0, 0, 0};
+DisplayPerfStats g_perf = {};
+DisplayPerfWindow g_perf_window;
 bool g_perf_ready = false;
-uint32_t g_perf_window_start_ms = 0;
-uint16_t g_perf_frames_in_window = 0;
 
 DRAM_ATTR static DeferredDispatchSlot<DISPLAY_TASK_DISPATCH_CTX_BYTES> g_display_job;
 
@@ -62,7 +61,7 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 			padScreens(nullptr), padIds(nullptr), padNames(nullptr),
 			lruCache(nullptr), lruCount(0),
 							lvglTaskHandle(nullptr), lvglTaskAlloc{}, lvglMutex(nullptr), lvglStopRequested(false), lvglTaskStopped(false),
-						presentTaskHandle(nullptr), presentTaskAlloc{}, presentSem(nullptr), sharedLvTimerUs(0),
+						 presentTaskHandle(nullptr), presentTaskAlloc{}, presentSem(nullptr),
 						screenCount(0), buf(nullptr), buf2(nullptr), flushPending(false), pendingSplashStatusSet(false) {
 				pendingSplashStatus[0] = '\0';
 		displayJobSlot().init();

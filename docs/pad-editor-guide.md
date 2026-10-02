@@ -469,8 +469,8 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | Navigation | **Navigate pad sequence** | Move to the next or previous configured, non-empty pad. Optionally wrap at the boundary and exclude specific 1-based pad numbers. |
 | Connectivity | **Publish MQTT message** | Send a message to an MQTT topic. Topic and payload fields support binding templates (e.g. `[health:cpu]`). |
 | Connectivity | **Call Home Assistant service** | Call a Home Assistant service over the REST API (e.g. toggle a light, run a scene). Configure an entity ID, service, and optional service-data JSON. Requires the HA URL and token to be set on the **Home Assistant** portal page. See [Home Assistant Service Action](#home-assistant-service-action) below. |
-| BLE | **Send BLE keys** | Send a BLE HID keystroke or key sequence to the paired host (see [BLE Key Sequences](#ble-key-sequences) below). The sequence field supports binding templates. ESP32-P4 boards only. |
-| BLE | **Start BLE pairing** | Clear the existing bond and open a 60-second pairing window. ESP32-P4 boards only. Remove the device from the old host's Bluetooth settings before re-pairing. |
+| Keyboard | **Send keys** | Send a HID sequence through the active USB or BLE backend (see [Key Sequences](#key-sequences)). The sequence field supports binding templates. Hidden when neither backend is available. |
+| BLE | **Start BLE pairing** | Clear the existing bond and open a 60-second pairing window. Available on builds with BLE keyboard support; requires BLE to be the active transport and no macro to be busy. Remove the device from the old host's Bluetooth settings before re-pairing. |
 | Audio | **Music** | Command: Play/Pause, Next track, Previous track, or Stop. Available on boards with the sound player enabled. |
 | Audio | **Play sound alert** | Play a **Tone Alert** from a beep pattern (for example, `1000:200 100 1000:200`) or an **MP3 Alert** from an uploaded sound file. Both accept an optional volume override; the tone pattern supports binding templates. ESP32-P4 boards only. |
 | Audio | **Volume** | Command: Set volume to an absolute value (0–100), or Adjust volume by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. ESP32-P4 boards only. |
@@ -531,9 +531,19 @@ For directional navigation, assign **Navigate pad sequence → Previous** to the
 **Navigate pad sequence → Next** to the right swipe, with Wrap enabled on both. Existing swipe
 defaults are unchanged until you configure these actions.
 
-### BLE Key Sequences
+### Key Sequences
 
-The **BLE Key** action sends keystrokes over Bluetooth to a paired host device. The sequence field accepts a compact DSL:
+The **Send keys** action sends keystrokes through the device's selected USB or
+BLE transport. Both use the same DSL and US ASCII mapping. Native USB is enabled
+on `jc1060p470c-sd`; choose a supported transport under **Connectivity > Keyboard & Mouse**,
+save, then reboot. Off is the initial default and rejects key actions.
+Single-backend builds offer Off and their supported backend. There is no
+automatic fallback to another transport.
+
+One macro can be pending or running. Disabled, busy, or disconnected requests fail;
+execution failure stops the remaining action-list suffix. Reconnection never
+replays an interrupted macro, and switching hosts during a macro is not allowed.
+Macros have a 60-second total deadline. The sequence field accepts a compact DSL:
 
 **Single keys:**
 - `a`, `enter`, `tab`, `esc`, `space`, `backspace`, `delete`
@@ -716,6 +726,114 @@ Buttons use the device-level beep patterns configured on the Home page. To play 
 ## Widgets
 
 Widgets replace the standard button rendering with specialized visualizations or interaction modes. Select the widget type in the button editor.
+
+### Mousepad
+
+On devices with touch and USB HID support, select **Mousepad** to turn a
+button into a relative USB mouse surface. Select **USB** in
+**Connectivity > Keyboard & Mouse**, save, and reboot. Connect the device's native
+USB device port to your computer using a data cable. No companion application
+is required; keyboard and mouse share the connection.
+
+Slide one finger to move the computer's pointer. Lift and touch elsewhere to
+continue moving without jumping to an absolute position. A stationary tap
+lasting at most 250 ms sends a left-button press and release. Movement beyond
+the configured threshold begins pointer movement and cancels tap eligibility,
+even if the finger returns to its starting point.
+
+Set **Movement threshold (px)** from 0 to 12 (default 3 device pixels),
+independently for each Mousepad. Lower values start pointer movement sooner;
+0 removes the dead zone. Small finger movements can then cancel taps more
+easily. The threshold is independent of sensitivity and acceleration.
+
+Set **Sensitivity** from 0.1 to 5 (default 1). Larger values move the pointer
+farther for the same finger movement; the computer's own pointer settings
+also affect the result. Increase the button's row and column spans for a
+larger mousepad. Labels, icons, and appearance remain customizable.
+
+Set **Acceleration** from 0 to 5 (default 0, off). Higher values amplify fast
+finger movement while retaining slow-movement precision. Sensitivity remains
+independent; the computer's own pointer acceleration can compound the effect.
+
+Touches starting inside the mousepad remain owned by it until release,
+including movement outside its edges. They do not trigger pad swipes,
+ordinary button actions, or long-press actions. The editor hides those action
+sections. Pending input is cleared when the pad hides or USB reconnects.
+BLE and Off disable USB mouse output. Dragging, right click, scrolling, and
+multitouch are not Mousepad gestures. Use a separate button with a Mouse Button
+action for right or middle clicks, or a Scrollpad widget for scrolling.
+
+### Scrollpad
+
+On devices with touch and USB HID support, select **Scrollpad** to turn a button
+into a USB mouse scroll surface. Use the USB transport and native USB data
+connection described above for Mousepad. Set row/column spans to make a tall,
+narrow strip beside your Mousepad, or a wide strip underneath it. Labels,
+icons, and colors remain customizable; this is not a scrollbar displaying the
+computer's scroll position.
+
+Choose **Axis**: **Vertical** (default) or **Horizontal**. Sliding up scrolls
+upward; sliding right scrolls rightward. Perpendicular movement is ignored.
+Enable **Reverse direction** to flip this behavior; it is off by default.
+
+Set **Sensitivity** from 0.1 to 5 (default 1), independently for each Scrollpad.
+At 1, finger travel of 20 device pixels produces one wheel step. Fractional
+steps accumulate within a touch, so slow slides work too. Lift and reposition
+to continue scrolling without a jump; any remaining fraction is discarded on
+release. The computer's scroll settings and application affect the result.
+Horizontal wheel support varies by application.
+
+Set **Inertia** from 0 to 5 (default 0, off). A moving release starts decaying
+scrolling; higher values coast longer. Pause before lifting to avoid coasting.
+A new touch on either Scrollpad or Mousepad stops coasting, as do pad hide,
+USB disconnect/reconnect, and OTA. Coasting is rate-limited and lasts at most
+three seconds; it stops if mouse polling stalls for more than 100 ms.
+
+Touches starting inside Scrollpad remain owned by it until release, even
+outside its bounds. Taps and stationary holds do nothing. It does not move the
+pointer, click, or trigger pad swipes or ordinary button actions.
+The editor hides tap and long-press action sections. Hide/destroy, USB
+reconnection, and OTA clear pending input. BLE and Off disable output.
+
+For JSON authoring:
+
+```json
+{
+  "widget_type": "scrollpad",
+  "widget_scrollpad_axis": "vertical",
+  "widget_scrollpad_sensitivity": 1,
+  "widget_scrollpad_reverse": false,
+  "widget_scrollpad_inertia": 0
+}
+```
+
+Missing or unrecognized axis values default to `"vertical"`. Sensitivity is
+clamped to 0.1-5; missing or non-finite values default to 1. Reverse direction
+defaults to false. `widget_scrollpad_inertia` and
+`widget_mousepad_acceleration` are clamped to 0-5; missing or non-finite values
+default to 0, preserving the behavior of existing pads.
+
+### Mouse Button
+
+On devices with USB HID support, select the **Mouse button** action under
+**Mouse**, then choose **Left**, **Right**, or **Middle** in its **Button**
+setting. Left is the default. Use the same USB transport and native USB
+connection described above for Mousepad. Touch is not required for this action.
+
+Assign it to an ordinary button's tap or long-press action, an action-dispatching
+widget such as a Rocker, or another action-list host such as a hardware button.
+The host decides when to trigger it; the action adds no separate tap threshold
+or gesture handling. Mousepad and Scrollpad consume their own gestures and do not
+dispatch these action lists. Labels, icons, colors, and spans work as usual.
+
+Each invocation queues the selected mouse button's press and release, not a
+held button. It does not move the pointer or enable dragging. BLE and Off
+disable its output, and requests fail when USB is disconnected, the queue is
+full, or OTA is active. USB reconnection or OTA clears pending input.
+
+For JSON authoring, use `{"type":"mouse_button","button":"right"}` in an
+action list. `button` accepts `"left"`, `"right"`, or `"middle"`; omitted values
+default to `"left"`, while invalid values are rejected.
 
 ### Extension
 
@@ -1309,7 +1427,7 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `table` | Structured table payload (standard schema) | `{"title":"Status","columns":[...],"rows":[...]}` |
 | `extended_table` | Structured table payload (extended schema) | `{"title":"Status","columns":[...],"rows":[...],"styles":...}` |
 | `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
-| `ble_name` | Current BLE keyboard name | `Kitchen Pad EEFF` |
+| `ble_name` | Current BLE keyboard name | `Kitchen Pad BLE` |
 | `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
 | `ble_pairing` | BLE pairing mode active | `ON` / `OFF` |
 | `ble_bonded` | Current connection is bonded | `ON` / `OFF` |
@@ -1327,12 +1445,12 @@ Values are cached for up to 2 seconds to keep the CPU impact low.
 
 | Signal | Value | Meaning |
 |--------|-------|---------|
-| `ble_status` | `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ble_status` | `disabled` | BLE keyboard is not initialized, including when USB is selected |
 | `ble_status` | `ready` | BLE keyboard is enabled and available, but not currently in pairing mode or in an active secured session |
 | `ble_status` | `pairing` | BLE keyboard is in the 60-second pairing window and accepting a new owner |
 | `ble_status` | `connected` | A host is connected and the BLE link is encrypted and usable for HID input |
 | `ble_status` | `error` | BLE initialization failed or the stack is in a fault state |
-| `ble_state` | `disabled` | BLE keyboard is turned off in runtime configuration |
+| `ble_state` | `disabled` | BLE keyboard is not initialized, including when USB is selected |
 | `ble_state` | `idle` | BLE stack is initialized but not actively advertising a user-relevant state |
 | `ble_state` | `advertising` | BLE is advertising without an owner claim yet |
 | `ble_state` | `pairing` | BLE is in pairing mode and waiting for a new host |
@@ -1357,7 +1475,12 @@ WiFi: [health:rssi] dBm                               → WiFi: -54 dBm
 
 **Syntax:** `[net:channel]` or `[net:channel;age]`
 
-Exposes live network / transport activity so labels, icon colors, and widget inputs can react with a subtle visual cue whenever the device sends or receives data. Each channel tracks the time of its most recent activity; the binding is resolved on-screen every frame, so an icon flashes on activity and settles back when idle.
+Exposes live network / transport activity so labels, icon colors, and widget inputs can react with a subtle visual cue whenever the device sends or receives data. Each channel tracks the time of its most recent activity; the binding is resolved when its consuming label, color, or widget refreshes, so an icon flashes on activity and settles back when idle.
+
+On `jc1060p470c-sd`, passive labels and button colors refresh at a 100 ms
+interval. Other LCD targets retain their default every-cycle passive refresh,
+while LCD widget inputs remain live. Interactive e-paper retains its existing
+refresh coalescing.
 
 | Channel | Activity tracked |
 |---------|------------------|
@@ -1367,7 +1490,7 @@ Exposes live network / transport activity so labels, icon colors, and widget inp
 | `mqtt_tx` | Outbound MQTT publishes |
 | `mqtt` | Either MQTT direction — active on `mqtt_rx` or `mqtt_tx` |
 | `http` | Outbound HTTP client (image fetch, Home Assistant REST) |
-| `ble` | BLE HID reports (ESP32-P4 only) |
+| `ble` | BLE HID reports on builds with BLE keyboard support |
 | `ota` | Firmware OTA flash writes |
 | `any` | Aggregate — active when *any* channel is active |
 
@@ -1669,7 +1792,11 @@ Color fields throughout the button editor accept binding expressions, making but
 - **Button colors** — background, text, and border
 - **Widget colors** — bar chart bar color, gauge arc/track/needle/tick colors, sparkline line colors, reference line colors, min/max marker colors
 
-All color bindings update live every display cycle — you don't need new data to arrive for a color change to take effect.
+Button and pad color bindings resolve at the passive refresh cadence: 100 ms
+on `jc1060p470c-sd`, with other LCD targets retaining their default every-cycle
+refresh. LCD widget color bindings remain live, and interactive e-paper retains
+its existing refresh coalescing. No new network data needs to arrive for a
+color change to take effect.
 
 **Basic pattern** — change color based on a threshold:
 

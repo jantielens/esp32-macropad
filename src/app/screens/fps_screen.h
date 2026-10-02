@@ -10,8 +10,8 @@ class DisplayManager;
 // ============================================================================
 // FPS Benchmark Screen
 // ============================================================================
-// Forces continuous full-screen redraws to measure the real panel refresh rate.
-// Displays live panel FPS, present() time, and LVGL render time.
+// Forces continuous full-screen redraws to measure update throughput.
+// Displays update FPS and average presentation, LVGL handler, and cycle times.
 // A spinning arc provides visual confirmation that redraws are happening.
 // Navigate to/from this screen via the web portal screen API.
 
@@ -25,7 +25,7 @@ private:
 		lv_obj_t* fpsUnitLabel;
 		lv_obj_t* presentLabel;
 		lv_obj_t* renderLabel;
-		lv_obj_t* frameLabel;
+		lv_obj_t* cycleLabel;
 		lv_obj_t* arc;
 		
 		// Arc animation state
