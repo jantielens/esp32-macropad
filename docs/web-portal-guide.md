@@ -238,7 +238,9 @@ Multicontact drivers also support two-finger midpoint scrolling with axis lock.
 **Sensitivity** and **Movement threshold** apply to movement and gestures;
 **Acceleration** (0-5, default 0/off) affects pointer movement only.
 **Reverse scroll direction** and **Scroll inertia** (0-5, default 0/off)
-follow Scrollpad conventions. See the
+follow Scrollpad conventions. Enable **Mouse buttons** (default off) for
+outlined left/right zones in the bottom 20%; hold one while moving or
+repositioning another finger above it on multicontact drivers. See the
 [Mousepad guide](pad-editor-guide.md#mousepad) for setup and limitations.
 Add a [Scrollpad widget](pad-editor-guide.md#scrollpad) beside or below it for
 one-finger vertical or horizontal scrolling, especially on single-touch boards.

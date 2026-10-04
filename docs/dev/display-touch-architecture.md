@@ -1495,6 +1495,9 @@ and shared point handlers. The existing `GamepadTouchRouter` routes both
 mouse and gamepad surfaces from the single physical snapshot reader; it is
 not duplicated. Captured IDs retain ownership outside bounds. Only two mouse
 contacts on one surface can be captured; held extra contacts are never promoted.
+When an optional Mousepad button zone is held, a newly touching pointer contact
+can replace a lifted pointer contact. Existing extra contacts are still never
+promoted, and scrolling still requires all contacts to lift before restarting.
 Gamepad captures coexist. HID interaction suppresses ordinary navigation until
 all raw contacts lift. Global cancellation requires a fresh raw zero-contact
 scan, not a filtered or cached release. Synthetic LVGL taps use the same point
@@ -1511,6 +1514,11 @@ midpoint sample per scan feeds `ScrollpadInput` for fractional steps and release
 velocity. Pointer acceleration uses raw finger speed before sensitivity, with
 a fixed speed threshold and bounded gain; it does not affect scrolling.
 Timing, axis policy, and the contact limit are named internal constants.
+The optional bottom 20% button strip assigns left/right hold roles at touchdown
+and suppresses scrolling while held. It shares HID owner tokens with tap-drag;
+`MouseSurfaceTouch::allow_replacement` permits pointer re-touch only during a
+zone hold. Outlines are drawn on the surface, not separate child hit targets,
+using dashed lines and corner arcs in the current button text color.
 The [Mousepad guide](../pad-editor-guide.md#mousepad) is the reference for gesture
 behavior and configuration ranges.
 

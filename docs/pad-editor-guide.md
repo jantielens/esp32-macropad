@@ -764,8 +764,21 @@ threshold to drag with the left button held. Lift that finger to release;
 there is no drag lock. A short stationary second tap produces a double-click
 instead. Additional fingers during a drag are ignored, not used for scrolling.
 
+Enable **Mouse buttons** (default off) for left/right zones in the bottom 20%
+of the mousepad, split evenly. Each has an unfilled, rounded, dashed outline in
+the button's text color; a thicker outline indicates the held mouse button.
+Touch a zone to press that mouse button immediately, and lift to release it.
+On multicontact drivers, keep that finger down while another finger moves in
+the main area above the strip. The finger controlling movement can lift and
+touch again to continue dragging without releasing the button. Either finger
+can touch first.
+Contact roles are fixed at touchdown: crossing a zone boundary does not change
+the role or button. Only one mouse button can be held at a time. Single-contact
+drivers support zone clicks, but not simultaneous hold-and-move dragging.
+
 On a driver exposing multiple contacts, two fingers starting inside the same
-Mousepad scroll using their midpoint. Adding the second finger establishes a
+Mousepad (above the strip when Mouse buttons is enabled) scroll using their
+midpoint. Adding the second finger establishes a
 fresh baseline and suppresses pointer movement and tap clicks. Once midpoint
 travel exceeds the movement threshold, scrolling locks to the dominant axis
 (vertical on a tie). Capture remains stable outside the button. Lifting either
@@ -788,16 +801,18 @@ coexist. Hide/delete, pad changes, wake suppression, USB disconnect/reconnect,
 and OTA cancel input and release drag ownership. Global cancellation requires
 a fresh all-contact-release scan before physical input can restart.
 BLE and Off disable USB mouse output. Two-finger right-click, pinch zoom, and
-three-finger gestures are not supported. Use a separate Mouse Button action
-for right or middle clicks. Clicking an owned left button during a drag is
-rejected; right/middle click releases leave the left button held.
+three-finger gestures are not supported. Use the optional right zone or a
+separate Mouse Button action for right clicks; use a Mouse Button action for
+middle clicks. Clicks overlapping a held mouse button are rejected;
+clicking and releasing a different mouse button preserves the held button.
 
 JSON fields are `widget_mousepad_sensitivity` (0.1-5, default 1),
 `widget_mousepad_acceleration` (0-5, default 0),
 `widget_mousepad_movement_threshold` (0-12, default 3),
-`widget_mousepad_reverse` (boolean, default false), and
-`widget_mousepad_inertia` (0-5, default 0). Authoring validation rejects
-non-numeric, non-finite, or out-of-range numbers and non-boolean reverse values.
+`widget_mousepad_reverse` (boolean, default false),
+`widget_mousepad_inertia` (0-5, default 0), and
+`widget_mousepad_buttons` (boolean, default false). Authoring validation rejects
+non-numeric, non-finite, or out-of-range numbers and non-boolean toggle values.
 Gesture timing and axis policy are internal constants, not per-button controls.
 
 ### Scrollpad

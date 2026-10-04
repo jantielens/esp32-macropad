@@ -3,6 +3,77 @@
 #include "widgets/mousepad_input.h"
 #include "widgets/scrollpad_input.h"
 
+TEST(Mousepad, ButtonZoneGeometryUsesSharedStripAndSplitBoundaries) {
+    const MousepadInput::ButtonZones zones{201, 103};
+    EXPECT_EQ(zones.top(), 83);
+    EXPECT_EQ(zones.split(), 100);
+    EXPECT_EQ(zones.left(false), 0);
+    EXPECT_EQ(zones.right(false), 99);
+    EXPECT_EQ(zones.left(true), 100);
+    EXPECT_EQ(zones.right(true), 200);
+    EXPECT_EQ(zones.mask_at(0, 82), 0);
+    EXPECT_EQ(zones.mask_at(0, 83), mouse_hid_buttons::left);
+    EXPECT_EQ(zones.mask_at(99, 102), mouse_hid_buttons::left);
+    EXPECT_EQ(zones.mask_at(100, 83), mouse_hid_buttons::right);
+    EXPECT_EQ(zones.mask_at(200, 102), mouse_hid_buttons::right);
+    EXPECT_EQ(zones.mask_at(-1, 90), 0);
+    EXPECT_EQ(zones.mask_at(201, 90), 0);
+    EXPECT_EQ(zones.mask_at(100, 103), 0);
+    const MousepadInput::ButtonZones disabled{0, 103};
+    EXPECT_EQ(disabled.mask_at(0, 90), 0);
+}
+
+TEST(Mousepad, ButtonStripHoldsAndAllowsPointerReposition) {
+    MousepadInput input;
+    input.configure_buttons(true, 200, 100);
+    auto output = input.contact_press(4, 20, 85, 0);
+    EXPECT_TRUE(output.hold_start);
+    EXPECT_EQ(output.button_mask, mouse_hid_buttons::left);
+    EXPECT_EQ(input.contact_move(4, 180, 10, 10, 1, 0, 3).dx, 0);
+    input.contact_press(1, 50, 30, 20);
+    EXPECT_EQ(input.contact_move(1, 70, 30, 30, 1, 0, 3).dx, 20);
+    EXPECT_EQ(input.scroll_sample(30, 1, 3, false).wheel, 0);
+    EXPECT_FALSE(input.contact_release(1, 40).hold_end);
+    EXPECT_TRUE(input.button_held());
+    input.contact_press(7, 100, 40, 50);
+    EXPECT_EQ(input.contact_move(7, 110, 40, 60, 1, 0, 3).dx, 10);
+    EXPECT_TRUE(input.contact_release(4, 70).hold_end);
+    EXPECT_FALSE(input.button_held());
+    EXPECT_EQ(input.contact_move(7, 120, 40, 80, 1, 0, 3).dx, 10);
+    EXPECT_FALSE(input.contact_release(7, 90).click);
+}
+
+TEST(Mousepad, PointerFirstRightButtonAndFixedContactRoles) {
+    MousepadInput input;
+    input.configure_buttons(true, 200, 100);
+    input.contact_press(1, 50, 30, 0);
+    auto output = input.contact_press(4, 150, 85, 10);
+    EXPECT_TRUE(output.hold_start);
+    EXPECT_EQ(output.button_mask, mouse_hid_buttons::right);
+    EXPECT_FALSE(input.contact_press(5, 20, 85, 20).hold_start);
+    EXPECT_EQ(input.contact_move(1, 60, 90, 30, 1, 0, 3).dx, 10);
+    EXPECT_EQ(input.scroll_sample(30, 1, 3, false).wheel, 0);
+    EXPECT_FALSE(input.contact_release(5, 40).hold_end);
+    EXPECT_TRUE(input.contact_release(4, 50).hold_end);
+    EXPECT_FALSE(input.contact_release(1, 60).click);
+    input.end_session();
+    input.contact_press(1, 50, 30, 70);
+    EXPECT_FALSE(input.contact_move(1, 50, 90, 80, 1, 0, 3).hold_start);
+    input.contact_press(4, 100, 30, 90);
+    input.contact_move(1, 50, 90, 100, 1, 0, 3);
+    input.contact_move(4, 100, 90, 100, 1, 0, 3);
+    EXPECT_EQ(input.scroll_sample(100, 1, 3, false).wheel, -1);
+    input.cancel();
+    EXPECT_FALSE(input.button_held());
+}
+
+TEST(Mousepad, DisabledStripRetainsTapBehavior) {
+    MousepadInput input;
+    input.configure_buttons(false, 200, 100);
+    EXPECT_FALSE(input.contact_press(1, 150, 90, 0).hold_start);
+    EXPECT_TRUE(input.contact_release(1, 20).click);
+}
+
 TEST(Mousepad, TwoFingerBaselineAxisAndRelease) {
     MousepadInput input;
     input.contact_press(4, 100, 100, 0);
@@ -61,16 +132,16 @@ TEST(Mousepad, TapThenDragAndStationaryDoubleClick) {
     input.end_session();
     input.contact_press(7, 30, 30, 200);
     auto output = input.contact_move(7, 40, 30, 220, 1, 0, 3);
-    EXPECT_TRUE(output.drag_start);
+    EXPECT_TRUE(output.hold_start);
     EXPECT_EQ(output.dx, 10);
     input.contact_press(1, 50, 50, 230);
     EXPECT_EQ(input.scroll_sample(240, 1, 3, false).wheel, 0);
-    EXPECT_FALSE(input.contact_release(1, 240).drag_end);
+    EXPECT_FALSE(input.contact_release(1, 240).hold_end);
     output = input.contact_move(7, 50, 30, 250, 1, 0, 3);
-    EXPECT_FALSE(output.drag_start);
+    EXPECT_FALSE(output.hold_start);
     EXPECT_EQ(output.dx, 10);
     output = input.contact_release(7, 260);
-    EXPECT_TRUE(output.drag_end);
+    EXPECT_TRUE(output.hold_end);
     EXPECT_FALSE(output.click);
     input.end_session();
     input.contact_press(0, 20, 20, 300);
@@ -80,7 +151,7 @@ TEST(Mousepad, TapThenDragAndStationaryDoubleClick) {
     EXPECT_TRUE(input.contact_release(0, 360).click);
     input.end_session();
     input.contact_press(0, 20, 20, 380);
-    EXPECT_FALSE(input.contact_move(0, 30, 20, 400, 1, 0, 3).drag_start);
+    EXPECT_FALSE(input.contact_move(0, 30, 20, 400, 1, 0, 3).hold_start);
 }
 
 TEST(Mousepad, ExpiredTapCancellationAndScrollDoNotArmDrag) {
@@ -89,24 +160,24 @@ TEST(Mousepad, ExpiredTapCancellationAndScrollDoNotArmDrag) {
     EXPECT_TRUE(input.contact_release(0, 20).click);
     input.end_session();
     input.contact_press(0, 0, 0, 321);
-    EXPECT_FALSE(input.contact_move(0, 20, 0, 330, 1, 0, 3).drag_start);
+    EXPECT_FALSE(input.contact_move(0, 20, 0, 330, 1, 0, 3).hold_start);
     input.cancel();
     input.contact_press(0, 0, 0, 400);
     EXPECT_TRUE(input.contact_release(0, 420).click);
     input.cancel();
     input.contact_press(0, 0, 0, 430);
-    EXPECT_FALSE(input.contact_move(0, 20, 0, 440, 1, 0, 3).drag_start);
+    EXPECT_FALSE(input.contact_move(0, 20, 0, 440, 1, 0, 3).hold_start);
     input.cancel();
     input.contact_press(0, 0, 0, 500);
     EXPECT_TRUE(input.contact_release(0, 520).click);
     input.end_session();
     input.contact_press(0, 0, 0, 530);
     input.contact_press(1, 20, 0, 535);
-    EXPECT_FALSE(input.contact_move(0, 40, 0, 540, 1, 0, 3).drag_start);
+    EXPECT_FALSE(input.contact_move(0, 40, 0, 540, 1, 0, 3).hold_start);
     EXPECT_FALSE(input.contact_release(0, 550).click);
     input.end_session();
     input.contact_press(0, 0, 0, 560);
-    EXPECT_FALSE(input.contact_move(0, 20, 0, 570, 1, 0, 3).drag_start);
+    EXPECT_FALSE(input.contact_move(0, 20, 0, 570, 1, 0, 3).hold_start);
 }
 
 TEST(Mousepad, ThreePixelMovementThreshold) {

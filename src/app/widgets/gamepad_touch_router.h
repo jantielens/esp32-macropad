@@ -59,7 +59,8 @@ public:
                 navigation_released |= slot.navigation;
                 if (slot.mouse) {
                     dispatch(slot, GamepadTouchEvent::Release);
-                    mouse_stopped_ = true;
+                    auto* mouse = resolve_mouse();
+                    if (!mouse || !mouse->allow_replacement) mouse_stopped_ = true;
                 } else dispatch(slot, GamepadTouchEvent::Release, touch);
                 slot = Slot{};
             } else if (touch || slot.mouse) {

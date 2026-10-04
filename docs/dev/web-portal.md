@@ -1156,10 +1156,13 @@ midpoint travel uses the same threshold for two-finger scrolling. Zero removes
 the dead zone. `widget_mousepad_reverse` is boolean (default false), and
 `widget_mousepad_inertia` is 0-5 (default 0/off), following Scrollpad direction
 and coasting conventions. Sensitivity applies to pointer and scroll travel;
-acceleration applies only to pointer movement. Pad storage and import/export
-preserve all five fields through the existing raw JSON path. The editor
+acceleration applies only to pointer movement. `widget_mousepad_buttons` is
+boolean (default false), enabling left/right hold zones in the bottom 20%.
+The zones use unfilled rounded dashed text-color outlines; a held zone has a
+thicker outline. Pad storage and import/export
+preserve all six fields through the existing raw JSON path. The editor
 loads/saves these fields and bounds numeric inputs. Shared widget validation
-rejects invalid types, non-finite/out-of-range numbers, and non-boolean reverse
+rejects invalid types, non-finite/out-of-range numbers, and non-boolean toggle
 values independently of MCP. Parsing still supplies defaults and bounds values.
 
 Mousepad supports pointer movement, taps, dragging, and two-finger scrolling.

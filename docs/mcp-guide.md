@@ -321,8 +321,10 @@ Active records are never evicted. When all four records are active or retained,
   `mousepad` with `widget_mousepad_sensitivity` (0.1-5, default 1),
   `widget_mousepad_acceleration` (0-5, default 0/off),
   `widget_mousepad_movement_threshold` (0-12 device pixels, default 3),
-  `widget_mousepad_reverse` (boolean, default false), and
-  `widget_mousepad_inertia` (0-5, default 0/off).
+  `widget_mousepad_reverse` (boolean, default false),
+  `widget_mousepad_inertia` (0-5, default 0/off), and
+  `widget_mousepad_buttons` (boolean, default false) for bottom left/right hold
+  zones supporting pointer-finger repositioning while a mouse button is held.
   The registry note describes pointer movement, taps, dragging, and two-finger
   scrolling when USB keyboard transport is active. See the
   [Mousepad guide](pad-editor-guide.md#mousepad) for gesture timing, thresholds,

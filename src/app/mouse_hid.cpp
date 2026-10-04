@@ -83,11 +83,11 @@ void mouse_hid_cancel() {
     portEXIT_CRITICAL(&mouse_mutex);
 }
 
-uint32_t mouse_hid_acquire(uint32_t epoch) {
+uint32_t mouse_hid_acquire(uint32_t epoch, uint8_t buttons) {
     if (!mouse_hid_is_ready()) return 0;
     portENTER_CRITICAL(&mouse_mutex);
     sync_mouse_epoch();
-    const uint32_t owner = epoch == mouse_epoch ? mouse_state.acquire() : 0;
+    const uint32_t owner = epoch == mouse_epoch ? mouse_state.acquire(buttons) : 0;
     portEXIT_CRITICAL(&mouse_mutex);
     return owner;
 }

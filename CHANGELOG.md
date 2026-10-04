@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   left until the owning finger lifts. A stationary second tap double-clicks.
   Single-contact drivers retain movement, taps, and dragging; Scrollpad remains
   available for one-finger scrolling.
+* Optional Mousepad mouse buttons in the bottom 20%, split left/right with
+  unfilled, rounded, dashed outlines in the button text color. Hold either zone
+  while another finger moves or lifts and repositions; lifting the zone releases
+  the mouse button. Portal settings and MCP expose `widget_mousepad_buttons`,
+  default off; existing pointer and scrolling gestures remain unchanged.
 
 ### Changed
 

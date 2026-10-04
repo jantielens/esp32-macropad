@@ -122,8 +122,15 @@ assert.strictEqual(context.padState.buttons[0].widget_mousepad_acceleration, 0);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_movement_threshold, 3);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_inertia, 0);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_reverse, false);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_buttons, false);
 assert.strictEqual(context.padState.buttons[0].actions, undefined);
 assert.strictEqual(context.padState.buttons[0].lp_actions, undefined);
+document.getElementById('pad-edit-mousepad-buttons').checked = true;
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_buttons, true);
+document.getElementById('pad-edit-mousepad-buttons').checked = false;
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_buttons, false);
 document.getElementById('pad-edit-mousepad-sensitivity').value = '10';
 context.padDialogOk(true);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, 5);
@@ -177,6 +184,7 @@ for (const axis of ['vertical', 'horizontal', 'invalid', '']) {
         assert.strictEqual(saved.widget_mousepad_movement_threshold, undefined);
         assert.strictEqual(saved.widget_mousepad_inertia, undefined);
         assert.strictEqual(saved.widget_mousepad_reverse, undefined);
+        assert.strictEqual(saved.widget_mousepad_buttons, undefined);
         assert.strictEqual(saved.actions, undefined);
         assert.strictEqual(saved.lp_actions, undefined);
     }

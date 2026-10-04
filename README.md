@@ -52,6 +52,8 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   Both JC3636W518 variants disable BLE.
   Mousepad supports tap-then-drag and two-finger midpoint scrolling on
   multicontact drivers, with single-touch movement/tap/drag fallback.
+  Optional left/right mouse button zones support held-button dragging and
+  pointer-finger repositioning on multicontact drivers.
   BLE keyboard support is board-dependent; some Macropad boards disable it to
   preserve internal RAM. Supported BLE builds offer single-owner pairing.
   HID output defaults to Off. Select a supported transport in

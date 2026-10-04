@@ -17,6 +17,7 @@ struct MouseSurfaceTouch {
     void* context = nullptr;
     bool enabled = true;
     bool physical = false;
+    bool allow_replacement = false;
 
     static MouseSurfaceTouch*& session() {
         static MouseSurfaceTouch* active = nullptr;

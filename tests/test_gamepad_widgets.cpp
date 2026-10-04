@@ -26,7 +26,7 @@ bool mouse_hid_is_ready() { return widget_ready; }
 uint32_t usb_hid_epoch() { return widget_mouse_epoch; }
 uint32_t mouse_hid_generation() { return widget_mouse.current_generation(); }
 void mouse_hid_cancel() { widget_mouse.reset(); }
-uint32_t mouse_hid_acquire(uint32_t) { return widget_ready ? widget_mouse.acquire() : 0; }
+uint32_t mouse_hid_acquire(uint32_t, uint8_t buttons) { return widget_ready ? widget_mouse.acquire(buttons) : 0; }
 void mouse_hid_release(uint32_t owner, uint32_t) { widget_mouse.release(owner); }
 void mouse_hid_begin_touch() { widget_mouse.stop_scroll(); }
 void mouse_hid_move(int dx, int dy, uint32_t) { widget_mouse.move(dx, dy); }
@@ -137,13 +137,14 @@ protected:
         button_config.actions[0].payload.gamepad = {0, 0, 1};
     }
 
-    void create(const char* name) {
+    void create(const char* name, bool mouse_buttons = false) {
         strlcpy(config.type, name, sizeof(config.type));
         ASSERT_STREQ(config.type, name);
         type = widget_find(config.type);
         ASSERT_NE(type, nullptr);
         JsonDocument document;
-        type->parseConfig(document.to<JsonObject>(), config.data);
+        document["widget_mousepad_buttons"] = mouse_buttons;
+        type->parseConfig(document.as<JsonObject>(), config.data);
         type->createUI(button, &config, &button_config, nullptr, nullptr, nullptr, nullptr, &state);
         lv_obj_update_layout(button);
         lv_obj_add_event_cb(button, [](lv_event_t* event) {
@@ -652,6 +653,184 @@ TEST_F(GamepadWidget, ObjectDeletionBeforeWidgetStateCancelsAndAllowsSafeCleanup
     type = nullptr;
 }
 
+TEST_F(GamepadWidget, MouseButtonStripRepositionsPointerAndPreservesRoles) {
+    create("mousepad", true);
+    mouse_reports();
+    GamepadTouchRouter router;
+    router.update(contacts({{4, 50, 180}}), false, widget_generation);
+    auto reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 1U);
+    EXPECT_EQ(reports[0].buttons, 1);
+    router.update(contacts({{4, 150, 20}, {1, 50, 50}}), false, widget_generation);
+    router.update(contacts({{4, 150, 20}, {1, 80, 180}, {7, 90, 50}}), false, widget_generation);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 2U);
+    EXPECT_EQ(reports[0].buttons, 1);
+    EXPECT_EQ(reports[0].dx, 30);
+    EXPECT_EQ(reports[0].wheel, 0);
+    router.update(contacts({{4, 150, 20}, {7, 90, 50}}), false, widget_generation);
+    EXPECT_TRUE(mouse_reports().empty());
+    router.update(contacts({{4, 150, 20}, {7, 120, 50}, {2, 100, 50}}), false, widget_generation);
+    router.update(contacts({{4, 150, 20}, {7, 130, 50}, {2, 110, 50}}), false, widget_generation);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 1U);
+    EXPECT_EQ(reports[0].dx, 10);
+    EXPECT_EQ(reports[0].buttons, 1);
+    router.update(contacts({{7, 130, 50}, {2, 110, 50}}), false, widget_generation);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 1U);
+    EXPECT_EQ(reports[0].buttons, 0);
+    router.update(contacts({}), false, widget_generation);
+    EXPECT_TRUE(mouse_reports().empty());
+}
+
+TEST_F(GamepadWidget, MouseButtonStripPointerFirstRightHoldAndSingleContactClick) {
+    create("mousepad", true);
+    mouse_reports();
+    GamepadTouchRouter router;
+    router.update(contacts({{4, 50, 50}}), false, widget_generation);
+    router.update(contacts({{4, 50, 50}, {1, 150, 180}}), false, widget_generation);
+    router.update(contacts({{1, 150, 180}, {4, 70, 50}}), false, widget_generation);
+    auto reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 2U);
+    EXPECT_EQ(reports[0].buttons, 2);
+    EXPECT_EQ(reports[1].buttons, 2);
+    EXPECT_EQ(reports[1].dx, 20);
+    router.update(contacts({{4, 70, 50}}), false, widget_generation);
+    router.update(contacts({{4, 80, 50}}), false, widget_generation);
+    router.update(contacts({}), false, widget_generation);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 2U);
+    EXPECT_EQ(reports[0].buttons, 0);
+    EXPECT_EQ(reports[1].buttons, 0);
+    EXPECT_EQ(reports[1].dx, 10);
+    point = {150, 180};
+    read(true);
+    read(false);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 2U);
+    EXPECT_EQ(reports[0].buttons, 2);
+    EXPECT_EQ(reports[1].buttons, 0);
+    EXPECT_EQ(ordinary_actions, 0U);
+}
+
+TEST_F(GamepadWidget, MouseButtonStripUsesTranslatedSurfaceBounds) {
+    create("mousepad", true);
+    lv_obj_set_pos(button, 50, 60);
+    lv_obj_update_layout(button);
+    mouse_reports();
+    GamepadTouchRouter router;
+    router.update(contacts({{4, 70, 180}}), false, widget_generation);
+    EXPECT_TRUE(mouse_reports().empty());
+    router.update(contacts({{4, 70, 180}, {1, 120, 240}}), false, widget_generation);
+    router.update(contacts({{4, 80, 180}, {1, 120, 240}}), false, widget_generation);
+    auto reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 2U);
+    EXPECT_EQ(reports[0].buttons, 1);
+    EXPECT_EQ(reports[1].buttons, 1);
+    EXPECT_EQ(reports[1].dx, 10);
+    router.update(contacts({}), false, widget_generation);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 1U);
+    EXPECT_EQ(reports[0].buttons, 0);
+    point = {220, 240};
+    read(true);
+    read(false);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 2U);
+    EXPECT_EQ(reports[0].buttons, 2);
+    EXPECT_EQ(reports[1].buttons, 0);
+}
+
+TEST_F(GamepadWidget, MouseButtonStripCancellationAlwaysReleases) {
+    create("mousepad", true);
+    GamepadTouchRouter router;
+    auto begin_hold = [&] {
+        router.update(contacts({}), false, widget_generation, mouse_hid_generation());
+        router.update(contacts({{4, 50, 180}}), false, widget_generation, mouse_hid_generation());
+        ASSERT_TRUE(reinterpret_cast<MousepadState*>(state.data)->touch.allow_replacement);
+        mouse_reports();
+    };
+    auto released = [&] {
+        auto* mouse = reinterpret_cast<MousepadState*>(state.data);
+        EXPECT_EQ(mouse->owner, 0U);
+        EXPECT_FALSE(mouse->touch.allow_replacement);
+        const auto reports = mouse_reports();
+        ASSERT_EQ(reports.size(), 1U);
+        EXPECT_EQ(reports[0].buttons, 0);
+    };
+    begin_hold();
+    type->onHide(&state);
+    type->onShow(&state);
+    router.update(contacts({{4, 50, 180}}), false, widget_generation, mouse_hid_generation());
+    released();
+    begin_hold();
+    ++widget_mouse_epoch;
+    widget_mouse.reset();
+    router.update(contacts({{4, 50, 180}}), false, widget_generation, mouse_hid_generation());
+    released();
+    begin_hold();
+    router.update(contacts({{4, 50, 180}}), true, widget_generation, mouse_hid_generation());
+    released();
+    begin_hold();
+    lv_obj_delete(button);
+    button = nullptr;
+    released();
+}
+
+TEST_F(GamepadWidget, MouseButtonStripRendersUnfilledDashedRoundedTextColorOutlines) {
+    create("mousepad", true);
+    lv_obj_set_style_bg_color(button, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_text_color(button, lv_color_hex(0x12AB34), LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
+    lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB888);
+    std::vector<uint8_t> pixels(300 * 300 * 3);
+    lv_display_set_user_data(display, &pixels);
+    lv_display_set_flush_cb(display, [](lv_display_t* output, const lv_area_t* area, uint8_t* data) {
+        auto& image = *static_cast<std::vector<uint8_t>*>(lv_display_get_user_data(output));
+        const int row_bytes = lv_area_get_width(area) * 3;
+        for (int row = area->y1; row <= area->y2; ++row)
+            std::copy(data + (row - area->y1) * row_bytes,
+                      data + (row - area->y1 + 1) * row_bytes,
+                      image.begin() + (row * 300 + area->x1) * 3);
+        lv_display_flush_ready(output);
+    });
+    lv_refr_now(display);
+    auto foreground = [&](int x, int y) {
+        const auto offset = (y * 300 + x) * 3;
+        return pixels[offset] == 0x34 && pixels[offset + 1] == 0xAB && pixels[offset + 2] == 0x12;
+    };
+    unsigned dashes = 0, gaps = 0;
+    for (int x = 12; x < 88; ++x) {
+        if (foreground(x, 163)) ++dashes;
+        else ++gaps;
+    }
+    EXPECT_GT(dashes, 20U);
+    EXPECT_GT(gaps, 10U);
+    EXPECT_FALSE(foreground(3, 163));
+    EXPECT_FALSE(foreground(50, 180));
+    EXPECT_FALSE(foreground(150, 180));
+    EXPECT_FALSE(foreground(50, 100));
+    unsigned right_dashes = 0;
+    for (int x = 112; x < 188; ++x) right_dashes += foreground(x, 163);
+    EXPECT_EQ(right_dashes, dashes);
+    mouse_reports();
+    GamepadTouchRouter router;
+    router.update(contacts({{4, 50, 180}}), false, widget_generation);
+    lv_refr_now(display);
+    unsigned pressed_thickness = 0, normal_thickness = 0;
+    for (int x = 12; x < 88; ++x) {
+        pressed_thickness += foreground(x, 164);
+        normal_thickness += foreground(x + 100, 164);
+    }
+    EXPECT_GT(pressed_thickness, normal_thickness);
+    EXPECT_FALSE(foreground(50, 180));
+    router.cancel();
+    lv_display_set_user_data(display, nullptr);
+    lv_display_set_flush_cb(display, [](lv_display_t* output, const lv_area_t*, uint8_t*) { lv_display_flush_ready(output); });
+}
+
 TEST_F(GamepadWidget, MouseCaptureDoesNotRescanMetadata) {
     create("mousepad");
     GamepadTouchRouter router;
@@ -981,6 +1160,13 @@ TEST_F(GamepadWidget, MousepadAuthoringValidationAndParse) {
     EXPECT_TRUE(parsed->reverse);
     EXPECT_EQ(parsed->inertia, 3);
     EXPECT_EQ(parsed->sensitivity, 1);
+    EXPECT_FALSE(parsed->button_zones_enabled);
+    document["widget_mousepad_buttons"] = "true";
+    EXPECT_NE(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
+    document["widget_mousepad_buttons"] = true;
+    EXPECT_EQ(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
+    mousepad->parseConfig(document.as<JsonObject>(), config.data);
+    EXPECT_TRUE(parsed->button_zones_enabled);
     document["widget_mousepad_inertia"] = 20;
     mousepad->parseConfig(document.as<JsonObject>(), config.data);
     EXPECT_EQ(parsed->inertia, 5);
