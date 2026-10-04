@@ -522,6 +522,81 @@ TEST_F(GamepadWidget, RouterRetainsIdsAndDoesNotAdoptExtraFinger) {
     router.cancel();
 }
 
+TEST_F(GamepadWidget, RouterIdleGenerationChangePreservesFirstPress) {
+    GamepadTouchRouter router;
+    router.update(contacts({}), false, widget_generation, 1);
+    router.cancel(false);
+    auto idle = contacts({});
+    idle.status = TouchReadStatus::Unchanged;
+    router.update(idle, false, widget_generation + 1, 1);
+    EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 1).pressed);
+    router.update(contacts({}), false, widget_generation + 1, 1);
+    EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 2).pressed);
+    router.cancel();
+}
+
+TEST_F(GamepadWidget, RouterBootResetAndGenerationChangeDeliverFirstLvglClick) {
+    GamepadTouchRouter router;
+    router.update(contacts({}), false, widget_generation, 1);
+    router.cancel(false);
+    lv_indev_reset(indev, nullptr);
+    struct RoutedInput {
+        bool* pressed;
+        lv_point_t* point;
+        GamepadTouchRouter* router;
+        uint32_t generation;
+    } input{&pressed, &point, &router, widget_generation + 1};
+    lv_indev_set_user_data(indev, &input);
+    lv_indev_set_read_cb(indev, [](lv_indev_t* device, lv_indev_data_t* data) {
+        auto* context = static_cast<RoutedInput*>(lv_indev_get_user_data(device));
+        TouchSnapshot snapshot;
+        snapshot.count = *context->pressed ? 1 : 0;
+        snapshot.contacts[0] = {1, uint16_t(context->point->x), uint16_t(context->point->y)};
+        const TouchSample navigation = context->router->update(snapshot, false, context->generation, 1);
+        if (context->router->reset_navigation) lv_indev_reset(device, nullptr);
+        data->state = navigation.pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        data->point = {navigation.horizontal, navigation.vertical};
+    });
+    lv_obj_add_event_cb(button, [](lv_event_t* event) {
+        ++*static_cast<unsigned*>(lv_event_get_user_data(event));
+    }, LV_EVENT_CLICKED, &ordinary_actions);
+    lv_obj_update_layout(button);
+    read(true);
+    EXPECT_TRUE(lv_obj_has_state(button, LV_STATE_PRESSED));
+    read(false);
+    EXPECT_EQ(ordinary_actions, 1U);
+    lv_indev_set_read_cb(indev, nullptr);
+    lv_indev_set_user_data(indev, this);
+    router.cancel();
+}
+
+TEST_F(GamepadWidget, RouterHeldGenerationChangeRequiresFreshRelease) {
+    GamepadTouchRouter router;
+    EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation, 1).pressed);
+    EXPECT_FALSE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 1).pressed);
+    auto idle = contacts({});
+    idle.status = TouchReadStatus::Unchanged;
+    router.update(idle, false, widget_generation + 1, 2);
+    router.cancel(false);
+    EXPECT_FALSE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 2).pressed);
+    router.update(contacts({}), false, widget_generation + 1, 2);
+    EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 2).pressed);
+    router.cancel();
+}
+
+TEST_F(GamepadWidget, RouterGenerationChangeDuringErrorRequiresFreshRelease) {
+    GamepadTouchRouter router;
+    router.update(contacts({}), false, widget_generation, 1);
+    auto error = contacts({});
+    error.status = TouchReadStatus::Error;
+    router.update(error, false, widget_generation + 1, 1);
+    router.cancel(false);
+    EXPECT_FALSE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 1).pressed);
+    router.update(contacts({}), false, widget_generation + 1, 1);
+    EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation + 1, 1).pressed);
+    router.cancel();
+}
+
 TEST_F(GamepadWidget, RouterCancellationRequiresFreshAllReleasedSnapshot) {
     create("gamepad_stick");
     GamepadTouchRouter router;

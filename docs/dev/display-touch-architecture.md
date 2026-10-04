@@ -1639,8 +1639,11 @@ TouchManager's LVGL callback is the sole physical reader, including during
 suppression and screen-saver sleep; auxiliary touch/wake queries read cached
 physical state. `TouchSnapshotFilter` tolerates an error episode for 100 ms;
 unchanged scans do not end that episode. Expiry explicitly cancels routed owners
-and resets LVGL. Errors, suppression, active pad rebuilds/switches, and transport
-invalidation require a fresh raw all-released scan before new interaction.
+and resets LVGL. Errors and suppression require a fresh raw all-released scan
+before new interaction. Pad rebuilds/switches and transport invalidation retain
+that guard for held contacts or an already-canceled gesture, but idle resets do
+not arm a new guard. HID generation changes likewise cancel active owners
+without discarding the next navigation press when the router was idle.
 OTA cancels input before the display task pauses.
 
 ### Touch Calibration

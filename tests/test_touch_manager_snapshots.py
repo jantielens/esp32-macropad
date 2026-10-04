@@ -17,7 +17,9 @@ harness = r'''
 #include <atomic>
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include "touch_sample.h"
+#define LOGI(tag, ...) ((void)std::snprintf(nullptr, 0, __VA_ARGS__))
 #define HAS_DISPLAY 1
 #define HAS_USB_HID TEST_USB
 #define portMUX_TYPE int
@@ -46,7 +48,7 @@ struct MouseSurfaceTouch {
 struct Router {
     bool reset_navigation = false;
     uint8_t physical_count = 0;
-    void cancel() { ++canceled; }
+    void cancel(bool = true) { ++canceled; }
     TouchSample update(const TouchSnapshot& snapshot, bool, uint32_t, uint32_t) {
         ++routed;
         physical_count = snapshot.count;
@@ -81,6 +83,13 @@ int main() {
     lv_indev_t indev{&manager};
     lv_indev_data_t output;
     auto poll = [&]() { ++clock_ms; TouchManager::readCallback(&indev, &output); };
+    poll();
+    touch_manager_cancel_physical_input();
+    assert(!g_require_release);
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    poll();
+    assert(!g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    driver.snapshot.status = TouchReadStatus::Fresh;
     driver.snapshot.count = 1;
     driver.snapshot.contacts[0].horizontal = 12;
     driver.snapshot.contacts[0].vertical = 34;
@@ -88,12 +97,13 @@ int main() {
     assert(output.state == LV_INDEV_STATE_PRESSED && output.point.x == 12);
     g_lvgl_force_released = true;
     poll();
-    assert(driver.reads == 2 && g_cached_physical.pressed && output.state == LV_INDEV_STATE_RELEASED);
+    assert(driver.reads == 4 && g_cached_physical.pressed && output.state == LV_INDEV_STATE_RELEASED);
     g_lvgl_force_released = false;
     poll();
     assert(output.state == LV_INDEV_STATE_RELEASED && g_require_release);
     driver.snapshot.count = 0;
     driver.snapshot.status = TouchReadStatus::Unchanged;
+    touch_manager_cancel_physical_input();
     poll();
     assert(g_require_release);
     driver.snapshot.status = TouchReadStatus::Fresh;

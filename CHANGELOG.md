@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Ordinary button taps and touch navigation work with USB HID disconnected or
   disabled. Mouse state now resets on disconnect and epoch transitions rather
   than every disconnected poll, preventing repeated touch-router cancellation.
+* Preserve the first button tap after boot by avoiding release guards for idle
+  screen resets and HID generation changes. Held contacts, suppression, and
+  errors retain fresh-release protection.
 
 ## [1.36.0] - 2026-10-04
 

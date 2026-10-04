@@ -8,13 +8,14 @@ class GamepadTouchRouter {
 public:
     bool reset_navigation = false;
 
-    void cancel() {
+    void cancel(bool require_release = true) {
+        blocked_ = blocked_ || require_release;
         end_mouse(MouseTouchEvent::Cancel);
         for (auto& slot : slots_) {
+            blocked_ = blocked_ || slot.active;
             dispatch(slot, GamepadTouchEvent::Cancel);
             slot = Slot{};
         }
-        blocked_ = true;
         controller_session_ = false;
         reset_navigation = true;
     }
@@ -23,8 +24,9 @@ public:
                        uint32_t mouse_generation = 0) {
         reset_navigation = false;
         TouchSample navigation;
-        if (generation_initialized_ && generation != generation_) cancel();
-        if (generation_initialized_ && mouse_generation != mouse_generation_) cancel();
+        if (generation_initialized_ &&
+            (generation != generation_ || mouse_generation != mouse_generation_))
+            cancel(snapshot.status == TouchReadStatus::Error);
         generation_initialized_ = true;
         generation_ = generation;
         mouse_generation_ = mouse_generation;
