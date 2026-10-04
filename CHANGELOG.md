@@ -14,63 +14,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-10-04
+
 ### Added
 
+* USB gamepad support with two sticks, independent triggers, an eight-direction
+  hat, and 16 buttons. New Gamepad Joystick and Gamepad Button widgets and
+  Gamepad tap/down/up actions are available in the pad editor and MCP metadata.
+  Gamepad Button shows held and release feedback and releases automatically
+  when its contact ends. Output uses the USB keyboard transport; XInput is not
+  included.
+* Mousepad dragging and double-clicks: tap, touch again within 300 ms, and move
+  to hold the left mouse button until the finger lifts. A stationary second tap
+  double-clicks. Optional left/right mouse-button zones let you hold a button
+  while another finger moves or lifts and repositions on multicontact drivers.
+  The zones occupy the bottom 20% of the Mousepad and default off.
+* Two-finger Mousepad scrolling on multicontact drivers, with dominant-axis
+  lock, reverse direction, and optional inertia (default off). Scrolling shares
+  pointer sensitivity and the movement threshold, without pointer acceleration,
+  and stops when either finger lifts. Single-contact drivers support pointer
+  movement, taps, and tap-then-drag; Scrollpad provides one-finger scrolling.
+  The new Mousepad settings are exposed in the pad editor and MCP metadata.
+* Multicontact GT911 input lets gamepad widgets capture fingers independently
+  and supports the new Mousepad gestures, with single-touch fallback on other
+  drivers. Captured gestures remain active outside button bounds. Controller
+  interaction suppresses ordinary navigation until all fingers lift; cancelled
+  input requires a fresh all-released scan before resuming.
 * Optional pad-wide swipe suppression on Mousepad, Scrollpad, Gamepad Joystick,
   and Gamepad Button, plus a touch-isolated top-left Back button on Mousepad.
-  Both settings default off and are exposed in the editor and MCP metadata.
-  Back uses existing history with no fallback when it is empty.
-* Generic composite USB HID gamepad with two sticks, independent triggers,
-  an eight-direction hat, and 16 buttons, enabled by USB keyboard transport.
-* Gamepad Joystick and automatically released Gamepad Button
-  widgets, Gamepad tap/down/up actions, portal editing, MCP metadata, bounded
-  ownership/retry handling, and checked GT911 reads with error cancellation.
-  XInput is not included.
-* Bounded GT911 multi-contact snapshots and independent gamepad widget capture,
-  with single-touch fallback on other drivers. Controller interaction cancels
-  ordinary navigation until all fingers lift; cancellation requires a fresh
-  all-released scan. Driver contact limits are exposed separately from USB HID.
-* Two-finger Mousepad midpoint scrolling on multicontact drivers, with a fresh
-  baseline, dominant-axis lock, stable capture outside button bounds, reverse
-  direction, and optional inertia (default off). Scrolling shares pointer
-  sensitivity and movement threshold, without pointer acceleration. Portal
-  controls, JSON validation, and MCP metadata expose the new settings.
-* Tap-then-drag on Mousepad: tap, touch again within 300 ms, and move to hold
-  left until the owning finger lifts. A stationary second tap double-clicks.
-  Single-contact drivers retain movement, taps, and dragging; Scrollpad remains
-  available for one-finger scrolling.
-* Optional Mousepad mouse buttons in the bottom 20%, split left/right with
-  unfilled, rounded, dashed outlines in the button text color. Hold either zone
-  while another finger moves or lifts and repositions; lifting the zone releases
-  the mouse button. Portal settings and MCP expose `widget_mousepad_buttons`,
-  default off; existing pointer and scrolling gestures remain unchanged.
+  Both settings default off and are exposed in the pad editor and MCP metadata.
+  Back uses navigation history and does nothing when it is empty.
+* Native USB keyboard, consumer/media-key, mouse, and gamepad HID on
+  `jc3636w518` and `jc3636w518-sd`, with USB CDC diagnostic logging. Both boards
+  disable BLE and BLE HID; output defaults to Off until USB is selected.
 
 ### Changed
 
 * USB HID interface and configuration names use the device friendly name with
   the existing ` USB` suffix instead of TinyUSB labels.
-* Gamepad Button reuses ordinary button visual feedback while held, flashes
-  briefly on release, and clears feedback on cancellation.
-* Mousepad and Scrollpad share physical and synthetic gesture handlers and one
-  active mouse-surface session, alongside independent gamepad captures.
-  Scrolling stops when either captured finger lifts, without pointer fallback
-  or replacement capture until all contacts lift. Additional fingers cannot
-  turn a drag into scrolling. Global cancellation requires a fresh raw
-  all-contact-release scan before input resumes.
-* `jc3636w518` and `jc3636w518-sd` enable native USB keyboard, consumer,
-  mouse, and gamepad HID with application-managed CDC logging. Both explicitly
-  disable BLE and BLE HID; output still defaults to Off until USB is selected.
 
 ### Fixed
 
-* Mouse reports preserve drag press, movement, and release ordering across
-  retries and fast lifts. In-flight motion acknowledgements follow their
-  original batch across ownership transitions without consuming newer movement.
-  Clicks overlapping a drag-owned button are rejected; other-button click
-  releases preserve the held button. Hide/delete, pad changes, wake suppression,
-  USB disconnect, and OTA cancel drag ownership and pending input.
-* Captured mouse contacts reuse lifetime-guarded active-session metadata instead
-  of repeatedly scanning LVGL event descriptors in the touch hot path.
 * AXS15231B preserves stationary holds, polls active contacts, and retries failed
   reports without another interrupt. AXS15231B and CST816S distinguish checked
   I2C failures from releases; persistent errors cancel holds after 100 ms and
@@ -79,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   configuration, until successful reinitialization.
 * XPT2046 preserves buffered contacts and routes invalid samples through touch
   error cancellation. Its SPI library cannot distinguish every bus failure
-  from release. Inkplate/Cypress changes remain deferred.
+  from release.
 
 ## [1.35.0] - 2026-10-02
 

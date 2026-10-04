@@ -176,7 +176,7 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     const hidComponent = fs.readFileSync('src/app/components/hid_component.cpp', 'utf8');
     assert.match(hidComponent, /REGISTER_NAV_COMPONENT\(hid, "hid", "connectivity", "Keyboard & Mouse", 20, "hid"\)/);
     assert.match(hidFragment, /aria-describedby="keyboard-transport-help"/);
-    assert.match(hidFragment, /id="keyboard-transport-help">USB enables keyboard and mouse control\. BLE enables keyboard control only\. Off disables keyboard and mouse control\./);
+    assert.match(hidFragment, /id="keyboard-transport-help">USB enables keyboard, mouse, and gamepad control\. BLE enables keyboard control only\. Off disables all HID control\./);
     assert.match(hidFragment, /gap:12px/);
     assert.match(hidFragment, /<section[^>]*id="keyboard-transport-choice"/);
     assert.match(hidFragment, /<section[^>]*aria-labelledby="keyboard-active-heading"/);
