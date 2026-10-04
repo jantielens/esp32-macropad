@@ -29,6 +29,14 @@ bool mouse_hid_is_ready() {
     return usb_hid_is_ready() && !ota_activity_is_active();
 }
 
+uint32_t mouse_hid_generation() {
+    portENTER_CRITICAL(&mouse_mutex);
+    sync_mouse_epoch();
+    const uint32_t generation = mouse_state.current_generation();
+    portEXIT_CRITICAL(&mouse_mutex);
+    return generation;
+}
+
 void mouse_hid_move(int dx, int dy, uint32_t epoch) {
     if (!mouse_hid_is_ready()) return;
     portENTER_CRITICAL(&mouse_mutex);
@@ -72,6 +80,22 @@ bool mouse_hid_click(uint32_t epoch, uint8_t buttons) {
 void mouse_hid_cancel() {
     portENTER_CRITICAL(&mouse_mutex);
     mouse_state.reset();
+    portEXIT_CRITICAL(&mouse_mutex);
+}
+
+uint32_t mouse_hid_acquire(uint32_t epoch) {
+    if (!mouse_hid_is_ready()) return 0;
+    portENTER_CRITICAL(&mouse_mutex);
+    sync_mouse_epoch();
+    const uint32_t owner = epoch == mouse_epoch ? mouse_state.acquire() : 0;
+    portEXIT_CRITICAL(&mouse_mutex);
+    return owner;
+}
+
+void mouse_hid_release(uint32_t owner, uint32_t epoch) {
+    portENTER_CRITICAL(&mouse_mutex);
+    sync_mouse_epoch();
+    if (epoch == mouse_epoch) mouse_state.release(owner);
     portEXIT_CRITICAL(&mouse_mutex);
 }
 

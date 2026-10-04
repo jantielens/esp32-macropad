@@ -463,6 +463,9 @@ function padDialogOpen(col, row) {
         (btn.widget_mousepad_acceleration !== undefined) ? btn.widget_mousepad_acceleration : 0;
     document.getElementById('pad-edit-mousepad-movement-threshold').value =
         (btn.widget_mousepad_movement_threshold !== undefined) ? btn.widget_mousepad_movement_threshold : 3;
+    document.getElementById('pad-edit-mousepad-inertia').value =
+        (btn.widget_mousepad_inertia !== undefined) ? btn.widget_mousepad_inertia : 0;
+    document.getElementById('pad-edit-mousepad-reverse').checked = btn.widget_mousepad_reverse === true;
     document.getElementById('pad-edit-scrollpad-axis').value =
         btn.widget_scrollpad_axis === 'horizontal' ? 'horizontal' : 'vertical';
     document.getElementById('pad-edit-scrollpad-sensitivity').value =
@@ -677,6 +680,8 @@ function padDialogOk(keepOpen) {
             btn.widget_mousepad_sensitivity = padGetBoundedWidgetNumber('pad-edit-mousepad-sensitivity', 1, 0.1, 5);
             btn.widget_mousepad_acceleration = padGetBoundedWidgetNumber('pad-edit-mousepad-acceleration', 0, 0, 5);
             btn.widget_mousepad_movement_threshold = padGetBoundedWidgetNumber('pad-edit-mousepad-movement-threshold', 3, 0, 12);
+            btn.widget_mousepad_inertia = padGetBoundedWidgetNumber('pad-edit-mousepad-inertia', 0, 0, 5);
+            btn.widget_mousepad_reverse = document.getElementById('pad-edit-mousepad-reverse').checked;
         }
         if (wtype === 'bar_chart') {
             const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();

@@ -163,7 +163,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 				if (physical.status == TouchReadStatus::Fresh && !physical.count) {
 						g_require_release = false;
 						#if HAS_DISPLAY && HAS_USB_HID
-						g_gamepad_touch_router.update(snapshot, false, gamepad_hid_generation());
+						g_gamepad_touch_router.update(physical, false, gamepad_hid_generation(), mouse_hid_generation());
 						#endif
 				}
 				data->state = LV_INDEV_STATE_RELEASED;
@@ -173,7 +173,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 
 		TouchSample navigation;
 		#if HAS_DISPLAY && HAS_USB_HID
-		navigation = g_gamepad_touch_router.update(snapshot, false, gamepad_hid_generation());
+		navigation = g_gamepad_touch_router.update(snapshot, false, gamepad_hid_generation(), mouse_hid_generation());
 		if (g_gamepad_touch_router.reset_navigation) {
 				lv_indev_reset(indev, nullptr);
 				g_prev_lvgl_pressed = false;
@@ -321,6 +321,7 @@ bool TouchManager::getTouch(uint16_t* x, uint16_t* y) {
 void touch_manager_cancel_physical_input() {
 		#if HAS_DISPLAY && HAS_USB_HID
 		g_gamepad_touch_router.cancel();
+		if (auto* mouse = MouseSurfaceTouch::session()) mouse->cancel();
 		#endif
 		lv_indev_reset(nullptr, nullptr);
 		g_require_release = true;

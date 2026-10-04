@@ -38,11 +38,16 @@ static void screen_saver_manager_notify_activity(bool) { ++activities; }
 #if HAS_USB_HID
 static unsigned routed = 0, canceled = 0;
 static uint32_t gamepad_hid_generation() { return 1; }
+static uint32_t mouse_hid_generation() { return 1; }
+struct MouseSurfaceTouch {
+    static MouseSurfaceTouch* session() { return nullptr; }
+    void cancel() {}
+};
 struct Router {
     bool reset_navigation = false;
     uint8_t physical_count = 0;
     void cancel() { ++canceled; }
-    TouchSample update(const TouchSnapshot& snapshot, bool, uint32_t) {
+    TouchSample update(const TouchSnapshot& snapshot, bool, uint32_t, uint32_t) {
         ++routed;
         physical_count = snapshot.count;
         TouchSample sample;

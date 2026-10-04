@@ -319,16 +319,20 @@ Active records are never evicted. When all four records are active or retained,
   reflects the current board and device class without a separate MCP catalog.
   On touch-enabled USB HID builds, the widget manifest also advertises
   `mousepad` with `widget_mousepad_sensitivity` (0.1-5, default 1),
-  `widget_mousepad_acceleration` (0-5, default 0/off), and
-  `widget_mousepad_movement_threshold` (0-12 device pixels, default 3).
-  Movement beyond this threshold starts pointer movement and cancels tap
-  eligibility; 0 removes the dead zone. Higher acceleration
-  amplifies fast finger movement independently of sensitivity. It provides
-  relative movement and tap-to-left-click only when USB keyboard transport is
-  active, and consumes ordinary button actions and pad swipes. On USB HID
+  `widget_mousepad_acceleration` (0-5, default 0/off),
+  `widget_mousepad_movement_threshold` (0-12 device pixels, default 3),
+  `widget_mousepad_reverse` (boolean, default false), and
+  `widget_mousepad_inertia` (0-5, default 0/off).
+  The registry note describes pointer movement, taps, dragging, and two-finger
+  scrolling when USB keyboard transport is active. See the
+  [Mousepad guide](pad-editor-guide.md#mousepad) for gesture timing, thresholds,
+  contact ownership, and cancellation rules. Mousepad consumes ordinary button
+  actions and pad swipes. On USB HID
   builds, the action catalog advertises `mouse_button` with `button` set to
   `left` (default), `right`, or `middle` for complete clicks, without movement
-  or hold-to-drag. Use `{"type":"mouse_button","button":"right"}` in existing
+  or hold-to-drag. Clicks overlapping a drag-owned button are rejected;
+  other-button click releases preserve the held button.
+  Use `{"type":"mouse_button","button":"right"}` in existing
   action lists; its host decides when it fires and touch is not required.
   The widget manifest also advertises `scrollpad` on touch-enabled USB HID
   builds, with `widget_scrollpad_axis` (`vertical` default, or `horizontal`),

@@ -1150,10 +1150,21 @@ HAS_USB_HID`. Its `widget_mousepad_sensitivity` JSON field accepts finite
 values from 0.1 to 5, defaulting to 1. `widget_mousepad_acceleration` accepts
 finite values from 0 to 5, defaulting to 0/off; it amplifies fast movement
 independently of sensitivity. `widget_mousepad_movement_threshold` accepts
-finite values clamped to 0-12 device pixels, defaulting to 3 when missing or
-non-finite. Movement beyond this distance from the press starts pointer
-movement and cancels taps; 0 removes the dead zone. Pad storage and
-import/export preserve all three fields through the existing JSON path.
+finite values from 0-12 device pixels, defaulting to 3 when missing.
+Movement beyond this distance starts pointer movement or an armed drag;
+midpoint travel uses the same threshold for two-finger scrolling. Zero removes
+the dead zone. `widget_mousepad_reverse` is boolean (default false), and
+`widget_mousepad_inertia` is 0-5 (default 0/off), following Scrollpad direction
+and coasting conventions. Sensitivity applies to pointer and scroll travel;
+acceleration applies only to pointer movement. Pad storage and import/export
+preserve all five fields through the existing raw JSON path. The editor
+loads/saves these fields and bounds numeric inputs. Shared widget validation
+rejects invalid types, non-finite/out-of-range numbers, and non-boolean reverse
+values independently of MCP. Parsing still supplies defaults and bounds values.
+
+Mousepad supports pointer movement, taps, dragging, and two-finger scrolling.
+See the [Mousepad guide](../pad-editor-guide.md#mousepad) for gesture timing,
+contact ownership, cancellation, and single-contact behavior.
 The editor consumes ordinary
 button actions for this widget and hides their controls. MCP advertises its
 schema through the widget registry without a separate mouse control tool.
@@ -1225,7 +1236,10 @@ The `button` field accepts `left`, `right`, or `middle` (default `left` when
 omitted); validation rejects invalid names and non-string values. This fixed
 option set is not bindable. Its catalog metadata drives the shared portal
 selector and MCP action schema. Dispatch returns complete when a click is
-accepted by the queue, or failed if unavailable, disconnected, full, or in OTA.
+accepted by the queue, or failed if unavailable, disconnected, full, in OTA,
+or overlapping a drag-owned button. Other-button click releases preserve drag
+ownership. No descriptor, BLE mouse, transport setting, or gesture-enable toggle
+is added.
 It requires neither touch nor a dedicated widget and uses its host's gesture
 rules. It does not wait for delivery before the next action in a list.
 

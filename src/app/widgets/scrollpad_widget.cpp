@@ -18,6 +18,8 @@ struct ScrollpadState {
     ScrollpadInput input;
     ScrollpadConfig config;
     MouseSurfaceTouch touch;
+    uint8_t contact = 0;
+    bool pressed = false;
 };
 
 static_assert(sizeof(ScrollpadConfig) <= WIDGET_CONFIG_MAX_BYTES, "Scrollpad config too large");
@@ -33,21 +35,38 @@ static void scrollpad_parse(const JsonObject& btn, uint8_t* data) {
     cfg->reverse = btn["widget_scrollpad_reverse"] | false;
 }
 
-static void scrollpad_event(lv_event_t* event) {
-    auto* state = static_cast<ScrollpadState*>(lv_event_get_user_data(event));
-    lv_point_t point;
-    if (!state->touch.process(event, state->input, point)) return;
+static void scrollpad_point(void* context, MouseTouchEvent interaction, uint8_t id, const lv_point_t& point) {
+    auto* state = static_cast<ScrollpadState*>(context);
+    if (interaction == MouseTouchEvent::Cancel || interaction == MouseTouchEvent::End) {
+        state->input.cancel();
+        state->pressed = false;
+        return;
+    }
+    if (interaction == MouseTouchEvent::Press) {
+        if (!state->pressed) {
+            state->contact = id;
+            state->pressed = true;
+            state->input.press(point.x, point.y, lv_tick_get());
+        }
+        return;
+    }
+    if (!state->pressed || id != state->contact || interaction == MouseTouchEvent::Sample ||
+        interaction == MouseTouchEvent::Position) return;
     const int steps = state->input.move(point.x, point.y, state->config.horizontal,
                                       state->config.sensitivity, state->config.reverse, lv_tick_get());
     if (steps) {
         mouse_hid_scroll(state->config.horizontal ? 0 : steps,
                          state->config.horizontal ? steps : 0, state->touch.epoch);
     }
-    if (lv_event_get_code(event) == LV_EVENT_RELEASED) {
+    if (interaction == MouseTouchEvent::Release) {
         const float velocity = state->input.release(lv_tick_get());
         mouse_hid_start_scroll_inertia(velocity, state->config.inertia,
                                       state->config.horizontal, state->touch.epoch);
     }
+}
+
+static void scrollpad_event(lv_event_t* event) {
+    static_cast<ScrollpadState*>(lv_event_get_user_data(event))->touch.process(event);
 }
 
 static void scrollpad_create(lv_obj_t* tile, const WidgetConfig* cfg,
@@ -56,22 +75,22 @@ static void scrollpad_create(lv_obj_t* tile, const WidgetConfig* cfg,
                             WidgetState* state) {
     auto* scrollpad = new (state->data) ScrollpadState{};
     scrollpad->config = *reinterpret_cast<const ScrollpadConfig*>(cfg->data);
-    MouseSurfaceTouch::attach(tile, scrollpad_event, scrollpad);
+    scrollpad->touch.attach(tile, scrollpad_event, scrollpad, scrollpad_point);
 }
 
 static void scrollpad_update(lv_obj_t*, const WidgetConfig*, WidgetState*, const char*) {}
 static void scrollpad_tick(lv_obj_t*, const WidgetConfig*, WidgetState*) {}
 
 static void scrollpad_show(WidgetState* state) {
-    MouseSurfaceTouch::show(reinterpret_cast<ScrollpadState*>(state->data)->input);
+    reinterpret_cast<ScrollpadState*>(state->data)->touch.show();
 }
 
 static void scrollpad_hide(WidgetState* state) {
-    MouseSurfaceTouch::hide(reinterpret_cast<ScrollpadState*>(state->data)->input);
+    reinterpret_cast<ScrollpadState*>(state->data)->touch.hide();
 }
 
 static void scrollpad_destroy(WidgetState* state) {
-    scrollpad_hide(state);
+    reinterpret_cast<ScrollpadState*>(state->data)->touch.detach(scrollpad_event);
     reinterpret_cast<ScrollpadState*>(state->data)->~ScrollpadState();
 }
 

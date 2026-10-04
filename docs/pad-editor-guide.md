@@ -745,24 +745,60 @@ even if the finger returns to its starting point.
 Set **Movement threshold (px)** from 0 to 12 (default 3 device pixels),
 independently for each Mousepad. Lower values start pointer movement sooner;
 0 removes the dead zone. Small finger movements can then cancel taps more
-easily. The threshold is independent of sensitivity and acceleration.
+easily. The same threshold activates tap-then-drag and two-finger midpoint
+scrolling, before sensitivity or acceleration.
 
 Set **Sensitivity** from 0.1 to 5 (default 1). Larger values move the pointer
-farther for the same finger movement; the computer's own pointer settings
+farther for the same finger movement and increase two-finger scroll travel;
+the computer's own pointer settings
 also affect the result. Increase the button's row and column spans for a
 larger mousepad. Labels, icons, and appearance remain customizable.
 
 Set **Acceleration** from 0 to 5 (default 0, off). Higher values amplify fast
 finger movement while retaining slow-movement precision. Sensitivity remains
 independent; the computer's own pointer acceleration can compound the effect.
+Acceleration affects pointer movement, including dragging, but not scrolling.
+
+Tap, lift, then touch again within 300 ms and move beyond the movement
+threshold to drag with the left button held. Lift that finger to release;
+there is no drag lock. A short stationary second tap produces a double-click
+instead. Additional fingers during a drag are ignored, not used for scrolling.
+
+On a driver exposing multiple contacts, two fingers starting inside the same
+Mousepad scroll using their midpoint. Adding the second finger establishes a
+fresh baseline and suppresses pointer movement and tap clicks. Once midpoint
+travel exceeds the movement threshold, scrolling locks to the dominant axis
+(vertical on a tie). Capture remains stable outside the button. Lifting either
+captured finger stops scrolling; lift all fingers before starting another
+gesture. Extra contacts are ignored and never replace a captured finger.
+
+Set **Reverse scroll direction** to reverse the normal finger-up/scroll-up and
+finger-right/scroll-right direction. Set **Scroll inertia** from 0 to 5
+(default 0, off) for optional release coasting, with the same behavior and
+cancellation rules as Scrollpad. Sensitivity 1 produces one wheel step per
+20 midpoint pixels. Horizontal wheel support depends on the host application.
+Single-contact drivers retain pointer movement, taps, and tap-then-drag;
+use Scrollpad for one-finger scrolling.
 
 Touches starting inside the mousepad remain owned by it until release,
 including movement outside its edges. They do not trigger pad swipes,
 ordinary button actions, or long-press actions. The editor hides those action
-sections. Pending input is cleared when the pad hides or USB reconnects.
-BLE and Off disable USB mouse output. Dragging, right click, scrolling, and
-multitouch are not Mousepad gestures. Use a separate button with a Mouse Button
-action for right or middle clicks, or a Scrollpad widget for scrolling.
+sections. Only one mouse surface is active at a time; gamepad captures can
+coexist. Hide/delete, pad changes, wake suppression, USB disconnect/reconnect,
+and OTA cancel input and release drag ownership. Global cancellation requires
+a fresh all-contact-release scan before physical input can restart.
+BLE and Off disable USB mouse output. Two-finger right-click, pinch zoom, and
+three-finger gestures are not supported. Use a separate Mouse Button action
+for right or middle clicks. Clicking an owned left button during a drag is
+rejected; right/middle click releases leave the left button held.
+
+JSON fields are `widget_mousepad_sensitivity` (0.1-5, default 1),
+`widget_mousepad_acceleration` (0-5, default 0),
+`widget_mousepad_movement_threshold` (0-12, default 3),
+`widget_mousepad_reverse` (boolean, default false), and
+`widget_mousepad_inertia` (0-5, default 0). Authoring validation rejects
+non-numeric, non-finite, or out-of-range numbers and non-boolean reverse values.
+Gesture timing and axis policy are internal constants, not per-button controls.
 
 ### Scrollpad
 
@@ -810,9 +846,8 @@ For JSON authoring:
 
 Missing or unrecognized axis values default to `"vertical"`. Sensitivity is
 clamped to 0.1-5; missing or non-finite values default to 1. Reverse direction
-defaults to false. `widget_scrollpad_inertia` and
-`widget_mousepad_acceleration` are clamped to 0-5; missing or non-finite values
-default to 0, preserving the behavior of existing pads.
+defaults to false. `widget_scrollpad_inertia` is clamped to 0-5; missing or
+non-finite values default to 0 when parsed.
 
 ### Mouse Button
 
@@ -841,8 +876,6 @@ default to `"left"`, while invalid values are rejected.
 Select **USB** under **Connectivity > Keyboard & Mouse**, save, reboot, and
 connect the native USB port. Gamepad output follows this transport setting;
 BLE and Off do not expose a gamepad. This is generic USB HID, not XInput.
-Windows enumeration and target-application compatibility still require
-hardware acceptance testing.
 
 The controller name uses the configured device friendly name with the existing
 ` USB` suffix. Name changes take effect after saving and rebooting. Windows may
@@ -904,10 +937,10 @@ the connected panel may support fewer. Two sticks, a stick and held button or
 trigger, or multiple hat directions can operate together. Each widget accepts
 one contact; additional fingers on that widget are ignored until they lift,
 even if its captured finger lifts first. Array reordering and crossing contacts
-do not exchange ownership. Other touch drivers retain single-touch operation;
-Mousepad, Scrollpad, and ordinary buttons remain single-pointer controls.
-Inkplate/Cypress multitouch is not included. Panel capacity, tracking-ID behavior,
-and multitouch latency still require hardware verification.
+do not exchange ownership. Other touch drivers retain single-touch operation.
+Scrollpad and ordinary buttons remain single-pointer controls; Mousepad also
+supports [two-finger scrolling](#mousepad) on multicontact drivers.
+Inkplate/Cypress multitouch is not included.
 
 Four held hat controls can form a D-pad. Hat directions compose into diagonals;
 opposing directions cancel independently. Binary triggers activate at 255 and

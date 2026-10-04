@@ -120,6 +120,8 @@ assert.strictEqual(context.padState.buttons[0].widget_type, 'mousepad');
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, 1.5);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_acceleration, 0);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_movement_threshold, 3);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_inertia, 0);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_reverse, false);
 assert.strictEqual(context.padState.buttons[0].actions, undefined);
 assert.strictEqual(context.padState.buttons[0].lp_actions, undefined);
 document.getElementById('pad-edit-mousepad-sensitivity').value = '10';
@@ -148,6 +150,14 @@ for (const [input, expected] of [['0', 0], ['3', 3], ['6', 6], ['12', 12], ['20'
     assert.strictEqual(context.padState.buttons[0].widget_mousepad_movement_threshold, expected);
 }
 
+for (const [input, expected] of [['3', 3], ['10', 5], ['-1', 0], ['Infinity', 0], ['NaN', 0], ['', 0]]) {
+    document.getElementById('pad-edit-mousepad-inertia').value = input;
+    document.getElementById('pad-edit-mousepad-reverse').checked = true;
+    context.padDialogOk(true);
+    assert.strictEqual(context.padState.buttons[0].widget_mousepad_inertia, expected);
+    assert.strictEqual(context.padState.buttons[0].widget_mousepad_reverse, true);
+}
+
 document.getElementById('pad-edit-widget-type').value = 'scrollpad';
 context.actionEditorBuild = function() { throw new Error('Scrollpad must not build button actions'); };
 for (const axis of ['vertical', 'horizontal', 'invalid', '']) {
@@ -165,6 +175,8 @@ for (const axis of ['vertical', 'horizontal', 'invalid', '']) {
         assert.strictEqual(saved.widget_mousepad_sensitivity, undefined);
         assert.strictEqual(saved.widget_mousepad_acceleration, undefined);
         assert.strictEqual(saved.widget_mousepad_movement_threshold, undefined);
+        assert.strictEqual(saved.widget_mousepad_inertia, undefined);
+        assert.strictEqual(saved.widget_mousepad_reverse, undefined);
         assert.strictEqual(saved.actions, undefined);
         assert.strictEqual(saved.lp_actions, undefined);
     }

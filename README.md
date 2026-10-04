@@ -44,14 +44,14 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   eight-direction hat, and 16 buttons. Gamepad Joystick and
   Gamepad Button widgets provide analog movement and automatically released
   held controls; GT911 drivers support independent simultaneous controller
-  contacts, with single-touch fallback on other drivers. Panel contact capacity
-  and multitouch latency still require hardware verification. Gamepad actions
-  provide tap/down/up operations.
+  contacts, with single-touch fallback on other drivers. Gamepad actions provide
+  tap/down/up operations.
   BLE supports keyboard control only. Native USB is compiled for
   `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
-  `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard/mouse hardware
-  testing so far covers `jc1060p470c-sd`. Both JC3636W518 variants disable BLE.
-  Gamepad Windows enumeration and application compatibility remain unverified.
+  `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
+  Both JC3636W518 variants disable BLE.
+  Mousepad supports tap-then-drag and two-finger midpoint scrolling on
+  multicontact drivers, with single-touch movement/tap/drag fallback.
   BLE keyboard support is board-dependent; some Macropad boards disable it to
   preserve internal RAM. Supported BLE builds offer single-owner pairing.
   HID output defaults to Off. Select a supported transport in

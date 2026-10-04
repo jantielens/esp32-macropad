@@ -233,12 +233,16 @@ You can also trigger pairing from a button on the device by assigning the `ble_p
 USB exposes keyboard, consumer HID, a relative mouse, and a generic HID gamepad alongside the serial console when USB is
 selected. With BLE or Off selected, USB exposes only the serial console after reboot,
 not a keyboard, mouse, or gamepad. Add a **Mousepad** widget in the pad editor on
-touch-enabled USB HID devices for finger movement and tap-to-left-click;
-**Sensitivity** and **Acceleration** (0-5, default 0/off) are configurable
-per button. See the
+touch-enabled USB HID devices for movement, tap-to-left-click, and tap-then-drag.
+Multicontact drivers also support two-finger midpoint scrolling with axis lock.
+**Sensitivity** and **Movement threshold** apply to movement and gestures;
+**Acceleration** (0-5, default 0/off) affects pointer movement only.
+**Reverse scroll direction** and **Scroll inertia** (0-5, default 0/off)
+follow Scrollpad conventions. See the
 [Mousepad guide](pad-editor-guide.md#mousepad) for setup and limitations.
 Add a [Scrollpad widget](pad-editor-guide.md#scrollpad) beside or below it for
-vertical or horizontal scrolling. Axis, Sensitivity, Reverse direction, and
+one-finger vertical or horizontal scrolling, especially on single-touch boards.
+Axis, Sensitivity, Reverse direction, and
 **Inertia** (0-5, default 0/off) are configured independently per Scrollpad.
 Higher inertia coasts longer after release; touching either mouse surface
 stops coasting.
@@ -249,10 +253,9 @@ Add [Gamepad Joystick or Gamepad Button widgets](pad-editor-guide.md#gamepad-con
 for analog movement or held controls with automatic release. GT911 drivers
 support independent simultaneous controller contacts when the panel provides
 them; other drivers remain single-touch. Gamepad interaction blocks ordinary
-navigation until every finger lifts. Panel multitouch acceptance remains pending.
+navigation until every finger lifts.
 Gamepad actions provide button, hat, or binary-trigger Tap/Down/Up operations.
-This is not XInput; Windows gamepad enumeration and application testing remain
-pending hardware acceptance.
+This is generic USB HID, not XInput.
 Its product name uses the configured friendly device name plus
 ` USB` after reboot, its manufacturer
 uses project branding, and its serial number uses the stable chip address.

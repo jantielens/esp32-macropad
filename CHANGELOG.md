@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-02
+ms.date: 2026-10-04
 ms.topic: reference
 ---
 
@@ -21,13 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Gamepad Joystick and automatically released Gamepad Button
   widgets, Gamepad tap/down/up actions, portal editing, MCP metadata, bounded
   ownership/retry handling, and checked GT911 reads with error cancellation.
-  Windows enumeration, application compatibility, and report latency remain
-  pending hardware acceptance. XInput is not included.
+  XInput is not included.
 * Bounded GT911 multi-contact snapshots and independent gamepad widget capture,
   with single-touch fallback on other drivers. Controller interaction cancels
   ordinary navigation until all fingers lift; cancellation requires a fresh
   all-released scan. Driver contact limits are exposed separately from USB HID.
-  Actual panel capacity, tracking IDs, and multitouch latency remain unverified.
+* Two-finger Mousepad midpoint scrolling on multicontact drivers, with a fresh
+  baseline, dominant-axis lock, stable capture outside button bounds, reverse
+  direction, and optional inertia (default off). Scrolling shares pointer
+  sensitivity and movement threshold, without pointer acceleration. Portal
+  controls, JSON validation, and MCP metadata expose the new settings.
+* Tap-then-drag on Mousepad: tap, touch again within 300 ms, and move to hold
+  left until the owning finger lifts. A stationary second tap double-clicks.
+  Single-contact drivers retain movement, taps, and dragging; Scrollpad remains
+  available for one-finger scrolling.
 
 ### Changed
 
@@ -35,12 +42,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the existing ` USB` suffix instead of TinyUSB labels.
 * Gamepad Button reuses ordinary button visual feedback while held, flashes
   briefly on release, and clears feedback on cancellation.
+* Mousepad and Scrollpad share physical and synthetic gesture handlers and one
+  active mouse-surface session, alongside independent gamepad captures.
+  Scrolling stops when either captured finger lifts, without pointer fallback
+  or replacement capture until all contacts lift. Additional fingers cannot
+  turn a drag into scrolling. Global cancellation requires a fresh raw
+  all-contact-release scan before input resumes.
 * `jc3636w518` and `jc3636w518-sd` enable native USB keyboard, consumer,
   mouse, and gamepad HID with application-managed CDC logging. Both explicitly
   disable BLE and BLE HID; output still defaults to Off until USB is selected.
 
 ### Fixed
 
+* Mouse reports preserve drag press, movement, and release ordering across
+  retries and fast lifts. In-flight motion acknowledgements follow their
+  original batch across ownership transitions without consuming newer movement.
+  Clicks overlapping a drag-owned button are rejected; other-button click
+  releases preserve the held button. Hide/delete, pad changes, wake suppression,
+  USB disconnect, and OTA cancel drag ownership and pending input.
+* Captured mouse contacts reuse lifetime-guarded active-session metadata instead
+  of repeatedly scanning LVGL event descriptors in the touch hot path.
 * AXS15231B preserves stationary holds, polls active contacts, and retries failed
   reports without another interrupt. AXS15231B and CST816S distinguish checked
   I2C failures from releases; persistent errors cancel holds after 100 ms and

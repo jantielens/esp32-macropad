@@ -708,7 +708,7 @@ error-cancellation guarantee. No installed Inkplate library files are patched.
 
 **GT911_TouchDriver** ([`src/app/drivers/gt911_touch_driver.h/cpp`](../src/app/drivers/gt911_touch_driver.cpp))
 - **Library**: Vendored I2C driver
-- **Hardware**: GT911 multi-touch capacitive controller (up to 5 points; actual panel capacity requires verification)
+- **Hardware**: GT911 multi-touch capacitive controller (up to 5 points, depending on the connected panel)
 - **Communication**: I2C (compile-time bus selection via `TOUCH_I2C_BUS`: Wire or Wire1)
 - **Optional reset**: Hardware reset via `TOUCH_RST` pin (INT pin selects I2C address)
 - **Used by**: ESP32-4848S040 (Guition ESP32-S3, ST7701 RGB 480×480), ESP32-P4-LCD4B (Waveshare, ST7703 DSI 720×720), JC4880P433 (Guition ESP32-P4, ST7701 DSI 480×800)
@@ -1490,22 +1490,31 @@ refresh. LVGL 9.5 otherwise creates the input timer with `LV_DEF_REFR_PERIOD`
 Actual fresh coordinate rates remain limited by the touch controller and
 LVGL task load.
 
-The Mousepad widget uses the existing single-contact touch interface and LVGL
-coordinates. It registers its event callback during widget creation, before
-PadScreen's ordinary button handlers. It consumes press, pressing, release,
-click, long-press, and gesture events; clears `LV_OBJ_FLAG_GESTURE_BUBBLE`;
-and uses `LV_OBJ_FLAG_PRESS_LOCK` to retain touches that leave the button.
-No touch-driver or native Extension ABI changes are needed.
+Mousepad and Scrollpad register lifetime-guarded `MouseSurfaceTouch` metadata
+and shared point handlers. The existing `GamepadTouchRouter` routes both
+mouse and gamepad surfaces from the single physical snapshot reader; it is
+not duplicated. Captured IDs retain ownership outside bounds. Only two mouse
+contacts on one surface can be captured; held extra contacts are never promoted.
+Gamepad captures coexist. HID interaction suppresses ordinary navigation until
+all raw contacts lift. Global cancellation requires a fresh raw zero-contact
+scan, not a filtered or cached release. Synthetic LVGL taps use the same point
+handlers, without entering physical capture. Event isolation and press lock
+still consume clicks, long presses, and pad swipes. No driver, HID descriptor,
+or native Extension ABI changes are needed.
 
-`MousepadInput` owns the relative movement baseline, fractional sensitivity
-remainders, movement threshold, and time-based acceleration.
-`widget_mousepad_movement_threshold` sets the initial activation distance in
-device pixels (0-12, default 3), before sensitivity or acceleration. Exactly
-the threshold remains tap-eligible; once exceeded, subsequent movement has
-no dead zone. Acceleration uses raw finger speed before sensitivity, with a
-fixed speed threshold and bounded gain;
-`widget_mousepad_acceleration` is 0-5, default 0/off.
-The widget submits deltas and left clicks to
+`MousepadInput` owns relative baselines, fractional sensitivity remainders,
+threshold checks, and time-based acceleration. Its pointer, scrolling, dragging,
+and wait-for-release modes share the physical and synthetic point handlers.
+Position-only updates synchronize the current scan before second-contact entry
+establishes the midpoint baseline or queues pointer movement. One complete
+midpoint sample per scan feeds `ScrollpadInput` for fractional steps and release
+velocity. Pointer acceleration uses raw finger speed before sensitivity, with
+a fixed speed threshold and bounded gain; it does not affect scrolling.
+Timing, axis policy, and the contact limit are named internal constants.
+The [Mousepad guide](../pad-editor-guide.md#mousepad) is the reference for gesture
+behavior and configuration ranges.
+
+The widget submits deltas, clicks, and owned holds to
 `mouse_hid`, never sending USB reports while holding LVGL's display mutex.
 The main loop submits mouse reports directly to TinyUSB without waiting for
 Arduino's report semaphore. Rejected submissions retain queued input; accepted
@@ -1513,11 +1522,13 @@ submissions are acknowledged once. USB and OTA epochs are checked immediately
 before submission; neutral release remains allowed during OTA. Reports already
 accepted by TinyUSB cannot be recalled. Keyboard boot protocol does not carry
 mouse reports.
-`MouseSurfaceTouch` shares event isolation, press setup, USB/OTA gesture epoch
-checks, object flags, and show/hide cancellation between both widgets.
-Widget hide/destroy and connection-epoch changes cancel stale input. A click
-release has priority over subsequent movement; OTA clears input while still
-allowing a neutral release report.
+`MouseSurfaceTouch` shares event isolation, press setup, generation checks,
+lifetime guards, and show/hide cancellation between both widgets. Metadata
+discovery scans LVGL event descriptors only for new targets; captured input
+resolves the active session by object and lifetime without rescanning. Mouse
+generations cover USB/OTA epochs and explicit resets, including taps between
+sessions. Hide/delete, pad changes, wake suppression, disconnect, and OTA cancel
+stale input and drag ownership. Released inertia is also canceled on hide.
 
 Scrollpad uses the same event isolation, press lock, and lifecycle callbacks.
 `ScrollpadInput` tracks the selected axis only and accumulates fractional
@@ -1549,7 +1560,14 @@ The Mouse Button action queues the configured Left, Right, or Middle button
 mask through the same sender. It has no touch callback or widget lifecycle;
 the action-list host decides when to dispatch it. It does not enable pointer
 movement or hold-to-drag. The sender stores up to eight clicks in FIFO order
-and retries a neutral release between each click.
+and retries a release to the currently held button mask between each click.
+Clicks overlapping an owned button are rejected. Other-button clicks preserve
+the owned mask through their release. Reports carry explicit acknowledgement
+kinds and revisions: a button-bearing movement report is not a queued click.
+The bounded FIFO reserves two entries for hold/release transitions. It snapshots
+movement at each ownership transition so a pending tap click, drag press,
+drag movement, and release stay ordered across failed sends or a lift before
+delivery. Duplicate/stale acknowledgements cannot consume another transition.
 
 ### Gamepad Ownership And Touch Safety
 
@@ -1566,8 +1584,7 @@ TinyUSB report outside it, and acknowledges only matching generation/sequence
 state. USB and OTA epochs invalidate stale input; neutral recovery precedes
 new output. Pad hide/replacement resets standalone and widget holds. A bounded
 tap waits for press submission, holds 50 ms, then completes its continuation
-only after release submission. Reset fails unconsumed completions. Report
-cadence and end-to-end latency remain hardware measurement items.
+only after release submission. Reset fails unconsumed completions.
 
 `GamepadJoystickInput` isolates geometry from LVGL and transport ownership.
 `GamepadSurfaceTouch` maps synthetic/single-contact LVGL events to press/move/release/cancel,
@@ -1580,15 +1597,17 @@ run independently of MCP. The registry has 16 slots for fully featured boards.
 slots track IDs, coordinates, and object/lifetime tokens, without a separate
 widget registry. Topmost LVGL hit-testing respects overlays and transforms;
 direct updates invert transforms before applying joystick geometry. One contact
-captures each widget until lift or cancellation; extras never acquire midway.
+captures each gamepad widget until lift or cancellation; extras never acquire midway.
 Hiding, disabling, replacing, or destroying targets invalidates their captures.
 USB generation changes cancel routed interactions as well as LVGL state.
 
 Controller input cancels an existing navigation pointer without clicking and
 locks navigation until all contacts lift. Ordinary navigation retains its
-primary ID and does not promote already-held secondary fingers. Mousepad and
-Scrollpad remain single-pointer consumers. Synthetic taps use the existing LVGL
-path only while physically idle, and their owed release takes precedence.
+primary ID and does not promote already-held secondary fingers. Ordinary LVGL
+navigation remains single-pointer; the physical router independently captures
+up to two contacts for Mousepad and one for Scrollpad. Synthetic taps use the
+existing single-pointer LVGL path only while physically idle, and their owed
+release takes precedence.
 
 TouchManager's LVGL callback is the sole physical reader, including during
 suppression and screen-saver sleep; auxiliary touch/wake queries read cached
@@ -1596,8 +1615,7 @@ physical state. `TouchSnapshotFilter` tolerates an error episode for 100 ms;
 unchanged scans do not end that episode. Expiry explicitly cancels routed owners
 and resets LVGL. Errors, suppression, active pad rebuilds/switches, and transport
 invalidation require a fresh raw all-released scan before new interaction.
-OTA cancels input before the display task pauses. Firmware verification does not
-prove panel contact capacity, stable IDs, or end-to-end multitouch latency.
+OTA cancels input before the display task pauses.
 
 ### Touch Calibration
 
