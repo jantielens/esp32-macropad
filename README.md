@@ -54,6 +54,9 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   multicontact drivers, with single-touch movement/tap/drag fallback.
   Optional left/right mouse button zones support held-button dragging and
   pointer-finger repositioning on multicontact drivers.
+  Mousepad, Scrollpad, and gamepad widgets can optionally disable swipe actions
+  across their pad. Mousepad can show a top-left Back button using screen history.
+  Both navigation settings default off.
   BLE keyboard support is board-dependent; some Macropad boards disable it to
   preserve internal RAM. Supported BLE builds offer single-owner pairing.
   HID output defaults to Off. Select a supported transport in

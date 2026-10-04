@@ -1505,6 +1505,24 @@ handlers, without entering physical capture. Event isolation and press lock
 still consume clicks, long presses, and pad swipes. No driver, HID descriptor,
 or native Extension ABI changes are needed.
 
+`WidgetConfig::disable_pad_swipes` parses `widget_disable_pad_swipes`, default
+false. Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button support it.
+During each button rebuild, `PadScreen` checks all configured widgets and
+registers the screen swipe handler only if none enables suppression. Swipe
+registration replaces the previous handler, so toggling the setting restores
+navigation without duplicate callbacks. Suppression is pad-wide and does not
+depend on HID readiness, widget visibility, or where contact begins.
+
+The optional `widget_mousepad_back` setting creates an LVGL child button in
+the mousepad's top-left corner. Raw hit testing forwards that child to LVGL
+navigation rather than mouse capture. Its handler consumes touch events and
+calls existing back navigation on a short stationary tap. Movement over
+8 pixels or a long press cancels the tap. Pressing Back clears mouse input,
+releases its held button, and stops inertia without changing the HID generation
+and invalidating the navigation contact. The target is at most 44 pixels square
+and shrinks to the mousepad's content bounds. Both settings default off; empty
+screen history has no special handling.
+
 `MousepadInput` owns relative baselines, fractional sensitivity remainders,
 threshold checks, and time-based acceleration. Its pointer, scrolling, dragging,
 and wait-for-release modes share the physical and synthetic point handlers.

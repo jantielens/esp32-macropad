@@ -488,6 +488,13 @@ Configure what happens when you swipe in each direction. Screens use the same ac
 
 Each of the four directions (left, right, up, down) can have one action. By default, swipe right navigates back.
 
+Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button also offer
+**Disable pad swipe actions (entire pad)** in the button editor. It defaults
+off; enabling it on any one widget disables all swipe actions across that pad,
+regardless of touch location or USB connection. Mousepad's optional
+**Show Back button** adds a top-left arrow that uses screen history without
+sending mouse input. It defaults off and does nothing when history is empty.
+
 ### Boot Actions
 
 *Shown only on boards with a display.*

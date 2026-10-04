@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Optional pad-wide swipe suppression on Mousepad, Scrollpad, Gamepad Joystick,
+  and Gamepad Button, plus a touch-isolated top-left Back button on Mousepad.
+  Both settings default off and are exposed in the editor and MCP metadata.
+  Back uses existing history with no fallback when it is empty.
 * Generic composite USB HID gamepad with two sticks, independent triggers,
   an eight-direction hat, and 16 buttons, enabled by USB keyboard transport.
 * Gamepad Joystick and automatically released Gamepad Button

@@ -11,6 +11,8 @@
 #define IS_SHUTTER_TESTER 0
 #define HAS_TOUCH 1
 #define HAS_MCP 0
+#undef HAS_AUDIO
+#define HAS_AUDIO 0
 #include "gamepad_hid.h"
 #include "mouse_hid_state.h"
 
@@ -18,11 +20,13 @@ namespace {
 GamepadHidState widget_controller;
 uint32_t widget_generation = 1;
 bool widget_ready = true;
+unsigned widget_back_requests = 0;
 MouseHidState widget_mouse;
 uint32_t widget_mouse_epoch = 1;
 }
 
 bool mouse_hid_is_ready() { return widget_ready; }
+bool display_manager_go_back() { ++widget_back_requests; return true; }
 uint32_t usb_hid_epoch() { return widget_mouse_epoch; }
 uint32_t mouse_hid_generation() { return widget_mouse.current_generation(); }
 void mouse_hid_cancel() { widget_mouse.reset(); }
@@ -79,6 +83,46 @@ static void joystick_set_pos(lv_obj_t* object, int32_t horizontal, int32_t verti
 #include "widgets/gamepad_touch_router.h"
 #include "widgets/mousepad_widget.cpp"
 #include "widgets/scrollpad_widget.cpp"
+#include "swipe_actions.cpp"
+
+static unsigned navigation_swipe_requests = 0;
+static SwipeConfig navigation_swipe_config{};
+const SwipeConfig* swipe_config_get() { return &navigation_swipe_config; }
+ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
+    ++navigation_swipe_requests;
+    return ACTION_COMPLETE;
+}
+
+TEST(WidgetNavigation, AnyEnabledInputWidgetSuppressesTheEntirePad) {
+    ScreenButtonConfig buttons[2]{};
+    PadConfig pad{};
+    pad.buttons = buttons;
+    pad.button_count = 2;
+    strcpy(buttons[0].widget.type, "gauge");
+    strcpy(buttons[1].widget.type, "scrollpad");
+    EXPECT_FALSE(pad_disables_swipes(pad));
+    buttons[0].widget.disable_pad_swipes = true;
+    EXPECT_FALSE(pad_disables_swipes(pad));
+    buttons[1].widget.disable_pad_swipes = true;
+    EXPECT_TRUE(pad_disables_swipes(pad));
+    buttons[1].widget.disable_pad_swipes = false;
+    EXPECT_FALSE(pad_disables_swipes(pad));
+}
+
+TEST(WidgetNavigation, SwipeControlIsLimitedToInputWidgetsAndDefaultsOff) {
+    WidgetConfig config{};
+    for (const char* name : {"mousepad", "scrollpad", "gamepad_button", "gamepad_stick"}) {
+        strlcpy(config.type, name, sizeof(config.type));
+        config.disable_pad_swipes = false;
+        EXPECT_FALSE(widget_disables_pad_swipes(config));
+        config.disable_pad_swipes = true;
+        EXPECT_TRUE(widget_disables_pad_swipes(config));
+    }
+    for (const char* name : {"", "gauge", "clock"}) {
+        strlcpy(config.type, name, sizeof(config.type));
+        EXPECT_FALSE(widget_disables_pad_swipes(config));
+    }
+}
 
 class GamepadWidget : public testing::Test {
 protected:
@@ -107,6 +151,12 @@ protected:
         widget_mouse.reset();
         ++widget_generation;
         widget_ready = true;
+        widget_back_requests = 0;
+        navigation_swipe_requests = 0;
+        for (ButtonAction* action : {&navigation_swipe_config.swipe_left, &navigation_swipe_config.swipe_right,
+                                     &navigation_swipe_config.swipe_up, &navigation_swipe_config.swipe_down}) {
+            strcpy(action->type, "test");
+        }
         joystick_size_updates = joystick_position_updates = 0;
         display = lv_display_create(300, 300);
         lv_display_set_buffers(display, buffer, nullptr, sizeof(buffer), LV_DISPLAY_RENDER_MODE_PARTIAL);
@@ -137,13 +187,14 @@ protected:
         button_config.actions[0].payload.gamepad = {0, 0, 1};
     }
 
-    void create(const char* name, bool mouse_buttons = false) {
+    void create(const char* name, bool mouse_buttons = false, bool show_back = false) {
         strlcpy(config.type, name, sizeof(config.type));
         ASSERT_STREQ(config.type, name);
         type = widget_find(config.type);
         ASSERT_NE(type, nullptr);
         JsonDocument document;
         document["widget_mousepad_buttons"] = mouse_buttons;
+        document["widget_mousepad_back"] = show_back;
         type->parseConfig(document.as<JsonObject>(), config.data);
         type->createUI(button, &config, &button_config, nullptr, nullptr, nullptr, nullptr, &state);
         lv_obj_update_layout(button);
@@ -1132,6 +1183,125 @@ TEST_F(GamepadWidget, MouseSurfaceHideStopsReleasedInertia) {
     EXPECT_FALSE(widget_mouse.inertia_tick(lv_tick_get() + 20).valid);
 }
 
+TEST_F(GamepadWidget, PadSwipeHandlerCanBeDisabledAndReenabledWithoutDuplicates) {
+    create("mousepad");
+    widget_ready = false;
+    lv_obj_t* overlay = lv_obj_create(lv_screen_active());
+    lv_obj_set_pos(overlay, 0, 0);
+    lv_obj_set_size(overlay, 320, 240);
+    lv_obj_remove_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
+    swipe_actions_register(lv_screen_active(), false);
+    swipe_actions_register(overlay, false);
+    point = {250, 60};
+    read(true);
+    point.y = 180;
+    read(true);
+    read(false);
+    EXPECT_EQ(navigation_swipe_requests, 0U);
+    swipe_actions_register(lv_screen_active());
+    swipe_actions_register(lv_screen_active());
+    swipe_actions_register(overlay);
+    swipe_actions_register(overlay);
+    lv_tick_inc(400);
+    point = {250, 60};
+    read(true);
+    point.y = 180;
+    read(true);
+    read(false);
+    EXPECT_EQ(navigation_swipe_requests, 1U);
+    swipe_actions_register(lv_screen_active(), false);
+    swipe_actions_register(overlay, false);
+    lv_tick_inc(400);
+    point = {250, 60};
+    read(true);
+    point.y = 180;
+    read(true);
+    read(false);
+    EXPECT_EQ(navigation_swipe_requests, 1U);
+}
+
+TEST_F(GamepadWidget, MousepadBackIsOptInAndConsumesTapsWithoutUsb) {
+    create("mousepad", false, true);
+    ASSERT_EQ(lv_obj_get_child_count(button), 1U);
+    lv_obj_t* back = lv_obj_get_child(button, 0);
+    EXPECT_EQ(lv_obj_get_width(back), 44);
+    EXPECT_EQ(lv_obj_get_height(back), 44);
+    widget_ready = false;
+    mouse_reports();
+    point = {20, 20};
+    read(true);
+    read(false);
+    EXPECT_EQ(widget_back_requests, 1U);
+    EXPECT_EQ(ordinary_actions, 0U);
+    EXPECT_EQ(swipe_actions, 0U);
+    EXPECT_TRUE(mouse_reports().empty());
+}
+
+TEST_F(GamepadWidget, MousepadBackCancelsMovedAndLongPresses) {
+    create("mousepad", false, true);
+    mouse_reports();
+    point = {20, 20};
+    read(true);
+    point = {80, 80};
+    read(true);
+    point = {20, 20};
+    read(true);
+    read(false);
+    EXPECT_EQ(widget_back_requests, 0U);
+    EXPECT_TRUE(mouse_reports().empty());
+    read(true);
+    lv_tick_inc(1000);
+    read(true);
+    read(false);
+    EXPECT_EQ(widget_back_requests, 0U);
+    EXPECT_TRUE(mouse_reports().empty());
+}
+
+TEST_F(GamepadWidget, MousepadRawBackAfterMouseInputDoesNotResetGeneration) {
+    create("mousepad", false, true);
+    struct RawInput {
+        GamepadTouchRouter router;
+        TouchSnapshot snapshot;
+    } raw;
+    lv_indev_set_user_data(indev, &raw);
+    lv_indev_set_read_cb(indev, [](lv_indev_t* input, lv_indev_data_t* data) {
+        auto* raw = static_cast<RawInput*>(lv_indev_get_user_data(input));
+        const auto navigation = raw->router.update(raw->snapshot, false, widget_generation,
+                                                   mouse_hid_generation());
+        if (raw->router.reset_navigation) lv_indev_reset(input, nullptr);
+        data->state = navigation.pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        if (navigation.pressed) data->point = {navigation.horizontal, navigation.vertical};
+    });
+    raw.snapshot = contacts({{1, 80, 80}});
+    read(true);
+    raw.snapshot = contacts({{1, 110, 110}});
+    read(true);
+    raw.snapshot = contacts({});
+    read(false);
+    mouse_reports();
+    const uint32_t generation = mouse_hid_generation();
+    raw.snapshot = contacts({{1, 20, 20}});
+    read(true);
+    EXPECT_EQ(mouse_hid_generation(), generation);
+    EXPECT_EQ(MouseSurfaceTouch::session(), nullptr);
+    raw.snapshot = contacts({});
+    read(false);
+    EXPECT_EQ(widget_back_requests, 1U);
+    EXPECT_TRUE(mouse_reports().empty());
+}
+
+TEST_F(GamepadWidget, MousepadRawMovementAcrossBackNeverNavigates) {
+    create("mousepad", false, true);
+    mouse_reports();
+    GamepadTouchRouter router;
+    router.update(contacts({{1, 80, 80}}), false, widget_generation, mouse_hid_generation());
+    router.update(contacts({{1, 20, 20}}), false, widget_generation, mouse_hid_generation());
+    router.update(contacts({}), false, widget_generation, mouse_hid_generation());
+    EXPECT_EQ(widget_back_requests, 0U);
+    EXPECT_FALSE(mouse_reports().empty());
+}
+
 TEST_F(GamepadWidget, MousepadAuthoringValidationAndParse) {
     const auto* mousepad = widget_find("mousepad");
     ASSERT_NE(mousepad->validateConfig, nullptr);
@@ -1161,6 +1331,13 @@ TEST_F(GamepadWidget, MousepadAuthoringValidationAndParse) {
     EXPECT_EQ(parsed->inertia, 3);
     EXPECT_EQ(parsed->sensitivity, 1);
     EXPECT_FALSE(parsed->button_zones_enabled);
+    EXPECT_FALSE(parsed->show_back);
+    document["widget_mousepad_back"] = "true";
+    EXPECT_NE(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
+    document["widget_mousepad_back"] = true;
+    EXPECT_EQ(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
+    mousepad->parseConfig(document.as<JsonObject>(), config.data);
+    EXPECT_TRUE(parsed->show_back);
     document["widget_mousepad_buttons"] = "true";
     EXPECT_NE(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
     document["widget_mousepad_buttons"] = true;

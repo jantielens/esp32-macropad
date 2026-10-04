@@ -1159,8 +1159,10 @@ and coasting conventions. Sensitivity applies to pointer and scroll travel;
 acceleration applies only to pointer movement. `widget_mousepad_buttons` is
 boolean (default false), enabling left/right hold zones in the bottom 20%.
 The zones use unfilled rounded dashed text-color outlines; a held zone has a
-thicker outline. Pad storage and import/export
-preserve all six fields through the existing raw JSON path. The editor
+thicker outline. `widget_mousepad_back` is boolean (default false), adding
+a top-left Back button that consumes its touches without mouse output and
+uses existing screen history, with no fallback when history is empty.
+Pad storage and import/export preserve these fields through the existing raw JSON path. The editor
 loads/saves these fields and bounds numeric inputs. Shared widget validation
 rejects invalid types, non-finite/out-of-range numbers, and non-boolean toggle
 values independently of MCP. Parsing still supplies defaults and bounds values.
@@ -1171,6 +1173,14 @@ contact ownership, cancellation, and single-contact behavior.
 The editor consumes ordinary
 button actions for this widget and hides their controls. MCP advertises its
 schema through the widget registry without a separate mouse control tool.
+
+Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button share
+`widget_disable_pad_swipes` (boolean, default false). The editor exposes
+**Disable pad swipe actions (entire pad)** only for those widgets; authoring
+validation rejects the field on other types. If any configured input widget
+enables it, the pad registers no swipe handler, regardless of touch position
+or USB readiness. Rebuilding the pad reapplies the aggregate setting.
+MCP includes the shared field in each supported widget's capability metadata.
 
 Gamepad Joystick and Gamepad Button use the same display/touch/USB gates and
 existing USB keyboard transport setting, with no new NVS toggle. USB registers

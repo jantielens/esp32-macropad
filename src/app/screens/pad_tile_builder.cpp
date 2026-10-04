@@ -155,6 +155,7 @@ void PadScreen::clearTiles() {
 
 void PadScreen::buildTiles() {
     clearTiles();
+    swipe_actions_register(screen);
 
     if (!container) return;
 
@@ -171,6 +172,9 @@ void PadScreen::buildTiles() {
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
+
+    const bool swipes_enabled = !pad_disables_swipes(*cfg);
+    swipe_actions_register(screen, swipes_enabled);
 
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
@@ -712,7 +716,7 @@ void PadScreen::buildTiles() {
         lv_obj_add_flag(padActionOverlay, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(padActionOverlay, onPadActionTap,
                             LV_EVENT_SHORT_CLICKED, this);
-        swipe_actions_register(padActionOverlay);
+        swipe_actions_register(padActionOverlay, swipes_enabled);
     }
 
 #if HAS_MQTT

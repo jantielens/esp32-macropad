@@ -467,6 +467,8 @@ function padDialogOpen(col, row) {
         (btn.widget_mousepad_inertia !== undefined) ? btn.widget_mousepad_inertia : 0;
     document.getElementById('pad-edit-mousepad-reverse').checked = btn.widget_mousepad_reverse === true;
     document.getElementById('pad-edit-mousepad-buttons').checked = btn.widget_mousepad_buttons === true;
+    document.getElementById('pad-edit-mousepad-back').checked = btn.widget_mousepad_back === true;
+    document.getElementById('pad-edit-disable-pad-swipes').checked = btn.widget_disable_pad_swipes === true;
     document.getElementById('pad-edit-scrollpad-axis').value =
         btn.widget_scrollpad_axis === 'horizontal' ? 'horizontal' : 'vertical';
     document.getElementById('pad-edit-scrollpad-sensitivity').value =
@@ -663,6 +665,9 @@ function padDialogOk(keepOpen) {
     // Widget type
     if (wtype) {
         btn.widget_type = wtype;
+        if (['mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'].includes(wtype)) {
+            btn.widget_disable_pad_swipes = document.getElementById('pad-edit-disable-pad-swipes').checked;
+        }
         if (wtype === 'gamepad_stick') {
             btn.widget_gamepad_stick = document.getElementById('pad-edit-gamepad-stick').value === 'right' ? 'right' : 'left';
             btn.widget_gamepad_center = document.getElementById('pad-edit-gamepad-center').value === 'floating' ? 'floating' : 'fixed';
@@ -684,6 +689,7 @@ function padDialogOk(keepOpen) {
             btn.widget_mousepad_inertia = padGetBoundedWidgetNumber('pad-edit-mousepad-inertia', 0, 0, 5);
             btn.widget_mousepad_reverse = document.getElementById('pad-edit-mousepad-reverse').checked;
             btn.widget_mousepad_buttons = document.getElementById('pad-edit-mousepad-buttons').checked;
+            btn.widget_mousepad_back = document.getElementById('pad-edit-mousepad-back').checked;
         }
         if (wtype === 'bar_chart') {
             const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();

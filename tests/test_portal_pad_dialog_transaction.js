@@ -123,6 +123,30 @@ assert.strictEqual(context.padState.buttons[0].widget_mousepad_movement_threshol
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_inertia, 0);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_reverse, false);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_buttons, false);
+assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, false);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_back, false);
+document.getElementById('pad-edit-disable-pad-swipes').checked = true;
+document.getElementById('pad-edit-mousepad-back').checked = true;
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, true);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_back, true);
+for (const widgetType of ['scrollpad', 'gamepad_stick', 'gamepad_button']) {
+    document.getElementById('pad-edit-widget-type').value = widgetType;
+    context.padDialogOk(true);
+    assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, true);
+    assert.strictEqual(context.padState.buttons[0].widget_mousepad_back, undefined);
+    document.getElementById('pad-edit-disable-pad-swipes').checked = false;
+    context.padDialogOk(true);
+    assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, false);
+    document.getElementById('pad-edit-disable-pad-swipes').checked = true;
+}
+document.getElementById('pad-edit-widget-type').value = '';
+context.actionEditorBuild = function() { return {}; };
+context.padDialogOk(true);
+assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, undefined);
+document.getElementById('pad-edit-widget-type').value = 'mousepad';
+document.getElementById('pad-edit-disable-pad-swipes').checked = false;
+document.getElementById('pad-edit-mousepad-back').checked = false;
 assert.strictEqual(context.padState.buttons[0].actions, undefined);
 assert.strictEqual(context.padState.buttons[0].lp_actions, undefined);
 document.getElementById('pad-edit-mousepad-buttons').checked = true;

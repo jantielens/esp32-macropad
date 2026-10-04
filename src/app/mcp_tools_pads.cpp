@@ -74,6 +74,14 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         JsonObject w = widgets.createNestedObject();
         w["type"] = wt->name;
         if (wt->describeSchema) wt->describeSchema(w);
+        if (widget_supports_pad_swipe_control(wt->name)) {
+            JsonArray fields = w["config_fields"].as<JsonArray>();
+            if (fields.isNull()) fields = w.createNestedArray("config_fields");
+            JsonObject field = fields.createNestedObject();
+            field["name"] = "widget_disable_pad_swipes";
+            field["type"] = "boolean";
+            field["desc"] = "Disable all swipe actions across this pad when any input widget enables it (default false); independent of USB connection";
+        }
     }
     result["widget_common"] = "all widgets: widget_type + widget_data_binding (and _2.._4 for extra binding templates); widget config fields are flat on the button. A config field whose \"type\" is \"action\" is a NESTED action object (same {type, <mode>, <value>} shape as a button action, and supports the {step} token), NOT a string — e.g. numericrocker's widget_numericrocker_action.";
 

@@ -359,6 +359,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
     // Widget type (bar_chart, gauge, etc.)
     const char* wtype = obj["widget_type"] | "";
     strlcpy(btn->widget.type, wtype, CONFIG_WIDGET_TYPE_MAX_LEN);
+    btn->widget.disable_pad_swipes = obj["widget_disable_pad_swipes"] | false;
     // Data bindings: data_binding[0] from "widget_data_binding",
     // data_binding[1..3] from "widget_data_binding_2..4"
     strlcpy(btn->widget.data_binding[0], obj["widget_data_binding"] | "", CONFIG_LABEL_MAX_LEN);

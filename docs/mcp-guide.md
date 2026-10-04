@@ -325,6 +325,12 @@ Active records are never evicted. When all four records are active or retained,
   `widget_mousepad_inertia` (0-5, default 0/off), and
   `widget_mousepad_buttons` (boolean, default false) for bottom left/right hold
   zones supporting pointer-finger repositioning while a mouse button is held.
+  `widget_mousepad_back` (boolean, default false) adds a top-left Back button
+  isolated from mouse input, using existing history with no empty-history fallback.
+  Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button also advertise
+  `widget_disable_pad_swipes` (boolean, default false). Enabling it on any
+  one input widget disables all swipe actions across its entire pad,
+  independently of USB readiness. Other widget types reject this field.
   The registry note describes pointer movement, taps, dragging, and two-finger
   scrolling when USB keyboard transport is active. See the
   [Mousepad guide](pad-editor-guide.md#mousepad) for gesture timing, thresholds,

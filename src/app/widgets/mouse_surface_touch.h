@@ -71,17 +71,21 @@ struct MouseSurfaceTouch {
         return true;
     }
 
+    static bool is_pointer_event(lv_event_code_t code) {
+        return code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING ||
+               code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST ||
+               code == LV_EVENT_SHORT_CLICKED || code == LV_EVENT_CLICKED ||
+               code == LV_EVENT_LONG_PRESSED || code == LV_EVENT_LONG_PRESSED_REPEAT ||
+               code == LV_EVENT_GESTURE;
+    }
+
     void process(lv_event_t* event) {
         const lv_event_code_t code = lv_event_get_code(event);
         if (code == LV_EVENT_INDEV_RESET) {
             if (!physical) cancel();
             return;
         }
-        if (code != LV_EVENT_PRESSED && code != LV_EVENT_PRESSING &&
-            code != LV_EVENT_RELEASED && code != LV_EVENT_PRESS_LOST &&
-            code != LV_EVENT_SHORT_CLICKED && code != LV_EVENT_CLICKED &&
-            code != LV_EVENT_LONG_PRESSED && code != LV_EVENT_LONG_PRESSED_REPEAT &&
-            code != LV_EVENT_GESTURE) return;
+        if (!is_pointer_event(code)) return;
         lv_event_stop_bubbling(event);
         lv_event_stop_processing(event);
         if (session() && session()->physical) return;

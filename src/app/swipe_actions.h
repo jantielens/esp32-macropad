@@ -10,7 +10,7 @@
 // Call from any Screen::create() to enable configurable swipe actions.
 // The handler reads from swipe_config and dispatches via the standard
 // action system (screen nav, back, MQTT, BLE key, etc.).
-void swipe_actions_register(lv_obj_t* screen_obj);
+void swipe_actions_register(lv_obj_t* screen_obj, bool enabled = true);
 
 // Timestamp of last swipe event (milliseconds, from lv_tick_get()).
 // Checked by button tap/long-press handlers to suppress accidental

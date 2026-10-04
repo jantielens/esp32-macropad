@@ -475,6 +475,8 @@ function padWidgetTypeChanged() {
     var isMouseWidget = (wtype === 'mousepad' || wtype === 'scrollpad');
     var isGamepadWidget = (wtype === 'gamepad_stick' || wtype === 'gamepad_button');
     var consumesActions = isMouseWidget || isGamepadWidget;
+    var navigationGroup = document.getElementById('pad-edit-input-navigation');
+    if (navigationGroup) navigationGroup.style.display = consumesActions ? '' : 'none';
     var axis = 'vertical';
     if (isRocker) {
         var axSel = document.getElementById('pad-edit-rocker-axis');

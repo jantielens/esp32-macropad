@@ -343,6 +343,7 @@ struct WidgetConfig {
     char type[CONFIG_WIDGET_TYPE_MAX_LEN];     // "" = normal button (default)
     char data_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN]; // Binding templates (0=primary, 1-3=extra)
     uint8_t data[WIDGET_CONFIG_MAX_BYTES];     // type-specific config, opaque to pad_config
+    bool disable_pad_swipes = false;
 };
 
 // Per-button config (grid placement, labels, colors, typed actions)
