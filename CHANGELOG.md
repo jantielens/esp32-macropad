@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* `[health:usb_status]` reports native USB HID status as `disabled`, `ready`,
+  `connected`, `suspended`, or `error`. The binding is available on USB HID
+  builds and advertised through the shared portal and MCP binding catalog.
+
 ### Changed
 
 * Native USB HID builds now send diagnostic logs through UART0 at 115200 baud

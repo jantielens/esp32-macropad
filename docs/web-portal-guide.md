@@ -380,6 +380,14 @@ Upload MP3 files to play as button actions or via MQTT. Files are stored on the 
 
 Once uploaded, alert sounds are available through **Sound Alert** with the **MP3 Alert** kind in the button editor, swipe actions, and boot actions.
 
+#### USB HID Status
+
+On boards with native USB HID support, use `[health:usb_status]` in button
+bindings. It reports `disabled` when USB HID is not enabled, `ready` while
+waiting for host enumeration, `connected` for an enumerated and awake host,
+`suspended` while the host suspends USB, or `error` if initialization fails.
+USB power or a plugged-in cable alone does not imply `connected`.
+
 #### BLE Signals
 
 The firmware exposes two BLE health signals for bindings and diagnostics:

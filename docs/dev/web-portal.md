@@ -667,6 +667,11 @@ format syntax. The device validates saved configurations authoritatively.
 The MCP `get_capabilities` manifest serializes its binding-scheme list from the
 same registry, so portal and MCP clients receive equivalent metadata.
 
+On `HAS_USB_HID` builds, the health key list includes `usb_status` for
+`[health:usb_status]`: `disabled`, `ready`, `connected`, `suspended`, or `error`.
+`connected` requires host enumeration and an awake USB session; USB power alone
+is insufficient. This is a binding key, not an additional `/api/health` field.
+
 ### Device Information
 
 #### `GET /api/info`

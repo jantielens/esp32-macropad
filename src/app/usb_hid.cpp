@@ -103,6 +103,12 @@ void usb_event(void*, esp_event_base_t, int32_t event, void*) {
 }
 
 bool usb_hid_is_ready() { return initialized.load() && hid && tud_mounted() && !tud_suspended(); }
+const char* usb_hid_status() {
+    if (!initialized.load()) return hid ? "error" : "disabled";
+    if (!tud_mounted()) return "ready";
+    if (tud_suspended()) return "suspended";
+    return "connected";
+}
 bool usb_hid_gamepad_enabled() { return gamepad_enabled.load(); }
 uint32_t usb_hid_epoch() { return epoch.load(); }
 

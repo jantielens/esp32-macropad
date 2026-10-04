@@ -9,6 +9,7 @@ struct MouseHidReport;
 struct GamepadReport;
 void usb_hid_init(const char* device_name, bool enable_hid);
 bool usb_hid_is_ready();
+const char* usb_hid_status();
 bool usb_hid_gamepad_enabled();
 uint32_t usb_hid_epoch();
 uint32_t gamepad_hid_submission_generation();

@@ -317,6 +317,9 @@ Active records are never evicted. When all four records are active or retained,
   Binding scheme names, parameter limits, and finite keys are serialized from the
   same live registry used by `GET /api/bindings` for the portal, so the manifest
   reflects the current board and device class without a separate MCP catalog.
+  USB HID builds include `[health:usb_status]` with values `disabled`, `ready`,
+  `connected`, `suspended`, and `error`. A connected status requires host
+  enumeration and an awake USB session, not merely USB power.
   On touch-enabled USB HID builds, the widget manifest also advertises
   `mousepad` with `widget_mousepad_sensitivity` (0.1-5, default 1),
   `widget_mousepad_acceleration` (0-5, default 0/off),

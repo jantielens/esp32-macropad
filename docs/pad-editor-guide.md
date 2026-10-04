@@ -1617,6 +1617,7 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `hostname` | Device hostname | `macropad` |
 | `table` | Structured table payload (standard schema) | `{"title":"Status","columns":[...],"rows":[...]}` |
 | `extended_table` | Structured table payload (extended schema) | `{"title":"Status","columns":[...],"rows":[...],"styles":...}` |
+| `usb_status` | Compact USB HID status (USB HID builds only) | `disabled`, `ready`, `connected`, `suspended`, `error` |
 | `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
 | `ble_name` | Current BLE keyboard name | `Kitchen Pad BLE` |
 | `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
@@ -1631,6 +1632,22 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 Values are cached for up to 2 seconds to keep the CPU impact low.
 
 `table` and `extended_table` are intended for the Table widget data binding field. Use them as exact single-token templates (for example `[health:table]`) so the structured payload is passed through unchanged.
+
+**USB HID status values:**
+
+| Value | Meaning |
+|-------|---------|
+| `disabled` | USB HID is not enabled, including when BLE or Off is selected |
+| `ready` | USB HID initialized and waiting for host enumeration |
+| `connected` | A host enumerated the device and USB is not suspended |
+| `suspended` | The enumerated host suspended USB; HID reports cannot currently be sent |
+| `error` | USB initialization failed |
+
+Use `USB: [health:usb_status]` in a label, or
+`[expr:[health:usb_status]=="connected"?"#00ff00":"#ff0000"]` for a status color.
+The status is read live when resolved. A cable or USB power alone does not mean
+`connected`; the host must enumerate the device. On builds without USB HID,
+the key is unavailable rather than returning `disabled`.
 
 **BLE signal values:**
 
