@@ -49,6 +49,12 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   BLE supports keyboard control only. Native USB is compiled for
   `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
   `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
+  On these builds, native USB is reserved for HID; serial logs use UART0.
+  The supported P4 HID boards have separate USB-C connectors for native USB HID
+  and USB-UART flashing/debugging. If HID does not connect, try the other connector
+  with a data-capable cable; the serial/debugging port cannot send HID input.
+  For logs, use the USB-UART port at 115200 baud, not the HID port. See
+  [USB connector guidance](docs/web-portal-guide.md#keyboard) for port and power precautions.
   Both JC3636W518 variants disable BLE.
   Mousepad supports tap-then-drag and two-finger midpoint scrolling on
   multicontact drivers, with single-touch movement/tap/drag fallback.

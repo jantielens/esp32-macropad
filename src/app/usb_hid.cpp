@@ -151,6 +151,10 @@ bool usb_hid_send_gamepad_report(const GamepadReport& state, uint32_t expected_e
 }
 
 void usb_hid_init(const char* device_name, bool enable_hid) {
+    if (!enable_hid) {
+        LOGI(kUsbHidTag, "Disabled; USB runtime not started");
+        return;
+    }
     char product_name[40];
     keyboard_transport_device_name(product_name, sizeof(product_name),
                                    device_name && device_name[0] ? device_name : PROJECT_DISPLAY_NAME,

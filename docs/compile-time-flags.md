@@ -1087,7 +1087,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/gamepad_hid.cpp
   - src/app/gamepad_hid.h
   - src/app/keyboard_hid.cpp
-  - src/app/log_manager.cpp
   - src/app/mcp_tools_config.cpp
   - src/app/mouse_hid.cpp
   - src/app/mouse_hid.h

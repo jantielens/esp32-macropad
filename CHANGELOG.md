@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Native USB HID builds now send diagnostic logs through UART0 at 115200 baud
+  instead of USB CDC. On dual-USB-C P4 boards, use native USB/OTG for HID and
+  the USB-UART connector for flashing and debugging. Setup guides explain port
+  selection and connector power precautions.
+* Native USB starts only when the selected keyboard transport is USB. BLE and
+  Off no longer start the USB runtime or expose a CDC serial console; UART
+  logging remains available.
+
+### Fixed
+
+* Ordinary button taps and touch navigation work with USB HID disconnected or
+  disabled. Mouse state now resets on disconnect and epoch transitions rather
+  than every disconnected poll, preventing repeated touch-router cancellation.
+
 ## [1.36.0] - 2026-10-04
 
 ### Added

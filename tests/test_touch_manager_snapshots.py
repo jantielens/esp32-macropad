@@ -183,3 +183,81 @@ int main() {
                                 str(test_source), "-o", str(executable)], check=True)
                 subprocess.run([str(executable)], check=True)
 print("PASS: shared touch capabilities across display, touch, and USB feature combinations")
+
+mouse_source = (root / "src/app/mouse_hid.cpp").read_text()
+mouse_start = mouse_source.index("namespace {")
+mouse_end = mouse_source.rindex("#endif")
+mouse_harness = r'''
+#include <cassert>
+#include <cstdint>
+#include "mouse_hid_state.h"
+#define portMUX_TYPE int
+#define portMUX_INITIALIZER_UNLOCKED 0
+#define portENTER_CRITICAL(mux) ((void)(mux))
+#define portEXIT_CRITICAL(mux) ((void)(mux))
+static bool usb_ready = false, ota_active = false;
+static uint32_t usb_epoch = 1, ota_epoch = 0, clock_ms = 0;
+static unsigned submissions = 0;
+static uint32_t millis() { return ++clock_ms; }
+static uint32_t usb_hid_epoch() { return usb_epoch; }
+static uint32_t ota_activity_epoch() { return ota_epoch; }
+static bool usb_hid_is_ready() { return usb_ready; }
+static bool ota_activity_is_active() { return ota_active; }
+static bool usb_hid_send_mouse_report(const MouseHidReport&, uint32_t, uint32_t) {
+    ++submissions;
+    return true;
+}
+bool mouse_hid_is_ready();
+'''
+mouse_harness += mouse_source[mouse_start:mouse_end]
+mouse_harness += r'''
+int main() {
+    auto expect_stable = [](uint32_t generation) {
+        for (unsigned poll = 0; poll < 100; ++poll) {
+            mouse_hid_loop();
+            assert(mouse_hid_generation() == generation);
+        }
+    };
+    const uint32_t initial = mouse_hid_generation();
+    expect_stable(initial);
+    assert(submissions == 0);
+    usb_ready = true;
+    mouse_hid_loop();
+    assert(mouse_hid_generation() == initial);
+    mouse_hid_move(12, 34, usb_epoch);
+    usb_ready = false;
+    mouse_hid_loop();
+    const uint32_t disconnected = mouse_hid_generation();
+    assert(disconnected == initial + 1);
+    expect_stable(disconnected);
+    usb_ready = true;
+    mouse_hid_loop();
+    MouseHidReport report;
+    assert(!mouse_state.next(report));
+    mouse_hid_move(5, 6, usb_epoch);
+    assert(mouse_state.next(report) && report.dx == 5 && report.dy == 6);
+    ++usb_epoch;
+    const uint32_t reenumerated = mouse_hid_generation();
+    assert(reenumerated == disconnected + 1);
+    expect_stable(reenumerated);
+    ota_active = true;
+    ++ota_epoch;
+    const uint32_t paused = mouse_hid_generation();
+    assert(paused == reenumerated + 1);
+    expect_stable(paused);
+    ota_active = false;
+    ++ota_epoch;
+    const uint32_t resumed = mouse_hid_generation();
+    assert(resumed == paused + 1);
+    expect_stable(resumed);
+}
+'''
+with tempfile.TemporaryDirectory() as directory:
+    test_source = pathlib.Path(directory) / "mouse_disconnect.cpp"
+    executable = pathlib.Path(directory) / "mouse_disconnect"
+    test_source.write_text(mouse_harness)
+    subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                    "-I", str(root / "src/app"), str(test_source),
+                    "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
+print("PASS: mouse generations stay stable while disconnected and invalidate once per transition")

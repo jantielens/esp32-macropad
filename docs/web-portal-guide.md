@@ -203,11 +203,30 @@ compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
 `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard output defaults to Off.
 Both JC3636W518 variants disable BLE and offer only Off or USB. Switching their
 firmware from hardware CDC to TinyUSB may assign a different Windows COM port.
-Hardware validation so far
-covers `jc1060p470c-sd` only. Use the native USB device connector, not a USB-UART
-bridge or host-only connector; check the board's connector and power wiring.
-On JC1060P470C hardware, USB uses the high-speed USB-C connector. Use one powered
-USB cable on that board because its connector power rails are shared.
+
+The P4 HID builds (`esp32-p4-lcd4b`, `jc1060p470c`, `jc1060p470c-sd`,
+`jc4880p433`, and `jc4880p433-sd`) use two separate USB-C connectors:
+
+| Connector | Purpose |
+|-----------|---------|
+| Native USB device / OTG | Keyboard, mouse, and gamepad input to the connected computer; no serial log console |
+| USB-UART / download / debug | Serial flashing and diagnostic logs at 115200 baud; no HID input |
+
+If USB HID stays **disconnected**, you may still be using the connector that
+worked for flashing or serial monitoring. Move the data-capable USB cable to the
+native USB connector. On Waveshare LCD4B, use **USB OTG** for HID and
+**USB TO UART** for debugging. On JC1060P470C, HID uses the high-speed USB-C
+connector. Labels vary by board; a host-only connector cannot provide HID output.
+
+For boot or crash debugging, connect the USB-UART port and start the serial
+monitor before resetting. That bridge can stay connected across MCU resets while
+powered; HID USB resets do not provide a persistent serial console. See the
+[serial monitor guide](dev/scripts.md#monitorsh).
+
+> [!WARNING]
+> Check the board's power wiring before attaching two powered USB cables.
+> JC1060P470C connector power rails are shared; use one powered cable unless
+> the board documentation provides a safe arrangement for simultaneous connections.
 
 The keyboard defaults to Off. Choose Off or a supported USB/BLE transport,
 save, and use the existing reboot-required banner. The displayed active
@@ -215,8 +234,9 @@ transport remains unchanged until reboot. Single-backend builds offer Off and
 their supported transport; builds with neither backend hide keyboard settings
 and **Send keys**. Explicitly saved USB/BLE choices remain unchanged after
 updating; devices without a saved choice become Off. Off disables keyboard
-and mouse output and rejects key actions while retaining USB serial logging and
-independent BLE telemetry.
+and mouse output and rejects key actions while retaining UART serial logging and
+independent BLE telemetry. On HID builds, selecting BLE or Off leaves native USB
+stopped after reboot; it does not expose a CDC serial console.
 
 | Element | Description |
 |---------|-------------|
@@ -230,9 +250,9 @@ independent BLE telemetry.
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 
-USB exposes keyboard, consumer HID, a relative mouse, and a generic HID gamepad alongside the serial console when USB is
-selected. With BLE or Off selected, USB exposes only the serial console after reboot,
-not a keyboard, mouse, or gamepad. Add a **Mousepad** widget in the pad editor on
+USB exposes keyboard, consumer HID, a relative mouse, and a generic HID gamepad
+when USB is selected. Serial diagnostics use the separate UART port regardless
+of the selected transport. Add a **Mousepad** widget in the pad editor on
 touch-enabled USB HID devices for movement, tap-to-left-click, and tap-then-drag.
 Multicontact drivers also support two-finger midpoint scrolling with axis lock.
 **Sensitivity** and **Movement threshold** apply to movement and gestures;
@@ -270,9 +290,7 @@ may be pending or running; extra requests fail instead of queueing. A
 disconnect, USB suspension, report failure, OTA activity, or 60-second deadline
 aborts execution and fails the remaining action-list suffix. Interrupted macros
 never replay on reconnect, and neither transport falls back to the other host.
-The user has confirmed USB and BLE input, serial logging, and CDC-only BLE-mode
-enumeration. Hardware checks for media keys and sleep/reconnect reliability
-remain pending.
+Hardware checks for media keys and sleep/reconnect reliability remain pending.
 
 The BLE keyboard advertises with the configured device name plus ` BLE` and the
 chip's stable hardware address. Transport suffixes distinguish the two Windows

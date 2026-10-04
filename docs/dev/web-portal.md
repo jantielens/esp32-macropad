@@ -1121,15 +1121,19 @@ rejects the request without leaving the keyboard busy, and does not fall back
 to internal RAM when PSRAM is present. Off allocates no macro workspace.
 
 Native USB requires `HAS_USB_HID`, `USBMode=default`, and `CDCOnBoot=default`.
-An explicit CDC instance provides logging; configuration loads before
-`usb_hid_init(device_name, enable_hid)` starts USB. The USB product name is the
+Arduino `Serial` provides UART0 logging at 115200 baud; no explicit CDC instance
+is registered. Configuration loads before `usb_hid_init(device_name, enable_hid)`
+starts USB, and the function returns without starting USB when HID is disabled.
+The USB product name is the
 friendly name plus ` USB`; BLE advertises the friendly name plus ` BLE`.
 The saved device name is unchanged. USB manufacturer follows branding, and
 serial is stable chip-derived identity.
 Name changes require reboot. HID objects are constructed only when USB is
 selected, before enumeration: USB mode exposes keyboard, consumer HID, relative
-mouse, and CDC;
-BLE and Off modes expose CDC only. Off skips BLE keyboard initialization,
+mouse, and gamepad. BLE and Off modes do not start native USB. On dual-USB-C P4
+boards, native USB/OTG serves HID and the USB-UART connector serves flashing and
+diagnostics; see the [user connector guide](../web-portal-guide.md#keyboard).
+Off skips BLE keyboard initialization,
 rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
 telemetry remains unaffected. Ending HID reports cannot remove its descriptors,
 so this change also requires reboot. Windows may retain disconnected entries.
@@ -1187,7 +1191,7 @@ existing USB keyboard transport setting, with no new NVS toggle. USB registers
 a custom generic-HID gamepad descriptor before startup alongside keyboard,
 consumer control, and mouse. Its packed report is 13 bytes: four signed 16-bit
 stick axes, two unsigned 8-bit triggers, an 8-bit null-state hat, and 16 button
-bits. BLE and Off retain CDC-only enumeration after reboot.
+bits. BLE and Off leave native USB stopped after reboot; UART logging remains available.
 
 USB HID interface and configuration strings reference the product string,
 which uses the configured device name plus ` USB`. Arduino supplies hardcoded
@@ -1266,9 +1270,8 @@ pad hide, or OTA clear queued input and request a neutral report.
 Routine macro completions and BLE protocol/control/LED reports log at DEBUG.
 Startup and connection/pairing events remain at INFO; aborted macros and
 delivery failures remain warnings. There are no periodic keyboard diagnostic
-counters. Windows testing on `jc1060p470c-sd` confirmed USB/BLE switching, serial
-logging, and CDC-only USB enumeration with BLE selected. Media keys and extended
-sleep/reconnect reliability still require hardware validation.
+counters. Media keys and extended sleep/reconnect reliability still require
+hardware validation.
 
 #### `POST /api/config`
 

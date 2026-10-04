@@ -30,8 +30,17 @@ struct __attribute__((packed)) tusb_desc_interface_t {
 };
 '''
 harness += source[start:end]
+harness += "\n#define LOGI(...) ((void)0)\nstatic unsigned startup_calls = 0;\n"
+init_start = source.index("void usb_hid_init(")
+setup_start = source.index("    char product_name[40];", init_start)
+harness += source[init_start:setup_start]
+harness += "    (void)device_name;\n    ++startup_calls;\n}\n"
 harness += r'''
 int main() {
+    usb_hid_init("Test", false);
+    assert(startup_calls == 0);
+    usb_hid_init("Test", true);
+    assert(startup_calls == 1);
     const uint8_t original[] = {
         9, 2, 34, 0, 2, 1, 7, 0x80, 250,
         9, 4, 0, 0, 1, 3, 1, 1, 8,
@@ -70,4 +79,4 @@ with tempfile.TemporaryDirectory() as directory:
     subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
                     str(test_source), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
-print("PASS: USB HID uses the product name while preserving CDC and endpoint descriptors")
+print("PASS: disabled HID skips USB startup; descriptor naming preserves other interfaces and endpoints")

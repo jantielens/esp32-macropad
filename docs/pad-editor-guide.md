@@ -541,6 +541,11 @@ save, then reboot. Off is the initial default and rejects key actions.
 Single-backend builds offer Off and their supported backend. There is no
 automatic fallback to another transport.
 
+On dual-USB-C P4 boards, connect the native USB device/OTG port for HID, not the
+USB-UART flashing/debugging port. If USB remains disconnected, try the other
+connector with a data-capable cable. Serial logs use the USB-UART port at 115200
+baud. See [USB connector and power guidance](web-portal-guide.md#keyboard).
+
 One macro can be pending or running. Disabled, busy, or disconnected requests fail;
 execution failure stops the remaining action-list suffix. Reconnection never
 replays an interrupted macro, and switching hosts during a macro is not allowed.
