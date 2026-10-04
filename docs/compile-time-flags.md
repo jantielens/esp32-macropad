@@ -1054,11 +1054,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/config_manager.cpp
   - src/app/display_manager.cpp
   - src/app/display_manager.h
+  - src/app/display_task.cpp
   - src/app/lv_conf.h
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/screens.cpp
+  - src/app/screens/pad_tile_builder.cpp
   - src/app/screens/touch_test_screen.cpp
   - src/app/screens/touch_test_screen.h
   - src/app/touch_drivers.cpp
@@ -1091,6 +1093,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mouse_hid.h
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
+  - src/app/touch_manager.cpp
   - src/app/usb_hid.cpp
   - src/app/usb_hid.h
   - src/app/web_portal_config.cpp

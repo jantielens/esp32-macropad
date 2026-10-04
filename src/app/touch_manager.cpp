@@ -7,6 +7,11 @@
 
 #include <atomic>
 
+#if HAS_DISPLAY && HAS_USB_HID
+#include "widgets/gamepad_touch_router.h"
+static GamepadTouchRouter g_gamepad_touch_router;
+#endif
+
 // Touch init may run while the LVGL rendering task is active.
 // LVGL is not thread-safe, so guard LVGL API calls with the DisplayManager mutex when available.
 #if HAS_DISPLAY
@@ -36,10 +41,12 @@ static std::atomic<uint32_t> g_lvgl_suppress_until_ms{0};
 static std::atomic<bool> g_lvgl_force_released{false};
 static bool g_prev_lvgl_pressed = false;
 // After suppression ends, require a genuine release before accepting new presses.
-// This prevents stale "touched" state in drivers (e.g., GT911 lastTouched flag)
+// This prevents cached contact state in drivers
 // from replaying as a phantom click.
 static bool g_require_release = false;
-static TouchSampleFilter g_touch_sample_filter;
+static TouchSnapshotFilter g_touch_snapshot_filter;
+static portMUX_TYPE g_physical_touch_mux = portMUX_INITIALIZER_UNLOCKED;
+static TouchSample g_cached_physical;
 
 #if HAS_DISPLAY
 enum class SyntheticTapState : uint8_t {
@@ -112,6 +119,20 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		TouchManager* manager = (TouchManager*)lv_indev_get_user_data(indev);
 
 		const uint32_t now = millis();
+		const TouchSnapshot physical = manager->driver->readSnapshot();
+		const TouchSnapshot snapshot = g_touch_snapshot_filter.update(physical, now);
+		portENTER_CRITICAL(&g_physical_touch_mux);
+		g_cached_physical.pressed = snapshot.count != 0;
+		g_cached_physical.horizontal = snapshot.contacts[0].horizontal;
+		g_cached_physical.vertical = snapshot.contacts[0].vertical;
+		portEXIT_CRITICAL(&g_physical_touch_mux);
+
+		const bool forceReleased = g_lvgl_force_released.load();
+		const uint32_t suppressUntil = g_lvgl_suppress_until_ms.load();
+		const bool suppressed = forceReleased || ((int32_t)(suppressUntil - now) > 0);
+		if (suppressed || g_touch_snapshot_filter.canceled) {
+				touch_manager_cancel_physical_input();
+		}
 		#if HAS_DISPLAY
 		// An emitted synthetic press always gets this next-callback release, before
 		// suppression or physical input can produce another pointer state.
@@ -123,21 +144,14 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		synthetic_tap_expire_pending(now);
 		#endif
 
-		const bool forceReleased = g_lvgl_force_released.load();
-		const uint32_t suppressUntil = g_lvgl_suppress_until_ms.load();
-		if (forceReleased || ((int32_t)(suppressUntil - now) > 0)) {
+		if (suppressed) {
 				data->state = LV_INDEV_STATE_RELEASED;
 				g_prev_lvgl_pressed = false;
 				g_require_release = true;
 				return;
 		}
 		
-		const TouchSample sample = g_touch_sample_filter.update(manager->driver->readSample(), now);
-		const bool touched = sample.pressed;
-		const uint16_t x = sample.horizontal;
-		const uint16_t y = sample.vertical;
-		if (g_touch_sample_filter.canceled) {
-				lv_indev_reset(indev, nullptr);
+		if (g_touch_snapshot_filter.canceled) {
 				data->state = LV_INDEV_STATE_RELEASED;
 				g_prev_lvgl_pressed = false;
 				return;
@@ -146,16 +160,34 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		// After suppression ends, wait for a genuine release before forwarding presses.
 		// Drivers like GT911 can retain stale "touched" state across the suppression window.
 		if (g_require_release) {
-				if (!touched) {
+				if (physical.status == TouchReadStatus::Fresh && !physical.count) {
 						g_require_release = false;
+						#if HAS_DISPLAY && HAS_USB_HID
+						g_gamepad_touch_router.update(snapshot, false, gamepad_hid_generation());
+						#endif
 				}
 				data->state = LV_INDEV_STATE_RELEASED;
 				g_prev_lvgl_pressed = false;
 				return;
 		}
 
+		TouchSample navigation;
+		#if HAS_DISPLAY && HAS_USB_HID
+		navigation = g_gamepad_touch_router.update(snapshot, false, gamepad_hid_generation());
+		if (g_gamepad_touch_router.reset_navigation) {
+				lv_indev_reset(indev, nullptr);
+				g_prev_lvgl_pressed = false;
+		}
+		#else
+		navigation.pressed = snapshot.count != 0;
+		navigation.horizontal = snapshot.contacts[0].horizontal;
+		navigation.vertical = snapshot.contacts[0].vertical;
+		#endif
+		const bool touched = navigation.pressed;
+		const uint16_t x = navigation.horizontal;
+		const uint16_t y = navigation.vertical;
 		#if HAS_DISPLAY
-		if (!touched && screen_saver_manager_input_ready()) {
+		if (!snapshot.count && !g_prev_lvgl_pressed && screen_saver_manager_input_ready()) {
 			uint16_t tapX = 0;
 			uint16_t tapY = 0;
 			if (synthetic_tap_take_pending_press(&tapX, &tapY)) {
@@ -166,6 +198,9 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 				return;
 			}
 		}
+		static bool previous_physical = false;
+		if (snapshot.count && !previous_physical) screen_saver_manager_notify_activity(false);
+		previous_physical = snapshot.count != 0;
 		#endif
 
 		if (touched) {
@@ -267,11 +302,29 @@ void TouchManager::loop() {
 }
 
 bool TouchManager::isTouched() {
-		return driver->isTouched();
+		portENTER_CRITICAL(&g_physical_touch_mux);
+		const bool pressed = g_cached_physical.pressed;
+		portEXIT_CRITICAL(&g_physical_touch_mux);
+		return pressed;
 }
 
 bool TouchManager::getTouch(uint16_t* x, uint16_t* y) {
-		return driver->getTouch(x, y);
+		if (!x || !y) return false;
+		portENTER_CRITICAL(&g_physical_touch_mux);
+		const TouchSample sample = g_cached_physical;
+		portEXIT_CRITICAL(&g_physical_touch_mux);
+		*x = sample.horizontal;
+		*y = sample.vertical;
+		return sample.pressed;
+}
+
+void touch_manager_cancel_physical_input() {
+		#if HAS_DISPLAY && HAS_USB_HID
+		g_gamepad_touch_router.cancel();
+		#endif
+		lv_indev_reset(nullptr, nullptr);
+		g_require_release = true;
+		g_prev_lvgl_pressed = false;
 }
 
 // C-style interface for app.ino
@@ -291,6 +344,12 @@ bool touch_manager_is_touched() {
 		if (!touchManager) return false;
 		return touchManager->isTouched();
 }
+
+#if HAS_DISPLAY
+uint8_t touch_manager_contact_capacity() {
+		return touchManager ? touchManager->contactCapacity() : 0;
+}
+#endif
 
 void touch_manager_suppress_lvgl_input(uint32_t duration_ms) {
 		const uint32_t now = millis();

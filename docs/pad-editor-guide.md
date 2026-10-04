@@ -853,7 +853,7 @@ The controller exposes two sticks (signed -32767 to 32767), two independent
 triggers (0 to 255), an eight-direction hat (neutral 0), and 16 buttons.
 Left-stick axes are X/Y, right-stick axes are Z/Rz, and triggers are Rx/Ry.
 
-Choose **Gamepad Joystick** for a single-touch absolute stick. Select Left or
+Choose **Gamepad Joystick** for an absolute stick. Select Left or
 Right, Fixed or Floating center, a 0-90% radial dead zone (default 10%), and
 optional axis inversion. Right/down are positive without inversion. Travel
 uses the shorter content dimension and is clamped radially, including outside
@@ -893,14 +893,25 @@ For widget-owned interactions, a contact starting inside either gamepad widget
 is captured until release or cancellation, including movement outside its
 button. It cannot transfer to another widget during that contact. Both widgets
 consume ordinary tap, long-press, and pad-swipe handling, including when USB
-gamepad output is unavailable. Touches starting elsewhere retain their normal
-routing. Configured full-screen tap actions take precedence over button and
+gamepad output is unavailable. On controller-enabled builds, gamepad input
+cancels an existing ordinary navigation press without clicking, and blocks
+navigation until every finger lifts. Already-held fingers are never promoted
+to navigation or another widget. Configured full-screen tap actions take precedence over button and
 widget interaction; clear them to use the gamepad widgets.
 
-Phase 1 supports one touch contact, not simultaneous on-screen sticks/buttons. Four
-held hat controls can form a D-pad, but simultaneous directions require macros
-or physical inputs. Hat directions compose into diagonals; opposing directions
-cancel independently. Binary triggers activate at 255 and release to zero.
+GT911 drivers can route up to five simultaneous contacts to controller widgets;
+the connected panel may support fewer. Two sticks, a stick and held button or
+trigger, or multiple hat directions can operate together. Each widget accepts
+one contact; additional fingers on that widget are ignored until they lift,
+even if its captured finger lifts first. Array reordering and crossing contacts
+do not exchange ownership. Other touch drivers retain single-touch operation;
+Mousepad, Scrollpad, and ordinary buttons remain single-pointer controls.
+Inkplate/Cypress multitouch is not included. Panel capacity, tracking-ID behavior,
+and multitouch latency still require hardware verification.
+
+Four held hat controls can form a D-pad. Hat directions compose into diagonals;
+opposing directions cancel independently. Binary triggers activate at 255 and
+release to zero. Queued synthetic taps wait until all physical contacts lift.
 
 For ordinary action lists, choose **Gamepad** and Tap, Down, or Up:
 
@@ -923,7 +934,9 @@ Disconnected USB, OTA, or exhausted capacity fails the action.
 Pad exit/replacement, disconnect/reconnect, and OTA clear holds and pending
 taps, without replay. Widgets also release on hide, disable, destruction, or
 touch cancellation. GT911, AXS15231B, and CST816S detected read failures cancel
-after 100 ms and require a physical release before another press. Stationary
+after 100 ms and require a fresh scan with all contacts released before another
+physical interaction. Suppression, pad replacement, and transport reset use the
+same all-contact rearming rule. Stationary
 contacts remain held between valid reports. XPT2046 applies the same cancellation
 to invalid samples, but its SPI library cannot identify every bus failure.
 Inkplate/Cypress retains its legacy behavior and is not covered by this checked
@@ -932,6 +945,11 @@ gamepad widgets still require the existing display, touch, and USB HID capabilit
 
 For hardware diagnostics, use the normal INFO-level device logs. `GamepadJoystick`
 and `GamepadButton` report creation, capture, rejection, and release reasons.
+GT911 logs `Contacts=N IDs=0x....` when the contact set changes, after a checked
+read and successful acknowledgement. Each set bit represents a tracking ID;
+record reordering or movement alone does not emit a contact-set log. Use these
+logs to check simultaneous contact counts and whether the remaining finger
+keeps its ID when another finger lifts. These are not latency measurements.
 Joystick axes are logged at first deflection and then at most every 200 ms
 during continuous movement. `GamepadHID` reports readiness/generation changes
 and submitted report values, including buttons, hat, triggers, and both sticks.

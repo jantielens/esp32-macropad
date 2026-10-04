@@ -110,13 +110,12 @@ static void gamepad_joystick_cancel(GamepadJoystickState* state, const char* rea
     state->axis_logged = false;
     state->input.thumb_x = state->input.center_x;
     state->input.thumb_y = state->input.center_y;
-    gamepad_joystick_render(state);
+    if (state->touch.object) gamepad_joystick_render(state);
 }
 
-static void gamepad_joystick_event(lv_event_t* event) {
-    auto* state = static_cast<GamepadJoystickState*>(lv_event_get_user_data(event));
-    lv_point_t point;
-    const GamepadTouchEvent interaction = state->touch.process(event, point);
+static void gamepad_joystick_point(void* context, GamepadTouchEvent requested, const lv_point_t& point) {
+    auto* state = static_cast<GamepadJoystickState*>(context);
+    const GamepadTouchEvent interaction = state->touch.point_event(requested);
     if (interaction == GamepadTouchEvent::Release || interaction == GamepadTouchEvent::Cancel) {
         gamepad_joystick_cancel(state, interaction == GamepadTouchEvent::Release ? "touch release" : "touch cancel");
         return;
@@ -165,11 +164,18 @@ static void gamepad_joystick_event(lv_event_t* event) {
     gamepad_joystick_render(state);
 }
 
+static void gamepad_joystick_event(lv_event_t* event) {
+    auto* state = static_cast<GamepadJoystickState*>(lv_event_get_user_data(event));
+    lv_point_t point{};
+    gamepad_joystick_point(state, state->touch.process(event, point), point);
+}
+
 static void gamepad_stick_create(lv_obj_t* button, const WidgetConfig* config,
                                    const ScreenButtonConfig*, const PadRect*, const UIScaleInfo*,
                                    lv_obj_t*, lv_obj_t* center_label, WidgetState* state) {
     auto* joystick = new (state->data) GamepadJoystickState{};
     joystick->button = button;
+    joystick->touch.object = button;
     joystick->config = *reinterpret_cast<const GamepadJoystickConfig*>(config->data);
     joystick->base = lv_obj_create(button);
     joystick->thumb = lv_obj_create(button);
@@ -187,7 +193,7 @@ static void gamepad_stick_create(lv_obj_t* button, const WidgetConfig* config,
     joystick->input.press(0, 0, area.x1, area.y1, area.x2 - area.x1 + 1, area.y2 - area.y1 + 1, false);
     gamepad_joystick_cancel(joystick, "initialize");
     if (center_label) lv_obj_add_flag(center_label, LV_OBJ_FLAG_HIDDEN);
-    GamepadSurfaceTouch::attach(button, gamepad_joystick_event, joystick);
+    joystick->touch.attach(button, gamepad_joystick_event, joystick, gamepad_joystick_point);
         LOGI("GamepadJoystick", "Created stick=%s center=%s dead_zone=%.2f invert=%u,%u size=%ldx%ld ready=%u",
             joystick->config.stick ? "right" : "left", joystick->config.floating ? "floating" : "fixed",
             double(joystick->config.dead_zone), unsigned(joystick->config.invert_x), unsigned(joystick->config.invert_y),
@@ -196,17 +202,21 @@ static void gamepad_stick_create(lv_obj_t* button, const WidgetConfig* config,
 static void gamepad_stick_update(lv_obj_t*, const WidgetConfig*, WidgetState*, const char*) {}
 static void gamepad_stick_tick(lv_obj_t*, const WidgetConfig*, WidgetState* state) {
     auto* joystick = reinterpret_cast<GamepadJoystickState*>(state->data);
+    if (!joystick->touch.object) return;
     gamepad_joystick_color(joystick);
     if (joystick->touch.owner && (!gamepad_hid_is_ready() || joystick->touch.generation != gamepad_hid_generation()))
         gamepad_joystick_cancel(joystick, "transport reset");
 }
-    static void gamepad_joystick_hide(WidgetState* state) { gamepad_joystick_cancel(reinterpret_cast<GamepadJoystickState*>(state->data), "hide/show/destroy"); }
-static void gamepad_stick_hide(WidgetState* state) { gamepad_joystick_hide(state); }
-static void gamepad_stick_show(WidgetState* state) { gamepad_stick_hide(state); }
+static void gamepad_stick_hide(WidgetState* state) {
+    reinterpret_cast<GamepadJoystickState*>(state->data)->touch.hide();
+}
+static void gamepad_stick_show(WidgetState* state) {
+    reinterpret_cast<GamepadJoystickState*>(state->data)->touch.show();
+}
 static void gamepad_stick_destroy(WidgetState* state) {
-    gamepad_joystick_hide(state);
-    lv_obj_remove_event_cb(reinterpret_cast<GamepadJoystickState*>(state->data)->button, gamepad_joystick_event);
-    reinterpret_cast<GamepadJoystickState*>(state->data)->~GamepadJoystickState();
+    auto* joystick = reinterpret_cast<GamepadJoystickState*>(state->data);
+    joystick->touch.detach(gamepad_joystick_event);
+    joystick->~GamepadJoystickState();
 }
 #if HAS_MCP
 static void gamepad_stick_describe(JsonObject& out) {
@@ -219,7 +229,7 @@ static void gamepad_stick_describe(JsonObject& out) {
         field["type"] = index < 2 ? "string" : index == 2 ? "number" : "boolean";
         field["desc"] = descriptions[index];
     }
-    out["note"] = "Single-touch absolute USB gamepad stick; release/cancel returns to neutral. Ring fills the shorter padded content dimension; dot is one-third of its diameter (minimum 6 pixels) and stays inside the ring. Both use button foreground color. Floating center can shift only along the longer dimension. Areas smaller than 16 pixels are inactive. First interaction owns each stick until release. Positive X/Y are right/down. Center label is suppressed; top/bottom labels remain. Consumes normal actions and pad swipes. USB keyboard mode required.";
+    out["note"] = "Absolute USB gamepad stick, with independent simultaneous contacts on multitouch drivers; release/cancel returns to neutral. One contact per widget; extras are ignored until lift. Ring fills the shorter padded content dimension; dot is one-third of its diameter (minimum 6 pixels) and stays inside the ring. Both use button foreground color. Floating center can shift only along the longer dimension. Areas smaller than 16 pixels are inactive. First interaction owns each stick until release. Positive X/Y are right/down. Center label is suppressed; top/bottom labels remain. Consumes normal actions and pad swipes. USB keyboard mode required.";
 }
 #endif
 REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(gamepad_stick, nullptr, false, gamepad_stick_validate);

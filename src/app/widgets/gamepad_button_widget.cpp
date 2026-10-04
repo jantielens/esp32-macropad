@@ -34,14 +34,13 @@ static void gamepad_button_cancel(GamepadButtonState* state, const char* reason,
              (unsigned long)state->touch.owner, (unsigned long)state->touch.generation, reason);
     }
     state->touch.cancel();
-    if (state->button) lv_obj_remove_state(state->button, LV_STATE_PRESSED);
-    if (was_held && state->button) lv_obj_send_event(state->button, LV_EVENT_VALUE_CHANGED, &feedback);
+    if (state->touch.object) lv_obj_remove_state(state->button, LV_STATE_PRESSED);
+    if (was_held && state->touch.object) lv_obj_send_event(state->button, LV_EVENT_VALUE_CHANGED, &feedback);
 }
 
-static void gamepad_button_event(lv_event_t* event) {
-    auto* state = static_cast<GamepadButtonState*>(lv_event_get_user_data(event));
-    lv_point_t point;
-    const GamepadTouchEvent interaction = state->touch.process(event, point);
+static void gamepad_button_point(void* context, GamepadTouchEvent requested, const lv_point_t&) {
+    auto* state = static_cast<GamepadButtonState*>(context);
+    const GamepadTouchEvent interaction = state->touch.point_event(requested);
     if (interaction == GamepadTouchEvent::Press) {
         if (!state->configured) {
             LOGW("GamepadButton", "Press rejected: invalid held-control configuration");
@@ -56,15 +55,21 @@ static void gamepad_button_event(lv_event_t* event) {
         } else {
             lv_obj_add_state(state->button, LV_STATE_PRESSED);
             lv_event_code_t feedback = LV_EVENT_PRESSED;
-            lv_obj_send_event(state->button, LV_EVENT_VALUE_CHANGED, &feedback);
             LOGI("GamepadButton", "Captured control=%u index=%u owner=%lu generation=%lu",
                  unsigned(state->control.kind), unsigned(state->control.index),
                  (unsigned long)state->touch.owner, (unsigned long)state->touch.generation);
+              lv_obj_send_event(state->button, LV_EVENT_VALUE_CHANGED, &feedback);
         }
     } else if (interaction == GamepadTouchEvent::Release || interaction == GamepadTouchEvent::Cancel) {
         gamepad_button_cancel(state, interaction == GamepadTouchEvent::Release ? "touch release" : "touch cancel",
             interaction == GamepadTouchEvent::Release ? LV_EVENT_RELEASED : LV_EVENT_PRESS_LOST);
     }
+}
+
+static void gamepad_button_event(lv_event_t* event) {
+    auto* state = static_cast<GamepadButtonState*>(lv_event_get_user_data(event));
+    lv_point_t point{};
+    gamepad_button_point(state, state->touch.process(event, point), point);
 }
 
 static void gamepad_button_create(lv_obj_t* button, const WidgetConfig*,
@@ -78,7 +83,7 @@ static void gamepad_button_create(lv_obj_t* button, const WidgetConfig*,
         held->control = {static_cast<GamepadControlKind>(payload.control), payload.index};
         held->configured = held->control.mask() != 0;
     }
-    GamepadSurfaceTouch::attach(button, gamepad_button_event, held);
+    held->touch.attach(button, gamepad_button_event, held, gamepad_button_point);
         LOGI("GamepadButton", "Created configured=%u control=%u index=%u ready=%u",
             unsigned(held->configured), unsigned(held->control.kind), unsigned(held->control.index), unsigned(gamepad_hid_is_ready()));
 }
@@ -88,16 +93,20 @@ static void gamepad_button_tick(lv_obj_t*, const WidgetConfig*, WidgetState* sta
     if (held->touch.owner && (!gamepad_hid_is_ready() || held->touch.generation != gamepad_hid_generation()))
         gamepad_button_cancel(held, "transport reset");
 }
-    static void gamepad_button_hide(WidgetState* state) { gamepad_button_cancel(reinterpret_cast<GamepadButtonState*>(state->data), "hide/show/destroy"); }
-static void gamepad_button_show(WidgetState* state) { gamepad_button_hide(state); }
+static void gamepad_button_hide(WidgetState* state) {
+    reinterpret_cast<GamepadButtonState*>(state->data)->touch.hide();
+}
+static void gamepad_button_show(WidgetState* state) {
+    reinterpret_cast<GamepadButtonState*>(state->data)->touch.show();
+}
 static void gamepad_button_destroy(WidgetState* state) {
-    gamepad_button_hide(state);
-    lv_obj_remove_event_cb(reinterpret_cast<GamepadButtonState*>(state->data)->button, gamepad_button_event);
-    reinterpret_cast<GamepadButtonState*>(state->data)->~GamepadButtonState();
+    auto* held = reinterpret_cast<GamepadButtonState*>(state->data);
+    held->touch.detach(gamepad_button_event);
+    held->~GamepadButtonState();
 }
 #if HAS_MCP
 static void gamepad_button_describe(JsonObject& out) {
-    out["note"] = "Single-touch held Gamepad control. Configure actions as exactly one gamepad action with operation down. Touch release, cancellation, hiding, pad exit, disconnect, and OTA release automatically. No long-press actions, ordinary tap dispatch, or pad swipes. USB keyboard mode required.";
+    out["note"] = "Held Gamepad control, with independent simultaneous contacts on multitouch drivers. One contact per widget; extras are ignored until lift. Configure actions as exactly one gamepad action with operation down. Touch release, cancellation, hiding, pad exit, disconnect, and OTA release automatically. No long-press actions, ordinary tap dispatch, or pad swipes. USB keyboard mode required.";
     JsonObject field = out.createNestedArray("config_fields").createNestedObject();
     field["name"] = "actions";
     field["type"] = "array";

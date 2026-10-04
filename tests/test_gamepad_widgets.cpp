@@ -34,7 +34,14 @@ void gamepad_hid_release(uint32_t owner, uint32_t generation) {
 }
 
 #include "widgets/widget.cpp"
+static unsigned touch_metadata_scans = 0;
+static uint32_t touch_event_count(lv_obj_t* object) {
+    ++touch_metadata_scans;
+    return lv_obj_get_event_count(object);
+}
+#define lv_obj_get_event_count touch_event_count
 #include "widgets/gamepad_button_widget.cpp"
+#undef lv_obj_get_event_count
 static unsigned joystick_size_updates = 0;
 static unsigned joystick_position_updates = 0;
 static void joystick_set_size(lv_obj_t* object, int32_t width, int32_t height) {
@@ -50,6 +57,7 @@ static void joystick_set_pos(lv_obj_t* object, int32_t horizontal, int32_t verti
 #include "widgets/gamepad_joystick_widget.cpp"
 #undef lv_obj_set_size
 #undef lv_obj_set_pos
+#include "widgets/gamepad_touch_router.h"
 
 class GamepadWidget : public testing::Test {
 protected:
@@ -60,6 +68,10 @@ protected:
     WidgetConfig config{};
     WidgetState state{};
     ScreenButtonConfig button_config{};
+    lv_obj_t* extra_button = nullptr;
+    const WidgetType* extra_type = nullptr;
+    WidgetConfig extra_config{};
+    WidgetState extra_state{};
     lv_point_t point{50, 50};
     bool pressed = false;
     unsigned ordinary_actions = 0;
@@ -129,6 +141,25 @@ protected:
         lv_indev_read(indev);
     }
 
+    void create_extra(const char* name, GamepadControl control = {GamepadControlKind::Button, 1}) {
+        extra_button = lv_obj_create(lv_screen_active());
+        lv_obj_set_pos(extra_button, 150, 0);
+        lv_obj_set_size(extra_button, 150, 150);
+        lv_obj_add_flag(extra_button, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_pad_all(extra_button, 0, LV_PART_MAIN);
+        lv_obj_set_style_border_width(extra_button, 0, LV_PART_MAIN);
+        extra_type = widget_find(name);
+        ASSERT_NE(extra_type, nullptr);
+        strlcpy(extra_config.type, name, sizeof(extra_config.type));
+        JsonDocument document;
+        document["widget_gamepad_stick"] = "right";
+        extra_type->parseConfig(document.as<JsonObject>(), extra_config.data);
+        ScreenButtonConfig configuration = button_config;
+        configuration.actions[0].payload.gamepad = {uint8_t(control.kind), control.index, 1};
+        extra_type->createUI(extra_button, &extra_config, &configuration, nullptr, nullptr, nullptr, nullptr, &extra_state);
+        lv_obj_update_layout(extra_button);
+    }
+
     GamepadReport delivered() {
         GamepadReport report, last;
         while (widget_controller.next(report)) {
@@ -139,6 +170,7 @@ protected:
     }
 
     void TearDown() override {
+        if (extra_type) extra_type->destroyUI(&extra_state);
         if (type) type->destroyUI(&state);
         lv_indev_delete(indev);
         lv_display_delete(display);
@@ -155,6 +187,70 @@ TEST_F(GamepadWidget, HeldButtonConsumesActionsAndReleases) {
     read(false);
     EXPECT_EQ(delivered().buttons, 0);
     EXPECT_EQ(ordinary_actions, 0U);
+}
+
+TEST_F(GamepadWidget, RouterHandlesDeletionInsidePressFeedback) {
+    create("gamepad_button");
+    lv_obj_add_event_cb(button, [](lv_event_t* event) {
+        const auto* feedback = static_cast<const lv_event_code_t*>(lv_event_get_param(event));
+        if (*feedback != LV_EVENT_PRESSED) return;
+        auto* fixture = static_cast<GamepadWidget_RouterHandlesDeletionInsidePressFeedback_Test*>(lv_event_get_user_data(event));
+        lv_obj_delete(fixture->button);
+        fixture->type->destroyUI(&fixture->state);
+        fixture->type = nullptr;
+        fixture->button = nullptr;
+    }, LV_EVENT_VALUE_CHANGED, this);
+    GamepadTouchRouter router;
+    TouchSnapshot snapshot;
+    snapshot.count = 1;
+    snapshot.contacts[0].horizontal = snapshot.contacts[0].vertical = 50;
+    EXPECT_FALSE(router.update(snapshot, false, widget_generation).pressed);
+    EXPECT_TRUE(router.reset_navigation);
+    EXPECT_EQ(delivered().buttons, 0);
+    EXPECT_FALSE(router.update(snapshot, false, widget_generation).pressed);
+    snapshot.count = 0;
+    router.update(snapshot, false, widget_generation);
+}
+
+TEST_F(GamepadWidget, RouterSkipsStationaryMovesButStillCancelsHiddenTargets) {
+    create("gamepad_stick");
+    auto* joystick = reinterpret_cast<GamepadJoystickState*>(state.data);
+    auto original = joystick->touch.handler;
+    unsigned moves = 0;
+    struct HandlerContext {
+        GamepadJoystickState* state;
+        GamepadSurfaceTouch::PointHandler original;
+        unsigned* moves;
+    } context{joystick, original, &moves};
+    joystick->touch.context = &context;
+    joystick->touch.handler = [](void* opaque, GamepadTouchEvent interaction, const lv_point_t& point) {
+        auto* handler = static_cast<HandlerContext*>(opaque);
+        if (interaction == GamepadTouchEvent::Move) ++*handler->moves;
+        handler->original(handler->state, interaction, point);
+    };
+    GamepadTouchRouter router;
+    TouchSnapshot snapshot;
+    snapshot.count = 1;
+    snapshot.contacts[0].horizontal = snapshot.contacts[0].vertical = 50;
+    router.update(snapshot, false, widget_generation);
+    const uint32_t owner = joystick->touch.owner;
+    ASSERT_NE(owner, 0U);
+    touch_metadata_scans = 0;
+    for (unsigned index = 0; index < 5; ++index) router.update(snapshot, false, widget_generation);
+    EXPECT_EQ(moves, 0U);
+    EXPECT_EQ(touch_metadata_scans, 5U);
+    EXPECT_EQ(joystick->touch.owner, owner);
+    snapshot.contacts[0].horizontal = 60;
+    touch_metadata_scans = 0;
+    router.update(snapshot, false, widget_generation);
+    EXPECT_EQ(moves, 1U);
+    EXPECT_EQ(touch_metadata_scans, 1U);
+    lv_obj_add_flag(button, LV_OBJ_FLAG_HIDDEN);
+    router.update(snapshot, false, widget_generation);
+    EXPECT_EQ(joystick->touch.owner, 0U);
+    EXPECT_TRUE(router.reset_navigation);
+    joystick->touch.context = joystick;
+    joystick->touch.handler = original;
 }
 
 TEST_F(GamepadWidget, HeldButtonRequestsPressReleaseAndCancelFeedback) {
@@ -209,6 +305,16 @@ TEST_F(GamepadWidget, HideAndDestroyCancelHolds) {
     type->destroyUI(&state);
     type = nullptr;
     EXPECT_EQ(delivered().buttons, 0);
+}
+
+TEST_F(GamepadWidget, NullInputResetReleasesAllInputDevicesSafely) {
+    create("gamepad_button");
+    read(true);
+    EXPECT_EQ(delivered().buttons, 1);
+    lv_indev_reset(nullptr, nullptr);
+    EXPECT_EQ(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner, 0U);
+    EXPECT_EQ(delivered().buttons, 0);
+    EXPECT_EQ(ordinary_actions, 0U);
 }
 
 TEST_F(GamepadWidget, JoystickKeepsStationaryDeflectionAndCancels) {
@@ -307,6 +413,211 @@ TEST_F(GamepadWidget, ValidatorsWorkWithoutMcp) {
     EXPECT_NE(type->validateConfig(button_json), nullptr);
     button_json["widget_gamepad_dead_zone"] = 1;
     EXPECT_NE(gamepad_stick_validate(button_json), nullptr);
+}
+
+static TouchSnapshot contacts(std::initializer_list<TouchContact> values) {
+    TouchSnapshot snapshot;
+    for (const auto& contact : values) snapshot.contacts[snapshot.count++] = contact;
+    return snapshot;
+}
+
+TEST_F(GamepadWidget, RouterRetainsIdsAndDoesNotAdoptExtraFinger) {
+    create("gamepad_button");
+    GamepadTouchRouter router;
+    EXPECT_FALSE(router.update(contacts({{3, 50, 50}, {7, 100, 100}}), false, widget_generation).pressed);
+    EXPECT_EQ(delivered().buttons, 1);
+    router.update(contacts({{7, 100, 100}, {3, 250, 250}}), false, widget_generation);
+    EXPECT_EQ(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner != 0, true);
+    router.update(contacts({{7, 100, 100}}), false, widget_generation);
+    EXPECT_EQ(delivered().buttons, 0);
+    router.update(contacts({{7, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner, 0U);
+    router.update(contacts({}), false, widget_generation);
+    router.update(contacts({{7, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(delivered().buttons, 1);
+    router.cancel();
+}
+
+TEST_F(GamepadWidget, RouterCancellationRequiresFreshAllReleasedSnapshot) {
+    create("gamepad_stick");
+    GamepadTouchRouter router;
+    router.update(contacts({{2, 175, 100}}), false, widget_generation);
+    EXPECT_EQ(delivered().left_x, 32767);
+    router.update(contacts({{2, 175, 100}}), true, widget_generation);
+    EXPECT_EQ(delivered().left_x, 0);
+    router.update(contacts({{2, 175, 100}}), false, widget_generation);
+    EXPECT_EQ(reinterpret_cast<GamepadJoystickState*>(state.data)->touch.owner, 0U);
+    auto unchanged = contacts({});
+    unchanged.status = TouchReadStatus::Unchanged;
+    router.update(unchanged, false, widget_generation);
+    router.update(contacts({{2, 175, 100}}), false, widget_generation);
+    EXPECT_EQ(reinterpret_cast<GamepadJoystickState*>(state.data)->touch.owner, 0U);
+    router.update(contacts({}), false, widget_generation);
+    router.update(contacts({{2, 175, 100}}), false, widget_generation);
+    EXPECT_EQ(delivered().left_x, 32767);
+    router.cancel();
+}
+
+TEST_F(GamepadWidget, RouterHideShowInvalidatesCaptureWithoutRecapture) {
+    create("gamepad_button");
+    GamepadTouchRouter router;
+    router.update(contacts({{1, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(delivered().buttons, 1);
+    type->onHide(&state);
+    type->onShow(&state);
+    router.update(contacts({{1, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(delivered().buttons, 0);
+    router.update(contacts({{1, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner, 0U);
+}
+
+TEST_F(GamepadWidget, RouterControllerLocksNavigationUntilEveryFingerLifts) {
+    create("gamepad_button");
+    GamepadTouchRouter router;
+    EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation).pressed);
+    EXPECT_FALSE(router.update(contacts({{1, 250, 250}, {2, 50, 50}}), false, widget_generation).pressed);
+    EXPECT_TRUE(router.reset_navigation);
+    EXPECT_FALSE(router.update(contacts({{1, 250, 250}}), false, widget_generation).pressed);
+    EXPECT_FALSE(router.update(contacts({{1, 250, 250}, {4, 240, 240}}), false, widget_generation).pressed);
+    router.update(contacts({}), false, widget_generation);
+    EXPECT_TRUE(router.update(contacts({{4, 240, 240}}), false, widget_generation).pressed);
+}
+
+TEST_F(GamepadWidget, RouterDoesNotPromoteHeldNavigationOrMalformedIds) {
+    GamepadTouchRouter router;
+    EXPECT_TRUE(router.update(contacts({{2, 250, 250}, {3, 240, 240}}), false, widget_generation).pressed);
+    EXPECT_FALSE(router.update(contacts({{3, 240, 240}}), false, widget_generation).pressed);
+    EXPECT_TRUE(router.update(contacts({{3, 240, 240}, {4, 230, 230}}), false, widget_generation).pressed);
+    EXPECT_FALSE(router.update(contacts({{4, 230, 230}, {4, 50, 50}}), false, widget_generation).pressed);
+    EXPECT_TRUE(router.reset_navigation);
+}
+
+TEST_F(GamepadWidget, RouterTwoSticksRemainIndependentAcrossReorderCrossingAndLift) {
+    lv_obj_set_size(button, 150, 150);
+    create("gamepad_stick");
+    create_extra("gamepad_stick");
+    GamepadTouchRouter router;
+    router.update(contacts({{1, 125, 75}, {8, 275, 75}}), false, widget_generation);
+    auto report = delivered();
+    EXPECT_EQ(report.left_x, 32767);
+    EXPECT_EQ(report.right_x, 32767);
+    const auto left_owner = reinterpret_cast<GamepadJoystickState*>(state.data)->touch.owner;
+    const auto right_owner = reinterpret_cast<GamepadJoystickState*>(extra_state.data)->touch.owner;
+    ASSERT_NE(left_owner, 0U);
+    ASSERT_NE(right_owner, 0U);
+    router.update(contacts({{8, 25, 75}, {1, 275, 75}}), false, widget_generation);
+    report = delivered();
+    EXPECT_EQ(report.left_x, 32767);
+    EXPECT_EQ(report.right_x, -32767);
+    EXPECT_EQ(reinterpret_cast<GamepadJoystickState*>(state.data)->touch.owner, left_owner);
+    EXPECT_EQ(reinterpret_cast<GamepadJoystickState*>(extra_state.data)->touch.owner, right_owner);
+    router.update(contacts({{8, 25, 75}}), false, widget_generation);
+    report = delivered();
+    EXPECT_EQ(report.left_x, 0);
+    EXPECT_EQ(report.right_x, -32767);
+    router.cancel();
+    EXPECT_EQ(delivered().right_x, 0);
+}
+
+TEST_F(GamepadWidget, RouterNavigationEmitsReleaseBeforeNewContactPress) {
+    GamepadTouchRouter router;
+    EXPECT_TRUE(router.update(contacts({{1, 250, 250}}), false, widget_generation).pressed);
+    EXPECT_FALSE(router.update(contacts({{2, 240, 240}}), false, widget_generation).pressed);
+    auto unchanged = contacts({{2, 240, 240}});
+    unchanged.status = TouchReadStatus::Unchanged;
+    const auto navigation = router.update(unchanged, false, widget_generation);
+    EXPECT_TRUE(navigation.pressed);
+    EXPECT_EQ(navigation.horizontal, 240);
+}
+
+TEST_F(GamepadWidget, RouterHeldTriggerCoexistsWithStickAndFeedback) {
+    lv_obj_set_size(button, 150, 150);
+    create("gamepad_stick");
+    create_extra("gamepad_button", {GamepadControlKind::Trigger, 0});
+    GamepadTouchRouter router;
+    router.update(contacts({{1, 125, 75}, {2, 225, 75}}), false, widget_generation);
+    auto report = delivered();
+    EXPECT_EQ(report.left_x, 32767);
+    EXPECT_EQ(report.left_trigger, 255);
+    EXPECT_TRUE(lv_obj_has_state(extra_button, LV_STATE_PRESSED));
+    router.update(contacts({{2, 225, 75}}), false, widget_generation);
+    report = delivered();
+    EXPECT_EQ(report.left_x, 0);
+    EXPECT_EQ(report.left_trigger, 255);
+    router.cancel();
+    EXPECT_EQ(delivered().left_trigger, 0);
+    EXPECT_FALSE(lv_obj_has_state(extra_button, LV_STATE_PRESSED));
+}
+
+TEST_F(GamepadWidget, RouterHatDirectionsComposeAndReleaseIndependently) {
+    lv_obj_set_size(button, 150, 150);
+    button_config.actions[0].payload.gamepad = {uint8_t(GamepadControlKind::Hat), 0, 1};
+    create("gamepad_button");
+    create_extra("gamepad_button", {GamepadControlKind::Hat, 3});
+    GamepadTouchRouter router;
+    router.update(contacts({{4, 75, 75}, {9, 225, 75}}), false, widget_generation);
+    EXPECT_EQ(delivered().hat, 2);
+    router.update(contacts({{9, 225, 75}}), false, widget_generation);
+    EXPECT_EQ(delivered().hat, 3);
+    router.cancel();
+    EXPECT_EQ(delivered().hat, 0);
+}
+
+TEST_F(GamepadWidget, RouterTransportResetAndDestroyedTargetRequireAllRelease) {
+    create("gamepad_button");
+    GamepadTouchRouter router;
+    router.update(contacts({{5, 50, 50}}), false, widget_generation);
+    delivered();
+    widget_controller.reset();
+    ++widget_generation;
+    router.update(contacts({{5, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner, 0U);
+    router.update(contacts({{5, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner, 0U);
+    router.update(contacts({}), false, widget_generation);
+    router.update(contacts({{5, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(delivered().buttons, 1);
+    type->destroyUI(&state);
+    type = nullptr;
+    lv_obj_delete(button);
+    button = nullptr;
+    EXPECT_FALSE(router.update(contacts({{5, 50, 50}}), false, widget_generation).pressed);
+    EXPECT_TRUE(router.reset_navigation);
+    EXPECT_EQ(delivered().buttons, 0);
+}
+
+TEST_F(GamepadWidget, RouterTranslatedJoystickUsesLogicalCoordinatesAndTopmostObject) {
+    create("gamepad_stick");
+    lv_obj_set_style_translate_x(button, 30, LV_PART_MAIN);
+    lv_obj_update_layout(button);
+    GamepadTouchRouter router;
+    router.update(contacts({{1, 130, 100}}), false, widget_generation);
+    EXPECT_EQ(delivered().left_x, 0);
+    router.update(contacts({{1, 205, 100}}), false, widget_generation);
+    EXPECT_EQ(delivered().left_x, 32767);
+    router.update(contacts({}), false, widget_generation);
+    auto* overlay = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(overlay, 300, 300);
+    lv_obj_set_pos(overlay, 0, 0);
+    lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_update_layout(overlay);
+    EXPECT_TRUE(router.update(contacts({{1, 130, 100}}), false, widget_generation).pressed);
+    EXPECT_EQ(reinterpret_cast<GamepadJoystickState*>(state.data)->touch.owner, 0U);
+    router.cancel();
+}
+
+TEST_F(GamepadWidget, ObjectDeletionBeforeWidgetStateCancelsAndAllowsSafeCleanup) {
+    create("gamepad_stick");
+    GamepadTouchRouter router;
+    router.update(contacts({{6, 175, 100}}), false, widget_generation);
+    EXPECT_EQ(delivered().left_x, 32767);
+    lv_obj_delete(button);
+    button = nullptr;
+    EXPECT_EQ(delivered().left_x, 0);
+    EXPECT_FALSE(router.update(contacts({{6, 175, 100}}), false, widget_generation).pressed);
+    gamepad_stick_tick(nullptr, &config, &state);
+    type->destroyUI(&state);
+    type = nullptr;
 }
 
 TEST(GamepadWidgetRegistry, SupportsFullFeaturedBoards) {

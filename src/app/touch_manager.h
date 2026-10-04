@@ -9,6 +9,7 @@
 #define TOUCH_MANAGER_H
 
 #include "board_config.h"
+#include <stdint.h>
 
 #if HAS_TOUCH
 
@@ -41,12 +42,14 @@ public:
 		bool isTouched();
 		bool getTouch(uint16_t* x, uint16_t* y);
 		bool isReady() const { return driver != nullptr; }
+		uint8_t contactCapacity() const { return driver ? driver->contactCapacity() : 0; }
 };
 
 // C-style interface for app.ino
 void touch_manager_init(uint8_t rotation);
 void touch_manager_loop();
 bool touch_manager_is_touched();
+void touch_manager_cancel_physical_input();
 
 // Temporarily suppress LVGL touch input (forces LVGL state=RELEASED).
 // Useful to avoid "wake tap" click-through when turning the backlight back on.
@@ -72,5 +75,15 @@ TouchManagerEnqueueResult touch_manager_enqueue_tap(int32_t x, int32_t y);
 #endif // HAS_DISPLAY
 
 #endif // HAS_TOUCH
+
+#if HAS_DISPLAY && HAS_TOUCH
+uint8_t touch_manager_contact_capacity();
+#else
+inline uint8_t touch_manager_contact_capacity() { return 0; }
+#endif
+
+inline bool touch_manager_controller_multitouch() {
+	return HAS_USB_HID && touch_manager_contact_capacity() > 1;
+}
 
 #endif // TOUCH_MANAGER_H

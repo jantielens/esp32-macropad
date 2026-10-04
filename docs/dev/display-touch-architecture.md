@@ -613,7 +613,12 @@ public:
 };
 ```
 
-`readSample()` is the LVGL input contract. `TouchSample` contains screen-space
+`readSnapshot()` is the TouchManager input contract. Its default adapter calls
+`readSample()` once, preserving status and providing contact ID 0 for a single
+pressed contact. `contactCapacity()` reports the driver limit (1 by default,
+5 for GT911), not a verified panel limit. Snapshots use fixed five-contact storage.
+
+`TouchSample` contains screen-space
 coordinates, a pressed flag, and `TouchReadStatus::Fresh`, `Unchanged`, or
 `Error`. The default adapter above treats each `getTouch()` result as a fresh
 sample, including `false` as a release. Legacy drivers therefore retain their
@@ -621,10 +626,14 @@ existing behavior; they do not distinguish a read failure from a release.
 `isTouched()` and `getTouch()` remain available for compatibility and non-LVGL
 touch detection.
 
-GT911 overrides `readSample()` with checked I2C reads. A fresh controller report
-updates its cached contact; no new report returns that contact as `Unchanged`,
+GT911 overrides `readSnapshot()` with checked I2C reads. A fresh controller report
+updates all cached contacts; no new report returns those contacts as `Unchanged`,
 preserving a stationary hold. Failed or incomplete transfers return `Error`
-without committing partial data. Initialization also checks the pending-data
+without committing partial data. Records use the complete eight-byte stride,
+including tracking ID; excessive counts, invalid/duplicate IDs, and failed
+acknowledgement never commit a partial snapshot. Calibration and rotation apply
+to each contact. `readSample()` retains a first-contact compatibility projection.
+Initialization also checks the pending-data
 clear and does not report successful initialization if that write fails.
 
 AXS15231B checks the complete command and eight-byte response before updating
@@ -699,7 +708,7 @@ error-cancellation guarantee. No installed Inkplate library files are patched.
 
 **GT911_TouchDriver** ([`src/app/drivers/gt911_touch_driver.h/cpp`](../src/app/drivers/gt911_touch_driver.cpp))
 - **Library**: Vendored I2C driver
-- **Hardware**: GT911 multi-touch capacitive controller (up to 5 points, uses 1)
+- **Hardware**: GT911 multi-touch capacitive controller (up to 5 points; actual panel capacity requires verification)
 - **Communication**: I2C (compile-time bus selection via `TOUCH_I2C_BUS`: Wire or Wire1)
 - **Optional reset**: Hardware reset via `TOUCH_RST` pin (INT pin selects I2C address)
 - **Used by**: ESP32-4848S040 (Guition ESP32-S3, ST7701 RGB 480×480), ESP32-P4-LCD4B (Waveshare, ST7703 DSI 720×720), JC4880P433 (Guition ESP32-P4, ST7701 DSI 480×800)
@@ -1561,20 +1570,34 @@ only after release submission. Reset fails unconsumed completions. Report
 cadence and end-to-end latency remain hardware measurement items.
 
 `GamepadJoystickInput` isolates geometry from LVGL and transport ownership.
-`GamepadSurfaceTouch` maps single-contact LVGL events to press/move/release/cancel,
+`GamepadSurfaceTouch` maps synthetic/single-contact LVGL events to press/move/release/cancel,
 captures ownership only at press, consumes ordinary actions/gestures, and handles
 both `PRESS_LOST` and `INDEV_RESET`. Lifecycle hooks clear owners and visuals;
 destroy removes callbacks before destroying widget state. Widget validators
 run independently of MCP. The registry has 16 slots for fully featured boards.
 
-`TouchDriver::readSample()` distinguishes fresh, unchanged, and error samples;
-legacy drivers adapt their existing boolean read. GT911 checks I2C transactions,
-short reads, and status acknowledgement before updating its cache. A valid
-unchanged scan preserves contact. `TouchSampleFilter` tolerates errors for
-100 ms, then cancels through `lv_indev_reset()` and ignores presses until a
-fresh physical release. No multi-contact HAL or router is introduced in phase 1;
-phase 2 can extend contact routing without changing joystick geometry or HID
-ownership.
+`GamepadTouchRouter` shares the widgets' point handlers with LVGL. Five bounded
+slots track IDs, coordinates, and object/lifetime tokens, without a separate
+widget registry. Topmost LVGL hit-testing respects overlays and transforms;
+direct updates invert transforms before applying joystick geometry. One contact
+captures each widget until lift or cancellation; extras never acquire midway.
+Hiding, disabling, replacing, or destroying targets invalidates their captures.
+USB generation changes cancel routed interactions as well as LVGL state.
+
+Controller input cancels an existing navigation pointer without clicking and
+locks navigation until all contacts lift. Ordinary navigation retains its
+primary ID and does not promote already-held secondary fingers. Mousepad and
+Scrollpad remain single-pointer consumers. Synthetic taps use the existing LVGL
+path only while physically idle, and their owed release takes precedence.
+
+TouchManager's LVGL callback is the sole physical reader, including during
+suppression and screen-saver sleep; auxiliary touch/wake queries read cached
+physical state. `TouchSnapshotFilter` tolerates an error episode for 100 ms;
+unchanged scans do not end that episode. Expiry explicitly cancels routed owners
+and resets LVGL. Errors, suppression, active pad rebuilds/switches, and transport
+invalidation require a fresh raw all-released scan before new interaction.
+OTA cancels input before the display task pauses. Firmware verification does not
+prove panel contact capacity, stable IDs, or end-to-end multitouch latency.
 
 ### Touch Calibration
 

@@ -468,8 +468,8 @@ static void poll_touch_activity() {
 		if (!g_config) return;
 		if (!g_config->screen_saver_wake_on_touch) return;
 
-		// Avoid competing with LVGL's indev polling while awake.
-		// Only poll the raw touch state to wake the backlight when sleeping/dimming.
+		// TouchManager samples on the display task even during suppression.
+		// Wake polling observes its cache without consuming another controller scan.
 		if ((g_state == ScreenSaverState::Awake && !g_idle_screen_active) || g_state == ScreenSaverState::FadingIn) {
 			g_prev_touch = false;
 			return;

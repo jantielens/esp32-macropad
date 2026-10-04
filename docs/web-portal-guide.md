@@ -246,7 +246,10 @@ Assign a [Mouse Button action](pad-editor-guide.md#mouse-button) for Left,
 Right, or Middle clicks to an ordinary button or action-dispatching widget;
 it does not change Mousepad gestures.
 Add [Gamepad Joystick or Gamepad Button widgets](pad-editor-guide.md#gamepad-controls)
-for single-touch analog movement or held controls with automatic release.
+for analog movement or held controls with automatic release. GT911 drivers
+support independent simultaneous controller contacts when the panel provides
+them; other drivers remain single-touch. Gamepad interaction blocks ordinary
+navigation until every finger lifts. Panel multitouch acceptance remains pending.
 Gamepad actions provide button, hat, or binary-trigger Tap/Down/Up operations.
 This is not XInput; Windows gamepad enumeration and application testing remain
 pending hardware acceptance.

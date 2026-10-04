@@ -1188,7 +1188,14 @@ and provides a dedicated held-control selector. The shared action editor
 emits only the selected control family's target fields. See the
 [Gamepad authoring guide](../pad-editor-guide.md#gamepad-controls) for JSON and
 ownership semantics. `get_capabilities` advertises action/widget schemas plus
-`device_config.usb_gamepad` ranges, readiness, and the single-contact limit.
+`device_config.usb_gamepad` ranges, readiness, the driver `touch_contacts` limit,
+and `controller_multitouch` support. `/api/info` exposes
+`touch_contact_capacity` (0 without initialized touch, 1 for single-contact
+drivers, up to 5 for GT911) and `has_controller_multitouch` independently of
+`has_usb_hid`. These fields report software capacity, not verified panel capacity
+or current USB readiness. No persisted action/widget fields or settings change.
+Gamepad contacts are captured by stable ID; ordinary navigation is canceled
+and blocked until all fingers lift. Synthetic taps remain idle-only.
 The lean gamepad action catalog also exposes `button_count`; the shared action
 editor uses it for button choices and validation. Descriptor dimensions,
 native validation, catalog metadata, and MCP capabilities share the constants

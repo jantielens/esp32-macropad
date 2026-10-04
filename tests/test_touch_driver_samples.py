@@ -97,6 +97,49 @@ public:
 };
 '''
 cases = {
+    "fallback": r'''
+#include "touch_driver.h"
+class CheckedDriver : public TouchDriver {
+public:
+    TouchSample sample;
+    unsigned reads = 0;
+    void init() override {}
+    bool isTouched() override { assert(false); return false; }
+    bool getTouch(uint16_t*, uint16_t*, uint16_t*) override { assert(false); return false; }
+    TouchSample readSample() override { ++reads; return sample; }
+    void setCalibration(uint16_t, uint16_t, uint16_t, uint16_t) override {}
+    void setRotation(uint8_t) override {}
+};
+int main() {
+    CheckedDriver driver;
+    assert(driver.contactCapacity() == 1);
+    driver.sample.pressed = true;
+    driver.sample.horizontal = 12;
+    driver.sample.vertical = 34;
+    TouchSnapshotFilter filter;
+    auto snapshot = driver.readSnapshot();
+    assert(driver.reads == 1 && snapshot.count == 1 && snapshot.contacts[0].id == 0);
+    assert(snapshot.contacts[0].horizontal == 12 && snapshot.contacts[0].vertical == 34);
+    assert(filter.update(snapshot, 0).count == 1);
+    driver.sample.status = TouchReadStatus::Unchanged;
+    snapshot = driver.readSnapshot();
+    assert(snapshot.status == TouchReadStatus::Unchanged && filter.update(snapshot, 10).count == 1);
+    driver.sample.status = TouchReadStatus::Error;
+    assert(filter.update(driver.readSnapshot(), 20).count == 1);
+    driver.sample.status = TouchReadStatus::Unchanged;
+    assert(filter.update(driver.readSnapshot(), 119).count == 1);
+    assert(filter.update(driver.readSnapshot(), 120).count == 0 && filter.canceled);
+    driver.sample.status = TouchReadStatus::Fresh;
+    assert(filter.update(driver.readSnapshot(), 130).count == 0);
+    driver.sample.status = TouchReadStatus::Unchanged;
+    driver.sample.pressed = false;
+    assert(filter.update(driver.readSnapshot(), 140).count == 0);
+    driver.sample.status = TouchReadStatus::Fresh;
+    assert(filter.update(driver.readSnapshot(), 150).count == 0);
+    driver.sample.pressed = true;
+    assert(filter.update(driver.readSnapshot(), 160).count == 1);
+}
+''',
     "axs": r'''
 #include "drivers/axs15231b/vendor/AXS15231B_touch.cpp"
 #include "drivers/axs15231b_touch_driver.cpp"

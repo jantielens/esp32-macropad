@@ -41,9 +41,12 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   Mousepad movement and tap-to-left-click with acceleration, vertical/horizontal
   Scrollpad scrolling with inertia, and Left/Right/Middle Mouse Button actions.
   USB also exposes a generic HID gamepad with two sticks, two triggers, an
-  eight-direction hat, and 16 buttons. Single-touch Gamepad Joystick and
+  eight-direction hat, and 16 buttons. Gamepad Joystick and
   Gamepad Button widgets provide analog movement and automatically released
-  held controls; Gamepad actions provide tap/down/up operations.
+  held controls; GT911 drivers support independent simultaneous controller
+  contacts, with single-touch fallback on other drivers. Panel contact capacity
+  and multitouch latency still require hardware verification. Gamepad actions
+  provide tap/down/up operations.
   BLE supports keyboard control only. Native USB is compiled for
   `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
   `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard/mouse hardware

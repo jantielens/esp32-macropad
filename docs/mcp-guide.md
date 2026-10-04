@@ -342,8 +342,12 @@ Active records are never evicted. When all four records are active or retained,
   direction is finger up/right scrolls up/right. There is no separate mouse
   movement, scroll, or click tool.
   USB HID builds also advertise the `gamepad` tap/down/up action and
-  `device_config.usb_gamepad` with readiness, ranges, and the single-contact
-  limit. Touch builds expose `gamepad_stick` and `gamepad_button`; the latter
+  `device_config.usb_gamepad` with readiness, ranges, the driver `touch_contacts`
+  limit, and `controller_multitouch` support. These describe software capacity,
+  not verified panel capacity; GT911 supports up to five contacts and other
+  drivers retain one. Gamepad interaction blocks navigation until all fingers
+  lift, and cancellation requires a fresh all-released scan.
+  Touch builds expose `gamepad_stick` and `gamepad_button`; the latter
   requires exactly one Gamepad down action with automatic release. There is
   no independent gamepad enable setting or direct movement tool. Standalone
   holds share one latch per control, separate from widget owners; see the

@@ -4,6 +4,9 @@
 #include "../log_manager.h"
 #include "../device_class.h"
 #include "../button_shadow_color.h"
+#if HAS_TOUCH
+#include "../touch_manager.h"
+#endif
 #include <esp_heap_caps.h>
 #include <string.h>
 
@@ -75,6 +78,9 @@ static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
 // ============================================================================
 
 void PadScreen::clearTiles() {
+    #if HAS_TOUCH
+    if (tileCount && screen && screen == lv_screen_active()) touch_manager_cancel_physical_input();
+    #endif
     clearPadActionOverlay();
     free(padActions);
     padActions = nullptr;

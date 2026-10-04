@@ -18,11 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Generic composite USB HID gamepad with two sticks, independent triggers,
   an eight-direction hat, and 16 buttons, enabled by USB keyboard transport.
-* Single-touch Gamepad Joystick and automatically released Gamepad Button
+* Gamepad Joystick and automatically released Gamepad Button
   widgets, Gamepad tap/down/up actions, portal editing, MCP metadata, bounded
   ownership/retry handling, and checked GT911 reads with error cancellation.
   Windows enumeration, application compatibility, and report latency remain
-  pending hardware acceptance. Multitouch and XInput are not included.
+  pending hardware acceptance. XInput is not included.
+* Bounded GT911 multi-contact snapshots and independent gamepad widget capture,
+  with single-touch fallback on other drivers. Controller interaction cancels
+  ordinary navigation until all fingers lift; cancellation requires a fresh
+  all-released scan. Driver contact limits are exposed separately from USB HID.
+  Actual panel capacity, tracking IDs, and multitouch latency remain unverified.
 
 ### Changed
 

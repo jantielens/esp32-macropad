@@ -34,6 +34,7 @@
 #if HAS_USB_HID
 #include "gamepad_hid.h"
 #endif
+#include "touch_manager.h"
 #include "log_manager.h"
 #if HAS_STORAGE_BROWSER
 #include "storage_browser.h"
@@ -1047,7 +1048,10 @@ void mcp_config_capabilities(JsonObject& out) {
     gamepad["buttons"] = gamepad_protocol::button_count;
     gamepad["hat_directions"] = gamepad_protocol::hat_position_count;
     gamepad["hat_neutral"] = gamepad_protocol::hat_neutral;
-    gamepad["touch_contacts"] = 1;
+    const uint8_t touch_contacts = touch_manager_contact_capacity();
+    gamepad["touch_contacts"] = touch_contacts;
+    gamepad["controller_multitouch"] = touch_manager_controller_multitouch();
+    gamepad["touch_note"] = "Driver contact limit, not verified panel capacity. One contact per widget; gamepad input cancels navigation until every finger lifts. Cancellation requires a fresh all-released scan.";
 #endif
 #if HAS_STORAGE_BROWSER
     JsonObject storage = out.createNestedObject("storage");
