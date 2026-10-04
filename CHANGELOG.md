@@ -14,31 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-* `[health:usb_status]` reports native USB HID status as `disabled`, `ready`,
-  `connected`, `suspended`, or `error`. The binding is available on USB HID
-  builds and advertised through the shared portal and MCP binding catalog.
-
-### Changed
-
-* Native USB HID builds now send diagnostic logs through UART0 at 115200 baud
-  instead of USB CDC. On dual-USB-C P4 boards, use native USB/OTG for HID and
-  the USB-UART connector for flashing and debugging. Setup guides explain port
-  selection and connector power precautions.
-* Native USB starts only when the selected keyboard transport is USB. BLE and
-  Off no longer start the USB runtime or expose a CDC serial console; UART
-  logging remains available.
-
-### Fixed
-
-* Ordinary button taps and touch navigation work with USB HID disconnected or
-  disabled. Mouse state now resets on disconnect and epoch transitions rather
-  than every disconnected poll, preventing repeated touch-router cancellation.
-* Preserve the first button tap after boot by avoiding release guards for idle
-  screen resets and HID generation changes. Held contacts, suppression, and
-  errors retain fresh-release protection.
-
 ## [1.36.0] - 2026-10-04
 
 ### Added
@@ -70,16 +45,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Both settings default off and are exposed in the pad editor and MCP metadata.
   Back uses navigation history and does nothing when it is empty.
 * Native USB keyboard, consumer/media-key, mouse, and gamepad HID on
-  `jc3636w518` and `jc3636w518-sd`, with USB CDC diagnostic logging. Both boards
-  disable BLE and BLE HID; output defaults to Off until USB is selected.
+  `jc3636w518` and `jc3636w518-sd`, with UART0 diagnostic logging at 115200 baud.
+  Both boards disable BLE and BLE HID; output defaults to Off until USB is
+  selected.
+* `[health:usb_status]` reports native USB HID status as `disabled`, `ready`,
+  `connected`, `suspended`, or `error`. The binding is available on USB HID
+  builds and advertised through the shared portal and MCP binding catalog.
 
 ### Changed
 
 * USB HID interface and configuration names use the device friendly name with
   the existing ` USB` suffix instead of TinyUSB labels.
+* Native USB HID builds now send diagnostic logs through UART0 at 115200 baud
+  instead of USB CDC. On dual-USB-C P4 boards, use native USB/OTG for HID and
+  the USB-UART connector for flashing and debugging. Setup guides explain port
+  selection and connector power precautions.
+* Native USB starts only when the selected keyboard transport is USB. BLE and
+  Off no longer start the USB runtime or expose a CDC serial console; UART
+  logging remains available.
 
 ### Fixed
 
+* Ordinary button taps and touch navigation work with USB HID disconnected or
+  disabled, including the first tap after boot. Mouse state resets only on
+  disconnect and epoch transitions, and idle input resets no longer require a
+  fresh release. Held contacts, suppression, and errors retain fresh-release
+  protection.
 * AXS15231B preserves stationary holds, polls active contacts, and retries failed
   reports without another interrupt. AXS15231B and CST816S distinguish checked
   I2C failures from releases; persistent errors cancel holds after 100 ms and
