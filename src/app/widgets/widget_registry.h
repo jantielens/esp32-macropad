@@ -8,6 +8,7 @@
 #include "../pad_config.h"
 #include <ArduinoJson.h>
 #include <stdint.h>
+#include <string.h>
 
 typedef struct _lv_obj_t lv_obj_t;
 struct PadRect;
@@ -42,12 +43,29 @@ struct WidgetType {
     void (*describeSchema)(JsonObject& out);
     void (*onShow)(WidgetState* state);
     void (*onHide)(WidgetState* state);
+    const char* (*validateConfig)(JsonObjectConst button);
 };
 
 const WidgetType* widget_find(const char* type_name);
 void widget_register(const WidgetType* type);
 uint8_t widget_count();
 const WidgetType* widget_at(uint8_t index);
+
+inline bool widget_supports_pad_swipe_control(const char* type) {
+    return strcmp(type, "mousepad") == 0 || strcmp(type, "scrollpad") == 0 ||
+           strcmp(type, "gamepad_button") == 0 || strcmp(type, "gamepad_stick") == 0;
+}
+
+inline bool widget_disables_pad_swipes(const WidgetConfig& config) {
+    return config.disable_pad_swipes && widget_supports_pad_swipe_control(config.type);
+}
+
+inline bool pad_disables_swipes(const PadConfig& config) {
+    for (uint8_t index = 0; index < config.button_count; ++index) {
+        if (widget_disables_pad_swipes(config.buttons[index].widget)) return true;
+    }
+    return false;
+}
 
 #endif // HAS_DISPLAY
 

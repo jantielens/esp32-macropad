@@ -21,6 +21,8 @@
 #if HAS_TOUCH && HAS_USB_HID
 #include "widgets/mousepad_widget.cpp"
 #include "widgets/scrollpad_widget.cpp"
+#include "widgets/gamepad_button_widget.cpp"
+#include "widgets/gamepad_joystick_widget.cpp"
 #endif
 #if HAS_CAMERA
 #include "widgets/camera_preview_widget.cpp"

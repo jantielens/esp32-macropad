@@ -448,7 +448,7 @@ For static images or cameras that only expose a snapshot endpoint, set the URL t
 
 ### Actions (Tap and Long-Press)
 
-Each button supports up to **3 sequential actions** per gesture, one for **tap** and one for **long-press** (triggered after holding ~500ms). Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a sound alert, and action 3 navigates to another screen. A **Delay** action pauses its current list for the configured duration, then runs its remaining actions. By default, up to three pausable actions can be pending device-wide at a time; starting another pausable action when all slots are occupied stops its action list.
+Ordinary buttons support up to **3 sequential actions** per gesture, one list for **tap** and one for **long-press** (triggered after holding ~500ms). Widgets that capture touch use their own interaction rules instead, as described in their sections below. Actions execute in order: for example, action 1 publishes an MQTT message, action 2 plays a sound alert, and action 3 navigates to another screen. A **Delay** action pauses its current list for the configured duration, then runs its remaining actions. By default, up to three pausable actions can be pending device-wide at a time; starting another pausable action when all slots are occupied stops its action list.
 
 Each gesture always shows three fixed action slots. An unused slot is collapsed and reads **Add tap action** or **Add long-press action**; click it to choose a type. Once a slot has an action, it expands and its heading shows the slot's position (**Tap action 1**, **Tap action 2**, and so on). To remove an action, set its type back to **(none)** — the slot collapses again.
 
@@ -535,10 +535,16 @@ defaults are unchanged until you configure these actions.
 
 The **Send keys** action sends keystrokes through the device's selected USB or
 BLE transport. Both use the same DSL and US ASCII mapping. Native USB is enabled
-on `jc1060p470c-sd`; choose a supported transport under **Connectivity > Keyboard & Mouse**,
+on supported builds, including `jc1060p470c-sd`, `jc3636w518`, and `jc3636w518-sd`.
+Both JC3636W518 variants disable BLE. Choose a supported transport under **Connectivity > Keyboard & Mouse**,
 save, then reboot. Off is the initial default and rejects key actions.
 Single-backend builds offer Off and their supported backend. There is no
 automatic fallback to another transport.
+
+On dual-USB-C P4 boards, connect the native USB device/OTG port for HID, not the
+USB-UART flashing/debugging port. If USB remains disconnected, try the other
+connector with a data-capable cable. Serial logs use the USB-UART port at 115200
+baud. See [USB connector and power guidance](web-portal-guide.md#keyboard).
 
 One macro can be pending or running. Disabled, busy, or disconnected requests fail;
 execution failure stops the remaining action-list suffix. Reconnection never
@@ -744,24 +750,89 @@ even if the finger returns to its starting point.
 Set **Movement threshold (px)** from 0 to 12 (default 3 device pixels),
 independently for each Mousepad. Lower values start pointer movement sooner;
 0 removes the dead zone. Small finger movements can then cancel taps more
-easily. The threshold is independent of sensitivity and acceleration.
+easily. The same threshold activates tap-then-drag and two-finger midpoint
+scrolling, before sensitivity or acceleration.
 
 Set **Sensitivity** from 0.1 to 5 (default 1). Larger values move the pointer
-farther for the same finger movement; the computer's own pointer settings
+farther for the same finger movement and increase two-finger scroll travel;
+the computer's own pointer settings
 also affect the result. Increase the button's row and column spans for a
 larger mousepad. Labels, icons, and appearance remain customizable.
 
 Set **Acceleration** from 0 to 5 (default 0, off). Higher values amplify fast
 finger movement while retaining slow-movement precision. Sensitivity remains
 independent; the computer's own pointer acceleration can compound the effect.
+Acceleration affects pointer movement, including dragging, but not scrolling.
+
+Tap, lift, then touch again within 300 ms and move beyond the movement
+threshold to drag with the left button held. Lift that finger to release;
+there is no drag lock. A short stationary second tap produces a double-click
+instead. Additional fingers during a drag are ignored, not used for scrolling.
+
+Enable **Mouse buttons** (default off) for left/right zones in the bottom 20%
+of the mousepad, split evenly. Each has an unfilled, rounded, dashed outline in
+the button's text color; a thicker outline indicates the held mouse button.
+Touch a zone to press that mouse button immediately, and lift to release it.
+On multicontact drivers, keep that finger down while another finger moves in
+the main area above the strip. The finger controlling movement can lift and
+touch again to continue dragging without releasing the button. Either finger
+can touch first.
+Contact roles are fixed at touchdown: crossing a zone boundary does not change
+the role or button. Only one mouse button can be held at a time. Single-contact
+drivers support zone clicks, but not simultaneous hold-and-move dragging.
+
+On a driver exposing multiple contacts, two fingers starting inside the same
+Mousepad (above the strip when Mouse buttons is enabled) scroll using their
+midpoint. Adding the second finger establishes a
+fresh baseline and suppresses pointer movement and tap clicks. Once midpoint
+travel exceeds the movement threshold, scrolling locks to the dominant axis
+(vertical on a tie). Capture remains stable outside the button. Lifting either
+captured finger stops scrolling; lift all fingers before starting another
+gesture. Extra contacts are ignored and never replace a captured finger.
+
+Set **Reverse scroll direction** to reverse the normal finger-up/scroll-up and
+finger-right/scroll-right direction. Set **Scroll inertia** from 0 to 5
+(default 0, off) for optional release coasting, with the same behavior and
+cancellation rules as Scrollpad. Sensitivity 1 produces one wheel step per
+20 midpoint pixels. Horizontal wheel support depends on the host application.
+Single-contact drivers retain pointer movement, taps, and tap-then-drag;
+use Scrollpad for one-finger scrolling.
 
 Touches starting inside the mousepad remain owned by it until release,
 including movement outside its edges. They do not trigger pad swipes,
 ordinary button actions, or long-press actions. The editor hides those action
-sections. Pending input is cleared when the pad hides or USB reconnects.
-BLE and Off disable USB mouse output. Dragging, right click, scrolling, and
-multitouch are not Mousepad gestures. Use a separate button with a Mouse Button
-action for right or middle clicks, or a Scrollpad widget for scrolling.
+sections. Only one mouse surface is active at a time; gamepad captures can
+coexist. Hide/delete, pad changes, wake suppression, USB disconnect/reconnect,
+and OTA cancel input and release drag ownership. Global cancellation requires
+a fresh all-contact-release scan before physical input can restart.
+BLE and Off disable USB mouse output. Two-finger right-click, pinch zoom, and
+three-finger gestures are not supported. Use the optional right zone or a
+separate Mouse Button action for right clicks; use a Mouse Button action for
+middle clicks. Clicks overlapping a held mouse button are rejected;
+clicking and releasing a different mouse button preserves the held button.
+
+Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button offer
+**Disable pad swipe actions (entire pad)**, default off. Enabling it on any
+one of these widgets disables all four swipe actions everywhere on that pad,
+including outside the widget and when USB is disconnected. Other widgets do
+not offer this setting. The JSON field is `widget_disable_pad_swipes` (boolean).
+
+Mousepad also offers **Show Back button**, default off
+(`widget_mousepad_back`, boolean). It adds a top-left arrow with a touch target
+up to 44 pixels square, separate from mouse input. A short stationary tap
+uses existing screen history; moving more than 8 pixels or holding cancels it.
+It works without USB, stops mouse activity, and does nothing when history is
+empty. Provide a separate navigation button if your pad has no history.
+
+JSON fields are `widget_mousepad_sensitivity` (0.1-5, default 1),
+`widget_mousepad_acceleration` (0-5, default 0),
+`widget_mousepad_movement_threshold` (0-12, default 3),
+`widget_mousepad_reverse` (boolean, default false),
+`widget_mousepad_inertia` (0-5, default 0),
+`widget_mousepad_buttons` (boolean, default false), and the two navigation
+toggles described above. Authoring validation rejects
+non-numeric, non-finite, or out-of-range numbers and non-boolean toggle values.
+Gesture timing and axis policy are internal constants, not per-button controls.
 
 ### Scrollpad
 
@@ -809,9 +880,8 @@ For JSON authoring:
 
 Missing or unrecognized axis values default to `"vertical"`. Sensitivity is
 clamped to 0.1-5; missing or non-finite values default to 1. Reverse direction
-defaults to false. `widget_scrollpad_inertia` and
-`widget_mousepad_acceleration` are clamped to 0-5; missing or non-finite values
-default to 0, preserving the behavior of existing pads.
+defaults to false. `widget_scrollpad_inertia` is clamped to 0-5; missing or
+non-finite values default to 0 when parsed.
 
 ### Mouse Button
 
@@ -834,6 +904,127 @@ full, or OTA is active. USB reconnection or OTA clears pending input.
 For JSON authoring, use `{"type":"mouse_button","button":"right"}` in an
 action list. `button` accepts `"left"`, `"right"`, or `"middle"`; omitted values
 default to `"left"`, while invalid values are rejected.
+
+### Gamepad Controls
+
+Select **USB** under **Connectivity > Keyboard & Mouse**, save, reboot, and
+connect the native USB port. Gamepad output follows this transport setting;
+BLE and Off do not expose a gamepad. This is generic USB HID, not XInput.
+
+The controller name uses the configured device friendly name with the existing
+` USB` suffix. Name changes take effect after saving and rebooting. Windows may
+cache an earlier label; unplug and reconnect after updating firmware, and remove
+the old device instance in Device Manager if the cached name persists.
+
+The controller exposes two sticks (signed -32767 to 32767), two independent
+triggers (0 to 255), an eight-direction hat (neutral 0), and 16 buttons.
+Left-stick axes are X/Y, right-stick axes are Z/Rz, and triggers are Rx/Ry.
+
+Choose **Gamepad Joystick** for an absolute stick. Select Left or
+Right, Fixed or Floating center, a 0-90% radial dead zone (default 10%), and
+optional axis inversion. Right/down are positive without inversion. Travel
+uses the shorter content dimension and is clamped radially, including outside
+the button. Floating centers stay within the button; content areas smaller
+than 16 pixels are inactive. The center label is hidden, while top and bottom
+labels remain. Release or cancellation centers the stick. Two widgets aimed
+at one stick use first-owner-wins until release.
+
+The ring and dot use the button foreground (text) color, including live color
+bindings. The ring fills the shorter content dimension after button padding
+and borders; the dot is one-third of its diameter, with a 6-pixel minimum.
+Dot travel keeps the entire dot inside the ring. A floating center can move
+only along the longer content dimension; a square content area leaves no room
+to shift the maximized ring.
+
+The JSON widget type is `gamepad_stick`. Earlier development pads using
+`gamepad_joystick` must reselect **Gamepad Joystick** in the editor and save.
+
+Choose **Gamepad Button** for one held control: button 1-16, a hat direction,
+or a binary left/right trigger. Release is automatic; there is no separate
+release action. Its persisted `actions` list must contain exactly one Gamepad
+`down` action, with no long-press or legacy action fields. This action configures
+the held control; it is not dispatched as an ordinary tap action:
+
+```json
+{
+  "widget_type": "gamepad_button",
+  "actions": [{"type": "gamepad", "control": "hat", "direction": "up", "operation": "down"}]
+}
+```
+
+Accepted presses reuse the ordinary button's background-adaptive overlay. It
+stays visible while held, flashes for 100 ms after release, and clears immediately
+on cancellation. Boards with animations disabled omit this visual feedback.
+
+For widget-owned interactions, a contact starting inside either gamepad widget
+is captured until release or cancellation, including movement outside its
+button. It cannot transfer to another widget during that contact. Both widgets
+consume ordinary tap, long-press, and pad-swipe handling, including when USB
+gamepad output is unavailable. On controller-enabled builds, gamepad input
+cancels an existing ordinary navigation press without clicking, and blocks
+navigation until every finger lifts. Already-held fingers are never promoted
+to navigation or another widget. Configured full-screen tap actions take precedence over button and
+widget interaction; clear them to use the gamepad widgets.
+
+GT911 drivers can route up to five simultaneous contacts to controller widgets;
+the connected panel may support fewer. Two sticks, a stick and held button or
+trigger, or multiple hat directions can operate together. Each widget accepts
+one contact; additional fingers on that widget are ignored until they lift,
+even if its captured finger lifts first. Array reordering and crossing contacts
+do not exchange ownership. Other touch drivers retain single-touch operation.
+Scrollpad and ordinary buttons remain single-pointer controls; Mousepad also
+supports [two-finger scrolling](#mousepad) on multicontact drivers.
+Inkplate/Cypress multitouch is not included.
+
+Four held hat controls can form a D-pad. Hat directions compose into diagonals;
+opposing directions cancel independently. Binary triggers activate at 255 and
+release to zero. Queued synthetic taps wait until all physical contacts lift.
+
+For ordinary action lists, choose **Gamepad** and Tap, Down, or Up:
+
+```json
+{"type":"gamepad","control":"button","button":1,"operation":"tap"}
+```
+
+Use `direction` (`up`, `down`, `left`, `right`) only with `control:"hat"`, or
+`trigger` (`left`, `right`) only with `control:"trigger"`. Button controls
+default to button 1; omitted operation defaults to `tap`. Conflicting target
+fields and invalid values are rejected.
+
+Standalone Down/Up actions share one idempotent latch per control. Any Up
+releases that latch, but cannot release a widget-owned hold. Two independent
+macros therefore cannot maintain separate standalone holds on one control.
+Tap rejects an already-held target; its 50 ms hold starts after successful
+press submission, and the next action runs only after release submission.
+Disconnected USB, OTA, or exhausted capacity fails the action.
+
+Pad exit/replacement, disconnect/reconnect, and OTA clear holds and pending
+taps, without replay. Widgets also release on hide, disable, destruction, or
+touch cancellation. GT911, AXS15231B, and CST816S detected read failures cancel
+after 100 ms and require a fresh scan with all contacts released before another
+physical interaction. Suppression, pad replacement, and transport reset use the
+same all-contact rearming rule. Stationary
+contacts remain held between valid reports. XPT2046 applies the same cancellation
+to invalid samples, but its SPI library cannot identify every bus failure.
+Inkplate/Cypress retains its legacy behavior and is not covered by this checked
+error handling. These driver changes do not enable USB HID on additional boards;
+gamepad widgets still require the existing display, touch, and USB HID capabilities.
+
+For hardware diagnostics, use the normal INFO-level device logs. `GamepadJoystick`
+and `GamepadButton` report creation, capture, rejection, and release reasons.
+GT911 logs `Contacts=N IDs=0x....` when the contact set changes, after a checked
+read and successful acknowledgement. Each set bit represents a tracking ID;
+record reordering or movement alone does not emit a contact-set log. Use these
+logs to check simultaneous contact counts and whether the remaining finger
+keeps its ID when another finger lifts. These are not latency measurements.
+Joystick axes are logged at first deflection and then at most every 200 ms
+during continuous movement. `GamepadHID` reports readiness/generation changes
+and submitted report values, including buttons, hat, triggers, and both sticks.
+Continuous report logging is limited to 200 ms intervals, with immediate logs
+for discrete changes, first deflection, and centering. A Submitted message
+confirms TinyUSB accepted the report, not that Windows or a game consumed it.
+Button diagnostics use control kind 0/1/2 for button/hat/trigger and zero-based
+target indexes; button index 0 corresponds to button 1.
 
 ### Extension
 
@@ -1426,6 +1617,7 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 | `hostname` | Device hostname | `macropad` |
 | `table` | Structured table payload (standard schema) | `{"title":"Status","columns":[...],"rows":[...]}` |
 | `extended_table` | Structured table payload (extended schema) | `{"title":"Status","columns":[...],"rows":[...],"styles":...}` |
+| `usb_status` | Compact USB HID status (USB HID builds only) | `disabled`, `ready`, `connected`, `suspended`, `error` |
 | `ble_status` | Compact BLE status | `disabled`, `ready`, `pairing`, `connected`, `error` |
 | `ble_name` | Current BLE keyboard name | `Kitchen Pad BLE` |
 | `ble_state` | Detailed BLE state | `disabled`, `pairing`, `connecting`, `secured`, `claimed`, ... |
@@ -1440,6 +1632,22 @@ Displays real-time device diagnostics — useful for system monitoring buttons o
 Values are cached for up to 2 seconds to keep the CPU impact low.
 
 `table` and `extended_table` are intended for the Table widget data binding field. Use them as exact single-token templates (for example `[health:table]`) so the structured payload is passed through unchanged.
+
+**USB HID status values:**
+
+| Value | Meaning |
+|-------|---------|
+| `disabled` | USB HID is not enabled, including when BLE or Off is selected |
+| `ready` | USB HID initialized and waiting for host enumeration |
+| `connected` | A host enumerated the device and USB is not suspended |
+| `suspended` | The enumerated host suspended USB; HID reports cannot currently be sent |
+| `error` | USB initialization failed |
+
+Use `USB: [health:usb_status]` in a label, or
+`[expr:[health:usb_status]=="connected"?"#00ff00":"#ff0000"]` for a status color.
+The status is read live when resolved. A cable or USB power alone does not mean
+`connected`; the host must enumerate the device. On builds without USB HID,
+the key is unavailable rather than returning `disabled`.
 
 **BLE signal values:**
 

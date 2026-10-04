@@ -3,6 +3,7 @@
 
 #include "Arduino.h"
 #include "Wire.h"
+#include <atomic>
 
 class AXS15231B_Touch {
 private:
@@ -10,7 +11,8 @@ private:
 
 		bool use_interrupt = true;
 
-		volatile bool touch_int = false;
+		std::atomic<uint32_t> touch_int{0};
+		bool retry_read = false;
 		static AXS15231B_Touch* instance;
 
 		uint16_t point_X = 0;
@@ -28,6 +30,9 @@ private:
 		uint16_t y_ideal_max = 0;
 
 public:
+		enum class ReadStatus : uint8_t { Fresh, Unchanged, Error };
+		ReadStatus readSample();
+		bool isPressed() const { return touchActive; }
 		AXS15231B_Touch(uint8_t scl, uint8_t sda, uint8_t int_pin, uint8_t addr, uint8_t rotation) {
 				this->scl = scl;
 				this->sda = sda;
@@ -48,7 +53,7 @@ public:
 private:
 		static void isrTouched();
 		void correctOffset(uint16_t *x, uint16_t *y);
-		bool update();
+		ReadStatus update();
 };
 
 // Response layout (per Espressif esp_lcd_touch_axs15231b.c):

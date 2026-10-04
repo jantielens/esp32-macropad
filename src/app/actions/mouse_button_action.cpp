@@ -41,7 +41,7 @@ ActionResult dispatch_mouse_button(const ButtonAction& act, const char* label, u
     if (mouse_hid_click(usb_hid_epoch(), mouse_button_mask(act.payload.mouse_button.button))) {
         return ACTION_COMPLETE;
     }
-    LOGW("Action", "%s mouse button: request rejected (disconnected, queue full, invalid, or OTA)", label);
+    LOGW("Action", "%s mouse button: request rejected (disconnected, owned button, queue full, invalid, or OTA)", label);
 #else
     (void)act;
     LOGW("Action", "%s mouse button: USB HID not compiled", label);
@@ -58,7 +58,7 @@ void describe_mouse_button(JsonObject& action) {
     action["label"] = "Mouse button";
     JsonObject field = action.createNestedArray("fields").createNestedObject();
     field["name"] = "button";
-    field["description"] = "left (default), right, or middle; complete USB click, no hold-to-drag";
+    field["description"] = "left (default), right, or middle; complete USB click; owned drag buttons reject clicks, other-button clicks preserve the drag";
     const char* values[] = { "left", "right", "middle" };
     const char* labels[] = { "Left", "Right", "Middle" };
     JsonArray commands = action.createNestedArray("commands");

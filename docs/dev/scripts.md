@@ -477,6 +477,25 @@ This script automates both steps.
 - Displays real-time output from `Serial.print()` statements
 - Press `Ctrl+C` to exit
 
+On builds with native USB HID support, the USB OTG connector is reserved for
+HID and does not expose a CDC serial console. Application logs use UART0 at
+115200 baud, starting before HID initialization. The native USB runtime is not
+started unless the selected keyboard transport is USB. Connect the board's dedicated
+USB-UART connector for monitoring and serial flashing, where provided. On the
+Waveshare P4 LCD4B, this connector is labeled **USB TO UART**.
+
+The dual-USB-C P4 HID builds are `esp32-p4-lcd4b`, `jc1060p470c`,
+`jc1060p470c-sd`, `jc4880p433`, and `jc4880p433-sd`. If monitoring on the HID
+connector produces no serial port or logs, switch to the USB-UART connector.
+Conversely, the USB-UART connector cannot send keyboard, mouse, or gamepad input;
+switch to native USB/OTG for HID. Check the
+[connector power precautions](../web-portal-guide.md#keyboard) before using two cables.
+
+The USB-UART bridge stays connected across MCU resets while the bridge remains
+powered. Open the monitor before resetting to capture early boot output. Bootloader
+and panic output depend on the board's SDK console configuration. Boards without
+HID support retain their existing UART or USB CDC logging behavior.
+
 **Requirements:** 
 - ESP32 device must be connected via USB
 - User must be in `dialout` group

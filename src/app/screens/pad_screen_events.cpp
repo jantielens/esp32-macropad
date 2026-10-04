@@ -131,6 +131,24 @@ static void do_tap_flash(ButtonTile* tile, uint8_t zone = 0, bool horizontal = f
     }
 }
 
+void PadScreen::onWidgetPressFeedback(lv_event_t* event) {
+    if (DISPLAY_DISABLE_ANIMATIONS) return;
+    auto* tile = static_cast<ButtonTile*>(lv_event_get_user_data(event));
+    const auto* feedback = static_cast<const lv_event_code_t*>(lv_event_get_param(event));
+    if (!tile || !tile->tap_overlay || !feedback) return;
+    if (*feedback == LV_EVENT_RELEASED) {
+        do_tap_flash(tile);
+        return;
+    }
+    if (tile->tap_flash_timer) {
+        lv_timer_delete(tile->tap_flash_timer);
+        tile->tap_flash_timer = nullptr;
+        restore_tap_overlay(tile);
+    }
+    if (*feedback == LV_EVENT_PRESSED) lv_obj_remove_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(tile->tap_overlay, LV_OBJ_FLAG_HIDDEN);
+}
+
 // Pixel-based tap flash: resize overlay to a pixel band of the tile.
 // px_start/px_end are tile-relative pixel offsets along the given axis.
 static void do_tap_flash_px(ButtonTile* tile, int px_start, int px_end, bool horizontal) {

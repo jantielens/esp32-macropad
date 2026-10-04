@@ -13,20 +13,32 @@ MouseHidState mouse_state;
 portMUX_TYPE mouse_mutex = portMUX_INITIALIZER_UNLOCKED;
 uint32_t mouse_epoch = 0;
 uint32_t mouse_ota_epoch = 0;
+bool mouse_was_ready = false;
 
 void sync_mouse_epoch() {
     const uint32_t live_epoch = usb_hid_epoch();
     const uint32_t live_ota_epoch = ota_activity_epoch();
-    if (mouse_epoch != live_epoch || mouse_ota_epoch != live_ota_epoch) {
+    const bool ready = mouse_hid_is_ready();
+    if (mouse_epoch != live_epoch || mouse_ota_epoch != live_ota_epoch ||
+        (!ready && mouse_was_ready)) {
         mouse_state.reset();
         mouse_epoch = live_epoch;
         mouse_ota_epoch = live_ota_epoch;
     }
+    mouse_was_ready = ready;
 }
 }
 
 bool mouse_hid_is_ready() {
     return usb_hid_is_ready() && !ota_activity_is_active();
+}
+
+uint32_t mouse_hid_generation() {
+    portENTER_CRITICAL(&mouse_mutex);
+    sync_mouse_epoch();
+    const uint32_t generation = mouse_state.current_generation();
+    portEXIT_CRITICAL(&mouse_mutex);
+    return generation;
 }
 
 void mouse_hid_move(int dx, int dy, uint32_t epoch) {
@@ -75,19 +87,33 @@ void mouse_hid_cancel() {
     portEXIT_CRITICAL(&mouse_mutex);
 }
 
+uint32_t mouse_hid_acquire(uint32_t epoch, uint8_t buttons) {
+    if (!mouse_hid_is_ready()) return 0;
+    portENTER_CRITICAL(&mouse_mutex);
+    sync_mouse_epoch();
+    const uint32_t owner = epoch == mouse_epoch ? mouse_state.acquire(buttons) : 0;
+    portEXIT_CRITICAL(&mouse_mutex);
+    return owner;
+}
+
+void mouse_hid_release(uint32_t owner, uint32_t epoch) {
+    portENTER_CRITICAL(&mouse_mutex);
+    sync_mouse_epoch();
+    if (epoch == mouse_epoch) mouse_state.release(owner);
+    portEXIT_CRITICAL(&mouse_mutex);
+}
+
 void mouse_hid_loop() {
     MouseHidState snapshot;
     portENTER_CRITICAL(&mouse_mutex);
     sync_mouse_epoch();
-    if (!mouse_hid_is_ready()) mouse_state.reset();
     snapshot = mouse_state;
     portEXIT_CRITICAL(&mouse_mutex);
     const MouseHidInertiaTick coast = snapshot.inertia_tick(millis());
     MouseHidReport report;
     portENTER_CRITICAL(&mouse_mutex);
     sync_mouse_epoch();
-    if (!mouse_hid_is_ready()) mouse_state.reset();
-    else mouse_state.apply_inertia(coast);
+    if (mouse_hid_is_ready()) mouse_state.apply_inertia(coast);
     const uint32_t report_epoch = mouse_epoch;
     const uint32_t report_ota_epoch = mouse_ota_epoch;
     const bool pending = mouse_state.next(report);

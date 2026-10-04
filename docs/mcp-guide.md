@@ -317,18 +317,33 @@ Active records are never evicted. When all four records are active or retained,
   Binding scheme names, parameter limits, and finite keys are serialized from the
   same live registry used by `GET /api/bindings` for the portal, so the manifest
   reflects the current board and device class without a separate MCP catalog.
+  USB HID builds include `[health:usb_status]` with values `disabled`, `ready`,
+  `connected`, `suspended`, and `error`. A connected status requires host
+  enumeration and an awake USB session, not merely USB power.
   On touch-enabled USB HID builds, the widget manifest also advertises
   `mousepad` with `widget_mousepad_sensitivity` (0.1-5, default 1),
-  `widget_mousepad_acceleration` (0-5, default 0/off), and
-  `widget_mousepad_movement_threshold` (0-12 device pixels, default 3).
-  Movement beyond this threshold starts pointer movement and cancels tap
-  eligibility; 0 removes the dead zone. Higher acceleration
-  amplifies fast finger movement independently of sensitivity. It provides
-  relative movement and tap-to-left-click only when USB keyboard transport is
-  active, and consumes ordinary button actions and pad swipes. On USB HID
+  `widget_mousepad_acceleration` (0-5, default 0/off),
+  `widget_mousepad_movement_threshold` (0-12 device pixels, default 3),
+  `widget_mousepad_reverse` (boolean, default false),
+  `widget_mousepad_inertia` (0-5, default 0/off), and
+  `widget_mousepad_buttons` (boolean, default false) for bottom left/right hold
+  zones supporting pointer-finger repositioning while a mouse button is held.
+  `widget_mousepad_back` (boolean, default false) adds a top-left Back button
+  isolated from mouse input, using existing history with no empty-history fallback.
+  Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button also advertise
+  `widget_disable_pad_swipes` (boolean, default false). Enabling it on any
+  one input widget disables all swipe actions across its entire pad,
+  independently of USB readiness. Other widget types reject this field.
+  The registry note describes pointer movement, taps, dragging, and two-finger
+  scrolling when USB keyboard transport is active. See the
+  [Mousepad guide](pad-editor-guide.md#mousepad) for gesture timing, thresholds,
+  contact ownership, and cancellation rules. Mousepad consumes ordinary button
+  actions and pad swipes. On USB HID
   builds, the action catalog advertises `mouse_button` with `button` set to
   `left` (default), `right`, or `middle` for complete clicks, without movement
-  or hold-to-drag. Use `{"type":"mouse_button","button":"right"}` in existing
+  or hold-to-drag. Clicks overlapping a drag-owned button are rejected;
+  other-button click releases preserve the held button.
+  Use `{"type":"mouse_button","button":"right"}` in existing
   action lists; its host decides when it fires and touch is not required.
   The widget manifest also advertises `scrollpad` on touch-enabled USB HID
   builds, with `widget_scrollpad_axis` (`vertical` default, or `horizontal`),
@@ -341,6 +356,18 @@ Active records are never evicted. When all four records are active or retained,
   At sensitivity 1 it accumulates one step per 20 device pixels; conventional
   direction is finger up/right scrolls up/right. There is no separate mouse
   movement, scroll, or click tool.
+  USB HID builds also advertise the `gamepad` tap/down/up action and
+  `device_config.usb_gamepad` with readiness, ranges, the driver `touch_contacts`
+  limit, and `controller_multitouch` support. These describe software capacity,
+  not verified panel capacity; GT911 supports up to five contacts and other
+  drivers retain one. Gamepad interaction blocks navigation until all fingers
+  lift, and cancellation requires a fresh all-released scan.
+  Touch builds expose `gamepad_stick` and `gamepad_button`; the latter
+  requires exactly one Gamepad down action with automatic release. There is
+  no independent gamepad enable setting or direct movement tool. Standalone
+  holds share one latch per control, separate from widget owners; see the
+  [Gamepad guide](pad-editor-guide.md#gamepad-controls) for exact fields and
+  limitations.
   Its `device_config.keyboard` section lists compiled `transports`, the default
   and active transport, and ready/busy status. `get_config` returns
   `keyboard_transport` (saved), `keyboard_active_transport`, and

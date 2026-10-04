@@ -22,7 +22,7 @@ uint32_t swipe_actions_last_swipe_time() {
     return s_last_swipe_ms;
 }
 
-static void on_gesture(lv_event_t* e) {
+static void on_gesture(lv_event_t*) {
     uint32_t now = lv_tick_get();
     if (now - s_last_swipe_ms < SWIPE_DEBOUNCE_MS) return;
 
@@ -62,9 +62,10 @@ static void on_gesture(lv_event_t* e) {
     lv_indev_wait_release(lv_indev_active());
 }
 
-void swipe_actions_register(lv_obj_t* screen_obj) {
+void swipe_actions_register(lv_obj_t* screen_obj, bool enabled) {
     if (!screen_obj) return;
-    lv_obj_add_event_cb(screen_obj, on_gesture, LV_EVENT_GESTURE, nullptr);
+    lv_obj_remove_event_cb(screen_obj, on_gesture);
+    if (enabled) lv_obj_add_event_cb(screen_obj, on_gesture, LV_EVENT_GESTURE, nullptr);
     lv_obj_add_flag(screen_obj, LV_OBJ_FLAG_CLICKABLE);
 }
 

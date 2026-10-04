@@ -199,12 +199,34 @@ duration (`count * interval + 50` ms), not an exact transmitted packet count.
 ### Keyboard
 
 Shown only when USB or BLE HID is compiled in. Native USB support is currently
-compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
-`esp32-p4-lcd4b`; keyboard output defaults to Off. Hardware validation so far
-covers `jc1060p470c-sd` only. Use the native USB device connector, not a USB-UART
-bridge or host-only connector; check the board's connector and power wiring.
-On JC1060P470C hardware, USB uses the high-speed USB-C connector. Use one powered
-USB cable on that board because its connector power rails are shared.
+compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
+`jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard output defaults to Off.
+Both JC3636W518 variants disable BLE and offer only Off or USB. Switching their
+firmware from hardware CDC to TinyUSB may assign a different Windows COM port.
+
+The P4 HID builds (`esp32-p4-lcd4b`, `jc1060p470c`, `jc1060p470c-sd`,
+`jc4880p433`, and `jc4880p433-sd`) use two separate USB-C connectors:
+
+| Connector | Purpose |
+|-----------|---------|
+| Native USB device / OTG | Keyboard, mouse, and gamepad input to the connected computer; no serial log console |
+| USB-UART / download / debug | Serial flashing and diagnostic logs at 115200 baud; no HID input |
+
+If USB HID stays **disconnected**, you may still be using the connector that
+worked for flashing or serial monitoring. Move the data-capable USB cable to the
+native USB connector. On Waveshare LCD4B, use **USB OTG** for HID and
+**USB TO UART** for debugging. On JC1060P470C, HID uses the high-speed USB-C
+connector. Labels vary by board; a host-only connector cannot provide HID output.
+
+For boot or crash debugging, connect the USB-UART port and start the serial
+monitor before resetting. That bridge can stay connected across MCU resets while
+powered; HID USB resets do not provide a persistent serial console. See the
+[serial monitor guide](dev/scripts.md#monitorsh).
+
+> [!WARNING]
+> Check the board's power wiring before attaching two powered USB cables.
+> JC1060P470C connector power rails are shared; use one powered cable unless
+> the board documentation provides a safe arrangement for simultaneous connections.
 
 The keyboard defaults to Off. Choose Off or a supported USB/BLE transport,
 save, and use the existing reboot-required banner. The displayed active
@@ -212,12 +234,13 @@ transport remains unchanged until reboot. Single-backend builds offer Off and
 their supported transport; builds with neither backend hide keyboard settings
 and **Send keys**. Explicitly saved USB/BLE choices remain unchanged after
 updating; devices without a saved choice become Off. Off disables keyboard
-and mouse output and rejects key actions while retaining USB serial logging and
-independent BLE telemetry.
+and mouse output and rejects key actions while retaining UART serial logging and
+independent BLE telemetry. On HID builds, selecting BLE or Off leaves native USB
+stopped after reboot; it does not expose a CDC serial console.
 
 | Element | Description |
 |---------|-------------|
-| **Transport** | In Connectivity > Keyboard & Mouse: USB enables keyboard and mouse control, BLE enables keyboard only, and Off disables both. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
+| **Transport** | In Connectivity > Keyboard & Mouse: USB enables keyboard, mouse, and gamepad control, BLE enables keyboard only, and Off disables all HID output. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
 | **Active connection** | Separate section showing the running USB/BLE backend and `ready`, `busy`, or `disconnected` status, or Keyboard disabled when Off; changing the selector does not change this section |
 | **BLE status indicator** | Shown when BLE is active: disabled, ready, pairing, connected, or error |
 | **Name** | Shows the configured device name plus ` USB` or ` BLE` for the active connection |
@@ -227,21 +250,34 @@ independent BLE telemetry.
 
 You can also trigger pairing from a button on the device by assigning the `ble_pair` action.
 
-USB exposes keyboard, consumer HID, and a relative mouse alongside the serial console when USB is
-selected. With BLE or Off selected, USB exposes only the serial console after reboot,
-not a keyboard or mouse. Add a **Mousepad** widget in the pad editor on
-touch-enabled USB HID devices for finger movement and tap-to-left-click;
-**Sensitivity** and **Acceleration** (0-5, default 0/off) are configurable
-per button. See the
+USB exposes keyboard, consumer HID, a relative mouse, and a generic HID gamepad
+when USB is selected. Serial diagnostics use the separate UART port regardless
+of the selected transport. Add a **Mousepad** widget in the pad editor on
+touch-enabled USB HID devices for movement, tap-to-left-click, and tap-then-drag.
+Multicontact drivers also support two-finger midpoint scrolling with axis lock.
+**Sensitivity** and **Movement threshold** apply to movement and gestures;
+**Acceleration** (0-5, default 0/off) affects pointer movement only.
+**Reverse scroll direction** and **Scroll inertia** (0-5, default 0/off)
+follow Scrollpad conventions. Enable **Mouse buttons** (default off) for
+outlined left/right zones in the bottom 20%; hold one while moving or
+repositioning another finger above it on multicontact drivers. See the
 [Mousepad guide](pad-editor-guide.md#mousepad) for setup and limitations.
 Add a [Scrollpad widget](pad-editor-guide.md#scrollpad) beside or below it for
-vertical or horizontal scrolling. Axis, Sensitivity, Reverse direction, and
+one-finger vertical or horizontal scrolling, especially on single-touch boards.
+Axis, Sensitivity, Reverse direction, and
 **Inertia** (0-5, default 0/off) are configured independently per Scrollpad.
 Higher inertia coasts longer after release; touching either mouse surface
 stops coasting.
 Assign a [Mouse Button action](pad-editor-guide.md#mouse-button) for Left,
 Right, or Middle clicks to an ordinary button or action-dispatching widget;
 it does not change Mousepad gestures.
+Add [Gamepad Joystick or Gamepad Button widgets](pad-editor-guide.md#gamepad-controls)
+for analog movement or held controls with automatic release. GT911 drivers
+support independent simultaneous controller contacts when the panel provides
+them; other drivers remain single-touch. Gamepad interaction blocks ordinary
+navigation until every finger lifts.
+Gamepad actions provide button, hat, or binary-trigger Tap/Down/Up operations.
+This is generic USB HID, not XInput.
 Its product name uses the configured friendly device name plus
 ` USB` after reboot, its manufacturer
 uses project branding, and its serial number uses the stable chip address.
@@ -254,9 +290,7 @@ may be pending or running; extra requests fail instead of queueing. A
 disconnect, USB suspension, report failure, OTA activity, or 60-second deadline
 aborts execution and fails the remaining action-list suffix. Interrupted macros
 never replay on reconnect, and neither transport falls back to the other host.
-The user has confirmed USB and BLE input, serial logging, and CDC-only BLE-mode
-enumeration. Hardware checks for media keys and sleep/reconnect reliability
-remain pending.
+Hardware checks for media keys and sleep/reconnect reliability remain pending.
 
 The BLE keyboard advertises with the configured device name plus ` BLE` and the
 chip's stable hardware address. Transport suffixes distinguish the two Windows
@@ -345,6 +379,14 @@ Upload MP3 files to play as button actions or via MQTT. Files are stored on the 
 | **Upload** | Uploads the file to the device |
 
 Once uploaded, alert sounds are available through **Sound Alert** with the **MP3 Alert** kind in the button editor, swipe actions, and boot actions.
+
+#### USB HID Status
+
+On boards with native USB HID support, use `[health:usb_status]` in button
+bindings. It reports `disabled` when USB HID is not enabled, `ready` while
+waiting for host enumeration, `connected` for an enumerated and awake host,
+`suspended` while the host suspends USB, or `error` if initialization fails.
+USB power or a plugged-in cable alone does not imply `connected`.
 
 #### BLE Signals
 
@@ -468,9 +510,16 @@ For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds sho
 
 *Shown only on boards with a display.*
 
-Configure what happens when you swipe in each direction. Swipe gestures work on all screens and use the same action system as buttons (screen navigation, MQTT publish, BLE key sequence, beep, sound, etc.).
+Configure what happens when you swipe in each direction. Screens use the same action system as buttons (screen navigation, MQTT publish, BLE key sequence, beep, sound, etc.), except when a touch-consuming widget owns the contact. Touches starting inside Mousepad, Scrollpad, Gamepad Joystick, or Gamepad Button are handled by that widget and do not trigger screen or pad swipe actions. See [Gamepad Controls](pad-editor-guide.md#gamepad-controls) for capture and release behavior.
 
 Each of the four directions (left, right, up, down) can have one action. By default, swipe right navigates back.
+
+Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button also offer
+**Disable pad swipe actions (entire pad)** in the button editor. It defaults
+off; enabling it on any one widget disables all swipe actions across that pad,
+regardless of touch location or USB connection. Mousepad's optional
+**Show Back button** adds a top-left arrow that uses screen history without
+sending mouse input. It defaults off and does nothing when history is empty.
 
 ### Boot Actions
 

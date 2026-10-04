@@ -18,6 +18,7 @@
 #include "health_history.h"
 #endif
 #include "version.h"
+#include "touch_manager.h"
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -171,6 +172,11 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_CAMERA ? "true" : "false");
 		response->print(",\"has_usb_hid\":");
 		response->print(HAS_USB_HID ? "true" : "false");
+		const uint8_t touch_contact_capacity = touch_manager_contact_capacity();
+		response->print(",\"touch_contact_capacity\":");
+		response->print(touch_contact_capacity);
+		response->print(",\"has_controller_multitouch\":");
+			response->print(touch_manager_controller_multitouch() ? "true" : "false");
 		response->print(",\"has_image_fetch\":");
 		response->print(HAS_IMAGE_FETCH ? "true" : "false");
 		response->print(",\"has_image_library\":");

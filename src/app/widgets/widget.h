@@ -108,7 +108,7 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        nullptr, nullptr, nullptr                                              \
+        nullptr, nullptr, nullptr, nullptr                                     \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -124,17 +124,17 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        prefix##_describe, nullptr, nullptr                                   \
+        prefix##_describe, nullptr, nullptr, nullptr                          \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
     } _##prefix##_auto_reg
 
-#define REGISTER_WIDGET_SCHEMA_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag) \
+#define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        prefix##_describe, prefix##_show, prefix##_hide                        \
+        prefix##_describe, prefix##_show, prefix##_hide, validate_fn            \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -143,16 +143,19 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
 #define REGISTER_WIDGET_SCHEMA(prefix, stream_fn, resolve_in_tick_flag)        \
     REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)
 
-#define REGISTER_WIDGET_SCHEMA_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag) \
+#define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        nullptr, prefix##_show, prefix##_hide                                  \
+        nullptr, prefix##_show, prefix##_hide, validate_fn                      \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
     } _##prefix##_auto_reg
 #endif
+
+#define REGISTER_WIDGET_SCHEMA_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag) \
+    REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, nullptr)
 
 #endif // HAS_DISPLAY
 

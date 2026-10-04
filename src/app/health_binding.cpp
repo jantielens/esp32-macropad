@@ -9,6 +9,10 @@
 #include "health_table_builder.h"
 #include "log_manager.h"
 
+#if HAS_USB_HID
+#include "usb_hid.h"
+#endif
+
 #if HAS_AUDIO
 #include "audio.h"
 #endif
@@ -323,6 +327,12 @@ static bool lookup_value(const char* key, char* out, size_t out_len) {
         return true;
     }
 #endif
+#if HAS_USB_HID
+    if (strcmp(key, "usb_status") == 0) {
+        strlcpy(out, usb_hid_status(), out_len);
+        return true;
+    }
+#endif
 #if HAS_BLE_HID
     if (strcmp(key, "ble_status") == 0) {
         strlcpy(out, ble_hid_is_initialized() ? ble_hid_status() : "disabled", out_len);
@@ -481,6 +491,9 @@ static const HealthKeyDef HEALTH_KEYS[] = {
 #endif
     {"table",               "structured table payload (for the table widget)"},
     {"extended_table",      "structured table payload, extended schema"},
+#if HAS_USB_HID
+    {"usb_status",          "compact USB HID status (disabled/ready/connected/suspended/error)"},
+#endif
 #if HAS_BLE_HID
     {"ble_status",          "compact BLE status (disabled/ready/pairing/connected/error)"},
     {"ble_name",            "current BLE keyboard name"},

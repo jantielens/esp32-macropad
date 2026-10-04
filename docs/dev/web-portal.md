@@ -667,6 +667,11 @@ format syntax. The device validates saved configurations authoritatively.
 The MCP `get_capabilities` manifest serializes its binding-scheme list from the
 same registry, so portal and MCP clients receive equivalent metadata.
 
+On `HAS_USB_HID` builds, the health key list includes `usb_status` for
+`[health:usb_status]`: `disabled`, `ready`, `connected`, `suspended`, or `error`.
+`connected` requires host enumeration and an awake USB session; USB power alone
+is insufficient. This is a binding key, not an additional `/api/health` field.
+
 ### Device Information
 
 #### `GET /api/info`
@@ -752,7 +757,7 @@ Returns comprehensive device information.
 
 **Mouse Capability:**
 - `has_usb_hid` reports compiled native USB HID support, not host readiness.
-  The pad editor offers Mousepad and Scrollpad only when both `has_usb_hid` and `has_touch`
+  The pad editor offers Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button only when both `has_usb_hid` and `has_touch`
   are true. The action catalog exposes Mouse Button on USB HID builds, without
   requiring touch. Mouse output requires the active USB keyboard transport.
 
@@ -1121,20 +1126,27 @@ rejects the request without leaving the keyboard busy, and does not fall back
 to internal RAM when PSRAM is present. Off allocates no macro workspace.
 
 Native USB requires `HAS_USB_HID`, `USBMode=default`, and `CDCOnBoot=default`.
-An explicit CDC instance provides logging; configuration loads before
-`usb_hid_init(device_name, enable_hid)` starts USB. The USB product name is the
+Arduino `Serial` provides UART0 logging at 115200 baud; no explicit CDC instance
+is registered. Configuration loads before `usb_hid_init(device_name, enable_hid)`
+starts USB, and the function returns without starting USB when HID is disabled.
+The USB product name is the
 friendly name plus ` USB`; BLE advertises the friendly name plus ` BLE`.
 The saved device name is unchanged. USB manufacturer follows branding, and
 serial is stable chip-derived identity.
 Name changes require reboot. HID objects are constructed only when USB is
 selected, before enumeration: USB mode exposes keyboard, consumer HID, relative
-mouse, and CDC;
-BLE and Off modes expose CDC only. Off skips BLE keyboard initialization,
+mouse, and gamepad. BLE and Off modes do not start native USB. On dual-USB-C P4
+boards, native USB/OTG serves HID and the USB-UART connector serves flashing and
+diagnostics; see the [user connector guide](../web-portal-guide.md#keyboard).
+Off skips BLE keyboard initialization,
 rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
 telemetry remains unaffected. Ending HID reports cannot remove its descriptors,
 so this change also requires reboot. Windows may retain disconnected entries.
 USB is compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`,
-`jc4880p433-sd`, and `esp32-p4-lcd4b`. The other JC4880 variants and LCD4B Voice
+`jc4880p433-sd`, `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
+Both JC3636W518 variants explicitly disable `HAS_BLE` and `HAS_BLE_HID` and
+use TinyUSB with application-managed CDC instead of hardware CDC.
+The other JC4880 variants and LCD4B Voice
 explicitly disable inherited USB HID support and keep their existing serial
 build options. Only `jc1060p470c-sd` has hardware validation so far; the other
 targets still require connector/power checks and host testing. Compiled USB
@@ -1147,13 +1159,80 @@ HAS_USB_HID`. Its `widget_mousepad_sensitivity` JSON field accepts finite
 values from 0.1 to 5, defaulting to 1. `widget_mousepad_acceleration` accepts
 finite values from 0 to 5, defaulting to 0/off; it amplifies fast movement
 independently of sensitivity. `widget_mousepad_movement_threshold` accepts
-finite values clamped to 0-12 device pixels, defaulting to 3 when missing or
-non-finite. Movement beyond this distance from the press starts pointer
-movement and cancels taps; 0 removes the dead zone. Pad storage and
-import/export preserve all three fields through the existing JSON path.
+finite values from 0-12 device pixels, defaulting to 3 when missing.
+Movement beyond this distance starts pointer movement or an armed drag;
+midpoint travel uses the same threshold for two-finger scrolling. Zero removes
+the dead zone. `widget_mousepad_reverse` is boolean (default false), and
+`widget_mousepad_inertia` is 0-5 (default 0/off), following Scrollpad direction
+and coasting conventions. Sensitivity applies to pointer and scroll travel;
+acceleration applies only to pointer movement. `widget_mousepad_buttons` is
+boolean (default false), enabling left/right hold zones in the bottom 20%.
+The zones use unfilled rounded dashed text-color outlines; a held zone has a
+thicker outline. `widget_mousepad_back` is boolean (default false), adding
+a top-left Back button that consumes its touches without mouse output and
+uses existing screen history, with no fallback when history is empty.
+Pad storage and import/export preserve these fields through the existing raw JSON path. The editor
+loads/saves these fields and bounds numeric inputs. Shared widget validation
+rejects invalid types, non-finite/out-of-range numbers, and non-boolean toggle
+values independently of MCP. Parsing still supplies defaults and bounds values.
+
+Mousepad supports pointer movement, taps, dragging, and two-finger scrolling.
+See the [Mousepad guide](../pad-editor-guide.md#mousepad) for gesture timing,
+contact ownership, cancellation, and single-contact behavior.
 The editor consumes ordinary
 button actions for this widget and hides their controls. MCP advertises its
 schema through the widget registry without a separate mouse control tool.
+
+Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button share
+`widget_disable_pad_swipes` (boolean, default false). The editor exposes
+**Disable pad swipe actions (entire pad)** only for those widgets; authoring
+validation rejects the field on other types. If any configured input widget
+enables it, the pad registers no swipe handler, regardless of touch position
+or USB readiness. Rebuilding the pad reapplies the aggregate setting.
+MCP includes the shared field in each supported widget's capability metadata.
+
+Gamepad Joystick and Gamepad Button use the same display/touch/USB gates and
+existing USB keyboard transport setting, with no new NVS toggle. USB registers
+a custom generic-HID gamepad descriptor before startup alongside keyboard,
+consumer control, and mouse. Its packed report is 13 bytes: four signed 16-bit
+stick axes, two unsigned 8-bit triggers, an 8-bit null-state hat, and 16 button
+bits. BLE and Off leave native USB stopped after reboot; UART logging remains available.
+
+USB HID interface and configuration strings reference the product string,
+which uses the configured device name plus ` USB`. Arduino supplies hardcoded
+TinyUSB interface labels, so firmware disconnects after descriptor construction,
+updates only these string indices, and reconnects before normal operation.
+The report descriptors, endpoints, CDC interface strings, and serial identity
+are unchanged. Windows can cache earlier device labels.
+
+`gamepad_stick` uses flat `widget_gamepad_stick` (`left`/`right`),
+`widget_gamepad_center` (`fixed`/`floating`), `widget_gamepad_dead_zone`
+(0-0.9, default 0.1), and boolean `widget_gamepad_invert_x`/`_invert_y` fields.
+`gamepad_button` stores exactly one `gamepad` action with `operation:"down"`
+in `actions`, with automatic release and no long-press/legacy actions.
+Accepted holds notify the pad through `LV_EVENT_VALUE_CHANGED` with a press,
+release, or cancellation event code. The pad keeps its existing tap overlay
+visible during the hold, reuses the 100 ms release flash, and clears feedback on
+cancellation without dispatching ordinary actions. `DISPLAY_DISABLE_ANIMATIONS`
+still suppresses the overlay.
+Shared pad validation invokes an optional widget validation callback even
+when MCP is disabled. The editor hides ordinary action lists for both widgets
+and provides a dedicated held-control selector. The shared action editor
+emits only the selected control family's target fields. See the
+[Gamepad authoring guide](../pad-editor-guide.md#gamepad-controls) for JSON and
+ownership semantics. `get_capabilities` advertises action/widget schemas plus
+`device_config.usb_gamepad` ranges, readiness, the driver `touch_contacts` limit,
+and `controller_multitouch` support. `/api/info` exposes
+`touch_contact_capacity` (0 without initialized touch, 1 for single-contact
+drivers, up to 5 for GT911) and `has_controller_multitouch` independently of
+`has_usb_hid`. These fields report software capacity, not verified panel capacity
+or current USB readiness. No persisted action/widget fields or settings change.
+Gamepad contacts are captured by stable ID; ordinary navigation is canceled
+and blocked until all fingers lift. Synthetic taps remain idle-only.
+The lean gamepad action catalog also exposes `button_count`; the shared action
+editor uses it for button choices and validation. Descriptor dimensions,
+native validation, catalog metadata, and MCP capabilities share the constants
+in `gamepad_hid_state.h`.
 
 Scrollpad has the same display/touch/USB gates and lifecycle. Its flat widget
 fields are `widget_scrollpad_axis` (`vertical` by default, or `horizontal`),
@@ -1179,7 +1258,10 @@ The `button` field accepts `left`, `right`, or `middle` (default `left` when
 omitted); validation rejects invalid names and non-string values. This fixed
 option set is not bindable. Its catalog metadata drives the shared portal
 selector and MCP action schema. Dispatch returns complete when a click is
-accepted by the queue, or failed if unavailable, disconnected, full, or in OTA.
+accepted by the queue, or failed if unavailable, disconnected, full, in OTA,
+or overlapping a drag-owned button. Other-button click releases preserve drag
+ownership. No descriptor, BLE mouse, transport setting, or gesture-enable toggle
+is added.
 It requires neither touch nor a dedicated widget and uses its host's gesture
 rules. It does not wait for delivery before the next action in a list.
 
@@ -1193,9 +1275,8 @@ pad hide, or OTA clear queued input and request a neutral report.
 Routine macro completions and BLE protocol/control/LED reports log at DEBUG.
 Startup and connection/pairing events remain at INFO; aborted macros and
 delivery failures remain warnings. There are no periodic keyboard diagnostic
-counters. Windows testing on `jc1060p470c-sd` confirmed USB/BLE switching, serial
-logging, and CDC-only USB enumeration with BLE selected. Media keys and extended
-sleep/reconnect reliability still require hardware validation.
+counters. Media keys and extended sleep/reconnect reliability still require
+hardware validation.
 
 #### `POST /api/config`
 

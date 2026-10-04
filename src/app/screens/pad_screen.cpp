@@ -23,6 +23,9 @@ extern DeviceConfig device_config;
 #include "../local_image_loader.h"
 #endif
 #include "../device_class.h"
+#if HAS_USB_HID
+#include "../gamepad_hid.h"
+#endif
 
 #include <esp_heap_caps.h>
 #include <string.h>
@@ -228,6 +231,9 @@ void PadScreen::show() {
 }
 
 void PadScreen::hide() {
+#if HAS_USB_HID
+    gamepad_hid_cancel();
+#endif
 #if HAS_IMAGE_FETCH
     for (uint8_t i = 0; i < tileCount; i++) {
         if (tiles[i].image_slot != IMAGE_SLOT_INVALID)
@@ -257,6 +263,9 @@ void PadScreen::update() {
     }
 
     cachedGeneration = gen;
+#if HAS_USB_HID
+    gamepad_hid_cancel();
+#endif
     buildTiles();
 
     // buildTiles() just (re)evaluated padHoldMask. Reconcile the acquire

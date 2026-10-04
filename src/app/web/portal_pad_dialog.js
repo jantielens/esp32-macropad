@@ -463,6 +463,12 @@ function padDialogOpen(col, row) {
         (btn.widget_mousepad_acceleration !== undefined) ? btn.widget_mousepad_acceleration : 0;
     document.getElementById('pad-edit-mousepad-movement-threshold').value =
         (btn.widget_mousepad_movement_threshold !== undefined) ? btn.widget_mousepad_movement_threshold : 3;
+    document.getElementById('pad-edit-mousepad-inertia').value =
+        (btn.widget_mousepad_inertia !== undefined) ? btn.widget_mousepad_inertia : 0;
+    document.getElementById('pad-edit-mousepad-reverse').checked = btn.widget_mousepad_reverse === true;
+    document.getElementById('pad-edit-mousepad-buttons').checked = btn.widget_mousepad_buttons === true;
+    document.getElementById('pad-edit-mousepad-back').checked = btn.widget_mousepad_back === true;
+    document.getElementById('pad-edit-disable-pad-swipes').checked = btn.widget_disable_pad_swipes === true;
     document.getElementById('pad-edit-scrollpad-axis').value =
         btn.widget_scrollpad_axis === 'horizontal' ? 'horizontal' : 'vertical';
     document.getElementById('pad-edit-scrollpad-sensitivity').value =
@@ -470,6 +476,13 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-scrollpad-reverse').checked = btn.widget_scrollpad_reverse === true;
     document.getElementById('pad-edit-scrollpad-inertia').value =
         (btn.widget_scrollpad_inertia !== undefined) ? btn.widget_scrollpad_inertia : 0;
+    document.getElementById('pad-edit-gamepad-stick').value = btn.widget_gamepad_stick || 'left';
+    document.getElementById('pad-edit-gamepad-center').value = btn.widget_gamepad_center || 'fixed';
+    document.getElementById('pad-edit-gamepad-dead-zone').value =
+        btn.widget_gamepad_dead_zone === undefined ? 10 : btn.widget_gamepad_dead_zone * 100;
+    document.getElementById('pad-edit-gamepad-invert-x').checked = btn.widget_gamepad_invert_x === true;
+    document.getElementById('pad-edit-gamepad-invert-y').checked = btn.widget_gamepad_invert_y === true;
+    actionEditorLoadGamepad('pad-edit-gamepad-hold', btn.widget_type === 'gamepad_button' && tapActions.length ? tapActions[0] : {});
 
     // Numeric Rocker widget fields
     document.getElementById('pad-edit-numericrocker-axis').value = btn.widget_numericrocker_axis || 'horizontal';
@@ -599,11 +612,13 @@ function padDialogOk(keepOpen) {
     // Tap actions (array)
     const wtype = document.getElementById('pad-edit-widget-type').value;
     const isMouseWidget = wtype === 'mousepad' || wtype === 'scrollpad';
-    var tapArr = isMouseWidget ? [] : actionEditorListBuild(padActionPrefixes('tap'));
+    const consumesActions = isMouseWidget || wtype === 'gamepad_stick' || wtype === 'gamepad_button';
+    var tapArr = wtype === 'gamepad_button' ? [actionEditorBuildGamepad('pad-edit-gamepad-hold', true)]
+        : consumesActions ? [] : actionEditorListBuild(padActionPrefixes('tap'));
     if (tapArr.length) btn.actions = tapArr;
 
     // Long-press actions (array)
-    var lpArr = isMouseWidget ? [] : actionEditorListBuild(padActionPrefixes('lp'));
+    var lpArr = consumesActions ? [] : actionEditorListBuild(padActionPrefixes('lp'));
     if (lpArr.length) btn.lp_actions = lpArr;
 
     if (document.getElementById('pad-edit-confirm').checked) {
@@ -650,6 +665,16 @@ function padDialogOk(keepOpen) {
     // Widget type
     if (wtype) {
         btn.widget_type = wtype;
+        if (['mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'].includes(wtype)) {
+            btn.widget_disable_pad_swipes = document.getElementById('pad-edit-disable-pad-swipes').checked;
+        }
+        if (wtype === 'gamepad_stick') {
+            btn.widget_gamepad_stick = document.getElementById('pad-edit-gamepad-stick').value === 'right' ? 'right' : 'left';
+            btn.widget_gamepad_center = document.getElementById('pad-edit-gamepad-center').value === 'floating' ? 'floating' : 'fixed';
+            btn.widget_gamepad_dead_zone = padGetBoundedWidgetNumber('pad-edit-gamepad-dead-zone', 10, 0, 90) / 100;
+            btn.widget_gamepad_invert_x = document.getElementById('pad-edit-gamepad-invert-x').checked;
+            btn.widget_gamepad_invert_y = document.getElementById('pad-edit-gamepad-invert-y').checked;
+        }
         if (wtype === 'scrollpad') {
             btn.widget_scrollpad_axis = document.getElementById('pad-edit-scrollpad-axis').value === 'horizontal'
                 ? 'horizontal' : 'vertical';
@@ -661,6 +686,10 @@ function padDialogOk(keepOpen) {
             btn.widget_mousepad_sensitivity = padGetBoundedWidgetNumber('pad-edit-mousepad-sensitivity', 1, 0.1, 5);
             btn.widget_mousepad_acceleration = padGetBoundedWidgetNumber('pad-edit-mousepad-acceleration', 0, 0, 5);
             btn.widget_mousepad_movement_threshold = padGetBoundedWidgetNumber('pad-edit-mousepad-movement-threshold', 3, 0, 12);
+            btn.widget_mousepad_inertia = padGetBoundedWidgetNumber('pad-edit-mousepad-inertia', 0, 0, 5);
+            btn.widget_mousepad_reverse = document.getElementById('pad-edit-mousepad-reverse').checked;
+            btn.widget_mousepad_buttons = document.getElementById('pad-edit-mousepad-buttons').checked;
+            btn.widget_mousepad_back = document.getElementById('pad-edit-mousepad-back').checked;
         }
         if (wtype === 'bar_chart') {
             const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();

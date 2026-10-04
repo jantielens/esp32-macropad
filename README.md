@@ -40,9 +40,29 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   shortcuts and text entry over USB or BLE. Optional USB mouse support adds
   Mousepad movement and tap-to-left-click with acceleration, vertical/horizontal
   Scrollpad scrolling with inertia, and Left/Right/Middle Mouse Button actions.
+  USB also exposes a generic HID gamepad with two sticks, two triggers, an
+  eight-direction hat, and 16 buttons. Gamepad Joystick and
+  Gamepad Button widgets provide analog movement and automatically released
+  held controls; GT911 drivers support independent simultaneous controller
+  contacts, with single-touch fallback on other drivers. Gamepad actions provide
+  tap/down/up operations.
   BLE supports keyboard control only. Native USB is compiled for
-  `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`, and
-  `esp32-p4-lcd4b`; hardware testing so far covers `jc1060p470c-sd`.
+  `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
+  `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
+  On these builds, native USB is reserved for HID; serial logs use UART0.
+  The supported P4 HID boards have separate USB-C connectors for native USB HID
+  and USB-UART flashing/debugging. If HID does not connect, try the other connector
+  with a data-capable cable; the serial/debugging port cannot send HID input.
+  For logs, use the USB-UART port at 115200 baud, not the HID port. See
+  [USB connector guidance](docs/web-portal-guide.md#keyboard) for port and power precautions.
+  Both JC3636W518 variants disable BLE.
+  Mousepad supports tap-then-drag and two-finger midpoint scrolling on
+  multicontact drivers, with single-touch movement/tap/drag fallback.
+  Optional left/right mouse button zones support held-button dragging and
+  pointer-finger repositioning on multicontact drivers.
+  Mousepad, Scrollpad, and gamepad widgets can optionally disable swipe actions
+  across their pad. Mousepad can show a top-left Back button using screen history.
+  Both navigation settings default off.
   BLE keyboard support is board-dependent; some Macropad boards disable it to
   preserve internal RAM. Supported BLE builds offer single-owner pairing.
   HID output defaults to Off. Select a supported transport in
@@ -50,7 +70,8 @@ A simple `[scheme:params]` syntax pulls live data into any label, color, or widg
   fallback or broadcast. See the [Key Sequences guide](docs/pad-editor-guide.md#key-sequences),
   [Mousepad guide](docs/pad-editor-guide.md#mousepad),
   [Scrollpad guide](docs/pad-editor-guide.md#scrollpad), and
-  [Mouse Button action guide](docs/pad-editor-guide.md#mouse-button).
+  [Mouse Button action guide](docs/pad-editor-guide.md#mouse-button), and
+  [Gamepad guide](docs/pad-editor-guide.md#gamepad-controls).
 - **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
 - **Hardware buttons** — map a board's physical GPIO buttons to tap and long-press action chains (works on headless boards too)
 - **Boot actions** — run a sequence of actions automatically when the device starts

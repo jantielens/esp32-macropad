@@ -14,6 +14,8 @@
 #define HAS_NATIVE_EXTENSIONS true
 // BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
 #define HAS_BLE_HID false
+#define HAS_BLE false
+#define HAS_USB_HID true
 // MCP disabled to preserve internal RAM for WiFi, SD storage, and extensions.
 #define HAS_MCP false
 // Remote image and MJPEG fetching disabled to preserve DMA-capable internal RAM.

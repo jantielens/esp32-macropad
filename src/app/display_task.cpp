@@ -14,6 +14,9 @@
 #include "button_confirmation.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
+#if HAS_TOUCH
+#include "touch_manager.h"
+#endif
 #include "timer_engine.h"
 #if HAS_MUSIC_ANALYSIS
 #include "music_analysis.h"
@@ -99,6 +102,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						continue;
 				}
 					if (ota_activity_is_active()) {
+						#if HAS_TOUCH
+						touch_manager_cancel_physical_input();
+						#endif
 						mgr->flushPending = false;
 						mgr->unlock();
 						vTaskDelay(pdMS_TO_TICKS(20));
@@ -129,6 +135,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_SWITCH);
 						Screen* target = mgr->pendingScreen;
 						button_confirmation_cancel();
+						#if HAS_TOUCH
+						touch_manager_cancel_physical_input();
+						#endif
 						if (mgr->currentScreen) {
 								mgr->currentScreen->hide();
 						}

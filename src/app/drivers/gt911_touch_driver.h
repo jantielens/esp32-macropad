@@ -39,6 +39,9 @@ public:
 
 		bool isTouched() override;
 		bool getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure = nullptr) override;
+		TouchSample readSample() override;
+		TouchSnapshot readSnapshot() override;
+		uint8_t contactCapacity() const override { return TOUCH_CONTACT_CAPACITY; }
 
 		void setCalibration(uint16_t x_min, uint16_t x_max, uint16_t y_min, uint16_t y_max) override;
 		void setRotation(uint8_t rotation) override;
@@ -54,17 +57,17 @@ private:
 		uint16_t calYMax;
 
 		// Cached state from last read()
-		bool lastTouched;
-		uint16_t lastX;
-		uint16_t lastY;
+		TouchSnapshot lastSnapshot;
+		TouchSnapshot transformedSnapshot;
+		bool transformPending = true;
 
 		// Low-level GT911 I2C operations (Wire1)
-		void gt911Read();
-		void writeReg(uint16_t reg, uint8_t val);
-		uint8_t readReg(uint16_t reg);
-		void readBlock(uint16_t reg, uint8_t* buf, uint8_t len);
+		TouchReadStatus gt911Read();
+		bool writeReg(uint16_t reg, uint8_t val);
+		bool readBlock(uint16_t reg, uint8_t* buf, uint8_t len);
 
 		void applyRotation(uint16_t& x, uint16_t& y) const;
+		void transform(uint16_t& x, uint16_t& y) const;
 };
 
 #endif // GT911_TOUCH_DRIVER_H

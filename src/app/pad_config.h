@@ -134,6 +134,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_BACK     "back"
 #define ACTION_TYPE_KEY      "key"
 #define ACTION_TYPE_MOUSE_BUTTON "mouse_button"
+#define ACTION_TYPE_GAMEPAD "gamepad"
 #define ACTION_TYPE_BLE_PAIR "ble_pair"
 #define ACTION_TYPE_MUSIC    "music"
 #define ACTION_TYPE_SOUND_ALERT "sound_alert"
@@ -188,6 +189,11 @@ struct KeyPayload {
 };
 struct MouseButtonPayload {
     char button[7];
+};
+struct GamepadPayload {
+    uint8_t control;
+    uint8_t index;
+    uint8_t operation;
 };
 struct MusicPayload {
     char music_command[12];
@@ -274,6 +280,7 @@ union ActionPayload {
     MqttPayload       mqtt;         // type == ACTION_TYPE_MQTT
     KeyPayload        key;          // type == ACTION_TYPE_KEY
     MouseButtonPayload mouse_button;
+    GamepadPayload    gamepad;
     MusicPayload      music;        // type == ACTION_TYPE_MUSIC
     SoundAlertPayload sound_alert;  // type == ACTION_TYPE_SOUND_ALERT
     VolumePayload     volume;       // type == ACTION_TYPE_VOLUME
@@ -336,6 +343,7 @@ struct WidgetConfig {
     char type[CONFIG_WIDGET_TYPE_MAX_LEN];     // "" = normal button (default)
     char data_binding[MAX_WIDGET_BINDINGS][CONFIG_LABEL_MAX_LEN]; // Binding templates (0=primary, 1-3=extra)
     uint8_t data[WIDGET_CONFIG_MAX_BYTES];     // type-specific config, opaque to pad_config
+    bool disable_pad_swipes = false;
 };
 
 // Per-button config (grid placement, labels, colors, typed actions)

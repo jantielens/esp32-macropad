@@ -57,8 +57,8 @@ PROJECT_DISPLAY_NAME="ESP32 Macropad"
 declare -A FQBN_TARGETS=(
     ["esp32-4848S040"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,CDCOnBoot=default" # ESP32-S3-4848S040 (480x480 ST7701 RGB + GT911 touch; 16MB + OPI PSRAM; hardware UART)
     ["jc3248w535"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3248W535 (16MB + OPI PSRAM)
-    ["jc3636w518"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 (16MB + OPI PSRAM)
-    ["jc3636w518-sd"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 JC3636W518 SDMMC primary-storage variant
+    ["jc3636w518"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-S3 JC3636W518 (16MB + OPI PSRAM)
+    ["jc3636w518-sd"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-S3 JC3636W518 SDMMC primary-storage variant
     ["jc4827w543c"]="esp32:esp32:esp32s3:FlashSize=4M,PSRAM=opi,PartitionScheme=huge_app,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-S3 GUITION JC4827W543C (480x272 NV3041A QSPI + GT911 touch; 4MB + 8MB OPI PSRAM; no OTA)
     ["esp32-p4-lcd4b"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-P4 Waveshare WIFI6-Touch-LCD-4B (720x720 MIPI-DSI + GT911 touch; 32MB + 32MB PSRAM; constrained to 16MB for extension XIP)
     ["esp32-p4-lcd4b-voice"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext" # ESP32-P4 LCD4B Azure Voice Assistant variant; constrained to 16MB for extension XIP
@@ -69,7 +69,7 @@ declare -A FQBN_TARGETS=(
     ["jc4880p433-nau7802"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + NAU7802 I2C load cell ADC (Coffee Scale variant)
     ["jc4880p433-darkroom"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + TSL2591 light sensor + Shelly relays (Darkroom Timer variant)
     ["jc1060p470c"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-P4 GUITION JC1060P470C (1024x600 MIPI-DSI JD9165 + GT911 touch; 16MB + 32MB PSRAM)
-    ["jc1060p470c-sd"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=default,CDCOnBoot=default" # Native USB HID and explicit CDC; firmware loads friendly name before enumeration
+    ["jc1060p470c-sd"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=default,CDCOnBoot=default" # Native USB HID with UART diagnostics; firmware loads friendly name before enumeration
     ["esp32c3-withsensors"]="esp32:esp32:nologo_esp32c3_super_mini:CDCOnBoot=cdc,PartitionScheme=ota_2mb" # ESP32-C3 Super Mini headless sensor node (no display; HAS_BLE + sensors)
     ["firebeetle2-esp32c6-aht10"]="esp32:esp32:dfrobot_beetle_esp32c6:CDCOnBoot=cdc,PartitionScheme=huge_app" # DFRobot FireBeetle 2 ESP32-C6 v1.2 headless battery sensor node (AHT10; 4MB flash; no OTA)
     ["inkplate5v2-frame"]="Inkplate_Boards:esp32:Inkplate5V2:PartitionScheme=ota_1_9mb" # Soldered Inkplate 5V2 (ESP32 classic, 5.17" 720x1280 3-bit grayscale e-paper; 4MB flash + 4MB QSPI PSRAM)

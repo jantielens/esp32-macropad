@@ -4,6 +4,9 @@
 #include "../log_manager.h"
 #include "../device_class.h"
 #include "../button_shadow_color.h"
+#if HAS_TOUCH
+#include "../touch_manager.h"
+#endif
 #include <esp_heap_caps.h>
 #include <string.h>
 
@@ -75,6 +78,9 @@ static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
 // ============================================================================
 
 void PadScreen::clearTiles() {
+    #if HAS_TOUCH
+    if (tileCount && screen && screen == lv_screen_active()) touch_manager_cancel_physical_input();
+    #endif
     clearPadActionOverlay();
     free(padActions);
     padActions = nullptr;
@@ -149,6 +155,7 @@ void PadScreen::clearTiles() {
 
 void PadScreen::buildTiles() {
     clearTiles();
+    swipe_actions_register(screen);
 
     if (!container) return;
 
@@ -165,6 +172,9 @@ void PadScreen::buildTiles() {
         tilesBuilt = true; // Mark built (empty) to avoid retrying every frame
         return;
     }
+
+    const bool swipes_enabled = !pad_disables_swipes(*cfg);
+    swipe_actions_register(screen, swipes_enabled);
 
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
@@ -687,6 +697,9 @@ void PadScreen::buildTiles() {
             lv_obj_clear_flag(ov, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
             lv_obj_add_flag(ov, LV_OBJ_FLAG_HIDDEN);
             tile.tap_overlay = ov;
+            if (strcmp(tile.widget_cfg.type, "gamepad_button") == 0) {
+                lv_obj_add_event_cb(obj, onWidgetPressFeedback, LV_EVENT_VALUE_CHANGED, &tiles[i]);
+            }
         }
 
         tileCount++;
@@ -703,7 +716,7 @@ void PadScreen::buildTiles() {
         lv_obj_add_flag(padActionOverlay, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(padActionOverlay, onPadActionTap,
                             LV_EVENT_SHORT_CLICKED, this);
-        swipe_actions_register(padActionOverlay);
+        swipe_actions_register(padActionOverlay, swipes_enabled);
     }
 
 #if HAS_MQTT

@@ -3,6 +3,117 @@
 #include "widgets/mousepad_input.h"
 #include "widgets/scrollpad_input.h"
 
+TEST(Mousepad, ButtonZoneGeometryUsesSharedStripAndSplitBoundaries) {
+    const MousepadInput::ButtonZones zones{201, 103};
+    EXPECT_EQ(zones.top(), 83);
+    EXPECT_EQ(zones.split(), 100);
+    EXPECT_EQ(zones.left(false), 0);
+    EXPECT_EQ(zones.right(false), 99);
+    EXPECT_EQ(zones.left(true), 100);
+    EXPECT_EQ(zones.right(true), 200);
+    EXPECT_EQ(zones.mask_at(0, 82), 0);
+    EXPECT_EQ(zones.mask_at(0, 83), mouse_hid_buttons::left);
+    EXPECT_EQ(zones.mask_at(99, 102), mouse_hid_buttons::left);
+    EXPECT_EQ(zones.mask_at(100, 83), mouse_hid_buttons::right);
+    EXPECT_EQ(zones.mask_at(200, 102), mouse_hid_buttons::right);
+    EXPECT_EQ(zones.mask_at(-1, 90), 0);
+    EXPECT_EQ(zones.mask_at(201, 90), 0);
+    EXPECT_EQ(zones.mask_at(100, 103), 0);
+    const MousepadInput::ButtonZones disabled{0, 103};
+    EXPECT_EQ(disabled.mask_at(0, 90), 0);
+}
+
+TEST(Mousepad, ButtonStripHoldsAndAllowsPointerReposition) {
+    MousepadInput input;
+    input.configure_buttons(true, 200, 100);
+    auto output = input.contact_press(4, 20, 85, 0);
+    EXPECT_TRUE(output.hold_start);
+    EXPECT_EQ(output.button_mask, mouse_hid_buttons::left);
+    EXPECT_EQ(input.contact_move(4, 180, 10, 10, 1, 0, 3).dx, 0);
+    input.contact_press(1, 50, 30, 20);
+    EXPECT_EQ(input.contact_move(1, 70, 30, 30, 1, 0, 3).dx, 20);
+    EXPECT_EQ(input.scroll_sample(30, 1, 3, false).wheel, 0);
+    EXPECT_FALSE(input.contact_release(1, 40).hold_end);
+    EXPECT_TRUE(input.button_held());
+    input.contact_press(7, 100, 40, 50);
+    EXPECT_EQ(input.contact_move(7, 110, 40, 60, 1, 0, 3).dx, 10);
+    EXPECT_TRUE(input.contact_release(4, 70).hold_end);
+    EXPECT_FALSE(input.button_held());
+    EXPECT_EQ(input.contact_move(7, 120, 40, 80, 1, 0, 3).dx, 10);
+    EXPECT_FALSE(input.contact_release(7, 90).click);
+}
+
+TEST(Mousepad, PointerFirstRightButtonAndFixedContactRoles) {
+    MousepadInput input;
+    input.configure_buttons(true, 200, 100);
+    input.contact_press(1, 50, 30, 0);
+    auto output = input.contact_press(4, 150, 85, 10);
+    EXPECT_TRUE(output.hold_start);
+    EXPECT_EQ(output.button_mask, mouse_hid_buttons::right);
+    EXPECT_FALSE(input.contact_press(5, 20, 85, 20).hold_start);
+    EXPECT_EQ(input.contact_move(1, 60, 90, 30, 1, 0, 3).dx, 10);
+    EXPECT_EQ(input.scroll_sample(30, 1, 3, false).wheel, 0);
+    EXPECT_FALSE(input.contact_release(5, 40).hold_end);
+    EXPECT_TRUE(input.contact_release(4, 50).hold_end);
+    EXPECT_FALSE(input.contact_release(1, 60).click);
+    input.end_session();
+    input.contact_press(1, 50, 30, 70);
+    EXPECT_FALSE(input.contact_move(1, 50, 90, 80, 1, 0, 3).hold_start);
+    input.contact_press(4, 100, 30, 90);
+    input.contact_move(1, 50, 90, 100, 1, 0, 3);
+    input.contact_move(4, 100, 90, 100, 1, 0, 3);
+    EXPECT_EQ(input.scroll_sample(100, 1, 3, false).wheel, -1);
+    input.cancel();
+    EXPECT_FALSE(input.button_held());
+}
+
+TEST(Mousepad, DisabledStripRetainsTapBehavior) {
+    MousepadInput input;
+    input.configure_buttons(false, 200, 100);
+    EXPECT_FALSE(input.contact_press(1, 150, 90, 0).hold_start);
+    EXPECT_TRUE(input.contact_release(1, 20).click);
+}
+
+TEST(Mousepad, TwoFingerBaselineAxisAndRelease) {
+    MousepadInput input;
+    input.contact_press(4, 100, 100, 0);
+    EXPECT_EQ(input.contact_move(4, 120, 100, 20, 1, 0, 3).dx, 20);
+    input.contact_press(1, 200, 100, 30);
+    EXPECT_EQ(input.scroll_sample(30, 1, 3, false).wheel, 0);
+    input.contact_move(1, 200, 60, 50, 1, 5, 3);
+    input.contact_move(4, 120, 60, 50, 1, 5, 3);
+    EXPECT_EQ(input.scroll_sample(50, 1, 3, false).wheel, 2);
+    input.contact_move(1, 300, 60, 70, 1, 0, 3);
+    EXPECT_EQ(input.scroll_sample(70, 1, 3, false).pan, 0);
+    EXPECT_FALSE(input.contact_release(1, 80).click);
+    EXPECT_EQ(input.contact_move(4, 200, 20, 90, 1, 0, 3).dx, 0);
+    input.contact_press(3, 200, 50, 100);
+    EXPECT_EQ(input.scroll_sample(100, 1, 3, false).wheel, 0);
+    EXPECT_FALSE(input.contact_release(4, 110).click);
+    input.end_session();
+    input.contact_press(4, 20, 20, 120);
+    EXPECT_TRUE(input.contact_release(4, 140).click);
+}
+
+TEST(Mousepad, ScrollThresholdExtraContactAndReverse) {
+    MousepadInput input;
+    input.contact_press(0, 0, 0, 0);
+    input.contact_press(2, 20, 0, 0);
+    input.contact_press(3, 500, 500, 0);
+    input.contact_move(3, 1000, 1000, 10, 1, 0, 3);
+    EXPECT_EQ(input.scroll_sample(10, 1, 3, false).pan, 0);
+    input.contact_move(0, 4, 0, 20, 1, 0, 3);
+    input.contact_move(2, 24, 0, 20, 1, 0, 3);
+    EXPECT_EQ(input.scroll_sample(20, 1, 3, true).pan, 0);
+    input.contact_move(0, 40, 0, 40, 1, 0, 3);
+    input.contact_move(2, 60, 0, 40, 1, 0, 3);
+    EXPECT_EQ(input.scroll_sample(40, 1, 3, true).pan, -2);
+    EXPECT_FALSE(input.contact_release(3, 50).click);
+    input.contact_move(0, 60, 0, 60, 1, 0, 3);
+    input.contact_move(2, 80, 0, 60, 1, 0, 3);
+    EXPECT_EQ(input.scroll_sample(60, 1, 3, true).pan, -1);
+}
+
 TEST(Mousepad, TapAndHold) {
     MousepadInput input;
     int dx, dy;
@@ -12,6 +123,61 @@ TEST(Mousepad, TapAndHold) {
     EXPECT_TRUE(input.release(200));
     input.press(20, 20, 300);
     EXPECT_FALSE(input.release(600));
+}
+
+TEST(Mousepad, TapThenDragAndStationaryDoubleClick) {
+    MousepadInput input;
+    input.contact_press(4, 20, 20, 100);
+    EXPECT_TRUE(input.contact_release(4, 120).click);
+    input.end_session();
+    input.contact_press(7, 30, 30, 200);
+    auto output = input.contact_move(7, 40, 30, 220, 1, 0, 3);
+    EXPECT_TRUE(output.hold_start);
+    EXPECT_EQ(output.dx, 10);
+    input.contact_press(1, 50, 50, 230);
+    EXPECT_EQ(input.scroll_sample(240, 1, 3, false).wheel, 0);
+    EXPECT_FALSE(input.contact_release(1, 240).hold_end);
+    output = input.contact_move(7, 50, 30, 250, 1, 0, 3);
+    EXPECT_FALSE(output.hold_start);
+    EXPECT_EQ(output.dx, 10);
+    output = input.contact_release(7, 260);
+    EXPECT_TRUE(output.hold_end);
+    EXPECT_FALSE(output.click);
+    input.end_session();
+    input.contact_press(0, 20, 20, 300);
+    EXPECT_TRUE(input.contact_release(0, 320).click);
+    input.end_session();
+    input.contact_press(0, 20, 20, 340);
+    EXPECT_TRUE(input.contact_release(0, 360).click);
+    input.end_session();
+    input.contact_press(0, 20, 20, 380);
+    EXPECT_FALSE(input.contact_move(0, 30, 20, 400, 1, 0, 3).hold_start);
+}
+
+TEST(Mousepad, ExpiredTapCancellationAndScrollDoNotArmDrag) {
+    MousepadInput input;
+    input.contact_press(0, 0, 0, 0);
+    EXPECT_TRUE(input.contact_release(0, 20).click);
+    input.end_session();
+    input.contact_press(0, 0, 0, 321);
+    EXPECT_FALSE(input.contact_move(0, 20, 0, 330, 1, 0, 3).hold_start);
+    input.cancel();
+    input.contact_press(0, 0, 0, 400);
+    EXPECT_TRUE(input.contact_release(0, 420).click);
+    input.cancel();
+    input.contact_press(0, 0, 0, 430);
+    EXPECT_FALSE(input.contact_move(0, 20, 0, 440, 1, 0, 3).hold_start);
+    input.cancel();
+    input.contact_press(0, 0, 0, 500);
+    EXPECT_TRUE(input.contact_release(0, 520).click);
+    input.end_session();
+    input.contact_press(0, 0, 0, 530);
+    input.contact_press(1, 20, 0, 535);
+    EXPECT_FALSE(input.contact_move(0, 40, 0, 540, 1, 0, 3).hold_start);
+    EXPECT_FALSE(input.contact_release(0, 550).click);
+    input.end_session();
+    input.contact_press(0, 0, 0, 560);
+    EXPECT_FALSE(input.contact_move(0, 20, 0, 570, 1, 0, 3).hold_start);
 }
 
 TEST(Mousepad, ThreePixelMovementThreshold) {
@@ -114,6 +280,117 @@ TEST(MouseReports, SplitAndRetryMovement) {
     ASSERT_TRUE(state.next(report));
     EXPECT_EQ(report.dx, 56);
     EXPECT_EQ(report.dy, 0);
+    state.acknowledge(report);
+    EXPECT_FALSE(state.next(report));
+}
+
+TEST(MouseReports, OwnedDragOrdersClickPressMovementAndReleaseAcrossRetries) {
+    MouseHidState state;
+    MouseHidReport report, retry;
+    state.next(report);
+    state.acknowledge(report);
+    ASSERT_TRUE(state.click());
+    const uint32_t owner = state.acquire();
+    ASSERT_NE(owner, 0U);
+    EXPECT_FALSE(state.click());
+    state.move(300, -200);
+    state.release(owner);
+    state.move(7, 0);
+    for (const int buttons : {1, 0, 1}) {
+        ASSERT_TRUE(state.next(report));
+        EXPECT_EQ(report.buttons, buttons);
+        EXPECT_EQ(report.dx, 0);
+        ASSERT_TRUE(state.next(retry));
+        EXPECT_EQ(retry.buttons, report.buttons);
+        state.acknowledge(report);
+        state.acknowledge(retry);
+    }
+    for (const int distance : {127, 127, 46}) {
+        ASSERT_TRUE(state.next(report));
+        EXPECT_EQ(report.buttons, 1);
+        EXPECT_EQ(report.dx, distance);
+        state.acknowledge(report);
+    }
+    ASSERT_TRUE(state.next(report));
+    EXPECT_EQ(report.buttons, 0);
+    EXPECT_EQ(report.dx, 0);
+    ASSERT_TRUE(state.next(retry));
+    state.acknowledge(report);
+    ASSERT_TRUE(state.next(report));
+    EXPECT_EQ(report.buttons, 0);
+    EXPECT_EQ(report.dx, 7);
+    state.acknowledge(report);
+    EXPECT_FALSE(state.next(report));
+}
+
+TEST(MouseReports, OtherButtonClickReleasePreservesOwnershipAndCancellation) {
+    MouseHidState state;
+    MouseHidReport report;
+    state.next(report);
+    state.acknowledge(report);
+    const auto owner = state.acquire();
+    state.next(report);
+    EXPECT_EQ(report.buttons, 1);
+    state.acknowledge(report);
+    EXPECT_FALSE(state.click(1));
+    EXPECT_FALSE(state.click(3));
+    EXPECT_TRUE(state.click(2));
+    state.move(10, 0);
+    state.next(report);
+    EXPECT_EQ(report.buttons, 1);
+    EXPECT_EQ(report.dx, 10);
+    state.acknowledge(report);
+    state.next(report);
+    EXPECT_EQ(report.buttons, 3);
+    state.acknowledge(report);
+    state.next(report);
+    EXPECT_EQ(report.buttons, 1);
+    state.acknowledge(report);
+    state.release(owner + 1);
+    EXPECT_FALSE(state.next(report));
+    state.release(owner);
+    state.next(report);
+    state.reset();
+    state.acknowledge(report);
+    state.next(report);
+    EXPECT_EQ(report.buttons, 0);
+    state.acknowledge(report);
+    EXPECT_FALSE(state.next(report));
+    const auto replacement = state.acquire();
+    EXPECT_NE(replacement, owner);
+    state.release(owner);
+    state.next(report);
+    EXPECT_EQ(report.buttons, 1);
+}
+
+TEST(MouseReports, FullClickQueueReservesDragTransitions) {
+    MouseHidState state;
+    MouseHidReport report;
+    state.next(report);
+    state.acknowledge(report);
+    for (unsigned index = 0; index < MouseHidState::click_capacity; ++index) ASSERT_TRUE(state.click());
+    EXPECT_FALSE(state.click());
+    const auto owner = state.acquire();
+    ASSERT_NE(owner, 0U);
+    state.move(20, 0);
+    state.release(owner);
+    for (unsigned index = 0; index < MouseHidState::click_capacity; ++index) {
+        state.next(report);
+        EXPECT_EQ(report.buttons, 1);
+        state.acknowledge(report);
+        state.next(report);
+        EXPECT_EQ(report.buttons, 0);
+        state.acknowledge(report);
+    }
+    state.next(report);
+    EXPECT_EQ(report.buttons, 1);
+    state.acknowledge(report);
+    state.next(report);
+    EXPECT_EQ(report.dx, 20);
+    EXPECT_EQ(report.buttons, 1);
+    state.acknowledge(report);
+    state.next(report);
+    EXPECT_EQ(report.buttons, 0);
     state.acknowledge(report);
     EXPECT_FALSE(state.next(report));
 }
@@ -448,6 +725,46 @@ TEST(MouseReports, InertiaSnapshotRejectsCancellationAndPreservesNewInput) {
     state.next(report);
     EXPECT_EQ(report.pan, 0);
     EXPECT_EQ(report.wheel, 0);
+}
+
+TEST(MouseReports, InFlightMotionSurvivesOwnershipTransitions) {
+    for (const bool releasing : {false, true}) {
+        MouseHidState state;
+        MouseHidReport report;
+        ASSERT_TRUE(state.next(report));
+        state.acknowledge(report);
+        uint32_t owner = 0;
+        if (releasing) {
+            owner = state.acquire();
+            ASSERT_NE(owner, 0u);
+            ASSERT_TRUE(state.next(report));
+            state.acknowledge(report);
+        }
+        state.move(20, -10);
+        ASSERT_TRUE(state.next(report));
+        const MouseHidReport in_flight = report;
+        state.move(7, -3);
+        if (releasing) state.release(owner);
+        else ASSERT_NE(state.acquire(), 0u);
+        state.move(5, 2);
+        state.acknowledge(in_flight);
+        ASSERT_TRUE(state.next(report));
+        EXPECT_EQ(report.dx, 7);
+        EXPECT_EQ(report.dy, -3);
+        EXPECT_EQ(report.buttons, releasing ? 1 : 0);
+        state.acknowledge(report);
+        ASSERT_TRUE(state.next(report));
+        EXPECT_EQ(report.dx, 0);
+        EXPECT_EQ(report.dy, 0);
+        EXPECT_EQ(report.buttons, releasing ? 0 : 1);
+        state.acknowledge(report);
+        ASSERT_TRUE(state.next(report));
+        EXPECT_EQ(report.dx, 5);
+        EXPECT_EQ(report.dy, 2);
+        EXPECT_EQ(report.buttons, releasing ? 0 : 1);
+        state.acknowledge(report);
+        EXPECT_FALSE(state.next(report));
+    }
 }
 
 TEST(MouseReports, RejectInvalidButtons) {

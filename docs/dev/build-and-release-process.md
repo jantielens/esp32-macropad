@@ -125,7 +125,7 @@ Conventions:
 - `device_class` **must** match the class the board compiles into. The flash-page generator validates this against the whitelist and warns if it sees an unknown value.
 - `description` is for **hardware only** — brand, model, and physically distinguishing features. Firmware capabilities belong in the board's `capabilities` list; site copy for each device class lives in `tools/esp-web-tools-site/device-classes.json`.
 - `capabilities` is an optional list of firmware features shown as tooltip-enabled
-  badges. Supported values are `mcp`, `ble_hid`, `bthome`, `image_fetch`,
+  badges. Supported values are `mcp`, `ble_hid`, `usb_hid`, `bthome`, `image_fetch`,
   `camera`, `audio`, `microphone`, `extensions`, `sd_card`, and `mqtt`.
   Keep the list limited to features that distinguish one firmware image from
   another; the device-class section already communicates the primary use case.

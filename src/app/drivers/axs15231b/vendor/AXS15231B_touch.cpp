@@ -28,7 +28,7 @@ ISR_PREFIX
 void AXS15231B_Touch::isrTouched() {
 		// This ISR gets executed if the display reports a touch interrupt
 		if (instance) {
-				instance->touch_int = true;
+				instance->touch_int.store(1, std::memory_order_release);
 		}
 }
 
@@ -38,6 +38,10 @@ void AXS15231B_Touch::setRotation(uint8_t rot) {
 
 bool AXS15231B_Touch::touched() {
 		// Check if the display is touched / got touched
+		return readSample() != ReadStatus::Error && touchActive;
+}
+
+AXS15231B_Touch::ReadStatus AXS15231B_Touch::readSample() {
 		return update();
 }
 
@@ -69,15 +73,10 @@ void AXS15231B_Touch::correctOffset(uint16_t *x, uint16_t *y) {
 		*y = map(*y, y_real_min, y_real_max, 0, y_ideal_max);
 }
 
-bool AXS15231B_Touch::update() {
-		// Check if interrupt occured, if there was an interrupt get data from touch controller and clear flag
-		if (use_interrupt) {
-				if (!touch_int) {
-						return false;
-				} else {
-						touch_int = false;
-				}
-		}
+AXS15231B_Touch::ReadStatus AXS15231B_Touch::update() {
+		if (use_interrupt && !touch_int.exchange(0, std::memory_order_acq_rel) && !retry_read && !touchActive)
+				return ReadStatus::Unchanged;
+		retry_read = true;
 
 		uint8_t tmp_buf[8] = {0};
 		// Command to read touch data — matches Espressif's esp_lcd_touch_axs15231b.c
@@ -91,16 +90,20 @@ bool AXS15231B_Touch::update() {
 
 		// Send command to controller (STOP, then separate read)
 		Wire.beginTransmission(addr);
-		Wire.write(read_touchpad_cmd, sizeof(read_touchpad_cmd));
-		Wire.endTransmission(true);
+		const size_t written = Wire.write(read_touchpad_cmd, sizeof(read_touchpad_cmd));
+		const uint8_t result = Wire.endTransmission(true);
+		if (written != sizeof(read_touchpad_cmd) || result != 0) return ReadStatus::Error;
 
 		// Small delay to let the controller prepare the response
 		delayMicroseconds(100);
 
 		// Read response from controller
-		Wire.requestFrom(addr, (uint8_t)sizeof(tmp_buf));
-		for(int i = 0; i < sizeof(tmp_buf) && Wire.available(); i++) {
-				tmp_buf[i] = Wire.read();
+		if (Wire.requestFrom(addr, (uint8_t)sizeof(tmp_buf)) != sizeof(tmp_buf) ||
+				Wire.available() < (int)sizeof(tmp_buf)) return ReadStatus::Error;
+		for (size_t index = 0; index < sizeof(tmp_buf); ++index) {
+				const int value = Wire.read();
+				if (value < 0) return ReadStatus::Error;
+				tmp_buf[index] = (uint8_t)value;
 		}
 
 		// Response layout (per Espressif esp_lcd_touch_axs15231b.c):
@@ -111,33 +114,18 @@ bool AXS15231B_Touch::update() {
 		uint8_t touch_count = tmp_buf[1];
 		uint8_t event = (tmp_buf[2] >> 6) & 0x03;
 
-		// No touch: count is 0
-		if (!use_interrupt && touch_count == 0) {
+		if (touch_count > 1) return ReadStatus::Error;
+		retry_read = false;
+		if (touch_count == 0 || event == 1) {
 				touchActive = false;
-				return false;
-		}
-
-		// Invalid touch count (AXS15231B supports max 1 touch point).
-		// Garbage frames (e.g. touch_count=255) must also clear the state
-		// machine so stale contact(2) events that follow are rejected.
-		if (touch_count > 1) {
-				touchActive = false;
-				return false;
+				return ReadStatus::Fresh;
 		}
 
 		// Event field state machine:
 		//   0 = press down, 1 = lift up, 2 = contact/move, 3 = no event
 		// After lift, the controller may replay stale coords with event=2.
 		// Require a fresh press(0) before accepting contact(2) events.
-		if (event == 0) {
-				touchActive = true;
-		} else if (event == 1 || event == 3) {
-				touchActive = false;
-				return false;
-		} else if (event == 2 && !touchActive) {
-				// Stale contact after lift — ignore
-				return false;
-		}
+		if (event == 3 || (event == 2 && !touchActive)) return ReadStatus::Unchanged;
 		// event==2 && touchActive: valid ongoing touch
 
 		// Extract X and Y coordinates from response
@@ -188,5 +176,6 @@ bool AXS15231B_Touch::update() {
 						break;
 		}
 
-		return true;
+		touchActive = true;
+		return ReadStatus::Fresh;
 }

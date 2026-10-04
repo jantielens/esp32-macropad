@@ -206,6 +206,71 @@ function actionEditorEnsureUnsupportedOption(select, type) {
 // prefix: unique ID prefix (e.g. "pad-edit-action", "swipe-right")
 // label:  optional label shown above the type dropdown (e.g. "Tap Action")
 // opts:   { showBleHint: bool, showKeyHelp: bool }
+function actionEditorGamepadButtonCount() {
+    var entry = actionEditorCatalogEntry('gamepad');
+    return entry && Number.isInteger(entry.button_count) && entry.button_count > 0 ? entry.button_count : 0;
+}
+
+function actionEditorGamepadHTML(prefix, held) {
+    var html = '<div id="' + prefix + '-gamepad-group" style="display:' + (held ? '' : 'none') + ';">';
+    var fields = [
+        ['control', 'Control', [['button', 'Button'], ['hat', 'Hat direction'], ['trigger', 'Trigger']]],
+        ['button', 'Button', Array.from({ length: actionEditorGamepadButtonCount() }, function(_, index) { return [String(index + 1), String(index + 1)]; })],
+        ['direction', 'Direction', [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right']]],
+        ['trigger', 'Trigger', [['left', 'Left'], ['right', 'Right']]]
+    ];
+    if (!held) fields.push(['operation', 'Operation', [['tap', 'Tap'], ['down', 'Down'], ['up', 'Up']]]);
+    fields.forEach(function(field) {
+        var id = prefix + '-gamepad-' + field[0];
+        html += '<div class="form-group" id="' + id + '-field"><label class="form-label" for="' + id + '">' + field[1] + '</label>';
+        html += '<select class="form-select form-select-sm" id="' + id + '"' +
+            (field[0] === 'control' ? ' onchange="actionEditorGamepadChanged(\'' + prefix + '\')"' : '') + '>';
+        field[2].forEach(function(option) { html += '<option value="' + option[0] + '">' + option[1] + '</option>'; });
+        html += '</select></div>';
+    });
+    return html + '</div>';
+}
+
+function actionEditorGamepadChanged(prefix) {
+    var control = document.getElementById(prefix + '-gamepad-control');
+    if (!control) return;
+    ['button', 'direction', 'trigger'].forEach(function(field) {
+        var group = document.getElementById(prefix + '-gamepad-' + field + '-field');
+        if (group) group.style.display = (field === 'direction' ? 'hat' : field) === control.value ? '' : 'none';
+    });
+}
+
+function actionEditorLoadGamepad(prefix, action) {
+    var defaults = { control: 'button', button: 1, direction: 'up', trigger: 'left', operation: 'tap' };
+    Object.keys(defaults).forEach(function(field) {
+        var input = document.getElementById(prefix + '-gamepad-' + field);
+        if (input) input.value = action[field] === undefined ? defaults[field] : action[field];
+    });
+    actionEditorGamepadChanged(prefix);
+}
+
+function actionEditorBuildGamepad(prefix, held) {
+    function value(field, fallback) {
+        var input = document.getElementById(prefix + '-gamepad-' + field);
+        return input && input.value ? input.value : fallback;
+    }
+    var action = { type: 'gamepad', control: value('control', 'button'), operation: held ? 'down' : value('operation', 'tap') };
+    if (action.control === 'button') {
+        action.button = Number(value('button', '1'));
+        var buttonCount = actionEditorGamepadButtonCount();
+        if (!buttonCount) throw new Error('Gamepad button controls are unavailable');
+        if (!Number.isInteger(action.button) || action.button < 1 || action.button > buttonCount) throw new Error('Gamepad button must be 1-' + buttonCount);
+    } else if (action.control === 'hat') {
+        action.direction = value('direction', 'up');
+        if (['up', 'down', 'left', 'right'].indexOf(action.direction) < 0) throw new Error('Invalid Gamepad hat direction');
+    } else if (action.control === 'trigger') {
+        action.trigger = value('trigger', 'left');
+        if (['left', 'right'].indexOf(action.trigger) < 0) throw new Error('Invalid Gamepad trigger');
+    } else throw new Error('Invalid Gamepad control');
+    if (['tap', 'down', 'up'].indexOf(action.operation) < 0) throw new Error('Invalid Gamepad operation');
+    return action;
+}
+
 function actionEditorHTML(prefix, label, opts) {
     opts = opts || {};
     var pausableActionLimit = actionEditorPausableActionLimit();
@@ -411,6 +476,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-delay-duration" min="1" max="' + ACTION_DELAY_MAX_DURATION_MS + '" value="1000" required>';
     h += '<small>Pauses this action list before running the following action. Up to ' + pausableActionLimit + ' pausable actions can be pending device-wide at a time; another pausable action stops its action list when all slots are occupied.</small>';
     h += '</div></div>';
+    h += actionEditorGamepadHTML(prefix, false);
     h += actionEditorGenericFieldsHTML(prefix);
     // Extension-contributed groups (e.g. shutter command UI on shutter-tester builds)
     _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
@@ -472,6 +538,9 @@ function actionEditorTypeChanged(prefix) {
     }
     var delayGrp = document.getElementById(prefix + '-delay-group');
     if (delayGrp) delayGrp.style.display = (type === 'delay') ? '' : 'none';
+    var gamepadGrp = document.getElementById(prefix + '-gamepad-group');
+    if (gamepadGrp) gamepadGrp.style.display = type === 'gamepad' ? '' : 'none';
+    if (type === 'gamepad') actionEditorGamepadChanged(prefix);
     actionEditorCatalog().forEach(function(entry) {
         var group = document.getElementById(prefix + '-generic-' + entry.type + '-group');
         if (group) group.style.display = entry.type === type ? '' : 'none';
@@ -674,6 +743,7 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = (action.duration_ms > 0) ? action.duration_ms : '';
     el = document.getElementById(prefix + '-delay-duration');
     if (el) el.value = (action.type === 'delay' && action.duration_ms > 0) ? action.duration_ms : '1000';
+    actionEditorLoadGamepad(prefix, action.type === 'gamepad' ? action : {});
     actionEditorSetGenericFields(prefix, action.type || '', action);
     // Extension-contributed load hooks (e.g. shutter field population)
     _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
@@ -692,6 +762,7 @@ function actionEditorBuild(prefix) {
         return _actionEditorUnsupported[prefix];
     }
     var act = { type: type };
+    if (type === 'gamepad') return actionEditorBuildGamepad(prefix, false);
     actionEditorBuildGenericFields(prefix, type, act);
     if (type === 'screen') {
         var t = document.getElementById(prefix + '-target');

@@ -124,6 +124,25 @@ TEST(type_only) {
     // back carries no payload
 }
 
+TEST(gamepad_round_trip_and_validation) {
+    ButtonAction act = round_trip("{\"type\":\"gamepad\",\"control\":\"button\",\"button\":16,\"operation\":\"down\"}");
+    ASSERT_STR(act.type, "gamepad");
+    ASSERT_EQ(act.payload.gamepad.index, 15);
+    ASSERT_EQ(act.payload.gamepad.operation, 1);
+    act = round_trip("{\"type\":\"gamepad\",\"control\":\"hat\",\"direction\":\"right\",\"operation\":\"up\"}");
+    ASSERT_EQ(act.payload.gamepad.control, 1);
+    ASSERT_EQ(act.payload.gamepad.index, 3);
+    act = round_trip("{\"type\":\"gamepad\",\"control\":\"trigger\",\"trigger\":\"left\"}");
+    ASSERT_EQ(act.payload.gamepad.control, 2);
+    ASSERT_EQ(act.payload.gamepad.operation, 0);
+    act = parse_from_string("{\"type\":\"gamepad\",\"button\":17}");
+    ASSERT_STR(act.type, "");
+    act = parse_from_string("{\"type\":\"gamepad\",\"control\":\"hat\",\"direction\":\"up\",\"button\":1}");
+    ASSERT_STR(act.type, "");
+    act = parse_from_string("{\"type\":\"gamepad\",\"control\":\"trigger\",\"trigger\":\"invalid\"}");
+    ASSERT_STR(act.type, "");
+}
+
 // ============================================================================
 // Screen action
 // ============================================================================
@@ -737,6 +756,7 @@ int main() {
     RUN(action_list_filters_literal_none_for_pad_callers);
     RUN(action_list_retains_literal_none_for_existing_callers);
     RUN(type_only);
+    RUN(gamepad_round_trip_and_validation);
 
     printf("\n--- Screen action ---\n");
     RUN(screen_action_parse);

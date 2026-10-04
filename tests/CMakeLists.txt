@@ -51,6 +51,23 @@ set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
 add_host_gtest(test_mousepad test_mousepad.cpp)
+add_host_gtest(test_gamepad test_gamepad.cpp)
+
+enable_language(C)
+file(GLOB_RECURSE HOST_LVGL_SOURCES CONFIGURE_DEPENDS
+    "${HOST_LVGL_DIR}/*.c" "${HOST_LVGL_DIR}/*.cpp")
+add_library(host_lvgl STATIC EXCLUDE_FROM_ALL ${HOST_LVGL_SOURCES})
+target_include_directories(host_lvgl PUBLIC ${HOST_LVGL_DIR})
+target_compile_definitions(host_lvgl PUBLIC LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
+    LV_FONT_MONTSERRAT_12=1 LV_FONT_MONTSERRAT_18=1 LV_FONT_MONTSERRAT_24=1
+    LV_FONT_MONTSERRAT_32=1 LV_FONT_MONTSERRAT_36=1 LV_FONT_MONTSERRAT_48=1)
+add_host_gtest(test_gamepad_widgets test_gamepad_widgets.cpp)
+target_include_directories(test_gamepad_widgets PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_options(test_gamepad_widgets PRIVATE
+    -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+target_link_libraries(test_gamepad_widgets PRIVATE host_lvgl)
 
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
@@ -413,6 +430,10 @@ add_host_command_test(test_widget_schema python3 ${PROJECT_SOURCE_DIR}/tools/lin
 add_host_command_test(test_gauge_caption_cache python3 ${PROJECT_SOURCE_DIR}/tests/test_gauge_caption_cache.py)
 add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp)
 add_host_command_test(test_pad_refresh_schedule python3 ${PROJECT_SOURCE_DIR}/tests/test_pad_refresh_schedule.py)
+add_host_command_test(test_gt911_touch python3 ${PROJECT_SOURCE_DIR}/tests/test_gt911_touch.py)
+add_host_command_test(test_touch_driver_samples python3 ${PROJECT_SOURCE_DIR}/tests/test_touch_driver_samples.py)
+add_host_command_test(test_touch_manager_snapshots python3 ${PROJECT_SOURCE_DIR}/tests/test_touch_manager_snapshots.py)
+add_host_command_test(test_usb_hid_naming python3 ${PROJECT_SOURCE_DIR}/tests/test_usb_hid_naming.py)
 add_host_command_test(test_display_perf_api python3 ${PROJECT_SOURCE_DIR}/tests/test_display_perf_api.py)
 add_host_command_test(test_timer_mcp_integration python3 ${PROJECT_SOURCE_DIR}/tests/test_timer_mcp_integration.py)
 

@@ -20,8 +20,7 @@
 
 GT911_TouchDriver::GT911_TouchDriver()
 		: addr(TOUCH_I2C_ADDR), rotation(0), calibrationEnabled(false),
-			calXMin(0), calXMax(0), calYMin(0), calYMax(0),
-			lastTouched(false), lastX(0), lastY(0) {}
+			calXMin(0), calXMax(0), calYMin(0), calYMax(0) {}
 
 void GT911_TouchDriver::init() {
 		LOGI("GT911", "Initializing touch on %s (SDA=%d, SCL=%d, ADDR=0x%02X)",
@@ -85,59 +84,97 @@ void GT911_TouchDriver::init() {
 		}
 
 		// Clear any pending touch data
-		writeReg(GT911_POINT_INFO, 0);
+		GT911_I2C_LOCK();
+		const bool pending_cleared = writeReg(GT911_POINT_INFO, 0);
+		GT911_I2C_UNLOCK();
+		if (!pending_cleared) {
+				LOGE("GT911", "Failed to clear pending touch data at addr 0x%02X", addr);
+				return;
+		}
 
 	LOGI("GT911", "Touch initialized on %s (%dx%d, addr=0x%02X)",
 			GT911_WIRE_NAME, DISPLAY_WIDTH, DISPLAY_HEIGHT, addr);
 }
 
-void GT911_TouchDriver::gt911Read() {
+TouchReadStatus GT911_TouchDriver::gt911Read() {
+		uint8_t touches = 0;
+		uint16_t previous_ids = 0;
+		uint16_t ids = 0;
 		GT911_I2C_LOCK();
-		uint8_t pointInfo = readReg(GT911_POINT_INFO);
-		uint8_t bufferStatus = (pointInfo >> 7) & 1;
-		uint8_t touches = pointInfo & 0x0F;
-
-		// Only update state when the GT911 has completed a new scan.
-		// When bufferStatus==0, no new data is available — keep the previous
-		// touch state to avoid inserting a false RELEASED between scans.
-		// The GT911 scans at ~60-140 Hz; the LVGL task can poll much faster,
-		// so empty reads are expected while the finger is still down.
-		if (bufferStatus == 0) {
-				GT911_I2C_UNLOCK();
-				return;
-		}
-
-		lastTouched = (touches > 0);
-
-		if (lastTouched) {
-				// Read first touch point only (7 bytes: id, x_lo, x_hi, y_lo, y_hi, size_lo, size_hi)
-				uint8_t data[7];
-				readBlock(GT911_POINT_1, data, 7);
-				lastX = data[1] | (data[2] << 8);
-				lastY = data[3] | (data[4] << 8);
-		}
-
-		// Clear buffer status flag (must always be done after reading)
-		writeReg(GT911_POINT_INFO, 0);
+		const TouchReadStatus status = [&]() {
+				uint8_t pointInfo = 0;
+				if (!readBlock(GT911_POINT_INFO, &pointInfo, 1)) return TouchReadStatus::Error;
+				if (!(pointInfo & 0x80)) return TouchReadStatus::Unchanged;
+				touches = pointInfo & 0x0F;
+				uint8_t data[8 * TOUCH_CONTACT_CAPACITY] = {};
+				if (touches > TOUCH_CONTACT_CAPACITY || (touches && !readBlock(GT911_POINT_1, data, touches * 8)))
+						return TouchReadStatus::Error;
+				TouchSnapshot next;
+				next.count = touches;
+				for (uint8_t index = 0; index < lastSnapshot.count; ++index)
+						previous_ids |= touch_contact_id_mask(lastSnapshot.contacts[index].id);
+				for (uint8_t index = 0; index < touches; ++index) {
+						const uint8_t* record = data + index * 8;
+						const uint8_t id = record[0];
+						const uint16_t mask = touch_contact_id_mask(id);
+						if (!mask || (ids & mask)) return TouchReadStatus::Error;
+						ids |= mask;
+						next.contacts[index].id = id;
+						next.contacts[index].horizontal = record[1] | (record[2] << 8);
+						next.contacts[index].vertical = record[3] | (record[4] << 8);
+				}
+				if (!writeReg(GT911_POINT_INFO, 0)) return TouchReadStatus::Error;
+				lastSnapshot = next;
+				transformPending = true;
+				return TouchReadStatus::Fresh;
+		}();
 		GT911_I2C_UNLOCK();
+		if (status == TouchReadStatus::Fresh && ids != previous_ids)
+				LOGI("GT911", "Contacts=%u IDs=0x%04x", unsigned(touches), unsigned(ids));
+		return status;
 }
 
 bool GT911_TouchDriver::isTouched() {
-		// Perform a fresh I2C read so callers outside the LVGL indev callback
-		// (e.g., screen-saver wake poll) get current hardware state.
-		gt911Read();
-		return lastTouched;
+		return gt911Read() != TouchReadStatus::Error && lastSnapshot.count;
 }
 
 bool GT911_TouchDriver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure) {
 		if (pressure) *pressure = 0;
 		if (!x || !y) return false;
 
-		gt911Read();
-		if (!lastTouched) return false;
+		const TouchSample sample = readSample();
+		if (sample.status == TouchReadStatus::Error || !sample.pressed) return false;
+		*x = sample.horizontal;
+		*y = sample.vertical;
+		return true;
+}
 
-		uint16_t tx = lastX;
-		uint16_t ty = lastY;
+TouchSample GT911_TouchDriver::readSample() {
+		const TouchSnapshot snapshot = readSnapshot();
+		TouchSample sample;
+		sample.status = snapshot.status;
+		sample.pressed = snapshot.count != 0;
+		if (snapshot.count) {
+				sample.horizontal = snapshot.contacts[0].horizontal;
+				sample.vertical = snapshot.contacts[0].vertical;
+		}
+		return sample;
+}
+
+TouchSnapshot GT911_TouchDriver::readSnapshot() {
+		const TouchReadStatus status = gt911Read();
+		if (transformPending) {
+				transformedSnapshot = lastSnapshot;
+				for (uint8_t index = 0; index < transformedSnapshot.count; ++index)
+						transform(transformedSnapshot.contacts[index].horizontal, transformedSnapshot.contacts[index].vertical);
+				transformPending = false;
+		}
+		TouchSnapshot snapshot = transformedSnapshot;
+		snapshot.status = status;
+		return snapshot;
+}
+
+void GT911_TouchDriver::transform(uint16_t& tx, uint16_t& ty) const {
 
 		// Apply calibration if configured
 		if (calibrationEnabled && calXMax > calXMin && calYMax > calYMin) {
@@ -153,10 +190,6 @@ bool GT911_TouchDriver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure) {
 		}
 
 		applyRotation(tx, ty);
-
-		*x = tx;
-		*y = ty;
-		return true;
 }
 
 void GT911_TouchDriver::setCalibration(uint16_t x_min, uint16_t x_max, uint16_t y_min, uint16_t y_max) {
@@ -165,42 +198,37 @@ void GT911_TouchDriver::setCalibration(uint16_t x_min, uint16_t x_max, uint16_t 
 		calXMax = x_max;
 		calYMin = y_min;
 		calYMax = y_max;
+		transformPending = true;
 }
 
 void GT911_TouchDriver::setRotation(uint8_t r) {
 		rotation = r & 0x03;
+		transformPending = true;
 }
 
 // ============================================================================
 // Low-level I2C (GT911_WIRE — compile-time bus selection)
 // ============================================================================
 
-void GT911_TouchDriver::writeReg(uint16_t reg, uint8_t val) {
+bool GT911_TouchDriver::writeReg(uint16_t reg, uint8_t val) {
 		GT911_WIRE.beginTransmission(addr);
 		GT911_WIRE.write(highByte(reg));
 		GT911_WIRE.write(lowByte(reg));
 		GT911_WIRE.write(val);
-		GT911_WIRE.endTransmission();
+		return GT911_WIRE.endTransmission() == 0;
 }
 
-uint8_t GT911_TouchDriver::readReg(uint16_t reg) {
+bool GT911_TouchDriver::readBlock(uint16_t reg, uint8_t* buf, uint8_t len) {
 		GT911_WIRE.beginTransmission(addr);
 		GT911_WIRE.write(highByte(reg));
 		GT911_WIRE.write(lowByte(reg));
-		GT911_WIRE.endTransmission();
-		GT911_WIRE.requestFrom(addr, (uint8_t)1);
-		return GT911_WIRE.read();
-}
-
-void GT911_TouchDriver::readBlock(uint16_t reg, uint8_t* buf, uint8_t len) {
-		GT911_WIRE.beginTransmission(addr);
-		GT911_WIRE.write(highByte(reg));
-		GT911_WIRE.write(lowByte(reg));
-		GT911_WIRE.endTransmission();
-		GT911_WIRE.requestFrom(addr, len);
+		if (GT911_WIRE.endTransmission() != 0 || GT911_WIRE.requestFrom(addr, len) != len) return false;
 		for (uint8_t i = 0; i < len; i++) {
-				buf[i] = GT911_WIRE.read();
+				const int value = GT911_WIRE.read();
+				if (value < 0) return false;
+				buf[i] = uint8_t(value);
 		}
+		return true;
 }
 
 void GT911_TouchDriver::applyRotation(uint16_t& x, uint16_t& y) const {
