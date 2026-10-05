@@ -15,7 +15,7 @@ ActionResult dispatch_key(const ButtonAction& act, const char* label, uint32_t c
         LOGW(kKeyActionTag, "%s key: request rejected (busy, disconnected, empty, or OTA)", label);
         return ACTION_FAILED;
     }
-    LOGI(kKeyActionTag, "%s key: %s '%s'", label, keyboard_transport_name(keyboard_hid_transport()), act.payload.key.key_sequence);
+    LOGT(kKeyActionTag, "%s key: transport=%s bytes=%u", label, keyboard_transport_name(keyboard_hid_transport()), unsigned(strlen(act.payload.key.key_sequence)));
     return ACTION_PENDING;
 #else
     (void)continuation_token;

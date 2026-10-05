@@ -12,7 +12,11 @@ void serialize_mqtt(const ButtonAction& act, JsonObject action) { if (act.payloa
 ActionResult dispatch_mqtt(const ButtonAction& act, const char* label, uint32_t) {
 #if defined(ARDUINO) && HAS_MQTT
     const auto& mqtt = act.payload.mqtt;
-    if (mqtt.mqtt_topic[0]) { bool ok = mqtt_manager.publish(mqtt.mqtt_topic, mqtt.mqtt_payload, false); LOGI(kMqttActionTag, "%s mqtt: topic='%s' payload='%s' %s", label, mqtt.mqtt_topic, mqtt.mqtt_payload, ok ? "ok" : "FAIL"); }
+    if (mqtt.mqtt_topic[0]) {
+        const bool ok = mqtt_manager.publish(mqtt.mqtt_topic, mqtt.mqtt_payload, false);
+        if (ok) LOGT(kMqttActionTag, "%s mqtt: topic='%s' bytes=%u", label, mqtt.mqtt_topic, unsigned(strlen(mqtt.mqtt_payload)));
+        else LOGW(kMqttActionTag, "%s mqtt publish failed: topic='%s'", label, mqtt.mqtt_topic);
+    }
     else LOGW(kMqttActionTag, "%s mqtt: empty topic", label);
 #else
     (void)act;

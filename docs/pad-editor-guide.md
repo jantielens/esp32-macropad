@@ -1010,7 +1010,10 @@ Inkplate/Cypress retains its legacy behavior and is not covered by this checked
 error handling. These driver changes do not enable USB HID on additional boards;
 gamepad widgets still require the existing display, touch, and USB HID capabilities.
 
-For hardware diagnostics, use the normal INFO-level device logs. `GamepadJoystick`
+For hardware diagnostics, build at DEBUG with `LOG_DIAGNOSTICS` selecting
+`GT911,Touch,GamepadHID,GamepadJoystick,GamepadButton`. Normal INFO remains quiet;
+rejections and readiness changes stay visible. See the
+[logging guidelines](dev/logging-guidelines.md). `GamepadJoystick`
 and `GamepadButton` report creation, capture, rejection, and release reasons.
 GT911 logs `Contacts=N IDs=0x....` when the contact set changes, after a checked
 read and successful acknowledgement. Each set bit represents a tracking ID;

@@ -480,6 +480,9 @@ static void shutter_adc_task(void* param) {
         // are honored only after the active capture finalizes.
         uint32_t capture_count[SHUTTER_SENSOR_MAX] = {};
         bool stop_now = false;
+        uint32_t read_failures = 0;
+        uint32_t last_error_log_ms = 0;
+        esp_err_t last_read_error = ESP_OK;
 
         while (!stop_now) {
             // Honor stop requests only when the state machine is at a clean
@@ -495,17 +498,21 @@ static void shutter_adc_task(void* param) {
             uint32_t bytes_read = 0;
             esp_err_t err = adc_continuous_read(s_adc_handle, s_read_buf, SHUTTER_ADC_FRAME_SIZE,
                                                  &bytes_read, pdMS_TO_TICKS(100));
-            if (err == ESP_ERR_TIMEOUT) {
-                static uint32_t timeout_count = 0;
-                if (++timeout_count % 50 == 1) {
-                    LOGW(TAG, "read timeout #%lu", (unsigned long)timeout_count);
+            if (err != ESP_OK) {
+                ++read_failures;
+                const uint32_t now_ms = millis();
+                if (read_failures == 1 || err != last_read_error || now_ms - last_error_log_ms >= 30000) {
+                    LOGW(TAG, "ADC read failed: %s attempts=%lu", esp_err_to_name(err), (unsigned long)read_failures);
+                    last_error_log_ms = now_ms;
                 }
+                last_read_error = err;
+                if (err != ESP_ERR_TIMEOUT) vTaskDelay(pdMS_TO_TICKS(10));
                 continue;
             }
-            if (err != ESP_OK) {
-                LOGW(TAG, "adc_continuous_read error: %s", esp_err_to_name(err));
-                vTaskDelay(pdMS_TO_TICKS(10));
-                continue;
+            if (read_failures) {
+                LOGI(TAG, "ADC read recovered after %lu failed attempts", (unsigned long)read_failures);
+                read_failures = 0;
+                last_read_error = ESP_OK;
             }
 
         // Parse conversion results (TYPE2 format: 4 bytes each).
@@ -764,7 +771,7 @@ static void shutter_adc_task(void* param) {
                                        new_rate < s_actual_per_sensor_hz * 1.05f);
                         if (accept) {
                             s_actual_per_sensor_hz = new_rate;
-                            LOGI(TAG, "Recalibrated: %.1f Hz/sensor (%lu sets / %lu ch0 in %lld ms%s)",
+                            LOGT(TAG, "Recalibrated: %.1f Hz/sensor (%lu sets / %lu ch0 in %lld ms%s)",
                                  new_rate, (unsigned long)s_recalib_sample_count,
                                  (unsigned long)s_recalib_ch0_count,
                                  (long long)(recalib_elapsed_us / 1000),

@@ -169,7 +169,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		const bool contact_edge = physical.status == TouchReadStatus::Fresh && physical.count != logged_contact_count;
 		if (contact_edge) {
 				logged_contact_count = physical.count;
-				LOGI("Touch", "Input: raw=%u filtered=%u x=%u y=%u suppressed=%u release_guard=%u filter_cancel=%u",
+				LOGT("Touch", "Input: raw=%u filtered=%u x=%u y=%u suppressed=%u release_guard=%u filter_cancel=%u",
 						unsigned(physical.count), unsigned(snapshot.count), unsigned(snapshot.contacts[0].horizontal),
 						unsigned(snapshot.contacts[0].vertical), unsigned(suppressed), unsigned(g_require_release),
 						unsigned(g_touch_snapshot_filter.canceled));
@@ -183,7 +183,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		}
 		const bool release_guarded = g_require_release;
 		if (release_guarded && physical.status == TouchReadStatus::Fresh && !physical.count) {
-				LOGI("Touch", "Release guard cleared (suppressed=%u)", unsigned(suppressed));
+				LOGT("Touch", "Release guard cleared (suppressed=%u)", unsigned(suppressed));
 				g_require_release = false;
 				#if HAS_DISPLAY && HAS_USB_HID
 				g_gamepad_touch_router.update(physical, false, gamepad_hid_generation(), mouse_hid_generation());
@@ -226,7 +226,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		const uint32_t mouse_generation = mouse_hid_generation();
 		navigation = g_gamepad_touch_router.update(snapshot, false, gamepad_generation, mouse_generation);
 		if (contact_edge || g_gamepad_touch_router.reset_navigation) {
-				LOGI("Touch", "Route: contacts=%u navigation=%u reset=%u gamepad_generation=%lu mouse_generation=%lu",
+				LOGT("Touch", "Route: contacts=%u navigation=%u reset=%u gamepad_generation=%lu mouse_generation=%lu",
 						unsigned(snapshot.count), unsigned(navigation.pressed), unsigned(g_gamepad_touch_router.reset_navigation),
 						(unsigned long)gamepad_generation, (unsigned long)mouse_generation);
 		}
@@ -381,7 +381,7 @@ void touch_manager_cancel_physical_input() {
 		const bool require_release = g_require_release || g_prev_lvgl_pressed || physical.pressed ||
 				physical.status == TouchReadStatus::Error || g_touch_snapshot_filter.canceled;
 		if (!g_require_release) {
-				LOGI("Touch", "Cancel: release_guard=%u physical=%u lvgl_pressed=%u",
+				LOGT("Touch", "Cancel: release_guard=%u physical=%u lvgl_pressed=%u",
 						unsigned(require_release), unsigned(physical.pressed), unsigned(g_prev_lvgl_pressed));
 		}
 		#if HAS_DISPLAY && HAS_USB_HID

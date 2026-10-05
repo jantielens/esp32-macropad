@@ -59,9 +59,9 @@ static void log_async_tcp_stack_watermark_once() {
 		const unsigned high_water_bytes = (unsigned)high_water_words * (unsigned)sizeof(StackType_t);
 
 		#ifdef CONFIG_ASYNC_TCP_STACK_SIZE
-				LOGI("Portal", "AsyncTCP stack watermark: %u bytes (CONFIG_ASYNC_TCP_STACK_SIZE=%u)", high_water_bytes, (unsigned)CONFIG_ASYNC_TCP_STACK_SIZE);
+				LOGT("Portal", "AsyncTCP stack watermark: %u bytes (CONFIG_ASYNC_TCP_STACK_SIZE=%u)", high_water_bytes, (unsigned)CONFIG_ASYNC_TCP_STACK_SIZE);
 		#else
-				LOGI("Portal", "AsyncTCP stack watermark: %u bytes (CONFIG_ASYNC_TCP_STACK_SIZE not set)", high_water_bytes);
+				LOGT("Portal", "AsyncTCP stack watermark: %u bytes (CONFIG_ASYNC_TCP_STACK_SIZE not set)", high_water_bytes);
 		#endif
 }
 
@@ -87,10 +87,10 @@ DeviceConfig* web_portal_get_current_config() {
 
 // Initialize web portal
 void web_portal_init(DeviceConfig *config) {
-		LOGI("Portal", "Init start");
+		LOGT("Portal", "Init start");
 		
 		current_config = config;
-		LOGI("Portal", "Config ptr: %p, backlight_brightness: %d", 
+		LOGT("Portal", "Config ptr: %p, backlight_brightness: %d",
 										current_config, current_config->backlight_brightness);
 		
 		// Create web server instance (avoid global constructor issues)

@@ -101,7 +101,7 @@ static void gamepad_joystick_render(GamepadJoystickState* state) {
 
 static void gamepad_joystick_cancel(GamepadJoystickState* state, const char* reason) {
     if (state->touch.owner) {
-        LOGI("GamepadJoystick", "Release stick=%s owner=%lu generation=%lu reason=%s axes=0,0",
+        LOGT("GamepadJoystick", "Release stick=%s owner=%lu generation=%lu reason=%s axes=0,0",
              state->config.stick ? "right" : "left", (unsigned long)state->touch.owner,
              (unsigned long)state->touch.generation, reason);
     }
@@ -136,7 +136,7 @@ static void gamepad_joystick_point(void* context, GamepadTouchEvent requested, c
               gamepad_joystick_cancel(state, "capture rejected");
               return;
            }
-           LOGI("GamepadJoystick", "Captured stick=%s owner=%lu generation=%lu point=%ld,%ld radius=%.1f",
+           LOGT("GamepadJoystick", "Captured stick=%s owner=%lu generation=%lu point=%ld,%ld radius=%.1f",
                state->config.stick ? "right" : "left", (unsigned long)state->touch.owner,
                (unsigned long)state->touch.generation, (long)point.x, (long)point.y, double(state->input.radius));
     } else if (interaction != GamepadTouchEvent::Move) return;
@@ -153,7 +153,7 @@ static void gamepad_joystick_point(void* context, GamepadTouchEvent requested, c
         (position.horizontal || position.vertical);
     if ((!state->axis_logged || position.horizontal != state->logged_horizontal || position.vertical != state->logged_vertical) &&
         (!state->axis_logged || first_deflection || now - state->last_axis_log >= 200)) {
-        LOGI("GamepadJoystick", "Axes stick=%s owner=%lu x=%d y=%d",
+        LOGT("GamepadJoystick", "Axes stick=%s owner=%lu x=%d y=%d",
              state->config.stick ? "right" : "left", (unsigned long)state->touch.owner,
              int(position.horizontal), int(position.vertical));
         state->last_axis_log = now;
@@ -194,7 +194,7 @@ static void gamepad_stick_create(lv_obj_t* button, const WidgetConfig* config,
     gamepad_joystick_cancel(joystick, "initialize");
     if (center_label) lv_obj_add_flag(center_label, LV_OBJ_FLAG_HIDDEN);
     joystick->touch.attach(button, gamepad_joystick_event, joystick, gamepad_joystick_point);
-        LOGI("GamepadJoystick", "Created stick=%s center=%s dead_zone=%.2f invert=%u,%u size=%ldx%ld ready=%u",
+        LOGT("GamepadJoystick", "Created stick=%s center=%s dead_zone=%.2f invert=%u,%u size=%ldx%ld ready=%u",
             joystick->config.stick ? "right" : "left", joystick->config.floating ? "floating" : "fixed",
             double(joystick->config.dead_zone), unsigned(joystick->config.invert_x), unsigned(joystick->config.invert_y),
             (long)(area.x2 - area.x1 + 1), (long)(area.y2 - area.y1 + 1), unsigned(gamepad_hid_is_ready()));

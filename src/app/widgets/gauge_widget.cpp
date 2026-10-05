@@ -567,7 +567,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (st->needle_len < 10) st->needle_len = 10;
     st->needle_inner = (int16_t)(st->needle_len * cfg->needle_cutoff_pct / 100);
 
-    LOGD(TAG, "Layout: rect=%dx%d avail=%dx%d radius=%d arc_w=%d cx=%d cy=%d rings=%d",
+    LOGT(TAG, "Layout: rect=%dx%d avail=%dx%d radius=%d arc_w=%d cx=%d cy=%d rings=%d",
             rect->w, rect->h, avail_w, avail_h, radius, arc_width, cx, cy, active_ring_count);
 
     // ---- Gap between concentric rings ----

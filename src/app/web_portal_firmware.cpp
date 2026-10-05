@@ -404,7 +404,7 @@ void handlePostFirmwareUpdate(AsyncWebServerRequest *request, uint8_t *data, siz
 		firmware_update_error[0] = '\0';
 		strlcpy(firmware_update_state, "downloading", sizeof(firmware_update_state));
 
-		LOGI("OTA", "Update requested url=%s size=%u", url, (unsigned)size);
+		LOGI("OTA", "Update requested size=%u", (unsigned)size);
 
 		// Spawn background task to avoid blocking AsyncTCP.
 		// Must use internal RAM stack: Update.write() triggers SPI flash writes

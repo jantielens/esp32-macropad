@@ -388,7 +388,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->cached_chart_w = chart_w;
     st->cached_chart_h = chart_h;
 
-    LOGD(TAG, "Layout: rect=%dx%d content=%dx%d chart_top=%d chart=%dx%d slots=%d window=%lus lines=%d",
+    LOGT(TAG, "Layout: rect=%dx%d content=%dx%d chart_top=%d chart=%dx%d slots=%d window=%lus lines=%d",
          rect->w, rect->h, content_w, content_h, chart_top, chart_w, chart_h,
          cfg->slot_count, (unsigned long)cfg->window_secs, st->line_count);
 

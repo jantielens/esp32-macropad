@@ -109,7 +109,7 @@ bool PadScreen::allocateArrays() {
     #undef PAD_ALLOC
 
     arraysAllocated = true;
-    LOGD(TAG, "Pad %u: arrays allocated", pageIndex);
+    LOGT(TAG, "Pad %u: arrays allocated", pageIndex);
     return true;
 }
 
@@ -149,7 +149,7 @@ void PadScreen::freeArrays() {
     arraysAllocated = false;
     tilesBuilt = false;
     cachedGeneration = UINT32_MAX;
-    LOGD(TAG, "Pad %u: arrays freed", pageIndex);
+    LOGT(TAG, "Pad %u: arrays freed", pageIndex);
 }
 
 void PadScreen::evict() {

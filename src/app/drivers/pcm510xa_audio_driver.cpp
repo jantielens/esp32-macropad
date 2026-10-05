@@ -66,7 +66,7 @@ bool PCM510xADriver::begin(uint32_t sample_rate) {
     initialized = true;
     setMuted(false);
     setVolume(volume);
-    LOGI(TAG, "PCM510xA: %u Hz, 16-bit data in 32-bit slots", sample_rate);
+    LOGT(TAG, "PCM510xA: %u Hz, 16-bit data in 32-bit slots", sample_rate);
     return true;
 }
 
@@ -86,7 +86,8 @@ bool PCM510xADriver::write(const int16_t* frames, size_t frame_count) {
         esp_err_t err = i2s_channel_write(tx_handle, scratch, sample_count * sizeof(int16_t),
                                           &written, portMAX_DELAY);
         if (err != ESP_OK || written != sample_count * sizeof(int16_t)) {
-            LOGE(TAG, "I2S write error: %s", esp_err_to_name(err));
+              LOGE(TAG, "I2S write error: %s bytes=%u/%u", esp_err_to_name(err),
+                  unsigned(written), unsigned(sample_count * sizeof(int16_t)));
             return false;
         }
         offset += sample_count;

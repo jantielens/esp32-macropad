@@ -100,7 +100,7 @@ bool epaper_frame_driver_draw_url(const char* url) {
 		uint8_t* buf = nullptr;
 		size_t len = 0;
 		if (!epaper_frame_http_download(url, &buf, &len)) {
-				LOGW("Epaper", "download failed for %s", url);
+				LOGW("Epaper", "Image download failed");
 				return false;
 		}
 
@@ -118,7 +118,7 @@ bool epaper_frame_driver_draw_url(const char* url) {
 
 		heap_caps_free(buf);
 		if (!ok) {
-				LOGW("Epaper", "decode/draw failed for %s", url);
+				LOGW("Epaper", "Image decode/draw failed");
 		}
 		return ok;
 }

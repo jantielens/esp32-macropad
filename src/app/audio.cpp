@@ -171,7 +171,8 @@ bool audio_write_with_stats(AudioOutputDriver* driver, const int16_t* frames,
 }
 
 void audio_log_starvation(const AudioStarvationStats& stats) {
-    LOGI(TAG, "Output starvation: events=%u worst_gap_us=%lld buffered_us=%lld",
+    if (!stats.event_count) return;
+    LOGW(TAG, "Output starvation: events=%u worst_gap_us=%lld buffered_us=%lld",
          stats.event_count, stats.worst_gap_us, kOutputBufferedUs);
 }
 

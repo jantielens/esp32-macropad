@@ -20,6 +20,7 @@ harness = r'''
 #include <cstdio>
 #include "touch_sample.h"
 #define LOGI(tag, ...) ((void)std::snprintf(nullptr, 0, __VA_ARGS__))
+#define LOGT(tag, ...) ((void)std::snprintf(nullptr, 0, __VA_ARGS__))
 #define LOGW(tag, ...) (++warnings, (void)std::snprintf(nullptr, 0, __VA_ARGS__))
 enum LogLevel { LOG_LEVEL_WARN = 2, LOG_LEVEL_DEBUG = 4 };
 #define LOG_LEVEL LOG_LEVEL_DEBUG

@@ -244,8 +244,9 @@ void Inkplate6FlickEpaperDriver::present() {
 				memcmp(framebuffer(), presentedFramebuffer, framebufferBytes()) == 0) {
 			pendingChanges = false;
 			noOpSkipCount++;
-			LOGI("Inkplate", "refresh skipped=no-op count=%lu", (unsigned long)noOpSkipCount);
+			const uint32_t skipped = noOpSkipCount;
 			xSemaphoreGive(framebufferMutex);
+			LOGT("Inkplate", "refresh skipped=no-op count=%lu", (unsigned long)skipped);
 			return;
 		}
 
@@ -274,10 +275,22 @@ void Inkplate6FlickEpaperDriver::present() {
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
 		hasPresentedFrame = true;
 		lastRefreshMs = millis();
-		LOGI("Inkplate", "%s refresh full=%lu partial_requests=%lu dur=%lums", usesBwMode() ? "B/W" : "grayscale",
-				(unsigned long)refreshCount, (unsigned long)partialUpdateCount,
-				(unsigned long)(lastRefreshMs - refreshStartMs));
+		const uint32_t completed_ms = lastRefreshMs;
+		const uint32_t full_count = refreshCount;
+		const uint32_t partial_count = partialUpdateCount;
+		const uint32_t skipped_count = noOpSkipCount;
 		xSemaphoreGive(framebufferMutex);
+		static uint32_t last_report_ms = 0;
+		if (forceFullRefresh || scheduledFullRefresh || completed_ms - last_report_ms >= 60000) {
+			LOGI("Inkplate", "Refresh: full=%lu partial=%lu skipped=%lu dur=%lums forced=%u scheduled=%u",
+			     (unsigned long)full_count, (unsigned long)partial_count, (unsigned long)skipped_count,
+			     (unsigned long)(completed_ms - refreshStartMs), unsigned(forceFullRefresh), unsigned(scheduledFullRefresh));
+			last_report_ms = completed_ms;
+		} else {
+			LOGT("Inkplate", "Refresh: full=%lu partial=%lu skipped=%lu dur=%lums",
+			     (unsigned long)full_count, (unsigned long)partial_count, (unsigned long)skipped_count,
+			     (unsigned long)(completed_ms - refreshStartMs));
+		}
 }
 
 bool Inkplate6FlickEpaperDriver::requestFullRefresh() {

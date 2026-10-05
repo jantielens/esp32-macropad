@@ -157,7 +157,7 @@ static HaServiceResult execute_request(const HaServiceRequest& request) {
         began = http.begin(plain_client, url);
     }
     if (!began) {
-        LOGW(TAG, "HTTP begin failed: %s", url);
+        LOGW(TAG, "HTTP begin failed: entity=%s service=%s", req.entity_id, req.service);
         return finish(HA_STATUS_HTTP_BEGIN_FAILED);
     }
 
@@ -170,9 +170,9 @@ static HaServiceResult execute_request(const HaServiceRequest& request) {
     net_activity_mark(NET_CH_HTTP);
     if (code > 0) result.http_status = (int16_t)code;
     if (code >= 200 && code < 300) {
-        LOGI(TAG, "%s -> HTTP %d", url, code);
+        LOGI(TAG, "entity=%s service=%s HTTP=%d", req.entity_id, req.service, code);
     } else {
-        LOGW(TAG, "%s -> HTTP %d (%s)", url, code,
+        LOGW(TAG, "entity=%s service=%s HTTP=%d (%s)", req.entity_id, req.service, code,
              HTTPClient::errorToString(code).c_str());
     }
     http.end();

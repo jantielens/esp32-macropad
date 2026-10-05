@@ -392,7 +392,8 @@ bool recover_controller() {
 				++s_diagnostics.recovery_failure_count;
 				++s_wake_recovery_failure_count;
 		}
-		LOGI("Epaper", "IT8951 panel recovery %s", ok ? "succeeded" : "failed");
+		if (ok) LOGI("Epaper", "IT8951 panel recovery succeeded");
+		else LOGE("Epaper", "IT8951 panel recovery failed");
 		return ok;
 }
 

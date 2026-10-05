@@ -253,7 +253,7 @@ static void start_sequence() {
 
     // Log segment table
     for (int i = 0; i < g_strip.segment_count; i++) {
-        LOGI(TAG, "  Seg %d: cum=%.1fs inc=%.1fs offset=%+.3f stops",
+        LOGT(TAG, "  Seg %d: cum=%.1fs inc=%.1fs offset=%+.3f stops",
              i + 1, g_strip.segments[i].cumulative_s, g_strip.segments[i].incremental_s,
              g_strip.segments[i].offset_stops);
     }
@@ -338,7 +338,7 @@ static void cmd_set_base(float t) {
     if (t > STRIP_BASE_TIME_MAX) t = STRIP_BASE_TIME_MAX;
     g_strip.base_time_s = t;
     recalculate_segments();
-    LOGI(TAG, "Base time: %.1fs", t);
+    LOGT(TAG, "Base time: %.1fs", t);
 }
 
 static void cmd_adjust_base(float delta) {
@@ -349,7 +349,7 @@ static void cmd_step_up() {
     if (g_strip.step_idx < STEP_TABLE_SIZE - 1) {
         g_strip.step_idx++;
         recalculate_segments();
-        LOGI(TAG, "Step up: %s", current_step_label());
+        LOGT(TAG, "Step up: %s", current_step_label());
     }
 }
 
@@ -357,7 +357,7 @@ static void cmd_step_down() {
     if (g_strip.step_idx > 0) {
         g_strip.step_idx--;
         recalculate_segments();
-        LOGI(TAG, "Step down: %s", current_step_label());
+        LOGT(TAG, "Step down: %s", current_step_label());
     }
 }
 
@@ -377,20 +377,20 @@ static void cmd_adjust_segments(int delta) {
     int n = clamp_odd_segments(g_strip.segment_count + delta);
     g_strip.segment_count = n;
     recalculate_segments();
-    LOGI(TAG, "Segments: %d (%+d)", n, delta);
+    LOGT(TAG, "Segments: %d (%+d)", n, delta);
 }
 
 static void cmd_set_segments(int n) {
     g_strip.segment_count = clamp_odd_segments(n);
     recalculate_segments();
-    LOGI(TAG, "Segments: %d", g_strip.segment_count);
+    LOGT(TAG, "Segments: %d", g_strip.segment_count);
 }
 
 static void cmd_set_countdown(int secs) {
     if (secs < STRIP_COUNTDOWN_MIN) secs = STRIP_COUNTDOWN_MIN;
     if (secs > STRIP_COUNTDOWN_MAX) secs = STRIP_COUNTDOWN_MAX;
     g_strip.countdown_s = secs;
-    LOGI(TAG, "Countdown: %ds", secs);
+    LOGT(TAG, "Countdown: %ds", secs);
 }
 
 static void cmd_adjust_countdown(int delta) {
@@ -401,7 +401,7 @@ static void cmd_set_pause(int secs) {
     if (secs < STRIP_PAUSE_MIN) secs = STRIP_PAUSE_MIN;
     if (secs > STRIP_PAUSE_MAX) secs = STRIP_PAUSE_MAX;
     g_strip.pause_s = secs;
-    LOGI(TAG, "Pause: %ds", secs);
+    LOGT(TAG, "Pause: %ds", secs);
 }
 
 static void cmd_adjust_pause(int delta) {
@@ -410,7 +410,7 @@ static void cmd_adjust_pause(int delta) {
 
 static void cmd_set_tick(bool on) {
     g_strip.exposure_tick = on;
-    LOGI(TAG, "Exposure tick: %s", on ? "on" : "off");
+    LOGT(TAG, "Exposure tick: %s", on ? "on" : "off");
 }
 
 // ============================================================================
@@ -822,7 +822,7 @@ void test_strip_init() {
                                     strip_binding_key_count, strip_binding_key_at})) {
         LOGE(TAG, "Failed to register strip binding scheme");
     } else {
-        LOGI(TAG, "Strip binding scheme registered");
+        LOGT(TAG, "Strip binding scheme registered");
     }
 }
 

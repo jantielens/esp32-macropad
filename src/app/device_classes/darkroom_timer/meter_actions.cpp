@@ -40,7 +40,7 @@ static ActionResult meter_action_dispatch(const ButtonAction& act, const char* l
         LOGW(TAG, "%s meter: empty command", label);
         return ACTION_COMPLETE;
     }
-    LOGI(TAG, "%s meter: %s %s", label, p.command, p.value);
+    LOGT(TAG, "%s meter: %s %s", label, p.command, p.value);
     meter_dispatch(p.command, p.value);
     return ACTION_COMPLETE;
 }

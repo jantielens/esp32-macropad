@@ -246,7 +246,7 @@ static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
         e.draw_buf = buf;
         e.kind = kind;
         cache_unlock();
-        LOGD(TAG, "Updated cache: '%s' %ux%u stride=%u", id,
+        LOGT(TAG, "Updated cache: '%s' %ux%u stride=%u", id,
              buf->header.w, buf->header.h, (unsigned)buf->header.stride);
         return true;
     }
@@ -266,7 +266,7 @@ static bool cache_entry_buf(const char* id, IconKind kind, lv_draw_buf_t* buf) {
     g_count++;
     uint16_t total = g_count;
     cache_unlock();
-    LOGD(TAG, "Cached: '%s' %ux%u stride=%u kind=%u (%u total)",
+    LOGT(TAG, "Cached: '%s' %ux%u stride=%u kind=%u (%u total)",
          id, buf->header.w, buf->header.h,
          (unsigned)buf->header.stride, kind, total);
     return true;
@@ -328,7 +328,7 @@ static bool load_from_fs(const char* fs_id, IconKind kind,
     if (!draw_buf) return false;
 
     const char* key = cache_key ? cache_key : fs_id;
-    LOGI(TAG, "Decoded '%s': %ux%u stride=%u cf=%u%s",
+    LOGT(TAG, "Decoded '%s': %ux%u stride=%u cf=%u%s",
          fs_id, draw_buf->header.w, draw_buf->header.h,
          draw_buf->header.stride, draw_buf->header.cf,
          cache_key ? " (alias)" : "");

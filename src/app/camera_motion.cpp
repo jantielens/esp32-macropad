@@ -144,7 +144,7 @@ void camera_motion_process_raw(const CameraRawFrame& raw, uint32_t now) {
         s_status.global_change = false;
         s_status.confirm_frames = 0;
         portEXIT_CRITICAL(&s_mux);
-        LOGI("Camera", "Motion sample: baseline captured (%ux%u grid)", kGridWidth, kGridHeight);
+        LOGT("Camera", "Motion sample: baseline captured (%ux%u grid)", kGridWidth, kGridHeight);
         return;
     }
 
@@ -162,7 +162,7 @@ void camera_motion_process_raw(const CameraRawFrame& raw, uint32_t now) {
     s_status.confirm_frames = s_active_frames;
     portEXIT_CRITICAL(&s_mux);
     if (global_change) {
-        LOGW("Camera", "Motion frame ignored: global change (%u/%u tiles)",
+        LOGT("Camera", "Motion frame ignored: global change (%u/%u tiles)",
              changed_tiles, kGridSize);
     }
     if (s_active_frames < kConfirmFrames) return;

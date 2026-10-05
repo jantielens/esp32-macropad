@@ -317,18 +317,26 @@ void camera_feed_loop() {
         if (writable_slot < 0) return;
     }
 
+    static uint32_t capture_failures = 0;
+    s_last_capture_ms = now;
     const int64_t raw_capture_started_us = esp_timer_get_time();
-    if (!camera_prepare_raw_capture() || !camera_capture_raw_reuse(&s_raw_frame)) {
+    const bool prepared = camera_prepare_raw_capture();
+    if (!prepared || !camera_capture_raw_reuse(&s_raw_frame)) {
         if (writable_slot >= 0) {
             portENTER_CRITICAL(&s_mux);
             s_slots[writable_slot].writing = false;
             portEXIT_CRITICAL(&s_mux);
         }
-        LOGW("Camera", "Shared RAW10 capture failed");
+        ++capture_failures;
+        if (!prepared) LOGW("Camera", "RAW10 preparation failed");
+        else LOGT("Camera", "Shared RAW10 capture failed");
         return;
     }
+    if (capture_failures) {
+        LOGI("Camera", "RAW10 capture recovered after %lu failed attempts", (unsigned long)capture_failures);
+        capture_failures = 0;
+    }
     const uint32_t raw_capture_us = static_cast<uint32_t>(esp_timer_get_time() - raw_capture_started_us);
-    s_last_capture_ms = now;
     camera_motion_on_raw_frame(s_raw_frame, !live_feed_due);
     if (!live_feed_due) return;
 

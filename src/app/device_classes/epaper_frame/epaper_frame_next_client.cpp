@@ -79,7 +79,7 @@ void log_service_transfer(const char* operation, uint32_t request_started_ms,
 		const uint32_t body_ms = now_ms - body_started_ms;
 		const uint32_t bytes_per_second = body_ms > 0
 				? (uint32_t)((body_bytes * 1000U) / body_ms) : 0;
-		LOGI("Epaper", "Service %s: headers=%ums body=%uB/%ums/%luB/s %s",
+		LOGT("Epaper", "Service %s: headers=%ums body=%uB/%ums/%luB/s %s",
 				operation, (unsigned)header_ms, (unsigned)body_bytes,
 				(unsigned)body_ms, (unsigned long)bytes_per_second,
 				complete ? "complete" : "incomplete");
@@ -275,7 +275,7 @@ EpaperNextPayload follow_redirect(const String& location,
 				payload.media_type, &payload)) {
 				http.end();
 				payload.result = EpaperNextResult::Show;
-				LOGI("Epaper", "Service redirect cache hit; body_bytes_read=0");
+				LOGT("Epaper", "Service redirect cache hit; body_bytes_read=0");
 				return payload;
 		}
 		const bool ok = read_and_validate_body(
@@ -384,7 +384,7 @@ EpaperNextPayload epaper_frame_next_client_fetch(
 						payload.media_type, &payload)) {
 						http.end();
 						payload.result = EpaperNextResult::Show;
-						LOGI("Epaper", "Service cache hit; body_bytes_read=0");
+						LOGT("Epaper", "Service cache hit; body_bytes_read=0");
 						return payload;
 				}
 				const uint32_t body_started_ms = millis();
@@ -537,7 +537,7 @@ EpaperNextPayload epaper_frame_next_client_fetch_batch_entry(
 				entry.content_crc32, entry.media_type,
 				&payload, entry.content_length)) {
 				payload.result = EpaperNextResult::Show;
-				LOGI("Epaper", "Batch cache hit; body_bytes_read=0");
+				LOGT("Epaper", "Batch cache hit; body_bytes_read=0");
 				return payload;
 		}
 

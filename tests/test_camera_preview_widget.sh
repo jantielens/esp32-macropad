@@ -88,7 +88,7 @@ grep -q 'camera_save_config_on_main' "$CAMERA_COMPONENT"
 grep -q 'loop_bridge_dispatch(camera_save_config_on_main' "$CAMERA_COMPONENT"
 grep -q 'kCameraPortalScript' "$CAMERA_COMPONENT"
 grep -q 'kCameraPortalStyle' "$CAMERA_COMPONENT"
-grep -A5 'LOGI("Config", "Save start")' "$CONFIG_MANAGER" | grep -q 'Serial.flush();'
+grep -A5 '"Config", "Save start"' "$CONFIG_MANAGER" | grep -q 'Serial.flush();'
 grep -q 'handleGetCameraMjpegStream' src/app/web_portal_routes.cpp
 grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc4880p433/board_overrides.h
 grep -q '#define CAMERA_MJPEG_MAX_CLIENTS 3' src/boards/jc1060p470c/board_overrides.h

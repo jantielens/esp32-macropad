@@ -198,7 +198,7 @@ void PadScreen::buildTiles() {
 
     // Only grid layout supported in v0
     if (strcmp(cfg->layout, "grid") != 0) {
-        LOGW(TAG, "Page %u: unsupported layout '%s', skipping", pageIndex, cfg->layout);
+        LOGW(TAG, "Pad %u: unsupported layout '%s', skipping", pageIndex, cfg->layout);
         pad_config_release(cfg);
         tilesBuilt = true;
         return;
@@ -647,7 +647,7 @@ void PadScreen::buildTiles() {
                 lv_obj_clear_flag(tile.local_bg_image, LV_OBJ_FLAG_CLICKABLE);
                 lv_obj_move_to_index(tile.local_bg_image, 0);
                 strlcpy(tile.local_image_path, bcfg.bg_image_path, sizeof(tile.local_image_path));
-                LOGD(TAG, "Tile %u: local image slot %d for %.40s", i, tile.local_image_slot, bcfg.bg_image_path);
+                LOGT(TAG, "Button %u: local image slot %d for %.40s", i, tile.local_image_slot, bcfg.bg_image_path);
             }
         }
 #endif
@@ -674,7 +674,7 @@ void PadScreen::buildTiles() {
 #endif
                 );
 
-                LOGD(TAG, "Tile %u: image slot %d for %.40s", i, tile.image_slot, bcfg.bg_image_url);
+                LOGT(TAG, "Button %u: image slot %d", i, tile.image_slot);
             }
         }
 #endif
@@ -753,7 +753,7 @@ void PadScreen::buildTiles() {
         if (!dc || !dc->pad_hold_scheme || !dc->pad_hold_acquire) continue;
         if (padHasScheme(dc->pad_hold_scheme)) {
             padHoldMask |= (uint8_t)(1u << c);
-            LOGI(TAG, "Page %u: device-class '%s' consumer detected — will hold engine while visible",
+            LOGT(TAG, "Pad %u: device-class '%s' consumer detected — will hold engine while visible",
                  pageIndex, dc->name);
         }
     }
@@ -762,5 +762,5 @@ void PadScreen::buildTiles() {
 
     tilesBuilt = true;
 
-    LOGI(TAG, "Page %u: built %u tiles (%dx%d display)", pageIndex, tileCount, disp_w, disp_h);
+    LOGI(TAG, "Pad %u: built %u buttons (%dx%d display)", pageIndex, tileCount, disp_w, disp_h);
 }

@@ -997,7 +997,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		bool begin_started = false;  // true once begin_async() has been kicked off
 		if (epaper_frame_driver_battery_ready_before_begin()) {
 				const uint16_t mv = epaper_frame_driver_battery_mv();
-				LOGI("Epaper", "Battery %u mV (early read)", mv);
+				LOGT("Epaper", "Battery %u mV (early read)", mv);
 				if (mv > 0 && mv < 3200) {
 						epaper_frame_driver_begin();  // bring panel up to paint the status frame
 						low_battery_sleep(mv);
@@ -1009,7 +1009,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				begin_started = true;
 		} else if (epaper_frame_driver_begin()) {
 				const uint16_t mv = epaper_frame_driver_battery_mv();
-				LOGI("Epaper", "Battery %u mV", mv);
+				LOGT("Epaper", "Battery %u mV", mv);
 				if (mv > 0 && mv < 3200) {
 						low_battery_sleep(mv);
 						return true;
@@ -1123,9 +1123,9 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						(now - last_sync) >= kEpaperNtpResyncIntervalS;
 				epaper_frame_timing_last.ntp_sync_ms = 0;
 				if (defer_ntp_resync) {
-						LOGI("Epaper", "NTP resync due; deferring until after panel draw");
+						LOGT("Epaper", "NTP resync due; deferring until after panel draw");
 				} else {
-						LOGI("Epaper", "NTP resync skipped (last sync %lds ago)",
+						LOGT("Epaper", "NTP resync skipped (last sync %lds ago)",
 								 (long)(now - last_sync));
 				}
 		}
@@ -1245,7 +1245,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						power_manager_sleep_for(g_epaper_config.service_interval_seconds);
 						return true;
 				}
-				LOGI("Epaper", "Service: requesting next image");
+				LOGT("Epaper", "Service: requesting next image");
 		} else {
 				if (!epaper_frame_resolve_current_url()) {
 						LOGW("Epaper", "Refresh skipped: no carousel URL configured");
@@ -1258,8 +1258,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						power_manager_sleep_for(kDefaultCarouselDurationS);
 						return true;
 				}
-				LOGI("Epaper", "Carousel: using slot %u URL: %s",
-						g_epaper_carousel_index, g_epaper_config.epaper_frame_url);
+				LOGT("Epaper", "Carousel: using slot %u", g_epaper_carousel_index);
 		}
 		const uint8_t active_slot_index = g_epaper_carousel_index;
 
@@ -1294,7 +1293,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 		if (defer_ntp_resync) {
 			deferred_ntp_start_ms = millis();
 			epaper_frame_ntp_start();
-			LOGI("Epaper", "NTP deferred resync started after panel draw");
+			LOGT("Epaper", "NTP deferred resync started after panel draw");
 		}
 
 		// Carousel: advance index after refresh (on success or skip)
@@ -1305,7 +1304,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 						g_epaper_config.carousel_count,
 						g_epaper_config.carousel[g_epaper_carousel_index].stay);
 				g_epaper_carousel_index = next_idx;
-				LOGI("Epaper", "Carousel: advanced to slot %u", next_idx);
+				LOGT("Epaper", "Carousel: advanced to slot %u", next_idx);
 		}
 		epaper_frame_timing_last.crc_to_draw_ms = t_draw_done - t_wifi_done;
 		if (defer_ntp_resync) {
@@ -1316,7 +1315,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 			const bool synced = epaper_frame_ntp_stop();
 			const uint32_t elapsed_ms = millis() - deferred_ntp_start_ms;
 			if (synced) {
-				LOGI("Epaper", "NTP deferred resync completed in %ums", elapsed_ms);
+				LOGT("Epaper", "NTP deferred resync completed in %ums", elapsed_ms);
 			} else {
 				LOGW("Epaper", "NTP deferred resync incomplete after %ums", elapsed_ms);
 			}
@@ -1350,7 +1349,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 				g_epaper_config.carousel_count > 0) {
 				target_s = g_epaper_config.carousel[active_slot_index].interval_seconds;
 				if (target_s == 0) target_s = kDefaultCarouselDurationS;
-				LOGI("Epaper", "Using carousel slot %u duration: %u seconds", active_slot_index, target_s);
+				LOGT("Epaper", "Using carousel slot %u duration: %u seconds", active_slot_index, target_s);
 		}
 
 		uint32_t sleep_s = epaper_frame_timing_last.budget_cut != static_cast<uint8_t>(EpaperWakeBudgetCut::None)
@@ -1399,7 +1398,7 @@ static bool run_duty_cycle_hook(DeviceConfig *config) {
 #if HAS_MQTT
 static void mqtt_discovery_hook(MqttManager &mqtt, bool *skip_generic) {
 		if (epaper_frame_mqtt_discovery_already_published()) {
-				LOGI("MQTT", "Skipping discovery (e-paper RTC flag set; retained configs persist)");
+				LOGT("MQTT", "Skipping discovery (e-paper RTC flag set; retained configs persist)");
 				if (skip_generic) *skip_generic = true;
 				return;
 		}

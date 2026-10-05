@@ -78,7 +78,7 @@ bool FsIndexedStore::begin() {
             LOGE(TAG, "Failed to create directory %s", _base_path);
             return false;
         }
-        LOGI(TAG, "Created directory %s", _base_path);
+        LOGT(TAG, "Created directory %s", _base_path);
     }
 
     // Manifest loading is deferred to the first list()/get()/exists()/count() call.
@@ -201,7 +201,7 @@ bool FsIndexedStore::_write_manifest() {
 // ---------------------------------------------------------------------------
 
 void FsIndexedStore::_rebuild_manifest() {
-    LOGW(TAG, "Rebuilding manifest for %s", _base_path);
+    LOGD(TAG, "Rebuilding manifest for %s", _base_path);
 
     delete _manifest_doc;
     _manifest_doc = new BasicJsonDocument<PsramJsonAllocator>(MANIFEST_REBUILD_CAPACITY);
@@ -320,7 +320,7 @@ void FsIndexedStore::_ensure_loaded() {
     bool do_rebuild = false;
 
     if (!Storage.exists(path)) {
-        LOGW(TAG, "Manifest missing for %s \u2014 will rebuild", _base_path);
+        LOGD(TAG, "Manifest missing for %s \u2014 will rebuild", _base_path);
         do_rebuild = true;
     } else {
         File f = Storage.open(path, "r");
@@ -402,7 +402,7 @@ bool FsIndexedStore::add(const char* id, const String& json_content, const JsonO
         created_at = (uint32_t)time(nullptr);
         if (created_at < 1000000UL) created_at = (uint32_t)(millis() / 1000);
         auto_generated = true;
-        LOGW(TAG, "add(): auto-generated created_at=%u for id '%s'", created_at, id);
+        LOGT(TAG, "add(): auto-generated created_at=%u for id '%s'", created_at, id);
     }
 
     // Write data file atomically.
@@ -803,7 +803,7 @@ void FsIndexedStore::_inject_missing_root_fields() {
                 (*_manifest_doc)[rf.name] = rf.default_uint32;
                 break;
         }
-        LOGW(TAG, "Injected missing root field '%s' with default for %s",
+        LOGT(TAG, "Injected missing root field '%s' with default for %s",
              rf.name, _base_path);
         any_injected = true;
     }

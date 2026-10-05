@@ -23,7 +23,7 @@ AXS15231B_TouchDriver::~AXS15231B_TouchDriver() {
 }
 
 void AXS15231B_TouchDriver::init() {
-		LOGI("AXS15231B", "Initializing I2C touch controller");
+		LOGT("AXS15231B", "Initializing I2C touch controller");
 		
 		#ifdef TOUCH_I2C_SCL
 		// Create touch instance with I2C pins and interrupt

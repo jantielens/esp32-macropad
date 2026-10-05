@@ -442,7 +442,7 @@ void setup()
 
 	// Re-apply brightness from loaded config (display was initialized before config load)
 	#if HAS_DISPLAY && HAS_BACKLIGHT
-	LOGI("Main", "Applying loaded brightness: %d%%", device_config.backlight_brightness);
+	LOGT("Main", "Applying loaded brightness: %d%%", device_config.backlight_brightness);
 	display_manager_set_backlight_brightness(device_config.backlight_brightness);
 	#endif
 

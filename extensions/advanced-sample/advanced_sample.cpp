@@ -96,7 +96,6 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     SampleState* state = get_state(host, extension_context);
     InstanceState* instance = state ? create_instance(state, instance_id) : nullptr;
     if (!instance) return false;
-    host->core->log(NATIVE_EXTENSION_LOG_INFO, "advanced sample created");
     set_advanced_label(host, instance, root);
     return instance->cpu_label != nullptr;
 }
@@ -106,7 +105,6 @@ extern "C" void native_extension_destroy_instance(const NativeExtensionHostApi* 
     SampleState* state = host ? static_cast<SampleState*>(host->core->context_get_data(extension_context)) : nullptr;
     // LVGL deletes the child panel with the root; discard only our reference.
     if (InstanceState* instance = state ? find_instance(state, instance_id) : nullptr) *instance = {};
-    if (host && host->core) host->core->log(NATIVE_EXTENSION_LOG_INFO, "advanced sample destroyed");
 }
 
 extern "C" void native_extension_shutdown(const NativeExtensionHostApi* host,
@@ -116,7 +114,6 @@ extern "C" void native_extension_shutdown(const NativeExtensionHostApi* host,
     // Shutdown follows worker join, so it is safe to release package state.
     if (state) host->core->free(state);
     host->core->context_set_data(extension_context, nullptr);
-    host->core->log(NATIVE_EXTENSION_LOG_INFO, "advanced sample shutdown");
 }
 
 extern "C" void native_extension_tick(const NativeExtensionHostApi* host,
@@ -144,7 +141,6 @@ extern "C" NativeExtensionEventResult native_extension_on_tap(const NativeExtens
                                                                 void* extension_context, uint32_t instance_id) {
     (void)extension_context;
     (void)instance_id;
-    if (host && host->core) host->core->log(NATIVE_EXTENSION_LOG_INFO, "advanced sample handled tap");
     if (host && host->core) host->core->notify("Advanced sample tap handled");
     // HANDLED suppresses the host button's ordinary tap action list.
     return NATIVE_EXTENSION_HANDLED;
@@ -152,9 +148,9 @@ extern "C" NativeExtensionEventResult native_extension_on_tap(const NativeExtens
 
 extern "C" NativeExtensionEventResult native_extension_on_long_press(const NativeExtensionHostApi* host,
                                                                        void* extension_context, uint32_t instance_id) {
+    (void)host;
     (void)extension_context;
     (void)instance_id;
-    if (host && host->core) host->core->log(NATIVE_EXTENSION_LOG_INFO, "advanced sample passed through long press");
     // PASS_THROUGH leaves ordinary button long-press actions active.
     return NATIVE_EXTENSION_PASS_THROUGH;
 }

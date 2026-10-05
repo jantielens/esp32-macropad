@@ -2,6 +2,8 @@ include(FetchContent)
 include(GoogleTest)
 include(CMakeParseArguments)
 
+add_test(NAME test_log_manager COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager.py)
+
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     googletest
@@ -344,6 +346,7 @@ add_host_legacy_test(test_timer_format SOURCES test_timer_format.cpp stubs.cpp I
 add_host_legacy_test(test_shutter_curtain_stats SOURCES test_shutter_curtain_stats.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester LIBRARIES m)
 add_host_legacy_test(test_shutter_capture SOURCES test_shutter_capture.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_shutter_measure SOURCES test_shutter_measure.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
+add_host_legacy_test(test_shutter_measure_no_csv SOURCES test_shutter_measure.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true LOG_SHUTTER_CSV=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
 add_host_legacy_test(test_shutter_binding SOURCES test_shutter_binding.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS HAS_DISPLAY=true IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
 add_host_legacy_test(test_shutter_session SOURCES test_shutter_session.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_session.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_SHUTTER_TESTER=true OPTIONS -Wno-deprecated-declarations PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
 add_host_legacy_test(test_shutter_session_actions

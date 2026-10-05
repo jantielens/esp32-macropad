@@ -95,6 +95,9 @@ private:
 
 		unsigned long _last_reconnect_attempt_ms = 0;
 		unsigned long _last_health_publish_ms = 0;
+		unsigned long _last_health_attempt_ms = 0;
+		bool _health_attempted = false;
+		uint32_t _health_publish_failures = 0;
 };
 
 // Global instance (defined in app.ino)

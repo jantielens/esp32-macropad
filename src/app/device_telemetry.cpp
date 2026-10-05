@@ -214,7 +214,7 @@ void device_telemetry_cache_rssi() {
 	if (wifi_diagnostics.associated) {
 		s_cached_rssi = wifi_diagnostics.rssi;
 		s_rssi_valid  = true;
-		LOGI("Telemetry", "Cached WiFi RSSI: %d dBm", (int)s_cached_rssi);
+		LOGT("Telemetry", "Cached WiFi RSSI: %d dBm", (int)s_cached_rssi);
 	}
 }
 
@@ -251,6 +251,7 @@ static constexpr uint32_t kHealthWindowSamplePeriodMs = HEALTH_WINDOW_SAMPLE_PER
 static constexpr uint32_t kInternalPoolWalkPeriodMs = TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS;
 
 static size_t g_cached_internal_largest = 0;
+static size_t g_cached_internal_free = 0;
 static size_t g_cached_dma_internal_largest = 0;
 static bool g_cached_internal_largest_valid = false;
 static uint32_t g_last_internal_pool_walk_ms = 0;
@@ -345,9 +346,11 @@ static void sample_internal_largest_if_due(uint32_t now_ms) {
 
 		// The timer daemon performs the walks; request handlers read only these copies.
 		const size_t internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+		const size_t internal_free = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 		const size_t dma_internal_largest = heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 		portENTER_CRITICAL(&g_health_window_mux);
 		g_cached_internal_largest = internal_largest;
+		g_cached_internal_free = internal_free;
 		g_cached_dma_internal_largest = dma_internal_largest;
 		g_cached_internal_largest_valid = true;
 		g_last_internal_pool_walk_ms = now_ms;
@@ -554,33 +557,57 @@ void device_telemetry_log_memory_snapshot(const char *tag) {
 				&psram_largest
 		);
 
-		// Keep this line short to avoid fixed log buffers truncating the output.
-		// Keys:
-		// hf=heap_free hm=heap_min hl=heap_largest hi=internal_free hin=internal_min
-		// pf=psram_free pm=psram_min pl=psram_largest
-		// frag=heap fragmentation percent (based on hl/hf)
-
-		unsigned frag_percent = 0;
-		if (heap_free > 0) {
-				float fragmentation = (1.0f - ((float)heap_largest / (float)heap_free)) * 100.0f;
-				if (fragmentation < 0) fragmentation = 0;
-				if (fragmentation > 100) fragmentation = 100;
-				frag_percent = (unsigned)fragmentation;
+		char heap_details[112];
+#if TELEMETRY_CACHE_INTERNAL_POOL_WALK
+		size_t sampled_free = 0;
+		size_t sampled_largest = 0;
+		uint32_t sampled_at = 0;
+		bool sampled = false;
+		portENTER_CRITICAL(&g_health_window_mux);
+		sampled = g_cached_internal_largest_valid;
+		sampled_free = g_cached_internal_free;
+		sampled_largest = g_cached_internal_largest;
+		sampled_at = g_last_internal_pool_walk_ms;
+		portEXIT_CRITICAL(&g_health_window_mux);
+		if (sampled) {
+				const uint32_t sample_age_ms = (uint32_t)millis() - sampled_at;
+				char fragmentation[5] = "na";
+				if (sample_age_ms <= kInternalPoolWalkPeriodMs && sampled_free > 0 &&
+				    sampled_largest > 0 && sampled_largest <= sampled_free) {
+						snprintf(fragmentation, sizeof(fragmentation), "%d",
+						         compute_fragmentation_percent(sampled_free, sampled_largest));
+				}
+				snprintf(heap_details, sizeof(heap_details),
+				         "hl_sample=%u hf_sample=%u frag_sample=%s pool_age_ms=%lu",
+				         (unsigned)sampled_largest, (unsigned)sampled_free, fragmentation,
+				         (unsigned long)sample_age_ms);
+		} else {
+				strlcpy(heap_details, "hl_sample=na hf_sample=na frag_sample=na pool_age_ms=na", sizeof(heap_details));
 		}
+#else
+		if (heap_free > 0 && heap_largest > 0 && heap_largest <= heap_free) {
+				snprintf(heap_details, sizeof(heap_details), "hl=%u frag=%d", (unsigned)heap_largest,
+				         compute_fragmentation_percent(heap_free, heap_largest));
+		} else {
+				strlcpy(heap_details, "hl=na frag=na", sizeof(heap_details));
+		}
+#endif
+		char psram_details[16] = "na";
+		if (psram_largest > 0 && psram_largest <= psram_free)
+				snprintf(psram_details, sizeof(psram_details), "%u", (unsigned)psram_largest);
 
 		LOGI(
 				"Mem",
-				"%s hf=%u hm=%u hl=%u hi=%u hin=%u frag=%u pf=%u pm=%u pl=%u",
+				"%s hf=%u hm=%u %s hi=%u hin=%u pf=%u pm=%u pl=%s",
 				tag ? tag : "(null)",
 				(unsigned)heap_free,
 				(unsigned)heap_min,
-				(unsigned)heap_largest,
+				heap_details,
 				(unsigned)internal_free,
 				(unsigned)internal_min,
-				(unsigned)frag_percent,
 				(unsigned)psram_free,
 				(unsigned)psram_min,
-				(unsigned)psram_largest
+				psram_details
 		);
 }
 

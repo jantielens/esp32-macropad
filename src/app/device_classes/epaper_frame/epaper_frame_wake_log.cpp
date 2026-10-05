@@ -111,7 +111,7 @@ void epaper_frame_wake_log_append(const EpaperWakeRecord& record) {
 			LOGW("EpaperLog", "Wake log append failed after %lums", (unsigned long)(millis() - started_ms));
 			return;
 		}
-		LOGI("EpaperLog", "Wake log appended in %lums", (unsigned long)(millis() - started_ms));
+		LOGT("EpaperLog", "Wake log appended in %lums", (unsigned long)(millis() - started_ms));
 }
 
 bool epaper_frame_wake_log_clear() {

@@ -431,7 +431,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (track_cross < 4) track_cross = 4;
     int16_t group_cross = (int16_t)(n * col_cross + (n - 1) * COL_GAP);
 
-    LOGD(TAG, "Layout: rect=%dx%d content_h=%d bar_top=%d fill_len=%d col_cross=%d track_cross=%d bars=%d horiz=%d",
+    LOGT(TAG, "Layout: rect=%dx%d content_h=%d bar_top=%d fill_len=%d col_cross=%d track_cross=%d bars=%d horiz=%d",
          rect->w, rect->h, content_h, bar_top, fill_len, col_cross, track_cross, n, cfg->horizontal);
 
     lv_color_t bg_clr = resolve_lv_color(cfg->bar_bg_color, 0x1A1A1A);

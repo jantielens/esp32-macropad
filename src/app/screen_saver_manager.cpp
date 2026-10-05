@@ -377,7 +377,7 @@ static void handle_pending_requests() {
 						}
 				}
 
-				LOGI("SAVER", "Wake: from=%u setup=%lums fade=%ums shift=%d,%d", unsigned(wake_from),
+				LOGT("SAVER", "Wake: from=%u setup=%lums fade=%ums shift=%d,%d", unsigned(wake_from),
 						(unsigned long)(millis() - g_wake_started_ms), unsigned(fade_in_ms()), dx, dy);
 				start_fade(ScreenSaverState::FadingIn, from, target, fade_in_ms());
 		}
@@ -488,7 +488,7 @@ static void poll_touch_activity() {
 
 		if (pressedEdge) {
 				// Touch press = activity + wake.
-				LOGI("SAVER", "Touch wake: state=%u idle=%u", unsigned(g_state.load()), unsigned(g_idle_screen_active));
+				LOGT("SAVER", "Touch wake: state=%u idle=%u", unsigned(g_state.load()), unsigned(g_idle_screen_active));
 				request_activity(true);
 		}
 }
@@ -565,7 +565,7 @@ void screen_saver_manager_loop() {
 		const bool force = (g_state != ScreenSaverState::Awake || g_idle_screen_active);
 		if (force != prev_force) {
 				touch_manager_set_lvgl_force_released(force);
-				LOGI("SAVER", "Touch suppress %s", force ? "ON" : "OFF");
+				LOGT("SAVER", "Touch suppress %s", force ? "ON" : "OFF");
 				prev_force = force;
 		}
 		#endif

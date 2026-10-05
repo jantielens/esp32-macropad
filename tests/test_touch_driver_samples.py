@@ -22,6 +22,7 @@ arduino = r'''
 #define IRAM_ATTR
 #define FALLING 1
 #define LOGI(...) ((void)0)
+#define LOGT(...) ((void)0)
 #define LOGW(...) ((void)0)
 #define LOGE(...) ((void)0)
 static void (*mock_irq)() = nullptr;

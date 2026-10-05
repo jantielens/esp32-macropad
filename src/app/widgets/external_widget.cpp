@@ -11,7 +11,7 @@
 #include <string.h>
 
 static constexpr uint32_t kSlowExtensionWarningIntervalMs = 60000;
-static constexpr uint16_t kStoppingRetryIntervalMs = NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS;
+static constexpr uint16_t kStoppingRetryIntervalMs = 250;
 
 struct ExternalWidgetState {
     lv_obj_t* root;
@@ -22,6 +22,10 @@ struct ExternalWidgetState {
     const ExternalWidgetConfig* config;
     bool created;
     bool retry_after_stop;
+    bool slow_warning_emitted;
+    uint32_t last_slow_warning_ms;
+    uint32_t slow_ticks;
+    uint32_t worst_tick_ms;
 };
 
 static_assert(sizeof(ExternalWidgetState) <= WIDGET_STATE_MAX_BYTES,
@@ -83,13 +87,20 @@ static void external_timer_cb(lv_timer_t* timer) {
     native_extension_tick_instance(external->config->extension_id, external->instance_id);
     const uint32_t elapsed_ms = millis() - started_ms;
     device_telemetry_mark_lvgl_extension_tick_complete(elapsed_ms);
-    static uint32_t last_slow_warning_ms = 0;
-    if (elapsed_ms > DEVICE_TELEMETRY_SLOW_EXTENSION_TICK_MS &&
-        started_ms - last_slow_warning_ms >= kSlowExtensionWarningIntervalMs) {
-        LOGW("EXT", "slow tick id=%s instance=%08lx elapsed_ms=%lu",
+    if (elapsed_ms > DEVICE_TELEMETRY_SLOW_EXTENSION_TICK_MS) {
+        ++external->slow_ticks;
+        if (elapsed_ms > external->worst_tick_ms) external->worst_tick_ms = elapsed_ms;
+    }
+    if (external->slow_ticks && (!external->slow_warning_emitted ||
+        started_ms - external->last_slow_warning_ms >= kSlowExtensionWarningIntervalMs)) {
+        LOGW("EXT", "Slow ticks: id=%s instance=%08lx count=%lu worst=%lums visible=%u",
                 external->config->extension_id, static_cast<unsigned long>(external->instance_id),
-                static_cast<unsigned long>(elapsed_ms));
-        last_slow_warning_ms = started_ms;
+                static_cast<unsigned long>(external->slow_ticks), static_cast<unsigned long>(external->worst_tick_ms),
+                unsigned(lv_obj_is_visible(external->root)));
+        external->slow_warning_emitted = true;
+        external->last_slow_warning_ms = started_ms;
+        external->slow_ticks = 0;
+        external->worst_tick_ms = 0;
     }
 }
 
@@ -143,7 +154,7 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
                                                   button->pad_bindings, button->pad_binding_count);
     native_extension_set_instance_button_context(config->extension_id, external->instance_id, tile,
                                                  button->label_top, button->label_center, button->label_bottom);
-        LOGI("EXT", "create id=%s instance=%08lx root=%dx%d rect=%ux%u",
+        LOGT("EXT", "create id=%s instance=%08lx root=%dx%d rect=%ux%u",
             config->extension_id, static_cast<unsigned long>(external->instance_id),
             lv_obj_get_width(external->root), lv_obj_get_height(external->root), rect->w, rect->h);
     external->status_label = lv_label_create(tile);

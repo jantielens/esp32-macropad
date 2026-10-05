@@ -30,7 +30,7 @@ static void gamepad_button_cancel(GamepadButtonState* state, const char* reason,
                                  lv_event_code_t feedback = LV_EVENT_PRESS_LOST) {
     const bool was_held = state->touch.owner != 0;
     if (state->touch.owner) {
-        LOGI("GamepadButton", "Release owner=%lu generation=%lu reason=%s",
+        LOGT("GamepadButton", "Release owner=%lu generation=%lu reason=%s",
              (unsigned long)state->touch.owner, (unsigned long)state->touch.generation, reason);
     }
     state->touch.cancel();
@@ -55,7 +55,7 @@ static void gamepad_button_point(void* context, GamepadTouchEvent requested, con
         } else {
             lv_obj_add_state(state->button, LV_STATE_PRESSED);
             lv_event_code_t feedback = LV_EVENT_PRESSED;
-            LOGI("GamepadButton", "Captured control=%u index=%u owner=%lu generation=%lu",
+            LOGT("GamepadButton", "Captured control=%u index=%u owner=%lu generation=%lu",
                  unsigned(state->control.kind), unsigned(state->control.index),
                  (unsigned long)state->touch.owner, (unsigned long)state->touch.generation);
               lv_obj_send_event(state->button, LV_EVENT_VALUE_CHANGED, &feedback);
@@ -84,7 +84,7 @@ static void gamepad_button_create(lv_obj_t* button, const WidgetConfig*,
         held->configured = held->control.mask() != 0;
     }
     held->touch.attach(button, gamepad_button_event, held, gamepad_button_point);
-        LOGI("GamepadButton", "Created configured=%u control=%u index=%u ready=%u",
+        LOGT("GamepadButton", "Created configured=%u control=%u index=%u ready=%u",
             unsigned(held->configured), unsigned(held->control.kind), unsigned(held->control.index), unsigned(gamepad_hid_is_ready()));
 }
 static void gamepad_button_update(lv_obj_t*, const WidgetConfig*, WidgetState*, const char*) {}

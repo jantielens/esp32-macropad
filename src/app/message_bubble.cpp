@@ -199,7 +199,7 @@ static void create_bubble(const MessageBubbleParams* p) {
         lv_timer_set_repeat_count(s_dismiss_timer, 1);
     }
 
-    LOGI(TAG, "Show: '%s' dur=%u loc=%u", p->text, p->duration_ms, p->location);
+    LOGI(TAG, "Show: bytes=%u dur=%u loc=%u", unsigned(strlen(p->text)), p->duration_ms, p->location);
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ void* config_psram_alloc(size_t bytes, const char* tag) {
     if (psramFound()) {
         ptr = heap_caps_calloc(1, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (ptr) {
-            LOGI(TAG, "%s config: allocated %u bytes in PSRAM", tag, (unsigned)bytes);
+            LOGT(TAG, "%s config: allocated %u bytes in PSRAM", tag, (unsigned)bytes);
             return ptr;
         }
         LOGW(TAG, "%s config: PSRAM allocation failed, trying internal SRAM", tag);
@@ -23,7 +23,7 @@ void* config_psram_alloc(size_t bytes, const char* tag) {
     // Fallback to internal SRAM
     ptr = calloc(1, bytes);
     if (ptr) {
-        LOGI(TAG, "%s config: allocated %u bytes in SRAM (PSRAM %s)",
+        LOGT(TAG, "%s config: allocated %u bytes in SRAM (PSRAM %s)",
              tag, (unsigned)bytes, psramFound() ? "exhausted" : "unavailable");
         return ptr;
     }

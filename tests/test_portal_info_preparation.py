@@ -37,6 +37,7 @@ void* heap_caps_malloc(size_t size, uint32_t) {
 void heap_caps_free(void* pointer) { free(pointer); }
 bool psramFound() { return false; }
 #define LOGD(...) ((void)0)
+#define LOGT(...) ((void)0)
 #define LOGI(...) ((void)0)
 #define LOGW(...) ((void)0)
 #define LOGE(...) ((void)0)

@@ -40,7 +40,7 @@ static ActionResult strip_dispatch(const ButtonAction& act, const char* label,
         LOGW(TAG, "%s strip: empty command", label);
         return ACTION_COMPLETE;
     }
-    LOGI(TAG, "%s strip: %s %s", label, p.command, p.value);
+    LOGT(TAG, "%s strip: %s %s", label, p.command, p.value);
     test_strip_dispatch(p.command, p.value);
     return ACTION_COMPLETE;
 }

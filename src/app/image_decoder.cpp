@@ -112,11 +112,11 @@ static bool hw_decode_jpeg(
     int aw = (int)info.width;
     int ah = (int)info.height;
     if (aw <= 0 || ah <= 0 || aw > 4096 || ah > 4096) {
-        LOGD(TAG, "HW JPEG: unsupported header (%dx%d), using SW decoder", aw, ah);
+        LOGT(TAG, "HW JPEG: unsupported header (%dx%d), using SW decoder", aw, ah);
         return false;
     }
     if (info.sample_method == JPEG_DOWN_SAMPLING_GRAY) {
-        LOGD(TAG, "HW JPEG: grayscale unsupported, using SW decoder");
+        LOGT(TAG, "HW JPEG: grayscale unsupported, using SW decoder");
         return false;
     }
 
@@ -217,7 +217,7 @@ static bool ppa_cover_scale(
         break;
     }
     if (!found_m) {
-        LOGD(TAG, "PPA cover: no exact m for %dx%d→%dx%d, SW fallback",
+        LOGT(TAG, "PPA cover: no exact m for %dx%d→%dx%d, SW fallback",
              src_w, src_h, target_w, target_h);
         return false;
     }
@@ -286,7 +286,7 @@ static bool ppa_letterbox_scale(
         break;
     }
     if (!found_m) {
-        LOGD(TAG, "PPA letterbox: no valid m for %dx%d→%dx%d, SW fallback",
+        LOGT(TAG, "PPA letterbox: no valid m for %dx%d→%dx%d, SW fallback",
              src_w, src_h, target_w, target_h);
         return false;
     }
@@ -975,7 +975,7 @@ bool image_decode_to_rgb565(
             if (out_size)   *out_size   = out_bytes;
             return true;
         }
-        LOGD(TAG, "JPEG HW path failed, using SW fallback");
+        LOGT(TAG, "JPEG software fallback selected");
 #endif
         uint8_t* rgb888 = nullptr;
         int src_w = 0, src_h = 0;

@@ -114,6 +114,41 @@ bool* s_create_allocation_failed = nullptr;
 portMUX_TYPE s_worker_lock = portMUX_INITIALIZER_UNLOCKED;
 TaskHandle_t s_lvgl_task = nullptr;
 
+struct ExtensionLogContext {
+    TaskHandle_t task;
+    char id[sizeof(s_slots[0].info.id)];
+    uint32_t instance_id;
+};
+ExtensionLogContext s_log_contexts[NATIVE_EXTENSION_SLOT_COUNT + 2] = {};
+
+class ExtensionLogScope {
+public:
+    ExtensionLogScope(const char* id, uint32_t instance_id) {
+        const TaskHandle_t task = xTaskGetCurrentTaskHandle();
+        portENTER_CRITICAL(&s_worker_lock);
+        for (size_t index = 0; index < NATIVE_EXTENSION_SLOT_COUNT + 2; ++index) {
+            if (s_log_contexts[index].task == task) { position = index; break; }
+            if (!s_log_contexts[index].task) position = index;
+        }
+        if (position < NATIVE_EXTENSION_SLOT_COUNT + 2) {
+            previous = s_log_contexts[position];
+            auto& context = s_log_contexts[position];
+            context.task = task;
+            strlcpy(context.id, id ? id : "unknown", sizeof(context.id));
+            context.instance_id = instance_id;
+        }
+        portEXIT_CRITICAL(&s_worker_lock);
+    }
+    ~ExtensionLogScope() {
+        portENTER_CRITICAL(&s_worker_lock);
+        if (position < NATIVE_EXTENSION_SLOT_COUNT + 2) s_log_contexts[position] = previous;
+        portEXIT_CRITICAL(&s_worker_lock);
+    }
+private:
+    size_t position = NATIVE_EXTENSION_SLOT_COUNT + 2;
+    ExtensionLogContext previous = {};
+};
+
 CanvasBuffer* find_canvas_buffer(void* canvas) {
     for (auto& entry : s_canvas_buffers) if (entry.canvas == canvas) return &entry;
     return nullptr;
@@ -191,9 +226,17 @@ lv_color_t host_color(uint32_t rgb) { return lv_color_hex(rgb & 0xFFFFFF); }
 uint32_t host_millis() { return millis(); }
 void host_delay_ms(uint32_t delay_ms) { vTaskDelay(pdMS_TO_TICKS(delay_ms)); }
 void host_log(NativeExtensionLogLevel level, const char* message) {
-    if (level == NATIVE_EXTENSION_LOG_ERROR) LOGE(TAG, "Extension: %s", message ? message : "");
-    else if (level == NATIVE_EXTENSION_LOG_WARN) LOGW(TAG, "Extension: %s", message ? message : "");
-    else LOGI(TAG, "Extension: %s", message ? message : "");
+    ExtensionLogContext context = {};
+    const TaskHandle_t task = xTaskGetCurrentTaskHandle();
+    portENTER_CRITICAL(&s_worker_lock);
+    for (const auto& candidate : s_log_contexts) {
+        if (candidate.task == task) { context = candidate; break; }
+    }
+    portEXIT_CRITICAL(&s_worker_lock);
+    const char* id = context.id[0] ? context.id : "unknown";
+    if (level == NATIVE_EXTENSION_LOG_ERROR) LOGE(TAG, "%s[%08lx]: %s", id, (unsigned long)context.instance_id, message ? message : "");
+    else if (level == NATIVE_EXTENSION_LOG_WARN) LOGW(TAG, "%s[%08lx]: %s", id, (unsigned long)context.instance_id, message ? message : "");
+    else LOGI(TAG, "%s[%08lx]: %s", id, (unsigned long)context.instance_id, message ? message : "");
 }
 void* host_alloc(size_t size) {
     if (size == 0) return nullptr;
@@ -296,7 +339,10 @@ void extension_worker_entry(void* raw_slot) {
     entry = slot->worker_entry;
     context = slot->worker_context;
     portEXIT_CRITICAL(&s_worker_lock);
-    if (entry) entry(context);
+    {
+        ExtensionLogScope log_scope(slot->info.id, 0);
+        if (entry) entry(context);
+    }
     portENTER_CRITICAL(&s_worker_lock);
     slot->worker_completed = true;
     portEXIT_CRITICAL(&s_worker_lock);
@@ -1072,7 +1118,8 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     strlcpy(loaded.info.id, header.id, sizeof(loaded.info.id)); strlcpy(loaded.info.version, header.version, sizeof(loaded.info.version));
     strlcpy(loaded.info.target_abi, header.target_abi, sizeof(loaded.info.target_abi));
     strlcpy(loaded.info.title, header.title, sizeof(loaded.info.title));
-        LOGI(TAG, "Loaded slot %u: %s@%s map=%p create=%p", slot, header.id, header.version,
+        LOGI(TAG, "Loaded slot %u: %s@%s", slot, header.id, header.version);
+        LOGT(TAG, "Slot %u map=%p create=%p", slot,
             mapping, reinterpret_cast<void*>(create));
     return true;
 }
@@ -1269,6 +1316,7 @@ bool native_extension_create_instance(const char* id, uint32_t instance_id, void
     LoadedSlot* slot = loaded_by_id(id);
     if (!slot || !root) { LOGW(TAG, "Create unavailable: %s", id ? id : ""); return false; }
     bool unavailable = false;
+    bool join_failed = false;
     portENTER_CRITICAL(&s_worker_lock);
     // Pad config saves rebuild widgets synchronously. A package without a
     // worker does not need the deferred main-loop shutdown between instances.
@@ -1278,14 +1326,17 @@ bool native_extension_create_instance(const char* id, uint32_t instance_id, void
         slot->worker_completed = false;
     }
     unavailable = slot->worker_join_pending || slot->worker_join_failed;
+    join_failed = slot->worker_join_failed;
     portEXIT_CRITICAL(&s_worker_lock);
     if (unavailable) {
-        LOGW(TAG, "Create unavailable while worker stops: %s", id ? id : "");
+        if (join_failed) LOGE(TAG, "Create unavailable after worker stop failed: %s", id ? id : "");
+        else LOGT(TAG, "Create deferred while worker stops: %s", id ? id : "");
         return false;
     }
     s_lvgl_task = xTaskGetCurrentTaskHandle();
-    LOGI(TAG, "Create %s instance=%08lx", id, static_cast<unsigned long>(instance_id));
+    LOGT(TAG, "Create %s instance=%08lx", id, static_cast<unsigned long>(instance_id));
     s_create_allocation_failed = allocation_failed;
+    ExtensionLogScope log_scope(id, instance_id);
     const bool created = slot->create(&HOST_API, slot, instance_id, root, config ? config : "");
     s_create_allocation_failed = nullptr;
     if (!created) return false;
@@ -1344,6 +1395,7 @@ uint16_t native_extension_tick_interval_ms(const char* id) {
 }
 void native_extension_destroy_instance(const char* id, uint32_t instance_id) {
     if (LoadedSlot* slot = loaded_by_id(id)) {
+        ExtensionLogScope log_scope(id, instance_id);
         slot->destroy(&HOST_API, slot, instance_id);
         if (slot->active_instances) --slot->active_instances;
         if (!slot->active_instances) request_worker_stop(slot);
@@ -1352,20 +1404,23 @@ void native_extension_destroy_instance(const char* id, uint32_t instance_id) {
 NativeExtensionEventResult native_extension_on_tap(const char* id, uint32_t instance_id) {
     LoadedSlot* slot = loaded_by_id(id);
     s_lvgl_task = xTaskGetCurrentTaskHandle();
+    ExtensionLogScope log_scope(id, instance_id);
     const NativeExtensionEventResult result = (slot && slot->tap) ? slot->tap(&HOST_API, slot, instance_id) : NATIVE_EXTENSION_PASS_THROUGH;
-    LOGI(TAG, "Tap %s instance=%08lx: %s", id ? id : "", static_cast<unsigned long>(instance_id), result == NATIVE_EXTENSION_HANDLED ? "handled" : "pass-through");
+    LOGT(TAG, "Tap %s instance=%08lx: %s", id ? id : "", static_cast<unsigned long>(instance_id), result == NATIVE_EXTENSION_HANDLED ? "handled" : "pass-through");
     return result;
 }
 NativeExtensionEventResult native_extension_on_long_press(const char* id, uint32_t instance_id) {
     LoadedSlot* slot = loaded_by_id(id);
     s_lvgl_task = xTaskGetCurrentTaskHandle();
+    ExtensionLogScope log_scope(id, instance_id);
     const NativeExtensionEventResult result = (slot && slot->long_press) ? slot->long_press(&HOST_API, slot, instance_id) : NATIVE_EXTENSION_PASS_THROUGH;
-    LOGI(TAG, "Long press %s instance=%08lx: %s", id ? id : "", static_cast<unsigned long>(instance_id), result == NATIVE_EXTENSION_HANDLED ? "handled" : "pass-through");
+    LOGT(TAG, "Long press %s instance=%08lx: %s", id ? id : "", static_cast<unsigned long>(instance_id), result == NATIVE_EXTENSION_HANDLED ? "handled" : "pass-through");
     return result;
 }
 void native_extension_tick_instance(const char* id, uint32_t instance_id) {
     if (LoadedSlot* slot = loaded_by_id(id); slot && slot->tick) {
         s_lvgl_task = xTaskGetCurrentTaskHandle();
+        ExtensionLogScope log_scope(id, instance_id);
         slot->tick(&HOST_API, slot, instance_id);
     }
 }
@@ -1380,6 +1435,7 @@ void native_extension_loop() {
         cancelled_at = slot.worker_cancelled_at_ms;
         portEXIT_CRITICAL(&s_worker_lock);
         if (completed) {
+            ExtensionLogScope log_scope(slot.info.id, 0);
             slot.shutdown(&HOST_API, &slot);
             portENTER_CRITICAL(&s_worker_lock);
             slot.worker_task = nullptr;

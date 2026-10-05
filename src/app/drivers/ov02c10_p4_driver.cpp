@@ -216,7 +216,7 @@ static void camera_log_output_size() {
     const uint16_t width = (uint16_t)(w_high << 8 | w_low);
     const uint16_t height = (uint16_t)(h_high << 8 | h_low);
     const uint32_t stride = (uint32_t)width * 10 / 8;
-    LOGI("Camera", "Sensor output: %ux%u (expected %ux%u), line %u bytes, 4-byte aligned: %s",
+    LOGT("Camera", "Sensor output: %ux%u (expected %ux%u), line %u bytes, 4-byte aligned: %s",
          width, height, CAMERA_CAPTURE_WIDTH, CAMERA_CAPTURE_HEIGHT,
          (unsigned)stride, (stride % 4 == 0) ? "yes" : "NO");
 }
@@ -259,7 +259,7 @@ static bool camera_set_streaming(bool enabled, TickType_t lock_timeout = pdMS_TO
     i2c_bus_unlock();
 
     if (read_back) {
-        LOGI("Camera", "Stream %s: 0x0100=0x%02X 0x4800=0x%02X",
+        LOGT("Camera", "Stream %s: 0x0100=0x%02X 0x4800=0x%02X",
              enabled ? "on" : "off", stream_mode, mipi_control);
     }
     return read_back;
@@ -293,15 +293,15 @@ static void camera_log_csi_errors() {
     const uint32_t ecc_corrected = MIPI_CSI_HOST.int_st_ecc_corrected.val;
     const uint32_t stopstate = MIPI_CSI_HOST.phy_stopstate.val;
 
-    LOGW("Camera", "CSI host status: main=0x%08X stopstate=0x%08X",
+    LOGT("Camera", "CSI host status: main=0x%08X stopstate=0x%08X",
          static_cast<unsigned>(main_status), static_cast<unsigned>(stopstate));
-    LOGW("Camera", "CSI errors: phy_fatal=0x%08X pkt_fatal=0x%08X phy=0x%08X",
+    LOGT("Camera", "CSI errors: phy_fatal=0x%08X pkt_fatal=0x%08X phy=0x%08X",
          static_cast<unsigned>(phy_fatal), static_cast<unsigned>(pkt_fatal),
          static_cast<unsigned>(phy));
-    LOGW("Camera", "CSI frame errors: bndry=0x%08X seq=0x%08X crc=0x%08X pld_crc=0x%08X",
+    LOGT("Camera", "CSI frame errors: bndry=0x%08X seq=0x%08X crc=0x%08X pld_crc=0x%08X",
          static_cast<unsigned>(bndry_frame), static_cast<unsigned>(seq_frame),
          static_cast<unsigned>(crc_frame), static_cast<unsigned>(pld_crc));
-    LOGW("Camera", "CSI packet errors: data_id=0x%08X ecc_corrected=0x%08X",
+    LOGT("Camera", "CSI packet errors: data_id=0x%08X ecc_corrected=0x%08X",
          static_cast<unsigned>(data_id), static_cast<unsigned>(ecc_corrected));
 }
 
@@ -459,16 +459,28 @@ static bool camera_driver_capture_raw_into(CameraRawFrame* frame, bool retain_bu
         }
     }
     s_csi_context.capture_armed = false;
+    static uint32_t failed_captures = 0;
+    static uint32_t last_error_log_ms = 0;
+    static esp_err_t last_capture_error = ESP_OK;
     if (error != ESP_OK) {
         if (frame && !retain_buffer_on_failure) camera_driver_release_raw(frame);
-        LOGW("Camera", "RAW10 frame capture failed: %s (requests=%u completed=%u bytes=%u)",
-             esp_err_to_name(error), static_cast<unsigned>(s_csi_context.transaction_requests),
-             static_cast<unsigned>(s_csi_context.completed_transactions),
-             static_cast<unsigned>(s_csi_context.received_size));
-        camera_log_csi_errors();
+        const uint32_t now_ms = millis();
+        ++failed_captures;
+        if (failed_captures == 1 || error != last_capture_error || now_ms - last_error_log_ms >= 30000) {
+              LOGW("Camera", "RAW10 capture failed: %s attempts=%lu requests=%u completed=%u bytes=%u",
+                  esp_err_to_name(error), (unsigned long)failed_captures,
+                  static_cast<unsigned>(s_csi_context.transaction_requests),
+                  static_cast<unsigned>(s_csi_context.completed_transactions),
+                  static_cast<unsigned>(s_csi_context.received_size));
+              camera_log_csi_errors();
+              last_error_log_ms = now_ms;
+        }
+        last_capture_error = error;
         return false;
     }
-
+    if (failed_captures) LOGT("Camera", "Capture resumed after %lu failed attempts", (unsigned long)failed_captures);
+    failed_captures = 0;
+    last_capture_error = ESP_OK;
     return true;
 }
 
@@ -776,7 +788,7 @@ void camera_driver_init() {
 bool camera_driver_deinit() {
     if (s_camera_streaming) {
         if (!camera_set_streaming(false, 0)) {
-            LOGD("Camera", "Deferring idle cleanup: I2C bus busy");
+            LOGT("Camera", "Deferring idle cleanup: I2C bus busy");
             return false;
         }
         s_camera_streaming = false;

@@ -200,7 +200,7 @@ EpaperRefreshSettings config_manager_get_epaper_refresh_settings() {
 
 // Initialize NVS
 void config_manager_init() {
-		LOGI("Config", "NVS init start");
+		LOGT("Config", "NVS init start");
 		esp_err_t err = nvs_flash_init();
 		if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
 				LOGW("Config", "NVS init error (%d) - erasing NVS", (int)err);
@@ -213,7 +213,7 @@ void config_manager_init() {
 				return;
 		}
 
-		LOGI("Config", "NVS init OK");
+		LOGT("Config", "NVS init OK");
 }
 
 // Get default device name with unique chip ID
@@ -276,7 +276,7 @@ bool config_manager_load(DeviceConfig *config) {
 		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
 		#endif
 
-		LOGI("Config", "Load start");
+		LOGT("Config", "Load start");
 
 		if (!preferences.begin(CONFIG_NAMESPACE, true)) { // Read-only mode
 				LOGE("Config", "Preferences begin failed");
@@ -418,8 +418,8 @@ bool config_manager_load(DeviceConfig *config) {
 		config->backlight_brightness = preferences.getUChar(KEY_BACKLIGHT_BRIGHTNESS, 100);
 		config->display_rotation = preferences.getUChar(KEY_DISPLAY_ROTATION, 0);
 		if (config->display_rotation > 3) config->display_rotation = 0;
-		LOGI("Config", "Loaded brightness: %d%%", config->backlight_brightness);
-		LOGI("Config", "Display rotation offset: %u quarter turns", config->display_rotation);
+		LOGT("Config", "Loaded brightness: %d%%", config->backlight_brightness);
+		LOGT("Config", "Display rotation offset: %u quarter turns", config->display_rotation);
 
 		// Load Basic Auth settings
 		config->basic_auth_enabled = preferences.getBool(KEY_BASIC_AUTH_ENABLED, false);
@@ -536,7 +536,7 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 		
 		config_manager_print(config);
-		LOGI("Config", "Load complete");
+		LOGT("Config", "Load complete");
 		return true;
 }
 
@@ -552,7 +552,7 @@ bool config_manager_save(const DeviceConfig *config) {
 				return false;
 		}
 
-		LOGI("Config", "Save start");
+		LOGT("Config", "Save start");
 		// ESP32-P4 USB CDC keeps its TX ring buffer in external RAM. Let the
 		// final logging ISR finish before Preferences starts flash writes, which
 		// temporarily make that memory inaccessible.
@@ -843,6 +843,10 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 // Print configuration (for debugging)
 void config_manager_print(const DeviceConfig *config) {
 		if (!config) return;
+		LOGI("Config", "Loaded: device='%s' power=%s brightness=%u%% sleep=%us",
+		     config->device_name, config->operating_mode, unsigned(config->backlight_brightness),
+		     unsigned(config->screen_saver_timeout_seconds));
+		if (LOG_LEVEL < LOG_LEVEL_DEBUG || !log_diagnostics_enabled("Config")) return;
 		
 		LOGI("Config", "Device: %s", config->device_name);
 		
@@ -852,7 +856,6 @@ void config_manager_print(const DeviceConfig *config) {
 		LOGI("Config", "mDNS: %s.local", sanitized);
 		
 		LOGI("Config", "WiFi SSID: %s", config->wifi_ssid);
-		LOGI("Config", "WiFi Pass: %s", strlen(config->wifi_password) > 0 ? "***" : "(none)");
 		
 		if (strlen(config->fixed_ip) > 0) {
 				LOGI("Config", "IP: %s", config->fixed_ip);
@@ -887,8 +890,7 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 				} else {
 						LOGI("Config", "MQTT: %s:%d (publish disabled)", config->mqtt_host, port);
 				}
-				LOGI("Config", "MQTT User: %s", strlen(config->mqtt_username) > 0 ? config->mqtt_username : "(none)");
-				LOGI("Config", "MQTT Pass: %s", strlen(config->mqtt_password) > 0 ? "***" : "(none)");
+				LOGD("Config", "MQTT authentication: user=%u password=%u", unsigned(config->mqtt_username[0] != 0), unsigned(config->mqtt_password[0] != 0));
 		} else {
 				LOGI("Config", "MQTT: disabled");
 		}
@@ -899,8 +901,7 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 
 		// Home Assistant REST API (independent of MQTT)
 		if (strlen(config->ha_url) > 0) {
-				LOGI("Config", "HA URL: %s", config->ha_url);
-				LOGI("Config", "HA Token: %s", strlen(config->ha_token) > 0 ? "***" : "(none)");
+				LOGD("Config", "HA REST: configured token=%u", unsigned(config->ha_token[0] != 0));
 		} else {
 				LOGI("Config", "HA REST: disabled");
 		}

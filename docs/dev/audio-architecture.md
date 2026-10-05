@@ -1,4 +1,7 @@
-# Audio Architecture
+---
+title: Audio Architecture
+description: Audio workers, output drivers, I2S framing, resampling, and diagnostics.
+---
 
 The audio subsystem produces beeps and MP3 playback through a board-selected
 output driver. It keeps command handling, decode work, and hardware I/O in
@@ -245,6 +248,12 @@ first decode occurs when the track is opened for playback.
 `audio.cpp` reports output starvation from the time represented by queued DMA
 frames. This metric identifies whether the output writer met its timing budget;
 it does not establish MP3 decode or resampler correctness.
+
+Only nonzero starvation is reported, at WARN. Resampler capacity clamps emit
+one initial warning and a per-playback count at close. Output drivers own I2S
+write failures, including short writes; the upper playback layer does not
+repeat the same error. Codec register and gain details are opt-in `LOGT`
+diagnostics rather than normal playback output.
 
 Use one low-rate initialization or state-change log per event. Do not emit
 logs from PCM sample loops, DMA write loops, or resampler inner loops. Follow

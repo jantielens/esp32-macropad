@@ -76,25 +76,25 @@ static ActionResult brew_dispatch(const ButtonAction& act, const char* label,
     if (!cmd[0]) cmd = "advance";
 
     if (strcmp(cmd, "set_template") == 0) {
-        LOGI(TAG, "%s brew: set_template='%s'", label, bp.value);
+        LOGT(TAG, "%s brew: set_template='%s'", label, bp.value);
         brew_hint_template(bp.value);
     } else if (strcmp(cmd, "advance") == 0) {
-        LOGI(TAG, "%s brew: advance", label);
+        LOGT(TAG, "%s brew: advance", label);
         brew_advance(nullptr);
     } else if (strcmp(cmd, "start") == 0) {
-        LOGI(TAG, "%s brew: start", label);
+        LOGT(TAG, "%s brew: start", label);
         brew_start(nullptr);
     } else if (strcmp(cmd, "next") == 0) {
-        LOGI(TAG, "%s brew: next", label);
+        LOGT(TAG, "%s brew: next", label);
         brew_next();
     } else if (strcmp(cmd, "stop") == 0) {
-        LOGI(TAG, "%s brew: stop", label);
+        LOGT(TAG, "%s brew: stop", label);
         brew_stop();
     } else if (strcmp(cmd, "reset") == 0) {
-        LOGI(TAG, "%s brew: reset", label);
+        LOGT(TAG, "%s brew: reset", label);
         brew_reset();
     } else if (strcmp(cmd, "tare") == 0) {
-        LOGI(TAG, "%s brew: tare", label);
+        LOGT(TAG, "%s brew: tare", label);
         scale_request_tare_no_persist();
     } else {
         LOGW(TAG, "%s brew: unknown cmd '%s'", label, cmd);
