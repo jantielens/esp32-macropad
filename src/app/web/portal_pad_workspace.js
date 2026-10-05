@@ -10,15 +10,11 @@ function padWorkspaceInit() {
     element('pad-workspace-commands').appendChild(element('pad-floating-footer'));
     const canvas = element('pad-workspace-canvas');
     ['pad-block-banner', 'pad-grid'].forEach(id => canvas.appendChild(element(id)));
-    element('pad-empty-state').remove();
     const fields = element('pad-workspace-pad-fields');
     const controls = root.querySelector('.pad-controls');
     controls.dataset.padTab = 'Layout';
     fields.appendChild(controls);
     root.querySelectorAll('[data-pad-tab]').forEach(node => fields.appendChild(node));
-    const select = element('pad-page-select');
-    root.querySelector('.pad-workspace-rail').prepend(select.closest('.form-group'));
-    select.closest('.form-group').classList.add('pad-workspace-selector');
     element('pad-workspace-button-fields').appendChild(element('pad-edit-overlay'));
     const body = root.querySelector('.pad-edit-body');
     const adjustment = element('pad-edit-numericrocker-adjust-section');
@@ -138,7 +134,6 @@ function padWorkspaceDispose() {
     if (!padWorkspace) return;
     padWorkspace.controller.abort();
     if (padWorkspace.resizeObserver) padWorkspace.resizeObserver.disconnect();
-    if (padQuickSaveObserver) { padQuickSaveObserver.disconnect(); padQuickSaveObserver = null; }
     if (padWorkspace.confirmResolve) padWorkspace.confirmResolve(false);
     if (typeof padPvHide === 'function') padPvHide();
     padWorkspace = null;

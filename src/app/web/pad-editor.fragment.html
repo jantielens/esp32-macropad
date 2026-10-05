@@ -29,14 +29,7 @@
 
         <!-- Controls rows -->
         <div class="pad-controls">
-            <div class="pad-controls-row">
-                <div class="form-group" style="margin-bottom:0; flex:1;">
-                    <label for="pad-page-select">Pad</label>
-                    <select id="pad-page-select">
-                        <!-- Populated dynamically from /api/info max_pads -->
-                    </select>
-                </div>
-            </div>
+            <select id="pad-page-select" hidden></select>
             <div class="pad-controls-row" style="margin-top:6px;">
                 <div class="form-group" style="margin-bottom:0; flex:1;">
                     <label for="pad-name">Pad Name</label>
@@ -69,12 +62,6 @@
             <button type="button" class="btn btn-small" id="pad-block-cancel-btn">Cancel</button>
         </div>
         <div id="pad-grid" class="pad-grid"></div>
-
-        <!-- Empty state -->
-        <div id="pad-empty-state" class="pad-empty-state" style="display:none;">
-            <p>No configuration for this pad yet.</p>
-            <p><small>Adjust columns and rows above, then click empty buttons to configure them.</small></p>
-        </div>
 
         <section class="card mb-3" data-pad-tab="Appearance">
             <div class="card-header"><h5 class="mb-0">Appearance</h5></div>
@@ -174,10 +161,6 @@
             </div>
         </div>
     </div>
-
-    <button type="button" id="pad-quick-save-btn" class="btn btn-primary pad-quick-save" hidden>
-        Save Pad
-    </button>
 
     <!-- Pad Button Edit Dialog -->
     <div id="pad-edit-overlay" style="display:none;">

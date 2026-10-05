@@ -56,6 +56,7 @@ function makeDocument() {
 }
 
 function loadPortal(context) {
+    context.padWorkspaceRefresh = () => {};
     vm.createContext(context);
     for (const file of [
         'src/app/web/portal_pad_icons.js',

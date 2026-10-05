@@ -32,43 +32,29 @@ const padState = {
 
 let padDirty = false;
 let padSaveInProgress = false;
-let padFooterVisible = false;
-let padQuickSaveObserver = null;
 let padLoadGeneration = 0;
 
 function padMarkDirty(event) {
     if (event && event.isTrusted === false) return;
     padDirty = true;
     if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.revision++;
-    padUpdateQuickSave();
+    padWorkspaceRefresh();
 }
 
 function padClearDirty() {
     padDirty = false;
-    padUpdateQuickSave();
-}
-
-function padUpdateQuickSave() {
-    if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
-    const quickSave = document.getElementById('pad-quick-save-btn');
-    const editor = document.getElementById('pad-config-section');
-    if (!quickSave || !editor) return;
-    if (typeof padWorkspace !== 'undefined' && padWorkspace) { quickSave.hidden = true; return; }
-
-    quickSave.hidden = !padDirty || padFooterVisible || editor.style.display === 'none';
-    quickSave.disabled = padSaveInProgress;
-    quickSave.textContent = padSaveInProgress ? 'Saving Pad...' : 'Save Pad';
+    padWorkspaceRefresh();
 }
 
 async function padRequestSave() {
     if (padSaveInProgress) return;
     padSaveInProgress = true;
-    padUpdateQuickSave();
+    padWorkspaceRefresh();
     try {
         await padSavePage();
     } finally {
         padSaveInProgress = false;
-        padUpdateQuickSave();
+        padWorkspaceRefresh();
     }
 }
 
@@ -136,8 +122,6 @@ async function padInit() {
     if (padActionContainer) {
         actionEditorListRender('pad-level-action-editors', padLevelActionPrefixes(), padDefaultActionLabels('Tap action'),
             { actionOptions: { showBleHint: true, showKeyHelp: true } });
-        padActionContainer.addEventListener('input', padMarkDirty);
-        padActionContainer.addEventListener('change', padMarkDirty);
     }
 
     // Generate numeric rocker adjustment action editor
@@ -146,28 +130,11 @@ async function padInit() {
         nrAdjContainer.innerHTML = actionEditorHTML('pad-edit-nr-adjust', 'Adjustment Action', { showBleHint: true, showKeyHelp: true });
     }
 
-    document.getElementById('pad-page-select').addEventListener('change', (e) => {
-        const newPage = parseInt(e.target.value);
-        if (typeof padWorkspaceSwitch === 'function') { padWorkspaceSwitch(newPage); return; }
-        if (padDirty) {
-            if (!confirm('You have unsaved changes. Discard and switch pad?')) {
-                e.target.value = padState.page;
-                return;
-            }
-        }
-        padClearDirty();
-        padState.page = newPage;
-        padLoadPage(padState.page);
-    });
     document.getElementById('pad-cols').addEventListener('change', (e) => {
         padState.cols = parseInt(e.target.value);
-        padMarkDirty();
-        padRenderGrid();
     });
     document.getElementById('pad-rows').addEventListener('change', (e) => {
         padState.rows = parseInt(e.target.value);
-        padMarkDirty();
-        padRenderGrid();
     });
     document.getElementById('pad-template-pad').addEventListener('change', async (e) => {
         padState.templatePad = parseInt(e.target.value);
@@ -177,7 +144,6 @@ async function padInit() {
     });
 
     document.getElementById('pad-save-btn').addEventListener('click', padRequestSave);
-    document.getElementById('pad-quick-save-btn').addEventListener('click', padRequestSave);
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
     document.getElementById('pad-binding-add').addEventListener('click', padAddBinding);
@@ -185,16 +151,6 @@ async function padInit() {
     if (btnDefSaveBtn) btnDefSaveBtn.addEventListener('click', padSaveButtonDefaults);
 
     const padFooter = document.getElementById('pad-floating-footer');
-    const contentPane = document.getElementById('content-pane');
-    if (padQuickSaveObserver) padQuickSaveObserver.disconnect();
-    padFooterVisible = false;
-    if (padFooter && contentPane && typeof IntersectionObserver !== 'undefined') {
-        padQuickSaveObserver = new IntersectionObserver(function (entries) {
-            padFooterVisible = entries[0].isIntersecting;
-            padUpdateQuickSave();
-        }, { root: contentPane, threshold: 0.1 });
-        padQuickSaveObserver.observe(padFooter);
-    }
 
     // More menu toggle
     const moreBtn = document.getElementById('pad-more-btn');
@@ -247,15 +203,11 @@ async function padInit() {
     const blockCancelBtn = document.getElementById('pad-block-cancel-btn');
     if (blockCancelBtn) blockCancelBtn.addEventListener('click', padExitPlacementMode);
 
-    // Track unsaved changes on name and other inputs
-    document.getElementById('pad-name').addEventListener('input', padMarkDirty);
-
-
     // deviceInfoCache is already populated (awaited at the top of padInit).
     if (deviceInfoCache.has_display === true) {
         section.style.display = 'block';
         if (padFooter) padFooter.style.display = '';
-        padUpdateQuickSave();
+        padWorkspaceRefresh();
         // Show pad and button defaults section
         var btnDefSec = document.getElementById('btn-defaults-section');
         if (btnDefSec) btnDefSec.style.display = 'block';

@@ -7,6 +7,7 @@ const context = {
 	console,
 	MAX_ACTIONS: 3,
 	padIconTypeChanged() {},
+	padWorkspaceRefresh() {},
 	actionEditorListSetLabels() {},
 	document: {
 		addEventListener() {},
@@ -222,7 +223,7 @@ for (const [dirty, saving, status] of [[false, false, ''], [true, false, 'Unsave
 assert.strictEqual(refreshElements.has('pad-workspace-position'), false, 'Refresh must not access the removed footer');
 assert.strictEqual(refreshElements.has('pad-workspace-geometry'), false, 'Refresh must not access the removed dimensions row');
 const fragment = fs.readFileSync('src/app/web/pad-editor.fragment.html', 'utf8');
-for (const id of ['pad-workspace-position', 'pad-workspace-geometry', 'pad-workspace-settings']) {
+for (const id of ['pad-workspace-position', 'pad-workspace-geometry', 'pad-workspace-settings', 'pad-quick-save-btn', 'pad-empty-state']) {
 	assert(!fragment.includes('id="' + id + '"'), 'Removed canvas control must not remain in the fragment: ' + id);
 }
 assert(fragment.includes('id="pad-settings-menu-btn"'), 'More must retain access to pad settings');

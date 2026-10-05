@@ -6,18 +6,6 @@ function padFindButton(col, row) {
     return padState.buttons.find(b => b.col === col && b.row === row);
 }
 
-function padIsCellOccupied(col, row) {
-    // Check if any button occupies this cell (via its span)
-    for (const b of padState.buttons) {
-        const bc = b.col, br = b.row;
-        const cs = b.col_span || 1, rs = b.row_span || 1;
-        if (col >= bc && col < bc + cs && row >= br && row < br + rs) {
-            return b;
-        }
-    }
-    return null;
-}
-
 // ===== BUTTON RESIZE (DRAG HANDLES) =====
 
 function padGetGridGeometry() {
@@ -158,7 +146,6 @@ function padCanPlaceTemplateButton(tplBtn) {
 
 function padRenderGrid() {
     const grid = document.getElementById('pad-grid');
-    const emptyState = document.getElementById('pad-empty-state');
     if (!grid) return;
 
     const cols = padState.cols;
@@ -173,8 +160,6 @@ function padRenderGrid() {
     const pageBgInput = document.getElementById('pad-edit-page-bg-color');
     grid.style.background = (pageBgInput && /^#[0-9a-fA-F]{6}$/.test(pageBgInput.value.trim())) ? pageBgInput.value.trim() : '#000000';
     grid.innerHTML = '';
-
-    if (emptyState) emptyState.style.display = 'none';
 
     // Track which cells are "covered" by a spanning button
     const covered = new Set();

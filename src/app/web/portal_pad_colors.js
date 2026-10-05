@@ -27,10 +27,6 @@ function padColorValue(val) {
     return String(val);
 }
 
-function padIsBinding(val) {
-    return typeof val === 'string' && val.startsWith('[');
-}
-
 function padColorsToHex(btn) {
     // Normalize colors for JSON save: legacy ints → hex strings, strip # from static hex
     ['bg_color', 'fg_color', 'border_color'].forEach(k => {

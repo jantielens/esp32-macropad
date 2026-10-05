@@ -528,13 +528,6 @@ function padDialogOpen(col, row) {
     // Enable paste button if clipboard has content
     document.getElementById('pad-edit-paste').disabled = !padState.btnClipboard;
 
-    // Scroll dialog body to top
-    const body = document.querySelector('.pad-edit-modal .pad-edit-body');
-    if (body) {
-        const saved = typeof padWorkspace !== 'undefined' && padWorkspace ? padWorkspace.forms.get(padWorkspaceKey()) : null;
-        body.scrollTop = saved ? saved.scroll : 0;
-    }
-
     // Refresh binding length warnings for the loaded values
     if (typeof padScanMaxlenHints === 'function') padScanMaxlenHints();
 
@@ -567,15 +560,6 @@ function padPopulateExtensionDropdown(value) {
     }
     select.value = selected || '';
     select.disabled = padExtensionCatalogLoading;
-}
-
-function padDialogClose() {
-    if (typeof padWorkspaceReturn === 'function') { padWorkspaceReturn(); return; }
-    if (typeof padPvHide === 'function') padPvHide();
-    padDialogClearValidationError();
-    document.getElementById('pad-edit-overlay').style.display = 'none';
-    document.body.style.overflow = '';
-    document.documentElement.style.overflow = '';
 }
 
 function padDialogShowValidationError(message) {
@@ -979,33 +963,13 @@ function padDialogValidateButton(btn) {
     }
 }
 
-function padDialogCommitButton(btn) {
-    const col = btn.col;
-    const row = btn.row;
-
-    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
-    padState.buttons.push(btn);
-    padMarkDirty();
-    padRenderGrid();
-}
-
-function padDialogOk(keepOpen) {
-    padDialogClearValidationError();
-    const btn = padDialogBuildButton();
-    try { padDialogValidateButton(btn); }
-    catch (error) { padDialogShowValidationError(error.message); return false; }
-    padDialogCommitButton(btn);
-    if (!keepOpen) padDialogClose();
-    return true;
-}
-
 function padDialogClear() {
     const col = padState.editCol;
     const row = padState.editRow;
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
     if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
     padMarkDirty();
-    padDialogClose();
+    padWorkspaceReturn();
     padRenderGrid();
 }
 
