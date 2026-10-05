@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Portal startup avoids duplicate device-info and health requests. The pad
+  editor loads pad data and appearance defaults before sound files, building
+  blocks, and native extension catalogs. Catalog controls retain saved selections
+  while their choices load, and concurrent health consumers share one request.
 * Pad editor widgets use consistent offline Material Symbols markers,
   including Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, and inherited
   template buttons. Directional symbols follow configured axes; unlabeled

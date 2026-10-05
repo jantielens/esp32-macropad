@@ -231,6 +231,17 @@ states:
 - Fixed widths prevent layout shift when data loads
 - Minimal visual changes when actual data arrives
 
+Navigation owns shell startup: it loads the header information and starts health
+polling once. Header consumers share cached device information; concurrent health
+consumers share one in-flight request, and subsequent polls request fresh data.
+The portal retains its two-request fetch concurrency limit for device memory safety.
+
+The pad editor requests pad data and button defaults together and waits for the
+defaults before rendering the grid. Sound files, building blocks, and native
+extensions load afterward. Sound and extension selectors remain disabled while
+their catalogs load, preserving saved filenames and extension IDs when options
+arrive. Building blocks show a loading state until their catalog is available.
+
 ### Fragment Layout Convention
 
 Every fragment begins with a `section-header` containing its title and a short

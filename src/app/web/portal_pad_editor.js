@@ -100,6 +100,8 @@ async function padInit() {
     await getDeviceInfo();
 
     const nativeExtensions = deviceInfoCache && deviceInfoCache.has_native_extensions === true;
+    padExtensionCatalogLoading = nativeExtensions;
+    padSoundListLoading = deviceInfoCache.has_sound_player === true;
     const externalWidgetOption = document.getElementById('pad-edit-external-widget-option');
     if (externalWidgetOption) externalWidgetOption.style.display = nativeExtensions ? '' : 'none';
     const cameraPreviewOption = document.getElementById('pad-edit-camera-preview-widget-option');
@@ -108,10 +110,6 @@ async function padInit() {
     padSetHidWidgetCapabilityVisibility(deviceInfoCache);
     document.getElementById('pad-edit-gamepad-button-fields').innerHTML = actionEditorGamepadHTML('pad-edit-gamepad-hold', true);
     padSetImageCapabilityVisibility(deviceInfoCache);
-    if (nativeExtensions && typeof extensionFetchSlots === 'function') {
-        try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
-    }
-
     // Generate action editor HTML from shared module — three fixed action
     // slots per gesture. An unused slot collapses as its own "Add ..."
     // placeholder; labels are set here for the non-widget default and
@@ -277,20 +275,36 @@ async function padInit() {
         padPopulateGridDropdowns();
         padPopulatePadDropdown();
         padPopulateScreenDropdown();
-        if (deviceInfoCache.has_sound_player === true) padFetchSoundList();
-        padLoadButtonDefaultsFromDevice();
         const requestedPage = Number(sessionStorage.getItem('esp32-macropad.recipe-pad-editor-page'));
         sessionStorage.removeItem('esp32-macropad.recipe-pad-editor-page');
         const initialPage = Number.isInteger(requestedPage) && requestedPage >= 0 &&
             requestedPage < deviceInfoCache.max_pads ? requestedPage : 0;
         padState.page = initialPage;
         document.getElementById('pad-page-select').value = initialPage;
-        padLoadPage(initialPage);
-        padLoadBlockCatalog();
         padRefreshDropdownLabels();
+        padPopulateSoundDropdown();
+        await padLoadInitialPage(initialPage);
     } else {
         const noDisp = document.getElementById('pad-no-display-section');
         if (noDisp) noDisp.style.display = 'block';
+    }
+}
+
+async function padLoadInitialPage(page) {
+    const section = document.getElementById('pad-config-section');
+    const blockItems = document.getElementById('pad-block-items');
+    if (blockItems) blockItems.textContent = 'Loading building blocks...';
+    const defaultsReady = padLoadButtonDefaultsFromDevice();
+    await padLoadPage(page, defaultsReady);
+    if (document.getElementById('pad-config-section') !== section) return;
+    if (deviceInfoCache.has_sound_player === true) padFetchSoundList();
+    padLoadBlockCatalog();
+    if (deviceInfoCache.has_native_extensions === true && typeof extensionFetchSlots === 'function') {
+        try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
+        padExtensionCatalogLoading = false;
+        if (document.getElementById('pad-config-section') === section) padPopulateExtensionDropdown();
+    } else {
+        padExtensionCatalogLoading = false;
     }
 }
 
@@ -420,13 +434,19 @@ function padPopulateScreenDropdown() {
 
 // Cached sound file list (populated at init, used synchronously on dialog open)
 var padSoundListCache = [];
+let padSoundListLoading = false;
+let padExtensionCatalogLoading = false;
 
 // Fetch sound list from device and update cache
 function padFetchSoundList() {
-    fetch('/api/sounds/list')
+    return fetch('/api/sounds/list')
         .then(function(r) { return r.ok ? r.json() : []; })
         .then(function(sounds) { padSoundListCache = sounds; })
-        .catch(function() {});
+        .catch(function() {})
+        .finally(function() {
+            padSoundListLoading = false;
+            padPopulateSoundDropdown();
+        });
 }
 
 // Populate sound file dropdowns in action editors (synchronous, uses cache)
@@ -435,6 +455,10 @@ function padPopulateSoundDropdown() {
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
     actionEditorPopulateSounds(prefixes, padSoundListCache);
+    prefixes.forEach(function(prefix) {
+        var select = document.getElementById(prefix + '-sound-alert-file');
+        if (select) select.disabled = padSoundListLoading;
+    });
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'];
@@ -506,7 +530,7 @@ function padWidgetTypeChanged() {
     if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 }
 
-async function padLoadPage(page) {
+async function padLoadPage(page, defaultsReady) {
     padState.page = page;
     padState.rawJson = null;
     padState.buttons = [];
@@ -519,6 +543,7 @@ async function padLoadPage(page) {
 
     try {
         const resp = await fetch('/api/pad?page=' + page);
+        await defaultsReady;
         if (resp.status === 404) {
             // No config for this page — show empty grid
             padState.cols = 3;
@@ -812,15 +837,3 @@ function padRefreshDropdownLabels() {
         }
     });
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Shell-level initialization only.
-    // Fragment-level init is handled by portal_nav.js + portal_fragment_init.js.
-
-    // Load version info for shell header badges (also seeds deviceInfoCache
-    // and sets portalMode from the ap_active flag).
-    loadVersion();
-
-    // Initialize health widget (badge in shell header)
-    initHealthWidget();
-});

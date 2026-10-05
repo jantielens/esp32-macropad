@@ -6,7 +6,7 @@
  */
 async function loadVersion() {
     try {
-        const version = await getDeviceInfo(true);
+        const version = await getDeviceInfo();
         if (!version) return;
 
         // portalMode is derived from /api/info ap_active flag (previously a

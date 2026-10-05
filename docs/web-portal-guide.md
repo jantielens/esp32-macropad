@@ -644,6 +644,11 @@ buttons retain a dashed outline without heavily fading their contents. Widget
 type icons work offline; user-selected Material Symbols button icons still use
 the existing online font loader.
 
+The grid loads before sound files, building blocks, and native extension choices.
+Sound-file and extension selectors are temporarily disabled while their choices
+load; saved selections are retained. The More menu shows a loading message until
+building blocks are available.
+
 The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide pad background and layout defaults alongside button colors, borders, and label styles. Pads and buttons inherit the applicable settings automatically, while explicit overrides still take precedence.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.

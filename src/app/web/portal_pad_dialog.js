@@ -502,19 +502,7 @@ function padDialogOpen(col, row) {
     // action screen dropdowns (which were populated earlier with empty provider).
     if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 
-    const extensionSelect = document.getElementById('pad-edit-extension-id');
-    if (extensionSelect) {
-        extensionSelect.replaceChildren();
-        const installed = (window.extensionCatalog || []).filter(function (slot) { return slot.installed && slot.enabled; });
-        if (!installed.length) {
-            const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'No enabled extensions installed'; extensionSelect.appendChild(empty);
-        } else {
-            installed.forEach(function (slot) {
-                const option = document.createElement('option'); option.value = slot.id; option.textContent = slot.id + ' @ ' + slot.version; extensionSelect.appendChild(option);
-            });
-        }
-        extensionSelect.value = btn.extension_id || '';
-    }
+    padPopulateExtensionDropdown(btn.extension_id || '');
     document.getElementById('pad-edit-extension-config').value = btn.extension_config || '';
     document.getElementById('pad-edit-extension-tick-interval').value = btn.extension_tick_interval_ms || '';
     document.getElementById('pad-edit-extension-upscale').value = btn.extension_upscale || 1;
@@ -535,6 +523,33 @@ function padDialogOpen(col, row) {
 
     // Mount + prefetch the in-context live-value preview affordances.
     if (typeof padPvOnOpen === 'function') padPvOnOpen();
+}
+
+function padPopulateExtensionDropdown(value) {
+    const select = document.getElementById('pad-edit-extension-id');
+    if (!select) return;
+    const selected = value === undefined ? select.value : value;
+    select.replaceChildren();
+    const installed = (window.extensionCatalog || []).filter(function(slot) { return slot.installed && slot.enabled; });
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = padExtensionCatalogLoading ? 'Loading extensions...' :
+        installed.length ? '(none)' : 'No enabled extensions installed';
+    select.appendChild(empty);
+    installed.forEach(function(slot) {
+        const option = document.createElement('option');
+        option.value = slot.id;
+        option.textContent = slot.id + ' @ ' + slot.version;
+        select.appendChild(option);
+    });
+    if (selected && !installed.some(function(slot) { return slot.id === selected; })) {
+        const saved = document.createElement('option');
+        saved.value = selected;
+        saved.textContent = selected;
+        select.appendChild(saved);
+    }
+    select.value = selected || '';
+    select.disabled = padExtensionCatalogLoading;
 }
 
 function padDialogClose() {

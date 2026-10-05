@@ -30,9 +30,9 @@ function getLatestHealth() {
  * in-flight Promise) so welcome/version-info fragments do not each spawn
  * their own /api/health request during portal boot.
  */
-function fetchHealthOnce() {
-    if (latestHealth) return Promise.resolve(latestHealth);
+function fetchHealthOnce(forceRefresh) {
     if (healthFetchInflight) return healthFetchInflight;
+    if (!forceRefresh && latestHealth) return Promise.resolve(latestHealth);
     healthFetchInflight = fetch(API_HEALTH)
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (h) {
@@ -544,10 +544,8 @@ function healthIntegerValue(value) {
 
 async function updateHealth() {
     try {
-        const response = await fetch(API_HEALTH);
-        if (!response.ok) return;
-
-        const health = await response.json();
+        const health = await fetchHealthOnce(true);
+        if (!health) return;
         // Publish snapshot for fetchHealthOnce() consumers (welcome + version
         // fragments) so they don't issue their own /api/health requests.
         latestHealth = health;
@@ -654,10 +652,9 @@ function initHealthWidget() {
         healthPollTimer = setInterval(updateHealth, healthPollIntervalMs);
     };
 
-    // Initial
-    updateHealth();
-    startPolling();
-
-    // Re-tune polling once deviceInfoCache becomes available.
-    setTimeout(startPolling, 1500);
+    if (!healthPollTimer) {
+        updateHealth();
+        startPolling();
+        setTimeout(startPolling, 1500);
+    }
 }
