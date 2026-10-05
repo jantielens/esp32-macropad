@@ -325,7 +325,7 @@ USB/OTG for HID and USB-UART for flashing and logs; see
 ### Developer Documentation
 
 Building from source, contributing, or adding new board support? See the [developer docs](docs/dev/).
-For portal-only UI work, use the [device-free portal development server](docs/dev/web-portal.md#local-device-free-development) to work against production assets without flashing a board.
+For portal-only UI work, use the [device-free portal development server](docs/dev/web-portal.md#local-device-free-development) to work against production assets without flashing a board. Its default P4 profile includes memory-backed pad editor fixtures and failure scenarios.
 
 ### Running Tests
 

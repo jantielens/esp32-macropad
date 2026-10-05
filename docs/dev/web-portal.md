@@ -8,16 +8,27 @@ The ESP32 template includes a full-featured web portal for device configuration,
 ## Local Device-Free Development
 
 Use `tools/portal-dev-server.py` to iterate on portal UI without a connected
-device or firmware build. It serves the production portal shell, core CSS and
-JavaScript sources, and available fragments from `src/app`, while replacing
-device API requests with deterministic in-memory fixtures.
+device or firmware build. It serves the production portal shell, CSS,
+feature-selected JavaScript bundle, and rendered fragments from `src/app`, while
+replacing device API requests with deterministic in-memory fixtures.
 
 ```bash
-python3 tools/portal-dev-server.py --port 8765
+python3 tools/portal-dev-server.py --port 8765 --profile esp32-p4-lcd4b
 ```
 
-Open a fragment directly by passing its profile and fragment ID. For example,
-the E-Paper Frame image workflow is available at:
+Open the P4 pad editor:
+
+```text
+http://localhost:8765/?profile=esp32-p4-lcd4b&fragment=pad-editor
+```
+
+Its fixtures cover empty and populated pads, spanning buttons, action lists,
+widgets, template inheritance, a dense grid, and input controls. Save, reload,
+delete, defaults, icon uploads, binding previews, and Show on Device run against
+memory-backed APIs. Show on Device records the chosen screen without rendering
+or executing actions on hardware.
+
+The existing E-Paper Frame image workflow remains available at:
 
 ```text
 http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
@@ -26,7 +37,12 @@ http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
 Changes to served HTML, CSS, and JavaScript are applied on the next browser
 reload. Restart the server after changing `tools/portal-dev-server.py`. Mock
 configuration writes remain in memory for the server process and never reach a
-physical device.
+physical device. The server binds to localhost. Binding previews resolve fixed
+sample values rather than reproducing the firmware binding engine.
+
+See the [script reference](scripts.md#toolsportal-dev-serverpy) for reset
+commands, failure scenarios, and focused regression tests. The P4 profile is the
+only pad-editor fixture target; this mock does not replace hardware verification.
 
 ## Overview
 

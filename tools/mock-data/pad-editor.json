@@ -1,0 +1,105 @@
+{
+  "button_defaults": {
+    "default_pad_bg_color": "#101820", "bg_color": "#273641", "fg_color": "#ffffff",
+    "border_color": "#52636e", "border_width": "1", "corner_radius": "8", "content_pad": "6",
+    "button_shadow_enabled": true, "label_top_style": "font:18;align:center",
+    "label_center_style": "font:28;align:center", "label_bottom_style": "font:16;align:center"
+  },
+  "pads": {
+    "0": {
+      "name": "Living Room", "cols": 4, "rows": 3, "bg_color": "#101820", "button_shadow": "enabled",
+      "wake_screen": "pad_0", "bindings": {"temperature": "[mqtt:home/living/temperature]", "light": "[mqtt:home/living/light]"},
+      "pad_actions": [{"type": "screen", "target": "pad_1"}],
+      "buttons": [
+        {"col": 0, "row": 0, "col_span": 2, "label_top": "Living Room", "label_center": "[pad:temperature]", "label_bottom": "Temperature", "bg_color": "#166b64"},
+        {"col": 2, "row": 0, "label_center": "Lights", "icon_id": "mi_lightbulb", "bg_color": "#bd8b21", "actions": [{"type": "mqtt", "topic": "home/living/light/set", "payload": "TOGGLE"}], "lp_actions": [{"type": "screen", "target": "pad_2"}]},
+        {"col": 3, "row": 0, "label_top": "Evening", "label_center": "Scene", "confirm": true, "confirm_text": "Activate the evening scene?", "actions": [{"type": "mqtt", "topic": "home/scene/set", "payload": "evening"}, {"type": "delay", "duration_ms": "500"}, {"type": "notify", "text": "Evening scene activated"}]},
+        {"col": 0, "row": 1, "col_span": 2, "row_span": 2, "widget_type": "gauge", "label_top": "Humidity", "widget_gauge_min": "0", "widget_gauge_max": "100", "widget_data_binding": "[mqtt:home/living/humidity]", "bg_color": "#273641"},
+        {"col": 2, "row": 1, "label_center": "Music", "icon_id": "mi_music_note", "actions": [{"type": "screen", "target": "pad_2"}]},
+        {"col": 3, "row": 2, "label_center": "Next", "icon_id": "mi_arrow_forward", "actions": [{"type": "screen", "target": "pad_1"}]}
+      ]
+    },
+    "1": {"name": "Empty Workspace", "cols": 4, "rows": 3, "buttons": []},
+    "2": {
+      "name": "Widgets", "cols": 3, "rows": 3, "bindings": {"power": "[mqtt:home/power]"},
+      "buttons": [
+        {"col": 0, "row": 0, "col_span": 3, "widget_type": "sparkline", "label_top": "Power consumption", "widget_data_binding": "[pad:power]", "widget_data_binding_2": "[mqtt:home/solar]", "widget_sparkline_window": 3600, "widget_sparkline_slots": 120, "widget_sparkline_line_color": "#36b6a0", "widget_sparkline_line_color_2": "#e4b83d"},
+        {"col": 0, "row": 1, "widget_type": "rocker", "label_center": "Volume", "actions": [{"type": "volume", "volume_mode": "adjust", "volume_value": "5"}], "lp_actions": [{"type": "volume", "volume_mode": "adjust", "volume_value": "-5"}]},
+        {"col": 1, "row": 1, "widget_type": "numericrocker", "label_center": "[mqtt:home/setpoint]", "widget_numericrocker_small_step": 0.5, "widget_numericrocker_action": {"type": "mqtt", "topic": "home/setpoint/adjust", "payload": "{step}"}},
+        {"col": 2, "row": 1, "widget_type": "bar_chart", "label_top": "Energy"},
+        {"col": 0, "row": 2, "widget_type": "table", "label_top": "Sensors"},
+        {"col": 1, "row": 2, "widget_type": "list", "label_top": "Playlist"},
+        {"col": 2, "row": 2, "widget_type": "external", "extension_id": "word-clock", "extension_config": "{\"color\":\"white\"}", "extension_tick_interval_ms": 1000}
+      ]
+    },
+    "3": {"name": "Shared Navigation", "cols": 4, "rows": 3, "buttons": [
+      {"col": 0, "row": 2, "label_center": "Home", "icon_id": "mi_home", "actions": [{"type": "screen", "target": "pad_0"}]},
+      {"col": 3, "row": 2, "label_center": "Widgets", "actions": [{"type": "screen", "target": "pad_2"}]}
+    ]},
+    "4": {"name": "Inherited Navigation", "cols": 4, "rows": 3, "template_pad": 3, "buttons": [
+      {"col": 0, "row": 0, "col_span": 2, "label_top": "Inherited navigation below", "label_center": "Office", "bg_color": "#166b64"}
+    ]},
+    "5": {"name": "Dense Grid", "cols": 8, "rows": 8, "buttons": []},
+    "6": {"name": "Input Controls", "cols": 2, "rows": 2, "buttons": [
+      {"col": 0, "row": 0, "widget_type": "mousepad"},
+      {"col": 1, "row": 0, "widget_type": "scrollpad"},
+      {"col": 0, "row": 1, "widget_type": "gamepad_stick"},
+      {"col": 1, "row": 1, "widget_type": "gamepad_button"}
+    ]}
+  },
+  "binding_values": {
+    "[mqtt:home/living/temperature]": "21.5 C", "[mqtt:home/living/humidity]": "46",
+    "[mqtt:home/living/light]": "ON", "[mqtt:home/power]": "420", "[mqtt:home/solar]": "780",
+    "[mqtt:home/setpoint]": "22.0"
+  },
+  "sounds": ["/sounds/chime.mp3", "/sounds/notification.mp3"],
+  "extensions": {"slots": [{"slot": 0, "id": "word-clock", "title": "Word Clock", "version": "1.0.0", "installed": true, "enabled": true, "loaded": true, "capacity": 262144, "size": 24576}]},
+  "blocks": [{"id": "navigation", "name": "Home navigation", "desc": "Navigate to the home pad", "icon": "Home", "min_cols": 1, "min_rows": 1, "min_free": 1, "bindings": {}, "buttons": [{"col_offset": 0, "row_offset": 0, "col_span": 1, "row_span": 1, "label_center": "Home", "actions": [{"type": "screen", "target": "pad_0"}]}]}],
+  "binding_schema": {"schemes": [
+    {"name": "pad", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": true},
+    {"name": "mqtt", "min_params": 1, "max_params": 3, "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": true},
+    {"name": "expr", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 1, "free_form": true},
+    {"name": "time", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": true},
+    {"name": "timer", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["1", "1_state", "1_mode", "1_expired", "1_target", "2", "2_state", "2_mode", "2_expired", "2_target", "3", "3_state", "3_mode", "3_expired", "3_target"]},
+    {"name": "health", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["cpu", "cpu_core_0", "cpu_core_1", "rssi", "uptime", "chip", "chip_rev", "chip_cores", "cpu_freq", "flash_size", "firmware", "board", "mac", "reset_reason", "heap_total", "heap_free", "heap_min", "heap_largest", "heap_internal_total", "heap_internal", "heap_internal_used", "psram_total", "psram_free", "psram_used", "psram_min", "psram_largest", "wifi_connected", "wifi_ssid", "ip", "hostname", "brightness", "volume", "table", "extended_table", "usb_status"]},
+    {"name": "net", "min_params": 1, "max_params": 2, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["portal", "mcp", "mqtt_rx", "mqtt_tx", "mqtt", "http", "ble", "ota", "any"]},
+    {"name": "list", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["pads.selected"]},
+    {"name": "music", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": -1, "validation_mode": 0, "free_form": false, "keys": ["file", "file_name", "title", "artist", "album", "track", "index", "count", "elapsed_s", "total_s", "status"]},
+    {"name": "image", "min_params": 1, "max_params": 1, "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": false, "keys": ["current", "error"]}
+  ]},
+  "catalog": [
+    {"type": "screen", "group": "Navigation", "label": "Navigate to screen"},
+    {"type": "back", "group": "Navigation", "label": "Navigate back"},
+    {"type": "cycle_pad", "group": "Navigation", "label": "Navigate pad sequence"},
+    {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message"},
+    {"type": "ha_service", "group": "Connectivity", "label": "Call Home Assistant service"},
+    {"type": "notify", "group": "Display", "label": "Show notification"},
+    {"type": "brightness", "group": "Display", "label": "Brightness", "commands": [{"id": "set", "label": "Set brightness"}, {"id": "adjust", "label": "Adjust brightness"}], "editor_fields": [{"name": "brightness_mode", "label": "Command", "type": "select", "command_options": true}, {"name": "brightness_value", "label": "Value (%)", "type": "text", "bindable": true}]},
+    {"type": "visual_alert", "group": "Display", "label": "Visual alert", "commands": [{"id": "start", "label": "Start alert"}, {"id": "stop", "label": "Stop alert"}]},
+    {"type": "timer", "group": "Timer", "label": "Timer", "commands": [{"id": "toggle", "label": "Toggle"}, {"id": "start", "label": "Start"}, {"id": "stop", "label": "Stop"}, {"id": "pause", "label": "Pause"}, {"id": "resume", "label": "Resume"}, {"id": "reset", "label": "Reset"}, {"id": "set", "label": "Set countdown"}, {"id": "adjust", "label": "Adjust countdown"}]},
+    {"type": "delay", "group": "Timer", "label": "Delay", "max_pending_actions": 3},
+    {"type": "volume", "group": "Audio", "label": "Volume", "commands": [{"id": "set", "label": "Set volume"}, {"id": "adjust", "label": "Adjust volume"}], "editor_fields": [{"name": "volume_mode", "label": "Command", "type": "select", "command_options": true}, {"name": "volume_value", "label": "Value (%)", "type": "text", "bindable": true}]},
+    {"type": "sound_alert", "group": "Audio", "label": "Play sound alert"},
+    {"type": "music", "group": "Audio", "label": "Music", "commands": [{"id": "play_pause", "label": "Play/Pause"}, {"id": "next", "label": "Next track"}, {"id": "previous", "label": "Previous track"}, {"id": "stop", "label": "Stop"}], "editor_fields": [{"name": "music_command", "label": "Command", "type": "select", "command_options": true}]},
+    {"type": "image_next", "group": "Image library", "label": "Next image"},
+    {"type": "image_previous", "group": "Image library", "label": "Previous image"},
+    {"type": "system", "group": "Device", "label": "Device command", "commands": [{"id": "reboot", "label": "Restart device"}, {"id": "wifi_reconnect", "label": "Reconnect Wi-Fi"}, {"id": "screensaver", "label": "Enable screensaver"}, {"id": "wake_display", "label": "Wake display"}], "editor_fields": [{"name": "system_command", "label": "Command", "type": "select", "command_options": true}]},
+    {"type": "key", "group": "Keyboard", "label": "Send keys"},
+    {"type": "mouse_button", "group": "Mouse", "label": "Mouse button", "commands": [{"id": "left", "label": "Left"}, {"id": "right", "label": "Right"}, {"id": "middle", "label": "Middle"}], "editor_fields": [{"name": "button", "label": "Button", "type": "select", "default": "left", "command_options": true}]},
+    {"type": "gamepad", "group": "Gamepad", "label": "Gamepad"}
+  ],
+  "widget_catalog": [
+    {"type": "bar_chart", "name": "Bar Chart", "icon": "bar_chart"},
+    {"type": "gauge", "name": "Gauge", "icon": "speed"},
+    {"type": "sparkline", "name": "Sparkline", "icon": "show_chart"},
+    {"type": "table", "name": "Table", "icon": "grid_on"},
+    {"type": "rocker", "name": "Rocker", "icon": "swap_vert", "axis_field": "widget_rocker_axis", "horizontal_icon": "swap_horiz", "vertical_icon": "swap_vert", "default_axis": "vertical"},
+    {"type": "numericrocker", "name": "Numeric Rocker", "icon": "remove", "second_icon": "add", "axis_field": "widget_numericrocker_axis", "default_axis": "horizontal"},
+    {"type": "list", "name": "List", "icon": "list"},
+    {"type": "mousepad", "name": "Mousepad", "icon": "touchpad_mouse"},
+    {"type": "scrollpad", "name": "Scrollpad", "icon": "keyboard_double_arrow_up", "axis_field": "widget_scrollpad_axis", "horizontal_icon": "keyboard_double_arrow_left", "vertical_icon": "keyboard_double_arrow_up", "default_axis": "vertical"},
+    {"type": "gamepad_stick", "name": "Gamepad Joystick", "icon": "joystick"},
+    {"type": "gamepad_button", "name": "Gamepad Button", "icon": "gamepad"},
+    {"type": "external", "name": "Extension", "icon": "extension"}
+  ]
+}

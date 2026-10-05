@@ -90,7 +90,7 @@ assert.strictEqual(elements.get('pad-edit-tap-actions').style.display, '');
 assert.strictEqual(elements.get('pad-edit-lp-actions').style.display, '');
 
 const devInfo = JSON.parse(execFileSync('python3', ['-c',
-	"import json, runpy, sys; sys.path.insert(0, 'tools'); print(json.dumps(runpy.run_path('tools/portal-dev-server.py')['PortalHandler']._device_info()))"
+	"import json, runpy, sys; from types import SimpleNamespace; sys.path.insert(0, 'tools'); module = runpy.run_path('tools/portal-dev-server.py'); handler = object.__new__(module['PortalHandler']); handler.headers = {}; handler.server = SimpleNamespace(profile='esp32-p4-lcd4b'); module['reset_pad_fixtures'](handler.server); print(json.dumps(handler._device_info()))"
 ], { encoding: 'utf8' }));
 context.padSetHidWidgetCapabilityVisibility(devInfo);
 for (const type of ['mousepad', 'scrollpad']) {
