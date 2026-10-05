@@ -242,6 +242,13 @@ extensions load afterward. Sound and extension selectors remain disabled while
 their catalogs load, preserving saved filenames and extension IDs when options
 arrive. Building blocks show a loading state until their catalog is available.
 
+Device information reads friendly pad names from the immutable RAM config cache,
+not from pad files. Names retain their full stored length. Successful saves and
+renames replace the cached config before the generation counter advances; deletes
+remove it, and boot loading and cache rebuilds populate it. Imports and MCP saves
+use the same persistence paths. The browser refreshes its device-info cache after
+pad saves and imports, so no separate name-cache expiration is needed.
+
 ### Fragment Layout Convention
 
 Every fragment begins with a `section-header` containing its title and a short
@@ -553,7 +560,7 @@ handler work.
 
 | Response | Measured work |
 |----------|---------------|
-| `/api/info` and `/api/info?catalog=1` | Authentication, system and WiFi metadata, capability metadata, optional action and widget catalogs, display metadata, pad-name reads, and response setup |
+| `/api/info` and `/api/info?catalog=1` | Authentication, system and WiFi metadata, capability metadata, optional action and widget catalog construction and JSON writing, display metadata, cached pad-name reads, and response setup |
 | `/api/health` and available `/api/health/history` | Authentication, telemetry or history collection, and response preparation |
 | `/api/portal/nav` | Authentication, navigation construction, and response preparation |
 | `/api/config` | Authentication, configuration projection, and response preparation |
@@ -561,6 +568,16 @@ handler work.
 | `/api/pad/blocks`, `/api/sounds/list`, `/api/extensions`, and button-default configuration | Catalog or configuration collection and response preparation |
 | Shell, fragments, and bundled static assets | Handler phases where supplied, otherwise response preparation; fragments include asset lookup |
 | Other shared JSON response callers | JSON sizing and response setup, or error-response setup |
+
+For catalog requests, `actions_build` and `widgets_build` cover document allocation
+and metadata construction. `actions_json` and `widgets_json` cover JSON sizing,
+temporary buffer allocation, serialization, and response-stream writing. Catalogs
+are generated per request to preserve live availability checks; they are not cached.
+The temporary buffers prefer PSRAM, fall back to internal memory, and are freed
+after a bulk write. If allocation fails, serialization uses the original direct
+stream path. An incomplete catalog write returns an error rather than sending
+truncated JSON. `pad_names` includes screen enumeration and cached-name output,
+without pad-file existence checks, reads, or JSON parsing.
 
 Measurements stop before asynchronous response delivery. They do not include
 browser-side queueing, DNS, TCP connection establishment, request queueing before

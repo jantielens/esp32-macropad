@@ -64,11 +64,12 @@ static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
     snprintf(buf, buf_len, "/config/pad_%u.json", page);
 }
 
-static PadConfig* pad_config_create(uint8_t button_capacity) {
+static PadConfig* pad_config_create(uint8_t button_capacity, const char* name = "") {
     if (button_capacity > MAX_PAD_BUTTONS) return nullptr;
 
+    const size_t name_size = strlen(name) + 1;
     const size_t size = sizeof(PadConfig) +
-                        (size_t)button_capacity * sizeof(ScreenButtonConfig);
+                        (size_t)button_capacity * sizeof(ScreenButtonConfig) + name_size;
     PadConfig* config = nullptr;
     if (psramFound()) {
         config = (PadConfig*)heap_caps_malloc(
@@ -81,6 +82,9 @@ static PadConfig* pad_config_create(uint8_t button_capacity) {
     config->ref_count = 1;
     config->button_capacity = button_capacity;
     config->buttons = (ScreenButtonConfig*)(config + 1);
+    char* stored_name = (char*)(config->buttons + button_capacity);
+    memcpy(stored_name, name, name_size);
+    config->name = stored_name;
     return config;
 }
 
@@ -96,12 +100,14 @@ static bool pad_config_resize(PadConfig** config_ptr, uint8_t button_capacity) {
     }
     if (button_capacity == config->button_capacity) return true;
 
-    PadConfig* replacement = pad_config_create(button_capacity);
+    PadConfig* replacement = pad_config_create(button_capacity, config->name);
     if (!replacement) return false;
+    const char* replacement_name = replacement->name;
     memcpy(replacement, config, sizeof(PadConfig));
     replacement->ref_count = 1;
     replacement->button_capacity = button_capacity;
     replacement->buttons = (ScreenButtonConfig*)(replacement + 1);
+    replacement->name = replacement_name;
     memcpy(replacement->buttons, config->buttons,
            (size_t)config->button_count * sizeof(ScreenButtonConfig));
     pad_config_destroy(config);
@@ -567,7 +573,7 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
     JsonArray buttons = doc["buttons"];
     uint8_t button_capacity = buttons.isNull() ? 0 :
         (uint8_t)min((size_t)MAX_PAD_BUTTONS, buttons.size());
-    PadConfig* out = pad_config_create(button_capacity);
+    PadConfig* out = pad_config_create(button_capacity, doc["name"] | "");
     if (!out) {
         LOGE(TAG, "Page %u: OOM for %u buttons", page, button_capacity);
         return nullptr;
@@ -880,21 +886,11 @@ uint32_t pad_config_get_eligible_mask() {
 bool pad_config_read_name(uint8_t page, char* out, size_t out_len) {
     if (out && out_len) out[0] = '\0';
     if (!out || out_len == 0 || page >= MAX_PADS) return false;
-    size_t len = 0;
-    char* raw = pad_config_read_raw(page, &len);
-    if (!raw) return false;
-    // Read only the top-level "name" (friendly label) without parsing the whole
-    // pad. Mirrors the filtered read in web_portal_device_api.
-    JsonDocument filter;
-    filter["name"] = true;
-    JsonDocument doc;
-    bool ok = false;
-    if (deserializeJson(doc, raw, len, DeserializationOption::Filter(filter)) == DeserializationError::Ok
-        && doc["name"].is<const char*>()) {
-        const char* n = doc["name"];
-        if (n && n[0]) { strlcpy(out, n, out_len); ok = true; }
-    }
-    free(raw);
+    const PadConfig* config = pad_config_acquire(page);
+    if (!config) return false;
+    const bool ok = config->name && config->name[0];
+    if (ok) strlcpy(out, config->name, out_len);
+    pad_config_release(config);
     return ok;
 }
 

@@ -431,6 +431,7 @@ add_host_command_test(test_widget_schema python3 ${PROJECT_SOURCE_DIR}/tools/lin
 add_host_command_test(test_gauge_caption_cache python3 ${PROJECT_SOURCE_DIR}/tests/test_gauge_caption_cache.py)
 add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp)
 add_host_command_test(test_pad_refresh_schedule python3 ${PROJECT_SOURCE_DIR}/tests/test_pad_refresh_schedule.py)
+add_host_command_test(test_portal_info_preparation python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_info_preparation.py)
 add_host_command_test(test_gt911_touch python3 ${PROJECT_SOURCE_DIR}/tests/test_gt911_touch.py)
 add_host_command_test(test_touch_driver_samples python3 ${PROJECT_SOURCE_DIR}/tests/test_touch_driver_samples.py)
 add_host_command_test(test_touch_manager_snapshots python3 ${PROJECT_SOURCE_DIR}/tests/test_touch_manager_snapshots.py)

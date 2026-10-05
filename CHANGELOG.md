@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Device-info responses reuse immutable RAM-cached pad names instead of reading
+  pad files on each request. Saves, renames, imports, and deletes refresh names
+  through the existing pad cache lifecycle without a separate invalidation timer.
+* Action and widget catalogs serialize through temporary PSRAM-preferred buffers
+  and bulk response writes while retaining live availability checks. Server timing
+  separates catalog construction from JSON preparation and writing.
 * Portal startup avoids duplicate device-info and health requests. The pad
   editor loads pad data and appearance defaults before sound files, building
   blocks, and native extension catalogs. Catalog controls retain saved selections

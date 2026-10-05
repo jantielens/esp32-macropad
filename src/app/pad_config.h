@@ -492,6 +492,7 @@ struct ButtonDefaults {
 struct PadConfig {
     uint16_t ref_count;                    // cache/readers; managed by pad_config_acquire/release
     uint8_t button_capacity;               // allocated entries in buttons
+    const char* name;
     char layout[CONFIG_LAYOUT_NAME_MAX_LEN]; // "grid" or curated layout name
     uint8_t cols;                            // 1-8 (grid mode only)
     uint8_t rows;                            // 1-8 (grid mode only)
@@ -562,7 +563,7 @@ bool pad_config_exists(uint8_t page);
 char* pad_config_read_raw(uint8_t page, size_t* out_len);
 
 // Read just the pad's optional friendly "name" label into `out` (empty when
-// unset). Returns true when a non-empty name was found. Cheap filtered read.
+// unset). Returns true when a non-empty name was found in the RAM cache.
 bool pad_config_read_name(uint8_t page, char* out, size_t out_len);
 
 // Resolve a pad reference that is either the canonical id ('pad_N') or a

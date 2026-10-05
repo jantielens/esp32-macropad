@@ -36,6 +36,19 @@ extern DeviceConfig device_config;
 #include "action_catalog.h"
 #endif
 
+template <typename TJson, typename TDestination>
+static bool write_json_buffered(const TJson& json, TDestination& response) {
+		const size_t size = measureJson(json);
+		PsramJsonAllocator allocator;
+		void* buffer = allocator.allocate(size);
+		if (!buffer) return serializeJson(json, response) == size;
+		const size_t written = serializeJson(json, static_cast<char*>(buffer), size);
+		const bool ok = written == size &&
+				response.write(static_cast<const uint8_t*>(buffer), written) == written;
+		allocator.deallocate(buffer);
+		return ok;
+}
+
 static void print_json_string(AsyncResponseStream *response, const char *value) {
 		response->print('"');
 		for (const char *cursor = value ? value : ""; *cursor; ++cursor) {
@@ -200,11 +213,17 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						if (catalog_doc && catalog_doc->capacity() > 0) {
 								JsonArray actions = catalog_doc->to<JsonArray>();
 								action_catalog_emit(actions, false);
-								serializeJson(actions, *response);
+								timing.mark("actions_build");
+								if (!write_json_buffered(actions, *response)) {
+										delete response;
+										web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
+										return;
+								}
 						} else {
+								timing.mark("actions_build");
 								response->print("[]");
 						}
-						timing.mark("actions");
+						timing.mark("actions_json");
 				}
 		#endif
 
@@ -215,11 +234,17 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						if (widget_doc && widget_doc->capacity() > 0) {
 								JsonArray widgets = widget_doc->to<JsonArray>();
 								widget_preview_catalog_emit(widgets);
-								serializeJson(widgets, *response);
+								timing.mark("widgets_build");
+								if (!write_json_buffered(widgets, *response)) {
+										delete response;
+										web_portal_send_json_error(request, 503, "Widget catalog unavailable", &timing);
+										return;
+								}
 							} else {
+									timing.mark("widgets_build");
 								response->print("[]");
 							}
-						timing.mark("widgets");
+						timing.mark("widgets_json");
 				}
 				// Display screen information
 				response->print(",\"has_display\":true");
@@ -256,28 +281,19 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						response->print(screens[i].id);
 						response->print("\",\"name\":\"");
 
-						// For pad screens, read custom name from LittleFS config
+						// For pad screens, use the immutable cached config.
 						const char* sid = screens[i].id;
 						bool emitted = false;
 						if (strncmp(sid, "pad_", 4) == 0) {
 								uint8_t pg = (uint8_t)atoi(sid + 4);
-								if (pg < MAX_PADS && pad_config_exists(pg)) {
-										size_t len = 0;
-										char* raw = pad_config_read_raw(pg, &len);
-										if (raw) {
-												JsonDocument filter;
-												filter["name"] = true;
-												JsonDocument doc;
-												if (deserializeJson(doc, raw, len, DeserializationOption::Filter(filter)) == DeserializationError::Ok
-														&& doc["name"].is<const char*>() && strlen(doc["name"].as<const char*>()) > 0) {
-														response->print(screens[i].display_name);
-														response->print(": ");
-														response->print(doc["name"].as<const char*>());
-														emitted = true;
-												}
-												free(raw);
-										}
+								const PadConfig* config = pad_config_acquire(pg);
+								if (config && config->name && config->name[0]) {
+										response->print(screens[i].display_name);
+										response->print(": ");
+										response->print(config->name);
+										emitted = true;
 								}
+								pad_config_release(config);
 						}
 						if (!emitted) response->print(screens[i].display_name);
 
