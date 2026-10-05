@@ -138,36 +138,42 @@ static uint8_t* prepare_pad_save_json(uint8_t page, const uint8_t* json, size_t 
 // GET /api/pad?page=N
 // ============================================================================
 void handleGetPadConfig(AsyncWebServerRequest *request) {
+    WebPortalTiming timing;
     if (!portal_auth_gate(request)) return;
+    timing.mark("auth");
 
     int page = parse_page_param(request);
     if (page < 0) {
-        web_portal_send_json_error(request, 400, "Missing or invalid page parameter");
+        web_portal_send_json_error(request, 400, "Missing or invalid page parameter", &timing);
         return;
     }
 
     if (!pad_config_exists((uint8_t)page)) {
-        web_portal_send_json_error(request, 404, "Page config not found");
+        web_portal_send_json_error(request, 404, "Page config not found", &timing);
         return;
     }
 
     size_t len = 0;
+    timing.mark("lookup");
     char* json = pad_config_read_raw((uint8_t)page, &len);
+    timing.mark("storage");
     if (!json) {
-        web_portal_send_json_error(request, 500, "Failed to read config");
+        web_portal_send_json_error(request, 500, "Failed to read config", &timing);
         return;
     }
 
     std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(len * 2 + 512);
     if (!doc || deserializeJson(*doc, json, len)) {
         free(json);
-        web_portal_send_json_error(request, 500, "Failed to read config");
+        web_portal_send_json_error(request, 500, "Failed to read config", &timing);
         return;
     }
     free(json);
+    timing.mark("parse");
 
     remove_pad_image_passwords((*doc)["buttons"].as<JsonArray>());
-    web_portal_send_json_chunked(request, doc);
+    timing.mark("redact");
+    web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 // ============================================================================
@@ -318,7 +324,9 @@ void handleDeletePadConfig(AsyncWebServerRequest *request) {
 // GET /api/pad/blocks — building block catalog
 // ============================================================================
 void handleGetPadBlocks(AsyncWebServerRequest *request) {
+    WebPortalTiming timing;
     if (!portal_auth_gate(request)) return;
+    timing.mark("auth");
 
     const uint8_t count = pad_block_catalog_count();
     const PadBlock* const* catalog = pad_block_catalog();
@@ -364,6 +372,8 @@ void handleGetPadBlocks(AsyncWebServerRequest *request) {
         response->print("}}");
     }
     response->print(']');
+    timing.mark("blocks_json");
+    timing.attach(response);
     request->send(response);
 }
 

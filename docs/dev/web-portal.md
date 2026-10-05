@@ -533,6 +533,51 @@ or device taking longer to boot.
 - DNS propagation for hostname changes may take additional time
 - Some networks/browsers block cross-origin polling
 
+## Server Timing Diagnostics
+
+Firmware portal responses expose request-local measurements in the `Server-Timing`
+HTTP header. Select a request in browser DevTools and open **Timing** to inspect
+the metrics, or inspect the response header directly. The local Python portal
+mock does not measure firmware handlers.
+
+```http
+Server-Timing: auth;dur=0.010, system;dur=0.250, wifi;dur=12.000, total;dur=12.400
+```
+
+Durations are milliseconds with three decimal places. Named phases measure time
+since the preceding phase marker; `total` measures handler work up to header
+attachment. It overlaps the phase measurements and must not be added to them.
+Shared response helpers use `response_total` when the caller has not supplied a
+handler timer; that metric covers only response preparation, not the earlier
+handler work.
+
+| Response | Measured work |
+|----------|---------------|
+| `/api/info` and `/api/info?catalog=1` | Authentication, system and WiFi metadata, capability metadata, optional action and widget catalogs, display metadata, pad-name reads, and response setup |
+| `/api/health` and available `/api/health/history` | Authentication, telemetry or history collection, and response preparation |
+| `/api/portal/nav` | Authentication, navigation construction, and response preparation |
+| `/api/config` | Authentication, configuration projection, and response preparation |
+| `/api/pad?page=N` | Authentication, pad lookup, storage reads, parsing, secret redaction, and response preparation |
+| `/api/pad/blocks`, `/api/sounds/list`, `/api/extensions`, and button-default configuration | Catalog or configuration collection and response preparation |
+| Shell, fragments, and bundled static assets | Handler phases where supplied, otherwise response preparation; fragments include asset lookup |
+| Other shared JSON response callers | JSON sizing and response setup, or error-response setup |
+
+Measurements stop before asynchronous response delivery. They do not include
+browser-side queueing, DNS, TCP connection establishment, request queueing before
+the handler starts, asynchronous body serialization, or network transmission.
+If browser waiting/TTFB is high but `total` is low, investigate scheduling or
+transport latency rather than attributing the entire wait to handler execution.
+Compare repeated requests because device load and network conditions vary.
+
+`WebPortalTiming` uses a fixed 384-byte formatting buffer per timer and reserves
+space for a total metric when additional phases no longer fit. It has no global
+request state, persistent storage, per-request logging, or external telemetry.
+Timer reads are inexpensive, but phase formatting, temporary stack use, response
+header allocation, and additional transmitted header bytes are not free. Keep
+phase names short and mark meaningful work boundaries instead of individual
+fields or loop iterations. JSON response bodies and cache policies are unchanged;
+not every authentication failure, redirect, or early error response is instrumented.
+
 ## REST API Reference
 
 ### Recipe Catalog

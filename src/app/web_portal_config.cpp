@@ -94,7 +94,9 @@ void web_portal_config_loop() {
 }
 
 void handleGetConfig(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		DeviceConfig *current_config = web_portal_get_current_config();
 		if (!current_config) {
@@ -217,17 +219,19 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				#endif
 
 				// Let registered device classes append their own fields.
+				timing.mark("config_json");
 				{
 						JsonObject root = doc->as<JsonObject>();
 						device_class_dispatch_config_api_get(current_config, root);
 				}
+				timing.mark("device_class");
 
 				if (doc->overflowed()) {
 						LOGE("Portal", "/api/config JSON overflow");
 				}
 		}
 
-		web_portal_send_json_chunked(request, doc);
+		web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {

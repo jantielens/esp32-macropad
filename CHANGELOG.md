@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Bounded, request-local `Server-Timing` headers across portal information,
+  health, configuration, navigation, pad, catalog, fragment, and asset responses.
+  DevTools reports preparation phases and handler or response-only totals without
+  changing JSON bodies or adding requests; asynchronous delivery is not measured.
 * Widget-owned preview metadata in `GET /api/info?catalog=1`, independent of
   MCP. Each widget registers its display name, Material Symbol, and optional
   axis variants, replacing the pad editor's central icon mapping.

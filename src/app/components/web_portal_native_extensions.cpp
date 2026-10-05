@@ -93,7 +93,9 @@ bool upload_start(AsyncWebServerRequest* request, size_t total) {
 }
 
 void handle_extension_status(AsyncWebServerRequest* request) {
+    WebPortalTiming timing;
     if (!portal_auth_gate(request)) return;
+    timing.mark("auth");
     AsyncResponseStream* response = request->beginResponseStream("application/json");
     response->print("{\"slots\":[");
     for (uint8_t slot = 0; slot < native_extension_slot_count(); ++slot) {
@@ -103,6 +105,8 @@ void handle_extension_status(AsyncWebServerRequest* request) {
         response->printf("{\"slot\":%u,\"installed\":%s,\"staged\":%s,\"pending_delete\":%s,\"incompatible_abi\":%s,\"enabled\":%s,\"loaded\":%s,\"capacity\":%u,\"size\":%u,\"staged_size\":%u,\"abi_version\":%u,\"id\":\"%s\",\"version\":\"%s\",\"target_abi\":\"%s\",\"title\":\"%s\",\"runtime_state\":%u,\"runtime_detail\":\"%s\"}", info.slot, info.installed ? "true" : "false", info.staged ? "true" : "false", info.pending_delete ? "true" : "false", info.incompatible_abi ? "true" : "false", info.enabled ? "true" : "false", info.loaded ? "true" : "false", info.capacity, info.elf_size, info.staged_size, info.abi_version, info.id, info.version, info.target_abi, info.title, info.runtime_state, info.runtime_detail);
     }
     response->print("]}");
+    timing.mark("slots_json");
+    timing.attach(response);
     request->send(response);
 }
 

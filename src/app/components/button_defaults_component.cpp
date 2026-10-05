@@ -10,7 +10,9 @@
 #include <ArduinoJson.h>
 
 static void button_defaults_get_config(AsyncWebServerRequest *request) {
+    WebPortalTiming timing;
     const ButtonDefaults* d = button_defaults_get();
+    timing.mark("defaults");
 
     auto doc = make_psram_json_doc(1024);
     if (d->default_pad_bg_color[0]) (*doc)["default_pad_bg_color"] = d->default_pad_bg_color;
@@ -41,7 +43,8 @@ static void button_defaults_get_config(AsyncWebServerRequest *request) {
     if (d->icon_position == ICON_POS_LEFT)   (*doc)["icon_position"] = "left";
     else if (d->icon_position == ICON_POS_CENTER) (*doc)["icon_position"] = "center";
 
-    web_portal_send_json_chunked(request, doc);
+    timing.mark("defaults_json");
+    web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 static void button_defaults_save_config(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {

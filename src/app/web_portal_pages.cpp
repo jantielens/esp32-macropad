@@ -3,6 +3,7 @@
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
 #include "web_portal_utils.h"
+#include "web_portal_timing.h"
 
 #include "web_assets.h"
 
@@ -27,8 +28,11 @@ static AsyncWebServerResponse *begin_gzipped_asset_response(
 		const char *content_type,
 		const uint8_t *content_gz,
 		size_t content_gz_len,
-		const char *cache_control
+		const char *cache_control,
+		WebPortalTiming *timing = nullptr
 ) {
+		WebPortalTiming response_timing;
+		WebPortalTiming &active_timing = timing ? *timing : response_timing;
 		AsyncWebServerResponse *response = request->beginResponse(
 				content_type,
 				content_gz_len,
@@ -48,20 +52,25 @@ static AsyncWebServerResponse *begin_gzipped_asset_response(
 		if (cache_control && strlen(cache_control) > 0) {
 				response->addHeader("Cache-Control", cache_control);
 		}
+		active_timing.mark("response_setup");
+		active_timing.attach(response, timing ? "total" : "response_total");
 		return response;
 }
 
 // ---- Shell (new single-page root) ----
 
 void handleShell(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		AsyncWebServerResponse *response = begin_gzipped_asset_response(
 				request,
 				"text/html",
 				shell_html_gz,
 				shell_html_gz_len,
-				"no-store"
+				"no-store",
+				&timing
 		);
 		request->send(response);
 }
@@ -69,7 +78,9 @@ void handleShell(AsyncWebServerRequest *request) {
 // ---- Fragment handler ----
 
 void handleFragment(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		// URL: /api/section/{id}  — id is the last path segment
 		const String& url = request->url();
@@ -81,6 +92,7 @@ void handleFragment(AsyncWebServerRequest *request) {
 		String frag_id = url.substring(last_slash + 1);
 
 		const FragmentAsset* asset = find_fragment_asset(frag_id.c_str());
+		timing.mark("fragment_lookup");
 		if (!asset) {
 				request->send(404, "text/plain", "Fragment not found");
 				return;
@@ -91,7 +103,8 @@ void handleFragment(AsyncWebServerRequest *request) {
 				"text/html",
 				asset->data,
 				asset->len,
-				"no-store"
+				"no-store",
+				&timing
 		);
 		request->send(response);
 }

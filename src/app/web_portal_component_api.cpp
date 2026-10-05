@@ -67,7 +67,9 @@ static bool is_hardcoded_category(const char* id) {
 // ============================================================================
 
 static void handlePortalNav(AsyncWebServerRequest* request) {
+    WebPortalTiming timing;
     if (!portal_auth_gate(request)) return;
+    timing.mark("auth");
     bool ap_mode = web_portal_is_ap_mode_active();
 
     auto doc = make_psram_json_doc(4096);
@@ -214,7 +216,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         }
     }
 
-    web_portal_send_json_chunked(request, doc);
+    timing.mark("navigation");
+    web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 // ============================================================================

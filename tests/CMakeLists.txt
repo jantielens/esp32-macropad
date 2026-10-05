@@ -52,6 +52,7 @@ set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
 add_host_gtest(test_mousepad test_mousepad.cpp)
 add_host_gtest(test_gamepad test_gamepad.cpp)
+add_host_gtest(test_web_portal_timing test_web_portal_timing.cpp)
 
 enable_language(C)
 file(GLOB_RECURSE HOST_LVGL_SOURCES CONFIGURE_DEPENDS

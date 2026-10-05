@@ -64,7 +64,9 @@ static void print_json_string(AsyncResponseStream *response, const char *value) 
 
 // GET /api/info - Get device information
 void handleGetVersion(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		AsyncResponseStream *response = request->beginResponseStream("application/json");
 		response->print("{\"version\":\"");
@@ -99,6 +101,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(device_telemetry_sketch_size());
 		response->print(",\"free_sketch_space\":");
 		response->print(device_telemetry_free_sketch_space());
+		timing.mark("system");
 		response->print(",\"mac_address\":\"");
 		response->print(WiFi.macAddress());
 		response->print("\",\"device_name\":");
@@ -110,6 +113,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(".local\",\"hostname\":\"");
 		response->print(WiFi.getHostname());
 		response->print("\",\"project_name\":\"");
+		timing.mark("wifi");
 		response->print(PROJECT_NAME);
 		response->print("\",\"project_display_name\":\"");
 		response->print(device_class_get_full_name());
@@ -156,6 +160,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print("\",\"github_repo\":\"");
 		response->print(REPO_NAME);
 		response->print("\"");
+		timing.mark("metadata");
 
 		response->print(",\"has_mqtt\":");
 		response->print(HAS_MQTT ? "true" : "false");
@@ -182,6 +187,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_IMAGE_FETCH ? "true" : "false");
 		response->print(",\"has_image_library\":");
 		response->print(HAS_IMAGE_LIBRARY ? "true" : "false");
+		timing.mark("capabilities");
 
 		// Action authoring catalog: only computed and sent when explicitly
 		// requested, so the bare response used by reboot connection polling
@@ -198,6 +204,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						} else {
 								response->print("[]");
 						}
+						timing.mark("actions");
 				}
 		#endif
 
@@ -212,6 +219,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 							} else {
 								response->print("[]");
 							}
+						timing.mark("widgets");
 				}
 				// Display screen information
 				response->print(",\"has_display\":true");
@@ -235,6 +243,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 				response->print(display_coord_width);
 				response->print(",\"display_coord_height\":");
 				response->print(display_coord_height);
+				timing.mark("display");
 
 				// Get available screens
 				size_t screen_count = 0;
@@ -275,6 +284,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						response->print("\"}");
 				}
 				response->print("]");
+				timing.mark("pad_names");
 
 				// Get current screen
 				const char* current_screen = display_manager_get_current_screen_id();
@@ -292,12 +302,16 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		#endif
 
 		response->print("}");
+		timing.mark("response_setup");
+		timing.attach(response);
 		request->send(response);
 }
 
 // GET /api/bindings - Live binding scheme metadata for portal validation.
 void handleGetBindings(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (!doc || doc->capacity() == 0) {
@@ -306,12 +320,15 @@ void handleGetBindings(AsyncWebServerRequest *request) {
 		}
 		JsonArray schemes = (*doc)["schemes"].to<JsonArray>();
 		binding_schema_emit(&schemes);
-		web_portal_send_json_chunked(request, doc);
+		timing.mark("schema");
+		web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 // GET /api/health - Get device health statistics
 void handleGetHealth(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (doc && doc->capacity() > 0) {
@@ -321,12 +338,15 @@ void handleGetHealth(AsyncWebServerRequest *request) {
 				}
 		}
 
-		web_portal_send_json_chunked(request, doc);
+		timing.mark("telemetry");
+		web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 // GET /api/health/history - Get device-side health history for sparklines
 void handleGetHealthHistory(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		#if !HEALTH_HISTORY_ENABLED
 				request->send(404, "application/json", "{\"available\":false}");
@@ -340,6 +360,7 @@ void handleGetHealthHistory(AsyncWebServerRequest *request) {
 		const HealthHistoryParams params = health_history_params();
 		const size_t count = health_history_count();
 		const size_t capacity = health_history_capacity();
+		timing.mark("history_snapshot");
 
 		AsyncResponseStream *response = request->beginResponseStream("application/json");
 		response->addHeader("Cache-Control", "no-store");
@@ -404,6 +425,8 @@ void handleGetHealthHistory(AsyncWebServerRequest *request) {
 #undef PRINT_U32_ARRAY_FIELD
 
 		response->print("}");
+		timing.mark("history_json");
+		timing.attach(response);
 		request->send(response);
 
 		#endif // HEALTH_HISTORY_ENABLED
