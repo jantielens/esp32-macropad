@@ -1655,7 +1655,7 @@ body {
   border-radius: 8px;
   min-height: 0;
   cursor: pointer;
-  transition: transform 0.1s, box-shadow 0.15s, outline-color 0.15s;
+  transition: transform 0.1s, box-shadow 0.15s;
   text-align: center;
   padding: 6px 4px;
   overflow: hidden;
@@ -2431,11 +2431,16 @@ input[type="text"].label-style-input {
    Toast container — anchor to top-right, just below the page header.
    The header is not sticky; --portal-header-height-desktop is published
    by JS on load/resize so this stays correct on mobile (badges wrap)
-   and desktop. Keeps toasts clear of the pad-editor toolbar at bottom.
+  and desktop.
    ================================================================ */
 #toast-container.toast-container {
   top: calc(var(--portal-header-height-desktop, 120px) + 12px);
   bottom: auto;
+}
+body:has(#pad-editor-root) #toast-container {
+  top: auto;
+  bottom: 64px;
+  max-width: 100%;
 }
 
 #pad-editor-root { --pad-workspace-line: var(--portal-border-light); }
@@ -2466,7 +2471,6 @@ input[type="text"].label-style-input {
 #pad-workspace-tabs button[aria-selected="true"] { color: var(--portal-primary); border-bottom-color: var(--portal-primary); }
 #pad-workspace-button-fields { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #pad-edit-overlay { flex: 1; min-height: 0; }
-#pad-editor-root .pad-edit-footer .btn { font-size: 12px; padding: 6px; }
 #pad-editor-root .editor-group { border-radius: 4px; }
 #pad-editor-root .editor-group-body { padding: 10px; }
 #pad-editor-root .pad-workspace-pad-fields { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
