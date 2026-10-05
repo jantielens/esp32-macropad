@@ -280,9 +280,9 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
     h += actionEditorTypeOptionsHTML();
     h += '</select>';
-    h += '<small id="' + prefix + '-context" class="action-context" style="display:none; color:#86868b;"></small>';
+    h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
     if (opts.showBleHint) {
-        h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Keyboard unavailable on this board.</small>';
+        h += '<small id="' + prefix + '-ble-hint" style="display:none;">Keyboard unavailable on this board.</small>';
     }
     h += '</div>';
     // Screen target

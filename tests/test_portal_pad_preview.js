@@ -98,7 +98,8 @@ for (const cell of gridElement.children) {
     assert(cell.children.some(child => child.className === 'pad-widget-fallback'));
 }
 assert(gridElement.children[1].classes.has('pad-cell-ghost'));
-assert.strictEqual(gridElement.children[1].style.gridColumn, 'span 2');
+assert.strictEqual(gridElement.children[1].style.gridColumn, '2 / span 2');
+assert.strictEqual(gridElement.children[1].style.gridRow, '1 / span 1');
 assert.strictEqual(gridElement.children[1].children[0].title, 'Gauge Widget');
 const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
 const font = Buffer.from(css.match(/data:font\/woff2;base64,([^']+)/)[1], 'base64');

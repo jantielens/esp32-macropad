@@ -4,8 +4,6 @@
                     <div class="editor-group-body">
                         <div class="widget-sub-heading">Data Sources</div>
 
-                        <small>Each line needs a live data binding. Home Assistant history can optionally fill that same line after a restart.</small>
-
                         <div class="sparkline-source">
                             <div class="sparkline-source-heading">
                                 <span>Line 1</span>
@@ -18,6 +16,7 @@
                                     <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]" oninput="padUpdateSparklineEditor()">
                                 </div>
                             </div>
+                            <small>Each line needs a live data binding. Home Assistant history can optionally fill that same line after a restart.</small>
                             </div>
                             <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency"></small>

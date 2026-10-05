@@ -2,13 +2,13 @@
                 <details class="editor-group" id="pad-edit-numericrocker-section" style="display:none;">
                     <summary>Numeric Rocker Settings</summary>
                     <div class="editor-group-body">
-                        <small style="display:block; margin-bottom:12px; color:#86868b;">Splits the button into 4 tap zones for fine and coarse adjustment. The center of the button works as a normal button with tap and long-press actions. Configure the adjustment action below using <code>{step}</code> as a placeholder for the signed step value.</small>
                         <div class="form-group">
                             <label for="pad-edit-numericrocker-axis">Direction</label>
                             <select id="pad-edit-numericrocker-axis">
                                 <option value="horizontal">Left / Right</option>
                                 <option value="vertical">Up / Down</option>
                             </select>
+                            <small>Four tap zones provide fine and coarse adjustment. The center retains the button's tap and long-press actions.</small>
                         </div>
                         <div style="display:flex; gap:8px;">
                             <div class="form-group" style="flex:1;">
@@ -41,6 +41,7 @@
                         <hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">
                         <div id="pad-edit-numericrocker-adjust-section">
                             <div id="pad-edit-nr-adjust-container"></div>
+                            <small>Use <code>{step}</code> in the adjustment action for the signed step value.</small>
                         </div>
                     </div>
                 </details>

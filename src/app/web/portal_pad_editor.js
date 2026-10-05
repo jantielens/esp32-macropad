@@ -34,10 +34,12 @@ let padDirty = false;
 let padSaveInProgress = false;
 let padFooterVisible = false;
 let padQuickSaveObserver = null;
+let padLoadGeneration = 0;
 
 function padMarkDirty(event) {
     if (event && event.isTrusted === false) return;
     padDirty = true;
+    if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.revision++;
     padUpdateQuickSave();
 }
 
@@ -47,9 +49,11 @@ function padClearDirty() {
 }
 
 function padUpdateQuickSave() {
+    if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
     const quickSave = document.getElementById('pad-quick-save-btn');
     const editor = document.getElementById('pad-config-section');
     if (!quickSave || !editor) return;
+    if (typeof padWorkspace !== 'undefined' && padWorkspace) { quickSave.hidden = true; return; }
 
     quickSave.hidden = !padDirty || padFooterVisible || editor.style.display === 'none';
     quickSave.disabled = padSaveInProgress;
@@ -93,11 +97,13 @@ function padSetHidWidgetCapabilityVisibility(info) {
 async function padInit() {
     const section = document.getElementById('pad-config-section');
     if (!section) return;
+    if (typeof padWorkspaceInit === 'function') padWorkspaceInit();
 
     // The action-type picker renders from the firmware catalog cached on
     // deviceInfoCache; wait for it before building any action editor markup
     // so the picker is complete and correct on first paint.
     await getDeviceInfo();
+    if (document.getElementById('pad-config-section') !== section) return;
 
     const nativeExtensions = deviceInfoCache && deviceInfoCache.has_native_extensions === true;
     padExtensionCatalogLoading = nativeExtensions;
@@ -142,6 +148,7 @@ async function padInit() {
 
     document.getElementById('pad-page-select').addEventListener('change', (e) => {
         const newPage = parseInt(e.target.value);
+        if (typeof padWorkspaceSwitch === 'function') { padWorkspaceSwitch(newPage); return; }
         if (padDirty) {
             if (!confirm('You have unsaved changes. Discard and switch pad?')) {
                 e.target.value = padState.page;
@@ -196,19 +203,15 @@ async function padInit() {
         e.stopPropagation();
         moreMenu.style.display = moreMenu.style.display === 'none' ? 'block' : 'none';
     });
-    // Close menu on outside click
-    document.addEventListener('click', () => { moreMenu.style.display = 'none'; });
     // Close menu when any menu item is clicked
     moreMenu.addEventListener('click', (e) => {
         if (e.target.tagName === 'BUTTON' && !e.target.disabled) moreMenu.style.display = 'none';
     });
 
     // Dialog buttons
-    document.getElementById('pad-edit-ok').addEventListener('click', () => padDialogOk());
     document.getElementById('pad-edit-copy').addEventListener('click', padDialogCopyBtn);
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
-    document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
     var imageRefresh = document.getElementById('pad-edit-bg-image-refresh');
     if (imageRefresh) imageRefresh.addEventListener('click', function () {
         padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value);
@@ -239,30 +242,14 @@ async function padInit() {
     const iconMi = document.getElementById('pad-edit-icon-mi');
     if (iconMi) iconMi.addEventListener('input', padUpdateIconPreview);
 
-    // Close dialog on overlay click
-    document.getElementById('pad-edit-overlay').addEventListener('click', (e) => {
-        if (e.target.id === 'pad-edit-overlay') padDialogClose();
-    });
 
     // Block placement cancel + Escape key
     const blockCancelBtn = document.getElementById('pad-block-cancel-btn');
     if (blockCancelBtn) blockCancelBtn.addEventListener('click', padExitPlacementMode);
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && padState.placingBlock) {
-            padExitPlacementMode();
-            e.stopImmediatePropagation();
-        }
-    });
 
     // Track unsaved changes on name and other inputs
     document.getElementById('pad-name').addEventListener('input', padMarkDirty);
 
-    // Warn before leaving with unsaved changes
-    window.addEventListener('beforeunload', (e) => {
-        if (padDirty) {
-            e.preventDefault();
-        }
-    });
 
     // deviceInfoCache is already populated (awaited at the top of padInit).
     if (deviceInfoCache.has_display === true) {
@@ -331,6 +318,10 @@ function padLoadLevelActions(actions) {
         return action && typeof action === 'object' && action.type && action.type !== 'none';
     }).slice(0, MAX_ACTIONS);
     actionEditorListLoad(padLevelActionPrefixes(), padState.padActions);
+    if (typeof padWorkspace !== 'undefined' && padWorkspace) {
+        document.querySelectorAll('#pad-level-action-editors .action-list-slot').forEach(group => { group.open = false; });
+        padWorkspaceSummaries();
+    }
 }
 
 function padBuildLevelActions() {
@@ -401,10 +392,14 @@ function padPopulateTemplateDropdown(currentPage) {
 async function padLoadTemplateButtons() {
     padState.templateButtons = [];
     if (padState.templatePad < 0) return;
+    const page = padState.page;
+    const template = padState.templatePad;
+    const section = document.getElementById('pad-config-section');
     try {
-        const resp = await fetch('/api/pad?page=' + padState.templatePad);
+        const resp = await fetch('/api/pad?page=' + template);
         if (!resp.ok) return;
         const json = await resp.json();
+        if (page !== padState.page || template !== padState.templatePad || document.getElementById('pad-config-section') !== section) return;
         padState.templateButtons = (json.buttons && Array.isArray(json.buttons)) ? json.buttons : [];
     } catch (e) {
         // Silently ignore — template just won't show ghosts
@@ -415,13 +410,20 @@ function padPopulateScreenDropdown() {
     var prefixes = padActionPrefixes('tap').concat(padActionPrefixes('lp'), padLevelActionPrefixes());
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
+    const selected = new Map();
+    prefixes.forEach(function(prefix) {
+        const select = document.getElementById(prefix + '-target');
+        if (select) selected.set(select, select.value);
+    });
     actionEditorPopulateScreens(
         prefixes,
         deviceInfoCache ? deviceInfoCache.available_screens : null
     );
+    selected.forEach(function(value, select) { select.value = value; });
     // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
     const wakeSel = document.getElementById('pad-wake-screen');
     if (wakeSel && deviceInfoCache && deviceInfoCache.available_screens) {
+        const wakeScreen = wakeSel.value;
         while (wakeSel.options.length > 1) wakeSel.remove(1);
         deviceInfoCache.available_screens.forEach(s => {
             const opt = document.createElement('option');
@@ -429,6 +431,7 @@ function padPopulateScreenDropdown() {
             opt.textContent = s.name;
             wakeSel.appendChild(opt);
         });
+        wakeSel.value = wakeScreen;
     }
 }
 
@@ -439,11 +442,13 @@ let padExtensionCatalogLoading = false;
 
 // Fetch sound list from device and update cache
 function padFetchSoundList() {
+    const section = document.getElementById('pad-config-section');
     return fetch('/api/sounds/list')
         .then(function(r) { return r.ok ? r.json() : []; })
         .then(function(sounds) { padSoundListCache = sounds; })
         .catch(function() {})
         .finally(function() {
+            if (document.getElementById('pad-config-section') !== section) return;
             padSoundListLoading = false;
             padPopulateSoundDropdown();
         });
@@ -474,7 +479,7 @@ function padWidgetTypeChanged() {
         extensionSection.style.display = wtype === 'external' ? '' : 'none';
         if (wtype === 'external') extensionSection.open = true;
     }
-    ['pad-edit-labels-section', 'pad-edit-icon-section'].forEach(function (id) {
+    ['pad-edit-text-labels-section', 'pad-edit-icon-section'].forEach(function (id) {
         var section = document.getElementById(id);
         if (section) section.style.display = wtype === 'external' ? 'none' : '';
     });
@@ -531,7 +536,14 @@ function padWidgetTypeChanged() {
 }
 
 async function padLoadPage(page, defaultsReady) {
+    const generation = ++padLoadGeneration;
+    const section = document.getElementById('pad-config-section');
+    const current = () => generation === padLoadGeneration && document.getElementById('pad-config-section') === section;
+    if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+    if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = true;
     padState.page = page;
+    const screen = (deviceInfoCache.available_screens || []).find(screen => screen.id === 'pad_' + page);
+    document.getElementById('pad-name').value = screen ? screen.name : '';
     padState.rawJson = null;
     padState.buttons = [];
     padState.bindings = [];
@@ -544,6 +556,7 @@ async function padLoadPage(page, defaultsReady) {
     try {
         const resp = await fetch('/api/pad?page=' + page);
         await defaultsReady;
+        if (!current()) return;
         if (resp.status === 404) {
             // No config for this page — show empty grid
             padState.cols = 3;
@@ -569,6 +582,7 @@ async function padLoadPage(page, defaultsReady) {
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
 
         const json = await resp.json();
+        if (!current()) return;
         padState.rawJson = json;
         const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
         const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
@@ -594,6 +608,7 @@ async function padLoadPage(page, defaultsReady) {
         padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null) ? json.template_pad : -1;
         padPopulateTemplateDropdown(page);
         await padLoadTemplateButtons();
+        if (!current()) return;
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -611,6 +626,7 @@ async function padLoadPage(page, defaultsReady) {
                    padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), '#000000'));
         padRenderGrid();
     } catch (err) {
+        if (!current()) return;
         console.error('padLoadPage error:', err);
         showMessage('Failed to load Pad ' + (page + 1), 'error');
         padRenderGrid();
@@ -618,7 +634,10 @@ async function padLoadPage(page, defaultsReady) {
         // Loading action lists, bindings, and template buttons can update
         // controls after the initial reset. A settled page is the clean
         // baseline; only user edits after this point should trigger a prompt.
-        padClearDirty();
+        if (current()) {
+            if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = false;
+            padClearDirty();
+        }
     }
 }
 
@@ -627,6 +646,7 @@ function padCloneJson(value) {
 }
 
 function padBuildSaveContext() {
+    if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate();
     const snapshot = {
         page: padState.page,
         cols: padState.cols,
@@ -793,8 +813,14 @@ async function padPersistPage(context) {
 async function padSavePage(options) {
     const bulk = Boolean(options && options.bulk);
     try {
+        const section = document.getElementById('pad-config-section');
         const context = padBuildSaveContext();
+        const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;
+        const revision = workspace ? workspace.revision : 0;
         await padQueuePersistence(context);
+
+        if (!bulk && (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
+            (workspace && (workspace !== padWorkspace || workspace.revision !== revision)))) return context;
 
         showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         padClearDirty();
@@ -803,8 +829,17 @@ async function padSavePage(options) {
         if (!bulk) {
             // Refresh deviceInfoCache so target screen dropdowns pick up new pad names.
             await getDeviceInfo(true);
+            if (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
+                (workspace && workspace.revision !== revision)) return context;
+            const selected = workspace && workspace.selected ? [padState.editCol, padState.editRow, workspace.scope, workspace.tab] : null;
             // Reload to get canonical version from device.
             await padLoadPage(context.page);
+            if (selected && workspace === padWorkspace && padState.page === context.page) {
+                padDialogOpen(selected[0], selected[1]);
+                padWorkspaceSetScope(selected[2]);
+                padWorkspace.tab = selected[3];
+                padWorkspaceRenderTabs();
+            }
         }
         return context;
     } catch (err) {
@@ -821,6 +856,7 @@ function padUpdateDropdownLabel(page, name) {
     if (!sel) return;
     const opt = sel.options[page];
     if (opt) opt.textContent = name ? 'Pad ' + (page + 1) + ': ' + name : 'Pad ' + (page + 1);
+    if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
 }
 
 // Populate pad-page-select labels from deviceInfoCache.available_screens

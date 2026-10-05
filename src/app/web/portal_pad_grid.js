@@ -123,6 +123,7 @@ function padResizeDragStart(col, row, side, startX, startY) {
                         (btn.col_span || 1) !== origCs || (btn.row_span || 1) !== origRs;
         if (changed) padMarkDirty();
         padRenderGrid();
+        if (typeof padWorkspaceMoveSelection === 'function') padWorkspaceMoveSelection(origCol, origRow, btn);
     }
 
     document.addEventListener('mousemove', onMouseMove);
@@ -207,20 +208,22 @@ function padRenderGrid() {
             cell.classList.add('pad-cell');
             cell.dataset.col = c;
             cell.dataset.row = r;
+            cell.style.gridColumn = (c + 1) + ' / span 1';
+            cell.style.gridRow = (r + 1) + ' / span 1';
 
             if (btn) {
                 cell.classList.add('pad-cell-btn');
                 const cs = Math.min(btn.col_span || 1, cols - c);
                 const rs = Math.min(btn.row_span || 1, rows - r);
-                if (cs > 1) cell.style.gridColumn = 'span ' + cs;
-                if (rs > 1) cell.style.gridRow = 'span ' + rs;
+                if (cs > 1) cell.style.gridColumn = (c + 1) + ' / span ' + cs;
+                if (rs > 1) cell.style.gridRow = (r + 1) + ' / span ' + rs;
 
                 padRenderCellContent(cell, btn);
 
                 padRenderResizeHandles(cell, btn, c, r);
 
                 if (!padState.placingBlock) {
-                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                    cell.addEventListener('click', () => padWorkspaceSelect(c, r));
                     cell.draggable = true;
                     cell.addEventListener('dragstart', (e) => padDragStart(e, c, r));
                     cell.addEventListener('dragend', padDragEnd);
@@ -232,8 +235,8 @@ function padRenderGrid() {
                     cell.classList.add('pad-cell-btn', 'pad-cell-ghost');
                     const cs = Math.min(tplBtn.col_span || 1, cols - c);
                     const rs = Math.min(tplBtn.row_span || 1, rows - r);
-                    if (cs > 1) cell.style.gridColumn = 'span ' + cs;
-                    if (rs > 1) cell.style.gridRow = 'span ' + rs;
+                    if (cs > 1) cell.style.gridColumn = (c + 1) + ' / span ' + cs;
+                    if (rs > 1) cell.style.gridRow = (r + 1) + ' / span ' + rs;
                     padRenderCellContent(cell, tplBtn);
                     // Mark cells covered by this template button's span
                     for (let dc = 0; dc < cs; dc++) {
@@ -255,7 +258,7 @@ function padRenderGrid() {
                 if (padState.placingBlock) {
                     cell.addEventListener('click', () => padPlacementClick(c, r));
                 } else {
-                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                    cell.addEventListener('click', () => padWorkspaceSelect(c, r));
                 }
             }
 
@@ -265,9 +268,13 @@ function padRenderGrid() {
 
     // Placement mode: add hover overlay behavior
     if (padState.placingBlock) {
-        grid.addEventListener('mouseover', padPlacementHover);
-        grid.addEventListener('mouseleave', () => padPlacementClearGhosts(grid));
+        grid.onmouseover = padPlacementHover;
+        grid.onmouseleave = () => padPlacementClearGhosts(grid);
+    } else {
+        grid.onmouseover = null;
+        grid.onmouseleave = null;
     }
+    if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
 }
 
 function padPlacementHover(e) {
@@ -390,6 +397,7 @@ function padDrop(e, col, row) {
     padState.buttons.push(btn);
     padMarkDirty();
     padRenderGrid();
+    if (typeof padWorkspaceMoveSelection === 'function') padWorkspaceMoveSelection(srcCol, srcRow, btn);
 }
 
 function padPlacementClick(col, row) {

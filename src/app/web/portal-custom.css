@@ -443,7 +443,8 @@ body {
 }
 
 /* Sub-item */
-.nav-item {
+.nav-item,
+#pad-workspace-pads button {
   display: block;
   padding: 7px 16px 7px 46px;
   color: var(--portal-text-muted);
@@ -454,12 +455,14 @@ body {
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
-.nav-item:hover {
+.nav-item:hover,
+#pad-workspace-pads button:hover {
   color: var(--bs-body-color);
   background: var(--portal-nav-item-hover-bg);
 }
 
-.nav-item.active {
+.nav-item.active,
+#pad-workspace-pads button[aria-current="true"] {
   color: var(--portal-primary);
   background: rgba(var(--portal-primary-rgb), 0.08);
   border-left-color: var(--portal-primary);
@@ -1867,7 +1870,8 @@ body {
   border-radius: 10px; margin-bottom: 10px;
   background: var(--portal-editor-bg);
 }
-.editor-group .editor-group {
+.editor-group .editor-group,
+#pad-level-action-editors > .action-list-slot {
   margin-left: 14px;
   border-left: 3px solid var(--portal-editor-nested-accent);
   background: var(--portal-editor-nested-bg);
@@ -1993,8 +1997,8 @@ body {
   width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto;
   border: 1px solid var(--portal-border); display: inline-block;
 }
-/* Pad-binding rows: preview drops to its own line, indented under the value */
-.pad-binding-preview { flex-basis: 100%; max-width: none; margin: 0 0 2px 116px; }
+/* Pad-binding rows: preview stays below its expression. */
+.pad-binding-preview { grid-column: 1 / -1; max-width: none; margin: 0; }
 .pad-binding-preview .pad-pv-text { max-width: 320px; }
 .reset-hint {
   display: none; font-size: 11px; margin-left: 2px; vertical-align: baseline;
@@ -2004,13 +2008,26 @@ body {
 
 /* Pad bindings list */
 .pad-binding-row {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end; gap: 8px; padding: 12px 0;
+  border-bottom: 1px solid var(--portal-border);
 }
-.pad-binding-row .pad-binding-name {
-  width: 110px; flex-shrink: 0; padding: 5px 8px; font-size: 13px; font-family: monospace;
-}
+.pad-binding-row label { min-width: 0; margin: 0; }
+.pad-binding-expression { grid-column: 1 / -1; }
+.pad-binding-row .pad-binding-del { width: 32px; height: 32px; padding: 0; margin-bottom: 2px; }
+.pad-binding-row .pad-binding-name,
 .pad-binding-row .pad-binding-value {
-  flex: 1; min-width: 0; padding: 5px 8px; font-size: 13px; font-family: monospace;
+  display: block; width: 100%; min-width: 0; margin-top: 4px;
+  padding: 5px 8px; font-size: 13px; font-family: monospace;
+}
+#pad-workspace-inspector .pad-appearance-row {
+  display: flex; align-items: flex-end; gap: 12px; margin-bottom: 8px;
+}
+#pad-workspace-inspector .pad-appearance-row > div {
+  flex: 1; min-width: 0; margin-bottom: 0;
+}
+#pad-workspace-inspector .pad-appearance-row label {
+  margin-bottom: 4px;
 }
 
 /* Sparkline: binding + color on same row */
@@ -2445,5 +2462,79 @@ input[type="text"].label-style-input {
 #toast-container.toast-container {
   top: calc(var(--portal-header-height-desktop, 120px) + 12px);
   bottom: auto;
+}
+
+#pad-editor-root { --pad-workspace-line: var(--portal-border-light); }
+#content-pane:has(#pad-editor-root) { padding-top: 0; }
+#pad-editor-root [hidden] { display: none !important; }
+#pad-editor-root input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+#pad-editor-root input[type="number"]::-webkit-inner-spin-button,
+#pad-editor-root input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#pad-edit-bg-image-refresh { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; padding: 0; }
+#pad-editor-root .pad-workspace-toolbar { display: flex; align-items: center; gap: 12px; padding: 8px 0 14px; min-height: var(--pad-workspace-toolbar-height, 59px); }
+#pad-editor-root .pad-workspace-toolbar h2 { font-size: 19px; margin: 0; overflow-wrap: anywhere; }
+#pad-workspace-status { color: var(--portal-text-muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+#pad-workspace-commands .save-bar { position: static; border: 0; padding: 0; margin: 0; background: transparent; box-shadow: none; }
+#pad-editor-root .pad-workspace { display: grid; grid-template-columns: 150px minmax(200px, 1fr) 360px; height: max(540px, var(--pad-workspace-height, calc(100dvh - var(--portal-header-height-desktop, 120px) - 110px))); border: 1px solid var(--pad-workspace-line); border-radius: 12px; overflow: hidden; }
+#pad-editor-root .pad-workspace-rail { overflow-y: auto; padding: 8px 0; border-right: 1px solid var(--pad-workspace-line); min-width: 0; background: var(--portal-sidebar-bg); }
+#pad-editor-root .pad-workspace-selector { display: none; }
+#pad-workspace-pads button { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; background: transparent; text-align: left; padding-left: 14px; border-radius: 0; margin: 0; overflow-wrap: anywhere; }
+#pad-editor-root .pad-workspace-stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; background-color: var(--portal-editor-bg); background-image: radial-gradient(var(--pad-workspace-line) .7px, transparent .7px); background-size: 16px 16px; }
+#pad-editor-root .pad-workspace-canvas { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#pad-editor-root #pad-grid { flex: none; padding: 8px; gap: 6px; border-radius: 4px; min-height: 0; max-height: none; max-width: none; border: 1px solid var(--pad-workspace-line); }
+#pad-editor-root .pad-cell-selected { outline: 3px solid var(--portal-primary); outline-offset: -3px; z-index: 1; }
+#pad-editor-root .pad-workspace-inspector { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-left: 1px solid var(--pad-workspace-line); background: var(--portal-surface); overflow: hidden; }
+#pad-workspace-mobile-save { display: none; }
+#pad-editor-root .pad-workspace-inspector-head { padding: 12px 12px 0; flex: none; }
+#pad-editor-root .pad-workspace-scopes { display: flex; gap: 2px; border: 1px solid var(--pad-workspace-line); padding: 2px; border-radius: 4px; }
+#pad-editor-root .pad-workspace-scopes button { flex: 1; padding: 6px; background: transparent; color: var(--portal-text); border: 0; border-radius: 3px; }
+#pad-editor-root .pad-workspace-scopes button[aria-pressed="true"] { background: rgba(var(--portal-primary-rgb), .15); color: var(--portal-primary); }
+#pad-workspace-tabs { display: flex; border-bottom: 1px solid var(--pad-workspace-line); margin-top: 8px; }
+#pad-workspace-tabs button { flex: 1; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 2px; font-size: 12px; background: transparent; color: var(--portal-text); }
+#pad-workspace-tabs button[aria-selected="true"] { color: var(--portal-primary); border-bottom-color: var(--portal-primary); }
+#pad-workspace-button-fields { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#pad-edit-overlay { flex: 1; min-height: 0; }
+#pad-editor-root .pad-edit-modal { width: 100%; max-width: none; max-height: none; min-height: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+#pad-editor-root .pad-edit-body { padding: 0 14px 14px; overflow: auto; }
+#pad-editor-root .pad-edit-footer { padding: 10px 14px; gap: 6px; }
+#pad-editor-root .pad-edit-footer .btn { font-size: 12px; padding: 6px; }
+#pad-editor-root .editor-group { border-radius: 4px; }
+#pad-editor-root .editor-group-body { padding: 10px; }
+#pad-editor-root .pad-workspace-pad-fields { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+#pad-editor-root .pad-workspace-pad-fields .card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#pad-editor-root .pad-workspace-pad-fields .card-header { padding: 8px 0; background: transparent; }
+#pad-editor-root .pad-workspace-pad-fields .card-body { padding: 10px 0; }
+#pad-editor-root .pad-controls-row { flex-wrap: wrap; }
+#pad-editor-root .pad-controls-row > .form-group { min-width: 80px; }
+#pad-editor-root .pad-edit-body input, #pad-editor-root .pad-edit-body select, #pad-editor-root .pad-edit-body textarea { min-width: 0; max-width: 100%; }
+#pad-editor-root .pad-edit-body .form-group, #pad-editor-root .pad-edit-body .bindable-color { min-width: 0; }
+#pad-workspace-back { display: none; }
+#pad-block-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 2; }
+#pad-editor-root .pad-more-menu { top: 100%; bottom: auto; max-height: 65dvh; overflow: auto; z-index: 20; }
+#pad-editor-root .pad-workspace-discard { max-width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--pad-workspace-line); border-radius: 6px; background: var(--portal-surface); color: var(--portal-text); }
+#pad-editor-root .pad-workspace-discard::backdrop { background: #0008; }
+@media (max-width: 1200px) {
+  #pad-editor-root .pad-workspace { grid-template-columns: 110px minmax(160px, 1fr) 310px; }
+  #pad-editor-root .pad-workspace-toolbar { flex-wrap: wrap; }
+}
+@media (max-width: 980px) {
+  #pad-editor-root .pad-workspace-toolbar { min-height: 0; padding-top: 16px; }
+  #pad-editor-root .pad-workspace { grid-template-columns: minmax(180px, 1fr) 310px; grid-template-rows: auto minmax(0, 1fr); }
+  #pad-editor-root .pad-workspace-rail { grid-column: 1 / -1; border-right: 0; border-bottom: 1px solid var(--pad-workspace-line); overflow-x: auto; padding: 6px; }
+  #pad-workspace-pads { display: flex; gap: 4px; }
+  #pad-workspace-pads button { width: auto; min-width: 90px; flex: none; margin: 0; max-width: 200px; }
+}
+@media (max-width: 700px) {
+  #pad-workspace-mobile-save { display: inline-flex; }
+  #pad-editor-root .pad-workspace { display: flex; flex-direction: column; height: max(420px, var(--pad-workspace-height, calc(100dvh - var(--portal-header-height-desktop, 120px) - 150px))); }
+  #pad-editor-root .pad-workspace-rail { flex: none; }
+  #pad-editor-root .pad-workspace-stage { flex: 1; }
+  #pad-editor-root .pad-workspace-inspector { display: none; position: fixed; inset: 0; z-index: 1035; border: 0; background: var(--bs-body-bg); }
+  #pad-editor-root.pad-workspace-inspecting .pad-workspace-inspector { display: flex; }
+  #pad-workspace-back { display: inline-block; margin-bottom: 10px; }
+  #pad-editor-root .pad-workspace-toolbar h2 { font-size: 16px; }
+  #pad-workspace-status { font-size: 11px; }
+  #pad-workspace-commands { width: 100%; }
+  #pad-editor-root .pad-edit-body { padding: 0 16px 16px; }
 }
 

@@ -86,7 +86,7 @@
     {"type": "system", "group": "Device", "label": "Device command", "commands": [{"id": "reboot", "label": "Restart device"}, {"id": "wifi_reconnect", "label": "Reconnect Wi-Fi"}, {"id": "screensaver", "label": "Enable screensaver"}, {"id": "wake_display", "label": "Wake display"}], "editor_fields": [{"name": "system_command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "key", "group": "Keyboard", "label": "Send keys"},
     {"type": "mouse_button", "group": "Mouse", "label": "Mouse button", "commands": [{"id": "left", "label": "Left"}, {"id": "right", "label": "Right"}, {"id": "middle", "label": "Middle"}], "editor_fields": [{"name": "button", "label": "Button", "type": "select", "default": "left", "command_options": true}]},
-    {"type": "gamepad", "group": "Gamepad", "label": "Gamepad"}
+    {"type": "gamepad", "group": "Gamepad", "label": "Gamepad", "button_count": 16}
   ],
   "widget_catalog": [
     {"type": "bar_chart", "name": "Bar Chart", "icon": "bar_chart"},

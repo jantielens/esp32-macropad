@@ -7,11 +7,14 @@
 let padBlockCatalog = [];
 
 async function padLoadBlockCatalog() {
+    const root = document.getElementById('pad-editor-root');
+    let catalog = [];
     try {
         const resp = await fetch('/api/pad/blocks');
-        if (resp.ok) padBlockCatalog = await resp.json();
-        else padBlockCatalog = [];
-    } catch (e) { padBlockCatalog = []; }
+        if (resp.ok) catalog = await resp.json();
+    } catch (e) {}
+    if (document.getElementById('pad-editor-root') !== root) return;
+    padBlockCatalog = catalog;
     padRenderBlockMenuItems();
 }
 
@@ -128,6 +131,12 @@ function padInsertBlock(block, anchorCol, anchorRow) {
         newBtn.row = anchorRow + btn.row_offset;
         delete newBtn.col_offset;
         delete newBtn.row_offset;
+        if (typeof padWorkspace !== 'undefined' && padWorkspace) {
+            const key = newBtn.col + ',' + newBtn.row;
+            padWorkspace.forms.delete(key);
+            padWorkspace.errors.delete(key);
+            if (padWorkspace.selected && padState.editCol === newBtn.col && padState.editRow === newBtn.row) padWorkspaceClearButton();
+        }
         padState.buttons.push(newBtn);
     }
     if (block.bindings) {

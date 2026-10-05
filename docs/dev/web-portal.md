@@ -389,7 +389,7 @@ every component in that custom section to the same category ID.
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
   - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
-  - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
+  - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Compact action summaries expand into registry-driven editors.
   - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)
@@ -404,9 +404,56 @@ every component in that custom section to the same category ID.
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
 - **Recipes** (display boards): Installs a declared scenario into a selected pad without changing existing buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked cell is the recipe's top-left anchor; adaptive recipes may use a smaller fitting footprint when no larger forward footprint fits. The placement grid previews the resolved group and reports its bounds. Fixed-offset recipes remain supported. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase that can. If the current empty grid can host it but existing buttons block every placement, it offers a confirmed **Clear Buttons** action that retains the other pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The **Recipe Catalog** page edits the device-persisted catalog served by `GET/POST /api/recipes/catalog`; a missing catalog is an empty valid envelope. The repository sample is [docs/samples/recipe-catalog.json](../samples/recipe-catalog.json).
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
-- **Pad save controls**: The bottom action bar provides Save Pad, Show on Device, and More. A fixed Save Pad button appears while the current pad has unsaved changes, so repeated edits do not require scrolling to the action bar.
+- Pad save controls: A workspace toolbar labels the pad list with Pads and provides pending-edit or saving status, Save Pad, Show on Device, and More. Clean drafts have no status label. The current pad is highlighted in the list, which shares navigation row styles with the shell. The Pad inspector scope or More > Pad Settings opens pad settings. Clicking a selected button again deselects it without discarding its draft. The canvas has no dimensions toolbar or footer. Pad and button action slots share the same accented group styles. Save Pad is also available in the mobile inspector header.
+- Pad numeric inputs: Spinner buttons are hidden consistently within the editor. A delegated, non-passive wheel listener prevents native number stepping and scrolls the nearest available scroll container, including dynamically rendered action and widget fields. Input focus and values remain unchanged; browser zoom gestures retain their native behavior.
+- Pad workspace layout: The outer frame matches the shared section corner radius (12px). Its height is measured from the content pane, workspace offset, and bottom padding rather than a fixed viewport allowance. The resize observer watches both the canvas and content pane; short screens retain the existing minimum heights and scrolling.
 
-**Layout:** Full-width pad grid with responsive button editor dialog
+Desktop uses a pad rail, persistent aspect-correct canvas, and contextual
+inspector. Tablet moves the rail above the canvas and inspector. Mobile uses a
+full-screen inspector with Return to pad; returning retains edits. Pad scope
+contains Layout, Appearance, Bindings, and Actions tabs.
+
+`portal_pad_workspace.js` owns one active pad draft's form snapshots, pending
+validation errors, selection, tabs, resize observer, and cancellable event
+listeners. Valid button edits immediately replace the draft model; invalid
+inputs retain the last valid model and their raw form values. Save blocks on
+pending errors or overlapping/out-of-bounds buttons. Copy and inherited-button
+selection do not mutate the draft. Only an actual edit creates an override.
+
+Save uses the existing serialized persistence queue and icon-upload path.
+Revision and root guards prevent completed saves or asynchronous catalogs and
+previews from replacing newer edits or a different pad. Successful canonical
+reload restores the selected inspector; failures retain the draft. No local
+storage, multi-pad drafts, undo history, or new continuous polling is added.
+The guarded pad switch and fragment departure use a native dialog with Keep
+Editing and Discard and Switch. Disposal clears listeners, observers, preview
+callbacks, and editor-only state. Clear Pad and pad-file import edit the draft;
+device defaults and explicitly confirmed device import remain separate writes.
+
+##### Workspace Acceptance Checklist
+
+Use the production fragment and local P4 fixtures for these checks. Mock tests
+do not verify on-device rendering, input dispatch, or physical device behavior.
+
+| Surface | Acceptance requirement |
+|---------|------------------------|
+| Draft lifecycle | Direct edits; button/tab changes retain incomplete fields; errors block save; failed save retains the draft; retry succeeds |
+| Persistence | No pad writes before Save Pad; one current-pad save; canonical reload retains selection; edits during save remain dirty |
+| Navigation | Keep Editing preserves the draft; discard loads the destination; fragment/hash navigation and beforeunload are guarded; revisits have no stale listeners |
+| Canvas | Device aspect ratio, spacing and insets; spans, inherited ghosts, empty positions; native selection, drag/drop and resize synchronize inspector coordinates |
+| Button content | All labels and styles, spans, icons and positioning, local/remote images and credentials, capability-gated camera controls |
+| Widgets | Bar chart, gauge, sparkline, table, rocker, numeric rocker, list, camera preview, HID input widgets, and native extension configuration |
+| Button actions | Ordered tap/long-press lists, add/remove/reorder, all registry types and bindings, confirmation, numeric-rocker adjustment |
+| Pad scope | Name, dimensions, wake screen, template, background, shadow inheritance, bindings, and full-screen actions |
+| Inheritance | Selecting or copying a ghost creates no override; editing does; clearing the override restores the inherited button |
+| Operations | Copy/paste button, fill, copy/paste pad, pad import/export, draft-only clear, blocks and cancellation; no unintended persistence |
+| Separate writes | Defaults save independently; device import retains its explicit confirmation, complete pad persistence, and reboot behavior; Show on Device does not save |
+| Responsive layout | Desktop/tablet canvas stays mounted; mobile inspector has save/return; no horizontal overflow or overlapping persistent controls |
+
+Run the focused Node portal tests through CTest, including the dev server,
+dialog transaction, dirty state, import, preview, action picker/list, and
+startup tests. Run the asset variant/cache checks and production asset
+generator. Portal-only changes do not require a firmware build.
 
 #### Network Page (`/network.html`)
 

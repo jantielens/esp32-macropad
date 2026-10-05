@@ -13,9 +13,49 @@ You'll find the pad editor on the **Pads** page of the web portal (Full mode onl
 
 A pad is a grid of buttons displayed on the device — swipe or navigate between pads using button actions.
 
+### Editor Workspace
+
+On desktop, choose a pad from the left rail, select buttons on the persistent
+canvas, and edit them in the right inspector. The **Pads** heading labels the
+list, which highlights the current pad. The toolbar shows pending edits or save
+progress, **Save Pad**, **Show on Device**, and **More** operations. Its status
+is empty when there are no unsaved edits. The canvas
+uses the device's display aspect ratio, spacing, and edge-inset defaults.
+
+The Button inspector has **Content**, **Actions**, and **Appearance** tabs.
+The Pad inspector has **Layout**, **Appearance**, **Bindings**, and **Actions**
+tabs. Action summaries expand into the existing complete action forms.
+
+Edits update one in-memory pad draft directly. There is no button Apply or
+Cancel step. Switching buttons or tabs retains edits, including incomplete
+fields. Correct any highlighted errors before saving. **Save Pad** writes the
+current pad; a failed save keeps your draft available for correction or retry.
+**Show on Device** displays the device's saved pad without saving the draft.
+
+Switching pads or leaving the editor with unsaved edits offers **Keep Editing**
+or **Discard and Switch**. Reloading or closing the browser also warns about
+unsaved changes. Drafts are not stored locally or retained for multiple pads.
+
+On mobile, selecting a button opens the full-screen inspector. **Return to
+pad** retains edits, and **Save Pad** is also available in the inspector header.
+The canvas view retains pad navigation, pad settings, and the operations menu.
+
+**Clear Pad**, paste, fill, block placement, and pad-file import change the
+draft; save to apply them to the device. Device-wide defaults have their own
+save control. Explicit device-configuration import remains a separately
+confirmed operation that writes settings and pads and reboots the device.
+
 ### Pad Settings
 
-At the top of the pad editor, you configure the pad itself:
+Select the **Pad** inspector scope or **More > Pad Settings** to configure the
+pad:
+
+Opening pad settings clears the button selection without discarding its edits.
+Clicking a selected button again also clears its selection and retains its edits.
+
+Numeric fields have no up/down spinner buttons. Type a value or use the keyboard
+arrow keys to adjust it. Mouse-wheel scrolling moves the inspector without
+changing the value or removing focus from the field.
 
 - **Pad selection** — switch between Pad 1 through 16. Each pad is saved independently.
 - **Pad Name** — an optional label shown in Home Assistant and on-device. For example, "Solar", "Lights", or "Cameras".
@@ -54,7 +94,7 @@ The stored JSON field is `pad_actions`, an array of up to three `ButtonAction` o
 
 ### Pad and Button Defaults
 
-The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide defaults for pad appearance, layout, and button appearance. Any button or pad without an explicit override inherits the applicable default.
+The separate **Button Defaults** navigation item sets device-wide defaults for pad appearance, layout, and button appearance. Any button or pad without an explicit override inherits the applicable default.
 
 **Available defaults:**
 
@@ -81,7 +121,7 @@ Button shadows use independent device-wide styling, so they never change grid ge
 
 ### Template Pad
 
-The **Template Pad** dropdown (below Background Color) lets you inherit buttons from another pad. When you select a template pad:
+The **Template Pad** dropdown in **Pad > Layout** lets you inherit buttons from another pad. When you select a template pad:
 
 - Buttons from the template pad fill **empty** grid positions on the current pad. Your own buttons always take priority — the template only fills gaps.
 - Template buttons appear as **ghost overlays** in the editor (semi-transparent with a dashed outline) so you can see what will be inherited.
@@ -2061,6 +2101,10 @@ Toggles between bright red and dark red every second — useful for alert button
 
 **Syntax:** `[pad:name]` or `[pad:name;format]`
 
+In the Pad inspector's **Bindings** tab, each separated entry has a **Name**
+field for the reusable identifier and a **Binding** field for its expression.
+Use **Add** for another entry or the delete icon to remove an entry.
+
 Pad bindings let you define a data source once at the pad level and reference it across all buttons and widgets on that pad. This avoids repeating the same MQTT topic everywhere and makes it easy to switch data sources — change one binding instead of editing every button.
 
 **Defining bindings** — in the pad JSON config, add a `"bindings"` object at the pad level:
@@ -2120,7 +2164,11 @@ The **More ▾** dropdown above the grid preview provides shortcuts for working 
 
 ### Copy and Paste Buttons
 
-In the button editor dialog, **Copy** saves the current button's settings to a clipboard — the editor stays open so you can keep editing. **Paste** applies the clipboard to the button you're editing and keeps the editor open so you can review or tweak the result. Column and row span values are preserved in the clipboard and applied on a best-effort basis: if the span fits at the target position (within grid bounds and no overlap with existing buttons) it is applied, otherwise it falls back to 1×1.
+In the Button inspector, **Copy** copies the current button's settings without
+changing the draft or saving to the device. **Paste** applies the clipboard to
+the selected button and keeps the inspector open. Column and row spans are
+preserved when they fit within the grid without overlap; otherwise they fall
+back to 1x1. Save the pad to persist pasted buttons.
 
 This is the fastest way to create multiple similar buttons — configure one, copy it, then paste into other positions and adjust the differences.
 

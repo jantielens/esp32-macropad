@@ -96,6 +96,7 @@ portal_pad_defaults.js
 portal_pad_grid.js
 portal_pad_dialog.js
 portal_pad_editor.js
+portal_pad_workspace.js
 
 # [chunk:shell]
 # Navigation shell, fragment init, and the entry point (must be last chunk).

@@ -633,7 +633,35 @@ next diagnostic run because earlier rows use the previous column layout.
 
 The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 16 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
-The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import) and **Building Blocks** — pre-configured button groups you can place into a pad with a single click. While the current pad has unsaved changes, a fixed **Save Pad** button also appears at the lower-right of the page. This is completely separate from the device config Save & Reboot footer on other pages.
+The Pad Editor workspace keeps pad navigation on the left, the canvas in the
+center, and an inspector on the right. Its toolbar provides **Save Pad**,
+**Show on Device**, and **More** operations, including fill, copy/paste,
+export/import, clear, and building blocks. Save status appears beside the pad
+list heading. These controls are separate from Save & Reboot on other portal views.
+
+The editor frame uses the same rounded corners as other portal sections and
+fills the available content height, leaving the normal padding below it. Short
+windows retain a minimum editor height and scroll when necessary.
+
+Selecting a button opens **Content**, **Actions**, and **Appearance** tabs.
+Select the **Pad** inspector scope or **More > Pad Settings** for pad **Layout**,
+**Appearance**, **Bindings**, and **Actions**. Clicking a selected button again
+deselects it without discarding edits. Edits update the current draft directly, without an Apply/Cancel
+step; only **Save Pad** persists the current pad. Switching buttons or tabs
+retains incomplete inputs. Correct validation errors before saving; failed
+saves retain the draft for retry.
+
+Numeric fields consistently omit spinner buttons. Mouse-wheel scrolling over
+them scrolls the inspector without changing their values or focus; typing and
+keyboard arrow keys remain available.
+
+On mobile, the inspector fills the screen and includes **Save Pad** and
+**Return to pad**. Returning keeps edits. Switching pads or leaving the editor
+with unsaved edits offers **Keep Editing** or **Discard and Switch**; browser
+reload and closure also warn. There is only one active draft, with no local
+storage recovery. Clear, paste, fill, and pad import require Save Pad to apply.
+Show on Device does not save first. Explicit device import remains a separately
+confirmed operation that writes the imported settings and pads and reboots.
 
 The grid is a configuration overview, not a live preview. Every widget has a
 bottom-left type icon, including widgets inherited from a template pad. Rocker
@@ -649,7 +677,10 @@ Sound-file and extension selectors are temporarily disabled while their choices
 load; saved selections are retained. The More menu shows a loading message until
 building blocks are available.
 
-The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide pad background and layout defaults alongside button colors, borders, and label styles. Pads and buttons inherit the applicable settings automatically, while explicit overrides still take precedence.
+The separate **Button Defaults** navigation item sets device-wide pad background
+and layout defaults alongside button colors, borders, and label styles, with
+its own save control. Pads and buttons inherit applicable settings; explicit
+overrides still take precedence.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 

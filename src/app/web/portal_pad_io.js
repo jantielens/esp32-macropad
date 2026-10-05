@@ -53,9 +53,9 @@ function padDialogCopyBtn() {
     const col = padState.editCol;
     const row = padState.editRow;
 
-    // Save dialog state to model without closing the dialog
-    padDialogOk(true);
-    const btn = padFindButton(col, row);
+    let btn;
+    try { btn = padDialogBuildButton(); padDialogValidateButton(btn); }
+    catch (error) { padDialogShowValidationError(error.message); return; }
     padState.btnClipboard = btn ? padStripPosition(btn) : null;
 
     if (padState.btnClipboard) {
@@ -69,6 +69,7 @@ function padDialogPasteBtn() {
     if (!padState.btnClipboard) return;
     const col = padState.editCol;
     const row = padState.editRow;
+    if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
 
     // Remove existing button at this position
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
@@ -97,6 +98,7 @@ function padDialogPasteBtn() {
 function padFillWithClipboard() {
     if (!padState.btnClipboard) return;
     if (!confirm('Fill all cells with the copied button settings?')) return;
+    if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
 
     for (let r = 0; r < padState.rows; r++) {
         for (let c = 0; c < padState.cols; c++) {
@@ -117,6 +119,8 @@ function padFillWithClipboard() {
 // --- Pad clipboard (copy/paste entire pad) ---
 
 function padCopyPad() {
+    try { if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate(); }
+    catch (error) { showMessage(error.message, 'error'); return; }
     // Snapshot current pad and button defaults from UI
     padCollectButtonDefaults();
     padState.padClipboard = {
@@ -138,6 +142,7 @@ function padCopyPad() {
 
 function padPastePad() {
     if (!padState.padClipboard) return;
+    if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
 
     padState.cols = padState.padClipboard.cols;
     padState.rows = padState.padClipboard.rows;
@@ -173,6 +178,8 @@ function padPastePad() {
 // --- Export/import single pad ---
 
 function padExportPad() {
+    try { if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate(); }
+    catch (error) { showMessage(error.message, 'error'); return; }
     padCollectButtonDefaults();
     const payload = {
         layout: 'grid',
@@ -216,10 +223,13 @@ async function padImportPad(evt) {
     const file = evt.target.files[0];
     evt.target.value = '';
     if (!file) return;
+    const page = padState.page;
+    const section = document.getElementById('pad-config-section');
 
     try {
         const text = await file.text();
         const json = JSON.parse(text);
+        if (padState.page !== page || document.getElementById('pad-config-section') !== section) return;
 
         if (!json.cols || !json.rows || !Array.isArray(json.buttons)) {
             throw new Error('Invalid pad JSON: missing cols, rows, or buttons');
@@ -229,6 +239,7 @@ async function padImportPad(evt) {
         }
 
         // Load into editor
+        if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
         padState.cols = json.cols;
         padState.rows = json.rows;
         padState.buttons = json.buttons.map(b => Object.assign({}, b));
@@ -252,6 +263,7 @@ async function padImportPad(evt) {
             json.template_pad !== padState.page) ? json.template_pad : -1;
         padPopulateTemplateDropdown(padState.page);
         await padLoadTemplateButtons();
+        if (padState.page !== page || document.getElementById('pad-config-section') !== section) return;
 
         padRenderGrid();
         padMarkDirty();
@@ -343,6 +355,8 @@ async function deviceImportConfig(evt) {
 
         if (!confirm('Import device configuration? This will overwrite current settings and all pad configs. The device will reboot.')) return;
 
+        if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+
         showMessage('Importing device config...', 'info');
 
         // Step 1: Import device settings (excl. network fields which were stripped on export)
@@ -387,6 +401,7 @@ async function deviceImportConfig(evt) {
                 padState.rows = padJson.rows || 2;
                 padState.buttons = (padJson.buttons || []).map(b => Object.assign({}, b));
                 padState.bindings = padBindingsFromJson(padJson.bindings);
+                padRenderBindings();
                 padLoadLevelActions(padJson.pad_actions);
                 padState.templatePad = (padJson.template_pad !== undefined &&
                     padJson.template_pad !== null && padJson.template_pad !== i)
@@ -400,6 +415,8 @@ async function deviceImportConfig(evt) {
                 document.getElementById('pad-template-pad').value = padState.templatePad;
                 padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
                 padSetBindableColor('pad-edit-page-bg-color', padJson.bg_color, '#000000');
+                const backgroundMode = document.getElementById('pad-page-bg-mode');
+                if (backgroundMode) backgroundMode.value = padJson.bg_color !== undefined ? 'override' : 'inherit';
                 document.getElementById('pad-button-shadow').value = padJson.button_shadow || 'inherit';
 
                 // Save pad through the shared icon and pad persistence path.
@@ -422,18 +439,11 @@ async function deviceImportConfig(evt) {
 }
 
 async function padDeletePage() {
-    if (!confirm('Clear Pad ' + (padState.page + 1) + '? This will remove all buttons. This cannot be undone.')) return;
+    if (!confirm('Clear Pad ' + (padState.page + 1) + ' in the editor? Save Pad to apply.')) return;
 
     try {
-        // Delete page icons
-        await fetch('/api/icons/page?page=' + padState.page, { method: 'DELETE' });
-
-        const resp = await fetch('/api/pad?page=' + padState.page, { method: 'DELETE' });
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.error || 'HTTP ' + resp.status);
-        }
-        showMessage('Pad ' + (padState.page + 1) + ' deleted', 'success');
+        if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+        showMessage('Pad cleared (unsaved)', 'success');
         padState.rawJson = null;
         padState.buttons = [];
         padState.cols = 3;
@@ -447,8 +457,14 @@ async function padDeletePage() {
         padState.bindings = [];
         padRenderBindings();
         padLoadLevelActions([]);
+        padState.templatePad = -1;
+        padState.templateButtons = [];
+        padPopulateTemplateDropdown(padState.page);
+        document.getElementById('pad-page-bg-mode').value = 'inherit';
+        document.getElementById('pad-button-shadow').value = 'inherit';
         padUpdateDropdownLabel(padState.page, '');
         padRenderGrid();
+        padMarkDirty();
     } catch (err) {
         console.error('padDeletePage error:', err);
         showMessage('Delete failed: ' + err.message, 'error');
