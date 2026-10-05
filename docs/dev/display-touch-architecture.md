@@ -282,7 +282,19 @@ When `HAS_DISPLAY` is enabled, the firmware includes an inactivity manager with 
 - **Pixel shift**: Each sleep cycle advances an offset across a square grid whose radius is the device-wide **Burn-in Pixel Shift Distance** (`pixel_shift_distance_px`, default 4 px, range 0-8 px). On wake and screen switch, `lv_obj_set_style_translate_x/y` is applied to `lv_scr_act()`. A distance of 0 disables movement and removes the matching pad-layout reserve. Pad layouts reserve the same distance on every edge to prevent clipping.
 - **Panel sleep**: When entering `Asleep`, the screen saver calls `displaySleep()` on the active `DisplayDriver` to put the panel controller into hardware low-power mode (MIPI-DSI DCS sleep-in, TFT_eSPI command 0x10, Arduino_GFX bus command). On wake, `displayWake()` is called before the backlight fade-in begins. Drivers that do not override these methods fall back to backlight-only sleep.
 - **Periodic sleep refresh / active de-bias**: While fully asleep, the screen saver calls `displayRefreshSleep()` on the active driver every `SCREENSAVER_SLEEP_REFRESH_MS` (default 15 min, 0 disables) so drivers can scrub residual state during long idle. `MipiDsiDriver` re-blanks the DPI framebuffer by default. On boards with `DISPLAY_HARD_RESET_ON_SLEEP`, this hook instead performs an **active LC de-bias**: it briefly powers the panel back up and drives `DISPLAY_DEBIAS_CYCLES` (default 3) full-frame white↔black inversion cycles — `DISPLAY_DEBIAS_HOLD_MS` (default 80 ms) per half-cycle — to cancel the DC bias that accumulates in cheap IPS cells (the cause of washed-out colors after multi-hour idle), then re-asserts reset. The backlight is at 0 throughout, so it is invisible, and the panel is left in the same resting state (RST low, framebuffer black) so the wake path is unchanged.
-- **LVGL throttle**: While fully asleep, the LVGL task loop delay increases from the normal 1–20 ms to `SCREENSAVER_SLEEP_TICK_MS` (default 200 ms, board-overridable). `screen->update()` is gated so widgets stop refreshing. FPS is reported as 0 during sleep. This reduces CPU usage from ~30% to ~2%.
+- **LVGL throttle**: While fully asleep, the LVGL task uses `SCREENSAVER_SLEEP_TICK_MS` (default 200 ms, board-overridable), capped at 20 ms when a touch driver is initialized. The touch callback remains the sole physical reader, so this cap keeps quick wake taps from falling between slow sleep polls. `screen->update()` remains gated so widgets stop refreshing, and FPS is reported as 0 during sleep. Devices without initialized touch retain the full sleep delay.
+
+Serial diagnostics report `SAVER: Asleep`, a detected `Touch wake`, wake setup
+duration and configured fade duration, and `Awake` with the total wake duration.
+The numeric `state` and `from` fields use `ScreenSaverState` values. Existing
+touch contact-edge and suppression logs remain event-based. `Touch: Sampling`
+summarizes controller read errors and callback gaps over 100 ms, including the
+largest gap, longest consecutive-gap sequence, and current suppression state.
+Isolated gaps below 250 ms are debug-level. Read errors, gaps of at least 250 ms,
+or three consecutive gaps over 100 ms produce warnings. The first anomaly is
+reported immediately at its selected level; subsequent summaries occur at most
+once every five seconds, only with pending anomalies. Debug summaries respect
+the compile-time log level. Normal polling emits no sampling summaries.
 
 **Configuration / APIs:**
 - Config fields are exposed via `GET/POST /api/config` (only when `HAS_DISPLAY`).
@@ -1640,7 +1652,11 @@ suppression and screen-saver sleep; auxiliary touch/wake queries read cached
 physical state. `TouchSnapshotFilter` tolerates an error episode for 100 ms;
 unchanged scans do not end that episode. Expiry explicitly cancels routed owners
 and resets LVGL. Errors and suppression require a fresh raw all-released scan
-before new interaction. Pad rebuilds/switches and transport invalidation retain
+before new interaction. A genuine release observed during suppression clears
+the release guard and routed-input block immediately, while LVGL still receives
+only released input. Later contact or a read error re-arms the guard, so holding
+through wake cannot click through; an unchanged cached release never clears it.
+Pad rebuilds/switches and transport invalidation retain
 that guard for held contacts or an already-canceled gesture, but idle resets do
 not arm a new guard. HID generation changes likewise cancel active owners
 without discarding the next navigation press when the router was idle.

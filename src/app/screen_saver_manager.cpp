@@ -25,6 +25,7 @@ namespace {
 
 DeviceConfig* g_config = nullptr;
 std::atomic<ScreenSaverState> g_state{ScreenSaverState::Awake};
+uint32_t g_wake_started_ms = 0;
 bool g_idle_screen_active = false;
 bool g_idle_screen_attempted = false;
 
@@ -86,11 +87,14 @@ static void enter_asleep() {
 		// Set state last so wake sources observe a fully completed transition.
 		g_state = ScreenSaverState::Asleep;
 		g_last_sleep_refresh_ms = millis();
+		LOGI("SAVER", "Asleep");
 }
 
 static void enter_awake() {
+		const bool completed_wake = g_state == ScreenSaverState::FadingIn;
 		g_state = ScreenSaverState::Awake;
 		remove_sleep_overlay();
+		if (completed_wake) LOGI("SAVER", "Awake (wake=%lums)", (unsigned long)(millis() - g_wake_started_ms));
 }
 bool g_prev_enabled = false;
 
@@ -294,6 +298,8 @@ static void handle_pending_requests() {
 		}
 
 		if (doWake) {
+				g_wake_started_ms = millis();
+				const ScreenSaverState wake_from = g_state.load();
 				g_last_activity_ms = millis();
 				g_idle_screen_attempted = false;
 				if (g_idle_screen_active && g_state == ScreenSaverState::Awake) {
@@ -371,8 +377,9 @@ static void handle_pending_requests() {
 						}
 				}
 
+				LOGI("SAVER", "Wake: from=%u setup=%lums fade=%ums shift=%d,%d", unsigned(wake_from),
+						(unsigned long)(millis() - g_wake_started_ms), unsigned(fade_in_ms()), dx, dy);
 				start_fade(ScreenSaverState::FadingIn, from, target, fade_in_ms());
-				LOGI("SAVER", "Wake requested (pixel shift dx=%d dy=%d)", dx, dy);
 		}
 }
 
@@ -481,6 +488,7 @@ static void poll_touch_activity() {
 
 		if (pressedEdge) {
 				// Touch press = activity + wake.
+				LOGI("SAVER", "Touch wake: state=%u idle=%u", unsigned(g_state.load()), unsigned(g_idle_screen_active));
 				request_activity(true);
 		}
 }

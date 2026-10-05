@@ -284,6 +284,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				if (screen_saver_manager_is_rendering_suspended()) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SLEEP);
 						delayMs = SCREENSAVER_SLEEP_TICK_MS;
+						#if HAS_TOUCH
+						if (touch_manager_contact_capacity() > 0 && delayMs > 20) delayMs = 20;
+						#endif
 
 						// No rendering during sleep — publish fps=0 so /api/health
 						// doesn't show a stale value from before the screensaver.

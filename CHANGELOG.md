@@ -43,6 +43,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   buttons remain readable with lighter fading and a dashed outline. The grid
   remains a configuration overview, not a live preview.
 
+### Fixed
+
+* Display Sleep retains touch polling with a task delay capped at 20 ms when
+  touch is initialized, preventing quick wake taps from falling between the
+  previous 200 ms sleep polls. Serial logs include sleep/wake transition timing
+  and touch sampling fault summaries limited to one every five seconds.
+* A genuine touch release during wake suppression clears the release guard,
+  preserving the first intentional tap afterward. Held or renewed contacts
+  and read errors retain click-through protection. Isolated short sampling
+  gaps are debug-level; warnings remain for errors and sustained or long stalls.
+
 ## [1.36.0] - 2026-10-04
 
 ### Added

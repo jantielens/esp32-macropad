@@ -20,6 +20,9 @@ harness = r'''
 #include <cstdio>
 #include "touch_sample.h"
 #define LOGI(tag, ...) ((void)std::snprintf(nullptr, 0, __VA_ARGS__))
+#define LOGW(tag, ...) (++warnings, (void)std::snprintf(nullptr, 0, __VA_ARGS__))
+enum LogLevel { LOG_LEVEL_WARN = 2, LOG_LEVEL_DEBUG = 4 };
+#define LOG_LEVEL LOG_LEVEL_DEBUG
 #define HAS_DISPLAY 1
 #define HAS_USB_HID TEST_USB
 #define portMUX_TYPE int
@@ -31,6 +34,12 @@ struct lv_indev_t { void* user_data; };
 struct lv_indev_data_t { int state = LV_INDEV_STATE_RELEASED; struct { int x = 0, y = 0; } point; };
 static uint32_t clock_ms = 0;
 static unsigned resets = 0, activities = 0;
+static unsigned warnings = 0;
+static unsigned debug_logs = 0;
+static void log_write(LogLevel level, const char*, const char*, ...) {
+    if (level == LOG_LEVEL_WARN) ++warnings;
+    else ++debug_logs;
+}
 static bool ready = true;
 static uint32_t millis() { return clock_ms; }
 static void* lv_indev_get_user_data(lv_indev_t* indev) { return indev->user_data; }
@@ -149,6 +158,96 @@ int main() {
 #if HAS_USB_HID
     assert(routed && canceled);
 #endif
+    g_lvgl_suppress_until_ms = clock_ms + 100;
+    driver.snapshot.count = 1;
+    poll();
+    assert(g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    driver.snapshot.count = 0;
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    poll();
+    assert(g_require_release);
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    poll();
+    assert(!g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    const unsigned resets_after_release = resets;
+    for (unsigned sample = 0; sample < 10; ++sample) poll();
+    assert(!g_require_release && resets == resets_after_release);
+    g_lvgl_force_released = false;
+    clock_ms += 100;
+    poll();
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    driver.snapshot.count = 1;
+    poll();
+    assert(output.state == LV_INDEV_STATE_PRESSED);
+    g_lvgl_force_released = true;
+    poll();
+    driver.snapshot.count = 0;
+    poll();
+    assert(!g_require_release);
+    driver.snapshot.count = 1;
+    poll();
+    assert(g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    g_lvgl_force_released = false;
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    poll();
+    assert(g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    driver.snapshot.count = 0;
+    poll();
+    assert(!g_require_release);
+    driver.snapshot.count = 1;
+    poll();
+    assert(output.state == LV_INDEV_STATE_PRESSED);
+    g_lvgl_force_released = true;
+    driver.snapshot.status = TouchReadStatus::Error;
+    poll();
+    driver.snapshot.count = 0;
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    poll();
+    assert(g_require_release);
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    poll();
+    assert(!g_require_release);
+    const unsigned warnings_before = warnings;
+    driver.snapshot.status = TouchReadStatus::Error;
+    for (unsigned sample = 0; sample < 200; ++sample) {
+        clock_ms += 20;
+        poll();
+    }
+    assert(warnings <= warnings_before + 1);
+    clock_ms += 5000;
+    poll();
+    assert(warnings >= warnings_before + 1 && warnings <= warnings_before + 2);
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    driver.snapshot.count = 0;
+    poll();
+    auto normal_polling = [&]() {
+        for (unsigned sample = 0; sample < 250; ++sample) {
+            clock_ms += 20;
+            poll();
+        }
+    };
+    normal_polling();
+    const unsigned warnings_after_errors = warnings;
+    const unsigned debug_before = debug_logs;
+    for (unsigned sample = 0; sample < 8; ++sample) {
+        clock_ms += 120;
+        poll();
+        poll();
+    }
+    normal_polling();
+    assert(warnings == warnings_after_errors && debug_logs > debug_before);
+    clock_ms += 250;
+    poll();
+    normal_polling();
+    assert(warnings == warnings_after_errors + 1);
+    for (unsigned sample = 0; sample < 3; ++sample) {
+        clock_ms += 120;
+        poll();
+    }
+    normal_polling();
+    assert(warnings == warnings_after_errors + 2);
 }
 '''
 
@@ -161,7 +260,51 @@ with tempfile.TemporaryDirectory() as directory:
                         f"-DTEST_USB={usb}", "-I", str(root / "src/app"),
                         str(test_source), "-o", str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
-print("PASS: touch manager single-reader wake, suppression, fresh-release rearm, errors, and synthetic pairing")
+print("PASS: touch manager single-reader wake, suppressed-release rearm, held contacts, errors, synthetic pairing, and throttled log severity")
+
+display_source = (root / "src/app/display_task.cpp").read_text()
+sleep_start = display_source.index("if (screen_saver_manager_is_rendering_suspended()) {")
+sleep_end = display_source.index("// No rendering during sleep", sleep_start)
+sleep_harness = r'''
+#include <cassert>
+#include <cstdint>
+#define SCREENSAVER_SLEEP_TICK_MS 200
+#define DEVICE_RUNTIME_PHASE_LVGL_SLEEP 0
+static void device_telemetry_mark_lvgl_task(int) {}
+static bool suspended = true;
+static bool screen_saver_manager_is_rendering_suspended() { return suspended; }
+#if HAS_TOUCH
+static uint8_t capacity = 0;
+static uint8_t touch_manager_contact_capacity() { return capacity; }
+#endif
+static uint32_t next_delay() {
+    uint32_t delayMs = 10;
+'''
+sleep_harness += display_source[sleep_start:sleep_end] + "}\nreturn delayMs;\n}\n"
+sleep_harness += r'''
+int main() {
+    assert(next_delay() == 200);
+#if HAS_TOUCH
+    capacity = 1;
+    assert(next_delay() == 20);
+    capacity = 5;
+    assert(next_delay() == 20);
+    capacity = 0;
+    assert(next_delay() == 200);
+#endif
+    suspended = false;
+    assert(next_delay() == 10);
+}
+'''
+with tempfile.TemporaryDirectory() as directory:
+    test_source = pathlib.Path(directory) / "sleep_polling.cpp"
+    executable = pathlib.Path(directory) / "sleep_polling"
+    test_source.write_text(sleep_harness)
+    for touch in (0, 1):
+        subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        f"-DHAS_TOUCH={touch}", str(test_source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+print("PASS: sleeping display retains responsive initialized-touch polling and no-touch throttling")
 
 header = (root / "src/app/touch_manager.h").read_text()
 capabilities = header[header.index("#if HAS_DISPLAY && HAS_TOUCH\nuint8_t touch_manager_contact_capacity()"):
