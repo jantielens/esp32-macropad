@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Redesigned the Pad Editor with a pad navigation rail, a persistent canvas
+  matching the device's screen proportions, and contextual pad and button
+  inspectors. Button settings are grouped into Content, Actions, and Appearance
+  tabs; pad settings use Layout, Appearance, Bindings, and Actions tabs. Save Pad,
+  Show on Device, and More remain in the toolbar, with a full-screen inspector
+  and an accessible Save Pad command on mobile.
+* Button edits now update a single in-memory pad draft without separate Apply
+  or Cancel commands. Switching between buttons retains incomplete inputs;
+  Save Pad validates and persists the draft. Unsaved-change guards protect pad
+  switching and portal navigation. Device defaults and confirmed device imports
+  continue to save separately.
 * Device-info responses reuse immutable RAM-cached pad names instead of reading
   pad files on each request. Saves, renames, imports, and deletes refresh names
   through the existing pad cache lifecycle without a separate invalidation timer.
@@ -45,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Pad Editor selection outlines no longer flicker while editing button
+  properties. Copy, Paste, and Clear use consistent button styles, and status
+  notifications stay clear of the editor's command buttons.
 * Display Sleep retains touch polling with a task delay capped at 20 ms when
   touch is initialized, preventing quick wake taps from falling between the
   previous 200 ms sleep polls. Serial logs include sleep/wake transition timing
