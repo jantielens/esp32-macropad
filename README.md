@@ -1,237 +1,320 @@
 ---
 title: ESP32 Macropad
-description: Configurable ESP32 control surfaces, dashboards, and USB/BLE input devices.
+description: Turn ESP32 boards into shortcut panels, live dashboards, game controls, and specialized instruments.
 ---
 
-Turn your ESP32 display board into a powerful, fully customizable smart home control panel with no coding required.
+Your favorite shortcut, one tap away. Your home's energy use, live on your desk.
 
-ESP32 Macropad is open-source firmware that transforms affordable ESP32 development boards into configurable control surfaces and dashboards. Interactive boards use a touch-first pad UI. E-paper boards, such as the Inkplate 5V2, use a battery-focused image carousel + hourly schedule model with deep sleep between refreshes. Both are configured from the same web portal and integrate with Home Assistant over MQTT.
+**ESP32 Macropad** is open-source firmware for customizable touchscreen controls
+and dashboards, with game controls and specialized instruments to explore too.
+Flash a supported board, then build and configure it in your browser.
+No coding required for everyday configuration.
 
-## ✨ Features
+## 🚀 Try It
 
-### Pads, buttons & widgets
-- **Up to 16 pads** with configurable grids (up to 8×8, board-dependent), per-pad backgrounds, and multi-cell button spans
-- **Rich button styling** — colors, borders, corner radius, icons (emoji + Material Symbols) with configurable icon position, background images, icon + center label co-display, and a per-label style DSL (font family, size, alignment, overflow)
-- **Widgets inside buttons** — gauge (multi-ring with target zones), bar chart (vertical/horizontal, up to 4 bars with per-bar captions and gauge-style scale options), sparkline (multi-line with reference markers), table, list (scrollable item picker), **rocker** (split-button up/down or left/right), **numeric rocker** (4-zone fine/coarse adjustment), and trusted native **Extensions** on ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive
-- **Home Assistant history for sparklines** — backfill long-term Recorder statistics after reboot, with wall-clock alignment and live readings taking precedence
-- **Smooth animations** — gauges, bars, and needles ease into new values instead of jumping
-- **Template pads & device-wide button defaults** — define appearance once, inherit everywhere
-- **Building blocks** — drop pre-built button groups such as System Info into any pad with a single click
-- **Custom fonts** — DSEG7 (7-segment), Bebas, and Doto pixel font, in addition to the default Montserrat
-- **Two-stage screen saver** with an optional transient Idle Screen pad, Display Sleep, backlight fade, pixel-shift burn-in prevention, panel hardware sleep, LVGL throttle, and per-pad wake redirect
+1. Choose your exact board and firmware variant in the [online installer](https://jantielens.github.io/esp32-macropad/). Check [supported hardware](#-supported-hardware) if you're still choosing a board.
+2. Connect it by USB and flash in **Chrome** or **Edge**. No compiler or command-line tools needed.
+3. Join its setup hotspot, connect it to your Wi-Fi, and open the web portal to make your first button.
 
-### Live data with bindings
-A simple `[scheme:params]` syntax pulls live data into any label, color, or widget — with format strings, fallbacks, and inline expressions.
-
-- **`[mqtt:topic;path]`** — any MQTT topic, with JSON path extraction
-- **`[health:key]`** — CPU, memory, PSRAM, WiFi/BLE status, IP, uptime, and 30+ more device metrics
-- **`[time:format;tz]`** — NTP-synced clocks with timezone and sub-second precision
-- **`[expr:...]`** — math, comparisons, ternary, and a `threshold()` helper for multi-zone color logic
-- **`[pad:name]`** — name a binding once per pad and reuse it everywhere
-- **`[timer:N]`** — render on-device timer values in any format
-- **Dynamic colors** — background, text, border, and widget colors all accept binding expressions
-- **Dynamic state** — `enabled` / `disabled` / `hidden` per button via the same binding system
-- **Real-time syntax validator** in the pad editor catches typos and invalid expressions as you type
-- **Action values** - MQTT payloads, USB/BLE key sequences, beep patterns, volume/brightness values, and timer values all resolve bindings at dispatch time
-
-### Inputs & automation
-- **Multi-action buttons** — chain up to 3 actions per tap and per long-press (publish MQTT, play sound, navigate, send keystrokes, etc.)
-- **USB/BLE HID** - keyboard macros, modifier combos, and media keys for
-  shortcuts and text entry over USB or BLE. Optional USB mouse support adds
-  Mousepad movement and tap-to-left-click with acceleration, vertical/horizontal
-  Scrollpad scrolling with inertia, and Left/Right/Middle Mouse Button actions.
-  USB also exposes a generic HID gamepad with two sticks, two triggers, an
-  eight-direction hat, and 16 buttons. Gamepad Joystick and
-  Gamepad Button widgets provide analog movement and automatically released
-  held controls; GT911 drivers support independent simultaneous controller
-  contacts, with single-touch fallback on other drivers. Gamepad actions provide
-  tap/down/up operations.
-  BLE supports keyboard control only. Native USB is compiled for
-  `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
-  `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
-  On these builds, native USB is reserved for HID; serial logs use UART0.
-  The supported P4 HID boards have separate USB-C connectors for native USB HID
-  and USB-UART flashing/debugging. If HID does not connect, try the other connector
-  with a data-capable cable; the serial/debugging port cannot send HID input.
-  For logs, use the USB-UART port at 115200 baud, not the HID port. See
-  [USB connector guidance](docs/web-portal-guide.md#keyboard) for port and power precautions.
-  Both JC3636W518 variants disable BLE.
-  Mousepad supports tap-then-drag and two-finger midpoint scrolling on
-  multicontact drivers, with single-touch movement/tap/drag fallback.
-  Optional left/right mouse button zones support held-button dragging and
-  pointer-finger repositioning on multicontact drivers.
-  Mousepad, Scrollpad, and gamepad widgets can optionally disable swipe actions
-  across their pad. Mousepad can show a top-left Back button using screen history.
-  Both navigation settings default off.
-  BLE keyboard support is board-dependent; some Macropad boards disable it to
-  preserve internal RAM. Supported BLE builds offer single-owner pairing.
-  HID output defaults to Off. Select a supported transport in
-  **Connectivity > Keyboard & Mouse**, save, then reboot. There is no automatic
-  fallback or broadcast. See the [Key Sequences guide](docs/pad-editor-guide.md#key-sequences),
-  [Mousepad guide](docs/pad-editor-guide.md#mousepad),
-  [Scrollpad guide](docs/pad-editor-guide.md#scrollpad), and
-  [Mouse Button action guide](docs/pad-editor-guide.md#mouse-button), and
-  [Gamepad guide](docs/pad-editor-guide.md#gamepad-controls).
-- **Swipe gestures** — configure left/right/up/down on any screen with the same actions as buttons
-- **Hardware buttons** — map a board's physical GPIO buttons to tap and long-press action chains (works on headless boards too)
-- **Boot actions** — run a sequence of actions automatically when the device starts
-- **MQTT triggers** — dispatch action chains when a matching MQTT message arrives, no button or screen required (works on headless boards with a physical button too)
-- **On-device timers** — 3 independent timers whose Start and Toggle actions carry their stopwatch or countdown mode and duration, with per-slot expire actions and live `[timer:N]` bindings
-- **Notification bubble** — display a floating message via a button action or remotely from Home Assistant
-
-### Audio & feedback
-- **Beeps & sound files** — pattern DSL (`500:40 60 800:40`) for short cues and MP3 file playback (≤512 KB) for longer sounds
-- **MP3 player** — organize an MP3 library on the device and use it for music playback
-- **Audio feedback** for taps, long-press, and timer expiry, with per-button or per-action overrides
-- **Volume & brightness actions** — adjust device volume or backlight from any button
-- **Hardware-accelerated audio** on supported ESP32-P4 boards and jc3636w518
-
-### Smart home & connectivity
-- **MQTT with Home Assistant auto-discovery** — registers as a full HA device with sensors, buttons, siren, volume, screen selector, and notification entities (no YAML needed)
-- **Home Assistant service buttons** — call any HA service (toggle lights, run scenes, open covers) directly over the REST API from a button, swipe, or boot action
-- **MCP server for AI assistants** — a built-in [Model Context Protocol](docs/mcp-guide.md) endpoint lets a local LLM client (Claude Desktop, Cursor, VS Code Copilot Chat) inspect and control the device through chat; off by default, token-secured, with separate read and control permissions
-- **Remote control from HA** — switch screens, trigger beeps, play tones, set volume, send notifications
-- **Resilient WiFi** — event-driven tiered reconnect keeps the display responsive through outages, with gateway-ping liveness detection
-- **Live camera feeds** — OV02C10 JPEG snapshots and **MJPEG streaming** at up to 4 fps on supported ESP32-P4 camera boards
-- **OTA updates** with rollback protection — flash from the web portal or the online installer
-
-### Web configuration portal
-- **Visual pad editor** — drag-to-move and drag-to-resize buttons, live preview matching your device's aspect ratio
-- **Recipes** — install a declared setup into a selected pad with adaptive placement, optional parameters, and safe grid-size or clear-buttons recovery when space is unavailable
-- **Copy/paste & import/export** — clone buttons, pads, or entire device configurations to JSON
-- **Browser-based setup** — Wi-Fi, MQTT, security, and all device settings, no tools needed
-- **Real-time health dashboard** — CPU, memory, temperature, WiFi signal, MQTT and BLE status; API-only display timing diagnostics include cycle averages and peaks
-- **Optional HTTP Basic Auth** for portal access
-- **SD card support** — use a FAT32 MicroSD card for pad configurations, icons, sounds, and indexed data on supported boards
-- **Native Extensions** — install trusted native modules in explicit slots on ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive (one 32 KiB slot). P4 modules execute from flash; Xtensa modules use executable internal RAM for code and PSRAM for data. Place an Extension on one or more buttons with per-button configuration and controlled tap/long-press behavior. Download the package for your device target from the [Extensions catalog](https://jantielens.github.io/esp32-macropad/extensions.html), then upload it through the device portal. Packages larger than a board's slot are rejected. See the [Extension developer guide](docs/dev/extensions.md).
+Start with a Macropad build for touchscreen controls and dashboards.
+[First-time setup](#-getting-started) walks you through a "Hello!" button that
+needs no keyboard pairing or Home Assistant connection.
 
 ## 💡 What Can You Build?
 
-- **Home Assistant control panel** — lights, switches, scenes, climate — all one tap away
-- **Energy monitor dashboard** — real-time solar, battery, and grid power visualization
-- **Battery-powered e-paper dashboard** — rotate through one or more images, apply hourly refresh windows, refresh, and go back to sleep
-- **Media controller** — play, pause, skip, volume for your media players
-- **MP3 music player** — store a music library on the device and play it through supported audio hardware
-- **Bluetooth macro keyboard** — launch apps, paste snippets, control presentations, or trigger shortcuts on your PC or Mac
-- **Smart home remote** — replace a drawer full of remotes with one touch screen
-- **Status display** — show weather, time, sensor readings, or system stats
-- **Security camera viewer** — live camera thumbnails on your desk
+### A Macropad: Your Shortcuts, Without the Finger Gymnastics
 
-## 📱 Supported Devices
+Put a complex keyboard combo behind one button. Add text snippets, presentation
+controls, and media keys beside it. **USB and BLE keyboard macros** put your
+favorite shortcuts on screen instead of making you memorize them.
 
-ESP32 Macropad runs on these ESP32 development boards:
+On USB HID boards, add a **Mousepad** for pointing, clicking, and dragging,
+a **Scrollpad**, or **gamepad controls** with two sticks, two triggers, a hat,
+and 16 buttons. Multicontact drivers support simultaneous controls and
+two-finger Mousepad scrolling.
+
+BLE supports keyboard control only; USB gamepad output is generic HID, not XInput.
+See [keyboard macros](docs/pad-editor-guide.md#key-sequences),
+[mouse controls](docs/pad-editor-guide.md#mousepad), and
+[gamepad controls](docs/pad-editor-guide.md#gamepad-controls).
+
+### A Smart Home Panel: Controls That Fit Your Routine
+
+Lights, blinds, music, and a good-night scene belong together when you use them
+together. Build a bedside remote that calls **Home Assistant services** or
+publishes MQTT commands.
+
+Auto-discovery exposes available sensors and controls without discovery YAML.
+Your automations can switch screens, wake the display, and send sounds or
+notifications back. MQTT works with other systems too; Home Assistant is optional.
+
+[Connect to Home Assistant](docs/ha-integration-guide.md).
+
+### A Live Dashboard: Your Data at a Glance
+
+Is the house running on solar or drawing from the grid? Put the answer in a large
+gauge, give battery charge its own bar, and show the day's trend in a sparkline.
+Mix **gauges, bar charts, sparklines, tables, and scrollable lists** with ordinary
+buttons and adjustment rockers. Advanced options include multi-ring gauges with
+target zones and multi-line sparklines; supported builds can backfill history
+from Home Assistant after reboot.
+
+For a sensor publishing watts to `home/solar/power`, the label
+`Solar: [mqtt:home/solar/power;;%.0f W]` shows the live reading with its unit.
+
+Arrange up to **16 pads** with flexible grids (up to 8x8, board-dependent) and
+buttons spanning multiple positions. Style them with icons, images, colors,
+and aligned labels. Try DSEG7 for seven-segment readings, Doto for a pixel look,
+or Bebas for bold labels. Smooth value animations bring readings to life;
+idle pads, display sleep, fading, and pixel shifting handle downtime.
+
+[Design your first pad](docs/pad-editor-guide.md#designing-a-pad).
+
+### Live Bindings: A Dashboard That Reacts to Your Data
+
+A gauge can turn red when consumption rises; a control can disappear when it
+isn't available. **Bindings** connect data to labels, colors, widgets, button
+states, and action values. Add `[health:cpu]%` for device load, or
+`[time:%H:%M;Europe/Amsterdam]` for a local clock.
+
+Combine MQTT values and JSON fields with clocks, timers, health, and data from
+enabled media or camera features. Expressions, formatting, fallbacks, and named
+bindings keep it reusable. The editor checks syntax and previews live values.
+
+[Explore binding templates](docs/pad-editor-guide.md#binding-templates).
+
+### Automation & Timers: One Tap Starts the Routine
+
+Start a focus timer, lower the brightness, and show a confirmation with one tap.
+When time is up, play a sound and pulse the screen. **Three independent timers**
+support countdowns, stopwatches, and expiry actions.
+
+Chain up to three actions per tap or long-press, with delays and optional button
+confirmations. Swipes, full-screen taps, physical buttons, boot, MQTT messages,
+and camera motion can trigger actions where supported. Notifications, pulsing
+alerts, beep patterns, and MP3 sounds provide the feedback.
+
+[Configure actions](docs/pad-editor-guide.md#actions-tap-and-long-press) and
+[timers](docs/pad-editor-guide.md#timer-actions).
+
+### Images, Cameras & Music: More Than a Control Panel
+
+Turn an unused display into a **JPEG/PNG slideshow**, advance photos with buttons,
+or bring remote images and camera views into your dashboard.
+
+Camera builds add preview, snapshots, a camera roll, and MJPEG streaming.
+Local motion detection can trigger actions or keep the display awake without
+cloud processing. It detects movement, not a person sitting still.
+
+Audio builds can play your **MP3 library** with metadata, progress, and volume
+controls. Supported music-analysis builds add audio-level and frequency-band
+visualizations.
+
+See [images](docs/web-portal-guide.md#image-library),
+[camera workflows](docs/web-portal-guide.md#camera-snapshots), and
+[music](docs/web-portal-guide.md#music-library).
+
+## 🎨 Make It Your Own
+
+### Build in Your Browser
+
+Drag buttons into place, resize them, pick an icon, and preview the layout at your
+device's aspect ratio. Save and see the result on your device. **Template pads**,
+shared styling defaults, and building blocks let you reuse what works.
+
+Install parameterized recipes from your device-saved catalog, starting with the
+repository's Pomodoro and Home Energy examples. Copy buttons or pads, and
+import/export configurations as JSON to back up or share your work.
+
+The portal also handles settings, media, health diagnostics, and screen previews,
+with optional HTTP Basic Auth. Supported builds offer **over-the-air updates**
+with rollback protection.
+
+[Open the pad editor guide](docs/pad-editor-guide.md) or
+[tour the web portal](docs/web-portal-guide.md).
+
+### Ask an AI Assistant to Help
+
+"Create a pad with a clock, a CPU gauge, and a kitchen-lights button."
+
+The built-in **Model Context Protocol (MCP) server** lets compatible clients such
+as VS Code Copilot Chat, Cursor, and Claude Desktop inspect the device, resolve
+bindings, control available features, and author pads and buttons.
+It is off by default, requires a token, and separates read, control, and pad
+authoring permissions. Enable it only on a trusted LAN; its HTTP transport is not
+encrypted.
+
+[Connect your assistant](docs/mcp-guide.md).
+
+### Add Something the Built-In Widgets Cannot Do
+
+A Nixie clock, a word clock, Matrix rain, or a clock with a game running inside it:
+**native Extensions** add custom visualizations and interactions to your buttons.
+Download a package for your device target, upload it through the portal, and
+configure each button that uses it.
+
+Extensions run native code, so install only modules you trust. Support and slot
+capacity depend on the board; oversized packages are rejected.
+
+[Browse the Extensions catalog](https://jantielens.github.io/esp32-macropad/extensions.html)
+or [build your own](docs/dev/extensions.md).
+
+## 🔬 Beyond the Macropad
+
+### A Dashboard That Sleeps Between Updates
+
+An **E-Paper Frame** wakes, fetches an image, refreshes the panel, and returns to
+deep sleep. Rotate images, choose hourly refresh windows, and estimate battery
+life in the portal. Supported reTerminal E1003 service setups can cache a batch
+for offline refreshes between network syncs.
+
+Want buttons instead? **Interactive E-Paper** runs the customizable pad UI with
+black-and-white or grayscale rendering. It is a different firmware experience
+from the sleep-first image frame.
+
+[Choose an e-paper experience](docs/epaper-architectures.md) or
+[set up an E-Paper Frame](docs/epaper-frame-guide.md).
+
+### A Sensor Node Without a Screen
+
+Report temperature, humidity, pressure, battery level, or presence with the
+appropriate sensors and board. Run continuously or wake periodically to publish
+over MQTT and go back to sleep. BLE telemetry builds can send **BTHome** sensor
+advertisements without starting Wi-Fi on normal wakes. The browser portal still
+handles configuration, even when there is no display.
+
+### ☕ Your Next Brew, Measured
+
+The **Coffee Scale** firmware combines a load cell with live weight and flow-rate
+readings. Follow stage-based espresso or pour-over templates, then revisit the
+recorded brew history. Calibration, templates, and brew logs live in the web portal.
+
+[Build a Coffee Scale](docs/device-classes/coffee-scale/README.md).
+
+### 🎞️ Tools for the Analog Darkroom
+
+The **Darkroom Timer** handles enlarger exposures, f-stop test strips, light
+metering, and print logs, with Shelly Wi-Fi relays controlling the enlarger and
+safelight. The **Shutter Tester** measures camera shutter speeds and curtain timing
+with photodiodes, and saves sessions for comparison.
+
+Explore the [Darkroom Timer](docs/device-classes/darkroom-timer/README.md) and
+[Shutter Tester](docs/device-classes/shutter-tester/user-guide.md).
+
+### 🎙️ Voice as Another Input and Output
+
+The **Voice Assistant** variant records speech, transcribes it through Azure,
+and can publish the result over MQTT. Speak binding-driven text using cloud
+text-to-speech for audible replies. It provides the voice pieces for your own
+automation, not a standalone conversational assistant; cloud credentials and an
+external reply workflow are required for that experience.
+
+[Set up the Voice Assistant](docs/web-portal-guide.md#voice-assistant).
+
+## 📱 Supported Hardware
+
+From a compact round display to a 7-inch control panel or a battery-powered
+e-paper frame, choose the board that fits the job. Features depend on the exact
+board and firmware variant; the [installer](https://jantielens.github.io/esp32-macropad/)
+helps you choose the right combination.
+
+Persistent storage uses internal flash or a MicroSD card, depending on the
+target. It holds pad configurations, images, sounds, and recorded data such as
+brew logs or shutter-test sessions. SD-primary variants give media and recordings
+more room without using the board's internal flash for those files.
 
 | Board | Chip | Display | Resolution | Shape |
 |-------|------|---------|------------|-------|
+| **Cheap Yellow Display (CYD) v2** | ESP32 | 2.8" TFT LCD | 320 x 240 | Landscape |
 | **Guition ESP32-S3-4848S040** | ESP32-S3 | 4.0" IPS LCD | 480 × 480 | Square |
 | **Guition JC3248W535** | ESP32-S3 | 3.5" IPS LCD | 480 × 320 | Landscape |
+| **Guition JC4827W543C** | ESP32-S3 | 4.3" IPS LCD | 480 x 272 | Landscape |
 | **JC3636W518** | ESP32-S3 | 3.6" IPS LCD | 360 × 360 | Round |
 | **Waveshare ESP32-P4 Touch LCD 4B** | ESP32-P4 | 4.0" IPS LCD | 720 × 720 | Square |
-| **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 800 × 480 | Rectangle |
+| **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 480 x 800 | Portrait |
 | **Guition JC1060P470C** | ESP32-P4 | 7.0" IPS LCD | 1024 × 600 | Rectangle |
 | **Soldered Inkplate 5V2** | ESP32 | 5.17" 3-bit grayscale e-paper | 720 × 1280 | Portrait |
-| **Soldered Inkplate 6FLICK** | ESP32 | 6.0" 3-bit grayscale e-paper | 1024 × 758 | Landscape |
-| **Soldered Inkplate 6FLICK LVGL (experimental)** | ESP32 | 6.0" 3-bit grayscale e-paper touch UI | 1024 × 758 | Landscape |
-| **Soldered Inkplate 6FLICK LVGL B/W (experimental)** | ESP32 | 6.0" black-and-white e-paper touch UI | 1024 × 758 | Landscape |
-| **Seeed reTerminal E1003 Frame** | ESP32-S3 | 10.3" 16-level grayscale e-paper dashboard | 1404 × 1872 | Portrait |
-| **Seeed reTerminal E1003 Interactive** | ESP32-S3 | 10.3" 16-level grayscale e-paper touch UI | 1404 × 1872 | Portrait |
+| **Soldered Inkplate 6FLICK** | ESP32 | 6.0" e-paper, Frame or Interactive firmware | 1024 x 758 | Landscape |
+| **Seeed reTerminal E1003** | ESP32-S3 | 10.3" e-paper, Frame or Interactive firmware | 1404 x 1872 | Portrait |
+| **ESP32-C3 Super Mini** | ESP32-C3 | Headless sensor node | N/A | N/A |
+| **DFRobot FireBeetle 2 ESP32-C6** | ESP32-C6 | Headless AHT10 sensor node | N/A | N/A |
 
-Most boards feature capacitive touch and are widely available from AliExpress and similar retailers. The Inkplate 5V2, Inkplate 6FLICK, and `reterminal-e1003-frame` are sleep-first E-Paper Frame targets. The `inkplate6flick-interactive` and `reterminal-e1003-interactive` targets are Interactive E-Paper touch UIs with persisted B/W and grayscale render-mode settings. E1003 B/W mode uses the IT8951's DU waveform between scheduled GC16 full refreshes; grayscale always uses GC16. The E1003 targets use the 8 MB OTA application partition; the interactive profile also reserves three native Extension slots. Back up its stored files before upgrading from the older partition layout: mounting the old, larger LittleFS volume with the new layout causes a boot loop until the storage volume is erased or the old partition layout is restored.
+### Pick the Right Variant
 
-### Headless Sensor Targets
+| Capability | What to check |
+|------------|---------------|
+| USB keyboard, mouse, and gamepad | JC1060P470C, JC4880P433, JC3636W518, their `-sd` variants, and ESP32-P4 LCD 4B Macropad builds |
+| BLE keyboard | Board-dependent; both JC3636W518 variants disable BLE |
+| Native Extensions | Supported ESP32-P4 and ESP32-S3 builds, plus Inkplate 6FLICK Interactive; slot capacity varies |
+| Audio, microphones, and cameras | Hardware and firmware support vary; check the exact installer target |
+| SD primary storage | JC1060P470C, JC3636W518, and JC4880P433 `-sd` builds require a FAT32 card and do not fall back to internal flash |
+| OTA updates | Not available on every target, including FireBeetle 2 AHT10 and Inkplate 6FLICK Interactive |
 
-The `firebeetle2-esp32c6-aht10` target supports a DFRobot FireBeetle 2
-ESP32-C6 v1.2 with an AHT10 on GPIO19/GPIO20. It reads the board's onboard
-LiPo divider on GPIO0 and intentionally leaves the built-in GPIO15 LED
-unconfigured. The target uses the 3 MB `huge_app` partition and therefore does
-not support OTA updates.
+Specialized targets include `jc4880p433-nau7802` and `jc4880p433-hx711`
+(Coffee Scale), `jc4880p433-darkroom`, `jc4880p433-shutter`, and
+`esp32-p4-lcd4b-voice`. Sensors and other external hardware must be added as
+described in their setup guides. See [device classes](docs/device-classes/README.md)
+for the build-time selection and branding model.
 
-```bash
-./build.sh firebeetle2-esp32c6-aht10
-```
+> [!IMPORTANT]
+> Back up stored files before upgrading older e-paper partition layouts.
+> The reTerminal E1003's smaller filesystem can cause a boot loop if the old
+> volume is retained; erase storage or restore the previous layout to recover.
+> Inkplate 6FLICK Interactive also requires a backup and restore when moving to
+> its Extension-enabled layout. Check the [e-paper architecture guide](docs/epaper-architectures.md)
+> and [release notes](CHANGELOG.md) before upgrading.
 
-### SD Primary Storage Variants
-
-The `jc1060p470c-sd`, `jc3636w518-sd`, and `jc4880p433-sd` targets store
-persistent files on the board's MicroSD card rather than internal LittleFS.
-Format the card as FAT32 before first use. The device stops at boot when the
-card is absent or cannot be mounted, so it never falls back to internal flash.
-
-```bash
-./build.sh jc1060p470c-sd
-./build.sh jc3636w518-sd
-./build.sh jc4880p433-sd
-```
-
-### Device Classes
-
-The firmware auto-detects a device class at build time based on board capability flags. The class drives mDNS naming, captive-portal SSID, Home Assistant model strings, the default device name, and how each board is presented on the flash page.
-
-| Device Class | Detection | Brand Prefix | SSID Format | Boards |
-|---|---|---|---|---|
-| **Macropad** | `HAS_DISPLAY` (default) | `ESP32 Macropad` | `ESP32-MACROPAD-XXXXXX` | All touch-screen boards listed above |
-| **E-Paper Frame** | `IS_EPAPER_FRAME` | `ESP32-MP E-Paper Frame` | `ESP32-MP-EPAPER_FRAME-XXXXXX` | Inkplate 5V2, Inkplate 6FLICK, Seeed reTerminal E1003 |
-| **Headless** | `!HAS_DISPLAY` | `ESP32-MP Headless` | `ESP32-MP-HEADLESS-XXXXXX` | Sensor-only boards (e.g. `esp32c3-withsensors`, `firebeetle2-esp32c6-aht10`) |
-| **Shutter Tester** | `IS_SHUTTER_TESTER` | `ESP32-MP Shutter Tester` | `ESP32-MP-SHUTTER-XXXXXX` | `jc4880p433-shutter` — see [docs/device-classes/shutter-tester/](docs/device-classes/shutter-tester/README.md) |
-| **Coffee Scale** | `IS_COFFEE_SCALE` | `ESP32-MP Coffee Scale` | `ESP32-MP-SCALE-XXXXXX` | `jc4880p433-nau7802`, `jc4880p433-hx711` — see [docs/device-classes/coffee-scale/](docs/device-classes/coffee-scale/README.md) |
-| **Darkroom Timer** | `IS_DARKROOM_TIMER` | `ESP32-MP Darkroom Timer` | `ESP32-MP-DARKROOM-XXXXXX` | `jc4880p433-darkroom` — see [docs/device-classes/darkroom-timer/](docs/device-classes/darkroom-timer/README.md) |
-| **Voice Assistant** | `IS_VOICE_ASSISTANT` | `ESP32-MP Voice Assistant` | `ESP32-MP-VOICE-XXXXXX` | `esp32-p4-lcd4b-voice` |
-
-`XXXXXX` is the last six hex digits of the ESP32 chip ID. Per-board metadata (label, description, specs) lives in `src/boards/<board>/metadata.json` and is consumed by the flash page generator.
-
-> **More boards welcome!** The firmware has a modular driver architecture that makes adding new boards straightforward. Check the [developer docs](docs/dev/display-touch-architecture.md) if you'd like to contribute.
+More boards are welcome. The [modular display and touch drivers](docs/dev/display-touch-architecture.md)
+provide a starting point for adding yours.
 
 ## 🚀 Getting Started
 
 ### Install Firmware
 
-The easiest way to flash ESP32 Macropad is through the **online device guide**. No tools or compilers are needed:
-
-**👉 [ESP32 Macropad Firmware Installer](https://jantielens.github.io/esp32-macropad/)**
+Use the [online firmware installer](https://jantielens.github.io/esp32-macropad/).
+No compiler or command-line tools are needed.
 
 1. Choose a device class, then select your exact board and firmware variant.
 2. Open the linked USB flash page in **Chrome** or **Edge** (WebSerial required).
 3. Connect your board via USB, click **Connect**, and follow the installer prompts.
 
-Already running ESP32 Macropad? [Update over Wi-Fi](https://jantielens.github.io/esp32-macropad/update.html) from the site or use the device's web portal.
+Already running an OTA-capable build? [Update over Wi-Fi](https://jantielens.github.io/esp32-macropad/update.html)
+from the site or use the device's web portal.
 
 ### First-Time Setup
 
 After flashing, the device creates its own Wi-Fi hotspot for initial configuration:
 
-1. Connect to the device's Wi-Fi network (`esp32-macropad-XXXXXX`)
-2. A captive portal opens — configure your Wi-Fi credentials
-3. The device reboots and joins your network
-4. Access the configuration portal at `http://<device-name>.local`
+1. Connect to the device's Wi-Fi hotspot. Macropad builds use `ESP32-MACROPAD-XXXXXX`; other device classes use their own prefix.
+2. Configure your Wi-Fi credentials in the captive portal.
+3. After the device reboots, open `http://<device-name>.local` on your network.
 
-**📖 [Detailed first-time setup guide →](docs/first-time-setup.md)**
+On a Macropad build, make your first button do something you can see:
 
-## 🎛️ Web Configuration Portal
+1. Open **Pads**, choose a pad, and add a button labeled `Hello`.
+2. Add a **Show notification** tap action with the message `Hello!`.
+3. Save, open that pad on the device, and tap the button to see the message.
 
-Everything is configured from your browser — no flashing or coding needed after the initial install. The portal is a single-page app with a responsive sidebar organizing settings into 8 categories:
+No Home Assistant connection or HID setup is needed for this first test.
 
-- **Device** — operating mode, boot actions, timers, and swipe gestures
-- **Display** — brightness, on-demand screen preview, screen saver, and button defaults
-- **Pads** — visual pad editor for designing button layouts
-- **Actions** — boot actions, swipe gestures, hardware buttons, and MQTT triggers
-- **Connectivity** — Wi-Fi, MQTT, BLE, device name, static IP, and security
-- **Audio** — volume, beep patterns, and sound files
-- **Sensors** — sensor configuration for boards with sensor hardware
-- **Firmware** — OTA updates, manual upload, and factory reset
+For HID controls, select your transport in **Connectivity > Keyboard & Mouse**,
+save, and reboot. Output defaults to Off. On dual-USB-C P4 boards, use native
+USB/OTG for HID and USB-UART for flashing and logs; see
+[USB connector and power guidance](docs/web-portal-guide.md#keyboard).
 
-The pad editor lets you design button layouts visually: drag-to-move and drag-to-resize buttons, pick icons, set colors, add MQTT bindings for live data, configure tap actions — then save and see it instantly on your device. Dark and light mode follow your OS preference.
+[Follow the first-time setup guide](docs/first-time-setup.md).
 
-**📖 [Full web portal guide →](docs/web-portal-guide.md)**
-
-## 📖 Documentation
+## 📚 Documentation
 
 | Guide | Description |
 |-------|-------------|
 | [First-Time Setup](docs/first-time-setup.md) | Initial configuration after flashing |
 | [Web Portal Guide](docs/web-portal-guide.md) | Complete guide to all portal features |
-| [MCP Server Guide](docs/mcp-guide.md) | Connect a local AI assistant to inspect and control the device over MCP |
-| [E-Paper Frame Guide](docs/epaper-frame-guide.md) | Detailed guide for the E-Paper Frame device class, carousel/schedule model, wake behavior, and status semantics |
+| [Pad Editor Guide](docs/pad-editor-guide.md) | Layouts, widgets, actions, bindings, and worked examples |
+| [MCP Server Guide](docs/mcp-guide.md) | AI-assisted inspection, control, configuration, and pad authoring |
+| [E-Paper Frame Guide](docs/epaper-frame-guide.md) | Image sources, scheduling, battery use, and wake behavior |
 | [Home Assistant Integration](docs/ha-integration-guide.md) | HA entity reference, audio control, and automation examples |
+| [Device Classes](docs/device-classes/README.md) | Specialized firmware variants and their guides |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |
 | [Extension Developer Guide](docs/dev/extensions.md) | Build, install, and author trusted native ESP32-P4, ESP32-S3, and classic ESP32 Extensions |
 
@@ -256,7 +339,7 @@ ctest --test-dir build/host-tests --output-on-failure
 
 ## 📄 License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
