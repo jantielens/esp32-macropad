@@ -29,6 +29,7 @@ extern DeviceConfig device_config;
 #include "display_manager.h"
 #include "icon_store.h"
 #include "pad_config.h"
+#include "widgets/widget_registry.h"
 #endif
 
 #if HAS_DISPLAY || HAS_BUTTON
@@ -201,6 +202,17 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		#endif
 
 		#if HAS_DISPLAY
+				if (request->hasParam("catalog")) {
+						auto widget_doc = make_psram_json_doc(4096);
+						response->print(",\"widget_catalog\":");
+						if (widget_doc && widget_doc->capacity() > 0) {
+								JsonArray widgets = widget_doc->to<JsonArray>();
+								widget_preview_catalog_emit(widgets);
+								serializeJson(widgets, *response);
+							} else {
+								response->print("[]");
+							}
+				}
 				// Display screen information
 				response->print(",\"has_display\":true");
 				response->print(",\"has_touch\":");

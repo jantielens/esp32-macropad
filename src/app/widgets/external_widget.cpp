@@ -186,6 +186,7 @@ static void external_tick(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* 
     (void)state;
 }
 
+static const WidgetPreview external_preview = {"Extension", "extension"};
 REGISTER_WIDGET(external, nullptr, false);
 
 #endif

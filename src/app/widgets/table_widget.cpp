@@ -542,6 +542,7 @@ static void table_describe(JsonObject& out) {
     { JsonObject o = f.createNestedObject(); o["name"] = "widget_table_style"; o["type"] = "string"; o["desc"] = "table style preset"; }
 }
 #endif
+static const WidgetPreview table_preview = {"Table", "grid_on"};
 REGISTER_WIDGET_SCHEMA(table, nullptr, true);
 
 #endif // HAS_DISPLAY

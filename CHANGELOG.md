@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-04
+ms.date: 2026-10-05
 ms.topic: reference
 ---
 
@@ -13,6 +13,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+* Widget-owned preview metadata in `GET /api/info?catalog=1`, independent of
+  MCP. Each widget registers its display name, Material Symbol, and optional
+  axis variants, replacing the pad editor's central icon mapping.
+
+### Changed
+
+* Pad editor widgets use consistent offline Material Symbols markers,
+  including Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, and inherited
+  template buttons. Directional symbols follow configured axes; unlabeled
+  widgets show a larger symbol and their name when space permits. Template
+  buttons remain readable with lighter fading and a dashed outline. The grid
+  remains a configuration overview, not a live preview.
 
 ## [1.36.0] - 2026-10-04
 

@@ -93,6 +93,33 @@ ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
     return ACTION_COMPLETE;
 }
 
+TEST(WidgetPreview, CatalogIsAvailableWithoutMcp) {
+    DynamicJsonDocument document(4096);
+    JsonArray catalog = document.to<JsonArray>();
+    widget_preview_catalog_emit(catalog);
+    unsigned described = 0;
+    for (uint8_t index = 0; index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        if (!type->preview) continue;
+        ASSERT_LT(described, catalog.size());
+        JsonObjectConst entry = catalog[described++];
+        EXPECT_STREQ(entry["type"], type->name);
+        EXPECT_STREQ(entry["name"], type->preview->name);
+        EXPECT_STREQ(entry["icon"], type->preview->icon);
+        EXPECT_EQ(type->describeSchema, nullptr);
+        if (type->preview->axis_field) {
+            EXPECT_STREQ(entry["axis_field"], type->preview->axis_field);
+            EXPECT_STREQ(entry["horizontal_icon"], type->preview->horizontal_icon);
+            EXPECT_STREQ(entry["default_axis"], type->preview->default_axis);
+        } else {
+            EXPECT_FALSE(entry.containsKey("axis_field"));
+        }
+    }
+    EXPECT_EQ(described, 4u);
+    EXPECT_EQ(catalog.size(), described);
+    EXPECT_FALSE(document.overflowed());
+}
+
 TEST(WidgetNavigation, AnyEnabledInputWidgetSuppressesTheEntirePad) {
     ScreenButtonConfig buttons[2]{};
     PadConfig pad{};

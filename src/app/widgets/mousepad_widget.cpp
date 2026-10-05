@@ -300,6 +300,7 @@ static void mousepad_describe(JsonObject& out) {
 }
 #endif
 
+static const WidgetPreview mousepad_preview = {"Mousepad", "touchpad_mouse"};
 REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(mousepad, nullptr, false, mousepad_validate);
 
 #endif

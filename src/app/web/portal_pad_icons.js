@@ -47,6 +47,32 @@ function padIconIdToType(iconId) {
     return { type: '', value: '' };
 }
 
+function padWidgetPreview(btn) {
+    if (!btn.widget_type) return null;
+    const catalog = deviceInfoCache && deviceInfoCache.widget_catalog;
+    const metadata = Array.isArray(catalog) && catalog.find(entry => entry.type === btn.widget_type);
+    const preview = { ...(metadata || { name: 'Unknown Widget', icon: 'extension' }) };
+    if (preview.axis_field) {
+        const axis = btn[preview.axis_field] || preview.default_axis;
+        preview.icon = (axis === 'horizontal' ? preview.horizontal_icon : preview.vertical_icon) || preview.icon;
+        preview.vertical = !!preview.second_icon && axis === 'vertical';
+    }
+    return preview;
+}
+
+function padWidgetPreviewSymbol(preview) {
+    const symbol = document.createElement('span');
+    symbol.className = 'pad-widget-symbol' + (preview.vertical ? ' pad-widget-symbol-vertical' : '');
+    symbol.setAttribute('aria-hidden', 'true');
+    for (const icon of [preview.icon, preview.second_icon].filter(Boolean)) {
+        const glyph = document.createElement('span');
+        glyph.className = 'pad-widget-glyph';
+        glyph.textContent = icon;
+        symbol.appendChild(glyph);
+    }
+    return symbol;
+}
+
 // Shared cell content renderer for normal and ghost buttons.
 // Sets colors, border, labels, icon, and bg-image placeholder on the cell div.
 function padRenderCellContent(cell, btn) {
@@ -65,6 +91,28 @@ function padRenderCellContent(cell, btn) {
     if (!isNaN(cpNum)) {
         if (cpNum < 0) cpNum = 0; else if (cpNum > 50) cpNum = 50;
         cell.style.padding = cpNum + 'px';
+    }
+    const widget = padWidgetPreview(btn);
+    if (widget) {
+        cell.classList.add('pad-cell-has-widget');
+        cell.style.paddingBottom = 'max(' + (isNaN(cpNum) ? 6 : cpNum) + 'px, 28px)';
+        const marker = document.createElement('span');
+        marker.className = 'pad-widget-marker';
+        marker.title = widget.name + ' Widget';
+        marker.setAttribute('aria-label', marker.title);
+        marker.appendChild(padWidgetPreviewSymbol(widget));
+        cell.appendChild(marker);
+        if (!btn.label_top && !btn.label_center && !btn.label_bottom && !btn.icon_id && !btn.bg_image_url && !btn.bg_image_path) {
+            const fallback = document.createElement('div');
+            fallback.className = 'pad-widget-fallback';
+            fallback.appendChild(padWidgetPreviewSymbol(widget));
+            const name = document.createElement('span');
+            name.className = 'pad-widget-name';
+            name.textContent = widget.name;
+            fallback.appendChild(name);
+            cell.appendChild(fallback);
+            return;
+        }
     }
     const hasTop = !!btn.label_top;
     const hasBottom = !!btn.label_bottom;
@@ -134,11 +182,13 @@ function padRenderCellContent(cell, btn) {
             }
         }
     } else if (!btn.bg_image_url && !btn.bg_image_path) {
-        const centerText = btn.label_center || '\u2022';
-        const elc = document.createElement('div');
-        elc.className = 'pad-cell-label-center';
-        elc.textContent = padSimplifyBindings(centerText);
-        cell.appendChild(elc);
+        const centerText = btn.label_center || (widget ? '' : '\u2022');
+        if (centerText) {
+            const elc = document.createElement('div');
+            elc.className = 'pad-cell-label-center';
+            elc.textContent = padSimplifyBindings(centerText);
+            cell.appendChild(elc);
+        }
     } else if (btn.label_center) {
         const elc = document.createElement('div');
         elc.className = 'pad-cell-label-center';

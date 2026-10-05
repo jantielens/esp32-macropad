@@ -354,7 +354,7 @@ every component in that custom section to the same category ID.
 **Sections:**
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
   - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
-  - **Grid preview**: Click any cell to open the button editor dialog
+  - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
   - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
   - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
@@ -770,11 +770,34 @@ Returns comprehensive device information.
 - Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, `record_cancel`, and `speak` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. Azure transcription has a 30-second limit and no automatic retry. Failure sets `[stt:status]` to `error`, puts the reason in `[stt:text]`, and stops the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation. `speak` resolves its text field as a binding template, then queues best-effort Azure TTS with optional voice and volume overrides; it does not pause the action list, and provider failures are logged without changing the STT bindings. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
 
 **Display Fields** (only when `has_display` is `true`):
+- `widget_catalog`: Present only with `?catalog=1`. Array of registered widget
+  preview descriptors with `type`, `name`, and `icon` (Material Symbol name).
+  Optional fields are `second_icon`, `axis_field`, `horizontal_icon`,
+  `vertical_icon`, and `default_axis`. This metadata is independent of MCP.
 - `display_coord_width` / `display_coord_height`: Display resolution
 - `icon_max_dimension`: Largest accepted PNG width or height. The Pad editor
   rasterizes larger icons at this limit and the device scales them to fit.
 - `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
 - `current_screen`: ID of the currently displayed screen
+
+Each widget module defines a `static const WidgetPreview <type>_preview` before
+its `REGISTER_WIDGET*` invocation. The registration macros attach it to
+`WidgetType`; `widget_preview_catalog_emit()` enumerates the registry for the
+portal. The generic grid renderer reads `deviceInfoCache.widget_catalog`, so
+adding a widget does not require another JavaScript type-to-icon list. Unknown
+types or missing catalogs use a generic extension symbol.
+
+Widget markers use the small Material Symbols Outlined WOFF2 subset embedded
+in `portal-custom.css`, under the separate `Pad Widget Symbols` font family.
+This keeps markers offline without changing user-configured button icons.
+When a widget introduces a new symbol, regenerate the embedded subset from the
+icon names in widget preview declarations, including axis variants and the
+generic `extension` fallback. The upstream Apache 2.0 license is retained in
+[`assets/fonts/MaterialSymbols-LICENSE.txt`](../../assets/fonts/MaterialSymbols-LICENSE.txt).
+`tests/test_portal_pad_preview.js` checks catalog coverage, generic axis handling,
+configured content preservation, inherited rendering, and the embedded font
+payload. The `WidgetPreview.CatalogIsAvailableWithoutMcp` host test verifies
+native serialization with MCP disabled.
 
 **Health Widget Fields:**
 - `health_poll_interval_ms`: Poll interval used by the portal health overlay

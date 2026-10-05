@@ -635,6 +635,15 @@ The Pads page is the heart of ESP32 Macropad — this is where you design your t
 
 The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import) and **Building Blocks** — pre-configured button groups you can place into a pad with a single click. While the current pad has unsaved changes, a fixed **Save Pad** button also appears at the lower-right of the page. This is completely separate from the device config Save & Reboot footer on other pages.
 
+The grid is a configuration overview, not a live preview. Every widget has a
+bottom-left type icon, including widgets inherited from a template pad. Rocker
+and Scrollpad icons follow their configured axis; Numeric Rocker uses minus/plus
+symbols along that axis. Widgets without labels, a button icon, or a background
+image show a larger type icon and, when space permits, their name. Template
+buttons retain a dashed outline without heavily fading their contents. Widget
+type icons work offline; user-selected Material Symbols button icons still use
+the existing online font loader.
+
 The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide pad background and layout defaults alongside button colors, borders, and label styles. Pads and buttons inherit the applicable settings automatically, while explicit overrides still take precedence.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.

@@ -20,6 +20,16 @@ struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];
 };
 
+struct WidgetPreview {
+    const char* name;
+    const char* icon;
+    const char* second_icon = nullptr;
+    const char* axis_field = nullptr;
+    const char* horizontal_icon = nullptr;
+    const char* vertical_icon = nullptr;
+    const char* default_axis = nullptr;
+};
+
 struct WidgetType {
     const char* name;
     void (*parseConfig)(const JsonObject& btn, uint8_t* data);
@@ -44,12 +54,14 @@ struct WidgetType {
     void (*onShow)(WidgetState* state);
     void (*onHide)(WidgetState* state);
     const char* (*validateConfig)(JsonObjectConst button);
+    const WidgetPreview* preview = nullptr;
 };
 
 const WidgetType* widget_find(const char* type_name);
 void widget_register(const WidgetType* type);
 uint8_t widget_count();
 const WidgetType* widget_at(uint8_t index);
+void widget_preview_catalog_emit(JsonArray catalog);
 
 inline bool widget_supports_pad_swipe_control(const char* type) {
     return strcmp(type, "mousepad") == 0 || strcmp(type, "scrollpad") == 0 ||

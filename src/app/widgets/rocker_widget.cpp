@@ -144,6 +144,7 @@ static void rocker_describe(JsonObject& out) {
                   "lp_actions[]. Configure both via the button's 'actions' and 'lp_actions' arrays.";
 }
 #endif
+static const WidgetPreview rocker_preview = {"Rocker", "swap_vert", nullptr, "widget_rocker_axis", "swap_horiz", "swap_vert", "vertical"};
 REGISTER_WIDGET_SCHEMA(rocker, nullptr, false);
 
 #endif // HAS_DISPLAY

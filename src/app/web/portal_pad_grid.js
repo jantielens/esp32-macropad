@@ -217,63 +217,6 @@ function padRenderGrid() {
 
                 padRenderCellContent(cell, btn);
 
-                // Widget indicator
-                if (btn.widget_type === 'bar_chart') {
-                    const bar = document.createElement('div');
-                    bar.className = 'pad-cell-widget-bar';
-                    bar.title = 'Bar Chart Widget';
-                    cell.appendChild(bar);
-                }
-                if (btn.widget_type === 'gauge') {
-                    const arc = document.createElement('div');
-                    arc.className = 'pad-cell-widget-gauge';
-                    arc.title = 'Gauge Widget';
-                    cell.appendChild(arc);
-                }
-                if (btn.widget_type === 'sparkline') {
-                    const spark = document.createElement('div');
-                    spark.className = 'pad-cell-widget-sparkline';
-                    spark.title = 'Sparkline Widget';
-                    cell.appendChild(spark);
-                }
-                if (btn.widget_type === 'table') {
-                    const tbl = document.createElement('div');
-                    tbl.className = 'pad-cell-widget-table';
-                    tbl.title = 'Table Widget';
-                    cell.appendChild(tbl);
-                }
-                if (btn.widget_type === 'rocker') {
-                    const rk = document.createElement('div');
-                    rk.className = 'pad-cell-widget-rocker';
-                    rk.title = 'Rocker Widget';
-                    cell.appendChild(rk);
-                }
-                if (btn.widget_type === 'numericrocker') {
-                    const nr = document.createElement('div');
-                    nr.className = 'pad-cell-widget-numericrocker';
-                    nr.title = 'Numeric Rocker Widget';
-                    cell.appendChild(nr);
-                }
-                if (btn.widget_type === 'list') {
-                    const ls = document.createElement('div');
-                    ls.className = 'pad-cell-widget-list';
-                    ls.title = 'List Widget';
-                    cell.appendChild(ls);
-                }
-                if (btn.widget_type === 'camera_preview') {
-                    const camera = document.createElement('div');
-                    camera.className = 'pad-cell-widget-camera';
-                    camera.title = 'Camera Preview Widget';
-                    cell.appendChild(camera);
-                }
-                if (btn.widget_type === 'external') {
-                    const ext = document.createElement('div');
-                    ext.textContent = 'EXT';
-                    ext.title = 'Extension Widget';
-                    ext.style.cssText = 'position:absolute;right:4px;bottom:3px;font-size:10px;font-weight:700;padding:1px 3px;border-radius:2px;background:#0f766e;color:#fff;';
-                    cell.appendChild(ext);
-                }
-
                 padRenderResizeHandles(cell, btn, c, r);
 
                 if (!padState.placingBlock) {

@@ -224,6 +224,7 @@ static void list_describe(JsonObject& out) {
     out["note"] = "data via [list:name] binding; no button-level config";
 }
 #endif
+static const WidgetPreview list_preview = {"List", "list"};
 REGISTER_WIDGET_SCHEMA(list, nullptr, true);
 
 #endif // HAS_DISPLAY

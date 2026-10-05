@@ -1284,6 +1284,7 @@ static void gauge_describe(JsonObject& out) {
     add("widget_anim_ms","number","transition ms");
 }
 #endif
+static const WidgetPreview gauge_preview = {"Gauge", "speed"};
 REGISTER_WIDGET_SCHEMA(gauge, nullptr, false);
 
 #endif // HAS_DISPLAY

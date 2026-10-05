@@ -113,5 +113,6 @@ static void gamepad_button_describe(JsonObject& out) {
     field["desc"] = "Exactly one {type:gamepad, control:button|hat|trigger, operation:down, ...target fields}";
 }
 #endif
+static const WidgetPreview gamepad_button_preview = {"Gamepad Button", "gamepad"};
 REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(gamepad_button, nullptr, false, gamepad_button_validate);
 #endif

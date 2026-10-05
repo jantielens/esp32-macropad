@@ -939,6 +939,7 @@ static void bar_chart_describe(JsonObject& out) {
     add("widget_anim_ms","number","transition ms, 0=instant");
 }
 #endif
+static const WidgetPreview bar_chart_preview = {"Bar Chart", "bar_chart"};
 REGISTER_WIDGET_SCHEMA(bar_chart, nullptr, false);
 
 #endif // HAS_DISPLAY

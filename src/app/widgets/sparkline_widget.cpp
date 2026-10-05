@@ -1172,6 +1172,7 @@ static void sparkline_describe(JsonObject& out) {
 #endif
 }
 #endif
+static const WidgetPreview sparkline_preview = {"Sparkline", "show_chart"};
 REGISTER_WIDGET_SCHEMA(sparkline, sparkline_get_stream_params, false);
 
 #endif // HAS_DISPLAY

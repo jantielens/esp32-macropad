@@ -232,5 +232,6 @@ static void gamepad_stick_describe(JsonObject& out) {
     out["note"] = "Absolute USB gamepad stick, with independent simultaneous contacts on multitouch drivers; release/cancel returns to neutral. One contact per widget; extras are ignored until lift. Ring fills the shorter padded content dimension; dot is one-third of its diameter (minimum 6 pixels) and stays inside the ring. Both use button foreground color. Floating center can shift only along the longer dimension. Areas smaller than 16 pixels are inactive. First interaction owns each stick until release. Positive X/Y are right/down. Center label is suppressed; top/bottom labels remain. Consumes normal actions and pad swipes. USB keyboard mode required.";
 }
 #endif
+static const WidgetPreview gamepad_stick_preview = {"Gamepad Joystick", "joystick"};
 REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(gamepad_stick, nullptr, false, gamepad_stick_validate);
 #endif

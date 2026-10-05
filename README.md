@@ -122,6 +122,10 @@ Drag buttons into place, resize them, pick an icon, and preview the layout at yo
 device's aspect ratio. Save and see the result on your device. **Template pads**,
 shared styling defaults, and building blocks let you reuse what works.
 
+Offline widget type icons identify both local and inherited buttons in the pad
+editor. Unlabeled widgets show a larger symbol and their name when space allows;
+the grid remains a configuration overview rather than a live data preview.
+
 Install parameterized recipes from your device-saved catalog, starting with the
 repository's Pomodoro and Home Energy examples. Copy buttons or pads, and
 import/export configurations as JSON to back up or share your work.
