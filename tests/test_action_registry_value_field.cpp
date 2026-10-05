@@ -214,6 +214,15 @@ static void test_resolve_bindings_rejects_overflow() {
 int main() {
     printf("=== action registry value-field contract tests ===\n\n");
 
+    static const ActionTypeDef fitting_type = {
+        "abcdefghijklmno", nullptr, nullptr, nullptr, nullptr, nullptr
+    };
+    action_type_register(&fitting_type);
+    ButtonAction stored = {};
+    strlcpy(stored.type, fitting_type.type_name, sizeof(stored.type));
+    check_str(stored.type, fitting_type.type_name, "maximum fitting name survives storage");
+    check_true(action_type_find(stored.type) == &fitting_type, "stored name resolves registered type");
+
     const BindingSchemeSpec free_form = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr};
     binding_template_register("mock", mock_resolve, mock_collect, free_form);
     binding_template_register("long", long_resolve, mock_collect, free_form);

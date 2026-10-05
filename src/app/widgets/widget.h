@@ -105,6 +105,8 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
 // (use nullptr when the widget has no data-stream support).
 // ----------------------------------------------------------------------------
 #define REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)               \
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
@@ -121,6 +123,8 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
 // bleeds into non-MCP firmware.
 #if HAS_MCP
 #define REGISTER_WIDGET_SCHEMA(prefix, stream_fn, resolve_in_tick_flag)        \
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
@@ -131,6 +135,8 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
     } _##prefix##_auto_reg
 
 #define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
@@ -144,6 +150,8 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
     REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)
 
 #define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \

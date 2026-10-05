@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Compile-time action and widget identifier capacity guards, with host tests
+  for NUL-aware boundaries and stored-name registry lookup. Runtime parsing and
+  configured buffer capacities remain unchanged.
 * Bounded, request-local `Server-Timing` headers across portal information,
   health, configuration, navigation, pad, catalog, fragment, and asset responses.
   DevTools reports preparation phases and handler or response-only totals without

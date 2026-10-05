@@ -96,6 +96,27 @@ baseline initialization, and rejected global lighting changes. Per-frame
 diagnostics are intentionally omitted to avoid overloading the ESP32-P4 USB CDC
 serial path.
 
+## Configuration Identifier Limits
+
+`CONFIG_*_MAX_LEN` capacities in `pad_config.h` include the terminating NUL
+byte. Action and widget type buffers are 16 bytes, so their identifiers must
+fit in 15 bytes. Limits count UTF-8 bytes, not displayed characters.
+
+Widget registration macros check the stringified prefix at compile time.
+`DEFINE_AND_REGISTER_ACTION_TYPE` checks the actual persisted type literal,
+not the C++ variable name. These checks also protect board-specific modules
+when they are compiled, without changing runtime parsing or registry behavior.
+
+`test_config_identifier_guards` compiles every widget macro variant with MCP
+enabled and disabled, plus action registrations. It accepts 14- and 15-byte
+names and requires the intended assertion for 16-byte names, including the
+former `gamepad_joystick` identifier. Runtime host tests copy fitting names
+through `WidgetConfig::type` and `ButtonAction::type` before registry lookup.
+
+Other configuration strings retain their existing validation and truncation
+behavior. This registration guard does not introduce a general oversized-input
+rejection policy or increase any buffer capacity.
+
 ## Portal Modes
 
 ### Core Mode (AP with Captive Portal)

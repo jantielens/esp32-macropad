@@ -120,6 +120,35 @@ TEST(WidgetPreview, CatalogIsAvailableWithoutMcp) {
     EXPECT_FALSE(document.overflowed());
 }
 
+TEST(WidgetPreview, RegisteredIdentifiersSurviveStorage) {
+    for (uint8_t index = 0; index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        WidgetConfig config{};
+        ASSERT_LT(strlen(type->name), sizeof(config.type));
+        strlcpy(config.type, type->name, sizeof(config.type));
+        EXPECT_STREQ(config.type, type->name);
+        EXPECT_EQ(widget_find(config.type), type);
+    }
+    WidgetConfig config{};
+    strlcpy(config.type, "gamepad_stick", sizeof(config.type));
+    EXPECT_NE(widget_find(config.type), nullptr);
+    EXPECT_EQ(strlen("gamepad_joystick"), sizeof(config.type));
+    strlcpy(config.type, "gamepad_joystick", sizeof(config.type));
+    EXPECT_STREQ(config.type, "gamepad_joystic");
+    EXPECT_EQ(widget_find(config.type), nullptr);
+}
+
+TEST(WidgetPreview, MaximumFittingIdentifierSurvivesStorage) {
+    static WidgetType fitting_type{};
+    fitting_type.name = "abcdefghijklmno";
+    ASSERT_EQ(strlen(fitting_type.name), CONFIG_WIDGET_TYPE_MAX_LEN - 1u);
+    widget_register(&fitting_type);
+    WidgetConfig config{};
+    strlcpy(config.type, fitting_type.name, sizeof(config.type));
+    EXPECT_STREQ(config.type, fitting_type.name);
+    EXPECT_EQ(widget_find(config.type), &fitting_type);
+}
+
 TEST(WidgetNavigation, AnyEnabledInputWidgetSuppressesTheEntirePad) {
     ScreenButtonConfig buttons[2]{};
     PadConfig pad{};
