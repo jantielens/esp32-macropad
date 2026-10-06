@@ -711,6 +711,7 @@ emit_chunked_variants() {
 
     local bundle_name chunks ckey f n_flags n_indep n_classes n_variants
     local if_expr active_flags cflag include
+    local max_variants=80
     local variant_tmp variant_orig_size variant_gz_size variant_gz vnum
     for bundle_name in "${!bundle_chunks_ref[@]}"; do
         chunks="${bundle_chunks_ref[$bundle_name]}"
@@ -742,9 +743,9 @@ emit_chunked_variants() {
         # Four independent feature chunks plus the four mutually exclusive
         # device classes produce 80 reachable variants. Keep a bounded cap so
         # a future independent chunk cannot silently explode generated assets.
-        if [[ $n_variants -gt 80 ]]; then
+        if [[ $n_variants -gt $max_variants ]]; then
             echo "  ✗ Bundle $bundle_name expands to $n_variants variants" \
-                 "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max 80)." >&2
+                 "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max ${max_variants})." >&2
             echo "     Independent flags (HAS_*) each double the gzipped variants emitted into" >&2
             echo "     web_assets.h; device-class flags (IS_*) add only one variant each." >&2
             echo "     Consolidate independent chunk flags, or split the bundle." >&2

@@ -10,6 +10,8 @@
 
 #include <Arduino.h>
 
+constexpr size_t LOG_LINE_BYTES = 288;
+
 enum LogLevel : uint8_t {
 		LOG_LEVEL_ERROR = 1,
 		LOG_LEVEL_WARN = 2,

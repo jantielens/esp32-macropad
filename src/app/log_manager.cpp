@@ -148,7 +148,7 @@ void log_write(LogLevel level, const char* module, const char* format, ...) {
 		    entry->last_ms = t;
 		}
 
-		char line[288];
+		char line[LOG_LINE_BYTES];
 		if (suppressed) {
 		    snprintf(line, sizeof(line), "[%lums] %c %.24s: %s [suppressed=%lu]\n", t,
 		             log_level_char(level), safe_module, msgbuf, (unsigned long)suppressed);

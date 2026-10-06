@@ -6,7 +6,7 @@
 #include "remote_log.h"
 #include "ota_activity.h"
 
-bool portal_logs_access_enabled() {
+bool portal_logs_full_mode_enabled() {
     const DeviceConfig* config = web_portal_get_current_config();
     return !web_portal_is_ap_mode_active() && config;
 }
@@ -50,7 +50,7 @@ void debug_crash_task(void* argument) {
 }
 
 void handleDebugCrash(AsyncWebServerRequest* request) {
-    if (!portal_logs_access_enabled()) {
+    if (!portal_logs_full_mode_enabled()) {
         log_status(request, 403, "{\"error\":\"Crash injection requires full portal access\"}");
         return;
     }
@@ -96,7 +96,6 @@ void handleDebugCrash(AsyncWebServerRequest* request) {
 
 #if REMOTE_LOG_BUFFER_RECORDS > 0
 #include <ArduinoJson.h>
-#include <ChunkPrint.h>
 #include <WebResponseImpl.h>
 #include <new>
 #include <atomic>
@@ -142,9 +141,23 @@ private:
     size_t used_ = 0;
 };
 
-bool write_log_snapshot(Print& output, const RemoteLogSnapshot& snapshot, bool reset) {
-    LogJsonAllocator allocator(snapshot.json_storage);
+bool write_log_segment(Print& output, const RemoteLogSnapshot& snapshot, bool reset, size_t segment) {
+    if (segment == snapshot.count + 1) {
+        output.print("]}");
+        return true;
+    }
+    LogJsonAllocator allocator(snapshot.json_storage, 6144);
     JsonDocument doc(&allocator);
+    if (segment) {
+        const size_t index = segment - 1;
+        if (index >= snapshot.count) return false;
+        if (index) output.write(',');
+        doc["sequence"] = snapshot.records[index].sequence;
+        doc["line"] = static_cast<const char*>(snapshot.records[index].line);
+        if (doc.overflowed()) return false;
+        serializeJson(doc, output);
+        return true;
+    }
     doc["available"] = true;
     doc["boot_id"] = snapshot.boot_id;
     doc["capacity"] = snapshot.capacity;
@@ -162,16 +175,6 @@ bool write_log_snapshot(Print& output, const RemoteLogSnapshot& snapshot, bool r
     const size_t length = serializeJson(doc, header, sizeof(header));
     output.write(reinterpret_cast<const uint8_t*>(header), length - 1);
     output.print(",\"records\":[");
-    for (size_t index = 0; index < snapshot.count; ++index) {
-        if (index) output.write(',');
-        doc.clear();
-        allocator.reset();
-        doc["sequence"] = snapshot.records[index].sequence;
-        doc["line"] = static_cast<const char*>(snapshot.records[index].line);
-        if (doc.overflowed()) return false;
-        serializeJson(doc, output);
-    }
-    output.print("]}");
     return true;
 }
 
@@ -180,6 +183,23 @@ public:
     size_t count = 0;
     size_t write(uint8_t) override { ++count; return 1; }
 };
+
+class LogBufferPrint final : public Print {
+public:
+    explicit LogBufferPrint(uint8_t* buffer, size_t capacity) : buffer_(buffer), capacity_(capacity) {}
+    size_t write(uint8_t value) override {
+        if (count == capacity_) { overflowed = true; return 0; }
+        buffer_[count++] = value;
+        return 1;
+    }
+    size_t count = 0;
+    bool overflowed = false;
+private:
+    uint8_t* buffer_;
+    size_t capacity_;
+};
+
+static_assert(REMOTE_LOG_LINE_BYTES * 6 + 64 <= 2048, "Escaped log records must fit the segment cache");
 
 class RemoteLogResponse final : public AsyncAbstractResponse {
 public:
@@ -190,7 +210,13 @@ public:
         _sendContentLength = true;
         _chunked = false;
         LogLengthPrint counter;
-        valid_ = write_log_snapshot(counter, *snapshot_, reset_);
+        valid_ = true;
+        for (size_t segment = 0; segment <= snapshot_->count + 1; ++segment) {
+            if (!write_log_segment(counter, *snapshot_, reset_, segment)) {
+                valid_ = false;
+                break;
+            }
+        }
         _contentLength = counter.count;
         addHeader("Cache-Control", "no-store");
     }
@@ -203,12 +229,26 @@ public:
 
     size_t _fillBuffer(uint8_t* buffer, size_t max_length) override {
         if (!_sourceValid() || offset_ >= _contentLength) return 0;
-        size_t count = _contentLength - offset_;
-        if (count > max_length) count = max_length;
-        if (count > 1024) count = 1024;
-        ChunkPrint output(buffer, offset_, count);
-        if (!write_log_snapshot(output, *snapshot_, reset_)) return 0;
-        offset_ += count;
+        const size_t limit = max_length < 1024 ? max_length : 1024;
+        uint8_t* cache = snapshot_->json_storage + 6144;
+        size_t count = 0;
+        while (count < limit && offset_ < _contentLength) {
+            if (segment_offset_ == segment_size_) {
+                LogBufferPrint output(cache, 2048);
+                if (!write_log_segment(output, *snapshot_, reset_, segment_++) || output.overflowed) {
+                    valid_ = false;
+                    return count;
+                }
+                segment_size_ = output.count;
+                segment_offset_ = 0;
+            }
+            size_t copied = segment_size_ - segment_offset_;
+            if (copied > limit - count) copied = limit - count;
+            memcpy(buffer + count, cache + segment_offset_, copied);
+            segment_offset_ += copied;
+            offset_ += copied;
+            count += copied;
+        }
         return count;
     }
 
@@ -217,11 +257,14 @@ private:
     bool reset_;
     uint32_t started_;
     size_t offset_ = 0;
+    size_t segment_ = 0;
+    size_t segment_size_ = 0;
+    size_t segment_offset_ = 0;
     bool valid_ = false;
 };
 
 bool crash_access(AsyncWebServerRequest* request) {
-    if (!portal_logs_access_enabled()) {
+    if (!portal_logs_full_mode_enabled()) {
         log_status(request, 403, "{\"error\":\"Logs require full portal access\"}");
         return false;
     }
@@ -400,7 +443,7 @@ void handleGetCrashLog(AsyncWebServerRequest* request) {
     log_status(request, 200, "{\"available\":false,\"reason\":\"disabled\"}");
     #endif
     #else
-    if (!portal_logs_access_enabled()) {
+    if (!portal_logs_full_mode_enabled()) {
         log_status(request, 403, "{\"error\":\"Logs require full portal access\"}");
         return;
     }
@@ -432,7 +475,7 @@ void handleDownloadCrashLog(AsyncWebServerRequest* request) {
     }
     request->send(response);
     #else
-    if (!portal_logs_access_enabled()) {
+    if (!portal_logs_full_mode_enabled()) {
         log_status(request, 403, "{\"error\":\"Logs require full portal access\"}");
         return;
     }
@@ -442,7 +485,7 @@ void handleDownloadCrashLog(AsyncWebServerRequest* request) {
 }
 
 void handleGetLogs(AsyncWebServerRequest* request) {
-    if (!portal_logs_access_enabled()) {
+    if (!portal_logs_full_mode_enabled()) {
         log_status(request, 403, "{\"error\":\"Logs require full portal access\"}");
         return;
     }

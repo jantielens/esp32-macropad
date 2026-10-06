@@ -26,11 +26,6 @@
 // Screenshot encoding and pad saves run from the AsyncTCP worker.
 #define CONFIG_ASYNC_TCP_STACK_SIZE 8192
 
-// TEMPORARY dev/test only: set to 0 after crash-dump verification.
-#ifndef DEBUG_CRASH_API_ENABLED
-#define DEBUG_CRASH_API_ENABLED 1
-#endif
-
 // ============================================================================
 // Driver Selection (HAL)
 // ============================================================================

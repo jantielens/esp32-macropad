@@ -49,6 +49,8 @@ async function main() {
         exception_cause: 7, trap_value: '0x500d2000', current_reset_reason: 3, current_elf_sha256: 'current-elf-hash',
         registers: { MEPC: '0x40012345', RA: '0x400cfc8c', SP: '0x4ff41350', MCAUSE: '0x00000007', MTVAL: '0x500d2000' } };
     let crashStatusCode = 200;
+    let deferCrash = false;
+    let clock = 0;
     let timerId = 0;
     let clipboard = '';
     let fallbackCopies = 0;
@@ -64,12 +66,19 @@ async function main() {
     TestURL.revokeObjectURL = () => {};
     const context = {
         window, document, AbortController, URLSearchParams, URL: TestURL, Blob,
+        Date: { now: () => clock },
         navigator: { clipboard: { async writeText(text) { clipboard = text; } } },
         setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
         clearTimeout(id) { timers.delete(id); },
         fetch(url, options) {
             if (url === '/api/logs/crash') {
                 crashRequests.push({ url, options });
+                if (deferCrash) {
+                    return new Promise((resolve, reject) => {
+                        crashRequests.at(-1).resolve = resolve;
+                        options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+                    });
+                }
                 return Promise.resolve({ ok: crashStatusCode === 200, status: crashStatusCode, json: async () => crashData });
             }
             return new Promise((resolve, reject) => {
@@ -88,6 +97,7 @@ async function main() {
     function tick(delay = 3000) {
         const entry = [...timers.entries()].find(([, timer]) => timer.delay === delay);
         assert(entry, 'one poll must be scheduled');
+        clock += delay;
         timers.delete(entry[0]);
         entry[1].callback();
     }
@@ -313,6 +323,37 @@ async function main() {
         await flush();
         assert.strictEqual(get('logs-crash-reset').textContent, description + ' (' + reason + ')');
     }
+    window.emit('portal-fragment-leave');
+    deferCrash = true;
+    window.init_logs_fragment();
+    answer(0);
+    await flush();
+    const abortedCrashCount = crashRequests.length;
+    document.hidden = true;
+    document.emit('visibilitychange');
+    await flush();
+    assert(crashRequests.at(-1).options.signal.aborted);
+    deferCrash = false;
+    document.hidden = false;
+    document.emit('visibilitychange');
+    answer(0);
+    await flush();
+    assert.strictEqual(crashRequests.length, abortedCrashCount + 1, 'superseded crash requests must remain retryable');
+    window.emit('portal-fragment-leave');
+    crashStatusCode = 503;
+    window.init_logs_fragment();
+    answer(0);
+    await flush();
+    for (const delay of [3000, 6000, 12000, 24000, 30000, 30000]) {
+        const attempts = crashRequests.length;
+        for (let elapsed = 3000; elapsed <= delay; elapsed += 3000) {
+            tick();
+            answer(0);
+            await flush();
+            assert.strictEqual(crashRequests.length, attempts + (elapsed === delay ? 1 : 0), 'crash retries must respect capped backoff');
+        }
+    }
+    crashStatusCode = 200;
     window.emit('portal-fragment-leave');
     window.init_logs_fragment();
     requests.at(-1).resolve({ ok: false, status: 401 });

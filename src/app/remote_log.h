@@ -1,10 +1,11 @@
 #pragma once
 
+#include "log_manager.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-constexpr size_t REMOTE_LOG_LINE_BYTES = 288;
+constexpr size_t REMOTE_LOG_LINE_BYTES = LOG_LINE_BYTES;
 constexpr size_t REMOTE_LOG_RESPONSE_RECORDS = 32;
 
 struct RemoteLogRecord {

@@ -144,10 +144,10 @@ storage and leaves serial output independent.
 See the [log viewer guide](docs/web-portal-guide.md#device-logs) and
 [log API reference](docs/dev/web-portal.md#remote-logs).
 
-Development builds for `esp32-p4-lcd4b`, `jc3636w518`, and `jc3636w518-sd` temporarily enable
-`POST /api/debug/crash` for abort, assertion, and invalid-write tests, with no
-web UI. `DEBUG_CRASH_API_ENABLED` defaults off on other boards; set the relevant
-base-board override to `0` and rebuild after testing. See
+`POST /api/debug/crash` supports abort, assertion, and invalid-write tests,
+with no web UI. `DEBUG_CRASH_API_ENABLED` defaults off on every board. Enable
+it explicitly only in an isolated dev/test build; never ship it enabled in
+production firmware. Remove the opt-in and rebuild after testing. See
 [crash injection](docs/dev/web-portal.md#development-crash-injection) for
 commands, authentication, and dump-overwrite risks.
 

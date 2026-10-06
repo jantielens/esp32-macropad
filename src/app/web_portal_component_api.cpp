@@ -183,7 +183,7 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         for (uint8_t i = 0; i < component_registry_count(); i++) {
             ComponentDef* comp = component_registry_get(i);
             if (strcmp(comp->category, cat.id) != 0) continue;
-            if (strcmp(comp->id, "logs") == 0 && !portal_logs_access_enabled()) continue;
+            if (strcmp(comp->id, "logs") == 0 && !portal_logs_full_mode_enabled()) continue;
             bool is_setup = (strcmp(comp->id, "setup") == 0);
             if (is_setup && !ap_mode) continue;  // hide wizard outside AP mode
             // In AP mode the outer loop has already restricted us to the

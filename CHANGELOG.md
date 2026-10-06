@@ -18,8 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Development-only `POST /api/debug/crash` for abort, failed assertion, and
   invalid-memory-write tests, gated by `DEBUG_CRASH_API_ENABLED`. The flag
-  defaults off and is temporarily enabled on `esp32-p4-lcd4b`, `jc3636w518`,
-  and `jc3636w518-sd`; disable the base-board override after testing.
+  defaults off on every board and requires explicit dev/test opt-in; keep it
+  disabled in production firmware.
   No UI is added. Requests follow portal
   authentication, require explicit confirmation, and reject OTA or duplicates.
 * Device Logs viewer on PSRAM builds, following configured portal authentication, with bounded rolling and
@@ -77,6 +77,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Remote-log initialization can retry after allocation failure, and bounded
+  snapshots copy metadata and records from one consistent store state.
+  Log responses cache individual JSON segments instead of reserializing the
+  whole snapshot for every network chunk.
+* Canceled crash-summary requests remain retryable; transient failures use
+  exponential backoff capped at 30 seconds without slowing log polling.
+* Portal component-capacity checks preserve C operators in complex expressions
+  and cache compiler results across boards.
 * Inkplate IDF 4 builds use the legacy firmware ELF-hash API and exclude
   newer reset enum values. Crash summaries retain saved registers and firmware
   identity without requiring the newer panic-text API.

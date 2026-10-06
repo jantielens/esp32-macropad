@@ -21,8 +21,10 @@ device's authentication settings: no credentials are needed when HTTP Basic
 Authentication is disabled; when enabled, sign in with the configured credentials.
 Log access is unavailable in the setup access point.
 
-One log view starts with the first 128 retained startup lines, then follows
-the device's rolling history of 256 application log lines. Overlapping records
+One log view starts with retained startup lines, then follows the device's
+rolling application log history. The build defaults are 128 startup records
+and 256 rolling records; board overrides can change these capacities, and
+**Device buffer** shows the active capacity. Overlapping records
 are not repeated. An inline gap marker identifies records no longer retained
 between startup and recent history, or lost while following new logs. After
 a device reboot, the viewer clears old history and loads startup logs again.
@@ -30,7 +32,7 @@ These buffers contain centralized application logs, not bootloader output, crash
 dumps, or arbitrary serial writes. Serial logging continues independently.
 
 The viewer shows **Catching up** while fetching pending records in batches of
-32, with a 250 ms delay between requests. Once caught up, it polls every three
+up to 32, with a 250 ms delay between requests. Once caught up, it polls every three
 seconds while visible. Pause stops polling. Auto-scroll follows new lines and
 turns off when you scroll upward. Clear removes only the browser's retained
 history. Copy and Download export that history, including gap markers, which

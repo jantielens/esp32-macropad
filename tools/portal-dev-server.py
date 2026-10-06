@@ -15,6 +15,7 @@ import copy
 import time
 import json
 import os
+import re
 import sys
 from _render_html_template import render
 from urllib.parse import parse_qs, urlparse
@@ -29,6 +30,17 @@ APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
 PROFILES = ("esp32-p4-lcd4b", "reterminal-e1003-frame")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
+
+
+def remote_log_response_limit():
+    source = (SCRIPT_DIR.parent / "src/app/remote_log.h").read_text(encoding="utf-8")
+    match = re.search(r"^constexpr size_t REMOTE_LOG_RESPONSE_RECORDS\s*=\s*(\d+);", source, re.MULTILINE)
+    if not match:
+        raise RuntimeError("could not read REMOTE_LOG_RESPONSE_RECORDS")
+    return int(match.group(1))
+
+
+LOG_RESPONSE_RECORDS = remote_log_response_limit()
 
 
 def reset_pad_fixtures(server, scenario="normal"):
@@ -392,7 +404,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_logs(self, query):
         source = query.get("source", ["recent"])[0]
         try:
-            limit = min(32, max(1, int(query.get("limit", ["32"])[0])))
+            limit = min(LOG_RESPONSE_RECORDS, max(1, int(query.get("limit", [str(LOG_RESPONSE_RECORDS)])[0])))
             after = int(query["after"][0]) if "after" in query else None
             if after is not None and not 0 <= after <= 0xffffffff:
                 raise ValueError()

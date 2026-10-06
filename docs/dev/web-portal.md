@@ -59,8 +59,9 @@ The web portal provides:
 PSRAM builds default to `REMOTE_LOG_BUFFER_RECORDS=256` and
 `REMOTE_LOG_BOOT_RECORDS=128`. Setting the rolling capacity to `0` removes
 capture calls, storage, navigation, and log assets. Non-PSRAM builds default
-to `0`. Capture starts at `log_init()` and preserves up to 128 startup lines
-until setup finishes, separately from the rolling buffer. Boot capacity
+to `0`. Both capacities can be overridden per board. Capture starts at
+`log_init()` and preserves up to the configured startup capacity until setup
+finishes, separately from the rolling buffer. Boot capacity
 overflow is reported; neither buffer survives reboot or deep sleep.
 
 The logger stores complete 288-byte formatted records, with the existing
@@ -70,12 +71,19 @@ writes, ROM/bootloader logs, and ISR logging are outside this feature.
 
 One startup allocation reserves approximately 127 KiB of PSRAM for records,
 a 32-record response snapshot, and a fixed JSON serialization arena. There
-is no bulk-storage fallback to internal SRAM or allocation retry. Capture
+is no bulk-storage fallback to internal SRAM. Allocation failure leaves
+capture unavailable, but a later explicit initialization call may retry; the
+logging path does not allocate or retry automatically. Capture
 uses a statically allocated, zero-timeout mutex with interrupts enabled;
 contention and OTA cause capture drops rather than additional serial waits.
-Readers never acquire the serial mutex, and network transmission owns an
+Readers copy metadata and at most 32 records under one zero-timeout capture
+lock, never acquire the serial mutex, and network transmission owns an
 immutable snapshot. Serial and HTTP transport retain their normal memory
 and synchronization requirements.
+
+Log responses use 6 KiB of the snapshot arena for JSON construction and 2 KiB
+for a cached header or record segment. Each segment is serialized once for
+length calculation and once for transmission, regardless of network chunk size.
 
 `GET /api/logs?source=recent&after=123&limit=32&boot_id=456` requires Full Mode,
 and follows the device's HTTP Basic Authentication setting through the standard
@@ -164,9 +172,12 @@ reserves 2 KiB for the SDK summary and 6 KiB for ArduinoJson, without an interna
 SRAM workspace fallback. SDK parsing and the small HTTP response retain their
 normal allocation requirements. Serialized summary output is bounded by a
 2 KiB stack buffer. The arena lease lasts through JSON document destruction.
-The portal loads the summary once per device
-boot or fragment initialization; transient errors retry at the normal log
-polling interval. Summary strings are rendered as text, never HTML.
+The portal loads the summary once per device boot or fragment initialization.
+Transient errors retry with delays of 3, 6, 12, 24, then at most 30 seconds;
+attempts share the log poll's 10-second timeout. Normal log polling continues
+during backoff. A new boot resets backoff, and pause, hidden tabs, and navigation
+cancel pending requests without disabling later refreshes. Summary strings are
+rendered as text, never HTML.
 
 `GET /api/logs/crash/download` returns the validated raw dump as
 `application/octet-stream`, with an attachment filename of
@@ -828,9 +839,10 @@ not every authentication failure, redirect, or early error response is instrumen
 
 `POST /api/debug/crash?mode=abort&confirm=crash` intentionally crashes the
 device to test flash coredump capture. There is no web UI or MCP tool.
-`DEBUG_CRASH_API_ENABLED` defaults to `0`; temporary `1` overrides are in the
-`esp32-p4-lcd4b` and `jc3636w518` board configurations. `jc3636w518-sd` inherits
-the latter override. When disabled, both the handler and route are compiled out.
+`DEBUG_CRASH_API_ENABLED` defaults to `0` on every board. For an isolated
+dev/test build, explicitly set it to `1` in a local board override or compiler
+flags. Never enable it in distributed or production firmware. When disabled,
+both the handler and route are compiled out.
 
 | Mode | Behavior |
 | --- | --- |
@@ -858,8 +870,8 @@ with `mode=assert` or `mode=invalid_write` for the other tests.
 > This API intentionally interrupts device operation and may overwrite an
 > existing retained dump. Download that dump first, keep the exact crashing
 > build's ELF, and use only on a trusted development network. After testing,
-> set `DEBUG_CRASH_API_ENABLED` to `0` in the relevant base-board override and rebuild and
-> flash the firmware. No runtime setting disables this compile-time feature.
+> remove the dev/test opt-in, rebuild, and flash firmware with
+> `DEBUG_CRASH_API_ENABLED=0`. No runtime setting disables this compile-time feature.
 
 After reboot, inspect `/api/logs/crash` and download
 `/api/logs/crash/download`, or use the existing Device Logs viewer. Coredump

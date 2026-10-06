@@ -56,23 +56,24 @@ struct HwButtonDef {
 #endif
 
 // ============================================================================
-// Project Branding
-// Remote diagnostic record capacity; zero removes capture from the logging path.
+// Remote Diagnostics
+// Rolling record capacity; PSRAM defaults to 256, zero disables remote capture.
 #ifndef REMOTE_LOG_BUFFER_RECORDS
 #define REMOTE_LOG_BUFFER_RECORDS (HAS_PSRAM ? 256 : 0)
 #endif
 
-// Startup records retained independently of the rolling diagnostic buffer.
+// Startup snapshot capacity; defaults to 128 records when remote capture is enabled.
 #ifndef REMOTE_LOG_BOOT_RECORDS
 #define REMOTE_LOG_BOOT_RECORDS 128
 #endif
 
-// Development-only crash injection API; disable before shipping test firmware.
+// Dev/test-only crash API; defaults off on every board and must stay off in production.
 #ifndef DEBUG_CRASH_API_ENABLED
 #define DEBUG_CRASH_API_ENABLED 0
 #endif
 
 // ============================================================================
+// Project Branding
 // Human-friendly project name used in the web UI and device name (can be set by build system).
 #ifndef PROJECT_DISPLAY_NAME
 #define PROJECT_DISPLAY_NAME "ESP32 Device"

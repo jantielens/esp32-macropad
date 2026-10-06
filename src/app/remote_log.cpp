@@ -44,7 +44,6 @@ struct RemoteLogStorage {
 
 void remote_log_init() {
     if (initialized) return;
-    initialized = true;
     void* memory = heap_caps_malloc(sizeof(RemoteLogStorage), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!memory) return;
     capture_mutex = xSemaphoreCreateMutexStatic(&capture_mutex_storage);
@@ -57,6 +56,7 @@ void remote_log_init() {
     boot_store.init(storage->boot, REMOTE_LOG_BOOT_RECORDS);
     snapshot = &storage->response;
     boot_id = esp_random();
+    initialized = true;
     available.store(true, std::memory_order_release);
 }
 
@@ -92,18 +92,18 @@ const RemoteLogSnapshot* remote_log_snapshot(bool boot, bool has_after, uint32_t
     snapshot->boot_complete = boot_complete.load(std::memory_order_relaxed);
     snapshot->boot_truncated = boot_truncated;
     snapshot->count = 0;
-    xSemaphoreGive(capture_mutex);
     const size_t requested = snapshot->range.count;
     for (size_t index = 0; index < requested; ++index) {
-        if (ota_activity_is_active() || xSemaphoreTake(capture_mutex, 0) != pdTRUE) {
+        if (ota_activity_is_active()) {
+            xSemaphoreGive(capture_mutex);
             remote_log_release_snapshot();
             return nullptr;
         }
         const uint32_t sequence = ++snapshot->range.cursor;
         if (store.get(sequence, snapshot->records[snapshot->count])) ++snapshot->count;
         else ++snapshot->range.missed;
-        xSemaphoreGive(capture_mutex);
     }
+    xSemaphoreGive(capture_mutex);
     return snapshot;
 }
 

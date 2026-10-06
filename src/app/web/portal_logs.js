@@ -20,6 +20,8 @@
         var registerSection = document.getElementById('logs-crash-register-section');
         var crashData = null;
         var crashPending = true;
+        var crashRetryAt = 0;
+        var crashRetryDelay = 3000;
         var crashAvailable = false;
         var downloading = false;
         var lines = [];
@@ -99,13 +101,15 @@
         }
 
         async function loadCrash(requestController, requestGeneration) {
-            if (!crashPending) return true;
-            crashPending = false;
+            if (!crashPending || Date.now() < crashRetryAt) return true;
             try {
                 var response = await fetch('/api/logs/crash', { signal: requestController.signal, cache: 'no-store' });
                 if (!response.ok) throw new Error('Crash summary unavailable (HTTP ' + response.status + ').');
                 var data = await response.json();
                 if (disposed || requestGeneration !== generation) return true;
+                crashPending = false;
+                crashRetryAt = 0;
+                crashRetryDelay = 3000;
                 crashAvailable = !!data.available;
                 crashData = crashAvailable ? data : null;
                 crashDownload.disabled = !crashAvailable;
@@ -155,6 +159,8 @@
             } catch (error) {
                 if (disposed || requestGeneration !== generation) return true;
                 crashPending = true;
+                crashRetryAt = Date.now() + crashRetryDelay;
+                crashRetryDelay = Math.min(crashRetryDelay * 2, 30000);
                 crashAvailable = false;
                 crashData = null;
                 crashDownload.disabled = true;
@@ -173,7 +179,7 @@
             var requestController = new AbortController();
             controller = requestController;
             var timeout = setTimeout(function () { requestController.abort(); }, 10000);
-            var params = new URLSearchParams({ source: source, limit: '32' });
+            var params = new URLSearchParams({ source: source });
             if (cursor !== null) params.set('after', String(cursor));
             if (bootId !== null) params.set('boot_id', String(bootId));
             try {
@@ -205,6 +211,8 @@
                     latest = null;
                     catchingUp = true;
                     crashPending = true;
+                    crashRetryAt = 0;
+                    crashRetryDelay = 3000;
                     crashAvailable = false;
                     crashData = null;
                     crashDownload.disabled = true;

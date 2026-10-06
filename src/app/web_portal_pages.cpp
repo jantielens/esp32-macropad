@@ -91,7 +91,7 @@ void handleFragment(AsyncWebServerRequest *request) {
 				return;
 		}
 		String frag_id = url.substring(last_slash + 1);
-		if (frag_id == "logs" && !portal_logs_access_enabled()) {
+		if (frag_id == "logs" && !portal_logs_full_mode_enabled()) {
 			request->send(403, "text/plain", "Logs require full portal access");
 			return;
 		}
@@ -114,10 +114,9 @@ void handleFragment(AsyncWebServerRequest *request) {
 		request->send(response);
 }
 
-// ---- Legacy page handlers (redirect to shell with hash) ----
 void handlePortalLogsJS(AsyncWebServerRequest *request) {
 	#if REMOTE_LOG_BUFFER_RECORDS > 0
-	if (!portal_logs_access_enabled()) {
+	if (!portal_logs_full_mode_enabled()) {
 		request->send(403, "text/plain", "Logs require full portal access");
 		return;
 	}
@@ -129,6 +128,7 @@ void handlePortalLogsJS(AsyncWebServerRequest *request) {
 	#endif
 }
 
+// ---- Legacy page handlers (redirect to shell with hash) ----
 void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;
 

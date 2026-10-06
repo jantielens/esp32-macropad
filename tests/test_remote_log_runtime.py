@@ -25,15 +25,17 @@ class RemoteLogRuntimeTests(unittest.TestCase):
         self.assertIn("#define DEBUG_CRASH_API_ENABLED 0", defaults)
         enabled_boards = [path.parent.name for path in (ROOT / "src/boards").glob("*/board_overrides.h")
                           if "#define DEBUG_CRASH_API_ENABLED 1" in path.read_text()]
-        self.assertEqual(sorted(enabled_boards), ["esp32-p4-lcd4b", "jc3636w518"])
-        for board, enabled in (("esp32-p4-lcd4b", 1), ("esp32-p4-lcd4b-voice", 0),
-                               ("jc3636w518", 1), ("jc3636w518-sd", 1)):
+        self.assertEqual(enabled_boards, [])
+        for board, enabled in (("esp32-p4-lcd4b", 0), ("esp32-p4-lcd4b-voice", 0),
+                       ("jc3636w518", 0), ("jc3636w518-sd", 0),
+                       ("esp32-p4-lcd4b", 1), ("jc3636w518", 1), ("jc3636w518-sd", 1)):
             source = f'''#include "{ROOT / "src/app/board_config.h"}"
 #if DEBUG_CRASH_API_ENABLED != {enabled}
 #error Unexpected crash injection configuration
 #endif
 '''
-            subprocess.run(["c++", "-E", "-x", "c++", "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM",
+            opt_in = ["-DDEBUG_CRASH_API_ENABLED=1"] if enabled else []
+            subprocess.run(["c++", "-E", "-x", "c++", "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", *opt_in,
                             "-I", str(ROOT / "src/boards" / board), "-"],
                            input=source, text=True, stdout=subprocess.DEVNULL, check=True)
         routes = (ROOT / "src/app/web_portal_routes.cpp").read_text()
@@ -270,12 +272,20 @@ inline void vTaskDelete(void*) {}
 struct StaticSemaphore_t { std::mutex mutex; };
 using SemaphoreHandle_t = StaticSemaphore_t*;
 inline bool refuse_capture = false;
+inline void (*after_unlock)() = nullptr;
 inline SemaphoreHandle_t xSemaphoreCreateMutexStatic(StaticSemaphore_t* storage) { return storage; }
 inline int xSemaphoreTake(SemaphoreHandle_t handle, unsigned timeout) {
     if (timeout == portMAX_DELAY) { handle->mutex.lock(); return pdTRUE; }
     return !refuse_capture && handle->mutex.try_lock() ? pdTRUE : 0;
 }
-inline void xSemaphoreGive(SemaphoreHandle_t handle) { handle->mutex.unlock(); }
+inline void xSemaphoreGive(SemaphoreHandle_t handle) {
+    handle->mutex.unlock();
+    if (after_unlock) {
+        auto callback = after_unlock;
+        after_unlock = nullptr;
+        callback();
+    }
+}
 ''',
             "probe.cpp": r'''
 #include "log_manager.h"
@@ -318,7 +328,9 @@ int main() {
     fail_allocation = true;
 #endif
     log_init(115200);
+    #if !TEST_FAILURE
     remote_log_init();
+    #endif
     AsyncWebServerRequest denied;
     ap_mode = true;
     handleGetLogs(&denied);
@@ -332,7 +344,7 @@ int main() {
     authenticated = false;
     {
         AsyncWebServerRequest open;
-        assert(portal_logs_access_enabled());
+        assert(portal_logs_full_mode_enabled());
         handleGetLogs(&open);
         assert(open.response && open.response->code() == 200);
     }
@@ -412,6 +424,17 @@ int main() {
     AsyncWebServerRequest unavailable;
     handleGetLogs(&unavailable);
     assert(unavailable.response->body.find("\"available\":false") != std::string::npos);
+    #if TEST_FAILURE && REMOTE_LOG_BUFFER_RECORDS > 0
+    fail_allocation = false;
+    remote_log_init();
+    assert(remote_log_available() && allocations == 2);
+    remote_log_init();
+    assert(allocations == 2);
+    remote_log_append("retry");
+    const auto* recovered = remote_log_snapshot(false, false, 0, 1);
+    assert(recovered && recovered->count == 1 && strcmp(recovered->records[0].line, "retry") == 0);
+    remote_log_release_snapshot();
+    #endif
     return 0;
 #else
     assert(remote_log_available() && allocations == 1);
@@ -463,7 +486,21 @@ int main() {
     for (size_t index = 1; index < recent->count; ++index)
         assert(recent->records[index].sequence == recent->records[index - 1].sequence + 1);
     assert(allocations == 1);
+    const uint32_t snapshot_newest = recent->range.newest;
     remote_log_release_snapshot();
+    after_unlock = [] {
+        remote_log_append("overwrite one");
+        remote_log_append("overwrite two");
+        remote_log_append("overwrite three");
+    };
+    recent = remote_log_snapshot(false, false, 0, 32);
+    assert(recent && recent->range.newest == snapshot_newest && recent->count == 3);
+    assert(recent->range.missed == 0 && recent->range.cursor == snapshot_newest);
+    assert(recent->records[0].sequence == snapshot_newest - 2);
+    assert(recent->records[2].sequence == snapshot_newest);
+    remote_log_release_snapshot();
+    const std::string escaped_line(REMOTE_LOG_LINE_BYTES - 1, '\x01');
+    remote_log_append(escaped_line.c_str());
     remote_log_append("quote=\" newline=\n slash=\\ <script>");
     AsyncWebServerRequest invalid;
     invalid.params["after"].text = "4294967296";
@@ -483,6 +520,7 @@ int main() {
     assert(busy.response->code() == 429);
     std::string json;
     uint8_t chunk[7];
+    assert(request.response->_fillBuffer(chunk, 0) == 0);
     while (const size_t count = request.response->_fillBuffer(chunk, sizeof(chunk)))
         json.append(reinterpret_cast<char*>(chunk), count);
     assert(json.size() == request.response->length());
@@ -490,6 +528,7 @@ int main() {
     assert(!deserializeJson(document, json));
     assert(document["reset"] == true);
     assert(document["records"].size() == 3);
+    assert(document["records"][1]["line"].as<std::string>() == escaped_line);
     const char* line = document["records"][2]["line"];
     assert(!strcmp(line, "quote=\" newline=\n slash=\\ <script>"));
     ota = true;
