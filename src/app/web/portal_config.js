@@ -151,40 +151,6 @@ function updateKeyboardTransportSetting() {
     }
 }
 
-function updateScreenSaverMode(config) {
-    const settings = document.getElementById('screensaver-settings');
-    if (!settings) return;
-    const lightOnly = config.screen_saver_backlight_only === true;
-    settings.dataset.backlightOnly = String(lightOnly);
-    for (const id of ['screensaver-enable-setting', 'screensaver-transition-settings']) {
-        const section = document.getElementById(id);
-        if (section) section.hidden = lightOnly;
-    }
-    for (const id of ['screen_saver_enabled', 'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms']) {
-        const field = document.getElementById(id);
-        if (field) field.disabled = lightOnly;
-    }
-    const touchUnsupported = config.caps && config.caps.touch === false;
-    const touchSection = document.getElementById('screensaver-touch-setting');
-    const touchField = document.getElementById('screen_saver_wake_on_touch');
-    if (touchSection) touchSection.hidden = !!touchUnsupported;
-    if (touchField) touchField.disabled = !!touchUnsupported;
-    const labels = {
-        'screensaver-description': lightOnly ? 'Choose an idle screen and when its lighting turns off.' : 'Choose what the device shows, then whether it turns the display off.',
-        'screensaver-sleep-heading': lightOnly ? 'Backlight Timeout' : 'Display Sleep',
-        'screensaver-timeout-label': lightOnly ? 'Turn off backlight after' : 'Turn off display after',
-        'screensaver-timeout-help': lightOnly ? '0 keeps the lighting on. The display continues updating while its backlight or frontlight is off.' : '0 disables automatic sleep. Example: 1800 = 30 minutes.',
-        'idle-screen-timeout-help': lightOnly ? 'Must be greater than 0, and shorter than the backlight timeout when it is enabled.' : 'Must be greater than 0, and shorter than Display Sleep when it is enabled.',
-        'screensaver-timeline-sleep-title': lightOnly ? 'Backlight off' : 'Display off',
-        'screensaver-touch-help': lightOnly ? 'One touch exits Idle Screen or turns the lighting back on.' : 'One touch fully exits Idle Screen or wakes Display Sleep. Only applies to touch-enabled boards.',
-        'screensaver-binding-help': lightOnly ? 'An ON value exits Idle Screen or turns the lighting on, and prevents both inactivity stages while it remains ON.' : 'An ON value fully exits Idle Screen or wakes Display Sleep, and keeps both stages off while it remains ON.'
-    };
-    for (const id of Object.keys(labels)) {
-        const label = document.getElementById(id);
-        if (label) label.textContent = labels[id];
-    }
-}
-
 async function loadConfig() {
     try {
         
@@ -356,6 +322,8 @@ async function loadConfig() {
         if (brightnessSlider) brightnessSlider.min = brightnessMin;
         setValueIfExists('backlight_brightness', brightness);
         setTextIfExists('brightness-value', brightness);
+        const backlightTimeoutSettings = document.getElementById('backlight-timeout-settings');
+        if (backlightTimeoutSettings) backlightTimeoutSettings.hidden = config.screen_saver_backlight_only !== true;
 
         // Screen saver settings
         setCheckedIfExists('screen_saver_enabled', config.screen_saver_enabled);
@@ -367,7 +335,6 @@ async function loadConfig() {
         setCheckedIfExists('idle_screen_enabled', config.idle_screen_enabled);
         setValueIfExists('idle_screen_timeout_seconds', config.idle_screen_timeout_seconds);
         setValueIfExists('idle_screen_pad', config.idle_screen_pad);
-        updateScreenSaverMode(config);
         if (typeof window.screensaverTimelineUpdate === 'function') window.screensaverTimelineUpdate();
 
         // E-paper settings (only present when firmware has HAS_EPAPER_PANEL)

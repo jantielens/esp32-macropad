@@ -1445,18 +1445,11 @@ Returns current device configuration (passwords excluded).
 - Some fields are build-time gated.
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
   - `screen_saver_backlight_only` is true on targets that retain display
-    rendering during logical sleep and turn off only the backlight or
-    frontlight. All `HAS_DISPLAY` builds register Screen Saver. The fragment
-    uses this API field, not board names, to show Backlight Timeout instead of
-    Display Sleep and adapt the timeline. The enable checkbox and fade inputs
-    are hidden and disabled, so fragment saves omit them; idle-screen, timeout,
-    touch wake, and MQTT wake settings remain available. Brightness contains
-    only the brightness slider. On backlight-only targets,
+    rendering during logical sleep and turn off only the backlight. Their
+    portal moves the timeout and MQTT wake binding into Brightness and omits
+    the Screen Saver navigation component. On these targets,
     `screen_saver_enabled` is always reported as true; set the timeout to `0`
-    to disable automatic lighting shutdown. Stored fade values are retained,
-    but effective fades are zero. `caps.touch=false` hides and disables touch
-    wake. Capability adaptation runs after config values load and before the
-    timeline refreshes.
+    to disable automatic backlight shutdown.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.

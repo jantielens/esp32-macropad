@@ -14,15 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-* Restore Screen Saver configuration on backlight-only boards, including
-  JC3248W535 and Inkplate 6FLICK Interactive. Keep idle-screen and wake settings
-  available, adapt the inactivity timeline, and hide unsupported panel-sleep
-  and fade controls. Move lighting timeout and MQTT wake settings from
-  Brightness to Screen Saver without changing stored settings or touch-wake
-  behavior.
-
 ## [1.37.0] - 2026-10-06
 
 ### Added

@@ -28,9 +28,7 @@ PROTO_DIR = SCRIPT_DIR / "portal-prototype"
 MOCK_DIR = SCRIPT_DIR / "mock-data"
 APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
-DISPLAY_PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "inkplate6flick-interactive")
-BACKLIGHT_ONLY_PROFILES = ("jc3248w535", "inkplate6flick-interactive")
-PROFILES = (*DISPLAY_PROFILES, "reterminal-e1003-frame")
+PROFILES = ("esp32-p4-lcd4b", "reterminal-e1003-frame")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
 
 
@@ -115,23 +113,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Device API fixtures. POSTs are accepted in do_POST below.
         elif path == "/api/config":
             config = copy.deepcopy(self.server.mock_config)
-            if self._profile() in DISPLAY_PROFILES:
+            if self._profile() == "esp32-p4-lcd4b":
                 config["caps"].update(ble=False, ble_hid=False, display=True, touch=True, ha_history=True)
-                config["screen_saver_backlight_only"] = self._profile() in BACKLIGHT_ONLY_PROFILES
-                defaults = {
-                    "screen_saver_enabled": True,
-                    "screen_saver_timeout_seconds": 0 if self._profile() == "inkplate6flick-interactive" else 300,
-                    "screen_saver_fade_out_ms": 800, "screen_saver_fade_in_ms": 400,
-                    "screen_saver_wake_on_touch": True, "screen_saver_wake_binding": "",
-                    "idle_screen_enabled": False, "idle_screen_timeout_seconds": 60,
-                    "idle_screen_pad": "pad_0",
-                }
-                for key, value in defaults.items():
-                    config.setdefault(key, value)
-                if config["screen_saver_backlight_only"]:
-                    config["screen_saver_enabled"] = True
-                if self._profile() == "inkplate6flick-interactive":
-                    config["caps"].update(usb_hid=False, ha_history=False)
             self._serve_json(config)
         elif path == "/api/info":
             self._serve_json(self._device_info("catalog" in query))
@@ -210,7 +193,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             for frag in candidates:
                 if frag.is_file():
                     html = render(frag, APP_WEB_DIR, "esp32-macropad", "ESP32 Macropad (Local Mock)",
-                                  "dev-mock", self._profile() not in DISPLAY_PROFILES)
+                                  "dev-mock", self._profile() != "esp32-p4-lcd4b")
                     self._serve_bytes(html.encode("utf-8"), "text/html; charset=utf-8")
                     return
             self.send_error(404, f"Fragment not found: {fragment}")
@@ -384,7 +367,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
         }
         for marker, value in replacements.items():
             shell = shell.replace(marker, value)
-        fragment = query.get("fragment", ["pad-editor" if profile in DISPLAY_PROFILES else "welcome"])[0]
+        fragment = query.get("fragment", ["pad-editor" if profile == "esp32-p4-lcd4b" else "welcome"])[0]
         shell = shell.replace(
             '<script src="/portal.js?v=dev-mock"></script>',
             '<script>window.location.hash = ' + json.dumps("#" + fragment).replace("<", "\\u003c") + ';</script>\n'
@@ -395,9 +378,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_production_bundle(self):
         files = []
         enabled = True
-        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER"} if self._profile() in DISPLAY_PROFILES else {"IS_EPAPER_FRAME"}
-        if self._profile() == "esp32-p4-lcd4b":
-            flags.add("HAS_SOUND_PLAYER")
+        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER"} if self._profile() == "esp32-p4-lcd4b" else {"IS_EPAPER_FRAME"}
         for line in (APP_WEB_DIR / "portal.js.bundle").read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line.startswith("# [chunk:"):
@@ -460,14 +441,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if item["id"] == "ble":
                     item["id"] = "hid"
                     item["display_name"] = "Keyboard, Mouse & Gamepad"
-        if profile in DISPLAY_PROFILES:
+        if profile == "esp32-p4-lcd4b":
             nav["primary"] = {"fragment": "pad-editor", "label": "Pad Editor", "icon": ""}
             nav["categories"] = [category for category in nav["categories"] if category["id"] != "sensors"]
-            if profile in BACKLIGHT_ONLY_PROFILES:
-                nav["categories"] = [category for category in nav["categories"] if category["id"] != "audio"]
-            if profile == "inkplate6flick-interactive":
-                for category in nav["categories"]:
-                    category["items"] = [item for item in category["items"] if item["id"] != "hid"]
             return nav
         nav["primary"] = {"fragment": "epaper-image", "label": "E-paper Frame", "icon": "🖼️"}
         nav["categories"].insert(1, {
@@ -492,8 +468,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
             "ap_active": False, "has_mqtt": True,
             "has_touch": True, "has_usb_hid": True}
-        if self._profile() in DISPLAY_PROFILES:
-            info.update(device_class="Macropad", board=self._profile(), has_display=True,
+        if self._profile() == "esp32-p4-lcd4b":
+            info.update(device_class="Macropad", board="esp32-p4-lcd4b", has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
                         has_image_library=True, has_ble=False, has_ble_hid=False,
@@ -504,13 +480,6 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if include_catalog:
                 info["catalog"] = self.server.pad_fixture["catalog"]
                 info["widget_catalog"] = self.server.pad_fixture["widget_catalog"]
-            if self._profile() == "jc3248w535":
-                info.update(chip_model="ESP32-S3", display_coord_width=480, display_coord_height=320,
-                            has_audio=False, has_sound_player=False)
-            elif self._profile() == "inkplate6flick-interactive":
-                info.update(chip_model="ESP32", display_coord_width=1024, display_coord_height=758,
-                            has_audio=False, has_sound_player=False, has_usb_hid=False,
-                            has_image_fetch=False, has_image_library=False)
         return info
 
     def _health(self):
@@ -633,7 +602,7 @@ def main():
     }
     print(f"Portal dev server running at http://localhost:{args.port}")
     print(f"Serving production assets from: {APP_WEB_DIR}")
-    fragment = "pad-editor" if args.profile in DISPLAY_PROFILES else "epaper-image"
+    fragment = "pad-editor" if args.profile == "esp32-p4-lcd4b" else "epaper-image"
     print(f"Example: http://localhost:{args.port}/?profile={args.profile}&fragment={fragment}")
     print("Press Ctrl+C to stop.\n")
 

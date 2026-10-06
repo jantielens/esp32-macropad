@@ -9,8 +9,25 @@
       <input type="range" class="form-range" id="backlight_brightness" name="backlight_brightness" min="5" max="100" value="100">
       <div class="form-text">Brightness adjusts immediately. Click Save to persist across reboots.</div>
     </div>
+    <div id="backlight-timeout-settings" hidden>
+      <hr>
+      <div class="mb-3">
+        <label class="form-label" for="screen_saver_timeout_seconds">Turn off backlight after</label>
+        <input type="number" class="form-control" id="screen_saver_timeout_seconds" name="screen_saver_timeout_seconds" min="0" max="65535" placeholder="0">
+        <div class="form-text">0 keeps the backlight on. The e-paper display continues updating while the backlight is off.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="screen_saver_wake_binding">MQTT Backlight Wake and Keep-On Binding</label>
+        <div class="input-group">
+          <input type="text" class="form-control binding-mono" id="screen_saver_wake_binding" name="screen_saver_wake_binding" maxlength="191" placeholder="[mqtt:devices/node/presence/state]">
+          <button type="button" class="btn btn-outline-secondary binding-help-btn" onclick="showBindingHelp()">?</button>
+        </div>
+        <div class="form-text">An <strong>ON</strong> value turns the backlight on and keeps it on while it remains ON.</div>
+      </div>
+    </div>
     <div class="save-bar">
       <button type="button" class="btn btn-primary btn-sm" id="brightness-save-btn">Save</button>
     </div>
   </div>
 </div>
+{{BINDING_HELP}}

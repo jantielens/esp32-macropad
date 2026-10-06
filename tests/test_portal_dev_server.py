@@ -131,38 +131,6 @@ class PortalDevServerTest(unittest.TestCase):
         for query in ("", "?page=-1", "?page=16", "?page=wrong"):
             self.assertEqual(self.request("/api/pad" + query)[0], 400)
 
-    def test_screensaver_profiles(self):
-        for profile in PORTAL.DISPLAY_PROFILES:
-            with self.subTest(profile=profile):
-                _, config = self.request("/api/config", profile=profile)
-                self.assertEqual(config["screen_saver_backlight_only"], profile in PORTAL.BACKLIGHT_ONLY_PROFILES)
-                self.assertTrue(config["caps"]["touch"])
-                self.assertTrue(config["screen_saver_enabled"])
-                categories = self.request("/api/portal/nav", profile=profile)[1]["categories"]
-                display = next(category for category in categories if category["id"] == "display")
-                self.assertTrue(any(item["id"] == "screensaver" for item in display["items"]))
-                _, fragment = self.request("/api/section/screensaver", profile=profile, raw=True)
-                self.assertIn('id="screensaver-settings"', fragment)
-                self.assertNotIn("{{", fragment)
-                _, brightness = self.request("/api/section/brightness", profile=profile, raw=True)
-                self.assertNotIn("screen_saver_", brightness)
-                _, bundle = self.request("/portal.js", profile=profile, raw=True)
-                self.assertIn("function updateScreenSaverMode(config)", bundle)
-                self.assertIn("window.init_screensaver_fragment", bundle)
-                _, info = self.request("/api/info", profile=profile)
-                self.assertEqual(info["board"], profile)
-                self.assertTrue(any(screen["id"] == "pad_0" for screen in info["available_screens"]))
-        previous = copy.deepcopy(self.server.mock_config)
-        try:
-            self.request("/api/config", "POST", {"screen_saver_timeout_seconds": 0,
-                "idle_screen_enabled": True, "idle_screen_pad": "pad_0"}, profile="jc3248w535")
-            _, config = self.request("/api/config", profile="jc3248w535")
-            self.assertEqual(config["screen_saver_timeout_seconds"], 0)
-            self.assertTrue(config["idle_screen_enabled"])
-            self.assertEqual(config["idle_screen_pad"], "pad_0")
-        finally:
-            self.server.mock_config = previous
-
     def test_save_reload_delete_and_reset(self):
         pad = self.request("/api/pad?page=0")[1]
         pad.update(name="Edited pad", future_field="preserved")

@@ -513,8 +513,13 @@ The firmware exposes two BLE health signals for bindings and diagnostics:
 |---------|-------------|
 | **Backlight Brightness** | Slider (0–100%). Changes take effect immediately; save to persist across reboots |
 
-Backlight or frontlight inactivity timing and MQTT wake bindings are configured
-under **Display > Screen Saver**, including on backlight-only targets.
+On the Inkplate 6FLICK LVGL target, Brightness also contains **Turn off
+backlight after** and the MQTT backlight wake/keep-on binding. Set the timeout
+to `0` to keep the frontlight on. When the timeout expires, the e-paper panel
+continues to render and refresh bindings; touching the screen, a configured
+MQTT binding, and display wake actions turn the frontlight back on. This target
+does not show the separate Screen Saver page because panel-sleep and burn-in
+controls do not apply to e-paper.
 
 ### Rotation
 
@@ -570,8 +575,6 @@ captures; lower subsampling reduces transfer size at the cost of color detail.
 
 ### Screen Saver (Burn-in Prevention)
 
-*Shown on boards with an interactive display.*
-
 The screen saver has two optional features, both measured from the most recent user activity. **Idle Screen** temporarily shows a configured pad. **Display Sleep** turns off the panel to protect it from burn-in. Either can be used alone, or Idle Screen can lead into Display Sleep. A built-in pixel-shift mechanism moves content slightly each Display Sleep cycle to prevent ghosting. The portal shows a live timeline of the current settings above the controls.
 
 | Setting | Description |
@@ -587,16 +590,6 @@ The screen saver has two optional features, both measured from the most recent u
 | **MQTT Wake and Keep Awake Binding** | An ON binding fully exits Idle Screen or wakes Display Sleep, and keeps both stages off while it remains ON (e.g. `[mqtt:devices/node/presence/state]`) |
 
 For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds shows the selected screen after five minutes, then turns off the panel after 30 minutes total. The first wake interaction is consumed and returns to the screen that was active before the Idle Screen appeared, so the temporary screen is not added to navigation history.
-
-On JC3248W535 and Inkplate 6FLICK Interactive, **Backlight Timeout** replaces
-Display Sleep. **Turn off backlight after** controls when the backlight or
-frontlight switches off; `0` keeps it on. The panel remains active and continues
-updating. Idle Screen, touch wake, and MQTT wake/keep-awake remain available.
-The panel-sleep checkbox and fade controls are hidden because this mode uses
-instant lighting transitions and does not put the panel to sleep or apply pixel
-shifting. Touch wake is shown only when touch is supported. JC3248W535 retains
-this mode for reliable touch wake, at the cost of higher power use than full
-panel sleep.
 
 ### Swipe Actions
 
