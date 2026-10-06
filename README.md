@@ -278,13 +278,6 @@ Specialized targets include `jc4880p433-nau7802` and `jc4880p433-hx711`
 described in their setup guides. See [device classes](docs/device-classes/README.md)
 for the build-time selection and branding model.
 
-> [!IMPORTANT]
-> Back up stored files before upgrading older e-paper partition layouts.
-> The reTerminal E1003's smaller filesystem can cause a boot loop if the old
-> volume is retained; erase storage or restore the previous layout to recover.
-> Inkplate 6FLICK Interactive also requires a backup and restore when moving to
-> its Extension-enabled layout. Check the [e-paper architecture guide](docs/epaper-architectures.md)
-> and [release notes](CHANGELOG.md) before upgrading.
 
 More boards are welcome. The [modular display and touch drivers](docs/dev/display-touch-architecture.md)
 provide a starting point for adding yours.

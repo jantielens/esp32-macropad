@@ -393,18 +393,22 @@ This template automates the installation:
 - For boards using `PartitionScheme=...`, `upload.sh` defaults to a full flash (`--full`) to ensure the partition layout on the device matches what was built.
 - If you see errors like “offset not aligned” or “sketch too big”, verify your offsets are 0x10000-aligned (except NVS/otadata) and that your firmware fits in the configured app partition size.
 
-### JC3248W535 USB HID Layout
+### ESP32-S3 4 MiB OTA Layout
 
-`jc3248w535` uses `ota_4mb_16MB_ext` to fit USB HID firmware while retaining
-two 4 MiB OTA slots. The 16 MiB layout also provides 256 KiB for native
-Extensions and 7.625 MiB for filesystem storage. Other 3 MiB-slot boards are
-unchanged. Run `./tools/install-custom-partitions.sh` before building.
+`jc3248w535`, `jc3636w518`, and `jc3636w518-sd` use `ota_4mb_16MB_ext`
+to provide firmware headroom while retaining two 4 MiB OTA slots. The 16 MiB
+layout also provides 256 KiB for native Extensions and 7.625 MiB for internal
+filesystem storage. Other 3 MiB-slot boards are unchanged.
+Run `./tools/install-custom-partitions.sh` before building.
 
 Back up stored files and Extension packages before migrating from
 `ota_3mb_16MB_ext`. The filesystem and Extensions offsets move, so a full
 serial flash, storage reinitialization, and restoration are required. A
 firmware-only OTA update does not migrate the partition table. OTA remains
-available after the new layout is installed.
+available after the new layout is installed. The `jc3636w518-sd` variant uses
+the SD card for primary file storage; this migration does not repartition
+the SD card, but native Extensions still reside in internal flash and must
+be backed up and restored.
 
 ### reTerminal E1003 Interactive Extensions
 

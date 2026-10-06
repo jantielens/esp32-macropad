@@ -63,12 +63,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and two-finger scrolling. Dragging remains available through optional mouse
   button zones on multicontact drivers; single-contact drivers no longer support
   dragging.
-* JC3248W535 uses two 4 MiB OTA firmware slots to fit USB HID while retaining
-  native Extensions and 7.625 MiB of filesystem storage. Back up files and
+* JC3248W535, `jc3636w518`, and `jc3636w518-sd` use two 4 MiB OTA firmware
+  slots for firmware headroom while retaining native Extensions and 7.625 MiB
+  of internal filesystem storage. Back up internal files and
   Extension packages before migrating from the 3 MiB-slot layout: partition
   offsets change and require a full serial flash, storage reinitialization,
   and restoration. Firmware-only OTA cannot migrate the partition table;
-  OTA updates remain supported afterward. Other boards keep their layouts.
+  OTA updates remain supported afterward. SD-card contents are unaffected.
+  Other boards keep their layouts.
 * Redesigned the Pad Editor with a pad navigation rail, a persistent canvas
   matching the device's screen proportions, and contextual pad and button
   inspectors. Button settings are grouped into Content, Actions, and Appearance
