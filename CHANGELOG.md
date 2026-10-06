@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Two-contact AXS15231B touch support on JC3248W535, with independent tracking
+  IDs for two-finger Mousepad scrolling, button-zone holds with pointer movement,
+  and simultaneous controller widgets. Other AXS15231B boards retain the
+  single-contact default. Temporary hardware-probe logging is removed.
 * Native USB HID keyboard, consumer-control, mouse, and gamepad support on
   JC3248W535. Select USB in the keyboard transport settings and reboot;
   output defaults to Off. Native USB no longer provides a serial log console,

@@ -1007,7 +1007,10 @@ to navigation or another widget. Configured full-screen tap actions take precede
 widget interaction; clear them to use the gamepad widgets.
 
 GT911 drivers can route up to five simultaneous contacts to controller widgets;
-the connected panel may support fewer. Two sticks, a stick and held button or
+the connected panel may support fewer. JC3248W535's AXS15231B driver supports
+two simultaneous contacts, including two-finger Mousepad scrolling and holding
+a Mousepad button zone while another finger moves the pointer.
+Two sticks, a stick and held button or
 trigger, or multiple hat directions can operate together. Each widget accepts
 one contact; additional fingers on that widget are ignored until they lift,
 even if its captured finger lifts first. Array reordering and crossing contacts
@@ -1051,12 +1054,12 @@ error handling. These driver changes do not enable USB HID on additional boards;
 gamepad widgets still require the existing display, touch, and USB HID capabilities.
 
 For hardware diagnostics, build at DEBUG with `LOG_DIAGNOSTICS` selecting
-`GT911,Touch,GamepadHID,GamepadJoystick,GamepadButton`. Normal INFO remains quiet;
+`GT911,AXS15231B,Touch,GamepadHID,GamepadJoystick,GamepadButton`. Normal INFO remains quiet;
 rejections and readiness changes stay visible. See the
 [logging guidelines](dev/logging-guidelines.md). `GamepadJoystick`
 and `GamepadButton` report creation, capture, rejection, and release reasons.
-GT911 logs `Contacts=N IDs=0x....` when the contact set changes, after a checked
-read and successful acknowledgement. Each set bit represents a tracking ID;
+GT911 and AXS15231B log `Contacts=N IDs=0x....` when the contact set changes after
+a checked report (and successful acknowledgement for GT911). Each set bit represents a tracking ID;
 record reordering or movement alone does not emit a contact-set log. Use these
 logs to check simultaneous contact counts and whether the remaining finger
 keeps its ID when another finger lifts. These are not latency measurements.

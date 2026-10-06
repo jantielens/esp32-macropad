@@ -94,6 +94,7 @@
 // ============================================================================
 // Enable touch support on this board.
 #define HAS_TOUCH true
+#define MAX_AXS15231B_CONTACTS 2
 
 // Touch is I2C (from sample/esp_bsp.h)
 // I2C controller index.

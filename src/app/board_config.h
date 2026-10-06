@@ -1253,6 +1253,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define TOUCH_DRIVER_CST816S_WIRE 6
 #define TOUCH_DRIVER_INKPLATE6FLICK 7
 
+// Maximum AXS15231B contacts (1 or 2); enable two only on verified panels.
+#ifndef MAX_AXS15231B_CONTACTS
+#define MAX_AXS15231B_CONTACTS 1
+#endif
+
 // Touch reset pin (-1 = no hardware reset, GT911 boots normally).
 #ifndef TOUCH_RST
 #define TOUCH_RST -1

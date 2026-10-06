@@ -40,11 +40,18 @@ void AXS15231B_Touch::setRotation(uint8_t rot) {
 
 bool AXS15231B_Touch::touched() {
 		// Check if the display is touched / got touched
-		return readSample() != ReadStatus::Error && touchActive;
+		return readSample() != ReadStatus::Error && isPressed();
 }
 
 AXS15231B_Touch::ReadStatus AXS15231B_Touch::readSample() {
 		return update();
+}
+
+TouchSnapshot AXS15231B_Touch::readSnapshot() {
+		const ReadStatus status = update();
+		TouchSnapshot snapshot = last_snapshot;
+		snapshot.status = status;
+		return snapshot;
 }
 
 void AXS15231B_Touch::readData(uint16_t *x, uint16_t *y) {
@@ -76,11 +83,12 @@ void AXS15231B_Touch::correctOffset(uint16_t *x, uint16_t *y) {
 }
 
 AXS15231B_Touch::ReadStatus AXS15231B_Touch::update() {
-		if (use_interrupt && !touch_int.exchange(0, std::memory_order_acq_rel) && !retry_read && !touchActive)
+		if (use_interrupt && !touch_int.exchange(0, std::memory_order_acq_rel) && !retry_read && !isPressed())
 				return ReadStatus::Unchanged;
 		retry_read = true;
 
-		uint8_t tmp_buf[8] = {0};
+		uint8_t tmp_buf[14] = {0};
+		const uint8_t response_size = 2 + contact_capacity * 6;
 		const auto read_error = [&](const char* stage, unsigned actual, unsigned expected) {
 				const uint32_t now = millis();
 				if (!error_logged || uint32_t(now - last_error_log_ms) >= 5000) {
@@ -93,11 +101,11 @@ AXS15231B_Touch::ReadStatus AXS15231B_Touch::update() {
 				return ReadStatus::Error;
 		};
 		// Command to read touch data — matches Espressif's esp_lcd_touch_axs15231b.c
-		// 11-byte command: magic + addr + response-length (0x0008) + 3 trailing zeros
-		static const uint8_t read_touchpad_cmd[11] = {
+		// 11-byte command: magic + addr + response-length + 3 trailing zeros
+		const uint8_t read_touchpad_cmd[11] = {
 				0xB5, 0xAB, 0xA5, 0x5A,
 				0x00, 0x00,
-				0x00, 0x08,  // response length = 8
+				0x00, response_size,
 				0x00, 0x00, 0x00
 		};
 
@@ -112,68 +120,92 @@ AXS15231B_Touch::ReadStatus AXS15231B_Touch::update() {
 		delayMicroseconds(100);
 
 		// Read response from controller
-		const size_t received = Wire.requestFrom(addr, (uint8_t)sizeof(tmp_buf));
-		if (received != sizeof(tmp_buf)) return read_error("requestFrom", received, sizeof(tmp_buf));
+		const size_t received = Wire.requestFrom(addr, response_size);
+		if (received != response_size) return read_error("requestFrom", received, response_size);
 		const int available = Wire.available();
-		if (available < (int)sizeof(tmp_buf)) return read_error("available", available, sizeof(tmp_buf));
-		for (size_t index = 0; index < sizeof(tmp_buf); ++index) {
+		if (available < response_size) return read_error("available", available, response_size);
+		for (size_t index = 0; index < response_size; ++index) {
 				const int value = Wire.read();
-				if (value < 0) return read_error("read", index, sizeof(tmp_buf));
+				if (value < 0) return read_error("read", index, response_size);
 				tmp_buf[index] = (uint8_t)value;
 		}
 
-		// Response layout (per Espressif esp_lcd_touch_axs15231b.c):
-		//   [0] gesture
-		//   [1] num_points (0 = no touch)
-		//   [2] event(2b):unused(2b):x_h(4b)   [3] x_l
-		//   [4] unused(4b):y_h(4b)              [5] y_l
-		uint8_t touch_count = tmp_buf[1];
-		uint8_t event = (tmp_buf[2] >> 6) & 0x03;
+		const uint8_t touch_count = tmp_buf[1];
+		uint16_t previous_ids = 0;
+		for (uint8_t index = 0; index < last_snapshot.count; ++index)
+				previous_ids |= touch_contact_id_mask(last_snapshot.contacts[index].id);
+		TouchSnapshot next;
+		uint16_t seen_ids = 0;
+		uint16_t next_ids = 0;
+		bool stale_move = false;
+		bool valid = tmp_buf[0] == 0 && touch_count <= contact_capacity;
+		for (uint8_t index = 0; valid && index < touch_count; ++index) {
+				const uint8_t* record = tmp_buf + 2 + index * 6;
+				const uint8_t event = record[0] >> 6;
+				const uint8_t id = record[2] >> 4;
+				const uint16_t mask = touch_contact_id_mask(id);
+				if (id == 15 || (record[0] & 0x30) || (seen_ids & mask)) {
+						valid = false;
+						break;
+				}
+				seen_ids |= mask;
+				if (event == 1 || event == 3) continue;
+				if (event == 2 && !(previous_ids & mask)) {
+						stale_move = true;
+						continue;
+				}
+				TouchContact& contact = next.contacts[next.count++];
+				contact.id = id;
+				contact.horizontal = ((record[0] & 0x0f) << 8) | record[1];
+				contact.vertical = ((record[2] & 0x0f) << 8) | record[3];
+				transform(contact.horizontal, contact.vertical);
+				next_ids |= mask;
+		}
 
-		if (touch_count > 1 && touchActive) {
+		if (!valid && isPressed()) {
 				const uint32_t now = millis();
 				if (!invalid_report_active) {
 						invalid_report_active = true;
 						invalid_report_started_ms = now;
+				}
+				if (!invalid_report_logged || uint32_t(now - last_invalid_report_log_ms) >= 5000) {
 						LOGT("AXS15231B", "Invalid active report: count=%u report=%02x %02x %02x %02x %02x %02x %02x %02x",
 								unsigned(touch_count), unsigned(tmp_buf[0]), unsigned(tmp_buf[1]),
 								unsigned(tmp_buf[2]), unsigned(tmp_buf[3]), unsigned(tmp_buf[4]), unsigned(tmp_buf[5]),
 								unsigned(tmp_buf[6]), unsigned(tmp_buf[7]));
+						invalid_report_logged = true;
+						last_invalid_report_log_ms = now;
 				}
 				if (uint32_t(now - invalid_report_started_ms) >= TouchReadFilterState::error_timeout_ms) {
-						touchActive = false;
+						last_snapshot.count = 0;
 				}
 				return ReadStatus::Error;
 		}
 		invalid_report_active = false;
-		if (touch_count != 1 || event == 1 || event == 3) {
-				if (touchActive) {
-						LOGT("AXS15231B", "Release: count=%u event=%u report=%02x %02x %02x %02x %02x %02x %02x %02x",
-								unsigned(touch_count), unsigned(event), unsigned(tmp_buf[0]), unsigned(tmp_buf[1]),
-								unsigned(tmp_buf[2]), unsigned(tmp_buf[3]), unsigned(tmp_buf[4]), unsigned(tmp_buf[5]),
-								unsigned(tmp_buf[6]), unsigned(tmp_buf[7]));
-				}
-				retry_read = false;
-				touchActive = false;
-				return ReadStatus::Fresh;
-		}
 		retry_read = false;
-
-		// Event field state machine:
-		//   0 = press down, 1 = lift up, 2 = contact/move, 3 = no event
-		// After lift, the controller may replay stale coords with event=2.
-		// Require a fresh press(0) before accepting contact(2) events.
-		if (event == 2 && !touchActive) return ReadStatus::Unchanged;
-		// event==2 && touchActive: valid ongoing touch
-
-		// Extract X and Y coordinates from response
-		uint16_t raw_X = AXS_GET_POINT_X(tmp_buf);
-		uint16_t raw_Y = AXS_GET_POINT_Y(tmp_buf);
-		if (!touchActive) {
-				LOGT("AXS15231B", "Press: count=%u event=%u raw=%u,%u",
-						unsigned(touch_count), unsigned(event), unsigned(raw_X), unsigned(raw_Y));
+		if (!valid) return ReadStatus::Fresh;
+		if (stale_move && !next.count && !last_snapshot.count) return ReadStatus::Unchanged;
+		if (next.count) {
+				uint8_t primary = 0;
+				if (last_snapshot.count) {
+						for (uint8_t index = 0; index < next.count; ++index)
+								if (next.contacts[index].id == last_snapshot.contacts[0].id) primary = index;
+				}
+				if (primary) {
+						const TouchContact first = next.contacts[0];
+						next.contacts[0] = next.contacts[primary];
+						next.contacts[primary] = first;
+				}
+				point_X = next.contacts[0].horizontal;
+				point_Y = next.contacts[0].vertical;
 		}
+		last_snapshot = next;
+		if (next_ids != previous_ids)
+				LOGT("AXS15231B", "Contacts=%u IDs=0x%04x", unsigned(next.count), unsigned(next_ids));
+		return ReadStatus::Fresh;
+}
 
+void AXS15231B_Touch::transform(uint16_t& raw_X, uint16_t& raw_Y) {
 		// Clamp raw coordinates to calibration range.
 		// Without clamping, values outside the calibrated area cause
 		// correctOffset()'s map() to produce negative (wrapped) results.
@@ -199,25 +231,24 @@ AXS15231B_Touch::ReadStatus AXS15231B_Touch::update() {
 		//   → touch inverse: physical(px,py) → logical(H-1-py, px)
 		switch (rotation) {
 				case 0:
-						point_X = raw_X;
-						point_Y = raw_Y;
 						break;
-				case 1:
-						point_X = y_max - raw_Y;
-						point_Y = raw_X;
+				case 1: {
+						const uint16_t horizontal = y_max - raw_Y;
+						raw_Y = raw_X;
+						raw_X = horizontal;
 						break;
+				}
 				case 2:
-						point_X = x_max - raw_X;
-						point_Y = y_max - raw_Y;
+						raw_X = x_max - raw_X;
+						raw_Y = y_max - raw_Y;
 						break;
-				case 3:
-						point_X = raw_Y;
-						point_Y = x_max - raw_X;
+				case 3: {
+						const uint16_t vertical = x_max - raw_X;
+						raw_X = raw_Y;
+						raw_Y = vertical;
 						break;
+				}
 				default:
 						break;
 		}
-
-		touchActive = true;
-		return ReadStatus::Fresh;
 }

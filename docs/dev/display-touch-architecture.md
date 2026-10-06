@@ -628,7 +628,8 @@ public:
 `readSnapshot()` is the TouchManager input contract. Its default adapter calls
 `readSample()` once, preserving status and providing contact ID 0 for a single
 pressed contact. `contactCapacity()` reports the driver limit (1 by default,
-5 for GT911), not a verified panel limit. Snapshots use fixed five-contact storage.
+5 for GT911, 2 for AXS15231B on JC3248W535), not a universal controller or panel
+limit. Snapshots use fixed five-contact storage.
 
 `TouchSample` contains screen-space
 coordinates, a pressed flag, and `TouchReadStatus::Fresh`, `Unchanged`, or
@@ -648,19 +649,29 @@ to each contact. `readSample()` retains a first-contact compatibility projection
 Initialization also checks the pending-data
 clear and does not report successful initialization if that write fails.
 
-AXS15231B checks the complete command and eight-byte response before updating
-contact state or coordinates. Idle reads without an interrupt are `Unchanged`;
+AXS15231B checks the complete command and response before updating contact state
+or coordinates. `MAX_AXS15231B_CONTACTS` defaults to 1 (eight-byte response);
+JC3248W535 sets it to 2 (14-byte response), following hardware verification of
+independent coordinates and stable tracking IDs. Each six-byte record carries
+its own event and tracking ID. Snapshots update atomically after checking the
+zero gesture header, reserved bits, and unique non-sentinel IDs. Calibration and
+rotation apply to each accepted contact. Legacy single-contact access retains
+the same primary contact while it remains pressed, even if records reorder.
+Idle reads without an interrupt are `Unchanged`;
 held contacts are polled so stationary bus failures and missed release interrupts
 can be detected. Failed reports are retried without requiring another interrupt.
-Zero contacts or an up event release the contact; stale move events after release
-do not start another press.
-An impossible contact count during an active touch reports `Error` rather than
+Zero contacts release the complete set; an up event or omission releases the
+corresponding ID. Each ID requires a down event before move events can extend
+its lifetime; stale moves after release do not start another press.
+A malformed report during an active touch reports `Error` rather than
 an immediate release. A valid report within the shared 100 ms error timeout
-resumes movement with the previous contact and coordinates intact. Persistent
+resumes movement with the previous contacts and coordinates intact. Persistent
 malformed reports clear driver contact state and trigger filter cancellation;
 subsequent malformed idle reports provide a fresh release so input can rearm.
-Press/release traces include raw coordinates or packet bytes, and the first
-malformed report in each active error sequence is traced for hardware diagnosis.
+Contact-set changes log `Contacts=N IDs=0x....` at diagnostic level. The first
+malformed active report includes packet bytes for diagnosis, with subsequent
+packet diagnostics limited to one every five seconds across error sequences;
+the temporary hardware probe's periodic INFO logs are removed.
 
 CST816S polls its five-byte report and distinguishes checked transfer failures
 from zero-contact or up-event releases. Calibration and rotation apply only to
@@ -701,13 +712,15 @@ error-cancellation guarantee. No installed Inkplate library files are patched.
 - **Library**: Vendored I2C driver ([`drivers/axs15231b/vendor/`](../src/app/drivers/axs15231b/vendor/))
 - **Hardware**: AXS15231B capacitive touch (same chip as QSPI display, different bus)
 - **Communication**: I2C (400 kHz), default address 0x3B
-- **Protocol**: 11-byte command + 100 µs delay + 8-byte response (per Espressif `esp_lcd_touch_axs15231b.c`)
+- **Protocol**: 11-byte command + 100 µs delay + 8-byte or 14-byte response, selected by `MAX_AXS15231B_CONTACTS`
 - **Response layout**:
   - `[0]` gesture, `[1]` num_points
   - `[2]` event(2b):unused(2b):x_h(4b), `[3]` x_l
-  - `[4]` unused(4b):y_h(4b), `[5]` y_l
-- **Event field state machine**: Byte `[2]` bits 7:6 encode press(0), lift(1), contact(2), no-event(3). A `touchActive` flag requires a fresh press(0) before accepting contact(2) events, preventing double-tap artifacts from stale controller replays after lift.
+    - `[4]` tracking_id(4b):y_h(4b), `[5]` y_l
+    - Records repeat every six bytes; bytes `[6:7]` and `[12:13]` are not used for coordinates or identity
+- **Event field state machine**: Bits 7:6 of each record's first byte encode press(0), lift(1), contact(2), no-event(3). A fresh press is required per tracking ID before accepting moves, preventing stale controller replays from reacquiring a released contact.
 - **Features**:
+    - Two independently tracked contacts on JC3248W535; other boards retain the one-contact default
   - Optional IRQ pin (polling fallback when INT=-1)
   - Edge clamping to calibration range before coordinate mapping
   - Driver-level rotation (inverse of display pixel transpose)

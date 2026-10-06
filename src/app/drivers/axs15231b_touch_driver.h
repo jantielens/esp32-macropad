@@ -12,6 +12,9 @@
 #include "../board_config.h"
 #include "axs15231b/vendor/AXS15231B_touch.h"
 
+static_assert(MAX_AXS15231B_CONTACTS == 1 || MAX_AXS15231B_CONTACTS == 2,
+		"AXS15231B supports one or two configured contacts");
+
 class AXS15231B_TouchDriver : public TouchDriver {
 private:
 		AXS15231B_Touch* touch;
@@ -27,6 +30,8 @@ public:
 		bool isTouched() override;
 		bool getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure = nullptr) override;
 		TouchSample readSample() override;
+		TouchSnapshot readSnapshot() override;
+		uint8_t contactCapacity() const override { return MAX_AXS15231B_CONTACTS; }
 		void setCalibration(uint16_t x_min, uint16_t x_max, uint16_t y_min, uint16_t y_max) override;
 		void setRotation(uint8_t rotation) override;
 };

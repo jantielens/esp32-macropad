@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 302
+Total flags: 303
 
 ### Features (HAS_*)
 
@@ -161,6 +161,7 @@ Total flags: 302
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
+- **MAX_AXS15231B_CONTACTS** default: `1` — Maximum AXS15231B contacts (1 or 2); enable two only on verified panels.
 - **MAX_GRID_COLS** default: `(no default)` — Maximum grid columns.
 - **MAX_GRID_ROWS** default: `(no default)` — Maximum grid rows.
 - **MAX_HW_BUTTONS** default: `5` — Compile-time cap on the number of declarable hardware buttons.
@@ -1521,6 +1522,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **LVGL_THEME_DARK_MODE**
   - src/app/board_config.h
 - **LVGL_TICK_PERIOD_MS**
+  - src/app/board_config.h
+- **MAX_AXS15231B_CONTACTS**
   - src/app/board_config.h
 - **MAX_GRID_COLS**
   - src/app/pad_config.h

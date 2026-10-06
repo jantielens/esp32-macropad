@@ -3,6 +3,7 @@
 
 #include "Arduino.h"
 #include "Wire.h"
+#include "../../../touch_sample.h"
 #include <atomic>
 
 class AXS15231B_Touch {
@@ -14,6 +15,10 @@ private:
 		uint32_t last_error_log_ms = 0;
 		bool invalid_report_active = false;
 		uint32_t invalid_report_started_ms = 0;
+		bool invalid_report_logged = false;
+		uint32_t last_invalid_report_log_ms = 0;
+		uint8_t contact_capacity = 1;
+		TouchSnapshot last_snapshot;
 
 		std::atomic<uint32_t> touch_int{0};
 		bool retry_read = false;
@@ -21,8 +26,6 @@ private:
 
 		uint16_t point_X = 0;
 		uint16_t point_Y = 0;
-
-		bool touchActive = false;  // State machine: true after press(0), false after lift(1)
 
 		bool en_offset_correction = false;
 
@@ -34,15 +37,17 @@ private:
 		uint16_t y_ideal_max = 0;
 
 public:
-		enum class ReadStatus : uint8_t { Fresh, Unchanged, Error };
+		using ReadStatus = TouchReadStatus;
 		ReadStatus readSample();
-		bool isPressed() const { return touchActive; }
-		AXS15231B_Touch(uint8_t scl, uint8_t sda, uint8_t int_pin, uint8_t addr, uint8_t rotation) {
+		TouchSnapshot readSnapshot();
+		bool isPressed() const { return last_snapshot.count != 0; }
+		AXS15231B_Touch(uint8_t scl, uint8_t sda, uint8_t int_pin, uint8_t addr, uint8_t rotation, uint8_t capacity = 1) {
 				this->scl = scl;
 				this->sda = sda;
 				this->int_pin = int_pin;
 				this->addr = addr;
 				this->rotation = rotation;
+				contact_capacity = capacity == 2 ? 2 : 1;
 		}
 
 		bool begin();
@@ -57,13 +62,14 @@ public:
 private:
 		static void isrTouched();
 		void correctOffset(uint16_t *x, uint16_t *y);
+		void transform(uint16_t& horizontal, uint16_t& vertical);
 		ReadStatus update();
 };
 
 // Response layout (per Espressif esp_lcd_touch_axs15231b.c):
 //   [0] gesture, [1] num_points,
 //   [2] event(2b):unused(2b):x_h(4b), [3] x_l,
-//   [4] unused(4b):y_h(4b), [5] y_l
+//   [4] tracking_id(4b):y_h(4b), [5] y_l; records repeat every 6 bytes.
 // X: bytes 2 (low 4 bits) + 3
 #define AXS_GET_POINT_X(buf) (((buf[2] & 0x0F) << 8) | buf[3])
 // Y: bytes 4 (low 4 bits) + 5
