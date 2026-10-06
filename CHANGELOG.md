@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Widen the Pad Editor inspector on desktop and tablet screens and remove the
+  repeated heading in the pad Appearance tab. The mobile inspector remains
+  full-screen.
 * Remove Mousepad single-touch tap-then-drag to prevent unintended dragging
   when moving after a tap. Preserve pointer movement, tap clicks, double-clicks,
   and two-finger scrolling. Dragging remains available through optional mouse
