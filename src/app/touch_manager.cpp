@@ -380,7 +380,7 @@ void touch_manager_cancel_physical_input() {
 		portEXIT_CRITICAL(&g_physical_touch_mux);
 		const bool require_release = g_require_release || g_prev_lvgl_pressed || physical.pressed ||
 				physical.status == TouchReadStatus::Error || g_touch_snapshot_filter.canceled;
-		if (!g_require_release) {
+		if (require_release && !g_require_release) {
 				LOGT("Touch", "Cancel: release_guard=%u physical=%u lvgl_pressed=%u",
 						unsigned(require_release), unsigned(physical.pressed), unsigned(g_prev_lvgl_pressed));
 		}

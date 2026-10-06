@@ -20,7 +20,7 @@ harness = r'''
 #include <cstdio>
 #include "touch_sample.h"
 #define LOGI(tag, ...) ((void)std::snprintf(nullptr, 0, __VA_ARGS__))
-#define LOGT(tag, ...) ((void)std::snprintf(nullptr, 0, __VA_ARGS__))
+#define LOGT(tag, ...) (++trace_logs, (void)std::snprintf(nullptr, 0, __VA_ARGS__))
 #define LOGW(tag, ...) (++warnings, (void)std::snprintf(nullptr, 0, __VA_ARGS__))
 enum LogLevel { LOG_LEVEL_WARN = 2, LOG_LEVEL_DEBUG = 4 };
 #define LOG_LEVEL LOG_LEVEL_DEBUG
@@ -37,6 +37,7 @@ static uint32_t clock_ms = 0;
 static unsigned resets = 0, activities = 0;
 static unsigned warnings = 0;
 static unsigned debug_logs = 0;
+static unsigned trace_logs = 0;
 static void log_write(LogLevel level, const char*, const char*, ...) {
     if (level == LOG_LEVEL_WARN) ++warnings;
     else ++debug_logs;
@@ -94,7 +95,11 @@ int main() {
     lv_indev_data_t output;
     auto poll = [&]() { ++clock_ms; TouchManager::readCallback(&indev, &output); };
     poll();
+    const unsigned idle_trace_logs = trace_logs;
+    const unsigned idle_resets = resets;
     touch_manager_cancel_physical_input();
+    touch_manager_cancel_physical_input();
+    assert(trace_logs == idle_trace_logs && resets == idle_resets + 2);
     assert(!g_require_release);
     driver.snapshot.status = TouchReadStatus::Unchanged;
     poll();
@@ -105,6 +110,11 @@ int main() {
     driver.snapshot.contacts[0].vertical = 34;
     poll();
     assert(output.state == LV_INDEV_STATE_PRESSED && output.point.x == 12);
+    const unsigned pressed_trace_logs = trace_logs;
+    touch_manager_cancel_physical_input();
+    assert(g_require_release && trace_logs == pressed_trace_logs + 1);
+    touch_manager_cancel_physical_input();
+    assert(g_require_release && trace_logs == pressed_trace_logs + 1);
     g_lvgl_force_released = true;
     poll();
     assert(driver.reads == 4 && g_cached_physical.pressed && output.state == LV_INDEV_STATE_RELEASED);

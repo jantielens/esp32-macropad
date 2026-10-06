@@ -96,6 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Suppress repeated idle touch-cancel debug logs during OTA updates while
+  preserving input resets, release guards, and one-time active-touch diagnostics.
 * Restore JC3248W535 touch continuity and Mousepad movement across malformed
   AXS15231B reports. Unsupported contact counts during an active touch retain
   contact for recovery within 100 ms; persistent malformed data cancels input
