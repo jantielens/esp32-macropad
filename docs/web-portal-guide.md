@@ -275,9 +275,18 @@ duration (`count * interval + 50` ms), not an exact transmitted packet count.
 
 Shown only when USB or BLE HID is compiled in. Native USB support is currently
 compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
-`jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard output defaults to Off.
+`jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard output defaults to Off.
 Both JC3636W518 variants disable BLE and offer only Off or USB. Switching their
 firmware from hardware CDC to TinyUSB may assign a different Windows COM port.
+
+JC3248W535 also offers only Off or USB for HID. Its native USB connector no
+longer provides a serial log console; diagnostics use UART0 at 115200 baud.
+For native USB flashing when the running firmware has no serial port, hold
+BOOT while resetting to enter the ESP32-S3 download mode, or use OTA updates.
+Migrating from its older 3 MiB firmware slots requires a full serial flash of
+the new 4 MiB-slot partition table. Back up files and Extension packages first;
+their partitions move and must be reinitialized and restored. OTA updates
+remain supported after migration.
 
 The P4 HID builds (`esp32-p4-lcd4b`, `jc1060p470c`, `jc1060p470c-sd`,
 `jc4880p433`, and `jc4880p433-sd`) use two separate USB-C connectors:

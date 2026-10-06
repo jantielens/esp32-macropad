@@ -654,6 +654,13 @@ held contacts are polled so stationary bus failures and missed release interrupt
 can be detected. Failed reports are retried without requiring another interrupt.
 Zero contacts or an up event release the contact; stale move events after release
 do not start another press.
+An impossible contact count during an active touch reports `Error` rather than
+an immediate release. A valid report within the shared 100 ms error timeout
+resumes movement with the previous contact and coordinates intact. Persistent
+malformed reports clear driver contact state and trigger filter cancellation;
+subsequent malformed idle reports provide a fresh release so input can rearm.
+Press/release traces include raw coordinates or packet bytes, and the first
+malformed report in each active error sequence is traced for hardware diagnosis.
 
 CST816S polls its five-byte report and distinguishes checked transfer failures
 from zero-contact or up-event releases. Calibration and rotation apply only to

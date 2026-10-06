@@ -209,7 +209,7 @@ int main() {
     assert(sample.status == TouchReadStatus::Error && sample.horizontal == 100);
     Wire.packet({0, 2, 0, 100, 0, 80, 0, 0});
     sample = driver.readSample();
-    assert(sample.status == TouchReadStatus::Fresh && !sample.pressed && sample.horizontal == 100);
+    assert(sample.status == TouchReadStatus::Error && sample.pressed && sample.horizontal == 100);
     Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
     Wire.read_failure = true;
     mock_irq();
@@ -237,11 +237,28 @@ int main() {
     assert(snapshot_filter.update(startup_snapshot, 0).count == 0 && !snapshot_filter.canceled);
     Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
     assert(snapshot_filter.update(read_snapshot(), 0).count == 1);
+    Wire.packet({0xff, 0xff, 0xff, 0xff, 0xff, 0x2b, 0x29, 0x29});
+    mock_now = 10;
+    auto malformed_snapshot = read_snapshot();
+    assert(malformed_snapshot.status == TouchReadStatus::Error && malformed_snapshot.count == 1);
+    assert(snapshot_filter.update(malformed_snapshot, 10).count == 1);
+    Wire.packet({0, 1, 0x80, 130, 0, 90, 0, 0});
+    mock_now = 20;
+    assert(snapshot_filter.update(read_snapshot(), 20).count == 1);
+    uint16_t recovered_x = 0, recovered_y = 0;
+    polling.readData(&recovered_x, &recovered_y);
+    assert(recovered_x == 130 && recovered_y == 90);
+    Wire.packet({0, 1, 0x40, 130, 0, 90, 0, 0});
+    assert(snapshot_filter.update(read_snapshot(), 30).count == 0);
+    Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
+    assert(snapshot_filter.update(read_snapshot(), 40).count == 1);
     Wire.packet({0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff});
-    for (unsigned now = 10; now <= 200; now += 10) {
+    for (unsigned now = 50; now <= 200; now += 10) {
+        mock_now = now;
         const auto snapshot = read_snapshot();
-        assert(snapshot.status == TouchReadStatus::Fresh && snapshot.count == 0);
-        assert(snapshot_filter.update(snapshot, now).count == 0 && !snapshot_filter.canceled);
+        assert(snapshot.status == (now <= 150 ? TouchReadStatus::Error : TouchReadStatus::Fresh));
+        assert(snapshot_filter.update(snapshot, now).count == (now < 150 ? 1 : 0));
+        assert(snapshot_filter.canceled == (now == 150));
     }
     Wire.packet({0, 1, 0, 150, 0, 90, 0, 0});
     assert(snapshot_filter.update(read_snapshot(), 210).count == 1);
@@ -259,9 +276,11 @@ int main() {
         const uint8_t idle_value = idle_values[cycle];
         Wire.packet({idle_value, idle_value, idle_value, idle_value, idle_value, idle_value, idle_value, idle_value});
         for (unsigned idle = 0; idle < 500; ++idle) {
+            mock_now = timeline;
             const auto snapshot = read_snapshot();
-            assert(snapshot.status == TouchReadStatus::Fresh && snapshot.count == 0);
-            assert(snapshot_filter.update(snapshot, timeline).count == 0 && !snapshot_filter.canceled);
+            assert(snapshot.status == (idle <= 10 ? TouchReadStatus::Error : TouchReadStatus::Fresh));
+            assert(snapshot_filter.update(snapshot, timeline).count == (idle < 10 ? 1 : 0));
+            assert(snapshot_filter.canceled == (idle == 10));
             timeline += 10;
         }
         Wire.packet({0, 1, 0x80, 100, 0, 80, 0, 0});
@@ -302,9 +321,14 @@ int main() {
     assert(snapshot_filter.update(read_snapshot(), timeline + 10).count == 1);
     assert(snapshot_filter.update(read_snapshot(), timeline + 110).count == 0 && snapshot_filter.canceled);
     Wire.packet({0x29, 0x29, 0x29, 0x29, 0x29, 0x29, 0x29, 0x29});
+    mock_now = timeline + 120;
     assert(snapshot_filter.update(read_snapshot(), timeline + 120).count == 0 && !snapshot_filter.canceled);
+    mock_now = timeline + 220;
+    assert(snapshot_filter.update(read_snapshot(), timeline + 220).count == 0 && !snapshot_filter.canceled);
+    mock_now = timeline + 230;
+    assert(snapshot_filter.update(read_snapshot(), timeline + 230).count == 0 && !snapshot_filter.canceled);
     Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
-    assert(snapshot_filter.update(read_snapshot(), timeline + 130).count == 1);
+    assert(snapshot_filter.update(read_snapshot(), timeline + 240).count == 1);
 }
 ''',
     "cst": r'''

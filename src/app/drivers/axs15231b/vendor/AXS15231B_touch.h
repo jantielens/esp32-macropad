@@ -12,6 +12,8 @@ private:
 		bool use_interrupt = true;
 		bool error_logged = false;
 		uint32_t last_error_log_ms = 0;
+		bool invalid_report_active = false;
+		uint32_t invalid_report_started_ms = 0;
 
 		std::atomic<uint32_t> touch_int{0};
 		bool retry_read = false;

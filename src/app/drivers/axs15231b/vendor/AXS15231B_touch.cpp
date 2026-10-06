@@ -1,5 +1,6 @@
 #include "AXS15231B_touch.h"
 #include "../../../log_manager.h"
+#include "../../../touch_sample.h"
 
 
 
@@ -129,7 +130,29 @@ AXS15231B_Touch::ReadStatus AXS15231B_Touch::update() {
 		uint8_t touch_count = tmp_buf[1];
 		uint8_t event = (tmp_buf[2] >> 6) & 0x03;
 
+		if (touch_count > 1 && touchActive) {
+				const uint32_t now = millis();
+				if (!invalid_report_active) {
+						invalid_report_active = true;
+						invalid_report_started_ms = now;
+						LOGT("AXS15231B", "Invalid active report: count=%u report=%02x %02x %02x %02x %02x %02x %02x %02x",
+								unsigned(touch_count), unsigned(tmp_buf[0]), unsigned(tmp_buf[1]),
+								unsigned(tmp_buf[2]), unsigned(tmp_buf[3]), unsigned(tmp_buf[4]), unsigned(tmp_buf[5]),
+								unsigned(tmp_buf[6]), unsigned(tmp_buf[7]));
+				}
+				if (uint32_t(now - invalid_report_started_ms) >= TouchReadFilterState::error_timeout_ms) {
+						touchActive = false;
+				}
+				return ReadStatus::Error;
+		}
+		invalid_report_active = false;
 		if (touch_count != 1 || event == 1 || event == 3) {
+				if (touchActive) {
+						LOGT("AXS15231B", "Release: count=%u event=%u report=%02x %02x %02x %02x %02x %02x %02x %02x",
+								unsigned(touch_count), unsigned(event), unsigned(tmp_buf[0]), unsigned(tmp_buf[1]),
+								unsigned(tmp_buf[2]), unsigned(tmp_buf[3]), unsigned(tmp_buf[4]), unsigned(tmp_buf[5]),
+								unsigned(tmp_buf[6]), unsigned(tmp_buf[7]));
+				}
 				retry_read = false;
 				touchActive = false;
 				return ReadStatus::Fresh;
@@ -146,6 +169,10 @@ AXS15231B_Touch::ReadStatus AXS15231B_Touch::update() {
 		// Extract X and Y coordinates from response
 		uint16_t raw_X = AXS_GET_POINT_X(tmp_buf);
 		uint16_t raw_Y = AXS_GET_POINT_Y(tmp_buf);
+		if (!touchActive) {
+				LOGT("AXS15231B", "Press: count=%u event=%u raw=%u,%u",
+						unsigned(touch_count), unsigned(event), unsigned(raw_X), unsigned(raw_Y));
+		}
 
 		// Clamp raw coordinates to calibration range.
 		// Without clamping, values outside the calibrated area cause
