@@ -14,55 +14,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.37.0] - 2026-10-06
+
 ### Added
 
-* Two-contact AXS15231B touch support on JC3248W535, with independent tracking
-  IDs for two-finger Mousepad scrolling, button-zone holds with pointer movement,
-  and simultaneous controller widgets. Other AXS15231B boards retain the
-  single-contact default. Temporary hardware-probe logging is removed.
+* Device Logs viewer on boards with `HAS_REMOTE_LOG` enabled and PSRAM,
+  with live logs, startup history,
+  copy/download, retained crash summaries, and bounded coredump downloads.
+  Diagnostics include the reset reason, SDK version, firmware ELF SHA256,
+  decoded exception causes, and SDK-saved registers, with separate copy commands
+  for crash and current-boot diagnostics. Access follows configured portal
+  authentication and defers during OTA; downloads do not erase crash dumps.
+  Capture and JSON storage use bounded PSRAM buffers without internal-heap
+  fallback or additional serial-logging waits. Consistent snapshots, incremental
+  polling, browser history limits, and retryable initialization and crash-summary
+  requests keep memory use and network work bounded. Log counters distinguish
+  device capacity, record IDs, browser history, overwritten records, and drops.
+  ESP32-S3 atomic counters use internal DRAM; Inkplate IDF 4 builds retain
+  compatible firmware identity and register diagnostics.
 * Native USB HID keyboard, consumer-control, mouse, and gamepad support on
   JC3248W535. Select USB in the keyboard transport settings and reboot;
   output defaults to Off. Native USB no longer provides a serial log console,
   and serial diagnostics use UART0 at 115200 baud.
-* Development-only `POST /api/debug/crash` for abort, failed assertion, and
-  invalid-memory-write tests, gated by `DEBUG_CRASH_API_ENABLED`. The flag
-  defaults off on every board and requires explicit dev/test opt-in; keep it
-  disabled in production firmware.
-  No UI is added. Requests follow portal
-  authentication, require explicit confirmation, and reject OTA or duplicates.
-* Device Logs viewer on PSRAM builds, following configured portal authentication, with bounded rolling and
-  startup buffers, incremental polling, browser history limits, and copy/download.
-  Capture and JSON storage use PSRAM without internal-heap fallback; contention,
-  allocation failure, and OTA do not add remote-capture waits to serial logging.
-* Startup reset reason, SDK version, and firmware ELF SHA256 diagnostics, plus
-  retained flash crash summaries and bounded coredump downloads in Device Logs.
-  Crash access follows configured portal authentication and defers during OTA;
-  downloads do not erase dumps or copy them into a bulk SRAM buffer.
-  Summaries decode exception causes, distinguish exception PCs from faulting
-  addresses, expose SDK-saved registers, and support copying crash and current
-  boot diagnostics separately. Log counters distinguish device buffer capacity,
-  record IDs, browser history, overwritten records, and capture drops.
-* Compile-time action and widget identifier capacity guards, with host tests
-  for NUL-aware boundaries and stored-name registry lookup. Runtime parsing and
-  configured buffer capacities remain unchanged.
+* Two-contact AXS15231B touch support on JC3248W535, with independent tracking
+  IDs for two-finger Mousepad scrolling, button-zone holds with pointer movement,
+  and simultaneous controller widgets. Other AXS15231B boards retain the
+  single-contact default.
 * Bounded, request-local `Server-Timing` headers across portal information,
   health, configuration, navigation, pad, catalog, fragment, and asset responses.
   DevTools reports preparation phases and handler or response-only totals without
   changing JSON bodies or adding requests; asynchronous delivery is not measured.
-* Widget-owned preview metadata in `GET /api/info?catalog=1`, independent of
-  MCP. Each widget registers its display name, Material Symbol, and optional
-  axis variants, replacing the pad editor's central icon mapping.
+* Development-only `POST /api/debug/crash` for abort, failed assertion, and
+  invalid-memory-write tests, gated by `DEBUG_CRASH_API_ENABLED`. The flag
+  defaults off on every board and requires explicit dev/test opt-in; keep it
+  disabled in production firmware.
+  No UI is added. Requests follow portal authentication, require explicit
+  confirmation, and reject OTA or duplicates.
+* Compile-time action and widget identifier capacity guards, with host tests
+  for NUL-aware boundaries and stored-name registry lookup. Runtime parsing and
+  configured buffer capacities remain unchanged.
 
 ### Changed
 
-* Widen the Pad Editor inspector on desktop and tablet screens and remove the
-  repeated heading in the pad Appearance tab. The mobile inspector remains
-  full-screen.
-* Remove Mousepad single-touch tap-then-drag to prevent unintended dragging
-  when moving after a tap. Preserve pointer movement, tap clicks, double-clicks,
-  and two-finger scrolling. Dragging remains available through optional mouse
-  button zones on multicontact drivers; single-contact drivers no longer support
-  dragging.
+* Redesigned the Pad Editor with a pad navigation rail, a persistent canvas
+  matching the device's screen proportions, and contextual pad and button
+  inspectors. Button settings are grouped into Content, Actions, and Appearance
+  tabs; pad settings use Layout, Appearance, Bindings, and Actions tabs. Save Pad,
+  Show on Device, and More remain in the toolbar. Desktop and tablet inspectors
+  provide more editing space; mobile uses a full-screen inspector and an
+  accessible Save Pad command. Button edits update one in-memory draft without
+  separate Apply or Cancel commands, and switching buttons retains incomplete
+  inputs. Save Pad validates and persists the draft; unsaved-change guards
+  protect pad switching and portal navigation. Device defaults and confirmed
+  device imports continue to save separately. Stable selection outlines,
+  consistent Copy/Paste/Clear controls, and unobstructed status notifications
+  accompany the redesign.
+* Pad Editor widgets use consistent offline Material Symbols markers,
+  including Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, and inherited
+  template buttons. Directional symbols follow configured axes; unlabeled
+  widgets show a larger symbol and their name when space permits. Template
+  buttons remain readable with lighter fading and a dashed outline. The grid
+  remains a configuration overview, not a live preview. Widget-owned display
+  names, symbols, and axis variants are exposed in `GET /api/info?catalog=1`,
+  independent of MCP, instead of a central editor icon mapping.
 * JC3248W535, `jc3636w518`, and `jc3636w518-sd` use two 4 MiB OTA firmware
   slots for firmware headroom while retaining native Extensions and 7.625 MiB
   of internal filesystem storage. Back up internal files and
@@ -71,73 +85,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and restoration. Firmware-only OTA cannot migrate the partition table;
   OTA updates remain supported afterward. SD-card contents are unaffected.
   Other boards keep their layouts.
-* Redesigned the Pad Editor with a pad navigation rail, a persistent canvas
-  matching the device's screen proportions, and contextual pad and button
-  inspectors. Button settings are grouped into Content, Actions, and Appearance
-  tabs; pad settings use Layout, Appearance, Bindings, and Actions tabs. Save Pad,
-  Show on Device, and More remain in the toolbar, with a full-screen inspector
-  and an accessible Save Pad command on mobile.
-* Button edits now update a single in-memory pad draft without separate Apply
-  or Cancel commands. Switching between buttons retains incomplete inputs;
-  Save Pad validates and persists the draft. Unsaved-change guards protect pad
-  switching and portal navigation. Device defaults and confirmed device imports
-  continue to save separately.
+* Remove Mousepad single-touch tap-then-drag to prevent unintended dragging
+  when moving after a tap. Preserve pointer movement, tap clicks, double-clicks,
+  and two-finger scrolling. Dragging remains available through optional mouse
+  button zones on multicontact drivers; single-contact drivers no longer support
+  dragging.
+* Serial logging defaults to DEBUG with diagnostics enabled for all modules.
+  Sensitive action and network payloads are omitted, repeated warnings and
+  errors are rate-limited, and retry and failure diagnostics are bounded.
+* Portal startup avoids duplicate device-info and health requests. The Pad
+  Editor loads pad data and appearance defaults before sound files, building
+  blocks, and native extension catalogs. Catalog controls retain saved selections
+  while their choices load, and concurrent health consumers share one request.
 * Device-info responses reuse immutable RAM-cached pad names instead of reading
   pad files on each request. Saves, renames, imports, and deletes refresh names
   through the existing pad cache lifecycle without a separate invalidation timer.
 * Action and widget catalogs serialize through temporary PSRAM-preferred buffers
   and bulk response writes while retaining live availability checks. Server timing
   separates catalog construction from JSON preparation and writing.
-* Portal startup avoids duplicate device-info and health requests. The pad
-  editor loads pad data and appearance defaults before sound files, building
-  blocks, and native extension catalogs. Catalog controls retain saved selections
-  while their choices load, and concurrent health consumers share one request.
-* Pad editor widgets use consistent offline Material Symbols markers,
-  including Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, and inherited
-  template buttons. Directional symbols follow configured axes; unlabeled
-  widgets show a larger symbol and their name when space permits. Template
-  buttons remain readable with lighter fading and a dashed outline. The grid
-  remains a configuration overview, not a live preview.
 
 ### Fixed
 
-* Suppress repeated idle touch-cancel debug logs during OTA updates while
-  preserving input resets, release guards, and one-time active-touch diagnostics.
-* Restore JC3248W535 touch continuity and Mousepad movement across malformed
-  AXS15231B reports. Unsupported contact counts during an active touch retain
-  contact for recovery within 100 ms; persistent malformed data cancels input
-  safely. Malformed idle reports allow input to rearm, while valid zero-contact
-  and lift reports release immediately. Failed or incomplete I2C transfers
-  retain throttled diagnostics and error handling.
-* Keep the JC3248W535 controller active during display sleep using backlight-only
-  blanking, restoring touch wake at the cost of higher sleep power use. Skip panel
-  wake commands in backlight-only mode to avoid overlapping active SPI transfers.
-* Remote-log initialization can retry after allocation failure, and bounded
-  snapshots copy metadata and records from one consistent store state.
-  Log responses cache individual JSON segments instead of reserializing the
-  whole snapshot for every network chunk.
-* Canceled crash-summary requests remain retryable; transient failures use
-  exponential backoff capped at 30 seconds without slowing log polling.
-* Portal component-capacity checks preserve C operators in complex expressions
-  and cache compiler results across boards.
-* Inkplate IDF 4 builds use the legacy firmware ELF-hash API and exclude
-  newer reset enum values. Crash summaries retain saved registers and firmware
-  identity without requiring the newer panic-text API.
-* Display-less builds omit display-only fields from the configuration log
-  summary, fixing E-Paper Frame compilation.
-* ESP32-S3 remote logging pins its dropped-record counter to internal DRAM,
-  where the SDK uses native atomic operations despite conservative compiler
-  lock-free reporting. Other targets retain the compile-time lock-free check.
-* Current-boot reset labels in retained crash reports now include the SDK's
-  External reset value: Software is `3` and Panic is `4`. Previously, software
-  restarts and all later reset reasons were mislabeled by one enum position.
-* Crash summary and coredump download routes now register before the parent
-  log route. ESPAsyncWebServer's child-path matching previously returned
-  ordinary log JSON for both crash URLs, causing unavailable summary fields
-  and JSON files named as binary coredumps.
-* Pad Editor selection outlines no longer flicker while editing button
-  properties. Copy, Paste, and Clear use consistent button styles, and status
-  notifications stay clear of the editor's command buttons.
 * Display Sleep retains touch polling with a task delay capped at 20 ms when
   touch is initialized, preventing quick wake taps from falling between the
   previous 200 ms sleep polls. Serial logs include sleep/wake transition timing
@@ -146,6 +114,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserving the first intentional tap afterward. Held or renewed contacts
   and read errors retain click-through protection. Isolated short sampling
   gaps are debug-level; warnings remain for errors and sustained or long stalls.
+* Keep the JC3248W535 controller active during display sleep using backlight-only
+  blanking, restoring touch wake at the cost of higher sleep power use. Skip panel
+  wake commands in backlight-only mode to avoid overlapping active SPI transfers.
+* Restore JC3248W535 touch continuity and Mousepad movement across malformed
+  AXS15231B reports. Unsupported contact counts during an active touch retain
+  contact for recovery within 100 ms; persistent malformed data cancels input
+  safely. Malformed idle reports allow input to rearm, while valid zero-contact
+  and lift reports release immediately. Failed or incomplete I2C transfers
+  retain throttled diagnostics and error handling.
+* Suppress repeated idle touch-cancel debug logs during OTA updates while
+  preserving input resets, release guards, and one-time active-touch diagnostics.
+* Serial logging respects severity filters, serializes concurrent output,
+  sanitizes control characters, and marks truncated messages. Memory diagnostics
+  report valid samples instead of misleading unavailable values.
+* Display-less builds omit display-only fields from the configuration log
+  summary, fixing E-Paper Frame compilation.
+* Portal component-capacity checks preserve C operators in complex expressions
+  and cache compiler results across boards.
 
 ## [1.36.0] - 2026-10-04
 
