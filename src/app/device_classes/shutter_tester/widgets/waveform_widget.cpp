@@ -479,6 +479,7 @@ static void waveform_destroy(WidgetState* state) {
 
 // ---- Registration ----
 
+static const WidgetPreview waveform_preview = {"Waveform", "show_chart"};
 REGISTER_WIDGET(waveform, nullptr, true);
 
 #endif // HAS_DISPLAY && IS_SHUTTER_TESTER

@@ -28,8 +28,11 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
 
 const fields = ['name', 'icon', 'second_icon', 'axis_field', 'horizontal_icon', 'vertical_icon', 'default_axis'];
-for (const file of fs.readdirSync('src/app/widgets').filter(name => name.endsWith('_widget.cpp'))) {
-    const source = fs.readFileSync('src/app/widgets/' + file, 'utf8');
+const widgetFiles = fs.readdirSync('src/app/widgets').filter(name => name.endsWith('_widget.cpp'))
+    .map(name => 'src/app/widgets/' + name);
+widgetFiles.push('src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp');
+for (const file of widgetFiles) {
+    const source = fs.readFileSync(file, 'utf8');
     const match = source.match(/static const WidgetPreview (\w+)_preview = \{([^}]+)\};/);
     if (!match) continue;
     const values = JSON.parse('[' + match[2].replace(/nullptr/g, 'null') + ']');
@@ -41,6 +44,7 @@ for (const file of fs.readdirSync('src/app/widgets').filter(name => name.endsWit
 const fragment = fs.readFileSync('src/app/web/pad-editor.fragment.html', 'utf8');
 const selector = fragment.match(/<select id="pad-edit-widget-type"[\s\S]*?<\/select>/)[0];
 const types = [...selector.matchAll(/<option value="([^"]+)"/g)].map(match => match[1]);
+types.push('waveform');
 for (const widget_type of types) {
     const cell = createElement();
     context.padRenderCellContent(cell, { widget_type });
