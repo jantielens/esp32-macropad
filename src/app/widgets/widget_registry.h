@@ -23,11 +23,22 @@ struct WidgetState {
 struct WidgetPreview {
     const char* name;
     const char* icon;
-    const char* second_icon = nullptr;
-    const char* axis_field = nullptr;
-    const char* horizontal_icon = nullptr;
-    const char* vertical_icon = nullptr;
-    const char* default_axis = nullptr;
+    const char* second_icon;
+    const char* axis_field;
+    const char* horizontal_icon;
+    const char* vertical_icon;
+    const char* default_axis;
+
+    constexpr WidgetPreview(const char* preview_name = nullptr,
+                            const char* preview_icon = nullptr,
+                            const char* preview_second_icon = nullptr,
+                            const char* preview_axis_field = nullptr,
+                            const char* preview_horizontal_icon = nullptr,
+                            const char* preview_vertical_icon = nullptr,
+                            const char* preview_default_axis = nullptr)
+        : name(preview_name), icon(preview_icon), second_icon(preview_second_icon),
+         axis_field(preview_axis_field), horizontal_icon(preview_horizontal_icon),
+         vertical_icon(preview_vertical_icon), default_axis(preview_default_axis) {}
 };
 
 struct WidgetType {
@@ -54,7 +65,7 @@ struct WidgetType {
     void (*onShow)(WidgetState* state);
     void (*onHide)(WidgetState* state);
     const char* (*validateConfig)(JsonObjectConst button);
-    const WidgetPreview* preview = nullptr;
+    const WidgetPreview* preview;
 };
 
 const WidgetType* widget_find(const char* type_name);
