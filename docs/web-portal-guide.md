@@ -324,7 +324,7 @@ stopped after reboot; it does not expose a CDC serial console.
 
 | Element | Description |
 |---------|-------------|
-| **Transport** | In Connectivity > Keyboard & Mouse: USB enables keyboard, mouse, and gamepad control, BLE enables keyboard only, and Off disables all HID output. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
+| **Transport** | In Connectivity > Keyboard, Mouse & Gamepad: USB enables keyboard, mouse, and gamepad control, BLE enables keyboard only, and Off disables all HID output. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
 | **Active connection** | Separate section showing the running USB/BLE backend and `ready`, `busy`, or `disconnected` status, or Keyboard disabled when Off; changing the selector does not change this section |
 | **BLE status indicator** | Shown when BLE is active: disabled, ready, pairing, connected, or error |
 | **Name** | Shows the configured device name plus ` USB` or ` BLE` for the active connection |

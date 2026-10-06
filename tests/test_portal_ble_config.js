@@ -172,9 +172,9 @@ for (const file of ['portal_config.js', 'portal_fragment_init.js']) {
     assert.strictEqual(elements['keyboard-pending'].textContent, 'Off pending reboot');
     assert.strictEqual(elements['keyboard-active-heading'].textContent, 'Active USB Connection');
     const hidFragment = fs.readFileSync('src/app/web/hid.fragment.html', 'utf8');
-    assert.match(hidFragment, /<h2>.*Keyboard &amp; Mouse<\/h2>/);
+    assert.match(hidFragment, /<h2>.*Keyboard, Mouse &amp; Gamepad<\/h2>/);
     const hidComponent = fs.readFileSync('src/app/components/hid_component.cpp', 'utf8');
-    assert.match(hidComponent, /REGISTER_NAV_COMPONENT\(hid, "hid", "connectivity", "Keyboard & Mouse", 20, "hid"\)/);
+    assert.match(hidComponent, /REGISTER_NAV_COMPONENT\(hid, "hid", "connectivity", "Keyboard, Mouse & Gamepad", 20, "hid"\)/);
     assert.match(hidFragment, /aria-describedby="keyboard-transport-help"/);
     assert.match(hidFragment, /id="keyboard-transport-help">USB enables keyboard, mouse, and gamepad control\. BLE enables keyboard control only\. Off disables all HID control\./);
     assert.match(hidFragment, /gap:12px/);

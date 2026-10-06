@@ -1473,7 +1473,7 @@ offers Off plus compiled transports, including on single-backend boards.
 Explicitly saved USB/BLE choices remain unchanged; devices without a saved
 choice become Off after updating. With neither backend compiled, keyboard
 fields, navigation, and the key action are absent. The `hid` fragment displays
-**Keyboard & Mouse** in both navigation and the fragment heading. The transport
+**Keyboard, Mouse & Gamepad** in both navigation and the fragment heading. The transport
 note explains that USB enables keyboard and mouse control, BLE enables keyboard
 control only, and Off disables both. Its active connection section follows the
 running backend, not the selector. Save is disabled for an unchanged preference; a saved preference

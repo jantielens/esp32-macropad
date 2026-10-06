@@ -576,7 +576,7 @@ defaults are unchanged until you configure these actions.
 The **Send keys** action sends keystrokes through the device's selected USB or
 BLE transport. Both use the same DSL and US ASCII mapping. Native USB is enabled
 on supported builds, including `jc1060p470c-sd`, `jc3636w518`, and `jc3636w518-sd`.
-Both JC3636W518 variants disable BLE. Choose a supported transport under **Connectivity > Keyboard & Mouse**,
+Both JC3636W518 variants disable BLE. Choose a supported transport under **Connectivity > Keyboard, Mouse & Gamepad**,
 save, then reboot. Off is the initial default and rejects key actions.
 Single-backend builds offer Off and their supported backend. There is no
 automatic fallback to another transport.
@@ -777,7 +777,7 @@ Widgets replace the standard button rendering with specialized visualizations or
 
 On devices with touch and USB HID support, select **Mousepad** to turn a
 button into a relative USB mouse surface. Select **USB** in
-**Connectivity > Keyboard & Mouse**, save, and reboot. Connect the device's native
+**Connectivity > Keyboard, Mouse & Gamepad**, save, and reboot. Connect the device's native
 USB device port to your computer using a data cable. No companion application
 is required; keyboard and mouse share the connection.
 
@@ -946,7 +946,7 @@ default to `"left"`, while invalid values are rejected.
 
 ### Gamepad Controls
 
-Select **USB** under **Connectivity > Keyboard & Mouse**, save, reboot, and
+Select **USB** under **Connectivity > Keyboard, Mouse & Gamepad**, save, reboot, and
 connect the native USB port. Gamepad output follows this transport setting;
 BLE and Off do not expose a gamepad. This is generic USB HID, not XInput.
 

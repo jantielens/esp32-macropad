@@ -440,7 +440,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             for item in category["items"]:
                 if item["id"] == "ble":
                     item["id"] = "hid"
-                    item["display_name"] = "Keyboard & Mouse"
+                    item["display_name"] = "Keyboard, Mouse & Gamepad"
         if profile == "esp32-p4-lcd4b":
             nav["primary"] = {"fragment": "pad-editor", "label": "Pad Editor", "icon": ""}
             nav["categories"] = [category for category in nav["categories"] if category["id"] != "sensors"]

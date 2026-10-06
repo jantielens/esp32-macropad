@@ -319,7 +319,7 @@ On a Macropad build, make your first button do something you can see:
 
 No Home Assistant connection or HID setup is needed for this first test.
 
-For HID controls, select your transport in **Connectivity > Keyboard & Mouse**,
+For HID controls, select your transport in **Connectivity > Keyboard, Mouse & Gamepad**,
 save, and reboot. Output defaults to Off. On dual-USB-C P4 boards, use native
 USB/OTG for HID and USB-UART for flashing and logs; see
 [USB connector and power guidance](docs/web-portal-guide.md#keyboard).
