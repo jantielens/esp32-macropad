@@ -77,6 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Restore JC3248W535 touch input by treating completed AXS15231B reports with
+  unsupported contact counts as releases instead of read errors. Failed or
+  incomplete I2C transfers retain throttled diagnostics and error handling.
+* Keep the JC3248W535 controller active during display sleep using backlight-only
+  blanking, restoring touch wake at the cost of higher sleep power use. Skip panel
+  wake commands in backlight-only mode to avoid overlapping active SPI transfers.
 * Remote-log initialization can retry after allocation failure, and bounded
   snapshots copy metadata and records from one consistent store state.
   Log responses cache individual JSON segments instead of reserializing the

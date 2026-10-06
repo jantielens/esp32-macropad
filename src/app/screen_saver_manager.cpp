@@ -359,6 +359,7 @@ static void handle_pending_requests() {
 				// Drivers that complete wake in a single step (e.g. hard-reset wake that
 				// replays the full init sequence) report needsTwoPhaseWake()==false so the
 				// gap and second lock acquisition are skipped.
+				#if !SCREENSAVER_BACKLIGHT_ONLY
 				if (g_state == ScreenSaverState::Asleep) {
 						if (displayManager && displayManager->getDriver()) {
 								DisplayDriver* drv = displayManager->getDriver();
@@ -376,6 +377,7 @@ static void handle_pending_requests() {
 								}
 						}
 				}
+				#endif
 
 				LOGT("SAVER", "Wake: from=%u setup=%lums fade=%ums shift=%d,%d", unsigned(wake_from),
 						(unsigned long)(millis() - g_wake_started_ms), unsigned(fade_in_ms()), dx, dy);

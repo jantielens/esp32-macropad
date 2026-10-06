@@ -10,6 +10,8 @@ private:
 		uint8_t scl, sda, int_pin, addr, rotation;
 
 		bool use_interrupt = true;
+		bool error_logged = false;
+		uint32_t last_error_log_ms = 0;
 
 		std::atomic<uint32_t> touch_int{0};
 		bool retry_read = false;

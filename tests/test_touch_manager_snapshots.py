@@ -307,6 +307,76 @@ with tempfile.TemporaryDirectory() as directory:
         subprocess.run([str(executable)], check=True)
 print("PASS: sleeping display retains responsive initialized-touch polling and no-touch throttling")
 
+subprocess.run(["c++", "-E", "-x", "c++", "-I", str(root), "-"], input=r'''
+#include "src/boards/jc3248w535/board_overrides.h"
+#if !SCREENSAVER_BACKLIGHT_ONLY
+#error JC3248W535 must keep the AXS controller awake for touch wake
+#endif
+''', text=True, stdout=subprocess.DEVNULL, check=True)
+print("PASS: JC3248W535 uses backlight-only sleep for touch wake")
+
+saver_source = (root / "src/app/screen_saver_manager.cpp").read_text()
+wake_start = saver_source.index("// Wake panel in two phases")
+wake_end = saver_source.index('LOGT("SAVER", "Wake:', wake_start)
+wake_harness = r'''
+#include <cassert>
+#define SCREENSAVER_BACKLIGHT_ONLY TEST_BACKLIGHT_ONLY
+#define pdMS_TO_TICKS(value) (value)
+static unsigned delayed_ms = 0;
+static void vTaskDelay(unsigned duration) { delayed_ms += duration; }
+enum class ScreenSaverState { Asleep, Awake };
+static ScreenSaverState g_state = ScreenSaverState::Asleep;
+struct DisplayDriver {
+    unsigned sleep_out = 0, display_on = 0;
+    bool two_phase = true;
+    bool needsTwoPhaseWake() { return two_phase; }
+    void displayWakeSleepOut() { ++sleep_out; }
+    void displayWakeDisplayOn() { ++display_on; }
+};
+struct DisplayManager {
+    DisplayDriver driver;
+    unsigned locks = 0, unlocks = 0;
+    DisplayDriver* getDriver() { return &driver; }
+    void lock() { ++locks; }
+    void unlock() { ++unlocks; }
+};
+static DisplayManager manager;
+static DisplayManager* displayManager = &manager;
+static void wake_panel() {
+'''
+wake_harness += saver_source[wake_start:wake_end] + "}\n"
+wake_harness += r'''
+int main() {
+    assert(displayManager == &manager);
+    wake_panel();
+    assert(manager.driver.sleep_out == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    assert(manager.driver.display_on == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    assert(delayed_ms == (TEST_BACKLIGHT_ONLY ? 0U : 120U));
+    assert(manager.locks == (TEST_BACKLIGHT_ONLY ? 0U : 2U));
+    assert(manager.unlocks == manager.locks);
+    g_state = ScreenSaverState::Awake;
+    wake_panel();
+    assert(manager.driver.sleep_out == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    assert(manager.driver.display_on == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    g_state = ScreenSaverState::Asleep;
+    manager.driver.two_phase = false;
+    wake_panel();
+    assert(manager.driver.sleep_out == (TEST_BACKLIGHT_ONLY ? 0U : 2U));
+    assert(manager.driver.display_on == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    assert(delayed_ms == (TEST_BACKLIGHT_ONLY ? 0U : 120U));
+}
+'''
+with tempfile.TemporaryDirectory() as directory:
+    test_source = pathlib.Path(directory) / "wake_panel.cpp"
+    executable = pathlib.Path(directory) / "wake_panel"
+    test_source.write_text(wake_harness)
+    for backlight_only in (0, 1):
+        subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        "-Wno-unused-function", f"-DTEST_BACKLIGHT_ONLY={backlight_only}",
+                        str(test_source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+print("PASS: backlight-only wake skips panel transactions; panel sleep preserves phased wake")
+
 header = (root / "src/app/touch_manager.h").read_text()
 capabilities = header[header.index("#if HAS_DISPLAY && HAS_TOUCH\nuint8_t touch_manager_contact_capacity()"):
                       header.index("#endif // TOUCH_MANAGER_H")]

@@ -11,6 +11,9 @@ arduino = r'''
 #include <cstdint>
 #include <cstddef>
 #include <algorithm>
+#include <cstdarg>
+#include <cstdio>
+#include <string>
 #define BOARD_CONFIG_H
 #define LOG_MANAGER_H
 #define DISPLAY_WIDTH 320
@@ -23,7 +26,20 @@ arduino = r'''
 #define FALLING 1
 #define LOGI(...) ((void)0)
 #define LOGT(...) ((void)0)
-#define LOGW(...) ((void)0)
+static unsigned warning_count = 0;
+static std::string last_warning;
+static uint32_t mock_now = 0;
+inline uint32_t millis() { return mock_now; }
+inline void mock_warning(const char*, const char* format, ...) {
+    char message[512];
+    va_list arguments;
+    va_start(arguments, format);
+    vsnprintf(message, sizeof(message), format, arguments);
+    va_end(arguments);
+    last_warning = message;
+    ++warning_count;
+}
+#define LOGW(...) mock_warning(__VA_ARGS__)
 #define LOGE(...) ((void)0)
 static void (*mock_irq)() = nullptr;
 inline int digitalPinToInterrupt(int pin) { return pin; }
@@ -164,8 +180,10 @@ int main() {
     assert(Wire.requests == requests + 1 && filter.update(sample, 500).pressed);
     Wire.packet({0, 1, 0xc0, 100, 0, 80, 0, 0});
     mock_irq();
-    assert(driver.readSample().status == TouchReadStatus::Unchanged);
+    sample = driver.readSample();
+    assert(sample.status == TouchReadStatus::Fresh && !sample.pressed);
     Wire.result = 4;
+    mock_irq();
     assert(filter.update(driver.readSample(), 600).pressed);
     assert(!filter.update(driver.readSample(), 700).pressed && filter.canceled);
     assert(Wire.requests == requests + 2);
@@ -190,14 +208,103 @@ int main() {
     sample = driver.readSample();
     assert(sample.status == TouchReadStatus::Error && sample.horizontal == 100);
     Wire.packet({0, 2, 0, 100, 0, 80, 0, 0});
-    assert(driver.readSample().status == TouchReadStatus::Error);
+    sample = driver.readSample();
+    assert(sample.status == TouchReadStatus::Fresh && !sample.pressed && sample.horizontal == 100);
     Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
     Wire.read_failure = true;
+    mock_irq();
     assert(driver.readSample().status == TouchReadStatus::Error);
     Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
     driver.setRotation(1);
     sample = driver.readSample();
     assert(sample.status == TouchReadStatus::Fresh && sample.horizontal == 159 && sample.vertical == 100);
+
+    AXS15231B_Touch polling(22, 21, 0xff, 0x3b, 0);
+    assert(polling.begin());
+    polling.setOffsets(0, 319, 319, 0, 239, 239);
+    TouchSnapshotFilter snapshot_filter;
+    auto read_snapshot = [&]() {
+        TouchSnapshot snapshot;
+        const auto status = polling.readSample();
+        snapshot.status = status == AXS15231B_Touch::ReadStatus::Fresh ? TouchReadStatus::Fresh :
+            status == AXS15231B_Touch::ReadStatus::Unchanged ? TouchReadStatus::Unchanged : TouchReadStatus::Error;
+        snapshot.count = polling.isPressed() ? 1 : 0;
+        return snapshot;
+    };
+    Wire.packet({0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02});
+    const auto startup_snapshot = read_snapshot();
+    assert(startup_snapshot.status == TouchReadStatus::Fresh && startup_snapshot.count == 0);
+    assert(snapshot_filter.update(startup_snapshot, 0).count == 0 && !snapshot_filter.canceled);
+    Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
+    assert(snapshot_filter.update(read_snapshot(), 0).count == 1);
+    Wire.packet({0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff});
+    for (unsigned now = 10; now <= 200; now += 10) {
+        const auto snapshot = read_snapshot();
+        assert(snapshot.status == TouchReadStatus::Fresh && snapshot.count == 0);
+        assert(snapshot_filter.update(snapshot, now).count == 0 && !snapshot_filter.canceled);
+    }
+    Wire.packet({0, 1, 0, 150, 0, 90, 0, 0});
+    assert(snapshot_filter.update(read_snapshot(), 210).count == 1);
+    Wire.packet({0, 1, 0xc0, 150, 0, 90, 0, 0});
+    assert(snapshot_filter.update(read_snapshot(), 220).count == 0);
+    Wire.packet({0, 1, 0x80, 150, 0, 90, 0, 0});
+    assert(snapshot_filter.update(read_snapshot(), 230).count == 0);
+    unsigned timeline = 240;
+    const unsigned idle_warnings = warning_count;
+    const uint8_t idle_values[] = {0x02, 0x29, 0xff};
+    for (unsigned cycle = 0; cycle < 3; ++cycle) {
+        Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
+        assert(snapshot_filter.update(read_snapshot(), timeline).count == 1);
+        timeline += 10;
+        const uint8_t idle_value = idle_values[cycle];
+        Wire.packet({idle_value, idle_value, idle_value, idle_value, idle_value, idle_value, idle_value, idle_value});
+        for (unsigned idle = 0; idle < 500; ++idle) {
+            const auto snapshot = read_snapshot();
+            assert(snapshot.status == TouchReadStatus::Fresh && snapshot.count == 0);
+            assert(snapshot_filter.update(snapshot, timeline).count == 0 && !snapshot_filter.canceled);
+            timeline += 10;
+        }
+        Wire.packet({0, 1, 0x80, 100, 0, 80, 0, 0});
+        assert(snapshot_filter.update(read_snapshot(), timeline).count == 0);
+        timeline += 10;
+    }
+    assert(warning_count == idle_warnings);
+    Wire.packet({0, 2, 0, 100, 0, 80, 0, 0});
+    auto ignored_snapshot = read_snapshot();
+    assert(ignored_snapshot.status == TouchReadStatus::Fresh && ignored_snapshot.count == 0);
+    Wire.packet({0x29, 0x29, 0x29, 0x29, 0x29, 0x29, 0x29, 0x28});
+    ignored_snapshot = read_snapshot();
+    assert(ignored_snapshot.status == TouchReadStatus::Fresh && ignored_snapshot.count == 0);
+    Wire.packet({0xff, 0xff, 0x00, 0x00, 0x01, 0x80, 0xbe, 0x00});
+    ignored_snapshot = read_snapshot();
+    assert(ignored_snapshot.status == TouchReadStatus::Fresh && ignored_snapshot.count == 0);
+    assert(warning_count == idle_warnings);
+    Wire.result = 4;
+    assert(read_snapshot().status == TouchReadStatus::Error);
+    assert(last_warning.find("stage=endTransmission actual=4 expected=0") != std::string::npos);
+    const unsigned warnings = warning_count;
+    assert(warnings == idle_warnings + 1);
+    assert(read_snapshot().status == TouchReadStatus::Error);
+    assert(warning_count == warnings);
+    mock_now = 5000;
+    assert(read_snapshot().status == TouchReadStatus::Error);
+    assert(warning_count == warnings + 1);
+    assert(last_warning.find("stage=endTransmission actual=4 expected=0") != std::string::npos);
+    Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
+    Wire.requested_size = 0;
+    mock_now = 10000;
+    assert(read_snapshot().status == TouchReadStatus::Error);
+    assert(last_warning.find("stage=requestFrom actual=0 expected=8") != std::string::npos);
+
+    Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
+    assert(snapshot_filter.update(read_snapshot(), timeline).count == 1);
+    Wire.result = 4;
+    assert(snapshot_filter.update(read_snapshot(), timeline + 10).count == 1);
+    assert(snapshot_filter.update(read_snapshot(), timeline + 110).count == 0 && snapshot_filter.canceled);
+    Wire.packet({0x29, 0x29, 0x29, 0x29, 0x29, 0x29, 0x29, 0x29});
+    assert(snapshot_filter.update(read_snapshot(), timeline + 120).count == 0 && !snapshot_filter.canceled);
+    Wire.packet({0, 1, 0, 100, 0, 80, 0, 0});
+    assert(snapshot_filter.update(read_snapshot(), timeline + 130).count == 1);
 }
 ''',
     "cst": r'''
