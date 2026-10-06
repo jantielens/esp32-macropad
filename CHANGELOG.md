@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-05
+ms.date: 2026-10-06
 ms.topic: reference
 ---
 
@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Native USB HID keyboard, consumer-control, mouse, and gamepad support on
+  JC3248W535. Select USB in the keyboard transport settings and reboot;
+  output defaults to Off. Native USB no longer provides a serial log console,
+  and serial diagnostics use UART0 at 115200 baud.
 * Development-only `POST /api/debug/crash` for abort, failed assertion, and
   invalid-memory-write tests, gated by `DEBUG_CRASH_API_ENABLED`. The flag
   defaults off on every board and requires explicit dev/test opt-in; keep it
@@ -47,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* JC3248W535 uses two 4 MiB OTA firmware slots to fit USB HID while retaining
+  native Extensions and 7.625 MiB of filesystem storage. Back up files and
+  Extension packages before migrating from the 3 MiB-slot layout: partition
+  offsets change and require a full serial flash, storage reinitialization,
+  and restoration. Firmware-only OTA cannot migrate the partition table;
+  OTA updates remain supported afterward. Other boards keep their layouts.
 * Redesigned the Pad Editor with a pad navigation rail, a persistent canvas
   matching the device's screen proportions, and contextual pad and button
   inspectors. Button settings are grouped into Content, Actions, and Appearance
@@ -77,9 +87,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* Restore JC3248W535 touch input by treating completed AXS15231B reports with
-  unsupported contact counts as releases instead of read errors. Failed or
-  incomplete I2C transfers retain throttled diagnostics and error handling.
+* Restore JC3248W535 touch continuity and Mousepad movement across malformed
+  AXS15231B reports. Unsupported contact counts during an active touch retain
+  contact for recovery within 100 ms; persistent malformed data cancels input
+  safely. Malformed idle reports allow input to rearm, while valid zero-contact
+  and lift reports release immediately. Failed or incomplete I2C transfers
+  retain throttled diagnostics and error handling.
 * Keep the JC3248W535 controller active during display sleep using backlight-only
   blanking, restoring touch wake at the cost of higher sleep power use. Skip panel
   wake commands in backlight-only mode to avoid overlapping active SPI transfers.
