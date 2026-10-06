@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import pathlib
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -39,8 +40,25 @@ class RemoteLogRuntimeTests(unittest.TestCase):
             "app.ino": ("remote_log_finish_boot", "Firmware ELF SHA256", "Reset reason:"),
             "web_assets.h": ("logs_fragment_html_gz", "portal_logs_js_gz"),
         }
+        with tempfile.TemporaryDirectory() as directory:
+            project = pathlib.Path(directory)
+            tools = project / "tools"
+            tools.mkdir()
+            for tool in (ROOT / "tools").iterdir():
+                (tools / tool.name).symlink_to(tool, target_is_directory=tool.is_dir())
+            app = project / "src/app"
+            app.mkdir(parents=True)
+            for name in ("web", "device_classes"):
+                shutil.copytree(ROOT / "src/app" / name, app / name)
+            (project / "src/version.h").symlink_to(ROOT / "src/version.h")
+            result = subprocess.run(["bash", str(tools / "minify-web-assets.sh")],
+                                    cwd=project, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout)
+            generated_assets = (app / "web_assets.h").read_text()
         for filename, markers in surfaces.items():
-            source = (ROOT / "src/app" / filename).read_text()
+            source = generated_assets if filename == "web_assets.h" else (
+                ROOT / "src/app" / filename).read_text()
             if filename == "portal_components.cpp":
                 source = source.replace('#include "components/logs_component.cpp"', '"logs_component.cpp"')
             source = re.sub(r'^\s*#include[^\n]*', '', source, flags=re.MULTILINE)
