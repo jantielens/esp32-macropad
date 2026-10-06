@@ -29,6 +29,14 @@ The existing E-Paper Frame profile remains available:
 http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
 ```
 
+Backlight-only and frontlight-only Screen Saver workflows use the production
+fragment with board-specific capability fixtures:
+
+```text
+http://localhost:8765/?profile=jc3248w535&fragment=screensaver
+http://localhost:8765/?profile=inkplate6flick-interactive&fragment=screensaver
+```
+
 **Notes:**
 
 * Reload the browser after changing a served HTML, CSS, or JavaScript source.

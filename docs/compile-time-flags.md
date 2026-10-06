@@ -1564,7 +1564,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/mcp_tools_config.cpp
-  - src/app/portal_components.cpp
   - src/app/screen_saver_manager.cpp
   - src/app/web_portal_config.cpp
 - **SCREENSAVER_DEFAULT_FADE_IN_MS**
