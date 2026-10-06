@@ -843,9 +843,13 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 // Print configuration (for debugging)
 void config_manager_print(const DeviceConfig *config) {
 		if (!config) return;
+		#if HAS_DISPLAY
 		LOGI("Config", "Loaded: device='%s' power=%s brightness=%u%% sleep=%us",
 		     config->device_name, config->operating_mode, unsigned(config->backlight_brightness),
 		     unsigned(config->screen_saver_timeout_seconds));
+		#else
+		LOGI("Config", "Loaded: device='%s' power=%s", config->device_name, config->operating_mode);
+		#endif
 		if (LOG_LEVEL < LOG_LEVEL_DEBUG || !log_diagnostics_enabled("Config")) return;
 		
 		LOGI("Config", "Device: %s", config->device_name);

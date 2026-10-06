@@ -21,6 +21,11 @@
 // Remote image and MJPEG fetching disabled to preserve DMA-capable internal RAM.
 #define HAS_IMAGE_FETCH false
 
+// TEMPORARY dev/test only: set to 0 after crash-dump verification.
+#ifndef DEBUG_CRASH_API_ENABLED
+#define DEBUG_CRASH_API_ENABLED 1
+#endif
+
 // ---------------------------------------------------------------------------
 // Audio (PCM510xA, 3-wire I2S)
 // ---------------------------------------------------------------------------

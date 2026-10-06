@@ -6,6 +6,9 @@
 
 #include "log_manager.h"
 #include "board_config.h"
+#if REMOTE_LOG_BUFFER_RECORDS > 0
+#include "remote_log.h"
+#endif
 #include <stdarg.h>
 #include <string.h>
 #if defined(ESP32)
@@ -39,6 +42,9 @@ void log_init(unsigned long baud) {
 		#endif
 		Serial.begin(baud);
 		g_log_manager_begun = true;
+		#if REMOTE_LOG_BUFFER_RECORDS > 0
+		remote_log_init();
+		#endif
 }
 
 void log_serial_begin() {
@@ -79,8 +85,14 @@ static inline char log_level_char(LogLevel level) {
 }
 
 void log_write(LogLevel level, const char* module, const char* format, ...) {
+		const bool serial_ready = serial_ready_for_logging();
 		if (level < LOG_LEVEL_ERROR || level > LOG_LEVEL_DEBUG || level > LOG_LEVEL ||
-		    !module || !format || !serial_ready_for_logging()) return;
+		    !module || !format) return;
+		#if REMOTE_LOG_BUFFER_RECORDS > 0
+		if (!serial_ready && !remote_log_available()) return;
+		#else
+		if (!serial_ready) return;
+		#endif
 
 		char msgbuf[192];
 		va_list args;
@@ -101,10 +113,10 @@ void log_write(LogLevel level, const char* module, const char* format, ...) {
 		    if (static_cast<unsigned char>(*cursor) < 32 || *cursor == 127) *cursor = ' ';
 		}
 
-		log_serial_begin();
+		if (serial_ready) log_serial_begin();
 		const unsigned long t = millis();
 		uint32_t suppressed = 0;
-		if (level <= LOG_LEVEL_WARN) {
+		if (serial_ready && level <= LOG_LEVEL_WARN) {
 		    uint32_t fingerprint = 2166136261U ^ uint32_t(level);
 		    for (const unsigned char* cursor = reinterpret_cast<const unsigned char*>(module); *cursor; ++cursor)
 		        fingerprint = (fingerprint ^ *cursor) * 16777619U;
@@ -143,6 +155,9 @@ void log_write(LogLevel level, const char* module, const char* format, ...) {
 		} else {
 		    snprintf(line, sizeof(line), "[%lums] %c %.24s: %s\n", t, log_level_char(level), safe_module, msgbuf);
 		}
-		Serial.print(line);
-		log_serial_end();
+		if (serial_ready) Serial.print(line);
+		#if REMOTE_LOG_BUFFER_RECORDS > 0
+		remote_log_append(line);
+		#endif
+		if (serial_ready) log_serial_end();
 }

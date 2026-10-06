@@ -37,6 +37,7 @@ void log_write(LogLevel level, const char* module, const char* format, ...);
 bool log_diagnostics_enabled(const char* module);
 void log_serial_begin();
 void log_serial_end();
+void remote_log_finish_boot();
 
 // Convenience duration helper.
 inline void log_duration(const char* module, const char* label, unsigned long start_ms) {

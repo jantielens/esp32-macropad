@@ -73,7 +73,16 @@ def expression_is_true(expression: str, macros: dict[str, str]) -> bool:
     value = value.replace("&&", " and ").replace("||", " or ")
     value = re.sub(r"!(?!=)", " not ", value)
     if not re.fullmatch(r"[\s0-9()andor!not]+", value):
-        raise RuntimeError(f"unsupported preprocessor expression: {expression!r}")
+        if not re.fullmatch(r"[\s0-9()andornot<>=?:+*/%&|^~!\-]+", value):
+            raise RuntimeError(f"unsupported preprocessor expression: {expression!r}")
+        result = subprocess.run(
+            ["g++", "-E", "-P", "-x", "c++", "-"],
+            input=f"#if {value}\n1\n#else\n0\n#endif\n",
+            text=True, capture_output=True,
+        )
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip())
+        return result.stdout.strip() == "1"
     try:
         return bool(eval(value, {"__builtins__": {}}, {}))
     except (SyntaxError, TypeError) as error:

@@ -3,6 +3,8 @@ include(GoogleTest)
 include(CMakeParseArguments)
 
 add_test(NAME test_log_manager COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager.py)
+add_test(NAME test_log_manager_serial COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager_serial.py)
+add_test(NAME test_remote_log_runtime COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_remote_log_runtime.py)
 add_test(NAME test_config_identifier_guards COMMAND python3
     ${PROJECT_SOURCE_DIR}/tests/test_config_identifier_guards.py --compiler ${CMAKE_CXX_COMPILER})
 
@@ -55,6 +57,7 @@ set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
 add_host_gtest(test_mousepad test_mousepad.cpp)
+add_host_legacy_test(test_remote_log SOURCES test_remote_log.cpp)
 add_host_gtest(test_gamepad test_gamepad.cpp)
 add_host_gtest(test_web_portal_timing test_web_portal_timing.cpp)
 
@@ -450,6 +453,7 @@ foreach(script
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
     test_portal_ble_config.js test_portal_pad_preview.js test_portal_startup.js
+    test_portal_logs.js
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} node ${PROJECT_SOURCE_DIR}/tests/${script})

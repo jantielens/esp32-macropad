@@ -32,6 +32,11 @@
 #include "health_history.h"
 #endif
 #include <WiFi.h>
+#include <esp_system.h>
+#include <esp_idf_version.h>
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include <esp_app_desc.h>
+#endif
 
 #if HAS_DISPLAY
 #include "binding_builtin_schemes.h"
@@ -190,6 +195,36 @@ void setup()
 
 	LOGI("SYS", "Boot");
 	LOGI("SYS", "Firmware: v%s", FIRMWARE_VERSION);
+	LOGI("SYS", "SDK: %s", esp_get_idf_version());
+	const esp_reset_reason_t reset_reason = esp_reset_reason();
+	const char* reset_name = "Unknown";
+	switch (reset_reason) {
+		case ESP_RST_POWERON: reset_name = "Power On"; break;
+		case ESP_RST_SW: reset_name = "Software"; break;
+		case ESP_RST_PANIC: reset_name = "Panic"; break;
+		case ESP_RST_INT_WDT: reset_name = "Interrupt WDT"; break;
+		case ESP_RST_TASK_WDT: reset_name = "Task WDT"; break;
+		case ESP_RST_WDT: reset_name = "WDT"; break;
+		case ESP_RST_DEEPSLEEP: reset_name = "Deep Sleep"; break;
+		case ESP_RST_BROWNOUT: reset_name = "Brownout"; break;
+		case ESP_RST_SDIO: reset_name = "SDIO"; break;
+		#if ESP_IDF_VERSION_MAJOR >= 5
+		case ESP_RST_USB: reset_name = "USB"; break;
+		case ESP_RST_JTAG: reset_name = "JTAG"; break;
+		case ESP_RST_EFUSE: reset_name = "eFuse"; break;
+		case ESP_RST_PWR_GLITCH: reset_name = "Power Glitch"; break;
+		case ESP_RST_CPU_LOCKUP: reset_name = "CPU Lockup"; break;
+		#endif
+		default: break;
+	}
+	LOGI("SYS", "Reset reason: %s (%d)", reset_name, static_cast<int>(reset_reason));
+	char elf_sha256[65];
+	#if ESP_IDF_VERSION_MAJOR >= 5
+	esp_app_get_elf_sha256(elf_sha256, sizeof(elf_sha256));
+	#else
+	esp_ota_get_app_elf_sha256(elf_sha256, sizeof(elf_sha256));
+	#endif
+	LOGI("SYS", "Firmware ELF SHA256: %s", elf_sha256);
 	LOGI("SYS", "Chip: %s (Rev %d)", ESP.getChipModel(), ESP.getChipRevision());
 	LOGI("SYS", "CPU: %d MHz", ESP.getCpuFreqMHz());
 	LOGI("SYS", "Flash: %d MB", ESP.getFlashChipSize() / (1024 * 1024));
@@ -665,6 +700,9 @@ void setup()
 	// Start the screen saver inactivity timer after the first runtime screen is visible.
 	// This avoids counting boot + splash time as "inactivity".
 	screen_saver_manager_notify_activity(false);
+	#endif
+	#if REMOTE_LOG_BUFFER_RECORDS > 0
+	remote_log_finish_boot();
 	#endif
 }
 

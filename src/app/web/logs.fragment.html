@@ -1,0 +1,67 @@
+<section id="logs-root">
+  <div class="section-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <h2 class="mb-0">Logs</h2>
+  </div>
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <button id="logs-pause" type="button" class="btn btn-outline-secondary btn-sm" title="Pause polling" aria-pressed="false">Pause</button>
+    <button id="logs-clear" type="button" class="btn btn-outline-danger btn-sm" title="Clear browser history">Clear</button>
+    <button id="logs-copy" type="button" class="btn btn-outline-secondary btn-sm" title="Copy retained logs">Copy</button>
+    <button id="logs-download" type="button" class="btn btn-outline-secondary btn-sm" title="Download retained logs">Download</button>
+    <div class="form-check form-switch ms-sm-auto">
+      <input id="logs-follow" class="form-check-input" type="checkbox" role="switch" checked>
+      <label class="form-check-label" for="logs-follow">Auto-scroll</label>
+    </div>
+  </div>
+  <div id="logs-error" class="alert alert-warning d-none" role="alert"></div>
+  <div id="logs-status" class="text-muted small mb-2" role="status">Connecting...</div>
+  <pre id="logs-output" tabindex="0" aria-label="Device logs"></pre>
+  <div id="logs-crash" class="border-top mt-3 pt-3">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+      <h3 class="fs-6 mb-0">Retained crash</h3>
+      <div class="d-flex flex-wrap gap-2">
+        <button id="logs-crash-copy" type="button" class="btn btn-outline-secondary btn-sm" title="Copy crash details and current boot diagnostics" disabled>Copy crash summary</button>
+        <button id="logs-crash-download" type="button" class="btn btn-outline-secondary btn-sm" disabled>Download crash dump</button>
+      </div>
+    </div>
+    <div id="logs-crash-status" class="text-muted small mb-2" role="status">Checking saved crash...</div>
+    <dl id="logs-crash-details" class="row small mb-0 d-none">
+      <dt class="col-sm-3">Panic reason</dt><dd id="logs-crash-reason" class="col-sm-9"></dd>
+      <dt class="col-sm-3">Task</dt><dd id="logs-crash-task" class="col-sm-9"></dd>
+      <dt class="col-sm-3">Exception cause</dt><dd id="logs-crash-cause" class="col-sm-9"></dd>
+      <dt class="col-sm-3">Exception PC</dt><dd id="logs-crash-pc" class="col-sm-9 font-monospace"></dd>
+      <dt id="logs-crash-address-label" class="col-sm-3">Faulting address / trap value</dt><dd id="logs-crash-address" class="col-sm-9 font-monospace"></dd>
+      <dt class="col-sm-3">Return address (RA / A0)</dt><dd id="logs-crash-ra" class="col-sm-9 font-monospace"></dd>
+      <dt class="col-sm-3">Stack pointer (SP / A1)</dt><dd id="logs-crash-sp" class="col-sm-9 font-monospace"></dd>
+      <dt class="col-sm-3">Crashed firmware ELF SHA256</dt><dd id="logs-crash-elf" class="col-sm-9 font-monospace"></dd>
+      <dt class="col-sm-3 mt-2">Current boot reset reason</dt><dd id="logs-crash-reset" class="col-sm-9 mt-sm-2"></dd>
+      <dt class="col-sm-3">Current firmware ELF SHA256</dt><dd id="logs-crash-current-elf" class="col-sm-9 font-monospace"></dd>
+    </dl>
+    <details id="logs-crash-register-section" class="d-none mt-2">
+      <summary class="small">Saved registers</summary>
+      <dl id="logs-crash-registers" class="row small mt-2 mb-0"></dl>
+    </details>
+  </div>
+</section>
+<style>
+  #logs-root { min-width: 0; }
+  #logs-pause { min-width: 74px; }
+  #logs-output {
+    height: min(60vh, 640px);
+    min-height: 240px;
+    width: 100%;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 4px;
+    background: var(--bs-tertiary-bg);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  #logs-status { overflow-wrap: anywhere; }
+  #logs-crash-status, #logs-crash-details dd, #logs-crash-registers dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+</style>

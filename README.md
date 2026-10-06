@@ -134,6 +134,23 @@ The portal also handles settings, media, health diagnostics, and screen previews
 with optional HTTP Basic Auth. Supported builds offer **over-the-air updates**
 with rollback protection.
 
+PSRAM builds also offer **Device > Logs** with Full Mode access:
+recent application logs, a retained startup snapshot, and browser copy/download.
+Startup records include reset diagnostics and firmware identity. SDK-supported
+flash coredumps appear separately with readable exception diagnostics, saved
+registers, summary copy, and bounded download.
+Access follows the device's authentication settings. Capture uses bounded PSRAM
+storage and leaves serial output independent.
+See the [log viewer guide](docs/web-portal-guide.md#device-logs) and
+[log API reference](docs/dev/web-portal.md#remote-logs).
+
+Development builds for `esp32-p4-lcd4b`, `jc3636w518`, and `jc3636w518-sd` temporarily enable
+`POST /api/debug/crash` for abort, assertion, and invalid-write tests, with no
+web UI. `DEBUG_CRASH_API_ENABLED` defaults off on other boards; set the relevant
+base-board override to `0` and rebuild after testing. See
+[crash injection](docs/dev/web-portal.md#development-crash-injection) for
+commands, authentication, and dump-overwrite risks.
+
 [Open the pad editor guide](docs/pad-editor-guide.md) or
 [tour the web portal](docs/web-portal-guide.md).
 

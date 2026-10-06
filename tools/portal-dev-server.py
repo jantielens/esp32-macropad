@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import copy
+import time
 import json
 import os
 import sys
@@ -86,6 +87,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_production_bundle()
         elif path == "/epaper_init.js":
             self._serve_file(EPAPER_WEB_DIR / "epaper_init.js")
+        elif path == "/portal-logs.js":
+            self._serve_file(APP_WEB_DIR / "portal_logs.js")
 
         # Prototype assets remain useful for fragments not yet migrated.
         elif path in ("/bootstrap.min.css", "/portal-custom.css", "/portal_nav.js"):
@@ -146,6 +149,21 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json(self._health())
         elif path == "/api/health/history":
             self._serve_json(self._health_history())
+        elif path == "/api/logs":
+            self._serve_logs(query)
+        elif path == "/api/logs/crash":
+            self._serve_json({"available": True, "size": 1024, "partition_size": 65536,
+                              "task": "loopTask", "pc": "0x40012345",
+                              "panic_reason": "Mock panic: <script> & text",
+                              "elf_sha256": "0123456789abcdef" * 4,
+                              "architecture": "riscv", "exception_cause": 7, "trap_value": "0x500d2000",
+                              "current_reset_reason": 3, "current_elf_sha256": "fedcba9876543210" * 4,
+                              "registers": {"MEPC": "0x40012345", "RA": "0x400cfc8c", "SP": "0x4ff41350",
+                                            "MSTATUS": "0x00001880", "MTVEC": "0x4ff00003",
+                                            "MCAUSE": "0x00000007", "MTVAL": "0x500d2000",
+                                            **{f"A{index}": "0x00000000" for index in range(8)}}})
+        elif path == "/api/logs/crash/download":
+            self._serve_bytes(bytes(range(256)) * 4, "application/octet-stream")
         elif path == "/api/component/epaper-status/status":
             self._serve_json(self._epaper_status())
 
@@ -371,9 +389,42 @@ class PortalHandler(SimpleHTTPRequestHandler):
         styles = "\n\n".join(path.read_text(encoding="utf-8") for path in files)
         self._serve_bytes(styles.encode("utf-8"), "text/css; charset=utf-8")
 
+    def _serve_logs(self, query):
+        source = query.get("source", ["recent"])[0]
+        try:
+            limit = min(32, max(1, int(query.get("limit", ["32"])[0])))
+            after = int(query["after"][0]) if "after" in query else None
+            if after is not None and not 0 <= after <= 0xffffffff:
+                raise ValueError()
+        except ValueError:
+            self._serve_json({"error": "Invalid log cursor or limit"}, 400)
+            return
+        if source not in ("recent", "boot"):
+            self._serve_json({"error": "Invalid log source"}, 400)
+            return
+        boot = source == "boot"
+        newest = 8 if boot else 280 + int(time.monotonic() - self.server.logs_started)
+        capacity = 128 if boot else 256
+        oldest = max(1, newest - capacity + 1)
+        reset = "boot_id" in query and query["boot_id"][0] != "123"
+        missed = max(0, oldest - after - 1) if after is not None and not reset else 0
+        start = oldest if after is None or reset else max(oldest, after + 1)
+        records = [{"sequence": sequence,
+                    "line": f"[{sequence * 100}ms] I {'SYS' if boot else 'Probe'}: " +
+                            ("Boot diagnostic" if boot else "Recent diagnostic <script> & text") + "\n"}
+                   for sequence in range(start, min(newest + 1, start + limit))]
+        cursor = records[-1]["sequence"] if records else (after if after is not None else newest)
+        self._serve_json({"available": True, "boot_id": 123, "capacity": capacity,
+                          "oldest": oldest, "newest": newest, "next": cursor,
+                          "missed": missed, "dropped": 0, "reset": reset,
+                          "has_more": cursor < newest, "boot_complete": True,
+                          "boot_truncated": False, "records": records})
+
     def _navigation(self, profile):
         nav = json.loads((MOCK_DIR / "nav.json").read_text(encoding="utf-8"))
         for category in nav["categories"]:
+            if category["id"] == "device":
+                category["items"].append({"id": "logs", "display_name": "Logs", "portal_script": "/portal-logs.js"})
             for item in category["items"]:
                 if item["id"] == "ble":
                     item["id"] = "hid"
@@ -491,6 +542,7 @@ def main():
 
     server = HTTPServer(("127.0.0.1", args.port), PortalHandler)
     server.profile = args.profile
+    server.logs_started = time.monotonic()
     reset_pad_fixtures(server, args.scenario)
     server.mock_config = {
         "device_name": "Kitchen Pad",

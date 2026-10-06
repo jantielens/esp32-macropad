@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 298
+Total flags: 301
 
 ### Features (HAS_*)
 
@@ -168,6 +168,7 @@ Total flags: 298
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
 - **MIN_USER_BRIGHTNESS** default: `5` — The screen saver bypasses this floor to allow sleep (brightness 0).
+- **REMOTE_LOG_BUFFER_RECORDS** default: `(HAS_PSRAM ? 256 : 0)` — Remote diagnostic record capacity; zero removes capture from the logging path.
 - **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS** default: `300` — Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).
 - **SDMMC_MAX_FREQUENCY_KHZ** default: `20000` — SDMMC maximum bus frequency in kHz.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
@@ -215,6 +216,7 @@ Total flags: 298
 - **CAMERA_SENSOR_EXPECTED_ID** default: `0x0000` — Camera sensor product ID expected from the high and low ID registers.
 - **CAMERA_SENSOR_ID_REG_HIGH** default: `0x0000` — Camera sensor product ID high-byte register.
 - **CONFIG_DEFAULT_PORTAL_IDLE_SECONDS** default: `120` — the device on a fresh flash.
+- **DEBUG_CRASH_API_ENABLED** default: `0` — Development-only crash injection API; disable before shipping test firmware.
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
 - **DEVICE_TELEMETRY_CPU_MONITOR** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
 - **DEVICE_TELEMETRY_HEALTH_WINDOW** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable health-window min/max sampling timer.
@@ -274,6 +276,7 @@ Total flags: 298
 - **PORTAL_PRIMARY_LABEL** default: `""` — Display name for the primary portal category in the nav sidebar.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
+- **REMOTE_LOG_BOOT_RECORDS** default: `128` — Startup records retained independently of the rolling diagnostic buffer.
 - **SCREENSAVER_BACKLIGHT_ONLY** default: `false` — Keep the display content active during logical sleep and only turn off the backlight.
 - **SCREENSAVER_DEFAULT_FADE_IN_MS** default: `400` — Default backlight fade-in duration when the screen saver wakes (ms).
 - **SCREENSAVER_DEFAULT_FADE_OUT_MS** default: `800` — Default backlight fade-out duration when the screen saver activates (ms).
@@ -1194,6 +1197,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **DATA_STREAM_MAX_STREAMS**
   - src/app/board_config.h
+- **DEBUG_CRASH_API_ENABLED**
+  - src/app/board_config.h
+  - src/app/web_portal_logs.cpp
+  - src/app/web_portal_routes.cpp
+  - src/boards/esp32-p4-lcd4b/board_overrides.h
+  - src/boards/jc3636w518/board_overrides.h
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS**
   - src/app/board_config.h
 - **DEVICE_TELEMETRY_CPU_MONITOR**
@@ -1522,6 +1531,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/power_manager.cpp
 - **PROJECT_DISPLAY_NAME**
   - src/app/board_config.h
+- **REMOTE_LOG_BOOT_RECORDS**
+  - src/app/board_config.h
+- **REMOTE_LOG_BUFFER_RECORDS**
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/log_manager.cpp
+  - src/app/portal_components.cpp
+  - src/app/remote_log.cpp
+  - src/app/web_portal_logs.cpp
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_routes.cpp
 - **SCREENSAVER_BACKLIGHT_ONLY**
   - src/app/board_config.h
   - src/app/config_manager.cpp

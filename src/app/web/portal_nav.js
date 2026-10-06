@@ -172,6 +172,7 @@
       }
       padWorkspaceDispose();
     }
+    window.dispatchEvent(new CustomEvent('portal-fragment-leave', { detail: currentItem }));
     currentItem = itemId;
     var loadGeneration = ++fragmentLoadGeneration;
     setActive(itemId);

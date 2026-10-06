@@ -22,6 +22,7 @@ class PortalDevServerTest(unittest.TestCase):
     def setUpClass(cls):
         cls.server = PORTAL.HTTPServer(("127.0.0.1", 0), PORTAL.PortalHandler)
         cls.server.profile = "esp32-p4-lcd4b"
+        cls.server.logs_started = PORTAL.time.monotonic()
         cls.server.mock_config = {
             "caps": {"ble": True, "ble_hid": True, "usb_hid": True, "mqtt": True},
             "backlight_brightness": 80, "keyboard_transport": "none",
@@ -63,6 +64,47 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertLess(bundle.index("function actionEditorHTML("), bundle.index("async function padInit()"))
         self.assertNotIn("portal_shutter", bundle)
         self.assertEqual(self.request("/api/bindings")[0], 200)
+
+    def test_logs(self):
+        status, data = self.request("/api/logs?limit=100")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(data["records"]), 32)
+        self.assertTrue(data["has_more"])
+        _, incremental = self.request(f"/api/logs?after={data['next']}&boot_id=123")
+        self.assertEqual(incremental["records"][0]["sequence"], data["next"] + 1)
+        _, boot = self.request("/api/logs?source=boot")
+        self.assertEqual(len(boot["records"]), 8)
+        self.assertTrue(boot["boot_complete"])
+        self.assertEqual(self.request("/api/logs?after=-1")[0], 400)
+        self.assertEqual(self.request("/api/logs?source=invalid")[0], 400)
+        self.assertIn("init_logs_fragment", self.request("/portal-logs.js", raw=True)[1])
+        self.assertIn('id="logs-output"', self.request("/api/section/logs", raw=True)[1])
+        categories = self.request("/api/portal/nav")[1]["categories"]
+        device = next(category for category in categories if category["id"] == "device")
+        self.assertTrue(any(item["id"] == "logs" for item in device["items"]))
+
+    def test_crash_logs(self):
+        status, crash = self.request("/api/logs/crash")
+        self.assertEqual(status, 200)
+        self.assertTrue(crash["available"])
+        self.assertEqual(crash["size"], 1024)
+        self.assertEqual(crash["task"], "loopTask")
+        self.assertEqual(len(crash["elf_sha256"]), 64)
+        self.assertEqual(crash["exception_cause"], 7)
+        self.assertEqual(crash["trap_value"], "0x500d2000")
+        self.assertEqual(crash["registers"]["RA"], "0x400cfc8c")
+        self.assertEqual(crash["current_reset_reason"], 3)
+        self.assertNotEqual(crash["elf_sha256"], crash["current_elf_sha256"])
+        with urlopen(self.base + "/api/logs/crash/download", timeout=5) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers["Content-Type"], "application/octet-stream")
+            self.assertEqual(response.read(), bytes(range(256)) * 4)
+        fragment = self.request("/api/section/logs", raw=True)[1]
+        self.assertIn('id="logs-crash-download"', fragment)
+        self.assertIn('id="logs-crash-details"', fragment)
+        self.assertIn('id="logs-crash-copy"', fragment)
+        self.assertIn('id="logs-crash-registers"', fragment)
+        self.assertIn('Exception PC', fragment)
 
     def test_profile_and_capabilities(self):
         _, info = self.request("/api/info?catalog=1")

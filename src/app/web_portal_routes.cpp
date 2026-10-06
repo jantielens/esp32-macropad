@@ -10,6 +10,7 @@
 #include "web_portal_pad.h"
 #include "web_portal_pages.h"
 #include "web_portal_recipes.h"
+#include "web_portal_logs.h"
 
 #include "board_config.h"
 
@@ -73,6 +74,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Exactly one #if variant matches per build, so the browser fetches the
 		// entire portal JS in one request with one gzip member (see handlePortalJS).
 		server->on("/portal.js", HTTP_GET, handlePortalJS);
+		#if REMOTE_LOG_BUFFER_RECORDS > 0
+		server->on("/portal-logs.js", HTTP_GET, handlePortalLogsJS);
+		#endif
 		#if HAS_CAMERA
 		server->on("/portal-camera.js", HTTP_GET, handlePortalCameraJS);
 		server->on("/portal-camera.css", HTTP_GET, handlePortalCameraCSS);
@@ -83,6 +87,12 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints
+		#if DEBUG_CRASH_API_ENABLED
+		server->on("/api/debug/crash", HTTP_POST, handleDebugCrash);
+		#endif
+		server->on("/api/logs/crash/download", HTTP_GET, handleDownloadCrashLog);
+		server->on("/api/logs/crash", HTTP_GET, handleGetCrashLog);
+		server->on("/api/logs", HTTP_GET, handleGetLogs);
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
 		// Some AsyncWebServer matchers can behave like prefix matches depending on configuration.
 		registerOptions("/api/config");

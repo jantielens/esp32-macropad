@@ -4,6 +4,7 @@
 #include "web_portal_state.h"
 #include "web_portal_utils.h"
 #include "web_portal_timing.h"
+#include "web_portal_logs.h"
 
 #include "web_assets.h"
 
@@ -90,6 +91,10 @@ void handleFragment(AsyncWebServerRequest *request) {
 				return;
 		}
 		String frag_id = url.substring(last_slash + 1);
+		if (frag_id == "logs" && !portal_logs_access_enabled()) {
+			request->send(403, "text/plain", "Logs require full portal access");
+			return;
+		}
 
 		const FragmentAsset* asset = find_fragment_asset(frag_id.c_str());
 		timing.mark("fragment_lookup");
@@ -110,6 +115,19 @@ void handleFragment(AsyncWebServerRequest *request) {
 }
 
 // ---- Legacy page handlers (redirect to shell with hash) ----
+void handlePortalLogsJS(AsyncWebServerRequest *request) {
+	#if REMOTE_LOG_BUFFER_RECORDS > 0
+	if (!portal_logs_access_enabled()) {
+		request->send(403, "text/plain", "Logs require full portal access");
+		return;
+	}
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript",
+		portal_logs_js_gz, portal_logs_js_gz_len, "no-store"));
+	#else
+	request->send(404, "text/plain", "Not found");
+	#endif
+}
 
 void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;

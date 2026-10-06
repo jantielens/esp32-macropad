@@ -16,6 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Development-only `POST /api/debug/crash` for abort, failed assertion, and
+  invalid-memory-write tests, gated by `DEBUG_CRASH_API_ENABLED`. The flag
+  defaults off and is temporarily enabled on `esp32-p4-lcd4b`, `jc3636w518`,
+  and `jc3636w518-sd`; disable the base-board override after testing.
+  No UI is added. Requests follow portal
+  authentication, require explicit confirmation, and reject OTA or duplicates.
+* Device Logs viewer on PSRAM builds, following configured portal authentication, with bounded rolling and
+  startup buffers, incremental polling, browser history limits, and copy/download.
+  Capture and JSON storage use PSRAM without internal-heap fallback; contention,
+  allocation failure, and OTA do not add remote-capture waits to serial logging.
+* Startup reset reason, SDK version, and firmware ELF SHA256 diagnostics, plus
+  retained flash crash summaries and bounded coredump downloads in Device Logs.
+  Crash access follows configured portal authentication and defers during OTA;
+  downloads do not erase dumps or copy them into a bulk SRAM buffer.
+  Summaries decode exception causes, distinguish exception PCs from faulting
+  addresses, expose SDK-saved registers, and support copying crash and current
+  boot diagnostics separately. Log counters distinguish device buffer capacity,
+  record IDs, browser history, overwritten records, and capture drops.
 * Compile-time action and widget identifier capacity guards, with host tests
   for NUL-aware boundaries and stored-name registry lookup. Runtime parsing and
   configured buffer capacities remain unchanged.
@@ -59,6 +77,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Inkplate IDF 4 builds use the legacy firmware ELF-hash API and exclude
+  newer reset enum values. Crash summaries retain saved registers and firmware
+  identity without requiring the newer panic-text API.
+* Display-less builds omit display-only fields from the configuration log
+  summary, fixing E-Paper Frame compilation.
+* ESP32-S3 remote logging pins its dropped-record counter to internal DRAM,
+  where the SDK uses native atomic operations despite conservative compiler
+  lock-free reporting. Other targets retain the compile-time lock-free check.
+* Current-boot reset labels in retained crash reports now include the SDK's
+  External reset value: Software is `3` and Panic is `4`. Previously, software
+  restarts and all later reset reasons were mislabeled by one enum position.
+* Crash summary and coredump download routes now register before the parent
+  log route. ESPAsyncWebServer's child-path matching previously returned
+  ordinary log JSON for both crash URLs, causing unavailable summary fields
+  and JSON files named as binary coredumps.
 * Pad Editor selection outlines no longer flicker while editing button
   properties. Copy, Paste, and Clear use consistent button styles, and status
   notifications stay clear of the editor's command buttons.

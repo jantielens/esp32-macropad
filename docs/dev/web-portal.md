@@ -54,6 +54,149 @@ The web portal provides:
 - Optional HTTP Basic Authentication (Full Mode only)
 - Responsive web interface (desktop & mobile)
 
+### Remote Logs
+
+PSRAM builds default to `REMOTE_LOG_BUFFER_RECORDS=256` and
+`REMOTE_LOG_BOOT_RECORDS=128`. Setting the rolling capacity to `0` removes
+capture calls, storage, navigation, and log assets. Non-PSRAM builds default
+to `0`. Capture starts at `log_init()` and preserves up to 128 startup lines
+until setup finishes, separately from the rolling buffer. Boot capacity
+overflow is reported; neither buffer survives reboot or deep sleep.
+
+The logger stores complete 288-byte formatted records, with the existing
+serial truncation and suppression behavior. Disconnected USB CDC does not
+prevent capture and does not update serial repetition state. Direct serial
+writes, ROM/bootloader logs, and ISR logging are outside this feature.
+
+One startup allocation reserves approximately 127 KiB of PSRAM for records,
+a 32-record response snapshot, and a fixed JSON serialization arena. There
+is no bulk-storage fallback to internal SRAM or allocation retry. Capture
+uses a statically allocated, zero-timeout mutex with interrupts enabled;
+contention and OTA cause capture drops rather than additional serial waits.
+Readers never acquire the serial mutex, and network transmission owns an
+immutable snapshot. Serial and HTTP transport retain their normal memory
+and synchronization requirements.
+
+`GET /api/logs?source=recent&after=123&limit=32&boot_id=456` requires Full Mode,
+and follows the device's HTTP Basic Authentication setting through the standard
+portal auth gate. With authentication disabled, credentials are not required;
+with authentication enabled, valid credentials are required. AP mode returns
+`403`; missing or invalid credentials return `401` when authentication is enabled. Responses use
+`Cache-Control: no-store`. Use `source=boot` for retained startup records;
+omit `after` to start at the oldest retained record. Limits must be positive
+and are capped at 32. Cursors are unsigned 32-bit sequences, including zero.
+
+Successful responses contain `available`, `boot_id`, `capacity`, `oldest`,
+`newest`, `next`, `missed`, `dropped`, `reset`, `has_more`, `boot_complete`,
+`boot_truncated`, and `records` containing `sequence` and `line`. Continue
+with `after=next`, not `newest`. Supply the last `boot_id` so reboot resets
+the cursor. Sequence comparisons use unsigned arithmetic; cursors more than
+half the sequence space away are treated as reset. `missed` reports overwritten
+records for this read; `dropped` is the cumulative capture-drop count.
+
+Disabled or allocation-failure builds return `available:false` with a reason.
+Only one log response may be active; overlapping reads return `429`, OTA
+defers new reads with `503`, and invalid parameters return `400`. A response
+owns the snapshot until destruction, including disconnect/error paths;
+its source expires after ten seconds and is invalidated during OTA.
+JSON serialization uses fixed PSRAM storage, not the shared allocator's
+internal-heap fallback. Polling does not emit routine logs.
+
+The Device **Logs** fragment presents one combined view. It drains `source=boot`
+first, then requests `source=recent` with the last boot cursor to avoid duplicates.
+It inserts inline history-gap markers for missed records or ambiguous cursor
+resets, and restarts at boot history when `boot_id` changes. The next bounded
+batch follows after 250 ms while boot/recent history remains, displaying
+**Catching up**. Once caught up, it polls every
+three seconds; errors also use this normal retry interval. It keeps one request
+in flight, stops when hidden/inactive or paused, and retains at most 10,000
+browser lines. Clear only removes browser history and retains the cursor.
+Copy uses the shared `copyTextToClipboard()` helper, including its HTTP-compatible
+textarea fallback; downloads contain the combined history and gap markers.
+
+Status counters distinguish device buffer capacity (records), latest captured
+record ID, browser history entries (including gap markers), records missed
+before retrieval, and records dropped during capture. Browser history can exceed
+the device buffer capacity; the latest record ID is a sequence, not a timestamp.
+
+#### Retained Crash Diagnostics
+
+Startup application logs include the reset reason (name and ESP-IDF enum value),
+SDK version, and current firmware ELF SHA256. These are application-generated
+diagnostics, not a replay of the ROM banner. A software reset alone does not
+indicate a panic.
+
+`GET /api/logs/crash` uses the same Full Mode and configured authentication policy
+as `/api/logs`. It checks the SDK flash coredump for integrity and bounds before
+returning `available`, `size`, and `partition_size`. ELF-format dumps may also
+provide `panic_reason`, `task`, `pc` (hexadecimal address), and `elf_sha256` from
+the crashed firmware. Valid dumps also return `current_reset_reason` (the
+ESP-IDF enum for the current boot) and `current_elf_sha256`, separately from the
+crashed firmware identity. Architecture-specific optional fields include:
+
+* `architecture`: `riscv` or `xtensa`
+* `exception_cause`: Numeric `MCAUSE` or `EXCCAUSE`
+* `trap_value`: Hexadecimal RISC-V `MTVAL`, which is not always a memory address
+* `fault_address`: Hexadecimal Xtensa `EXCVADDR`
+* `registers`: SDK-saved register names mapped to hexadecimal strings
+
+Firmware identity uses the legacy ELF-hash API on IDF 4 builds, including
+Inkplate. `panic_reason` requires IDF 5.5 or newer; older SDKs can still return
+the crashed task, firmware identity, exception details, and saved registers.
+
+The portal decodes known exception causes and preserves numeric codes for
+unknown causes. It labels `pc` as **Exception PC**, distinct from the faulting
+address or trap value. RISC-V summaries expose `MEPC`, `RA`, `SP`, `MSTATUS`,
+`MTVEC`, `MCAUSE`, `MTVAL`, and `A0` through `A7`. Xtensa summaries expose `PC`,
+`EXCCAUSE`, `EXCVADDR`, `A0` through `A15`, and available `EPC` registers. These
+are the SDK summary's subset, not the complete serial register dump. The portal
+shows key values directly and the remaining saved registers in an expandable
+section. It marks crash age unknown and displays current-boot diagnostics
+separately. **Copy crash summary** uses the shared clipboard helper and includes
+both firmware hashes, reset reason, exception details, and saved registers.
+
+Unavailable responses contain `available:false` and a
+`reason`: `disabled`, `no_partition`, `not_found`, or `invalid_dump`. OTA or an
+unavailable summary workspace returns `503`.
+
+The summary borrows the existing log snapshot's PSRAM arena temporarily. It
+reserves 2 KiB for the SDK summary and 6 KiB for ArduinoJson, without an internal
+SRAM workspace fallback. SDK parsing and the small HTTP response retain their
+normal allocation requirements. Serialized summary output is bounded by a
+2 KiB stack buffer. The arena lease lasts through JSON document destruction.
+The portal loads the summary once per device
+boot or fragment initialization; transient errors retry at the normal log
+polling interval. Summary strings are rendered as text, never HTML.
+
+`GET /api/logs/crash/download` returns the validated raw dump as
+`application/octet-stream`, with an attachment filename of
+`device-coredump.bin`, its content length, and `Cache-Control: no-store`.
+It streams directly from the flash partition in reads capped at 1,024 bytes,
+without loading the dump into RAM. Only one download may be active (`429` for
+overlap); response destruction releases ownership. Downloads expire after
+30 seconds and stop during OTA. Missing or disabled dumps return `404`; invalid
+dumps return `409`. The browser pauses log polling during download and aborts
+the request when hidden or when leaving the fragment. No API erases the dump.
+
+The P4 Arduino SDK currently enables ELF coredumps to flash, with CRC checking,
+a 1,792-byte dedicated stack, up to 64 tasks, and overwrite enabled. Its native
+extension partition layout reserves 64 KiB for a coredump. These settings are
+SDK/board-dependent; a partition alone does not enable capture. The partition
+must fit the captured task stacks, which requires hardware validation.
+
+A retained dump can survive successful boots and firmware updates that preserve
+the partition. It is not necessarily from the immediately preceding boot, and
+the next crash can overwrite it. Decode the downloaded raw file with Espressif's
+`esp-coredump` tool and the exact matching firmware ELF, identified by the dump's
+ELF SHA256. Ordinary PSRAM contents, including the remote log ring, are not
+included. Power loss, early startup failure, or panic-handler failure can leave
+no valid dump. Crash dumps may contain sensitive stack data; enable portal
+authentication and treat downloads accordingly.
+The local development server exposes the fragment and incremental API
+shape at `/?fragment=logs`; fixtures are not hardware or security tests.
+Focused coverage lives in `test_remote_log`, `test_remote_log_runtime`, and
+`test_portal_logs`, alongside the existing logger regression tests.
+
 ### Camera Motion Sensing
 
 Camera-enabled boards add a **Motion sensing** navigation item under the Camera
@@ -680,6 +823,48 @@ fields or loop iterations. JSON response bodies and cache policies are unchanged
 not every authentication failure, redirect, or early error response is instrumented.
 
 ## REST API Reference
+
+### Development Crash Injection
+
+`POST /api/debug/crash?mode=abort&confirm=crash` intentionally crashes the
+device to test flash coredump capture. There is no web UI or MCP tool.
+`DEBUG_CRASH_API_ENABLED` defaults to `0`; temporary `1` overrides are in the
+`esp32-p4-lcd4b` and `jc3636w518` board configurations. `jc3636w518-sd` inherits
+the latter override. When disabled, both the handler and route are compiled out.
+
+| Mode | Behavior |
+| --- | --- |
+| `abort` | Calls `abort()` from a dedicated task |
+| `assert` | Fails an assertion; returns `501` without scheduling if `NDEBUG` disables assertions |
+| `invalid_write` | Writes to address zero through a volatile pointer; falls back to `abort()` if the write returns |
+
+The endpoint follows configured portal authentication and requires Full Mode
+outside AP/setup mode. Query parameters `mode` and `confirm=crash` are required
+(`400` otherwise). OTA returns `503`; a pending request returns `409`; task
+allocation failure returns `503`. Accepted requests return
+`202 {"scheduled":true,"delay_ms":500}` with `Cache-Control: no-store`.
+The task rechecks OTA after the delay and cancels if an update has started.
+The delay gives the HTTP response time to leave, but delivery is not guaranteed.
+
+```bash
+curl -X POST 'http://esp32-macropad.local/api/debug/crash?mode=abort&confirm=crash'
+```
+
+Use your configured hostname or IP address; add `--user YOUR_USERNAME` when
+Basic Auth is enabled (curl prompts for the password). Replace `mode=abort`
+with `mode=assert` or `mode=invalid_write` for the other tests.
+
+> [!WARNING]
+> This API intentionally interrupts device operation and may overwrite an
+> existing retained dump. Download that dump first, keep the exact crashing
+> build's ELF, and use only on a trusted development network. After testing,
+> set `DEBUG_CRASH_API_ENABLED` to `0` in the relevant base-board override and rebuild and
+> flash the firmware. No runtime setting disables this compile-time feature.
+
+After reboot, inspect `/api/logs/crash` and download
+`/api/logs/crash/download`, or use the existing Device Logs viewer. Coredump
+capture still depends on the SDK, partition capacity, and panic handler;
+an injected crash does not guarantee a valid dump.
 
 ### Recipe Catalog
 

@@ -14,6 +14,77 @@ The ESP32 Macropad includes a built-in web portal for configuring every aspect o
 
 In AP mode, only the Network page is available. In Full mode, the standard four pages are accessible, and e-paper boards also expose a dedicated E-Paper page.
 
+## Device Logs
+
+On PSRAM-enabled builds, open **Device > Logs** in Full Mode. Logs follow the
+device's authentication settings: no credentials are needed when HTTP Basic
+Authentication is disabled; when enabled, sign in with the configured credentials.
+Log access is unavailable in the setup access point.
+
+One log view starts with the first 128 retained startup lines, then follows
+the device's rolling history of 256 application log lines. Overlapping records
+are not repeated. An inline gap marker identifies records no longer retained
+between startup and recent history, or lost while following new logs. After
+a device reboot, the viewer clears old history and loads startup logs again.
+These buffers contain centralized application logs, not bootloader output, crash
+dumps, or arbitrary serial writes. Serial logging continues independently.
+
+The viewer shows **Catching up** while fetching pending records in batches of
+32, with a 250 ms delay between requests. Once caught up, it polls every three
+seconds while visible. Pause stops polling. Auto-scroll follows new lines and
+turns off when you scroll upward. Clear removes only the browser's retained
+history. Copy and Download export that history, including gap markers, which
+is limited to 10,000 lines and trimmed in batches. Copy uses the portal's
+clipboard fallback when the modern clipboard API is unavailable on HTTP pages.
+
+**Device buffer** is the device's rolling capacity in records. **Latest record ID**
+is a sequence number, not a timestamp. **Browser history** counts displayed
+entries, including gap markers; it can exceed the device buffer capacity.
+**Records missed before retrieval** counts records overwritten before they
+could be read. **Records dropped during capture** counts logging skipped for
+remote capture because of contention or OTA;
+these do not mean serial output was dropped. High-volume logging can outrun
+the polling rate. Polling and capture defer during firmware updates.
+
+Buffers use PSRAM only. If allocation fails, the viewer reports unavailable
+storage without affecting serial output. Both buffers reset after reboot or
+deep sleep. Logs can contain operational identifiers such as SSIDs and MQTT
+topics; treat downloaded logs as diagnostic data.
+
+Startup logs also report the reset reason, SDK version, and firmware ELF SHA256.
+The reset reason distinguishes a normal software restart from a panic or
+watchdog reset; it does not reproduce the early ROM serial output.
+
+The **Retained crash** section shows a saved flash coredump when supported by
+the firmware and partition layout. It reports the panic reason, task, decoded
+exception cause, **Exception PC** (the failing instruction), faulting address or
+trap value, return address, stack pointer, and crashed firmware's ELF SHA256 when
+available. RISC-V `MTVAL` is labelled as a faulting address for address-related
+exceptions and as a trap value otherwise. Expand **Saved registers** to inspect
+the additional registers exposed by the SDK; this is not the complete serial
+register dump. Unknown causes retain their numeric codes.
+
+The current boot's reset reason and firmware hash appear separately from the
+retained crash. **Copy crash summary** copies both sets of diagnostics and the
+saved registers for an issue report, including on HTTP pages.
+**Download crash dump**
+exports `device-coredump.bin`. Log polling pauses during the download; leaving
+the fragment or hiding the browser cancels it. Downloads are unavailable during
+firmware updates.
+
+A dump is marked **Crash age unknown**. It can remain after successful boots,
+so it may describe an older crash or
+firmware. A subsequent crash can overwrite it. Decode the downloaded file with
+Espressif's `esp-coredump` tool and the exact matching firmware ELF, using the
+displayed ELF SHA256 to identify the build. The dump is not previous text-log
+history and does not include the PSRAM log buffer. Sudden power loss or failure
+of the crash handler can prevent capture. A missing or corrupt dump is reported
+without enabling the download button.
+
+Crash downloads follow the same configured authentication policy as Logs. Dumps
+can contain sensitive stack data, including credentials; enable authentication
+and keep downloaded files private. The portal does not erase retained dumps.
+
 ## Header & Health Monitoring
 
 The portal header shows real-time device info at a glance:

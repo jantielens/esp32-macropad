@@ -57,6 +57,21 @@ struct HwButtonDef {
 
 // ============================================================================
 // Project Branding
+// Remote diagnostic record capacity; zero removes capture from the logging path.
+#ifndef REMOTE_LOG_BUFFER_RECORDS
+#define REMOTE_LOG_BUFFER_RECORDS (HAS_PSRAM ? 256 : 0)
+#endif
+
+// Startup records retained independently of the rolling diagnostic buffer.
+#ifndef REMOTE_LOG_BOOT_RECORDS
+#define REMOTE_LOG_BOOT_RECORDS 128
+#endif
+
+// Development-only crash injection API; disable before shipping test firmware.
+#ifndef DEBUG_CRASH_API_ENABLED
+#define DEBUG_CRASH_API_ENABLED 0
+#endif
+
 // ============================================================================
 // Human-friendly project name used in the web UI and device name (can be set by build system).
 #ifndef PROJECT_DISPLAY_NAME
