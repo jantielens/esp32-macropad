@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG true
+#endif
+
 // ==========================================================================
 // Board Overrides: reterminal-e1003-frame (Seeed reTerminal E1003)
 // ==========================================================================

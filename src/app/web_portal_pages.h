@@ -16,7 +16,9 @@ void handleFirmware(AsyncWebServerRequest *request);
 // the entire portal JS in a single HTTP response and a single gzip member.
 void handlePortalJS(AsyncWebServerRequest *request);
 void handlePortalAllCSS(AsyncWebServerRequest *request);
+#if HAS_REMOTE_LOG
 void handlePortalLogsJS(AsyncWebServerRequest *request);
+#endif
 #if HAS_CAMERA
 void handlePortalCameraJS(AsyncWebServerRequest *request);
 void handlePortalCameraCSS(AsyncWebServerRequest *request);

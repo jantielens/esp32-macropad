@@ -74,7 +74,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Exactly one #if variant matches per build, so the browser fetches the
 		// entire portal JS in one request with one gzip member (see handlePortalJS).
 		server->on("/portal.js", HTTP_GET, handlePortalJS);
-		#if REMOTE_LOG_BUFFER_RECORDS > 0
+			 #if HAS_REMOTE_LOG
 		server->on("/portal-logs.js", HTTP_GET, handlePortalLogsJS);
 		#endif
 		#if HAS_CAMERA
@@ -87,12 +87,14 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/portal-all.css", HTTP_GET, handlePortalAllCSS);
 
 		// API endpoints
+			 #if HAS_REMOTE_LOG
 		#if DEBUG_CRASH_API_ENABLED
 		server->on("/api/debug/crash", HTTP_POST, handleDebugCrash);
 		#endif
 		server->on("/api/logs/crash/download", HTTP_GET, handleDownloadCrashLog);
 		server->on("/api/logs/crash", HTTP_GET, handleGetCrashLog);
 		server->on("/api/logs", HTTP_GET, handleGetLogs);
+			 #endif
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
 		// Some AsyncWebServer matchers can behave like prefix matches depending on configuration.
 		registerOptions("/api/config");

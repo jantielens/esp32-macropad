@@ -1,6 +1,10 @@
 #ifndef BOARD_OVERRIDES_H
 #define BOARD_OVERRIDES_H
 
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG true
+#endif
+
 // ============================================================================
 // Board Overrides: jc3636w518 (ESP32-S3 + ST77916 QSPI 360x360 + CST816S touch)
 // Mirrors the known-good setup from sample/jc3636w518-macropad.

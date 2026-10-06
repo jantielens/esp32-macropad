@@ -1053,7 +1053,7 @@ asset_feature_flag() {
         storage)
             echo "HAS_STORAGE_BROWSER" ;;
         logs|portal_logs)
-            echo "REMOTE_LOG_BUFFER_RECORDS > 0" ;;
+            echo "HAS_REMOTE_LOG" ;;
         epaper_status|epaper_image|epaper_overlay|epaper_vcom|epaper_init)
             echo "HAS_EPAPER_PANEL" ;;
         epaper_refresh|portal_epaper_refresh)

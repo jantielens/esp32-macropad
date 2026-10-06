@@ -1,7 +1,7 @@
 #include "board_config.h"
+#if HAS_REMOTE_LOG
 #include "remote_log.h"
 
-#if REMOTE_LOG_BUFFER_RECORDS > 0
 #include "ota_activity.h"
 #include <atomic>
 #include <esp_heap_caps.h>
@@ -13,7 +13,7 @@
 #include <esp_attr.h>
 #endif
 
-static_assert(REMOTE_LOG_BUFFER_RECORDS < INT32_MAX, "Remote log capacity must fit sequence arithmetic");
+static_assert(REMOTE_LOG_BUFFER_RECORDS > 0 && REMOTE_LOG_BUFFER_RECORDS < INT32_MAX, "Remote log capacity must be positive and fit sequence arithmetic");
 static_assert(REMOTE_LOG_BOOT_RECORDS > 0, "Remote startup capacity must be positive");
 
 namespace {
@@ -108,11 +108,4 @@ const RemoteLogSnapshot* remote_log_snapshot(bool boot, bool has_after, uint32_t
 }
 
 void remote_log_release_snapshot() { snapshot_busy.clear(std::memory_order_release); }
-#else
-void remote_log_init() {}
-bool remote_log_available() { return false; }
-void remote_log_append(const char*) {}
-void remote_log_finish_boot() {}
-const RemoteLogSnapshot* remote_log_snapshot(bool, bool, uint32_t, size_t) { return nullptr; }
-void remote_log_release_snapshot() {}
 #endif

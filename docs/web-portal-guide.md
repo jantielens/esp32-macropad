@@ -16,7 +16,9 @@ In AP mode, only the Network page is available. In Full mode, the standard four 
 
 ## Device Logs
 
-On PSRAM-enabled builds, open **Device > Logs** in Full Mode. Logs follow the
+On builds with `HAS_REMOTE_LOG`, open **Device > Logs** in Full Mode. This
+feature is enabled on all configured ESP32-P4 boards and ESP32-S3 boards with
+more than 5 MB flash; PSRAM alone does not enable it. Logs follow the
 device's authentication settings: no credentials are needed when HTTP Basic
 Authentication is disabled; when enabled, sign in with the configured credentials.
 Log access is unavailable in the setup access point.

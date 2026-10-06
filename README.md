@@ -134,7 +134,8 @@ The portal also handles settings, media, health diagnostics, and screen previews
 with optional HTTP Basic Auth. Supported builds offer **over-the-air updates**
 with rollback protection.
 
-PSRAM builds also offer **Device > Logs** with Full Mode access:
+Builds with `HAS_REMOTE_LOG` offer **Device > Logs** with Full Mode access:
+all configured ESP32-P4 boards and ESP32-S3 boards with more than 5 MB flash.
 recent application logs, a retained startup snapshot, and browser copy/download.
 Startup records include reset diagnostics and firmware identity. SDK-supported
 flash coredumps appear separately with readable exception diagnostics, saved

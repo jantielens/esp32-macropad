@@ -9,6 +9,50 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class RemoteLogRuntimeTests(unittest.TestCase):
+    def test_board_feature_policy(self):
+        config = (ROOT / "config.sh").read_text()
+        boards = re.findall(r'^\s*\["([^"]+)"\]="([^"]+)"', config, re.MULTILINE)
+        self.assertTrue(boards)
+        for board, fqbn in boards:
+            flash = re.search(r"FlashSize=(\d+)M", fqbn)
+            enabled = ":esp32p4:" in fqbn or (
+                ":esp32s3:" in fqbn and flash is not None and int(flash[1]) > 5)
+            for override in (None, 0):
+                with self.subTest(board=board, override=override):
+                    source = f'''#include "board_config.h"
+#if HAS_REMOTE_LOG != {int(enabled) if override is None else override}
+#error Unexpected remote log configuration
+#endif
+'''
+                    flags = [] if override is None else [f"-DHAS_REMOTE_LOG={override}"]
+                    subprocess.run(["c++", "-E", "-x", "c++", "-DBOARD_HAS_OVERRIDE",
+                                    "-DBOARD_HAS_PSRAM", *flags, "-I", str(ROOT / "src/app"),
+                                    "-I", str(ROOT / "src/boards" / board), "-"],
+                                   input=source, text=True, stdout=subprocess.DEVNULL, check=True)
+
+    def test_feature_exclusion(self):
+        surfaces = {
+            "web_portal_routes.cpp": ("/api/logs", "/portal-logs.js", "/api/debug/crash"),
+            "web_portal_pages.cpp": ("handlePortalLogsJS", "portal_logs_full_mode_enabled"),
+            "web_portal_component_api.cpp": ("portal_logs_full_mode_enabled",),
+            "portal_components.cpp": ("logs_component.cpp",),
+            "app.ino": ("remote_log_finish_boot", "Firmware ELF SHA256", "Reset reason:"),
+            "web_assets.h": ("logs_fragment_html_gz", "portal_logs_js_gz"),
+        }
+        for filename, markers in surfaces.items():
+            source = (ROOT / "src/app" / filename).read_text()
+            if filename == "portal_components.cpp":
+                source = source.replace('#include "components/logs_component.cpp"', '"logs_component.cpp"')
+            source = re.sub(r'^\s*#include[^\n]*', '', source, flags=re.MULTILINE)
+            for enabled in (0, 1):
+                with self.subTest(filename=filename, enabled=enabled):
+                    output = subprocess.check_output(
+                        ["c++", "-E", "-P", "-x", "c++", f"-DHAS_REMOTE_LOG={enabled}",
+                         "-DDEBUG_CRASH_API_ENABLED=1", "-DBOARD_HAS_PSRAM", "-I", str(ROOT / "src/app"), "-"],
+                        input='#include "board_config.h"\n' + source, text=True)
+                    for marker in markers:
+                        self.assertEqual(marker in output, bool(enabled), marker)
+
     def test_log_route_dispatch(self):
         source = (ROOT / "src/app/web_portal_routes.cpp").read_text()
         routes = re.findall(r'server->on\("(/api/logs[^\"]*)", HTTP_GET, (\w+)\)', source)
@@ -317,13 +361,23 @@ inline void xSemaphoreGive(SemaphoreHandle_t handle) {
 #define FIRMWARE_VERSION "test-version"
 std::atomic<bool> ota{false};
 bool ota_activity_is_active() { return ota.load(); }
+#if HAS_REMOTE_LOG
 DeviceConfig config;
 bool ap_mode = false;
 bool authenticated = true;
 DeviceConfig* web_portal_get_current_config() { return &config; }
 bool web_portal_is_ap_mode_active() { return ap_mode; }
 bool portal_auth_gate(AsyncWebServerRequest*) { return !config.basic_auth_enabled || authenticated; }
+#endif
 int main() {
+#if !HAS_REMOTE_LOG
+    log_init(115200);
+    Serial.connected = true;
+    LOGI("SYS", "serial");
+    assert(Serial.output == "[42ms] I SYS: serial\n");
+    assert(allocations == 0);
+    return 0;
+#else
 #if TEST_FAILURE
     fail_allocation = true;
 #endif
@@ -641,6 +695,7 @@ int main() {
     assert(crash.response->code() == 404);
     #endif
 #endif
+#endif
 }
 ''',
         }
@@ -665,7 +720,8 @@ int main() {
                         "c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-pthread",
                         *atomic_flags,
                         "-DESP32", "-DARDUINO_USB_CDC_ON_BOOT=1",
-                        f"-DREMOTE_LOG_BUFFER_RECORDS={capacity}", f"-DTEST_FAILURE={failure}",
+                        f"-DHAS_REMOTE_LOG={int(capacity > 0)}",
+                        f"-DREMOTE_LOG_BUFFER_RECORDS={capacity or 3}", f"-DTEST_FAILURE={failure}",
                         f"-DCONFIG_ESP_COREDUMP_ENABLE_TO_FLASH={coredump}", f"-DCONFIG_ESP_COREDUMP_DATA_FORMAT_ELF={coredump}",
                         f"-DCONFIG_IDF_TARGET_ARCH_RISCV={riscv}", f"-DCONFIG_IDF_TARGET_ARCH_XTENSA={1 - riscv}",
                         f"-DCONFIG_IDF_TARGET_ESP32S3={1 - riscv}",
@@ -678,7 +734,12 @@ int main() {
                     ], check=True)
                     subprocess.run([str(binary)], check=True)
                     symbols = subprocess.check_output(["nm", "-C", str(binary)], text=True)
-                    self.assertEqual("handleDebugCrash(AsyncWebServerRequest*)" in symbols, bool(riscv))
+                    self.assertEqual("handleDebugCrash(AsyncWebServerRequest*)" in symbols, bool(riscv and capacity))
+                    if not capacity:
+                        self.assertNotIn("remote_log_", symbols)
+                        self.assertNotIn("handleGetLogs", symbols)
+                        self.assertNotIn("handleGetCrashLog", symbols)
+                        self.assertNotIn("handleDownloadCrashLog", symbols)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,10 @@
 #ifndef BOARD_OVERRIDES_ESP32_4848S040_H
 #define BOARD_OVERRIDES_ESP32_4848S040_H
 
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG true
+#endif
+
 // ============================================================================
 // Guition ESP32-S3-4848S040 Board Configuration Overrides
 // ============================================================================

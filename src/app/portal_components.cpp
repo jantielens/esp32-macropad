@@ -14,7 +14,7 @@
 #include "components/wifi_component.cpp"
 #include "components/device_name_component.cpp"
 #include "components/network_component.cpp"
-#if REMOTE_LOG_BUFFER_RECORDS > 0
+#if HAS_REMOTE_LOG
 #include "components/logs_component.cpp"
 #endif
  #if !IS_EPAPER_FRAME

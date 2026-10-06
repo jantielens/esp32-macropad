@@ -56,10 +56,19 @@ The web portal provides:
 
 ### Remote Logs
 
-PSRAM builds default to `REMOTE_LOG_BUFFER_RECORDS=256` and
-`REMOTE_LOG_BOOT_RECORDS=128`. Setting the rolling capacity to `0` removes
-capture calls, storage, navigation, and log assets. Non-PSRAM builds default
-to `0`. Both capacities can be overridden per board. Capture starts at
+`HAS_REMOTE_LOG` defaults to `false`. Board overrides enable it for all
+configured ESP32-P4 boards and ESP32-S3 boards with more than 5 MB flash.
+Disabling it removes capture code, startup reset/firmware identity diagnostics,
+retrieval routes, navigation, and Logs HTML/CSS/JavaScript from the firmware.
+Disabled retrieval routes are absent rather than returning a disabled response.
+Ordinary serial logging remains available. SDK coredump capture and reserved
+coredump partition space are independent of this guard.
+
+Enabled builds default to `REMOTE_LOG_BUFFER_RECORDS=256` and
+`REMOTE_LOG_BOOT_RECORDS=128`. Both capacities must be positive and can be
+overridden per board; they no longer select feature inclusion. Storage still
+requires PSRAM. Crash injection additionally requires `DEBUG_CRASH_API_ENABLED`.
+Capture starts at
 `log_init()` and preserves up to the configured startup capacity until setup
 finishes, separately from the rolling buffer. Boot capacity
 overflow is reported; neither buffer survives reboot or deep sleep.

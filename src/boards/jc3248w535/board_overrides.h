@@ -1,6 +1,10 @@
 #ifndef BOARD_OVERRIDES_JC3248W535_H
 #define BOARD_OVERRIDES_JC3248W535_H
 
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG true
+#endif
+
 // ============================================================================
 // Guition JC3248W535 Board Configuration Overrides
 // ============================================================================

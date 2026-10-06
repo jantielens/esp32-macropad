@@ -1,5 +1,6 @@
-#include "web_portal_logs.h"
 #include "board_config.h"
+#if HAS_REMOTE_LOG
+#include "web_portal_logs.h"
 #include "config_manager.h"
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
@@ -94,7 +95,6 @@ void handleDebugCrash(AsyncWebServerRequest* request) {
 }
 #endif
 
-#if REMOTE_LOG_BUFFER_RECORDS > 0
 #include <ArduinoJson.h>
 #include <WebResponseImpl.h>
 #include <new>
@@ -341,10 +341,8 @@ private:
 };
 #endif
 }
-#endif
 
 void handleGetCrashLog(AsyncWebServerRequest* request) {
-    #if REMOTE_LOG_BUFFER_RECORDS > 0
     if (!crash_access(request)) return;
     #if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
     const esp_partition_t* partition = nullptr;
@@ -442,18 +440,10 @@ void handleGetCrashLog(AsyncWebServerRequest* request) {
     #else
     log_status(request, 200, "{\"available\":false,\"reason\":\"disabled\"}");
     #endif
-    #else
-    if (!portal_logs_full_mode_enabled()) {
-        log_status(request, 403, "{\"error\":\"Logs require full portal access\"}");
-        return;
-    }
-    if (!portal_auth_gate(request)) return;
-    log_status(request, 200, "{\"available\":false,\"reason\":\"disabled\"}");
-    #endif
 }
 
 void handleDownloadCrashLog(AsyncWebServerRequest* request) {
-    #if REMOTE_LOG_BUFFER_RECORDS > 0 && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
+    #if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
     if (!crash_access(request)) return;
     bool expected = false;
     if (!crash_download_active.compare_exchange_strong(expected, true)) {
@@ -491,14 +481,9 @@ void handleGetLogs(AsyncWebServerRequest* request) {
     }
     if (!portal_auth_gate(request)) return;
     if (!remote_log_available()) {
-        #if REMOTE_LOG_BUFFER_RECORDS > 0
         log_status(request, 200, "{\"available\":false,\"reason\":\"psram_unavailable\"}");
-        #else
-        log_status(request, 200, "{\"available\":false,\"reason\":\"disabled\"}");
-        #endif
         return;
     }
-    #if REMOTE_LOG_BUFFER_RECORDS > 0
     if (ota_activity_is_active()) {
         log_status(request, 503, "{\"error\":\"Logs paused during firmware update\"}");
         return;
@@ -542,5 +527,5 @@ void handleGetLogs(AsyncWebServerRequest* request) {
         return;
     }
     request->send(response);
-    #endif
 }
+#endif

@@ -32,10 +32,12 @@
 #include "health_history.h"
 #endif
 #include <WiFi.h>
+#if HAS_REMOTE_LOG
 #include <esp_system.h>
 #include <esp_idf_version.h>
 #if ESP_IDF_VERSION_MAJOR >= 5
 #include <esp_app_desc.h>
+#endif
 #endif
 
 #if HAS_DISPLAY
@@ -195,6 +197,7 @@ void setup()
 
 	LOGI("SYS", "Boot");
 	LOGI("SYS", "Firmware: v%s", FIRMWARE_VERSION);
+	#if HAS_REMOTE_LOG
 	LOGI("SYS", "SDK: %s", esp_get_idf_version());
 	const esp_reset_reason_t reset_reason = esp_reset_reason();
 	const char* reset_name = "Unknown";
@@ -225,6 +228,7 @@ void setup()
 	esp_ota_get_app_elf_sha256(elf_sha256, sizeof(elf_sha256));
 	#endif
 	LOGI("SYS", "Firmware ELF SHA256: %s", elf_sha256);
+	#endif
 	LOGI("SYS", "Chip: %s (Rev %d)", ESP.getChipModel(), ESP.getChipRevision());
 	LOGI("SYS", "CPU: %d MHz", ESP.getCpuFreqMHz());
 	LOGI("SYS", "Flash: %d MB", ESP.getFlashChipSize() / (1024 * 1024));
@@ -701,7 +705,7 @@ void setup()
 	// This avoids counting boot + splash time as "inactivity".
 	screen_saver_manager_notify_activity(false);
 	#endif
-	#if REMOTE_LOG_BUFFER_RECORDS > 0
+	#if HAS_REMOTE_LOG
 	remote_log_finish_boot();
 	#endif
 }

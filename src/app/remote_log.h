@@ -95,9 +95,11 @@ struct RemoteLogSnapshot {
     alignas(max_align_t) mutable uint8_t json_storage[8192];
 };
 
+#if HAS_REMOTE_LOG
 void remote_log_init();
 bool remote_log_available();
 void remote_log_append(const char* line);
 void remote_log_finish_boot();
 const RemoteLogSnapshot* remote_log_snapshot(bool boot, bool has_after, uint32_t after, size_t limit);
 void remote_log_release_snapshot();
+#endif

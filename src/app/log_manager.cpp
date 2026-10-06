@@ -6,7 +6,7 @@
 
 #include "log_manager.h"
 #include "board_config.h"
-#if REMOTE_LOG_BUFFER_RECORDS > 0
+#if HAS_REMOTE_LOG
 #include "remote_log.h"
 #endif
 #include <stdarg.h>
@@ -42,7 +42,7 @@ void log_init(unsigned long baud) {
 		#endif
 		Serial.begin(baud);
 		g_log_manager_begun = true;
-		#if REMOTE_LOG_BUFFER_RECORDS > 0
+			   #if HAS_REMOTE_LOG
 		remote_log_init();
 		#endif
 }
@@ -88,7 +88,7 @@ void log_write(LogLevel level, const char* module, const char* format, ...) {
 		const bool serial_ready = serial_ready_for_logging();
 		if (level < LOG_LEVEL_ERROR || level > LOG_LEVEL_DEBUG || level > LOG_LEVEL ||
 		    !module || !format) return;
-		#if REMOTE_LOG_BUFFER_RECORDS > 0
+			   #if HAS_REMOTE_LOG
 		if (!serial_ready && !remote_log_available()) return;
 		#else
 		if (!serial_ready) return;
@@ -156,7 +156,7 @@ void log_write(LogLevel level, const char* module, const char* format, ...) {
 		    snprintf(line, sizeof(line), "[%lums] %c %.24s: %s\n", t, log_level_char(level), safe_module, msgbuf);
 		}
 		if (serial_ready) Serial.print(line);
-		#if REMOTE_LOG_BUFFER_RECORDS > 0
+			   #if HAS_REMOTE_LOG
 		remote_log_append(line);
 		#endif
 		if (serial_ready) log_serial_end();

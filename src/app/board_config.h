@@ -57,9 +57,14 @@ struct HwButtonDef {
 
 // ============================================================================
 // Remote Diagnostics
-// Rolling record capacity; PSRAM defaults to 256, zero disables remote capture.
+// Include remote log capture, portal assets, and retained-crash retrieval.
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG false
+#endif
+
+// Rolling record capacity when remote diagnostics are enabled.
 #ifndef REMOTE_LOG_BUFFER_RECORDS
-#define REMOTE_LOG_BUFFER_RECORDS (HAS_PSRAM ? 256 : 0)
+#define REMOTE_LOG_BUFFER_RECORDS 256
 #endif
 
 // Startup snapshot capacity; defaults to 128 records when remote capture is enabled.
