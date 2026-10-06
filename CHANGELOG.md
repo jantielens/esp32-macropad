@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* Restore JC3248W535's full Screen Saver settings, including the enable
+  checkbox and configurable Fade In/Fade Out. Keep its combined display/touch
+  controller awake while fading the backlight off, without applying the legacy
+  instant-transition policy. Load idle-pad choices reliably on first opening.
+
 ## [1.37.0] - 2026-10-06
 
 ### Added

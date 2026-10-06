@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 303
+Total flags: 304
 
 ### Features (HAS_*)
 
@@ -279,9 +279,10 @@ Total flags: 303
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
 - **REMOTE_LOG_BOOT_RECORDS** default: `128` — Startup snapshot capacity; defaults to 128 records when remote capture is enabled.
-- **SCREENSAVER_BACKLIGHT_ONLY** default: `false` — Keep the display content active during logical sleep and only turn off the backlight.
+- **SCREENSAVER_BACKLIGHT_ONLY** default: `false` — Use the legacy timeout-only lighting policy with instant transitions.
 - **SCREENSAVER_DEFAULT_FADE_IN_MS** default: `400` — Default backlight fade-in duration when the screen saver wakes (ms).
 - **SCREENSAVER_DEFAULT_FADE_OUT_MS** default: `800` — Default backlight fade-out duration when the screen saver activates (ms).
+- **SCREENSAVER_KEEP_PANEL_AWAKE** default: `SCREENSAVER_BACKLIGHT_ONLY` — Keep the panel and rendering active during screen saver sleep, independently of fading.
 - **SCREENSAVER_SLEEP_REFRESH_MS** default: `900000` — Interval in ms between periodic asleep-display refresh calls (0 = disabled).
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
@@ -1573,6 +1574,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS**
   - src/app/board_config.h
+- **SCREENSAVER_KEEP_PANEL_AWAKE**
+  - src/app/board_config.h
+  - src/app/screen_saver_manager.cpp
 - **SCREENSAVER_SLEEP_REFRESH_MS**
   - src/app/board_config.h
   - src/app/screen_saver_manager.cpp

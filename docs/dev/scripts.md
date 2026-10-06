@@ -29,6 +29,13 @@ The existing E-Paper Frame profile remains available:
 http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
 ```
 
+Preview JC3248W535's full Screen Saver controls with backlight fading and an
+awake panel controller:
+
+```text
+http://localhost:8765/?profile=jc3248w535&fragment=screensaver
+```
+
 **Notes:**
 
 * Reload the browser after changing a served HTML, CSS, or JavaScript source.

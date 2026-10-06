@@ -726,10 +726,15 @@ error-cancellation guarantee. No installed Inkplate library files are patched.
   - Driver-level rotation (inverse of display pixel transpose)
   - Calibration via `setOffsets()` with real→ideal coordinate mapping
 
-JC3248W535 sets `SCREENSAVER_BACKLIGHT_ONLY=true`. Logical display sleep turns
-off the backlight but keeps the combined AXS15231B controller and LVGL active.
+JC3248W535 sets `SCREENSAVER_KEEP_PANEL_AWAKE=true`. Screen saver activation
+fades the backlight off using the configured Fade Out duration, while keeping
+the combined AXS15231B controller and LVGL active. Wake uses the configured
+Fade In duration without sending panel Sleep Out or Display On commands.
 Touch wake therefore does not depend on touch detection during panel Sleep In.
-This mode uses more power than full panel sleep.
+The normal screen saver enable setting remains available. This mode uses more
+power than full panel sleep. The independent legacy
+`SCREENSAVER_BACKLIGHT_ONLY` policy remains reserved for timeout-only targets
+with instant lighting transitions.
 
 **Wire_CST816S_TouchDriver** ([`src/app/drivers/wire_cst816s_touch_driver.h/cpp`](../src/app/drivers/wire_cst816s_touch_driver.cpp))
 - **Library**: Arduino Wire.h (I2C)

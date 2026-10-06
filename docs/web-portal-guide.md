@@ -591,6 +591,14 @@ The screen saver has two optional features, both measured from the most recent u
 
 For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds shows the selected screen after five minutes, then turns off the panel after 30 minutes total. The first wake interaction is consumed and returns to the screen that was active before the Idle Screen appeared, so the temporary screen is not added to navigation history.
 
+On JC3248W535, the second stage is **Backlight Off** rather than Display Sleep.
+All screen saver controls remain available, including the automatic-shutoff
+checkbox, Idle Screen, Fade Out, Fade In, touch wake, and MQTT wake binding.
+The backlight fades off and back on using the configured durations, but the
+combined display/touch controller and rendering remain active for reliable
+touch wake. This mode uses more power than full panel sleep and does not
+perform sleep-cycle pixel shifting.
+
 ### Swipe Actions
 
 *Shown only on boards with a display.*

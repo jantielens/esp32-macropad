@@ -24,6 +24,7 @@ class PortalDevServerTest(unittest.TestCase):
         cls.server.profile = "esp32-p4-lcd4b"
         cls.server.logs_started = PORTAL.time.monotonic()
         cls.server.mock_config = {
+            **PORTAL.SCREENSAVER_DEFAULTS,
             "caps": {"ble": True, "ble_hid": True, "usb_hid": True, "mqtt": True},
             "backlight_brightness": 80, "keyboard_transport": "none",
             "keyboard_active_transport": "none", "device_name": "Mock",
@@ -130,6 +131,33 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/pad?page=00")[1], self.request("/api/pad?page=0")[1])
         for query in ("", "?page=-1", "?page=16", "?page=wrong"):
             self.assertEqual(self.request("/api/pad" + query)[0], 400)
+
+    def test_screensaver_panel_policy_and_save(self):
+        for profile, keep_panel in (("esp32-p4-lcd4b", False), ("jc3248w535", True)):
+            config = self.request("/api/config", profile=profile)[1]
+            self.assertEqual(config["screen_saver_keeps_panel_awake"], keep_panel)
+            self.assertFalse(config["screen_saver_backlight_only"])
+            self.assertTrue(config["caps"]["touch"])
+            nav = self.request("/api/portal/nav", profile=profile)[1]
+            self.assertTrue(any(item["id"] == "screensaver" for category in nav["categories"] for item in category["items"]))
+            fragment = self.request("/api/section/screensaver", profile=profile, raw=True)[1]
+            self.assertIn('id="screen_saver_enabled"', fragment)
+            self.assertIn('id="screen_saver_fade_out_ms"', fragment)
+            self.assertIn('id="screen_saver_fade_in_ms"', fragment)
+            info = self.request("/api/info", profile=profile)[1]
+            self.assertEqual(len(info["available_screens"]), 17)
+            if profile == "jc3248w535":
+                self.assertTrue(config["caps"]["usb_hid"])
+                self.assertFalse(config["caps"]["ble_hid"])
+                self.assertTrue(info["has_native_extensions"])
+                self.assertEqual((info["display_coord_width"], info["display_coord_height"]), (480, 320))
+            updates = {"screen_saver_enabled": False, "screen_saver_fade_out_ms": 1500,
+                       "screen_saver_fade_in_ms": 750, "idle_screen_pad": "pad_1"}
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST", updates, profile=profile)[0], 200)
+            loaded = self.request("/api/config", profile=profile)[1]
+            for key, value in updates.items():
+                self.assertEqual(loaded[key], value)
+            self.assertEqual(loaded["screen_saver_keeps_panel_awake"], keep_panel)
 
     def test_save_reload_delete_and_reset(self):
         pad = self.request("/api/pad?page=0")[1]

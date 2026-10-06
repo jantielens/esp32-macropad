@@ -319,8 +319,11 @@ print("PASS: sleeping display retains responsive initialized-touch polling and n
 
 subprocess.run(["c++", "-E", "-x", "c++", "-I", str(root), "-"], input=r'''
 #include "src/boards/jc3248w535/board_overrides.h"
-#if !SCREENSAVER_BACKLIGHT_ONLY
+#if !SCREENSAVER_KEEP_PANEL_AWAKE
 #error JC3248W535 must keep the AXS controller awake for touch wake
+#endif
+#if SCREENSAVER_BACKLIGHT_ONLY
+#error JC3248W535 must retain configurable screen saver fading
 #endif
 ''', text=True, stdout=subprocess.DEVNULL, check=True)
 print("PASS: JC3248W535 uses backlight-only sleep for touch wake")
@@ -330,7 +333,7 @@ wake_start = saver_source.index("// Wake panel in two phases")
 wake_end = saver_source.index('LOGT("SAVER", "Wake:', wake_start)
 wake_harness = r'''
 #include <cassert>
-#define SCREENSAVER_BACKLIGHT_ONLY TEST_BACKLIGHT_ONLY
+#define SCREENSAVER_KEEP_PANEL_AWAKE TEST_BACKLIGHT_ONLY
 #define pdMS_TO_TICKS(value) (value)
 static unsigned delayed_ms = 0;
 static void vTaskDelay(unsigned duration) { delayed_ms += duration; }
@@ -386,6 +389,110 @@ with tempfile.TemporaryDirectory() as directory:
                         str(test_source), "-o", str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
 print("PASS: backlight-only wake skips panel transactions; panel sleep preserves phased wake")
+
+fade_harness = r'''
+#include <cassert>
+#include <cstdint>
+#define SCREENSAVER_BACKLIGHT_ONLY TEST_LEGACY
+#define SCREENSAVER_KEEP_PANEL_AWAKE TEST_KEEP_PANEL
+#define HAS_IMAGE_FETCH 1
+#define LOGI(...) ((void)0)
+enum class ScreenSaverState { Awake, FadingOut, Asleep, FadingIn };
+struct DeviceConfig { uint16_t screen_saver_fade_out_ms = 800, screen_saver_fade_in_ms = 400; };
+static DeviceConfig config;
+static DeviceConfig* g_config = &config;
+static ScreenSaverState g_state = ScreenSaverState::Awake;
+static uint32_t clock_ms = 0, g_last_sleep_refresh_ms = 0, g_fade_start_ms = 0, g_fade_duration_ms = 0;
+static uint16_t g_pixel_shift_counter = 0;
+static uint8_t g_current_brightness = 100, g_target_brightness = 100, g_fade_from = 0, g_fade_to = 0;
+static bool g_idle_screen_active = false;
+static unsigned overlays = 0, suspends = 0, resumes = 0;
+static uint32_t millis() { return clock_ms; }
+static uint8_t button_defaults_get_pixel_shift_distance() { return 4; }
+static void create_sleep_overlay() { ++overlays; }
+static void image_fetch_suspend() { ++suspends; }
+static void image_fetch_unsuspend() { ++resumes; }
+static void enter_awake() { g_state = ScreenSaverState::Awake; }
+struct DisplayDriver {
+    unsigned sleeps = 0;
+    uint8_t brightness = 100;
+    bool hasBacklightControl() { return true; }
+    void setBacklightBrightness(uint8_t value) { brightness = value; }
+    void setBacklight(bool on) { brightness = on ? 100 : 0; }
+    void displaySleep() { ++sleeps; }
+};
+struct Manager {
+    DisplayDriver driver;
+    DisplayDriver* getDriver() { return &driver; }
+    void lock() {}
+    void unlock() {}
+    void handleSleepScreenRedirect() {}
+};
+static Manager manager;
+static Manager* displayManager = &manager;
+'''
+fade_harness += saver_source[saver_source.index("static void enter_asleep() {"):
+                            saver_source.index("static void enter_awake() {")]
+fade_harness += saver_source[saver_source.index("static uint16_t fade_out_ms() {"):
+                            saver_source.index("static uint8_t config_brightness() {")]
+fade_harness += saver_source[saver_source.index("static void apply_brightness("):
+                            saver_source.index("static void request_activity(")]
+fade_harness += saver_source[saver_source.index("static void update_fade() {"):
+                            saver_source.index("static void maybe_auto_sleep() {")]
+fade_harness += saver_source[saver_source.index("bool screen_saver_manager_is_rendering_suspended() {"):
+                            saver_source.index("bool screen_saver_manager_input_ready() {")]
+fade_harness += r'''
+int main() {
+    assert(g_config == &config);
+    assert(fade_out_ms() == (TEST_LEGACY ? 0 : 800));
+    assert(fade_in_ms() == (TEST_LEGACY ? 0 : 400));
+    assert(!g_idle_screen_active);
+    start_fade(ScreenSaverState::FadingOut, 100, 0, fade_out_ms());
+    if (!TEST_LEGACY) {
+        assert(g_state == ScreenSaverState::FadingOut);
+        clock_ms = 400;
+        update_fade();
+        assert(manager.driver.brightness == 50);
+        assert(manager.driver.sleeps == 0);
+        clock_ms = 800;
+        update_fade();
+    }
+    assert(g_state == ScreenSaverState::Asleep);
+    assert(manager.driver.brightness == 0);
+    assert(manager.driver.sleeps == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(g_pixel_shift_counter == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(overlays == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(suspends == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(screen_saver_manager_is_rendering_suspended() == !TEST_KEEP_PANEL);
+    start_fade(ScreenSaverState::FadingIn, 0, 100, fade_in_ms());
+    if (!TEST_LEGACY) {
+        assert(g_state == ScreenSaverState::FadingIn);
+        clock_ms += 200;
+        update_fade();
+        assert(manager.driver.brightness == 50);
+        clock_ms += 200;
+        update_fade();
+    }
+    assert(g_state == ScreenSaverState::Awake);
+    assert(manager.driver.brightness == 100);
+    assert(resumes == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(!screen_saver_manager_is_rendering_suspended());
+    config.screen_saver_fade_out_ms = 2000;
+    config.screen_saver_fade_in_ms = 600;
+    assert(fade_out_ms() == (TEST_LEGACY ? 0 : 2000));
+    assert(fade_in_ms() == (TEST_LEGACY ? 0 : 600));
+}
+'''
+with tempfile.TemporaryDirectory() as directory:
+    test_source = pathlib.Path(directory) / "fade_policy.cpp"
+    executable = pathlib.Path(directory) / "fade_policy"
+    test_source.write_text(fade_harness)
+    for legacy, keep_panel in ((0, 0), (0, 1), (1, 1)):
+        subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
+                        f"-DTEST_LEGACY={legacy}", f"-DTEST_KEEP_PANEL={keep_panel}",
+                        str(test_source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+print("PASS: configurable fades retain intermediate brightness without panel sleep; legacy frontlight policy is unchanged")
 
 header = (root / "src/app/touch_manager.h").read_text()
 capabilities = header[header.index("#if HAS_DISPLAY && HAS_TOUCH\nuint8_t touch_manager_contact_capacity()"):

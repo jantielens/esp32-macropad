@@ -87,7 +87,8 @@
 #define LCD_BL_PIN 1
 // LEDC channel used for backlight PWM.
 #define TFT_BACKLIGHT_PWM_CHANNEL 1
-#define SCREENSAVER_BACKLIGHT_ONLY true
+// Keep the combined display/touch controller awake while fading the backlight off.
+#define SCREENSAVER_KEEP_PANEL_AWAKE true
 
 // ============================================================================
 // Touch Configuration

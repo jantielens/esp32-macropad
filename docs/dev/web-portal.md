@@ -1444,12 +1444,19 @@ Returns current device configuration (passwords excluded).
 **Notes:**
 - Some fields are build-time gated.
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
-  - `screen_saver_backlight_only` is true on targets that retain display
-    rendering during logical sleep and turn off only the backlight. Their
+  - `screen_saver_backlight_only` is true on legacy timeout-only targets,
+    such as Inkplate6flick-interactive, with instant lighting transitions. Their
     portal moves the timeout and MQTT wake binding into Brightness and omits
     the Screen Saver navigation component. On these targets,
     `screen_saver_enabled` is always reported as true; set the timeout to `0`
     to disable automatic backlight shutdown.
+  - `screen_saver_keeps_panel_awake` is a read-only build capability derived
+    from `SCREENSAVER_KEEP_PANEL_AWAKE`. It keeps the panel controller and
+    rendering active while the screen saver turns off the lighting, and skips
+    panel sleep/wake commands. On JC3248W535 it is true independently of the
+    legacy policy: Screen Saver retains its enable checkbox, configured
+    Fade In/Fade Out durations, idle pad, and wake controls. The portal changes
+    only the display-sleep wording to backlight-off wording.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.

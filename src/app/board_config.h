@@ -1318,9 +1318,14 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // ============================================================================
 // Screensaver
 // ============================================================================
-// Keep the display content active during logical sleep and only turn off the backlight.
+// Use the legacy timeout-only lighting policy with instant transitions.
 #ifndef SCREENSAVER_BACKLIGHT_ONLY
 #define SCREENSAVER_BACKLIGHT_ONLY false
+#endif
+
+// Keep the panel and rendering active during screen saver sleep, independently of fading.
+#ifndef SCREENSAVER_KEEP_PANEL_AWAKE
+#define SCREENSAVER_KEEP_PANEL_AWAKE SCREENSAVER_BACKLIGHT_ONLY
 #endif
 
 // Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).

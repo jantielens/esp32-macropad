@@ -28,8 +28,14 @@ PROTO_DIR = SCRIPT_DIR / "portal-prototype"
 MOCK_DIR = SCRIPT_DIR / "mock-data"
 APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
-PROFILES = ("esp32-p4-lcd4b", "reterminal-e1003-frame")
+PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
+SCREENSAVER_DEFAULTS = {
+    "screen_saver_enabled": True, "screen_saver_timeout_seconds": 300,
+    "screen_saver_fade_out_ms": 800, "screen_saver_fade_in_ms": 400,
+    "screen_saver_wake_on_touch": True, "screen_saver_wake_binding": "",
+    "idle_screen_enabled": False, "idle_screen_timeout_seconds": 60, "idle_screen_pad": "",
+}
 
 
 def remote_log_response_limit():
@@ -115,6 +121,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
             config = copy.deepcopy(self.server.mock_config)
             if self._profile() == "esp32-p4-lcd4b":
                 config["caps"].update(ble=False, ble_hid=False, display=True, touch=True, ha_history=True)
+            elif self._profile() == "jc3248w535":
+                config["caps"].update(ble=False, ble_hid=False, usb_hid=True, display=True, touch=True, ha_history=True)
+            config["screen_saver_backlight_only"] = False
+            config["screen_saver_keeps_panel_awake"] = self._profile() == "jc3248w535"
             self._serve_json(config)
         elif path == "/api/info":
             self._serve_json(self._device_info("catalog" in query))
@@ -378,7 +388,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_production_bundle(self):
         files = []
         enabled = True
-        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER"} if self._profile() == "esp32-p4-lcd4b" else {"IS_EPAPER_FRAME"}
+        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
+        if self._profile() == "jc3248w535":
+            flags.discard("HAS_SOUND_PLAYER")
         for line in (APP_WEB_DIR / "portal.js.bundle").read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line.startswith("# [chunk:"):
@@ -441,7 +453,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if item["id"] == "ble":
                     item["id"] = "hid"
                     item["display_name"] = "Keyboard, Mouse & Gamepad"
-        if profile == "esp32-p4-lcd4b":
+        if profile in ("esp32-p4-lcd4b", "jc3248w535"):
             nav["primary"] = {"fragment": "pad-editor", "label": "Pad Editor", "icon": ""}
             nav["categories"] = [category for category in nav["categories"] if category["id"] != "sensors"]
             return nav
@@ -468,8 +480,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
             "ap_active": False, "has_mqtt": True,
             "has_touch": True, "has_usb_hid": True}
-        if self._profile() == "esp32-p4-lcd4b":
-            info.update(device_class="Macropad", board="esp32-p4-lcd4b", has_display=True,
+        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535"):
+            info.update(device_class="Macropad", board=self._profile(), has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
                         has_image_library=True, has_ble=False, has_ble_hid=False,
@@ -477,6 +489,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                         display_coord_width=720, display_coord_height=720, display_blank_on_save=True,
                         available_screens=[{"id": "pad_" + str(page), "name": self.server.mock_pads.get(str(page), {}).get("name", "Pad " + str(page + 1))}
                                            for page in range(16)] + [{"id": "info", "name": "Device Info"}])
+            if self._profile() == "jc3248w535":
+                info.update(chip_model="ESP32-S3", has_audio=False, has_sound_player=False,
+                            has_image_fetch=False, has_image_library=False,
+                            display_coord_width=480, display_coord_height=320)
             if include_catalog:
                 info["catalog"] = self.server.pad_fixture["catalog"]
                 info["widget_catalog"] = self.server.pad_fixture["widget_catalog"]
@@ -557,6 +573,7 @@ def main():
     server.logs_started = time.monotonic()
     reset_pad_fixtures(server, args.scenario)
     server.mock_config = {
+        **SCREENSAVER_DEFAULTS,
         "device_name": "Kitchen Pad",
         "backlight_brightness": 80,
         "operating_mode": "always_on",
@@ -602,7 +619,7 @@ def main():
     }
     print(f"Portal dev server running at http://localhost:{args.port}")
     print(f"Serving production assets from: {APP_WEB_DIR}")
-    fragment = "pad-editor" if args.profile == "esp32-p4-lcd4b" else "epaper-image"
+    fragment = "screensaver" if args.profile == "jc3248w535" else "pad-editor" if args.profile == "esp32-p4-lcd4b" else "epaper-image"
     print(f"Example: http://localhost:{args.port}/?profile={args.profile}&fragment={fragment}")
     print("Press Ctrl+C to stop.\n")
 

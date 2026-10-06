@@ -184,6 +184,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				#endif
 				(*doc)["backlight_brightness_min"] = MIN_USER_BRIGHTNESS;
 							(*doc)["screen_saver_backlight_only"] = SCREENSAVER_BACKLIGHT_ONLY;
+				(*doc)["screen_saver_keeps_panel_awake"] = SCREENSAVER_KEEP_PANEL_AWAKE;
 				#if HAS_LVGL_EPAPER
 				(*doc)["epaper_render_mode"] = current_config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale";
 				(*doc)["epaper_binding_refresh_interval_ms"] = current_config->epaper_binding_refresh_interval_ms;
