@@ -270,7 +270,7 @@ static void mousepad_describe(JsonObject& out) {
     JsonObject threshold = fields.createNestedObject();
     threshold["name"] = "widget_mousepad_movement_threshold";
     threshold["type"] = "number";
-    threshold["desc"] = "Pointer, drag, and midpoint scroll activation threshold, 0-12 device pixels (default 3); 0 removes the dead zone";
+    threshold["desc"] = "Pointer and midpoint scroll activation threshold, 0-12 device pixels (default 3); 0 removes the dead zone";
     JsonObject reverse = fields.createNestedObject();
     reverse["name"] = "widget_mousepad_reverse";
     reverse["type"] = "boolean";
@@ -288,14 +288,14 @@ static void mousepad_describe(JsonObject& out) {
     back["type"] = "boolean";
     back["desc"] = "Show a top-left Back button isolated from mouse input (default false); uses screen history, with no fallback when empty";
     out["note"] = "USB mousepad: one finger moves; a short stationary tap sends left click. "
-                  "Tap then touch within 300 ms and move to drag; lift the owning finger to release. "
-                  "A stationary second tap double-clicks. Two contacts starting in this mousepad scroll "
+                  "A stationary second tap double-clicks; movement after a tap never holds a mouse button. "
+                  "Two contacts starting in this mousepad scroll "
                   "by midpoint with dominant-axis lock (ties vertical); lift either to stop and lift all before restarting. "
                   "Optional bottom button zones hold left/right on touch until lift; pointer contacts can lift and restart while a zone is held. "
                   "Contact roles are fixed at touchdown; scrolling requires two contacts above the button strip. "
-                  "Extra fingers never change a drag into scrolling; only one mouse button can be held at a time. "
+                  "Only one mouse button can be held at a time. "
                   "Requires USB keyboard transport; consumes button actions and pad swipes. "
-                  "Single-contact drivers retain movement, taps, and dragging; use scrollpad for one-finger scrolling. "
+                  "Single-contact drivers support movement, taps, and zone clicks, but not dragging; use scrollpad for one-finger scrolling. "
                   "No BLE mouse, drag lock, pinch, or multi-finger clicks.";
 }
 #endif

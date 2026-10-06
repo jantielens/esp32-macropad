@@ -28,9 +28,9 @@ Put a complex keyboard combo behind one button. Add text snippets, presentation
 controls, and media keys beside it. **USB and BLE keyboard macros** put your
 favorite shortcuts on screen instead of making you memorize them.
 
-On USB HID boards, add a **Mousepad** for pointing, clicking, and dragging,
+On USB HID boards, add a **Mousepad** for pointing, clicking, and button-zone dragging,
 a **Scrollpad**, or **gamepad controls** with two sticks, two triggers, a hat,
-and 16 buttons. Multicontact drivers support simultaneous controls and
+and 16 buttons. Multicontact drivers support button-zone dragging, simultaneous controls, and
 two-finger Mousepad scrolling.
 
 BLE supports keyboard control only; USB gamepad output is generic HID, not XInput.

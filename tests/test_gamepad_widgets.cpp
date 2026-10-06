@@ -1163,25 +1163,21 @@ TEST_F(GamepadWidget, ScrollpadRemainsSingleContactWithCapture) {
 }
 
 TEST_F(GamepadWidget, MouseDragOwnsFingerAndSuppressesExtraFingers) {
-    create("mousepad");
+    create("mousepad", true);
     mouse_reports();
     GamepadTouchRouter router;
-    router.update(contacts({{4, 50, 50}}), false, widget_generation);
-    lv_tick_inc(20);
-    router.update(contacts({}), false, widget_generation);
-    router.update(contacts({{7, 50, 50}}), false, widget_generation);
-    router.update(contacts({{7, 80, 50}}), false, widget_generation);
+    router.update(contacts({{4, 50, 180}}), false, widget_generation);
+    router.update(contacts({{4, 50, 180}, {7, 50, 50}}), false, widget_generation);
+    router.update(contacts({{4, 50, 180}, {7, 80, 50}}), false, widget_generation);
     auto* mouse = reinterpret_cast<MousepadState*>(state.data);
     ASSERT_NE(mouse->owner, 0U);
     auto reports = mouse_reports();
-    ASSERT_EQ(reports.size(), 4U);
+    ASSERT_EQ(reports.size(), 2U);
     EXPECT_EQ(reports[0].buttons, 1);
-    EXPECT_EQ(reports[1].buttons, 0);
-    EXPECT_EQ(reports[2].buttons, 1);
-    EXPECT_EQ(reports[3].buttons, 1);
-    EXPECT_EQ(reports[3].dx, 30);
-    router.update(contacts({{7, 90, 50}, {1, 100, 100}, {2, 120, 100}}), false, widget_generation);
-    router.update(contacts({{7, 100, 50}, {1, 100, 20}, {2, 120, 20}}), false, widget_generation);
+    EXPECT_EQ(reports[1].buttons, 1);
+    EXPECT_EQ(reports[1].dx, 30);
+    router.update(contacts({{4, 50, 180}, {7, 90, 50}, {1, 100, 100}, {2, 120, 100}}), false, widget_generation);
+    router.update(contacts({{4, 50, 180}, {7, 100, 50}, {1, 100, 20}, {2, 120, 20}}), false, widget_generation);
     reports = mouse_reports();
     ASSERT_EQ(reports.size(), 1U);
     EXPECT_EQ(reports[0].buttons, 1);
@@ -1209,7 +1205,7 @@ TEST_F(GamepadWidget, SyntheticReleaseConsumesFinalPosition) {
     EXPECT_EQ(reports[0].buttons, 0);
 }
 
-TEST_F(GamepadWidget, SyntheticTapDragAndDoubleClick) {
+TEST_F(GamepadWidget, SyntheticTapThenMovementNeverHoldsButtonAndDoubleClickStillWorks) {
     create("mousepad");
     mouse_reports();
     read(true);
@@ -1224,28 +1220,29 @@ TEST_F(GamepadWidget, SyntheticTapDragAndDoubleClick) {
     EXPECT_EQ(reports[3].buttons, 0);
     read(true);
     read(false);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 2U);
+    EXPECT_EQ(reports[0].buttons, 1);
+    EXPECT_EQ(reports[1].buttons, 0);
     read(true);
     point.x = 80;
     read(true);
-    ASSERT_NE(reinterpret_cast<MousepadState*>(state.data)->owner, 0U);
+    EXPECT_EQ(reinterpret_cast<MousepadState*>(state.data)->owner, 0U);
     read(false);
     reports = mouse_reports();
-    ASSERT_EQ(reports.size(), 5U);
-    EXPECT_EQ(reports[2].buttons, 1);
-    EXPECT_EQ(reports[3].buttons, 1);
-    EXPECT_EQ(reports[3].dx, 30);
-    EXPECT_EQ(reports[4].buttons, 0);
+    ASSERT_EQ(reports.size(), 1U);
+    EXPECT_EQ(reports[0].buttons, 0);
+    EXPECT_EQ(reports[0].dx, 30);
 }
 
 TEST_F(GamepadWidget, MouseDragCancellationHideDeleteDisconnectAndOta) {
-    create("mousepad");
+    create("mousepad", true);
     GamepadTouchRouter router;
     auto begin_drag = [&] {
         router.update(contacts({}), false, widget_generation, mouse_hid_generation());
-        router.update(contacts({{4, 50, 50}}), false, widget_generation, mouse_hid_generation());
-        router.update(contacts({}), false, widget_generation, mouse_hid_generation());
-        router.update(contacts({{7, 50, 50}}), false, widget_generation, mouse_hid_generation());
-        router.update(contacts({{7, 80, 50}}), false, widget_generation, mouse_hid_generation());
+        router.update(contacts({{4, 50, 180}}), false, widget_generation, mouse_hid_generation());
+        router.update(contacts({{4, 50, 180}, {7, 50, 50}}), false, widget_generation, mouse_hid_generation());
+        router.update(contacts({{4, 50, 180}, {7, 80, 50}}), false, widget_generation, mouse_hid_generation());
         ASSERT_NE(reinterpret_cast<MousepadState*>(state.data)->owner, 0U);
         mouse_reports();
     };
@@ -1279,7 +1276,7 @@ TEST_F(GamepadWidget, MouseDragCancellationHideDeleteDisconnectAndOta) {
     EXPECT_EQ(reports[0].buttons, 0);
 }
 
-TEST_F(GamepadWidget, MouseDisconnectBetweenTapsClearsDragCandidate) {
+TEST_F(GamepadWidget, MouseDisconnectBetweenTapsKeepsMovementButtonFree) {
     create("mousepad");
     mouse_reports();
     read(true);

@@ -55,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Remove Mousepad single-touch tap-then-drag to prevent unintended dragging
+  when moving after a tap. Preserve pointer movement, tap clicks, double-clicks,
+  and two-finger scrolling. Dragging remains available through optional mouse
+  button zones on multicontact drivers; single-contact drivers no longer support
+  dragging.
 * JC3248W535 uses two 4 MiB OTA firmware slots to fit USB HID while retaining
   native Extensions and 7.625 MiB of filesystem storage. Back up files and
   Extension packages before migrating from the 3 MiB-slot layout: partition

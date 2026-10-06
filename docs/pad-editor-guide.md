@@ -790,7 +790,7 @@ even if the finger returns to its starting point.
 Set **Movement threshold (px)** from 0 to 12 (default 3 device pixels),
 independently for each Mousepad. Lower values start pointer movement sooner;
 0 removes the dead zone. Small finger movements can then cancel taps more
-easily. The same threshold activates tap-then-drag and two-finger midpoint
+easily. The same threshold activates two-finger midpoint
 scrolling, before sensitivity or acceleration.
 
 Set **Sensitivity** from 0.1 to 5 (default 1). Larger values move the pointer
@@ -804,10 +804,9 @@ finger movement while retaining slow-movement precision. Sensitivity remains
 independent; the computer's own pointer acceleration can compound the effect.
 Acceleration affects pointer movement, including dragging, but not scrolling.
 
-Tap, lift, then touch again within 300 ms and move beyond the movement
-threshold to drag with the left button held. Lift that finger to release;
-there is no drag lock. A short stationary second tap produces a double-click
-instead. Additional fingers during a drag are ignored, not used for scrolling.
+Two short stationary taps produce a double-click. Movement after a tap only
+moves the pointer; it never holds a mouse button. To drag, enable Mouse buttons
+and use the button zones described below with a multicontact driver.
 
 Enable **Mouse buttons** (default off) for left/right zones in the bottom 20%
 of the mousepad, split evenly. Each has an unfilled, rounded, dashed outline in
@@ -835,8 +834,8 @@ finger-right/scroll-right direction. Set **Scroll inertia** from 0 to 5
 (default 0, off) for optional release coasting, with the same behavior and
 cancellation rules as Scrollpad. Sensitivity 1 produces one wheel step per
 20 midpoint pixels. Horizontal wheel support depends on the host application.
-Single-contact drivers retain pointer movement, taps, and tap-then-drag;
-use Scrollpad for one-finger scrolling.
+Single-contact drivers support pointer movement, taps, and zone clicks, but
+not dragging; use Scrollpad for one-finger scrolling.
 
 Touches starting inside the mousepad remain owned by it until release,
 including movement outside its edges. They do not trigger pad swipes,

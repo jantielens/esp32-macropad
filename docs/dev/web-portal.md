@@ -1549,7 +1549,7 @@ values from 0.1 to 5, defaulting to 1. `widget_mousepad_acceleration` accepts
 finite values from 0 to 5, defaulting to 0/off; it amplifies fast movement
 independently of sensitivity. `widget_mousepad_movement_threshold` accepts
 finite values from 0-12 device pixels, defaulting to 3 when missing.
-Movement beyond this distance starts pointer movement or an armed drag;
+Movement beyond this distance starts pointer movement, including during a button-zone hold;
 midpoint travel uses the same threshold for two-finger scrolling. Zero removes
 the dead zone. `widget_mousepad_reverse` is boolean (default false), and
 `widget_mousepad_inertia` is 0-5 (default 0/off), following Scrollpad direction
@@ -1565,7 +1565,7 @@ loads/saves these fields and bounds numeric inputs. Shared widget validation
 rejects invalid types, non-finite/out-of-range numbers, and non-boolean toggle
 values independently of MCP. Parsing still supplies defaults and bounds values.
 
-Mousepad supports pointer movement, taps, dragging, and two-finger scrolling.
+Mousepad supports pointer movement, taps, button-zone dragging, and two-finger scrolling.
 See the [Mousepad guide](../pad-editor-guide.md#mousepad) for gesture timing,
 contact ownership, cancellation, and single-contact behavior.
 The editor consumes ordinary

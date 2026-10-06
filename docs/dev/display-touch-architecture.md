@@ -1561,7 +1561,7 @@ and shrinks to the mousepad's content bounds. Both settings default off; empty
 screen history has no special handling.
 
 `MousepadInput` owns relative baselines, fractional sensitivity remainders,
-threshold checks, and time-based acceleration. Its pointer, scrolling, dragging,
+threshold checks, and time-based acceleration. Its pointer, scrolling, button-held,
 and wait-for-release modes share the physical and synthetic point handlers.
 Position-only updates synchronize the current scan before second-contact entry
 establishes the midpoint baseline or queues pointer movement. One complete
@@ -1570,7 +1570,7 @@ velocity. Pointer acceleration uses raw finger speed before sensitivity, with
 a fixed speed threshold and bounded gain; it does not affect scrolling.
 Timing, axis policy, and the contact limit are named internal constants.
 The optional bottom 20% button strip assigns left/right hold roles at touchdown
-and suppresses scrolling while held. It shares HID owner tokens with tap-drag;
+and suppresses scrolling while held. Zone holds use HID owner tokens;
 `MouseSurfaceTouch::allow_replacement` permits pointer re-touch only during a
 zone hold. Outlines are drawn on the surface, not separate child hit targets,
 using dashed lines and corner arcs in the current button text color.

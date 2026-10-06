@@ -337,14 +337,15 @@ You can also trigger pairing from a button on the device by assigning the `ble_p
 USB exposes keyboard, consumer HID, a relative mouse, and a generic HID gamepad
 when USB is selected. Serial diagnostics use the separate UART port regardless
 of the selected transport. Add a **Mousepad** widget in the pad editor on
-touch-enabled USB HID devices for movement, tap-to-left-click, and tap-then-drag.
+touch-enabled USB HID devices for movement and tap-to-left-click.
 Multicontact drivers also support two-finger midpoint scrolling with axis lock.
 **Sensitivity** and **Movement threshold** apply to movement and gestures;
 **Acceleration** (0-5, default 0/off) affects pointer movement only.
 **Reverse scroll direction** and **Scroll inertia** (0-5, default 0/off)
 follow Scrollpad conventions. Enable **Mouse buttons** (default off) for
 outlined left/right zones in the bottom 20%; hold one while moving or
-repositioning another finger above it on multicontact drivers. See the
+repositioning another finger above it to drag on multicontact drivers.
+Single-contact drivers support zone clicks but not dragging. See the
 [Mousepad guide](pad-editor-guide.md#mousepad) for setup and limitations.
 Add a [Scrollpad widget](pad-editor-guide.md#scrollpad) beside or below it for
 one-finger vertical or horizontal scrolling, especially on single-touch boards.

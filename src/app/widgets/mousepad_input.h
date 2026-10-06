@@ -10,7 +10,6 @@ public:
     static constexpr float default_movement_threshold = 3.0f;
     static constexpr float max_movement_threshold = 12.0f;
     static constexpr uint32_t tap_duration_ms = 250;
-    static constexpr uint32_t tap_follow_ms = 300;
     static constexpr bool horizontal_axis_on_tie = false;
 
     struct ButtonZones {
@@ -57,7 +56,6 @@ public:
             button_id = id;
             button_mask = zone_mask;
             mode = Mode::ButtonHeld;
-            tap_pending = drag_candidate = false;
             output.hold_start = true;
             output.button_mask = button_mask;
         } else if (mode == Mode::ButtonHeld) {
@@ -67,15 +65,12 @@ public:
                 press(x, y, now);
             }
         } else if (mode == Mode::Idle) {
-            drag_candidate = tap_pending && uint32_t(now - tapped_at) <= tap_follow_ms;
-            tap_pending = false;
             first = {id, x, y};
             mode = Mode::Pointer;
             press(x, y, now);
         } else if (mode == Mode::Pointer && id != first.id) {
             second = {id, x, y};
             mode = Mode::Scrolling;
-            drag_candidate = tap_pending = false;
             active = false;
             axis_locked = false;
             baseline_x = (first.x + second.x) / 2;
@@ -93,15 +88,10 @@ public:
     Output contact_move(uint8_t id, int x, int y, uint32_t now,
                         float sensitivity, float acceleration, float threshold) {
         Output output;
-                if ((mode == Mode::Pointer || mode == Mode::Dragging ||
-                         (mode == Mode::ButtonHeld && pointer_active)) && id == first.id) {
+        if ((mode == Mode::Pointer || (mode == Mode::ButtonHeld && pointer_active)) && id == first.id) {
             first.x = x;
             first.y = y;
             move(x, y, sensitivity, output.dx, output.dy, now, acceleration, threshold);
-            if (moved && drag_candidate && mode == Mode::Pointer) {
-                mode = Mode::Dragging;
-                output.hold_start = true;
-            }
         } else if (mode == Mode::Scrolling) {
             Contact* contact = id == first.id ? &first : id == second.id ? &second : nullptr;
             if (!contact) return output;
@@ -143,12 +133,6 @@ public:
             pointer_active = active = false;
         } else if (mode == Mode::Pointer && id == first.id) {
             output.click = release(now);
-            tap_pending = output.click && !drag_candidate;
-            tapped_at = now;
-            mode = Mode::Waiting;
-        } else if (mode == Mode::Dragging && id == first.id) {
-            output.hold_end = true;
-            active = false;
             mode = Mode::Waiting;
         } else if (mode == Mode::Scrolling && (id == first.id || id == second.id)) {
             output.velocity = scrolling.release(now);
@@ -212,10 +196,10 @@ public:
         return click;
     }
 
-    void cancel() { end_session(); tap_pending = drag_candidate = false; }
+    void cancel() { end_session(); }
 
 private:
-    enum class Mode : uint8_t { Idle, Pointer, Scrolling, Dragging, Waiting, ButtonHeld };
+    enum class Mode : uint8_t { Idle, Pointer, Scrolling, Waiting, ButtonHeld };
     struct Contact { uint8_t id = 0; int x = 0; int y = 0; };
     Contact first;
     Contact second;
@@ -225,9 +209,6 @@ private:
     int baseline_y = 0;
     bool axis_locked = false;
     bool horizontal = false;
-    uint32_t tapped_at = 0;
-    bool tap_pending = false;
-    bool drag_candidate = false;
     int start_x = 0;
     int start_y = 0;
     int last_x = 0;
