@@ -9,6 +9,12 @@
       <input type="text" class="form-control" id="device_name" name="device_name" oninput="updateSanitizedName()">
       <div class="form-text">mDNS hostname: <code id="device_name_sanitized">esp32-xxxx.local</code></div>
     </div>
+    <div class="mb-3">
+      <label class="form-label" for="timezone">Timezone</label>
+      <input type="text" class="form-control" id="timezone" name="timezone" maxlength="63" list="timezone-options">
+      <datalist id="timezone-options"><option value="UTC0"><option value="Europe/Brussels"><option value="Europe/London"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Asia/Tokyo"></datalist>
+      <button type="button" class="btn btn-secondary btn-sm" id="timezone-save-btn">Save Timezone</button>
+    </div>
     <div class="save-bar">
       <button type="button" class="btn btn-primary btn-sm" id="device-name-save-btn">Save</button>
     </div>

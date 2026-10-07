@@ -57,6 +57,23 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.scenario = scenario
     server.mock_screen = "pad_0"
     server.mock_icons = {}
+    server.mock_alarms = {"1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
+                               "snooze_minutes": 9, "auto_dismiss_minutes": 30,
+                               "on_ring": [], "on_stop": []}}
+    server.mock_alarm_status = {"active_id": 0, "state": "idle", "ready": True,
+                               "ota_deferred": False, "storage_error": False, "hook_error": False}
+    for action in fixture["catalog"]:
+        action["alarm_hook_allowed"] = action["type"] not in ("delay", "key", "gamepad", "camera_capture", "voice_assistant")
+        if action["type"] == "sound_alert":
+            action["label"] = "Sound alert"
+    fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm", "alarm_hook_allowed": True,
+        "commands": [{"id": "snooze", "label": "Snooze"}, {"id": "cancel", "label": "Cancel"}],
+        "editor_fields": [{"name": "alarm_id", "label": "Alarm", "type": "select", "default": "0", "numeric": True,
+                           "options": [{"id": "0", "label": "Active alarm"}, {"id": "1", "label": "Alarm 1"}]},
+                          {"name": "alarm_command", "label": "Command", "type": "select", "default": "snooze", "command_options": True}]})
+    fixture["binding_schema"]["schemes"].append({"name": "alarm", "min_params": 1, "max_params": 1,
+        "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
+        "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id"]})
     server.mock_pads["5"]["buttons"] = [
         {"col": col, "row": row, "label_center": f"{row * 8 + col + 1:02}",
          "bg_color": "#166b64" if (col + row) % 2 else "#273641"}
@@ -107,6 +124,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_file(EPAPER_WEB_DIR / "epaper_init.js")
         elif path == "/portal-logs.js":
             self._serve_file(APP_WEB_DIR / "portal_logs.js")
+        elif path == "/portal_alarms.js":
+            self._serve_file(APP_WEB_DIR / "portal_alarms.js")
 
         # Prototype assets remain useful for fragments not yet migrated.
         elif path in ("/bootstrap.min.css", "/portal-custom.css", "/portal_nav.js"):
@@ -124,6 +143,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             elif self._profile() == "jc3248w535":
                 config["caps"].update(ble=False, ble_hid=False, usb_hid=True, display=True, touch=True, ha_history=True)
             config["screen_saver_backlight_only"] = False
+            config.setdefault("timezone", "Europe/Brussels")
             config["screen_saver_keeps_panel_awake"] = self._profile() == "jc3248w535"
             self._serve_json(config)
         elif path == "/api/info":
@@ -139,6 +159,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     self._serve_json({"error": "Pad not found"}, 404)
         elif path == "/api/component/button-defaults/config":
             self._serve_json(self.server.mock_defaults)
+        elif path in ("/api/component/alarms/config", "/api/component/alarms/status"):
+            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
+                self._serve_json({"error": "Alarm unavailable"}, 404)
+            else:
+                self._serve_json(self.server.mock_alarms if path.endswith("/config") else self.server.mock_alarm_status)
         elif path == "/api/bindings":
             self._serve_json(self.server.pad_fixture["binding_schema"])
         elif path == "/api/pad/blocks":
@@ -217,6 +242,46 @@ class PortalHandler(SimpleHTTPRequestHandler):
         query = parse_qs(parsed.query)
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
+
+        if path.startswith("/api/component/alarms/") or path == "/__mock/alarm":
+            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
+                self._serve_json({"error": "Alarm unavailable"}, 404)
+                return
+            try:
+                data = json.loads(body.decode("utf-8")) if body else {}
+                if not isinstance(data, dict):
+                    raise ValueError()
+            except (UnicodeDecodeError, ValueError):
+                self._serve_json({"error": "Invalid JSON"}, 400)
+                return
+            if path == "/api/component/alarms/config":
+                slot = data.get("1", {})
+                allowed = {action["type"] for action in self.server.pad_fixture["catalog"] if action["alarm_hook_allowed"]}
+                if (set(data) != {"1"} or type(slot.get("enabled")) is not bool
+                        or any(type(slot.get(key)) is not int or not minimum <= slot[key] <= maximum for key, minimum, maximum in
+                               (("hour", 0, 23), ("minute", 0, 59), ("weekdays", 0, 127), ("snooze_minutes", 1, 1440), ("auto_dismiss_minutes", 1, 1440)))
+                        or any(not isinstance(slot.get(key), list) or len(slot[key]) > 3
+                               or any(not isinstance(action, dict) or action.get("type") not in allowed for action in slot[key]) for key in ("on_ring", "on_stop"))):
+                    self._serve_json({"error": "Invalid alarm config"}, 400)
+                    return
+                if self.server.scenario == "save-error":
+                    self._serve_json({"error": "Mock alarm save failure"}, 503)
+                    return
+                if data != self.server.mock_alarms:
+                    self.server.mock_alarm_status.update(active_id=0, state="idle")
+                self.server.mock_alarms = data
+            elif path == "/api/component/alarms/snooze":
+                if self.server.mock_alarm_status["state"] == "ringing":
+                    self.server.mock_alarm_status["state"] = "snoozed"
+            elif path == "/api/component/alarms/cancel":
+                self.server.mock_alarm_status.update(active_id=0, state="idle")
+            elif path == "/__mock/alarm":
+                self.server.mock_alarm_status.update(data)
+            else:
+                self._serve_json({"error": "Unknown alarm operation"}, 404)
+                return
+            self._serve_json({"success": True})
+            return
 
         if path in ("/api/pad", "/api/pad/resolve", "/api/component/button-defaults/config",
                     "/api/component/display/screen", "/__mock/reset"):
@@ -449,6 +514,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
         for category in nav["categories"]:
             if category["id"] == "device":
                 category["items"].append({"id": "logs", "display_name": "Logs", "portal_script": "/portal-logs.js"})
+            if category["id"] == "actions" and profile in ("esp32-p4-lcd4b", "jc3248w535"):
+                category["items"].append({"id": "alarms", "display_name": "Alarm", "portal_script": "/portal_alarms.js"})
             for item in category["items"]:
                 if item["id"] == "ble":
                     item["id"] = "hid"

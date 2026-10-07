@@ -243,6 +243,24 @@ source samples into the next call so adjacent decoded frames remain continuous.
 Music uploads are published after path validation and storage completion; the
 first decode occurs when the track is opened for playback.
 
+## Alarm Tones And Cancellation
+
+Sound alerts support `tone`, `tone_loop`, `mp3`, and shared audio `stop` kinds.
+A looping tone must contain a valid duration-bearing segment; empty patterns
+use the existing default beep. Looping MP3 playback is not implemented.
+Stop clears queued sound and music work, ends tone overlays, and requests a
+music stop independently of command-queue capacity.
+
+Synchronous alarm dispatch supplies a session-generation guard to tone, MP3,
+and music submissions. Workers check that guard before queued execution and at
+playback checkpoints. Cancel, snooze, replacement, edits, and timezone changes
+invalidate the previous session so stale work cannot restart its audio.
+Submissions also carry the current OTA epoch. Active OTA discards queued audio
+and music work, ends playback, and skips catalog refreshes. MP3 decoding checks
+between frames and PCM output checks before writes; cancellation is cooperative.
+Ordinary button submissions retain their existing unguarded session behavior,
+while all audio work still honors OTA checkpoints.
+
 ## Diagnostics And Logging
 
 `audio.cpp` reports output starvation from the time represented by queued DMA

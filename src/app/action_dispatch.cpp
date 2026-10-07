@@ -16,6 +16,19 @@
 
 #define TAG "Action"
 
+static thread_local ActionDispatchContext dispatch_context;
+ActionDispatchContext action_dispatch_context() { return dispatch_context; }
+ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* label,
+                                         bool (*work_guard)(uint32_t), uint32_t generation) {
+    const ActionTypeDef* type = action_type_find(act.type);
+    if (!type || type->execution != ACTION_EXECUTION_SYNC) return ACTION_FAILED;
+    const ActionDispatchContext previous = dispatch_context;
+    dispatch_context = {true, work_guard, generation};
+    const ActionResult result = action_dispatch(act, label);
+    dispatch_context = previous;
+    return result;
+}
+
 #if HAS_MQTT
 static bool resolve_action_bindings(ButtonAction& act) {
     return action_type_resolve_bindings(action_type_find(act.type), act);

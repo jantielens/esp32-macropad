@@ -6,6 +6,7 @@
 #include "web_portal_state.h"  // web_portal_get_current_config()
 #include "log_manager.h"
 #include "net_activity.h"
+#include "ota_activity.h"
 
 #include <HTTPClient.h>
 #include <WiFi.h>
@@ -166,6 +167,7 @@ static HaServiceResult execute_request(const HaServiceRequest& request) {
     http.addHeader("Authorization", auth);
     http.addHeader("Content-Type", "application/json");
 
+    if (ota_activity_is_active()) { http.end(); return finish(HA_STATUS_TRANSPORT_ERROR); }
     const int code = http.POST((uint8_t*)body, strlen(body));
     net_activity_mark(NET_CH_HTTP);
     if (code > 0) result.http_status = (int16_t)code;
@@ -183,6 +185,7 @@ static HaServiceResult execute_request(const HaServiceRequest& request) {
 }
 
 void ha_service_execute() {
+    if (ota_activity_is_active()) return;
     HaServiceRequest request = {};
     portENTER_CRITICAL(&g_ha_mux);
     const bool dequeued = g_ha_delivery.dequeue(request);
@@ -193,6 +196,13 @@ void ha_service_execute() {
 #if HAS_MCP
     if (result.execution_id) ha_service_execution_record(result);
 #endif
+}
+
+bool ha_service_execute_immediate(const HaServicePayload& payload) {
+    if (ota_activity_is_active()) return false;
+    HaServiceRequest request = {};
+    request.payload = payload;
+    return execute_request(request).status == HA_STATUS_SUCCESS;
 }
 
 #endif // HAS_DISPLAY || HAS_BUTTON

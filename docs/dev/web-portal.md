@@ -1361,11 +1361,108 @@ History intentionally excludes largest-free-block measurements. Those require
 an allocator pool walk, which can interrupt continuous MIPI-DSI scan-out.
 `GET /api/health` retains its cached internal largest-block values.
 
+### Persistent Alarm Component
+
+`ALARM_ENABLED` defaults to `HAS_DISPLAY` and can be overridden by a board with
+the action framework enabled. It gates the runtime, `alarm` action and binding,
+component, assets, and MCP tools. Shared timezone and NTP services are ungated.
+The Alarm fragment uses the shared action editor with strict
+`alarm_hook_allowed` catalog filtering. Its standalone `/portal_alarms.js` asset
+is authenticated and gated with the component.
+Hash routing waits for navigation assets before loading a fragment, including
+on direct links, so its convention-based initializer is available at startup.
+
+| Method | Endpoint | Contract |
+|--------|----------|----------|
+| GET | `/api/component/alarms/config` | Normalized ID-keyed definition |
+| POST | `/api/component/alarms/config` | Validated, durable full replacement; maximum 8192 bytes |
+| GET | `/api/component/alarms/status` | State, readiness, storage/action failures, OTA deferral |
+| POST | `/api/component/alarms/snooze` | Queue snooze for a ringing session |
+| POST | `/api/component/alarms/cancel` | Queue cancellation without disabling the schedule |
+
+Phase 1 accepts exactly slot `1`:
+
+```json
+{
+  "1": {
+    "enabled": false,
+    "hour": 7,
+    "minute": 30,
+    "weekdays": 62,
+    "snooze_minutes": 9,
+    "auto_dismiss_minutes": 30,
+    "on_ring": [],
+    "on_stop": []
+  }
+}
+```
+
+Weekdays use Sunday bit 0 through Saturday bit 6; zero schedules nothing.
+Hours are 0-23, minutes 0-59, and both durations are 1-1440 minutes. Hook arrays
+use the existing three-action limit. Every write path rejects unavailable,
+unknown, pausable, or invalid actions; oversized string payloads are not silently
+truncated. Other action lists retain their continuation behavior.
+
+`alarm_manager` owns runtime transitions on the main loop. REST and MCP writes
+cross the main-loop bridge, controls enter a bounded command queue, and readers
+copy mutex-protected snapshots. Ring/stop hooks are snapshotted per session and
+dispatched outside the manager lock, with display locking when available.
+Synchronous hook failures do not prevent attempts of subsequent hooks. Alarm
+Home Assistant hooks execute bounded HTTP requests directly; ordinary button
+actions retain queued delivery.
+
+The shared time service requires current-boot SNTP synchronization. Local-time
+conversion and explicit binding timezone overrides share a mutex around `TZ`.
+Startup, first synchronization, enabling, and substantive edits establish a
+next-full-minute fence. Live occurrences have an inclusive 300-second grace;
+only the newest eligible occurrence is considered. The first DST fold is used,
+gaps are skipped, and handled history survives edits and backward clock changes.
+Snooze and auto-dismiss use monotonic time; each ring start resets its timeout.
+An overdue snooze beyond the same grace expires rather than ringing late.
+
+Persistence uses `Storage` and alternating `/config/alarm_a.json` and
+`/config/alarm_b.json` snapshots. Each bounded envelope includes schema version,
+generation, config, handled epoch, and CRC32. The inactive file is written,
+flushed, closed, and re-read before becoming active. A failed config save does
+not apply changes. An invalid newer snapshot falls back to the valid older one
+and reports degraded storage; two invalid snapshots leave the default disabled.
+
+Handled-occurrence history is saved before ring dispatch. If that save fails,
+the alarm still rings with RAM deduplication and degraded-storage status, without
+per-tick retries. Exactly-once external effects cannot be guaranteed: a crash
+after a successful history save but before dispatch can lose a ring, while a
+failed history save followed by reboot can duplicate one. Filesystem loss is
+not recovered from NVS or another medium.
+
+OTA defers hooks and persistent writes. Interrupted hook lists retain their
+remaining suffix, while cancel, edits, and replacement invalidate stale pending
+rings. Cleanup runs before a replacement ring, and lateness remains bounded.
+Alarm audio work carries session-generation and OTA-epoch guards so canceled
+or stale queued work cannot later resume. Already-started external effects are
+cooperatively stopped where supported, not rolled back.
+
+Serial diagnostics use the `Time` and `Alarm` tags. INFO logs report timezone,
+NTP startup/synchronization, loaded or saved settings, readiness, ring starts,
+controls, and hook dispatch/results. WARN logs identify rejected saves, expired
+pending rings, and empty ring action lists. With `LOG_LEVEL=4`, enabled alarms
+also emit a DEBUG scheduling snapshot at most once per minute, plus snapshots
+after configuration, readiness, or OTA changes. Its `blocked` field explains
+readiness, weekday, arming, handled-history, cleanup, and grace-window guards;
+the snapshot includes local time, Sunday-based weekday index, and epoch values.
+Hook payloads are not logged. Capture both tags from boot through the expected
+trigger when investigating an alarm that does not ring.
+
 ### Configuration Management
 
 #### `GET /api/config`
 
 Returns current device configuration (passwords excluded).
+
+The `timezone` field defaults to `UTC0`. `POST /api/config?no_reboot=1` accepts
+supported Olson names or validated POSIX TZ rules, including explicit transition
+rules for DST. Successful changes apply live and dismiss/rearm an active alarm;
+unqualified time bindings use the same setting. Failed saves retain the previous
+timezone and alarm session.
 
 **Response:**
 ```json

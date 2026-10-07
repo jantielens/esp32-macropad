@@ -74,9 +74,7 @@ void describe_volume(JsonObject& action) {
     JsonObject editor_value = editor_fields.createNestedObject(); editor_value["name"] = "volume_value"; editor_value["label"] = "Value (%)"; editor_value["type"] = "text"; editor_value["bindable"] = true;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kVolumeActionType, ACTION_TYPE_VOLUME, parse_volume,
-    serialize_volume, dispatch_volume, nullptr, describe_volume, volume_available,
-    validate_volume, visit_volume_fields);
+DEFINE_AND_REGISTER_ACTION_TYPE(kVolumeActionType, ACTION_TYPE_VOLUME, parse_volume, serialize_volume, dispatch_volume, nullptr, describe_volume, volume_available, validate_volume, visit_volume_fields, ACTION_EXECUTION_SYNC);
 
 } // namespace
 

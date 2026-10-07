@@ -97,8 +97,6 @@ void describe_gamepad(JsonObject& action) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kGamepadActionType,
-    ACTION_TYPE_GAMEPAD, parse_gamepad, serialize_gamepad, dispatch_gamepad,
-    nullptr, describe_gamepad, gamepad_available, validate_gamepad);
+DEFINE_AND_REGISTER_ACTION_TYPE(kGamepadActionType, ACTION_TYPE_GAMEPAD, parse_gamepad, serialize_gamepad, dispatch_gamepad, nullptr, describe_gamepad, gamepad_available, validate_gamepad, nullptr, ACTION_EXECUTION_PAUSABLE);
 }
 #endif

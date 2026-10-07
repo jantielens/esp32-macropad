@@ -43,4 +43,25 @@ for forbidden in ("timer_configure_and_start(", "timer_toggle_prepared(", "timer
     if forbidden in control_body.group(0):
         raise AssertionError("MCP Timer control bypasses the shared command runner")
 
-print("timer_mcp_integration: PASS")
+require(
+    r'\{\s*"alarms"\s*,\s*nullptr\s*,\s*alarm_config_save_raw\s*,\s*8192\s*\}',
+    "MCP Alarm writes must delegate to the shared durable manager",
+)
+require(
+    r'if \(strcmp\(entry->name, "alarms"\) == 0\).*?alarm_config_to_json\(.*?alarm_status_to_json\(',
+    "MCP Alarm reads must report normalized definitions and runtime status",
+)
+require(
+    r'static bool tool_alarm_control\(.*?alarm_command_submit\(',
+    "MCP Alarm controls must use the main-loop command queue",
+)
+require(
+    r'if \(c->save == alarm_config_save_raw\).*?alarm_last_error\(',
+    "MCP Alarm writes must expose manager validation failures",
+)
+if 'REGISTER_MCP_TOOL(s_tool_get_alarm_status)' not in SOURCE or 'REGISTER_MCP_TOOL(s_tool_alarm_control)' not in SOURCE:
+    raise AssertionError("MCP Alarm status and control tools must be registered")
+if '!time_service_timezone_valid(timezone)' not in SOURCE:
+    raise AssertionError("MCP timezone writes must use the shared timezone validator")
+
+print("timer_mcp_integration: PASS (timers and alarms)")

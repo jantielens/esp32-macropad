@@ -128,6 +128,14 @@ void handlePortalLogsJS(AsyncWebServerRequest *request) {
 }
 #endif
 
+#if ALARM_ENABLED
+void handlePortalAlarmsJS(AsyncWebServerRequest *request) {
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript",
+		portal_alarms_js_gz, portal_alarms_js_gz_len, "no-store"));
+}
+#endif
+
 // ---- Legacy page handlers (redirect to shell with hash) ----
 void handleRoot(AsyncWebServerRequest *request) {
 		if (!portal_auth_gate(request)) return;

@@ -634,6 +634,42 @@ When a message is received on the topic, its payload is compared to the value fi
 
 The number of available trigger slots depends on the board (8 by default, fewer on memory-constrained boards). Changes apply immediately and subscriptions are re-established whenever the device reconnects to the MQTT broker.
 
+### Alarm Clock
+
+*Shown when the board enables `ALARM_ENABLED`, normally on display boards.*
+
+Open **Alarm** in the Actions category. Phase 1 provides one weekly alarm,
+slot **1**, disabled by default. Set its time and weekdays; selecting no weekdays
+means it never rings. Set **Timezone** in the general device settings before
+choosing the alarm's local time. Supported Olson names, such as
+`Europe/Brussels`, and explicit POSIX timezone rules are accepted. Saving a
+timezone applies it immediately without rebooting.
+
+Each ring and stop list holds up to three synchronous actions. Actions that
+pause execution, such as Delay and key sequences, are excluded. To sound an
+alarm, select **Sound alert** with a looping tone pattern; use **Stop audio** in
+the stop list. Looping MP3 playback is not supported. Stop audio is shared with
+other audio playback on the device.
+
+**Snooze** ends the current ring, runs its stop actions, then rings again after
+the selected duration (default nine minutes). **Cancel** ends ringing or snooze
+without disabling the weekly schedule. Ringing automatically ends after the
+configured timeout (default 30 minutes). Idle controls do nothing.
+
+The alarm waits for an NTP synchronization during the current boot. Once synced,
+Wi-Fi loss does not stop its clock. Boot, first sync, enabling, and substantive
+edits start checking from the next full minute; missed alarms before that point
+are not replayed. Live delays allow at most five minutes of lateness. During a
+daylight-saving transition, a repeated local time rings only on its first
+occurrence, and a nonexistent local time is skipped.
+
+A successful definition or timezone change dismisses an active alarm using its
+old stop actions. Identical saves, rejected input, and failed saves preserve the
+session. Definitions and handled-occurrence history use the primary filesystem,
+not NVS. Formatting or losing that filesystem can lose the alarm. Storage and
+action failures appear in the alarm status; a history-save failure still allows
+the current ring, but a later reboot can repeat an occurrence.
+
 ### Timers
 
 *Shown only on boards with a display.*

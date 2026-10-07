@@ -14,6 +14,7 @@
   var categories = [];
   var itemMap = {};       // itemId → { cat, item }
   var currentItem = null;
+  var navigationReady = false;
   var activeFetchController = null;
   var fragmentLoadGeneration = 0;
   var backdropEl = null;
@@ -300,6 +301,7 @@
   // ---------- Hash change (browser back/forward) ----------
 
   window.addEventListener('hashchange', function () {
+    if (!navigationReady) return;
     var item = getItemFromHash();
     if (item && item !== currentItem) {
       loadFragment(item);
@@ -388,6 +390,7 @@
         window._portalPrimary = primary;
 
         buildNav(data.categories || []);
+        navigationReady = true;
 
         // Startup fallback chain:
         // 1. In AP mode, primary fragment wins over any hash (the wizard is

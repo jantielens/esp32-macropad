@@ -28,6 +28,6 @@ char* key_value_field(ButtonAction& act, size_t* size) { *size = sizeof(act.payl
 bool key_available() { return HAS_BLE_HID || HAS_USB_HID; }
 const char* validate_key(const JsonObjectConst action) { return action.containsKey("sequence") && !action["sequence"].is<const char*>() ? "key sequence must be a string" : nullptr; }
 void describe_key(JsonObject& action) { action["group"] = "Keyboard"; action["label"] = "Send keys"; JsonArray fields = action.createNestedArray("fields"); JsonObject sequence = fields.createNestedObject(); sequence["name"] = "sequence"; sequence["description"] = "key sequence DSL"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kKeyActionType, ACTION_TYPE_KEY, parse_key, serialize_key, dispatch_key, key_value_field, describe_key, key_available, validate_key);
+DEFINE_AND_REGISTER_ACTION_TYPE(kKeyActionType, ACTION_TYPE_KEY, parse_key, serialize_key, dispatch_key, key_value_field, describe_key, key_available, validate_key, nullptr, ACTION_EXECUTION_PAUSABLE);
 } // namespace
 #endif // (HAS_DISPLAY || HAS_BUTTON) && (HAS_BLE_HID || HAS_USB_HID)

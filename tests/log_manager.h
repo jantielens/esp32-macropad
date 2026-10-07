@@ -17,8 +17,12 @@ enum LogLevel : uint8_t {
 
 // Variadic template noop — evaluates all arguments (satisfying -Werror=unused-variable
 // for variables used only in log calls) but emits no code at runtime.
+#if defined(HOST_LOG_CAPTURE)
+void log_noop(const char* module, const char* format, ...);
+#else
 template<typename... Args>
 inline void log_noop(Args&&...) {}
+#endif
 
 #define LOGE(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
 #define LOGW(module, format, ...) log_noop(module, format, ##__VA_ARGS__)

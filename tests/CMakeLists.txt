@@ -56,6 +56,10 @@ endfunction()
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
+add_host_legacy_test(test_alarm_clock_core SOURCES test_alarm_clock_core.cpp)
+add_host_legacy_test(test_alarm_calendar SOURCES test_alarm_calendar.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp OPTIONS -pthread)
+
 add_host_gtest(test_mousepad test_mousepad.cpp)
 add_host_legacy_test(test_remote_log SOURCES test_remote_log.cpp)
 add_host_gtest(test_gamepad test_gamepad.cpp)
@@ -346,6 +350,18 @@ add_host_legacy_test(test_timer_config
 )
 add_test(NAME test_timer_config_config_mutex_failure COMMAND test_timer_config config-mutex-failure)
 add_test(NAME test_timer_config_save_mutex_failure COMMAND test_timer_config save-mutex-failure)
+add_host_legacy_test(test_alarm_manager
+    SOURCES test_alarm_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/alarm_manager.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/actions.cpp ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp stubs.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS ALARM_ENABLED=1 HOST_LOG_CAPTURE=1
+    OPTIONS -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/Arduino.h
+    LIBRARIES m pthread)
 add_host_legacy_test(test_timer_format SOURCES test_timer_format.cpp stubs.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 
 add_host_legacy_test(test_shutter_curtain_stats SOURCES test_shutter_curtain_stats.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester LIBRARIES m)
@@ -371,7 +387,7 @@ add_host_legacy_test(test_epaper_frame_media_conformance SOURCES test_epaper_fra
 add_host_legacy_test(test_coffee_scale_cmd_len SOURCES test_coffee_scale_cmd_len.cpp DEFINITIONS IS_COFFEE_SCALE=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_expose_dry_down SOURCES test_expose_dry_down.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 HAS_AUDIO=0 LIBRARIES m)
 add_host_legacy_test(test_meter_mag SOURCES test_meter_mag.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
-add_host_legacy_test(test_print_log SOURCES test_print_log.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
+add_host_legacy_test(test_print_log SOURCES test_print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m pthread)
 add_host_legacy_test(test_mcp_result_strings SOURCES test_mcp_result_strings.cpp INCLUDES ${HOST_ARDUINOJSON_DIR})
 add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_littlefs SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
@@ -386,11 +402,12 @@ function(add_binding_schema_profile name definition)
         SOURCES test_binding_schema_production.cpp binding_schema_profiles/stubs.cpp
             ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_builtin_schemes.cpp
             ${PROJECT_SOURCE_DIR}/src/app/health_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/alarm_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/music_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/net_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp
             ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/camera_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
-            ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${ARGN}
+            ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src
         DEFINITIONS ${definition}
         OPTIONS -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function

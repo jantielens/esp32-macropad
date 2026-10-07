@@ -25,6 +25,6 @@ ActionResult dispatch_ble_pair(const ButtonAction&, const char* label, uint32_t)
 bool ble_pair_available() { return HAS_BLE_HID; }
 const char* validate_ble_pair(JsonObjectConst) { return nullptr; }
 void describe_ble_pair(JsonObject& action) { action["group"] = "BLE"; action["label"] = "Start BLE pairing"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kBlePairActionType, ACTION_TYPE_BLE_PAIR, parse_ble_pair, serialize_ble_pair, dispatch_ble_pair, nullptr, describe_ble_pair, ble_pair_available, validate_ble_pair);
+DEFINE_AND_REGISTER_ACTION_TYPE(kBlePairActionType, ACTION_TYPE_BLE_PAIR, parse_ble_pair, serialize_ble_pair, dispatch_ble_pair, nullptr, describe_ble_pair, ble_pair_available, validate_ble_pair, nullptr, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

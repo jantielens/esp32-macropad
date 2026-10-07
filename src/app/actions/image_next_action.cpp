@@ -13,8 +13,7 @@ ActionResult dispatch_image_next(const ButtonAction&, const char* label, uint32_
 }
 bool image_next_available() { return true; }
 void describe_image_next(JsonObject& action) { action["group"] = "Image library"; action["label"] = "Next image"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kImageNextActionType, ACTION_TYPE_IMAGE_NEXT,
-    nullptr, nullptr, dispatch_image_next, nullptr, describe_image_next, image_next_available);
+DEFINE_AND_REGISTER_ACTION_TYPE(kImageNextActionType, ACTION_TYPE_IMAGE_NEXT, nullptr, nullptr, dispatch_image_next, nullptr, describe_image_next, image_next_available, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 }
 
 #endif // HAS_IMAGE_LIBRARY

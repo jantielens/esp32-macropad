@@ -53,10 +53,11 @@ function actionEditorPausableActionLimit() {
 }
 
 // Grouped <optgroup> markup for the type <select>, in catalog order.
-function actionEditorTypeOptionsHTML() {
+function actionEditorTypeOptionsHTML(opts) {
     var order = [];
     var byGroup = {};
     actionEditorCatalog().forEach(function(entry) {
+        if (opts && opts.alarmHook && entry.alarm_hook_allowed !== true) return;
         if (!byGroup[entry.group]) { byGroup[entry.group] = []; order.push(entry.group); }
         byGroup[entry.group].push(entry);
     });
@@ -137,7 +138,7 @@ function actionEditorBuildGenericFields(prefix, type, action) {
         if (field.type === 'toggle') {
             action[field.name] = el.checked;
         } else if (el.value !== '') {
-            action[field.name] = field.type === 'number' ? Number(el.value) : el.value.trim();
+            action[field.name] = field.type === 'number' || field.numeric ? Number(el.value) : el.value.trim();
         }
     });
 }
@@ -278,7 +279,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div class="form-group">';
     if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
     h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
-    h += actionEditorTypeOptionsHTML();
+    h += actionEditorTypeOptionsHTML(opts);
     h += '</select>';
     h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
     if (opts.showBleHint) {
@@ -329,7 +330,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div id="' + prefix + '-sound-alert-group" style="display:none;">';
     h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-kind">Kind</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-kind" onchange="actionEditorSoundAlertChanged(\'' + prefix + '\')">';
-    h += '<option value="tone">Tone Alert</option><option value="mp3">MP3 Alert</option></select></div>';
+    h += '<option value="tone">Tone Alert</option><option value="tone_loop">Loop Tone</option><option value="mp3">MP3 Alert</option><option value="stop">Stop Audio</option></select></div>';
     h += '<div id="' + prefix + '-sound-alert-tone-group">';
     h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-pattern">Tone Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sound-alert-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200"></div></div>';
@@ -578,7 +579,7 @@ function actionEditorSoundAlertChanged(prefix) {
     var tone = document.getElementById(prefix + '-sound-alert-tone-group');
     var mp3 = document.getElementById(prefix + '-sound-alert-mp3-group');
     var isMp3 = kind && kind.value === 'mp3';
-    if (tone) tone.style.display = isMp3 ? 'none' : '';
+    if (tone) tone.style.display = isMp3 || (kind && kind.value === 'stop') ? 'none' : '';
     if (mp3) mp3.style.display = isMp3 ? '' : 'none';
 }
 
@@ -789,10 +790,10 @@ function actionEditorBuild(prefix) {
         act.sound_alert_kind = kind ? kind.value : 'tone';
         var volume = document.getElementById(prefix + '-sound-alert-volume');
         if (volume && volume.value !== '') act.sound_alert_volume = parseInt(volume.value, 10);
-        if (act.sound_alert_kind === 'tone') {
+        if (act.sound_alert_kind === 'tone' || act.sound_alert_kind === 'tone_loop') {
             var pattern = document.getElementById(prefix + '-sound-alert-pattern');
             if (pattern) act.sound_alert_pattern = (pattern.value || '').trim();
-        } else {
+        } else if (act.sound_alert_kind === 'mp3') {
             var file = document.getElementById(prefix + '-sound-alert-file');
             if (file) act.sound_alert_file = file.value || '';
         }

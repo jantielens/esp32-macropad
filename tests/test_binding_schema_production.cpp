@@ -110,6 +110,16 @@ int main() {
     expect(all_registered_finite_keys_are_recognized(),
            "every production finite key is not unknown to its real resolver");
     expect_structural_resolvers_are_invoked();
+#if ALARM_ENABLED
+    expect(scheme_is_registered("alarm"), "alarm registered when enabled");
+    char alarm_value[32] = {};
+    binding_template_resolve_registered("alarm", 5, "1_time", alarm_value, sizeof(alarm_value));
+    expect(!strcmp(alarm_value, "07:30"), "alarm time snapshot");
+    binding_template_resolve_registered("alarm", 5, "1_state", alarm_value, sizeof(alarm_value));
+    expect(!strcmp(alarm_value, "ringing"), "alarm state snapshot");
+#else
+    expect(!scheme_is_registered("alarm"), "alarm absent when disabled");
+#endif
 #if HAS_CAMERA && HAS_DISPLAY
     expect(scheme_is_registered("camera"), "camera scheme registered on camera display profile");
 #endif

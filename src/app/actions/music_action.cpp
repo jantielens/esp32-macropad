@@ -1,4 +1,5 @@
 #include "action_registry.h"
+#include "action_dispatch.h"
 #include "log_manager.h"
 #include "music_command.h"
 #if defined(ARDUINO) && HAS_SOUND_PLAYER
@@ -21,7 +22,13 @@ ActionResult dispatch_music(const ButtonAction& act, const char* label, uint32_t
 #if defined(ARDUINO) && HAS_SOUND_PLAYER
     MusicCommand command;
     if (!music_command_parse(act.payload.music.music_command, &command)) LOGW(kMusicActionTag, "%s music: invalid command", label);
-    else if (audio_music_command(command) != AUDIO_MUSIC_SUBMIT_QUEUED) LOGW(kMusicActionTag, "%s music: audio worker busy", label);
+    else {
+        const ActionDispatchContext context = action_dispatch_context();
+        if (audio_music_command(command, context.work_guard, context.generation) != AUDIO_MUSIC_SUBMIT_QUEUED) {
+            LOGW(kMusicActionTag, "%s music: audio worker busy", label);
+            return ACTION_FAILED;
+        }
+    }
 #else
     (void)act;
     LOGW(kMusicActionTag, "%s music: not compiled", label);
@@ -50,6 +57,6 @@ void describe_music(JsonObject& action) {
     JsonArray editor_fields = action.createNestedArray("editor_fields");
     JsonObject command = editor_fields.createNestedObject(); command["name"] = "music_command"; command["label"] = "Command"; command["type"] = "select"; command["command_options"] = true;
 }
-DEFINE_AND_REGISTER_ACTION_TYPE(kMusicActionType, ACTION_TYPE_MUSIC, parse_music, serialize_music, dispatch_music, nullptr, describe_music, music_available, validate_music);
+DEFINE_AND_REGISTER_ACTION_TYPE(kMusicActionType, ACTION_TYPE_MUSIC, parse_music, serialize_music, dispatch_music, nullptr, describe_music, music_available, validate_music, nullptr, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

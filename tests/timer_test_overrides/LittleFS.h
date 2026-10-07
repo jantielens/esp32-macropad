@@ -36,6 +36,7 @@ public:
         return count;
     }
     size_t write(uint8_t value) { return write(&value, 1); }
+    void flush() {}
     void close() {
         if (state->valid && state->writable) timer_test_files[state->path] = state->content;
         state->valid = false;

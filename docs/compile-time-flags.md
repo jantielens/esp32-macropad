@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 304
+Total flags: 305
 
 ### Features (HAS_*)
 
@@ -189,6 +189,7 @@ Total flags: 304
 ### Other
 
 - **ACTION_CONTINUATION_SLOTS** default: `3` — Maximum independent pending action lists; each consumes about 884 bytes of internal RAM; constrained boards should override this to 1.
+- **ALARM_ENABLED** default: `HAS_DISPLAY` — Include the persistent weekly alarm on pad-capable display builds.
 - **AUDIO_CODEC_ADDR** default: `0x18` — I2C address of the audio codec (e.g. ES8311 = 0x18).
 - **AUDIO_DEFAULT_VOLUME** default: `50` — Default volume used when no NVS value has been stored.
 - **AUDIO_DMA_DESC_NUM** default: `6` — I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.
@@ -614,6 +615,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/timer_action.cpp
   - src/app/actions/visual_alert_action.cpp
   - src/app/actions/volume_action.cpp
+  - src/app/alarm_manager.cpp
   - src/app/app.ino
   - src/app/audio_input_binding.cpp
   - src/app/binding_builtin_schemes.cpp
@@ -1149,6 +1151,19 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **ACTION_CONTINUATION_SLOTS**
   - src/app/board_config.h
+- **ALARM_ENABLED**
+  - src/app/actions/alarm_action.cpp
+  - src/app/alarm_binding.cpp
+  - src/app/alarm_manager.cpp
+  - src/app/alarm_manager.h
+  - src/app/app.ino
+  - src/app/binding_builtin_schemes.cpp
+  - src/app/board_config.h
+  - src/app/mcp_tools_config.cpp
+  - src/app/portal_components.cpp
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
+  - src/app/web_portal_routes.cpp
 - **AP_MAX_CONNECTIONS**
   - src/app/web_portal_ap.cpp
 - **AUDIO_CODEC_ADDR**
@@ -1409,6 +1424,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper_frame_device_class.cpp
   - src/app/mqtt_manager.cpp
   - src/app/portal_components.cpp
+  - src/app/time_service.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

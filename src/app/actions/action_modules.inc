@@ -19,6 +19,9 @@
 #include "display_refresh_action.cpp"
 #endif
 #include "timer_action.cpp"
+#if ALARM_ENABLED
+#include "alarm_action.cpp"
+#endif
 #if HAS_IMAGE_LIBRARY
 #include "image_next_action.cpp"
 #include "image_previous_action.cpp"

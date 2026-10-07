@@ -28,6 +28,9 @@ typedef bool (*ActionBindableFieldVisitor)(char* field, size_t field_size,
 // describe() may expose only the existing generic editor field types (text,
 // number, select, toggle). Actions with conditional or specialized controls
 // keep their custom portal editor while still using this registry contract.
+enum ActionExecutionClass { ACTION_EXECUTION_UNKNOWN, ACTION_EXECUTION_SYNC,
+                            ACTION_EXECUTION_PAUSABLE };
+
 struct ActionTypeDef {
     ActionTypeDef(
         const char* type_name,
@@ -40,10 +43,11 @@ struct ActionTypeDef {
         bool (*available)() = nullptr,
                 const char* (*validate)(JsonObjectConst action) = nullptr,
                 bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
-                                                             void* context) = nullptr)
+                                                             void* context) = nullptr,
+        ActionExecutionClass execution = ACTION_EXECUTION_UNKNOWN)
         : type_name(type_name), parse(parse), serialize(serialize), dispatch(dispatch),
           value_field(value_field), describe(describe), available(available),
-                    validate(validate), binding_fields(binding_fields) {}
+                    validate(validate), binding_fields(binding_fields), execution(execution) {}
 
     const char* type_name;                                                  // matches ButtonAction::type
     void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
@@ -59,6 +63,7 @@ struct ActionTypeDef {
     const char* (*validate)(JsonObjectConst action);                         // optional: authoring validation; nullptr = valid
     bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
                            void* context);                                   // optional: visit bindable payload fields
+    ActionExecutionClass execution;
 };
 
 void action_type_register(const ActionTypeDef* type);

@@ -85,6 +85,12 @@ bindings keep it reusable. The editor checks syntax and previews live values.
 
 ### Automation & Timers: One Tap Starts the Routine
 
+Configure one persistent weekly alarm in the portal's **Alarm** settings. Choose
+weekdays and local time, then up to three ring actions and three stop actions.
+Snooze and Cancel are available in the portal, on pad buttons, and through MCP.
+The device-wide timezone also supplies the default for `[time:format]` bindings.
+See the [alarm guide](docs/web-portal-guide.md#alarm-clock).
+
 Start a focus timer, lower the brightness, and show a confirmation with one tap.
 When time is up, play a sound and pulse the screen. **Three independent timers**
 support countdowns, stopwatches, and expiry actions.

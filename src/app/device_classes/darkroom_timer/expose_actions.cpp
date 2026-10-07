@@ -71,13 +71,6 @@ static void expose_describe(JsonObject& out) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(expose_action_type,
-    /* type_name   */ ACTION_TYPE_EXPOSE,
-    /* parse       */ expose_parse,
-    /* serialize   */ expose_serialize,
-    /* dispatch    */ expose_dispatch,
-    /* value_field */ expose_value_field,
-    /* describe    */ expose_describe,
-);
+DEFINE_AND_REGISTER_ACTION_TYPE(expose_action_type, /* type_name   */ ACTION_TYPE_EXPOSE, /* parse       */ expose_parse, /* serialize   */ expose_serialize, /* dispatch    */ expose_dispatch, /* value_field */ expose_value_field, /* describe    */ expose_describe, , nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

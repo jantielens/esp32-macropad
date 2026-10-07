@@ -1,4 +1,5 @@
 #include "power_manager.h"
+#include "time_service.h"
 
 #include "board_config.h"
 #include "config_manager.h"
@@ -181,7 +182,7 @@ void power_manager_sleep_for(uint32_t seconds) {
 				if (now >= 946684800) {
 						struct tm wake_tm;
 						char wake_buf[32];
-						localtime_r(&wake_epoch, &wake_tm);
+						time_service_localtime(wake_epoch, &wake_tm);
 						strftime(wake_buf, sizeof(wake_buf), "%Y-%m-%d %H:%M:%S", &wake_tm);
 						LOGI("Power", "Sleeping for %us; planned wake at %s (epoch=%llu)",
 						     (unsigned)seconds,

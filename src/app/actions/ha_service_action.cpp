@@ -1,4 +1,5 @@
 #include "action_registry.h"
+#include "action_dispatch.h"
 #include "log_manager.h"
 #if defined(ARDUINO)
 #include "ha_service.h"
@@ -13,8 +14,10 @@ void serialize_ha_service(const ButtonAction& act, JsonObject action) { if (act.
 ActionResult dispatch_ha_service(const ButtonAction& act, const char* label, uint32_t) {
 #if defined(ARDUINO)
     const auto& service = act.payload.ha_service;
-    if (service.entity_id[0] && service.service[0]) { LOGI(kHaServiceActionTag, "%s ha_service: %s.%s", label, service.entity_id, service.service); if (ha_service_enqueue(service) == HA_SERVICE_QUEUE_FULL) LOGW(kHaServiceActionTag, "%s ha_service queue full: entity='%s' service='%s'", label, service.entity_id, service.service); }
-    else LOGW(kHaServiceActionTag, "%s ha_service: missing entity_id/service", label);
+    if (action_dispatch_context().synchronous)
+        return ha_service_execute_immediate(service) ? ACTION_COMPLETE : ACTION_FAILED;
+    if (service.entity_id[0] && service.service[0]) { LOGI(kHaServiceActionTag, "%s ha_service: %s.%s", label, service.entity_id, service.service); if (ha_service_enqueue(service) == HA_SERVICE_QUEUE_FULL) { LOGW(kHaServiceActionTag, "%s ha_service queue full: entity='%s' service='%s'", label, service.entity_id, service.service); return ACTION_FAILED; } }
+    else { LOGW(kHaServiceActionTag, "%s ha_service: missing entity_id/service", label); return ACTION_FAILED; }
 #else
     (void)act; (void)label;
 #endif
@@ -37,6 +40,6 @@ const char* validate_ha_service(const JsonObjectConst action) {
     JsonDocument document; return deserializeJson(document, data) || !document.is<JsonObjectConst>() ? "ha_service data_json must contain a JSON object" : nullptr;
 }
 void describe_ha_service(JsonObject& action) { action["group"] = "Connectivity"; action["label"] = "Call Home Assistant service"; JsonArray fields = action.createNestedArray("fields"); JsonObject entity = fields.createNestedObject(); entity["name"] = "entity_id"; entity["description"] = "required domain-qualified entity"; JsonObject service = fields.createNestedObject(); service["name"] = "service"; service["description"] = "required bare service name"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kHaServiceActionType, ACTION_TYPE_HA_SERVICE, parse_ha_service, serialize_ha_service, dispatch_ha_service, nullptr, describe_ha_service, ha_service_available, validate_ha_service);
+DEFINE_AND_REGISTER_ACTION_TYPE(kHaServiceActionType, ACTION_TYPE_HA_SERVICE, parse_ha_service, serialize_ha_service, dispatch_ha_service, nullptr, describe_ha_service, ha_service_available, validate_ha_service, nullptr, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

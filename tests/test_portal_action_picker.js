@@ -250,4 +250,19 @@ const editorSource = fs.readFileSync('src/app/web/portal_action_editor.js', 'utf
 assert(!editorSource.includes('querySelectorAll'));
 assert(editorSource.includes('action-type-select'));
 
+FIXTURE_CATALOG[0].alarm_hook_allowed = true;
+context.actionEditorListRender('alarm-hooks', ['alarm-hook-1'], null, {actionOptions:{alarmHook:true}});
+const alarmHtml = document.getElementById('alarm-hooks').innerHTML;
+assert(alarmHtml.includes('<option value="screen">'));
+assert(!alarmHtml.includes('<option value="delay">'));
+assert(!alarmHtml.includes('<option value="key">'));
+assert(!alarmHtml.includes('<option value="mqtt">'));
+assert(context.actionEditorTypeOptionsHTML().includes('<option value="delay">'));
+context.actionEditorLoad(prefix, {type:'sound_alert', sound_alert_kind:'tone_loop', sound_alert_pattern:'1000:200 800'});
+assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_pattern, '1000:200 800');
+context.actionEditorLoad(prefix, {type:'sound_alert', sound_alert_kind:'stop'});
+const stopAudio = context.actionEditorBuild(prefix);
+assert.strictEqual(stopAudio.sound_alert_kind, 'stop');
+assert.strictEqual(stopAudio.sound_alert_file, undefined);
+assert.strictEqual(stopAudio.sound_alert_pattern, undefined);
 console.log('portal_action_picker: PASS');

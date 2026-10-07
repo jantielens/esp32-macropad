@@ -118,11 +118,7 @@ void describe_camera_capture(JsonObject& action) {
     both["label"] = "Latest and camera roll";
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kCameraCaptureActionType,
-    ACTION_TYPE_CAMERA_CAPTURE, parse_camera_capture, serialize_camera_capture,
-    dispatch_camera_capture, nullptr, describe_camera_capture,
-    camera_capture_available, validate_camera_capture
-);
+DEFINE_AND_REGISTER_ACTION_TYPE(kCameraCaptureActionType, ACTION_TYPE_CAMERA_CAPTURE, parse_camera_capture, serialize_camera_capture, dispatch_camera_capture, nullptr, describe_camera_capture, camera_capture_available, validate_camera_capture, nullptr, ACTION_EXECUTION_PAUSABLE);
 
 } // namespace
 

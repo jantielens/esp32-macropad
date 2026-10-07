@@ -24,6 +24,7 @@ HaServiceEnqueueResult ha_service_enqueue(const HaServicePayload& payload,
 
 // Perform a pending HA service call. Call from main loop() context.
 void ha_service_execute();
+bool ha_service_execute_immediate(const HaServicePayload& payload);
 
 #if HAS_MCP
 bool ha_service_execution_reserve(uint8_t action_count, uint32_t* execution_id);

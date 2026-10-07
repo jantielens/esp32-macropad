@@ -28,6 +28,6 @@ bool mqtt_available() { return HAS_MQTT; }
 const char* validate_mqtt(const JsonObjectConst action) { if (action.containsKey("topic") && !action["topic"].is<const char*>()) return "mqtt topic must be a string"; return action.containsKey("payload") && !action["payload"].is<const char*>() ? "mqtt payload must be a string" : nullptr; }
 bool visit_mqtt_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) { return (!act.payload.mqtt.mqtt_topic[0] || visitor(act.payload.mqtt.mqtt_topic, sizeof(act.payload.mqtt.mqtt_topic), false, context)) && (!act.payload.mqtt.mqtt_payload[0] || visitor(act.payload.mqtt.mqtt_payload, sizeof(act.payload.mqtt.mqtt_payload), false, context)); }
 void describe_mqtt(JsonObject& action) { action["group"] = "Connectivity"; action["label"] = "Publish MQTT message"; JsonArray fields = action.createNestedArray("fields"); JsonObject topic = fields.createNestedObject(); topic["name"] = "topic"; topic["description"] = "MQTT topic to publish to"; JsonObject payload = fields.createNestedObject(); payload["name"] = "payload"; payload["description"] = "MQTT payload"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kMqttActionType, ACTION_TYPE_MQTT, parse_mqtt, serialize_mqtt, dispatch_mqtt, nullptr, describe_mqtt, mqtt_available, validate_mqtt, visit_mqtt_fields);
+DEFINE_AND_REGISTER_ACTION_TYPE(kMqttActionType, ACTION_TYPE_MQTT, parse_mqtt, serialize_mqtt, dispatch_mqtt, nullptr, describe_mqtt, mqtt_available, validate_mqtt, visit_mqtt_fields, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

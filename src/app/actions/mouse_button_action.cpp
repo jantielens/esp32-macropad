@@ -75,10 +75,7 @@ void describe_mouse_button(JsonObject& action) {
     editor["command_options"] = true;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kMouseButtonActionType,
-    ACTION_TYPE_MOUSE_BUTTON, parse_mouse_button, serialize_mouse_button,
-    dispatch_mouse_button, nullptr, describe_mouse_button,
-    mouse_button_available, validate_mouse_button);
+DEFINE_AND_REGISTER_ACTION_TYPE(kMouseButtonActionType, ACTION_TYPE_MOUSE_BUTTON, parse_mouse_button, serialize_mouse_button, dispatch_mouse_button, nullptr, describe_mouse_button, mouse_button_available, validate_mouse_button, nullptr, ACTION_EXECUTION_SYNC);
 
 }
 #endif

@@ -224,6 +224,7 @@ async function loadConfig() {
         
         // Device settings
         setValueIfExists('device_name', config.device_name);
+        setValueIfExists('timezone', config.timezone || 'UTC0');
         setTextIfExists('device_name_sanitized', (config.device_name_sanitized || 'esp32-xxxx') + '.local');
         
         // Fixed IP settings

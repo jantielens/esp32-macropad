@@ -66,6 +66,30 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertNotIn("portal_shutter", bundle)
         self.assertEqual(self.request("/api/bindings")[0], 200)
 
+    def test_alarms(self):
+        status, alarm = self.request("/api/component/alarms/config")
+        self.assertEqual(status, 200)
+        self.assertFalse(alarm["1"]["enabled"])
+        alarm["1"].update(enabled=True, hour=8, on_ring=[{"type": "sound_alert", "sound_alert_kind": "tone_loop"}])
+        self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
+        self.assertEqual(self.request("/api/component/alarms/config")[1], alarm)
+        invalid = copy.deepcopy(alarm)
+        invalid["1"]["on_ring"] = [{"type": "delay", "duration_ms": 10}]
+        self.assertEqual(self.request("/api/component/alarms/config", "POST", invalid)[0], 400)
+        self.request("/__mock/alarm", "POST", {"state": "ringing", "active_id": 1})
+        self.assertEqual(self.request("/api/component/alarms/snooze", "POST", {})[0], 200)
+        self.assertEqual(self.request("/api/component/alarms/status")[1]["state"], "snoozed")
+        self.assertEqual(self.request("/api/component/alarms/cancel", "POST", {})[0], 200)
+        self.assertEqual(self.request("/api/component/alarms/status")[1]["state"], "idle")
+        self.assertEqual(self.request("/api/component/alarms/config", profile="reterminal-e1003-frame")[0], 404)
+        self.assertIn("init_alarms_fragment", self.request("/portal_alarms.js", raw=True)[1])
+        self.assertIn('server->on("/portal_alarms.js", HTTP_GET, handlePortalAlarmsJS)',
+                  (ROOT / "src/app/web_portal_routes.cpp").read_text())
+        bundle = self.request("/portal.js", raw=True)[1]
+        self.assertIn("if (!navigationReady) return;", bundle)
+        self.assertLess(bundle.index("return loadNavigationAssets(data)"),
+                bundle.index("navigationReady = true;"))
+
     def test_logs(self):
         status, data = self.request("/api/logs?limit=100")
         self.assertEqual(status, 200)

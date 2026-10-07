@@ -1,0 +1,34 @@
+<div class="section-header"><h2>Alarm</h2></div>
+<div class="save-bar" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <div style="display:flex;flex-wrap:wrap;gap:8px"><strong id="alarm-state">Loading</strong><span id="alarm-readiness"></span></div>
+  <div style="display:flex;gap:8px">
+    <button type="button" class="btn btn-secondary btn-sm" id="alarm-snooze" disabled>Snooze</button>
+    <button type="button" class="btn btn-secondary btn-sm" id="alarm-cancel" disabled>Cancel</button>
+  </div>
+</div>
+<div id="alarm-warning" role="status" class="text-danger" hidden></div>
+<form id="alarm-config-form">
+  <div class="form-group"><label><input type="checkbox" id="alarm-enabled"> Enabled</label></div>
+  <div class="row">
+    <div class="form-group col-md-6"><label class="form-label" for="alarm-time">Time</label><input type="time" class="form-control" id="alarm-time" value="07:00" required></div>
+    <div class="form-group col-md-6"><label class="form-label" for="alarm-timezone">Timezone</label><output class="form-control-plaintext" id="alarm-timezone"></output></div>
+  </div>
+  <fieldset class="form-group" style="border:0;padding:0"><legend class="form-label">Weekdays</legend>
+    <div style="display:flex;flex-wrap:wrap;gap:16px">
+      <label><input type="checkbox" id="alarm-day-1"> Mon</label>
+      <label><input type="checkbox" id="alarm-day-2"> Tue</label>
+      <label><input type="checkbox" id="alarm-day-3"> Wed</label>
+      <label><input type="checkbox" id="alarm-day-4"> Thu</label>
+      <label><input type="checkbox" id="alarm-day-5"> Fri</label>
+      <label><input type="checkbox" id="alarm-day-6"> Sat</label>
+      <label><input type="checkbox" id="alarm-day-0"> Sun</label>
+    </div>
+  </fieldset>
+  <div class="row">
+    <div class="form-group col-md-6"><label class="form-label" for="alarm-snooze-minutes">Snooze (minutes)</label><input type="number" class="form-control" id="alarm-snooze-minutes" min="1" max="1440" value="9" required></div>
+    <div class="form-group col-md-6"><label class="form-label" for="alarm-dismiss-minutes">Auto-dismiss (minutes)</label><input type="number" class="form-control" id="alarm-dismiss-minutes" min="1" max="1440" value="30" required></div>
+  </div>
+  <details class="editor-group" open><summary>On ring</summary><div class="editor-group-body" id="alarm-ring-editors"></div></details>
+  <details class="editor-group" open><summary>On stop</summary><div class="editor-group-body" id="alarm-stop-editors"></div></details>
+  <div class="save-bar"><button type="submit" class="btn btn-primary btn-sm" id="alarm-save">Save Alarm</button></div>
+</form>

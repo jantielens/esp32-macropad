@@ -15,6 +15,15 @@
 ActionResult action_dispatch(const ButtonAction& act, const char* label,
 							 uint32_t continuation_token = 0);
 
+struct ActionDispatchContext {
+	bool synchronous = false;
+	bool (*work_guard)(uint32_t) = nullptr;
+	uint32_t generation = 0;
+};
+ActionDispatchContext action_dispatch_context();
+ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* label,
+										 bool (*work_guard)(uint32_t), uint32_t generation);
+
 // Process deferred action work and loop-owned action continuations — call from loop().
 void action_dispatch_loop();
 

@@ -620,6 +620,21 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 > **Tip**: Assign `ble_pair` to a dedicated button so you can pair a new host device directly from the macropad's touch screen.
 
+### Alarm Actions
+
+When alarms are enabled on the board, an **Alarm** action can Snooze or Cancel
+the active alarm (`alarm_id: 0`) or slot 1. Cancel does not disable its weekly
+schedule; idle controls do nothing. Configure the schedule and ring/stop hooks
+in the portal's Alarm settings, not on the button.
+
+```json
+{ "type": "alarm", "alarm_id": 0, "alarm_command": "cancel" }
+```
+
+The Sound alert action supports a repeating `tone_loop` pattern and shared
+`stop` audio command as well as existing one-shot tones and MP3 sounds. For an
+alarm, pair the looping tone ring hook with Stop audio in the stop list.
+
 ### Timer Actions
 
 The **Timer** action type controls one of 3 independent on-device timers. Timers support count-up (stopwatch) and countdown modes. Use `[timer:N]` bindings on labels to display the timer value (see [Timer Binding](#timer-binding)).
@@ -1791,7 +1806,9 @@ Displays the current date and time, synced via NTP. If the device hasn't synced 
 | `%ds` | 100 ms | `0`–`9` |
 | `%ums` | — | Device uptime in milliseconds (no NTP needed) |
 
-**Timezone** — use an Olson timezone name. Omit for UTC. Supported timezones:
+**Timezone**: use an Olson timezone name. Omitting it uses the device-wide
+timezone from general settings (default `UTC0`). An explicit timezone remains
+independent of that setting. Supported timezones:
 
 <details>
 <summary>Full timezone list (click to expand)</summary>
@@ -1879,6 +1896,21 @@ A precision timer with milliseconds:
 ```
 [time:%H:%M:%S.%ms]                                    → 14:30:05.123
 ```
+
+### Alarm Binding
+
+Available only when the board enables alarms:
+
+| Binding | Value |
+|---------|-------|
+| `[alarm:1_time]` | Configured local time, `HH:MM` |
+| `[alarm:1_enabled]` | `ON` or `OFF` |
+| `[alarm:1_state]` | `idle`, `ringing`, or `snoozed` |
+| `[alarm:1_ready]` | `ON` after current-boot NTP sync, otherwise `OFF` |
+| `[alarm:active_id]` | `1` while ringing/snoozed, otherwise `0` |
+
+For example, use `Alarm [alarm:1_time]` as a button label and
+`[alarm:1_state]` as its secondary label, with an Alarm Cancel action.
 
 ### Timer Binding
 

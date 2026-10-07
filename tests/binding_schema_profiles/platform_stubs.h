@@ -16,6 +16,7 @@ class String {};
 #define HAS_CAMERA 0
 
 #if defined(BINDING_SCHEMA_PROFILE_FULL)
+#define ALARM_ENABLED 1
 #define HAS_AUDIO 1
 #define HAS_SOUND_PLAYER 1
 #define HAS_MUSIC_ANALYSIS 1

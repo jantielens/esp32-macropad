@@ -74,6 +74,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Exactly one #if variant matches per build, so the browser fetches the
 		// entire portal JS in one request with one gzip member (see handlePortalJS).
 		server->on("/portal.js", HTTP_GET, handlePortalJS);
+		#if ALARM_ENABLED
+		server->on("/portal_alarms.js", HTTP_GET, handlePortalAlarmsJS);
+		#endif
 			 #if HAS_REMOTE_LOG
 		server->on("/portal-logs.js", HTTP_GET, handlePortalLogsJS);
 		#endif

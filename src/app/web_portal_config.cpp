@@ -6,6 +6,7 @@
 
 #include "board_config.h"
 #include "config_manager.h"
+#include "time_service.h"
 #include "keyboard_hid.h"
 #include "device_class.h"
 #include "device_telemetry.h"
@@ -111,6 +112,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["wifi_password"] = ""; // Don't send password
 				(*doc)["wifi_password_set"] = (strlen(current_config->wifi_password) > 0);
 				(*doc)["device_name"] = current_config->device_name;
+				(*doc)["timezone"] = current_config->timezone;
 
 				// Sanitized name for display
 				char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
@@ -432,6 +434,15 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		}
 
+		char previous_timezone[CONFIG_TIMEZONE_MAX_LEN];
+		strlcpy(previous_timezone, current_config->timezone, sizeof(previous_timezone));
+		if (doc.containsKey("timezone") && (!doc["timezone"].is<const char*>() || !time_service_timezone_valid(doc["timezone"].as<const char*>()))) {
+				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid timezone\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
 		// Partial update: only update fields that are present in the request
 		// This allows different pages to update only their relevant fields
 		#if HAS_DISPLAY
@@ -829,10 +840,12 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 		#endif
 
+		if (doc.containsKey("timezone")) strlcpy(current_config->timezone, doc["timezone"], sizeof(current_config->timezone));
 		current_config->magic = CONFIG_MAGIC;
 
 		// Validate config
 		if (!config_manager_is_valid(current_config)) {
+				strlcpy(current_config->timezone, previous_timezone, sizeof(current_config->timezone));
 				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid configuration\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();
@@ -869,6 +882,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+				strlcpy(current_config->timezone, previous_timezone, sizeof(current_config->timezone));
 				request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save\"}");
 
 				portENTER_CRITICAL(&g_config_post_mux);

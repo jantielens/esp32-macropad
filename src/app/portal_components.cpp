@@ -30,6 +30,9 @@
 #include "components/manual_upload_component.cpp"
 #include "components/version_info_component.cpp"
 #include "components/sensor_data_component.cpp"
+#if ALARM_ENABLED
+#include "components/alarms_component.cpp"
+#endif
 #if HAS_NATIVE_EXTENSIONS
 #include "components/extensions_component.cpp"
 #endif

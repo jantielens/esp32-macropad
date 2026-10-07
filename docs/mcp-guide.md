@@ -222,10 +222,10 @@ graph LR
   is stopped, so a later Toggle or Resume starts from that target.
 - `set_config` — write a safe subset of device settings that apply live without a
   reboot: device name, backlight brightness, the screen-saver group, MQTT publish
-  interval/scope, and audio volume. WiFi/MQTT/HA credentials, operating mode, and
+  interval/scope, audio volume, and device timezone. WiFi/MQTT/HA credentials, operating mode, and
   security toggles stay read-only (change those in the portal).
 - `set_component_config` — overwrite one auxiliary feature's config (`timers`,
-  `swipe`, `boot`, `button-defaults`, `hw-buttons`, `mqtt-triggers`) with a
+  `swipe`, `boot`, `button-defaults`, `hw-buttons`, `mqtt-triggers`, `alarms`) with a
   validated full-replacement object (read it first with `get_component_config`,
   edit, send back).
 - `set_camera_config` — persist one or more camera capture settings. Read
@@ -244,6 +244,31 @@ The component's `exists` result reports whether
 Display-related tools are present only on boards that have a display; camera tools
 require camera hardware; `set_volume` requires audio hardware; and
 `get_component_config` lists only the components compiled into the board.
+
+### Alarm Clock Tools
+
+On alarm-enabled boards, `get_capabilities` advertises one weekly alarm slot,
+the component and tool names, weekday mask, hook limit, lateness grace, and
+filesystem persistence. `get_alarm_status` reads readiness, runtime state,
+storage/action failures, and OTA deferral.
+
+Use `get_component_config` with `component: "alarms"` before a full-replacement
+`set_component_config` write. The definition is keyed by `"1"` and includes
+`enabled`, `hour`, `minute`, `weekdays`, `snooze_minutes`,
+`auto_dismiss_minutes`, `on_ring`, and `on_stop`. Hook arrays accept at most
+three available synchronous actions. Validation and persistence use the same
+manager as the portal; failed or identical saves do not dismiss an active ring.
+
+`alarm_control` accepts `command: "snooze"` or `"cancel"` and optional
+`alarm_id: 0` (active alarm) or `1`. Success means the command was queued for the
+main loop, not that external stop hooks completed. Cancel does not disable the
+schedule. Write and control permissions are required as for other MCP controls.
+
+`get_config` exposes `timezone`; `set_config` accepts a supported Olson name or
+explicit POSIX TZ rule and applies it without rebooting. A substantive successful
+timezone change dismisses the old session and rearms from the next full minute.
+The [portal alarm guide](web-portal-guide.md#alarm-clock) covers scheduling and
+storage failure behavior.
 
 ### Home Assistant execution results
 
