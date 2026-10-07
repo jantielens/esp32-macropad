@@ -66,6 +66,7 @@ portal_shutter_tests.js
 # [chunk:config]
 # Configuration (main config page — non-display settings stay always-on)
 portal_config.js
+portal_timezone.js
 
 # Firmware page
 portal_firmware.js

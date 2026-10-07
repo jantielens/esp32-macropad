@@ -16,16 +16,13 @@ function alarmConfigBuild() {
 }
 
 async function alarmStatusRefresh() {
-    var element = document.getElementById('alarm-state');
+    var element = document.getElementById('alarm-readiness');
     if (!element) return;
     var response = await fetch('/api/component/alarms/status');
     if (!response.ok) throw new Error('Alarm status unavailable');
     var status = await response.json();
-    if (document.getElementById('alarm-state') !== element) return;
-    element.textContent = status.state === 'ringing' ? 'Ringing' : status.state === 'snoozed' ? 'Snoozed' : 'Idle';
-    document.getElementById('alarm-readiness').textContent = status.ota_deferred ? 'Firmware update' : status.ready ? '' : 'Waiting for time synchronization';
-    document.getElementById('alarm-snooze').disabled = status.state !== 'ringing';
-    document.getElementById('alarm-cancel').disabled = status.state === 'idle';
+    if (document.getElementById('alarm-readiness') !== element) return;
+    element.textContent = status.ota_deferred ? 'Firmware update' : status.ready ? '' : 'Waiting for time synchronization';
     var warning = document.getElementById('alarm-warning');
     warning.hidden = !status.storage_error && !status.hook_error;
     warning.textContent = status.storage_error ? 'Alarm storage unavailable' : status.hook_error ? 'An alarm action failed' : '';
@@ -38,14 +35,12 @@ window.init_alarms_fragment = async function() {
         await getDeviceInfo();
         actionEditorListRender('alarm-ring-editors', ALARM_RING_PREFIXES, null, {actionOptions:{alarmHook:true}});
         actionEditorListRender('alarm-stop-editors', ALARM_STOP_PREFIXES, null, {actionOptions:{alarmHook:true}});
-        var responses = await Promise.all([fetch('/api/component/alarms/config'), fetch('/api/config')]);
-        if (!responses[0].ok || !responses[1].ok) throw new Error('Alarm configuration unavailable');
-        var config = (await responses[0].json())['1'];
-        var device = await responses[1].json();
+        var response = await fetch('/api/component/alarms/config');
+        if (!response.ok) throw new Error('Alarm configuration unavailable');
+        var config = (await response.json())['1'];
         if (document.getElementById('alarm-config-form') !== form) return;
         document.getElementById('alarm-enabled').checked = config.enabled;
         document.getElementById('alarm-time').value = String(config.hour).padStart(2, '0') + ':' + String(config.minute).padStart(2, '0');
-        document.getElementById('alarm-timezone').textContent = device.timezone || 'UTC0';
         document.getElementById('alarm-snooze-minutes').value = config.snooze_minutes;
         document.getElementById('alarm-dismiss-minutes').value = config.auto_dismiss_minutes;
         for (var day = 0; day < 7; day++) document.getElementById('alarm-day-' + day).checked = !!(config.weekdays & (1 << day));
@@ -64,22 +59,6 @@ window.init_alarms_fragment = async function() {
             } catch (error) { showMessage(error.message, 'error'); }
             finally { button.disabled = false; }
         });
-        ['snooze', 'cancel'].forEach(function(command) {
-            document.getElementById('alarm-' + command).addEventListener('click', async function() {
-                try {
-                    var response = await fetch('/api/component/alarms/' + command, {method:'POST'});
-                    if (!response.ok) throw new Error('Alarm command failed');
-                    await alarmStatusRefresh();
-                } catch (error) { showMessage(error.message, 'error'); }
-            });
-        });
-        async function poll() {
-            if (document.getElementById('alarm-config-form') !== form) return;
-            try { await alarmStatusRefresh(); } catch (error) {
-                if (document.getElementById('alarm-config-form') === form) document.getElementById('alarm-readiness').textContent = 'Offline';
-            }
-            if (document.getElementById('alarm-config-form') === form) setTimeout(poll, 2000);
-        }
-        await poll();
+        await alarmStatusRefresh();
     } catch (error) { showMessage(error.message, 'error'); }
 };

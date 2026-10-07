@@ -11,7 +11,7 @@ void parse_screen(const JsonObject& action, ButtonAction& act) { strlcpy(act.pay
 void serialize_screen(const ButtonAction& act, JsonObject action) { if (act.payload.screen.screen_id[0]) action["target"] = act.payload.screen.screen_id; }
 ActionResult dispatch_screen(const ButtonAction& act, const char* label, uint32_t) {
 #if defined(ARDUINO) && HAS_DISPLAY
-    if (act.payload.screen.screen_id[0]) { bool ok = false; display_manager_show_screen(act.payload.screen.screen_id, &ok); if (!ok) LOGW(kScreenActionTag, "%s nav failed: '%s'", label, act.payload.screen.screen_id); }
+    if (act.payload.screen.screen_id[0]) { bool ok = false; display_manager_show_screen(act.payload.screen.screen_id, &ok, true); if (!ok) LOGW(kScreenActionTag, "%s nav failed: '%s'", label, act.payload.screen.screen_id); }
 #else
     (void)act;
     LOGW(kScreenActionTag, "%s screen: no display", label);

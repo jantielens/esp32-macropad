@@ -124,6 +124,14 @@ output write. MP3 Alerts are exclusive: they stop Music and use the same
 decoder session and output path. Music files can be managed through the portal
 only while neither Music nor an MP3 Alert is active.
 
+The `alarm_mp3` action submits an MP3 Alert with looping enabled. File-backed
+playback reuses its decoder and output buffers, seeks to the beginning only
+after a successful pass with accepted PCM, and checks stop, session-generation,
+and OTA guards before restarting. Output failures and files with no decoded
+audio terminate instead of repeating. Repetition is not guaranteed to be
+gapless. `alarm_tone` uses the existing repeating tone path; ordinary sound
+alerts remain one-shot unless a legacy looping kind is explicitly persisted.
+
 Music transport and catalog-refresh requests use a dedicated, bounded worker
 queue. This keeps them independent from replaceable tone/alert requests, so an
 alert cannot discard a pending refresh. Transport submission is non-blocking

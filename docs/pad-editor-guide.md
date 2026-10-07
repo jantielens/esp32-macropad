@@ -531,6 +531,13 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 - **Tap action 1**: Navigate to screen → `pad_2` (cameras pad)
 - Button label: "Cameras" with a `videocam` Material Symbol icon
 
+Successful **Navigate to screen**, **Navigate back**, and **Navigate pad sequence**
+actions wake the display and reset the inactivity timer without disabling the
+screensaver. Leaving an idle pad keeps the requested destination and preserves
+the original screen for navigation history. Failed navigation does not wake the
+display. Repeated navigation from alarm, timer, or other automated actions can
+keep the display awake.
+
 **Example Voice Assistant button:**
 - **Tap action 1**: Voice Assistant → Record until silence → trailing silence: `1000`, speech level threshold: `2`
 - **Tap action 2**: Publish MQTT message → topic: `home/voice/transcript`, payload: `[stt:text]`
@@ -622,7 +629,7 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 ### Alarm Actions
 
-When alarms are enabled on the board, an **Alarm** action can Snooze or Cancel
+When alarms are enabled on the board, an **Alarm Control** action can Snooze or Cancel
 the active alarm (`alarm_id: 0`) or slot 1. Cancel does not disable its weekly
 schedule; idle controls do nothing. Configure the schedule and ring/stop hooks
 in the portal's Alarm settings, not on the button.
@@ -631,9 +638,15 @@ in the portal's Alarm settings, not on the button.
 { "type": "alarm", "alarm_id": 0, "alarm_command": "cancel" }
 ```
 
-The Sound alert action supports a repeating `tone_loop` pattern and shared
-`stop` audio command as well as existing one-shot tones and MP3 sounds. For an
-alarm, pair the looping tone ring hook with Stop audio in the stop list.
+The **Alarm** group also contains **Loop Tone** (`alarm_tone`) and **Loop MP3**
+(`alarm_mp3`). Loop Tone accepts a bindable tone pattern; Loop MP3 selects an
+uploaded sound file. Both allow a volume override. Pair the ring hook with
+**Sound alert > Stop Audio** in the stop list. MP3 repetition is not guaranteed
+to be gapless and stops on cancellation, OTA, or playback failure.
+
+Regular one-shot tones, MP3 playback, and Stop Audio remain under **Audio**.
+Existing `sound_alert` actions with `tone_loop` remain valid and appear as Loop
+Tone in the editor. Alarm Control keeps its persisted `alarm` type.
 
 ### Timer Actions
 

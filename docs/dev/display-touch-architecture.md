@@ -273,6 +273,7 @@ When `HAS_DISPLAY` is enabled, the firmware includes an inactivity manager with 
 **Behavior:**
 - Idle Screen is configured by `idle_screen_enabled`, `idle_screen_timeout_seconds`, and `idle_screen_pad`. It requires a configured pad and positive timeout. When Display Sleep is also enabled, its timeout must be shorter than `screen_saver_timeout_seconds`.
 - Idle Screen navigation is transient: the manager captures the currently active screen, does not push the Idle Screen onto history, and restores the captured screen on wake. Its first wake interaction is suppressed and cannot activate a button on the idle pad.
+- Successful screen, back, and pad-sequence actions opt into display wake and inactivity reset. They discard the transient restore target while retaining the original screen as the history source, so a pending wake cannot overwrite the destination. Pad-sequence actions use the original screen as their anchor while an Idle Screen is active. Failed navigation does not wake the display; internal navigation keeps its existing non-waking behavior.
 - Idle Screen switches immediately at the current brightness. `screen_saver_fade_out_ms` and `screen_saver_fade_in_ms` apply only when entering or leaving Display Sleep.
 - After `screen_saver_timeout_seconds` of inactivity, the backlight fades to 0, even when Idle Screen is active.
 - Wake fades back to the configured `backlight_brightness`.
@@ -584,16 +585,22 @@ Direct-mode boards are unaffected — no present task is created (their `present
 All display operations from outside the rendering task must be protected:
 
 ```cpp
-displayManager->lock();
+bool didLock = false;
+displayManager->lockIfNeeded(didLock);
 // LVGL operations here
-displayManager->unlock();
+displayManager->unlockIfNeeded(didLock);
 ```
+
+The display mutex is non-recursive. `lockIfNeeded()` skips acquisition inside the
+LVGL task or when the calling task already owns the mutex. In those cases,
+`didLock` is false and `unlockIfNeeded()` leaves the outer lock held. This permits
+alarm hooks and other caller-locked paths to invoke navigation safely.
 
 **Deferred Screen Switching:**
 
-DisplayManager uses a deferred pattern for screen navigation (`showSplash()`, `showInfo()`, `showTest()`, etc.):
+DisplayManager uses a deferred pattern for screen navigation (`showScreen()`, `goBack()`, and `cyclePad()`):
 
-1. Navigation methods set `pendingScreen` flag (no mutex, returns instantly)
+1. Navigation methods briefly protect queue and history updates with `lockIfNeeded()`, set `pendingScreen`, and return without waiting for the screen switch
 2. LVGL rendering task checks flag and performs switch on next frame
 3. Avoids blocking rendering task during screen transitions (prevents FPS drops)
 4. After switching, `lv_indev_reset(NULL, NULL)` is called to flush any in-progress PRESSED state from the previous screen, preventing phantom CLICKED events on the new screen

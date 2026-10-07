@@ -640,17 +640,20 @@ The number of available trigger slots depends on the board (8 by default, fewer 
 
 Open **Alarm** in the Actions category. Phase 1 provides one weekly alarm,
 slot **1**, disabled by default. Set its time and weekdays; selecting no weekdays
-means it never rings. Set **Timezone** in the general device settings before
-choosing the alarm's local time. Supported Olson names, such as
-`Europe/Brussels`, and explicit POSIX timezone rules are accepted. Saving a
-timezone applies it immediately without rebooting.
+means it never rings. Set **Device > Timezone** before choosing the alarm's
+local time. City selection previews device time without applying the change;
+**Save** applies it without rebooting.
 
 Each ring and stop list holds up to three synchronous actions. Actions that
 pause execution, such as Delay and key sequences, are excluded. To sound an
-alarm, select **Sound alert** with a looping tone pattern; use **Stop audio** in
-the stop list. Looping MP3 playback is not supported. Stop audio is shared with
-other audio playback on the device.
+alarm, select **Loop Tone** or **Loop MP3** under **Alarm**; use **Sound alert >
+Stop Audio** in the stop list. MP3 repeats after successful playback, with no
+gapless guarantee, and stops on cancellation, firmware updates, or playback
+failure. Stop Audio is shared with other audio playback on the device.
 
+Use an **Alarm Control** button or MCP for Snooze and Cancel; the settings form
+does not offer live controls or Ringing/Snoozed indicators. Readiness and failure
+warnings refresh on load and after saving, without recurring status polling.
 **Snooze** ends the current ring, runs its stop actions, then rings again after
 the selected duration (default nine minutes). **Cancel** ends ringing or snooze
 without disabling the weekly schedule. Ringing automatically ends after the
@@ -882,6 +885,18 @@ All binding fields validate syntax in real time as you type — bracket balance,
 |---------|-------------|
 | **Device Name** | A friendly name for your device (e.g., "Kitchen Pad"). Used in the web portal, Home Assistant, and browser discovery |
 | **mDNS Name** | Auto-generated from the device name. This is the `.local` address you use to access the portal (shown as read-only) |
+
+### Timezone
+
+Open **Device > Timezone** and select a city from the geographically grouped
+catalog. The compact catalog reuses 61 supported names, including UTC. City
+choices map to POSIX rules; raw rules are visible only with **Custom** selected.
+Custom accepts supported Olson names or explicit POSIX rules.
+
+The preview shows device time in the selected timezone, its UTC offset, and
+synchronization readiness. Previewing does not save settings or disturb alarms.
+Choose **Save** to persist and apply the timezone without rebooting. A substantive
+change dismisses an active alarm and rearms it from the next full minute.
 
 ### Network Configuration (Optional)
 

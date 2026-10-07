@@ -1452,6 +1452,32 @@ the snapshot includes local time, Sunday-based weekday index, and epoch values.
 Hook payloads are not logged. Capture both tags from boot through the expected
 trigger when investigating an alarm that does not ring.
 
+### Timezone Settings
+
+The ungated `timezone` component owns the dedicated Device fragment. Its city
+options reuse the time service's 61-entry Olson-to-POSIX catalog rather than
+embedding another table in portal assets. Geographical optgroups expose city
+names; only Custom exposes a raw rule. Selection previews without saving,
+and Save writes `timezone` through `/api/config?no_reboot=1`.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/component/timezone/catalog` | Return `cities` entries with `name` and `posix` |
+| GET | `/api/component/timezone/preview?timezone=<encoded-rule>` | Return `epoch`, `local_time`, `utc_offset`, and `ready` |
+
+Both routes use component authentication. Preview validates the supplied rule,
+formats one device epoch under the shared timezone mutex, and restores the
+authoritative timezone without changing its generation or alarm state. Invalid
+input returns `400`; formatting failure returns `503`. The browser discards stale
+preview responses and does not poll.
+
+The Alarm fragment displays readiness and storage/action warnings on load and
+after saves, without recurring polling, live Ringing/Snoozed indicators, or
+Snooze/Cancel buttons. REST and MCP alarm controls remain available. The shared
+action editor advertises Alarm Control, Loop Tone, and Loop MP3 in Alarm while
+regular sound playback remains in Audio. Catalog-driven MP3 fields reuse the
+sound library and retain missing saved file names.
+
 ### Configuration Management
 
 #### `GET /api/config`

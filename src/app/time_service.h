@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <time.h>
 
+struct TimezoneEntry { const char* name; const char* posix; };
+const TimezoneEntry* time_service_timezones(size_t* count);
 bool time_service_set_timezone(const char* timezone);
 bool time_service_timezone_valid(const char* timezone);
 uint32_t time_service_generation();

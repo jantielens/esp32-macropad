@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 from _render_html_template import render
 from urllib.parse import parse_qs, urlparse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -66,11 +67,20 @@ def reset_pad_fixtures(server, scenario="normal"):
         action["alarm_hook_allowed"] = action["type"] not in ("delay", "key", "gamepad", "camera_capture", "voice_assistant")
         if action["type"] == "sound_alert":
             action["label"] = "Sound alert"
-    fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm", "alarm_hook_allowed": True,
+    fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm Control", "alarm_hook_allowed": True,
         "commands": [{"id": "snooze", "label": "Snooze"}, {"id": "cancel", "label": "Cancel"}],
         "editor_fields": [{"name": "alarm_id", "label": "Alarm", "type": "select", "default": "0", "numeric": True,
                            "options": [{"id": "0", "label": "Active alarm"}, {"id": "1", "label": "Alarm 1"}]},
                           {"name": "alarm_command", "label": "Command", "type": "select", "default": "snooze", "command_options": True}]})
+    for action_type, label, source in (("alarm_tone", "Loop Tone", "sound_alert_pattern"),
+                                      ("alarm_mp3", "Loop MP3", "sound_alert_file")):
+        field = {"name": source, "label": "MP3 file" if action_type == "alarm_mp3" else "Tone pattern",
+                 "type": "select" if action_type == "alarm_mp3" else "text"}
+        field.update({"options_source": "sounds"} if action_type == "alarm_mp3" else {"bindable": True})
+        fixture["catalog"].append({"type": action_type, "group": "Alarm", "label": label,
+            "alarm_hook_allowed": True, "editor_fields": [field,
+                {"name": "sound_alert_volume", "label": "Volume override (%)", "type": "number",
+                 "min": 0, "max": 100, "default": "0"}]})
     fixture["binding_schema"]["schemes"].append({"name": "alarm", "min_params": 1, "max_params": 1,
         "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
         "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id"]})
@@ -148,6 +158,20 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json(config)
         elif path == "/api/info":
             self._serve_json(self._device_info("catalog" in query))
+        elif path == "/api/component/timezone/catalog":
+            source = (SCRIPT_DIR.parent / "src/app/time_service.cpp").read_text(encoding="utf-8")
+            entries = re.findall(r'\{"([^"\n]+)", "([^"\n]+)"\}', source)
+            self._serve_json({"cities": [{"name": name, "posix": posix} for name, posix in entries]})
+        elif path == "/api/component/timezone/preview":
+            timezone = query.get("timezone", [""])[0]
+            if not timezone or len(timezone) > 63 or not re.fullmatch(r'[A-Za-z0-9_+<>/.,:\-]+', timezone):
+                self._serve_json({"message": "Invalid timezone"}, 400)
+                return
+            environment = dict(os.environ, TZ=timezone)
+            formatted = subprocess.run(["date", "--date=@1791370589", "+%Y-%m-%d %H:%M:%S|%z"],
+                                       env=environment, capture_output=True, text=True, check=True)
+            local_time, offset = formatted.stdout.strip().split("|")
+            self._serve_json({"epoch": 1791370589, "local_time": local_time, "utc_offset": offset, "ready": True})
         elif path == "/api/pad":
             page = self._page(query)
             if page is not None:
@@ -513,6 +537,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
         nav = json.loads((MOCK_DIR / "nav.json").read_text(encoding="utf-8"))
         for category in nav["categories"]:
             if category["id"] == "device":
+                category["items"].append({"id": "timezone", "display_name": "Timezone"})
                 category["items"].append({"id": "logs", "display_name": "Logs", "portal_script": "/portal-logs.js"})
             if category["id"] == "actions" and profile in ("esp32-p4-lcd4b", "jc3248w535"):
                 category["items"].append({"id": "alarms", "display_name": "Alarm", "portal_script": "/portal_alarms.js"})

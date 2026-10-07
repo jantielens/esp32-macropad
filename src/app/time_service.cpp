@@ -12,7 +12,6 @@
 #include "log_manager.h"
 #endif
 
-struct TimezoneEntry { const char* name; const char* posix; };
 static const TimezoneEntry timezones[] = {
     {"UTC", "UTC0"},
     {"Europe/London", "GMT0BST,M3.5.0/1,M10.5.0"},
@@ -40,21 +39,34 @@ static const TimezoneEntry timezones[] = {
     {"America/Phoenix", "MST7"}, {"America/Toronto", "EST5EDT,M3.2.0,M11.1.0"},
     {"America/Vancouver", "PST8PDT,M3.2.0,M11.1.0"},
     {"America/Sao_Paulo", "<-03>3"}, {"America/Argentina/Buenos_Aires", "<-03>3"},
-    {"America/Mexico_City", "CST6CDT,M4.1.0,M10.5.0"},
+    {"America/Mexico_City", "CST6"},
+    {"America/St_Johns", "NST3:30NDT,M3.2.0,M11.1.0"},
+    {"America/Bogota", "<-05>5"}, {"America/Halifax", "AST4ADT,M3.2.0,M11.1.0"},
     {"Asia/Tokyo", "JST-9"}, {"Asia/Shanghai", "CST-8"}, {"Asia/Hong_Kong", "HKT-8"},
     {"Asia/Singapore", "SGT-8"}, {"Asia/Seoul", "KST-9"}, {"Asia/Kolkata", "IST-5:30"},
     {"Asia/Dubai", "GST-4"}, {"Asia/Riyadh", "AST-3"}, {"Asia/Bangkok", "ICT-7"},
-    {"Asia/Jakarta", "WIB-7"},
+    {"Asia/Jakarta", "WIB-7"}, {"Asia/Kathmandu", "<+0545>-5:45"},
+    {"Asia/Dhaka", "<+06>-6"}, {"Asia/Yangon", "<+0630>-6:30"},
     {"Australia/Sydney", "AEST-10AEDT,M10.1.0,M4.1.0/3"},
     {"Australia/Melbourne", "AEST-10AEDT,M10.1.0,M4.1.0/3"},
-    {"Australia/Perth", "AWST-8"}, {"Pacific/Auckland", "NZST-12NZDT,M9.5.0,M4.1.0/3"},
+    {"Australia/Perth", "AWST-8"}, {"Australia/Darwin", "ACST-9:30"},
+    {"Australia/Adelaide", "ACST-9:30ACDT,M10.1.0,M4.1.0/3"},
+    {"Pacific/Auckland", "NZST-12NZDT,M9.5.0,M4.1.0/3"},
+    {"Pacific/Chatham", "<+1245>-12:45<+1345>,M9.5.0/2:45,M4.1.0/3:45"},
+    {"Pacific/Noumea", "<+11>-11"}, {"Pacific/Pago_Pago", "SST11"},
+    {"Pacific/Kiritimati", "<+14>-14"},
     {"Pacific/Honolulu", "HST10"}, {"Africa/Cairo", "EET-2EEST,M4.5.5/0,M10.5.4/24"},
-    {"Africa/Johannesburg", "SAST-2"}, {"Africa/Lagos", "WAT-1"}
+    {"Africa/Johannesburg", "SAST-2"}, {"Africa/Lagos", "WAT-1"}, {"Africa/Nairobi", "EAT-3"}
 };
 static std::mutex timezone_mutex;
 static char device_timezone[64] = "UTC0";
 static std::atomic<uint32_t> timezone_generation{0};
 static std::atomic<bool> synchronized{false};
+
+const TimezoneEntry* time_service_timezones(size_t* count) {
+    if (count) *count = sizeof(timezones) / sizeof(timezones[0]);
+    return timezones;
+}
 
 static const char* resolve_timezone(const char* timezone) {
     if (!timezone || !timezone[0]) return device_timezone;

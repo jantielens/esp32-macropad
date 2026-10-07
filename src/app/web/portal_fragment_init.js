@@ -302,17 +302,6 @@ async function saveSetupWizard() {
 
 window.init_device_name_fragment = function () {
     initConfigFragment('device-name-save-btn', true);
-    document.getElementById('timezone-save-btn').addEventListener('click', async function() {
-        try {
-            var response = await fetch('/api/config?no_reboot=1', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({timezone: document.getElementById('timezone').value.trim()})
-            });
-            var result = await response.json();
-            if (!response.ok) throw new Error(result.message || 'Timezone was not saved');
-            showMessage('Timezone saved', 'success');
-        } catch (error) { showMessage(error.message, 'error'); }
-    });
 };
 
 // ============================================================================

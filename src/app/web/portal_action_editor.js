@@ -101,13 +101,17 @@ function actionEditorGenericFieldsHTML(prefix) {
                 if (field.type === 'select') {
                     html += '<select class="form-select form-select-sm" id="' + id + '">';
                     if (field.command_options) html += actionEditorCommandOptionsHTML(entry.type);
+                    else if (field.options_source === 'sounds') html += '<option value="">(none)</option>';
                     else if (field.options) html += field.options.map(function(option) {
                         return '<option value="' + option.id + '">' + option.label + '</option>';
                     }).join('');
                     html += '</select>';
                 } else {
                     var inputType = field.type === 'number' ? 'number' : 'text';
-                    html += '<input type="' + inputType + '" class="form-control form-control-sm" id="' + id + '">';
+                    html += '<input type="' + inputType + '" class="form-control form-control-sm" id="' + id + '"';
+                    if (field.min !== undefined) html += ' min="' + Number(field.min) + '"';
+                    if (field.max !== undefined) html += ' max="' + Number(field.max) + '"';
+                    html += '>';
                 }
             }
             html += '</div>';
@@ -127,7 +131,16 @@ function actionEditorSetGenericFields(prefix, type, action) {
         var el = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
         if (!el) return;
         if (field.type === 'toggle') el.checked = !!action[field.name];
-        else el.value = action[field.name] === undefined ? (field.default || '') : action[field.name];
+        else {
+            var value = action[field.name] === undefined ? (field.default || '') : action[field.name];
+            if (field.options_source === 'sounds' && value && !Array.from(el.options).some(function(option) { return option.value === value; })) {
+                var option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                el.appendChild(option);
+            }
+            el.value = value;
+        }
     });
 }
 
@@ -330,7 +343,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div id="' + prefix + '-sound-alert-group" style="display:none;">';
     h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-kind">Kind</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-kind" onchange="actionEditorSoundAlertChanged(\'' + prefix + '\')">';
-    h += '<option value="tone">Tone Alert</option><option value="tone_loop">Loop Tone</option><option value="mp3">MP3 Alert</option><option value="stop">Stop Audio</option></select></div>';
+    h += '<option value="tone">Tone Alert</option><option value="mp3">MP3 Alert</option><option value="stop">Stop Audio</option></select></div>';
     h += '<div id="' + prefix + '-sound-alert-tone-group">';
     h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-pattern">Tone Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sound-alert-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200"></div></div>';
@@ -638,6 +651,14 @@ function actionEditorInitBindings(prefix) {
 function actionEditorLoad(prefix, action) {
     if (!action) action = {};
     var el;
+    if (action.type === 'sound_alert') {
+        var loopType = action.sound_alert_kind === 'tone_loop' ? 'alarm_tone'
+            : action.sound_alert_kind === 'mp3_loop' ? 'alarm_mp3' : '';
+        if (loopType && actionEditorCatalogEntry(loopType)) {
+            action = Object.assign({}, action, {type: loopType});
+            delete action.sound_alert_kind;
+        }
+    }
     el = document.getElementById(prefix + '-type');
     if (el) {
         el.value = action.type || '';
@@ -1002,7 +1023,13 @@ function actionEditorPopulateScreens(prefixes, screens) {
 function actionEditorPopulateSounds(prefixes, sounds) {
     if (!sounds) return;
     prefixes.forEach(function(prefix) {
-        var sel = document.getElementById(prefix + '-sound-alert-file');
+        var selects = [document.getElementById(prefix + '-sound-alert-file')];
+        actionEditorCatalog().forEach(function(entry) {
+            actionEditorGenericFields(entry.type).forEach(function(field) {
+                if (field.options_source === 'sounds') selects.push(document.getElementById(prefix + '-generic-' + entry.type + '-' + field.name));
+            });
+        });
+        selects.forEach(function(sel) {
         if (!sel) return;
         var selected = sel.value;
         while (sel.options.length > 1) sel.remove(1);
@@ -1015,6 +1042,7 @@ function actionEditorPopulateSounds(prefixes, sounds) {
             sel.appendChild(opt);
         });
         sel.value = selected;
+        });
     });
 }
 

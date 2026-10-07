@@ -13,6 +13,7 @@
 #include "components/setup_component.cpp"
 #include "components/wifi_component.cpp"
 #include "components/device_name_component.cpp"
+#include "components/timezone_component.cpp"
 #include "components/network_component.cpp"
 #if HAS_REMOTE_LOG
 #include "components/logs_component.cpp"

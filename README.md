@@ -87,7 +87,9 @@ bindings keep it reusable. The editor checks syntax and previews live values.
 
 Configure one persistent weekly alarm in the portal's **Alarm** settings. Choose
 weekdays and local time, then up to three ring actions and three stop actions.
-Snooze and Cancel are available in the portal, on pad buttons, and through MCP.
+Use **Alarm Control** on pad buttons or MCP to Snooze and Cancel. **Loop Tone**
+and **Loop MP3** are available for ring actions. The dedicated **Timezone**
+settings offer grouped cities and a device-time preview; changes apply on Save.
 The device-wide timezone also supplies the default for `[time:format]` bindings.
 See the [alarm guide](docs/web-portal-guide.md#alarm-clock).
 

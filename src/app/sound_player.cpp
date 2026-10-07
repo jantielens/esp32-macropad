@@ -420,15 +420,28 @@ bool sound_player_get_timing(const SoundPlayer* player, uint64_t* total_us,
 }
 
 bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
-                       volatile bool* stop_flag, bool (*guard)(uint32_t), uint32_t generation) {
+                       volatile bool* stop_flag, bool (*guard)(uint32_t), uint32_t generation, bool loop) {
     if (!filename || !filename[0]) return false;
     char path[48];
     sound_store_path(filename, path, sizeof(path));
     SoundPlayer* player = sound_player_begin_path(output_driver, path);
     if (!player) return false;
     SoundPlayerStepResult result = SOUND_PLAYER_STEP_PLAYING;
-    while (!*stop_flag && (!guard || guard(generation)) && result == SOUND_PLAYER_STEP_PLAYING) {
+    uint64_t iteration_start_frames = player->elapsed_output_frames;
+    while (!*stop_flag && !ota_activity_is_active() && (!guard || guard(generation))
+        && result == SOUND_PLAYER_STEP_PLAYING) {
         result = sound_player_step(player);
+        if (result == SOUND_PLAYER_STEP_COMPLETE && loop) {
+            if (player->elapsed_output_frames == iteration_start_frames) {
+                LOGW(TAG, "Cannot loop MP3 without decoded audio");
+                result = SOUND_PLAYER_STEP_ERROR;
+                break;
+            }
+            if (*stop_flag || ota_activity_is_active() || (guard && !guard(generation))) break;
+            iteration_start_frames = player->elapsed_output_frames;
+            sound_player_reset_decode(player);
+            result = SOUND_PLAYER_STEP_PLAYING;
+        }
     }
     audio_log_starvation(player->starvation);
     sound_player_close(player);

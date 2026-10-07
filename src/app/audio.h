@@ -72,7 +72,8 @@ void audio_log_starvation(const AudioStarvationStats& stats);
 // volume_override: 1-100 = use this volume, 0 = use device volume.
 void audio_play_sound(const char* filename, uint8_t volume_override);
 bool audio_submit_sound(const char* filename, uint8_t volume_override,
-                        AudioPlaybackGuard guard = nullptr, uint32_t generation = 0);
+                        AudioPlaybackGuard guard = nullptr, uint32_t generation = 0,
+                        bool loop = false);
 
 // Guard invoked on the audio task immediately before a memory-backed MP3 starts.
 // The buffer ownership transfers on every call and is released by the audio task.

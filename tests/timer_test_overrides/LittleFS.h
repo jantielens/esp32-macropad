@@ -26,6 +26,18 @@ public:
         if (state->position >= state->content.size()) return -1;
         return (unsigned char)state->content[state->position++];
     }
+    size_t read(uint8_t* output, size_t length) {
+        const size_t remaining = state->content.size() - state->position;
+        const size_t count = length < remaining ? length : remaining;
+        memcpy(output, state->content.data() + state->position, count);
+        state->position += count;
+        return count;
+    }
+    bool seek(size_t position) {
+        if (!state->valid || position > state->content.size()) return false;
+        state->position = position;
+        return true;
+    }
     int available() const { return (int)(state->content.size() - state->position); }
     size_t write(const uint8_t* data, size_t length) {
         if (!state->valid || !state->writable) return 0;

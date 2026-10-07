@@ -57,6 +57,23 @@ set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
 add_host_legacy_test(test_alarm_clock_core SOURCES test_alarm_clock_core.cpp)
+add_host_legacy_test(test_navigation_wake
+    SOURCES test_navigation_wake.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+set(NAVIGATION_LOCK_SOURCE "${PROJECT_SOURCE_DIR}/src/app/display_manager.cpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${NAVIGATION_LOCK_SOURCE}")
+file(READ "${NAVIGATION_LOCK_SOURCE}" NAVIGATION_LOCK_SOURCE_TEXT)
+string(FIND "${NAVIGATION_LOCK_SOURCE_TEXT}" "void DisplayManager::lockIfNeeded(" NAVIGATION_LOCK_START)
+string(FIND "${NAVIGATION_LOCK_SOURCE_TEXT}" "void DisplayManager::lock()" NAVIGATION_LOCK_END)
+if(NAVIGATION_LOCK_START LESS 0 OR NAVIGATION_LOCK_END LESS NAVIGATION_LOCK_START)
+    message(FATAL_ERROR "Navigation test could not locate display lock helpers")
+endif()
+math(EXPR NAVIGATION_LOCK_LENGTH "${NAVIGATION_LOCK_END} - ${NAVIGATION_LOCK_START}")
+string(SUBSTRING "${NAVIGATION_LOCK_SOURCE_TEXT}" ${NAVIGATION_LOCK_START}
+    ${NAVIGATION_LOCK_LENGTH} NAVIGATION_LOCK_HELPERS)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/navigation_lock_helpers.inc" "${NAVIGATION_LOCK_HELPERS}")
+target_include_directories(test_navigation_wake PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_host_legacy_test(test_alarm_calendar SOURCES test_alarm_calendar.cpp
     ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp OPTIONS -pthread)
 
@@ -363,6 +380,12 @@ add_host_legacy_test(test_alarm_manager
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/Arduino.h
     LIBRARIES m pthread)
 add_host_legacy_test(test_timer_format SOURCES test_timer_format.cpp stubs.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_sound_player_loop
+    SOURCES test_sound_player_loop.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides
+    DEFINITIONS HAS_AUDIO=1 HAS_SOUND_PLAYER=1 AUDIO_SAMPLE_RATE=48000
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES m)
 
 add_host_legacy_test(test_shutter_curtain_stats SOURCES test_shutter_curtain_stats.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester LIBRARIES m)
 add_host_legacy_test(test_shutter_capture SOURCES test_shutter_capture.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h)

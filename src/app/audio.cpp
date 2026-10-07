@@ -497,7 +497,7 @@ static void audio_task(void* param) {
                 audio_command_dispose(&cmd);
             } else if (cmd.is_sound) {
                 if (music_storage_playback_claim()) {
-                    sound_player_play(output_driver, cmd.pattern, &g_stop_requested, cmd.guard, cmd.generation);
+                    sound_player_play(output_driver, cmd.pattern, &g_stop_requested, cmd.guard, cmd.generation, cmd.loop);
                     music_storage_playback_release();
                 } else {
                     LOGW(TAG, "MP3 alert skipped while Music storage is busy");
@@ -804,7 +804,7 @@ void audio_play_sound(const char* filename, uint8_t volume_override) {
     audio_submit_sound(filename, volume_override);
 }
 
-bool audio_submit_sound(const char* filename, uint8_t volume_override, AudioPlaybackGuard guard, uint32_t generation) {
+bool audio_submit_sound(const char* filename, uint8_t volume_override, AudioPlaybackGuard guard, uint32_t generation, bool loop) {
     if (ota_activity_is_active()) return false;
     if (!audio_initialized) {
         LOGW(TAG, "Audio not initialized");
@@ -833,7 +833,7 @@ bool audio_submit_sound(const char* filename, uint8_t volume_override, AudioPlay
     memset(&cmd, 0, sizeof(cmd));
     strlcpy(cmd.pattern, filename, AUDIO_PATTERN_MAX_LEN);
     cmd.volume_override = volume_override;
-    cmd.loop = false;
+    cmd.loop = loop;
     cmd.is_sound = true;
     cmd.guard = guard;
     cmd.generation = generation;

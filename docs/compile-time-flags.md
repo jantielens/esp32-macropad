@@ -411,6 +411,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:USAGE -->
 - **HAS_AUDIO**
+  - src/app/actions/alarm_mp3_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
@@ -506,6 +507,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_registry.h
   - src/app/action_validate.cpp
   - src/app/action_validate.h
+  - src/app/actions/alarm_mp3_action.cpp
+  - src/app/actions/alarm_tone_action.cpp
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
@@ -596,6 +599,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_registry.h
   - src/app/action_validate.cpp
   - src/app/action_validate.h
+  - src/app/actions/alarm_mp3_action.cpp
+  - src/app/actions/alarm_tone_action.cpp
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
@@ -1048,6 +1053,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_SENSOR_TSL2591**
   - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **HAS_SOUND_PLAYER**
+  - src/app/actions/alarm_mp3_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/app.ino

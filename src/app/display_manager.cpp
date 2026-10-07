@@ -267,7 +267,8 @@ bool DisplayManager::isInLvglTask() const {
 }
 
 void DisplayManager::lockIfNeeded(bool& didLock) {
-		if (isInLvglTask()) {
+		if (isInLvglTask() || (lvglMutex &&
+				xSemaphoreGetMutexHolder(lvglMutex) == xTaskGetCurrentTaskHandle())) {
 				didLock = false;
 				return;
 		}

@@ -8,6 +8,7 @@ import threading
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from urllib.parse import urlencode
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +90,30 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertIn("if (!navigationReady) return;", bundle)
         self.assertLess(bundle.index("return loadNavigationAssets(data)"),
                 bundle.index("navigationReady = true;"))
+        fragment = self.request("/api/section/alarms", raw=True)[1]
+        self.assertNotIn('id="alarm-snooze"', fragment)
+        self.assertNotIn('id="alarm-cancel"', fragment)
+        self.assertNotIn('id="alarm-state"', fragment)
+        self.assertNotIn("setTimeout", self.request("/portal_alarms.js", raw=True)[1])
+
+    def test_timezone(self):
+        status, catalog = self.request("/api/component/timezone/catalog")
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(len(catalog["cities"]), 50)
+        self.assertLessEqual(len(catalog["cities"]), 70)
+        kathmandu = next(city for city in catalog["cities"] if city["name"] == "Asia/Kathmandu")
+        before = self.request("/api/config")[1]
+        status, preview = self.request("/api/component/timezone/preview?" + urlencode({"timezone": kathmandu["posix"]}))
+        self.assertEqual(status, 200)
+        self.assertEqual(preview["utc_offset"], "+0545")
+        self.assertTrue(preview["ready"])
+        self.assertEqual(self.request("/api/config")[1], before)
+        self.assertEqual(self.request("/api/component/timezone/preview?timezone=")[0], 400)
+        self.assertIn('id="timezone-city"', self.request("/api/section/timezone", raw=True)[1])
+        self.assertNotIn('id="timezone"', self.request("/api/section/device-name", raw=True)[1])
+        self.assertIn("init_timezone_fragment", self.request("/portal.js", raw=True)[1])
+        nav = self.request("/api/portal/nav", profile="reterminal-e1003-frame")[1]
+        self.assertTrue(any(item["id"] == "timezone" for category in nav["categories"] for item in category["items"]))
 
     def test_logs(self):
         status, data = self.request("/api/logs?limit=100")

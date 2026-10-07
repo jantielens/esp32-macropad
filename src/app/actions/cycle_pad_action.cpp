@@ -27,7 +27,7 @@ void serialize_cycle_pad(const ButtonAction& act, JsonObject action) {
 ActionResult dispatch_cycle_pad(const ButtonAction& act, const char* label, uint32_t) {
 #if defined(ARDUINO) && HAS_DISPLAY
     const auto& cycle = act.payload.cycle_pad;
-    if (!display_manager_cycle_pad(cycle.direction, cycle.wrap, cycle.excluded_mask)) LOGD(kCyclePadActionTag, "%s cycle_pad: no eligible destination", label);
+    if (!display_manager_cycle_pad(cycle.direction, cycle.wrap, cycle.excluded_mask, true)) LOGD(kCyclePadActionTag, "%s cycle_pad: no eligible destination", label);
 #else
     (void)act;
     LOGW(kCyclePadActionTag, "%s cycle_pad: no display", label);

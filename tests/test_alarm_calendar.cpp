@@ -16,6 +16,20 @@ static time_t utc(int year, int month, int day, int hour, int minute) {
 
 int main() {
     assert(time_service_set_timezone("Europe/Brussels"));
+    size_t timezone_count = 0;
+    const TimezoneEntry* catalog = time_service_timezones(&timezone_count);
+    assert(timezone_count >= 50 && timezone_count <= 70);
+    for (size_t index = 0; index < timezone_count; ++index) {
+        assert(time_service_timezone_valid(catalog[index].name));
+        assert(time_service_timezone_valid(catalog[index].posix));
+    }
+    char preview[48];
+    const uint32_t generation = time_service_generation();
+    assert(time_service_format(utc(2026, 10, 7, 5, 0), "%Y-%m-%d %H:%M:%S %z", "Asia/Kathmandu", preview, sizeof(preview)));
+    assert(!strcmp(preview, "2026-10-07 10:45:00 +0545"));
+    assert(time_service_generation() == generation);
+    assert(time_service_format(utc(2026, 7, 7, 5, 0), "%H:%M %z", "America/Mexico_City", preview, sizeof(preview)));
+    assert(!strcmp(preview, "23:00 -0600"));
     assert(!time_service_timezone_valid("Europe/Unknown"));
     const char* valid[] = {"UTC", "UTC0", "<+03>-3", "IST-5:30", "EST5EDT,M3.2.0,M11.1.0", "EET-2EEST,M4.5.5/0,M10.5.4/24", "ABC1DEF,J60/2,300/3"};
     const char* invalid[] = {"", "XYZ", "UTC25", "UTC0:60", "AB0", "<+03-3", "ABC1junk", "ABC1DEF,M13.1.0,M10.5.0", "ABC1DEF,M3.6.0,M10.5.0", "ABC1DEF,M3.2.7,M10.5.0", "ABC1DEF,J0,J365", "UTC0,garbage"};

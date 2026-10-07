@@ -280,6 +280,32 @@ TEST(legacy_alert_aliases_are_rejected) {
     ASSERT_STR(act.type, "");
 }
 
+TEST(alarm_audio_round_trip) {
+    ButtonAction tone = round_trip("{\"type\":\"alarm_tone\",\"sound_alert_pattern\":\"1000:200 800\",\"sound_alert_volume\":55}");
+    ASSERT_STR(tone.type, "alarm_tone");
+    ASSERT_STR(tone.payload.sound_alert.sound_alert_kind, "tone_loop");
+    ASSERT_STR(tone.payload.sound_alert.sound_alert_pattern, "1000:200 800");
+    ASSERT_EQ(tone.payload.sound_alert.sound_alert_volume, 55);
+    ButtonAction mp3 = round_trip("{\"type\":\"alarm_mp3\",\"sound_alert_file\":\"wake-up\",\"sound_alert_volume\":60}");
+    ASSERT_STR(mp3.type, "alarm_mp3");
+    ASSERT_STR(mp3.payload.sound_alert.sound_alert_kind, "mp3_loop");
+    ASSERT_STR(mp3.payload.sound_alert.sound_alert_file, "wake-up");
+    ASSERT_EQ(mp3.payload.sound_alert.sound_alert_volume, 60);
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm_mp3\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm_tone\",\"sound_alert_file\":\"wake-up\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm_mp3\",\"sound_alert_file\":\"wake-up\",\"sound_alert_volume\":101}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm_tone\",\"sound_alert_kind\":\"stop\"}").type, "");
+    StaticJsonDocument<1024> description;
+    JsonObject metadata = description.to<JsonObject>();
+    action_type_find("alarm_mp3")->describe(metadata);
+    ASSERT_STR(metadata["group"] | "", "Alarm");
+    ASSERT_STR(metadata["label"] | "", "Loop MP3");
+    ASSERT_EQ(action_type_find("alarm_tone")->execution, ACTION_EXECUTION_SYNC);
+    ButtonAction legacy = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone_loop\",\"sound_alert_pattern\":\"1000:200 800\"}");
+    ASSERT_STR(legacy.type, "sound_alert");
+    ASSERT_STR(legacy.payload.sound_alert.sound_alert_kind, "tone_loop");
+}
+
 // ============================================================================
 // Volume action
 // ============================================================================
@@ -793,6 +819,7 @@ int main() {
     RUN(sound_alert_tone_parse);
     RUN(sound_alert_mp3_round_trip);
     RUN(legacy_alert_aliases_are_rejected);
+    RUN(alarm_audio_round_trip);
 
     printf("\n--- Volume action ---\n");
     RUN(volume_set_action_parse);

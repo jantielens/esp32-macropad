@@ -142,6 +142,8 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_BRIGHTNESS "brightness"
 #define ACTION_TYPE_TIMER    "timer"
 #define ACTION_TYPE_ALARM    "alarm"
+#define ACTION_TYPE_ALARM_TONE "alarm_tone"
+#define ACTION_TYPE_ALARM_MP3 "alarm_mp3"
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
 #define ACTION_TYPE_HA_SERVICE "ha_service"

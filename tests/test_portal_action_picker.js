@@ -91,6 +91,12 @@ const FIXTURE_CATALOG = [
             .map(function(id) { return { id: id, label: id }; })
     },
     { type: 'delay', group: 'Timer', label: 'Delay', max_pending_actions: 3 },
+        { type: 'alarm_tone', group: 'Alarm', label: 'Loop Tone', alarm_hook_allowed: true,
+            editor_fields: [{name:'sound_alert_pattern', label:'Tone pattern', type:'text', bindable:true},
+                                            {name:'sound_alert_volume', label:'Volume override (%)', type:'number', min:0, max:100, default:'0'}] },
+        { type: 'alarm_mp3', group: 'Alarm', label: 'Loop MP3', alarm_hook_allowed: true,
+            editor_fields: [{name:'sound_alert_file', label:'MP3 file', type:'select', options_source:'sounds'},
+                                            {name:'sound_alert_volume', label:'Volume override (%)', type:'number', min:0, max:100, default:'0'}] },
     {
         type: 'shutter', group: 'Shutter Tester', label: 'Shutter tester',
         command_families: [
@@ -259,7 +265,15 @@ assert(!alarmHtml.includes('<option value="key">'));
 assert(!alarmHtml.includes('<option value="mqtt">'));
 assert(context.actionEditorTypeOptionsHTML().includes('<option value="delay">'));
 context.actionEditorLoad(prefix, {type:'sound_alert', sound_alert_kind:'tone_loop', sound_alert_pattern:'1000:200 800'});
+assert.strictEqual(context.actionEditorBuild(prefix).type, 'alarm_tone');
 assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_pattern, '1000:200 800');
+context.actionEditorLoad(prefix, {type:'alarm_mp3', sound_alert_file:'missing-clip', sound_alert_volume:65});
+assert.strictEqual(context.actionEditorBuild(prefix).type, 'alarm_mp3');
+assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_file, 'missing-clip');
+assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_volume, 65);
+assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_kind, undefined);
+assert(context.actionEditorTypeOptionsHTML().includes('<option value="alarm_mp3">Loop MP3</option>'));
+assert(!context.actionEditorHTML(prefix).includes('<option value="tone_loop">'));
 context.actionEditorLoad(prefix, {type:'sound_alert', sound_alert_kind:'stop'});
 const stopAudio = context.actionEditorBuild(prefix);
 assert.strictEqual(stopAudio.sound_alert_kind, 'stop');

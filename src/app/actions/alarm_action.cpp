@@ -22,7 +22,7 @@ ActionResult dispatch_alarm(const ButtonAction& action, const char*, uint32_t) {
 }
 void describe_alarm(JsonObject& action) {
     action["group"] = "Alarm";
-    action["label"] = "Alarm";
+    action["label"] = "Alarm Control";
     JsonArray commands = action.createNestedArray("commands");
     for (const char* command : {"snooze", "cancel"}) {
         JsonObject item = commands.createNestedObject();

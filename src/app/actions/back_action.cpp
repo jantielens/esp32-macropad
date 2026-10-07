@@ -4,7 +4,7 @@
 #if HAS_DISPLAY || HAS_BUTTON
 
 #if HAS_DISPLAY && defined(ARDUINO)
-bool display_manager_go_back();
+#include "display_manager.h"
 #endif
 
 namespace {
@@ -16,7 +16,7 @@ ActionResult dispatch_back(const ButtonAction&, const char* label, uint32_t) {
     (void)label;
     return ACTION_COMPLETE;
 #elif HAS_DISPLAY
-    if (!display_manager_go_back()) {
+    if (!display_manager_go_back(true)) {
         LOGW(kBackActionTag, "%s back: no previous screen", label);
     }
 #else
