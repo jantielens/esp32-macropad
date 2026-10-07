@@ -42,6 +42,16 @@ extern "C" unsigned long millis() { return monotonic_clock; }
 bool time_service_ready() { return ready; }
 uint32_t time_service_generation() { return timezone_revision; }
 bool time_service_localtime(time_t epoch, struct tm* result) { return result && gmtime_r(&epoch, result); }
+bool time_service_format(time_t epoch, const char* format, const char*, char* output, size_t capacity) {
+    struct tm local = {};
+    return gmtime_r(&epoch, &local) && strftime(output, capacity, format, &local);
+}
+time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute) {
+    struct tm local = {};
+    gmtime_r(&now, &local);
+    const time_t target = now - local.tm_hour * 3600 - local.tm_min * 60 - local.tm_sec + hour * 3600 + minute * 60;
+    return target > now ? target : target + 86400;
+}
 time_t time_service_alarm_candidate(time_t now, uint8_t hour, uint8_t minute, uint8_t weekdays) {
     struct tm local = {};
     gmtime_r(&now, &local);
@@ -65,7 +75,120 @@ ActionResult action_dispatch_synchronous(const ButtonAction& action, const char*
 static bool save(const char* json) { return alarm_config_save_raw(reinterpret_cast<const uint8_t*>(json), strlen(json)); }
 static const char* config = R"({"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"type":"screen","target":"info"}],"on_stop":[]}})";
 
+static void test_once() {
+    std::string once(config);
+    once.replace(once.find("\"weekdays\":62"), strlen("\"weekdays\":62"), "\"weekdays\":0");
+    timer_test_files.clear();
+    ready = true;
+    wall_clock = 1704094140;
+    monotonic_clock = 0;
+    alarm_manager_init();
+    assert(save(once.c_str()));
+    const time_t target = wall_clock + 60;
+    assert(alarm_snapshot().once_epoch == target);
+    wall_clock += 30;
+    alarm_manager_init();
+    assert(alarm_snapshot().once_epoch == target);
+    assert(save(once.c_str()));
+    assert(alarm_snapshot().once_epoch == target);
+    ++timezone_revision;
+    alarm_manager_loop();
+    assert(alarm_snapshot().once_epoch == target);
+    JsonDocument status;
+    alarm_status_to_json(status.to<JsonObject>());
+    assert(status["enabled"] == true && status["once_epoch"].as<int64_t>() == target);
+    assert(!strcmp(status["once_local"].as<const char*>(), "2024-01-01 07:30"));
+    wall_clock += 30;
+    dispatched.clear();
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING && !alarm_snapshot().enabled);
+    assert(alarm_snapshot().once_epoch == 0 && dispatched.size() == 1);
+    assert(last_work_guard(last_work_generation));
+    assert(alarm_command_submit("snooze"));
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_SNOOZED && !last_work_guard(last_work_generation));
+    monotonic_clock += 9 * 60000;
+    wall_clock += 9 * 60;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 2);
+    monotonic_clock += 30 * 60000;
+    wall_clock += 30 * 60;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_IDLE);
+    alarm_manager_init();
+    wall_clock += 86400;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().enabled && dispatched.size() == 2);
+    assert(save(once.c_str()));
+    assert(alarm_snapshot().enabled && alarm_snapshot().once_epoch > wall_clock);
+    timer_test_files.clear();
+    wall_clock = 1704094140;
+    alarm_manager_init();
+    assert(save(once.c_str()));
+    timer_test_write_limit = 8;
+    wall_clock += 60;
+    dispatched.clear();
+    alarm_manager_loop();
+    assert(alarm_snapshot().enabled && alarm_snapshot().storage_error);
+    assert(alarm_snapshot().state == ALARM_IDLE && dispatched.empty());
+    timer_test_write_limit = SIZE_MAX;
+    ++wall_clock;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().enabled && alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 1);
+    timer_test_files.clear();
+    wall_clock = 1704094140;
+    alarm_manager_init();
+    assert(save(once.c_str()));
+    wall_clock += 361;
+    dispatched.clear();
+    alarm_manager_loop();
+    assert(!alarm_snapshot().enabled && alarm_snapshot().state == ALARM_IDLE && dispatched.empty());
+    alarm_manager_init();
+    assert(!alarm_snapshot().enabled);
+    timer_test_files.clear();
+    wall_clock = 1704094140;
+    alarm_manager_init();
+    assert(save(once.c_str()));
+    wall_clock += 61;
+    alarm_manager_init();
+    dispatched.clear();
+    alarm_manager_loop();
+    assert(!alarm_snapshot().enabled && dispatched.empty());
+    timer_test_files.clear();
+    ready = false;
+    wall_clock = 1704094140;
+    alarm_manager_init();
+    assert(save(once.c_str()));
+    assert(alarm_snapshot().once_epoch == 0);
+    wall_clock += 120;
+    ready = true;
+    alarm_manager_loop();
+    assert(alarm_snapshot().enabled && alarm_snapshot().once_epoch == 1704180600);
+    timer_test_files.clear();
+    ready = true;
+    wall_clock = 1704094140;
+    alarm_manager_init();
+    assert(save(once.c_str()));
+    ota = true;
+    wall_clock += 60;
+    dispatched.clear();
+    alarm_manager_loop();
+    assert(alarm_snapshot().deferred && dispatched.empty());
+    ota = false;
+    wall_clock += 300;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().enabled && alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 1);
+    timer_test_files.clear();
+    ready = false;
+    ota = false;
+    wall_clock = 1704094140;
+    monotonic_clock = 0;
+    dispatched.clear();
+    diagnostics.clear();
+}
+
 int main() {
+    test_once();
     alarm_manager_init();
     assert(!alarm_snapshot().enabled);
     assert(save(config));

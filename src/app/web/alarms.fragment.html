@@ -15,6 +15,11 @@
       <label><input type="checkbox" id="alarm-day-0"> Sun</label>
     </div>
   </fieldset>
+  <div class="form-group">
+    <div id="alarm-repeat-summary" role="status" aria-live="polite"></div>
+    <div id="alarm-once-target" class="form-text" hidden></div>
+    <div class="form-text">No weekdays: ring once, then disable. Selected weekdays: repeat weekly. Times use the device timezone.</div>
+  </div>
   <div class="row">
     <div class="form-group col-md-6"><label class="form-label" for="alarm-snooze-minutes">Snooze (minutes)</label><input type="number" class="form-control" id="alarm-snooze-minutes" min="1" max="1440" value="9" required></div>
     <div class="form-group col-md-6"><label class="form-label" for="alarm-dismiss-minutes">Auto-dismiss (minutes)</label><input type="number" class="form-control" id="alarm-dismiss-minutes" min="1" max="1440" value="30" required></div>

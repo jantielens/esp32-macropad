@@ -638,9 +638,13 @@ The number of available trigger slots depends on the board (8 by default, fewer 
 
 *Shown when the board enables `ALARM_ENABLED`, normally on display boards.*
 
-Open **Alarm** in the Actions category. Phase 1 provides one weekly alarm,
-slot **1**, disabled by default. Set its time and weekdays; selecting no weekdays
-means it never rings. Set **Device > Timezone** before choosing the alarm's
+Open **Alarm** in the Actions category. There is one alarm, slot **1**, disabled
+by default. Selected weekdays repeat weekly. Leave all weekdays unselected for
+**Only once**: saving an enabled alarm schedules the next valid occurrence of
+its time, usually today or tomorrow. It automatically disables on its first
+scheduled ring; snooze can still ring again within that session. Enable and save
+again to schedule another one-shot. The form shows the repetition summary and,
+after saving, the scheduled date in device time. Set **Device > Timezone** before choosing the alarm's
 local time. City selection previews device time without applying the change;
 **Save** applies it without rebooting.
 
@@ -666,12 +670,22 @@ are not replayed. Live delays allow at most five minutes of lateness. During a
 daylight-saving transition, a repeated local time rings only on its first
 occurrence, and a nonexistent local time is skipped.
 
+A one-shot target is persisted, so reboot does not move it to another day.
+If it is missed at boot or more than five minutes late, it disables without
+ringing or rescheduling. Saving changed enabled one-shot settings chooses a new
+next occurrence; an identical save keeps the existing target. Saving before
+time synchronization leaves the target pending until the clock is ready.
+Timezone changes keep an already scheduled one-shot instant, although its local
+display time can change. Sessions, including snooze, do not survive reboot.
+
 A successful definition or timezone change dismisses an active alarm using its
 old stop actions. Identical saves, rejected input, and failed saves preserve the
 session. Definitions and handled-occurrence history use the primary filesystem,
 not NVS. Formatting or losing that filesystem can lose the alarm. Storage and
-action failures appear in the alarm status; a history-save failure still allows
-the current ring, but a later reboot can repeat an occurrence.
+action failures appear in the alarm status. A weekly history-save failure still
+allows the current ring, but a later reboot can repeat an occurrence. A one-shot
+must record consumption before ringing; failed writes defer it within the
+five-minute grace instead of risking another scheduled ring after reboot.
 
 ### Timers
 

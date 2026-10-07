@@ -247,10 +247,11 @@ require camera hardware; `set_volume` requires audio hardware; and
 
 ### Alarm Clock Tools
 
-On alarm-enabled boards, `get_capabilities` advertises one weekly alarm slot,
+On alarm-enabled boards, `get_capabilities` advertises one alarm slot,
 the component and tool names, weekday mask, hook limit, lateness grace, and
 filesystem persistence. `get_alarm_status` reads readiness, runtime state,
-storage/action failures, and OTA deferral.
+storage/action failures, OTA deferral, and the persisted one-shot target through
+`once_epoch` and `once_local` (device-local date and time).
 
 Use `get_component_config` with `component: "alarms"` before a full-replacement
 `set_component_config` write. The definition is keyed by `"1"` and includes
@@ -258,6 +259,13 @@ Use `get_component_config` with `component: "alarms"` before a full-replacement
 `auto_dismiss_minutes`, `on_ring`, and `on_stop`. Hook arrays accept at most
 three available synchronous actions. Validation and persistence use the same
 manager as the portal; failed or identical saves do not dismiss an active ring.
+Nonzero weekday masks repeat weekly. A zero mask rings once at the next valid
+local time and automatically disables, while snooze remains available within
+that session. Re-enable and save for another occurrence. Identical saves retain
+the target; changed enabled settings replace it. Reboot and timezone changes
+keep the saved instant; missed targets disable instead of moving to tomorrow.
+One-shot consumption must be saved before ringing; storage errors defer it
+within the grace period. Without synchronized time the target remains pending.
 
 `alarm_control` accepts `command: "snooze"` or `"cancel"` and optional
 `alarm_id: 0` (active alarm) or `1`. Success means the command was queued for the

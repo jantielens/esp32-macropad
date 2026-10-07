@@ -27,6 +27,7 @@ struct AlarmSnapshot {
     bool deferred;
     bool storage_error;
     bool hook_error;
+    time_t once_epoch;
 };
 
 void alarm_manager_init();

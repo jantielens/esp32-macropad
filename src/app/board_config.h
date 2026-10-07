@@ -99,7 +99,7 @@ struct HwButtonDef {
 #define HAS_MQTT true
 #endif
 
-// Include the persistent weekly alarm on pad-capable display builds.
+// Include the persistent weekly or one-shot alarm on pad-capable display builds.
 #ifndef ALARM_ENABLED
 #define ALARM_ENABLED HAS_DISPLAY
 #endif

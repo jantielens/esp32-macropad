@@ -1376,7 +1376,7 @@ on direct links, so its convention-based initializer is available at startup.
 |--------|----------|----------|
 | GET | `/api/component/alarms/config` | Normalized ID-keyed definition |
 | POST | `/api/component/alarms/config` | Validated, durable full replacement; maximum 8192 bytes |
-| GET | `/api/component/alarms/status` | State, readiness, storage/action failures, OTA deferral |
+| GET | `/api/component/alarms/status` | State, readiness, failures, OTA deferral, enabled, once_epoch, once_local |
 | POST | `/api/component/alarms/snooze` | Queue snooze for a ringing session |
 | POST | `/api/component/alarms/cancel` | Queue cancellation without disabling the schedule |
 
@@ -1397,7 +1397,11 @@ Phase 1 accepts exactly slot `1`:
 }
 ```
 
-Weekdays use Sunday bit 0 through Saturday bit 6; zero schedules nothing.
+Weekdays use Sunday bit 0 through Saturday bit 6. Nonzero masks repeat weekly;
+zero means one-shot at the next valid local occurrence, usually today or tomorrow.
+The portal updates its once/weekly summary as settings change. Status includes
+`enabled`, `once_epoch` (zero if unresolved or absent), and `once_local` (device-local
+`YYYY-MM-DD HH:MM`, empty without a target). Status refreshes only on load/save.
 Hours are 0-23, minutes 0-59, and both durations are 1-1440 minutes. Hook arrays
 use the existing three-action limit. Every write path rejects unavailable,
 unknown, pausable, or invalid actions; oversized string payloads are not silently
@@ -1422,16 +1426,26 @@ An overdue snooze beyond the same grace expires rather than ringing late.
 
 Persistence uses `Storage` and alternating `/config/alarm_a.json` and
 `/config/alarm_b.json` snapshots. Each bounded envelope includes schema version,
-generation, config, handled epoch, and CRC32. The inactive file is written,
+generation, config, handled epoch, one-shot epoch, and CRC32. Schema 2 has no
+migration from earlier development snapshots. The inactive file is written,
 flushed, closed, and re-read before becoming active. A failed config save does
 not apply changes. An invalid newer snapshot falls back to the valid older one
 and reports degraded storage; two invalid snapshots leave the default disabled.
 
-Handled-occurrence history is saved before ring dispatch. If that save fails,
-the alarm still rings with RAM deduplication and degraded-storage status, without
-per-tick retries. Exactly-once external effects cannot be guaranteed: a crash
+One-shots persist a fixed epoch when enabled settings are saved. Without synced
+time they persist an unresolved target and resolve it once time is ready and OTA
+is inactive. Identical saves keep the target; substantive edits choose a new
+one. Reboot and timezone changes retain the instant. A target before the arming
+fence or outside the grace is disabled, not rolled forward. Initial triggering
+atomically records history, clears the target, and disables the definition
+before dispatch; snooze uses the retained session and does not consume again.
+Consumption-write failures suppress ringing and retry within the grace.
+
+Weekly handled-occurrence history is saved before ring dispatch. If that save
+fails, the weekly alarm still rings with RAM deduplication and degraded-storage
+status, without per-tick retries. Exactly-once external effects cannot be guaranteed: a crash
 after a successful history save but before dispatch can lose a ring, while a
-failed history save followed by reboot can duplicate one. Filesystem loss is
+failed weekly history save followed by reboot can duplicate one. Filesystem loss is
 not recovered from NVS or another medium.
 
 OTA defers hooks and persistent writes. Interrupted hook lists retain their

@@ -1091,10 +1091,11 @@ void mcp_config_capabilities(JsonObject& out) {
     alarm["status_tool"] = "get_alarm_status";
     alarm["control_tool"] = "alarm_control";
     alarm["grace_seconds"] = 300;
-    alarm["weekdays"] = "bit mask: Sunday=1, Monday=2, ... Saturday=64; zero schedules nothing";
+    alarm["weekdays"] = "bit mask: Sunday=1, Monday=2, ... Saturday=64; selected days repeat weekly; zero rings once at the next local time, then disables; snooze remains available in that session";
     alarm["hooks"] = "up to three explicitly synchronous actions per on_ring/on_stop; attempt every action; hooks snapshot per session";
     alarm["config"] = "slot 1: enabled, hour (0-23), minute (0-59), weekdays (0-127), snooze_minutes and auto_dismiss_minutes (1-1440), on_ring and on_stop arrays";
-    alarm["persistence"] = "two checksummed filesystem snapshots; config + handled history; no reboot catch-up; occurrence-write failure still rings with degraded durability";
+    alarm["persistence"] = "two checksummed filesystem snapshots; config + handled history + fixed one-shot epoch; no reboot catch-up; weekly history-write failure still rings; one-shot consumption must be durable before ringing";
+    alarm["one_shot"] = "target survives reboot and timezone changes; status exposes enabled, once_epoch and once_local; missed occurrences disable, never roll forward; enable and save to rearm";
 #endif
     JsonObject keyboard = out.createNestedObject("keyboard");
     JsonArray transports = keyboard.createNestedArray("transports");

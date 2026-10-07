@@ -189,7 +189,7 @@ Total flags: 305
 ### Other
 
 - **ACTION_CONTINUATION_SLOTS** default: `3` — Maximum independent pending action lists; each consumes about 884 bytes of internal RAM; constrained boards should override this to 1.
-- **ALARM_ENABLED** default: `HAS_DISPLAY` — Include the persistent weekly alarm on pad-capable display builds.
+- **ALARM_ENABLED** default: `HAS_DISPLAY` — Include the persistent weekly or one-shot alarm on pad-capable display builds.
 - **AUDIO_CODEC_ADDR** default: `0x18` — I2C address of the audio codec (e.g. ES8311 = 0x18).
 - **AUDIO_DEFAULT_VOLUME** default: `50` — Default volume used when no NVS value has been stored.
 - **AUDIO_DMA_DESC_NUM** default: `6` — I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.

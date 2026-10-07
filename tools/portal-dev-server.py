@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, urlparse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
 from pathlib import Path
+from datetime import date, timedelta
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROTO_DIR = SCRIPT_DIR / "portal-prototype"
@@ -62,7 +63,8 @@ def reset_pad_fixtures(server, scenario="normal"):
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
                                "on_ring": [], "on_stop": []}}
     server.mock_alarm_status = {"active_id": 0, "state": "idle", "ready": True,
-                               "ota_deferred": False, "storage_error": False, "hook_error": False}
+                               "ota_deferred": False, "storage_error": False, "hook_error": False,
+                               "enabled": False, "once_epoch": 0, "once_local": ""}
     for action in fixture["catalog"]:
         action["alarm_hook_allowed"] = action["type"] not in ("delay", "key", "gamepad", "camera_capture", "voice_assistant")
         if action["type"] == "sound_alert":
@@ -292,7 +294,20 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     self._serve_json({"error": "Mock alarm save failure"}, 503)
                     return
                 if data != self.server.mock_alarms:
-                    self.server.mock_alarm_status.update(active_id=0, state="idle")
+                    self.server.mock_alarm_status.update(active_id=0, state="idle", enabled=slot["enabled"], once_epoch=0, once_local="")
+                    if slot["enabled"] and not slot["weekdays"]:
+                        environment = dict(os.environ, TZ=self.server.mock_config.get("timezone", "Europe/Brussels"))
+                        today = subprocess.run(["date", "--date=@1791370589", "+%Y-%m-%d"], env=environment,
+                                               capture_output=True, text=True, check=True).stdout.strip()
+                        for offset in range(2):
+                            day = date.fromisoformat(today) + timedelta(days=offset)
+                            target = f"{day} {slot['hour']:02}:{slot['minute']:02}"
+                            result = subprocess.run(["date", f"--date={target}", "+%s|%Y-%m-%d %H:%M"], env=environment,
+                                                    capture_output=True, text=True, check=True).stdout.strip()
+                            epoch, local = result.split("|")
+                            if int(epoch) > 1791370589:
+                                self.server.mock_alarm_status.update(once_epoch=int(epoch), once_local=local)
+                                break
                 self.server.mock_alarms = data
             elif path == "/api/component/alarms/snooze":
                 if self.server.mock_alarm_status["state"] == "ringing":
@@ -301,6 +316,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self.server.mock_alarm_status.update(active_id=0, state="idle")
             elif path == "/__mock/alarm":
                 self.server.mock_alarm_status.update(data)
+                slot = self.server.mock_alarms["1"]
+                if data.get("state") == "ringing" and slot["enabled"] and not slot["weekdays"]:
+                    slot["enabled"] = False
+                    self.server.mock_alarm_status.update(enabled=False, once_epoch=0, once_local="")
             else:
                 self._serve_json({"error": "Unknown alarm operation"}, 404)
                 return

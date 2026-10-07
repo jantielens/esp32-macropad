@@ -63,5 +63,9 @@ if 'REGISTER_MCP_TOOL(s_tool_get_alarm_status)' not in SOURCE or 'REGISTER_MCP_T
     raise AssertionError("MCP Alarm status and control tools must be registered")
 if '!time_service_timezone_valid(timezone)' not in SOURCE:
     raise AssertionError("MCP timezone writes must use the shared timezone validator")
+require(r'alarm\["weekdays"\].*?zero rings once.*?snooze remains available',
+    "MCP capabilities must explain one-shot weekday semantics")
+require(r'alarm\["one_shot"\].*?once_epoch and once_local.*?missed occurrences disable',
+    "MCP capabilities must advertise persisted one-shot status and expiration")
 
 print("timer_mcp_integration: PASS (timers and alarms)")

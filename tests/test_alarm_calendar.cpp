@@ -41,6 +41,14 @@ int main() {
     assert(time_service_alarm_candidate(utc(2026, 10, 7, 5, 0), 7, 0, 1 << 3) == utc(2026, 10, 7, 5, 0));
     assert(time_service_alarm_candidate(utc(2026, 10, 7, 5, 0), 7, 0, 1 << 4) == 0);
     assert(time_service_alarm_candidate(utc(2026, 10, 11, 22, 2), 0, 0, 1 << 1) == utc(2026, 10, 11, 22, 0));
+    assert(time_service_alarm_next(utc(2026, 10, 7, 4, 59), 7, 0) == utc(2026, 10, 7, 5, 0));
+    assert(time_service_alarm_next(utc(2026, 10, 7, 5, 0), 7, 0) == utc(2026, 10, 8, 5, 0));
+    assert(time_service_alarm_next(utc(2026, 12, 31, 23, 30), 7, 0) == utc(2027, 1, 1, 6, 0));
+    assert(time_service_alarm_next(utc(2026, 3, 28, 23, 0), 2, 30) == utc(2026, 3, 30, 0, 30));
+    assert(time_service_alarm_next(utc(2026, 10, 24, 23, 0), 2, 30) == repeated);
+    assert(time_service_alarm_next(utc(2026, 10, 25, 1, 0), 2, 30) == utc(2026, 10, 26, 1, 30));
+    assert(time_service_alarm_next(utc(2026, 10, 7, 4, 59), 24, 0) == 0);
+    assert(time_service_alarm_next(utc(2026, 10, 7, 4, 59), 7, 60) == 0);
     std::thread clock([] {
         for (int count = 0; count < 1000; ++count) {
             char text[32];

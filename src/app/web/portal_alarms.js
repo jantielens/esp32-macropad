@@ -1,6 +1,25 @@
 var ALARM_RING_PREFIXES = actionEditorSlotPrefixes('alarm-ring-');
 var ALARM_STOP_PREFIXES = actionEditorSlotPrefixes('alarm-stop-');
 
+function alarmScheduleSummary() {
+    var form = document.getElementById('alarm-config-form');
+    var days = [];
+    var names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    [1, 2, 3, 4, 5, 6, 0].forEach(function(day) {
+        if (document.getElementById('alarm-day-' + day).checked) days.push(names[day]);
+    });
+    var enabled = document.getElementById('alarm-enabled').checked;
+    var time = document.getElementById('alarm-time').value;
+    var summary = days.length ? 'Weekly: ' + days.join(', ') + ' at ' + time + '.'
+        : 'Only once: next valid ' + time + ', then automatically disabled. Snooze can still ring again within that session.';
+    document.getElementById('alarm-repeat-summary').textContent = enabled ? summary : 'Disabled. Enable and save to schedule. ' + summary;
+    var target = document.getElementById('alarm-once-target');
+    target.hidden = !enabled || days.length > 0;
+    target.textContent = form.dataset.onceLocal && form.dataset.dirty !== 'true'
+        ? 'Scheduled: ' + form.dataset.onceLocal + ' (device timezone).'
+        : 'Saving enabled one-shot settings schedules the next occurrence, usually today or tomorrow. Unchanged settings keep the saved occurrence.';
+}
+
 function alarmConfigBuild() {
     var time = document.getElementById('alarm-time').value.split(':');
     var weekdays = 0;
@@ -26,6 +45,12 @@ async function alarmStatusRefresh() {
     var warning = document.getElementById('alarm-warning');
     warning.hidden = !status.storage_error && !status.hook_error;
     warning.textContent = status.storage_error ? 'Alarm storage unavailable' : status.hook_error ? 'An alarm action failed' : '';
+    var form = document.getElementById('alarm-config-form');
+    if (form.dataset.dirty !== 'true') {
+        document.getElementById('alarm-enabled').checked = status.enabled;
+        form.dataset.onceLocal = status.once_local || '';
+    }
+    alarmScheduleSummary();
 }
 
 window.init_alarms_fragment = async function() {
@@ -47,13 +72,24 @@ window.init_alarms_fragment = async function() {
         actionEditorListLoad(ALARM_RING_PREFIXES, config.on_ring || []);
         actionEditorListLoad(ALARM_STOP_PREFIXES, config.on_stop || []);
         actionEditorWireFragment(ALARM_RING_PREFIXES.concat(ALARM_STOP_PREFIXES));
+        form.dataset.dirty = 'false';
+        function settingsChanged() {
+            form.dataset.dirty = 'true';
+            alarmScheduleSummary();
+        }
+        form.addEventListener('input', settingsChanged);
+        form.addEventListener('change', settingsChanged);
+        alarmScheduleSummary();
         form.addEventListener('submit', async function(event) {
             event.preventDefault();
             var button = document.getElementById('alarm-save');
             button.disabled = true;
             try {
-                var response = await fetch('/api/component/alarms/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(alarmConfigBuild())});
+                var submitted = JSON.stringify(alarmConfigBuild());
+                var response = await fetch('/api/component/alarms/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:submitted});
                 if (!response.ok) throw new Error('Alarm configuration was not saved');
+                if (document.getElementById('alarm-config-form') !== form) return;
+                form.dataset.dirty = JSON.stringify(alarmConfigBuild()) === submitted ? 'false' : 'true';
                 showMessage('Alarm saved', 'success');
                 await alarmStatusRefresh();
             } catch (error) { showMessage(error.message, 'error'); }

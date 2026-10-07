@@ -18,7 +18,7 @@
 
 unsigned long millis() { return 10000; }
 #if ALARM_ENABLED
-AlarmSnapshot alarm_snapshot() { return {true, 7, 30, ALARM_RINGING, true, false, false, false}; }
+AlarmSnapshot alarm_snapshot() { return {true, 7, 30, ALARM_RINGING, true, false, false, false, 0}; }
 #endif
 
 void log_write(LogLevel, const char*, const char*, ...) {}

@@ -17,6 +17,12 @@ struct AlarmClockCore {
     uint32_t snooze_ms = 9 * 60000;
     uint32_t dismiss_ms = 30 * 60000;
 
+    bool occurrence_due(time_t now, bool ready, time_t candidate) const {
+        const time_t armed = ready && !time_ready ? (now / 60 + 1) * 60 : armed_from;
+        return ready && candidate >= armed && candidate > handled_epoch
+            && candidate <= now && now - candidate <= 300;
+    }
+
     void rearm(time_t now, bool ready) {
         time_ready = ready;
         armed_from = ready ? (now / 60 + 1) * 60 : 0;
@@ -43,8 +49,7 @@ struct AlarmClockCore {
                  uint32_t configured_dismiss_ms) {
         if (ready && !time_ready) rearm(now, true);
         if (!ready) time_ready = false;
-        const bool due = ready && candidate >= armed_from && candidate > handled_epoch
-            && candidate <= now && now - candidate <= 300;
+        const bool due = occurrence_due(now, ready, candidate);
         deferred = ota && (due || (state != ALARM_IDLE && monotonic_ms >= deadline_ms));
         if (ota) return ALARM_EFFECT_NONE;
         if (due) {
