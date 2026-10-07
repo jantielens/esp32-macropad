@@ -13,8 +13,6 @@
 #include "mqtt_action.cpp"
 #include "ha_service_action.cpp"
 #include "sound_alert_action.cpp"
-#include "alarm_tone_action.cpp"
-#include "alarm_mp3_action.cpp"
 #include "notify_action.cpp"
 #include "visual_alert_action.cpp"
 #if HAS_LVGL_EPAPER
@@ -23,6 +21,8 @@
 #include "timer_action.cpp"
 #if ALARM_ENABLED
 #include "alarm_action.cpp"
+#include "alarm_tone_action.cpp"
+#include "alarm_mp3_action.cpp"
 #endif
 #if HAS_IMAGE_LIBRARY
 #include "image_next_action.cpp"

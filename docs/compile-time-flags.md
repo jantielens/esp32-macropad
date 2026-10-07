@@ -620,7 +620,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/timer_action.cpp
   - src/app/actions/visual_alert_action.cpp
   - src/app/actions/volume_action.cpp
-  - src/app/alarm_manager.cpp
   - src/app/app.ino
   - src/app/audio_input_binding.cpp
   - src/app/binding_builtin_schemes.cpp
@@ -1159,6 +1158,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **ALARM_ENABLED**
   - src/app/actions/alarm_action.cpp
+  - src/app/actions/alarm_mp3_action.cpp
+  - src/app/actions/alarm_tone_action.cpp
+  - src/app/actions/sound_alert_action.cpp
   - src/app/alarm_binding.cpp
   - src/app/alarm_manager.cpp
   - src/app/alarm_manager.h

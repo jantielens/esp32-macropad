@@ -3,6 +3,15 @@
 #include <cstdio>
 #include <thread>
 #include <cstring>
+#include "binding_template.h"
+#include "time_binding.h"
+
+static bool calendar_clock_ready = true;
+extern "C" unsigned long millis() { return 1000; }
+bool calendar_time_ready() { return calendar_clock_ready; }
+#define time_service_ready calendar_time_ready
+#include "../src/app/time_binding.cpp"
+#undef time_service_ready
 
 static time_t utc(int year, int month, int day, int hour, int minute) {
     struct tm value = {};
@@ -59,6 +68,23 @@ int main() {
     for (int count = 0; count < 1000; ++count)
         assert(time_service_alarm_candidate(utc(2026, 10, 7, 5, 0), 7, 0, 127) == utc(2026, 10, 7, 5, 0));
     clock.join();
+    time_binding_init();
+    auto binding_expect = [](const char* params, const char* expected) {
+        char value[32] = {};
+        assert(binding_template_resolve_registered("time", 4, params, value, sizeof(value)) == BINDING_RESOLVER_RESOLVED);
+        assert(!strcmp(value, expected));
+    };
+    assert(time_service_set_timezone("UTC0"));
+    binding_expect("%z", "+0000");
+    binding_expect("%z;", "+0000");
+    assert(time_service_set_timezone("IST-5:30"));
+    binding_expect("%z", "+0530");
+    binding_expect("%z;", "+0530");
+    binding_expect("%z;Asia/Kathmandu", "+0545");
+    binding_expect("%z", "+0530");
+    calendar_clock_ready = false;
+    binding_expect("%z", "--:--");
+    binding_expect("%ums", "1000");
     assert(!time_service_ready());
     std::puts("alarm calendar: PASS");
 }

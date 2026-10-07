@@ -41,18 +41,11 @@
 
   // ---------- Two-level nav build ----------
 
-  function loadNavigationAssets(data) {
-    var scripts = {};
-    var styles = {};
-    (data.categories || []).forEach(function (category) {
-      (category.items || []).forEach(function (item) {
-        if (item.portal_script) scripts[item.portal_script] = true;
-        if (item.portal_style) styles[item.portal_style] = true;
-      });
-    });
-
+  var navigationAssetLoads = {};
+  function loadItemAssets(item) {
     function loadNavigationAsset(path, kind) {
-      return new Promise(function (resolve, reject) {
+      if (navigationAssetLoads[path]) return navigationAssetLoads[path];
+      navigationAssetLoads[path] = new Promise(function (resolve, reject) {
         var asset = document.createElement(kind === 'style' ? 'link' : 'script');
         if (kind === 'style') {
           asset.rel = 'stylesheet';
@@ -61,17 +54,19 @@
           asset.src = path;
         }
         asset.onload = resolve;
-        asset.onerror = function () { reject(new Error('Portal asset unavailable: ' + path)); };
+        asset.onerror = function () {
+          asset.remove();
+          delete navigationAssetLoads[path];
+          reject(new Error('Portal asset unavailable: ' + path));
+        };
         document.head.appendChild(asset);
       });
+      return navigationAssetLoads[path];
     }
 
-    var loads = Object.keys(styles).map(function (path) {
-      return loadNavigationAsset(path, 'style');
-    });
-    loads = loads.concat(Object.keys(scripts).map(function (path) {
-      return loadNavigationAsset(path, 'script');
-    }));
+    var loads = [];
+    if (item && item.portal_style) loads.push(loadNavigationAsset(item.portal_style, 'style'));
+    if (item && item.portal_script) loads.push(loadNavigationAsset(item.portal_script, 'script'));
     return Promise.all(loads);
   }
 
@@ -206,7 +201,8 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.text();
       })
-      .then(function (html) {
+      .then(async function (html) {
+        await loadItemAssets(itemMap[itemId] && itemMap[itemId].item);
         if (loadGeneration !== fragmentLoadGeneration) return;
         contentEl.innerHTML = html;
         // Convention-based fragment init
@@ -380,9 +376,6 @@
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
-      })
-      .then(function (data) {
-        return loadNavigationAssets(data).then(function () { return data; });
       })
       .then(function (data) {
         // Expose primary category data for welcome hero card

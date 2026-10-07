@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-06
+ms.date: 2026-10-07
 ms.topic: reference
 ---
 
@@ -14,8 +14,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Persistent alarm clock on alarm-enabled display boards, with one stable slot,
+  weekly weekday scheduling, configurable snooze and auto-dismiss, and up to
+  three synchronous ring and stop actions. Alarm Control buttons and MCP provide
+  Snooze and Cancel; read-only bindings expose configured time, enabled state,
+  readiness, session state, and active ID. Alternating checksummed filesystem
+  snapshots preserve settings and handled occurrences. Scheduling requires
+  current-boot time synchronization and permits up to five minutes of live
+  lateness, without replaying alarms missed before startup readiness.
+* One-shot alarms when no weekdays are selected. Save an enabled alarm to
+  schedule the next valid local occurrence; its fixed target survives reboot
+  and timezone changes. Initial triggering durably consumes the occurrence and
+  disables future scheduling, while snooze remains available within the session.
+  Missed one-shots disable rather than moving to another day. The Alarm form
+  explains once versus weekly settings and displays the saved device-local date.
+* Dedicated Timezone settings with grouped city choices, a non-mutating
+  device-time preview, and save without reboot. The device timezone supplies
+  alarm scheduling and the default for clock bindings without an explicit
+  timezone override.
+* Loop Tone and Loop MP3 alarm actions, using the shared audio engine and
+  session guards. MP3 repeats after successful playback without a gapless
+  guarantee; playback stops on session invalidation, replacement audio, OTA,
+  or playback failure. Stop Audio remains available for configured cleanup.
+
+### Changed
+
+* Successful screen, back, and pad-cycle actions wake the display and reset
+  its sleep timer, preserving the original screen's navigation history when
+  leaving an idle screen. Internal navigation remains non-waking by default.
+* Load component-specific portal assets on first opening rather than fetching
+  every advertised script and stylesheet during portal startup.
+
 ### Fixed
 
+* Keep blocking alarm Home Assistant requests outside the display mutex while
+  protecting UI dispatch and binding resolution independently.
+* Hide dedicated alarm audio actions on alarm-disabled builds and prevent
+  saved forbidden action types from bypassing the Alarm form's hook filter.
+* Prevent alarm-driven navigation from reacquiring a display mutex already held
+  by the same task, avoiding blocked alarm hooks and the resulting watchdog reset.
 * Restore JC3248W535's full Screen Saver settings, including the enable
   checkbox and configurable Fade In/Fade Out. Keep its combined display/touch
   controller awake while fading the backlight off, without applying the legacy

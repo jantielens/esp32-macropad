@@ -13,9 +13,9 @@
 
 extern "C" unsigned long millis() { return 0; }
 
-std::map<std::string, std::string> timer_test_files;
-bool timer_test_fail_open = false;
-size_t timer_test_write_limit = SIZE_MAX;
+std::map<std::string, std::string> storage_test_files;
+bool storage_test_fail_open = false;
+size_t storage_test_write_limit = SIZE_MAX;
 FakeLittleFS LittleFS;
 
 void storage_publish_usage(bool) {}
@@ -39,14 +39,14 @@ static bool save(const char* json) {
 }
 
 static void test_missing_and_malformed_exists_semantics() {
-    timer_test_files.clear();
+    storage_test_files.clear();
     timer_config_init();
     assert(!timer_config_exists());
     assert(snapshot(1).count == 0);
     assert(snapshot(2).count == 0);
     assert(snapshot(3).count == 0);
 
-    timer_test_files["/config/timers.json"] = "{malformed";
+    storage_test_files["/config/timers.json"] = "{malformed";
     timer_config_init();
     assert(timer_config_exists());
     assert(snapshot(1).count == 0);
@@ -55,7 +55,7 @@ static void test_missing_and_malformed_exists_semantics() {
 }
 
 static void test_tolerant_load_and_normalization() {
-    timer_test_files["/config/timers.json"] = R"({
+    storage_test_files["/config/timers.json"] = R"({
         "1":{"mode":"down","countdown":30,"expire_actions":[
             {"type":"sound_alert","sound_alert_kind":"tone","sound_alert_pattern":"a"},null,{},
             {"type":"unknown"},{"type":"sound_alert","sound_alert_kind":"mp3","sound_alert_file":"alarm"},
@@ -95,22 +95,22 @@ static void test_strict_writes_and_atomic_cache() {
         R"({"1":{"expire_actions":[{"type":"a"},{"type":"b"},{"type":"c"},{"type":"d"}]}})"
     };
     for (const char* json : invalid) {
-        std::string before = timer_test_files["/config/timers.json"];
+        std::string before = storage_test_files["/config/timers.json"];
         assert(!save(json));
-        assert(timer_test_files["/config/timers.json"] == before);
+        assert(storage_test_files["/config/timers.json"] == before);
         assert(snapshot(2).count == 1);
     }
 
-    timer_test_write_limit = 5;
+    storage_test_write_limit = 5;
     assert(!save(R"({"1":{"expire_actions":[{"type":"sound_alert","sound_alert_kind":"mp3"}]}})"));
     assert(snapshot(2).count == 1);
-    timer_test_write_limit = SIZE_MAX;
+    storage_test_write_limit = SIZE_MAX;
 
     assert(save(R"({"1":{"expire_actions":[{"type":"future"}]}})"));
     assert(snapshot(1).count == 1);
     assert(snapshot(2).count == 0);
     JsonDocument doc;
-    assert(!deserializeJson(doc, timer_test_files["/config/timers.json"]));
+    assert(!deserializeJson(doc, storage_test_files["/config/timers.json"]));
     assert(doc["1"]["expire_actions"][0]["type"] == "future");
     assert(doc["2"]["expire_actions"].as<JsonArray>().size() == 0);
     assert(doc["3"]["expire_actions"].as<JsonArray>().size() == 0);
@@ -141,7 +141,7 @@ static void test_concurrent_saves_stay_consistent() {
     second_writer.join();
 
     JsonDocument persisted;
-    assert(!deserializeJson(persisted, timer_test_files["/config/timers.json"]));
+    assert(!deserializeJson(persisted, storage_test_files["/config/timers.json"]));
     size_t persisted_count = persisted["1"]["expire_actions"].as<JsonArray>().size();
     assert(persisted_count == snapshot(1).count);
 }

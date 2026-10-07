@@ -57,6 +57,11 @@ set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
 add_host_legacy_test(test_alarm_clock_core SOURCES test_alarm_clock_core.cpp)
+add_host_legacy_test(test_alarm_dispatch_lock
+    SOURCES test_alarm_dispatch_lock.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    OPTIONS -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_navigation_wake
     SOURCES test_navigation_wake.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
@@ -75,7 +80,9 @@ string(SUBSTRING "${NAVIGATION_LOCK_SOURCE_TEXT}" ${NAVIGATION_LOCK_START}
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/navigation_lock_helpers.inc" "${NAVIGATION_LOCK_HELPERS}")
 target_include_directories(test_navigation_wake PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_host_legacy_test(test_alarm_calendar SOURCES test_alarm_calendar.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp OPTIONS -pthread)
+    ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    OPTIONS -pthread)
 
 add_host_gtest(test_mousepad test_mousepad.cpp)
 add_host_legacy_test(test_remote_log SOURCES test_remote_log.cpp)
@@ -296,11 +303,19 @@ set(ACTION_TEST_SOURCES
 )
 
 add_host_legacy_test(test_action_parse
-    SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES}
+    SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
+add_host_legacy_test(test_action_parse_alarm_disabled
+    SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/alarm_manager.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS ALARM_ENABLED=0 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
+    OPTIONS -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_action_bindings
     SOURCES test_action_bindings.cpp ${ACTION_TEST_SOURCES}
     INCLUDES ${HOST_ARDUINOJSON_DIR}
@@ -439,8 +454,10 @@ function(add_binding_schema_profile name definition)
 endfunction()
 
 add_binding_schema_profile(baseline "")
+add_binding_schema_profile(alarm_disabled "ALARM_ENABLED=0")
 add_binding_schema_profile(camera BINDING_SCHEMA_PROFILE_CAMERA)
 add_binding_schema_profile(full BINDING_SCHEMA_PROFILE_FULL ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
+add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
 add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_binding.cpp)
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)
 add_binding_schema_profile(darkroom BINDING_SCHEMA_PROFILE_DARKROOM ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/meter.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/expose_timer.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/test_strip.cpp)
@@ -497,6 +514,9 @@ foreach(script
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} node ${PROJECT_SOURCE_DIR}/tests/${script})
+    if(script STREQUAL "test_portal_action_picker.js")
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "ACTION_CATALOG_BINARY=$<TARGET_FILE:test_action_parse>")
+    endif()
 endforeach()
 
 foreach(script portal_action_editor.js portal_binding_validator.js portal_pad_dialog.js portal_config_actions.js portal_recipes.js)

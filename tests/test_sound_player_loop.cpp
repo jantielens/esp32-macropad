@@ -7,9 +7,9 @@
 using std::min;
 #include "../src/app/sound_player.cpp"
 
-std::map<std::string, std::string> timer_test_files;
-bool timer_test_fail_open = false;
-size_t timer_test_write_limit = SIZE_MAX;
+std::map<std::string, std::string> storage_test_files;
+bool storage_test_fail_open = false;
+size_t storage_test_write_limit = SIZE_MAX;
 FakeLittleFS LittleFS;
 static bool ota = false;
 static bool guard_valid = true;
@@ -54,7 +54,7 @@ int main() {
     frame[0] = char(0xff);
     frame[1] = char(0xfb);
     frame[2] = char(0x90);
-    timer_test_files["/sounds/clip.mp3"] = frame + frame + frame;
+    storage_test_files["/sounds/clip.mp3"] = frame + frame + frame;
     TestOutput output;
     assert(sound_player_play(&output, "clip", &stopped, playback_guard, 7));
     const size_t clip_frames = output.frames;
@@ -77,9 +77,9 @@ int main() {
     output.fail = true;
     assert(!sound_player_play(&output, "clip", &stopped, playback_guard, 7, true));
     output = TestOutput();
-    timer_test_files["/sounds/empty.mp3"] = "";
+    storage_test_files["/sounds/empty.mp3"] = "";
     assert(!sound_player_play(&output, "empty", &stopped, playback_guard, 7, true));
-    timer_test_files["/sounds/corrupt.mp3"] = std::string(100, '\0');
+    storage_test_files["/sounds/corrupt.mp3"] = std::string(100, '\0');
     assert(!sound_player_play(&output, "corrupt", &stopped, playback_guard, 7, true));
     assert(!sound_player_play(&output, "missing", &stopped, playback_guard, 7, true));
     assert(output.frames == 0);

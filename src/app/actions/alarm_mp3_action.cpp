@@ -1,5 +1,5 @@
 #include "action_registry.h"
-#if HAS_DISPLAY || HAS_BUTTON
+#if ALARM_ENABLED && (HAS_DISPLAY || HAS_BUTTON)
 namespace {
 const char* validate_alarm_mp3(JsonObjectConst action) {
     if (action.containsKey("sound_alert_kind")) return "Loop MP3 has a fixed sound kind";

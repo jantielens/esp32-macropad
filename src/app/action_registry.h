@@ -44,10 +44,12 @@ struct ActionTypeDef {
                 const char* (*validate)(JsonObjectConst action) = nullptr,
                 bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
                                                              void* context) = nullptr,
-        ActionExecutionClass execution = ACTION_EXECUTION_UNKNOWN)
+        ActionExecutionClass execution = ACTION_EXECUTION_UNKNOWN,
+        bool display_lock_required = true)
         : type_name(type_name), parse(parse), serialize(serialize), dispatch(dispatch),
           value_field(value_field), describe(describe), available(available),
-                    validate(validate), binding_fields(binding_fields), execution(execution) {}
+                    validate(validate), binding_fields(binding_fields), execution(execution),
+          display_lock_required(display_lock_required) {}
 
     const char* type_name;                                                  // matches ButtonAction::type
     void (*parse)(const JsonObject& a, ButtonAction& act);                  // flat JSON -> payload arm
@@ -64,6 +66,7 @@ struct ActionTypeDef {
     bool (*binding_fields)(ButtonAction& act, ActionBindableFieldVisitor visitor,
                            void* context);                                   // optional: visit bindable payload fields
     ActionExecutionClass execution;
+    bool display_lock_required;
 };
 
 void action_type_register(const ActionTypeDef* type);

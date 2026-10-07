@@ -1369,8 +1369,16 @@ component, assets, and MCP tools. Shared timezone and NTP services are ungated.
 The Alarm fragment uses the shared action editor with strict
 `alarm_hook_allowed` catalog filtering. Its standalone `/portal_alarms.js` asset
 is authenticated and gated with the component.
-Hash routing waits for navigation assets before loading a fragment, including
-on direct links, so its convention-based initializer is available at startup.
+Hash routing loads only the selected component's advertised assets and waits
+before fragment initialization, including on direct links. Home visits do not
+fetch the alarm script. Persisted forbidden hook types remain disabled and
+must be replaced or removed before saving.
+
+Synchronous dispatch uses `ActionTypeDef.display_lock_required` to protect UI
+work; its conservative default is `true`. Home Assistant service dispatch sets
+it to `false` so blocking HTTP requests do not hold the display mutex. Binding
+resolution acquires and releases the display lock separately before dispatch.
+The alarm manager does not hold a display lock around its hook list.
 
 | Method | Endpoint | Contract |
 |--------|----------|----------|
@@ -3097,8 +3105,10 @@ Shared JavaScript source files are concatenated into a single `portal.js` asset 
 Components can provide feature-specific assets without adding them to the shared
 bundle. Set `ComponentDef.portal_script` and/or `ComponentDef.portal_style` to
 dedicated route paths. `GET /api/portal/nav` publishes those optional paths for
-each component; `portal_nav.js` deduplicates them, loads styles and scripts, and
-waits for all assets before building navigation or loading a fragment.
+each component; `portal_nav.js` loads that item's styles and scripts when it is
+opened, before invoking its fragment initializer. Concurrent requests and
+revisits share successful asset loads. Failed loads can be retried without
+blocking unrelated navigation items.
 
 The camera components demonstrate this pattern: they advertise
 `/portal-camera.js` and `/portal-camera.css`, served by dedicated handlers in

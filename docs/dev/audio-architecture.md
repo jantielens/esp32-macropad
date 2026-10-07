@@ -255,7 +255,12 @@ first decode occurs when the track is opened for playback.
 
 Sound alerts support `tone`, `tone_loop`, `mp3`, and shared audio `stop` kinds.
 A looping tone must contain a valid duration-bearing segment; empty patterns
-use the existing default beep. Looping MP3 playback is not implemented.
+use the existing default beep. Alarm-enabled builds also register dedicated
+`alarm_tone` and `alarm_mp3` actions with fixed `tone_loop` and `mp3_loop` kinds.
+Looping MP3 playback rewinds the open file and resets decoding after each
+successful pass. It does not guarantee gapless playback. Empty or corrupt
+files, output failures, cancellation, and OTA end playback rather than retrying
+indefinitely.
 Stop clears queued sound and music work, ends tone overlays, and requests a
 music stop independently of command-queue capacity.
 

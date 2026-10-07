@@ -6,6 +6,8 @@
 #include "list_binding.h"
 #include "list_provider.h"
 #include "time_binding.h"
+#include "alarm_manager.h"
+#include "psram_json_allocator.h"
 
 #if IS_VOICE_ASSISTANT
 #include "device_classes/voice_assistant/voice_binding.h"
@@ -112,13 +114,39 @@ int main() {
     expect_structural_resolvers_are_invoked();
 #if ALARM_ENABLED
     expect(scheme_is_registered("alarm"), "alarm registered when enabled");
-    char alarm_value[32] = {};
-    binding_template_resolve_registered("alarm", 5, "1_time", alarm_value, sizeof(alarm_value));
-    expect(!strcmp(alarm_value, "07:30"), "alarm time snapshot");
-    binding_template_resolve_registered("alarm", 5, "1_state", alarm_value, sizeof(alarm_value));
-    expect(!strcmp(alarm_value, "ringing"), "alarm state snapshot");
+    extern AlarmSnapshot binding_test_alarm;
+    auto alarm_expect = [](const char* key, const char* expected) {
+        char value[32] = {};
+        expect(binding_template_resolve_registered("alarm", 5, key, value, sizeof(value)) == BINDING_RESOLVER_RESOLVED,
+               key);
+        expect(!strcmp(value, expected), expected);
+    };
+    alarm_expect("1_time", "07:30");
+    alarm_expect("1_enabled", "ON");
+    alarm_expect("1_ready", "ON");
+    alarm_expect("1_state", "ringing");
+    alarm_expect("active_id", "1");
+    binding_test_alarm = {false, 0, 5, ALARM_SNOOZED, false, false, false, false, 0};
+    alarm_expect("1_time", "00:05");
+    alarm_expect("1_enabled", "OFF");
+    alarm_expect("1_ready", "OFF");
+    alarm_expect("1_state", "snoozed");
+    alarm_expect("active_id", "1");
+    binding_test_alarm.state = ALARM_IDLE;
+    alarm_expect("1_state", "idle");
+    alarm_expect("active_id", "0");
+    char value[32] = {};
+    expect(binding_template_resolve_registered("alarm", 5, "2_time", value, sizeof(value)) == BINDING_RESOLVER_UNKNOWN,
+           "unknown alarm key rejected");
 #else
     expect(!scheme_is_registered("alarm"), "alarm absent when disabled");
+#endif
+#if !HAS_PSRAM
+    expect(!psramFound(), "no PSRAM present in the no-PSRAM profile");
+    PsramJsonAllocator allocator;
+    void* memory = allocator.allocate(128);
+    expect(memory != nullptr, "JSON allocation falls back to internal heap");
+    allocator.deallocate(memory);
 #endif
 #if HAS_CAMERA && HAS_DISPLAY
     expect(scheme_is_registered("camera"), "camera scheme registered on camera display profile");

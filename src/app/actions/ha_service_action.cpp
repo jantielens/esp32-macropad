@@ -40,6 +40,6 @@ const char* validate_ha_service(const JsonObjectConst action) {
     JsonDocument document; return deserializeJson(document, data) || !document.is<JsonObjectConst>() ? "ha_service data_json must contain a JSON object" : nullptr;
 }
 void describe_ha_service(JsonObject& action) { action["group"] = "Connectivity"; action["label"] = "Call Home Assistant service"; JsonArray fields = action.createNestedArray("fields"); JsonObject entity = fields.createNestedObject(); entity["name"] = "entity_id"; entity["description"] = "required domain-qualified entity"; JsonObject service = fields.createNestedObject(); service["name"] = "service"; service["description"] = "required bare service name"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kHaServiceActionType, ACTION_TYPE_HA_SERVICE, parse_ha_service, serialize_ha_service, dispatch_ha_service, nullptr, describe_ha_service, ha_service_available, validate_ha_service, nullptr, ACTION_EXECUTION_SYNC);
+DEFINE_AND_REGISTER_ACTION_TYPE(kHaServiceActionType, ACTION_TYPE_HA_SERVICE, parse_ha_service, serialize_ha_service, dispatch_ha_service, nullptr, describe_ha_service, ha_service_available, validate_ha_service, nullptr, ACTION_EXECUTION_SYNC, false);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

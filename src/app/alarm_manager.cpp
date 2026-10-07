@@ -225,10 +225,6 @@ static bool persist(const AlarmDefinition& candidate, time_t handled, time_t onc
 }
 
 static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const char* label, uint8_t index) {
-#if defined(ARDUINO) && HAS_DISPLAY
-    bool locked = false;
-    display_manager_lock_if_needed(&locked);
-#endif
     for (; index < count; ++index) {
         if (ota_activity_is_active()) break;
         LOGI("Alarm", "%s hook %u/%u: dispatch type=%s", label, unsigned(index + 1), unsigned(count), actions[index].type);
@@ -240,9 +236,6 @@ static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const 
             LOGI("Alarm", "%s hook %u/%u: complete", label, unsigned(index + 1), unsigned(count));
         }
     }
-#if defined(ARDUINO) && HAS_DISPLAY
-    display_manager_unlock_if_needed(locked);
-#endif
     return index;
 }
 

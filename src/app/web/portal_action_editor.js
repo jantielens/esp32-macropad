@@ -211,8 +211,10 @@ function actionEditorEnsureUnsupportedOption(select, type) {
     var opt = document.createElement('option');
     opt.value = type;
     var entry = actionEditorCatalogEntry(type);
-    opt.textContent = entry ? entry.label : type + ' (unsupported by this build)';
-    opt.disabled = !entry;
+    var disallowed = select.getAttribute('data-alarm-hook') === 'true' && (!entry || entry.alarm_hook_allowed !== true);
+    opt.textContent = disallowed ? type + ' (not allowed for alarm hooks)'
+        : entry ? entry.label : type + ' (unsupported by this build)';
+    opt.disabled = !entry || disallowed;
     select.appendChild(opt);
 }
 
@@ -291,7 +293,7 @@ function actionEditorHTML(prefix, label, opts) {
     var h = '';
     h += '<div class="form-group">';
     if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
-    h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
+    h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" data-alarm-hook="' + (opts.alarmHook === true) + '" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
     h += actionEditorTypeOptionsHTML(opts);
     h += '</select>';
     h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
@@ -784,6 +786,10 @@ function actionEditorBuild(prefix) {
     if (!typeEl) return {};
     var type = typeEl.value;
     if (!type) return {};
+    var entry = actionEditorCatalogEntry(type);
+    if (typeEl.getAttribute('data-alarm-hook') === 'true' && (!entry || entry.alarm_hook_allowed !== true)) {
+        throw new Error('Action "' + type + '" is not allowed for alarm hooks. Replace or remove it.');
+    }
     // Round-trip a persisted action whose type this build's catalog does not
     // contain — its fields have no editor, so save it back exactly as loaded.
     if (_actionEditorUnsupported[prefix] && _actionEditorUnsupported[prefix].type === type) {

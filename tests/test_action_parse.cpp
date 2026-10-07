@@ -14,6 +14,8 @@
 #include "action_list.h"
 #include "action_parse.h"
 #include "action_registry.h"
+#include "action_catalog.h"
+#include <string>
 
 ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
     return ACTION_COMPLETE;
@@ -281,6 +283,7 @@ TEST(legacy_alert_aliases_are_rejected) {
 }
 
 TEST(alarm_audio_round_trip) {
+#if ALARM_ENABLED
     ButtonAction tone = round_trip("{\"type\":\"alarm_tone\",\"sound_alert_pattern\":\"1000:200 800\",\"sound_alert_volume\":55}");
     ASSERT_STR(tone.type, "alarm_tone");
     ASSERT_STR(tone.payload.sound_alert.sound_alert_kind, "tone_loop");
@@ -304,6 +307,12 @@ TEST(alarm_audio_round_trip) {
     ButtonAction legacy = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone_loop\",\"sound_alert_pattern\":\"1000:200 800\"}");
     ASSERT_STR(legacy.type, "sound_alert");
     ASSERT_STR(legacy.payload.sound_alert.sound_alert_kind, "tone_loop");
+#else
+    for (const char* type : {"alarm", "alarm_tone", "alarm_mp3"}) {
+        ASSERT_TRUE(action_type_find(type) == nullptr);
+        ASSERT_TRUE(!action_type_is_supported(type));
+    }
+#endif
 }
 
 // ============================================================================
@@ -785,11 +794,44 @@ TEST(registered_identifiers_survive_storage) {
     }
 }
 
-int main() {
+TEST(catalog_feature_gates_and_metadata_parity) {
+    JsonDocument portal;
+    action_catalog_emit(portal.to<JsonArray>(), false);
+    JsonDocument mcp;
+    action_catalog_emit(mcp.to<JsonArray>(), true);
+    unsigned alarm_count = 0;
+    for (JsonObject entry : mcp.as<JsonArray>()) {
+        const char* name = entry["type"];
+        const ActionTypeDef* type = action_type_find(name);
+        ASSERT_TRUE(type != nullptr);
+        ASSERT_EQ(entry["alarm_hook_allowed"].as<bool>(), type->execution == ACTION_EXECUTION_SYNC);
+        if (!strcmp(name, "alarm") || !strcmp(name, "alarm_tone") || !strcmp(name, "alarm_mp3")) ++alarm_count;
+        entry.remove("fields");
+    }
+    ASSERT_EQ(alarm_count, ALARM_ENABLED ? 3 : 0);
+    ASSERT_TRUE(action_type_find("screen")->display_lock_required);
+    ASSERT_TRUE(!action_type_find("ha_service")->display_lock_required);
+    std::string portal_json, mcp_json;
+    serializeJson(portal, portal_json);
+    serializeJson(mcp, mcp_json);
+    ASSERT_TRUE(portal_json == mcp_json);
+}
+
+int main(int argc, char** argv) {
+    if (argc == 2 && !strcmp(argv[1], "--catalog")) {
+        JsonDocument catalogs;
+        action_catalog_emit(catalogs["portal"].to<JsonArray>(), false);
+        action_catalog_emit(catalogs["mcp"].to<JsonArray>(), true);
+        std::string output;
+        serializeJson(catalogs, output);
+        std::puts(output.c_str());
+        return 0;
+    }
     printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
 
     printf("--- Empty / minimal ---\n");
     RUN(registered_identifiers_survive_storage);
+    RUN(catalog_feature_gates_and_metadata_parity);
     RUN(empty_json);
     RUN(empty_to_json_produces_empty_object);
     RUN(action_list_filters_literal_none_for_pad_callers);

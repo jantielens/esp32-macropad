@@ -10,6 +10,15 @@
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
+const path = require('path');
+const {execFileSync} = require('child_process');
+const catalogBinary = process.env.ACTION_CATALOG_BINARY || path.resolve('build/host-tests/tests/test_action_parse');
+const productionCatalogs = JSON.parse(execFileSync(catalogBinary, ['--catalog'], {encoding:'utf8'}));
+assert.deepStrictEqual(productionCatalogs.portal, productionCatalogs.mcp.map(entry => {
+    const metadata = {...entry};
+    delete metadata.fields;
+    return metadata;
+}));
 
 class Element {
     constructor(tag) {
@@ -91,12 +100,7 @@ const FIXTURE_CATALOG = [
             .map(function(id) { return { id: id, label: id }; })
     },
     { type: 'delay', group: 'Timer', label: 'Delay', max_pending_actions: 3 },
-        { type: 'alarm_tone', group: 'Alarm', label: 'Loop Tone', alarm_hook_allowed: true,
-            editor_fields: [{name:'sound_alert_pattern', label:'Tone pattern', type:'text', bindable:true},
-                                            {name:'sound_alert_volume', label:'Volume override (%)', type:'number', min:0, max:100, default:'0'}] },
-        { type: 'alarm_mp3', group: 'Alarm', label: 'Loop MP3', alarm_hook_allowed: true,
-            editor_fields: [{name:'sound_alert_file', label:'MP3 file', type:'select', options_source:'sounds'},
-                                            {name:'sound_alert_volume', label:'Volume override (%)', type:'number', min:0, max:100, default:'0'}] },
+    ...productionCatalogs.portal.filter(entry => ['alarm_tone', 'alarm_mp3'].includes(entry.type)),
     {
         type: 'shutter', group: 'Shutter Tester', label: 'Shutter tester',
         command_families: [
@@ -263,6 +267,17 @@ assert(alarmHtml.includes('<option value="screen">'));
 assert(!alarmHtml.includes('<option value="delay">'));
 assert(!alarmHtml.includes('<option value="key">'));
 assert(!alarmHtml.includes('<option value="mqtt">'));
+assert(alarmHtml.includes('data-alarm-hook="true"'));
+const alarmType = document.getElementById('alarm-hook-1-type');
+alarmType.setAttribute('data-alarm-hook', 'true');
+for (const type of ['delay', 'mqtt', 'unknown_action']) {
+    context.actionEditorEnsureUnsupportedOption(alarmType, type);
+    assert.strictEqual(alarmType.options[alarmType.options.length - 1].disabled, true);
+    context.actionEditorLoad('alarm-hook-1', {type});
+    assert.throws(() => context.actionEditorBuild('alarm-hook-1'), /not allowed for alarm hooks/);
+}
+context.actionEditorLoad('alarm-hook-1', {type:'alarm_mp3', sound_alert_file:'wake-up'});
+assert.strictEqual(context.actionEditorBuild('alarm-hook-1').type, 'alarm_mp3');
 assert(context.actionEditorTypeOptionsHTML().includes('<option value="delay">'));
 context.actionEditorLoad(prefix, {type:'sound_alert', sound_alert_kind:'tone_loop', sound_alert_pattern:'1000:200 800'});
 assert.strictEqual(context.actionEditorBuild(prefix).type, 'alarm_tone');
@@ -304,3 +319,13 @@ document.getElementById('alarm-enabled').checked = false;
 context.alarmScheduleSummary();
 assert(document.getElementById('alarm-repeat-summary').textContent.startsWith('Disabled.'));
 console.log('portal_action_picker: PASS');
+context.deviceInfoCache.catalog = productionCatalogs.portal;
+const productionOptions = context.actionEditorTypeOptionsHTML({alarmHook:true});
+for (const entry of productionCatalogs.portal) {
+    assert.strictEqual(productionOptions.includes('<option value="' + entry.type + '">'),
+        entry.alarm_hook_allowed === true, 'actual hook eligibility: ' + entry.type);
+}
+for (const type of ['alarm', 'alarm_tone', 'alarm_mp3']) {
+    assert(productionOptions.includes('<option value="' + type + '">'));
+}
+console.log('production portal/MCP action parity: PASS');

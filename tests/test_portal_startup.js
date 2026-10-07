@@ -153,6 +153,36 @@ async function main() {
     context.actionEditorPopulateSounds(['test'], ['saved.mp3']);
     assert.strictEqual(soundSelect.value, 'saved.mp3');
     assert.strictEqual(soundSelect.options.filter(option => option.value === 'saved.mp3').length, 1);
+    const navSource = fs.readFileSync('src/app/web/portal_nav.js', 'utf8');
+    const assets = [];
+    const assetContext = { document: {
+        createElement(tag) { return { tag, remove() {} }; },
+        head: { appendChild(asset) { assets.push(asset); } }
+    } };
+    vm.createContext(assetContext);
+    vm.runInContext(navSource.slice(navSource.indexOf('  var navigationAssetLoads'),
+        navSource.indexOf('  function buildNav')), assetContext);
+    await assetContext.loadItemAssets({ id:'welcome' });
+    assert.strictEqual(assets.length, 0, 'home must not fetch alarm assets');
+    const alarmItem = { portal_script:'/portal_alarms.js' };
+    let initialized = false;
+    const alarmAssets = assetContext.loadItemAssets(alarmItem).then(() => { initialized = true; });
+    const sharedAssets = assetContext.loadItemAssets(alarmItem);
+    assert.strictEqual(assets.length, 1, 'concurrent visits share the asset request');
+    assert.strictEqual(assets[0].src, '/portal_alarms.js');
+    assert.strictEqual(initialized, false, 'initialization waits for the script');
+    assets[0].onload();
+    await Promise.all([alarmAssets, sharedAssets]);
+    await assetContext.loadItemAssets(alarmItem);
+    assert.strictEqual(assets.length, 1, 'revisits use the loaded script');
+    const retryItem = { portal_style:'/alarm.css' };
+    const failure = assetContext.loadItemAssets(retryItem);
+    assets[1].onerror();
+    await assert.rejects(failure, /Portal asset unavailable/);
+    const retry = assetContext.loadItemAssets(retryItem);
+    assert.strictEqual(assets.length, 3, 'a failed asset can be retried');
+    assets[2].onload();
+    await retry;
     console.log('portal_startup: PASS');
 }
 

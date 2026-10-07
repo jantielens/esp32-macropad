@@ -32,6 +32,7 @@ APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
 PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
+MOCK_NOW_EPOCH = 1791370589
 SCREENSAVER_DEFAULTS = {
     "screen_saver_enabled": True, "screen_saver_timeout_seconds": 300,
     "screen_saver_fade_out_ms": 800, "screen_saver_fade_in_ms": 400,
@@ -137,7 +138,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
         elif path == "/portal-logs.js":
             self._serve_file(APP_WEB_DIR / "portal_logs.js")
         elif path == "/portal_alarms.js":
-            self._serve_file(APP_WEB_DIR / "portal_alarms.js")
+            if self._profile() == "reterminal-e1003-frame":
+                self.send_error(404, "Alarm unavailable")
+            else:
+                self._serve_file(APP_WEB_DIR / "portal_alarms.js")
 
         # Prototype assets remain useful for fragments not yet migrated.
         elif path in ("/bootstrap.min.css", "/portal-custom.css", "/portal_nav.js"):
@@ -170,10 +174,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"message": "Invalid timezone"}, 400)
                 return
             environment = dict(os.environ, TZ=timezone)
-            formatted = subprocess.run(["date", "--date=@1791370589", "+%Y-%m-%d %H:%M:%S|%z"],
+            formatted = subprocess.run(["date", f"--date=@{MOCK_NOW_EPOCH}", "+%Y-%m-%d %H:%M:%S|%z"],
                                        env=environment, capture_output=True, text=True, check=True)
             local_time, offset = formatted.stdout.strip().split("|")
-            self._serve_json({"epoch": 1791370589, "local_time": local_time, "utc_offset": offset, "ready": True})
+            self._serve_json({"epoch": MOCK_NOW_EPOCH, "local_time": local_time, "utc_offset": offset, "ready": True})
         elif path == "/api/pad":
             page = self._page(query)
             if page is not None:
@@ -243,6 +247,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Fragment API — production fragments take precedence.
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
+            if fragment == "alarms" and self._profile() == "reterminal-e1003-frame":
+                self.send_error(404, "Alarm unavailable")
+                return
             if not all(c.isalnum() or c in "-_" for c in fragment) or not fragment:
                 self.send_error(400, "Invalid section ID")
                 return
@@ -297,7 +304,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     self.server.mock_alarm_status.update(active_id=0, state="idle", enabled=slot["enabled"], once_epoch=0, once_local="")
                     if slot["enabled"] and not slot["weekdays"]:
                         environment = dict(os.environ, TZ=self.server.mock_config.get("timezone", "Europe/Brussels"))
-                        today = subprocess.run(["date", "--date=@1791370589", "+%Y-%m-%d"], env=environment,
+                        today = subprocess.run(["date", f"--date=@{MOCK_NOW_EPOCH}", "+%Y-%m-%d"], env=environment,
                                                capture_output=True, text=True, check=True).stdout.strip()
                         for offset in range(2):
                             day = date.fromisoformat(today) + timedelta(days=offset)
@@ -305,7 +312,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                             result = subprocess.run(["date", f"--date={target}", "+%s|%Y-%m-%d %H:%M"], env=environment,
                                                     capture_output=True, text=True, check=True).stdout.strip()
                             epoch, local = result.split("|")
-                            if int(epoch) > 1791370589:
+                            if int(epoch) > MOCK_NOW_EPOCH:
                                 self.server.mock_alarm_status.update(once_epoch=int(epoch), once_local=local)
                                 break
                 self.server.mock_alarms = data

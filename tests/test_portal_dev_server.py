@@ -86,7 +86,7 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
         once = self.request("/api/component/alarms/status")[1]
         self.assertTrue(once["enabled"])
-        self.assertGreater(once["once_epoch"], 1791370589)
+        self.assertGreater(once["once_epoch"], PORTAL.MOCK_NOW_EPOCH)
         self.assertRegex(once["once_local"], r"2026-10-0[78] 08:00")
         self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
         self.assertEqual(self.request("/api/component/alarms/status")[1]["once_epoch"], once["once_epoch"])
@@ -96,13 +96,16 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/component/alarms/snooze", "POST", {})[0], 200)
         self.assertEqual(self.request("/api/component/alarms/status")[1]["state"], "snoozed")
         self.assertEqual(self.request("/api/component/alarms/config", profile="reterminal-e1003-frame")[0], 404)
+        self.assertEqual(self.request("/api/section/alarms", profile="reterminal-e1003-frame", raw=True)[0], 404)
+        self.assertEqual(self.request("/portal_alarms.js", profile="reterminal-e1003-frame", raw=True)[0], 404)
         self.assertIn("init_alarms_fragment", self.request("/portal_alarms.js", raw=True)[1])
         self.assertIn('server->on("/portal_alarms.js", HTTP_GET, handlePortalAlarmsJS)',
                   (ROOT / "src/app/web_portal_routes.cpp").read_text())
         bundle = self.request("/portal.js", raw=True)[1]
         self.assertIn("if (!navigationReady) return;", bundle)
-        self.assertLess(bundle.index("return loadNavigationAssets(data)"),
-                bundle.index("navigationReady = true;"))
+        self.assertNotIn("loadNavigationAssets(data)", bundle)
+        self.assertLess(bundle.index("await loadItemAssets("),
+            bundle.index("var initFn = window["))
         fragment = self.request("/api/section/alarms", raw=True)[1]
         self.assertNotIn('id="alarm-snooze"', fragment)
         self.assertNotIn('id="alarm-cancel"', fragment)
