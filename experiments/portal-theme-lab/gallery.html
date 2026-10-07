@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Portal Theme Lab</title>
+  <script src="/lab/themes.js"></script>
+  <script src="/lab/lucide.min.js"></script>
+  <style>
+    @import url('/lab/fonts/fonts.css');
+    :root { color-scheme:light; font-family:'IBM Plex Sans',sans-serif; color:#202125; background:#f1f2f4; }
+    * { box-sizing:border-box; letter-spacing:0; }
+    body { margin:0; }
+    header { padding:24px 32px; border-bottom:1px solid #c4c7cc; background:#fff; }
+    h1 { font-family:'Space Grotesk',sans-serif; margin:0 0 8px; font-size:28px; }
+    p { margin:0; color:#646974; font-size:14px; }
+    .controls { display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; }
+    label { display:flex; gap:8px; align-items:center; font-size:13px; }
+    select { padding:8px; border:1px solid #bcc1ca; background:white; border-radius:4px; }
+    main { padding:24px 32px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:28px; }
+    article { min-width:0; }
+    .title { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:6px; }
+    h2 { font-size:21px; margin:0; }
+    a { color:#2455bb; text-decoration:none; font-size:13px; }
+    .shots { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
+    img { width:100%; display:block; border:1px solid #c4c7cc; border-radius:4px; background:#e4e6eb; }
+    .caption { display:block; font-size:12px; padding:6px 0; text-transform:uppercase; color:#646974; }
+    .preview-trigger { display:block; width:100%; padding:0; border:0; background:none; cursor:zoom-in; }
+    .preview-trigger:focus-visible, .preview-toolbar button:focus-visible { outline:3px solid #2455bb; outline-offset:3px; }
+    #preview-dialog { width:calc(100vw - 32px); height:calc(100dvh - 32px); max-width:1800px; max-height:none; padding:0; border:1px solid #bcc1ca; border-radius:6px; background:#f1f2f4; color:#202125; overflow:hidden; }
+    #preview-dialog[open] { display:grid; grid-template-rows:auto minmax(0,1fr); }
+    #preview-dialog::backdrop { background:rgba(16,18,24,.75); }
+    .preview-toolbar { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid #c4c7cc; background:#fff; }
+    #preview-title { flex:1; min-width:0; font-size:15px; overflow-wrap:anywhere; }
+    .preview-toolbar button { display:grid; place-items:center; width:36px; height:36px; flex-shrink:0; padding:0; border:1px solid #bcc1ca; border-radius:4px; background:#fff; color:#202125; cursor:pointer; }
+    .preview-toolbar button:hover { background:#e4e6eb; }
+    .preview-toolbar svg { width:18px; height:18px; }
+    .preview-scroll { min-width:0; min-height:0; overflow:auto; overscroll-behavior:contain; }
+    .preview-scroll img { width:auto; height:auto; max-width:none; margin:0 auto; border:0; border-radius:0; }
+    @media(max-width:850px) { main { grid-template-columns:1fr; padding:16px; } header { padding:20px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Portal Theme Lab</h1>
+    <p>22 visual directions / paired light and dark / unchanged portal structure</p>
+    <div class="controls">
+      <label>Screen <select id="fragment"><option value="welcome">Home</option><option value="pad-editor">Pad Editor</option><option value="screensaver">Screen Saver</option><option value="hid">Keyboard, Mouse &amp; Gamepad</option></select></label>
+      <label>View <select id="view"><option value="desktop">Desktop / 1600 x 1100</option><option value="mobile">Mobile / 390 x 844</option></select></label>
+      <label>Collection <select id="collection"><option value="all">All 22 designs</option><option value="style" selected>12 style studies</option><option value="palette">10 palette studies</option></select></label>
+    </div>
+  </header>
+  <main id="gallery"></main>
+  <dialog id="preview-dialog" aria-labelledby="preview-title">
+    <div class="preview-toolbar">
+      <h2 id="preview-title"></h2>
+      <button type="button" id="preview-prev" aria-label="Previous preview" title="Previous preview"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+      <button type="button" id="preview-next" aria-label="Next preview" title="Next preview"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+      <button type="button" id="preview-close" aria-label="Close preview" title="Close preview" autofocus><i data-lucide="x" aria-hidden="true"></i></button>
+    </div>
+    <div class="preview-scroll"><img id="preview-image" alt=""></div>
+  </dialog>
+  <script>
+    const previewDialog=document.querySelector('#preview-dialog');
+    const previewImage=document.querySelector('#preview-image');
+    let previewIndex=0;
+    function showPreview(index) {
+      const previews=[...document.querySelectorAll('.preview-trigger img')];
+      previewIndex=(index+previews.length)%previews.length;
+      const image=previews[previewIndex];
+      previewImage.src=image.src;
+      previewImage.alt=image.alt;
+      document.querySelector('#preview-title').textContent=`${previewIndex+1} / ${previews.length} - ${image.alt}`;
+      document.querySelector('.preview-scroll').scrollTo(0,0);
+      if(!previewDialog.open) previewDialog.showModal();
+    }
+    document.querySelector('#gallery').addEventListener('click',event=> {
+      const trigger=event.target.closest('.preview-trigger');
+      if(trigger) showPreview([...document.querySelectorAll('.preview-trigger')].indexOf(trigger));
+    });
+    document.querySelector('#preview-prev').addEventListener('click',()=>showPreview(previewIndex-1));
+    document.querySelector('#preview-next').addEventListener('click',()=>showPreview(previewIndex+1));
+    document.querySelector('#preview-close').addEventListener('click',()=>previewDialog.close());
+    previewDialog.addEventListener('keydown',event=> {
+      if(event.key==='ArrowLeft' || event.key==='ArrowRight') {
+        event.preventDefault();
+        showPreview(previewIndex+(event.key==='ArrowRight'?1:-1));
+      }
+    });
+    previewDialog.addEventListener('click',event=> {
+      const bounds=previewDialog.getBoundingClientRect();
+      if(event.target===previewDialog && (event.clientX<bounds.left || event.clientX>bounds.right || event.clientY<bounds.top || event.clientY>bounds.bottom)) previewDialog.close();
+    });
+    function renderGallery() {
+      const mobile=document.querySelector('#view').value==='mobile';
+      const fragmentSelect=document.querySelector('#fragment');
+      for(const option of fragmentSelect.options) option.disabled=mobile && !['welcome','screensaver'].includes(option.value);
+      if(fragmentSelect.selectedOptions[0].disabled) fragmentSelect.value='welcome';
+      const fragment=fragmentSelect.value;
+      const collection=document.querySelector('#collection').value;
+      const themes=portalExperiments.filter(theme=>(!mobile || portalMobileExperimentIds.includes(theme.id)) && (collection==='all' || (theme.group || 'palette')===collection));
+      const screen=mobile && !['welcome','screensaver'].includes(fragment) ? 'screensaver' : fragment;
+      document.querySelector('#gallery').innerHTML=themes.map(theme=>`<article><div class="title"><h2>${theme.id.slice(0,2)} / ${theme.name}</h2><a target="_blank" href="/?profile=jc3248w535&variant=${theme.id}&fragment=${fragment}">Open live portal &#8599;</a></div><p>${theme.note}</p><div class="shots">${['light','dark'].map(mode=>`<div><span class="caption">${mode}${mobile?' / '+screen:''}</span><button type="button" class="preview-trigger" aria-label="Preview ${theme.name}, ${mode}, ${screen}"><img loading="lazy" alt="${theme.name}, ${mode}, ${screen}" src="/lab/screenshots/${theme.id}-${mode}-${screen}${mobile?'-mobile':''}.png"></button></div>`).join('')}</div></article>`).join('');
+    }
+    document.querySelectorAll('select').forEach(select=>select.addEventListener('change',renderGallery));
+    renderGallery();
+    lucide.createIcons();
+  </script>
+</body>
+</html>

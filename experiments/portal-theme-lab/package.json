@@ -1,0 +1,16 @@
+{
+  "name": "portal-theme-lab",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Parked visual studies for the ESP32 Macropad web portal",
+  "scripts": {
+    "capture": "node capture.cjs",
+    "fonts": "node fetch-fonts.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "playwright": "1.61.1"
+  }
+}
