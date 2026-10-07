@@ -250,7 +250,7 @@ require camera hardware; `set_volume` requires audio hardware; and
 On alarm-enabled boards, `get_capabilities` advertises one alarm slot,
 the component and tool names, weekday mask, hook limit, lateness grace, and
 filesystem persistence. `get_alarm_status` reads readiness, runtime state,
-storage/action failures, OTA deferral, and the persisted one-shot target through
+storage/action failures, OTA deferral, and the live one-shot target through
 `once_epoch` and `once_local` (device-local date and time).
 
 Use `get_component_config` with `component: "alarms"` before a full-replacement
@@ -267,10 +267,43 @@ keep the saved instant; missed targets disable instead of moving to tomorrow.
 One-shot consumption must be saved before ringing; storage errors defer it
 within the grace period. Without synchronized time the target remains pending.
 
-`alarm_control` accepts `command: "snooze"` or `"cancel"` and optional
-`alarm_id: 0` (active alarm) or `1`. Success means the command was queued for the
-main loop, not that external stop hooks completed. Cancel does not disable the
-schedule. Write and control permissions are required as for other MCP controls.
+`alarm_control` accepts `snooze`/`cancel` (default `alarm_id: 0`, active session)
+or configuration for slot 1 (default `alarm_id: 1`):
+
+| Command | Arguments |
+|---------|-----------|
+| `set_time` | Integer `value`: minutes since midnight, 0-1439 |
+| `adjust_minutes` | Signed 32-bit integer `value`: whole-minute delta, wraps within 24 hours |
+| `enable`, `disable`, `toggle` | No value required |
+| `weekday_enable`, `weekday_disable`, `weekday_toggle` | Integer `day`: Sunday=0 through Saturday=6 |
+
+Configuration cannot target ID 0. Success returns `queued: true` and
+`persisted: false`: the command is accepted, not yet applied or durably saved.
+There are four queue positions, one command is processed per loop, and no
+coalescing. Read `get_alarm_status` for `pending_commands`, `completed_commands`,
+`command_error`, `command_message`, and `save_state`. These report queue-wide
+processing, not a per-client receipt; external stop hooks can still be deferred.
+Queued settings preserve other fields and apply live immediately. They save and
+verify the latest definition 10 seconds after the last substantive change;
+identical changes do not extend the delay, write, or dismiss a session.
+`save_state` stays `pending` until verification, then becomes `saved`. Failed
+delayed saves report `failed`, retain live settings, and retry after 10 seconds.
+OTA defers writes. `completed_commands` acknowledges processing, not durability;
+reboot or power loss before verification can lose recent changes. Explicit
+`set_component_config` writes remain immediately durable, including an identical
+definition with pending live changes. Occurrence records also save immediately
+and can flush pending settings early. Substantive edits dismiss the session and
+rearm from the next full minute.
+Cancel does not disable the schedule. Write and control permissions are required.
+
+Status also exposes `hour`, `minute`, `weekdays`, `snooze_minutes`,
+`auto_dismiss_minutes`, `next_epoch`, `next_local`, `next_seconds`,
+`snooze_seconds`, `dismiss_seconds`, and `next_ring_seconds`. Combined next-ring
+time is the earlier schedule/snooze deadline, or zero while ringing. Check
+`next_available`, `snooze_available`, and `next_ring_available` rather than
+treating a zero numeric value as availability. The read-only binding catalog
+advertises the equivalent pad fields, including individual weekdays; unavailable
+binding dates/epochs/countdowns are empty strings.
 
 `get_config` exposes `timezone`; `set_config` accepts a supported Olson name or
 explicit POSIX TZ rule and applies it without rebooting. A substantive successful

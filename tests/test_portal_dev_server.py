@@ -114,6 +114,22 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertIn('id="alarm-once-target"', fragment)
         self.assertNotIn("setTimeout", self.request("/portal_alarms.js", raw=True)[1])
 
+    def test_alarm_authoring_metadata(self):
+        catalog = self.request("/api/info?catalog=1")[1]["catalog"]
+        action = next(item for item in catalog if item["type"] == "alarm")
+        header = (ROOT / "src/app/alarm_manager.h").read_text()
+        commands = re.search(r'alarm_command_names\[\].*?\{(.*?)\}', header, re.S).group(1)
+        self.assertEqual([item["id"] for item in action["commands"]], [item for item in re.findall(r'"([^"]*)"', commands) if item])
+        fields = {field["name"]: field for field in action["editor_fields"]}
+        self.assertTrue(fields["alarm_value"]["bindable"])
+        self.assertEqual(fields["alarm_id"]["default"], "1")
+        self.assertEqual([item["id"] for item in fields["alarm_day"]["options"]], list(range(7)))
+        schema = self.request("/api/bindings")[1]
+        alarm = next(item for item in schema["schemes"] if item["name"] == "alarm")
+        source = (ROOT / "src/app/alarm_binding.cpp").read_text()
+        keys = re.search(r'alarm_keys\[\].*?\{(.*?)\}', source, re.S).group(1)
+        self.assertEqual(alarm["keys"], re.findall(r'"([^"]+)"', keys))
+
     def test_timezone(self):
         status, catalog = self.request("/api/component/timezone/catalog")
         self.assertEqual(status, 200)

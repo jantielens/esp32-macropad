@@ -123,6 +123,15 @@ static void test_value_fields_resolved() {
         resolve_action_bindings(act);
         check_str(act.payload.brightness.brightness_value, "RESOLVED", "brightness_value resolved");
     }
+#if ALARM_ENABLED
+    {
+        ButtonAction act = make_action(ACTION_TYPE_ALARM);
+        strlcpy(act.payload.alarm.alarm_command, "adjust_minutes", sizeof(act.payload.alarm.alarm_command));
+        strlcpy(act.payload.alarm.alarm_value, "[echo:-60]", sizeof(act.payload.alarm.alarm_value));
+        resolve_action_bindings(act);
+        check_str(act.payload.alarm.alarm_value, "-60", "alarm adjustment binding resolved");
+    }
+#endif
     {
         ButtonAction act = make_action(ACTION_TYPE_TIMER);
         strlcpy(act.payload.timer.timer_value, "[mock:tv]", sizeof(act.payload.timer.timer_value));

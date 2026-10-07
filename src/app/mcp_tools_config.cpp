@@ -1030,19 +1030,32 @@ static bool tool_alarm_control(const JsonObject& args, JsonObject& result, Strin
     if (args.containsKey("alarm_id") && (!args["alarm_id"].is<uint8_t>() || args["alarm_id"].as<uint8_t>() > 1))
         return cfg_fail(result, error, CFG_ERR_PARAMS, "alarm_id must be 0 or 1");
     const char* command = args["command"] | "";
-    if (strcmp(command, "cancel") && strcmp(command, "snooze")) return cfg_fail(result, error, CFG_ERR_PARAMS, "command must be cancel or snooze");
-    if (!alarm_command_submit(command, args["alarm_id"] | 0)) return cfg_fail(result, error, CFG_ERR_BUSY, "Alarm command queue busy");
+    const uint8_t operation = alarm_command_operation(command);
+    const uint8_t id = args["alarm_id"] | (operation > 2 ? 1 : 0);
+    if ((operation == 3 || operation == 4) && !args["value"].is<int>())
+        return cfg_fail(result, error, CFG_ERR_PARAMS, "Time commands require a signed 32-bit integer value in minutes");
+    if (args.containsKey("value") && !args["value"].is<int>())
+        return cfg_fail(result, error, CFG_ERR_PARAMS, "value must be a signed 32-bit integer");
+    if ((operation >= 8 || args.containsKey("day")) && (!args["day"].is<uint8_t>() || args["day"].as<uint8_t>() > 6))
+        return cfg_fail(result, error, CFG_ERR_PARAMS, "Weekday commands require day: 0 (Sunday) through 6 (Saturday)");
+    const int value = args["value"] | 0;
+    const uint8_t day = args["day"] | 0;
+    const char* validation = alarm_command_validate(command, id, value, day);
+    if (validation) return cfg_fail(result, error, CFG_ERR_PARAMS, validation);
+    if (!alarm_command_submit(command, id, value, day)) return cfg_fail(result, error, CFG_ERR_BUSY, "Alarm command unavailable or queue full");
     result["queued"] = true;
+    result["persisted"] = false;
+    result["acknowledgement"] = "Read get_alarm_status pending_commands and completed_commands for processing; save_state for delayed durability; command_error and command_message for failures";
     return true;
 }
 static const McpTool s_tool_get_alarm_status = {
-    "get_alarm_status", "Read the active alarm, idle/ringing/snoozed state, time readiness, OTA deferral and degraded storage/hook status.",
+    "get_alarm_status", "Read configured values, next local occurrence and countdown, snooze/next-ring countdowns, active state, readiness, OTA deferral, storage/hook errors and queued-command completion/failure.",
     "{\"type\":\"object\",\"properties\":{}}", tool_get_alarm_status, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_alarm_status);
 static const McpTool s_tool_alarm_control = {
-    "alarm_control", "Queue cancel or snooze for the active alarm (id 0) or slot 1. Cancel does not disable the weekly schedule; idle commands do nothing.",
-    "{\"type\":\"object\",\"properties\":{\"alarm_id\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":1},\"command\":{\"type\":\"string\",\"enum\":[\"cancel\",\"snooze\"]}},\"required\":[\"command\"]}", tool_alarm_control, false, false, true
+    "alarm_control", "Queue cancel/snooze (default id 0) or slot-1 configuration (default id 1). set_time requires value: minutes since midnight 0-1439; adjust_minutes requires signed whole-minute value and wraps at midnight; weekday commands require day 0=Sunday..6=Saturday. Configuration persists before apply and substantive edits dismiss the session. Four queued commands maximum, one processed per loop, no coalescing. Queue acceptance is not a persistence acknowledgement; read status for completion/failure.",
+    "{\"type\":\"object\",\"properties\":{\"alarm_id\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":1},\"command\":{\"type\":\"string\",\"enum\":[\"cancel\",\"snooze\",\"set_time\",\"adjust_minutes\",\"enable\",\"disable\",\"toggle\",\"weekday_enable\",\"weekday_disable\",\"weekday_toggle\"]},\"value\":{\"type\":\"integer\",\"minimum\":-2147483648,\"maximum\":2147483647},\"day\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":6}},\"required\":[\"command\"]}", tool_alarm_control, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_alarm_control);
 #endif
@@ -1090,6 +1103,8 @@ void mcp_config_capabilities(JsonObject& out) {
     alarm["component"] = "alarms";
     alarm["status_tool"] = "get_alarm_status";
     alarm["control_tool"] = "alarm_control";
+    alarm["device_configuration"] = "alarm actions: set_time, adjust_minutes (bindable string including {step}), enable/disable/toggle, weekday_enable/disable/toggle; configuration targets slot 1; read-only alarm bindings advertise settings, weekdays, next occurrence, countdowns and command feedback";
+    alarm["command_queue"] = "four queued commands, one per main-loop iteration, no coalescing; settings apply live, saved after 10 seconds without substantive changes; no-ops do not extend the delay; save_state pending/saved/failed reports durability; failures retain live settings and retry after 10 seconds; explicit config saves and occurrence records persist immediately";
     alarm["grace_seconds"] = 300;
     alarm["weekdays"] = "bit mask: Sunday=1, Monday=2, ... Saturday=64; selected days repeat weekly; zero rings once at the next local time, then disables; snooze remains available in that session";
     alarm["hooks"] = "up to three explicitly synchronous actions per on_ring/on_stop; attempt every action; hooks snapshot per session";

@@ -71,10 +71,16 @@ def reset_pad_fixtures(server, scenario="normal"):
         if action["type"] == "sound_alert":
             action["label"] = "Sound alert"
     fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm Control", "alarm_hook_allowed": True,
-        "commands": [{"id": "snooze", "label": "Snooze"}, {"id": "cancel", "label": "Cancel"}],
-        "editor_fields": [{"name": "alarm_id", "label": "Alarm", "type": "select", "default": "0", "numeric": True,
+        "commands": [{"id": command, "label": label} for command, label in (
+            ("cancel", "Cancel"), ("snooze", "Snooze"), ("set_time", "Set time"), ("adjust_minutes", "Adjust time"),
+            ("enable", "Enable alarm"), ("disable", "Disable alarm"), ("toggle", "Toggle alarm"),
+            ("weekday_enable", "Enable weekday"), ("weekday_disable", "Disable weekday"), ("weekday_toggle", "Toggle weekday"))],
+        "editor_fields": [{"name": "alarm_id", "label": "Alarm", "type": "select", "default": "1", "numeric": True,
                            "options": [{"id": "0", "label": "Active alarm"}, {"id": "1", "label": "Alarm 1"}]},
-                          {"name": "alarm_command", "label": "Command", "type": "select", "default": "snooze", "command_options": True}]})
+                          {"name": "alarm_command", "label": "Command", "type": "select", "default": "snooze", "command_options": True},
+                          {"name": "alarm_value", "label": "Minutes (set time: since midnight; adjust: signed step)", "type": "text", "bindable": True},
+                          {"name": "alarm_day", "label": "Weekday (weekday commands only)", "type": "select", "numeric": True, "default": "1",
+                           "options": [{"id": day, "label": name} for day, name in enumerate(("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))]}]})
     for action_type, label, source in (("alarm_tone", "Loop Tone", "sound_alert_pattern"),
                                       ("alarm_mp3", "Loop MP3", "sound_alert_file")):
         field = {"name": source, "label": "MP3 file" if action_type == "alarm_mp3" else "Tone pattern",
@@ -86,7 +92,13 @@ def reset_pad_fixtures(server, scenario="normal"):
                  "min": 0, "max": 100, "default": "0"}]})
     fixture["binding_schema"]["schemes"].append({"name": "alarm", "min_params": 1, "max_params": 1,
         "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
-        "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id"]})
+        "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id", "1_hour", "1_minute", "1_minutes",
+             "1_weekdays", "1_day_0", "1_day_1", "1_day_2", "1_day_3", "1_day_4", "1_day_5", "1_day_6",
+             "1_repeat", "1_snooze_minutes", "1_auto_dismiss_minutes", "1_once_epoch", "1_once_local", "1_once_available",
+             "1_next_epoch", "1_next_local", "1_next_seconds", "1_next_available", "1_snooze_seconds", "1_snooze_available",
+             "1_dismiss_seconds", "1_dismiss_available", "1_next_ring_seconds", "1_next_ring_available",
+             "1_ota_deferred", "1_storage_error", "1_hook_error", "1_command_error", "1_command_message",
+             "1_pending_commands", "1_completed_commands", "1_save_state"]})
     server.mock_pads["5"]["buttons"] = [
         {"col": col, "row": row, "label_center": f"{row * 8 + col + 1:02}",
          "bg_color": "#166b64" if (col + row) % 2 else "#273641"}

@@ -1384,7 +1384,7 @@ The alarm manager does not hold a display lock around its hook list.
 |--------|----------|----------|
 | GET | `/api/component/alarms/config` | Normalized ID-keyed definition |
 | POST | `/api/component/alarms/config` | Validated, durable full replacement; maximum 8192 bytes |
-| GET | `/api/component/alarms/status` | State, readiness, failures, OTA deferral, enabled, once_epoch, once_local |
+| GET | `/api/component/alarms/status` | Configuration values, state/readiness/failures, one-shot target, next occurrence/countdowns, queue acknowledgement |
 | POST | `/api/component/alarms/snooze` | Queue snooze for a ringing session |
 | POST | `/api/component/alarms/cancel` | Queue cancellation without disabling the schedule |
 
@@ -1422,6 +1422,45 @@ dispatched outside the manager lock, with display locking when available.
 Synchronous hook failures do not prevent attempts of subsequent hooks. Alarm
 Home Assistant hooks execute bounded HTTP requests directly; ordinary button
 actions retain queued delivery.
+
+The registered `alarm` action also supports slot-1 `set_time`, `adjust_minutes`,
+`enable`/`disable`/`toggle`, and weekday enable/disable/toggle. Its generic editor
+metadata exposes `alarm_id`, `alarm_command`, bindable `alarm_value` (minutes,
+including Numeric Rocker `{step}`), and `alarm_day` (Sunday=0).
+`portal_action_editor_alarm.js` owns command-specific rendering, loading,
+binding setup, and payload building through `_actionEditorExtensions`. Its
+`type` registration excludes Alarm fields from the generic renderer. It shows
+the value only for time commands and the weekday only for weekday commands;
+unused fields are omitted from saved actions. MCP uses the same
+command validation and queue, with integer `value` and `day` arguments. Config
+commands default to ID 1; ID 0 is reserved for active-session controls.
+Queued mutations serialize the current definition, alter only the selected
+fields, and use shared validation/apply logic with portal edits. The four-entry
+queue processes one command per loop without coalescing adjustments. Settings
+apply live, then save once after 10 seconds without a substantive change, using
+monotonic time. No-ops do not slide the deadline. Failed delayed saves retain live
+settings and retry after 10 seconds; OTA defers writes. Explicit
+`alarm_config_save_raw` calls remain durable before applying, including flushing
+an identical-to-live dirty definition without disturbing the session. Scheduler
+occurrence checkpoints persist immediately and clear pending settings when
+successful, avoiding a redundant delayed write. Ordinary scheduler ticks do not
+write. Dispatch only acknowledges acceptance; status exposes `pending_commands`
+and `completed_commands` for queue-wide processing, and `save_state` for delayed
+durability (`pending`, `saved`, or `failed`). `command_error` and `command_message`
+also report delayed save failures. Reboot or power loss before verification can
+lose pending settings.
+Queue-full submissions are rejected and reported through command failure status.
+
+Forecasts are cached by wall-clock minute and relevant state changes, not
+computed by binding resolution. Status exposes `next_epoch`, `next_local`,
+`next_seconds`, `snooze_seconds`, `dismiss_seconds`, and `next_ring_seconds`.
+The combined countdown is the earlier schedule/snooze deadline, zero while
+ringing. Numeric absent values are zero in JSON; `next_available`,
+`snooze_available`, and `next_ring_available` disambiguate them. Binding dates,
+epochs, and countdowns are empty when absent, with explicit `ON`/`OFF`
+availability flags. See the [pad binding reference](../pad-editor-guide.md#alarm-binding)
+for every key. This adds no dedicated screen/pad and does not expose duration or
+hook editing on the device.
 
 The shared time service requires current-boot SNTP synchronization. Local-time
 conversion and explicit binding timezone overrides share a mutex around `TZ`.

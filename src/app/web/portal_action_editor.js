@@ -74,11 +74,11 @@ function actionEditorTypeOptionsHTML(opts) {
 
 // <option> tags for a multi-command type's Command selector. '' for a
 // direct action (no commands) or a type absent from this build's catalog.
-function actionEditorCommandOptionsHTML(type) {
+function actionEditorCommandOptionsHTML(type, selected) {
     var entry = actionEditorCatalogEntry(type);
     if (!entry || !entry.commands) return '';
     return entry.commands.map(function(c) {
-        return '<option value="' + c.id + '">' + c.label + '</option>';
+        return '<option value="' + c.id + '"' + (selected !== undefined && String(c.id) === String(selected) ? ' selected' : '') + '>' + c.label + '</option>';
     }).join('');
 }
 
@@ -87,9 +87,10 @@ function actionEditorCommandOptionsHTML(type) {
 function actionEditorGenericFieldsHTML(prefix) {
     var html = '';
     actionEditorCatalog().forEach(function(entry) {
-        if (!entry.editor_fields || !entry.editor_fields.length) return;
+        var fields = actionEditorGenericFields(entry.type);
+        if (!fields.length) return;
         html += '<div id="' + prefix + '-generic-' + entry.type + '-group" style="display:none;">';
-        entry.editor_fields.forEach(function(field) {
+        fields.forEach(function(field) {
             var id = prefix + '-generic-' + entry.type + '-' + field.name;
             html += '<div class="form-group">';
             if (field.type === 'toggle') {
@@ -100,10 +101,10 @@ function actionEditorGenericFieldsHTML(prefix) {
                 html += '</label>';
                 if (field.type === 'select') {
                     html += '<select class="form-select form-select-sm" id="' + id + '">';
-                    if (field.command_options) html += actionEditorCommandOptionsHTML(entry.type);
+                    if (field.command_options) html += actionEditorCommandOptionsHTML(entry.type, field.default);
                     else if (field.options_source === 'sounds') html += '<option value="">(none)</option>';
                     else if (field.options) html += field.options.map(function(option) {
-                        return '<option value="' + option.id + '">' + option.label + '</option>';
+                        return '<option value="' + option.id + '"' + (field.default !== undefined && String(option.id) === String(field.default) ? ' selected' : '') + '>' + option.label + '</option>';
                     }).join('');
                     html += '</select>';
                 } else {
@@ -122,6 +123,7 @@ function actionEditorGenericFieldsHTML(prefix) {
 }
 
 function actionEditorGenericFields(type) {
+    if (_actionEditorExtensions.some(function(ext) { return ext.type === type; })) return [];
     var entry = actionEditorCatalogEntry(type);
     return entry && entry.editor_fields ? entry.editor_fields : [];
 }

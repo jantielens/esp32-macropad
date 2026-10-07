@@ -18,12 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Persistent alarm clock on alarm-enabled display boards, with one stable slot,
   weekly weekday scheduling, configurable snooze and auto-dismiss, and up to
-  three synchronous ring and stop actions. Alarm Control buttons and MCP provide
-  Snooze and Cancel; read-only bindings expose configured time, enabled state,
-  readiness, session state, and active ID. Alternating checksummed filesystem
+  three synchronous ring and stop actions. Alternating checksummed filesystem
   snapshots preserve settings and handled occurrences. Scheduling requires
   current-boot time synchronization and permits up to five minutes of live
   lateness, without replaying alarms missed before startup readiness.
+* Alarm Control buttons and MCP commands for Snooze, Cancel, and editing alarm
+  time, weekdays, and enabled state. Signed minute adjustments wrap within
+  24 hours and support Numeric Rocker steps. The action editor shows only fields
+  relevant to the selected command. Read-only bindings expose settings,
+  readiness, session state, active ID, next occurrence, schedule and snooze
+  countdowns, errors, command completion, and save status.
+* Batched persistence for queued alarm-setting changes: settings apply live
+  immediately and save after 10 seconds without a substantive change. No-ops do
+  not extend the delay. Failed delayed saves retain live settings and retry;
+  OTA defers writes. Explicit configuration saves and occurrence records remain
+  immediate. Reboot or power loss before verification can lose pending changes.
 * One-shot alarms when no weekdays are selected. Save an enabled alarm to
   schedule the next valid local occurrence; its fixed target survives reboot
   and timezone changes. Initial triggering durably consumes the occurrence and
@@ -49,12 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-* Keep blocking alarm Home Assistant requests outside the display mutex while
-  protecting UI dispatch and binding resolution independently.
-* Hide dedicated alarm audio actions on alarm-disabled builds and prevent
-  saved forbidden action types from bypassing the Alarm form's hook filter.
-* Prevent alarm-driven navigation from reacquiring a display mutex already held
-  by the same task, avoiding blocked alarm hooks and the resulting watchdog reset.
 * Restore JC3248W535's full Screen Saver settings, including the enable
   checkbox and configurable Fade In/Fade Out. Keep its combined display/touch
   controller awake while fading the backlight off, without applying the legacy

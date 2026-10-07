@@ -631,12 +631,48 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 When alarms are enabled on the board, an **Alarm Control** action can Snooze or Cancel
 the active alarm (`alarm_id: 0`) or slot 1. Cancel does not disable its weekly
-schedule; idle controls do nothing. Configure the schedule and ring/stop hooks
-in the portal's Alarm settings, not on the button.
+schedule; idle controls do nothing. The same action also configures slot 1 from
+ordinary buttons or Numeric Rocker widgets. Snooze duration, auto-dismiss duration,
+and ring/stop action lists remain in the portal's Alarm settings.
 
 ```json
 { "type": "alarm", "alarm_id": 0, "alarm_command": "cancel" }
 ```
+
+| Configuration command | Fields |
+|-----------------------|--------|
+| `set_time` | `alarm_value`: string containing whole minutes since midnight, 0-1439 |
+| `adjust_minutes` | `alarm_value`: signed whole-minute string, including bindings or `{step}` |
+| `enable`, `disable`, `toggle` | No additional value |
+| `weekday_enable`, `weekday_disable`, `weekday_toggle` | `alarm_day`: 0=Sunday through 6=Saturday |
+
+The action editor shows only the fields used by the selected command. Adjust Time
+shows Minutes; Set Time shows Time (minutes since midnight). Weekday commands show
+Weekday instead. Enable, Disable, Toggle, Cancel, and Snooze need neither field.
+
+Configuration requires `alarm_id: 1`; omission defaults to 1 for configuration
+and 0 for Cancel/Snooze. Time adjustments wrap within 24 hours without changing
+weekdays or enabled state. Use +/-60 for hour controls and +/-1 for minute controls,
+or configure other signed steps. For a Numeric Rocker adjustment action:
+
+```json
+{ "type": "alarm", "alarm_id": 1, "alarm_command": "adjust_minutes", "alarm_value": "{step}" }
+```
+
+Changes apply immediately to live settings and bindings without a draft or Save
+button. Storage is batched: the latest settings are saved and verified 10 seconds
+after the last substantive change. Repeated adjustments restart that delay;
+identical changes do not. The queue accepts four pending commands and processes
+one per main-loop iteration without coalescing adjustments. Show
+`[alarm:1_save_state]` (`pending`, `saved`, or `failed`) and
+`[alarm:1_command_message]` for feedback. Failed delayed saves retain live
+settings and retry after 10 seconds; OTA defers writes. Reboot or power loss before
+verification can lose recent changes, including while adjustments continue.
+Explicit portal configuration saves remain immediate and preserve the previous
+definition on failure. Occurrence records also save immediately and may save
+pending settings early. Ordinary scheduler ticks do not write. Substantive edits
+dismiss ringing/snoozing with the original stop actions and rearm enabled settings
+from the next full minute. Removing all weekdays selects one-shot mode.
 
 The **Alarm** group also contains **Loop Tone** (`alarm_tone`) and **Loop MP3**
 (`alarm_mp3`). Loop Tone accepts a bindable tone pattern; Loop MP3 selects an
@@ -1921,9 +1957,33 @@ Available only when the board enables alarms:
 | `[alarm:1_state]` | `idle`, `ringing`, or `snoozed` |
 | `[alarm:1_ready]` | `ON` after current-boot NTP sync, otherwise `OFF` |
 | `[alarm:active_id]` | `1` while ringing/snoozed, otherwise `0` |
+| `[alarm:1_hour]`, `[alarm:1_minute]`, `[alarm:1_minutes]` | Numeric configured hour, minute, and minutes since midnight |
+| `[alarm:1_weekdays]` | Numeric weekday bit mask, Sunday bit 0 |
+| `[alarm:1_day_0]` through `[alarm:1_day_6]` | Individual weekday `ON`/`OFF`, Sunday through Saturday |
+| `[alarm:1_repeat]` | `once` or `weekly` |
+| `[alarm:1_snooze_minutes]`, `[alarm:1_auto_dismiss_minutes]` | Configured durations, read-only on a pad |
+| `[alarm:1_once_epoch]`, `[alarm:1_once_local]` | Saved one-shot epoch and device-local `YYYY-MM-DD HH:MM` |
+| `[alarm:1_next_epoch]`, `[alarm:1_next_local]` | Next eligible scheduled occurrence, excluding handled occurrences |
+| `[alarm:1_next_seconds]` | Whole seconds until that scheduled occurrence |
+| `[alarm:1_snooze_seconds]`, `[alarm:1_dismiss_seconds]` | Monotonic whole seconds remaining, rounded up, while snoozed/ringing respectively |
+| `[alarm:1_next_ring_seconds]` | Earlier of schedule/snooze countdown; zero while ringing |
+| `[alarm:1_once_available]`, `[alarm:1_next_available]`, `[alarm:1_snooze_available]`, `[alarm:1_dismiss_available]`, `[alarm:1_next_ring_available]` | `ON`/`OFF` availability for the corresponding values |
+| `[alarm:1_ota_deferred]`, `[alarm:1_storage_error]`, `[alarm:1_hook_error]`, `[alarm:1_command_error]` | `ON`/`OFF` deferral and failure indicators |
+| `[alarm:1_command_message]` | Last command failure text, empty after successful processing |
+| `[alarm:1_pending_commands]`, `[alarm:1_completed_commands]` | Pending count and processed-command count since manager initialization |
+| `[alarm:1_save_state]` | `idle`, `pending` (queued or awaiting delayed save), `saved` (verified), or `failed`; session controls also acknowledge processing |
 
 For example, use `Alarm [alarm:1_time]` as a button label and
 `[alarm:1_state]` as its secondary label, with an Alarm Cancel action.
+
+Bindings are read-only and advertised in the portal/MCP binding catalog. Epochs,
+local dates and countdowns resolve to an empty string when unavailable, not zero;
+use their availability flags to distinguish absence from an imminent ring. A
+one-shot can be disabled while its session is still ringing or snoozed. Time
+readiness gates calendar forecasts, but an existing snooze uses monotonic time.
+Weekly forecasts use the device timezone, skip nonexistent DST times, and use
+the first occurrence of repeated local times. No dedicated configuration pad or
+screen is installed; use these fields in your own pad.
 
 ### Timer Binding
 

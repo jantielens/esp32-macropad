@@ -217,7 +217,9 @@ struct BrightnessPayload {
 };
 struct AlarmPayload {
     uint8_t alarm_id;
-    char alarm_command[7];
+    char alarm_command[17];
+    uint8_t alarm_day;
+    char alarm_value[CONFIG_VALUE_MAX_LEN];
 };
 struct TimerPayload {
     uint8_t timer_id;                                 // 1-3

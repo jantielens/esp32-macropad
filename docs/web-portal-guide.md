@@ -663,6 +663,13 @@ the selected duration (default nine minutes). **Cancel** ends ringing or snooze
 without disabling the weekly schedule. Ringing automatically ends after the
 configured timeout (default 30 minutes). Idle controls do nothing.
 
+You can also configure time, weekdays, and enabled state from your own pad using
+**Alarm Control** actions, including Numeric Rocker `{step}` adjustments. Edits
+save immediately; bindings expose accepted values, countdowns, readiness, and
+save failures. Durations and ring/stop lists remain in this portal form. See
+[Alarm Actions](pad-editor-guide.md#alarm-actions) and
+[Alarm Binding](pad-editor-guide.md#alarm-binding) for the authoring fields.
+
 The alarm waits for an NTP synchronization during the current boot. Once synced,
 Wi-Fi loss does not stop its clock. Boot, first sync, enabling, and substantive
 edits start checking from the next full minute; missed alarms before that point

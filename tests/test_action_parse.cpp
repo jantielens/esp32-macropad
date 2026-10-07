@@ -284,6 +284,18 @@ TEST(legacy_alert_aliases_are_rejected) {
 
 TEST(alarm_audio_round_trip) {
 #if ALARM_ENABLED
+    ButtonAction control = round_trip("{\"type\":\"alarm\",\"alarm_command\":\"adjust_minutes\",\"alarm_value\":\"{step}\"}");
+    ASSERT_STR(control.type, "alarm");
+    ASSERT_EQ(control.payload.alarm.alarm_id, 1);
+    action_type_substitute_step(action_type_find("alarm"), control, -60);
+    ASSERT_STR(control.payload.alarm.alarm_value, "-60");
+    control = round_trip("{\"type\":\"alarm\",\"alarm_command\":\"weekday_toggle\",\"alarm_day\":6}");
+    ASSERT_EQ(control.payload.alarm.alarm_day, 6);
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"bad\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"set_time\",\"alarm_value\":\"1440\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"adjust_minutes\",\"alarm_value\":\"1.5\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"toggle\",\"alarm_id\":0}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"weekday_toggle\"}").type, "");
     ButtonAction tone = round_trip("{\"type\":\"alarm_tone\",\"sound_alert_pattern\":\"1000:200 800\",\"sound_alert_volume\":55}");
     ASSERT_STR(tone.type, "alarm_tone");
     ASSERT_STR(tone.payload.sound_alert.sound_alert_kind, "tone_loop");

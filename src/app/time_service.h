@@ -17,4 +17,4 @@ bool time_service_format(time_t epoch, const char* format, const char* timezone,
                          char* out, size_t capacity);
 time_t time_service_alarm_candidate(time_t now, uint8_t hour, uint8_t minute,
                                     uint8_t weekdays);
-time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute);
+time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute, uint8_t weekdays = 127);

@@ -237,18 +237,19 @@ time_t time_service_alarm_candidate(time_t now, uint8_t hour, uint8_t minute, ui
     return latest;
 }
 
-time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute) {
-    if (hour > 23 || minute > 59) return 0;
+time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute, uint8_t weekdays) {
+    if (hour > 23 || minute > 59 || !weekdays || weekdays > 127) return 0;
     std::lock_guard<std::mutex> lock(timezone_mutex);
     struct tm today = {};
     if (!localtime_r(&now, &today)) return 0;
-    for (int offset = 0; offset < 7; ++offset) {
+    for (int offset = 0; offset < 15; ++offset) {
         struct tm date = today;
         date.tm_mday += offset;
         date.tm_hour = 12;
         date.tm_min = date.tm_sec = 0;
         date.tm_isdst = -1;
         mktime(&date);
+        if (!(weekdays & (1U << date.tm_wday))) continue;
         const time_t occurrence = alarm_local_occurrence(date, hour, minute);
         if (occurrence > now) return occurrence;
     }

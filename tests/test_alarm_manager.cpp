@@ -8,6 +8,7 @@
 #include <LittleFS.h>
 #include "../src/app/alarm_manager.h"
 #include "../src/app/action_dispatch.h"
+#include "../src/app/action_registry.h"
 
 std::map<std::string, std::string> storage_test_files;
 bool storage_test_fail_open = false;
@@ -46,11 +47,17 @@ bool time_service_format(time_t epoch, const char* format, const char*, char* ou
     struct tm local = {};
     return gmtime_r(&epoch, &local) && strftime(output, capacity, format, &local);
 }
-time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute) {
+time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute, uint8_t weekdays) {
     struct tm local = {};
     gmtime_r(&now, &local);
     const time_t target = now - local.tm_hour * 3600 - local.tm_min * 60 - local.tm_sec + hour * 3600 + minute * 60;
-    return target > now ? target : target + 86400;
+    for (int offset = 0; offset < 15; ++offset) {
+        const time_t candidate = target + offset * 86400;
+        struct tm date = {};
+        gmtime_r(&candidate, &date);
+        if (candidate > now && (weekdays & (1U << date.tm_wday))) return candidate;
+    }
+    return 0;
 }
 time_t time_service_alarm_candidate(time_t now, uint8_t hour, uint8_t minute, uint8_t weekdays) {
     struct tm local = {};
@@ -145,6 +152,13 @@ static void test_once() {
     assert(!alarm_snapshot().enabled && alarm_snapshot().state == ALARM_IDLE && dispatched.empty());
     alarm_manager_init();
     assert(!alarm_snapshot().enabled);
+    ButtonAction invalid = {};
+    strlcpy(invalid.type, "alarm", sizeof(invalid.type));
+    strlcpy(invalid.payload.alarm.alarm_command, "adjust_minutes", sizeof(invalid.payload.alarm.alarm_command));
+    strlcpy(invalid.payload.alarm.alarm_value, "1.5", sizeof(invalid.payload.alarm.alarm_value));
+    invalid.payload.alarm.alarm_id = 1;
+    assert(action_type_find("alarm")->dispatch(invalid, "test", 0) == ACTION_FAILED);
+    assert(alarm_snapshot().command_error);
     storage_test_files.clear();
     wall_clock = 1704094140;
     alarm_manager_init();
@@ -187,10 +201,206 @@ static void test_once() {
     diagnostics.clear();
 }
 
+static uint64_t persisted_generation() {
+    uint64_t newest = 0;
+    for (const auto& file : storage_test_files) {
+        JsonDocument document;
+        if (!deserializeJson(document, file.second))
+            newest = std::max(newest, document["generation"].as<uint64_t>());
+    }
+    return newest;
+}
+
+static void test_settings_debounce() {
+    storage_test_files.clear();
+    ready = true;
+    ota = false;
+    wall_clock = 1704094140;
+    monotonic_clock = 0;
+    alarm_manager_init();
+    assert(save(config));
+    const auto initial_files = storage_test_files;
+    const uint64_t initial_generation = persisted_generation();
+    assert(alarm_command_submit("adjust_minutes", 1, 1));
+    alarm_manager_loop();
+    assert(alarm_snapshot().minute == 31 && alarm_snapshot().save_pending);
+    assert(alarm_snapshot().pending_commands == 0 && storage_test_files == initial_files);
+    JsonDocument status;
+    alarm_status_to_json(status.to<JsonObject>());
+    assert(status["save_state"] == "pending" && status["completed_commands"] == 1);
+    monotonic_clock = 5000;
+    assert(alarm_command_submit("adjust_minutes", 1, 1));
+    alarm_manager_loop();
+    assert(alarm_snapshot().minute == 32 && storage_test_files == initial_files);
+    monotonic_clock = 10000;
+    assert(alarm_command_submit("adjust_minutes", 1, 0));
+    alarm_manager_loop();
+    assert(storage_test_files == initial_files);
+    monotonic_clock = 14999;
+    alarm_manager_loop();
+    assert(storage_test_files == initial_files);
+    monotonic_clock = 15000;
+    alarm_manager_loop();
+    assert(persisted_generation() == initial_generation + 1 && !alarm_snapshot().save_pending);
+    alarm_status_to_json(status.to<JsonObject>());
+    assert(status["save_state"] == "saved");
+    assert(alarm_command_submit("adjust_minutes", 1, 1));
+    alarm_manager_loop();
+    assert(alarm_snapshot().minute == 33);
+    alarm_manager_init();
+    assert(alarm_snapshot().minute == 32 && !alarm_snapshot().save_pending);
+    assert(alarm_command_submit("adjust_minutes", 1, 1));
+    alarm_manager_loop();
+    JsonDocument live;
+    alarm_config_to_json(live.to<JsonObject>());
+    std::string payload;
+    serializeJson(live, payload);
+    const uint64_t before_explicit = persisted_generation();
+    assert(save(payload.c_str()));
+    assert(persisted_generation() == before_explicit + 1 && !alarm_snapshot().save_pending);
+    alarm_manager_init();
+    assert(alarm_snapshot().minute == 33);
+    assert(alarm_command_submit("adjust_minutes", 1, 1));
+    alarm_manager_loop();
+    assert(alarm_snapshot().minute == 34);
+    storage_test_write_limit = 8;
+    monotonic_clock += 10000;
+    alarm_manager_loop();
+    assert(alarm_snapshot().minute == 34 && alarm_snapshot().save_pending && alarm_snapshot().save_failed);
+    alarm_status_to_json(status.to<JsonObject>());
+    assert(status["save_state"] == "failed" && status["command_error"] == true);
+    assert(strlen(status["command_message"].as<const char*>()) > 0);
+    const auto failed_files = storage_test_files;
+    storage_test_write_limit = SIZE_MAX;
+    monotonic_clock += 9999;
+    alarm_manager_loop();
+    assert(storage_test_files == failed_files);
+    ++monotonic_clock;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().save_pending && !alarm_snapshot().command_error);
+    alarm_status_to_json(status.to<JsonObject>());
+    assert(status["save_state"] == "saved");
+    alarm_manager_init();
+    assert(alarm_snapshot().minute == 34);
+    assert(alarm_command_submit("weekday_toggle", 1, 0, 0));
+    alarm_manager_loop();
+    const auto before_ota = storage_test_files;
+    ota = true;
+    monotonic_clock += 10000;
+    alarm_manager_loop();
+    assert(storage_test_files == before_ota && alarm_snapshot().save_pending);
+    ota = false;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().save_pending && storage_test_files != before_ota);
+    alarm_manager_init();
+    assert(alarm_snapshot().weekdays == 63);
+    for (bool once : {false, true}) {
+        storage_test_files.clear();
+        monotonic_clock = 0;
+        wall_clock = 1704094195;
+        alarm_manager_init();
+        std::string schedule(config);
+        if (once) schedule.replace(schedule.find("\"weekdays\":62"), strlen("\"weekdays\":62"), "\"weekdays\":0");
+        assert(save(schedule.c_str()));
+        const uint64_t before_ring = persisted_generation();
+        assert(alarm_command_submit("set_time", 1, 451));
+        alarm_manager_loop();
+        assert(alarm_command_submit("set_time", 1, 450));
+        alarm_manager_loop();
+        assert(alarm_snapshot().save_pending && persisted_generation() == before_ring);
+        wall_clock += 5;
+        monotonic_clock = 5000;
+        dispatched.clear();
+        alarm_manager_loop();
+        assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 1);
+        assert(persisted_generation() == before_ring + 1 && !alarm_snapshot().save_pending);
+        if (once) assert(!alarm_snapshot().enabled);
+        const auto ring_files = storage_test_files;
+        monotonic_clock = 15000;
+        alarm_manager_loop();
+        assert(storage_test_files == ring_files && alarm_snapshot().state == ALARM_RINGING);
+        storage_test_write_limit = 8;
+        assert(alarm_command_submit("adjust_minutes", 1, 1));
+        alarm_manager_loop();
+        assert(alarm_snapshot().state == ALARM_IDLE && alarm_snapshot().minute == 31);
+        assert(alarm_snapshot().save_pending && !alarm_snapshot().command_error);
+        monotonic_clock += 10000;
+        alarm_manager_loop();
+        assert(alarm_snapshot().state == ALARM_IDLE && alarm_snapshot().minute == 31 && alarm_snapshot().save_failed);
+        storage_test_write_limit = SIZE_MAX;
+    }
+    storage_test_files.clear();
+    ready = false;
+    ota = false;
+    wall_clock = 1704094140;
+    monotonic_clock = 0;
+    dispatched.clear();
+    diagnostics.clear();
+}
+
 int main() {
+    test_settings_debounce();
     test_once();
     alarm_manager_init();
     assert(!alarm_snapshot().enabled);
+    assert(!alarm_command_submit("adjust_minutes", 0, 1));
+    assert(!alarm_command_submit("set_time", 1, 1440));
+    assert(!alarm_command_submit("weekday_toggle", 1, 0, 7));
+    assert(!alarm_command_submit("unknown", 1));
+    assert(alarm_command_submit("set_time", 1, 1439));
+    alarm_manager_loop();
+    assert(alarm_snapshot().hour == 23 && alarm_snapshot().minute == 59);
+    assert(alarm_command_submit("adjust_minutes", 1, 1));
+    alarm_manager_loop();
+    assert(alarm_snapshot().hour == 0 && alarm_snapshot().minute == 0);
+    assert(alarm_command_submit("adjust_minutes", 1, -1));
+    alarm_manager_loop();
+    assert(alarm_snapshot().hour == 23 && alarm_snapshot().minute == 59);
+    storage_test_write_limit = 8;
+    assert(alarm_command_submit("set_time", 1, 60));
+    alarm_manager_loop();
+    assert(alarm_snapshot().hour == 1 && alarm_snapshot().minute == 0);
+    assert(alarm_snapshot().save_pending && !alarm_snapshot().command_error);
+    monotonic_clock += 10000;
+    alarm_manager_loop();
+    storage_test_write_limit = SIZE_MAX;
+    assert(alarm_snapshot().command_error && alarm_snapshot().completed_commands == 4);
+    assert(alarm_command_submit("weekday_enable", 1, 0, 1));
+    assert(alarm_command_submit("weekday_toggle", 1, 0, 6));
+    assert(alarm_command_submit("weekday_disable", 1, 0, 1));
+    assert(alarm_command_submit("enable", 1));
+    assert(!alarm_command_submit("toggle", 1));
+    assert(alarm_snapshot().pending_commands == 4);
+    alarm_manager_loop();
+    assert(alarm_snapshot().weekdays == 2 && alarm_snapshot().pending_commands == 3);
+    alarm_manager_loop();
+    assert(alarm_snapshot().weekdays == 66);
+    alarm_manager_loop();
+    assert(alarm_snapshot().weekdays == 64);
+    alarm_manager_loop();
+    assert(alarm_snapshot().enabled);
+    monotonic_clock += 10000;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().command_error && !alarm_snapshot().save_pending);
+    const auto saved_files = storage_test_files;
+    assert(alarm_command_submit("enable", 1));
+    alarm_manager_loop();
+    assert(saved_files == storage_test_files);
+    for (int tick = 0; tick < 100; ++tick) alarm_manager_loop();
+    assert(saved_files == storage_test_files);
+    alarm_manager_init();
+    assert(alarm_snapshot().enabled && alarm_snapshot().weekdays == 64);
+    assert(alarm_command_submit("disable", 1));
+    alarm_manager_loop();
+    assert(!alarm_snapshot().enabled && alarm_snapshot().weekdays == 64);
+    assert(alarm_command_submit("toggle", 1));
+    alarm_manager_loop();
+    assert(alarm_snapshot().enabled);
+    assert(alarm_command_submit("adjust_minutes", 1, INT32_MAX));
+    alarm_manager_loop();
+    assert(alarm_snapshot().hour * 60 + alarm_snapshot().minute == (60LL + INT32_MAX) % 1440);
+    storage_test_files.clear();
+    alarm_manager_init();
     assert(save(config));
     assert(alarm_snapshot().enabled && alarm_snapshot().minute == 30);
     alarm_manager_init();
@@ -229,6 +439,10 @@ int main() {
     alarm_manager_loop();
     assert(alarm_snapshot().state == ALARM_RINGING);
     assert(dispatched.size() == 2 && alarm_snapshot().hook_error);
+    assert(alarm_snapshot().next_epoch > wall_clock);
+    assert(alarm_command_submit("adjust_minutes", 1, 0));
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 2);
     assert(save(hooked.c_str()));
     assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 2);
     std::string edited(hooked);
@@ -240,13 +454,15 @@ int main() {
     assert(alarm_command_submit("snooze"));
     alarm_manager_loop();
     assert(alarm_snapshot().state == ALARM_SNOOZED && dispatched.size() == 3);
+    assert(alarm_snapshot().snooze_remaining == 540);
     assert(alarm_command_submit("cancel"));
     alarm_manager_loop();
     assert(alarm_snapshot().state == ALARM_IDLE && dispatched.size() == 3);
     wall_clock += 86400;
     alarm_manager_loop();
     assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 5);
-    assert(save(edited.c_str()));
+    assert(alarm_command_submit("adjust_minutes", 1, 1));
+    alarm_manager_loop();
     assert(alarm_snapshot().state == ALARM_IDLE && dispatched.size() == 6);
     assert(dispatched.back() == "Alarm stop:screen");
     const uint32_t cleanup_generation = last_work_generation;
