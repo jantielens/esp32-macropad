@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 298
+Total flags: 304
 
 ### Features (HAS_*)
 
@@ -49,6 +49,7 @@ Total flags: 298
 - **HAS_MQTT** default: `true` — Enable MQTT and Home Assistant integration.
 - **HAS_MUSIC_ANALYSIS** default: `false` — Demand-driven Music MP3 RMS, peak, and spectrum bindings.
 - **HAS_NATIVE_EXTENSIONS** default: `false` — ELF modules loaded from persistent storage at startup.
+- **HAS_REMOTE_LOG** default: `false` — Include remote log capture, portal assets, and retained-crash retrieval.
 - **HAS_SCALE** default: `(HAS_SENSOR_HX711 || HAS_SENSOR_NAU7802)` — device class.
 - **HAS_SD_CARD** default: `false` — Board has a physical MicroSD card slot wired to SDMMC.
 - **HAS_SENSOR_AHT10** default: `false` — Enable AHT10/AHT20 (I2C) temperature and humidity sensor adapter.
@@ -160,6 +161,7 @@ Total flags: 298
 - **LVGL_BUFFER_SIZE** default: `(DISPLAY_WIDTH * 10)` — LVGL draw buffer size in pixels (larger = faster, more RAM).
 - **LVGL_REFR_PERIOD_MS** default: `(no default)` — Default LVGL 8.4 is 30 ms (~33 fps). Panel hardware supports ~59 fps.
 - **LVGL_TICK_PERIOD_MS** default: `5` — LVGL tick period in milliseconds.
+- **MAX_AXS15231B_CONTACTS** default: `1` — Maximum AXS15231B contacts (1 or 2); enable two only on verified panels.
 - **MAX_GRID_COLS** default: `(no default)` — Maximum grid columns.
 - **MAX_GRID_ROWS** default: `(no default)` — Maximum grid rows.
 - **MAX_HW_BUTTONS** default: `5` — Compile-time cap on the number of declarable hardware buttons.
@@ -168,6 +170,7 @@ Total flags: 298
 - **MAX_PADS** default: `16` — Override per-board in board_overrides.h for memory-constrained targets.
 - **MAX_PAD_BUTTONS** default: `(no default)` — Maximum buttons per pad (5×5 grid).
 - **MIN_USER_BRIGHTNESS** default: `5` — The screen saver bypasses this floor to allow sleep (brightness 0).
+- **REMOTE_LOG_BUFFER_RECORDS** default: `256` — Rolling record capacity when remote diagnostics are enabled.
 - **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS** default: `300` — Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).
 - **SDMMC_MAX_FREQUENCY_KHZ** default: `20000` — SDMMC maximum bus frequency in kHz.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
@@ -215,6 +218,7 @@ Total flags: 298
 - **CAMERA_SENSOR_EXPECTED_ID** default: `0x0000` — Camera sensor product ID expected from the high and low ID registers.
 - **CAMERA_SENSOR_ID_REG_HIGH** default: `0x0000` — Camera sensor product ID high-byte register.
 - **CONFIG_DEFAULT_PORTAL_IDLE_SECONDS** default: `120` — the device on a fresh flash.
+- **DEBUG_CRASH_API_ENABLED** default: `0` — Dev/test-only crash API; defaults off on every board and must stay off in production.
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
 - **DEVICE_TELEMETRY_CPU_MONITOR** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
 - **DEVICE_TELEMETRY_HEALTH_WINDOW** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable health-window min/max sampling timer.
@@ -274,9 +278,11 @@ Total flags: 298
 - **PORTAL_PRIMARY_LABEL** default: `""` — Display name for the primary portal category in the nav sidebar.
 - **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
-- **SCREENSAVER_BACKLIGHT_ONLY** default: `false` — Keep the display content active during logical sleep and only turn off the backlight.
+- **REMOTE_LOG_BOOT_RECORDS** default: `128` — Startup snapshot capacity; defaults to 128 records when remote capture is enabled.
+- **SCREENSAVER_BACKLIGHT_ONLY** default: `false` — Use the legacy timeout-only lighting policy with instant transitions.
 - **SCREENSAVER_DEFAULT_FADE_IN_MS** default: `400` — Default backlight fade-in duration when the screen saver wakes (ms).
 - **SCREENSAVER_DEFAULT_FADE_OUT_MS** default: `800` — Default backlight fade-out duration when the screen saver activates (ms).
+- **SCREENSAVER_KEEP_PANEL_AWAKE** default: `SCREENSAVER_BACKLIGHT_ONLY` — Keep the panel and rendering active during screen saver sleep, independently of fading.
 - **SCREENSAVER_SLEEP_REFRESH_MS** default: `900000` — Interval in ms between periodic asleep-display refresh calls (0 = disabled).
 - **SCREENSAVER_SLEEP_TICK_MS** default: `200` — Higher values save more CPU but increase wake latency (default 200 ms ≈ 5 Hz).
 - **SCREEN_HISTORY_MAX** default: `8` — Screen history depth for back-navigation. Also controls the LRU pad cache size.
@@ -345,30 +351,30 @@ Total flags: 298
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_USB_HID |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
-| jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
-| jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
-| jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
-| jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
-| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
-| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
-| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
-| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
-| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |  |
-| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |  |
-| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |  |
-| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
-| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
-| esp32c3-withsensors |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  |  |
-| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |  |
-| inkplate5v2-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
-| inkplate6flick-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
-| inkplate6flick-interactive |  |  | ✅ |  |  |  |  |  | ? | ✅ | ✅ |  |  | ✅ |  |  |  |  |  | ✅ |  | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |  |
-| reterminal-e1003-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ |  |  | ? |  | ? |  | ✅ | ✅ |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
-| reterminal-e1003-interactive |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ |  |  | ✅ |  |  | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |  |
+| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_CUSTOM_FONTS | HAS_DISPLAY | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_USB_HID |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ? | ✅ |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ |  |
+| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ✅ | ✅ |  |
+| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ✅ | ✅ |  |
+| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ✅ | ✅ |  |
+| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ? | ✅ |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ✅ | ✅ | ✅ |
+| esp32c3-withsensors |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  |  |
+| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ | ? |  |  |  |  |  |  | ? | ? | ? |  | ✅ | ✅ |  |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  |  |
+| inkplate5v2-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
+| inkplate6flick-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ | ✅ |  | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
+| inkplate6flick-interactive |  |  | ✅ |  |  |  |  |  | ? | ✅ | ✅ |  |  | ✅ |  |  |  |  |  | ✅ |  | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |  |
+| reterminal-e1003-frame |  |  |  |  |  |  |  |  | ? |  |  | ✅ |  | ✅ |  |  | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ |  |  |
+| reterminal-e1003-interactive |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ |  |  | ✅ |  |  | ? |  |  | ✅ | ✅ | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ✅ | ✅ |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
@@ -960,6 +966,28 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets.cpp
   - src/app/widgets/external_widget.cpp
   - src/app/widgets/external_widget.h
+- **HAS_REMOTE_LOG**
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/log_manager.cpp
+  - src/app/log_manager.h
+  - src/app/portal_components.cpp
+  - src/app/remote_log.cpp
+  - src/app/remote_log.h
+  - src/app/web_portal_component_api.cpp
+  - src/app/web_portal_logs.cpp
+  - src/app/web_portal_logs.h
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
+  - src/app/web_portal_routes.cpp
+  - src/boards/esp32-4848S040/board_overrides.h
+  - src/boards/esp32-p4-lcd4b/board_overrides.h
+  - src/boards/jc1060p470c/board_overrides.h
+  - src/boards/jc3248w535/board_overrides.h
+  - src/boards/jc3636w518/board_overrides.h
+  - src/boards/jc4880p433/board_overrides.h
+  - src/boards/reterminal-e1003-frame/board_overrides.h
+  - src/boards/reterminal-e1003-interactive/board_overrides.h
 - **HAS_SCALE**
   - src/app/device_classes/coffee_scale/brew/brew_binding.cpp
   - src/app/device_classes/coffee_scale/brew/brew_log.cpp
@@ -1194,6 +1222,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **DATA_STREAM_MAX_STREAMS**
   - src/app/board_config.h
+- **DEBUG_CRASH_API_ENABLED**
+  - src/app/board_config.h
+  - src/app/web_portal_logs.cpp
+  - src/app/web_portal_logs.h
+  - src/app/web_portal_routes.cpp
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS**
   - src/app/board_config.h
 - **DEVICE_TELEMETRY_CPU_MONITOR**
@@ -1491,6 +1524,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **LVGL_TICK_PERIOD_MS**
   - src/app/board_config.h
+- **MAX_AXS15231B_CONTACTS**
+  - src/app/board_config.h
 - **MAX_GRID_COLS**
   - src/app/pad_config.h
 - **MAX_GRID_ROWS**
@@ -1522,6 +1557,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/power_manager.cpp
 - **PROJECT_DISPLAY_NAME**
   - src/app/board_config.h
+- **REMOTE_LOG_BOOT_RECORDS**
+  - src/app/board_config.h
+- **REMOTE_LOG_BUFFER_RECORDS**
+  - src/app/board_config.h
 - **SCREENSAVER_BACKLIGHT_ONLY**
   - src/app/board_config.h
   - src/app/config_manager.cpp
@@ -1535,6 +1574,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS**
   - src/app/board_config.h
+- **SCREENSAVER_KEEP_PANEL_AWAKE**
+  - src/app/board_config.h
+  - src/app/screen_saver_manager.cpp
 - **SCREENSAVER_SLEEP_REFRESH_MS**
   - src/app/board_config.h
   - src/app/screen_saver_manager.cpp

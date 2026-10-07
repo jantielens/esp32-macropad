@@ -20,6 +20,10 @@ harness = r'''
 #include <cstdio>
 #include "touch_sample.h"
 #define LOGI(tag, ...) ((void)std::snprintf(nullptr, 0, __VA_ARGS__))
+#define LOGT(tag, ...) (++trace_logs, (void)std::snprintf(nullptr, 0, __VA_ARGS__))
+#define LOGW(tag, ...) (++warnings, (void)std::snprintf(nullptr, 0, __VA_ARGS__))
+enum LogLevel { LOG_LEVEL_WARN = 2, LOG_LEVEL_DEBUG = 4 };
+#define LOG_LEVEL LOG_LEVEL_DEBUG
 #define HAS_DISPLAY 1
 #define HAS_USB_HID TEST_USB
 #define portMUX_TYPE int
@@ -31,6 +35,13 @@ struct lv_indev_t { void* user_data; };
 struct lv_indev_data_t { int state = LV_INDEV_STATE_RELEASED; struct { int x = 0, y = 0; } point; };
 static uint32_t clock_ms = 0;
 static unsigned resets = 0, activities = 0;
+static unsigned warnings = 0;
+static unsigned debug_logs = 0;
+static unsigned trace_logs = 0;
+static void log_write(LogLevel level, const char*, const char*, ...) {
+    if (level == LOG_LEVEL_WARN) ++warnings;
+    else ++debug_logs;
+}
 static bool ready = true;
 static uint32_t millis() { return clock_ms; }
 static void* lv_indev_get_user_data(lv_indev_t* indev) { return indev->user_data; }
@@ -84,7 +95,11 @@ int main() {
     lv_indev_data_t output;
     auto poll = [&]() { ++clock_ms; TouchManager::readCallback(&indev, &output); };
     poll();
+    const unsigned idle_trace_logs = trace_logs;
+    const unsigned idle_resets = resets;
     touch_manager_cancel_physical_input();
+    touch_manager_cancel_physical_input();
+    assert(trace_logs == idle_trace_logs && resets == idle_resets + 2);
     assert(!g_require_release);
     driver.snapshot.status = TouchReadStatus::Unchanged;
     poll();
@@ -95,6 +110,11 @@ int main() {
     driver.snapshot.contacts[0].vertical = 34;
     poll();
     assert(output.state == LV_INDEV_STATE_PRESSED && output.point.x == 12);
+    const unsigned pressed_trace_logs = trace_logs;
+    touch_manager_cancel_physical_input();
+    assert(g_require_release && trace_logs == pressed_trace_logs + 1);
+    touch_manager_cancel_physical_input();
+    assert(g_require_release && trace_logs == pressed_trace_logs + 1);
     g_lvgl_force_released = true;
     poll();
     assert(driver.reads == 4 && g_cached_physical.pressed && output.state == LV_INDEV_STATE_RELEASED);
@@ -149,6 +169,96 @@ int main() {
 #if HAS_USB_HID
     assert(routed && canceled);
 #endif
+    g_lvgl_suppress_until_ms = clock_ms + 100;
+    driver.snapshot.count = 1;
+    poll();
+    assert(g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    driver.snapshot.count = 0;
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    poll();
+    assert(g_require_release);
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    poll();
+    assert(!g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    const unsigned resets_after_release = resets;
+    for (unsigned sample = 0; sample < 10; ++sample) poll();
+    assert(!g_require_release && resets == resets_after_release);
+    g_lvgl_force_released = false;
+    clock_ms += 100;
+    poll();
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    driver.snapshot.count = 1;
+    poll();
+    assert(output.state == LV_INDEV_STATE_PRESSED);
+    g_lvgl_force_released = true;
+    poll();
+    driver.snapshot.count = 0;
+    poll();
+    assert(!g_require_release);
+    driver.snapshot.count = 1;
+    poll();
+    assert(g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    g_lvgl_force_released = false;
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    poll();
+    assert(g_require_release && output.state == LV_INDEV_STATE_RELEASED);
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    driver.snapshot.count = 0;
+    poll();
+    assert(!g_require_release);
+    driver.snapshot.count = 1;
+    poll();
+    assert(output.state == LV_INDEV_STATE_PRESSED);
+    g_lvgl_force_released = true;
+    driver.snapshot.status = TouchReadStatus::Error;
+    poll();
+    driver.snapshot.count = 0;
+    driver.snapshot.status = TouchReadStatus::Unchanged;
+    poll();
+    assert(g_require_release);
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    poll();
+    assert(!g_require_release);
+    const unsigned warnings_before = warnings;
+    driver.snapshot.status = TouchReadStatus::Error;
+    for (unsigned sample = 0; sample < 200; ++sample) {
+        clock_ms += 20;
+        poll();
+    }
+    assert(warnings <= warnings_before + 1);
+    clock_ms += 5000;
+    poll();
+    assert(warnings >= warnings_before + 1 && warnings <= warnings_before + 2);
+    driver.snapshot.status = TouchReadStatus::Fresh;
+    driver.snapshot.count = 0;
+    poll();
+    auto normal_polling = [&]() {
+        for (unsigned sample = 0; sample < 250; ++sample) {
+            clock_ms += 20;
+            poll();
+        }
+    };
+    normal_polling();
+    const unsigned warnings_after_errors = warnings;
+    const unsigned debug_before = debug_logs;
+    for (unsigned sample = 0; sample < 8; ++sample) {
+        clock_ms += 120;
+        poll();
+        poll();
+    }
+    normal_polling();
+    assert(warnings == warnings_after_errors && debug_logs > debug_before);
+    clock_ms += 250;
+    poll();
+    normal_polling();
+    assert(warnings == warnings_after_errors + 1);
+    for (unsigned sample = 0; sample < 3; ++sample) {
+        clock_ms += 120;
+        poll();
+    }
+    normal_polling();
+    assert(warnings == warnings_after_errors + 2);
 }
 '''
 
@@ -161,7 +271,228 @@ with tempfile.TemporaryDirectory() as directory:
                         f"-DTEST_USB={usb}", "-I", str(root / "src/app"),
                         str(test_source), "-o", str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
-print("PASS: touch manager single-reader wake, suppression, fresh-release rearm, errors, and synthetic pairing")
+print("PASS: touch manager single-reader wake, suppressed-release rearm, held contacts, errors, synthetic pairing, and throttled log severity")
+
+display_source = (root / "src/app/display_task.cpp").read_text()
+sleep_start = display_source.index("if (screen_saver_manager_is_rendering_suspended()) {")
+sleep_end = display_source.index("// No rendering during sleep", sleep_start)
+sleep_harness = r'''
+#include <cassert>
+#include <cstdint>
+#define SCREENSAVER_SLEEP_TICK_MS 200
+#define DEVICE_RUNTIME_PHASE_LVGL_SLEEP 0
+static void device_telemetry_mark_lvgl_task(int) {}
+static bool suspended = true;
+static bool screen_saver_manager_is_rendering_suspended() { return suspended; }
+#if HAS_TOUCH
+static uint8_t capacity = 0;
+static uint8_t touch_manager_contact_capacity() { return capacity; }
+#endif
+static uint32_t next_delay() {
+    uint32_t delayMs = 10;
+'''
+sleep_harness += display_source[sleep_start:sleep_end] + "}\nreturn delayMs;\n}\n"
+sleep_harness += r'''
+int main() {
+    assert(next_delay() == 200);
+#if HAS_TOUCH
+    capacity = 1;
+    assert(next_delay() == 20);
+    capacity = 5;
+    assert(next_delay() == 20);
+    capacity = 0;
+    assert(next_delay() == 200);
+#endif
+    suspended = false;
+    assert(next_delay() == 10);
+}
+'''
+with tempfile.TemporaryDirectory() as directory:
+    test_source = pathlib.Path(directory) / "sleep_polling.cpp"
+    executable = pathlib.Path(directory) / "sleep_polling"
+    test_source.write_text(sleep_harness)
+    for touch in (0, 1):
+        subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        f"-DHAS_TOUCH={touch}", str(test_source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+print("PASS: sleeping display retains responsive initialized-touch polling and no-touch throttling")
+
+subprocess.run(["c++", "-E", "-x", "c++", "-I", str(root), "-"], input=r'''
+#include "src/boards/jc3248w535/board_overrides.h"
+#if !SCREENSAVER_KEEP_PANEL_AWAKE
+#error JC3248W535 must keep the AXS controller awake for touch wake
+#endif
+#if SCREENSAVER_BACKLIGHT_ONLY
+#error JC3248W535 must retain configurable screen saver fading
+#endif
+''', text=True, stdout=subprocess.DEVNULL, check=True)
+print("PASS: JC3248W535 uses backlight-only sleep for touch wake")
+
+saver_source = (root / "src/app/screen_saver_manager.cpp").read_text()
+wake_start = saver_source.index("// Wake panel in two phases")
+wake_end = saver_source.index('LOGT("SAVER", "Wake:', wake_start)
+wake_harness = r'''
+#include <cassert>
+#define SCREENSAVER_KEEP_PANEL_AWAKE TEST_BACKLIGHT_ONLY
+#define pdMS_TO_TICKS(value) (value)
+static unsigned delayed_ms = 0;
+static void vTaskDelay(unsigned duration) { delayed_ms += duration; }
+enum class ScreenSaverState { Asleep, Awake };
+static ScreenSaverState g_state = ScreenSaverState::Asleep;
+struct DisplayDriver {
+    unsigned sleep_out = 0, display_on = 0;
+    bool two_phase = true;
+    bool needsTwoPhaseWake() { return two_phase; }
+    void displayWakeSleepOut() { ++sleep_out; }
+    void displayWakeDisplayOn() { ++display_on; }
+};
+struct DisplayManager {
+    DisplayDriver driver;
+    unsigned locks = 0, unlocks = 0;
+    DisplayDriver* getDriver() { return &driver; }
+    void lock() { ++locks; }
+    void unlock() { ++unlocks; }
+};
+static DisplayManager manager;
+static DisplayManager* displayManager = &manager;
+static void wake_panel() {
+'''
+wake_harness += saver_source[wake_start:wake_end] + "}\n"
+wake_harness += r'''
+int main() {
+    assert(displayManager == &manager);
+    wake_panel();
+    assert(manager.driver.sleep_out == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    assert(manager.driver.display_on == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    assert(delayed_ms == (TEST_BACKLIGHT_ONLY ? 0U : 120U));
+    assert(manager.locks == (TEST_BACKLIGHT_ONLY ? 0U : 2U));
+    assert(manager.unlocks == manager.locks);
+    g_state = ScreenSaverState::Awake;
+    wake_panel();
+    assert(manager.driver.sleep_out == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    assert(manager.driver.display_on == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    g_state = ScreenSaverState::Asleep;
+    manager.driver.two_phase = false;
+    wake_panel();
+    assert(manager.driver.sleep_out == (TEST_BACKLIGHT_ONLY ? 0U : 2U));
+    assert(manager.driver.display_on == (TEST_BACKLIGHT_ONLY ? 0U : 1U));
+    assert(delayed_ms == (TEST_BACKLIGHT_ONLY ? 0U : 120U));
+}
+'''
+with tempfile.TemporaryDirectory() as directory:
+    test_source = pathlib.Path(directory) / "wake_panel.cpp"
+    executable = pathlib.Path(directory) / "wake_panel"
+    test_source.write_text(wake_harness)
+    for backlight_only in (0, 1):
+        subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                        "-Wno-unused-function", f"-DTEST_BACKLIGHT_ONLY={backlight_only}",
+                        str(test_source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+print("PASS: backlight-only wake skips panel transactions; panel sleep preserves phased wake")
+
+fade_harness = r'''
+#include <cassert>
+#include <cstdint>
+#define SCREENSAVER_BACKLIGHT_ONLY TEST_LEGACY
+#define SCREENSAVER_KEEP_PANEL_AWAKE TEST_KEEP_PANEL
+#define HAS_IMAGE_FETCH 1
+#define LOGI(...) ((void)0)
+enum class ScreenSaverState { Awake, FadingOut, Asleep, FadingIn };
+struct DeviceConfig { uint16_t screen_saver_fade_out_ms = 800, screen_saver_fade_in_ms = 400; };
+static DeviceConfig config;
+static DeviceConfig* g_config = &config;
+static ScreenSaverState g_state = ScreenSaverState::Awake;
+static uint32_t clock_ms = 0, g_last_sleep_refresh_ms = 0, g_fade_start_ms = 0, g_fade_duration_ms = 0;
+static uint16_t g_pixel_shift_counter = 0;
+static uint8_t g_current_brightness = 100, g_target_brightness = 100, g_fade_from = 0, g_fade_to = 0;
+static bool g_idle_screen_active = false;
+static unsigned overlays = 0, suspends = 0, resumes = 0;
+static uint32_t millis() { return clock_ms; }
+static uint8_t button_defaults_get_pixel_shift_distance() { return 4; }
+static void create_sleep_overlay() { ++overlays; }
+static void image_fetch_suspend() { ++suspends; }
+static void image_fetch_unsuspend() { ++resumes; }
+static void enter_awake() { g_state = ScreenSaverState::Awake; }
+struct DisplayDriver {
+    unsigned sleeps = 0;
+    uint8_t brightness = 100;
+    bool hasBacklightControl() { return true; }
+    void setBacklightBrightness(uint8_t value) { brightness = value; }
+    void setBacklight(bool on) { brightness = on ? 100 : 0; }
+    void displaySleep() { ++sleeps; }
+};
+struct Manager {
+    DisplayDriver driver;
+    DisplayDriver* getDriver() { return &driver; }
+    void lock() {}
+    void unlock() {}
+    void handleSleepScreenRedirect() {}
+};
+static Manager manager;
+static Manager* displayManager = &manager;
+'''
+fade_harness += saver_source[saver_source.index("static void enter_asleep() {"):
+                            saver_source.index("static void enter_awake() {")]
+fade_harness += saver_source[saver_source.index("static uint16_t fade_out_ms() {"):
+                            saver_source.index("static uint8_t config_brightness() {")]
+fade_harness += saver_source[saver_source.index("static void apply_brightness("):
+                            saver_source.index("static void request_activity(")]
+fade_harness += saver_source[saver_source.index("static void update_fade() {"):
+                            saver_source.index("static void maybe_auto_sleep() {")]
+fade_harness += saver_source[saver_source.index("bool screen_saver_manager_is_rendering_suspended() {"):
+                            saver_source.index("bool screen_saver_manager_input_ready() {")]
+fade_harness += r'''
+int main() {
+    assert(g_config == &config);
+    assert(fade_out_ms() == (TEST_LEGACY ? 0 : 800));
+    assert(fade_in_ms() == (TEST_LEGACY ? 0 : 400));
+    assert(!g_idle_screen_active);
+    start_fade(ScreenSaverState::FadingOut, 100, 0, fade_out_ms());
+    if (!TEST_LEGACY) {
+        assert(g_state == ScreenSaverState::FadingOut);
+        clock_ms = 400;
+        update_fade();
+        assert(manager.driver.brightness == 50);
+        assert(manager.driver.sleeps == 0);
+        clock_ms = 800;
+        update_fade();
+    }
+    assert(g_state == ScreenSaverState::Asleep);
+    assert(manager.driver.brightness == 0);
+    assert(manager.driver.sleeps == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(g_pixel_shift_counter == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(overlays == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(suspends == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(screen_saver_manager_is_rendering_suspended() == !TEST_KEEP_PANEL);
+    start_fade(ScreenSaverState::FadingIn, 0, 100, fade_in_ms());
+    if (!TEST_LEGACY) {
+        assert(g_state == ScreenSaverState::FadingIn);
+        clock_ms += 200;
+        update_fade();
+        assert(manager.driver.brightness == 50);
+        clock_ms += 200;
+        update_fade();
+    }
+    assert(g_state == ScreenSaverState::Awake);
+    assert(manager.driver.brightness == 100);
+    assert(resumes == (TEST_KEEP_PANEL ? 0U : 1U));
+    assert(!screen_saver_manager_is_rendering_suspended());
+    config.screen_saver_fade_out_ms = 2000;
+    config.screen_saver_fade_in_ms = 600;
+    assert(fade_out_ms() == (TEST_LEGACY ? 0 : 2000));
+    assert(fade_in_ms() == (TEST_LEGACY ? 0 : 600));
+}
+'''
+with tempfile.TemporaryDirectory() as directory:
+    test_source = pathlib.Path(directory) / "fade_policy.cpp"
+    executable = pathlib.Path(directory) / "fade_policy"
+    test_source.write_text(fade_harness)
+    for legacy, keep_panel in ((0, 0), (0, 1), (1, 1)):
+        subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
+                        f"-DTEST_LEGACY={legacy}", f"-DTEST_KEEP_PANEL={keep_panel}",
+                        str(test_source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+print("PASS: configurable fades retain intermediate brightness without panel sleep; legacy frontlight policy is unchanged")
 
 header = (root / "src/app/touch_manager.h").read_text()
 capabilities = header[header.index("#if HAS_DISPLAY && HAS_TOUCH\nuint8_t touch_manager_contact_capacity()"):

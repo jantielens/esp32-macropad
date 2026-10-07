@@ -5,6 +5,7 @@
 #include "web_portal_cors.h"
 #include "web_portal_json.h"
 #include "web_portal_state.h"
+#include "web_portal_logs.h"
 #include "log_manager.h"
 
 #include <algorithm>
@@ -67,7 +68,9 @@ static bool is_hardcoded_category(const char* id) {
 // ============================================================================
 
 static void handlePortalNav(AsyncWebServerRequest* request) {
+    WebPortalTiming timing;
     if (!portal_auth_gate(request)) return;
+    timing.mark("auth");
     bool ap_mode = web_portal_is_ap_mode_active();
 
     auto doc = make_psram_json_doc(4096);
@@ -180,6 +183,9 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         for (uint8_t i = 0; i < component_registry_count(); i++) {
             ComponentDef* comp = component_registry_get(i);
             if (strcmp(comp->category, cat.id) != 0) continue;
+            #if HAS_REMOTE_LOG
+            if (strcmp(comp->id, "logs") == 0 && !portal_logs_full_mode_enabled()) continue;
+            #endif
             bool is_setup = (strcmp(comp->id, "setup") == 0);
             if (is_setup && !ap_mode) continue;  // hide wizard outside AP mode
             // In AP mode the outer loop has already restricted us to the
@@ -214,7 +220,8 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         }
     }
 
-    web_portal_send_json_chunked(request, doc);
+    timing.mark("navigation");
+    web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 // ============================================================================

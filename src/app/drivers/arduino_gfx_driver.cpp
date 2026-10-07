@@ -31,7 +31,7 @@ Arduino_GFX_Driver::~Arduino_GFX_Driver() {
 }
 
 void Arduino_GFX_Driver::init() {
-		LOGI("GFX", "Initializing QSPI display driver");
+		LOGT("GFX", "Initializing QSPI display driver");
 		
 		// Initialize backlight pin first
 		#ifdef LCD_BL_PIN
@@ -41,11 +41,11 @@ void Arduino_GFX_Driver::init() {
 		// Configure PWM for smooth brightness control
 		#if ESP_ARDUINO_VERSION_MAJOR >= 3
 		double actualFreq = ledcAttach(LCD_BL_PIN, TFT_BACKLIGHT_PWM_FREQ, 8);  // pin, freq, resolution (8-bit)
-		LOGI("GFX", "PWM attached on GPIO%d, actual freq: %.1f Hz", LCD_BL_PIN, actualFreq);
+		LOGT("GFX", "PWM attached on GPIO%d, actual freq: %.1f Hz", LCD_BL_PIN, actualFreq);
 		#else
 		ledcSetup(TFT_BACKLIGHT_PWM_CHANNEL, TFT_BACKLIGHT_PWM_FREQ, 8);
 		ledcAttachPin(LCD_BL_PIN, TFT_BACKLIGHT_PWM_CHANNEL);
-		LOGI("GFX", "PWM setup complete on GPIO%d (channel %d)", LCD_BL_PIN, TFT_BACKLIGHT_PWM_CHANNEL);
+		LOGT("GFX", "PWM setup complete on GPIO%d (channel %d)", LCD_BL_PIN, TFT_BACKLIGHT_PWM_CHANNEL);
 		#endif
 		backlightPwmAttached = true;
 
@@ -57,7 +57,7 @@ void Arduino_GFX_Driver::init() {
 		#else
 		digitalWrite(LCD_BL_PIN, HIGH);
 		#endif
-		LOGI("GFX", "Backlight enabled on GPIO%d", LCD_BL_PIN);
+		LOGT("GFX", "Backlight enabled on GPIO%d", LCD_BL_PIN);
 		#endif
 		#endif
 		
@@ -71,7 +71,7 @@ void Arduino_GFX_Driver::init() {
 				LCD_QSPI_D2,    // D2
 				LCD_QSPI_D3     // D3
 		);
-		LOGI("GFX", "QSPI bus created");
+		LOGT("GFX", "QSPI bus created");
 		#else
 		LOGE("GFX", "QSPI pins not defined in board_config.h");
 		return;
@@ -82,7 +82,7 @@ void Arduino_GFX_Driver::init() {
 		// 0 = initial rotation (portrait)
 		// false = IPS mode
 		gfx = new Arduino_AXS15231B(bus, LCD_QSPI_RST, 0, false, displayWidth, displayHeight);
-		LOGI("GFX", "AXS15231B panel object created");
+		LOGT("GFX", "AXS15231B panel object created");
 		
 		// Initialize display directly (no canvas layer)
 		if (!gfx->begin(40000000UL)) {  // 40MHz QSPI frequency
@@ -93,7 +93,7 @@ void Arduino_GFX_Driver::init() {
 		
 		// Clear screen
 		gfx->fillScreen(RGB565_BLACK);
-		LOGI("GFX", "Screen cleared");
+		LOGT("GFX", "Screen cleared");
 		
 		// Allocate portrait-orientation framebuffer in PSRAM.
 		// QSPI partial writes don't work (address window lost on CS toggle),
@@ -105,7 +105,7 @@ void Arduino_GFX_Driver::init() {
 		}
 		if (framebuffer) {
 				memset(framebuffer, 0, fbBytes);
-				LOGI("GFX", "Framebuffer allocated: %u bytes (%ux%u)", fbBytes, displayWidth, displayHeight);
+				LOGT("GFX", "Framebuffer allocated: %u bytes (%ux%u)", fbBytes, displayWidth, displayHeight);
 		} else {
 				LOGE("GFX", "Failed to allocate framebuffer! (%u bytes)", fbBytes);
 		}
@@ -118,7 +118,7 @@ void Arduino_GFX_Driver::setRotation(uint8_t rotation) {
 		// Driver-level rotation transposes pixels in pushColors().
 		// MADCTL rotation is unreliable on AXS15231B over QSPI.
 		displayRotation = rotation;
-		LOGI("GFX", "Rotation %d (driver-level transpose in pushColors)", rotation);
+		LOGT("GFX", "Rotation %d (driver-level transpose in pushColors)", rotation);
 }
 
 int Arduino_GFX_Driver::width() {

@@ -150,7 +150,7 @@ static bool conn_ensure(int slot, const char* url, const char* user, const char*
 
     bool ok = need_https ? c.http.begin(*c.tls, url) : c.http.begin(*c.plain, url);
     if (!ok) {
-        LOGW(TAG, "HTTP begin failed: %.60s", url);
+        LOGW(TAG, "Slot %d HTTP begin failed", slot);
         conn_close(slot);
         return false;
     }
@@ -356,7 +356,7 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
             // Server returned a single image, not a stream.
             // Read the body from this response directly to avoid a wasted
             // second GET when the caller falls back to snapshot mode.
-            LOGD(TAG, "MJPEG slot %d: not multipart (%s) — snapshot", slot, ct.c_str());
+            LOGT(TAG, "Slot %d snapshot content-type=%s", slot, ct.c_str());
             int cl = c.http.getSize();
             if (cl <= 0 || (size_t)cl > MAX_DOWNLOAD_SIZE) { c.http.end(); return false; }
             uint8_t* buf = (uint8_t*)heap_caps_malloc((size_t)cl, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -474,7 +474,7 @@ static bool mjpeg_read_frame(int slot, uint8_t** out_data, size_t* out_len) {
 
 static void fetch_task(void* param) {
     (void)param;
-    LOGI(TAG, "Fetch task started");
+    LOGT(TAG, "Fetch task started");
 
     int8_t last_slot = -1;
 
@@ -760,7 +760,7 @@ image_slot_t image_fetch_request(
 
     xSemaphoreGive(g_mutex);
 
-    LOGI(TAG, "Slot %d: %.60s %ux%u interval=%ums", id, url, target_w, target_h, (unsigned)interval_ms);
+    LOGT(TAG, "Slot %d: %ux%u interval=%ums", id, target_w, target_h, (unsigned)interval_ms);
     return id;
 }
 

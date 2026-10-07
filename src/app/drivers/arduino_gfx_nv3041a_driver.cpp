@@ -21,7 +21,7 @@ Arduino_GFX_NV3041A_Driver::~Arduino_GFX_NV3041A_Driver() {
 }
 
 void Arduino_GFX_NV3041A_Driver::init() {
-		LOGI("GFX_NV3041A", "Initializing NV3041A QSPI display driver");
+		LOGT("GFX_NV3041A", "Initializing NV3041A QSPI display driver");
 
 		#ifdef LCD_BL_PIN
 		pinMode(LCD_BL_PIN, OUTPUT);

@@ -1,6 +1,6 @@
 <div class="section-header">
   <h2>🌙 Screen Saver</h2>
-  <p>Choose what the device shows, then whether it turns the display off.</p>
+  <p id="screensaver-description">Choose what the device shows, then whether it turns the display off.</p>
 </div>
 <div class="card mb-3">
   <div class="card-header"><h5 class="mb-0">Inactivity Plan</h5></div>
@@ -24,7 +24,7 @@
         <div class="screensaver-timeline-step" id="screensaver-timeline-sleep" hidden>
           <span class="screensaver-timeline-dot" aria-hidden="true"></span>
           <span class="screensaver-timeline-time" id="screensaver-timeline-sleep-time"></span>
-          <strong>Display off</strong>
+          <strong id="screensaver-timeline-sleep-title">Display off</strong>
           <small>Wakes on activity</small>
         </div>
       </div>
@@ -46,7 +46,7 @@
       <div class="col-md-6 mb-3">
         <label class="form-label" for="idle_screen_timeout_seconds">Show idle screen after</label>
         <input type="number" class="form-control" id="idle_screen_timeout_seconds" name="idle_screen_timeout_seconds" min="0" max="65535" placeholder="300">
-        <div class="form-text">Must be greater than 0, and shorter than Display Sleep when it is enabled.</div>
+        <div class="form-text">Must be greater than 0, and shorter than the screen saver timeout when automatic shutoff is enabled.</div>
       </div>
       <div class="col-md-6 mb-3">
         <label class="form-label" for="idle_screen_pad">Idle screen</label>
@@ -58,16 +58,16 @@
   </div>
 </div>
 
-<div class="card mb-3">
-  <div class="card-header"><h5 class="mb-0">Display Sleep</h5></div>
+<div class="card mb-3" id="screensaver-sleep-settings">
+  <div class="card-header"><h5 class="mb-0" id="screensaver-sleep-heading">Display Sleep</h5></div>
   <div class="card-body">
     <div class="form-check mb-3">
       <input type="checkbox" class="form-check-input" id="screen_saver_enabled" name="screen_saver_enabled">
-      <label class="form-check-label" for="screen_saver_enabled">Turn off display after inactivity</label>
-      <div class="form-text">Fade to black, then put the display panel to sleep.</div>
+      <label class="form-check-label" for="screen_saver_enabled" id="screensaver-enabled-label">Turn off display after inactivity</label>
+      <div class="form-text" id="screensaver-sleep-help">Fade to black, then put the display panel to sleep.</div>
     </div>
     <div class="mb-3">
-      <label class="form-label" for="screen_saver_timeout_seconds">Turn off display after</label>
+      <label class="form-label" for="screen_saver_timeout_seconds" id="screensaver-timeout-label">Turn off display after</label>
       <input type="number" class="form-control" id="screen_saver_timeout_seconds" name="screen_saver_timeout_seconds" min="0" max="65535" placeholder="300">
       <div class="form-text">0 disables automatic sleep. Example: 1800 = 30 minutes.</div>
     </div>
@@ -81,12 +81,12 @@
       <div class="col-md-6 mb-3">
         <label class="form-label" for="screen_saver_fade_out_ms">Fade Out (ms)</label>
         <input type="number" class="form-control" id="screen_saver_fade_out_ms" name="screen_saver_fade_out_ms" min="0" max="60000" placeholder="800">
-        <div class="form-text">Fade to black when Display Sleep begins. 0 = instant.</div>
+        <div class="form-text">Fade to black when the screen saver activates. 0 = instant.</div>
       </div>
       <div class="col-md-6 mb-3">
         <label class="form-label" for="screen_saver_fade_in_ms">Fade In (ms)</label>
         <input type="number" class="form-control" id="screen_saver_fade_in_ms" name="screen_saver_fade_in_ms" min="0" max="60000" placeholder="400">
-        <div class="form-text">Fade from black when Display Sleep ends. 0 = instant.</div>
+        <div class="form-text">Fade from black when the screen saver wakes. 0 = instant.</div>
       </div>
     </div>
   </div>
@@ -98,7 +98,7 @@
     <div class="form-check mb-3">
       <input type="checkbox" class="form-check-input" id="screen_saver_wake_on_touch" name="screen_saver_wake_on_touch">
       <label class="form-check-label" for="screen_saver_wake_on_touch">Wake on touch press</label>
-      <div class="form-text">One touch fully exits Idle Screen or wakes Display Sleep. Only applies to touch-enabled boards.</div>
+      <div class="form-text">One touch fully exits Idle Screen or wakes the screen saver. Only applies to touch-enabled boards.</div>
     </div>
     <div class="mb-3">
       <label class="form-label" for="screen_saver_wake_binding">MQTT Wake and Keep Awake Binding</label>
@@ -106,7 +106,7 @@
         <input type="text" class="form-control binding-mono" id="screen_saver_wake_binding" name="screen_saver_wake_binding" maxlength="191" placeholder="[mqtt:devices/node/presence/state]">
         <button type="button" class="btn btn-outline-secondary binding-help-btn" onclick="showBindingHelp()">?</button>
       </div>
-      <div class="form-text">An <strong>ON</strong> value fully exits Idle Screen or wakes Display Sleep, and keeps both stages off while it remains ON.</div>
+      <div class="form-text">An <strong>ON</strong> value fully exits Idle Screen or wakes the screen saver, and keeps both stages off while it remains ON.</div>
     </div>
   </div>
 </div>

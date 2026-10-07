@@ -216,13 +216,13 @@ void ST7701_RGB_Driver::init() {
 	#if ESP_ARDUINO_VERSION_MAJOR >= 3
 	ledcAttachChannel(LCD_BL_PIN, TFT_BACKLIGHT_PWM_FREQ, 8, TFT_BACKLIGHT_PWM_CHANNEL);
 	ledcWrite(LCD_BL_PIN, 0);  // Start OFF
-	LOGI("ST7701", "Backlight PWM: GPIO%d, %dHz, 8-bit, ch%d (OFF)",
+	LOGT("ST7701", "Backlight PWM: GPIO%d, %dHz, 8-bit, ch%d (OFF)",
 			LCD_BL_PIN, TFT_BACKLIGHT_PWM_FREQ, TFT_BACKLIGHT_PWM_CHANNEL);
 	#else
 	ledcSetup(TFT_BACKLIGHT_PWM_CHANNEL, TFT_BACKLIGHT_PWM_FREQ, 8);
 	ledcAttachPin(LCD_BL_PIN, TFT_BACKLIGHT_PWM_CHANNEL);
 	ledcWrite(TFT_BACKLIGHT_PWM_CHANNEL, 0);  // Start OFF
-	LOGI("ST7701", "Backlight PWM: GPIO%d, %dHz, 8-bit, ch%d (OFF)",
+	LOGT("ST7701", "Backlight PWM: GPIO%d, %dHz, 8-bit, ch%d (OFF)",
 			LCD_BL_PIN, TFT_BACKLIGHT_PWM_FREQ, TFT_BACKLIGHT_PWM_CHANNEL);
 	#endif
 	#else
@@ -233,7 +233,7 @@ void ST7701_RGB_Driver::init() {
 	#else
 	digitalWrite(LCD_BL_PIN, LOW);  // Start OFF
 	#endif
-	LOGI("ST7701", "Backlight digital: GPIO%d (OFF)", LCD_BL_PIN);
+	LOGT("ST7701", "Backlight digital: GPIO%d (OFF)", LCD_BL_PIN);
 	#endif
 	#endif
 	
@@ -241,7 +241,7 @@ void ST7701_RGB_Driver::init() {
 	// Create Arduino_GFX display stack (same approach as working sample)
 	// ----------------------------------------------------------------
 	
-	LOGI("ST7701", "Creating Arduino_GFX display stack");
+	LOGT("ST7701", "Creating Arduino_GFX display stack");
 
 	// 1. 9-bit SPI bus for ST7701 initialization commands
 	#if defined(LCD_CS_PIN) && defined(LCD_SCK_PIN) && defined(LCD_MOSI_PIN)
@@ -252,7 +252,7 @@ void ST7701_RGB_Driver::init() {
 			LCD_MOSI_PIN,     // MOSI
 			GFX_NOT_DEFINED   // MISO (not used)
 	);
-	LOGI("ST7701", "SPI bus: CS=%d, SCK=%d, MOSI=%d", LCD_CS_PIN, LCD_SCK_PIN, LCD_MOSI_PIN);
+	LOGT("ST7701", "SPI bus: CS=%d, SCK=%d, MOSI=%d", LCD_CS_PIN, LCD_SCK_PIN, LCD_MOSI_PIN);
 	#else
 	LOGE("ST7701", "SPI pins not defined in board_config.h");
 	return;
@@ -276,7 +276,7 @@ void ST7701_RGB_Driver::init() {
 			0,                 // pclk_idle_high
 			bounce_px          // bounce_buffer_size_px
 	);
-	LOGI("ST7701", "RGB panel: HSYNC=%d/%d/%d, VSYNC=%d/%d/%d, bounce=%d lines (%d px)",
+	LOGT("ST7701", "RGB panel: HSYNC=%d/%d/%d, VSYNC=%d/%d/%d, bounce=%d lines (%d px)",
 			LCD_HSYNC_FRONT_PORCH, LCD_HSYNC_PULSE_WIDTH, LCD_HSYNC_BACK_PORCH,
 			LCD_VSYNC_FRONT_PORCH, LCD_VSYNC_PULSE_WIDTH, LCD_VSYNC_BACK_PORCH,
 			ST7701_BOUNCE_BUFFER_LINES, (int)bounce_px);

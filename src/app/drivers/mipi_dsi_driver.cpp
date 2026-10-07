@@ -68,13 +68,13 @@ void MipiDsiDriver::init() {
     #if ESP_ARDUINO_VERSION_MAJOR >= 3
     ledcAttachChannel(LCD_BL_PIN, TFT_BACKLIGHT_PWM_FREQ, 8, TFT_BACKLIGHT_PWM_CHANNEL);
     ledcWrite(LCD_BL_PIN, 0);
-    LOGI(tag, "Backlight PWM: GPIO%d, %dHz, 8-bit, ch%d (OFF)",
+    LOGT(tag, "Backlight PWM: GPIO%d, %dHz, 8-bit, ch%d (OFF)",
          LCD_BL_PIN, TFT_BACKLIGHT_PWM_FREQ, TFT_BACKLIGHT_PWM_CHANNEL);
     #else
     ledcSetup(TFT_BACKLIGHT_PWM_CHANNEL, TFT_BACKLIGHT_PWM_FREQ, 8);
     ledcAttachPin(LCD_BL_PIN, TFT_BACKLIGHT_PWM_CHANNEL);
     ledcWrite(TFT_BACKLIGHT_PWM_CHANNEL, 0);
-    LOGI(tag, "Backlight PWM: GPIO%d, %dHz, 8-bit, ch%d (OFF)",
+    LOGT(tag, "Backlight PWM: GPIO%d, %dHz, 8-bit, ch%d (OFF)",
          LCD_BL_PIN, TFT_BACKLIGHT_PWM_FREQ, TFT_BACKLIGHT_PWM_CHANNEL);
     #endif
     #else
@@ -84,7 +84,7 @@ void MipiDsiDriver::init() {
     #else
     digitalWrite(LCD_BL_PIN, LOW);
     #endif
-    LOGI(tag, "Backlight digital: GPIO%d (OFF)", LCD_BL_PIN);
+    LOGT(tag, "Backlight digital: GPIO%d (OFF)", LCD_BL_PIN);
     #endif
     #endif
     
@@ -99,23 +99,23 @@ void MipiDsiDriver::init() {
     delay(10);
     digitalWrite(LCD_RST_PIN, HIGH);
     delay(120);
-    LOGI(tag, "Panel reset: GPIO%d (HIGH-LOW-HIGH, 120ms)", LCD_RST_PIN);
+    LOGT(tag, "Panel reset: GPIO%d (HIGH-LOW-HIGH, 120ms)", LCD_RST_PIN);
     #endif
     
     // ----------------------------------------------------------------
     // Direct ESP-IDF MIPI-DSI initialization
     // ----------------------------------------------------------------
     
-    LOGI(tag, "Initializing MIPI-DSI via direct ESP-IDF calls");
-    LOGI(tag, "DSI timing: DPI_CLK=%luHz, lane_rate=%lu Mbps",
+    LOGT(tag, "Initializing MIPI-DSI via direct ESP-IDF calls");
+    LOGT(tag, "DSI timing: DPI_CLK=%luHz, lane_rate=%lu Mbps",
          (unsigned long)timing.dpi_clock_hz, (unsigned long)timing.lane_bit_rate_mbps);
-    LOGI(tag, "DSI HSYNC: pw=%lu, bp=%lu, fp=%lu",
+    LOGT(tag, "DSI HSYNC: pw=%lu, bp=%lu, fp=%lu",
          (unsigned long)timing.hsync_pulse_width, (unsigned long)timing.hsync_back_porch,
          (unsigned long)timing.hsync_front_porch);
-    LOGI(tag, "DSI VSYNC: pw=%lu, bp=%lu, fp=%lu",
+    LOGT(tag, "DSI VSYNC: pw=%lu, bp=%lu, fp=%lu",
          (unsigned long)timing.vsync_pulse_width, (unsigned long)timing.vsync_back_porch,
          (unsigned long)timing.vsync_front_porch);
-    LOGI(tag, "DSI flags: disable_lp=%s, use_dma2d=true",
+    LOGT(tag, "DSI flags: disable_lp=%s, use_dma2d=true",
          timing.disable_lp ? "true" : "false");
     
     // 1. Power on MIPI DSI PHY via internal LDO (LDO_VO3 → VDD_MIPI_DPHY)
@@ -125,7 +125,7 @@ void MipiDsiDriver::init() {
         .voltage_mv = MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV,
     };
     ESP_ERROR_CHECK(esp_ldo_acquire_channel(&ldo_config, &ldo_mipi_phy));
-    LOGI(tag, "MIPI DSI PHY powered on (LDO ch%d, %dmV)",
+    LOGT(tag, "MIPI DSI PHY powered on (LDO ch%d, %dmV)",
          MIPI_DSI_PHY_PWR_LDO_CHAN, MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV);
     
     // 2. Create DSI bus (2-lane, configured bit rate)
@@ -215,7 +215,7 @@ void MipiDsiDriver::init() {
             ppa_event_callbacks_t ppa_cbs = {};
             ppa_cbs.on_trans_done = onPpaDone;
             ESP_ERROR_CHECK(ppa_client_register_event_callbacks(ppaClient, &ppa_cbs));
-            LOGI(tag, "PPA async rotation enabled: %u byte buffer @ %p", (unsigned)rotBufSize, rotBuffer);
+            LOGT(tag, "PPA async rotation enabled: %u byte buffer @ %p", (unsigned)rotBufSize, rotBuffer);
         }
     }
 
@@ -472,7 +472,7 @@ void MipiDsiDriver::configureLVGL(lv_display_t* disp, uint8_t rotation) {
     esp_lcd_dpi_panel_event_callbacks_t cbs = {};
     cbs.on_color_trans_done = onColorTransDone;
     ESP_ERROR_CHECK(esp_lcd_dpi_panel_register_event_callbacks(panel_handle, &cbs, disp));
-    LOGI(getLogTag(), "DMA2D flush callback registered");
+    LOGT(getLogTag(), "DMA2D flush callback registered");
 }
 
 bool MipiDsiDriver::asyncFlush() const {
@@ -520,7 +520,7 @@ void MipiDsiDriver::sendInitCommands() {
             delay(cmds[i].delay_ms);
         }
     }
-    LOGI(getLogTag(), "Sent %d vendor init commands", (int)num_cmds);
+    LOGT(getLogTag(), "Sent %d vendor init commands", (int)num_cmds);
 }
 
 #if DISPLAY_HARD_RESET_ON_SLEEP && defined(LCD_RST_PIN)

@@ -85,8 +85,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 
 				// Begin OTA update
 				if (!Update.begin(updateSize, U_FLASH)) {
-								LOGE("OTA", "Begin failed");
-						Update.printError(Serial);
+								LOGE("OTA", "Begin failed: %s", Update.errorString());
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"OTA begin failed\"}");
 						ota_upload_finish();
 						return;
@@ -99,8 +98,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 		if (len) {
 				net_activity_mark(NET_CH_OTA);
 				if (Update.write(data, len) != len) {
-								LOGE("OTA", "Write failed");
-						Update.printError(Serial);
+								LOGE("OTA", "Write failed: %s", Update.errorString());
 						Update.abort();
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"Write failed\"}");
 						ota_upload_finish();
@@ -131,8 +129,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 						ESP.restart();
 						return;
 				} else {
-								LOGE("OTA", "Update failed");
-						Update.printError(Serial);
+								LOGE("OTA", "Update failed: %s", Update.errorString());
 						request->send(500, "application/json", "{\"success\":false,\"message\":\"Update failed\"}");
 				}
 

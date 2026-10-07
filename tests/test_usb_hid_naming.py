@@ -1,10 +1,44 @@
 #!/usr/bin/env python3
+import csv
+import json
 import pathlib
+import re
 import subprocess
 import tempfile
 
 
 root = pathlib.Path(__file__).resolve().parents[1]
+board = "jc3248w535"
+overrides = (root / f"src/boards/{board}/board_overrides.h").read_text()
+assert re.search(r"^#define HAS_USB_HID true$", overrides, re.MULTILINE)
+assert re.search(r"^#define HAS_BLE_HID false$", overrides, re.MULTILINE)
+fqbn_line = next(line for line in (root / "config.sh").read_text().splitlines()
+                 if f'["{board}"]=' in line)
+assert "USBMode=default,CDCOnBoot=default" in fqbn_line
+assert "PartitionScheme=ota_4mb_16MB_ext" in fqbn_line
+partition_path = root / "partitions/partitions_ota_4mb_16MB_ext.csv"
+with partition_path.open() as partition_file:
+    partitions = list(csv.reader(line for line in partition_file
+                                 if line.strip() and not line.startswith("#")))
+partition_end = 0
+for partition in partitions:
+    offset = int(partition[3].strip(), 0)
+    size = int(partition[4].strip(), 0)
+    assert offset >= partition_end
+    assert offset % 0x1000 == 0
+    assert size % 0x1000 == 0
+    if partition[1].strip() == "app":
+        assert offset % 0x10000 == 0
+        assert size == 0x400000
+    partition_end = offset + size
+assert partition_end == 16 * 1024 * 1024
+partition_by_name = {partition[0].strip(): partition for partition in partitions}
+assert partition_by_name["app0"][2].strip() == "ota_0"
+assert partition_by_name["app1"][2].strip() == "ota_1"
+assert int(partition_by_name["extensions"][4].strip(), 0) == 0x40000
+assert int(partition_by_name["storage"][4].strip(), 0) == 0x7A0000
+metadata = json.loads((root / f"src/boards/{board}/metadata.json").read_text())
+assert "usb_hid" in metadata["capabilities"]
 source = (root / "src/app/usb_hid.cpp").read_text()
 start = source.index("static bool name_usb_hid_configuration(")
 end = source.index("\nvoid usb_event(", start)

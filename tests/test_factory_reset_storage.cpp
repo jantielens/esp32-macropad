@@ -33,6 +33,11 @@ void log_write(...) {}
 #define LOGE(...) ((void)0)
 #define LOGW(...) ((void)0)
 #define LOGI(...) ((void)0)
+#define LOGD(...) ((void)0)
+#define LOGT(...) ((void)0)
+#define LOG_LEVEL 3
+#define LOG_LEVEL_DEBUG 4
+bool log_diagnostics_enabled(const char*) { return false; }
 
 EspTestDouble ESP;
 FakeStorage SD_MMC;

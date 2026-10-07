@@ -1,6 +1,10 @@
 #ifndef BOARD_OVERRIDES_JC3248W535_H
 #define BOARD_OVERRIDES_JC3248W535_H
 
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG true
+#endif
+
 // ============================================================================
 // Guition JC3248W535 Board Configuration Overrides
 // ============================================================================
@@ -20,6 +24,7 @@
 #define HAS_NATIVE_EXTENSIONS true
 // BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
 #define HAS_BLE_HID false
+#define HAS_USB_HID true
 
 // ============================================================================
 // Driver Selection (HAL)
@@ -82,12 +87,15 @@
 #define LCD_BL_PIN 1
 // LEDC channel used for backlight PWM.
 #define TFT_BACKLIGHT_PWM_CHANNEL 1
+// Keep the combined display/touch controller awake while fading the backlight off.
+#define SCREENSAVER_KEEP_PANEL_AWAKE true
 
 // ============================================================================
 // Touch Configuration
 // ============================================================================
 // Enable touch support on this board.
 #define HAS_TOUCH true
+#define MAX_AXS15231B_CONTACTS 2
 
 // Touch is I2C (from sample/esp_bsp.h)
 // I2C controller index.

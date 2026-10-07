@@ -32,6 +32,7 @@ static void log_info(const char* format) {
     if (std::strstr(format, "Touch initialized")) ++initialized;
 }
 #define LOGI(tag, format, ...) log_info(format)
+#define LOGT(tag, format, ...) log_info(format)
 #define LOGE(...) (++errors)
 #define GT911_I2C_LOCK() (++lock_count, ++lock_depth)
 #define GT911_I2C_UNLOCK() (--lock_depth)
@@ -109,6 +110,7 @@ snapshot_harness = r'''
 #define GT911_POINT_1 0x814f
 static int lock_depth = 0;
 #define LOGI(...) assert(lock_depth == 0)
+#define LOGT(...) assert(lock_depth == 0)
 static unsigned transforms = 0;
 #define GT911_I2C_LOCK() (++lock_depth)
 #define GT911_I2C_UNLOCK() (--lock_depth)

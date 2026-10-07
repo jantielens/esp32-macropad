@@ -261,7 +261,7 @@ void brew_next() {
     const BrewStage* stage = current_stage();
     if (!stage || stage->type != STAGE_MANUAL) return;
 
-    LOGI(TAG, "Next: leaving stage[%u] '%s'", (unsigned)s_stage_index, stage->name);
+    LOGT(TAG, "Next: leaving stage[%u] '%s'", (unsigned)s_stage_index, stage->name);
     dispatch_effects(stage->on_exit, stage);
 
     uint8_t next_index = s_stage_index + 1;
@@ -367,7 +367,7 @@ void brew_tick() {
                                                 s_captures, s_capture_count);
         brew_free_series();
         if (saved_id) {
-            LOGI(TAG, "Brew saved to storage: %u", (unsigned)saved_id);
+            LOGT(TAG, "Brew saved to storage: %u", (unsigned)saved_id);
         } else {
             LOGE(TAG, "Failed to save brew to storage");
         }

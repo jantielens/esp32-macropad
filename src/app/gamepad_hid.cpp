@@ -121,7 +121,8 @@ void gamepad_hid_loop() {
     static uint32_t logged_generation = 0;
     static bool logged_ready = false;
     if (generation != logged_generation || ready != logged_ready) {
-        LOGI("GamepadHID", "Ready=%u generation=%lu usb_epoch=%lu ota_epoch=%lu",
+        if (ready != logged_ready) LOGI("GamepadHID", "Ready=%u", unsigned(ready));
+        LOGT("GamepadHID", "Ready=%u generation=%lu usb_epoch=%lu ota_epoch=%lu",
              unsigned(ready), (unsigned long)generation, (unsigned long)usb_epoch, (unsigned long)ota_epoch);
         logged_generation = generation;
         logged_ready = ready;
@@ -143,7 +144,7 @@ void gamepad_hid_loop() {
         const bool deflected = ((!logged_report.left_x && !logged_report.left_y) && (report.left_x || report.left_y)) ||
             ((!logged_report.right_x && !logged_report.right_y) && (report.right_x || report.right_y));
         if (current && (!report_logged || logged_report.generation != report.generation || discrete_changed || centered || deflected || now - last_report_log >= 200)) {
-            LOGI("GamepadHID", "Submitted generation=%lu seq=%lu left=%d,%d right=%d,%d triggers=%u,%u hat=%u buttons=0x%04x",
+            LOGT("GamepadHID", "Submitted generation=%lu seq=%lu left=%d,%d right=%d,%d triggers=%u,%u hat=%u buttons=0x%04x",
                  (unsigned long)generation, (unsigned long)report.sequence,
                  int(report.left_x), int(report.left_y), int(report.right_x), int(report.right_y),
                  unsigned(report.left_trigger), unsigned(report.right_trigger), unsigned(report.hat), unsigned(report.buttons));

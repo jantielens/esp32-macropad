@@ -410,7 +410,6 @@ void ReTerminalE1003EpaperDriver::present() {
 			dirtyX2 = kPanelWidth - 1;
 			dirtyY2 = kPanelHeight - 1;
 			dirtyRegionValid = true;
-			LOGE("Epaper", "E1003 presentation failed");
 		} else {
 			hasPresentedFrame = true;
 			lastRefreshMs = millis();
@@ -419,14 +418,28 @@ void ReTerminalE1003EpaperDriver::present() {
 				grayscalePartialUpdatesSinceFull = 0;
 			} else if (usesBwMode()) ++bwPartialUpdatesSinceFull;
 			else ++grayscalePartialUpdatesSinceFull;
-			LOGI("Epaper", "%s refresh %ux%u completed in %lums (dirty=%ux%u@%u,%u %lu%%; forced=%d scheduled=%d; partials=%lu/%u)",
+		}
+		const uint32_t completed_ms = millis();
+		xSemaphoreGive(framebufferMutex);
+		static uint32_t last_report_ms = 0;
+		static uint32_t presentations = 0;
+		if (!presented) {
+			LOGE("Epaper", "E1003 presentation failed");
+		} else {
+			++presentations;
+			if (forceFull || scheduledFull || completed_ms - last_report_ms >= 60000) {
+				LOGI("Epaper", "Refresh: count=%lu mode=%s dur=%lums forced=%u scheduled=%u",
+				     (unsigned long)presentations, fullRefresh ? "full" : "partial",
+				     (unsigned long)(completed_ms - startMs), unsigned(forceFull), unsigned(scheduledFull));
+				last_report_ms = completed_ms;
+			}
+			LOGT("Epaper", "%s refresh %ux%u completed in %lums (dirty=%ux%u@%u,%u %lu%%; forced=%d scheduled=%d; partials=%lu/%u)",
 					fullRefresh ? "full GC16" : (usesBwMode() ? "B/W partial DU" : "grayscale partial GC16"),
-					region.width, region.height, (unsigned long)(lastRefreshMs - startMs),
+					region.width, region.height, (unsigned long)(completed_ms - startMs),
 					dirtyRegion.width, dirtyRegion.height, dirtyRegion.x, dirtyRegion.y, (unsigned long)dirtyCoveragePercent,
 					forceFull, scheduledFull, (unsigned long)partialCountBefore,
 					settings.epaper_full_refresh_threshold);
 		}
-		xSemaphoreGive(framebufferMutex);
 }
 
 bool ReTerminalE1003EpaperDriver::requestFullRefresh() {

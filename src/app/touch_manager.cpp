@@ -131,17 +131,63 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		const bool forceReleased = g_lvgl_force_released.load();
 		const uint32_t suppressUntil = g_lvgl_suppress_until_ms.load();
 		const bool suppressed = forceReleased || ((int32_t)(suppressUntil - now) > 0);
+		static bool sampled = false;
+		static uint32_t previous_sample_ms = 0;
+		static uint32_t read_errors = 0;
+		static uint32_t sampling_gaps = 0;
+		static uint32_t max_gap_ms = 0;
+		static uint32_t consecutive_gaps = 0;
+		static uint32_t max_consecutive_gaps = 0;
+		static bool diagnostic_logged = false;
+		static uint32_t last_diagnostic_ms = 0;
+		const uint32_t gap_ms = now - previous_sample_ms;
+		if (sampled && gap_ms > 100) {
+				++sampling_gaps;
+				if (gap_ms > max_gap_ms) max_gap_ms = gap_ms;
+				++consecutive_gaps;
+				if (consecutive_gaps > max_consecutive_gaps) max_consecutive_gaps = consecutive_gaps;
+		} else {
+				consecutive_gaps = 0;
+		}
+		sampled = true;
+		previous_sample_ms = now;
+		if (physical.status == TouchReadStatus::Error) ++read_errors;
+		if ((read_errors || sampling_gaps) && (!diagnostic_logged || uint32_t(now - last_diagnostic_ms) >= 5000)) {
+				const LogLevel level = (read_errors || max_gap_ms >= 250 || max_consecutive_gaps >= 3)
+						? LOG_LEVEL_WARN : LOG_LEVEL_DEBUG;
+				if (LOG_LEVEL >= level) {
+						log_write(level, "Touch", "Sampling: errors=%lu gaps=%lu max_gap=%lums consecutive=%lu status=%u suppressed=%u",
+								(unsigned long)read_errors, (unsigned long)sampling_gaps, (unsigned long)max_gap_ms,
+								(unsigned long)max_consecutive_gaps, unsigned(physical.status), unsigned(suppressed));
+				}
+				read_errors = sampling_gaps = max_gap_ms = 0;
+				max_consecutive_gaps = 0;
+				diagnostic_logged = true;
+				last_diagnostic_ms = now;
+		}
 		static uint8_t logged_contact_count = UINT8_MAX;
 		const bool contact_edge = physical.status == TouchReadStatus::Fresh && physical.count != logged_contact_count;
 		if (contact_edge) {
 				logged_contact_count = physical.count;
-				LOGI("Touch", "Input: raw=%u filtered=%u x=%u y=%u suppressed=%u release_guard=%u filter_cancel=%u",
+				LOGT("Touch", "Input: raw=%u filtered=%u x=%u y=%u suppressed=%u release_guard=%u filter_cancel=%u",
 						unsigned(physical.count), unsigned(snapshot.count), unsigned(snapshot.contacts[0].horizontal),
 						unsigned(snapshot.contacts[0].vertical), unsigned(suppressed), unsigned(g_require_release),
 						unsigned(g_touch_snapshot_filter.canceled));
 		}
-		if (suppressed || g_touch_snapshot_filter.canceled) {
+		static bool previously_suppressed = false;
+		const bool suppression_started = suppressed && !previously_suppressed;
+		previously_suppressed = suppressed;
+		if ((suppressed && (suppression_started || physical.count || physical.status == TouchReadStatus::Error)) ||
+				g_touch_snapshot_filter.canceled) {
 				touch_manager_cancel_physical_input();
+		}
+		const bool release_guarded = g_require_release;
+		if (release_guarded && physical.status == TouchReadStatus::Fresh && !physical.count) {
+				LOGT("Touch", "Release guard cleared (suppressed=%u)", unsigned(suppressed));
+				g_require_release = false;
+				#if HAS_DISPLAY && HAS_USB_HID
+				g_gamepad_touch_router.update(physical, false, gamepad_hid_generation(), mouse_hid_generation());
+				#endif
 		}
 		#if HAS_DISPLAY
 		// An emitted synthetic press always gets this next-callback release, before
@@ -157,7 +203,6 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		if (suppressed) {
 				data->state = LV_INDEV_STATE_RELEASED;
 				g_prev_lvgl_pressed = false;
-				g_require_release = true;
 				return;
 		}
 		
@@ -169,14 +214,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 
 		// After suppression ends, wait for a genuine release before forwarding presses.
 		// Drivers like GT911 can retain stale "touched" state across the suppression window.
-		if (g_require_release) {
-				if (physical.status == TouchReadStatus::Fresh && !physical.count) {
-						LOGI("Touch", "Release guard cleared");
-						g_require_release = false;
-						#if HAS_DISPLAY && HAS_USB_HID
-						g_gamepad_touch_router.update(physical, false, gamepad_hid_generation(), mouse_hid_generation());
-						#endif
-				}
+		if (release_guarded) {
 				data->state = LV_INDEV_STATE_RELEASED;
 				g_prev_lvgl_pressed = false;
 				return;
@@ -188,7 +226,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		const uint32_t mouse_generation = mouse_hid_generation();
 		navigation = g_gamepad_touch_router.update(snapshot, false, gamepad_generation, mouse_generation);
 		if (contact_edge || g_gamepad_touch_router.reset_navigation) {
-				LOGI("Touch", "Route: contacts=%u navigation=%u reset=%u gamepad_generation=%lu mouse_generation=%lu",
+				LOGT("Touch", "Route: contacts=%u navigation=%u reset=%u gamepad_generation=%lu mouse_generation=%lu",
 						unsigned(snapshot.count), unsigned(navigation.pressed), unsigned(g_gamepad_touch_router.reset_navigation),
 						(unsigned long)gamepad_generation, (unsigned long)mouse_generation);
 		}
@@ -342,8 +380,8 @@ void touch_manager_cancel_physical_input() {
 		portEXIT_CRITICAL(&g_physical_touch_mux);
 		const bool require_release = g_require_release || g_prev_lvgl_pressed || physical.pressed ||
 				physical.status == TouchReadStatus::Error || g_touch_snapshot_filter.canceled;
-		if (!g_require_release) {
-				LOGI("Touch", "Cancel: release_guard=%u physical=%u lvgl_pressed=%u",
+		if (require_release && !g_require_release) {
+				LOGT("Touch", "Cancel: release_guard=%u physical=%u lvgl_pressed=%u",
 						unsigned(require_release), unsigned(physical.pressed), unsigned(g_prev_lvgl_pressed));
 		}
 		#if HAS_DISPLAY && HAS_USB_HID

@@ -129,7 +129,7 @@ bool sd_cache_write(uint32_t content_crc32, const uint8_t* data, size_t len) {
 						SD.remove(path);  // rename won't overwrite an existing file
 						if (SD.rename(tmp, path)) {
 								ok = true;
-								LOGI("Epaper", "SD cache wrote %u bytes in %lu ms",
+								LOGT("Epaper", "SD cache wrote %u bytes in %lu ms",
 										 (unsigned)len, (unsigned long)(millis() - t0));
 						} else {
 								LOGW("Epaper", "SD cache rename failed");
@@ -192,7 +192,7 @@ bool epaper_frame_sd_cache_read(uint32_t content_crc32, uint8_t** out_buf, size_
 										*out_buf = buf;
 										*out_len = sz;
 										ok = true;
-										LOGI("Epaper", "SD cache read %u bytes in %lu ms",
+										LOGT("Epaper", "SD cache read %u bytes in %lu ms",
 												 (unsigned)sz, (unsigned long)(millis() - t0));
 								} else {
 										heap_caps_free(buf);

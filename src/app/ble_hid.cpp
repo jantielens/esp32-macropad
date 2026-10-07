@@ -7,6 +7,8 @@
 #include "keyboard_transport.h"
 #include <atomic>
 #include "net_activity.h"
+#include "log_manager.h"
+static constexpr uint8_t kBleLogLevel = LOG_LEVEL;
 
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -26,6 +28,7 @@
 #undef LOG_LEVEL_INFO
 #undef LOG_LEVEL_DEBUG
 #undef LOG_LEVEL
+#define LOG_LEVEL kBleLogLevel
 #include "log_manager.h"
 
 static const char* TAG = "BleHID";
@@ -327,21 +330,26 @@ static bool init_hid_service() {
 }
 
 static bool send_report_notification(uint16_t value_handle, const void* data, uint16_t size) {
+    static std::atomic<uint32_t> failed_sends{0};
     if (!connected || !hid_service_ready || value_handle == 0 || bleServer == nullptr) {
         return false;
     }
 
     struct os_mbuf* om = ble_hs_mbuf_from_flat(data, size);
     if (om == nullptr) {
+        ++failed_sends;
         LOGW(TAG, "Failed to allocate HID report mbuf (handle=%u size=%u)", value_handle, size);
         return false;
     }
 
     const int rc = ble_gatts_notify_custom(bleServer->getConnId(), value_handle, om);
     if (rc != 0) {
+        ++failed_sends;
         LOGW(TAG, "ble_gatts_notify_custom failed (handle=%u rc=%d)", value_handle, rc);
     } else {
         net_activity_mark(NET_CH_BLE);
+        const uint32_t failures = failed_sends.exchange(0);
+        if (failures) LOGI(TAG, "Notification succeeded after %lu failed sends", (unsigned long)failures);
     }
     return rc == 0;
 }

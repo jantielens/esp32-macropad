@@ -26,7 +26,7 @@ Arduino_GFX_ST77916_Driver::~Arduino_GFX_ST77916_Driver() {
 }
 
 void Arduino_GFX_ST77916_Driver::init() {
-		LOGI("GFX_ST77916", "Initializing QSPI display driver");
+		LOGT("GFX_ST77916", "Initializing QSPI display driver");
 
 		// Backlight PWM
 		#ifdef LCD_BL_PIN
@@ -35,11 +35,11 @@ void Arduino_GFX_ST77916_Driver::init() {
 		#if HAS_BACKLIGHT
 		#if ESP_ARDUINO_VERSION_MAJOR >= 3
 		double actualFreq = ledcAttach(LCD_BL_PIN, TFT_BACKLIGHT_PWM_FREQ, 8);
-		LOGI("GFX_ST77916", "PWM attached on GPIO%d, actual freq: %.1f Hz", LCD_BL_PIN, actualFreq);
+		LOGT("GFX_ST77916", "PWM attached on GPIO%d, actual freq: %.1f Hz", LCD_BL_PIN, actualFreq);
 		#else
 		ledcSetup(TFT_BACKLIGHT_PWM_CHANNEL, TFT_BACKLIGHT_PWM_FREQ, 8);
 		ledcAttachPin(LCD_BL_PIN, TFT_BACKLIGHT_PWM_CHANNEL);
-		LOGI("GFX_ST77916", "PWM setup complete on GPIO%d (channel %d)", LCD_BL_PIN, TFT_BACKLIGHT_PWM_CHANNEL);
+		LOGT("GFX_ST77916", "PWM setup complete on GPIO%d (channel %d)", LCD_BL_PIN, TFT_BACKLIGHT_PWM_CHANNEL);
 		#endif
 		backlightPwmAttached = true;
 		setBacklightBrightness(currentBrightness);
@@ -49,7 +49,7 @@ void Arduino_GFX_ST77916_Driver::init() {
 		#else
 		digitalWrite(LCD_BL_PIN, HIGH);
 		#endif
-		LOGI("GFX_ST77916", "Backlight enabled on GPIO%d", LCD_BL_PIN);
+		LOGT("GFX_ST77916", "Backlight enabled on GPIO%d", LCD_BL_PIN);
 		#endif
 		#endif
 
@@ -63,7 +63,7 @@ void Arduino_GFX_ST77916_Driver::init() {
 				LCD_QSPI_D2,
 				LCD_QSPI_D3
 		);
-		LOGI("GFX_ST77916", "QSPI bus created");
+		LOGT("GFX_ST77916", "QSPI bus created");
 		#else
 		LOGE("GFX_ST77916", "QSPI pins not defined in board_config.h");
 		return;
@@ -88,7 +88,7 @@ void Arduino_GFX_ST77916_Driver::init() {
 				st77916_150_init_operations,
 				sizeof(st77916_150_init_operations)
 		);
-		LOGI("GFX_ST77916", "ST77916 panel object created (%dx%d)", DISPLAY_WIDTH, DISPLAY_HEIGHT);
+		LOGT("GFX_ST77916", "ST77916 panel object created (%dx%d)", DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
 		if (!gfx->begin(TFT_SPI_FREQ_HZ)) {
 				LOGE("GFX_ST77916", "Failed to initialize display");
@@ -107,7 +107,7 @@ void Arduino_GFX_ST77916_Driver::setRotation(uint8_t rotation) {
 		if (gfx) {
 				gfx->setRotation(displayRotation);
 		}
-		LOGI("GFX_ST77916", "Rotation set to %d (hardware MADCTL)", rotation);
+		LOGT("GFX_ST77916", "Rotation set to %d (hardware MADCTL)", rotation);
 }
 
 int Arduino_GFX_ST77916_Driver::width() {

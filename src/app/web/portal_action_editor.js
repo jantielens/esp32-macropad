@@ -280,9 +280,9 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<select class="form-select form-select-sm action-type-select" id="' + prefix + '-type" onchange="actionEditorTypeChanged(\'' + prefix + '\')">';
     h += actionEditorTypeOptionsHTML();
     h += '</select>';
-    h += '<small id="' + prefix + '-context" class="action-context" style="display:none; color:#86868b;"></small>';
+    h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
     if (opts.showBleHint) {
-        h += '<small id="' + prefix + '-ble-hint" style="display:none; color:#86868b;">Keyboard unavailable on this board.</small>';
+        h += '<small id="' + prefix + '-ble-hint" style="display:none;">Keyboard unavailable on this board.</small>';
     }
     h += '</div>';
     // Screen target
@@ -676,6 +676,12 @@ function actionEditorLoad(prefix, action) {
     if (el) el.value = action.sound_alert_pattern || '';
     el = document.getElementById(prefix + '-sound-alert-file');
     if (el) {
+        if (action.sound_alert_file && !Array.from(el.options).some(function(option) { return option.value === action.sound_alert_file; })) {
+            var soundOption = document.createElement('option');
+            soundOption.value = action.sound_alert_file;
+            soundOption.textContent = action.sound_alert_file;
+            el.appendChild(soundOption);
+        }
         el.value = action.sound_alert_file || '';
         if (el.selectedIndex < 0) el.value = '';
     }
@@ -997,13 +1003,17 @@ function actionEditorPopulateSounds(prefixes, sounds) {
     prefixes.forEach(function(prefix) {
         var sel = document.getElementById(prefix + '-sound-alert-file');
         if (!sel) return;
+        var selected = sel.value;
         while (sel.options.length > 1) sel.remove(1);
-        sounds.forEach(function(name) {
+        var names = sounds.slice();
+        if (selected && names.indexOf(selected) < 0) names.push(selected);
+        names.forEach(function(name) {
             var opt = document.createElement('option');
             opt.value = name;
             opt.textContent = name;
             sel.appendChild(opt);
         });
+        sel.value = selected;
     });
 }
 

@@ -29,11 +29,25 @@ extern DeviceConfig device_config;
 #include "display_manager.h"
 #include "icon_store.h"
 #include "pad_config.h"
+#include "widgets/widget_registry.h"
 #endif
 
 #if HAS_DISPLAY || HAS_BUTTON
 #include "action_catalog.h"
 #endif
+
+template <typename TJson, typename TDestination>
+static bool write_json_buffered(const TJson& json, TDestination& response) {
+		const size_t size = measureJson(json);
+		PsramJsonAllocator allocator;
+		void* buffer = allocator.allocate(size);
+		if (!buffer) return serializeJson(json, response) == size;
+		const size_t written = serializeJson(json, static_cast<char*>(buffer), size);
+		const bool ok = written == size &&
+				response.write(static_cast<const uint8_t*>(buffer), written) == written;
+		allocator.deallocate(buffer);
+		return ok;
+}
 
 static void print_json_string(AsyncResponseStream *response, const char *value) {
 		response->print('"');
@@ -63,7 +77,9 @@ static void print_json_string(AsyncResponseStream *response, const char *value) 
 
 // GET /api/info - Get device information
 void handleGetVersion(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		AsyncResponseStream *response = request->beginResponseStream("application/json");
 		response->print("{\"version\":\"");
@@ -98,6 +114,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(device_telemetry_sketch_size());
 		response->print(",\"free_sketch_space\":");
 		response->print(device_telemetry_free_sketch_space());
+		timing.mark("system");
 		response->print(",\"mac_address\":\"");
 		response->print(WiFi.macAddress());
 		response->print("\",\"device_name\":");
@@ -109,6 +126,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(".local\",\"hostname\":\"");
 		response->print(WiFi.getHostname());
 		response->print("\",\"project_name\":\"");
+		timing.mark("wifi");
 		response->print(PROJECT_NAME);
 		response->print("\",\"project_display_name\":\"");
 		response->print(device_class_get_full_name());
@@ -155,6 +173,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print("\",\"github_repo\":\"");
 		response->print(REPO_NAME);
 		response->print("\"");
+		timing.mark("metadata");
 
 		response->print(",\"has_mqtt\":");
 		response->print(HAS_MQTT ? "true" : "false");
@@ -181,6 +200,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_IMAGE_FETCH ? "true" : "false");
 		response->print(",\"has_image_library\":");
 		response->print(HAS_IMAGE_LIBRARY ? "true" : "false");
+		timing.mark("capabilities");
 
 		// Action authoring catalog: only computed and sent when explicitly
 		// requested, so the bare response used by reboot connection polling
@@ -193,14 +213,39 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						if (catalog_doc && catalog_doc->capacity() > 0) {
 								JsonArray actions = catalog_doc->to<JsonArray>();
 								action_catalog_emit(actions, false);
-								serializeJson(actions, *response);
+								timing.mark("actions_build");
+								if (!write_json_buffered(actions, *response)) {
+										delete response;
+										web_portal_send_json_error(request, 503, "Action catalog unavailable", &timing);
+										return;
+								}
 						} else {
+								timing.mark("actions_build");
 								response->print("[]");
 						}
+						timing.mark("actions_json");
 				}
 		#endif
 
 		#if HAS_DISPLAY
+				if (request->hasParam("catalog")) {
+						auto widget_doc = make_psram_json_doc(4096);
+						response->print(",\"widget_catalog\":");
+						if (widget_doc && widget_doc->capacity() > 0) {
+								JsonArray widgets = widget_doc->to<JsonArray>();
+								widget_preview_catalog_emit(widgets);
+								timing.mark("widgets_build");
+								if (!write_json_buffered(widgets, *response)) {
+										delete response;
+										web_portal_send_json_error(request, 503, "Widget catalog unavailable", &timing);
+										return;
+								}
+							} else {
+									timing.mark("widgets_build");
+								response->print("[]");
+							}
+						timing.mark("widgets_json");
+				}
 				// Display screen information
 				response->print(",\"has_display\":true");
 				response->print(",\"has_touch\":");
@@ -223,6 +268,7 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 				response->print(display_coord_width);
 				response->print(",\"display_coord_height\":");
 				response->print(display_coord_height);
+				timing.mark("display");
 
 				// Get available screens
 				size_t screen_count = 0;
@@ -235,34 +281,26 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 						response->print(screens[i].id);
 						response->print("\",\"name\":\"");
 
-						// For pad screens, read custom name from LittleFS config
+						// For pad screens, use the immutable cached config.
 						const char* sid = screens[i].id;
 						bool emitted = false;
 						if (strncmp(sid, "pad_", 4) == 0) {
 								uint8_t pg = (uint8_t)atoi(sid + 4);
-								if (pg < MAX_PADS && pad_config_exists(pg)) {
-										size_t len = 0;
-										char* raw = pad_config_read_raw(pg, &len);
-										if (raw) {
-												JsonDocument filter;
-												filter["name"] = true;
-												JsonDocument doc;
-												if (deserializeJson(doc, raw, len, DeserializationOption::Filter(filter)) == DeserializationError::Ok
-														&& doc["name"].is<const char*>() && strlen(doc["name"].as<const char*>()) > 0) {
-														response->print(screens[i].display_name);
-														response->print(": ");
-														response->print(doc["name"].as<const char*>());
-														emitted = true;
-												}
-												free(raw);
-										}
+								const PadConfig* config = pad_config_acquire(pg);
+								if (config && config->name && config->name[0]) {
+										response->print(screens[i].display_name);
+										response->print(": ");
+										response->print(config->name);
+										emitted = true;
 								}
+								pad_config_release(config);
 						}
 						if (!emitted) response->print(screens[i].display_name);
 
 						response->print("\"}");
 				}
 				response->print("]");
+				timing.mark("pad_names");
 
 				// Get current screen
 				const char* current_screen = display_manager_get_current_screen_id();
@@ -280,12 +318,16 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		#endif
 
 		response->print("}");
+		timing.mark("response_setup");
+		timing.attach(response);
 		request->send(response);
 }
 
 // GET /api/bindings - Live binding scheme metadata for portal validation.
 void handleGetBindings(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (!doc || doc->capacity() == 0) {
@@ -294,12 +336,15 @@ void handleGetBindings(AsyncWebServerRequest *request) {
 		}
 		JsonArray schemes = (*doc)["schemes"].to<JsonArray>();
 		binding_schema_emit(&schemes);
-		web_portal_send_json_chunked(request, doc);
+		timing.mark("schema");
+		web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 // GET /api/health - Get device health statistics
 void handleGetHealth(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (doc && doc->capacity() > 0) {
@@ -309,12 +354,15 @@ void handleGetHealth(AsyncWebServerRequest *request) {
 				}
 		}
 
-		web_portal_send_json_chunked(request, doc);
+		timing.mark("telemetry");
+		web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
 // GET /api/health/history - Get device-side health history for sparklines
 void handleGetHealthHistory(AsyncWebServerRequest *request) {
+		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
+		timing.mark("auth");
 
 		#if !HEALTH_HISTORY_ENABLED
 				request->send(404, "application/json", "{\"available\":false}");
@@ -328,6 +376,7 @@ void handleGetHealthHistory(AsyncWebServerRequest *request) {
 		const HealthHistoryParams params = health_history_params();
 		const size_t count = health_history_count();
 		const size_t capacity = health_history_capacity();
+		timing.mark("history_snapshot");
 
 		AsyncResponseStream *response = request->beginResponseStream("application/json");
 		response->addHeader("Cache-Control", "no-store");
@@ -392,6 +441,8 @@ void handleGetHealthHistory(AsyncWebServerRequest *request) {
 #undef PRINT_U32_ARRAY_FIELD
 
 		response->print("}");
+		timing.mark("history_json");
+		timing.attach(response);
 		request->send(response);
 
 		#endif // HEALTH_HISTORY_ENABLED

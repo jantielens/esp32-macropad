@@ -6,6 +6,7 @@ var PAD_SPARKLINE_MAX_WINDOW_SECONDS = 7 * 86400;
 var PAD_SPARKLINE_MAX_POINTS = 1024;
 var PAD_SPARKLINE_MIN_INTERVAL_SECONDS = 0.1;
 var padImageLibraryFiles = [];
+let padDialogSelectionGeneration = 0;
 
 function padGetBoundedWidgetNumber(id, fallback, minimum, maximum) {
     const raw = document.getElementById(id).value;
@@ -23,21 +24,34 @@ function padPopulateLocalImageOptions(selected) {
         var option = document.createElement('option');
         option.value = path; option.textContent = path; select.appendChild(option);
     });
+    if (selected && !padImageLibraryFiles.includes(selected)) {
+        const option = document.createElement('option');
+        option.value = selected; option.textContent = selected; select.appendChild(option);
+    }
     select.value = selected || '';
 }
 
 function padLoadLocalImageOptions(selected) {
     if (!deviceInfoCache || deviceInfoCache.has_image_library !== true) return Promise.resolve();
+    const section = document.getElementById('pad-config-section');
+    const page = padState.page;
+    const col = padState.editCol;
+    const row = padState.editRow;
+    const generation = padDialogSelectionGeneration;
+    const input = document.getElementById('pad-edit-bg-image-path');
+    const before = input ? input.value : '';
     return fetch('/api/images?directory=' + encodeURIComponent('/images'))
         .then(function (response) {
             if (!response.ok) throw new Error('Image library unavailable');
             return response.json();
         })
         .then(function (catalog) {
+            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.editCol !== col || padState.editRow !== row) return;
             padImageLibraryFiles = Array.isArray(catalog.files) ? catalog.files : [];
-            padPopulateLocalImageOptions(selected);
+            padPopulateLocalImageOptions(input.value !== before ? input.value : selected);
         })
         .catch(function () {
+            if (generation !== padDialogSelectionGeneration || document.getElementById('pad-config-section') !== section || padState.page !== page || padState.editCol !== col || padState.editRow !== row) return;
             var group = document.getElementById('pad-edit-local-image-group');
             if (group) group.style.display = 'none';
         });
@@ -185,6 +199,9 @@ function padUpdateSparklineEditor() {
 }
 
 function padDialogOpen(col, row) {
+    padDialogSelectionGeneration++;
+    padPvHide();
+    if (typeof padWorkspaceBeforeSelect === 'function') padWorkspaceBeforeSelect(col, row);
     padState.editCol = col;
     padState.editRow = row;
 
@@ -202,10 +219,8 @@ function padDialogOpen(col, row) {
     }
     if (!padState.buttonDefaults) padState.buttonDefaults = {};
 
-    const btn = padFindButton(col, row) || {};
-
-    document.getElementById('pad-edit-title').textContent =
-        'Button [' + col + ', ' + row + ']';
+    const inherited = typeof padFindTemplateButton === 'function' ? padFindTemplateButton(col, row) : null;
+    const btn = padFindButton(col, row) || inherited || {};
 
     document.getElementById('pad-edit-label-top').value = padLabelToInput(btn.label_top);
     document.getElementById('pad-edit-label-center').value = padLabelToInput(btn.label_center);
@@ -289,8 +304,7 @@ function padDialogOpen(col, row) {
     if (!lpActions.length && btn.lp_action && btn.lp_action.type) lpActions = [btn.lp_action];
     actionEditorListLoad(padActionPrefixes('lp'), lpActions);
 
-    document.getElementById('pad-edit-confirm').checked =
-        !!btn.confirm && !document.getElementById('pad-edit-widget-type').value;
+    document.getElementById('pad-edit-confirm').checked = !!btn.confirm && !btn.widget_type;
     document.getElementById('pad-edit-confirm-text').value = btn.confirm_text || '';
     padConfirmChanged();
 
@@ -305,6 +319,7 @@ function padDialogOpen(col, row) {
     updateWriteOnlySecretField('pad-edit-bg-image-password',
         'pad-edit-bg-image-password-status', btn.bg_image_password_set === true,
         'Not configured.', 'password');
+    document.getElementById('pad-edit-bg-image-password').value = btn.bg_image_password || '';
     document.getElementById('pad-edit-bg-image-interval').value = (btn.bg_image_interval_ms !== undefined) ? btn.bg_image_interval_ms : 0;
     document.getElementById('pad-edit-bg-image-scale').value = btn.bg_image_letterbox ? 'letterbox' : 'cover';
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_path;
@@ -502,33 +517,16 @@ function padDialogOpen(col, row) {
     // action screen dropdowns (which were populated earlier with empty provider).
     if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 
-    const extensionSelect = document.getElementById('pad-edit-extension-id');
-    if (extensionSelect) {
-        extensionSelect.replaceChildren();
-        const installed = (window.extensionCatalog || []).filter(function (slot) { return slot.installed && slot.enabled; });
-        if (!installed.length) {
-            const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'No enabled extensions installed'; extensionSelect.appendChild(empty);
-        } else {
-            installed.forEach(function (slot) {
-                const option = document.createElement('option'); option.value = slot.id; option.textContent = slot.id + ' @ ' + slot.version; extensionSelect.appendChild(option);
-            });
-        }
-        extensionSelect.value = btn.extension_id || '';
-    }
+    padPopulateExtensionDropdown(btn.extension_id || '');
     document.getElementById('pad-edit-extension-config').value = btn.extension_config || '';
     document.getElementById('pad-edit-extension-tick-interval').value = btn.extension_tick_interval_ms || '';
     document.getElementById('pad-edit-extension-upscale').value = btn.extension_upscale || 1;
 
     document.getElementById('pad-edit-overlay').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
+    if (typeof padWorkspaceAfterSelect === 'function') padWorkspaceAfterSelect();
 
     // Enable paste button if clipboard has content
     document.getElementById('pad-edit-paste').disabled = !padState.btnClipboard;
-
-    // Scroll dialog body to top
-    const body = document.querySelector('.pad-edit-modal .pad-edit-body');
-    if (body) body.scrollTop = 0;
 
     // Refresh binding length warnings for the loaded values
     if (typeof padScanMaxlenHints === 'function') padScanMaxlenHints();
@@ -537,12 +535,31 @@ function padDialogOpen(col, row) {
     if (typeof padPvOnOpen === 'function') padPvOnOpen();
 }
 
-function padDialogClose() {
-    if (typeof padPvHide === 'function') padPvHide();
-    padDialogClearValidationError();
-    document.getElementById('pad-edit-overlay').style.display = 'none';
-    document.body.style.overflow = '';
-    document.documentElement.style.overflow = '';
+function padPopulateExtensionDropdown(value) {
+    const select = document.getElementById('pad-edit-extension-id');
+    if (!select) return;
+    const selected = value === undefined ? select.value : value;
+    select.replaceChildren();
+    const installed = (window.extensionCatalog || []).filter(function(slot) { return slot.installed && slot.enabled; });
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = padExtensionCatalogLoading ? 'Loading extensions...' :
+        installed.length ? '(none)' : 'No enabled extensions installed';
+    select.appendChild(empty);
+    installed.forEach(function(slot) {
+        const option = document.createElement('option');
+        option.value = slot.id;
+        option.textContent = slot.id + ' @ ' + slot.version;
+        select.appendChild(option);
+    });
+    if (selected && !installed.some(function(slot) { return slot.id === selected; })) {
+        const saved = document.createElement('option');
+        saved.value = selected;
+        saved.textContent = selected;
+        select.appendChild(saved);
+    }
+    select.value = selected || '';
+    select.disabled = padExtensionCatalogLoading;
 }
 
 function padDialogShowValidationError(message) {
@@ -559,8 +576,7 @@ function padDialogClearValidationError() {
     alert.style.display = 'none';
 }
 
-function padDialogOk(keepOpen) {
-    padDialogClearValidationError();
+function padDialogBuildButton() {
     const col = padState.editCol;
     const row = padState.editRow;
 
@@ -899,7 +915,7 @@ function padDialogOk(keepOpen) {
         }
         if (wtype === 'external') {
             const extensionId = document.getElementById('pad-edit-extension-id').value;
-            if (!extensionId) { showMessage('Select an installed extension', 'error'); return; }
+            if (!extensionId) throw new Error('Select an installed extension');
             btn.extension_id = extensionId;
             const extensionConfig = document.getElementById('pad-edit-extension-config').value.trim();
             if (extensionConfig) btn.extension_config = extensionConfig;
@@ -915,29 +931,45 @@ function padDialogOk(keepOpen) {
     const btnState = document.getElementById('pad-edit-btn-state').value.trim();
     if (btnState) btn.btn_state = btnState;
 
+    return btn;
+}
+
+function padDialogValidateButton(btn) {
+    const overlay = document.getElementById('pad-edit-overlay');
+    if (overlay && overlay.querySelectorAll) overlay.querySelectorAll('input[type="number"]').forEach(input => {
+        let parent = input;
+        let relevant = !input.disabled;
+        while (parent && parent !== overlay) {
+            if (parent.style && parent.style.display === 'none') relevant = false;
+            parent = parent.parentElement;
+        }
+        if (relevant && input.validity && !input.validity.valid) {
+            const label = overlay.querySelector('label[for="' + input.id + '"]');
+            throw new Error((label ? label.textContent.trim() : input.id) + ': ' + input.validationMessage);
+        }
+    });
+    const others = padState.buttons.filter(function(button) { return button.col !== btn.col || button.row !== btn.row; });
+    if (typeof padCanSpanFit === 'function' && !padCanSpanFit(btn.col, btn.row, btn.col_span || 1, btn.row_span || 1, others)) {
+        throw new Error('Button span exceeds the pad or overlaps another button');
+    }
+
     // Validate all binding fields before accepting
     if (typeof bindingValidateDialog === 'function') {
         var bvResult = bindingValidateDialog();
         if (!bvResult.valid) {
-            padDialogShowValidationError(bvResult.count + ' binding error' +
+            throw new Error(bvResult.count + ' binding error' +
                 (bvResult.count > 1 ? 's' : '') + ' - check highlighted fields');
-            return;
         }
     }
-
-    padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
-    padState.buttons.push(btn);
-    padMarkDirty();
-    if (!keepOpen) padDialogClose();
-    padRenderGrid();
 }
 
 function padDialogClear() {
     const col = padState.editCol;
     const row = padState.editRow;
     padState.buttons = padState.buttons.filter(b => !(b.col === col && b.row === row));
+    if (typeof padWorkspaceClearButton === 'function') padWorkspaceClearButton(col, row);
     padMarkDirty();
-    padDialogClose();
+    padWorkspaceReturn();
     padRenderGrid();
 }
 
@@ -962,6 +994,17 @@ var PAD_PV_FIELDS = [
     { id: 'pad-edit-widget-data-binding', kind: 'text',  field: 'widget_data_binding' }
 ];
 var padPvTimer = null;  // debounce for edit-triggered refresh
+let padPvGeneration = 0;
+
+function padPvRequestGuard() {
+    const generation = padPvGeneration;
+    const overlay = document.getElementById('pad-edit-overlay');
+    const page = padState.page;
+    const col = padState.editCol;
+    const row = padState.editRow;
+    return () => generation === padPvGeneration && document.getElementById('pad-edit-overlay') === overlay &&
+        page === padState.page && col === padState.editCol && row === padState.editRow;
+}
 
 function padPreviewEsc(s) {
     return String(s == null ? '' : s)
@@ -1060,6 +1103,7 @@ function padPvSetChip(id, value, state) {
 // covers a just-subscribed MQTT topic whose (retained) message arrives shortly
 // after the first resolve.
 function padPvRefreshField(id, retriesLeft) {
+    const current = padPvRequestGuard();
     var val = padPvFieldValue(id);
     if (!padPvIsBinding(val)) { padPvSetChip(id); return; }
     var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
@@ -1069,16 +1113,18 @@ function padPvRefreshField(id, retriesLeft) {
         body: JSON.stringify({ screen: 'pad_' + padState.page, bindings: [val] })
     }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
+          if (!current() || padPvFieldValue(id) !== val) return;
           var v = (j && j.resolved && j.resolved[0]) ? j.resolved[0].value : '---';
           padPvSetChip(id, v);
           if (padPvUnresolved(v) && rl > 0)
-              setTimeout(function () { padPvRefreshField(id, rl - 1); }, 1000);
+              setTimeout(function () { if (current() && padPvFieldValue(id) === val) padPvRefreshField(id, rl - 1); }, 1000);
       })
-      .catch(function () { padPvSetChip(id, '---'); });
+    .catch(function () { if (current() && padPvFieldValue(id) === val) padPvSetChip(id, '---'); });
 }
 
 // Batch-resolve all bound fields in one request (dialog open + debounced edits).
 function padPvRefreshAll(retriesLeft) {
+    const current = padPvRequestGuard();
     padPvMount();
     var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
     var btn = {}, any = false;
@@ -1093,21 +1139,23 @@ function padPvRefreshAll(retriesLeft) {
         body: JSON.stringify({ screen: 'pad_' + padState.page, button: btn })
     }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
+          if (!current()) return;
           var fields = (j && j.button) || {};
           var anyUnresolved = false;
           PAD_PV_FIELDS.forEach(function (f) {
-              if (padPvIsBinding(padPvFieldValue(f.id))) {
+              if (padPvIsBinding(padPvFieldValue(f.id)) && padPvFieldValue(f.id) === btn[f.field]) {
                   var v = fields[f.field] !== undefined ? fields[f.field] : '---';
                   padPvSetChip(f.id, v);
                   if (padPvUnresolved(v)) anyUnresolved = true;
               }
           });
-          if (anyUnresolved && rl > 0) setTimeout(function () { padPvRefreshAll(rl - 1); }, 1000);
+          if (anyUnresolved && rl > 0) setTimeout(function () { if (current()) padPvRefreshAll(rl - 1); }, 1000);
       })
       .catch(function () {
+          if (!current()) return;
           PAD_PV_FIELDS.forEach(function (f) { if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, '---'); });
       });
 }
 
 function padPvOnOpen() { padPvMount(); padPvRefreshAll(); }
-function padPvHide() { /* inline chips live inside the dialog; nothing to tear down */ }
+function padPvHide() { padPvGeneration++; clearTimeout(padPvTimer); }

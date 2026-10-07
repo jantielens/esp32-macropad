@@ -4,6 +4,7 @@
 #pragma once
 
 #include "psram_json_allocator.h"
+#include "web_portal_timing.h"
 
 #include <ArduinoJson.h>
 #include <ChunkPrint.h>
@@ -11,8 +12,11 @@
 
 #include <memory>
 
-static inline void web_portal_send_json_error(AsyncWebServerRequest *request, int status_code, const char *message) {
+static inline void web_portal_send_json_error(AsyncWebServerRequest *request, int status_code, const char *message,
+                                            WebPortalTiming *timing = nullptr) {
 		if (!request) return;
+		WebPortalTiming response_timing;
+		WebPortalTiming &active_timing = timing ? *timing : response_timing;
 
 		// Note: messages should be constant strings or otherwise JSON-safe (no quotes/newlines).
 		AsyncResponseStream *response = request->beginResponseStream("application/json");
@@ -20,6 +24,8 @@ static inline void web_portal_send_json_error(AsyncWebServerRequest *request, in
 		response->print(message ? message : "Error");
 		response->print("\"}");
 		response->setCode(status_code);
+		active_timing.mark("response_setup");
+		active_timing.attach(response, timing ? "total" : "response_total");
 		request->send(response);
 }
 
@@ -31,21 +37,25 @@ template <typename TDoc>
 static inline void web_portal_send_json_chunked(
 		AsyncWebServerRequest *request,
 		const std::shared_ptr<TDoc> &doc,
-		int status_code = 200
+		int status_code = 200,
+		WebPortalTiming *timing = nullptr
 ) {
 		if (!request) return;
 
 		if (!doc || doc->capacity() == 0) {
-				web_portal_send_json_error(request, 503, "Out of memory");
+				web_portal_send_json_error(request, 503, "Out of memory", timing);
 				return;
 		}
 
 		if (doc->overflowed()) {
-				web_portal_send_json_error(request, 500, "Response too large");
+				web_portal_send_json_error(request, 500, "Response too large", timing);
 				return;
 		}
 
+		WebPortalTiming response_timing;
+		WebPortalTiming &active_timing = timing ? *timing : response_timing;
 		const size_t total_len = measureJson(*doc);
+		active_timing.mark("json_size");
 		AsyncWebServerResponse *response = request->beginChunkedResponse(
 				"application/json",
 				[doc, total_len](uint8_t *buffer, size_t max_len, size_t index) -> size_t {
@@ -62,6 +72,8 @@ static inline void web_portal_send_json_chunked(
 				response->setCode(status_code);
 		}
 
+		active_timing.mark("response_setup");
+		active_timing.attach(response, timing ? "total" : "response_total");
 		request->send(response);
 }
 
@@ -73,21 +85,25 @@ template <typename TDoc>
 static inline void web_portal_send_json_sized(
 		AsyncWebServerRequest *request,
 		const std::shared_ptr<TDoc> &doc,
-		int status_code = 200
+		int status_code = 200,
+		WebPortalTiming *timing = nullptr
 ) {
 		if (!request) return;
 
 		if (!doc || doc->capacity() == 0) {
-				web_portal_send_json_error(request, 503, "Out of memory");
+				web_portal_send_json_error(request, 503, "Out of memory", timing);
 				return;
 		}
 
 		if (doc->overflowed()) {
-				web_portal_send_json_error(request, 500, "Response too large");
+				web_portal_send_json_error(request, 500, "Response too large", timing);
 				return;
 		}
 
+		WebPortalTiming response_timing;
+		WebPortalTiming &active_timing = timing ? *timing : response_timing;
 		const size_t total_len = measureJson(*doc);
+		active_timing.mark("json_size");
 		AsyncWebServerResponse *response = request->beginResponse(
 				"application/json",
 				total_len,
@@ -105,6 +121,8 @@ static inline void web_portal_send_json_sized(
 				response->setCode(status_code);
 		}
 
+		active_timing.mark("response_setup");
+		active_timing.attach(response, timing ? "total" : "response_total");
 		request->send(response);
 }
 

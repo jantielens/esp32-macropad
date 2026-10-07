@@ -8,16 +8,27 @@ The ESP32 template includes a full-featured web portal for device configuration,
 ## Local Device-Free Development
 
 Use `tools/portal-dev-server.py` to iterate on portal UI without a connected
-device or firmware build. It serves the production portal shell, core CSS and
-JavaScript sources, and available fragments from `src/app`, while replacing
-device API requests with deterministic in-memory fixtures.
+device or firmware build. It serves the production portal shell, CSS,
+feature-selected JavaScript bundle, and rendered fragments from `src/app`, while
+replacing device API requests with deterministic in-memory fixtures.
 
 ```bash
-python3 tools/portal-dev-server.py --port 8765
+python3 tools/portal-dev-server.py --port 8765 --profile esp32-p4-lcd4b
 ```
 
-Open a fragment directly by passing its profile and fragment ID. For example,
-the E-Paper Frame image workflow is available at:
+Open the P4 pad editor:
+
+```text
+http://localhost:8765/?profile=esp32-p4-lcd4b&fragment=pad-editor
+```
+
+Its fixtures cover empty and populated pads, spanning buttons, action lists,
+widgets, template inheritance, a dense grid, and input controls. Save, reload,
+delete, defaults, icon uploads, binding previews, and Show on Device run against
+memory-backed APIs. Show on Device records the chosen screen without rendering
+or executing actions on hardware.
+
+The existing E-Paper Frame image workflow remains available at:
 
 ```text
 http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
@@ -26,7 +37,12 @@ http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
 Changes to served HTML, CSS, and JavaScript are applied on the next browser
 reload. Restart the server after changing `tools/portal-dev-server.py`. Mock
 configuration writes remain in memory for the server process and never reach a
-physical device.
+physical device. The server binds to localhost. Binding previews resolve fixed
+sample values rather than reproducing the firmware binding engine.
+
+See the [script reference](scripts.md#toolsportal-dev-serverpy) for reset
+commands, failure scenarios, and focused regression tests. The P4 profile is the
+only pad-editor fixture target; this mock does not replace hardware verification.
 
 ## Overview
 
@@ -37,6 +53,169 @@ The web portal provides:
 - REST API for programmatic access
 - Optional HTTP Basic Authentication (Full Mode only)
 - Responsive web interface (desktop & mobile)
+
+### Remote Logs
+
+`HAS_REMOTE_LOG` defaults to `false`. Board overrides enable it for all
+configured ESP32-P4 boards and ESP32-S3 boards with more than 5 MB flash.
+Disabling it removes capture code, startup reset/firmware identity diagnostics,
+retrieval routes, navigation, and Logs HTML/CSS/JavaScript from the firmware.
+Disabled retrieval routes are absent rather than returning a disabled response.
+Ordinary serial logging remains available. SDK coredump capture and reserved
+coredump partition space are independent of this guard.
+
+Enabled builds default to `REMOTE_LOG_BUFFER_RECORDS=256` and
+`REMOTE_LOG_BOOT_RECORDS=128`. Both capacities must be positive and can be
+overridden per board; they no longer select feature inclusion. Storage still
+requires PSRAM. Crash injection additionally requires `DEBUG_CRASH_API_ENABLED`.
+Capture starts at
+`log_init()` and preserves up to the configured startup capacity until setup
+finishes, separately from the rolling buffer. Boot capacity
+overflow is reported; neither buffer survives reboot or deep sleep.
+
+The logger stores complete 288-byte formatted records, with the existing
+serial truncation and suppression behavior. Disconnected USB CDC does not
+prevent capture and does not update serial repetition state. Direct serial
+writes, ROM/bootloader logs, and ISR logging are outside this feature.
+
+One startup allocation reserves approximately 127 KiB of PSRAM for records,
+a 32-record response snapshot, and a fixed JSON serialization arena. There
+is no bulk-storage fallback to internal SRAM. Allocation failure leaves
+capture unavailable, but a later explicit initialization call may retry; the
+logging path does not allocate or retry automatically. Capture
+uses a statically allocated, zero-timeout mutex with interrupts enabled;
+contention and OTA cause capture drops rather than additional serial waits.
+Readers copy metadata and at most 32 records under one zero-timeout capture
+lock, never acquire the serial mutex, and network transmission owns an
+immutable snapshot. Serial and HTTP transport retain their normal memory
+and synchronization requirements.
+
+Log responses use 6 KiB of the snapshot arena for JSON construction and 2 KiB
+for a cached header or record segment. Each segment is serialized once for
+length calculation and once for transmission, regardless of network chunk size.
+
+`GET /api/logs?source=recent&after=123&limit=32&boot_id=456` requires Full Mode,
+and follows the device's HTTP Basic Authentication setting through the standard
+portal auth gate. With authentication disabled, credentials are not required;
+with authentication enabled, valid credentials are required. AP mode returns
+`403`; missing or invalid credentials return `401` when authentication is enabled. Responses use
+`Cache-Control: no-store`. Use `source=boot` for retained startup records;
+omit `after` to start at the oldest retained record. Limits must be positive
+and are capped at 32. Cursors are unsigned 32-bit sequences, including zero.
+
+Successful responses contain `available`, `boot_id`, `capacity`, `oldest`,
+`newest`, `next`, `missed`, `dropped`, `reset`, `has_more`, `boot_complete`,
+`boot_truncated`, and `records` containing `sequence` and `line`. Continue
+with `after=next`, not `newest`. Supply the last `boot_id` so reboot resets
+the cursor. Sequence comparisons use unsigned arithmetic; cursors more than
+half the sequence space away are treated as reset. `missed` reports overwritten
+records for this read; `dropped` is the cumulative capture-drop count.
+
+Disabled or allocation-failure builds return `available:false` with a reason.
+Only one log response may be active; overlapping reads return `429`, OTA
+defers new reads with `503`, and invalid parameters return `400`. A response
+owns the snapshot until destruction, including disconnect/error paths;
+its source expires after ten seconds and is invalidated during OTA.
+JSON serialization uses fixed PSRAM storage, not the shared allocator's
+internal-heap fallback. Polling does not emit routine logs.
+
+The Device **Logs** fragment presents one combined view. It drains `source=boot`
+first, then requests `source=recent` with the last boot cursor to avoid duplicates.
+It inserts inline history-gap markers for missed records or ambiguous cursor
+resets, and restarts at boot history when `boot_id` changes. The next bounded
+batch follows after 250 ms while boot/recent history remains, displaying
+**Catching up**. Once caught up, it polls every
+three seconds; errors also use this normal retry interval. It keeps one request
+in flight, stops when hidden/inactive or paused, and retains at most 10,000
+browser lines. Clear only removes browser history and retains the cursor.
+Copy uses the shared `copyTextToClipboard()` helper, including its HTTP-compatible
+textarea fallback; downloads contain the combined history and gap markers.
+
+Status counters distinguish device buffer capacity (records), latest captured
+record ID, browser history entries (including gap markers), records missed
+before retrieval, and records dropped during capture. Browser history can exceed
+the device buffer capacity; the latest record ID is a sequence, not a timestamp.
+
+#### Retained Crash Diagnostics
+
+Startup application logs include the reset reason (name and ESP-IDF enum value),
+SDK version, and current firmware ELF SHA256. These are application-generated
+diagnostics, not a replay of the ROM banner. A software reset alone does not
+indicate a panic.
+
+`GET /api/logs/crash` uses the same Full Mode and configured authentication policy
+as `/api/logs`. It checks the SDK flash coredump for integrity and bounds before
+returning `available`, `size`, and `partition_size`. ELF-format dumps may also
+provide `panic_reason`, `task`, `pc` (hexadecimal address), and `elf_sha256` from
+the crashed firmware. Valid dumps also return `current_reset_reason` (the
+ESP-IDF enum for the current boot) and `current_elf_sha256`, separately from the
+crashed firmware identity. Architecture-specific optional fields include:
+
+* `architecture`: `riscv` or `xtensa`
+* `exception_cause`: Numeric `MCAUSE` or `EXCCAUSE`
+* `trap_value`: Hexadecimal RISC-V `MTVAL`, which is not always a memory address
+* `fault_address`: Hexadecimal Xtensa `EXCVADDR`
+* `registers`: SDK-saved register names mapped to hexadecimal strings
+
+Firmware identity uses the legacy ELF-hash API on IDF 4 builds, including
+Inkplate. `panic_reason` requires IDF 5.5 or newer; older SDKs can still return
+the crashed task, firmware identity, exception details, and saved registers.
+
+The portal decodes known exception causes and preserves numeric codes for
+unknown causes. It labels `pc` as **Exception PC**, distinct from the faulting
+address or trap value. RISC-V summaries expose `MEPC`, `RA`, `SP`, `MSTATUS`,
+`MTVEC`, `MCAUSE`, `MTVAL`, and `A0` through `A7`. Xtensa summaries expose `PC`,
+`EXCCAUSE`, `EXCVADDR`, `A0` through `A15`, and available `EPC` registers. These
+are the SDK summary's subset, not the complete serial register dump. The portal
+shows key values directly and the remaining saved registers in an expandable
+section. It marks crash age unknown and displays current-boot diagnostics
+separately. **Copy crash summary** uses the shared clipboard helper and includes
+both firmware hashes, reset reason, exception details, and saved registers.
+
+Unavailable responses contain `available:false` and a
+`reason`: `disabled`, `no_partition`, `not_found`, or `invalid_dump`. OTA or an
+unavailable summary workspace returns `503`.
+
+The summary borrows the existing log snapshot's PSRAM arena temporarily. It
+reserves 2 KiB for the SDK summary and 6 KiB for ArduinoJson, without an internal
+SRAM workspace fallback. SDK parsing and the small HTTP response retain their
+normal allocation requirements. Serialized summary output is bounded by a
+2 KiB stack buffer. The arena lease lasts through JSON document destruction.
+The portal loads the summary once per device boot or fragment initialization.
+Transient errors retry with delays of 3, 6, 12, 24, then at most 30 seconds;
+attempts share the log poll's 10-second timeout. Normal log polling continues
+during backoff. A new boot resets backoff, and pause, hidden tabs, and navigation
+cancel pending requests without disabling later refreshes. Summary strings are
+rendered as text, never HTML.
+
+`GET /api/logs/crash/download` returns the validated raw dump as
+`application/octet-stream`, with an attachment filename of
+`device-coredump.bin`, its content length, and `Cache-Control: no-store`.
+It streams directly from the flash partition in reads capped at 1,024 bytes,
+without loading the dump into RAM. Only one download may be active (`429` for
+overlap); response destruction releases ownership. Downloads expire after
+30 seconds and stop during OTA. Missing or disabled dumps return `404`; invalid
+dumps return `409`. The browser pauses log polling during download and aborts
+the request when hidden or when leaving the fragment. No API erases the dump.
+
+The P4 Arduino SDK currently enables ELF coredumps to flash, with CRC checking,
+a 1,792-byte dedicated stack, up to 64 tasks, and overwrite enabled. Its native
+extension partition layout reserves 64 KiB for a coredump. These settings are
+SDK/board-dependent; a partition alone does not enable capture. The partition
+must fit the captured task stacks, which requires hardware validation.
+
+A retained dump can survive successful boots and firmware updates that preserve
+the partition. It is not necessarily from the immediately preceding boot, and
+the next crash can overwrite it. Decode the downloaded raw file with Espressif's
+`esp-coredump` tool and the exact matching firmware ELF, identified by the dump's
+ELF SHA256. Ordinary PSRAM contents, including the remote log ring, are not
+included. Power loss, early startup failure, or panic-handler failure can leave
+no valid dump. Crash dumps may contain sensitive stack data; enable portal
+authentication and treat downloads accordingly.
+The local development server exposes the fragment and incremental API
+shape at `/?fragment=logs`; fixtures are not hardware or security tests.
+Focused coverage lives in `test_remote_log`, `test_remote_log_runtime`, and
+`test_portal_logs`, alongside the existing logger regression tests.
 
 ### Camera Motion Sensing
 
@@ -79,6 +258,27 @@ Camera logs report motion state transitions, capture failures, first-frame
 baseline initialization, and rejected global lighting changes. Per-frame
 diagnostics are intentionally omitted to avoid overloading the ESP32-P4 USB CDC
 serial path.
+
+## Configuration Identifier Limits
+
+`CONFIG_*_MAX_LEN` capacities in `pad_config.h` include the terminating NUL
+byte. Action and widget type buffers are 16 bytes, so their identifiers must
+fit in 15 bytes. Limits count UTF-8 bytes, not displayed characters.
+
+Widget registration macros check the stringified prefix at compile time.
+`DEFINE_AND_REGISTER_ACTION_TYPE` checks the actual persisted type literal,
+not the C++ variable name. These checks also protect board-specific modules
+when they are compiled, without changing runtime parsing or registry behavior.
+
+`test_config_identifier_guards` compiles every widget macro variant with MCP
+enabled and disabled, plus action registrations. It accepts 14- and 15-byte
+names and requires the intended assertion for 16-byte names, including the
+former `gamepad_joystick` identifier. Runtime host tests copy fitting names
+through `WidgetConfig::type` and `ButtonAction::type` before registry lookup.
+
+Other configuration strings retain their existing validation and truncation
+behavior. This registration guard does not introduce a general oversized-input
+rejection policy or increase any buffer capacity.
 
 ## Portal Modes
 
@@ -231,6 +431,24 @@ states:
 - Fixed widths prevent layout shift when data loads
 - Minimal visual changes when actual data arrives
 
+Navigation owns shell startup: it loads the header information and starts health
+polling once. Header consumers share cached device information; concurrent health
+consumers share one in-flight request, and subsequent polls request fresh data.
+The portal retains its two-request fetch concurrency limit for device memory safety.
+
+The pad editor requests pad data and button defaults together and waits for the
+defaults before rendering the grid. Sound files, building blocks, and native
+extensions load afterward. Sound and extension selectors remain disabled while
+their catalogs load, preserving saved filenames and extension IDs when options
+arrive. Building blocks show a loading state until their catalog is available.
+
+Device information reads friendly pad names from the immutable RAM config cache,
+not from pad files. Names retain their full stored length. Successful saves and
+renames replace the cached config before the generation counter advances; deletes
+remove it, and boot loading and cache rebuilds populate it. Imports and MCP saves
+use the same persistence paths. The browser refreshes its device-info cache after
+pad saves and imports, so no separate name-cache expiration is needed.
+
 ### Fragment Layout Convention
 
 Every fragment begins with a `section-header` containing its title and a short
@@ -354,8 +572,8 @@ every component in that custom section to the same category ID.
 **Sections:**
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
   - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
-  - **Grid preview**: Click any cell to open the button editor dialog
-  - **Button editor dialog**: Reorganized into collapsible card-like groups (Layout, Labels, Bar Chart, Gauge, Sparkline, Table, Actions, Icon, Image / Camera Feed, Appearance, State)
+  - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
+  - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Compact action summaries expand into registry-driven editors.
   - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)
@@ -370,9 +588,56 @@ every component in that custom section to the same category ID.
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
 - **Recipes** (display boards): Installs a declared scenario into a selected pad without changing existing buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked cell is the recipe's top-left anchor; adaptive recipes may use a smaller fitting footprint when no larger forward footprint fits. The placement grid previews the resolved group and reports its bounds. Fixed-offset recipes remain supported. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase that can. If the current empty grid can host it but existing buttons block every placement, it offers a confirmed **Clear Buttons** action that retains the other pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The **Recipe Catalog** page edits the device-persisted catalog served by `GET/POST /api/recipes/catalog`; a missing catalog is an empty valid envelope. The repository sample is [docs/samples/recipe-catalog.json](../samples/recipe-catalog.json).
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
-- **Pad save controls**: The bottom action bar provides Save Pad, Show on Device, and More. A fixed Save Pad button appears while the current pad has unsaved changes, so repeated edits do not require scrolling to the action bar.
+- Pad save controls: A workspace toolbar labels the pad list with Pads and provides pending-edit or saving status, Save Pad, Show on Device, and More. Clean drafts have no status label. The current pad is highlighted in the list, which shares navigation row styles with the shell. The Pad inspector scope or More > Pad Settings opens pad settings. Clicking a selected button again deselects it without discarding its draft. The canvas has no dimensions toolbar or footer. Pad and button action slots share the same accented group styles. Save Pad is also available in the mobile inspector header.
+- Pad numeric inputs: Spinner buttons are hidden consistently within the editor. A delegated, non-passive wheel listener prevents native number stepping and scrolls the nearest available scroll container, including dynamically rendered action and widget fields. Input focus and values remain unchanged; browser zoom gestures retain their native behavior.
+- Pad workspace layout: The outer frame matches the shared section corner radius (12px). Its height is measured from the content pane, workspace offset, and bottom padding rather than a fixed viewport allowance. The resize observer watches both the canvas and content pane; short screens retain the existing minimum heights and scrolling.
 
-**Layout:** Full-width pad grid with responsive button editor dialog
+Desktop uses a pad rail, persistent aspect-correct canvas, and contextual
+inspector. Tablet moves the rail above the canvas and inspector. Mobile uses a
+full-screen inspector with Return to pad; returning retains edits. Pad scope
+contains Layout, Appearance, Bindings, and Actions tabs.
+
+`portal_pad_workspace.js` owns one active pad draft's form snapshots, pending
+validation errors, selection, tabs, resize observer, and cancellable event
+listeners. Valid button edits immediately replace the draft model; invalid
+inputs retain the last valid model and their raw form values. Save blocks on
+pending errors or overlapping/out-of-bounds buttons. Copy and inherited-button
+selection do not mutate the draft. Only an actual edit creates an override.
+
+Save uses the existing serialized persistence queue and icon-upload path.
+Revision and root guards prevent completed saves or asynchronous catalogs and
+previews from replacing newer edits or a different pad. Successful canonical
+reload restores the selected inspector; failures retain the draft. No local
+storage, multi-pad drafts, undo history, or new continuous polling is added.
+The guarded pad switch and fragment departure use a native dialog with Keep
+Editing and Discard and Switch. Disposal clears listeners, observers, preview
+callbacks, and editor-only state. Clear Pad and pad-file import edit the draft;
+device defaults and explicitly confirmed device import remain separate writes.
+
+##### Workspace Acceptance Checklist
+
+Use the production fragment and local P4 fixtures for these checks. Mock tests
+do not verify on-device rendering, input dispatch, or physical device behavior.
+
+| Surface | Acceptance requirement |
+|---------|------------------------|
+| Draft lifecycle | Direct edits; button/tab changes retain incomplete fields; errors block save; failed save retains the draft; retry succeeds |
+| Persistence | No pad writes before Save Pad; one current-pad save; canonical reload retains selection; edits during save remain dirty |
+| Navigation | Keep Editing preserves the draft; discard loads the destination; fragment/hash navigation and beforeunload are guarded; revisits have no stale listeners |
+| Canvas | Device aspect ratio, spacing and insets; spans, inherited ghosts, empty positions; native selection, drag/drop and resize synchronize inspector coordinates |
+| Button content | All labels and styles, spans, icons and positioning, local/remote images and credentials, capability-gated camera controls |
+| Widgets | Bar chart, gauge, sparkline, table, rocker, numeric rocker, list, camera preview, HID input widgets, and native extension configuration |
+| Button actions | Ordered tap/long-press lists, add/remove/reorder, all registry types and bindings, confirmation, numeric-rocker adjustment |
+| Pad scope | Name, dimensions, wake screen, template, background, shadow inheritance, bindings, and full-screen actions |
+| Inheritance | Selecting or copying a ghost creates no override; editing does; clearing the override restores the inherited button |
+| Operations | Copy/paste button, fill, copy/paste pad, pad import/export, draft-only clear, blocks and cancellation; no unintended persistence |
+| Separate writes | Defaults save independently; device import retains its explicit confirmation, complete pad persistence, and reboot behavior; Show on Device does not save |
+| Responsive layout | Desktop/tablet canvas stays mounted; mobile inspector has save/return; no horizontal overflow or overlapping persistent controls |
+
+Run the focused Node portal tests through CTest, including the dev server,
+dialog transaction, dirty state, import, preview, action picker/list, and
+startup tests. Run the asset variant/cache checks and production asset
+generator. Portal-only changes do not require a firmware build.
 
 #### Network Page (`/network.html`)
 
@@ -522,7 +787,105 @@ or device taking longer to boot.
 - DNS propagation for hostname changes may take additional time
 - Some networks/browsers block cross-origin polling
 
+## Server Timing Diagnostics
+
+Firmware portal responses expose request-local measurements in the `Server-Timing`
+HTTP header. Select a request in browser DevTools and open **Timing** to inspect
+the metrics, or inspect the response header directly. The local Python portal
+mock does not measure firmware handlers.
+
+```http
+Server-Timing: auth;dur=0.010, system;dur=0.250, wifi;dur=12.000, total;dur=12.400
+```
+
+Durations are milliseconds with three decimal places. Named phases measure time
+since the preceding phase marker; `total` measures handler work up to header
+attachment. It overlaps the phase measurements and must not be added to them.
+Shared response helpers use `response_total` when the caller has not supplied a
+handler timer; that metric covers only response preparation, not the earlier
+handler work.
+
+| Response | Measured work |
+|----------|---------------|
+| `/api/info` and `/api/info?catalog=1` | Authentication, system and WiFi metadata, capability metadata, optional action and widget catalog construction and JSON writing, display metadata, cached pad-name reads, and response setup |
+| `/api/health` and available `/api/health/history` | Authentication, telemetry or history collection, and response preparation |
+| `/api/portal/nav` | Authentication, navigation construction, and response preparation |
+| `/api/config` | Authentication, configuration projection, and response preparation |
+| `/api/pad?page=N` | Authentication, pad lookup, storage reads, parsing, secret redaction, and response preparation |
+| `/api/pad/blocks`, `/api/sounds/list`, `/api/extensions`, and button-default configuration | Catalog or configuration collection and response preparation |
+| Shell, fragments, and bundled static assets | Handler phases where supplied, otherwise response preparation; fragments include asset lookup |
+| Other shared JSON response callers | JSON sizing and response setup, or error-response setup |
+
+For catalog requests, `actions_build` and `widgets_build` cover document allocation
+and metadata construction. `actions_json` and `widgets_json` cover JSON sizing,
+temporary buffer allocation, serialization, and response-stream writing. Catalogs
+are generated per request to preserve live availability checks; they are not cached.
+The temporary buffers prefer PSRAM, fall back to internal memory, and are freed
+after a bulk write. If allocation fails, serialization uses the original direct
+stream path. An incomplete catalog write returns an error rather than sending
+truncated JSON. `pad_names` includes screen enumeration and cached-name output,
+without pad-file existence checks, reads, or JSON parsing.
+
+Measurements stop before asynchronous response delivery. They do not include
+browser-side queueing, DNS, TCP connection establishment, request queueing before
+the handler starts, asynchronous body serialization, or network transmission.
+If browser waiting/TTFB is high but `total` is low, investigate scheduling or
+transport latency rather than attributing the entire wait to handler execution.
+Compare repeated requests because device load and network conditions vary.
+
+`WebPortalTiming` uses a fixed 384-byte formatting buffer per timer and reserves
+space for a total metric when additional phases no longer fit. It has no global
+request state, persistent storage, per-request logging, or external telemetry.
+Timer reads are inexpensive, but phase formatting, temporary stack use, response
+header allocation, and additional transmitted header bytes are not free. Keep
+phase names short and mark meaningful work boundaries instead of individual
+fields or loop iterations. JSON response bodies and cache policies are unchanged;
+not every authentication failure, redirect, or early error response is instrumented.
+
 ## REST API Reference
+
+### Development Crash Injection
+
+`POST /api/debug/crash?mode=abort&confirm=crash` intentionally crashes the
+device to test flash coredump capture. There is no web UI or MCP tool.
+`DEBUG_CRASH_API_ENABLED` defaults to `0` on every board. For an isolated
+dev/test build, explicitly set it to `1` in a local board override or compiler
+flags. Never enable it in distributed or production firmware. When disabled,
+both the handler and route are compiled out.
+
+| Mode | Behavior |
+| --- | --- |
+| `abort` | Calls `abort()` from a dedicated task |
+| `assert` | Fails an assertion; returns `501` without scheduling if `NDEBUG` disables assertions |
+| `invalid_write` | Writes to address zero through a volatile pointer; falls back to `abort()` if the write returns |
+
+The endpoint follows configured portal authentication and requires Full Mode
+outside AP/setup mode. Query parameters `mode` and `confirm=crash` are required
+(`400` otherwise). OTA returns `503`; a pending request returns `409`; task
+allocation failure returns `503`. Accepted requests return
+`202 {"scheduled":true,"delay_ms":500}` with `Cache-Control: no-store`.
+The task rechecks OTA after the delay and cancels if an update has started.
+The delay gives the HTTP response time to leave, but delivery is not guaranteed.
+
+```bash
+curl -X POST 'http://esp32-macropad.local/api/debug/crash?mode=abort&confirm=crash'
+```
+
+Use your configured hostname or IP address; add `--user YOUR_USERNAME` when
+Basic Auth is enabled (curl prompts for the password). Replace `mode=abort`
+with `mode=assert` or `mode=invalid_write` for the other tests.
+
+> [!WARNING]
+> This API intentionally interrupts device operation and may overwrite an
+> existing retained dump. Download that dump first, keep the exact crashing
+> build's ELF, and use only on a trusted development network. After testing,
+> remove the dev/test opt-in, rebuild, and flash firmware with
+> `DEBUG_CRASH_API_ENABLED=0`. No runtime setting disables this compile-time feature.
+
+After reboot, inspect `/api/logs/crash` and download
+`/api/logs/crash/download`, or use the existing Device Logs viewer. Coredump
+capture still depends on the SDK, partition capacity, and panic handler;
+an injected crash does not guarantee a valid dump.
 
 ### Recipe Catalog
 
@@ -770,11 +1133,34 @@ Returns comprehensive device information.
 - Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, `record_cancel`, and `speak` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. Azure transcription has a 30-second limit and no automatic retry. Failure sets `[stt:status]` to `error`, puts the reason in `[stt:text]`, and stops the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation. `speak` resolves its text field as a binding template, then queues best-effort Azure TTS with optional voice and volume overrides; it does not pause the action list, and provider failures are logged without changing the STT bindings. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
 
 **Display Fields** (only when `has_display` is `true`):
+- `widget_catalog`: Present only with `?catalog=1`. Array of registered widget
+  preview descriptors with `type`, `name`, and `icon` (Material Symbol name).
+  Optional fields are `second_icon`, `axis_field`, `horizontal_icon`,
+  `vertical_icon`, and `default_axis`. This metadata is independent of MCP.
 - `display_coord_width` / `display_coord_height`: Display resolution
 - `icon_max_dimension`: Largest accepted PNG width or height. The Pad editor
   rasterizes larger icons at this limit and the device scales them to fit.
 - `available_screens`: Array of `{id, name}` objects; pad screens include custom names from config
 - `current_screen`: ID of the currently displayed screen
+
+Each widget module defines a `static const WidgetPreview <type>_preview` before
+its `REGISTER_WIDGET*` invocation. The registration macros attach it to
+`WidgetType`; `widget_preview_catalog_emit()` enumerates the registry for the
+portal. The generic grid renderer reads `deviceInfoCache.widget_catalog`, so
+adding a widget does not require another JavaScript type-to-icon list. Unknown
+types or missing catalogs use a generic extension symbol.
+
+Widget markers use the small Material Symbols Outlined WOFF2 subset embedded
+in `portal-custom.css`, under the separate `Pad Widget Symbols` font family.
+This keeps markers offline without changing user-configured button icons.
+When a widget introduces a new symbol, regenerate the embedded subset from the
+icon names in widget preview declarations, including axis variants and the
+generic `extension` fallback. The upstream Apache 2.0 license is retained in
+[`assets/fonts/MaterialSymbols-LICENSE.txt`](../../assets/fonts/MaterialSymbols-LICENSE.txt).
+`tests/test_portal_pad_preview.js` checks catalog coverage, generic axis handling,
+configured content preservation, inherited rendering, and the embedded font
+payload. The `WidgetPreview.CatalogIsAvailableWithoutMcp` host test verifies
+native serialization with MCP disabled.
 
 **Health Widget Fields:**
 - `health_poll_interval_ms`: Poll interval used by the portal health overlay
@@ -1058,12 +1444,19 @@ Returns current device configuration (passwords excluded).
 **Notes:**
 - Some fields are build-time gated.
   - Display-related fields (backlight + screen saver) are present when `HAS_DISPLAY` is enabled.
-  - `screen_saver_backlight_only` is true on targets that retain display
-    rendering during logical sleep and turn off only the backlight. Their
+  - `screen_saver_backlight_only` is true on legacy timeout-only targets,
+    such as Inkplate6flick-interactive, with instant lighting transitions. Their
     portal moves the timeout and MQTT wake binding into Brightness and omits
     the Screen Saver navigation component. On these targets,
     `screen_saver_enabled` is always reported as true; set the timeout to `0`
     to disable automatic backlight shutdown.
+  - `screen_saver_keeps_panel_awake` is a read-only build capability derived
+    from `SCREENSAVER_KEEP_PANEL_AWAKE`. It keeps the panel controller and
+    rendering active while the screen saver turns off the lighting, and skips
+    panel sleep/wake commands. On JC3248W535 it is true independently of the
+    legacy policy: Screen Saver retains its enable checkbox, configured
+    Fade In/Fade Out durations, idle pad, and wake controls. The portal changes
+    only the display-sleep wording to backlight-off wording.
   - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
@@ -1087,7 +1480,7 @@ offers Off plus compiled transports, including on single-backend boards.
 Explicitly saved USB/BLE choices remain unchanged; devices without a saved
 choice become Off after updating. With neither backend compiled, keyboard
 fields, navigation, and the key action are absent. The `hid` fragment displays
-**Keyboard & Mouse** in both navigation and the fragment heading. The transport
+**Keyboard, Mouse & Gamepad** in both navigation and the fragment heading. The transport
 note explains that USB enables keyboard and mouse control, BLE enables keyboard
 control only, and Off disables both. Its active connection section follows the
 running backend, not the selector. Save is disabled for an unchanged preference; a saved preference
@@ -1143,7 +1536,10 @@ rejects key actions, and reports `keyboard_status: "disabled"`. Independent BLE
 telemetry remains unaffected. Ending HID reports cannot remove its descriptors,
 so this change also requires reboot. Windows may retain disconnected entries.
 USB is compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`,
-`jc4880p433-sd`, `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
+`jc4880p433-sd`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`.
+JC3248W535 disables BLE HID and uses native TinyUSB without a CDC console;
+serial diagnostics use UART0 at 115200 baud. Native USB flashing requires
+download mode when no runtime serial port is available.
 Both JC3636W518 variants explicitly disable `HAS_BLE` and `HAS_BLE_HID` and
 use TinyUSB with application-managed CDC instead of hardware CDC.
 The other JC4880 variants and LCD4B Voice
@@ -1160,7 +1556,7 @@ values from 0.1 to 5, defaulting to 1. `widget_mousepad_acceleration` accepts
 finite values from 0 to 5, defaulting to 0/off; it amplifies fast movement
 independently of sensitivity. `widget_mousepad_movement_threshold` accepts
 finite values from 0-12 device pixels, defaulting to 3 when missing.
-Movement beyond this distance starts pointer movement or an armed drag;
+Movement beyond this distance starts pointer movement, including during a button-zone hold;
 midpoint travel uses the same threshold for two-finger scrolling. Zero removes
 the dead zone. `widget_mousepad_reverse` is boolean (default false), and
 `widget_mousepad_inertia` is 0-5 (default 0/off), following Scrollpad direction
@@ -1176,7 +1572,7 @@ loads/saves these fields and bounds numeric inputs. Shared widget validation
 rejects invalid types, non-finite/out-of-range numbers, and non-boolean toggle
 values independently of MCP. Parsing still supplies defaults and bounds values.
 
-Mousepad supports pointer movement, taps, dragging, and two-finger scrolling.
+Mousepad supports pointer movement, taps, button-zone dragging, and two-finger scrolling.
 See the [Mousepad guide](../pad-editor-guide.md#mousepad) for gesture timing,
 contact ownership, cancellation, and single-contact behavior.
 The editor consumes ordinary

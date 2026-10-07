@@ -54,10 +54,17 @@ void Bme280Sensor::update() {
 		_humidity_pct = g_bme280.readHumidity();
 		_pressure_hpa = g_bme280.readPressure() / 100.0f;
 
+		const bool previously_valid = _has_valid_readings;
 		_has_valid_readings = !(isnan(_temperature_c) || isnan(_humidity_pct) || isnan(_pressure_hpa));
+		if (previously_valid != _has_valid_readings) {
+				if (_has_valid_readings) LOGI("Sensor", "BME280 readings valid");
+				else LOGW("Sensor", "BME280 readings invalid");
+		} else if (!_has_valid_readings) {
+				LOGW("Sensor", "BME280 readings invalid");
+		}
 
 		if (_has_valid_readings) {
-				LOGI(
+				LOGT(
 						"Sensor",
 						"BME280 read: %.2f C, %.2f %%RH, %.2f hPa",
 						_temperature_c,

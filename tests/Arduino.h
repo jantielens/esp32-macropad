@@ -18,6 +18,7 @@ class String;
 extern "C" {
 #endif
 unsigned long millis();
+unsigned long micros();
 #ifdef __cplusplus
 }
 #endif

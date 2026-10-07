@@ -120,6 +120,7 @@ static void scrollpad_describe(JsonObject& out) {
 }
 #endif
 
+static const WidgetPreview scrollpad_preview = {"Scrollpad", "keyboard_double_arrow_up", nullptr, "widget_scrollpad_axis", "keyboard_double_arrow_left", "keyboard_double_arrow_up", "vertical"};
 REGISTER_WIDGET_SCHEMA_LIFECYCLE(scrollpad, nullptr, false);
 
 #endif

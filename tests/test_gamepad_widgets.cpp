@@ -93,6 +93,62 @@ ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
     return ACTION_COMPLETE;
 }
 
+TEST(WidgetPreview, CatalogIsAvailableWithoutMcp) {
+    DynamicJsonDocument document(4096);
+    JsonArray catalog = document.to<JsonArray>();
+    widget_preview_catalog_emit(catalog);
+    unsigned described = 0;
+    for (uint8_t index = 0; index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        if (!type->preview) continue;
+        ASSERT_LT(described, catalog.size());
+        JsonObjectConst entry = catalog[described++];
+        EXPECT_STREQ(entry["type"], type->name);
+        EXPECT_STREQ(entry["name"], type->preview->name);
+        EXPECT_STREQ(entry["icon"], type->preview->icon);
+        EXPECT_EQ(type->describeSchema, nullptr);
+        if (type->preview->axis_field) {
+            EXPECT_STREQ(entry["axis_field"], type->preview->axis_field);
+            EXPECT_STREQ(entry["horizontal_icon"], type->preview->horizontal_icon);
+            EXPECT_STREQ(entry["default_axis"], type->preview->default_axis);
+        } else {
+            EXPECT_FALSE(entry.containsKey("axis_field"));
+        }
+    }
+    EXPECT_EQ(described, 4u);
+    EXPECT_EQ(catalog.size(), described);
+    EXPECT_FALSE(document.overflowed());
+}
+
+TEST(WidgetPreview, RegisteredIdentifiersSurviveStorage) {
+    for (uint8_t index = 0; index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        WidgetConfig config{};
+        ASSERT_LT(strlen(type->name), sizeof(config.type));
+        strlcpy(config.type, type->name, sizeof(config.type));
+        EXPECT_STREQ(config.type, type->name);
+        EXPECT_EQ(widget_find(config.type), type);
+    }
+    WidgetConfig config{};
+    strlcpy(config.type, "gamepad_stick", sizeof(config.type));
+    EXPECT_NE(widget_find(config.type), nullptr);
+    EXPECT_EQ(strlen("gamepad_joystick"), sizeof(config.type));
+    strlcpy(config.type, "gamepad_joystick", sizeof(config.type));
+    EXPECT_STREQ(config.type, "gamepad_joystic");
+    EXPECT_EQ(widget_find(config.type), nullptr);
+}
+
+TEST(WidgetPreview, MaximumFittingIdentifierSurvivesStorage) {
+    static WidgetType fitting_type{};
+    fitting_type.name = "abcdefghijklmno";
+    ASSERT_EQ(strlen(fitting_type.name), CONFIG_WIDGET_TYPE_MAX_LEN - 1u);
+    widget_register(&fitting_type);
+    WidgetConfig config{};
+    strlcpy(config.type, fitting_type.name, sizeof(config.type));
+    EXPECT_STREQ(config.type, fitting_type.name);
+    EXPECT_EQ(widget_find(config.type), &fitting_type);
+}
+
 TEST(WidgetNavigation, AnyEnabledInputWidgetSuppressesTheEntirePad) {
     ScreenButtonConfig buttons[2]{};
     PadConfig pad{};
@@ -1107,25 +1163,21 @@ TEST_F(GamepadWidget, ScrollpadRemainsSingleContactWithCapture) {
 }
 
 TEST_F(GamepadWidget, MouseDragOwnsFingerAndSuppressesExtraFingers) {
-    create("mousepad");
+    create("mousepad", true);
     mouse_reports();
     GamepadTouchRouter router;
-    router.update(contacts({{4, 50, 50}}), false, widget_generation);
-    lv_tick_inc(20);
-    router.update(contacts({}), false, widget_generation);
-    router.update(contacts({{7, 50, 50}}), false, widget_generation);
-    router.update(contacts({{7, 80, 50}}), false, widget_generation);
+    router.update(contacts({{4, 50, 180}}), false, widget_generation);
+    router.update(contacts({{4, 50, 180}, {7, 50, 50}}), false, widget_generation);
+    router.update(contacts({{4, 50, 180}, {7, 80, 50}}), false, widget_generation);
     auto* mouse = reinterpret_cast<MousepadState*>(state.data);
     ASSERT_NE(mouse->owner, 0U);
     auto reports = mouse_reports();
-    ASSERT_EQ(reports.size(), 4U);
+    ASSERT_EQ(reports.size(), 2U);
     EXPECT_EQ(reports[0].buttons, 1);
-    EXPECT_EQ(reports[1].buttons, 0);
-    EXPECT_EQ(reports[2].buttons, 1);
-    EXPECT_EQ(reports[3].buttons, 1);
-    EXPECT_EQ(reports[3].dx, 30);
-    router.update(contacts({{7, 90, 50}, {1, 100, 100}, {2, 120, 100}}), false, widget_generation);
-    router.update(contacts({{7, 100, 50}, {1, 100, 20}, {2, 120, 20}}), false, widget_generation);
+    EXPECT_EQ(reports[1].buttons, 1);
+    EXPECT_EQ(reports[1].dx, 30);
+    router.update(contacts({{4, 50, 180}, {7, 90, 50}, {1, 100, 100}, {2, 120, 100}}), false, widget_generation);
+    router.update(contacts({{4, 50, 180}, {7, 100, 50}, {1, 100, 20}, {2, 120, 20}}), false, widget_generation);
     reports = mouse_reports();
     ASSERT_EQ(reports.size(), 1U);
     EXPECT_EQ(reports[0].buttons, 1);
@@ -1153,7 +1205,7 @@ TEST_F(GamepadWidget, SyntheticReleaseConsumesFinalPosition) {
     EXPECT_EQ(reports[0].buttons, 0);
 }
 
-TEST_F(GamepadWidget, SyntheticTapDragAndDoubleClick) {
+TEST_F(GamepadWidget, SyntheticTapThenMovementNeverHoldsButtonAndDoubleClickStillWorks) {
     create("mousepad");
     mouse_reports();
     read(true);
@@ -1168,28 +1220,29 @@ TEST_F(GamepadWidget, SyntheticTapDragAndDoubleClick) {
     EXPECT_EQ(reports[3].buttons, 0);
     read(true);
     read(false);
+    reports = mouse_reports();
+    ASSERT_EQ(reports.size(), 2U);
+    EXPECT_EQ(reports[0].buttons, 1);
+    EXPECT_EQ(reports[1].buttons, 0);
     read(true);
     point.x = 80;
     read(true);
-    ASSERT_NE(reinterpret_cast<MousepadState*>(state.data)->owner, 0U);
+    EXPECT_EQ(reinterpret_cast<MousepadState*>(state.data)->owner, 0U);
     read(false);
     reports = mouse_reports();
-    ASSERT_EQ(reports.size(), 5U);
-    EXPECT_EQ(reports[2].buttons, 1);
-    EXPECT_EQ(reports[3].buttons, 1);
-    EXPECT_EQ(reports[3].dx, 30);
-    EXPECT_EQ(reports[4].buttons, 0);
+    ASSERT_EQ(reports.size(), 1U);
+    EXPECT_EQ(reports[0].buttons, 0);
+    EXPECT_EQ(reports[0].dx, 30);
 }
 
 TEST_F(GamepadWidget, MouseDragCancellationHideDeleteDisconnectAndOta) {
-    create("mousepad");
+    create("mousepad", true);
     GamepadTouchRouter router;
     auto begin_drag = [&] {
         router.update(contacts({}), false, widget_generation, mouse_hid_generation());
-        router.update(contacts({{4, 50, 50}}), false, widget_generation, mouse_hid_generation());
-        router.update(contacts({}), false, widget_generation, mouse_hid_generation());
-        router.update(contacts({{7, 50, 50}}), false, widget_generation, mouse_hid_generation());
-        router.update(contacts({{7, 80, 50}}), false, widget_generation, mouse_hid_generation());
+        router.update(contacts({{4, 50, 180}}), false, widget_generation, mouse_hid_generation());
+        router.update(contacts({{4, 50, 180}, {7, 50, 50}}), false, widget_generation, mouse_hid_generation());
+        router.update(contacts({{4, 50, 180}, {7, 80, 50}}), false, widget_generation, mouse_hid_generation());
         ASSERT_NE(reinterpret_cast<MousepadState*>(state.data)->owner, 0U);
         mouse_reports();
     };
@@ -1223,7 +1276,7 @@ TEST_F(GamepadWidget, MouseDragCancellationHideDeleteDisconnectAndOta) {
     EXPECT_EQ(reports[0].buttons, 0);
 }
 
-TEST_F(GamepadWidget, MouseDisconnectBetweenTapsClearsDragCandidate) {
+TEST_F(GamepadWidget, MouseDisconnectBetweenTapsKeepsMovementButtonFree) {
     create("mousepad");
     mouse_reports();
     read(true);

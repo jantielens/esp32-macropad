@@ -145,7 +145,7 @@ void epaper_frame_overlay_render(uint16_t battery_mv, uint32_t cycle_time_ms) {
 				epaper_frame_driver_print(text);
 		}
 
-		LOGI("Epaper", "Overlay drawn (pos=%u items=0x%02x batt=%u%% cycle=%ums)",
+		LOGT("Epaper", "Overlay drawn (pos=%u items=0x%02x batt=%u%% cycle=%ums)",
 			 (unsigned)g_epaper_config.epaper_frame_overlay_position,
 			 (unsigned)g_epaper_config.epaper_frame_overlay_items,
 			 (unsigned)pct, (unsigned)cycle_time_ms);

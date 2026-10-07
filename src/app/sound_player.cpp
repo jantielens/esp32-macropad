@@ -178,6 +178,7 @@ struct SoundPlayer {
     size_t buf_consumed;
     bool eof;
     bool resampler_initialized;
+    uint32_t truncated_frames;
     uint64_t total_us;
     uint64_t elapsed_output_frames;
     uint64_t elapsed_us;
@@ -252,6 +253,8 @@ static void sound_player_record_accepted_output(SoundPlayer* player, int out_fra
 
 void sound_player_close(SoundPlayer* player) {
     if (!player) return;
+    if (player->truncated_frames) LOGW(TAG, "Playback resampler truncation: frames=%lu cap=%d",
+                                     (unsigned long)player->truncated_frames, SOUND_PLAYER_MAX_OUTPUT_FRAMES);
     if (player->pcm) heap_caps_free(player->pcm);
 #if AUDIO_MP3_SCRATCH_PSRAM
     if (player->decode_scratch) heap_caps_free(player->decode_scratch);
@@ -390,7 +393,7 @@ SoundPlayerStepResult sound_player_step(SoundPlayer* player) {
             out_frames = resampler_process(&player->resampler, player->pcm, samples,
                                player->out_buf, SOUND_PLAYER_MAX_OUTPUT_FRAMES, &truncated);
             if (truncated) {
-                LOGW(TAG, "Resampler output cap reached: cap=%d source=%d Hz",
+                if (++player->truncated_frames == 1) LOGW(TAG, "Resampler output cap reached: cap=%d source=%d Hz",
                      SOUND_PLAYER_MAX_OUTPUT_FRAMES, frame_info.hz);
             }
     }
@@ -399,7 +402,7 @@ SoundPlayerStepResult sound_player_step(SoundPlayer* player) {
     }
     if (out_frames > 0 && !audio_write_with_stats(player->output_driver, player->out_buf,
                                                    out_frames, &player->starvation)) {
-        LOGE(TAG, "Audio output write error");
+        LOGT(TAG, "Playback stopped after output write failure");
         return SOUND_PLAYER_STEP_ERROR;
     }
     sound_player_record_accepted_output(player, out_frames);

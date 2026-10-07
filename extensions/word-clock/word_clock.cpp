@@ -112,6 +112,7 @@ static_assert(sizeof(ACCURATE_WORD_NAMES) / sizeof(ACCURATE_WORD_NAMES[0]) == WO
 struct InstanceState {
     bool active;
     bool dirty;
+    bool log_phrases;
     uint32_t instance_id;
     void* extension_context;
     void* canvas;
@@ -180,7 +181,7 @@ char face_letter(WordClockMode mode, uint8_t row, uint8_t column) {
 }
 
 void log_phrase(const NativeExtensionHostApi* host, const InstanceState* instance, const char* resolved) {
-    if (!host || !host->core || !host->core->log || !instance) return;
+    if (!host || !host->core || !host->core->log || !instance || !instance->log_phrases) return;
     char message[LOG_MESSAGE_CAPACITY] = "word clock time=";
     char* cursor = message + sizeof("word clock time=") - 1;
     const char* end = message + sizeof(message);
@@ -601,6 +602,9 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     find_string(config_json, "font_family", instance->font_name, sizeof(instance->font_name));
     find_string(config_json, "time", instance->time_template, sizeof(instance->time_template));
     instance->mode = parse_mode(config_json);
+    uint32_t log_phrases = 0;
+    find_number(config_json, "log_phrases", &log_phrases);
+    instance->log_phrases = log_phrases != 0;
     instance->accurate_past_threshold_minutes = parse_accurate_past_threshold(config_json);
     instance->phrase_animation_ms = parse_phrase_animation_interval(config_json);
     instance->shift_pixels = parse_shift_pixels(config_json);

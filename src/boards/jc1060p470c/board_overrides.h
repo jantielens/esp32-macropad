@@ -1,6 +1,10 @@
 #ifndef BOARD_OVERRIDES_JC1060P470C_H
 #define BOARD_OVERRIDES_JC1060P470C_H
 
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG true
+#endif
+
 // ============================================================================
 // GUITION JC1060P470C Board Configuration Overrides
 // ============================================================================

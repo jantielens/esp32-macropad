@@ -32,39 +32,29 @@ const padState = {
 
 let padDirty = false;
 let padSaveInProgress = false;
-let padFooterVisible = false;
-let padQuickSaveObserver = null;
+let padLoadGeneration = 0;
 
 function padMarkDirty(event) {
     if (event && event.isTrusted === false) return;
     padDirty = true;
-    padUpdateQuickSave();
+    if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.revision++;
+    padWorkspaceRefresh();
 }
 
 function padClearDirty() {
     padDirty = false;
-    padUpdateQuickSave();
-}
-
-function padUpdateQuickSave() {
-    const quickSave = document.getElementById('pad-quick-save-btn');
-    const editor = document.getElementById('pad-config-section');
-    if (!quickSave || !editor) return;
-
-    quickSave.hidden = !padDirty || padFooterVisible || editor.style.display === 'none';
-    quickSave.disabled = padSaveInProgress;
-    quickSave.textContent = padSaveInProgress ? 'Saving Pad...' : 'Save Pad';
+    padWorkspaceRefresh();
 }
 
 async function padRequestSave() {
     if (padSaveInProgress) return;
     padSaveInProgress = true;
-    padUpdateQuickSave();
+    padWorkspaceRefresh();
     try {
         await padSavePage();
     } finally {
         padSaveInProgress = false;
-        padUpdateQuickSave();
+        padWorkspaceRefresh();
     }
 }
 
@@ -93,13 +83,17 @@ function padSetHidWidgetCapabilityVisibility(info) {
 async function padInit() {
     const section = document.getElementById('pad-config-section');
     if (!section) return;
+    if (typeof padWorkspaceInit === 'function') padWorkspaceInit();
 
     // The action-type picker renders from the firmware catalog cached on
     // deviceInfoCache; wait for it before building any action editor markup
     // so the picker is complete and correct on first paint.
     await getDeviceInfo();
+    if (document.getElementById('pad-config-section') !== section) return;
 
     const nativeExtensions = deviceInfoCache && deviceInfoCache.has_native_extensions === true;
+    padExtensionCatalogLoading = nativeExtensions;
+    padSoundListLoading = deviceInfoCache.has_sound_player === true;
     const externalWidgetOption = document.getElementById('pad-edit-external-widget-option');
     if (externalWidgetOption) externalWidgetOption.style.display = nativeExtensions ? '' : 'none';
     const cameraPreviewOption = document.getElementById('pad-edit-camera-preview-widget-option');
@@ -108,10 +102,6 @@ async function padInit() {
     padSetHidWidgetCapabilityVisibility(deviceInfoCache);
     document.getElementById('pad-edit-gamepad-button-fields').innerHTML = actionEditorGamepadHTML('pad-edit-gamepad-hold', true);
     padSetImageCapabilityVisibility(deviceInfoCache);
-    if (nativeExtensions && typeof extensionFetchSlots === 'function') {
-        try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
-    }
-
     // Generate action editor HTML from shared module — three fixed action
     // slots per gesture. An unused slot collapses as its own "Add ..."
     // placeholder; labels are set here for the non-widget default and
@@ -132,8 +122,6 @@ async function padInit() {
     if (padActionContainer) {
         actionEditorListRender('pad-level-action-editors', padLevelActionPrefixes(), padDefaultActionLabels('Tap action'),
             { actionOptions: { showBleHint: true, showKeyHelp: true } });
-        padActionContainer.addEventListener('input', padMarkDirty);
-        padActionContainer.addEventListener('change', padMarkDirty);
     }
 
     // Generate numeric rocker adjustment action editor
@@ -142,27 +130,11 @@ async function padInit() {
         nrAdjContainer.innerHTML = actionEditorHTML('pad-edit-nr-adjust', 'Adjustment Action', { showBleHint: true, showKeyHelp: true });
     }
 
-    document.getElementById('pad-page-select').addEventListener('change', (e) => {
-        const newPage = parseInt(e.target.value);
-        if (padDirty) {
-            if (!confirm('You have unsaved changes. Discard and switch pad?')) {
-                e.target.value = padState.page;
-                return;
-            }
-        }
-        padClearDirty();
-        padState.page = newPage;
-        padLoadPage(padState.page);
-    });
     document.getElementById('pad-cols').addEventListener('change', (e) => {
         padState.cols = parseInt(e.target.value);
-        padMarkDirty();
-        padRenderGrid();
     });
     document.getElementById('pad-rows').addEventListener('change', (e) => {
         padState.rows = parseInt(e.target.value);
-        padMarkDirty();
-        padRenderGrid();
     });
     document.getElementById('pad-template-pad').addEventListener('change', async (e) => {
         padState.templatePad = parseInt(e.target.value);
@@ -172,7 +144,6 @@ async function padInit() {
     });
 
     document.getElementById('pad-save-btn').addEventListener('click', padRequestSave);
-    document.getElementById('pad-quick-save-btn').addEventListener('click', padRequestSave);
     document.getElementById('pad-delete-btn').addEventListener('click', padDeletePage);
     document.getElementById('pad-show-btn').addEventListener('click', padShowOnDevice);
     document.getElementById('pad-binding-add').addEventListener('click', padAddBinding);
@@ -180,16 +151,6 @@ async function padInit() {
     if (btnDefSaveBtn) btnDefSaveBtn.addEventListener('click', padSaveButtonDefaults);
 
     const padFooter = document.getElementById('pad-floating-footer');
-    const contentPane = document.getElementById('content-pane');
-    if (padQuickSaveObserver) padQuickSaveObserver.disconnect();
-    padFooterVisible = false;
-    if (padFooter && contentPane && typeof IntersectionObserver !== 'undefined') {
-        padQuickSaveObserver = new IntersectionObserver(function (entries) {
-            padFooterVisible = entries[0].isIntersecting;
-            padUpdateQuickSave();
-        }, { root: contentPane, threshold: 0.1 });
-        padQuickSaveObserver.observe(padFooter);
-    }
 
     // More menu toggle
     const moreBtn = document.getElementById('pad-more-btn');
@@ -198,19 +159,15 @@ async function padInit() {
         e.stopPropagation();
         moreMenu.style.display = moreMenu.style.display === 'none' ? 'block' : 'none';
     });
-    // Close menu on outside click
-    document.addEventListener('click', () => { moreMenu.style.display = 'none'; });
     // Close menu when any menu item is clicked
     moreMenu.addEventListener('click', (e) => {
         if (e.target.tagName === 'BUTTON' && !e.target.disabled) moreMenu.style.display = 'none';
     });
 
     // Dialog buttons
-    document.getElementById('pad-edit-ok').addEventListener('click', () => padDialogOk());
     document.getElementById('pad-edit-copy').addEventListener('click', padDialogCopyBtn);
     document.getElementById('pad-edit-paste').addEventListener('click', padDialogPasteBtn);
     document.getElementById('pad-edit-clear').addEventListener('click', padDialogClear);
-    document.getElementById('pad-edit-cancel').addEventListener('click', padDialogClose);
     var imageRefresh = document.getElementById('pad-edit-bg-image-refresh');
     if (imageRefresh) imageRefresh.addEventListener('click', function () {
         padLoadLocalImageOptions(document.getElementById('pad-edit-bg-image-path').value);
@@ -241,56 +198,52 @@ async function padInit() {
     const iconMi = document.getElementById('pad-edit-icon-mi');
     if (iconMi) iconMi.addEventListener('input', padUpdateIconPreview);
 
-    // Close dialog on overlay click
-    document.getElementById('pad-edit-overlay').addEventListener('click', (e) => {
-        if (e.target.id === 'pad-edit-overlay') padDialogClose();
-    });
 
     // Block placement cancel + Escape key
     const blockCancelBtn = document.getElementById('pad-block-cancel-btn');
     if (blockCancelBtn) blockCancelBtn.addEventListener('click', padExitPlacementMode);
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && padState.placingBlock) {
-            padExitPlacementMode();
-            e.stopImmediatePropagation();
-        }
-    });
-
-    // Track unsaved changes on name and other inputs
-    document.getElementById('pad-name').addEventListener('input', padMarkDirty);
-
-    // Warn before leaving with unsaved changes
-    window.addEventListener('beforeunload', (e) => {
-        if (padDirty) {
-            e.preventDefault();
-        }
-    });
 
     // deviceInfoCache is already populated (awaited at the top of padInit).
     if (deviceInfoCache.has_display === true) {
         section.style.display = 'block';
         if (padFooter) padFooter.style.display = '';
-        padUpdateQuickSave();
+        padWorkspaceRefresh();
         // Show pad and button defaults section
         var btnDefSec = document.getElementById('btn-defaults-section');
         if (btnDefSec) btnDefSec.style.display = 'block';
         padPopulateGridDropdowns();
         padPopulatePadDropdown();
         padPopulateScreenDropdown();
-        if (deviceInfoCache.has_sound_player === true) padFetchSoundList();
-        padLoadButtonDefaultsFromDevice();
         const requestedPage = Number(sessionStorage.getItem('esp32-macropad.recipe-pad-editor-page'));
         sessionStorage.removeItem('esp32-macropad.recipe-pad-editor-page');
         const initialPage = Number.isInteger(requestedPage) && requestedPage >= 0 &&
             requestedPage < deviceInfoCache.max_pads ? requestedPage : 0;
         padState.page = initialPage;
         document.getElementById('pad-page-select').value = initialPage;
-        padLoadPage(initialPage);
-        padLoadBlockCatalog();
         padRefreshDropdownLabels();
+        padPopulateSoundDropdown();
+        await padLoadInitialPage(initialPage);
     } else {
         const noDisp = document.getElementById('pad-no-display-section');
         if (noDisp) noDisp.style.display = 'block';
+    }
+}
+
+async function padLoadInitialPage(page) {
+    const section = document.getElementById('pad-config-section');
+    const blockItems = document.getElementById('pad-block-items');
+    if (blockItems) blockItems.textContent = 'Loading building blocks...';
+    const defaultsReady = padLoadButtonDefaultsFromDevice();
+    await padLoadPage(page, defaultsReady);
+    if (document.getElementById('pad-config-section') !== section) return;
+    if (deviceInfoCache.has_sound_player === true) padFetchSoundList();
+    padLoadBlockCatalog();
+    if (deviceInfoCache.has_native_extensions === true && typeof extensionFetchSlots === 'function') {
+        try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
+        padExtensionCatalogLoading = false;
+        if (document.getElementById('pad-config-section') === section) padPopulateExtensionDropdown();
+    } else {
+        padExtensionCatalogLoading = false;
     }
 }
 
@@ -317,6 +270,10 @@ function padLoadLevelActions(actions) {
         return action && typeof action === 'object' && action.type && action.type !== 'none';
     }).slice(0, MAX_ACTIONS);
     actionEditorListLoad(padLevelActionPrefixes(), padState.padActions);
+    if (typeof padWorkspace !== 'undefined' && padWorkspace) {
+        document.querySelectorAll('#pad-level-action-editors .action-list-slot').forEach(group => { group.open = false; });
+        padWorkspaceSummaries();
+    }
 }
 
 function padBuildLevelActions() {
@@ -387,10 +344,14 @@ function padPopulateTemplateDropdown(currentPage) {
 async function padLoadTemplateButtons() {
     padState.templateButtons = [];
     if (padState.templatePad < 0) return;
+    const page = padState.page;
+    const template = padState.templatePad;
+    const section = document.getElementById('pad-config-section');
     try {
-        const resp = await fetch('/api/pad?page=' + padState.templatePad);
+        const resp = await fetch('/api/pad?page=' + template);
         if (!resp.ok) return;
         const json = await resp.json();
+        if (page !== padState.page || template !== padState.templatePad || document.getElementById('pad-config-section') !== section) return;
         padState.templateButtons = (json.buttons && Array.isArray(json.buttons)) ? json.buttons : [];
     } catch (e) {
         // Silently ignore — template just won't show ghosts
@@ -401,13 +362,20 @@ function padPopulateScreenDropdown() {
     var prefixes = padActionPrefixes('tap').concat(padActionPrefixes('lp'), padLevelActionPrefixes());
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
+    const selected = new Map();
+    prefixes.forEach(function(prefix) {
+        const select = document.getElementById(prefix + '-target');
+        if (select) selected.set(select, select.value);
+    });
     actionEditorPopulateScreens(
         prefixes,
         deviceInfoCache ? deviceInfoCache.available_screens : null
     );
+    selected.forEach(function(value, select) { select.value = value; });
     // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
     const wakeSel = document.getElementById('pad-wake-screen');
     if (wakeSel && deviceInfoCache && deviceInfoCache.available_screens) {
+        const wakeScreen = wakeSel.value;
         while (wakeSel.options.length > 1) wakeSel.remove(1);
         deviceInfoCache.available_screens.forEach(s => {
             const opt = document.createElement('option');
@@ -415,18 +383,27 @@ function padPopulateScreenDropdown() {
             opt.textContent = s.name;
             wakeSel.appendChild(opt);
         });
+        wakeSel.value = wakeScreen;
     }
 }
 
 // Cached sound file list (populated at init, used synchronously on dialog open)
 var padSoundListCache = [];
+let padSoundListLoading = false;
+let padExtensionCatalogLoading = false;
 
 // Fetch sound list from device and update cache
 function padFetchSoundList() {
-    fetch('/api/sounds/list')
+    const section = document.getElementById('pad-config-section');
+    return fetch('/api/sounds/list')
         .then(function(r) { return r.ok ? r.json() : []; })
         .then(function(sounds) { padSoundListCache = sounds; })
-        .catch(function() {});
+        .catch(function() {})
+        .finally(function() {
+            if (document.getElementById('pad-config-section') !== section) return;
+            padSoundListLoading = false;
+            padPopulateSoundDropdown();
+        });
 }
 
 // Populate sound file dropdowns in action editors (synchronous, uses cache)
@@ -435,6 +412,10 @@ function padPopulateSoundDropdown() {
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
     actionEditorPopulateSounds(prefixes, padSoundListCache);
+    prefixes.forEach(function(prefix) {
+        var select = document.getElementById(prefix + '-sound-alert-file');
+        if (select) select.disabled = padSoundListLoading;
+    });
 }
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'];
@@ -450,7 +431,7 @@ function padWidgetTypeChanged() {
         extensionSection.style.display = wtype === 'external' ? '' : 'none';
         if (wtype === 'external') extensionSection.open = true;
     }
-    ['pad-edit-labels-section', 'pad-edit-icon-section'].forEach(function (id) {
+    ['pad-edit-text-labels-section', 'pad-edit-icon-section'].forEach(function (id) {
         var section = document.getElementById(id);
         if (section) section.style.display = wtype === 'external' ? 'none' : '';
     });
@@ -506,8 +487,15 @@ function padWidgetTypeChanged() {
     if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 }
 
-async function padLoadPage(page) {
+async function padLoadPage(page, defaultsReady) {
+    const generation = ++padLoadGeneration;
+    const section = document.getElementById('pad-config-section');
+    const current = () => generation === padLoadGeneration && document.getElementById('pad-config-section') === section;
+    if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+    if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = true;
     padState.page = page;
+    const screen = (deviceInfoCache.available_screens || []).find(screen => screen.id === 'pad_' + page);
+    document.getElementById('pad-name').value = screen ? screen.name : '';
     padState.rawJson = null;
     padState.buttons = [];
     padState.bindings = [];
@@ -519,6 +507,8 @@ async function padLoadPage(page) {
 
     try {
         const resp = await fetch('/api/pad?page=' + page);
+        await defaultsReady;
+        if (!current()) return;
         if (resp.status === 404) {
             // No config for this page — show empty grid
             padState.cols = 3;
@@ -544,6 +534,7 @@ async function padLoadPage(page) {
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
 
         const json = await resp.json();
+        if (!current()) return;
         padState.rawJson = json;
         const maxCols = (deviceInfoCache && deviceInfoCache.max_grid_cols) || 8;
         const maxRows = (deviceInfoCache && deviceInfoCache.max_grid_rows) || 8;
@@ -569,6 +560,7 @@ async function padLoadPage(page) {
         padState.templatePad = (json.template_pad !== undefined && json.template_pad !== null) ? json.template_pad : -1;
         padPopulateTemplateDropdown(page);
         await padLoadTemplateButtons();
+        if (!current()) return;
 
         // Update dropdown label
         padUpdateDropdownLabel(page, json.name || '');
@@ -586,6 +578,7 @@ async function padLoadPage(page) {
                    padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), '#000000'));
         padRenderGrid();
     } catch (err) {
+        if (!current()) return;
         console.error('padLoadPage error:', err);
         showMessage('Failed to load Pad ' + (page + 1), 'error');
         padRenderGrid();
@@ -593,7 +586,10 @@ async function padLoadPage(page) {
         // Loading action lists, bindings, and template buttons can update
         // controls after the initial reset. A settled page is the clean
         // baseline; only user edits after this point should trigger a prompt.
-        padClearDirty();
+        if (current()) {
+            if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = false;
+            padClearDirty();
+        }
     }
 }
 
@@ -602,6 +598,7 @@ function padCloneJson(value) {
 }
 
 function padBuildSaveContext() {
+    if (typeof padWorkspaceValidate === 'function') padWorkspaceValidate();
     const snapshot = {
         page: padState.page,
         cols: padState.cols,
@@ -768,8 +765,14 @@ async function padPersistPage(context) {
 async function padSavePage(options) {
     const bulk = Boolean(options && options.bulk);
     try {
+        const section = document.getElementById('pad-config-section');
         const context = padBuildSaveContext();
+        const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;
+        const revision = workspace ? workspace.revision : 0;
         await padQueuePersistence(context);
+
+        if (!bulk && (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
+            (workspace && (workspace !== padWorkspace || workspace.revision !== revision)))) return context;
 
         showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         padClearDirty();
@@ -778,8 +781,17 @@ async function padSavePage(options) {
         if (!bulk) {
             // Refresh deviceInfoCache so target screen dropdowns pick up new pad names.
             await getDeviceInfo(true);
+            if (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
+                (workspace && workspace.revision !== revision)) return context;
+            const selected = workspace && workspace.selected ? [padState.editCol, padState.editRow, workspace.scope, workspace.tab] : null;
             // Reload to get canonical version from device.
             await padLoadPage(context.page);
+            if (selected && workspace === padWorkspace && padState.page === context.page) {
+                padDialogOpen(selected[0], selected[1]);
+                padWorkspaceSetScope(selected[2]);
+                padWorkspace.tab = selected[3];
+                padWorkspaceRenderTabs();
+            }
         }
         return context;
     } catch (err) {
@@ -796,6 +808,7 @@ function padUpdateDropdownLabel(page, name) {
     if (!sel) return;
     const opt = sel.options[page];
     if (opt) opt.textContent = name ? 'Pad ' + (page + 1) + ': ' + name : 'Pad ' + (page + 1);
+    if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
 }
 
 // Populate pad-page-select labels from deviceInfoCache.available_screens
@@ -812,15 +825,3 @@ function padRefreshDropdownLabels() {
         }
     });
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Shell-level initialization only.
-    // Fragment-level init is handled by portal_nav.js + portal_fragment_init.js.
-
-    // Load version info for shell header badges (also seeds deviceInfoCache
-    // and sets portalMode from the ap_active flag).
-    loadVersion();
-
-    // Initialize health widget (badge in shell header)
-    initHealthWidget();
-});

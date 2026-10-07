@@ -112,7 +112,7 @@ void mqtt_notify_init() {
     const char* base = mqtt_manager.baseTopic();
     snprintf(g_cmd_topic, sizeof(g_cmd_topic), "%s/notify/set", base);
     snprintf(g_state_topic, sizeof(g_state_topic), "%s/notify/state", base);
-    LOGI(TAG, "Init: cmd=%s state=%s", g_cmd_topic, g_state_topic);
+    LOGT(TAG, "Init: cmd=%s state=%s", g_cmd_topic, g_state_topic);
 }
 
 void mqtt_notify_on_connected() {
@@ -153,7 +153,7 @@ void mqtt_notify_loop() {
 
     if (params.text[0]) {
         message_bubble_show(&params);
-        LOGI(TAG, "Show: '%s'", params.text);
+        LOGT(TAG, "Show: bytes=%u", unsigned(strlen(params.text)));
     } else {
         message_bubble_dismiss();
         LOGI(TAG, "Dismiss");

@@ -43,6 +43,8 @@ struct TableWidgetState {
     uint8_t    col_count;
     uint16_t   row_count;
     uint32_t   last_payload_hash;
+    uint8_t    button_col;
+    uint8_t    button_row;
 };
 
 static inline TableWidgetState* table_get_state(WidgetState* state) {
@@ -303,7 +305,6 @@ static void table_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                          const PadRect* rect, const UIScaleInfo* scale,
                          lv_obj_t* icon_img, lv_obj_t* center_label,
                          WidgetState* state) {
-    (void)btn;
     (void)icon_img;
     (void)center_label;
 
@@ -314,6 +315,8 @@ static void table_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         return;
     }
     memset(st, 0, sizeof(TableWidgetState));
+    st->button_col = btn->col;
+    st->button_row = btn->row;
     table_set_state(state, st);
 
     st->default_bg = resolve_lv_color("#12122a", 0x12122a);
@@ -423,7 +426,7 @@ static void table_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, raw_value);
     if (err) {
-        LOGW(TAG, "JSON parse failed: %s", err.c_str());
+        LOGW(TAG, "Button %u,%u JSON parse failed: %s", st->button_col, st->button_row, err.c_str());
         lv_table_set_row_count(st->table, 1);
         st->row_count = 0;
         lv_obj_invalidate(st->table);
@@ -462,7 +465,7 @@ static void table_update(lv_obj_t* tile, const WidgetConfig* wcfg,
             first_row = rows[0].as<JsonObjectConst>();
         }
     } else {
-        LOGW(TAG, "Unsupported table payload root type");
+        LOGW(TAG, "Button %u,%u unsupported table payload root type", st->button_col, st->button_row);
         lv_table_set_row_count(st->table, 1);
         st->row_count = 0;
         lv_obj_invalidate(st->table);
@@ -542,6 +545,7 @@ static void table_describe(JsonObject& out) {
     { JsonObject o = f.createNestedObject(); o["name"] = "widget_table_style"; o["type"] = "string"; o["desc"] = "table style preset"; }
 }
 #endif
+static const WidgetPreview table_preview = {"Table", "grid_on"};
 REGISTER_WIDGET_SCHEMA(table, nullptr, true);
 
 #endif // HAS_DISPLAY

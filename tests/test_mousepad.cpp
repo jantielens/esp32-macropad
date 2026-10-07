@@ -125,23 +125,20 @@ TEST(Mousepad, TapAndHold) {
     EXPECT_FALSE(input.release(600));
 }
 
-TEST(Mousepad, TapThenDragAndStationaryDoubleClick) {
+TEST(Mousepad, TapThenMovementNeverHoldsButtonAndStationaryTapsStillClick) {
     MousepadInput input;
     input.contact_press(4, 20, 20, 100);
     EXPECT_TRUE(input.contact_release(4, 120).click);
     input.end_session();
     input.contact_press(7, 30, 30, 200);
     auto output = input.contact_move(7, 40, 30, 220, 1, 0, 3);
-    EXPECT_TRUE(output.hold_start);
+    EXPECT_FALSE(output.hold_start);
     EXPECT_EQ(output.dx, 10);
-    input.contact_press(1, 50, 50, 230);
-    EXPECT_EQ(input.scroll_sample(240, 1, 3, false).wheel, 0);
-    EXPECT_FALSE(input.contact_release(1, 240).hold_end);
     output = input.contact_move(7, 50, 30, 250, 1, 0, 3);
     EXPECT_FALSE(output.hold_start);
     EXPECT_EQ(output.dx, 10);
     output = input.contact_release(7, 260);
-    EXPECT_TRUE(output.hold_end);
+    EXPECT_FALSE(output.hold_end);
     EXPECT_FALSE(output.click);
     input.end_session();
     input.contact_press(0, 20, 20, 300);
@@ -154,7 +151,7 @@ TEST(Mousepad, TapThenDragAndStationaryDoubleClick) {
     EXPECT_FALSE(input.contact_move(0, 30, 20, 400, 1, 0, 3).hold_start);
 }
 
-TEST(Mousepad, ExpiredTapCancellationAndScrollDoNotArmDrag) {
+TEST(Mousepad, MovementAfterTapCancellationAndScrollNeverHoldsButton) {
     MousepadInput input;
     input.contact_press(0, 0, 0, 0);
     EXPECT_TRUE(input.contact_release(0, 20).click);

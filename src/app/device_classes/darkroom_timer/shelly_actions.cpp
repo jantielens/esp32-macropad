@@ -42,7 +42,7 @@ static ActionResult shelly_dispatch(const ButtonAction& act, const char* label,
         LOGW(TAG, "%s shelly: empty host", label);
         return ACTION_COMPLETE;
     }
-    LOGI(TAG, "%s shelly: %s relay %u %s", label, p.host, p.relay,
+    LOGT(TAG, "%s shelly: %s relay %u %s", label, p.host, p.relay,
          p.on ? "on" : "off");
     relay_queue_shelly(p.host, p.relay, p.on);
     return ACTION_COMPLETE;

@@ -29,4 +29,21 @@ const WidgetType* widget_at(uint8_t index) {
     return (index < s_widget_count) ? s_widget_types[index] : nullptr;
 }
 
+void widget_preview_catalog_emit(JsonArray catalog) {
+    for (uint8_t index = 0; index < widget_count(); ++index) {
+        const WidgetType* type = widget_at(index);
+        if (!type || !type->preview) continue;
+        const WidgetPreview& preview = *type->preview;
+        JsonObject entry = catalog.createNestedObject();
+        entry["type"] = type->name;
+        entry["name"] = preview.name;
+        entry["icon"] = preview.icon;
+        if (preview.second_icon) entry["second_icon"] = preview.second_icon;
+        if (preview.axis_field) entry["axis_field"] = preview.axis_field;
+        if (preview.horizontal_icon) entry["horizontal_icon"] = preview.horizontal_icon;
+        if (preview.vertical_icon) entry["vertical_icon"] = preview.vertical_icon;
+        if (preview.default_axis) entry["default_axis"] = preview.default_axis;
+    }
+}
+
 #endif // HAS_DISPLAY

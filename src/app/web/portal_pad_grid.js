@@ -6,18 +6,6 @@ function padFindButton(col, row) {
     return padState.buttons.find(b => b.col === col && b.row === row);
 }
 
-function padIsCellOccupied(col, row) {
-    // Check if any button occupies this cell (via its span)
-    for (const b of padState.buttons) {
-        const bc = b.col, br = b.row;
-        const cs = b.col_span || 1, rs = b.row_span || 1;
-        if (col >= bc && col < bc + cs && row >= br && row < br + rs) {
-            return b;
-        }
-    }
-    return null;
-}
-
 // ===== BUTTON RESIZE (DRAG HANDLES) =====
 
 function padGetGridGeometry() {
@@ -123,6 +111,7 @@ function padResizeDragStart(col, row, side, startX, startY) {
                         (btn.col_span || 1) !== origCs || (btn.row_span || 1) !== origRs;
         if (changed) padMarkDirty();
         padRenderGrid();
+        if (typeof padWorkspaceMoveSelection === 'function') padWorkspaceMoveSelection(origCol, origRow, btn);
     }
 
     document.addEventListener('mousemove', onMouseMove);
@@ -157,7 +146,6 @@ function padCanPlaceTemplateButton(tplBtn) {
 
 function padRenderGrid() {
     const grid = document.getElementById('pad-grid');
-    const emptyState = document.getElementById('pad-empty-state');
     if (!grid) return;
 
     const cols = padState.cols;
@@ -172,8 +160,6 @@ function padRenderGrid() {
     const pageBgInput = document.getElementById('pad-edit-page-bg-color');
     grid.style.background = (pageBgInput && /^#[0-9a-fA-F]{6}$/.test(pageBgInput.value.trim())) ? pageBgInput.value.trim() : '#000000';
     grid.innerHTML = '';
-
-    if (emptyState) emptyState.style.display = 'none';
 
     // Track which cells are "covered" by a spanning button
     const covered = new Set();
@@ -207,77 +193,22 @@ function padRenderGrid() {
             cell.classList.add('pad-cell');
             cell.dataset.col = c;
             cell.dataset.row = r;
+            cell.style.gridColumn = (c + 1) + ' / span 1';
+            cell.style.gridRow = (r + 1) + ' / span 1';
 
             if (btn) {
                 cell.classList.add('pad-cell-btn');
                 const cs = Math.min(btn.col_span || 1, cols - c);
                 const rs = Math.min(btn.row_span || 1, rows - r);
-                if (cs > 1) cell.style.gridColumn = 'span ' + cs;
-                if (rs > 1) cell.style.gridRow = 'span ' + rs;
+                if (cs > 1) cell.style.gridColumn = (c + 1) + ' / span ' + cs;
+                if (rs > 1) cell.style.gridRow = (r + 1) + ' / span ' + rs;
 
                 padRenderCellContent(cell, btn);
-
-                // Widget indicator
-                if (btn.widget_type === 'bar_chart') {
-                    const bar = document.createElement('div');
-                    bar.className = 'pad-cell-widget-bar';
-                    bar.title = 'Bar Chart Widget';
-                    cell.appendChild(bar);
-                }
-                if (btn.widget_type === 'gauge') {
-                    const arc = document.createElement('div');
-                    arc.className = 'pad-cell-widget-gauge';
-                    arc.title = 'Gauge Widget';
-                    cell.appendChild(arc);
-                }
-                if (btn.widget_type === 'sparkline') {
-                    const spark = document.createElement('div');
-                    spark.className = 'pad-cell-widget-sparkline';
-                    spark.title = 'Sparkline Widget';
-                    cell.appendChild(spark);
-                }
-                if (btn.widget_type === 'table') {
-                    const tbl = document.createElement('div');
-                    tbl.className = 'pad-cell-widget-table';
-                    tbl.title = 'Table Widget';
-                    cell.appendChild(tbl);
-                }
-                if (btn.widget_type === 'rocker') {
-                    const rk = document.createElement('div');
-                    rk.className = 'pad-cell-widget-rocker';
-                    rk.title = 'Rocker Widget';
-                    cell.appendChild(rk);
-                }
-                if (btn.widget_type === 'numericrocker') {
-                    const nr = document.createElement('div');
-                    nr.className = 'pad-cell-widget-numericrocker';
-                    nr.title = 'Numeric Rocker Widget';
-                    cell.appendChild(nr);
-                }
-                if (btn.widget_type === 'list') {
-                    const ls = document.createElement('div');
-                    ls.className = 'pad-cell-widget-list';
-                    ls.title = 'List Widget';
-                    cell.appendChild(ls);
-                }
-                if (btn.widget_type === 'camera_preview') {
-                    const camera = document.createElement('div');
-                    camera.className = 'pad-cell-widget-camera';
-                    camera.title = 'Camera Preview Widget';
-                    cell.appendChild(camera);
-                }
-                if (btn.widget_type === 'external') {
-                    const ext = document.createElement('div');
-                    ext.textContent = 'EXT';
-                    ext.title = 'Extension Widget';
-                    ext.style.cssText = 'position:absolute;right:4px;bottom:3px;font-size:10px;font-weight:700;padding:1px 3px;border-radius:2px;background:#0f766e;color:#fff;';
-                    cell.appendChild(ext);
-                }
 
                 padRenderResizeHandles(cell, btn, c, r);
 
                 if (!padState.placingBlock) {
-                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                    cell.addEventListener('click', () => padWorkspaceSelect(c, r));
                     cell.draggable = true;
                     cell.addEventListener('dragstart', (e) => padDragStart(e, c, r));
                     cell.addEventListener('dragend', padDragEnd);
@@ -289,8 +220,8 @@ function padRenderGrid() {
                     cell.classList.add('pad-cell-btn', 'pad-cell-ghost');
                     const cs = Math.min(tplBtn.col_span || 1, cols - c);
                     const rs = Math.min(tplBtn.row_span || 1, rows - r);
-                    if (cs > 1) cell.style.gridColumn = 'span ' + cs;
-                    if (rs > 1) cell.style.gridRow = 'span ' + rs;
+                    if (cs > 1) cell.style.gridColumn = (c + 1) + ' / span ' + cs;
+                    if (rs > 1) cell.style.gridRow = (r + 1) + ' / span ' + rs;
                     padRenderCellContent(cell, tplBtn);
                     // Mark cells covered by this template button's span
                     for (let dc = 0; dc < cs; dc++) {
@@ -312,7 +243,7 @@ function padRenderGrid() {
                 if (padState.placingBlock) {
                     cell.addEventListener('click', () => padPlacementClick(c, r));
                 } else {
-                    cell.addEventListener('click', () => padDialogOpen(c, r));
+                    cell.addEventListener('click', () => padWorkspaceSelect(c, r));
                 }
             }
 
@@ -322,9 +253,13 @@ function padRenderGrid() {
 
     // Placement mode: add hover overlay behavior
     if (padState.placingBlock) {
-        grid.addEventListener('mouseover', padPlacementHover);
-        grid.addEventListener('mouseleave', () => padPlacementClearGhosts(grid));
+        grid.onmouseover = padPlacementHover;
+        grid.onmouseleave = () => padPlacementClearGhosts(grid);
+    } else {
+        grid.onmouseover = null;
+        grid.onmouseleave = null;
     }
+    if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
 }
 
 function padPlacementHover(e) {
@@ -447,6 +382,7 @@ function padDrop(e, col, row) {
     padState.buttons.push(btn);
     padMarkDirty();
     padRenderGrid();
+    if (typeof padWorkspaceMoveSelection === 'function') padWorkspaceMoveSelection(srcCol, srcRow, btn);
 }
 
 function padPlacementClick(col, row) {

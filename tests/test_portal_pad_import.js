@@ -56,6 +56,7 @@ function makeDocument() {
 }
 
 function loadPortal(context) {
+    context.padWorkspaceRefresh = () => {};
     vm.createContext(context);
     for (const file of [
         'src/app/web/portal_pad_icons.js',
@@ -114,6 +115,7 @@ async function runImport(options = {}) {
         showMessage(message, type) { messages.push({ message, type }); },
         padBindingsFromJson() { return []; },
         padBindingsToDict() { return null; },
+        padRenderBindings() { context.importedBindingsRendered = true; },
         actionEditorBuild() { return {}; },
         actionEditorLoad() {},
         actionEditorListLoad(prefixes, actions) {
@@ -129,7 +131,7 @@ async function runImport(options = {}) {
         padInitBindableColor() {},
         padLoadLevelActions() {},
         padPopulateTemplateDropdown() {},
-        bindingValidatePadBindings() { return { valid: true, count: 0 }; },
+        bindingValidatePadBindings() { return { valid: context.importedBindingsRendered === true, count: context.importedBindingsRendered ? 0 : 1 }; },
         bindingValidateDefaults() { return { valid: true, count: 0 }; },
         getDeviceInfo: async function() { requests.push({ kind: 'device-info' }); },
         padLoadPage: async function(page) { reloads.push(page); },

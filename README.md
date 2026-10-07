@@ -28,9 +28,9 @@ Put a complex keyboard combo behind one button. Add text snippets, presentation
 controls, and media keys beside it. **USB and BLE keyboard macros** put your
 favorite shortcuts on screen instead of making you memorize them.
 
-On USB HID boards, add a **Mousepad** for pointing, clicking, and dragging,
+On USB HID boards, add a **Mousepad** for pointing, clicking, and button-zone dragging,
 a **Scrollpad**, or **gamepad controls** with two sticks, two triggers, a hat,
-and 16 buttons. Multicontact drivers support simultaneous controls and
+and 16 buttons. Multicontact drivers support button-zone dragging, simultaneous controls, and
 two-finger Mousepad scrolling.
 
 BLE supports keyboard control only; USB gamepad output is generic HID, not XInput.
@@ -122,6 +122,10 @@ Drag buttons into place, resize them, pick an icon, and preview the layout at yo
 device's aspect ratio. Save and see the result on your device. **Template pads**,
 shared styling defaults, and building blocks let you reuse what works.
 
+Offline widget type icons identify both local and inherited buttons in the pad
+editor. Unlabeled widgets show a larger symbol and their name when space allows;
+the grid remains a configuration overview rather than a live data preview.
+
 Install parameterized recipes from your device-saved catalog, starting with the
 repository's Pomodoro and Home Energy examples. Copy buttons or pads, and
 import/export configurations as JSON to back up or share your work.
@@ -129,6 +133,24 @@ import/export configurations as JSON to back up or share your work.
 The portal also handles settings, media, health diagnostics, and screen previews,
 with optional HTTP Basic Auth. Supported builds offer **over-the-air updates**
 with rollback protection.
+
+Builds with `HAS_REMOTE_LOG` offer **Device > Logs** with Full Mode access:
+all configured ESP32-P4 boards and ESP32-S3 boards with more than 5 MB flash.
+recent application logs, a retained startup snapshot, and browser copy/download.
+Startup records include reset diagnostics and firmware identity. SDK-supported
+flash coredumps appear separately with readable exception diagnostics, saved
+registers, summary copy, and bounded download.
+Access follows the device's authentication settings. Capture uses bounded PSRAM
+storage and leaves serial output independent.
+See the [log viewer guide](docs/web-portal-guide.md#device-logs) and
+[log API reference](docs/dev/web-portal.md#remote-logs).
+
+`POST /api/debug/crash` supports abort, assertion, and invalid-write tests,
+with no web UI. `DEBUG_CRASH_API_ENABLED` defaults off on every board. Enable
+it explicitly only in an isolated dev/test build; never ship it enabled in
+production firmware. Remove the opt-in and rebuild after testing. See
+[crash injection](docs/dev/web-portal.md#development-crash-injection) for
+commands, authentication, and dump-overwrite risks.
 
 [Open the pad editor guide](docs/pad-editor-guide.md) or
 [tour the web portal](docs/web-portal-guide.md).
@@ -243,7 +265,7 @@ more room without using the board's internal flash for those files.
 
 | Capability | What to check |
 |------------|---------------|
-| USB keyboard, mouse, and gamepad | JC1060P470C, JC4880P433, JC3636W518, their `-sd` variants, and ESP32-P4 LCD 4B Macropad builds |
+| USB keyboard, mouse, and gamepad | JC3248W535, JC1060P470C, JC4880P433, JC3636W518, their `-sd` variants, and ESP32-P4 LCD 4B Macropad builds |
 | BLE keyboard | Board-dependent; both JC3636W518 variants disable BLE |
 | Native Extensions | Supported ESP32-P4 and ESP32-S3 builds, plus Inkplate 6FLICK Interactive; slot capacity varies |
 | Audio, microphones, and cameras | Hardware and firmware support vary; check the exact installer target |
@@ -256,13 +278,6 @@ Specialized targets include `jc4880p433-nau7802` and `jc4880p433-hx711`
 described in their setup guides. See [device classes](docs/device-classes/README.md)
 for the build-time selection and branding model.
 
-> [!IMPORTANT]
-> Back up stored files before upgrading older e-paper partition layouts.
-> The reTerminal E1003's smaller filesystem can cause a boot loop if the old
-> volume is retained; erase storage or restore the previous layout to recover.
-> Inkplate 6FLICK Interactive also requires a backup and restore when moving to
-> its Extension-enabled layout. Check the [e-paper architecture guide](docs/epaper-architectures.md)
-> and [release notes](CHANGELOG.md) before upgrading.
 
 More boards are welcome. The [modular display and touch drivers](docs/dev/display-touch-architecture.md)
 provide a starting point for adding yours.
@@ -297,7 +312,7 @@ On a Macropad build, make your first button do something you can see:
 
 No Home Assistant connection or HID setup is needed for this first test.
 
-For HID controls, select your transport in **Connectivity > Keyboard & Mouse**,
+For HID controls, select your transport in **Connectivity > Keyboard, Mouse & Gamepad**,
 save, and reboot. Output defaults to Off. On dual-USB-C P4 boards, use native
 USB/OTG for HID and USB-UART for flashing and logs; see
 [USB connector and power guidance](docs/web-portal-guide.md#keyboard).
@@ -321,7 +336,7 @@ USB/OTG for HID and USB-UART for flashing and logs; see
 ### Developer Documentation
 
 Building from source, contributing, or adding new board support? See the [developer docs](docs/dev/).
-For portal-only UI work, use the [device-free portal development server](docs/dev/web-portal.md#local-device-free-development) to work against production assets without flashing a board.
+For portal-only UI work, use the [device-free portal development server](docs/dev/web-portal.md#local-device-free-development) to work against production assets without flashing a board. Its default P4 profile includes memory-backed pad editor fixtures and failure scenarios.
 
 ### Running Tests
 

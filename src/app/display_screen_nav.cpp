@@ -24,13 +24,13 @@ void DisplayManager::showSplash() {
 void DisplayManager::showInfo() {
 		// Defer screen switch to lvglTask (non-blocking)
 		pendingScreen = &infoScreen;
-		LOGI("Display", "Queued switch to InfoScreen");
+		LOGT("Display", "Queued switch to InfoScreen");
 }
 
 void DisplayManager::showTest() {
 		// Defer screen switch to lvglTask (non-blocking)
 		pendingScreen = &testScreen;
-		LOGI("Display", "Queued switch to TestScreen");
+		LOGT("Display", "Queued switch to TestScreen");
 }
 
 void DisplayManager::setSplashStatus(const char* text) {
@@ -58,7 +58,7 @@ bool DisplayManager::showScreen(const char* screen_id) {
 				if (strcmp(availableScreens[i].id, screen_id) == 0) {
 						// Defer screen switch to lvglTask (non-blocking)
 						pendingScreen = availableScreens[i].instance;
-						LOGI("Display", "Queued switch to screen: %s", screen_id);
+						LOGT("Display", "Queued switch to screen: %s", screen_id);
 						return true;
 				}
 		}
@@ -78,7 +78,7 @@ bool DisplayManager::showTransientScreen(const char* screen_id) {
 			}
 			skipHistoryPush = true;
 			pendingScreen = availableScreens[i].instance;
-			LOGI("Display", "Queued transient screen: %s", screen_id);
+			LOGT("Display", "Queued transient screen: %s", screen_id);
 			return true;
 		}
 
@@ -96,7 +96,7 @@ bool DisplayManager::restoreTransientScreen() {
 
 		skipHistoryPush = true;
 		pendingScreen = target;
-		LOGI("Display", "Queued transient screen restore");
+		LOGT("Display", "Queued transient screen restore");
 		return true;
 }
 
@@ -104,7 +104,7 @@ bool DisplayManager::goBack() {
 		if (screenHistoryCount == 0) return false;
 		pendingScreen = screenHistory[--screenHistoryCount];
 		skipHistoryPush = true;
-		LOGI("Display", "Queued go-back (history depth: %zu)", screenHistoryCount);
+		LOGT("Display", "Queued go-back (history depth: %zu)", screenHistoryCount);
 		return true;
 }
 
@@ -130,7 +130,7 @@ bool DisplayManager::cyclePad(int8_t direction, bool wrap, uint32_t excludedMask
 		unlockIfNeeded(didLock);
 
 		if (destination >= 0) {
-				LOGI("Display", "Queued cycle to Pad %d", destination + 1);
+				LOGT("Display", "Queued cycle to Pad %d", destination + 1);
 				return true;
 		}
 		return false;

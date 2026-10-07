@@ -105,8 +105,15 @@ void action_type_collect_topics(const ActionTypeDef* def, const ButtonAction& ac
 // Define an immutable action type and register it as one declaration. Use
 // this for production action types so the definition cannot be omitted from
 // the registry by a separate registration step.
-#define DEFINE_AND_REGISTER_ACTION_TYPE(var, ...)                              \
-    const ActionTypeDef var = { __VA_ARGS__ };                                  \
+template<size_t capacity>
+constexpr bool action_type_name_fits(const char (&)[capacity]) {
+    return capacity <= CONFIG_ACTION_TYPE_MAX_LEN;
+}
+
+#define DEFINE_AND_REGISTER_ACTION_TYPE(var, type_name, ...)                   \
+    static_assert(action_type_name_fits(type_name),                            \
+                  "Action identifier exceeds CONFIG_ACTION_TYPE_MAX_LEN; shorten the persisted type name"); \
+    const ActionTypeDef var = { type_name, __VA_ARGS__ };                       \
     REGISTER_ACTION_TYPE(var)
 
 #endif // HAS_DISPLAY || HAS_BUTTON

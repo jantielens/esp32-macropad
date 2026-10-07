@@ -6,7 +6,7 @@
  */
 async function loadVersion() {
     try {
-        const version = await getDeviceInfo(true);
+        const version = await getDeviceInfo();
         if (!version) return;
 
         // portalMode is derived from /api/info ap_active flag (previously a
@@ -148,6 +148,25 @@ function updateKeyboardTransportSetting() {
             config.keyboard_transport !== config.keyboard_active_transport;
         pending.style.display = needsReboot ? '' : 'none';
         pending.textContent = needsReboot ? keyboardTransportLabel(config.keyboard_transport) + ' pending reboot' : '';
+    }
+}
+
+function updateScreenSaverMode(config) {
+    const settings = document.getElementById('screensaver-sleep-settings');
+    if (!settings) return;
+    const keepPanelAwake = config.screen_saver_keeps_panel_awake === true;
+    settings.dataset.keepPanelAwake = String(keepPanelAwake);
+    const labels = {
+        'screensaver-description': keepPanelAwake ? 'Choose what the device shows, then when its backlight turns off.' : 'Choose what the device shows, then whether it turns the display off.',
+        'screensaver-sleep-heading': keepPanelAwake ? 'Backlight Off' : 'Display Sleep',
+        'screensaver-enabled-label': keepPanelAwake ? 'Turn off backlight after inactivity' : 'Turn off display after inactivity',
+        'screensaver-sleep-help': keepPanelAwake ? 'Fade the backlight to black while the display controller stays active.' : 'Fade to black, then put the display panel to sleep.',
+        'screensaver-timeout-label': keepPanelAwake ? 'Turn off backlight after' : 'Turn off display after',
+        'screensaver-timeline-sleep-title': keepPanelAwake ? 'Backlight off' : 'Display off'
+    };
+    for (const id of Object.keys(labels)) {
+        const label = document.getElementById(id);
+        if (label) label.textContent = labels[id];
     }
 }
 
@@ -335,6 +354,7 @@ async function loadConfig() {
         setCheckedIfExists('idle_screen_enabled', config.idle_screen_enabled);
         setValueIfExists('idle_screen_timeout_seconds', config.idle_screen_timeout_seconds);
         setValueIfExists('idle_screen_pad', config.idle_screen_pad);
+        updateScreenSaverMode(config);
         if (typeof window.screensaverTimelineUpdate === 'function') window.screensaverTimelineUpdate();
 
         // E-paper settings (only present when firmware has HAS_EPAPER_PANEL)

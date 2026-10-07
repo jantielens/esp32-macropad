@@ -23,7 +23,7 @@ GT911_TouchDriver::GT911_TouchDriver()
 			calXMin(0), calXMax(0), calYMin(0), calYMax(0) {}
 
 void GT911_TouchDriver::init() {
-		LOGI("GT911", "Initializing touch on %s (SDA=%d, SCL=%d, ADDR=0x%02X)",
+		LOGT("GT911", "Initializing touch on %s (SDA=%d, SCL=%d, ADDR=0x%02X)",
 				GT911_WIRE_NAME, TOUCH_I2C_SDA, TOUCH_I2C_SCL, TOUCH_I2C_ADDR);
 
 		// ----------------------------------------------------------------
@@ -35,7 +35,7 @@ void GT911_TouchDriver::init() {
 		//   INT=HIGH → 0x14 (TOUCH_I2C_ADDR_ALT)
 		// ----------------------------------------------------------------
 		#if TOUCH_RST >= 0
-		LOGI("GT911", "Hardware reset (RST=GPIO%d)", TOUCH_RST);
+		LOGT("GT911", "Hardware reset (RST=GPIO%d)", TOUCH_RST);
 		pinMode(TOUCH_RST, OUTPUT);
 
 		#if defined(TOUCH_INT) && TOUCH_INT >= 0
@@ -55,7 +55,7 @@ void GT911_TouchDriver::init() {
 		pinMode(TOUCH_INT, INPUT);
 		#endif
 
-		LOGI("GT911", "Reset complete");
+		LOGT("GT911", "Reset complete");
 		#endif
 
 		// Initialize I2C bus.
@@ -130,7 +130,7 @@ TouchReadStatus GT911_TouchDriver::gt911Read() {
 		}();
 		GT911_I2C_UNLOCK();
 		if (status == TouchReadStatus::Fresh && ids != previous_ids)
-				LOGI("GT911", "Contacts=%u IDs=0x%04x", unsigned(touches), unsigned(ids));
+				LOGT("GT911", "Contacts=%u IDs=0x%04x", unsigned(touches), unsigned(ids));
 		return status;
 }
 

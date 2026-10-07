@@ -2,6 +2,12 @@ include(FetchContent)
 include(GoogleTest)
 include(CMakeParseArguments)
 
+add_test(NAME test_log_manager COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager.py)
+add_test(NAME test_log_manager_serial COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager_serial.py)
+add_test(NAME test_remote_log_runtime COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_remote_log_runtime.py)
+add_test(NAME test_config_identifier_guards COMMAND python3
+    ${PROJECT_SOURCE_DIR}/tests/test_config_identifier_guards.py --compiler ${CMAKE_CXX_COMPILER})
+
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     googletest
@@ -51,7 +57,9 @@ set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
 add_host_gtest(test_mousepad test_mousepad.cpp)
+add_host_legacy_test(test_remote_log SOURCES test_remote_log.cpp)
 add_host_gtest(test_gamepad test_gamepad.cpp)
+add_host_gtest(test_web_portal_timing test_web_portal_timing.cpp)
 
 enable_language(C)
 file(GLOB_RECURSE HOST_LVGL_SOURCES CONFIGURE_DEPENDS
@@ -343,6 +351,7 @@ add_host_legacy_test(test_timer_format SOURCES test_timer_format.cpp stubs.cpp I
 add_host_legacy_test(test_shutter_curtain_stats SOURCES test_shutter_curtain_stats.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester LIBRARIES m)
 add_host_legacy_test(test_shutter_capture SOURCES test_shutter_capture.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_shutter_measure SOURCES test_shutter_measure.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
+add_host_legacy_test(test_shutter_measure_no_csv SOURCES test_shutter_measure.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true LOG_SHUTTER_CSV=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
 add_host_legacy_test(test_shutter_binding SOURCES test_shutter_binding.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS HAS_DISPLAY=true IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
 add_host_legacy_test(test_shutter_session SOURCES test_shutter_session.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_session.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/shutter_session_overrides ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_SHUTTER_TESTER=true OPTIONS -Wno-deprecated-declarations PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)
 add_host_legacy_test(test_shutter_session_actions
@@ -430,6 +439,8 @@ add_host_command_test(test_widget_schema python3 ${PROJECT_SOURCE_DIR}/tools/lin
 add_host_command_test(test_gauge_caption_cache python3 ${PROJECT_SOURCE_DIR}/tests/test_gauge_caption_cache.py)
 add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp)
 add_host_command_test(test_pad_refresh_schedule python3 ${PROJECT_SOURCE_DIR}/tests/test_pad_refresh_schedule.py)
+add_host_command_test(test_portal_info_preparation python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_info_preparation.py)
+add_host_command_test(test_portal_dev_server python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_dev_server.py)
 add_host_command_test(test_gt911_touch python3 ${PROJECT_SOURCE_DIR}/tests/test_gt911_touch.py)
 add_host_command_test(test_touch_driver_samples python3 ${PROJECT_SOURCE_DIR}/tests/test_touch_driver_samples.py)
 add_host_command_test(test_touch_manager_snapshots python3 ${PROJECT_SOURCE_DIR}/tests/test_touch_manager_snapshots.py)
@@ -441,7 +452,8 @@ foreach(script
     test_timer_action_editor.js test_portal_action_editor_cycle.js test_portal_action_picker.js
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
-    test_portal_ble_config.js
+    test_portal_ble_config.js test_portal_pad_preview.js test_portal_startup.js
+    test_portal_logs.js test_portal_screensaver.js
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} node ${PROJECT_SOURCE_DIR}/tests/${script})

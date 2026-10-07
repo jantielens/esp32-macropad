@@ -282,7 +282,19 @@ When `HAS_DISPLAY` is enabled, the firmware includes an inactivity manager with 
 - **Pixel shift**: Each sleep cycle advances an offset across a square grid whose radius is the device-wide **Burn-in Pixel Shift Distance** (`pixel_shift_distance_px`, default 4 px, range 0-8 px). On wake and screen switch, `lv_obj_set_style_translate_x/y` is applied to `lv_scr_act()`. A distance of 0 disables movement and removes the matching pad-layout reserve. Pad layouts reserve the same distance on every edge to prevent clipping.
 - **Panel sleep**: When entering `Asleep`, the screen saver calls `displaySleep()` on the active `DisplayDriver` to put the panel controller into hardware low-power mode (MIPI-DSI DCS sleep-in, TFT_eSPI command 0x10, Arduino_GFX bus command). On wake, `displayWake()` is called before the backlight fade-in begins. Drivers that do not override these methods fall back to backlight-only sleep.
 - **Periodic sleep refresh / active de-bias**: While fully asleep, the screen saver calls `displayRefreshSleep()` on the active driver every `SCREENSAVER_SLEEP_REFRESH_MS` (default 15 min, 0 disables) so drivers can scrub residual state during long idle. `MipiDsiDriver` re-blanks the DPI framebuffer by default. On boards with `DISPLAY_HARD_RESET_ON_SLEEP`, this hook instead performs an **active LC de-bias**: it briefly powers the panel back up and drives `DISPLAY_DEBIAS_CYCLES` (default 3) full-frame white↔black inversion cycles — `DISPLAY_DEBIAS_HOLD_MS` (default 80 ms) per half-cycle — to cancel the DC bias that accumulates in cheap IPS cells (the cause of washed-out colors after multi-hour idle), then re-asserts reset. The backlight is at 0 throughout, so it is invisible, and the panel is left in the same resting state (RST low, framebuffer black) so the wake path is unchanged.
-- **LVGL throttle**: While fully asleep, the LVGL task loop delay increases from the normal 1–20 ms to `SCREENSAVER_SLEEP_TICK_MS` (default 200 ms, board-overridable). `screen->update()` is gated so widgets stop refreshing. FPS is reported as 0 during sleep. This reduces CPU usage from ~30% to ~2%.
+- **LVGL throttle**: While fully asleep, the LVGL task uses `SCREENSAVER_SLEEP_TICK_MS` (default 200 ms, board-overridable), capped at 20 ms when a touch driver is initialized. The touch callback remains the sole physical reader, so this cap keeps quick wake taps from falling between slow sleep polls. `screen->update()` remains gated so widgets stop refreshing, and FPS is reported as 0 during sleep. Devices without initialized touch retain the full sleep delay.
+
+Serial diagnostics report `SAVER: Asleep`, a detected `Touch wake`, wake setup
+duration and configured fade duration, and `Awake` with the total wake duration.
+The numeric `state` and `from` fields use `ScreenSaverState` values. Existing
+touch contact-edge and suppression logs remain event-based. `Touch: Sampling`
+summarizes controller read errors and callback gaps over 100 ms, including the
+largest gap, longest consecutive-gap sequence, and current suppression state.
+Isolated gaps below 250 ms are debug-level. Read errors, gaps of at least 250 ms,
+or three consecutive gaps over 100 ms produce warnings. The first anomaly is
+reported immediately at its selected level; subsequent summaries occur at most
+once every five seconds, only with pending anomalies. Debug summaries respect
+the compile-time log level. Normal polling emits no sampling summaries.
 
 **Configuration / APIs:**
 - Config fields are exposed via `GET/POST /api/config` (only when `HAS_DISPLAY`).
@@ -616,7 +628,8 @@ public:
 `readSnapshot()` is the TouchManager input contract. Its default adapter calls
 `readSample()` once, preserving status and providing contact ID 0 for a single
 pressed contact. `contactCapacity()` reports the driver limit (1 by default,
-5 for GT911), not a verified panel limit. Snapshots use fixed five-contact storage.
+5 for GT911, 2 for AXS15231B on JC3248W535), not a universal controller or panel
+limit. Snapshots use fixed five-contact storage.
 
 `TouchSample` contains screen-space
 coordinates, a pressed flag, and `TouchReadStatus::Fresh`, `Unchanged`, or
@@ -636,12 +649,29 @@ to each contact. `readSample()` retains a first-contact compatibility projection
 Initialization also checks the pending-data
 clear and does not report successful initialization if that write fails.
 
-AXS15231B checks the complete command and eight-byte response before updating
-contact state or coordinates. Idle reads without an interrupt are `Unchanged`;
+AXS15231B checks the complete command and response before updating contact state
+or coordinates. `MAX_AXS15231B_CONTACTS` defaults to 1 (eight-byte response);
+JC3248W535 sets it to 2 (14-byte response), following hardware verification of
+independent coordinates and stable tracking IDs. Each six-byte record carries
+its own event and tracking ID. Snapshots update atomically after checking the
+zero gesture header, reserved bits, and unique non-sentinel IDs. Calibration and
+rotation apply to each accepted contact. Legacy single-contact access retains
+the same primary contact while it remains pressed, even if records reorder.
+Idle reads without an interrupt are `Unchanged`;
 held contacts are polled so stationary bus failures and missed release interrupts
 can be detected. Failed reports are retried without requiring another interrupt.
-Zero contacts or an up event release the contact; stale move events after release
-do not start another press.
+Zero contacts release the complete set; an up event or omission releases the
+corresponding ID. Each ID requires a down event before move events can extend
+its lifetime; stale moves after release do not start another press.
+A malformed report during an active touch reports `Error` rather than
+an immediate release. A valid report within the shared 100 ms error timeout
+resumes movement with the previous contacts and coordinates intact. Persistent
+malformed reports clear driver contact state and trigger filter cancellation;
+subsequent malformed idle reports provide a fresh release so input can rearm.
+Contact-set changes log `Contacts=N IDs=0x....` at diagnostic level. The first
+malformed active report includes packet bytes for diagnosis, with subsequent
+packet diagnostics limited to one every five seconds across error sequences;
+the temporary hardware probe's periodic INFO logs are removed.
 
 CST816S polls its five-byte report and distinguishes checked transfer failures
 from zero-contact or up-event releases. Calibration and rotation apply only to
@@ -682,17 +712,29 @@ error-cancellation guarantee. No installed Inkplate library files are patched.
 - **Library**: Vendored I2C driver ([`drivers/axs15231b/vendor/`](../src/app/drivers/axs15231b/vendor/))
 - **Hardware**: AXS15231B capacitive touch (same chip as QSPI display, different bus)
 - **Communication**: I2C (400 kHz), default address 0x3B
-- **Protocol**: 11-byte command + 100 µs delay + 8-byte response (per Espressif `esp_lcd_touch_axs15231b.c`)
+- **Protocol**: 11-byte command + 100 µs delay + 8-byte or 14-byte response, selected by `MAX_AXS15231B_CONTACTS`
 - **Response layout**:
   - `[0]` gesture, `[1]` num_points
   - `[2]` event(2b):unused(2b):x_h(4b), `[3]` x_l
-  - `[4]` unused(4b):y_h(4b), `[5]` y_l
-- **Event field state machine**: Byte `[2]` bits 7:6 encode press(0), lift(1), contact(2), no-event(3). A `touchActive` flag requires a fresh press(0) before accepting contact(2) events, preventing double-tap artifacts from stale controller replays after lift.
+    - `[4]` tracking_id(4b):y_h(4b), `[5]` y_l
+    - Records repeat every six bytes; bytes `[6:7]` and `[12:13]` are not used for coordinates or identity
+- **Event field state machine**: Bits 7:6 of each record's first byte encode press(0), lift(1), contact(2), no-event(3). A fresh press is required per tracking ID before accepting moves, preventing stale controller replays from reacquiring a released contact.
 - **Features**:
+    - Two independently tracked contacts on JC3248W535; other boards retain the one-contact default
   - Optional IRQ pin (polling fallback when INT=-1)
   - Edge clamping to calibration range before coordinate mapping
   - Driver-level rotation (inverse of display pixel transpose)
   - Calibration via `setOffsets()` with real→ideal coordinate mapping
+
+JC3248W535 sets `SCREENSAVER_KEEP_PANEL_AWAKE=true`. Screen saver activation
+fades the backlight off using the configured Fade Out duration, while keeping
+the combined AXS15231B controller and LVGL active. Wake uses the configured
+Fade In duration without sending panel Sleep Out or Display On commands.
+Touch wake therefore does not depend on touch detection during panel Sleep In.
+The normal screen saver enable setting remains available. This mode uses more
+power than full panel sleep. The independent legacy
+`SCREENSAVER_BACKLIGHT_ONLY` policy remains reserved for timeout-only targets
+with instant lighting transitions.
 
 **Wire_CST816S_TouchDriver** ([`src/app/drivers/wire_cst816s_touch_driver.h/cpp`](../src/app/drivers/wire_cst816s_touch_driver.cpp))
 - **Library**: Arduino Wire.h (I2C)
@@ -1524,7 +1566,7 @@ and shrinks to the mousepad's content bounds. Both settings default off; empty
 screen history has no special handling.
 
 `MousepadInput` owns relative baselines, fractional sensitivity remainders,
-threshold checks, and time-based acceleration. Its pointer, scrolling, dragging,
+threshold checks, and time-based acceleration. Its pointer, scrolling, button-held,
 and wait-for-release modes share the physical and synthetic point handlers.
 Position-only updates synchronize the current scan before second-contact entry
 establishes the midpoint baseline or queues pointer movement. One complete
@@ -1533,7 +1575,7 @@ velocity. Pointer acceleration uses raw finger speed before sensitivity, with
 a fixed speed threshold and bounded gain; it does not affect scrolling.
 Timing, axis policy, and the contact limit are named internal constants.
 The optional bottom 20% button strip assigns left/right hold roles at touchdown
-and suppresses scrolling while held. It shares HID owner tokens with tap-drag;
+and suppresses scrolling while held. Zone holds use HID owner tokens;
 `MouseSurfaceTouch::allow_replacement` permits pointer re-touch only during a
 zone hold. Outlines are drawn on the surface, not separate child hit targets,
 using dashed lines and corner arcs in the current button text color.
@@ -1640,7 +1682,11 @@ suppression and screen-saver sleep; auxiliary touch/wake queries read cached
 physical state. `TouchSnapshotFilter` tolerates an error episode for 100 ms;
 unchanged scans do not end that episode. Expiry explicitly cancels routed owners
 and resets LVGL. Errors and suppression require a fresh raw all-released scan
-before new interaction. Pad rebuilds/switches and transport invalidation retain
+before new interaction. A genuine release observed during suppression clears
+the release guard and routed-input block immediately, while LVGL still receives
+only released input. Later contact or a read error re-arms the guard, so holding
+through wake cannot click through; an unchanged cached release never clears it.
+Pad rebuilds/switches and transport invalidation retain
 that guard for held contacts or an already-canceled gesture, but idle resets do
 not arm a new guard. HID generation changes likewise cancel active owners
 without discarding the next navigation press when the router was idle.

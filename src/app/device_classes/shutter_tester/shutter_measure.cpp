@@ -577,6 +577,8 @@ void shutter_measure_init() {
     // Emit CSV header at boot for raw serial / monitor.sh users.
     // NOTE: monitor_meas.sh generates its own header from CSV_HEADER_TOP / CSV_SENSOR_COLS.
     // If column names or order change here, update those variables in monitor_meas.sh to match.
+#if LOG_SHUTTER_CSV
+    log_serial_begin();
     Serial.print("[MEAS] #,preset_id,capture_id,timestamp_ms,matched_speed,matched_ms,"
                  "target_manual,speed_locked,avg_ms,dev_pct,dev_stops,spread_ms,"
                  "spread_pct,verdict,sensor_count,valid_sensor_count,"
@@ -588,6 +590,8 @@ void shutter_measure_init() {
                       i+1,i+1,i+1,i+1,i+1,i+1,i+1,i+1,i+1,i+1);
     }
     Serial.println();
+    log_serial_end();
+#endif
 }
 
 void shutter_measure_process() {
@@ -615,11 +619,13 @@ void shutter_measure_process() {
 
     // Snapshot the row number under the lock before emitting the CSV line so
     // the printed value matches the count stored after the increment (ARCH-02).
+#if LOG_SHUTTER_CSV
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     uint32_t row_num = s_measure_count + 1;
     xSemaphoreGive(s_mutex);
 
     // CSV diagnostic line.
+    log_serial_begin();
     Serial.printf("[MEAS] %lu,%s,%lu,%lu,%s,%.3f,%d,%d,%.2f,%+.2f,%.4f,%.3f,%.2f,%d,%d,%d",
                   (unsigned long)row_num,
                   s_preset_id_str_cached,
@@ -665,6 +671,8 @@ void shutter_measure_process() {
         }
     }
     Serial.println();
+    log_serial_end();
+#endif
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     s_latest = m;

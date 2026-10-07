@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pad Workspace Concept</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Material+Symbols+Outlined&display=swap">
+<style>
+:root { color-scheme: dark; --bg:#181a1d; --panel:#202226; --raised:#292c31; --line:#383b41; --ink:#eceef0; --muted:#a2a8af; --accent:#59c8ac; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:14px 'IBM Plex Sans',sans-serif; letter-spacing:0; height:100dvh; display:flex; flex-direction:column; }
+button,input,select,textarea { font:inherit; color:inherit; }
+button { cursor:pointer; border:1px solid var(--line); background:var(--raised); border-radius:5px; padding:7px 11px; display:inline-flex; align-items:center; justify-content:center; gap:7px; }
+button:hover:not(:disabled) { background:#363a40; }
+button:disabled { opacity:.35; cursor:default; }
+button:focus-visible,a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+input,select,textarea { width:100%; min-width:0; background:#181a1d; border:1px solid #484c54; border-radius:4px; padding:8px 10px; outline:none; }
+input:focus,select:focus,textarea:focus { border-color:var(--accent); }
+input[type=color] { height:36px; padding:3px; cursor:pointer; }
+input[type=checkbox] { width:auto; accent-color:var(--accent); }
+input[type=range] { padding:0; accent-color:var(--accent); }
+a { color:var(--muted); text-decoration:none; }
+a:hover { color:var(--ink); }
+.icon { font-family:'Material Symbols Outlined'; font-size:20px; font-weight:normal; font-style:normal; line-height:1; white-space:nowrap; }
+.icon-button { width:34px; height:34px; padding:0; flex-shrink:0; }
+.primary { background:var(--accent); border-color:var(--accent); color:#10281f; font-weight:600; }
+.primary:hover:not(:disabled) { background:#7ddbc3; }
+.app-header { height:58px; flex-shrink:0; border-bottom:1px solid var(--line); display:flex; align-items:center; padding:0 22px; gap:16px; }
+.brand { font-size:17px; font-weight:600; }
+.concept { font-size:11px; color:var(--accent); border:1px solid #3b665a; padding:2px 6px; border-radius:3px; }
+.device { margin-left:auto; color:var(--muted); font-size:12px; }
+.toolbar { min-height:66px; flex-shrink:0; display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--line); }
+.toolbar h1 { font-size:19px; margin:0 8px 0 0; font-weight:500; }
+.toolbar .spacer { flex:1; }
+.status { color:var(--muted); font-size:12px; white-space:nowrap; }
+.status.dirty { color:#ebc277; }
+.workspace { display:grid; grid-template-columns:170px minmax(300px,1fr) 360px; flex:1; min-height:0; }
+.pad-list { padding:18px 10px; border-right:1px solid var(--line); overflow:auto; }
+.rail-title { color:var(--muted); font-size:11px; text-transform:uppercase; margin:0 10px 12px; }
+.pad-choice { width:100%; justify-content:flex-start; text-align:left; border:0; background:none; padding:11px 10px; margin-bottom:4px; gap:10px; }
+.pad-choice.active { color:var(--accent); background:#283b35; }
+.pad-number { color:var(--muted); font-size:12px; width:18px; flex-shrink:0; }
+.pad-choice span:last-child { overflow-wrap:anywhere; }
+.stage { min-width:0; display:flex; flex-direction:column; background-color:#17191c; background-image:radial-gradient(#33363b .7px,transparent .7px); background-size:16px 16px; }
+.stage-tools { height:54px; display:flex; align-items:center; gap:9px; padding:10px 20px; flex-shrink:0; }
+.stage-tools small { color:var(--muted); }
+.stage-tools .spacer { flex:1; }
+.segmented { display:flex; background:#202226; border:1px solid var(--line); border-radius:5px; padding:2px; gap:2px; }
+.segmented button { border:0; background:none; padding:5px 9px; font-size:12px; }
+.segmented button.active { background:#39413f; color:#b5f1df; }
+.canvas-space { min-height:0; flex:1; display:flex; justify-content:center; align-items:center; padding:8px 24px 20px; overflow:auto; container-type:size; }
+.canvas { width:min(100%,calc(100cqh - 24px)); aspect-ratio:1; min-width:240px; display:grid; padding:8px; gap:6px; background:#101820; border:1px solid #4c555e; box-shadow:0 18px 50px #0005; flex-shrink:0; }
+.canvas-button { min-width:0; min-height:0; border:1px solid #54616b; background:#273641; border-radius:6px; padding:8px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; text-align:center; gap:7px; container-type:inline-size; }
+.canvas-button:hover:not(:disabled) { filter:brightness(1.12); }
+.canvas-button.selected { outline:3px solid var(--accent); outline-offset:2px; z-index:1; }
+.canvas-button.selected::after { content:''; width:7px; height:7px; background:var(--accent); border:1px solid #10281f; position:absolute; bottom:2px; right:2px; }
+.canvas-button.ghost { opacity:.45; border-style:dashed; }
+.canvas-button.empty { color:#76818b; background:#1b242c; border:1px dashed #3a4652; }
+.canvas-button .label { font-size:clamp(12px,24cqi,26px); font-weight:500; overflow-wrap:anywhere; line-height:1.2; max-width:100%; }
+.canvas-button .small-label { font-size:12px; opacity:.8; overflow-wrap:anywhere; }
+.canvas-button .icon { font-size:32px; }
+.canvas-button .action-count { position:absolute; bottom:5px; right:6px; font-size:10px; background:#0004; border-radius:3px; padding:1px 4px; }
+.gauge { width:88px; height:88px; max-width:100%; aspect-ratio:1; border-radius:50%; background:conic-gradient(var(--accent) 46%,#415059 0); display:grid; place-items:center; }
+.gauge strong { display:grid; place-items:center; background:#273641; width:72px; height:72px; border-radius:50%; font-size:22px; }
+.stage-footer { padding:11px 20px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); display:flex; justify-content:space-between; background:var(--bg); }
+.inspector { background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+.inspector-head { padding:16px 18px 12px; }
+.scope { margin-bottom:16px; }
+.scope button { flex:1; }
+.inspector-heading { display:flex; align-items:center; gap:10px; }
+.inspector-heading h2 { font-size:19px; margin:0; font-weight:500; flex:1; overflow-wrap:anywhere; }
+.eyebrow { color:var(--muted); font-size:12px; margin-top:5px; }
+.tabs { display:flex; padding:0 12px; border-bottom:1px solid var(--line); }
+.tabs button { flex:1; border:0; background:none; border-radius:0; border-bottom:2px solid transparent; font-size:13px; padding:11px 5px; }
+.tabs button.active { color:var(--accent); border-bottom-color:var(--accent); }
+.inspector-body { flex:1; overflow:auto; padding:20px 18px; }
+.section-title { display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:600; margin:0 0 14px; }
+.section { margin-bottom:24px; }
+.field { display:block; margin-bottom:15px; }
+.field-label { display:flex; align-items:center; justify-content:space-between; color:#c4c8cd; margin-bottom:7px; font-size:12px; }
+.field-label .icon { font-size:16px; }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.value-preview { border-left:2px solid var(--accent); padding:5px 9px; color:var(--accent); font-size:12px; margin-top:7px; overflow-wrap:anywhere; }
+.muted { color:var(--muted); font-size:12px; }
+.divider { border:0; border-top:1px solid var(--line); margin:20px 0; }
+.action { border:1px solid var(--line); border-radius:5px; margin:8px 0; overflow:hidden; }
+.action summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:9px; padding:11px; }
+.action summary .step { width:21px; height:21px; display:grid; place-items:center; background:#363a40; border-radius:3px; font-size:11px; }
+.action-summary { flex:1; min-width:0; }
+.action-summary strong { display:block; font-weight:500; font-size:13px; }
+.action-summary small { display:block; color:var(--muted); margin-top:3px; overflow-wrap:anywhere; }
+.action-content { padding:12px; border-top:1px solid var(--line); }
+.action-content .field:last-child { margin-bottom:0; }
+.wide { width:100%; }
+.swatches { display:flex; gap:9px; margin:10px 0 18px; }
+.swatch { width:31px; height:31px; border-radius:4px; border:2px solid #ffffff35; padding:0; }
+.toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:15px 0; font-size:13px; }
+.binding-row { padding:10px 0; border-bottom:1px solid var(--line); }
+.binding-row code { font-size:12px; color:var(--accent); }
+.mobile-back { display:none; }
+#notice { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:#33574b; color:#ddfff2; padding:12px 20px; border:1px solid #608c7c; border-radius:5px; z-index:5; box-shadow:0 5px 24px #0005; max-width:90%; }
+#notice[hidden] { display:none; }
+@media(min-width:1600px) { .workspace { grid-template-columns:190px minmax(300px,1fr) 390px; } }
+@media(max-width:1050px) { .workspace { grid-template-columns:130px minmax(240px,1fr) 320px; } .toolbar { flex-wrap:wrap; } .device { display:none; } }
+@media(max-width:760px) {
+  .app-header { padding:0 14px; } .app-header>a { margin-left:auto; font-size:12px; } .brand { font-size:15px; }
+  .toolbar { padding:10px 14px; min-height:66px; } .toolbar h1 { font-size:17px; } .toolbar .status { display:none; }
+  .workspace { display:flex; flex-direction:column; }
+  .pad-list { display:flex; gap:5px; overflow-x:auto; flex-shrink:0; padding:6px 10px; border-right:0; border-bottom:1px solid var(--line); }
+  .rail-title { display:none; } #pad-list { display:flex; } .pad-choice { width:auto; flex-shrink:0; white-space:nowrap; padding:8px; margin:0; } .pad-number { display:none; }
+  .stage { flex:1; min-height:0; } .stage-tools { padding:8px 14px; } .canvas-space { padding:10px 15px; } .stage-footer { padding:8px 14px; }
+  .inspector { display:none; position:fixed; inset:0; z-index:3; border:0; } body.inspecting .inspector { display:flex; }
+  .mobile-back { display:inline-flex; margin-right:8px; } .inspector-head { padding-top:12px; } .scope { margin-bottom:12px; }
+}
+</style>
+</head>
+<body>
+<header class="app-header"><span class="icon">grid_view</span><span class="brand">ESP32 Macropad</span><span class="concept">Concept</span><span class="device">esp32-p4-lcd4b · 720 × 720</span><a href="http://localhost:8766/?profile=esp32-p4-lcd4b&fragment=pad-editor">Current editor <span aria-hidden="true">↗</span></a></header>
+<div class="toolbar">
+  <h1>Pad Editor</h1><button id="pad-settings"><span class="icon">tune</span>Pad settings</button>
+  <span class="spacer"></span><span id="status" class="status" role="status">Saved</span>
+  <button id="undo" class="icon-button" title="Undo" aria-label="Undo"><span class="icon">undo</span></button>
+  <button id="redo" class="icon-button" title="Redo" aria-label="Redo"><span class="icon">redo</span></button>
+  <button id="revert" class="icon-button" title="Revert to saved draft" aria-label="Revert to saved draft"><span class="icon">history</span></button>
+  <button id="save" class="primary"><span class="icon">save</span>Save draft</button>
+</div>
+<main class="workspace">
+  <nav class="pad-list" aria-label="Pads"><div class="rail-title">Pads</div><div id="pad-list"></div></nav>
+  <section class="stage" aria-label="Pad canvas">
+    <div class="stage-tools"><small id="grid-meta"></small><span class="spacer"></span><div class="segmented" aria-label="Preview mode"><button id="design">Design</button><button id="live" class="active">Live values</button></div></div>
+    <div class="canvas-space"><div id="canvas" class="canvas"></div></div>
+    <footer class="stage-footer"><span id="selection-meta"></span><span>Fit to view</span></footer>
+  </section>
+  <aside class="inspector" aria-label="Inspector">
+    <div class="inspector-head">
+      <div class="segmented scope"><button id="scope-button" class="active">Button</button><button id="scope-pad">Pad</button></div>
+      <div class="inspector-heading"><button id="back" class="icon-button mobile-back" title="Return to pad" aria-label="Return to pad"><span class="icon">arrow_back</span></button><h2 id="inspector-title"></h2><button id="delete" class="icon-button" title="Delete button" aria-label="Delete button"><span class="icon">delete</span></button></div>
+      <div id="inspector-meta" class="eyebrow"></div>
+    </div>
+    <div id="tabs" class="tabs" role="tablist"></div>
+    <div id="inspector-body" class="inspector-body" role="tabpanel"></div>
+  </aside>
+</main>
+<div id="notice" role="status" hidden></div>
+<script>
+let fixture, pads, saved, pageId='0', selected=2, scope='button', tab='Content', live=true;
+const undoStack=[], redoStack=[];
+const element=id=>document.getElementById(id);
+const escape=value=>String(value??'').replace(/[&<>"']/g, character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
+const clone=value=>structuredClone(value);
+const currentPad=()=>pads[pageId];
+const currentButton=()=>currentPad().buttons[selected];
+function notify(message) { element('notice').textContent=message; element('notice').hidden=false; clearTimeout(notify.timer); notify.timer=setTimeout(()=>element('notice').hidden=true,2500); }
+function snapshot() { return {pads:clone(pads),pageId,selected}; }
+function change(callback) { const before=snapshot(); callback(); if(JSON.stringify(before.pads)!==JSON.stringify(pads)) {undoStack.push(before);redoStack.length=0;} render(); }
+function restore(state) { pads=clone(state.pads); pageId=state.pageId; selected=state.selected; render(); }
+function dirty() { return JSON.stringify(pads)!==JSON.stringify(saved); }
+function resolve(value) {
+  if (!live) return value;
+  return String(value??'').replace(/\[pad:([^\]]+)\]/g,(_,name)=>currentPad().bindings?.[name]??'---').replace(/\[mqtt:[^\]]+\]/g,token=>fixture.binding_values[token]??'---');
+}
+function field(label,key,value,type='text') {
+  return `<label class="field"><span class="field-label">${escape(label)}</span><input data-field="${escape(key)}" type="${type}" value="${escape(value)}"></label>`;
+}
+function selectField(label,key,value,options) {
+  return `<label class="field"><span class="field-label">${escape(label)}</span><select data-field="${key}">${options.map(([id,title])=>`<option value="${escape(id)}" ${String(value)===String(id)?'selected':''}>${escape(title)}</option>`).join('')}</select></label>`;
+}
+function section(title,content) { return `<section class="section"><h3 class="section-title">${title}</h3>${content}</section>`; }
+function selectButton(index) { selected=index; scope='button'; if (!['Content','Actions','Appearance'].includes(tab)) tab='Content'; document.body.classList.add('inspecting'); render(); }
+function renderCanvas() {
+  const pad=currentPad(), canvas=element('canvas');
+  canvas.style.gridTemplateColumns=`repeat(${pad.cols},minmax(0,1fr))`; canvas.style.gridTemplateRows=`repeat(${pad.rows},minmax(0,1fr))`; canvas.style.background=pad.bg_color||'#101820';
+  canvas.replaceChildren();
+  const used=new Set();
+  function addButton(button,index,inherited=false) {
+    for(let row=button.row;row<button.row+(button.row_span||1);row++) for(let col=button.col;col<button.col+(button.col_span||1);col++) used.add(`${col},${row}`);
+    const node=document.createElement('button');
+    node.className='canvas-button'+(index===selected&&!inherited?' selected':'')+(inherited?' ghost':'');
+    node.style.gridColumn=`${button.col+1} / span ${button.col_span||1}`; node.style.gridRow=`${button.row+1} / span ${button.row_span||1}`;
+    node.style.background=button.bg_color||'#273641'; node.style.color=button.fg_color||'#ffffff';
+    node.title=inherited?'Inherited from '+pads[String(pad.template_pad)]?.name:`Column ${button.col+1}, row ${button.row+1}`;
+    node.setAttribute('aria-label',button.label_top||button.label_center||button.widget_type||'Button'); node.setAttribute('aria-pressed',String(index===selected&&!inherited));
+    const symbol=button.icon_id?.replace('mi_','')||fixture.widget_catalog.find(widget=>widget.type===button.widget_type)?.icon;
+    let visual=symbol?`<span class="icon" aria-hidden="true">${escape(symbol)}</span>`:'';
+    if(button.widget_type==='gauge'&&live) visual=`<div class="gauge"><strong>${escape(resolve(button.widget_data_binding)||46)}%</strong></div>`;
+    node.innerHTML=`${button.label_top?`<span class="small-label">${escape(resolve(button.label_top))}</span>`:''}${visual}${button.label_center?`<span class="label" style="${button.mock_font_size?'font-size:'+Number(button.mock_font_size)+'px':''}">${escape(resolve(button.label_center))}</span>`:''}${button.label_bottom?`<span class="small-label">${escape(resolve(button.label_bottom))}</span>`:''}${button.actions?.length?`<span class="action-count">${button.actions.length} ${button.actions.length===1?'action':'actions'}</span>`:''}`;
+    node.onclick=()=>inherited?notify('Inherited from '+pads[String(pad.template_pad)].name):selectButton(index);
+    canvas.append(node);
+  }
+  pad.buttons.forEach((button,index)=>addButton(button,index));
+  if(pad.template_pad!==undefined) pads[String(pad.template_pad)]?.buttons.forEach(button=>{
+    const positions=[];
+    for(let row=button.row;row<button.row+(button.row_span||1);row++) for(let col=button.col;col<button.col+(button.col_span||1);col++) positions.push(`${col},${row}`);
+    if(button.col+(button.col_span||1)<=pad.cols&&button.row+(button.row_span||1)<=pad.rows&&positions.every(position=>!used.has(position))) addButton(button,-1,true);
+  });
+  for(let row=0;row<pad.rows;row++) for(let col=0;col<pad.cols;col++) if(!used.has(`${col},${row}`)) {
+    const node=document.createElement('button'); node.className='canvas-button empty'; node.style.gridColumn=col+1; node.style.gridRow=row+1;
+    node.innerHTML='<span class="icon">add</span>'; node.title=`Add button at column ${col+1}, row ${row+1}`; node.setAttribute('aria-label',node.title);
+    node.onclick=()=>change(()=>{pad.buttons.push({col,row,label_center:'New button'}); selected=pad.buttons.length-1; scope='button'; tab='Content'; document.body.classList.add('inspecting');}); canvas.append(node);
+  }
+  element('grid-meta').textContent=`${pad.cols} × ${pad.rows} · 720 × 720`;
+  element('selection-meta').textContent=scope==='button'&&currentButton()?`Column ${currentButton().col+1}, row ${currentButton().row+1} · ${currentButton().col_span||1} × ${currentButton().row_span||1}`:pad.name;
+}
+function actionEditor(actions,listKey,title) {
+  const descriptions={mqtt:'Publish MQTT message',delay:'Delay',notify:'Show notification',screen:'Navigate to screen'};
+  const rows=(actions||[]).map((action,index)=>{
+    const fields=Object.keys(action).filter(key=>key!=='type').map(key=>field(key.replaceAll('_',' '),`action:${listKey}:${index}:${key}`,action[key])).join('');
+    return `<details class="action" ${index===0?'open':''}><summary><span class="step">${index+1}</span><span class="action-summary"><strong>${escape(descriptions[action.type]||fixture.catalog.find(item=>item.type===action.type)?.label||action.type)}</strong><small>${escape(action.topic||action.duration_ms&&action.duration_ms+' ms'||action.text||action.target||action.type)}</small></span><span class="icon">expand_more</span></summary><div class="action-content">${selectField('Action type',`action:${listKey}:${index}:type`,action.type,fixture.catalog.map(item=>[item.type,item.label]))}${fields}<button class="wide" data-remove-action="${listKey}:${index}"><span class="icon">delete</span>Remove action</button></div></details>`;
+  }).join('');
+  return section(title,rows+`<button class="wide" data-add-action="${listKey}"><span class="icon">add</span>Add action</button>`);
+}
+function renderInspector() {
+  const pad=currentPad(), button=currentButton(), isPad=scope==='pad';
+  element('scope-button').classList.toggle('active',!isPad); element('scope-pad').classList.toggle('active',isPad);
+  element('scope-button').disabled=!button; element('delete').hidden=isPad||!button;
+  element('inspector-title').textContent=isPad?pad.name:button?.label_center&&!button.label_center.includes('[')?button.label_center:button?.label_top||'Button';
+  element('inspector-meta').textContent=isPad?'Pad '+(Number(pageId)+1):button?`Column ${button.col+1}, row ${button.row+1} · ${button.widget_type||'Standard button'}`:'No button selected';
+  const tabs=isPad?['Layout','Appearance','Bindings','Actions']:['Content','Actions','Appearance'];
+  if(!tabs.includes(tab)) tab=tabs[0];
+  element('tabs').innerHTML=tabs.map(name=>`<button role="tab" aria-selected="${name===tab}" class="${name===tab?'active':''}" data-tab="${name}">${name}</button>`).join('');
+  let html='';
+  if(isPad&&tab==='Layout') html=section('Pad',field('Name','name',pad.name))+section('Grid',`<div class="row">${field('Columns','cols',pad.cols,'number')}${field('Rows','rows',pad.rows,'number')}</div>`)+section('Inheritance',selectField('Template pad','template_pad',pad.template_pad??'', [['','None'],...Object.entries(pads).filter(([id])=>id!==pageId).map(([id,data])=>[id,data.name])]))+section('Screensaver',selectField('Wake screen','wake_screen',pad.wake_screen??'', [['','Stay on this screen'],...Object.entries(pads).map(([id,data])=>['pad_'+id,data.name])]));
+  if(isPad&&tab==='Bindings') html=Object.entries(pad.bindings||{}).map(([name,value])=>`<div class="binding-row"><code>[pad:${escape(name)}]</code>${field('Source',`binding:${name}`,value)}<div class="value-preview">${escape(resolve(value))}</div></div>`).join('')+`<button id="add-binding" class="wide" style="margin-top:15px"><span class="icon">add</span>Add binding</button>`;
+  if(tab==='Actions') html=isPad?actionEditor(pad.pad_actions,'pad_actions','Full-screen tap'):actionEditor(button?.actions,'actions','Tap')+actionEditor(button?.lp_actions,'lp_actions','Long press')+`<hr class="divider"><label class="toggle">Confirm before running<input type="checkbox" data-field="confirm" ${button?.confirm?'checked':''}></label>${button?.confirm?field('Confirmation text','confirm_text',button.confirm_text):''}`;
+  if(!isPad&&button&&tab==='Content') {
+    html=section('Labels',field('Top','label_top',button.label_top)+field('Center','label_center',button.label_center)+(button.label_center?.includes('[')?`<div class="value-preview">${escape(resolve(button.label_center))}</div>`:'')+field('Bottom','label_bottom',button.label_bottom));
+    html+=section('Content',selectField('Widget','widget_type',button.widget_type||'',[['','Standard button'],...fixture.widget_catalog.map(widget=>[widget.type,widget.name])])+selectField('Icon','icon_id',button.icon_id||'',[['','None'],['mi_lightbulb','Lightbulb'],['mi_music_note','Music'],['mi_home','Home'],['mi_arrow_forward','Forward'],['mi_power_settings_new','Power']]));
+    if(button.widget_type) html+=section('Widget data',field('Data binding','widget_data_binding',button.widget_data_binding)+`<div class="value-preview">${escape(resolve(button.widget_data_binding)||'---')}</div>`+(button.widget_type==='gauge'?`<div class="row" style="margin-top:14px">${field('Minimum','widget_gauge_min',button.widget_gauge_min||0,'number')}${field('Maximum','widget_gauge_max',button.widget_gauge_max||100,'number')}</div>`:''));
+  }
+  if(tab==='Appearance') {
+    const target=isPad?pad:button;
+    if(target) html=section('Background',field('Color','bg_color',target.bg_color||'#273641','color')+`<div class="swatches">${['#273641','#166b64','#bd8b21','#7e405b','#486877','#15191d'].map(color=>`<button class="swatch" data-color="${color}" title="${color}" aria-label="Background ${color}" style="background:${color}"></button>`).join('')}</div>`);
+    if(!isPad&&button) html+=section('Text',field('Text color','fg_color',button.fg_color||'#ffffff','color')+field('Center label size','mock_font_size',button.mock_font_size||26,'number'))+section('Position',`<div class="row">${field('Column span','col_span',button.col_span||1,'number')}${field('Row span','row_span',button.row_span||1,'number')}</div>`);
+  }
+  element('inspector-body').innerHTML=html;
+  element('tabs').querySelectorAll('[data-tab]').forEach(node=>node.onclick=()=>{tab=node.dataset.tab;renderInspector();});
+  element('inspector-body').querySelectorAll('[data-field]').forEach(node=>node.onchange=()=>{
+    const key=node.dataset.field;
+    let value=node.type==='checkbox'?node.checked:node.value;
+    if(node.type==='number') {
+      value=Number(value); const max=key==='cols'||key==='rows'?8:key==='col_span'?pad.cols-button.col:key==='row_span'?pad.rows-button.row:1000;
+      if(!Number.isFinite(value)||value<0||value>max||(['cols','rows','col_span','row_span'].includes(key)&&(value<1||!Number.isInteger(value)))) { notify('Value is outside the grid limits');renderInspector();return; }
+      if(key==='cols'||key==='rows') { const cropped=pad.buttons.some(item=>key==='cols'?item.col+(item.col_span||1)>value:item.row+(item.row_span||1)>value); if(cropped) {notify('Move buttons before reducing the grid');renderInspector();return;} }
+      if(key==='col_span'||key==='row_span') { const width=key==='col_span'?value:button.col_span||1, height=key==='row_span'?value:button.row_span||1; if(pad.buttons.some(item=>item!==button&&button.col<item.col+(item.col_span||1)&&button.col+width>item.col&&button.row<item.row+(item.row_span||1)&&button.row+height>item.row)) {notify('Another button occupies that position');renderInspector();return;} }
+    }
+    change(()=>{
+      if(key.startsWith('action:')) { const [,list,index,property]=key.split(':'); const target=isPad?pad:button; if(property==='type') {const defaults={mqtt:{topic:'home/command',payload:'ON'},delay:{duration_ms:'500'},notify:{text:'Notification'},screen:{target:'pad_0'}}; target[list][index]={type:value,...defaults[value]};} else target[list][index][property]=value; }
+      else if(key.startsWith('binding:')) pad.bindings[key.slice(8)]=value;
+      else if(key==='template_pad') { if(value==='') delete pad[key]; else if(pads[value].template_pad!==undefined) notify('Choose a pad without a template'); else pad[key]=Number(value); }
+      else (isPad?pad:button)[key]=value;
+    });
+  });
+  element('inspector-body').querySelectorAll('[data-color]').forEach(node=>node.onclick=()=>change(()=>(isPad?pad:button).bg_color=node.dataset.color));
+  element('inspector-body').querySelectorAll('[data-add-action]').forEach(node=>node.onclick=()=>change(()=>{const target=isPad?pad:button; (target[node.dataset.addAction]??=[]).push({type:'mqtt',topic:'home/command',payload:'ON'});}));
+  element('inspector-body').querySelectorAll('[data-remove-action]').forEach(node=>node.onclick=()=>change(()=>{const [list,index]=node.dataset.removeAction.split(':'); (isPad?pad:button)[list].splice(Number(index),1);}));
+  if(element('add-binding')) element('add-binding').onclick=()=>change(()=>{pad.bindings??={}; let number=1; while(pad.bindings['binding'+number]) number++; pad.bindings['binding'+number]='[mqtt:home/value]';});
+}
+function render() {
+  element('pad-list').innerHTML=Object.entries(pads).map(([id,pad])=>`<button class="pad-choice ${id===pageId?'active':''}" data-pad="${id}"><span class="pad-number">${String(Number(id)+1).padStart(2,'0')}</span><span>${escape(pad.name)}</span></button>`).join('');
+  element('pad-list').querySelectorAll('[data-pad]').forEach(node=>node.onclick=()=>{pageId=node.dataset.pad; selected=0; scope=currentButton()?'button':'pad'; tab=scope==='button'?'Content':'Layout';render();});
+  const changed=dirty(); element('status').textContent=changed?'Unsaved changes':'Saved'; element('status').classList.toggle('dirty',changed);
+  element('undo').disabled=!undoStack.length; element('redo').disabled=!redoStack.length; element('save').disabled=!changed; element('revert').disabled=!changed;
+  element('design').classList.toggle('active',!live); element('live').classList.toggle('active',live);
+  renderCanvas(); renderInspector();
+}
+element('undo').onclick=()=>{if(undoStack.length) {redoStack.push(snapshot());restore(undoStack.pop());}};
+element('redo').onclick=()=>{if(redoStack.length) {undoStack.push(snapshot());restore(redoStack.pop());}};
+element('save').onclick=()=>{saved=clone(pads);render();notify('Draft saved for this session');};
+element('revert').onclick=()=>change(()=>pads=clone(saved));
+element('delete').onclick=()=>change(()=>{currentPad().buttons.splice(selected,1);selected=0;if(!currentButton()) {scope='pad';tab='Layout';}});
+element('pad-settings').onclick=element('scope-pad').onclick=()=>{scope='pad';tab='Layout';document.body.classList.add('inspecting');render();};
+element('scope-button').onclick=()=>{scope='button';tab='Content';render();};
+element('back').onclick=()=>document.body.classList.remove('inspecting');
+element('design').onclick=()=>{live=false;render();}; element('live').onclick=()=>{live=true;render();};
+fetch('../mock-data/pad-editor.json').then(response=>{if(!response.ok)throw new Error('Unable to load fixtures');return response.json();}).then(data=>{
+  fixture=data; pads=clone(data.pads); pads['5'].buttons=Array.from({length:64},(_,index)=>({col:index%8,row:Math.floor(index/8),label_center:String(index+1),bg_color:index%2?'#166b64':'#273641'})); saved=clone(pads); render();
+}).catch(error=>{element('inspector-title').textContent='Unable to load pads';notify(error.message);});
+</script>
+</body>
+</html>

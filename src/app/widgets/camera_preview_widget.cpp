@@ -181,6 +181,7 @@ static void camera_preview_describe(JsonObject& out) {
 }
 #endif
 
+static const WidgetPreview camera_preview_preview = {"Camera Preview", "videocam"};
 REGISTER_WIDGET_SCHEMA_LIFECYCLE(camera_preview, nullptr, false);
 
 #endif

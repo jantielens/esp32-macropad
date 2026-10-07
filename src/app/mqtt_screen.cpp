@@ -31,7 +31,7 @@ void mqtt_screen_init() {
 		snprintf(g_state_topic, sizeof(g_state_topic), "%s/screen/state", mqtt_manager.baseTopic());
 		g_pending = false;
 		g_last_published[0] = '\0';
-		LOGI(TAG, "Init: cmd=%s state=%s", g_command_topic, g_state_topic);
+		LOGT(TAG, "Init: cmd=%s state=%s", g_command_topic, g_state_topic);
 }
 
 void mqtt_screen_on_connected() {

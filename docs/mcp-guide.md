@@ -334,7 +334,7 @@ Active records are never evicted. When all four records are active or retained,
   `widget_disable_pad_swipes` (boolean, default false). Enabling it on any
   one input widget disables all swipe actions across its entire pad,
   independently of USB readiness. Other widget types reject this field.
-  The registry note describes pointer movement, taps, dragging, and two-finger
+  The registry note describes pointer movement, taps, button-zone dragging, and two-finger
   scrolling when USB keyboard transport is active. See the
   [Mousepad guide](pad-editor-guide.md#mousepad) for gesture timing, thresholds,
   contact ownership, and cancellation rules. Mousepad consumes ordinary button

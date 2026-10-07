@@ -64,11 +64,12 @@ static void pad_config_path(uint8_t page, char* buf, size_t buf_len) {
     snprintf(buf, buf_len, "/config/pad_%u.json", page);
 }
 
-static PadConfig* pad_config_create(uint8_t button_capacity) {
+static PadConfig* pad_config_create(uint8_t button_capacity, const char* name = "") {
     if (button_capacity > MAX_PAD_BUTTONS) return nullptr;
 
+    const size_t name_size = strlen(name) + 1;
     const size_t size = sizeof(PadConfig) +
-                        (size_t)button_capacity * sizeof(ScreenButtonConfig);
+                        (size_t)button_capacity * sizeof(ScreenButtonConfig) + name_size;
     PadConfig* config = nullptr;
     if (psramFound()) {
         config = (PadConfig*)heap_caps_malloc(
@@ -81,6 +82,9 @@ static PadConfig* pad_config_create(uint8_t button_capacity) {
     config->ref_count = 1;
     config->button_capacity = button_capacity;
     config->buttons = (ScreenButtonConfig*)(config + 1);
+    char* stored_name = (char*)(config->buttons + button_capacity);
+    memcpy(stored_name, name, name_size);
+    config->name = stored_name;
     return config;
 }
 
@@ -96,12 +100,14 @@ static bool pad_config_resize(PadConfig** config_ptr, uint8_t button_capacity) {
     }
     if (button_capacity == config->button_capacity) return true;
 
-    PadConfig* replacement = pad_config_create(button_capacity);
+    PadConfig* replacement = pad_config_create(button_capacity, config->name);
     if (!replacement) return false;
+    const char* replacement_name = replacement->name;
     memcpy(replacement, config, sizeof(PadConfig));
     replacement->ref_count = 1;
     replacement->button_capacity = button_capacity;
     replacement->buttons = (ScreenButtonConfig*)(replacement + 1);
+    replacement->name = replacement_name;
     memcpy(replacement->buttons, config->buttons,
            (size_t)config->button_count * sizeof(ScreenButtonConfig));
     pad_config_destroy(config);
@@ -407,7 +413,7 @@ bool pad_config_init() {
                 publish_eligibility(i, cfg->button_count > 0 ||
                                        cfg->pad_action_count > 0);
                 any_loaded = true;
-                LOGD(TAG, "Cached page %u", i);
+                LOGT(TAG, "Cached pad %u", i);
             }
         }
     }
@@ -440,7 +446,7 @@ static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
     if (!tpl_cfg) return;
 
     if (!pad_config_resize(out_ptr, (uint8_t)(out->button_count + tpl_cfg->button_count))) {
-        LOGW(TAG, "Page %u: OOM reserving template buttons", page);
+        LOGW(TAG, "Pad %u: OOM reserving template buttons", page);
         pad_config_release(tpl_cfg);
         return;
     }
@@ -511,7 +517,7 @@ static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
     }
 
     if (merged > 0) {
-        LOGI(TAG, "Page %u: merged %u buttons from template pad %d", page, merged, tpl);
+        LOGT(TAG, "Pad %u: merged %u buttons from template pad %d", page, merged, tpl);
     }
 
     // Trim capacity back to the number of entries actually merged.
@@ -527,13 +533,13 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
 
     File f = Storage.open(path, "r");
     if (!f) {
-        LOGD(TAG, "Page %u config not found", page);
+        LOGD(TAG, "Pad %u config not found", page);
         return nullptr;
     }
 
     size_t file_size = f.size();
     if (file_size == 0 || file_size > 64 * 1024) {
-        LOGW(TAG, "Page %u: invalid file size %u", page, (unsigned)file_size);
+        LOGW(TAG, "Pad %u: invalid file size %u", page, (unsigned)file_size);
         f.close();
         return nullptr;
     }
@@ -546,7 +552,7 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
         buf = (char*)malloc(file_size + 1);
     }
     if (!buf) {
-        LOGE(TAG, "Page %u: OOM for %u bytes", page, (unsigned)file_size);
+        LOGE(TAG, "Pad %u: OOM for %u bytes", page, (unsigned)file_size);
         f.close();
         return nullptr;
     }
@@ -560,16 +566,16 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
     free(buf);
 
     if (err) {
-        LOGE(TAG, "Page %u: JSON parse error: %s", page, err.c_str());
+        LOGE(TAG, "Pad %u: JSON parse error: %s", page, err.c_str());
         return nullptr;
     }
 
     JsonArray buttons = doc["buttons"];
     uint8_t button_capacity = buttons.isNull() ? 0 :
         (uint8_t)min((size_t)MAX_PAD_BUTTONS, buttons.size());
-    PadConfig* out = pad_config_create(button_capacity);
+    PadConfig* out = pad_config_create(button_capacity, doc["name"] | "");
     if (!out) {
-        LOGE(TAG, "Page %u: OOM for %u buttons", page, button_capacity);
+        LOGE(TAG, "Pad %u: OOM for %u buttons", page, button_capacity);
         return nullptr;
     }
     strlcpy(out->layout, "grid", CONFIG_LAYOUT_NAME_MAX_LEN);
@@ -596,14 +602,14 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
     if (!bindings_obj.isNull()) {
         for (JsonPair kv : bindings_obj) {
             if (out->binding_count >= PAD_MAX_BINDINGS) {
-                LOGW(TAG, "Page %u: max %d bindings reached, skipping rest", page, PAD_MAX_BINDINGS);
+                LOGW(TAG, "Pad %u: max %d bindings reached, skipping rest", page, PAD_MAX_BINDINGS);
                 break;
             }
             const char* name = kv.key().c_str();
             const char* value = kv.value().as<const char*>();
             if (!name || !value) continue;
             if (!is_valid_binding_name(name)) {
-                LOGW(TAG, "Page %u: skipping invalid binding name '%s'", page, name);
+                LOGW(TAG, "Pad %u: skipping invalid binding name '%s'", page, name);
                 continue;
             }
             PadBinding& b = out->bindings[out->binding_count];
@@ -612,7 +618,7 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
             out->binding_count++;
         }
         if (out->binding_count > 0) {
-            LOGI(TAG, "Page %u: %u named bindings loaded", page, out->binding_count);
+            LOGT(TAG, "Pad %u: %u named bindings loaded", page, out->binding_count);
         }
     }
 
@@ -645,7 +651,7 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
         merge_template_buttons(page, &out);
     }
 
-    LOGI(TAG, "Page %u loaded: layout=%s cols=%u rows=%u buttons=%u",
+    LOGT(TAG, "Pad %u loaded: layout=%s cols=%u rows=%u buttons=%u",
          page, out->layout, out->cols, out->rows, out->button_count);
     return out;
 }
@@ -729,7 +735,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
 
     File f = Storage.open(path, "w");
     if (!f) {
-        LOGE(TAG, "Page %u: failed to open for write", page);
+        LOGE(TAG, "Pad %u: failed to open for write", page);
         return false;
     }
 
@@ -737,7 +743,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
     f.close();
 
     if (written != len) {
-        LOGE(TAG, "Page %u: write failed (wrote %u of %u)", page, (unsigned)written, (unsigned)len);
+        LOGE(TAG, "Pad %u: write failed (wrote %u of %u)", page, (unsigned)written, (unsigned)len);
         return false;
     }
 
@@ -774,7 +780,7 @@ bool pad_config_save_raw(uint8_t page, const uint8_t* json, size_t len) {
     // Update fs_health stats
     storage_publish_usage(false);
 
-    LOGI(TAG, "Page %u saved (%u bytes, gen=%u)", page, (unsigned)len, g_generation);
+    LOGI(TAG, "Pad %u saved (%u bytes, gen=%u)", page, (unsigned)len, g_generation);
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
     }
@@ -790,7 +796,7 @@ bool pad_config_delete(uint8_t page) {
 
     bool existed = Storage.exists(path);
     if (existed && !Storage.remove(path)) {
-        LOGE(TAG, "Page %u: delete failed", page);
+        LOGE(TAG, "Pad %u: delete failed", page);
         return false;
     }
 
@@ -815,7 +821,7 @@ bool pad_config_delete(uint8_t page) {
 
     storage_publish_usage(false);
 
-    LOGI(TAG, "Page %u %s (gen=%u)", page,
+    LOGI(TAG, "Pad %u %s (gen=%u)", page,
          existed ? "deleted" : "cache reconciled", g_generation);
     if (!refresh_ok) {
         LOGE(TAG, "Pad %u: dependent cache refresh incomplete", page);
@@ -880,21 +886,11 @@ uint32_t pad_config_get_eligible_mask() {
 bool pad_config_read_name(uint8_t page, char* out, size_t out_len) {
     if (out && out_len) out[0] = '\0';
     if (!out || out_len == 0 || page >= MAX_PADS) return false;
-    size_t len = 0;
-    char* raw = pad_config_read_raw(page, &len);
-    if (!raw) return false;
-    // Read only the top-level "name" (friendly label) without parsing the whole
-    // pad. Mirrors the filtered read in web_portal_device_api.
-    JsonDocument filter;
-    filter["name"] = true;
-    JsonDocument doc;
-    bool ok = false;
-    if (deserializeJson(doc, raw, len, DeserializationOption::Filter(filter)) == DeserializationError::Ok
-        && doc["name"].is<const char*>()) {
-        const char* n = doc["name"];
-        if (n && n[0]) { strlcpy(out, n, out_len); ok = true; }
-    }
-    free(raw);
+    const PadConfig* config = pad_config_acquire(page);
+    if (!config) return false;
+    const bool ok = config->name && config->name[0];
+    if (ok) strlcpy(out, config->name, out_len);
+    pad_config_release(config);
     return ok;
 }
 

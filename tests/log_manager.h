@@ -24,5 +24,11 @@ inline void log_noop(Args&&...) {}
 #define LOGW(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
 #define LOGI(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
 #define LOGD(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
+#define LOGT(module, format, ...) log_noop(module, format, ##__VA_ARGS__)
+#ifndef LOG_SHUTTER_CSV
+#define LOG_SHUTTER_CSV 1
+#endif
+inline void log_serial_begin() {}
+inline void log_serial_end() {}
 
 #endif // LOG_MANAGER_H

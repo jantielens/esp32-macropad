@@ -217,17 +217,17 @@ static void cmd_set_time(float t) {
     if (t < EXPOSE_TIME_MIN) t = EXPOSE_TIME_MIN;
     if (t > EXPOSE_TIME_MAX) t = EXPOSE_TIME_MAX;
     g_expose.exposure_time_s = t;
-    LOGI(TAG, "Set time %.1fs", t);
+    LOGT(TAG, "Set time %.1fs", t);
 }
 
 static void cmd_adjust_seconds(float delta) {
     cmd_set_time(snap_tenth(g_expose.exposure_time_s + delta));
-    LOGI(TAG, "Adjust %.1fs → %.1fs", delta, g_expose.exposure_time_s);
+    LOGT(TAG, "Adjust %.1fs → %.1fs", delta, g_expose.exposure_time_s);
 }
 
 static void cmd_adjust_stops(float stops) {
     cmd_set_time(snap_tenth(g_expose.exposure_time_s * powf(2.0f, stops)));
-    LOGI(TAG, "Adjust %.3f stops → %.1fs", stops, g_expose.exposure_time_s);
+    LOGT(TAG, "Adjust %.3f stops → %.1fs", stops, g_expose.exposure_time_s);
 }
 
 static void cmd_set_dry_down(float pct) {
@@ -238,7 +238,7 @@ static void cmd_set_dry_down(float pct) {
     if (pct < DRY_DOWN_MIN) pct = DRY_DOWN_MIN;
     if (pct > DRY_DOWN_MAX) pct = DRY_DOWN_MAX;
     g_expose.dry_down_pct = snap_tenth(pct);
-    LOGI(TAG, "Dry-down %.1f%% (effective %.1fs)", g_expose.dry_down_pct, effective_time_s());
+    LOGT(TAG, "Dry-down %.1f%% (effective %.1fs)", g_expose.dry_down_pct, effective_time_s());
 }
 
 static void cmd_adjust_dry_down(float delta) {
@@ -490,7 +490,7 @@ void expose_timer_init() {
                                     expose_binding_key_count, expose_binding_key_at})) {
         LOGE(TAG, "Failed to register expose binding scheme");
     } else {
-        LOGI(TAG, "Expose binding scheme registered");
+        LOGT(TAG, "Expose binding scheme registered");
     }
 }
 

@@ -27,7 +27,7 @@ inline T clamp_val(T v, T lo, T hi) { return (v < lo) ? lo : (v > hi) ? hi : v; 
 // 1. Create widgets/<name>_widget.cpp
 // 2. Define a WidgetTypeConfig-sized config struct
 // 3. Implement parse/create/update/destroy/tick functions
-// 4. Add  REGISTER_WIDGET(name, stream_fn);  at the bottom (nullptr if no data stream)
+// 4. Define <name>_preview metadata, then REGISTER_WIDGET(name, stream_fn, resolve_in_tick).
 
 // ---- JSON→string field parser for widget config ----
 // Converts a JSON value (integer, hex string, or binding template) into a
@@ -105,10 +105,12 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
 // (use nullptr when the widget has no data-stream support).
 // ----------------------------------------------------------------------------
 #define REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)               \
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        nullptr, nullptr, nullptr, nullptr                                     \
+        nullptr, nullptr, nullptr, nullptr, &prefix##_preview                  \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -121,20 +123,24 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
 // bleeds into non-MCP firmware.
 #if HAS_MCP
 #define REGISTER_WIDGET_SCHEMA(prefix, stream_fn, resolve_in_tick_flag)        \
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        prefix##_describe, nullptr, nullptr, nullptr                          \
+        prefix##_describe, nullptr, nullptr, nullptr, &prefix##_preview        \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
     } _##prefix##_auto_reg
 
 #define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        prefix##_describe, prefix##_show, prefix##_hide, validate_fn            \
+        prefix##_describe, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \
@@ -144,10 +150,12 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
     REGISTER_WIDGET(prefix, stream_fn, resolve_in_tick_flag)
 
 #define REGISTER_WIDGET_SCHEMA_VALIDATED_LIFECYCLE(prefix, stream_fn, resolve_in_tick_flag, validate_fn) \
+    static_assert(sizeof(#prefix) <= CONFIG_WIDGET_TYPE_MAX_LEN,               \
+                  "Widget identifier exceeds CONFIG_WIDGET_TYPE_MAX_LEN; shorten the prefix"); \
     static const WidgetType prefix##_widget_type = {                           \
         #prefix, prefix##_parse, prefix##_create, prefix##_update,             \
         prefix##_destroy, prefix##_tick, stream_fn, resolve_in_tick_flag,      \
-        nullptr, prefix##_show, prefix##_hide, validate_fn                      \
+        nullptr, prefix##_show, prefix##_hide, validate_fn, &prefix##_preview   \
     };                                                                         \
     static struct prefix##AutoReg {                                            \
         prefix##AutoReg() { widget_register(&prefix##_widget_type); }          \

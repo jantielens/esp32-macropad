@@ -112,7 +112,7 @@ void mqtt_audio_init() {
 
     g_siren_on = false;
     g_last_published_volume = 255;
-    LOGI(TAG, "Init: siren_cmd=%s volume_cmd=%s", g_siren_cmd_topic, g_volume_cmd_topic);
+    LOGT(TAG, "Init: siren_cmd=%s volume_cmd=%s", g_siren_cmd_topic, g_volume_cmd_topic);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +184,7 @@ void mqtt_audio_on_message(const char* topic, const uint8_t* payload, unsigned i
         }
         g_siren_pending = true;
         portEXIT_CRITICAL(&g_mux);
-        LOGI(TAG, "Siren command: %s", state);
+        LOGT(TAG, "Siren command: %s", state);
         return;
     }
 
@@ -202,7 +202,7 @@ void mqtt_audio_on_message(const char* topic, const uint8_t* payload, unsigned i
         g_volume_pending_value = (uint8_t)v;
         g_volume_pending = true;
         portEXIT_CRITICAL(&g_mux);
-        LOGI(TAG, "Volume command: %d", v);
+        LOGT(TAG, "Volume command: %d", v);
         return;
     }
 
@@ -217,7 +217,7 @@ void mqtt_audio_on_message(const char* topic, const uint8_t* payload, unsigned i
             strlcpy(g_custom_tone_pending_pattern, buf, sizeof(g_custom_tone_pending_pattern));
             g_custom_tone_pending = true;
             portEXIT_CRITICAL(&g_mux);
-            LOGI(TAG, "Custom tone: %s", buf);
+            LOGT(TAG, "Custom tone: %s", buf);
         }
         return;
     }
@@ -234,7 +234,7 @@ void mqtt_audio_on_message(const char* topic, const uint8_t* payload, unsigned i
             strlcpy(g_sound_pending_name, buf, sizeof(g_sound_pending_name));
             g_sound_pending = true;
             portEXIT_CRITICAL(&g_mux);
-            LOGI(TAG, "Sound: %s", buf);
+            LOGT(TAG, "Sound: %s", buf);
         }
         return;
     }
@@ -245,21 +245,21 @@ void mqtt_audio_on_message(const char* topic, const uint8_t* payload, unsigned i
         portENTER_CRITICAL(&g_mux);
         g_beep_pending = BEEP_SINGLE;
         portEXIT_CRITICAL(&g_mux);
-        LOGI(TAG, "Beep single");
+        LOGT(TAG, "Beep single");
         return;
     }
     if (strcmp(topic, g_beep_double_topic) == 0) {
         portENTER_CRITICAL(&g_mux);
         g_beep_pending = BEEP_DOUBLE;
         portEXIT_CRITICAL(&g_mux);
-        LOGI(TAG, "Beep double");
+        LOGT(TAG, "Beep double");
         return;
     }
     if (strcmp(topic, g_beep_triple_topic) == 0) {
         portENTER_CRITICAL(&g_mux);
         g_beep_pending = BEEP_TRIPLE;
         portEXIT_CRITICAL(&g_mux);
-        LOGI(TAG, "Beep triple");
+        LOGT(TAG, "Beep triple");
         return;
     }
 }
@@ -307,7 +307,7 @@ void mqtt_audio_loop() {
         g_siren_stop_at_ms = 0;
         g_siren_on = false;
         mqtt_manager.publish(g_siren_state_topic, "OFF", true);
-        LOGI(TAG, "Siren duration elapsed — stopped");
+        LOGT(TAG, "Siren duration elapsed — stopped");
     }
 
     // Auto-detect siren stopped (loop ended naturally — shouldn't happen, but safety)
@@ -354,7 +354,7 @@ void mqtt_audio_loop() {
             config_manager_save(cfg);
         }
 
-        LOGI(TAG, "Volume set: %u%%", vol);
+        LOGT(TAG, "Volume set: %u%%", vol);
     }
 
     // --- Process custom tone update ---
@@ -365,7 +365,7 @@ void mqtt_audio_loop() {
         portEXIT_CRITICAL(&g_mux);
 
         mqtt_manager.publish(g_custom_tone_state_topic, g_custom_tone_pattern, true);
-        LOGI(TAG, "Custom tone updated: %s", g_custom_tone_pattern);
+        LOGT(TAG, "Custom tone updated: %s", g_custom_tone_pattern);
     }
 
 #if HAS_SOUND_PLAYER
@@ -385,7 +385,7 @@ void mqtt_audio_loop() {
         }
 
         audio_play_sound(name, 0);
-        LOGI(TAG, "Sound play: %s", name);
+        LOGT(TAG, "Sound play: %s", name);
     }
 #endif
 

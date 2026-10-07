@@ -1,6 +1,10 @@
 #ifndef BOARD_OVERRIDES_ESP32_P4_LCD4B_H
 #define BOARD_OVERRIDES_ESP32_P4_LCD4B_H
 
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG true
+#endif
+
 // ============================================================================
 // Waveshare ESP32-P4-WIFI6-Touch-LCD-4B Board Configuration Overrides
 // ============================================================================

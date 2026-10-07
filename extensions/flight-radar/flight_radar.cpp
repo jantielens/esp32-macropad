@@ -81,6 +81,8 @@ struct RadarScan {
     uint32_t version;
     uint32_t refresh_ms;
     uint32_t last_refresh_ms;
+    uint32_t failed_attempts;
+    uint32_t last_error_log_ms;
     char status[72];
 };
 
@@ -347,6 +349,41 @@ uint16_t parse_response(const NativeExtensionHostApi* host, const char* response
 
 void set_status(RadarScan* scan, const char* text) { copy_text(scan->status, sizeof(scan->status), text); }
 
+void report_refresh_failure(RadarService* service, uint8_t scan_index, const char* reason,
+                            const NativeExtensionHttpResult& result, uint32_t started_ms) {
+    const auto* host = service->host;
+    const uint32_t now = host->core->millis();
+    uint32_t failed_attempts = 0;
+    bool report = false;
+    if (host->core->mutex_lock(service->mutex, 100)) {
+        RadarScan& scan = service->scans[scan_index];
+        set_status(&scan, reason);
+        scan.last_refresh_ms = now;
+        ++scan.version;
+        failed_attempts = ++scan.failed_attempts;
+        report = failed_attempts == 1 || now - scan.last_error_log_ms >= 60000;
+        if (report) scan.last_error_log_ms = now;
+        host->core->mutex_unlock(service->mutex);
+    }
+    if (report) {
+        char message[160] = "flight-radar scan=";
+        append_uint(message, sizeof(message), scan_index);
+        append_text(message, sizeof(message), " reason=");
+        append_text(message, sizeof(message), reason);
+        append_text(message, sizeof(message), " HTTP=");
+        if (result.status_code < 0) append_text(message, sizeof(message), "-");
+        append_uint(message, sizeof(message), result.status_code < 0 ? 0U - uint32_t(result.status_code) : uint32_t(result.status_code));
+        append_text(message, sizeof(message), " truncated=");
+        append_uint(message, sizeof(message), result.truncated ? 1 : 0);
+        append_text(message, sizeof(message), " duration_ms=");
+        append_uint(message, sizeof(message), now - started_ms);
+        append_text(message, sizeof(message), " attempts=");
+        append_uint(message, sizeof(message), failed_attempts);
+        host->core->log(NATIVE_EXTENSION_LOG_WARN, message);
+    }
+    host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_ERROR, reason);
+}
+
 void refresh(RadarService* service, uint8_t scan_index) {
     const NativeExtensionHostApi* host = service->host;
     if (scan_index >= MAX_SCANS) return;
@@ -371,18 +408,7 @@ void refresh(RadarService* service, uint8_t scan_index) {
     const uint32_t started = host->core->millis();
     NativeExtensionHttpResult result = {};
     if (!host->http->http_get(url, service->response, RESPONSE_CAPACITY - 1, HTTP_TIMEOUT_MS, &result) || result.status_code != 200 || result.truncated) {
-        if (host->core->mutex_lock(service->mutex, 100)) {
-            char error[72] = "ADSB request failed: HTTP ";
-            append_uint(error, sizeof(error), result.status_code > 0 ? static_cast<uint32_t>(result.status_code) : 0);
-            RadarScan& scan = service->scans[scan_index];
-            set_status(&scan, error);
-            scan.last_refresh_ms = host->core->millis();
-            ++scan.version;
-            host->core->mutex_unlock(service->mutex);
-        }
-        host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar ADSB request failed");
-        host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_ERROR,
-                       "ADSB request failed");
+        report_refresh_failure(service, scan_index, "ADSB request failed", result, started);
         return;
     }
     service->response[result.body_length] = '\0';
@@ -394,22 +420,16 @@ void refresh(RadarService* service, uint8_t scan_index) {
         // An empty result is valid; malformed root documents are shown as an error.
         const char* array = find_value(reinterpret_cast<const char*>(service->response), reinterpret_cast<const char*>(service->response) + result.body_length, "ac");
         if (!array) {
-            if (host->core->mutex_lock(service->mutex, 100)) {
-                RadarScan& scan = service->scans[scan_index];
-                set_status(&scan, "ADSB JSON parse failed");
-                scan.last_refresh_ms = host->core->millis();
-                ++scan.version;
-                host->core->mutex_unlock(service->mutex);
-            }
-            host->core->log(NATIVE_EXTENSION_LOG_WARN, "flight radar ADSB JSON parse failed");
-            host->core->status_set(service->extension_context, NATIVE_EXTENSION_RUNTIME_ERROR,
-                                   "ADSB JSON parse failed");
+            report_refresh_failure(service, scan_index, "ADSB JSON parse failed", result, started);
             return;
         }
     }
     const uint32_t elapsed = host->core->millis() - started;
+    uint32_t recovered_attempts = 0;
     if (host->core->mutex_lock(service->mutex, 100)) {
         RadarScan& scan = service->scans[scan_index];
+        recovered_attempts = scan.failed_attempts;
+        scan.failed_attempts = 0;
         for (uint16_t index = 0; index < count; ++index) scan.snapshot[index] = service->parse[index];
         scan.count = count;
         scan.in_range = in_range;
@@ -420,6 +440,13 @@ void refresh(RadarService* service, uint8_t scan_index) {
                        count ? "Live ADS-B" : "No aircraft in range");
         ++scan.version;
         host->core->mutex_unlock(service->mutex);
+    }
+    if (recovered_attempts) {
+        char message[96] = "flight-radar recovered scan=";
+        append_uint(message, sizeof(message), scan_index);
+        append_text(message, sizeof(message), " failed_attempts=");
+        append_uint(message, sizeof(message), recovered_attempts);
+        host->core->log(NATIVE_EXTENSION_LOG_INFO, message);
     }
 }
 

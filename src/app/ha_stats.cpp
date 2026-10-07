@@ -172,7 +172,7 @@ static int fetch_job(const HaStatsJob& job, float* out) {
         began = http.begin(plain_client, url);
     }
     if (!began) {
-        LOGW(TAG, "HTTP begin failed: %s", url);
+        LOGW(TAG, "HTTP begin failed: entity=%s", job.entity_id);
         return -1;
     }
 
@@ -251,7 +251,7 @@ static int fetch_job(const HaStatsJob& job, float* out) {
     // Phase breakdown so a slow hydration can be attributed to the right stage:
     // queue = wait behind other streams, post = TLS handshake + HA query time,
     // parse = streaming JSON decode, resample = bucket mapping on this task.
-    LOGD(TAG, "%s: timing queue %lums, post %lums, parse %lums, resample %lums, total %lums",
+    LOGT(TAG, "%s: timing queue %lums, post %lums, parse %lums, resample %lums, total %lums",
          job.entity_id,
          (unsigned long)(t_start - job.queued_ms),
          (unsigned long)(t_post - t_start),
@@ -406,7 +406,7 @@ bool ha_stats_request(data_stream_handle_t handle, uint32_t uid,
 
     if (accept) {
         xSemaphoreGive(g_wake);
-        LOGD(TAG, "Queued %s (stream %d, %u slots x %lums)", entity_id,
+        LOGT(TAG, "Queued %s (stream %d, %u slots x %lums)", entity_id,
              handle, slot_count, (unsigned long)slot_ms);
     }
     return accept;

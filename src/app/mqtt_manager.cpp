@@ -180,7 +180,7 @@ bool MqttManager::subscribe(const char *topic) {
 		if (!_client.connected()) return false;
 		bool ok = _client.subscribe(topic);
 		if (ok) {
-				LOGI("MQTT", "Subscribed: %s", topic);
+				LOGT("MQTT", "Subscribed: %s", topic);
 		} else {
 				LOGW("MQTT", "Subscribe failed: %s", topic);
 		}
@@ -253,7 +253,7 @@ void MqttManager::publishHealthNow() {
 				return;
 		}
 		if (_client.publish(_health_state_topic, (const uint8_t*)payload, (unsigned)n, true)) {
-				LOGI("MQTT", "Published health (retained)");
+				LOGT("MQTT", "Published health (retained)");
 		}
 }
 
@@ -264,13 +264,18 @@ void MqttManager::publishHealthIfDue() {
 
 		unsigned long now = millis();
 		unsigned long interval_ms = (unsigned long)_config->mqtt_publish_interval_seconds * 1000UL;
+		const unsigned long retry_interval_ms = interval_ms < 5000UL ? interval_ms : 5000UL;
+		if (_health_attempted && (now - _last_health_attempt_ms) < retry_interval_ms) return;
 
 		if (_last_health_publish_ms == 0 || (now - _last_health_publish_ms) >= interval_ms) {
+				_health_attempted = true;
+				_last_health_attempt_ms = now;
 				StaticJsonDocument<768> doc;
 				const MqttPublishScope scope = power_config_parse_mqtt_publish_scope(_config);
 				device_telemetry_fill_mqtt_scoped(doc, scope);
 
 				if (doc.overflowed()) {
+						++_health_publish_failures;
 						LOGE("MQTT", "Health JSON overflow (StaticJsonDocument too small)");
 						return;
 				}
@@ -278,6 +283,7 @@ void MqttManager::publishHealthIfDue() {
 				char payload[MQTT_MAX_PACKET_SIZE];
 				size_t n = serializeJson(doc, payload, sizeof(payload));
 				if (n == 0 || n >= sizeof(payload)) {
+						++_health_publish_failures;
 						LOGE("MQTT", "Health JSON payload too large for MQTT_MAX_PACKET_SIZE (%u)", (unsigned)sizeof(payload));
 						return;
 				}
@@ -286,7 +292,12 @@ void MqttManager::publishHealthIfDue() {
 
 				if (ok) {
 						_last_health_publish_ms = now;
-						LOGI("MQTT", "Published health (retained)");
+						if (_health_publish_failures) LOGI("MQTT", "Health publish recovered after %lu failed attempts", (unsigned long)_health_publish_failures);
+						_health_publish_failures = 0;
+						LOGT("MQTT", "Published health (retained)");
+				} else {
+						++_health_publish_failures;
+						LOGW("MQTT", "Health publish failed");
 				}
 		}
 }

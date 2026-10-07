@@ -14,6 +14,81 @@ The ESP32 Macropad includes a built-in web portal for configuring every aspect o
 
 In AP mode, only the Network page is available. In Full mode, the standard four pages are accessible, and e-paper boards also expose a dedicated E-Paper page.
 
+## Device Logs
+
+On builds with `HAS_REMOTE_LOG`, open **Device > Logs** in Full Mode. This
+feature is enabled on all configured ESP32-P4 boards and ESP32-S3 boards with
+more than 5 MB flash; PSRAM alone does not enable it. Logs follow the
+device's authentication settings: no credentials are needed when HTTP Basic
+Authentication is disabled; when enabled, sign in with the configured credentials.
+Log access is unavailable in the setup access point.
+
+One log view starts with retained startup lines, then follows the device's
+rolling application log history. The build defaults are 128 startup records
+and 256 rolling records; board overrides can change these capacities, and
+**Device buffer** shows the active capacity. Overlapping records
+are not repeated. An inline gap marker identifies records no longer retained
+between startup and recent history, or lost while following new logs. After
+a device reboot, the viewer clears old history and loads startup logs again.
+These buffers contain centralized application logs, not bootloader output, crash
+dumps, or arbitrary serial writes. Serial logging continues independently.
+
+The viewer shows **Catching up** while fetching pending records in batches of
+up to 32, with a 250 ms delay between requests. Once caught up, it polls every three
+seconds while visible. Pause stops polling. Auto-scroll follows new lines and
+turns off when you scroll upward. Clear removes only the browser's retained
+history. Copy and Download export that history, including gap markers, which
+is limited to 10,000 lines and trimmed in batches. Copy uses the portal's
+clipboard fallback when the modern clipboard API is unavailable on HTTP pages.
+
+**Device buffer** is the device's rolling capacity in records. **Latest record ID**
+is a sequence number, not a timestamp. **Browser history** counts displayed
+entries, including gap markers; it can exceed the device buffer capacity.
+**Records missed before retrieval** counts records overwritten before they
+could be read. **Records dropped during capture** counts logging skipped for
+remote capture because of contention or OTA;
+these do not mean serial output was dropped. High-volume logging can outrun
+the polling rate. Polling and capture defer during firmware updates.
+
+Buffers use PSRAM only. If allocation fails, the viewer reports unavailable
+storage without affecting serial output. Both buffers reset after reboot or
+deep sleep. Logs can contain operational identifiers such as SSIDs and MQTT
+topics; treat downloaded logs as diagnostic data.
+
+Startup logs also report the reset reason, SDK version, and firmware ELF SHA256.
+The reset reason distinguishes a normal software restart from a panic or
+watchdog reset; it does not reproduce the early ROM serial output.
+
+The **Retained crash** section shows a saved flash coredump when supported by
+the firmware and partition layout. It reports the panic reason, task, decoded
+exception cause, **Exception PC** (the failing instruction), faulting address or
+trap value, return address, stack pointer, and crashed firmware's ELF SHA256 when
+available. RISC-V `MTVAL` is labelled as a faulting address for address-related
+exceptions and as a trap value otherwise. Expand **Saved registers** to inspect
+the additional registers exposed by the SDK; this is not the complete serial
+register dump. Unknown causes retain their numeric codes.
+
+The current boot's reset reason and firmware hash appear separately from the
+retained crash. **Copy crash summary** copies both sets of diagnostics and the
+saved registers for an issue report, including on HTTP pages.
+**Download crash dump**
+exports `device-coredump.bin`. Log polling pauses during the download; leaving
+the fragment or hiding the browser cancels it. Downloads are unavailable during
+firmware updates.
+
+A dump is marked **Crash age unknown**. It can remain after successful boots,
+so it may describe an older crash or
+firmware. A subsequent crash can overwrite it. Decode the downloaded file with
+Espressif's `esp-coredump` tool and the exact matching firmware ELF, using the
+displayed ELF SHA256 to identify the build. The dump is not previous text-log
+history and does not include the PSRAM log buffer. Sudden power loss or failure
+of the crash handler can prevent capture. A missing or corrupt dump is reported
+without enabling the download button.
+
+Crash downloads follow the same configured authentication policy as Logs. Dumps
+can contain sensitive stack data, including credentials; enable authentication
+and keep downloaded files private. The portal does not erase retained dumps.
+
 ## Header & Health Monitoring
 
 The portal header shows real-time device info at a glance:
@@ -200,9 +275,18 @@ duration (`count * interval + 50` ms), not an exact transmitted packet count.
 
 Shown only when USB or BLE HID is compiled in. Native USB support is currently
 compiled for `jc1060p470c`, `jc1060p470c-sd`, `jc4880p433`, `jc4880p433-sd`,
-`jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard output defaults to Off.
+`jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and `esp32-p4-lcd4b`; keyboard output defaults to Off.
 Both JC3636W518 variants disable BLE and offer only Off or USB. Switching their
 firmware from hardware CDC to TinyUSB may assign a different Windows COM port.
+
+JC3248W535 also offers only Off or USB for HID. Its native USB connector no
+longer provides a serial log console; diagnostics use UART0 at 115200 baud.
+For native USB flashing when the running firmware has no serial port, hold
+BOOT while resetting to enter the ESP32-S3 download mode, or use OTA updates.
+Migrating from its older 3 MiB firmware slots requires a full serial flash of
+the new 4 MiB-slot partition table. Back up files and Extension packages first;
+their partitions move and must be reinitialized and restored. OTA updates
+remain supported after migration.
 
 The P4 HID builds (`esp32-p4-lcd4b`, `jc1060p470c`, `jc1060p470c-sd`,
 `jc4880p433`, and `jc4880p433-sd`) use two separate USB-C connectors:
@@ -240,7 +324,7 @@ stopped after reboot; it does not expose a CDC serial console.
 
 | Element | Description |
 |---------|-------------|
-| **Transport** | In Connectivity > Keyboard & Mouse: USB enables keyboard, mouse, and gamepad control, BLE enables keyboard only, and Off disables all HID output. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
+| **Transport** | In Connectivity > Keyboard, Mouse & Gamepad: USB enables keyboard, mouse, and gamepad control, BLE enables keyboard only, and Off disables all HID output. Only supported transports appear. Save is disabled until the preference changes; saving marks the transport as pending reboot. Changes are rejected while a macro is busy |
 | **Active connection** | Separate section showing the running USB/BLE backend and `ready`, `busy`, or `disconnected` status, or Keyboard disabled when Off; changing the selector does not change this section |
 | **BLE status indicator** | Shown when BLE is active: disabled, ready, pairing, connected, or error |
 | **Name** | Shows the configured device name plus ` USB` or ` BLE` for the active connection |
@@ -253,14 +337,15 @@ You can also trigger pairing from a button on the device by assigning the `ble_p
 USB exposes keyboard, consumer HID, a relative mouse, and a generic HID gamepad
 when USB is selected. Serial diagnostics use the separate UART port regardless
 of the selected transport. Add a **Mousepad** widget in the pad editor on
-touch-enabled USB HID devices for movement, tap-to-left-click, and tap-then-drag.
+touch-enabled USB HID devices for movement and tap-to-left-click.
 Multicontact drivers also support two-finger midpoint scrolling with axis lock.
 **Sensitivity** and **Movement threshold** apply to movement and gestures;
 **Acceleration** (0-5, default 0/off) affects pointer movement only.
 **Reverse scroll direction** and **Scroll inertia** (0-5, default 0/off)
 follow Scrollpad conventions. Enable **Mouse buttons** (default off) for
 outlined left/right zones in the bottom 20%; hold one while moving or
-repositioning another finger above it on multicontact drivers. See the
+repositioning another finger above it to drag on multicontact drivers.
+Single-contact drivers support zone clicks but not dragging. See the
 [Mousepad guide](pad-editor-guide.md#mousepad) for setup and limitations.
 Add a [Scrollpad widget](pad-editor-guide.md#scrollpad) beside or below it for
 one-finger vertical or horizontal scrolling, especially on single-touch boards.
@@ -506,6 +591,14 @@ The screen saver has two optional features, both measured from the most recent u
 
 For example, an Idle Screen at 300 seconds and Display Sleep at 1800 seconds shows the selected screen after five minutes, then turns off the panel after 30 minutes total. The first wake interaction is consumed and returns to the screen that was active before the Idle Screen appeared, so the temporary screen is not added to navigation history.
 
+On JC3248W535, the second stage is **Backlight Off** rather than Display Sleep.
+All screen saver controls remain available, including the automatic-shutoff
+checkbox, Idle Screen, Fade Out, Fade In, touch wake, and MQTT wake binding.
+The backlight fades off and back on using the configured durations, but the
+combined display/touch controller and rendering remain active for reliable
+touch wake. This mode uses more power than full panel sleep and does not
+perform sleep-cycle pixel shifting.
+
 ### Swipe Actions
 
 *Shown only on boards with a display.*
@@ -633,9 +726,54 @@ next diagnostic run because earlier rows use the previous column layout.
 
 The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 16 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
-The Pads page has its own floating footer with **Save Pad**, **Show on Device**, and a **More** menu for bulk operations (Fill, Copy/Paste Pad, Export/Import) and **Building Blocks** — pre-configured button groups you can place into a pad with a single click. While the current pad has unsaved changes, a fixed **Save Pad** button also appears at the lower-right of the page. This is completely separate from the device config Save & Reboot footer on other pages.
+The Pad Editor workspace keeps pad navigation on the left, the canvas in the
+center, and an inspector on the right. Its toolbar provides **Save Pad**,
+**Show on Device**, and **More** operations, including fill, copy/paste,
+export/import, clear, and building blocks. Save status appears beside the pad
+list heading. These controls are separate from Save & Reboot on other portal views.
 
-The **Pad and Button Defaults** section at the bottom of the Pads page sets device-wide pad background and layout defaults alongside button colors, borders, and label styles. Pads and buttons inherit the applicable settings automatically, while explicit overrides still take precedence.
+The editor frame uses the same rounded corners as other portal sections and
+fills the available content height, leaving the normal padding below it. Short
+windows retain a minimum editor height and scroll when necessary.
+
+Selecting a button opens **Content**, **Actions**, and **Appearance** tabs.
+Select the **Pad** inspector scope or **More > Pad Settings** for pad **Layout**,
+**Appearance**, **Bindings**, and **Actions**. Clicking a selected button again
+deselects it without discarding edits. Edits update the current draft directly, without an Apply/Cancel
+step; only **Save Pad** persists the current pad. Switching buttons or tabs
+retains incomplete inputs. Correct validation errors before saving; failed
+saves retain the draft for retry.
+
+Numeric fields consistently omit spinner buttons. Mouse-wheel scrolling over
+them scrolls the inspector without changing their values or focus; typing and
+keyboard arrow keys remain available.
+
+On mobile, the inspector fills the screen and includes **Save Pad** and
+**Return to pad**. Returning keeps edits. Switching pads or leaving the editor
+with unsaved edits offers **Keep Editing** or **Discard and Switch**; browser
+reload and closure also warn. There is only one active draft, with no local
+storage recovery. Clear, paste, fill, and pad import require Save Pad to apply.
+Show on Device does not save first. Explicit device import remains a separately
+confirmed operation that writes the imported settings and pads and reboots.
+
+The grid is a configuration overview, not a live preview. Every widget has a
+bottom-left type icon, including widgets inherited from a template pad. Rocker
+and Scrollpad icons follow their configured axis; Numeric Rocker uses minus/plus
+symbols along that axis. Widgets without labels, a button icon, or a background
+image show a larger type icon and, when space permits, their name. Template
+buttons retain a dashed outline without heavily fading their contents. Widget
+type icons work offline; user-selected Material Symbols button icons still use
+the existing online font loader.
+
+The grid loads before sound files, building blocks, and native extension choices.
+Sound-file and extension selectors are temporarily disabled while their choices
+load; saved selections are retained. The More menu shows a loading message until
+building blocks are available.
+
+The separate **Button Defaults** navigation item sets device-wide pad background
+and layout defaults alongside button colors, borders, and label styles, with
+its own save control. Pads and buttons inherit applicable settings; explicit
+overrides still take precedence.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 

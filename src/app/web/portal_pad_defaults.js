@@ -321,10 +321,11 @@ function padRenderBindings() {
         const row = document.createElement('div');
         row.className = 'pad-binding-row';
         row.innerHTML =
-            '<input type="text" class="pad-binding-name" value="' + escAttr(b.name) + '" placeholder="name" maxlength="31" spellcheck="false">' +
-            '<span style="color:#86868b; flex-shrink:0;">→</span>' +
-            '<input type="text" class="pad-binding-value" value="' + escAttr(b.value) + '" placeholder="[mqtt:topic;path]" maxlength="191" spellcheck="false">' +
-            '<button type="button" class="btn btn-small pad-binding-del" style="padding:2px 8px; font-size:12px; color:#ff3b30;">✕</button>';
+            '<label for="pad-binding-name-' + idx + '">Name' +
+            '<input id="pad-binding-name-' + idx + '" type="text" class="pad-binding-name" value="' + escAttr(b.name) + '" placeholder="e.g. temperature" maxlength="31" spellcheck="false"></label>' +
+            '<button type="button" class="btn btn-outline-danger btn-sm pad-binding-del" aria-label="Delete binding ' + (idx + 1) + '" title="Delete binding">✕</button>' +
+            '<label class="pad-binding-expression" for="pad-binding-value-' + idx + '">Binding' +
+            '<input id="pad-binding-value-' + idx + '" type="text" class="pad-binding-value" value="' + escAttr(b.value) + '" placeholder="[mqtt:topic;path]" maxlength="191" spellcheck="false"></label>';
         row.querySelector('.pad-binding-name').addEventListener('input', function() {
             var v = this.value.trim();
             padState.bindings[idx].name = v;

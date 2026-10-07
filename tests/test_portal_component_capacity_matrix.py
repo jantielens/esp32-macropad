@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import functools
 import pathlib
 import re
 import subprocess
@@ -57,6 +58,18 @@ def board_macros(board: str) -> dict[str, str]:
     return macros
 
 
+@functools.lru_cache(maxsize=256)
+def cpp_expression_is_true(value: str) -> bool:
+    result = subprocess.run(
+        ["g++", "-E", "-P", "-x", "c++", "-"],
+        input=f"#if {value}\n1\n#else\n0\n#endif\n",
+        text=True, capture_output=True,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip())
+    return result.stdout.strip() == "1"
+
+
 def expression_is_true(expression: str, macros: dict[str, str]) -> bool:
     value = re.sub(r"defined\s*\(\s*([A-Za-z_]\w*)\s*\)",
                    lambda match: "1" if match.group(1) in macros else "0",
@@ -70,10 +83,13 @@ def expression_is_true(expression: str, macros: dict[str, str]) -> bool:
             break
         value = updated
     value = value.replace("true", "1").replace("false", "0")
+    cpp_value = value
     value = value.replace("&&", " and ").replace("||", " or ")
     value = re.sub(r"!(?!=)", " not ", value)
     if not re.fullmatch(r"[\s0-9()andor!not]+", value):
-        raise RuntimeError(f"unsupported preprocessor expression: {expression!r}")
+        if not re.fullmatch(r"[\s0-9()<>=?:+*/%&|^~!\-]+", cpp_value):
+            raise RuntimeError(f"unsupported preprocessor expression: {expression!r}")
+        return cpp_expression_is_true(cpp_value)
     try:
         return bool(eval(value, {"__builtins__": {}}, {}))
     except (SyntaxError, TypeError) as error:
@@ -140,6 +156,14 @@ def board_component_count(board: str) -> int:
 
 
 def main() -> int:
+    macros = {"ENABLED": "1", "DISABLED": "0", "CAPACITY": "(ENABLED ? 32 : 0)"}
+    assert expression_is_true("CAPACITY > 0 && !DISABLED", macros)
+    assert not expression_is_true("CAPACITY == 0 || DISABLED", macros)
+    assert expression_is_true("DISABLED || (CAPACITY > 0 && ENABLED)", macros)
+    cached = cpp_expression_is_true.cache_info()
+    assert expression_is_true("CAPACITY > 0 && !DISABLED", macros)
+    repeated = cpp_expression_is_true.cache_info()
+    assert repeated.hits == cached.hits + 1 and repeated.misses == cached.misses
     limit = portal_limit()
     print(f"=== Portal component capacity matrix (limit: {limit}) ===")
     failed = False

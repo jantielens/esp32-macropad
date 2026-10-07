@@ -163,8 +163,16 @@
 
   // ---------- Fragment loading ----------
 
-  function loadFragment(itemId) {
+  async function loadFragment(itemId) {
     if (currentItem === itemId) return;
+    if (currentItem === 'pad-editor' && typeof padWorkspace !== 'undefined' && padWorkspace) {
+      if (padDirty && !await padWorkspaceConfirm('Discard pad edits and leave the editor?')) {
+        history.replaceState(null, '', '#' + currentItem);
+        return false;
+      }
+      padWorkspaceDispose();
+    }
+    window.dispatchEvent(new CustomEvent('portal-fragment-leave', { detail: currentItem }));
     currentItem = itemId;
     var loadGeneration = ++fragmentLoadGeneration;
     setActive(itemId);
@@ -223,6 +231,7 @@
           showError(err.message || 'Failed to load section', itemId);
         }
       });
+    return true;
   }
 
   function showError(message, itemId) {
@@ -243,10 +252,11 @@
 
   // ---------- Navigation ----------
 
-  function navigateTo(itemId) {
-    window.location.hash = '#' + itemId;
-    loadFragment(itemId);
-    closeNav();
+  async function navigateTo(itemId) {
+    if (await loadFragment(itemId) !== false) {
+      window.location.hash = '#' + itemId;
+      closeNav();
+    }
   }
 
   function getItemFromHash() {

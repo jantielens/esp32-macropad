@@ -690,11 +690,13 @@ window.init_screen_preview_fragment = function () {
 // Screen Saver
 // ============================================================================
 
-window.init_screensaver_fragment = function () {
-    initConfigFragment('screensaver-save-btn', false);
+window.init_screensaver_fragment = async function () {
+    var saveButton = document.getElementById('screensaver-save-btn');
+    var info = await getDeviceInfo();
+    if (saveButton !== document.getElementById('screensaver-save-btn')) return;
     var idlePad = document.getElementById('idle_screen_pad');
-    if (idlePad && typeof deviceInfoCache !== 'undefined' && deviceInfoCache.available_screens) {
-        deviceInfoCache.available_screens.forEach(function (screen) {
+    if (idlePad && info && info.available_screens) {
+        info.available_screens.forEach(function (screen) {
             if (screen.id.indexOf('pad_') !== 0) return;
             var option = document.createElement('option');
             option.value = screen.id;
@@ -702,6 +704,7 @@ window.init_screensaver_fragment = function () {
             idlePad.appendChild(option);
         });
     }
+    initConfigFragment('screensaver-save-btn', false);
     window.screensaverTimelineUpdate = function () {
         var idleEnabled = document.getElementById('idle_screen_enabled');
         var idleTimeout = document.getElementById('idle_screen_timeout_seconds');
@@ -725,6 +728,8 @@ window.init_screensaver_fragment = function () {
         };
         var idleSeconds = Number(idleTimeout.value) || 0;
         var sleepSeconds = Number(sleepTimeout.value) || 0;
+        var settings = document.getElementById('screensaver-sleep-settings');
+        var keepPanelAwake = settings && settings.dataset.keepPanelAwake === 'true';
         var hasIdle = idleEnabled.checked && idleSeconds > 0 && idlePadSelect.value;
         var hasSleep = sleepEnabled.checked && sleepSeconds > 0;
         var idleName = idlePadSelect.options[idlePadSelect.selectedIndex];
@@ -741,11 +746,11 @@ window.init_screensaver_fragment = function () {
         if (!hasIdle && !hasSleep) {
             summary.textContent = 'The current screen stays visible until activity.';
         } else if (hasIdle && hasSleep) {
-            summary.textContent = 'The idle screen appears first, then the display turns off.';
+            summary.textContent = keepPanelAwake ? 'The idle screen appears first, then the backlight fades off.' : 'The idle screen appears first, then the display turns off.';
         } else if (hasIdle) {
             summary.textContent = 'The idle screen remains visible until activity.';
         } else {
-            summary.textContent = 'The display turns off after the selected delay.';
+            summary.textContent = keepPanelAwake ? 'The backlight fades off after the selected delay; the display controller stays active.' : 'The display turns off after the selected delay.';
         }
     };
     ['idle_screen_enabled', 'idle_screen_timeout_seconds', 'idle_screen_pad',

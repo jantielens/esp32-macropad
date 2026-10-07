@@ -54,7 +54,7 @@ bool epaper_frame_http_read_body(HTTPClient& http, uint8_t** out_buf, size_t* ou
 			if (total < 32768 && complete) return;
 			const uint32_t idle_gap_ms = idle_started_ms ? millis() - idle_started_ms : 0;
 			if (idle_gap_ms > longest_idle_ms) longest_idle_ms = idle_gap_ms;
-			LOGI("Epaper", "image receive: %uB/%lums idle=%lums max_gap=%lums read=%lums calls=%lu peak=%u %s",
+			LOGT("Epaper", "image receive: %uB/%lums idle=%lums max_gap=%lums read=%lums calls=%lu peak=%u %s",
 					(unsigned)total, (unsigned long)(millis() - started_ms),
 					(unsigned long)(idle_ms + idle_gap_ms), (unsigned long)longest_idle_ms,
 					(unsigned long)read_ms, (unsigned long)reads,
@@ -191,7 +191,7 @@ bool epaper_frame_http_download(const char* url, uint8_t** out_buf, size_t* out_
 				*out_len = 0;
 				return false;
 		}
-		LOGI("Epaper", "image downloaded %u bytes in %lu ms",
+		LOGT("Epaper", "image downloaded %u bytes in %lu ms",
 			 (unsigned)body_bytes_read, (unsigned long)(millis() - t0));
 		return true;
 	}

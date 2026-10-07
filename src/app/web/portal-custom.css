@@ -443,7 +443,8 @@ body {
 }
 
 /* Sub-item */
-.nav-item {
+.nav-item,
+#pad-workspace-pads button {
   display: block;
   padding: 7px 16px 7px 46px;
   color: var(--portal-text-muted);
@@ -454,12 +455,14 @@ body {
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
-.nav-item:hover {
+.nav-item:hover,
+#pad-workspace-pads button:hover {
   color: var(--bs-body-color);
   background: var(--portal-nav-item-hover-bg);
 }
 
-.nav-item.active {
+.nav-item.active,
+#pad-workspace-pads button[aria-current="true"] {
   color: var(--portal-primary);
   background: rgba(var(--portal-primary-rgb), 0.08);
   border-left-color: var(--portal-primary);
@@ -1146,21 +1149,6 @@ body {
   margin-top: 16px;
 }
 
-.pad-quick-save {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 1020;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
-}
-
-@media (max-width: 767.98px) {
-  .pad-quick-save {
-    right: 14px;
-    bottom: 14px;
-  }
-}
-
 /* ================================================================
    Theme Toggle Button
    ================================================================ */
@@ -1638,19 +1626,21 @@ body {
 
 .pad-controls-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: flex-end;
 }
+.pad-controls-row > .form-group { min-width: 80px; }
 
 .pad-grid {
   display: grid;
+  flex: none;
   gap: 6px;
-  padding: 12px;
+  padding: 8px;
   background: #1c1c1e;
-  border-radius: 12px;
-  min-height: 80px;
-  max-height: 70vh;
-  max-width: 100%;
+  border: 1px solid var(--pad-workspace-line);
+  border-radius: 4px;
+  min-height: 0;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -1665,7 +1655,7 @@ body {
   border-radius: 8px;
   min-height: 0;
   cursor: pointer;
-  transition: transform 0.1s, box-shadow 0.15s, outline-color 0.15s;
+  transition: transform 0.1s, box-shadow 0.15s;
   text-align: center;
   padding: 6px 4px;
   overflow: hidden;
@@ -1681,7 +1671,7 @@ body {
 .pad-cell-empty       { background: transparent; color: #636366; font-size: 20px; }
 .pad-cell-empty:hover { background: rgba(255,255,255,0.04); }
 .pad-cell-btn         { border: none; outline-style: solid; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
-.pad-cell-ghost       { opacity: 0.35; outline: 2px dashed rgba(255,255,255,0.35); outline-offset: -2px; }
+.pad-cell-ghost       { opacity: 0.85; outline: 2px dashed #9ca3af; outline-offset: -2px; }
 .pad-cell-btn:hover   { box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
 
 .pad-cell-image-placeholder {
@@ -1703,65 +1693,82 @@ body {
 .pad-cell-icon-row     { display: flex; align-items: center; gap: 4px; overflow: hidden; max-width: 100%; }
 .pad-cell-label-bottom { font-size: 10px; opacity: 0.7; line-height: 1.2; white-space: pre-line; }
 
-.pad-cell-widget-bar {
-  position: absolute; bottom: 4px; left: 4px; width: 6px; height: 60%;
-  background: linear-gradient(to top, #4CAF50 33%, #FF9800 66%, #F44336 100%);
-  border-radius: 2px; opacity: 0.6;
+@font-face {
+  font-family: 'Pad Widget Symbols';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('data:font/woff2;base64,d09GMgABAAAAAAyYAA4AAAAAF1QAAAw/AAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHIUEBmA/U1RBVGIAgVQRCAqcXJcfC1oAATYCJANaBCAFhQoHIAwHG0UTI5KTVg9k6khd+PPn3w+e/9f7b5+b+IHJg/4A8OpVjetx/aeHUIPIz79n/blBcU/SdKgOoAWUZuR27dydv3Qhdh+xAIonwIB3079AqqPCxKGZWc1oMUtNUwsVJVDzeUWZOyOdM3/mMtEvfn4utZciyDpkIVurmpcffPcLudK/X8bcFTgFVDQygoXsZcCkRNXGwsyYGWEmjJ7F2PRk8Oo6sRFfVv0kCOBSm5ao3n0Hjya6eMbqpUTRCZSXgmXl4gXzsJdS/1o6FqDLFdkpdYnuPQvYCL9xeM8DTrCN1cxlNE3JJgmRN5vHw6eKNEnKKJKYCAY18PHxcHCoR5IaNKIueE1qF2MhTJ+XqdKA0F005aklfDVsqmiw3ZcnTZFYbdKC6xh2uE8txmTtVIMkHgYWNfkIjbBi5OA4DvWpjU+FWqTohNjsJDVpRJrckljVwzTg4SFJJVP4ZClQOrEWdU/J756MojMuiiImUVxyVFHPlG77iuPQAV7YsDhziAissT+5No3wqb/FBXUSbHYgO8z7dBRRYB3zxF1sdAJ5HWoRFQdIkeC111a0x8Qii08DUlQxg26wx1KUCBtpaE3+5ThdNTDJZ4Y9zFg+NEIRXTsl2zEY5DJc0USJ/k6Jp7hMv2HD+nGKqu+b9apgH7r0uky6QVPQTmmneBWNLKDtIkujwdoa1XfA4MFp7rDfyB69RZBly1dtFIVaN2/+atFalpr4mCxnK5RsB3XM6ICgxK0Y8iprUYmKasZRYOrY1hsT3CLvsoppLGfjwxoPBz08+6jPo0mPFz2JPXn7/NHLTS/3vrz/6unrs69vfnv/fXMQMD6ZacxgZcZS995j8Cm4FhwNqitPKmcqfcsXy9WlQ8VvxVyuSWZPZnWmtV/yenntXc/ZdErWZ+ArSBAQ84MbC+Nd8yL0I7FmNNiebaBhYhC+vckQHmuUEwEnEE4OrFFplKGyRVXCcrpfqveQ53nenBNmEUUpKpmmhlpCxUGy3SyYhSSzYDYJVlFoErILUrjdbhHuMDs92yzYrdYsSiWaIUmxFsEUafM+rwUtQpElgkZaLBIV0KyYOhobpop1dXIDaZQ+D8Y1tp30NXr81VOOX6OGD/RDCcqBI4QFCrSzflzGl7XzJLUZ3lhvgLAguuoJYyRCWkR8H3xaCXR/A5IXHqi4/1HFGwFCWNDjB9B9sxgjfEZ5nMJ0AP1qxjnCs/OoeM4CMQx6WLdB4K6Oug6NKmNEcwIlhLxUrYkeJpcvg/ZjpwD0k2ltR42MjuNeHMBOZ7Y7gTHSDqPTguOUo8bb59k544x+tpmjvWqTTOdsqJNKaTmFOAlCvVPDY9gJqlPqiaZCS39CoQ3796PdSPr10TwX7TLOEbHGxQX9DJ2FhIIFkVAVS/bQjhUZQ7uJMRI6MUZop1ObOEVVp3k7J2nqBKdT0nllkILZEpGdk1UXP6V7I67eOVnlkdMmTicKzBgfnnmGl7DT6DkF+skp6xs3EhlclCBBQKBAtaMtyBcAjXOCfoZ2yGeGSifdfplg8+raJJfqGtvlnM0jJ4koSCwMJXbW8BOnCfNmDGvSDMduLzVORic7asKr56i9Chi7uIGJ5zFhjyoIO4944PyZCVi1+8Xz2KOfoQ3XBJmp6+XlhafjVDrNrWmKiqJ8GxhXxcVoh+wJEhagEqHOdiMQuFafEz1+v1+l+wOBADV8Ph/ofvQEg8Ek9Pl8PiNqcUn6ohgCNlDG6noPbqaxsBSico0mEpG5+0RO4VGgvI1DIosSCQFJkIFLG0HQlWR7gPDI6XQV5ObjHFB6tG4UUbBnweZiLG018AyptKiONpTQFA5FXIgOEQW6iKZw7cbd5UZJnfX2Gj6oiykq7KBkfypxvOwJOoTK6bLvdixs0OpLcWMD/AkLBAIZL7kolUupQWBslvvzKs0xPgyg/lIu2Y0HaJ+G3SpqLnSrLdicgqmt0ztvoi0OmtyELnRhF+1SemgPdmO3zMs7mIiTXdjFIVlsIyGwQAHV+8u5caH4wvsrn+l4pnP9tevPtF/f1PlMR8NT7a1wefxg7vf7ZWX3dX7QqN4+rYk9Q/LO3E1f89JrKzMOPjPwwvHknMjJk3IGFGbM71NqH1248cOwAWEfbiy0jy6d0Mdw9aytHRsJH4Spl09MntynKLmoDx5wonnagt3rvDnTpq3bveryihWNbY0rVrwkz1FzAgCeKXSlk0vapGhpROLuhGcSdifOQTvY08K1dE666RfC0kLgr9c/6Q2v/mnvxVlbRmyZYttTPjS/csyYyvGvyC8fusdm3mktDHeHF1rNO60Z1q2FX3/c2w8AzDvas/t93GvNyH3fURLsE53ZEPP9haJ+27Y3GekFuLZ48Rs/vFGYtHix0gAAT6FZXfGNxRH/z2ubZ/513v//zzO72rzEX7fNOzsENyTuSrQHTBmuBwzgRr/6+mpyQc2G4RvyROq2AEAIKbzw9PeDSMeZ+i9LVt3gOO+gitagDZJOnBcXcbjdGSMy3O4xZ+DnOH8eBj/dIkk7bo/PstABSdoI+whlz+RbWl75Q4G5QYE5QYHaoEBd4IGNi+L328Y7Rty+/Y7xnc50fP68xCW5KD0rR+2TOicnN2C8U7JfesFw8ZIqbVtI5NNu/2dxSMjBA6J1ZYqaI0dgf55yULVKh7J2g2MDPv/8d+5tvTsiZMTiQuHIewDec4bvEotPhTvfBdDkjsoMj4jKdDcCxkotKwZWrRiwyD+b7V2qmLVrVDFdOyQuyY49Mao1a2NUe7ZLz0o+T8fgP7Gmzle5zte32zpscRfX0KvX0uD4h0VHjNYEhfZ9ol+frrEeKSjljVOZ2Zr4hGxF5pT5UGZaYlRsWnTmITwOzDm8urvAtJUpMm3pzj+8Oke2cUZzZE5+gJZ5x5BQtJgVrVD2LinXJdVoJz8bGFhcLbJQJlky46XNLeyMHJwBjt+8747zjOjMnTP7VhpX9V3qGxINX+rpWwWOX0C/+LXVbL33pgkcH0p/8mePqScURGDesRV9ufRAWaFuS2vB3jXZMRvFbWGFWc+XnTVGF0vK/BdvfnV0ZO+XfcPMYPCBI6vMW6elRr63DBzPLA9fXswXy8JlkJk753SazebOOZ1mPB+omlzYoUm1ZZEMqUzOKg21iSOi7DOKI2W56vHS8eyU5g69IwQczxwzHR395ME17naDYa1nL+w3WdsbNCr4tjvBDGm+E9zG5z9VkPbfnmT9/qSMDHsKji+NUJFyYR5fFionQzz4IdB5/+Q18bX7J51n7p92i933T59O3XK7b1I8ebt/y8CtPofYcbsXHO8VWTUzMyw6vT0qPSusamYkPy2X126IPL0pQs2D48UlDktN/TjLXp/DXpfnKLbkJiVfL2N/XFIW/E80fgl0P8lt8Wa8FU6Z6+RUTNSymsgBqm96xeddM6yraFqRcbn0y3tnbHneRd6qnbGuE5Pr4uenrmyQNs/UvRHyWkFN8bcM3OxWupzezGJv4PDyhjRVR2YP07P5MtfS5LZv7CnoyVR2NKQNLcdl8vKFatnTZCupsCY+tVy7gG/JVy+UjAt2kbt2CCr2CvaSQ8OC4lcvFO/xu02+vdsPomud/nTEwPFG/7KEvWyC97HGEXOE9/VOXIbLtWlZqJQMXR7a7XIBa9W3JVdoleam9AsT1jF0JQ0AAAAQAARP5ygZd3NZUNJDX4HwBQD47dvfLgLAb9/e/81z33NK+LbwBQDeEAAACICkPEcB4Que+56HwreFLzwoToTwBbwBFiwcfecXcAcsnHDgD9zZ118gGDAOypBycybDKpVoRwXqNNeORxgsAOZCBB+sRehfyMhaogKL/6KWhVeE3agm/dDEEjvXGQSSiIIMAQIJc4YQxfgvg0QKjmd4YT6G0r2hh9og/lloIjII+CO8HE1zMRdcCNG/PUDwf1IgDXY0g4MFVuSjCnWoQS1akY5GtBJWaBMpZF+5G1UwoBkWVKIKetR5Oa1IhQWtvBl12aZnowscymEXY1uQjja0Kqc62FCFSkQi3GigdchCFWrQBusfoQd5hfUW+tJ22EAhEqFIQByiTG9H0fYUVVJUFmUz+K8ggwHpSIcBMvbLbG0YY18N7GhEVzFyIYh+bCRiQcFAfXbUwOpfi0IKUqBBKChQUBG4qxShLc5jCwtst4Ghf622wfI3qfUG4dl6kRwHAAA=') format('woff2');
 }
 
-.pad-cell-widget-gauge {
-  position: absolute; bottom: 4px; left: 4px; width: 14px; height: 8px;
-  border-top: 3px solid #4CAF50; border-radius: 8px 8px 0 0;
-  border-left: 3px solid #FF9800; border-right: 3px solid #F44336;
-  opacity: 0.6;
+.pad-widget-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
 }
-
-.pad-cell-widget-sparkline {
-  position: absolute; bottom: 4px; left: 4px; width: 20px; height: 10px;
-  opacity: 0.6;
-  background: linear-gradient(135deg, transparent 20%, #4CAF50 20%, #4CAF50 30%, transparent 30%, transparent 50%, #4CAF50 50%, #4CAF50 60%, transparent 60%, transparent 80%, #4CAF50 80%);
-  border-bottom: 1px solid #4CAF50;
+.pad-widget-symbol-vertical { flex-direction: column; }
+.pad-widget-glyph {
+  font-family: 'Pad Widget Symbols';
+  font-weight: 400;
+  font-style: normal;
+  font-size: 16px;
+  font-feature-settings: 'liga';
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  word-break: normal;
+  direction: ltr;
 }
-
-.pad-cell-widget-table {
-  position: absolute; bottom: 4px; left: 4px; width: 18px; height: 10px;
-  opacity: 0.6; border: 1px solid #90CAF9;
-  background: repeating-linear-gradient(0deg, transparent, transparent 3px, #90CAF9 3px, #90CAF9 4px);
+.pad-widget-marker {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  width: 34px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fff;
+  border-radius: 3px;
+  background: #202124;
+  color: #fff;
+  box-sizing: border-box;
+  z-index: 1;
 }
-
-.pad-cell-widget-rocker {
-  position: absolute; bottom: 4px; left: 4px; width: 10px; height: 14px; opacity: 0.6;
+.pad-widget-marker .pad-widget-symbol-vertical .pad-widget-glyph { font-size: 9px; }
+.pad-widget-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
-.pad-cell-widget-rocker::before, .pad-cell-widget-rocker::after {
-  content: ''; position: absolute; left: 1px;
-  border-left: 4px solid transparent; border-right: 4px solid transparent;
+.pad-widget-fallback .pad-widget-glyph { font-size: 28px; }
+.pad-widget-fallback .pad-widget-symbol-vertical .pad-widget-glyph { font-size: 18px; }
+.pad-widget-name {
+  font-size: 11px;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
-.pad-cell-widget-rocker::before { top: 0; border-bottom: 5px solid #fff; }
-.pad-cell-widget-rocker::after  { bottom: 0; border-top: 5px solid #fff; }
-
-.pad-cell-widget-numericrocker {
-  position: absolute; bottom: 4px; left: 4px; width: 14px; height: 10px; opacity: 0.6;
+.pad-cell-has-widget > .pad-cell-label-top,
+.pad-cell-has-widget > .pad-cell-label-center,
+.pad-cell-has-widget > .pad-cell-label-bottom {
+  max-width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  flex-shrink: 1;
 }
-.pad-cell-widget-numericrocker::before, .pad-cell-widget-numericrocker::after {
-  content: ''; position: absolute; top: 1px;
-  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+@container (max-width: 80px) or (max-height: 85px) {
+  .pad-widget-name { display: none; }
 }
-.pad-cell-widget-numericrocker::before { left: 0; border-right: 5px solid #fff; }
-.pad-cell-widget-numericrocker::after  { right: 0; border-left: 5px solid #fff; }
-
-.pad-cell-widget-list {
-  position: absolute; bottom: 4px; left: 4px; width: 14px; height: 12px;
-  opacity: 0.6;
-  background: repeating-linear-gradient(0deg, #fff, #fff 2px, transparent 2px, transparent 5px);
-}
-
-.pad-cell-widget-camera {
-  position: absolute; bottom: 4px; left: 4px; width: 16px; height: 11px;
-  border: 1px solid #fff; border-radius: 2px; opacity: 0.7;
-}
-.pad-cell-widget-camera::after {
-  content: ''; position: absolute; width: 4px; height: 4px; left: 5px; top: 2px;
-  border: 1px solid #fff; border-radius: 50%;
+@container (max-height: 52px) {
+  .pad-widget-fallback { display: none; }
 }
 
 /* Resize drag handles */
@@ -1776,10 +1783,6 @@ body {
 .pad-resize-handle-up     { left: 12%; top: 0;    height: 5px; width: 76%; cursor: row-resize; }
 .pad-resize-handle:hover  { background: rgba(100,180,255,0.85); }
 
-.pad-actions {
-  display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px;
-}
-
 .action-add-link {
   display: inline-block; margin-top: 8px; color: var(--portal-blue); cursor: pointer; font-size: 13px;
 }
@@ -1788,15 +1791,11 @@ body {
 .action-remove-link { color: #ff3b30; cursor: pointer; font-size: 13px; }
 .action-remove-link:hover { text-decoration: underline; }
 
-.pad-empty-state {
-  text-align: center; color: var(--portal-text-muted); padding: 20px;
-}
-.pad-empty-state p { margin: 4px 0; }
-
 .pad-more-menu {
-  position: absolute; right: 0; bottom: 100%; margin-bottom: 6px;
+  position: absolute; right: 0; top: 100%; margin-bottom: 6px;
   background: var(--portal-surface); border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.18); min-width: 200px; padding: 6px 0; z-index: 100;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18); min-width: 200px; padding: 6px 0; z-index: 20;
+  max-height: 65dvh; overflow: auto;
 }
 
 .pad-more-menu button {
@@ -1824,24 +1823,19 @@ body {
 .pad-cell-ghost-block.invalid { outline-color: rgba(255, 59, 48, 0.7); }
 
 /* ================================================================
-   Pad Edit Modal (migrated from portal.css)
+  Pad Button Form
    ================================================================ */
 .pad-edit-modal {
-  max-width: 520px;
+  width: 100%;
+  min-height: 0;
   text-align: left;
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
   padding: 0;
 }
 
-.pad-edit-modal h2 {
-  margin: 0; font-size: 20px;
-  padding: 24px 32px 16px; flex-shrink: 0;
-}
-
 .pad-edit-body {
-  overflow-y: auto; flex: 1; min-height: 0; padding: 0 32px;
+  overflow: auto; flex: 1; min-height: 0; padding: 0 14px 14px;
 }
 .pad-edit-body .form-group { margin-bottom: 12px; }
 
@@ -1850,7 +1844,8 @@ body {
   border-radius: 10px; margin-bottom: 10px;
   background: var(--portal-editor-bg);
 }
-.editor-group .editor-group {
+.editor-group .editor-group,
+#pad-level-action-editors > .action-list-slot {
   margin-left: 14px;
   border-left: 3px solid var(--portal-editor-nested-accent);
   background: var(--portal-editor-nested-bg);
@@ -1976,8 +1971,8 @@ body {
   width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto;
   border: 1px solid var(--portal-border); display: inline-block;
 }
-/* Pad-binding rows: preview drops to its own line, indented under the value */
-.pad-binding-preview { flex-basis: 100%; max-width: none; margin: 0 0 2px 116px; }
+/* Pad-binding rows: preview stays below its expression. */
+.pad-binding-preview { grid-column: 1 / -1; max-width: none; margin: 0; }
 .pad-binding-preview .pad-pv-text { max-width: 320px; }
 .reset-hint {
   display: none; font-size: 11px; margin-left: 2px; vertical-align: baseline;
@@ -1987,13 +1982,26 @@ body {
 
 /* Pad bindings list */
 .pad-binding-row {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end; gap: 8px; padding: 12px 0;
+  border-bottom: 1px solid var(--portal-border);
 }
-.pad-binding-row .pad-binding-name {
-  width: 110px; flex-shrink: 0; padding: 5px 8px; font-size: 13px; font-family: monospace;
-}
+.pad-binding-row label { min-width: 0; margin: 0; }
+.pad-binding-expression { grid-column: 1 / -1; }
+.pad-binding-row .pad-binding-del { width: 32px; height: 32px; padding: 0; margin-bottom: 2px; }
+.pad-binding-row .pad-binding-name,
 .pad-binding-row .pad-binding-value {
-  flex: 1; min-width: 0; padding: 5px 8px; font-size: 13px; font-family: monospace;
+  display: block; width: 100%; min-width: 0; margin-top: 4px;
+  padding: 5px 8px; font-size: 13px; font-family: monospace;
+}
+#pad-workspace-inspector .pad-appearance-row {
+  display: flex; align-items: flex-end; gap: 12px; margin-bottom: 8px;
+}
+#pad-workspace-inspector .pad-appearance-row > div {
+  flex: 1; min-width: 0; margin-bottom: 0;
+}
+#pad-workspace-inspector .pad-appearance-row label {
+  margin-bottom: 4px;
 }
 
 /* Sparkline: binding + color on same row */
@@ -2082,7 +2090,7 @@ input[type="text"].label-style-input {
 .label-style-input::placeholder { color: var(--portal-text-muted); opacity: 0.5; }
 
 .pad-edit-footer {
-  display: flex; gap: 12px; padding: 16px 32px 24px;
+  display: flex; gap: 6px; padding: 10px 14px;
   flex-shrink: 0; border-top: 1px solid var(--portal-border-light);
 }
 
@@ -2423,10 +2431,80 @@ input[type="text"].label-style-input {
    Toast container — anchor to top-right, just below the page header.
    The header is not sticky; --portal-header-height-desktop is published
    by JS on load/resize so this stays correct on mobile (badges wrap)
-   and desktop. Keeps toasts clear of the pad-editor toolbar at bottom.
+  and desktop.
    ================================================================ */
 #toast-container.toast-container {
   top: calc(var(--portal-header-height-desktop, 120px) + 12px);
   bottom: auto;
+}
+body:has(#pad-editor-root) #toast-container {
+  top: auto;
+  bottom: 64px;
+  max-width: 100%;
+}
+
+#pad-editor-root { --pad-workspace-line: var(--portal-border-light); }
+#content-pane:has(#pad-editor-root) { padding-top: 0; }
+#pad-editor-root [hidden] { display: none !important; }
+#pad-editor-root input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+#pad-editor-root input[type="number"]::-webkit-inner-spin-button,
+#pad-editor-root input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#pad-edit-bg-image-refresh { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; padding: 0; }
+#pad-editor-root .pad-workspace-toolbar { display: flex; align-items: center; gap: 12px; padding: 8px 0 14px; min-height: var(--pad-workspace-toolbar-height, 59px); }
+#pad-editor-root .pad-workspace-toolbar h2 { font-size: 19px; margin: 0; overflow-wrap: anywhere; }
+#pad-workspace-status { color: var(--portal-text-muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+#pad-workspace-commands .save-bar { position: static; border: 0; padding: 0; margin: 0; background: transparent; box-shadow: none; }
+#pad-editor-root .pad-workspace { display: grid; grid-template-columns: 150px minmax(200px, 1fr) 400px; height: max(540px, var(--pad-workspace-height, calc(100dvh - var(--portal-header-height-desktop, 120px) - 110px))); border: 1px solid var(--pad-workspace-line); border-radius: 12px; overflow: hidden; }
+#pad-editor-root .pad-workspace-rail { overflow-y: auto; padding: 8px 0; border-right: 1px solid var(--pad-workspace-line); min-width: 0; background: var(--portal-sidebar-bg); }
+#pad-workspace-pads button { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; background: transparent; text-align: left; padding-left: 14px; border-radius: 0; margin: 0; overflow-wrap: anywhere; }
+#pad-editor-root .pad-workspace-stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; background-color: var(--portal-editor-bg); background-image: radial-gradient(var(--pad-workspace-line) .7px, transparent .7px); background-size: 16px 16px; }
+#pad-editor-root .pad-workspace-canvas { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#pad-editor-root .pad-cell-selected { outline: 3px solid var(--portal-primary); outline-offset: -3px; z-index: 1; }
+#pad-editor-root .pad-workspace-inspector { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-left: 1px solid var(--pad-workspace-line); background: var(--portal-surface); overflow: hidden; }
+#pad-workspace-mobile-save { display: none; }
+#pad-editor-root .pad-workspace-inspector-head { padding: 12px 12px 0; flex: none; }
+#pad-editor-root .pad-workspace-scopes { display: flex; gap: 2px; border: 1px solid var(--pad-workspace-line); padding: 2px; border-radius: 4px; }
+#pad-editor-root .pad-workspace-scopes button { flex: 1; padding: 6px; background: transparent; color: var(--portal-text); border: 0; border-radius: 3px; }
+#pad-editor-root .pad-workspace-scopes button[aria-pressed="true"] { background: rgba(var(--portal-primary-rgb), .15); color: var(--portal-primary); }
+#pad-workspace-tabs { display: flex; border-bottom: 1px solid var(--pad-workspace-line); margin-top: 8px; }
+#pad-workspace-tabs button { flex: 1; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 2px; font-size: 12px; background: transparent; color: var(--portal-text); }
+#pad-workspace-tabs button[aria-selected="true"] { color: var(--portal-primary); border-bottom-color: var(--portal-primary); }
+#pad-workspace-button-fields { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#pad-edit-overlay { flex: 1; min-height: 0; }
+#pad-editor-root .editor-group { border-radius: 4px; }
+#pad-editor-root .editor-group-body { padding: 10px; }
+#pad-editor-root .pad-workspace-pad-fields { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+#pad-editor-root .pad-workspace-pad-fields .card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#pad-editor-root .pad-workspace-pad-fields .card-header { padding: 8px 0; background: transparent; }
+#pad-editor-root .pad-workspace-pad-fields .card-body { padding: 10px 0; }
+#pad-editor-root .pad-edit-body input, #pad-editor-root .pad-edit-body select, #pad-editor-root .pad-edit-body textarea { min-width: 0; max-width: 100%; }
+#pad-editor-root .pad-edit-body .form-group, #pad-editor-root .pad-edit-body .bindable-color { min-width: 0; }
+#pad-workspace-back { display: none; }
+#pad-block-banner { position: absolute; top: 0; left: 0; right: 0; z-index: 2; }
+#pad-editor-root .pad-workspace-discard { max-width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--pad-workspace-line); border-radius: 6px; background: var(--portal-surface); color: var(--portal-text); }
+#pad-editor-root .pad-workspace-discard::backdrop { background: #0008; }
+@media (max-width: 1200px) {
+  #pad-editor-root .pad-workspace { grid-template-columns: 110px minmax(160px, 1fr) 340px; }
+  #pad-editor-root .pad-workspace-toolbar { flex-wrap: wrap; }
+}
+@media (max-width: 980px) {
+  #pad-editor-root .pad-workspace-toolbar { min-height: 0; padding-top: 16px; }
+  #pad-editor-root .pad-workspace { grid-template-columns: minmax(180px, 1fr) 340px; grid-template-rows: auto minmax(0, 1fr); }
+  #pad-editor-root .pad-workspace-rail { grid-column: 1 / -1; border-right: 0; border-bottom: 1px solid var(--pad-workspace-line); overflow-x: auto; padding: 6px; }
+  #pad-workspace-pads { display: flex; gap: 4px; }
+  #pad-workspace-pads button { width: auto; min-width: 90px; flex: none; margin: 0; max-width: 200px; }
+}
+@media (max-width: 700px) {
+  #pad-workspace-mobile-save { display: inline-flex; }
+  #pad-editor-root .pad-workspace { display: flex; flex-direction: column; height: max(420px, var(--pad-workspace-height, calc(100dvh - var(--portal-header-height-desktop, 120px) - 150px))); }
+  #pad-editor-root .pad-workspace-rail { flex: none; }
+  #pad-editor-root .pad-workspace-stage { flex: 1; }
+  #pad-editor-root .pad-workspace-inspector { display: none; position: fixed; inset: 0; z-index: 1035; border: 0; background: var(--bs-body-bg); }
+  #pad-editor-root.pad-workspace-inspecting .pad-workspace-inspector { display: flex; }
+  #pad-workspace-back { display: inline-block; margin-bottom: 10px; }
+  #pad-editor-root .pad-workspace-toolbar h2 { font-size: 16px; }
+  #pad-workspace-status { font-size: 11px; }
+  #pad-workspace-commands { width: 100%; }
+  #pad-editor-root .pad-edit-body { padding: 0 16px 16px; }
 }
 

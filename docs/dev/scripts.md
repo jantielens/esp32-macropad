@@ -1,30 +1,68 @@
-# Development Scripts
+---
+title: Development Scripts
+description: Build, upload, monitoring, and local portal development script reference
+---
 
 This project includes several bash scripts to streamline ESP32 development workflow.
 
 ## tools/portal-dev-server.py
 
 **Purpose:** Run the production portal UI locally without a device or firmware
-build. The server serves the production shell, core assets, and available
-fragments with deterministic in-memory API fixtures.
+build. The server serves the production shell, feature-selected JavaScript
+bundle, styles, and rendered fragments with deterministic in-memory API fixtures.
 
 **Usage:**
 
 ```bash
-python3 tools/portal-dev-server.py --port 8765
+python3 tools/portal-dev-server.py --port 8765 --profile esp32-p4-lcd4b
 ```
 
-Open a fragment with its profile and ID:
+Open the pad editor (the P4 profile is the default):
+
+```text
+http://localhost:8765/?profile=esp32-p4-lcd4b&fragment=pad-editor
+```
+
+The existing E-Paper Frame profile remains available:
 
 ```text
 http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
+```
+
+Preview JC3248W535's full Screen Saver controls with backlight fading and an
+awake panel controller:
+
+```text
+http://localhost:8765/?profile=jc3248w535&fragment=screensaver
 ```
 
 **Notes:**
 
 * Reload the browser after changing a served HTML, CSS, or JavaScript source.
 * Restart the server after changing `tools/portal-dev-server.py`.
-* Mock API writes are process-local and do not contact a device.
+* The server binds to `127.0.0.1`. Mock writes are process-local and never contact a device.
+* Pad edits, defaults, icon uploads, brightness, and screen commands are retained in memory.
+* Fixtures include populated, empty, widget, template, inherited, dense 8x8, and input-control pads.
+* Binding previews use fixed sample values, not MQTT, Home Assistant, expressions, or device execution. Icon font height is approximate.
+
+Use `--scenario load-error`, `--scenario save-error`, or
+`--scenario invalid-bindings` to test failure states. Reset edits, reload fixture
+changes, or switch scenarios without restarting:
+
+```bash
+curl -X POST http://localhost:8765/__mock/reset \
+  -H 'Content-Type: application/json' -d '{"scenario":"normal"}'
+```
+
+Reload the browser after resetting. Restarting always discards mock state.
+State and the selected scenario are shared by tabs; the profile cookie is shared
+by tabs on the same hostname, so use one profile at a time.
+
+Run the focused mock API and catalog snapshot tests:
+
+```bash
+python3 tests/test_portal_dev_server.py
+```
 
 ## config.sh
 

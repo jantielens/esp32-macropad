@@ -14,6 +14,9 @@
 #include "components/wifi_component.cpp"
 #include "components/device_name_component.cpp"
 #include "components/network_component.cpp"
+#if HAS_REMOTE_LOG
+#include "components/logs_component.cpp"
+#endif
  #if !IS_EPAPER_FRAME
 // On E-Paper Frame boards the Power Mode page is suppressed because frames
 // always run in duty_cycle_epaper_frame, and that mode is set automatically when

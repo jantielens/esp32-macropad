@@ -427,11 +427,17 @@ responsive time-brick layout that scales to the owning button.
 `extensions/word-clock` demonstrates a responsive letter-matrix clock with
 rounded, minute-dots, and accurate phrase modes, bundled font selection, and
 button-color integration.
+Phrase logging is disabled by default. Add the numeric option `"log_phrases":1`
+to a widget's JSON configuration for phrase diagnostics. Host log records
+include the package and widget instance IDs; worker records use instance 0.
 `extensions/flight-radar` is a stateful example: it shares one fixed-buffer
 ADSB.lol polling worker across active widgets, uses `config_json` for location
 and range, and renders a radar canvas plus labels. `interval` is an optional
 refresh period in seconds (1-3600, default 10). Its HTTPS requests are insecure
 under the current ABI policy.
+Radar failures report scan index, HTTP result, truncation, elapsed time, and
+attempt count on the first failure and at most once per minute thereafter.
+A successful refresh reports recovery when earlier attempts failed.
 
 The radar worker supports up to four distinct scan configurations at once. A
 widget attaches to a scan slot by its complete normalized configuration; widgets

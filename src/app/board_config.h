@@ -56,8 +56,29 @@ struct HwButtonDef {
 #endif
 
 // ============================================================================
-// Project Branding
+// Remote Diagnostics
+// Include remote log capture, portal assets, and retained-crash retrieval.
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG false
+#endif
+
+// Rolling record capacity when remote diagnostics are enabled.
+#ifndef REMOTE_LOG_BUFFER_RECORDS
+#define REMOTE_LOG_BUFFER_RECORDS 256
+#endif
+
+// Startup snapshot capacity; defaults to 128 records when remote capture is enabled.
+#ifndef REMOTE_LOG_BOOT_RECORDS
+#define REMOTE_LOG_BOOT_RECORDS 128
+#endif
+
+// Dev/test-only crash API; defaults off on every board and must stay off in production.
+#ifndef DEBUG_CRASH_API_ENABLED
+#define DEBUG_CRASH_API_ENABLED 0
+#endif
+
 // ============================================================================
+// Project Branding
 // Human-friendly project name used in the web UI and device name (can be set by build system).
 #ifndef PROJECT_DISPLAY_NAME
 #define PROJECT_DISPLAY_NAME "ESP32 Device"
@@ -1232,6 +1253,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define TOUCH_DRIVER_CST816S_WIRE 6
 #define TOUCH_DRIVER_INKPLATE6FLICK 7
 
+// Maximum AXS15231B contacts (1 or 2); enable two only on verified panels.
+#ifndef MAX_AXS15231B_CONTACTS
+#define MAX_AXS15231B_CONTACTS 1
+#endif
+
 // Touch reset pin (-1 = no hardware reset, GT911 boots normally).
 #ifndef TOUCH_RST
 #define TOUCH_RST -1
@@ -1292,9 +1318,14 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // ============================================================================
 // Screensaver
 // ============================================================================
-// Keep the display content active during logical sleep and only turn off the backlight.
+// Use the legacy timeout-only lighting policy with instant transitions.
 #ifndef SCREENSAVER_BACKLIGHT_ONLY
 #define SCREENSAVER_BACKLIGHT_ONLY false
+#endif
+
+// Keep the panel and rendering active during screen saver sleep, independently of fading.
+#ifndef SCREENSAVER_KEEP_PANEL_AWAKE
+#define SCREENSAVER_KEEP_PANEL_AWAKE SCREENSAVER_BACKLIGHT_ONLY
 #endif
 
 // Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).

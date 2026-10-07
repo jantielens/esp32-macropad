@@ -747,10 +747,23 @@ TEST(delay_invalid_duration_clears_action) {
     }
 }
 
+TEST(registered_identifiers_survive_storage) {
+    ASSERT_TRUE(action_type_count() > 0);
+    for (uint8_t index = 0; index < action_type_count(); ++index) {
+        const ActionTypeDef* type = action_type_at(index);
+        ASSERT_TRUE(strlen(type->type_name) < sizeof(ButtonAction::type));
+        ButtonAction stored = {};
+        strlcpy(stored.type, type->type_name, sizeof(stored.type));
+        ASSERT_STR(stored.type, type->type_name);
+        ASSERT_TRUE(action_type_find(stored.type) == type);
+    }
+}
+
 int main() {
     printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
 
     printf("--- Empty / minimal ---\n");
+    RUN(registered_identifiers_survive_storage);
     RUN(empty_json);
     RUN(empty_to_json_produces_empty_object);
     RUN(action_list_filters_literal_none_for_pad_callers);

@@ -237,7 +237,7 @@ void DisplayManager::lruPromote(uint8_t padIndex) {
 void DisplayManager::lruEvictIfNeeded() {
 		while (lruCount >= SCREEN_HISTORY_MAX && lruCount > 0) {
 				uint8_t victim = lruCache[lruCount - 1];
-				LOGD("Display", "LRU evicting pad %u", victim);
+				LOGT("Display", "LRU evicting pad %u", victim);
 				padScreens[victim]->evict();
 				lruCount--;
 		}
@@ -302,7 +302,7 @@ bool DisplayManager::tryLock(uint32_t timeoutMs) {
 }
 
 void DisplayManager::initHardware() {
-		LOGI("Display", "Init start");
+		LOGT("Display", "Init start");
 		
 		// Initialize display driver
 		const uint8_t rotation = (DISPLAY_ROTATION + config->display_rotation) & 3;
@@ -317,24 +317,24 @@ void DisplayManager::initHardware() {
 		uint8_t brightness = config ? config->backlight_brightness : 100;
 		if (brightness > 100) brightness = 100;
 		driver->setBacklightBrightness(brightness);
-		LOGI("Display", "Backlight: %d%%", brightness);
+		LOGT("Display", "Backlight: %d%%", brightness);
 		#else
 		// Turn on backlight (on/off only)
 		driver->setBacklight(true);
-		LOGI("Display", "Backlight: ON");
+		LOGT("Display", "Backlight: ON");
 		#endif
 		
-		LOGI("Display", "Resolution: %dx%d", DISPLAY_WIDTH, DISPLAY_HEIGHT);
-		LOGI("Display", "Rotation: %d", rotation);
+		LOGT("Display", "Resolution: %dx%d", DISPLAY_WIDTH, DISPLAY_HEIGHT);
+		LOGT("Display", "Rotation: %d", rotation);
 		
 		// Apply display-specific settings (inversion, gamma, etc.)
 		driver->applyDisplayFixes();
 		
-		LOGI("Display", "Init complete");
+		LOGT("Display", "Init complete");
 }
 
 void DisplayManager::initLVGL() {
-		LOGI("Display", "LVGL v9 init start");
+		LOGT("Display", "LVGL v9 init start");
 		
 		lv_init();
 
@@ -375,7 +375,7 @@ void DisplayManager::initLVGL() {
 				LOGE("Display", "Failed to allocate LVGL buffer");
 				return;
 		}
-		LOGI("Display", "Buffer allocated: %d bytes (%d pixels, align=%d)", buf_size_bytes, LVGL_BUFFER_SIZE, buf_align);
+		LOGT("Display", "Buffer allocated: %d bytes (%d pixels, align=%d)", buf_size_bytes, LVGL_BUFFER_SIZE, buf_align);
 		
 		// Allocate second buffer for double-buffering if configured
 		buf2 = NULL;
@@ -386,7 +386,7 @@ void DisplayManager::initLVGL() {
 				buf2 = (uint8_t*)heap_caps_aligned_alloc(buf_align, buf_size_bytes, MALLOC_CAP_SPIRAM);
 		}
 		if (buf2) {
-				LOGI("Display", "Second buffer allocated for double-buffering: %d bytes", buf_size_bytes);
+				LOGT("Display", "Second buffer allocated for double-buffering: %d bytes", buf_size_bytes);
 		} else {
 				LOGW("Display", "Failed to allocate second buffer - using single-buffering");
 		}
@@ -408,15 +408,15 @@ void DisplayManager::initLVGL() {
 				LV_FONT_DEFAULT                // Default font
 		);
 		lv_display_set_theme(display, theme);
-		LOGI("Display", "Theme: Default %s mode initialized", LVGL_THEME_DARK_MODE ? "dark" : "light");
+		LOGT("Display", "Theme: Default %s mode initialized", LVGL_THEME_DARK_MODE ? "dark" : "light");
 		
 		// Override LVGL refresh period if board specifies a custom value.
 		#ifdef LVGL_REFR_PERIOD_MS
 		lv_timer_set_period(lv_display_get_refr_timer(display), LVGL_REFR_PERIOD_MS);
-		LOGI("Display", "Refresh period: %d ms", LVGL_REFR_PERIOD_MS);
+		LOGT("Display", "Refresh period: %d ms", LVGL_REFR_PERIOD_MS);
 		#endif
 		
-		LOGI("Display", "Buffer: %d pixels (%d lines), %s",
+		LOGT("Display", "Buffer: %d pixels (%d lines), %s",
 				 LVGL_BUFFER_SIZE, LVGL_BUFFER_SIZE / driver->width(),
 				 #if defined(LVGL_DRAW_BUF_COUNT) && LVGL_DRAW_BUF_COUNT == 2
 				 "double-buffered"
@@ -424,7 +424,7 @@ void DisplayManager::initLVGL() {
 				 "single-buffered"
 				 #endif
 		);
-		LOGI("Display", "LVGL v9 init complete");
+		LOGT("Display", "LVGL v9 init complete");
 }
 
 void DisplayManager::init() {
@@ -434,7 +434,7 @@ void DisplayManager::init() {
 		// Initialize LVGL
 		initLVGL();
 		
-		LOGI("Display", "Manager init start");
+		LOGT("Display", "Manager init start");
 
 #if HAS_MQTT
 		data_stream_init();
@@ -478,9 +478,9 @@ void DisplayManager::init() {
 		#endif
 		if (!lvglTaskCreated) {
 				xTaskCreate(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle);
-				LOGI("Display", "Rendering task created (single-core, internal stack)");
+				LOGT("Display", "Rendering task created (single-core, internal stack)");
 		} else {
-				LOGI("Display", "Rendering task created (single-core, %s stack)", lvglStackLocation);
+				LOGT("Display", "Rendering task created (single-core, %s stack)", lvglStackLocation);
 		}
 		#else
 		#if LVGL_TASK_USE_PSRAM_STACK
@@ -496,9 +496,9 @@ void DisplayManager::init() {
 		#endif
 		if (!lvglTaskCreated) {
 				xTaskCreatePinnedToCore(lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY, &lvglTaskHandle, LVGL_TASK_CORE);
-				LOGI("Display", "Rendering task created (Core %d, internal stack)", LVGL_TASK_CORE);
+				LOGT("Display", "Rendering task created (Core %d, internal stack)", LVGL_TASK_CORE);
 		} else {
-				LOGI("Display", "Rendering task created (Core %d, %s stack)", LVGL_TASK_CORE, lvglStackLocation);
+				LOGT("Display", "Rendering task created (Core %d, %s stack)", LVGL_TASK_CORE, lvglStackLocation);
 		}
 		#endif
 		
@@ -526,9 +526,9 @@ void DisplayManager::init() {
 				#endif
 				if (!presentTaskCreated) {
 						xTaskCreate(presentTask, "Present", 4096, this, 1, &presentTaskHandle);
-						LOGI("Display", "Present task created (single-core, internal stack)");
+						LOGT("Display", "Present task created (single-core, internal stack)");
 				} else {
-						LOGI("Display", "Present task created (single-core, %s stack)", presentStackLocation);
+						LOGT("Display", "Present task created (single-core, %s stack)", presentStackLocation);
 				}
 				#else
 				const BaseType_t presentCore = 1 - LVGL_TASK_CORE;
@@ -545,9 +545,9 @@ void DisplayManager::init() {
 				#endif
 				if (!presentTaskCreated) {
 						xTaskCreatePinnedToCore(presentTask, "Present", 4096, this, 1, &presentTaskHandle, presentCore);
-						LOGI("Display", "Present task created (Core %d, internal stack)", presentCore);
+						LOGT("Display", "Present task created (Core %d, internal stack)", presentCore);
 				} else {
-						LOGI("Display", "Present task created (Core %d, %s stack)", presentCore, presentStackLocation);
+						LOGT("Display", "Present task created (Core %d, %s stack)", presentCore, presentStackLocation);
 				}
 				#endif
 		}

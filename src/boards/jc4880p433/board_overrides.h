@@ -1,6 +1,10 @@
 #ifndef BOARD_OVERRIDES_JC4880P433_H
 #define BOARD_OVERRIDES_JC4880P433_H
 
+#ifndef HAS_REMOTE_LOG
+#define HAS_REMOTE_LOG true
+#endif
+
 // ============================================================================
 // GUITION JC4880P433 Board Configuration Overrides
 // ============================================================================

@@ -449,19 +449,16 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 
 				unsigned long timeout = remaining_timeout(WIFI_BACKOFF_BASE * (attempt + 1));
 				if (wait_for_connection(timeout)) {
-						LOGI("WiFi", "IP: %s", WiFi.localIP().toString().c_str());
-						LOGI("WiFi", "Hostname: %s", WiFi.getHostname());
-						LOGI("WiFi", "MAC: %s", WiFi.macAddress().c_str());
-						LOGI("WiFi", "Signal: %d dBm", WiFi.RSSI());
-						LOGI("WiFi", "Access: http://%s", WiFi.localIP().toString().c_str());
-						LOGI("WiFi", "Access: http://%s.local", WiFi.getHostname());
-						LOGI("WiFi", "Connected");
+						LOGI("WiFi", "Connected: ip=%s host=%s.local RSSI=%d dBm",
+						     WiFi.localIP().toString().c_str(), WiFi.getHostname(), WiFi.RSSI());
+						LOGT("WiFi", "MAC: %s", WiFi.macAddress().c_str());
 						cache_association_diagnostics(millis());
 						return true;
 				}
 
 				wl_status_t status = WiFi.status();
 				const char* reason =
+						(status == WL_IDLE_STATUS) ? "Idle/connecting" :
 						(status == WL_NO_SSID_AVAIL) ? "SSID not found" :
 						(status == WL_CONNECT_FAILED) ? "Connect failed (wrong password?)" :
 						(status == WL_CONNECTION_LOST) ? "Connection lost" :
@@ -489,13 +486,9 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 
 				while (millis() - start < backoff) {
 						if (WiFi.status() == WL_CONNECTED) {
-								LOGI("WiFi", "IP: %s", WiFi.localIP().toString().c_str());
-								LOGI("WiFi", "Hostname: %s", WiFi.getHostname());
-								LOGI("WiFi", "MAC: %s", WiFi.macAddress().c_str());
-								LOGI("WiFi", "Signal: %d dBm", WiFi.RSSI());
-								LOGI("WiFi", "Access: http://%s", WiFi.localIP().toString().c_str());
-								LOGI("WiFi", "Access: http://%s.local", WiFi.getHostname());
-								LOGI("WiFi", "Connected");
+								LOGI("WiFi", "Connected: ip=%s host=%s.local RSSI=%d dBm",
+								     WiFi.localIP().toString().c_str(), WiFi.getHostname(), WiFi.RSSI());
+								LOGT("WiFi", "MAC: %s", WiFi.macAddress().c_str());
 								cache_association_diagnostics(millis());
 
 								if (has_best_ap && best_channel > 0) {
@@ -513,6 +506,7 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 				wl_status_t status = WiFi.status();
 				if (status != WL_CONNECTED) {
 						const char* reason =
+								(status == WL_IDLE_STATUS) ? "Idle/connecting" :
 								(status == WL_NO_SSID_AVAIL) ? "SSID not found" :
 								(status == WL_CONNECT_FAILED) ? "Connect failed (wrong password?)" :
 								(status == WL_CONNECTION_LOST) ? "Connection lost" :

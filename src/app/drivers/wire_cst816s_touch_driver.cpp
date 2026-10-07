@@ -22,7 +22,7 @@ Wire_CST816S_TouchDriver::~Wire_CST816S_TouchDriver() {
 }
 
 void Wire_CST816S_TouchDriver::init() {
-		LOGI("CST816S", "Initializing touch (Wire I2C)");
+		LOGT("CST816S", "Initializing touch (Wire I2C)");
 
 		// Hardware reset
 		#ifdef TOUCH_RST
@@ -32,7 +32,7 @@ void Wire_CST816S_TouchDriver::init() {
 		delay(10);
 		digitalWrite(TOUCH_RST, HIGH);
 		delay(50);
-		LOGI("CST816S", "Hardware reset via GPIO%d", TOUCH_RST);
+		LOGT("CST816S", "Hardware reset via GPIO%d", TOUCH_RST);
 		#endif
 		#endif
 
@@ -40,10 +40,10 @@ void Wire_CST816S_TouchDriver::init() {
 		wire = &Wire;
 		#if defined(TOUCH_I2C_SDA) && defined(TOUCH_I2C_SCL)
 		const bool bus_ready = wire->begin(TOUCH_I2C_SDA, TOUCH_I2C_SCL, 400000);
-		LOGI("CST816S", "I2C init: SDA=%d, SCL=%d, 400kHz", TOUCH_I2C_SDA, TOUCH_I2C_SCL);
+		LOGT("CST816S", "I2C init: SDA=%d, SCL=%d, 400kHz", TOUCH_I2C_SDA, TOUCH_I2C_SCL);
 		#else
 		const bool bus_ready = wire->begin();
-		LOGI("CST816S", "I2C init: default pins, default freq");
+		LOGT("CST816S", "I2C init: default pins, default freq");
 		#endif
 
 		if (!bus_ready) {
@@ -56,7 +56,7 @@ void Wire_CST816S_TouchDriver::init() {
 		wire->beginTransmission(CST816S_I2C_ADDR);
 		uint8_t err = wire->endTransmission();
 		if (err == 0) {
-				LOGI("CST816S", "Touch controller found at 0x%02X", CST816S_I2C_ADDR);
+				LOGT("CST816S", "Touch controller found at 0x%02X", CST816S_I2C_ADDR);
 		} else {
 				LOGW("CST816S", "Touch controller not found at 0x%02X (err=%d)", CST816S_I2C_ADDR, err);
 		}
@@ -72,7 +72,7 @@ void Wire_CST816S_TouchDriver::init() {
 				wire = nullptr;
 				LOGW("CST816S", "Failed to disable auto-sleep (err=%d)", sleep_result);
 		} else {
-				LOGI("CST816S", "Init complete (auto-sleep disabled)");
+				LOGT("CST816S", "Init complete (auto-sleep disabled)");
 		}
 }
 

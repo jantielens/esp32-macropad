@@ -23,7 +23,7 @@ AXS15231B_TouchDriver::~AXS15231B_TouchDriver() {
 }
 
 void AXS15231B_TouchDriver::init() {
-		LOGI("AXS15231B", "Initializing I2C touch controller");
+		LOGT("AXS15231B", "Initializing I2C touch controller");
 		
 		#ifdef TOUCH_I2C_SCL
 		// Create touch instance with I2C pins and interrupt
@@ -44,7 +44,8 @@ void AXS15231B_TouchDriver::init() {
 				TOUCH_I2C_SDA,
 				int_pin,
 				TOUCH_I2C_ADDR,
-				DISPLAY_ROTATION
+				DISPLAY_ROTATION,
+				MAX_AXS15231B_CONTACTS
 		);
 		
 		initialized = touch->begin();
@@ -73,16 +74,20 @@ bool AXS15231B_TouchDriver::isTouched() {
 
 TouchSample AXS15231B_TouchDriver::readSample() {
 		TouchSample sample;
-		if (!touch || !initialized) {
-				sample.status = TouchReadStatus::Error;
-				return sample;
-		}
-		const auto status = touch->readSample();
-		sample.status = status == AXS15231B_Touch::ReadStatus::Fresh ? TouchReadStatus::Fresh :
-				status == AXS15231B_Touch::ReadStatus::Unchanged ? TouchReadStatus::Unchanged : TouchReadStatus::Error;
-		sample.pressed = touch->isPressed();
-		touch->readData(&sample.horizontal, &sample.vertical);
+		const TouchSnapshot snapshot = readSnapshot();
+		sample.status = snapshot.status;
+		sample.pressed = snapshot.count != 0;
+		if (touch) touch->readData(&sample.horizontal, &sample.vertical);
 		return sample;
+}
+
+TouchSnapshot AXS15231B_TouchDriver::readSnapshot() {
+		if (!touch || !initialized) {
+				TouchSnapshot snapshot;
+				snapshot.status = TouchReadStatus::Error;
+				return snapshot;
+		}
+		return touch->readSnapshot();
 }
 
 bool AXS15231B_TouchDriver::getTouch(uint16_t* x, uint16_t* y, uint16_t* pressure) {

@@ -328,7 +328,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         cleanup();
         return false;
     }
-    LOGI(TAG, "I2S TX: %u Hz, 16-bit stereo, MCLK=%lu Hz (%lux)",
+    LOGT(TAG, "I2S TX: %u Hz, 16-bit stereo, MCLK=%lu Hz (%lux)",
          sample_rate, sample_rate * static_cast<uint32_t>(kEs8311MclkMultiple),
          static_cast<uint32_t>(kEs8311MclkMultiple));
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -364,7 +364,8 @@ bool ES8311AudioDriver::write(const int16_t* frames, size_t frame_count) {
 void ES8311AudioDriver::setVolume(uint8_t vol_0_100) {
     uint8_t reg_val = (uint8_t)((uint16_t)vol_0_100 * 255 / 100);
     bool ok = es8311_write(ES8311_DAC_REG32, reg_val);
-    LOGD(TAG, "Volume: %u%% -> REG32=0x%02X %s", vol_0_100, reg_val, ok ? "OK" : "FAIL");
+    if (ok) LOGT(TAG, "Volume: %u%% -> REG32=0x%02X", vol_0_100, reg_val);
+    else LOGW(TAG, "Volume write failed: %u%% REG32=0x%02X", vol_0_100, reg_val);
 }
 
 // The microphone shares the ES8311 transport only on input-enabled boards.
