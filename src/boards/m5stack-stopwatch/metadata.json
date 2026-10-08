@@ -1,0 +1,19 @@
+{
+  "device_class": "macropad",
+  "board_label": "M5Stack StopWatch",
+  "description": "M5Stack StopWatch — 1.75\" round AMOLED with capacitive touch and two programmable buttons. Initial bring-up firmware; physical validation required. Speaker playback is opt-in; microphone, IMU, RTC, haptics, BLE, USB HID, and native Extensions are not enabled.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "capabilities": [],
+  "wireless": {
+    "wifi": true,
+    "ble": false
+  },
+  "display": {
+    "size": "1.75\"",
+    "resolution": "466x466",
+    "type": "AMOLED",
+    "touch": true
+  }
+}
