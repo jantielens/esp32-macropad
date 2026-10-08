@@ -1366,7 +1366,9 @@ an allocator pool walk, which can interrupt continuous MIPI-DSI scan-out.
 `ALARM_ENABLED` defaults to `HAS_DISPLAY` and can be overridden by a board with
 the action framework enabled. It gates the runtime, `alarm` action and binding,
 component, assets, and MCP tools. Shared timezone and NTP services are ungated.
-The Alarm fragment uses the shared action editor with strict
+The Alarm category contains `alarm-schedule` and `alarm-behavior` fragments.
+Schedule contains enabled state, time, and repeat days. Behavior contains durations,
+actions, and maximum lateness, and uses the shared action editor with strict
 `alarm_hook_allowed` catalog filtering. Its standalone `/portal_alarms.js` asset
 is authenticated and gated with the component.
 Hash routing loads only the selected component's advertised assets and waits
@@ -1384,9 +1386,19 @@ The alarm manager does not hold a display lock around its hook list.
 |--------|----------|----------|
 | GET | `/api/component/alarms/config` | Device-wide lateness setting and normalized ID-keyed definition |
 | POST | `/api/component/alarms/config` | Validated, durable full replacement; maximum 8192 bytes |
+| POST | `/api/component/alarms/schedule` | Durable scoped save of enabled state, time, and repeat days; maximum 8192 bytes |
+| POST | `/api/component/alarms/behavior` | Durable scoped save of durations, actions, and maximum lateness; maximum 8192 bytes |
 | GET | `/api/component/alarms/status` | Configuration values, state/readiness/failures, one-shot target, next occurrence/countdowns, queue acknowledgement |
 | POST | `/api/component/alarms/snooze` | Queue snooze for a ringing session |
 | POST | `/api/component/alarms/cancel` | Queue cancellation without disabling the schedule |
+
+Scoped saves use flat JSON objects containing exactly their own fields:
+`schedule` requires `enabled`, `hour`, `minute`, and `weekdays`; `behavior`
+requires `lateness_minutes`, `snooze_minutes`, `auto_dismiss_minutes`, `on_ring`,
+and `on_stop`. Missing or foreign fields are rejected. The main-loop handler
+merges against the latest live configuration before validation and persistence,
+so one view cannot overwrite the other view's settings with a stale snapshot.
+The MCP component API continues to use the full-replacement contract.
 
 Phase 3 accepts exactly slot `1` and a device-wide lateness setting:
 
@@ -1431,7 +1443,7 @@ including Numeric Rocker `{step}`), and `alarm_day` (Sunday=0).
 `portal_action_editor_alarm.js` owns command-specific rendering, loading,
 binding setup, and payload building through `_actionEditorExtensions`. Its
 `type` registration excludes Alarm fields from the generic renderer. It shows
-the value only for time commands and the weekday only for weekday commands;
+the value only for time commands and Day only for repeat-day commands;
 unused fields are omitted from saved actions. MCP uses the same
 command validation and queue, with integer `value` and `day` arguments. Config
 commands default to ID 1; ID 0 is reserved for active-session controls.
@@ -1555,12 +1567,17 @@ authoritative timezone without changing its generation or alarm state. Invalid
 input returns `400`; formatting failure returns `503`. The browser discards stale
 preview responses and does not poll.
 
-The Alarm fragment displays readiness and storage/action warnings on load and
+Both Alarm fragments display readiness and storage/action warnings on load and
 after saves, without recurring polling, live Ringing/Snoozed indicators, or
-Snooze/Cancel buttons. REST and MCP alarm controls remain available. The shared
-action editor advertises Alarm Control, Loop Tone, and Loop MP3 in Alarm while
+Snooze/Dismiss alarm buttons. REST and MCP alarm controls remain available. The shared
+action editor advertises Alarm Control, Alarm tone, and Alarm MP3 in Alarm while
 regular sound playback remains in Audio. Catalog-driven MP3 fields reuse the
 sound library and retain missing saved file names.
+Editor-field `help` metadata explains looping playback and the device-volume sentinel.
+Schedule uses Repeat days and Save schedule. Behavior uses When ringing starts/stops,
+Maximum alarm lateness, and Save behavior;
+binding help distinguishes the next scheduled alarm, the next ring including snooze,
+and time until auto-dismiss. Display labels do not rename persisted keys.
 
 ### Configuration Management
 

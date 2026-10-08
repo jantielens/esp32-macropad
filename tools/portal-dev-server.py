@@ -72,24 +72,26 @@ def reset_pad_fixtures(server, scenario="normal"):
             action["label"] = "Sound alert"
     fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm Control", "alarm_hook_allowed": True,
         "commands": [{"id": command, "label": label} for command, label in (
-            ("cancel", "Cancel"), ("snooze", "Snooze"), ("set_time", "Set time"), ("adjust_minutes", "Adjust time"),
+            ("cancel", "Dismiss alarm"), ("snooze", "Snooze"), ("set_time", "Set time"), ("adjust_minutes", "Adjust time"),
             ("enable", "Enable alarm"), ("disable", "Disable alarm"), ("toggle", "Toggle alarm"),
-            ("weekday_enable", "Enable weekday"), ("weekday_disable", "Disable weekday"), ("weekday_toggle", "Toggle weekday"))],
-        "editor_fields": [{"name": "alarm_id", "label": "Alarm", "type": "select", "default": "1", "numeric": True,
+            ("weekday_enable", "Enable day"), ("weekday_disable", "Disable day"), ("weekday_toggle", "Toggle day"))],
+        "editor_fields": [{"name": "alarm_id", "label": "Target alarm", "type": "select", "default": "1", "numeric": True,
+                           "help": "Active alarm works only with Snooze and Dismiss alarm. Dismiss alarm ends ringing or snoozing without disabling the weekly schedule.",
                            "options": [{"id": "0", "label": "Active alarm"}, {"id": "1", "label": "Alarm 1"}]},
                           {"name": "alarm_command", "label": "Command", "type": "select", "default": "snooze", "command_options": True},
-                          {"name": "alarm_value", "label": "Minutes (set time: since midnight; adjust: signed step)", "type": "text", "bindable": True},
-                          {"name": "alarm_day", "label": "Weekday (weekday commands only)", "type": "select", "numeric": True, "default": "1",
+                          {"name": "alarm_value", "label": "Adjustment (minutes)", "type": "text", "bindable": True},
+                          {"name": "alarm_day", "label": "Day", "type": "select", "numeric": True, "default": "1",
                            "options": [{"id": day, "label": name} for day, name in enumerate(("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))]}]})
-    for action_type, label, source in (("alarm_tone", "Loop Tone", "sound_alert_pattern"),
-                                      ("alarm_mp3", "Loop MP3", "sound_alert_file")):
+    for action_type, label, source in (("alarm_tone", "Alarm tone", "sound_alert_pattern"),
+                                      ("alarm_mp3", "Alarm MP3", "sound_alert_file")):
         field = {"name": source, "label": "MP3 file" if action_type == "alarm_mp3" else "Tone pattern",
-                 "type": "select" if action_type == "alarm_mp3" else "text"}
+                 "type": "select" if action_type == "alarm_mp3" else "text",
+                 "help": "Repeats until stopped. Stop audio stops playback; Dismiss alarm ends the alarm session."}
         field.update({"options_source": "sounds"} if action_type == "alarm_mp3" else {"bindable": True})
         fixture["catalog"].append({"type": action_type, "group": "Alarm", "label": label,
             "alarm_hook_allowed": True, "editor_fields": [field,
                 {"name": "sound_alert_volume", "label": "Volume override (%)", "type": "number",
-                 "min": 0, "max": 100, "default": "0"}]})
+                 "min": 0, "max": 100, "default": "0", "help": "0 = use device volume; 1-100 overrides it."}]})
     fixture["binding_schema"]["schemes"].append({"name": "alarm", "min_params": 1, "max_params": 1,
         "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
         "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id", "1_hour", "1_minute", "1_minutes",
@@ -259,7 +261,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Fragment API — production fragments take precedence.
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
-            if fragment == "alarms" and self._profile() == "reterminal-e1003-frame":
+            if fragment in ("alarm-schedule", "alarm-behavior") and self._profile() == "reterminal-e1003-frame":
                 self.send_error(404, "Alarm unavailable")
                 return
             if not all(c.isalnum() or c in "-_" for c in fragment) or not fragment:
@@ -299,7 +301,21 @@ class PortalHandler(SimpleHTTPRequestHandler):
             except (UnicodeDecodeError, ValueError):
                 self._serve_json({"error": "Invalid JSON"}, 400)
                 return
-            if path == "/api/component/alarms/config":
+            if path in ("/api/component/alarms/config", "/api/component/alarms/schedule", "/api/component/alarms/behavior"):
+                if not path.endswith("/config"):
+                    section = path.rsplit("/", 1)[1]
+                    fields = {"enabled", "hour", "minute", "weekdays"} if section == "schedule" else {
+                        "lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"}
+                    if set(data) != fields:
+                        self._serve_json({"error": "Alarm section requires exactly its own fields"}, 400)
+                        return
+                    merged = json.loads(json.dumps(self.server.mock_alarms))
+                    for key, value in data.items():
+                        if key == "lateness_minutes":
+                            merged[key] = value
+                        else:
+                            merged["1"][key] = value
+                    data = merged
                 slot = data.get("1", {})
                 allowed = {action["type"] for action in self.server.pad_fixture["catalog"] if action["alarm_hook_allowed"]}
                 if (set(data) != {"1", "lateness_minutes"} or type(data.get("lateness_minutes")) is not int
@@ -575,12 +591,15 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def _navigation(self, profile):
         nav = json.loads((MOCK_DIR / "nav.json").read_text(encoding="utf-8"))
+        if profile in ("esp32-p4-lcd4b", "jc3248w535"):
+            actions_index = next(index for index, category in enumerate(nav["categories"]) if category["id"] == "actions")
+            nav["categories"].insert(actions_index + 1, {"id": "alarm", "display_name": "Alarm", "icon": "\u23f0", "items": [
+                {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
+                {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
             if category["id"] == "device":
                 category["items"].append({"id": "timezone", "display_name": "Timezone"})
                 category["items"].append({"id": "logs", "display_name": "Logs", "portal_script": "/portal-logs.js"})
-            if category["id"] == "actions" and profile in ("esp32-p4-lcd4b", "jc3248w535"):
-                category["items"].append({"id": "alarms", "display_name": "Alarm", "portal_script": "/portal_alarms.js"})
             for item in category["items"]:
                 if item["id"] == "ble":
                     item["id"] = "hid"

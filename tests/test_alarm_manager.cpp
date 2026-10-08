@@ -618,7 +618,34 @@ static void test_settings_debounce() {
     diagnostics.clear();
 }
 
+static void test_section_saves() {
+    storage_test_files.clear();
+    ready = true;
+    ota = false;
+    alarm_manager_init();
+    assert(save(config));
+    const char* schedule = R"({"enabled":true,"hour":8,"minute":15,"weekdays":127})";
+    assert(alarm_config_save_section_raw(reinterpret_cast<const uint8_t*>(schedule), strlen(schedule), AlarmConfigSection::Schedule));
+    JsonDocument stored;
+    alarm_config_to_json(stored.to<JsonObject>());
+    assert(stored["1"]["hour"] == 8 && stored["1"]["minute"] == 15);
+    assert(stored["1"]["snooze_minutes"] == 9 && stored["lateness_minutes"] == 5);
+    assert(stored["1"]["on_ring"].size() == 1);
+    assert(alarm_command_submit("set_time", 1, 555));
+    alarm_manager_loop();
+    const char* behavior = R"({"lateness_minutes":60,"snooze_minutes":12,"auto_dismiss_minutes":45,"on_ring":[],"on_stop":[]})";
+    assert(alarm_config_save_section_raw(reinterpret_cast<const uint8_t*>(behavior), strlen(behavior), AlarmConfigSection::Behavior));
+    alarm_config_to_json(stored.to<JsonObject>());
+    assert(stored["1"]["hour"] == 9 && stored["1"]["minute"] == 15);
+    assert(stored["1"]["weekdays"] == 127 && stored["1"]["enabled"] == true);
+    assert(stored["1"]["snooze_minutes"] == 12 && stored["lateness_minutes"] == 60);
+    const char* invalid = R"({"enabled":true,"hour":8,"minute":15,"snooze_minutes":1})";
+    assert(!alarm_config_save_section_raw(reinterpret_cast<const uint8_t*>(invalid), strlen(invalid), AlarmConfigSection::Schedule));
+    storage_test_files.clear();
+}
+
 int main() {
+    test_section_saves();
     test_audio_failure(false);
     test_audio_failure(true);
     test_recovery();

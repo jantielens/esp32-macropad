@@ -88,8 +88,8 @@ for enabled in (False, True):
         raise AssertionError(f"Alarm portal component feature gate mismatch: enabled={enabled}")
 
 assets = pathlib.Path("tools/minify-web-assets.sh").read_text()
-if not re.search(r'alarms\|portal_alarms\)\s*echo "ALARM_ENABLED"', assets):
-    raise AssertionError("Alarm fragment and standalone script must share the alarm feature gate")
+if not re.search(r'alarm_schedule\|alarm_behavior\|portal_alarms\)\s*echo "ALARM_ENABLED"', assets):
+    raise AssertionError("Both alarm fragments and standalone script must share the alarm feature gate")
 table = assets[assets.index("static const FragmentAsset fragment_assets[]"):]
 if 'flag=$(asset_feature_flag "$filename")' not in table or 'echo "#if $flag"' not in table:
     raise AssertionError("Fragment lookup entries must use their asset feature gate")

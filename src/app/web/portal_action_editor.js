@@ -115,6 +115,7 @@ function actionEditorGenericFieldsHTML(prefix) {
                     html += '>';
                 }
             }
+            if (field.help) html += '<small>' + field.help + '</small>';
             html += '</div>';
         });
         html += '</div>';
@@ -347,19 +348,19 @@ function actionEditorHTML(prefix, label, opts) {
     h += '<div id="' + prefix + '-sound-alert-group" style="display:none;">';
     h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-kind">Kind</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-kind" onchange="actionEditorSoundAlertChanged(\'' + prefix + '\')">';
-    h += '<option value="tone">Tone Alert</option><option value="mp3">MP3 Alert</option><option value="stop">Stop Audio</option></select></div>';
+    h += '<option value="tone">Tone Alert</option><option value="mp3">MP3 Alert</option><option value="stop">Stop audio</option></select></div>';
     h += '<div id="' + prefix + '-sound-alert-tone-group">';
-    h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-pattern">Tone Pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+    h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-pattern">Tone pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
     h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sound-alert-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200"></div></div>';
     h += '<div id="' + prefix + '-sound-alert-mp3-group" style="display:none;">';
     h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-sound-alert-file">MP3 Alert File</label>';
+    h += '<label class="form-label" for="' + prefix + '-sound-alert-file">MP3 file</label>';
     h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-file"><option value="">(none)</option></select>';
     h += '</div>';
     h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-sound-alert-volume">Volume Override (%)</label>';
+    h += '<label class="form-label" for="' + prefix + '-sound-alert-volume">Volume override (%)</label>';
     h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sound-alert-volume" min="0" max="100" placeholder="(use device volume)">';
-    h += '<small>Optional. If empty, uses the device volume from Home &rarr; Audio.</small>';
+    h += '<small>Empty or 0 = use device volume from Home &rarr; Audio; 1-100 overrides it.</small>';
     h += '</div></div></div>';
     // Timer — structured dropdowns
     h += '<div id="' + prefix + '-timer-group" style="display:none;">';
@@ -655,14 +656,6 @@ function actionEditorInitBindings(prefix) {
 function actionEditorLoad(prefix, action) {
     if (!action) action = {};
     var el;
-    if (action.type === 'sound_alert') {
-        var loopType = action.sound_alert_kind === 'tone_loop' ? 'alarm_tone'
-            : action.sound_alert_kind === 'mp3_loop' ? 'alarm_mp3' : '';
-        if (loopType && actionEditorCatalogEntry(loopType)) {
-            action = Object.assign({}, action, {type: loopType});
-            delete action.sound_alert_kind;
-        }
-    }
     el = document.getElementById(prefix + '-type');
     if (el) {
         el.value = action.type || '';

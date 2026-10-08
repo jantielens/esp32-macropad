@@ -10,28 +10,40 @@ function alarmScheduleSummary() {
     });
     var enabled = document.getElementById('alarm-enabled').checked;
     var time = document.getElementById('alarm-time').value;
-    var summary = days.length ? 'Weekly: ' + days.join(', ') + ' at ' + time + '.'
-        : 'Only once: next valid ' + time + ', then automatically disabled. Snooze can still ring again within that session.';
-    document.getElementById('alarm-repeat-summary').textContent = enabled ? summary : 'Disabled. Enable and save to schedule. ' + summary;
+    var summary = days.length ? 'Every ' + days.join(', ') + ' at ' + time
+        : 'One-time alarm at ' + time;
+    document.getElementById('alarm-repeat-summary').textContent = enabled ? summary : 'Alarm off. ' + summary;
     var target = document.getElementById('alarm-once-target');
-    target.hidden = !enabled || days.length > 0;
-    target.textContent = form.dataset.onceLocal && form.dataset.dirty !== 'true'
-        ? 'Scheduled: ' + form.dataset.onceLocal + ' (device timezone).'
-        : 'Saving enabled one-shot settings schedules the next occurrence, usually today or tomorrow. Unchanged settings keep the saved occurrence.';
+    target.hidden = !enabled || days.length > 0 || !form.dataset.onceLocal || form.dataset.dirty === 'true';
+    if (form.dataset.onceLocal && form.dataset.dirty !== 'true') {
+        var saved = form.dataset.onceLocal.split(' ');
+        var date = new Date(saved[0] + 'T00:00:00Z');
+        target.textContent = 'Scheduled for: ' + date.toLocaleDateString('en-GB', {
+            day: 'numeric', month: 'long', timeZone: 'UTC'
+        }) + ' at ' + saved[1];
+    } else {
+        target.textContent = '';
+    }
+    document.getElementById('alarm-once-note').hidden = days.length > 0;
 }
 
 function alarmConfigBuild() {
+    if (document.getElementById('alarm-config-form').dataset.section === 'behavior') {
+        return {
+            lateness_minutes: Number(document.getElementById('alarm-lateness-minutes').value),
+            snooze_minutes: Number(document.getElementById('alarm-snooze-minutes').value),
+            auto_dismiss_minutes: Number(document.getElementById('alarm-dismiss-minutes').value),
+            on_ring: actionEditorListBuild(ALARM_RING_PREFIXES),
+            on_stop: actionEditorListBuild(ALARM_STOP_PREFIXES)
+        };
+    }
     var time = document.getElementById('alarm-time').value.split(':');
     var weekdays = 0;
     for (var day = 0; day < 7; day++) if (document.getElementById('alarm-day-' + day).checked) weekdays |= 1 << day;
-    return {lateness_minutes: Number(document.getElementById('alarm-lateness-minutes').value), '1': {
+    return {
         enabled: document.getElementById('alarm-enabled').checked,
-        hour: Number(time[0]), minute: Number(time[1]), weekdays: weekdays,
-        snooze_minutes: Number(document.getElementById('alarm-snooze-minutes').value),
-        auto_dismiss_minutes: Number(document.getElementById('alarm-dismiss-minutes').value),
-        on_ring: actionEditorListBuild(ALARM_RING_PREFIXES),
-        on_stop: actionEditorListBuild(ALARM_STOP_PREFIXES)
-    }};
+        hour: Number(time[0]), minute: Number(time[1]), weekdays: weekdays
+    };
 }
 
 async function alarmStatusRefresh() {
@@ -46,57 +58,68 @@ async function alarmStatusRefresh() {
     warning.hidden = !status.storage_error && !status.hook_error;
     warning.textContent = status.storage_error ? 'Alarm storage unavailable' : status.hook_error ? 'An alarm action failed' : '';
     var form = document.getElementById('alarm-config-form');
-    if (form.dataset.dirty !== 'true') {
+    if (form.dataset.section === 'schedule' && form.dataset.dirty !== 'true') {
         document.getElementById('alarm-enabled').checked = status.enabled;
         form.dataset.onceLocal = status.once_local || '';
     }
-    alarmScheduleSummary();
+    if (form.dataset.section === 'schedule') alarmScheduleSummary();
 }
 
-window.init_alarms_fragment = async function() {
+async function alarmInitFragment() {
     var form = document.getElementById('alarm-config-form');
     if (!form) return;
+    var schedule = form.dataset.section === 'schedule';
     try {
-        await getDeviceInfo();
-        actionEditorListRender('alarm-ring-editors', ALARM_RING_PREFIXES, null, {actionOptions:{alarmHook:true}});
-        actionEditorListRender('alarm-stop-editors', ALARM_STOP_PREFIXES, null, {actionOptions:{alarmHook:true}});
+        if (!schedule) {
+            await getDeviceInfo();
+            if (document.getElementById('alarm-config-form') !== form) return;
+            actionEditorListRender('alarm-ring-editors', ALARM_RING_PREFIXES, null, {actionOptions:{alarmHook:true}});
+            actionEditorListRender('alarm-stop-editors', ALARM_STOP_PREFIXES, null, {actionOptions:{alarmHook:true}});
+        }
         var response = await fetch('/api/component/alarms/config');
         if (!response.ok) throw new Error('Alarm configuration unavailable');
         var settings = await response.json();
         var config = settings['1'];
         if (document.getElementById('alarm-config-form') !== form) return;
-        document.getElementById('alarm-lateness-minutes').value = settings.lateness_minutes;
-        document.getElementById('alarm-enabled').checked = config.enabled;
-        document.getElementById('alarm-time').value = String(config.hour).padStart(2, '0') + ':' + String(config.minute).padStart(2, '0');
-        document.getElementById('alarm-snooze-minutes').value = config.snooze_minutes;
-        document.getElementById('alarm-dismiss-minutes').value = config.auto_dismiss_minutes;
-        for (var day = 0; day < 7; day++) document.getElementById('alarm-day-' + day).checked = !!(config.weekdays & (1 << day));
-        actionEditorListLoad(ALARM_RING_PREFIXES, config.on_ring || []);
-        actionEditorListLoad(ALARM_STOP_PREFIXES, config.on_stop || []);
-        actionEditorWireFragment(ALARM_RING_PREFIXES.concat(ALARM_STOP_PREFIXES));
+        if (schedule) {
+            document.getElementById('alarm-enabled').checked = config.enabled;
+            document.getElementById('alarm-time').value = String(config.hour).padStart(2, '0') + ':' + String(config.minute).padStart(2, '0');
+            for (var day = 0; day < 7; day++) document.getElementById('alarm-day-' + day).checked = !!(config.weekdays & (1 << day));
+        } else {
+            document.getElementById('alarm-lateness-minutes').value = settings.lateness_minutes;
+            document.getElementById('alarm-snooze-minutes').value = config.snooze_minutes;
+            document.getElementById('alarm-dismiss-minutes').value = config.auto_dismiss_minutes;
+            actionEditorListLoad(ALARM_RING_PREFIXES, config.on_ring || []);
+            actionEditorListLoad(ALARM_STOP_PREFIXES, config.on_stop || []);
+            actionEditorWireFragment(ALARM_RING_PREFIXES.concat(ALARM_STOP_PREFIXES));
+        }
         form.dataset.dirty = 'false';
         function settingsChanged() {
             form.dataset.dirty = 'true';
-            alarmScheduleSummary();
+            if (schedule) alarmScheduleSummary();
         }
         form.addEventListener('input', settingsChanged);
         form.addEventListener('change', settingsChanged);
-        alarmScheduleSummary();
+        if (schedule) alarmScheduleSummary();
+        document.getElementById('alarm-save').disabled = false;
         form.addEventListener('submit', async function(event) {
             event.preventDefault();
             var button = document.getElementById('alarm-save');
             button.disabled = true;
             try {
                 var submitted = JSON.stringify(alarmConfigBuild());
-                var response = await fetch('/api/component/alarms/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:submitted});
-                if (!response.ok) throw new Error('Alarm configuration was not saved');
+                var response = await fetch('/api/component/alarms/' + form.dataset.section, {method:'POST', headers:{'Content-Type':'application/json'}, body:submitted});
+                if (!response.ok) throw new Error('Alarm ' + form.dataset.section + ' was not saved');
                 if (document.getElementById('alarm-config-form') !== form) return;
                 form.dataset.dirty = JSON.stringify(alarmConfigBuild()) === submitted ? 'false' : 'true';
-                showMessage('Alarm saved', 'success');
+                showMessage(schedule ? 'Schedule saved' : 'Behavior saved', 'success');
                 await alarmStatusRefresh();
             } catch (error) { showMessage(error.message, 'error'); }
             finally { button.disabled = false; }
         });
         await alarmStatusRefresh();
     } catch (error) { showMessage(error.message, 'error'); }
-};
+}
+
+window.init_alarm_schedule_fragment = alarmInitFragment;
+window.init_alarm_behavior_fragment = alarmInitFragment;

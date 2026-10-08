@@ -130,7 +130,7 @@ after a successful pass with accepted PCM, and checks stop, session-generation,
 and OTA guards before restarting. Output failures and files with no decoded
 audio terminate instead of repeating. Repetition is not guaranteed to be
 gapless. `alarm_tone` uses the existing repeating tone path; ordinary sound
-alerts remain one-shot unless a legacy looping kind is explicitly persisted.
+alerts remain single-play; legacy looping kinds on `sound_alert` are rejected.
 
 Music transport and catalog-refresh requests use a dedicated, bounded worker
 queue. This keeps them independent from replaceable tone/alert requests, so an
@@ -253,10 +253,12 @@ first decode occurs when the track is opened for playback.
 
 ## Alarm Tones And Cancellation
 
-Sound alerts support `tone`, `tone_loop`, `mp3`, and shared audio `stop` kinds.
+The public Sound alert action supports `tone`, `mp3`, and shared audio `stop` kinds.
 A looping tone must contain a valid duration-bearing segment; empty patterns
 use the existing default beep. Alarm-enabled builds also register dedicated
-`alarm_tone` and `alarm_mp3` actions with fixed `tone_loop` and `mp3_loop` kinds.
+Alarm tone (`alarm_tone`) and Alarm MP3 (`alarm_mp3`) actions with fixed internal
+`tone_loop` and `mp3_loop` kinds. Both repeat until stopped; a volume override of
+0 uses device volume, and 1-100 overrides it.
 Looping MP3 playback rewinds the open file and resets decoding after each
 successful pass. It does not guarantee gapless playback. Empty or corrupt
 files, output failures, cancellation, and OTA end the worker's playback attempt.

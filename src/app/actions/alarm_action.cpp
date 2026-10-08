@@ -22,7 +22,7 @@ const char* validate_alarm(JsonObjectConst action) {
     const uint8_t id = action["alarm_id"] | (operation > 2 ? 1 : 0);
     if (action.containsKey("alarm_day") && (!action["alarm_day"].is<uint8_t>() || action["alarm_day"].as<uint8_t>() > 6))
         return "alarm_day must be 0 (Sunday) through 6 (Saturday)";
-    if (operation >= 8 && !action.containsKey("alarm_day")) return "Weekday commands require alarm_day";
+    if (operation >= 8 && !action.containsKey("alarm_day")) return "Day commands require alarm_day";
     int value = 0;
     if (action.containsKey("alarm_value") && (!action["alarm_value"].is<const char*>()
         || strlen(action["alarm_value"].as<const char*>()) >= CONFIG_VALUE_MAX_LEN)) return "alarm_value must be a bounded string";
@@ -66,7 +66,7 @@ void describe_alarm(JsonObject& action) {
     action["group"] = "Alarm";
     action["label"] = "Alarm Control";
     JsonArray commands = action.createNestedArray("commands");
-    const char* labels[] = {"", "Cancel", "Snooze", "Set time", "Adjust time", "Enable alarm", "Disable alarm", "Toggle alarm", "Enable weekday", "Disable weekday", "Toggle weekday"};
+    const char* labels[] = {"", "Dismiss alarm", "Snooze", "Set time", "Adjust time", "Enable alarm", "Disable alarm", "Toggle alarm", "Enable day", "Disable day", "Toggle day"};
     for (uint8_t index = 1; index < sizeof(alarm_command_names) / sizeof(alarm_command_names[0]); ++index) {
         JsonObject item = commands.createNestedObject();
         item["id"] = alarm_command_names[index];
@@ -84,11 +84,12 @@ void describe_alarm(JsonObject& action) {
     value["description"] = "set_time: whole minutes since midnight (0-1439); adjust_minutes: signed 32-bit minutes, wraps within 24 hours; string supports bindings and {step}";
     JsonObject day = fields.createNestedObject();
     day["name"] = "alarm_day";
-    day["description"] = "required for weekday commands: Sunday=0 through Saturday=6";
+    day["description"] = "required for repeat-day commands: Sunday=0 through Saturday=6";
     JsonArray editor = action.createNestedArray("editor_fields");
     JsonObject target = editor.createNestedObject();
     target["name"] = "alarm_id";
-    target["label"] = "Alarm";
+    target["label"] = "Target alarm";
+    target["help"] = "Active alarm works only with Snooze and Dismiss alarm. Dismiss alarm ends ringing or snoozing without disabling the weekly schedule.";
     target["type"] = "select";
     target["default"] = "1";
     target["numeric"] = true;
@@ -107,12 +108,12 @@ void describe_alarm(JsonObject& action) {
     operation["command_options"] = true;
     JsonObject editor_value = editor.createNestedObject();
     editor_value["name"] = "alarm_value";
-    editor_value["label"] = "Minutes (set time: since midnight; adjust: signed step)";
+    editor_value["label"] = "Adjustment (minutes)";
     editor_value["type"] = "text";
     editor_value["bindable"] = true;
     JsonObject editor_day = editor.createNestedObject();
     editor_day["name"] = "alarm_day";
-    editor_day["label"] = "Weekday (weekday commands only)";
+    editor_day["label"] = "Day";
     editor_day["type"] = "select";
     editor_day["numeric"] = true;
     editor_day["default"] = "1";

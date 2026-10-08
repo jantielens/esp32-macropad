@@ -29,6 +29,7 @@ static const NavCategory kNavCategories[] = {
     {"camera",       "Camera",       "\xf0\x9f\x93\xb7"},           // 📷
     {"pads",         "Pads",         "\xf0\x9f\x8e\x9b\xef\xb8\x8f"}, // 🎛️
     {"actions",      "Actions",      "\xe2\x9a\xa1"},               // ⚡
+    {"alarm",        "Alarm",        "\xe2\x8f\xb0"},
     {"connectivity", "Connectivity", "\xf0\x9f\x93\xa1"},           // 📡
     {"audio",        "Audio",        "\xf0\x9f\x94\x8a"},           // 🔊
     {"sensors",      "Sensors",      "\xf0\x9f\x93\x8a"},           // 📊

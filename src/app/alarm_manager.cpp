@@ -458,6 +458,29 @@ bool alarm_config_save_raw(const uint8_t* data, size_t length) {
     return alarm_config_apply_raw(data, length, false);
 }
 
+bool alarm_config_save_section_raw(const uint8_t* data, size_t length, AlarmConfigSection section) {
+    AlarmDocument input(ALARM_JSON_MAX * 2);
+    if (deserializeJson(input, data, length) || !input.is<JsonObject>()) return fail("Invalid alarm JSON");
+    const char* schedule_fields[] = {"enabled", "hour", "minute", "weekdays"};
+    const char* behavior_fields[] = {"lateness_minutes", "snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"};
+    const bool behavior = section == AlarmConfigSection::Behavior;
+    const char* const* fields = behavior ? behavior_fields : schedule_fields;
+    const size_t count = behavior ? 5 : 4;
+    if (input.size() != count) return fail("Alarm section requires exactly its own fields");
+    AlarmDocument merged(ALARM_JSON_MAX * 2);
+    alarm_config_to_json(merged.to<JsonObject>());
+    for (size_t index = 0; index < count; ++index) {
+        const char* name = fields[index];
+        if (!input.containsKey(name)) return fail("Missing alarm section field");
+        if (!strcmp(name, "lateness_minutes")) merged[name].set(input[name]);
+        else merged["1"][name].set(input[name]);
+    }
+    if (merged.overflowed()) return fail("Alarm allocation failed");
+    std::string payload;
+    serializeJson(merged, payload);
+    return alarm_config_save_raw(reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
+}
+
 const char* alarm_last_error() { return last_error; }
 
 void alarm_config_to_json(JsonObject root) {

@@ -7,19 +7,21 @@
 #include <string.h>
 
 namespace {
-struct AlarmSaveJob { mutable uint8_t* data; size_t length; };
+struct AlarmSaveJob { mutable uint8_t* data; size_t length; bool scoped; AlarmConfigSection section; };
 void alarm_save_cleanup(const void* context) {
     free(static_cast<const AlarmSaveJob*>(context)->data);
 }
 void alarm_save_execute(const void* context, bool* ok, char* message, size_t length) {
     const auto* job = static_cast<const AlarmSaveJob*>(context);
-    *ok = alarm_config_save_raw(job->data, job->length);
+    *ok = job->scoped ? alarm_config_save_section_raw(job->data, job->length, job->section)
+        : alarm_config_save_raw(job->data, job->length);
     strlcpy(message, *ok ? "saved" : alarm_last_error(), length);
     free(job->data);
     job->data = nullptr;
 }
-bool alarm_save_bridge(const uint8_t* data, size_t length) {
-    AlarmSaveJob job{static_cast<uint8_t*>(config_psram_alloc(length, "alarm_save")), length};
+bool alarm_save_bridge(const uint8_t* data, size_t length, bool scoped = false,
+                       AlarmConfigSection section = AlarmConfigSection::Schedule) {
+    AlarmSaveJob job{static_cast<uint8_t*>(config_psram_alloc(length, "alarm_save")), length, scoped, section};
     if (!job.data) return false;
     memcpy(job.data, data, length);
     bool ok = false;
@@ -35,7 +37,16 @@ void alarms_get_config(AsyncWebServerRequest* request) {
     web_portal_send_json_chunked(request, document);
 }
 void alarms_save_config(AsyncWebServerRequest* request, uint8_t* data, size_t length, size_t index, size_t total) {
-    component_handle_save_body(request, data, length, index, total, alarm_save_bridge, 8192);
+    component_handle_save_body(request, data, length, index, total,
+        [](const uint8_t* body, size_t size) { return alarm_save_bridge(body, size); }, 8192);
+}
+void alarms_save_schedule(AsyncWebServerRequest* request, uint8_t* data, size_t length, size_t index, size_t total) {
+    component_handle_save_body(request, data, length, index, total,
+        [](const uint8_t* body, size_t size) { return alarm_save_bridge(body, size, true, AlarmConfigSection::Schedule); }, 8192);
+}
+void alarms_save_behavior(AsyncWebServerRequest* request, uint8_t* data, size_t length, size_t index, size_t total) {
+    component_handle_save_body(request, data, length, index, total,
+        [](const uint8_t* body, size_t size) { return alarm_save_bridge(body, size, true, AlarmConfigSection::Behavior); }, 8192);
 }
 void alarms_get_status(AsyncWebServerRequest* request) {
     auto document = make_psram_json_doc(1024);
@@ -51,6 +62,8 @@ void alarms_snooze(AsyncWebServerRequest* request) {
     request->send(ok ? 200 : 503, "application/json", ok ? "{\"success\":true}" : "{\"success\":false}");
 }
 const ComponentAction alarms_actions[] = {
+    {"schedule", HTTP_POST, nullptr, alarms_save_schedule},
+    {"behavior", HTTP_POST, nullptr, alarms_save_behavior},
     {"status", HTTP_GET, alarms_get_status, nullptr},
     {"cancel", HTTP_POST, alarms_cancel, nullptr},
     {"snooze", HTTP_POST, alarms_snooze, nullptr},
@@ -58,17 +71,33 @@ const ComponentAction alarms_actions[] = {
 }
 static ComponentDef alarms_component = {
     .id = "alarms",
-    .category = "actions",
-    .display_name = "Alarm",
-    .nav_order = 35,
+    .category = "alarm",
+    .display_name = "Schedule",
+    .nav_order = 10,
     .get_config = alarms_get_config,
     .save_config = nullptr,
     .save_config_body = alarms_save_config,
     .delete_config = nullptr,
     .custom_actions = alarms_actions,
     .num_custom_actions = sizeof(alarms_actions) / sizeof(alarms_actions[0]),
-    .fragment_id = "alarms",
+    .fragment_id = "alarm-schedule",
     .portal_script = "portal_alarms.js",
     .portal_style = nullptr,
 };
 REGISTER_COMPONENT(alarms);
+static ComponentDef alarm_behavior_component = {
+    .id = "alarm-behavior",
+    .category = "alarm",
+    .display_name = "Behavior",
+    .nav_order = 20,
+    .get_config = nullptr,
+    .save_config = nullptr,
+    .save_config_body = nullptr,
+    .delete_config = nullptr,
+    .custom_actions = nullptr,
+    .num_custom_actions = 0,
+    .fragment_id = "alarm-behavior",
+    .portal_script = "portal_alarms.js",
+    .portal_style = nullptr,
+};
+REGISTER_COMPONENT(alarm_behavior);

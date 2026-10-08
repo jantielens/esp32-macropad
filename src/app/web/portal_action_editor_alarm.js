@@ -13,7 +13,11 @@ function actionEditorAlarmChanged(prefix) {
     });
     var command = document.getElementById(prefix + '-generic-alarm-alarm_command');
     var label = document.getElementById(prefix + '-generic-alarm-alarm_value-label');
-    if (label) label.textContent = command && command.value === 'set_time' ? 'Time (minutes since midnight)' : 'Minutes';
+    var setTime = command && command.value === 'set_time';
+    if (label) label.textContent = setTime ? 'Time (minutes since midnight)' : 'Adjustment (minutes)';
+    var help = document.getElementById(prefix + '-generic-alarm-alarm_value-help');
+    if (help) help.textContent = setTime ? '0-1439 minutes; for example, 420 = 07:00. Supports bindings.'
+        : 'Signed whole minutes; for example, +5 or -5. Use {step} for Numeric Rocker adjustments. Supports bindings.';
 }
 
 (function () {
@@ -28,7 +32,7 @@ function actionEditorAlarmChanged(prefix) {
             entry.editor_fields.forEach(function(field) {
                 var id = prefix + '-generic-alarm-' + field.name;
                 var conditional = field.name === 'alarm_value' || field.name === 'alarm_day';
-                var label = field.name === 'alarm_day' ? 'Weekday' : field.name === 'alarm_value' ? 'Minutes' : field.label;
+                var label = field.label;
                 html += '<div class="form-group" id="' + id + '-field"' + (conditional ? ' style="display:none;"' : '') + '>';
                 html += '<label class="form-label" for="' + id + '"><span id="' + id + '-label">' + label + '</span>';
                 if (field.bindable) html += ' <span class="fx-hint" onclick="showBindingHelp()">fx</span>';
@@ -41,6 +45,8 @@ function actionEditorAlarmChanged(prefix) {
                     });
                     html += '</select>';
                 } else html += '<input type="text" class="form-control form-control-sm" id="' + id + '">';
+                if (field.name === 'alarm_value') html += '<small id="' + id + '-help"></small>';
+                else if (field.help) html += '<small>' + field.help + '</small>';
                 html += '</div>';
             });
             return html + '</div>';

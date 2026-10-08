@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0-10080 whole minutes (zero allows on-time only). Only the latest eligible
   occurrence rings; persisted edit/timezone eligibility fences prevent surprise
   catch-up after configuration changes. Ringing and snooze sessions are not restored.
-* Alarm Control buttons and MCP commands for Snooze, Cancel, and editing alarm
+* Alarm Control buttons and MCP commands for Snooze, Dismiss alarm, and editing alarm
   time, weekdays, and enabled state. Signed minute adjustments wrap within
   24 hours and support Numeric Rocker steps. The action editor shows only fields
   relevant to the selected command. Read-only bindings expose settings,
@@ -50,13 +50,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   device-time preview, and save without reboot. The device timezone supplies
   alarm scheduling and the default for clock bindings without an explicit
   timezone override.
-* Loop Tone and Loop MP3 alarm actions, using the shared audio engine and
+* Alarm tone and Alarm MP3 actions, using the shared audio engine and
   session guards. MP3 repeats after successful playback without a gapless
   guarantee; playback stops on session invalidation, replacement audio, OTA,
-  or playback failure. Stop Audio remains available for configured cleanup.
+  or playback failure. Stop audio remains available for configured cleanup.
 
 ### Changed
 
+* Split Alarm settings into Schedule (enabled, time, repeat days) and Behavior
+  (durations, actions, maximum lateness) under a dedicated Alarm category.
+  Each save preserves the other view's latest settings, including device-side edits.
+* Clarify alarm labels, repeat days, ringing hooks, duration controls, volume
+  overrides, and countdown binding help. Alarm tone and Alarm MP3 explicitly
+  repeat until stopped. Remove legacy `sound_alert` loop conversion and reject
+  those configurations; use the dedicated alarm audio actions instead.
 * Successful screen, back, and pad-cycle actions wake the display and reset
   its sleep timer, preserving the original screen's navigation history when
   leaving an idle screen. Internal navigation remains non-waking by default.
@@ -66,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * Mix configured tap, long-press, rocker, pad, and swipe feedback tones over
-  Loop Tone and Loop MP3 without stopping or restarting the alarm. Protect
+  Alarm tone and Alarm MP3 without stopping or restarting the alarm. Protect
   queued loops too; rapid feedback replaces only the previous feedback tone.
   Reserve PCM headroom while feedback plays and clear it on cancellation,
   replacement, playback failure, or OTA. Explicit sound actions remain replacing

@@ -85,13 +85,15 @@ bindings keep it reusable. The editor checks syntax and previews live values.
 
 ### Automation & Timers: One Tap Starts the Routine
 
-Configure one persistent alarm in the portal's **Alarm** settings. Choose
-weekdays for weekly repetition, or leave them all unselected to ring once at the
-next selected local time and then disable. Add up to three ring and stop actions.
+Configure one persistent alarm under **Alarm > Schedule**. Choose
+repeat days for weekly repetition, or leave them all unselected to ring once at the
+next selected local time and then disable. Use **Alarm > Behavior** for snooze,
+auto-dismiss, missed-alarm recovery, and up to three ring and stop actions.
+Each view saves only its own settings.
 Missed alarms recover within a device-wide lateness window, default six hours,
 after time synchronization. Only the latest eligible occurrence rings.
-Use **Alarm Control** on pad buttons or MCP to Snooze and Cancel. **Loop Tone**
-and **Loop MP3** are available for ring actions. The dedicated **Timezone**
+Use **Alarm Control** on pad buttons or MCP to Snooze and Dismiss alarm. **Alarm tone**
+and **Alarm MP3** repeat until stopped and are available for ring actions. The dedicated **Timezone**
 settings offer grouped cities and a device-time preview; changes apply on Save.
 The device-wide timezone also supplies the default for `[time:format]` bindings.
 See the [alarm guide](docs/web-portal-guide.md#alarm-clock).

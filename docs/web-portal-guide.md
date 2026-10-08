@@ -407,7 +407,7 @@ alert-sound files, and the Music Library.
 
 Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Sound Alert action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
-Configured feedback tones mix over active Loop Tone and Loop MP3 actions
+Configured feedback tones mix over active Alarm tone and Alarm MP3 actions
 without interrupting them. Rapid taps replace only the previous feedback tone.
 While a standalone alarm loop plays, feedback follows its effective volume,
 including an alarm volume override. Explicit sound actions can still replace
@@ -644,48 +644,57 @@ The number of available trigger slots depends on the board (8 by default, fewer 
 
 *Shown when the board enables `ALARM_ENABLED`, normally on display boards.*
 
-Open **Alarm** in the Actions category. There is one alarm, slot **1**, disabled
-by default. Selected weekdays repeat weekly. Leave all weekdays unselected for
-**Only once**: saving an enabled alarm schedules the next valid occurrence of
+Open **Alarm > Schedule** for enabled state, time, and repeat days. There is one
+alarm, slot **1**, disabled by default. Use **Save schedule** to apply these fields
+without changing durations, actions, or maximum lateness. **Repeat days** selects
+weekly repetition. Leave all days unselected for
+**Once**: saving an enabled alarm schedules the next valid occurrence of
 its time, usually today or tomorrow. It automatically disables on its first
 scheduled ring; snooze can still ring again within that session. Enable and save
-again to schedule another one-shot. The form shows the repetition summary and,
+again to schedule another one-time alarm. The form shows the repetition summary and,
 after saving, the scheduled date in device time. Set **Device > Timezone** before choosing the alarm's
 local time. City selection previews device time without applying the change;
 **Save** applies it without rebooting.
 
-Each ring and stop list holds up to three synchronous actions. Actions that
-pause execution, such as Delay and key sequences, are excluded. To sound an
-alarm, select **Loop Tone** or **Loop MP3** under **Alarm**; use **Sound alert >
-Stop Audio** in the stop list. MP3 repeats after successful playback, with no
-gapless guarantee, and stops on cancellation, firmware updates, or playback
-failure. Stop Audio is shared with other audio playback on the device.
+Open **Alarm > Behavior** for **Snooze & dismissal**, **Actions**, and **Missed alarms**.
+**Save behavior** applies durations, both action lists, and maximum lateness while
+preserving the latest enabled state, time, and repeat days, including changes made
+from a pad or MCP after opening the view.
 
-Use an **Alarm Control** button or MCP for Snooze and Cancel; the settings form
+**When ringing starts** and **When ringing stops** each hold up to three synchronous actions. Actions that
+pause execution, such as Delay and key sequences, are excluded. To sound an
+alarm, select **Alarm tone** or **Alarm MP3** under **Alarm**. Both repeat until stopped;
+use **Sound alert > Stop audio** in When ringing stops. MP3 repeats after successful playback, with no
+gapless guarantee, and stops on dismissal, firmware updates, or playback
+failure. Stop audio stops playback, not the alarm session, and is shared with other audio playback.
+**Volume override (%)** uses device volume at 0; values 1-100 override it.
+
+Use an **Alarm Control** button or MCP for Snooze and Dismiss alarm; the settings form
 does not offer live controls or Ringing/Snoozed indicators. Readiness and failure
 warnings refresh on load and after saving, without recurring status polling.
 **Snooze** ends the current ring, runs its stop actions, then rings again after
-the selected duration (default nine minutes). **Cancel** ends ringing or snooze
+**Snooze duration (minutes)** (default nine minutes). **Dismiss alarm** ends ringing or snooze
 without disabling the weekly schedule. Ringing automatically ends after the
-configured timeout (default 30 minutes). Idle controls do nothing.
+**Auto-dismiss after (minutes)** timeout (default 30 minutes). Idle controls do nothing.
+When ringing stops includes snoozing as well as dismissal.
 
 If a ring sound cannot start or playback fails, the alarm automatically snoozes
 for its configured duration and reports an action failure. Stop actions run,
 then all ring actions run again when snooze ends. This also retries consumed
-one-shot alarms within their active session. Repeated failures snooze again;
-Cancel ends retries. No fallback sound is played, and these snoozed sessions
+one-time alarms within their active session. Repeated failures snooze again;
+Dismiss alarm ends retries. No fallback sound is played, and these snoozed sessions
 are not restored after reboot.
 
-You can also configure time, weekdays, and enabled state from your own pad using
+You can also configure time, repeat days, and enabled state from your own pad using
 **Alarm Control** actions, including Numeric Rocker `{step}` adjustments. Queued
 edits apply immediately and save after ten seconds without a substantive change;
 power loss before saving can lose them. Bindings expose accepted values, countdowns, readiness, and
-save failures. Durations and ring/stop lists remain in this portal form. See
+save failures. Durations and ring/stop lists remain in **Alarm > Behavior**. See
 [Alarm Actions](pad-editor-guide.md#alarm-actions) and
 [Alarm Binding](pad-editor-guide.md#alarm-binding) for the authoring fields.
 
 The alarm waits for an NTP synchronization during the current boot. Once synced,
-Wi-Fi loss does not stop its clock. **Maximum lateness for all alarms** covers
+Wi-Fi loss does not stop its clock. **Maximum alarm lateness (minutes)** covers
 both startup recovery and live delays. It defaults to **360 minutes (six hours)**
 and accepts 0-10080 whole minutes. Zero permits only on-time delivery. An alarm
 can ring at the exact lateness boundary, but not after it. Lateness is measured
@@ -697,19 +706,19 @@ synchronized time arm from the next minute after synchronization. During a
 daylight-saving transition, a repeated local time rings only on its first
 occurrence, and a nonexistent local time is skipped.
 
-A one-shot target is persisted, so reboot does not move it to another day.
+A one-time alarm target is persisted, so reboot does not move it to another day.
 If it is within the lateness window at boot, it can ring once. Outside that window, it disables without
-ringing or rescheduling. Saving changed enabled one-shot settings chooses a new
+ringing or rescheduling. Saving changed enabled one-time alarm settings chooses a new
 next occurrence; an identical save keeps the existing target. Saving before
 time synchronization leaves the target pending until the clock is ready.
-Timezone changes keep an already scheduled one-shot instant, although its local
+Timezone changes keep an already scheduled one-time alarm instant, although its local
 display time can change. Sessions, including snooze, do not survive reboot.
 
 A successful definition or timezone change dismisses an active alarm using its
 old stop actions. Identical saves, rejected input, and failed saves preserve the
 session. Definitions and handled-occurrence history use the primary filesystem,
 not NVS. Formatting or losing that filesystem can lose the alarm. Storage and
-action failures appear in the alarm status. Weekly and one-shot alarms still ring
+action failures appear in the alarm status. Weekly and one-time alarms still ring
 if saving their occurrence record fails: delivery takes priority over preventing
 a possible duplicate. RAM prevents another scheduled ring during the current
 boot; failed saves retry every ten seconds, except during firmware updates.

@@ -1037,7 +1037,7 @@ static bool tool_alarm_control(const JsonObject& args, JsonObject& result, Strin
     if (args.containsKey("value") && !args["value"].is<int>())
         return cfg_fail(result, error, CFG_ERR_PARAMS, "value must be a signed 32-bit integer");
     if ((operation >= 8 || args.containsKey("day")) && (!args["day"].is<uint8_t>() || args["day"].as<uint8_t>() > 6))
-        return cfg_fail(result, error, CFG_ERR_PARAMS, "Weekday commands require day: 0 (Sunday) through 6 (Saturday)");
+        return cfg_fail(result, error, CFG_ERR_PARAMS, "Repeat-day commands require day: 0 (Sunday) through 6 (Saturday)");
     const int value = args["value"] | 0;
     const uint8_t day = args["day"] | 0;
     const char* validation = alarm_command_validate(command, id, value, day);

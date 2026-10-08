@@ -27,7 +27,9 @@ const char* validate_sound_alert_payload(const JsonObjectConst action, const cha
     return nullptr;
 }
 const char* validate_sound_alert(const JsonObjectConst action) {
-    return validate_sound_alert_payload(action, action["sound_alert_kind"] | "");
+    const char* kind = action["sound_alert_kind"] | "";
+    if (strcmp(kind, "tone") && strcmp(kind, "mp3") && strcmp(kind, "stop")) return "Sound alert kind must be tone, mp3, or stop; use Alarm tone or Alarm MP3 for loops";
+    return validate_sound_alert_payload(action, kind);
 }
 void parse_sound_alert_payload(const JsonObject& action, ButtonAction& act, const char* kind) {
     if (validate_sound_alert_payload(action, kind)) { memset(&act, 0, sizeof(act)); return; }
@@ -38,6 +40,7 @@ void parse_sound_alert_payload(const JsonObject& action, ButtonAction& act, cons
     alert.sound_alert_volume = action["sound_alert_volume"] | 0;
 }
 void parse_sound_alert(const JsonObject& action, ButtonAction& act) {
+    if (validate_sound_alert(action)) { memset(&act, 0, sizeof(act)); return; }
     parse_sound_alert_payload(action, act, action["sound_alert_kind"] | "");
 }
 void serialize_sound_alert(const ButtonAction& act, JsonObject action) { action["sound_alert_kind"] = act.payload.sound_alert.sound_alert_kind; if ((!strcmp(act.payload.sound_alert.sound_alert_kind, "tone") || !strcmp(act.payload.sound_alert.sound_alert_kind, "tone_loop")) && act.payload.sound_alert.sound_alert_pattern[0]) action["sound_alert_pattern"] = act.payload.sound_alert.sound_alert_pattern; if ((!strcmp(act.payload.sound_alert.sound_alert_kind, "mp3") || !strcmp(act.payload.sound_alert.sound_alert_kind, "mp3_loop")) && act.payload.sound_alert.sound_alert_file[0]) action["sound_alert_file"] = act.payload.sound_alert.sound_alert_file; if (act.payload.sound_alert.sound_alert_volume) action["sound_alert_volume"] = act.payload.sound_alert.sound_alert_volume; }
@@ -81,7 +84,7 @@ bool sound_alert_available() {
 #endif
 }
 bool visit_sound_alert_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) { return (strcmp(act.payload.sound_alert.sound_alert_kind, "tone") && strcmp(act.payload.sound_alert.sound_alert_kind, "tone_loop")) || !act.payload.sound_alert.sound_alert_pattern[0] || visitor(act.payload.sound_alert.sound_alert_pattern, sizeof(act.payload.sound_alert.sound_alert_pattern), false, context); }
-void describe_sound_alert(JsonObject& action) { action["group"] = "Audio"; action["label"] = "Sound alert"; JsonArray fields = action.createNestedArray("fields"); JsonObject kind = fields.createNestedObject(); kind["name"] = "sound_alert_kind"; kind["description"] = "tone, tone_loop, mp3, or stop"; }
+void describe_sound_alert(JsonObject& action) { action["group"] = "Audio"; action["label"] = "Sound alert"; JsonArray fields = action.createNestedArray("fields"); JsonObject kind = fields.createNestedObject(); kind["name"] = "sound_alert_kind"; kind["description"] = "tone, mp3, or stop; use Alarm tone or Alarm MP3 for loops"; }
 #if ALARM_ENABLED
 void describe_alarm_audio(JsonObject& action, bool mp3) {
     JsonArray fields = action.createNestedArray("fields");
@@ -96,6 +99,7 @@ void describe_alarm_audio(JsonObject& action, bool mp3) {
     source_editor["name"] = mp3 ? "sound_alert_file" : "sound_alert_pattern";
     source_editor["label"] = mp3 ? "MP3 file" : "Tone pattern";
     source_editor["type"] = mp3 ? "select" : "text";
+    source_editor["help"] = "Repeats until stopped. Stop audio stops playback; Dismiss alarm ends the alarm session.";
     if (mp3) source_editor["options_source"] = "sounds";
     else source_editor["bindable"] = true;
     JsonObject volume_editor = editor.createNestedObject();
@@ -105,6 +109,7 @@ void describe_alarm_audio(JsonObject& action, bool mp3) {
     volume_editor["min"] = 0;
     volume_editor["max"] = 100;
     volume_editor["default"] = "0";
+    volume_editor["help"] = "0 = use device volume; 1-100 overrides it.";
 }
 #endif
 DEFINE_AND_REGISTER_ACTION_TYPE(kSoundAlertActionType, ACTION_TYPE_SOUND_ALERT, parse_sound_alert, serialize_sound_alert, dispatch_sound_alert, nullptr, describe_sound_alert, sound_alert_available, validate_sound_alert, visit_sound_alert_fields, ACTION_EXECUTION_SYNC);

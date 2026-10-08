@@ -279,7 +279,7 @@ for (const type of ['delay', 'mqtt', 'unknown_action']) {
 context.actionEditorLoad('alarm-hook-1', {type:'alarm_mp3', sound_alert_file:'wake-up'});
 assert.strictEqual(context.actionEditorBuild('alarm-hook-1').type, 'alarm_mp3');
 assert(context.actionEditorTypeOptionsHTML().includes('<option value="delay">'));
-context.actionEditorLoad(prefix, {type:'sound_alert', sound_alert_kind:'tone_loop', sound_alert_pattern:'1000:200 800'});
+context.actionEditorLoad(prefix, {type:'alarm_tone', sound_alert_pattern:'1000:200 800'});
 assert.strictEqual(context.actionEditorBuild(prefix).type, 'alarm_tone');
 assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_pattern, '1000:200 800');
 context.actionEditorLoad(prefix, {type:'alarm_mp3', sound_alert_file:'missing-clip', sound_alert_volume:65});
@@ -287,7 +287,7 @@ assert.strictEqual(context.actionEditorBuild(prefix).type, 'alarm_mp3');
 assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_file, 'missing-clip');
 assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_volume, 65);
 assert.strictEqual(context.actionEditorBuild(prefix).sound_alert_kind, undefined);
-assert(context.actionEditorTypeOptionsHTML().includes('<option value="alarm_mp3">Loop MP3</option>'));
+assert(context.actionEditorTypeOptionsHTML().includes('<option value="alarm_mp3">Alarm MP3</option>'));
 assert(!context.actionEditorHTML(prefix).includes('<option value="tone_loop">'));
 context.actionEditorLoad(prefix, {type:'sound_alert', sound_alert_kind:'stop'});
 const stopAudio = context.actionEditorBuild(prefix);
@@ -300,24 +300,50 @@ document.getElementById('alarm-time').value = '07:30';
 document.getElementById('alarm-enabled').checked = true;
 for (let day = 0; day < 7; day++) document.getElementById('alarm-day-' + day).checked = false;
 const alarmForm = document.getElementById('alarm-config-form');
+alarmForm.dataset.section = 'schedule';
 alarmForm.dataset.onceLocal = '2026-10-08 07:30';
 context.alarmScheduleSummary();
-assert(document.getElementById('alarm-repeat-summary').textContent.includes('Only once: next valid 07:30'));
-assert(document.getElementById('alarm-repeat-summary').textContent.includes('Snooze can still ring again'));
+assert.strictEqual(document.getElementById('alarm-repeat-summary').textContent, 'One-time alarm at 07:30');
 assert.strictEqual(document.getElementById('alarm-once-target').hidden, false);
-assert(document.getElementById('alarm-once-target').textContent.includes('2026-10-08 07:30'));
+assert.strictEqual(document.getElementById('alarm-once-target').textContent, 'Scheduled for: 8 October at 07:30');
+assert.strictEqual(document.getElementById('alarm-once-note').hidden, false);
 alarmForm.dataset.dirty = 'true';
 context.alarmScheduleSummary();
-assert(!document.getElementById('alarm-once-target').textContent.includes('2026-10-08'));
-assert(document.getElementById('alarm-once-target').textContent.includes('today or tomorrow'));
+assert.strictEqual(document.getElementById('alarm-once-target').textContent, '');
+assert.strictEqual(document.getElementById('alarm-once-target').hidden, true);
+alarmForm.dataset.dirty = 'false';
+alarmForm.dataset.onceLocal = '';
+context.alarmScheduleSummary();
+assert.strictEqual(document.getElementById('alarm-once-target').textContent, '');
+assert.strictEqual(document.getElementById('alarm-once-target').hidden, true);
 document.getElementById('alarm-day-1').checked = true;
 document.getElementById('alarm-day-5').checked = true;
 context.alarmScheduleSummary();
-assert.strictEqual(document.getElementById('alarm-repeat-summary').textContent, 'Weekly: Mon, Fri at 07:30.');
+assert.strictEqual(document.getElementById('alarm-repeat-summary').textContent, 'Every Mon, Fri at 07:30');
 assert.strictEqual(document.getElementById('alarm-once-target').hidden, true);
+assert.strictEqual(document.getElementById('alarm-once-note').hidden, true);
 document.getElementById('alarm-enabled').checked = false;
 context.alarmScheduleSummary();
-assert(document.getElementById('alarm-repeat-summary').textContent.startsWith('Disabled.'));
+assert(document.getElementById('alarm-repeat-summary').textContent.startsWith('Alarm off.'));
+const scheduleFragment = fs.readFileSync('src/app/web/alarm-schedule.fragment.html', 'utf8');
+const behaviorFragment = fs.readFileSync('src/app/web/alarm-behavior.fragment.html', 'utf8');
+const alarmFragment = scheduleFragment + behaviorFragment;
+assert(!scheduleFragment.includes('alarm-snooze-minutes'));
+assert(!scheduleFragment.includes('alarm-ring-editors'));
+assert(!behaviorFragment.includes('alarm-time'));
+assert.deepStrictEqual(Object.keys(context.alarmConfigBuild()).sort(), ['enabled', 'hour', 'minute', 'weekdays']);
+alarmForm.dataset.section = 'behavior';
+assert.deepStrictEqual(Object.keys(context.alarmConfigBuild()).sort(), ['auto_dismiss_minutes', 'lateness_minutes', 'on_ring', 'on_stop', 'snooze_minutes']);
+for (const label of ['Repeat days', 'Snooze duration (minutes)', 'Auto-dismiss after (minutes)',
+    'When ringing starts', 'When ringing stops', 'Maximum alarm lateness (minutes)']) {
+    assert(alarmFragment.includes(label));
+}
+const bindingHelp = fs.readFileSync('src/app/web/_binding_help.html', 'utf8');
+assert(bindingHelp.includes('data-binding-section="alarm"'));
+for (const label of ['Seconds until the next scheduled alarm; excludes snooze.',
+    'Seconds until the next ring, including snooze;', 'Seconds until auto-dismiss while ringing.']) {
+    assert(bindingHelp.includes(label));
+}
 console.log('portal_action_picker: PASS');
 context.deviceInfoCache.catalog = productionCatalogs.portal;
 const productionOptions = context.actionEditorTypeOptionsHTML({alarmHook:true});
@@ -328,4 +354,22 @@ for (const entry of productionCatalogs.portal) {
 for (const type of ['alarm', 'alarm_tone', 'alarm_mp3']) {
     assert(productionOptions.includes('<option value="' + type + '">'));
 }
+assert(productionOptions.includes('<option value="alarm_tone">Alarm tone</option>'));
+assert(productionOptions.includes('<option value="alarm_mp3">Alarm MP3</option>'));
+assert(context.actionEditorCommandOptionsHTML('alarm').includes('Dismiss alarm'));
+assert(context.actionEditorCommandOptionsHTML('alarm').includes('Enable day'));
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_alarm.js', 'utf8'), context);
+const productionEditor = context.actionEditorHTML(prefix);
+assert(productionEditor.includes('Repeats until stopped.'));
+assert(productionEditor.includes('0 = use device volume; 1-100 overrides it.'));
+assert(productionEditor.includes('Target alarm'));
+assert(productionEditor.includes('Active alarm works only with Snooze and Dismiss alarm.'));
+document.getElementById(prefix + '-generic-alarm-alarm_command').value = 'set_time';
+context.actionEditorAlarmChanged(prefix);
+assert.strictEqual(document.getElementById(prefix + '-generic-alarm-alarm_value-label').textContent, 'Time (minutes since midnight)');
+assert(document.getElementById(prefix + '-generic-alarm-alarm_value-help').textContent.includes('420 = 07:00'));
+document.getElementById(prefix + '-generic-alarm-alarm_command').value = 'adjust_minutes';
+context.actionEditorAlarmChanged(prefix);
+assert.strictEqual(document.getElementById(prefix + '-generic-alarm-alarm_value-label').textContent, 'Adjustment (minutes)');
+assert(document.getElementById(prefix + '-generic-alarm-alarm_value-help').textContent.includes('{step}'));
 console.log('production portal/MCP action parity: PASS');

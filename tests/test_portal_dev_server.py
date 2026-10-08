@@ -82,7 +82,7 @@ class PortalDevServerTest(unittest.TestCase):
             invalid["lateness_minutes"] = minutes
             self.assertEqual(self.request("/api/component/alarms/config", "POST", invalid)[0], 400)
         alarm["lateness_minutes"] = 360
-        alarm["1"].update(enabled=True, hour=8, on_ring=[{"type": "sound_alert", "sound_alert_kind": "tone_loop"}])
+        alarm["1"].update(enabled=True, hour=8, on_ring=[{"type": "alarm_tone"}])
         self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
         self.assertEqual(self.request("/api/component/alarms/config")[1], alarm)
         invalid = copy.deepcopy(alarm)
@@ -107,9 +107,11 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/component/alarms/snooze", "POST", {})[0], 200)
         self.assertEqual(self.request("/api/component/alarms/status")[1]["state"], "snoozed")
         self.assertEqual(self.request("/api/component/alarms/config", profile="reterminal-e1003-frame")[0], 404)
-        self.assertEqual(self.request("/api/section/alarms", profile="reterminal-e1003-frame", raw=True)[0], 404)
+        for fragment_id in ("alarm-schedule", "alarm-behavior"):
+            self.assertEqual(self.request("/api/section/" + fragment_id, profile="reterminal-e1003-frame", raw=True)[0], 404)
         self.assertEqual(self.request("/portal_alarms.js", profile="reterminal-e1003-frame", raw=True)[0], 404)
-        self.assertIn("init_alarms_fragment", self.request("/portal_alarms.js", raw=True)[1])
+        self.assertIn("init_alarm_schedule_fragment", self.request("/portal_alarms.js", raw=True)[1])
+        self.assertIn("init_alarm_behavior_fragment", self.request("/portal_alarms.js", raw=True)[1])
         self.assertIn('server->on("/portal_alarms.js", HTTP_GET, handlePortalAlarmsJS)',
                   (ROOT / "src/app/web_portal_routes.cpp").read_text())
         bundle = self.request("/portal.js", raw=True)[1]
@@ -117,14 +119,42 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertNotIn("loadNavigationAssets(data)", bundle)
         self.assertLess(bundle.index("await loadItemAssets("),
             bundle.index("var initFn = window["))
-        fragment = self.request("/api/section/alarms", raw=True)[1]
+        fragment = self.request("/api/section/alarm-schedule", raw=True)[1]
         self.assertNotIn('id="alarm-snooze"', fragment)
         self.assertNotIn('id="alarm-cancel"', fragment)
         self.assertNotIn('id="alarm-state"', fragment)
         self.assertIn('id="alarm-repeat-summary"', fragment)
         self.assertIn('id="alarm-once-target"', fragment)
-        self.assertIn('id="alarm-lateness-minutes"', fragment)
+        self.assertNotIn('id="alarm-lateness-minutes"', fragment)
+        self.assertNotIn('id="alarm-snooze-minutes"', fragment)
+        behavior = self.request("/api/section/alarm-behavior", raw=True)[1]
+        self.assertIn('id="alarm-lateness-minutes"', behavior)
+        self.assertNotIn('id="alarm-time"', behavior)
         self.assertNotIn("setTimeout", self.request("/portal_alarms.js", raw=True)[1])
+
+    def test_alarm_sections(self):
+        categories = self.request("/api/portal/nav")[1]["categories"]
+        category_ids = [category["id"] for category in categories]
+        self.assertEqual(category_ids[category_ids.index("actions") + 1], "alarm")
+        alarm_category = next(category for category in categories if category["id"] == "alarm")
+        self.assertEqual([item["display_name"] for item in alarm_category["items"]], ["Schedule", "Behavior"])
+        config = self.request("/api/component/alarms/config")[1]
+        schedule = {"enabled": True, "hour": 10, "minute": 20, "weekdays": 127}
+        self.assertEqual(self.request("/api/component/alarms/schedule", "POST", schedule)[0], 200)
+        current = self.request("/api/component/alarms/config")[1]
+        for key in ("snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"):
+            self.assertEqual(current["1"][key], config["1"][key])
+        self.assertEqual(current["lateness_minutes"], config["lateness_minutes"])
+        behavior = {"lateness_minutes": 12, "snooze_minutes": 4, "auto_dismiss_minutes": 15,
+                    "on_ring": [{"type": "alarm_tone"}], "on_stop": []}
+        self.assertEqual(self.request("/api/component/alarms/behavior", "POST", behavior)[0], 200)
+        current = self.request("/api/component/alarms/config")[1]
+        for key, value in schedule.items():
+            self.assertEqual(current["1"][key], value)
+        self.assertEqual(current["lateness_minutes"], 12)
+        self.assertEqual(current["1"]["snooze_minutes"], 4)
+        self.assertEqual(self.request("/api/component/alarms/schedule", "POST", {**schedule, "on_ring": []})[0], 400)
+        self.assertEqual(self.request("/api/component/alarms/behavior", "POST", {**behavior, "enabled": False})[0], 400)
 
     def test_alarm_authoring_metadata(self):
         catalog = self.request("/api/info?catalog=1")[1]["catalog"]

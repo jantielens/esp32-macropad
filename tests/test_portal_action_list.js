@@ -110,7 +110,7 @@ for (const command of ['set_time', 'adjust_minutes', 'weekday_enable', 'weekday_
     const weekdayCommand = command.startsWith('weekday_');
     assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-field').style.display, timeCommand ? '' : 'none');
     assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_day-field').style.display, weekdayCommand ? '' : 'none');
-    assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-label').textContent, command === 'set_time' ? 'Time (minutes since midnight)' : 'Minutes');
+    assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-label').textContent, command === 'set_time' ? 'Time (minutes since midnight)' : 'Adjustment (minutes)');
     const action = alarmEditor.build('alarm-test', 'alarm');
     assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'alarm_value'), timeCommand);
     assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'alarm_day'), weekdayCommand);
