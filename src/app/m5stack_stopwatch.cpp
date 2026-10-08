@@ -52,6 +52,13 @@ bool initialize() {
         if (!Wire.begin(47, 48, 100000)) return false;
         wireStarted = true;
     }
+    // The PMIC is always powered; its LDO/DCDC must be enabled before
+    // discovering the expander on a cold battery boot.
+    if (!probe(kPmic) ||
+        !write(kPmic, 0x09, 0) ||
+        !write(kPmic, 0x0a, 0) ||
+        !update(kPmic, 0x06, 0x1f, 0x17)) return false;
+    delay(10); // Allow the newly powered expander MCU to start before probing.
     if (probe(0x4f)) expander = 0x4f;
     else if (probe(0x6f)) expander = 0x6f;
     else return false;
@@ -66,14 +73,10 @@ bool initialize() {
         !update(expander, 0x22, 0x80, 0) ||
         !update(expander, 0x14, 0x03, 0) ||
         !update(expander, 0x04, 0x03, 0x03) ||
-        !update(expander, 0x05, 0x04, 0) ||
-        !probe(kPmic)) return false;
+        !update(expander, 0x05, 0x04, 0)) return false;
 
     // Preserve charging-current programming and power-button configuration.
-    if (!write(kPmic, 0x09, 0) ||
-        !write(kPmic, 0x0a, 0) ||
-        !update(kPmic, 0x06, 0x1f, 0x17) ||
-        !update(kPmic, 0x16, 0x30, 0) ||
+    if (!update(kPmic, 0x16, 0x30, 0) ||
         !update(kPmic, 0x10, 0x04, 0) ||
         !update(kPmic, 0x14, 0x30, 0)) return false;
 

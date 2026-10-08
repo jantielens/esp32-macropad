@@ -165,9 +165,10 @@ void i2c_bus_unlock();
 struct MockWire {
     std::array<std::array<uint8_t, 256>, 128> regs{};
     std::vector<std::tuple<int, int, int>> writes;
+    std::vector<std::tuple<int, int, int>> operations;
     std::vector<uint8_t> tx, rx;
     int address = 0, cursor = 0, begins = 0, transactions = 0, failureAt = -1;
-    bool primary = true, fallback = true, pmic = true, shortRead = false, shortWrite = false;
+    bool primary = true, fallback = false, pmic = true, shortRead = false, shortWrite = false;
     bool failCodecVolume = false;
     bool failAmpEnable = false;
     bool begin(int sda, int scl, int hz) {
@@ -184,8 +185,10 @@ struct MockWire {
     int endTransmission(bool = true) {
         assert(lockDepth == 1);
         const int index = transactions++;
+        operations.emplace_back(address, tx.empty() ? -1 : tx[0], tx.size() == 2 ? tx[1] : -1);
         if (index == failureAt || (address == 0x4f && !primary) ||
             (address == 0x6f && !fallback) || (address == 0x6e && !pmic)) return 4;
+        if ((address == 0x4f || address == 0x6f) && (regs[0x6e][6] & 6) != 6) return 4;
         if (failCodecVolume && address == 0x18 && tx.size() == 2 && tx[0] == 0x32) return 4;
         if (lifecycleTesting && address == 0x4f && tx.size() == 2 && tx[0] == 6 && (tx[1] & 2))
             assert(silentFrameWritten);
@@ -370,9 +373,12 @@ static void reset() {
         Wire.regs[address][0x25] = 0xa5;
         Wire.regs[address][0x26] = 0xab;
     }
-    Wire.regs[0x6e][0x06] = 0xff;
+    Wire.regs[0x6e][0x06] = 0xe8; // Cold battery boot: LDO/DCDC initially OFF.
     Wire.regs[0x6e][0x0b] = 0xa5;
     Wire.regs[0x6e][0x11] = 0x08; // CHG_PROG programming left untouched.
+    Wire.regs[0x6e][0x10] = 0x1f;
+    Wire.regs[0x6e][0x14] = 0xff;
+    Wire.regs[0x6e][0x16] = 0xff;
     assert(lockDepth == 0);
 }
 static void battery(int vbat, int vin, uint8_t gpio) {
@@ -399,7 +405,7 @@ int main() {
     assert(mutexCreates == created);
     reset();
     assert(m5stack_stopwatch_init());
-    assert(delays == std::vector<int>({10,10,50}));
+    assert(delays == std::vector<int>({10,10,10,50}));
     assert(Wire.regs[0x4f][5] == 0xfb); // audio OFF, USB/OLED/reset HIGH.
     assert(Wire.regs[0x4f][6] == 0xfc); // PA and motor OFF.
     assert(Wire.regs[0x4f][3] == 0x9d);
@@ -415,6 +421,16 @@ int main() {
     assert(Wire.regs[0x4f][0x25] == 0xa5 && Wire.regs[0x4f][0x26] == 0xab);
     assert(Wire.regs[0x6e][6] == 0xf7); // boost OFF; other bits preserved.
     assert(Wire.regs[0x6e][0x0b] == 0xa5 && Wire.regs[0x6e][0x11] == 8);
+    assert(Wire.regs[0x6e][0x10] == 0x1b && Wire.regs[0x6e][0x14] == 0xcf);
+    assert(Wire.regs[0x6e][0x16] == 0xcf); // GPIO3 mode/pull/function preserved.
+    int railsEnabled = -1, firstExpanderAccess = -1;
+    for (size_t i = 0; i < Wire.operations.size(); ++i) {
+        const auto [address, reg, value] = Wire.operations[i];
+        if (address == 0x6e && reg == 6 && value == 0xf7) railsEnabled = i;
+        if ((address == 0x4f || address == 0x6f) && firstExpanderAccess < 0)
+            firstExpanderAccess = i;
+    }
+    assert(railsEnabled >= 0 && firstExpanderAccess > railsEnabled);
     const auto successfulWrites = Wire.writes;
     const int count = Wire.transactions;
     assert(m5stack_stopwatch_init() && Wire.begins == 1 && Wire.transactions == count);
@@ -494,18 +510,20 @@ int main() {
         assert(audio_queue == nullptr && music_work_queue == nullptr);
     }
     lifecycleTesting = false;
-    for (int fail = 1; fail < count; ++fail) {
+    for (int fail = 0; fail < count; ++fail) {
         reset(); Wire.failureAt = fail;
         assert(!m5stack_stopwatch_init() && lockDepth == 0 && !ready);
-        assert(!(Wire.regs[0x4f][5] & 0x9c) && !(Wire.regs[0x4f][6] & 3));
-        assert(!(Wire.regs[0x4f][0x1c] & 0x80) &&
-               !(Wire.regs[0x4f][0x1e] & 0x80) &&
-               !(Wire.regs[0x4f][0x22] & 0x80));
+        if (expander) {
+            assert(!(Wire.regs[0x4f][5] & 0x9c) && !(Wire.regs[0x4f][6] & 3));
+            assert(!(Wire.regs[0x4f][0x1c] & 0x80) &&
+                   !(Wire.regs[0x4f][0x1e] & 0x80) &&
+                   !(Wire.regs[0x4f][0x22] & 0x80));
+        }
         assert(!m5stack_stopwatch_audio_power(true));
         const int failedCount = Wire.transactions;
         assert(m5stack_stopwatch_init() && Wire.transactions > failedCount && Wire.begins == 1);
     }
-    reset(); Wire.primary = false;
+    reset(); Wire.primary = false; Wire.fallback = true;
     assert(m5stack_stopwatch_init() && expander == 0x6f);
     assert(Wire.regs[0x6f][0x1c] == 0x4b && Wire.regs[0x6f][0x22] == 0x42);
     reset(); Wire.primary = Wire.fallback = false;

@@ -103,6 +103,7 @@ void InfoScreen::create() {
 			chipLabel, mdnsLabel, ipLabel};
 		for (lv_obj_t* label : labels) {
 			lv_obj_set_width(label, content.w - 24);
+			lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 			lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
 			lv_obj_set_height(label, lv_font_get_line_height(
 				lv_obj_get_style_text_font(label, LV_PART_MAIN)));

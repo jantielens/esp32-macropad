@@ -833,6 +833,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
 - **HAS_M5STACK_STOPWATCH**
   - src/app/app.ino
+  - src/app/audio.cpp
   - src/app/board_config.h
   - src/app/display_geometry.h
   - src/app/drivers/arduino_gfx_co5300_driver.cpp

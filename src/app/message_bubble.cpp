@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "display_manager.h"
+#include "display_geometry.h"
 #include "pad_layout.h"
 #include "log_manager.h"
 

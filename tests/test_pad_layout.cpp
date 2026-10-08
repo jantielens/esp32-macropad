@@ -58,10 +58,16 @@ static void test_stopwatch_466_square_round_viewport() {
     }
 
     #if HAS_M5STACK_STOPWATCH
+    // No explicit insets: the hardware gate must provide the safe square.
     const DisplayContentRect content = display_safe_content_rect(size, size);
     assert(content.x == 68 && content.y == 68 && content.w == 329 && content.h == 329);
     assert(rects[0].w == 61 && rects[0].h == 61);
     #else
+    const DisplayContentRect full = display_safe_content_rect(size, size);
+    assert(full.x == 0 && full.y == 0 && full.w == size && full.h == size);
+    assert(rects[0].x == 4 && rects[0].y == 4);
+    const uint16_t baseline = (size - 8 - 4 * pad_get_scale_info().gap) / 5;
+    assert(rects[0].w == baseline && rects[0].h == baseline);
     const PadGridLayoutSpace inscribed = {68, 68, 68, 68, 3, 3, 4};
     pad_compute_grid(5, 5, size, size, columns, rows, spans, spans, 25, rects, &inscribed);
     #endif
