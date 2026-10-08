@@ -45,6 +45,7 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_cycle_pad.js', 'utf8'), context);
 
 const prefix = 'cycle';
 function element(suffix) { return document.getElementById(prefix + suffix); }

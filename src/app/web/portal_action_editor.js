@@ -1,14 +1,12 @@
 // ============================================================================
 // Shared Action Editor — reusable UI component for ButtonAction editing
 // ============================================================================
-// Both the pad button editor (pads.html) and swipe action editor (home.html)
-// use the same action types (screen, back, mqtt, key, ble_pair). This module
-// provides shared HTML generation, load/save, and type-change handlers so that
-// adding a new action type requires exactly one code change.
+// Catalog-backed fields, extension dispatch, and reusable action-list plumbing.
 
 // Extension modules (e.g. portal_action_editor_shutter.js) can register into
 // _actionEditorExtensions to add action types without modifying this file.
-// Each extension provides: groups, typeChanged, load, build hooks. Type-select
+// Extensions provide groups, typeChanged, load, build, optional wireFragment,
+// and bindingSuffixes/colorSuffixes declarations. Type-select
 // options are no longer contributed by extensions — action_catalog.cpp (see
 // GET /api/info?catalog=1) is the single source for every type's group and
 // label, built-in or device-class.
@@ -18,7 +16,6 @@ var _actionEditorExtensions = [];
 // pad-level, boot, hardware button, MQTT trigger, timer expiry, Shutter
 // Tester session actions). Must match MAX_BUTTON_ACTIONS in pad_config.h.
 const MAX_ACTIONS = 3;
-const ACTION_DELAY_MAX_DURATION_MS = 55000;
 
 // 1-based slot-id generator for hosts whose ids follow "<base><1..MAX_ACTIONS>"
 // (boot actions, hardware buttons, MQTT triggers, timer expiry, Shutter
@@ -44,12 +41,6 @@ function actionEditorCatalogEntry(type) {
         if (catalog[i].type === type) return catalog[i];
     }
     return null;
-}
-
-function actionEditorPausableActionLimit() {
-    var delayAction = actionEditorCatalogEntry('delay');
-    return delayAction && Number.isInteger(delayAction.max_pending_actions)
-        ? delayAction.max_pending_actions : 1;
 }
 
 // Grouped <optgroup> markup for the type <select>, in catalog order.
@@ -135,7 +126,7 @@ function actionEditorSetGenericFields(prefix, type, action) {
         if (!el) return;
         if (field.type === 'toggle') el.checked = !!action[field.name];
         else {
-            var value = action[field.name] === undefined ? (field.default || '') : action[field.name];
+            var value = action[field.name] === undefined ? (field.default === undefined ? '' : field.default) : action[field.name];
             if (field.options_source === 'sounds' && value && !Array.from(el.options).some(function(option) { return option.value === value; })) {
                 var option = document.createElement('option');
                 option.value = value;
@@ -159,15 +150,31 @@ function actionEditorBuildGenericFields(prefix, type, action) {
     });
 }
 
-// Timer's Command selector is per-instance ("T1: Toggle", "T2: Start", ...);
-// labels still come from the catalog's single 'timer' entry so the text
-// shown for each command has one source regardless of which instance it's for.
-function actionEditorTimerCommandOptionsHTML(instance) {
-    var entry = actionEditorCatalogEntry('timer');
-    if (!entry || !entry.commands) return '';
-    return entry.commands.map(function(c) {
-        return '<option value="' + instance + ':' + c.id + '">T' + instance + ': ' + c.label + '</option>';
-    }).join('');
+function actionEditorBindingSuffixes(type) {
+    var extension = _actionEditorExtensions.find(function(candidate) { return candidate.type === type; });
+    var suffixes = extension ? (extension.bindingSuffixes || []).slice() : [];
+    if (extension) (extension.colorSuffixes || []).forEach(function(suffix) {
+        suffixes.push(suffix.replace(/-wrap$/, ''));
+    });
+    actionEditorGenericFields(type).forEach(function(field) {
+        if (field.bindable) suffixes.push('-generic-' + type + '-' + field.name);
+    });
+    return suffixes;
+}
+
+function actionEditorInitBindings(prefix, type) {
+    var extension = _actionEditorExtensions.find(function(candidate) { return candidate.type === type; });
+    if (extension) (extension.colorSuffixes || []).forEach(function(suffix) {
+        var wrap = document.getElementById(prefix + suffix);
+        if (wrap) padInitBindableColor(wrap);
+    });
+    actionEditorBindingSuffixes(type).forEach(function(suffix) {
+        var input = document.getElementById(prefix + suffix);
+        if (input && !input.dataset.bcBind && typeof bindingAttachValidation === 'function') {
+            input.dataset.bcBind = '1';
+            bindingAttachValidation(input);
+        }
+    });
 }
 
 // Family-then-command types (currently only Shutter Tester).
@@ -225,74 +232,8 @@ function actionEditorEnsureUnsupportedOption(select, type) {
 // prefix: unique ID prefix (e.g. "pad-edit-action", "swipe-right")
 // label:  optional label shown above the type dropdown (e.g. "Tap Action")
 // opts:   { showBleHint: bool, showKeyHelp: bool }
-function actionEditorGamepadButtonCount() {
-    var entry = actionEditorCatalogEntry('gamepad');
-    return entry && Number.isInteger(entry.button_count) && entry.button_count > 0 ? entry.button_count : 0;
-}
-
-function actionEditorGamepadHTML(prefix, held) {
-    var html = '<div id="' + prefix + '-gamepad-group" style="display:' + (held ? '' : 'none') + ';">';
-    var fields = [
-        ['control', 'Control', [['button', 'Button'], ['hat', 'Hat direction'], ['trigger', 'Trigger']]],
-        ['button', 'Button', Array.from({ length: actionEditorGamepadButtonCount() }, function(_, index) { return [String(index + 1), String(index + 1)]; })],
-        ['direction', 'Direction', [['up', 'Up'], ['down', 'Down'], ['left', 'Left'], ['right', 'Right']]],
-        ['trigger', 'Trigger', [['left', 'Left'], ['right', 'Right']]]
-    ];
-    if (!held) fields.push(['operation', 'Operation', [['tap', 'Tap'], ['down', 'Down'], ['up', 'Up']]]);
-    fields.forEach(function(field) {
-        var id = prefix + '-gamepad-' + field[0];
-        html += '<div class="form-group" id="' + id + '-field"><label class="form-label" for="' + id + '">' + field[1] + '</label>';
-        html += '<select class="form-select form-select-sm" id="' + id + '"' +
-            (field[0] === 'control' ? ' onchange="actionEditorGamepadChanged(\'' + prefix + '\')"' : '') + '>';
-        field[2].forEach(function(option) { html += '<option value="' + option[0] + '">' + option[1] + '</option>'; });
-        html += '</select></div>';
-    });
-    return html + '</div>';
-}
-
-function actionEditorGamepadChanged(prefix) {
-    var control = document.getElementById(prefix + '-gamepad-control');
-    if (!control) return;
-    ['button', 'direction', 'trigger'].forEach(function(field) {
-        var group = document.getElementById(prefix + '-gamepad-' + field + '-field');
-        if (group) group.style.display = (field === 'direction' ? 'hat' : field) === control.value ? '' : 'none';
-    });
-}
-
-function actionEditorLoadGamepad(prefix, action) {
-    var defaults = { control: 'button', button: 1, direction: 'up', trigger: 'left', operation: 'tap' };
-    Object.keys(defaults).forEach(function(field) {
-        var input = document.getElementById(prefix + '-gamepad-' + field);
-        if (input) input.value = action[field] === undefined ? defaults[field] : action[field];
-    });
-    actionEditorGamepadChanged(prefix);
-}
-
-function actionEditorBuildGamepad(prefix, held) {
-    function value(field, fallback) {
-        var input = document.getElementById(prefix + '-gamepad-' + field);
-        return input && input.value ? input.value : fallback;
-    }
-    var action = { type: 'gamepad', control: value('control', 'button'), operation: held ? 'down' : value('operation', 'tap') };
-    if (action.control === 'button') {
-        action.button = Number(value('button', '1'));
-        var buttonCount = actionEditorGamepadButtonCount();
-        if (!buttonCount) throw new Error('Gamepad button controls are unavailable');
-        if (!Number.isInteger(action.button) || action.button < 1 || action.button > buttonCount) throw new Error('Gamepad button must be 1-' + buttonCount);
-    } else if (action.control === 'hat') {
-        action.direction = value('direction', 'up');
-        if (['up', 'down', 'left', 'right'].indexOf(action.direction) < 0) throw new Error('Invalid Gamepad hat direction');
-    } else if (action.control === 'trigger') {
-        action.trigger = value('trigger', 'left');
-        if (['left', 'right'].indexOf(action.trigger) < 0) throw new Error('Invalid Gamepad trigger');
-    } else throw new Error('Invalid Gamepad control');
-    if (['tap', 'down', 'up'].indexOf(action.operation) < 0) throw new Error('Invalid Gamepad operation');
-    return action;
-}
-
 function actionEditorHTML(prefix, label, opts) {
     opts = opts || {};
-    var pausableActionLimit = actionEditorPausableActionLimit();
     var h = '';
     h += '<div class="form-group">';
     if (label) h += '<label class="form-label" for="' + prefix + '-type">' + label + '</label>';
@@ -300,202 +241,7 @@ function actionEditorHTML(prefix, label, opts) {
     h += actionEditorTypeOptionsHTML(opts);
     h += '</select>';
     h += '<small id="' + prefix + '-context" class="action-context" style="display:none;"></small>';
-    if (opts.showBleHint) {
-        h += '<small id="' + prefix + '-ble-hint" style="display:none;">Keyboard unavailable on this board.</small>';
-    }
     h += '</div>';
-    // Screen target
-    h += '<div id="' + prefix + '-screen-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-target">Target Screen</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-target"><option value="">(none)</option></select>';
-    h += '</div></div>';
-    // Pad sequence navigation
-    h += '<div id="' + prefix + '-cycle-pad-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-cycle-pad-direction">Direction</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-cycle-pad-direction">';
-    h += '<option value="next">Next</option><option value="previous">Previous</option>';
-    h += '</select></div>';
-    h += '<div class="form-group">';
-    h += '<label><input type="checkbox" id="' + prefix + '-cycle-pad-wrap" checked> Wrap at first or last pad</label>';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-cycle-pad-exclusions">Excluded Pads</label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-cycle-pad-exclusions" placeholder="e.g. 2, 5, 8">';
-    h += '<small>Optional comma-separated 1-based pad numbers.</small>';
-    h += '</div></div>';
-    // MQTT
-    h += '<div id="' + prefix + '-mqtt-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-topic">MQTT Topic <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-topic" maxlength="127" placeholder="e.g. home/light/toggle">';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-payload">MQTT Payload <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-payload" maxlength="127" placeholder="e.g. ON or [health:cpu]">';
-    h += '</div></div>';
-    // Key sequence
-    h += '<div id="' + prefix + '-key-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-sequence">Keys to Send <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sequence" maxlength="255" placeholder=\'e.g. ctrl+c, "hello", 200ms\'>';
-    if (opts.showKeyHelp) {
-        h += '<small>Space-separated steps. <b>Modifiers:</b> ctrl, shift, alt, gui &mdash; <b>Keys:</b> a&ndash;z, 0&ndash;9, enter, tab, esc, space, backspace, delete, up/down/left/right, f1&ndash;f12, home, end, pageup, pagedown, insert, printscreen, capslock &mdash; <b>Media:</b> vol_up, vol_down, mute, play_pause, next_track, prev_track &mdash; <b>Combos:</b> ctrl+c, ctrl+shift+t, gui+l &mdash; <b>Text:</b> &quot;hello&quot; &mdash; <b>Delay:</b> 200ms. Supports bindings.</small>';
-    }
-    h += '</div></div>';
-    // Sound Alert
-    h += '<div id="' + prefix + '-sound-alert-group" style="display:none;">';
-    h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-kind">Kind</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-kind" onchange="actionEditorSoundAlertChanged(\'' + prefix + '\')">';
-    h += '<option value="tone">Tone Alert</option><option value="mp3">MP3 Alert</option><option value="stop">Stop audio</option></select></div>';
-    h += '<div id="' + prefix + '-sound-alert-tone-group">';
-    h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-pattern">Tone pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sound-alert-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200"></div></div>';
-    h += '<div id="' + prefix + '-sound-alert-mp3-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-sound-alert-file">MP3 file</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-file"><option value="">(none)</option></select>';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-sound-alert-volume">Volume override (%)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-sound-alert-volume" min="0" max="100" placeholder="(use device volume)">';
-    h += '<small>Empty or 0 = use device volume from Home &rarr; Audio; 1-100 overrides it.</small>';
-    h += '</div></div></div>';
-    // Timer — structured dropdowns
-    h += '<div id="' + prefix + '-timer-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-timer-action">Command</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-timer-action" onchange="actionEditorTimerChanged(\'' + prefix + '\')">'; 
-    for (var t = 1; t <= 3; t++) {
-        h += '<optgroup label="Timer ' + t + '">' + actionEditorTimerCommandOptionsHTML(t) + '</optgroup>';
-    }
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-timer-mode-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-timer-mode">Mode</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-timer-mode" onchange="actionEditorTimerChanged(\'' + prefix + '\')">';
-    h += '<option value="">Select mode</option>';
-    h += '<option value="up">Stopwatch (Count Up)</option>';
-    h += '<option value="down">Countdown</option>';
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-timer-duration-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-timer-duration">Duration (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-duration" placeholder="e.g. 300">';
-    h += '<small>Positive whole seconds. Start always uses it; Toggle uses it only when starting a stopped timer, not when pausing or resuming. Supports bindings.</small>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-timer-set-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-timer-set-sec">Countdown (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-set-sec" placeholder="e.g. 300">';
-    h += '<small>Set the countdown to this many seconds. Supports bindings.</small>';
-    h += '</div>';
-    h += '<div class="form-group" id="' + prefix + '-timer-adjust-group" style="display:none;">';
-    h += '<label class="form-label" for="' + prefix + '-timer-adjust-sec">Adjust (seconds) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-timer-adjust-sec" placeholder="e.g. 15, -10, or {step}">';
-    h += '<small>Positive adds time, negative subtracts. Use <code>{step}</code> as a placeholder for Numeric Rocker widgets.</small>';
-    h += '</div>';
-    h += '</div>';
-    // Notify
-    h += '<div id="' + prefix + '-notify-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-notify-text">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-notify-text" maxlength="127" placeholder="e.g. Brightness is at 100%">';
-    h += '<small>Supports binding templates. Empty = dismiss current notification.</small>';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-notify-duration">Duration (ms) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-notify-duration" value="3000" placeholder="3000">';
-    h += '<small>0 = persistent (tap to dismiss). Supports bindings.</small>';
-    h += '</div>';
-    h += '<div class="grid-2col">';
-    h += '<div class="form-group">';
-    h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<div class="bindable-color" id="' + prefix + '-notify-text-color-wrap"><div class="bc-swatch"></div>';
-    h += '<input type="text" id="' + prefix + '-notify-text-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#ffffff or [binding]"></div>';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<div class="bindable-color" id="' + prefix + '-notify-bg-color-wrap"><div class="bc-swatch"></div>';
-    h += '<input type="text" id="' + prefix + '-notify-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#333333 or [binding]"></div>';
-    h += '</div>';
-    h += '</div>';
-    h += '<div class="grid-2col">';
-    h += '<div class="form-group">';
-    h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Border Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<div class="bindable-color" id="' + prefix + '-notify-border-color-wrap"><div class="bc-swatch"></div>';
-    h += '<input type="text" id="' + prefix + '-notify-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="Empty = no border"></div>';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-notify-opacity">Opacity (%)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-notify-opacity" min="0" max="100" placeholder="85">';
-    h += '</div>';
-    h += '</div>';
-    h += '<div class="grid-2col">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-notify-font-size">Font Size</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-notify-font-size" min="0" max="48" placeholder="0 = auto">';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-notify-location">Location</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-notify-location">';
-    h += '<option value="bottom" selected>Bottom</option>';
-    h += '<option value="center">Center</option>';
-    h += '<option value="top">Top</option>';
-    h += '</select>';
-    h += '</div>';
-    h += '</div>';
-    h += '</div>';
-    // Visual Alert
-    h += '<div id="' + prefix + '-va-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-va-op">Command</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-va-op" onchange="actionEditorVaOpChanged(\'' + prefix + '\')">';
-    h += actionEditorCommandOptionsHTML('visual_alert');
-    h += '</select>';
-    h += '<small>Start raises a full-screen pulsing overlay (wakes the screen). Stop clears it.</small>';
-    h += '</div>';
-    // Config fields — only relevant for "start" (hidden for "stop")
-    h += '<div id="' + prefix + '-va-config-group">';
-    h += '<div class="form-group">';
-    h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-    h += '<div class="bindable-color" id="' + prefix + '-va-color-wrap"><div class="bc-swatch"></div>';
-    h += '<input type="text" id="' + prefix + '-va-color" class="bc-input" maxlength="63" spellcheck="false" placeholder="#ff0000 or [binding]"></div>';
-    h += '<small>Overlay tint. Supports bindings (e.g. red via [expr:...]). Empty = red.</small>';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-va-pattern">Pattern</label>';
-    h += '<select class="form-select form-select-sm" id="' + prefix + '-va-pattern">';
-    h += '<option value="breathe" selected>Breathe</option>';
-    h += '<option value="blink">Blink</option>';
-    h += '<option value="solid">Solid</option>';
-    h += '</select>';
-    h += '</div>';
-    h += '<div class="grid-2col">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-va-period">Period (ms)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-va-period" min="0" max="10000" placeholder="800">';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-va-intensity">Intensity (%)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-va-intensity" min="0" max="100" placeholder="100">';
-    h += '</div>';
-    h += '</div>';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-va-duration">Duration (ms)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-va-duration" min="0" placeholder="0 = until stopped">';
-    h += '<small>0 = persist until Stop, tap, or another alert. Tap the overlay to dismiss.</small>';
-    h += '</div>';
-    h += '</div>';  // va-config-group
-    h += '</div>';  // va-group
-    // Delay
-    h += '<div id="' + prefix + '-delay-group" style="display:none;">';
-    h += '<div class="form-group">';
-    h += '<label class="form-label" for="' + prefix + '-delay-duration">Duration (ms)</label>';
-    h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-delay-duration" min="1" max="' + ACTION_DELAY_MAX_DURATION_MS + '" value="1000" required>';
-    h += '<small>Pauses this action list before running the following action. Up to ' + pausableActionLimit + ' pausable actions can be pending device-wide at a time; another pausable action stops its action list when all slots are occupied.</small>';
-    h += '</div></div>';
-    h += actionEditorGamepadHTML(prefix, false);
     h += actionEditorGenericFieldsHTML(prefix);
     // Extension-contributed groups (e.g. shutter command UI on shutter-tester builds)
     _actionEditorExtensions.forEach(function(ext) { if (ext.groups) h += ext.groups(prefix, opts); });
@@ -517,139 +263,13 @@ function actionEditorTypeChanged(prefix) {
         contextEl.style.display = entry ? '' : 'none';
     }
     actionEditorListRefreshSlot(prefix);
-    var screenGrp = document.getElementById(prefix + '-screen-group');
-    var mqttGrp = document.getElementById(prefix + '-mqtt-group');
-    var keyGrp = document.getElementById(prefix + '-key-group');
-    var bleHint = document.getElementById(prefix + '-ble-hint');
-    var soundAlertGrp = document.getElementById(prefix + '-sound-alert-group');
-    if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
-    // List widget: inject synthetic "Selected … Item" option in screen dropdown
-    if (type === 'screen') {
-        listInjectSyntheticScreenOption(prefix);
-        // Re-apply pending target value (deferred when option didn't exist).
-        // Only clear pending if the value was actually applied — otherwise the
-        // option may be injected later (after widget type / provider id is set).
-        var tgt = document.getElementById(prefix + '-target');
-        if (tgt && tgt.hasAttribute('data-pending-value')) {
-            var pv = tgt.getAttribute('data-pending-value');
-            tgt.value = pv;
-            if (tgt.value === pv) tgt.removeAttribute('data-pending-value');
-        }
-    }
-    if (mqttGrp) mqttGrp.style.display = (type === 'mqtt') ? '' : 'none';
-    if (keyGrp) keyGrp.style.display = (type === 'key') ? '' : 'none';
-    if (bleHint) bleHint.style.display = (type === 'key' || type === 'ble_pair') ? '' : 'none';
-    if (soundAlertGrp) soundAlertGrp.style.display = (type === 'sound_alert') ? '' : 'none';
-    if (type === 'sound_alert') actionEditorSoundAlertChanged(prefix);
-    var cyclePadGrp = document.getElementById(prefix + '-cycle-pad-group');
-    if (cyclePadGrp) cyclePadGrp.style.display = (type === 'cycle_pad') ? '' : 'none';
-    var timerGrp = document.getElementById(prefix + '-timer-group');
-    if (timerGrp) timerGrp.style.display = (type === 'timer') ? '' : 'none';
-    var notifyGrp = document.getElementById(prefix + '-notify-group');
-    if (notifyGrp) notifyGrp.style.display = (type === 'notify') ? '' : 'none';
-    var vaGrp = document.getElementById(prefix + '-va-group');
-    if (vaGrp) vaGrp.style.display = (type === 'visual_alert') ? '' : 'none';
-    if (type === 'visual_alert') {
-        // Default the color to pure red when unset, so the swatch shows red.
-        var vaCol = document.getElementById(prefix + '-va-color');
-        if (vaCol && !vaCol.value) padSetBindableColor(prefix + '-va-color', '#ff0000', '#ff0000');
-        actionEditorVaOpChanged(prefix);
-    }
-    var delayGrp = document.getElementById(prefix + '-delay-group');
-    if (delayGrp) delayGrp.style.display = (type === 'delay') ? '' : 'none';
-    var gamepadGrp = document.getElementById(prefix + '-gamepad-group');
-    if (gamepadGrp) gamepadGrp.style.display = type === 'gamepad' ? '' : 'none';
-    if (type === 'gamepad') actionEditorGamepadChanged(prefix);
     actionEditorCatalog().forEach(function(entry) {
         var group = document.getElementById(prefix + '-generic-' + entry.type + '-group');
         if (group) group.style.display = entry.type === type ? '' : 'none';
     });
-    if (['notify', 'visual_alert', 'mqtt', 'key', 'sound_alert', 'timer'].indexOf(type) >= 0) actionEditorInitBindings(prefix);
-    if (type === 'timer') actionEditorTimerChanged(prefix);
-    actionEditorGenericFields(type).forEach(function(field) {
-        if (!field.bindable) return;
-        var input = document.getElementById(prefix + '-generic-' + type + '-' + field.name);
-        if (input && !input.dataset.bcBind) {
-            input.dataset.bcBind = '1';
-            if (typeof bindingAttachValidation === 'function') bindingAttachValidation(input);
-        }
-    });
+    actionEditorInitBindings(prefix, type);
     // Extension-contributed type-change hooks (e.g. shutter group visibility)
     _actionEditorExtensions.forEach(function(ext) { if (ext.typeChanged) ext.typeChanged(prefix, type); });
-}
-
-function actionEditorNormalizeCyclePadExclusions(value) {
-    var configuredMax = (typeof deviceInfoCache !== 'undefined' && deviceInfoCache)
-        ? Number(deviceInfoCache.max_pads) : 0;
-    var maxPads = configuredMax > 0 ? Math.floor(configuredMax) : 16;
-    var unique = {};
-    String(value || '').split(',').forEach(function(token) {
-        token = token.trim();
-        if (!/^[0-9]+$/.test(token)) return;
-        var pad = Number(token);
-        if (pad >= 1 && pad <= maxPads) unique[pad] = true;
-    });
-    return Object.keys(unique).map(Number).sort(function(a, b) { return a - b; }).join(',');
-}
-
-function actionEditorSoundAlertChanged(prefix) {
-    var kind = document.getElementById(prefix + '-sound-alert-kind');
-    var tone = document.getElementById(prefix + '-sound-alert-tone-group');
-    var mp3 = document.getElementById(prefix + '-sound-alert-mp3-group');
-    var isMp3 = kind && kind.value === 'mp3';
-    if (tone) tone.style.display = isMp3 || (kind && kind.value === 'stop') ? 'none' : '';
-    if (mp3) mp3.style.display = isMp3 ? '' : 'none';
-}
-
-// Show/hide the visual-alert config fields based on the op dropdown.
-// Stop only needs the op selector; start needs color/pattern/period/etc.
-function actionEditorVaOpChanged(prefix) {
-    var op = document.getElementById(prefix + '-va-op');
-    var cfg = document.getElementById(prefix + '-va-config-group');
-    if (cfg) cfg.style.display = (op && op.value === 'stop') ? 'none' : '';
-}
-
-// Show/hide timer sub-fields based on the timer action dropdown.
-function actionEditorTimerChanged(prefix) {
-    var sel = document.getElementById(prefix + '-timer-action');
-    if (!sel) return;
-    var val = sel.value; // e.g. "1:toggle", "2:adjust"
-    var parts = val.split(':');
-    var cmd = parts[1] || '';
-    var starts = cmd === 'start' || cmd === 'toggle';
-    var mode = document.getElementById(prefix + '-timer-mode');
-    var modeGrp = document.getElementById(prefix + '-timer-mode-group');
-    var durationGrp = document.getElementById(prefix + '-timer-duration-group');
-    var setGrp = document.getElementById(prefix + '-timer-set-group');
-    var adjustGrp = document.getElementById(prefix + '-timer-adjust-group');
-    if (modeGrp) modeGrp.style.display = starts ? '' : 'none';
-    if (durationGrp) durationGrp.style.display = starts && mode && mode.value === 'down' ? '' : 'none';
-    if (setGrp) setGrp.style.display = (cmd === 'set') ? '' : 'none';
-    if (adjustGrp) adjustGrp.style.display = (cmd === 'adjust') ? '' : 'none';
-}
-
-// Suffixes for binding-capable action text inputs (shared with binding validator).
-var _ACTION_BIND_SUFFIXES = [
-    '-notify-text', '-notify-duration', '-topic', '-payload', '-sequence',
-    '-sound-alert-pattern', '-timer-duration', '-timer-set-sec', '-timer-adjust-sec'
-];
-
-// Initialize bindable-color pickers and binding font toggles for all bindable fields.
-// Idempotent — safe to call on every type-change.
-function actionEditorInitBindings(prefix) {
-    // Init action color pickers (notify + visual alert)
-    ['-notify-text-color-wrap', '-notify-bg-color-wrap', '-notify-border-color-wrap', '-va-color-wrap'].forEach(function(suffix) {
-        var wrap = document.getElementById(prefix + suffix);
-        if (wrap) padInitBindableColor(wrap);
-    });
-    // Wire binding validation on all binding-capable text inputs
-    _ACTION_BIND_SUFFIXES.forEach(function(suffix) {
-        var el = document.getElementById(prefix + suffix);
-        if (el && !el.dataset.bcBind) {
-            el.dataset.bcBind = '1';
-            if (typeof bindingAttachValidation === 'function') bindingAttachValidation(el);
-        }
-    });
 }
 
 // Load an action object { type, target, topic, payload, sequence } into the form.
@@ -673,102 +293,6 @@ function actionEditorLoad(prefix, action) {
             delete _actionEditorUnsupported[prefix];
         }
     }
-    el = document.getElementById(prefix + '-target');
-    if (el) {
-        el.value = action.target || '';
-        // If the option doesn't exist (e.g., synthetic [list:…] not yet injected),
-        // defer the value until the option is added.
-        if (action.target && el.value !== action.target) {
-            el.setAttribute('data-pending-value', action.target);
-            el.value = '';
-        }
-    }
-    el = document.getElementById(prefix + '-topic');
-    if (el) el.value = action.topic || '';
-    el = document.getElementById(prefix + '-payload');
-    if (el) el.value = action.payload || '';
-    el = document.getElementById(prefix + '-sequence');
-    if (el) el.value = action.sequence || '';
-    el = document.getElementById(prefix + '-sound-alert-kind');
-    if (el) el.value = action.sound_alert_kind || 'tone';
-    el = document.getElementById(prefix + '-sound-alert-pattern');
-    if (el) el.value = action.sound_alert_pattern || '';
-    el = document.getElementById(prefix + '-sound-alert-file');
-    if (el) {
-        if (action.sound_alert_file && !Array.from(el.options).some(function(option) { return option.value === action.sound_alert_file; })) {
-            var soundOption = document.createElement('option');
-            soundOption.value = action.sound_alert_file;
-            soundOption.textContent = action.sound_alert_file;
-            el.appendChild(soundOption);
-        }
-        el.value = action.sound_alert_file || '';
-        if (el.selectedIndex < 0) el.value = '';
-    }
-    el = document.getElementById(prefix + '-sound-alert-volume');
-    if (el) el.value = (action.sound_alert_volume > 0) ? action.sound_alert_volume : '';
-    el = document.getElementById(prefix + '-cycle-pad-direction');
-    if (el) el.value = action.direction === 'previous' ? 'previous' : 'next';
-    el = document.getElementById(prefix + '-cycle-pad-wrap');
-    if (el) el.checked = action.wrap !== false;
-    el = document.getElementById(prefix + '-cycle-pad-exclusions');
-    if (el) el.value = actionEditorNormalizeCyclePadExclusions(action.excluded_pads || '');
-
-    // Timer: load from proper fields
-    if (action.timer_id && action.timer_command) {
-        el = document.getElementById(prefix + '-timer-action');
-        if (el) {
-            el.value = action.timer_id + ':' + action.timer_command;
-            if (el.selectedIndex < 0) el.value = '1:toggle';
-        }
-        if (action.timer_command === 'start' || action.timer_command === 'toggle') {
-            el = document.getElementById(prefix + '-timer-mode');
-            if (el) el.value = action.timer_mode || '';
-            el = document.getElementById(prefix + '-timer-duration');
-            if (el) el.value = action.timer_mode === 'down' ? (action.timer_value || '') : '';
-        } else if (action.timer_command === 'set') {
-            el = document.getElementById(prefix + '-timer-set-sec');
-            if (el) el.value = action.timer_value || '';
-        } else if (action.timer_command === 'adjust') {
-            el = document.getElementById(prefix + '-timer-adjust-sec');
-            if (el) el.value = action.timer_value || '';
-        }
-    } else {
-        el = document.getElementById(prefix + '-timer-action');
-        if (el) el.value = '1:toggle';
-        el = document.getElementById(prefix + '-timer-mode');
-        if (el) el.value = '';
-        el = document.getElementById(prefix + '-timer-duration');
-        if (el) el.value = '';
-    }
-    // Notify fields
-    el = document.getElementById(prefix + '-notify-text');
-    if (el) { el.value = action.notify_text || ''; }
-    el = document.getElementById(prefix + '-notify-duration');
-    if (el) { el.value = action.notify_duration_ms || '3000'; }
-    padSetBindableColor(prefix + '-notify-text-color', action.notify_text_color || '', '#ffffff');
-    padSetBindableColor(prefix + '-notify-bg-color', action.notify_bg_color || '', '#333333');
-    padSetBindableColor(prefix + '-notify-border-color', action.notify_border_color || '', '');
-    el = document.getElementById(prefix + '-notify-opacity');
-    if (el) el.value = (action.notify_opacity > 0) ? action.notify_opacity : '';
-    el = document.getElementById(prefix + '-notify-font-size');
-    if (el) el.value = (action.notify_font_size > 0) ? action.notify_font_size : '';
-    el = document.getElementById(prefix + '-notify-location');
-    if (el) el.value = action.notify_location || 'bottom';
-    // Visual alert fields
-    el = document.getElementById(prefix + '-va-op');
-    if (el) el.value = action.op || 'start';
-    padSetBindableColor(prefix + '-va-color', action.color || '', '#ff0000');
-    el = document.getElementById(prefix + '-va-pattern');
-    if (el) el.value = action.pattern || 'breathe';
-    el = document.getElementById(prefix + '-va-period');
-    if (el) el.value = (action.period_ms > 0) ? action.period_ms : '';
-    el = document.getElementById(prefix + '-va-intensity');
-    if (el) el.value = (action.intensity > 0) ? action.intensity : '';
-    el = document.getElementById(prefix + '-va-duration');
-    if (el) el.value = (action.duration_ms > 0) ? action.duration_ms : '';
-    el = document.getElementById(prefix + '-delay-duration');
-    if (el) el.value = (action.type === 'delay' && action.duration_ms > 0) ? action.duration_ms : '1000';
-    actionEditorLoadGamepad(prefix, action.type === 'gamepad' ? action : {});
     actionEditorSetGenericFields(prefix, action.type || '', action);
     // Extension-contributed load hooks (e.g. shutter field population)
     _actionEditorExtensions.forEach(function(ext) { if (ext.load) ext.load(prefix, action); });
@@ -791,143 +315,7 @@ function actionEditorBuild(prefix) {
         return _actionEditorUnsupported[prefix];
     }
     var act = { type: type };
-    if (type === 'gamepad') return actionEditorBuildGamepad(prefix, false);
     actionEditorBuildGenericFields(prefix, type, act);
-    if (type === 'screen') {
-        var t = document.getElementById(prefix + '-target');
-        if (t) act.target = t.value;
-    }
-    if (type === 'mqtt') {
-        var topic = document.getElementById(prefix + '-topic');
-        var payload = document.getElementById(prefix + '-payload');
-        if (topic) act.topic = (topic.value || '').trim();
-        if (payload) act.payload = (payload.value || '').trim();
-    }
-    if (type === 'key') {
-        var seq = document.getElementById(prefix + '-sequence');
-        if (seq) act.sequence = (seq.value || '').trim();
-    }
-    if (type === 'sound_alert') {
-        var kind = document.getElementById(prefix + '-sound-alert-kind');
-        act.sound_alert_kind = kind ? kind.value : 'tone';
-        var volume = document.getElementById(prefix + '-sound-alert-volume');
-        if (volume && volume.value !== '') act.sound_alert_volume = parseInt(volume.value, 10);
-        if (act.sound_alert_kind === 'tone' || act.sound_alert_kind === 'tone_loop') {
-            var pattern = document.getElementById(prefix + '-sound-alert-pattern');
-            if (pattern) act.sound_alert_pattern = (pattern.value || '').trim();
-        } else if (act.sound_alert_kind === 'mp3') {
-            var file = document.getElementById(prefix + '-sound-alert-file');
-            if (file) act.sound_alert_file = file.value || '';
-        }
-    }
-    if (type === 'cycle_pad') {
-        var cycleDirection = document.getElementById(prefix + '-cycle-pad-direction');
-        var cycleWrap = document.getElementById(prefix + '-cycle-pad-wrap');
-        var cycleExclusions = document.getElementById(prefix + '-cycle-pad-exclusions');
-        act.direction = cycleDirection && cycleDirection.value === 'previous' ? 'previous' : 'next';
-        act.wrap = cycleWrap ? cycleWrap.checked : true;
-        var normalizedExclusions = actionEditorNormalizeCyclePadExclusions(
-            cycleExclusions ? cycleExclusions.value : '');
-        if (cycleExclusions) cycleExclusions.value = normalizedExclusions;
-        if (normalizedExclusions) act.excluded_pads = normalizedExclusions;
-    }
-
-    if (type === 'timer') {
-        var sel = document.getElementById(prefix + '-timer-action');
-        if (sel) {
-            var val = sel.value; // e.g. "1:toggle", "2:adjust"
-            var parts = val.split(':');
-            act.timer_id = parseInt(parts[0], 10);
-            act.timer_command = parts[1] || '';
-            if (act.timer_command === 'start' || act.timer_command === 'toggle') {
-                var mode = document.getElementById(prefix + '-timer-mode');
-                var duration = document.getElementById(prefix + '-timer-duration');
-                act.timer_mode = mode ? mode.value : '';
-                if (act.timer_mode !== 'up' && act.timer_mode !== 'down') {
-                    if (mode) { mode.setCustomValidity('Select a Timer mode.'); mode.reportValidity(); mode.focus(); }
-                    if (typeof showMessage === 'function') showMessage('Timer Mode is required for Start and Toggle.', 'error');
-                    throw new Error('Timer Mode is required for Start and Toggle');
-                }
-                if (mode) mode.setCustomValidity('');
-                if (act.timer_mode === 'down') {
-                    var durationValue = duration ? (duration.value || '').trim() : '';
-                    var durationTokens = typeof bindingTokenize === 'function'
-                        ? bindingTokenize(durationValue) : [];
-                    var bindingResult = typeof validateBinding === 'function'
-                        ? validateBinding(durationValue, { requireKnownScheme: true })
-                        : { valid: false };
-                    var isBinding = durationTokens.length === 1
-                        && durationTokens[0].start === 0
-                        && durationTokens[0].end === durationValue.length
-                        && durationTokens[0].raw === durationValue
-                        && bindingResult.valid;
-                    var isSeconds = /^[1-9][0-9]*$/.test(durationValue)
-                        && Number(durationValue) <= 4294967;
-                    if (!durationValue || (!isBinding && !isSeconds)) {
-                        if (duration) { duration.setCustomValidity('Enter 1-4294967 whole seconds or a binding.'); duration.reportValidity(); duration.focus(); }
-                        if (typeof showMessage === 'function') showMessage('Timer Duration must be 1-4294967 whole seconds or a binding.', 'error');
-                        throw new Error('Timer Duration must be 1-4294967 whole seconds or a binding');
-                    }
-                    if (duration) duration.setCustomValidity('');
-                    act.timer_value = durationValue;
-                } else if (duration) {
-                    duration.setCustomValidity('');
-                }
-            } else if (act.timer_command === 'set') {
-                var setSec = document.getElementById(prefix + '-timer-set-sec');
-                if (setSec && setSec.value !== '') act.timer_value = (setSec.value || '').trim();
-            } else if (act.timer_command === 'adjust') {
-                var adjSec = document.getElementById(prefix + '-timer-adjust-sec');
-                if (adjSec && adjSec.value !== '') act.timer_value = (adjSec.value || '').trim();
-            }
-        }
-    }
-    if (type === 'notify') {
-        var nt = document.getElementById(prefix + '-notify-text');
-        if (nt) act.notify_text = (nt.value || '').trim();
-        var nd = document.getElementById(prefix + '-notify-duration');
-        if (nd && nd.value !== '') act.notify_duration_ms = (nd.value || '').trim();
-        var ntc = padGetBindableColor(prefix + '-notify-text-color');
-        if (ntc) act.notify_text_color = ntc;
-        var nbc = padGetBindableColor(prefix + '-notify-bg-color');
-        if (nbc) act.notify_bg_color = nbc;
-        var nbrc = padGetBindableColor(prefix + '-notify-border-color');
-        if (nbrc) act.notify_border_color = nbrc;
-        var nop = document.getElementById(prefix + '-notify-opacity');
-        if (nop && nop.value !== '') act.notify_opacity = parseInt(nop.value, 10);
-        var nfs = document.getElementById(prefix + '-notify-font-size');
-        if (nfs && nfs.value !== '') act.notify_font_size = parseInt(nfs.value, 10);
-        var nloc = document.getElementById(prefix + '-notify-location');
-        if (nloc) act.notify_location = nloc.value;
-    }
-    if (type === 'visual_alert') {
-        var vaOp = document.getElementById(prefix + '-va-op');
-        if (vaOp) act.op = vaOp.value;
-        var vaCol = padGetBindableColor(prefix + '-va-color');
-        if (vaCol) act.color = vaCol;
-        var vaPat = document.getElementById(prefix + '-va-pattern');
-        if (vaPat) act.pattern = vaPat.value;
-        var vaPer = document.getElementById(prefix + '-va-period');
-        if (vaPer && vaPer.value !== '') act.period_ms = parseInt(vaPer.value, 10);
-        var vaInt = document.getElementById(prefix + '-va-intensity');
-        if (vaInt && vaInt.value !== '') act.intensity = parseInt(vaInt.value, 10);
-        var vaDur = document.getElementById(prefix + '-va-duration');
-        if (vaDur && vaDur.value !== '') act.duration_ms = parseInt(vaDur.value, 10);
-    }
-    if (type === 'delay') {
-        var delayDuration = document.getElementById(prefix + '-delay-duration');
-        var delayValue = delayDuration ? Number(delayDuration.value) : 0;
-        if (!Number.isInteger(delayValue) || delayValue < 1 || delayValue > ACTION_DELAY_MAX_DURATION_MS) {
-            if (delayDuration) {
-            delayDuration.setCustomValidity('Enter a whole number from 1 to ' + ACTION_DELAY_MAX_DURATION_MS + '.');
-                delayDuration.reportValidity();
-                delayDuration.focus();
-            }
-            throw new Error('Delay duration must be 1-' + ACTION_DELAY_MAX_DURATION_MS + ' milliseconds');
-        }
-        if (delayDuration) delayDuration.setCustomValidity('');
-        act.duration_ms = delayValue;
-    }
     // Extension-contributed build hooks (e.g. shutter merges shutter_command/shutter_value).
     _actionEditorExtensions.forEach(function(ext) {
         if (ext.build) {
@@ -936,115 +324,6 @@ function actionEditorBuild(prefix) {
         }
     });
     return act;
-}
-
-// Inject a synthetic "Selected {Title} Item" option into a screen target dropdown.
-// Only injects when the current widget type is "list" and a provider ID is set.
-function listInjectSyntheticScreenOption(prefix) {
-    var sel = document.getElementById(prefix + '-target');
-    if (!sel || sel.tagName !== 'SELECT') return;
-    // Capture the current value so we can restore it after removing the old
-    // synthetic option (which may itself be the currently selected option,
-    // since removing a selected <option> resets the dropdown to the first item).
-    var prevValue = sel.value;
-    // Helper: restore the previous value if it still maps to an existing option.
-    var restorePrev = function() {
-        if (prevValue && sel.value !== prevValue) sel.value = prevValue;
-    };
-    // Remove any previously injected synthetic option
-    var existing = sel.querySelector('option[data-synthetic]');
-    if (existing) existing.remove();
-    // Only inject for list widget with a provider ID
-    var wtEl = document.getElementById('pad-edit-widget-type');
-    var provInput = document.getElementById('pad-edit-list-provider-id');
-    var provId = provInput ? provInput.value.trim() : '';
-    if (!wtEl || wtEl.value !== 'list' || !provId) {
-        restorePrev();
-        return;
-    }
-    var title = provId.charAt(0).toUpperCase() + provId.slice(1);
-    var opt = document.createElement('option');
-    opt.value = '[list:' + provId + '.selected]';
-    opt.textContent = 'Selected ' + title + ' Item';
-    opt.setAttribute('data-synthetic', '1');
-    // Insert after "(none)" option
-    if (sel.options.length > 1) {
-        sel.insertBefore(opt, sel.options[1]);
-    } else {
-        sel.appendChild(opt);
-    }
-    // Re-apply pending value if it matches the newly injected synthetic option
-    if (sel.hasAttribute('data-pending-value') &&
-        sel.getAttribute('data-pending-value') === opt.value) {
-        sel.value = opt.value;
-        sel.removeAttribute('data-pending-value');
-    } else {
-        // Restore the previous selection (may be the just-injected synthetic option)
-        restorePrev();
-    }
-}
-
-// Refresh synthetic options in all tap and long-press action screen dropdowns.
-// Called when widget type changes to/from "list" or when provider ID changes.
-function listRefreshSyntheticOptions() {
-    for (var i = 0; i < (typeof MAX_ACTIONS !== 'undefined' ? MAX_ACTIONS : 3); i++) {
-        listInjectSyntheticScreenOption('pad-edit-action-' + i);
-        listInjectSyntheticScreenOption('pad-edit-lp-action-' + i);
-    }
-}
-
-// Populate the screen target dropdown(s) for one or more action editor prefixes.
-// screens: array of { id, name } from deviceInfoCache.available_screens
-// prefixes: array of prefix strings
-function actionEditorPopulateScreens(prefixes, screens) {
-    if (!screens) return;
-    prefixes.forEach(function(prefix) {
-        var sel = document.getElementById(prefix + '-target');
-        if (!sel) return;
-        while (sel.options.length > 1) sel.remove(1);
-        screens.forEach(function(s) {
-            var opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = s.name;
-            sel.appendChild(opt);
-        });
-        // Apply pending value deferred by actionEditorLoad() when the option
-        // did not yet exist at load time.
-        if (sel.hasAttribute('data-pending-value')) {
-            var pv = sel.getAttribute('data-pending-value');
-            sel.value = pv;
-            if (sel.value === pv) sel.removeAttribute('data-pending-value');
-        }
-    });
-}
-
-// Populate the sound file dropdown(s) for one or more action editor prefixes.
-// sounds: array of sound file names (strings) from /api/sounds/list
-// prefixes: array of prefix strings
-function actionEditorPopulateSounds(prefixes, sounds) {
-    if (!sounds) return;
-    prefixes.forEach(function(prefix) {
-        var selects = [document.getElementById(prefix + '-sound-alert-file')];
-        actionEditorCatalog().forEach(function(entry) {
-            actionEditorGenericFields(entry.type).forEach(function(field) {
-                if (field.options_source === 'sounds') selects.push(document.getElementById(prefix + '-generic-' + entry.type + '-' + field.name));
-            });
-        });
-        selects.forEach(function(sel) {
-        if (!sel) return;
-        var selected = sel.value;
-        while (sel.options.length > 1) sel.remove(1);
-        var names = sounds.slice();
-        if (selected && names.indexOf(selected) < 0) names.push(selected);
-        names.forEach(function(name) {
-            var opt = document.createElement('option');
-            opt.value = name;
-            opt.textContent = name;
-            sel.appendChild(opt);
-        });
-        sel.value = selected;
-        });
-    });
 }
 
 // ============================================================================
@@ -1129,19 +408,11 @@ function actionEditorListBuild(prefixes) {
         .filter(function(action) { return !!action.type; });
 }
 
-// Wire screen + sound dropdowns for a fragment hosting one or more action editors.
-// Fetches deviceInfo (screens) and /api/sounds/list once and populates the given prefixes.
 function actionEditorWireFragment(prefixes) {
-    if (typeof getDeviceInfo === 'function') {
-        getDeviceInfo().then(function(info) {
-            if (info && info.available_screens) {
-                actionEditorPopulateScreens(prefixes, info.available_screens);
-            }
-            if (info && info.has_sound_player === true) {
-                fetch('/api/sounds/list').then(function(r) { return r.ok ? r.json() : []; })
-                    .then(function(sounds) { actionEditorPopulateSounds(prefixes, sounds); })
-                    .catch(function() {});
-            }
-        });
-    }
+    if (typeof getDeviceInfo !== 'function') return Promise.resolve();
+    return getDeviceInfo().then(function(info) {
+        return Promise.all(_actionEditorExtensions.map(function(extension) {
+            return extension.wireFragment ? extension.wireFragment(prefixes, info) : null;
+        }));
+    });
 }

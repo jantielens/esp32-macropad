@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Move specialized action forms, command handling, defaults, validation, and
+  payload construction into dedicated portal editor extensions. Keep the shared
+  editor focused on catalog-backed fields, extension dispatch, unsupported-action
+  preservation, and action-list infrastructure; preserve bindings and existing
+  widget helper consumers.
+
+### Fixed
+
+* Preserve selected and deferred Screen action targets when refreshing available
+  screens, including list-widget synthetic targets.
+
 ## [1.38.0] - 2026-10-08
 
 ### Added

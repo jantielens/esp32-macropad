@@ -519,7 +519,9 @@ foreach(script
     endif()
 endforeach()
 
-foreach(script portal_action_editor.js portal_binding_validator.js portal_pad_dialog.js portal_config_actions.js portal_recipes.js)
+file(GLOB action_editor_scripts CONFIGURE_DEPENDS RELATIVE "${PROJECT_SOURCE_DIR}/src/app/web"
+    "${PROJECT_SOURCE_DIR}/src/app/web/portal_action_editor*.js")
+foreach(script ${action_editor_scripts} portal_binding_validator.js portal_pad_dialog.js portal_config_actions.js portal_recipes.js)
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(check_${name}_syntax node --check ${PROJECT_SOURCE_DIR}/src/app/web/${script})
 endforeach()

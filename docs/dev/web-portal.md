@@ -1155,6 +1155,37 @@ Returns comprehensive device information.
 - The portal uses this projection to populate action type, command, and simple field controls. MCP capability metadata uses the same catalog source with field documentation included.
 - Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, `record_cancel`, and `speak` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. Azure transcription has a 30-second limit and no automatic retry. Failure sets `[stt:status]` to `error`, puts the reason in `[stt:text]`, and stops the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation. `speak` resolves its text field as a binding template, then queues best-effort Azure TTS with optional voice and volume overrides; it does not pause the action list, and provider failures are logged without changing the STT bindings. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
 
+**Action Editor Ownership:**
+
+The shared `portal_action_editor.js` owns catalog access, common field rendering,
+extension dispatch, unsupported-action preservation, and fixed action-list slots.
+It does not own built-in action forms or command-specific payload rules.
+Specialized actions use `portal_action_editor_<type>.js` extensions registered in
+`_actionEditorExtensions`; simple actions continue using firmware `editor_fields`
+without a JavaScript extension or a second command catalog.
+
+Each specialized extension keeps its rendering (`groups`), visibility and command
+handling (`typeChanged`), defaults (`load`), and validation/payload construction
+(`build`) together. Build hooks return `null` for other types.
+Extensions can declare `bindingSuffixes`
+and `colorSuffixes` for shared, idempotent binding setup. Dialog validation uses
+these declarations and catalog bindable fields for the selected action only.
+An optional `wireFragment(prefixes, info)` hook supplies asynchronous options;
+shared wiring awaits all hooks after fetching device info once.
+
+The Screen extension owns dynamic screen targets and list-widget synthetic
+options. Sound Alert owns sound-list population, including catalog-backed sound
+selectors. Gamepad owns the helpers also consumed by the held-control widget;
+widget markup remains in the pad editor. Register extensions after the shared
+editor and before consumers in the existing feature-gated bundle chunks.
+Unsupported actions retain their loaded payloads unchanged. This portal refactor
+does not alter firmware rejection of retired audio aliases or invalid loop kinds.
+
+Run the action picker, action-list, cycle, timer, and startup host regressions after
+each migration, followed by asset minification and desktop/mobile checks. The
+picker guards the ownership boundary and exercises payload round-trips against
+the production catalog.
+
 **Display Fields** (only when `has_display` is `true`):
 - `widget_catalog`: Present only with `?catalog=1`. Array of registered widget
   preview descriptors with `type`, `name`, and `icon` (Material Symbol name).

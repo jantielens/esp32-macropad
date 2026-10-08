@@ -164,10 +164,20 @@ async function main() {
     }
     const extensionSelect = selectNode();
     const soundSelect = selectNode();
+    const screenSelect = selectNode();
+    screenSelect.attributes = {};
+    screenSelect.getAttribute = name => screenSelect.attributes[name];
+    screenSelect.hasAttribute = name => Object.hasOwn(screenSelect.attributes, name);
+    screenSelect.setAttribute = (name, value) => { screenSelect.attributes[name] = value; };
+    screenSelect.removeAttribute = name => { delete screenSelect.attributes[name]; };
+    screenSelect.remove = index => {
+        if (screenSelect.options[index].value === screenSelect.value) screenSelect.value = '';
+        screenSelect.options.splice(index, 1);
+    };
     context.document.createElement = () => ({ value: '', textContent: '' });
     context.document.getElementById = id => id === 'pad-edit-extension-id' ? extensionSelect :
-        id === 'test-sound-alert-file' ? soundSelect : null;
-    for (const module of ['portal_pad_dialog', 'portal_action_editor']) {
+        id === 'test-sound-alert-file' ? soundSelect : id === 'test-target' ? screenSelect : null;
+    for (const module of ['portal_pad_dialog', 'portal_action_editor', 'portal_action_editor_screen', 'portal_action_editor_sound_alert']) {
         vm.runInContext(fs.readFileSync('src/app/web/' + module + '.js', 'utf8'), context);
     }
     vm.runInContext('padExtensionCatalogLoading = true;', context);
@@ -189,6 +199,29 @@ async function main() {
     context.actionEditorPopulateSounds(['test'], ['saved.mp3']);
     assert.strictEqual(soundSelect.value, 'saved.mp3');
     assert.strictEqual(soundSelect.options.filter(option => option.value === 'saved.mp3').length, 1);
+    const screens = [{id:'pad_1', name:'Pad 2'}, {id:'pad_2', name:'Pad 3'}];
+    context.actionEditorPopulateScreens(['test'], screens);
+    screenSelect.value = 'pad_2';
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(screenSelect.value, 'pad_2', 'refresh must retain a selected screen');
+    screenSelect.setAttribute('data-pending-value', 'pad_1');
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(screenSelect.value, 'pad_1', 'refresh must restore a deferred target');
+    assert(!screenSelect.hasAttribute('data-pending-value'));
+    let soundRequests = 0;
+    context.getDeviceInfo = async () => ({ has_sound_player:false });
+    context.fetch = async url => {
+        assert.strictEqual(url, '/api/sounds/list');
+        soundRequests++;
+        return {ok:true, json:async () => ['new.mp3']};
+    };
+    await context.actionEditorWireFragment(['test']);
+    assert.strictEqual(soundRequests, 0, 'unsupported audio must not fetch sounds');
+    context.getDeviceInfo = async () => ({ has_sound_player:true });
+    await context.actionEditorWireFragment(['test']);
+    assert.strictEqual(soundRequests, 1, 'fragment wiring fetches sounds once for every editor prefix');
+    assert(soundSelect.options.some(option => option.value === 'new.mp3'));
+    assert.strictEqual(soundSelect.value, 'saved.mp3');
     const navSource = fs.readFileSync('src/app/web/portal_nav.js', 'utf8');
     const assets = [];
     const assetContext = { document: {

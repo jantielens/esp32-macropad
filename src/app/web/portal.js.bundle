@@ -34,6 +34,16 @@ portal_binding_validator.js
 # Action editor + config actions UI: only reachable from pad/swipe/boot/timer
 # editors, all of which are HAS_DISPLAY-gated fragments.
 portal_action_editor.js
+portal_action_editor_screen.js
+portal_action_editor_cycle_pad.js
+portal_action_editor_mqtt.js
+portal_action_editor_key.js
+portal_action_editor_sound_alert.js
+portal_action_editor_timer.js
+portal_action_editor_notify.js
+portal_action_editor_visual_alert.js
+portal_action_editor_delay.js
+portal_action_editor_gamepad.js
 portal_config_actions.js
 
 # Home Assistant Service action-editor extension. Registers the "ha_service"

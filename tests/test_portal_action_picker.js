@@ -133,6 +133,16 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_screen.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_cycle_pad.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_mqtt.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_key.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_sound_alert.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_timer.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_notify.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_visual_alert.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_delay.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_gamepad.js', 'utf8'), context);
 vm.runInContext(
     fs.readFileSync('src/app/device_classes/shutter_tester/web/portal_action_editor_shutter.js', 'utf8'),
     context
@@ -259,6 +269,44 @@ assert.strictEqual(delayAction.duration_ms, 2500);
 const editorSource = fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8');
 assert(!editorSource.includes('querySelectorAll'));
 assert(editorSource.includes('action-type-select'));
+const specializedTypes = ['screen', 'cycle_pad', 'mqtt', 'key', 'sound_alert', 'timer', 'notify', 'visual_alert', 'delay', 'gamepad'];
+const manifest = fs.readFileSync('src/app/web/portal.js.bundle', 'utf8');
+for (const type of specializedTypes) {
+    assert(!new RegExp("(?:type|action\\.type)\\s*===?\\s*['\"]" + type + "['\"]").test(editorSource), 'shared editor must not branch on ' + type);
+    const filename = 'portal_action_editor_' + type + '.js';
+    assert(manifest.indexOf(filename) > manifest.indexOf('portal_action_editor.js'), 'extension dependency order: ' + type);
+    const extension = context._actionEditorExtensions.find(candidate => candidate.type === type);
+    assert(extension && extension.groups && extension.load && extension.build && extension.typeChanged, 'complete ownership: ' + type);
+}
+for (const suffix of ['-timer-action', '-sound-alert-file', '-gamepad-control', '-cycle-pad-exclusions', '-notify-text', '-va-color', '-delay-duration', '-target', '-topic', '-sequence']) {
+    assert(!editorSource.includes(suffix), 'shared editor must not own action controls: ' + suffix);
+}
+assert.deepStrictEqual(Array.from(context.actionEditorBindingSuffixes('mqtt')), ['-topic', '-payload']);
+assert.deepStrictEqual(Array.from(context.actionEditorBindingSuffixes('volume')), ['-generic-volume-volume_value']);
+assert(!context.actionEditorBindingSuffixes('delay').length);
+let attachedBindings = [];
+context.bindingAttachValidation = input => attachedBindings.push(input);
+context.actionEditorLoad('binding-test', {type:'mqtt', topic:'[mqtt:topic]', payload:'{step}'});
+context.actionEditorTypeChanged('binding-test');
+assert.strictEqual(attachedBindings.length, 2, 'binding setup must be idempotent');
+assert(attachedBindings.includes(document.getElementById('binding-test-topic')));
+context.actionEditorLoad('binding-test', {type:'key', sequence:'ctrl+c'});
+assert.strictEqual(attachedBindings.length, 3);
+const unknownAction = {type:'future_action', custom:{nested:[1, 2]}, enabled:false};
+context.actionEditorLoad('unknown-test', unknownAction);
+assert.deepStrictEqual(context.actionEditorBuild('unknown-test'), unknownAction);
+document.getElementById('unknown-test-type').value = 'back';
+context.actionEditorTypeChanged('unknown-test');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('unknown-test'))), {type:'back'});
+for (const invalid of ['', '0', '-1', '1.5', '55001', '[mqtt:duration]']) {
+    context.actionEditorLoad(prefix, {type:'delay', duration_ms:1000});
+    document.getElementById(prefix + '-delay-duration').value = invalid;
+    assert.throws(() => context.actionEditorBuild(prefix), /Delay duration/);
+}
+for (const duration of [1, 55000]) {
+    document.getElementById(prefix + '-delay-duration').value = String(duration);
+    assert.strictEqual(context.actionEditorBuild(prefix).duration_ms, duration);
+}
 
 FIXTURE_CATALOG[0].alarm_hook_allowed = true;
 context.actionEditorListRender('alarm-hooks', ['alarm-hook-1'], null, {actionOptions:{alarmHook:true}});
@@ -346,6 +394,33 @@ for (const label of ['Seconds until the next scheduled alarm; excludes snooze.',
 }
 console.log('portal_action_picker: PASS');
 context.deviceInfoCache.catalog = productionCatalogs.portal;
+const roundTrips = [
+    {type:'mqtt', topic:'home/topic', payload:'[mqtt:value]'},
+    {type:'key', sequence:'ctrl+c'},
+    {type:'cycle_pad', direction:'previous', wrap:false, excluded_pads:'1,3'},
+    {type:'sound_alert', sound_alert_kind:'tone', sound_alert_pattern:'1000:200 100', sound_alert_volume:50},
+    {type:'sound_alert', sound_alert_kind:'mp3', sound_alert_file:'missing-sound', sound_alert_volume:60},
+    {type:'sound_alert', sound_alert_kind:'stop'},
+    {type:'notify', notify_text:'[mqtt:message]', notify_duration_ms:'0', notify_location:'center', notify_opacity:75, notify_font_size:20},
+    {type:'visual_alert', op:'stop', pattern:'blink', period_ms:900, intensity:75, duration_ms:5000},
+    {type:'timer', timer_id:2, timer_command:'adjust', timer_value:'{step}'},
+    {type:'delay', duration_ms:55000}
+];
+for (const action of roundTrips) {
+    context.actionEditorLoad('round-trip', action);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), action, 'round-trip: ' + action.type);
+}
+context.actionEditorLoad('round-trip', {type:'sound_alert'});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'sound_alert', sound_alert_kind:'tone', sound_alert_pattern:''});
+context.actionEditorLoad('round-trip', {type:'notify'});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'notify', notify_text:'', notify_duration_ms:'3000', notify_location:'bottom'});
+context.actionEditorLoad('round-trip', {type:'delay'});
+assert.strictEqual(context.actionEditorBuild('round-trip').duration_ms, 1000);
+context.actionEditorLoad('round-trip', {type:'visual_alert', op:'stop'});
+assert.strictEqual(document.getElementById('round-trip-va-config-group').style.display, 'none');
+context.actionEditorLoad('round-trip', {type:'sound_alert', sound_alert_kind:'mp3'});
+assert.strictEqual(document.getElementById('round-trip-sound-alert-tone-group').style.display, 'none');
+assert.strictEqual(document.getElementById('round-trip-sound-alert-mp3-group').style.display, '');
 const productionOptions = context.actionEditorTypeOptionsHTML({alarmHook:true});
 for (const entry of productionCatalogs.portal) {
     assert.strictEqual(productionOptions.includes('<option value="' + entry.type + '">'),
