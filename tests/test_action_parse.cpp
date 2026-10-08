@@ -317,8 +317,8 @@ TEST(alarm_audio_round_trip) {
     ASSERT_STR(metadata["label"] | "", "Loop MP3");
     ASSERT_EQ(action_type_find("alarm_tone")->execution, ACTION_EXECUTION_SYNC);
     ButtonAction legacy = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone_loop\",\"sound_alert_pattern\":\"1000:200 800\"}");
-    ASSERT_STR(legacy.type, "sound_alert");
-    ASSERT_STR(legacy.payload.sound_alert.sound_alert_kind, "tone_loop");
+    ASSERT_STR(legacy.type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"mp3_loop\",\"sound_alert_file\":\"wake-up\"}").type, "");
 #else
     for (const char* type : {"alarm", "alarm_tone", "alarm_mp3"}) {
         ASSERT_TRUE(action_type_find(type) == nullptr);

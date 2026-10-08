@@ -83,8 +83,8 @@ def reset_pad_fixtures(server, scenario="normal"):
                           {"name": "alarm_value", "label": "Adjustment (minutes)", "type": "text", "bindable": True},
                           {"name": "alarm_day", "label": "Day", "type": "select", "numeric": True, "default": "1",
                            "options": [{"id": day, "label": name} for day, name in enumerate(("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))]}]})
-    for action_type, label, source in (("alarm_tone", "Alarm tone", "sound_alert_pattern"),
-                                      ("alarm_mp3", "Alarm MP3", "sound_alert_file")):
+    for action_type, label, source in (("alarm_tone", "Loop Tone", "sound_alert_pattern"),
+                                      ("alarm_mp3", "Loop MP3", "sound_alert_file")):
         field = {"name": source, "label": "MP3 file" if action_type == "alarm_mp3" else "Tone pattern",
                  "type": "select" if action_type == "alarm_mp3" else "text",
                  "help": "Repeats until stopped. Stop audio stops playback; Dismiss alarm ends the alarm session."}

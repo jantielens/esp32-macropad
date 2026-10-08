@@ -14,16 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-10-08
+
 ### Added
 
-* Alarm Clock recipe with a digital clock, scheduled-time status, Snooze, and
-  confirmed Dismiss alarm controls. It opens the selected pad when ringing and
-  installs Alarm 1 disabled, preserving its schedule and durations. Recipe
-  confirmations, the reserved `${target_pad}` substitution, alarm/audio capability
-  requirements, and recipe-specific post-install instructions and internal links
-  support setup. Component configuration runs only after the pad saves successfully;
-  partial installation failures are reported without showing completion instructions.
-* Persistent alarm clock on alarm-enabled display boards, with one stable slot,
+* Alarm clock on alarm-enabled display boards, with persistent settings, one stable slot,
   weekly weekday scheduling, configurable snooze and auto-dismiss, and up to
   three synchronous ring and stop actions. Alternating checksummed filesystem
   snapshots preserve settings and handled occurrences. Scheduling requires
@@ -32,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0-10080 whole minutes (zero allows on-time only). Only the latest eligible
   occurrence rings; persisted edit/timezone eligibility fences prevent surprise
   catch-up after configuration changes. Ringing and snooze sessions are not restored.
+* Alarm Clock recipe with a digital clock, scheduled-time status, Snooze, and
+  confirmed Dismiss alarm controls. It opens the selected pad when ringing and
+  installs Alarm 1 disabled, preserving its schedule and durations. Recipe
+  confirmations, the reserved `${target_pad}` substitution, alarm/audio capability
+  requirements, and recipe-specific post-install instructions and internal links
+  support setup. Component configuration runs only after the pad saves successfully;
+  partial installation failures are reported without showing completion instructions.
 * Alarm Control buttons and MCP commands for Snooze, Cancel, and editing alarm
   time, weekdays, and enabled state. Signed minute adjustments wrap within
   24 hours and support Numeric Rocker steps. The action editor shows only fields
@@ -49,10 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   occurrence and disables future scheduling, while snooze remains available within the session.
   Missed one-shots disable rather than moving to another day. The Alarm form
   explains once versus weekly settings and displays the saved device-local date.
-* Weekly and one-shot alarms ring even when occurrence-record writes fail.
+  Weekly and one-shot alarms ring even when occurrence-record writes fail.
   RAM prevents duplicates during that boot; failed records retry every ten
   seconds and expose storage errors. Reboot before a successful retry can repeat
-  the alarm. Alarm snapshots use schema 3 with no development-config migration.
+  the alarm.
 * Dedicated Timezone settings with grouped city choices, a non-mutating
   device-time preview, and save without reboot. The device timezone supplies
   alarm scheduling and the default for clock bindings without an explicit
