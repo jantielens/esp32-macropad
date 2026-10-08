@@ -5,6 +5,7 @@
 #include "../board_config.h"
 #include "../display_manager.h"
 #include "../swipe_actions.h"
+#include "../display_geometry.h"
 #include <WiFi.h>
 #include <esp_chip_info.h>
 
@@ -94,6 +95,21 @@ void InfoScreen::create() {
 		lv_obj_set_style_text_color(ipLabel, lv_color_make(100, 200, 255), 0);
 		lv_obj_align(ipLabel, LV_ALIGN_CENTER, 0, 60);
 		lv_obj_clear_flag(ipLabel, LV_OBJ_FLAG_CLICKABLE);  // Click-transparent
+
+		#if HAS_M5STACK_STOPWATCH
+		const DisplayContentRect content = display_safe_content_rect(
+			lv_obj_get_width(screen), lv_obj_get_height(screen));
+		lv_obj_t* labels[] = {uptimeLabel, versionLabel, heapLabel, deviceNameLabel,
+			chipLabel, mdnsLabel, ipLabel};
+		for (lv_obj_t* label : labels) {
+			lv_obj_set_width(label, content.w - 24);
+			lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+			lv_obj_set_height(label, lv_font_get_line_height(
+				lv_obj_get_style_text_font(label, LV_PART_MAIN)));
+		}
+		lv_obj_set_width(separatorTop, content.w);
+		lv_obj_set_width(separatorBottom, content.w);
+		#endif
 		
 
 		

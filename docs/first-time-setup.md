@@ -109,6 +109,8 @@ never connect a battery. On v1.0.1, `*BAT` is a battery connection.
   and two quick presses for power-off. Firmware does not remap this button.
 - **Programmable buttons:** configure yellow and blue tap/hold actions through
   the existing hardware-button controls in the portal.
+- **Pad layout:** the grid uses a centered inscribed square so corner buttons
+  remain visible. Pad insets and pixel-shift settings apply inside that area.
 - **Brightness:** existing brightness and screen-saver controls send AMOLED
   commands; this device has no backlight GPIO. Start at low brightness and avoid
   leaving static content illuminated for long periods.

@@ -3,6 +3,7 @@
 #include "log_manager.h"
 #include "png_assets.h"
 #include "board_config.h"
+#include "display_geometry.h"
 
 // Scale layout and widget sizes based on screen resolution.
 // Returns a scale tier: 0 = small (≤360), 1 = medium (≤480), 2 = large (≥720).
@@ -76,7 +77,13 @@ void SplashScreen::create() {
 		statusLabel = lv_label_create(screen);
 		lv_label_set_text(statusLabel, "Booting...");
 		lv_label_set_long_mode(statusLabel, LV_LABEL_LONG_WRAP);
-		lv_obj_set_width(statusLabel, (lv_coord_t)(lv_obj_get_width(screen) - 24));
+		const DisplayContentRect content = display_safe_content_rect(
+			lv_obj_get_width(screen), lv_obj_get_height(screen));
+		lv_obj_set_width(statusLabel, (lv_coord_t)(content.w - 24));
+		#if HAS_M5STACK_STOPWATCH
+		lv_obj_set_style_max_height(statusLabel, content.h / 3, 0);
+		lv_label_set_long_mode(statusLabel, LV_LABEL_LONG_DOT);
+		#endif
 		lv_obj_set_style_text_align(statusLabel, LV_TEXT_ALIGN_CENTER, 0);
 		#if HAS_LVGL_EPAPER
 		lv_obj_set_style_text_color(statusLabel, lv_color_black(), 0);

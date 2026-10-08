@@ -15,6 +15,8 @@ public:
 private:
     bool available = false;
     bool calibration = false;
+    bool recovering = false;
+    uint32_t retryAfter = 0;
     uint8_t rotation = 0;
     uint16_t xmin = 0, xmax = 233, ymin = 0, ymax = 233;
     TouchSample last;

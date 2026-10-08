@@ -20,6 +20,8 @@ public:
     void setVolume(uint8_t vol_0_100) override;
 #if HAS_M5STACK_STOPWATCH
     void setMuted(bool muted) override;
+    bool isAvailable() const override;
+    void end() override { cleanup(); }
 #endif
 #if HAS_AUDIO_INPUT
     bool inputAvailable() const override;

@@ -77,6 +77,13 @@ Rotation and partial writes must be checked with asymmetric patterns and
 RGB565 color bars on hardware; the adapter does not inherit the AXS15231B
 full-frame workaround.
 
+StopWatch content uses a centered inscribed square through
+`display_safe_content_rect()`: pad grid computation (including the existing
+portal button-size calculation), splash/status text, info labels, and
+notification bounds share this safe area. Runtime pad insets and pixel-shift
+reserves are applied inside it. Other boards retain their existing content
+bounds; this does not introduce a stopwatch screen or device class.
+
 ### StopWatch CST820B Touch
 
 `TOUCH_DRIVER_CST820B_WIRE` selects a dedicated CST820B adapter on the same

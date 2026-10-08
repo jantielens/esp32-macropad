@@ -90,6 +90,22 @@ add_host_legacy_test(test_pad_layout
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 
+add_host_legacy_test(test_stopwatch_round_layout
+    SOURCES test_pad_layout.cpp
+    DEFINITIONS HAS_M5STACK_STOPWATCH=1 UI_SCALE_TIER=1
+    INCLUDES ${HOST_LVGL_DIR}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+
+add_host_legacy_test(test_stopwatch_round_ui
+    SOURCES test_stopwatch_round_ui.cpp ${PROJECT_SOURCE_DIR}/src/app/png_assets.cpp
+    DEFINITIONS HAS_M5STACK_STOPWATCH=1 UI_SCALE_TIER=1 DISPLAY_DISABLE_ANIMATIONS=1
+    OPTIONS -Wno-missing-field-initializers
+    INCLUDES ${HOST_LVGL_DIR}
+    LIBRARIES host_lvgl
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+
 add_host_legacy_test(test_numericrocker_zones
     SOURCES test_numericrocker_zones.cpp
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h

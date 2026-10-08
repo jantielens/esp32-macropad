@@ -187,6 +187,12 @@ and IO3**, respectively, not ESP32 GPIOs. Board initialization keeps both off;
 the ES8311 hardware path owns enabling and muting them through the shared I2C
 bus. The unused microphone input stays disabled.
 
+StopWatch startup keeps the amplifier muted through codec initialization,
+initial volume programming, and a short silence write, then unmutes it.
+Transport/control errors and audio queue/task allocation failures tear down
+the output and leave the amplifier and audio rail off. Other boards retain
+their existing initialization path.
+
 MP3 scratch is PSRAM-backed, while I2S DMA and the flash-accessing audio task
 remain in internal RAM. Check startup silence, volume, mute/shutdown, beep and
 MP3 playback, and the largest internal/DMA-capable block during simultaneous

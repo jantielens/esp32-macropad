@@ -10,7 +10,7 @@ namespace {
 constexpr uint8_t kPmic = 0x6e;
 constexpr uint8_t kTouch = 0x15;
 uint8_t expander = 0;
-bool attempted = false;
+bool wireStarted = false;
 bool ready = false;
 bool audioPowered = false;
 
@@ -48,7 +48,10 @@ bool update(uint8_t address, uint8_t reg, uint8_t mask, uint8_t value) {
 }
 
 bool initialize() {
-    if (!Wire.begin(47, 48, 100000)) return false;
+    if (!wireStarted) {
+        if (!Wire.begin(47, 48, 100000)) return false;
+        wireStarted = true;
+    }
     if (probe(0x4f)) expander = 0x4f;
     else if (probe(0x6f)) expander = 0x6f;
     else return false;
@@ -56,6 +59,11 @@ bool initialize() {
     // Latch motor/PA low before making IO9/IO10 push-pull outputs.
     if (!write(expander, 0x23, 0) ||
         !update(expander, 0x06, 0x03, 0) ||
+        // Retained PWM overrides the GPIO latch: PWM1=IO9, PWM2=IO8,
+        // PWM4=IO10. Leave PWM3 (unowned IO11) and shared frequency alone.
+        !update(expander, 0x1c, 0x80, 0) ||
+        !update(expander, 0x1e, 0x80, 0) ||
+        !update(expander, 0x22, 0x80, 0) ||
         !update(expander, 0x14, 0x03, 0) ||
         !update(expander, 0x04, 0x03, 0x03) ||
         !update(expander, 0x05, 0x04, 0) ||
@@ -85,13 +93,16 @@ bool initialize() {
 bool m5stack_stopwatch_init() {
     i2c_bus_init();
     if (!i2c_bus_lock()) return false;
-    if (!attempted) {
-        attempted = true;
+    if (!ready) {
+        audioPowered = false;
         ready = initialize();
         if (!ready && expander) {
             // Best-effort safe outputs even if the bus failed midway.
             update(expander, 0x06, 0x03, 0);
             update(expander, 0x05, 0x9c, 0);
+            update(expander, 0x1c, 0x80, 0);
+            update(expander, 0x1e, 0x80, 0);
+            update(expander, 0x22, 0x80, 0);
         }
     }
     const bool result = ready;

@@ -13,6 +13,8 @@ public:
     virtual void setVolume(uint8_t vol_0_100) = 0;
 
     virtual void setMuted(bool muted);
+    virtual bool isAvailable() const { return true; }
+    virtual void end() {}
     virtual void flush() {}
 };
 

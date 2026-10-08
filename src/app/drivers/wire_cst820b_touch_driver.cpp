@@ -48,10 +48,16 @@ TouchSample Wire_CST820B_TouchDriver::readSample() {
     if (!available) return sample;
     // Poll through a held contact to capture release, even after IRQ goes high.
     const bool pending = cst820b_irq_pending.exchange(false, std::memory_order_relaxed);
-    if (!pending && digitalRead(13) != LOW && !last.pressed) {
+    const uint32_t now = millis();
+    if (recovering && !pending && int32_t(now - retryAfter) < 0) return sample;
+    if (!pending && digitalRead(13) != LOW && !last.pressed && !recovering) {
         sample.status = TouchReadStatus::Unchanged;
         return sample;
     }
+    // A failed read is not a release. Retry even with IRQ high so a genuine
+    // Fresh release can clear the touch filter's error/cancellation episode.
+    recovering = true;
+    retryAfter = now + 50;
     uint8_t data[5];
     if (!m5stack_stopwatch_touch_read(data, sizeof(data))) return sample;
     const uint8_t event = data[1] >> 6;
@@ -77,6 +83,7 @@ TouchSample Wire_CST820B_TouchDriver::readSample() {
         sample.horizontal = tx; sample.vertical = ty;
     }
     last = sample;
+    recovering = false;
     return sample;
 }
 

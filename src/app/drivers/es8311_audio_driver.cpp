@@ -5,6 +5,9 @@
 #include "i2c_bus.h"
 #include "log_manager.h"
 #include "m5stack_stopwatch.h"
+#if HAS_M5STACK_STOPWATCH
+#include <atomic>
+#endif
 
 #define TAG "Audio"
 
@@ -101,7 +104,7 @@ static const ES8311Coeff* es8311_find_coeff(uint32_t mclk_hz, uint32_t sample_ra
 }
 
 #if HAS_M5STACK_STOPWATCH
-static bool codec_io_failed = false;
+static std::atomic<bool> codec_io_failed{false};
 #endif
 
 static bool es8311_write(uint8_t reg, uint8_t val) {
@@ -117,7 +120,7 @@ static bool es8311_write(uint8_t reg, uint8_t val) {
     bool ok = Wire.endTransmission() == 0 && reg_written && val_written;
     i2c_bus_unlock();
 #if HAS_M5STACK_STOPWATCH
-    codec_io_failed |= !ok;
+    if (!ok) codec_io_failed = true;
 #endif
     return ok;
 }
@@ -138,7 +141,7 @@ static uint8_t es8311_read(uint8_t reg) {
     uint8_t val = ok ? Wire.read() : 0xFF;
     i2c_bus_unlock();
 #if HAS_M5STACK_STOPWATCH
-    codec_io_failed |= !ok;
+    if (!ok) codec_io_failed = true;
 #endif
     return val;
 }
@@ -406,8 +409,17 @@ void ES8311AudioDriver::setVolume(uint8_t vol_0_100) {
 }
 
 #if HAS_M5STACK_STOPWATCH
+bool ES8311AudioDriver::isAvailable() const {
+    return tx_handle != nullptr && !codec_io_failed;
+}
+
 void ES8311AudioDriver::setMuted(bool muted) {
+    if (!muted && codec_io_failed) {
+        m5stack_stopwatch_audio_power(false);
+        return;
+    }
     if (!m5stack_stopwatch_audio_mute(muted)) {
+        codec_io_failed = true;
         LOGW(TAG, "StopWatch amplifier control failed");
         m5stack_stopwatch_audio_power(false);
     }

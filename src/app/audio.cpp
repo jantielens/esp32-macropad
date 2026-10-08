@@ -508,7 +508,26 @@ static void audio_task(void* param) {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+#if HAS_M5STACK_STOPWATCH
+static void audio_stopwatch_init_abort() {
+    output_driver->end();
+#if HAS_SOUND_PLAYER
+    if (music_work_queue) {
+        vQueueDelete(music_work_queue);
+        music_work_queue = NULL;
+    }
+    if (g_music_catalog_refresh_sem) {
+        vSemaphoreDelete(g_music_catalog_refresh_sem);
+        g_music_catalog_refresh_sem = nullptr;
+    }
+#endif
+}
+#endif
+
 void audio_init(uint8_t initial_volume) {
+#if HAS_M5STACK_STOPWATCH
+    if (audio_initialized) return;
+#endif
     LOGI(TAG, "Initializing audio output");
 
 #if HAS_MUSIC_ANALYSIS
@@ -521,10 +540,31 @@ void audio_init(uint8_t initial_volume) {
         LOGE(TAG, "No audio output driver");
         return;
     }
+#if HAS_M5STACK_STOPWATCH
+    output_driver->setMuted(true);
+#else
     output_driver->setMuted(false);
+#endif
     if (!output_driver->begin(AUDIO_SAMPLE_RATE)) return;
 
     output_driver->setVolume(current_volume);
+#if HAS_M5STACK_STOPWATCH
+    if (!output_driver->isAvailable()) {
+        audio_stopwatch_init_abort();
+        return;
+    }
+    int16_t silence[64] = {};
+    if (!output_driver->write(silence, 32)) {
+        audio_stopwatch_init_abort();
+        return;
+    }
+    // Codec, volume, and a silent I2S frame are ready before enabling PA.
+    output_driver->setMuted(false);
+    if (!output_driver->isAvailable()) {
+        audio_stopwatch_init_abort();
+        return;
+    }
+#endif
 
     // Create command queue and audio task. The stack remains internal because
     // sound playback reads LittleFS while the flash cache is disabled.
@@ -534,6 +574,9 @@ void audio_init(uint8_t initial_volume) {
     audio_queue = xQueueCreate(AUDIO_QUEUE_DEPTH, sizeof(AudioCommand));
     if (!audio_queue) {
         LOGE(TAG, "Failed to create audio queue");
+#if HAS_M5STACK_STOPWATCH
+        audio_stopwatch_init_abort();
+#endif
         return;
     }
 
@@ -543,6 +586,9 @@ void audio_init(uint8_t initial_volume) {
         LOGE(TAG, "Failed to create Music work queue");
         vQueueDelete(audio_queue);
         audio_queue = NULL;
+#if HAS_M5STACK_STOPWATCH
+        audio_stopwatch_init_abort();
+#endif
         return;
     }
     if (!music_catalog_store_init()) {
@@ -553,6 +599,9 @@ void audio_init(uint8_t initial_volume) {
         LOGE(TAG, "Failed to create Music catalog refresh semaphore");
         vQueueDelete(audio_queue);
         audio_queue = NULL;
+#if HAS_M5STACK_STOPWATCH
+        audio_stopwatch_init_abort();
+#endif
         return;
     }
 #endif
@@ -563,6 +612,9 @@ void audio_init(uint8_t initial_volume) {
         LOGE(TAG, "Failed to create audio task with internal stack");
         vQueueDelete(audio_queue);
         audio_queue = NULL;
+#if HAS_M5STACK_STOPWATCH
+        audio_stopwatch_init_abort();
+#endif
         return;
     }
 

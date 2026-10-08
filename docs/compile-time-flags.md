@@ -834,12 +834,16 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_M5STACK_STOPWATCH**
   - src/app/app.ino
   - src/app/board_config.h
+  - src/app/display_geometry.h
   - src/app/drivers/arduino_gfx_co5300_driver.cpp
   - src/app/drivers/es8311_audio_driver.cpp
   - src/app/drivers/es8311_audio_driver.h
   - src/app/drivers/wire_cst820b_touch_driver.cpp
   - src/app/m5stack_stopwatch.cpp
   - src/app/m5stack_stopwatch.h
+  - src/app/message_bubble.cpp
+  - src/app/screens/info_screen.cpp
+  - src/app/screens/splash_screen.cpp
   - src/app/sensors.cpp
 - **HAS_MCP**
   - src/app/board_config.h

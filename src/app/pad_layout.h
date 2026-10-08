@@ -3,6 +3,7 @@
 
 #include "board_config.h"
 #include "pad_config.h"
+#include "display_geometry.h"
 #if HAS_CUSTOM_FONTS
 #include "fonts/custom_fonts.h"
 #endif
@@ -213,8 +214,9 @@ static inline void pad_compute_grid(
         ? layout_space->pixel_shift_margin : DEFAULT_PIXEL_SHIFT_DISTANCE;
     const uint16_t inset_w = 2 * pixel_shift_margin + left + right;
     const uint16_t inset_h = 2 * pixel_shift_margin + top + bottom;
-    const uint16_t safe_w = display_w > inset_w ? display_w - inset_w : 0;
-    const uint16_t safe_h = display_h > inset_h ? display_h - inset_h : 0;
+    const DisplayContentRect content = display_safe_content_rect(display_w, display_h);
+    const uint16_t safe_w = content.w > inset_w ? content.w - inset_w : 0;
+    const uint16_t safe_h = content.h > inset_h ? content.h - inset_h : 0;
 
     const uint16_t total_gap_x = (cols - 1) * gap_x;
     const uint16_t total_gap_y = (rows - 1) * gap_y;
@@ -227,8 +229,8 @@ static inline void pad_compute_grid(
         const uint8_t cs = button_col_spans[i] > 0 ? button_col_spans[i] : 1;
         const uint8_t rs = button_row_spans[i] > 0 ? button_row_spans[i] : 1;
 
-        out_rects[i].x = pixel_shift_margin + left + c * (tile_w + gap_x);
-        out_rects[i].y = pixel_shift_margin + top + r * (tile_h + gap_y);
+        out_rects[i].x = content.x + pixel_shift_margin + left + c * (tile_w + gap_x);
+        out_rects[i].y = content.y + pixel_shift_margin + top + r * (tile_h + gap_y);
         out_rects[i].w = cs * tile_w + (cs - 1) * gap_x;
         out_rects[i].h = rs * tile_h + (rs - 1) * gap_y;
     }
