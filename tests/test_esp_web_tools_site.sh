@@ -54,6 +54,14 @@ BUILD_DIR="$TMP_DIR/build" \
 ./tools/build-esp-web-tools-site.sh "$TMP_DIR/site"
 
 test -f "$TMP_DIR/site/manifests/esp32-p4-lcd4b-voice.json"
+test -f "$TMP_DIR/site/manifests/m5stack-stopwatch.json"
+jq -e '.builds[0].chipFamily == "ESP32-S3"' \
+    "$TMP_DIR/site/manifests/m5stack-stopwatch.json" >/dev/null
+grep -q 'M5Stack StopWatch' "$TMP_DIR/site/devices/macropad.html"
+jq -e '.device_class == "macropad" and .flash_mb == 16 and .psram_mb == 8
+    and .display.resolution == "466x466" and .display.type == "AMOLED"
+    and .wireless.ble == false and .capabilities == []' \
+    "$PROJECT_DIR/src/boards/m5stack-stopwatch/metadata.json" >/dev/null
 for page in index flash update extensions; do
     test -f "$TMP_DIR/site/$page.html"
 done
