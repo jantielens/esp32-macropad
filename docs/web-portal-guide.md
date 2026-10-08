@@ -12,7 +12,21 @@ The ESP32 Macropad includes a built-in web portal for configuring every aspect o
 | **AP Mode** (first boot / factory reset) | Wi-Fi not configured | Connect to the device's Wi-Fi, then go to `http://192.168.4.1` |
 | **Full Mode** (normal operation) | Connected to your Wi-Fi | `http://<device-name>.local` or the device's IP address |
 
-In AP mode, only the Network page is available. In Full mode, the standard four pages are accessible, and e-paper boards also expose a dedicated E-Paper page.
+In AP mode, the portal opens device setup. In Full mode, the sidebar groups
+settings by category, with additional categories and controls for supported
+hardware and device classes.
+
+## Portal Appearance
+
+Navigation categories and fragment titles use Google-hosted Material icons.
+When Google cannot be reached, for example while connected to the setup access
+point, titles and navigation remain text-only. Icon names and broken symbols
+are not displayed. The theme and reboot controls retain text labels when icons
+are unavailable.
+
+Content sections use consistent spacing and subtly contrasting backgrounds in
+both themes. Views with multiple sections give each section a descriptive title;
+single-section views do not repeat the fragment title.
 
 ## Device Logs
 
@@ -1019,7 +1033,9 @@ The **Pads** page has its own separate footer — see [Pads Page](#pads-page) ab
 
 Each page only saves the fields shown on that page — saving on the Home page won't clear your Network settings.
 
-A **🔄 reboot button** also lives in the portal header (next to the light/dark theme toggle) and is available on every page. It prompts for confirmation, then reboots without saving — handy when you've made a change elsewhere (e.g., the API) and just need to restart.
+A reboot button also lives in the portal header next to the light/dark theme
+toggle and is available in every fragment. It prompts for confirmation, then
+reboots without saving.
 
 After a reboot, the portal shows an automatic reconnection dialog. If it can't reconnect (e.g., the device name changed), it provides a manual link with the new address.
 

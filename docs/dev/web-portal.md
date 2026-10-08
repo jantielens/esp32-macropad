@@ -385,27 +385,32 @@ Recommended apps for finding devices:
 
 ## User Interface
 
-### Multi-Page Architecture
+### Shell and Fragment Presentation
 
-The web portal is organized into three separate pages for better organization and user experience:
+The portal serves one shell with category navigation and hash-selected fragments.
+Legacy Home, Network, and Firmware URLs redirect into the shell. AP mode selects
+the setup fragment and exposes only the Device category. Mobile navigation
+collapses behind the header's navigation control.
 
-| Page | URL | Description | Available In |
-|------|-----|-------------|--------------|
-| **Home** | `/` or `/home.html` | Additional/custom settings and welcome message | Full Mode only |
-| **Network** | `/network.html` | WiFi, device, and network configuration | Both modes |
-| **Firmware** | `/firmware.html` | Online update, manual upload, and factory reset | Full Mode only |
+Each fragment title contains a decorative Material Symbol with `aria-hidden="true"`.
+Navigation category icons are mapped by category ID in `portalCategoryIcon()`;
+the API's legacy emoji metadata remains unchanged. Child navigation links stay
+text-only. The shell starts the shared `portalEnsureMaterialSymbols()` loader;
+pad icon rendering reuses it rather than issuing another font request.
 
-**Navigation:**
-- Tabbed navigation at top of page
-- Active page highlighted in white
-- In AP mode (Core Mode), only Network tab is visible
+Material Symbols remain Google-hosted. Decorative icons are hidden until the
+stylesheet and font load successfully. A failed request, missing font API, or
+four-second timeout leaves text-only titles and navigation. Theme and reboot
+buttons have visible text fallbacks. Font loading never blocks fragment startup.
+There is no requirement for Internet access in AP mode.
 
-**Responsive Design:**
-- Mobile (<768px): All sections stack vertically
-- Desktop (≥768px): Related sections displayed side-by-side in 2-column grid
-  - Home page: Hello World + Sample Settings
-  - Network page: WiFi Settings + Device Settings (side-by-side), Network Config (full-width)
-- Container max-width: 900px
+Every fragment view has at least one content section. A single section may omit
+a redundant heading; multiple sibling sections have descriptive headings.
+Existing `.card` containers and `.portal-section` use shared theme-aware surfaces,
+8px corners, and consistent spacing. Light mode uses neutral tinted sections with
+white inputs; dark mode keeps distinct darker surfaces. `.portal-list-section`
+uses flat repeated rows rather than nesting framed cards. Editors, charts, and
+previews retain their functional layouts.
 
 ### Header Identity and Badges
 
@@ -708,7 +713,11 @@ All pages include a fixed bottom footer with action buttons:
 - Always visible while scrolling
 
 **Header Reboot Button:**
-The portal header also carries a 🔄 reboot button next to the dark/light theme toggle, available on every page (including pages without the Save/Reboot footer). Clicking it prompts for confirmation, calls `POST /api/reboot`, and shows the standard reboot dialog. It does not save first.
+The portal header also carries a Material restart icon next to the dark/light
+theme toggle, available in every fragment (including fragments without the
+Save/Reboot footer). It falls back to a Reboot label if the font is unavailable.
+Clicking it prompts for confirmation, calls `POST /api/reboot`, and shows the
+standard reboot dialog. It does not save first.
 
 ## Automatic Reconnection After Reboot
 

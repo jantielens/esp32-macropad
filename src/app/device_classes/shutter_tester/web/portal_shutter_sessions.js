@@ -601,8 +601,7 @@ function sessionsLoadDetail(id) {
             // Notes section (top-level card)
             var notesEl = document.getElementById('session-notes-section');
             if (notesEl) {
-                var notesHtml = '<div class="card-body">';
-                notesHtml += '<h6 class="mb-3">Notes</h6>';
+                var notesHtml = '<div class="card-header"><h3 class="portal-section-title mb-0">Notes</h3></div><div class="card-body">';
                 notesHtml += sessionInlineField('session-inline-notes', null, data.notes || '', 'Add notes\u2026', true);
                 notesHtml += '</div>';
                 notesEl.innerHTML = notesHtml;
@@ -613,8 +612,7 @@ function sessionsLoadDetail(id) {
             var devEl = document.getElementById('session-deviation-section');
             if (devEl) {
                 if (ms.length > 0) {
-                    var devHtml = '<div class="card-body">';
-                    devHtml += '<h6 class="mb-3">Deviation spread</h6>';
+                    var devHtml = '<div class="card-header"><h3 class="portal-section-title mb-0">Deviation Spread</h3></div><div class="card-body">';
                     devHtml += '<div id="session-deviation-chart" style="position:relative"></div>';
                     devHtml += '<div id="session-deviation-legend"></div>';
                     devHtml += '</div>';
@@ -627,7 +625,7 @@ function sessionsLoadDetail(id) {
 
             // Measurements — sorted fast to slow (ascending duration)
             if (ms.length === 0) {
-                if (measEl) measEl.innerHTML = '<div class="card mb-3"><div class="card-body text-muted small">No measurements in this session.</div></div>';
+                if (measEl) measEl.innerHTML = '<section class="portal-section"><h3 class="portal-section-title">Measurements</h3><p class="text-muted small mb-0">No measurements in this session.</p></section>';
                 return;
             }
             ms.sort(function(a, b) { return (a.nearest_duration_ms || 0) - (b.nearest_duration_ms || 0); });
@@ -2759,7 +2757,7 @@ function sessionBuildSummaryTable(ms) {
     };
 
     var html = '<div class="card-body">';
-    html += '<h6 class="mb-3">Speed summary</h6>';
+    html += '<h3 class="portal-section-title">Speed Summary</h3>';
     html += '<div class="table-responsive">';
     html += '<table class="table table-sm sst-table mb-0">';
     html += '<thead>';

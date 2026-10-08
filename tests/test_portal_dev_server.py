@@ -1,6 +1,7 @@
 import copy
 import importlib.util
 import json
+from html.parser import HTMLParser
 from pathlib import Path
 import re
 import sys
@@ -66,6 +67,68 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertLess(bundle.index("function actionEditorHTML("), bundle.index("async function padInit()"))
         self.assertNotIn("portal_shutter", bundle)
         self.assertEqual(self.request("/api/bindings")[0], 200)
+
+    def test_fragment_presentation(self):
+        class FragmentParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.nodes = []
+                self.stack = []
+
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                node = {"tag": tag, "attrs": attributes,
+                        "classes": set(attributes.get("class", "").split()),
+                        "parent": self.stack[-1] if self.stack else None}
+                self.nodes.append(node)
+                if tag not in {"area", "base", "br", "col", "embed", "hr", "img",
+                               "input", "link", "meta", "param", "source", "track", "wbr"}:
+                    self.stack.append(node)
+
+            def handle_endtag(self, tag):
+                for index in range(len(self.stack) - 1, -1, -1):
+                    if self.stack[index]["tag"] == tag:
+                        del self.stack[index:]
+                        break
+
+        def descendants(nodes, parent):
+            for node in nodes:
+                ancestor = node["parent"]
+                while ancestor is not None:
+                    if ancestor is parent:
+                        yield node
+                        break
+                    ancestor = ancestor["parent"]
+
+        fragments = list((ROOT / "src/app/web").glob("*.fragment.html"))
+        fragments += list((ROOT / "src/app/device_classes").glob("*/web/*.fragment.html"))
+        for fragment in fragments:
+            with self.subTest(fragment=fragment.name):
+                parser = FragmentParser()
+                parser.feed(fragment.read_text())
+                headers = [node for node in parser.nodes if "section-header" in node["classes"]]
+                self.assertTrue(headers)
+                for header in headers:
+                    headings = [node for node in descendants(parser.nodes, header) if node["tag"] == "h2"]
+                    self.assertTrue(headings)
+                    for heading in headings:
+                        icons = [node for node in descendants(parser.nodes, heading)
+                                 if "portal-icon" in node["classes"]]
+                        self.assertEqual(len(icons), 1)
+                        self.assertEqual(icons[0]["attrs"].get("aria-hidden"), "true")
+                panels = [node for node in parser.nodes
+                          if node["classes"] & {"card", "portal-section", "pad-workspace"}]
+                self.assertTrue(panels, "Every fragment needs a content section")
+                if fragment.name == "pad-editor.fragment.html":
+                    continue
+                for panel in panels:
+                    siblings = [other for other in panels if other["parent"] is panel["parent"]]
+                    children = list(descendants(parser.nodes, panel))
+                    if len(siblings) < 2 or not children:
+                        continue
+                    self.assertTrue(any(node["tag"] in {"h2", "h3", "h4", "h5", "h6", "summary"}
+                                        or "card-header" in node["classes"] for node in children),
+                                    "Sibling sections need a title")
 
     def test_recipe_catalog(self):
         status, catalog = self.request("/api/recipes/catalog")

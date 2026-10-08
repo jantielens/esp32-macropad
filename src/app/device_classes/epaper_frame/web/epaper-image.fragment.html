@@ -1,9 +1,9 @@
 <div class="section-header">
-  <h2>📰 Images &amp; Schedule</h2>
+  <h2><span class="portal-icon" aria-hidden="true">photo_library</span>Images &amp; Schedule</h2>
   <p>Where the dashboard image is fetched from and how often the device wakes to refresh it. The device deep-sleeps between refreshes to save battery.</p>
 </div>
 
-<div class="epaper-estimator-hero" id="epaper-battery-estimator">
+<div class="epaper-estimator-hero portal-section" id="epaper-battery-estimator">
   <div class="epaper-estimator-heading">
     <p class="epaper-estimator-eyebrow">Battery Horizon</p>
     <h3 class="epaper-estimator-result" id="epaper-estimate-result" aria-live="polite">21 days</h3>
@@ -24,6 +24,7 @@
 </div>
 
 <div class="card epaper-estimator-body" id="epaper-estimator-details">
+  <h3 class="portal-section-title">Battery Estimate Settings</h3>
     <div class="row g-3 mb-4">
       <div class="col-12 col-md-4 epaper-estimator-slider">
         <label class="form-label" for="epaper-estimator-capacity">Battery size <output id="epaper-estimator-capacity-output" for="epaper-estimator-capacity">2000 mAh</output></label>
@@ -374,22 +375,22 @@
 </div>
 
 <style>
-  .epaper-estimator-hero { position: sticky; top: -0.75rem; z-index: 1020; margin-bottom: 1rem; padding: 0.7rem 0.85rem; border: 1px solid rgba(25, 135, 84, 0.3); border-radius: var(--bs-border-radius); color: #173b2b; background: linear-gradient(135deg, var(--epaper-hero-start, #d9f3e4), var(--epaper-hero-end, #fff4c7)); box-shadow: 0 0.35rem 1rem rgba(23, 59, 43, 0.18); }
+  .epaper-estimator-hero { position: sticky; top: -0.75rem; z-index: 1020; color: var(--portal-text); }
   .epaper-estimator-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
-  .epaper-estimator-eyebrow { margin: 0; color: #337052; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-  .epaper-estimator-result { margin: 0; color: #173b2b; font-size: clamp(1.35rem, 4vw, 2rem); line-height: 1; white-space: nowrap; }
+  .epaper-estimator-eyebrow { margin: 0; color: var(--portal-text-muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
+  .epaper-estimator-result { margin: 0; color: var(--portal-text); font-size: 1.75rem; line-height: 1; white-space: nowrap; }
   .epaper-horizon { overflow-x: auto; margin-top: 0.3rem; padding: 0.05rem 0.1rem 0; }
   .epaper-horizon-scale { position: relative; min-width: 620px; height: 2.15rem; }
   .epaper-horizon-axis { position: absolute; top: 0.95rem; right: 0; left: 0; height: 0.3rem; border-radius: 1rem; background: rgba(25, 135, 84, 0.25); }
-  .epaper-horizon-tick { position: absolute; top: 0; transform: translateX(-50%); color: #527064; font-size: 0.58rem; text-align: center; white-space: nowrap; }
+  .epaper-horizon-tick { position: absolute; top: 0; transform: translateX(-50%); color: var(--portal-text-muted); font-size: 0.58rem; text-align: center; white-space: nowrap; }
   .epaper-horizon-tick::after { display: block; width: 1px; height: 0.7rem; margin: 0.2rem auto 0; background: rgba(25, 135, 84, 0.45); content: ""; }
   .epaper-horizon-tick.is-first { transform: none; }
   .epaper-horizon-tick.is-last { transform: translateX(-100%); }
   .epaper-horizon-marker { position: absolute; top: 0.625rem; z-index: 1; width: 0.95rem; height: 0.95rem; transform: translateX(-50%); border: 0.16rem solid #fff; border-radius: 50%; background: #198754; box-shadow: 0 0 0 0.1rem rgba(25, 135, 84, 0.35); transition: left 250ms ease; }
-  .epaper-estimator-body { margin-bottom: 1rem; padding: 1.25rem; background: rgba(255, 255, 255, 0.92); }
-  .epaper-estimator-slider output { color: #16794d; font-weight: 700; }
-  .epaper-estimator-body .form-label, .epaper-estimator-body .form-check-label, .epaper-estimator-body strong, .epaper-estimator-body summary { color: #29463a; }
-  .epaper-estimator-body .form-text { color: #46584d; }
+  .epaper-estimator-body { margin-bottom: 1rem; padding: 1.25rem; }
+  .epaper-estimator-slider output { color: var(--portal-text); font-weight: 700; }
+  .epaper-estimator-body .form-label, .epaper-estimator-body .form-check-label, .epaper-estimator-body strong, .epaper-estimator-body summary { color: var(--portal-text); }
+  .epaper-estimator-body .form-text { color: var(--portal-text-muted); }
   .epaper-estimator-slider input[type="range"] { accent-color: #198754; }
   .epaper-budget { display: flex; height: 1.5rem; overflow: hidden; border-radius: 0.4rem; background: #e9ecef; }
   .epaper-budget-part { min-width: 2px; transition: width 250ms ease; }
@@ -398,7 +399,7 @@
   .epaper-budget-cache { background: #20c997; }
   .epaper-budget-panel { background: #fd7e14; }
   .epaper-budget-manual { background: #6f42c1; }
-  .epaper-budget-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-top: 0.6rem; color: #5c6870; font-size: 0.78rem; }
+  .epaper-budget-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-top: 0.6rem; color: var(--portal-text-muted); font-size: 0.78rem; }
   .epaper-budget-legend span::before { display: inline-block; width: 0.65rem; height: 0.65rem; margin-right: 0.3rem; border-radius: 50%; content: ""; }
   .epaper-legend-sleep::before { background: #198754; }
   .epaper-legend-network::before { background: #0d6efd; }
@@ -406,9 +407,9 @@
   .epaper-legend-panel::before { background: #fd7e14; }
   .epaper-legend-manual::before { background: #6f42c1; }
   .epaper-estimator-tip { border-left: 0.3rem solid #fd7e14; background: rgba(255, 193, 7, 0.15); }
-  .epaper-estimator-tip strong { color: #7a4b00; }
+  .epaper-estimator-tip strong { color: var(--portal-text); }
   .epaper-estimate-assumptions { white-space: pre-line; }
-  .epaper-estimate-cycle-stats { margin-left: 0.5rem; color: #46584d; font-size: 0.78rem; font-weight: 400; }
+  .epaper-estimate-cycle-stats { margin-left: 0.5rem; color: var(--portal-text-muted); font-size: 0.78rem; font-weight: 400; }
   @media (max-width: 575.98px) {
     .epaper-horizon { display: none; }
   }

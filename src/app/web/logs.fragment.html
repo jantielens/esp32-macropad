@@ -1,7 +1,9 @@
 <section id="logs-root">
   <div class="section-header d-flex flex-wrap align-items-center justify-content-between gap-3">
-    <h2 class="mb-0">Logs</h2>
+    <h2 class="mb-0"><span class="portal-icon" aria-hidden="true">terminal</span>Logs</h2>
   </div>
+  <section class="portal-section" aria-labelledby="logs-live-heading">
+  <h3 class="portal-section-title" id="logs-live-heading">Live Logs</h3>
   <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <button id="logs-pause" type="button" class="btn btn-outline-secondary btn-sm" title="Pause polling" aria-pressed="false">Pause</button>
     <button id="logs-clear" type="button" class="btn btn-outline-danger btn-sm" title="Clear browser history">Clear</button>
@@ -15,9 +17,10 @@
   <div id="logs-error" class="alert alert-warning d-none" role="alert"></div>
   <div id="logs-status" class="text-muted small mb-2" role="status">Connecting...</div>
   <pre id="logs-output" tabindex="0" aria-label="Device logs"></pre>
-  <div id="logs-crash" class="border-top mt-3 pt-3">
+  </section>
+  <section id="logs-crash" class="portal-section" aria-labelledby="logs-crash-heading">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-      <h3 class="fs-6 mb-0">Retained crash</h3>
+      <h3 class="portal-section-title mb-0" id="logs-crash-heading">Retained Crash</h3>
       <div class="d-flex flex-wrap gap-2">
         <button id="logs-crash-copy" type="button" class="btn btn-outline-secondary btn-sm" title="Copy crash details and current boot diagnostics" disabled>Copy crash summary</button>
         <button id="logs-crash-download" type="button" class="btn btn-outline-secondary btn-sm" disabled>Download crash dump</button>
@@ -40,7 +43,7 @@
       <summary class="small">Saved registers</summary>
       <dl id="logs-crash-registers" class="row small mt-2 mb-0"></dl>
     </details>
-  </div>
+  </section>
 </section>
 <style>
   #logs-root { min-width: 0; }

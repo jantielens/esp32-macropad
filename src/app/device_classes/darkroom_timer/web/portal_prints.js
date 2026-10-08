@@ -24,7 +24,6 @@ let currentPrintData = null;  // parsed detail data for Load action
 let currentPrintStarred = false;
 let starFilterActive = false; // client-side "starred only" filter
 
-var SECTION_HEADING_STYLE = 'font-size:14px; color:#86868b; text-transform:uppercase; letter-spacing:0.5px';
 
 // Convert fields array [{key, label, value, ...}] to keyed object {key: value}
 function fieldsToMap(arr) {
@@ -92,7 +91,7 @@ function renderList(data) {
             }
 
             html += '<div class="prints-row" data-id="' + escAttr(id) + '" style="' +
-                'padding:12px 16px; background:var(--portal-surface-alt); border-radius:10px; cursor:pointer; ' +
+                'padding:12px 16px; cursor:pointer; ' +
                 'display:flex; justify-content:space-between; align-items:center; gap:12px;">' +
                 '<div style="font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">' +
                 (p.starred ? starPrefix : '') + escHtml(summary) + '</div>' +
@@ -152,7 +151,7 @@ function renderDetail(data) {
     currentPrintStarred = !!data.starred;
 
     // --- Hero card ---
-    var heroHtml = '<div style="background:#2c2c2e; border-radius:12px; padding:20px; color:#e5e5ea;">';
+    var heroHtml = '<div><h3 class="portal-section-title">Print Details</h3>';
     heroHtml += '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">';
     heroHtml += '<div style="font-size:13px; color:#98989d;">' +
         escHtml((isStrip ? '\ud83d\udd2c ' : '\ud83d\udda8\ufe0f ') + (fields.id || '?') + ' \u00b7 ' + (isStrip ? 'Test Strip' : 'Exposure')) + '</div>';
@@ -180,7 +179,7 @@ function renderDetail(data) {
         for (var hs of heroSlots) {
             heroHtml += '<div style="min-width:80px;">' +
                 '<div style="font-size:11px; color:#98989d; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">' + escHtml(hs.label) + '</div>' +
-                '<div style="font-size:22px; font-weight:700; color:#f5f5f7;">' + escHtml(hs.value) + '</div>' +
+                '<div style="font-size:22px; font-weight:700; color:var(--portal-text);">' + escHtml(hs.value) + '</div>' +
                 '</div>';
         }
         heroHtml += '</div>';
@@ -224,15 +223,16 @@ function renderDetail(data) {
     // --- Exposure section ---
     var expHtml = '';
     if (exposureFields.length > 0) {
-        expHtml += '<h3 style="margin:0 0 8px 0; ' + SECTION_HEADING_STYLE + '">Exposure</h3>';
+        expHtml += '<h3 class="portal-section-title">Exposure</h3>';
         expHtml += renderFieldTable(exposureFields);
     }
     document.getElementById('detail-exposure').innerHTML = expHtml;
+    document.getElementById('detail-exposure').hidden = exposureFields.length === 0;
 
     // --- Segments table (test strip only) ---
     var segDiv = document.getElementById('detail-segments');
     if (data.segments && data.segments.length > 0) {
-        var segHtml = '<h3 style="margin:0 0 8px 0; ' + SECTION_HEADING_STYLE + '">Segments</h3>' +
+        var segHtml = '<h3 class="portal-section-title">Segments</h3>' +
             '<table style="width:100%; border-collapse:collapse; font-size:13px;">' +
             '<tr><th style="text-align:left; padding:6px 8px; border-bottom:1px solid #d1d1d6;">#</th>' +
             '<th style="text-align:left; padding:6px 8px; border-bottom:1px solid #d1d1d6;">Offset</th>' +
@@ -255,13 +255,14 @@ function renderDetail(data) {
     // --- Metering context section ---
     var metHtml = '';
     if (meteringFields.length > 0) {
-        metHtml += '<div style="background:#1c1c1e; border-radius:10px; padding:14px 16px;">';
-        metHtml += '<h3 style="margin:0 0 4px 0; ' + SECTION_HEADING_STYLE + '">Metering Context</h3>';
+        metHtml += '<div>';
+        metHtml += '<h3 class="portal-section-title">Metering Context</h3>';
         metHtml += '<p style="margin:0 0 10px 0; font-size:11px; color:#636366;">Meter readings at time of print</p>';
-        metHtml += renderFieldTable(meteringFields, '#a1a1a6');
+        metHtml += renderFieldTable(meteringFields);
         metHtml += '</div>';
     }
     document.getElementById('detail-metering').innerHTML = metHtml;
+    document.getElementById('detail-metering').hidden = meteringFields.length === 0;
 
     // --- Notes ---
     document.getElementById('detail-notes').value = data.notes || '';

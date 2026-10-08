@@ -79,7 +79,7 @@
     var welcomeLink = document.createElement('a');
     welcomeLink.className = 'nav-welcome-link';
     welcomeLink.href = '#welcome';
-    welcomeLink.innerHTML = '<span class="nav-welcome-icon">🏠</span> Home';
+    welcomeLink.innerHTML = '<span class="portal-icon" aria-hidden="true">home</span> Home';
     welcomeLink.addEventListener('click', function (e) {
       e.preventDefault();
       navigateTo('welcome');
@@ -92,7 +92,7 @@
       var header = document.createElement('div');
       header.className = 'nav-category-header' + (catIdx === 0 ? ' expanded' : '');
       header.innerHTML =
-        '<span class="nav-category-icon">' + (cat.icon || '') + '</span>' +
+        portalCategoryIcon(cat.id) +
         '<span class="nav-category-label">' + escapeHtml(cat.display_name) + '</span>' +
         '<span class="nav-category-chevron"></span>';
 
@@ -369,6 +369,7 @@
   // ---------- Init ----------
 
   function init() {
+    portalEnsureMaterialSymbols();
     updateLayoutHeight();
     window.addEventListener('resize', updateLayoutHeight);
 

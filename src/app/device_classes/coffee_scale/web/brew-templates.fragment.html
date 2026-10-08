@@ -1,10 +1,10 @@
 <div class="section-header">
-  <h2>📋 Brew Templates</h2>
+    <h2><span class="portal-icon" aria-hidden="true">list_alt</span>Brew Templates</h2>
   <p>Manage brew recipes and automation templates.</p>
 </div>
 
 <!-- Template List -->
-<div id="brew-tmpl-list-view">
+<div id="brew-tmpl-list-view" class="portal-section portal-list-section">
     <div class="brew-action-bar">
         <button type="button" class="btn btn-secondary btn-sm" id="brew-tmpl-upload-btn">Upload Template</button>
         <input type="file" accept=".json" id="brew-tmpl-upload-file" style="display:none;">
@@ -19,22 +19,22 @@
 <div id="brew-tmpl-detail-view" style="display:none;">
     <button type="button" class="btn btn-secondary btn-sm" id="brew-tmpl-back-btn">← Back to Templates</button>
 
-    <div class="section">
+    <div class="portal-section">
         <div class="brew-tmpl-detail-header">
-            <h2 id="brew-tmpl-detail-name">Template</h2>
+            <h3 class="portal-section-title" id="brew-tmpl-detail-name">Template</h3>
             <span id="brew-tmpl-detail-badge" class="brew-tmpl-badge"></span>
         </div>
         <div class="brew-tmpl-detail-desc" id="brew-tmpl-detail-desc"></div>
         <div class="brew-tmpl-detail-meta" id="brew-tmpl-detail-meta"></div>
     </div>
 
-    <div class="section">
-        <h2>Stages</h2>
+    <div class="portal-section">
+        <h3 class="portal-section-title">Stages</h3>
         <div class="brew-tmpl-timeline" id="brew-tmpl-stages"></div>
     </div>
 
-    <details class="section">
-        <summary class="brew-tmpl-summary">Raw JSON</summary>
+    <details class="portal-section">
+        <summary class="brew-tmpl-summary portal-section-title">Raw JSON</summary>
         <pre class="brew-tmpl-json" id="brew-tmpl-detail-json"></pre>
     </details>
 

@@ -3,6 +3,42 @@ const fs = require('fs');
 const vm = require('vm');
 
 async function main() {
+    for (const outcome of ['success', 'empty', 'error', 'font-error', 'timeout']) {
+        let stylesheet;
+        let timeoutCallback;
+        const classes = new Set();
+        const fontContext = {
+            window: { fetch: async () => ({}) },
+            document: {
+                createElement: () => ({}),
+                getElementById: () => null,
+                head: { appendChild: element => { stylesheet = element; } },
+                documentElement: { classList: { add: name => classes.add(name) } },
+                fonts: { load: async () => {
+                    if (outcome === 'font-error') throw new Error('Font unavailable');
+                    return outcome === 'success' ? [{}] : [];
+                } }
+            },
+            setTimeout: callback => { timeoutCallback = callback; return 1; },
+            clearTimeout() {},
+            console
+        };
+        vm.createContext(fontContext);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_core.js', 'utf8'), fontContext);
+        const loaded = fontContext.portalEnsureMaterialSymbols();
+        assert.strictEqual(fontContext.portalEnsureMaterialSymbols(), loaded);
+        if (outcome === 'timeout') timeoutCallback();
+        else if (outcome === 'error') stylesheet.onerror();
+        else stylesheet.onload();
+        assert.strictEqual(await loaded, outcome === 'success');
+        assert.strictEqual(classes.has('portal-icons-ready'), outcome === 'success');
+        if (outcome === 'timeout') {
+            fontContext.document.fonts.load = async () => [{}];
+            stylesheet.onload();
+            await Promise.resolve();
+            assert(!classes.has('portal-icons-ready'), 'late responses must preserve text-only fallback');
+        }
+    }
     const requests = [];
     const timers = [];
     const nodes = new Map();
