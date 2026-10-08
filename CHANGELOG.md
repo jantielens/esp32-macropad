@@ -93,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Move ESP32-4848S040 to the existing 4 MiB OTA-slot layout so firmware fits
+  without removing features.
 * Preserve selected and deferred Screen action targets when refreshing available
   screens, including list-widget synthetic targets.
 * Keep Pad Editor list labels in `Pad X: Name` format when selected or not.

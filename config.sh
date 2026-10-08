@@ -55,7 +55,7 @@ PROJECT_DISPLAY_NAME="ESP32 Macropad"
 #   ["cyd-v2"]="esp32:esp32:esp32"                                                # CYD display v2 (same FQBN as classic ESP32)
 
 declare -A FQBN_TARGETS=(
-    ["esp32-4848S040"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_3mb_16MB_ext,CDCOnBoot=default" # ESP32-S3-4848S040 (480x480 ST7701 RGB + GT911 touch; 16MB + OPI PSRAM; hardware UART)
+    ["esp32-4848S040"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_4mb_16MB_ext,CDCOnBoot=default" # ESP32-S3-4848S040 (480x480 ST7701 RGB + GT911 touch; 16MB + OPI PSRAM; hardware UART)
     ["jc3248w535"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_4mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-S3 JC3248W535 (16MB + OPI PSRAM)
     ["jc3636w518"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_4mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-S3 JC3636W518 (16MB + OPI PSRAM)
     ["jc3636w518-sd"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_4mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-S3 JC3636W518 SDMMC primary-storage variant
