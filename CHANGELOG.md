@@ -14,19 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-* Move specialized action forms, command handling, defaults, validation, and
-  payload construction into dedicated portal editor extensions. Keep the shared
-  editor focused on catalog-backed fields, extension dispatch, unsupported-action
-  preservation, and action-list infrastructure; preserve bindings and existing
-  widget helper consumers.
-
-### Fixed
-
-* Preserve selected and deferred Screen action targets when refreshing available
-  screens, including list-widget synthetic targets.
-
 ## [1.38.0] - 2026-10-08
 
 ### Added
@@ -79,6 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Move specialized action forms, command handling, defaults, validation, and
+  payload construction into dedicated portal editor extensions. Keep the shared
+  editor focused on catalog-backed fields, extension dispatch, unsupported-action
+  preservation, and action-list infrastructure; preserve bindings and existing
+  widget helper consumers.
 * Portal navigation and all fragment titles use Google-hosted Material icons,
   with clean text-only fallbacks when the font is unavailable. Content sections
   have consistent headings, spacing, 8px corners, and theme-aware backgrounds;
@@ -101,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Preserve selected and deferred Screen action targets when refreshing available
+  screens, including list-widget synthetic targets.
 * Keep Pad Editor list labels in `Pad X: Name` format when selected or not.
   Selection retains the regular font weight so longer labels do not wrap merely
   because the pad is selected; color, background, and border still highlight it.
