@@ -60,6 +60,7 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.scenario = scenario
     server.mock_screen = "pad_0"
     server.mock_icons = {}
+    server.mock_recipe_catalog = json.loads((SCRIPT_DIR.parent / "docs/samples/recipe-catalog.json").read_text(encoding="utf-8"))
     server.mock_alarms = {"lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
                                "on_ring": [], "on_stop": []}}
@@ -178,6 +179,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_json(config)
         elif path == "/api/info":
             self._serve_json(self._device_info("catalog" in query))
+        elif path == "/api/recipes/catalog":
+            self._serve_json(self.server.mock_recipe_catalog)
         elif path == "/api/component/timezone/catalog":
             source = (SCRIPT_DIR.parent / "src/app/time_service.cpp").read_text(encoding="utf-8")
             entries = re.findall(r'\{"([^"\n]+)", "([^"\n]+)"\}', source)
@@ -364,7 +367,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             return
 
         if path in ("/api/pad", "/api/pad/resolve", "/api/component/button-defaults/config",
-                    "/api/component/display/screen", "/__mock/reset"):
+                    "/api/component/display/screen", "/api/recipes/catalog", "/__mock/reset"):
             try:
                 data = json.loads(body.decode("utf-8")) if body else {}
                 if not isinstance(data, dict):
@@ -372,7 +375,15 @@ class PortalHandler(SimpleHTTPRequestHandler):
             except (UnicodeDecodeError, ValueError):
                 self._serve_json({"error": "Invalid JSON object"}, 400)
                 return
-            if path == "/__mock/reset":
+            if path == "/api/recipes/catalog":
+                if len(body) > 64 * 1024:
+                    self._serve_json({"error": "Recipe catalog exceeds 64 KiB"}, 413)
+                    return
+                if type(data.get("schema")) is not int or data["schema"] != 1 or not isinstance(data.get("catalog_version"), str) or not data["catalog_version"] or not isinstance(data.get("recipes"), list):
+                    self._serve_json({"error": "Invalid recipe catalog envelope"}, 400)
+                    return
+                self.server.mock_recipe_catalog = data
+            elif path == "/__mock/reset":
                 scenario = data.get("scenario", "normal")
                 if scenario not in SCENARIOS:
                     self._serve_json({"error": "Unknown mock scenario"}, 400)
@@ -597,6 +608,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
+            if category["id"] == "pads" and profile in ("esp32-p4-lcd4b", "jc3248w535"):
+                category["items"].extend([
+                    {"id": "recipes", "display_name": "Recipes"},
+                    {"id": "recipe-catalog", "display_name": "Recipe Catalog"},
+                ])
             if category["id"] == "device":
                 category["items"].append({"id": "timezone", "display_name": "Timezone"})
                 category["items"].append({"id": "logs", "display_name": "Logs", "portal_script": "/portal-logs.js"})
@@ -629,11 +645,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "chip_model": "ESP32-P4", "chip_revision": 100, "chip_cores": 2,
             "cpu_freq": 360, "flash_chip_size": 16 * 1024 * 1024,
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
-            "ap_active": False, "has_mqtt": True,
+            "ap_active": False, "has_mqtt": True, "has_alarm": False,
             "has_touch": True, "has_usb_hid": True}
         if self._profile() in ("esp32-p4-lcd4b", "jc3248w535"):
             info.update(device_class="Macropad", board=self._profile(), has_display=True,
-                        has_backlight=True, has_audio=True, has_sound_player=True,
+                        has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
                         has_image_library=True, has_ble=False, has_ble_hid=False,
                         max_pads=16, max_grid_cols=8, max_grid_rows=8,

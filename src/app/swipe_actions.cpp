@@ -50,7 +50,7 @@ static void on_gesture(lv_event_t*) {
     if (strcmp(act->type, ACTION_TYPE_SOUND_ALERT) != 0) {
         const char* pattern = device_config.tap_beep;
         if (pattern[0] && strcmp(pattern, "none") != 0) {
-            audio_feedback(pattern);
+            audio_beep(pattern, 0);
         }
     }
 #endif

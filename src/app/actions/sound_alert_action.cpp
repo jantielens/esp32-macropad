@@ -3,9 +3,6 @@
 #include "log_manager.h"
 #if defined(ARDUINO) && HAS_AUDIO
 #include "audio.h"
-#if ALARM_ENABLED
-#include "alarm_manager.h"
-#endif
 #endif
 
 #if HAS_DISPLAY || HAS_BUTTON
@@ -48,26 +45,19 @@ ActionResult dispatch_sound_alert(const ButtonAction& act, const char* label, ui
 #if defined(ARDUINO) && HAS_AUDIO
     const auto& alert = act.payload.sound_alert;
     const ActionDispatchContext context = action_dispatch_context();
-    const AudioPlaybackFailure failure =
-#if ALARM_ENABLED
-        alarm_manager_report_audio_failure;
-#else
-        nullptr;
-#endif
     bool accepted = true;
     if (!strcmp(alert.sound_alert_kind, "stop")) audio_stop();
     else if (!strcmp(alert.sound_alert_kind, "tone") || !strcmp(alert.sound_alert_kind, "tone_loop"))
-        accepted = audio_submit_tone(alert.sound_alert_pattern, alert.sound_alert_volume, !strcmp(alert.sound_alert_kind, "tone_loop"), context.work_guard, context.generation, failure);
+        accepted = audio_submit_tone(alert.sound_alert_pattern, alert.sound_alert_volume, !strcmp(alert.sound_alert_kind, "tone_loop"), context.work_guard, context.generation);
     else if (!strcmp(alert.sound_alert_kind, "mp3") || !strcmp(alert.sound_alert_kind, "mp3_loop")) {
 #if HAS_SOUND_PLAYER
         accepted = audio_submit_sound(alert.sound_alert_file, alert.sound_alert_volume, context.work_guard, context.generation,
-            !strcmp(alert.sound_alert_kind, "mp3_loop"), failure);
+            !strcmp(alert.sound_alert_kind, "mp3_loop"));
 #else
         LOGW(kSoundAlertActionTag, "%s sound_alert MP3: not compiled", label);
 #endif
     } else LOGW(kSoundAlertActionTag, "%s sound_alert: invalid kind", label);
     if (!accepted) {
-        if (failure) failure(context.work_guard, context.generation);
         return ACTION_FAILED;
     }
 #else

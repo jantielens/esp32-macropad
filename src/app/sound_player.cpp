@@ -8,7 +8,6 @@
 #include "audio_output_driver.h"
 #include "storage.h"
 #include <esp_heap_caps.h>
-#include <errno.h>
 #include <string.h>
 #include "log_manager.h"
 #include "sound_store.h"
@@ -273,11 +272,9 @@ SoundPlayer* sound_player_begin_path(AudioOutputDriver* output_driver, const cha
                                      void* transform_context) {
     if (!output_driver || !path || !path[0]) return nullptr;
 
-    errno = 0;
     File file = Storage.open(path, "r");
     if (!file) {
-        const int open_error = errno;
-        LOGW(TAG, "Cannot open MP3: %s (exists=%u errno=%d)", path, unsigned(Storage.exists(path)), open_error);
+        LOGW(TAG, "File not found: %s", path);
         return nullptr;
     }
 
@@ -423,12 +420,11 @@ bool sound_player_get_timing(const SoundPlayer* player, uint64_t* total_us,
 }
 
 bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
-                       volatile bool* stop_flag, bool (*guard)(uint32_t), uint32_t generation, bool loop,
-                       SoundPlayerPcmTransform transform, void* transform_context) {
+                       volatile bool* stop_flag, bool (*guard)(uint32_t), uint32_t generation, bool loop) {
     if (!filename || !filename[0]) return false;
     char path[48];
     sound_store_path(filename, path, sizeof(path));
-    SoundPlayer* player = sound_player_begin_path(output_driver, path, transform, transform_context);
+    SoundPlayer* player = sound_player_begin_path(output_driver, path);
     if (!player) return false;
     SoundPlayerStepResult result = SOUND_PLAYER_STEP_PLAYING;
     uint64_t iteration_start_frames = player->elapsed_output_frames;

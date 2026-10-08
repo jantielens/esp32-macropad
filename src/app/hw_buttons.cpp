@@ -56,7 +56,7 @@ static void maybe_beep(const ButtonAction* actions, uint8_t count) {
     }
     const char* pattern = device_config.tap_beep;
     if (pattern[0] && strcmp(pattern, "none") != 0) {
-        audio_feedback(pattern);
+        audio_beep(pattern, 0);
     }
 }
 #endif

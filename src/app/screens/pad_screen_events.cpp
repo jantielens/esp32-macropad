@@ -339,7 +339,7 @@ void PadScreen::onTap(lv_event_t* e) {
             if (!has_audio_action(&local_nr, 1)) {
                 const char* pattern = is_large ? device_config.lp_beep : device_config.tap_beep;
                 if (pattern[0] && strcmp(pattern, "none") != 0) {
-                    audio_feedback(pattern);
+                    audio_beep(pattern, 0);
                 }
             }
 #endif
@@ -370,7 +370,7 @@ void PadScreen::onTap(lv_event_t* e) {
         if (!has_audio_action(local, count)) {
             const char* pattern = device_config.tap_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
-                audio_feedback(pattern);
+                audio_beep(pattern, 0);
             }
         }
 #endif
@@ -435,7 +435,7 @@ void PadScreen::onLongPress(lv_event_t* e) {
         if (!has_audio_action(local, count)) {
             const char* pattern = device_config.lp_beep;
             if (pattern[0] && strcmp(pattern, "none") != 0) {
-                audio_feedback(pattern);
+                audio_beep(pattern, 0);
             }
         }
 #endif
@@ -508,7 +508,7 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
     if (!has_audio_action(local, count)) {
         const char* pattern = device_config.tap_beep;
         if (pattern[0] && strcmp(pattern, "none") != 0) {
-            audio_feedback(pattern);
+            audio_beep(pattern, 0);
         }
     }
 #endif

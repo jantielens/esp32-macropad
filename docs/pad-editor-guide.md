@@ -182,10 +182,20 @@ After all recipe configuration, icon upload, and pad saving completes, the
 installation panel offers **Show Pad** and **Navigate to Pad Editor** for the
 target pad.
 
+Recipes can also provide a completion message and direct links to settings.
+The Alarm Clock sample requires alarm and audio support. It needs a free 5x5
+area and offers a grid increase on smaller empty pads. Its status text retains
+the sample's dark color, and **Dismiss alarm** asks for confirmation. Installation
+asks before replacing Alarm 1's ringing and stop actions, and disables it while
+keeping its time, repeat days, durations, and maximum lateness. Ringing repeats
+the tone and shows your selected pad. After installation, **Open alarm schedule**
+opens **Alarm > Schedule**: set the time and days, enable the alarm, and save.
+**Alarm behavior** opens the durations and action lists.
+
 The device starts with an empty recipe catalog. Open **Recipe Catalog** in the
 Pads section to edit and save one complete catalog JSON document on the device.
 The Recipes page loads that saved catalog. The repository provides
-[Pomodoro and Home Energy examples](samples/recipe-catalog.json) as a starting
+[Pomodoro, Alarm Clock, and Home Energy examples](samples/recipe-catalog.json) as a starting
 point; copy and adapt them in Recipe Catalog before saving.
 
 ```json
@@ -217,6 +227,16 @@ can add named pad bindings and merge existing component configuration, such as
 timer `expire_actions`. Component objects merge recursively, arrays replace,
 and a named binding rejects the installation if the pad already uses that name
 with a different value.
+
+`${target_pad}` is reserved and expands to the chosen pad's screen ID, such as
+`pad_6`. Optional `requires` entries are `display`, `mqtt`, `audio`, `alarm`, and
+`sound_player`; unsupported recipes cannot be installed. A nonempty
+`confirmation` string adds an installation prompt. `post_install` contains a
+nonempty `message` and optional `links`, each with `label` and an internal
+`fragment` ID. These instructions appear only after successful installation.
+The pad saves before component changes. A component failure leaves the saved
+pad and any earlier component changes in place; review the reported error and
+component settings before retrying.
 
 ---
 
@@ -629,13 +649,11 @@ Available modifiers: `ctrl`, `shift`, `alt`, `gui` (Windows/Command key)
 
 ### Alarm Actions
 
-When alarms are enabled on the board, an **Alarm Control** action can Snooze or Dismiss alarm.
-It targets the active alarm (`alarm_id: 0`) or slot 1. Dismiss alarm does not disable its weekly
+When alarms are enabled on the board, an **Alarm Control** action can Snooze or Cancel
+the active alarm (`alarm_id: 0`) or slot 1. Cancel does not disable its weekly
 schedule; idle controls do nothing. The same action also configures slot 1 from
 ordinary buttons or Numeric Rocker widgets. Snooze duration, auto-dismiss duration,
-and the When ringing starts/stops action lists remain in **Alarm > Behavior**.
-Use **Alarm > Schedule** for enabled state, time, and repeat days; saving either
-view preserves the other view's latest settings.
+and ring/stop action lists remain in the portal's Alarm settings.
 
 ```json
 { "type": "alarm", "alarm_id": 0, "alarm_command": "cancel" }
@@ -648,16 +666,13 @@ view preserves the other view's latest settings.
 | `enable`, `disable`, `toggle` | No additional value |
 | `weekday_enable`, `weekday_disable`, `weekday_toggle` | `alarm_day`: 0=Sunday through 6=Saturday |
 
-The action editor shows only the fields used by the selected command. **Adjust time**
-shows **Adjustment (minutes)**; **Set time** shows **Time (minutes since midnight)**
-(for example, 420 = 07:00). **Enable day**, **Disable day**, and **Toggle day** show
-**Day** instead. Enable, Disable, Toggle, Dismiss alarm, and Snooze need neither field.
-**Target alarm > Active alarm** works only with Snooze and Dismiss alarm.
-The persisted command for Dismiss alarm remains `cancel`.
+The action editor shows only the fields used by the selected command. Adjust Time
+shows Minutes; Set Time shows Time (minutes since midnight). Weekday commands show
+Weekday instead. Enable, Disable, Toggle, Cancel, and Snooze need neither field.
 
 Configuration requires `alarm_id: 1`; omission defaults to 1 for configuration
-and 0 for Dismiss alarm/Snooze. Time adjustments wrap within 24 hours without changing
-repeat days or enabled state. Use +/-60 for hour controls and +/-1 for minute controls,
+and 0 for Cancel/Snooze. Time adjustments wrap within 24 hours without changing
+weekdays or enabled state. Use +/-60 for hour controls and +/-1 for minute controls,
 or configure other signed steps. For a Numeric Rocker adjustment action:
 
 ```json
@@ -677,25 +692,17 @@ Explicit portal configuration saves remain immediate and preserve the previous
 definition on failure. Occurrence records also save immediately and may save
 pending settings early. Ordinary scheduler ticks do not write. Substantive edits
 dismiss ringing/snoozing with the original stop actions and rearm enabled settings
-from the next full minute. Removing all repeat days selects a one-time alarm.
+from the next full minute. Removing all weekdays selects one-shot mode.
 
-The **Alarm** group also contains **Alarm tone** (`alarm_tone`) and **Alarm MP3**
-(`alarm_mp3`). Alarm tone accepts a bindable **Tone pattern**; Alarm MP3 selects an
-uploaded **MP3 file**. Both repeat until stopped and allow a **Volume override (%)**:
-0 uses device volume; 1-100 overrides it. Pair When ringing starts with
-**Sound alert > Stop audio** in When ringing stops. Stop audio stops playback;
-Dismiss alarm ends the alarm session. MP3 repetition is not guaranteed
-to be gapless and stops on dismissal, OTA, or playback failure.
+The **Alarm** group also contains **Loop Tone** (`alarm_tone`) and **Loop MP3**
+(`alarm_mp3`). Loop Tone accepts a bindable tone pattern; Loop MP3 selects an
+uploaded sound file. Both allow a volume override. Pair the ring hook with
+**Sound alert > Stop Audio** in the stop list. MP3 repetition is not guaranteed
+to be gapless and stops on cancellation, OTA, or playback failure.
 
-Configured tap and long-press feedback tones mix over both loop actions without
-stopping or restarting them, including during a tone pattern's silent gaps.
-Rapid feedback replaces only the previous feedback tone. Explicit sound actions
-can still replace a loop; feedback does not support MP3 files.
-
-Regular single-play tones, MP3 playback, and Stop audio remain under **Audio**.
-Use the dedicated alarm audio action types for loops; `sound_alert` accepts only
-`tone`, `mp3`, and `stop`, with no legacy loop conversion.
-Alarm Control keeps its persisted `alarm` type.
+Regular one-shot tones, MP3 playback, and Stop Audio remain under **Audio**.
+Existing `sound_alert` actions with `tone_loop` remain valid and appear as Loop
+Tone in the editor. Alarm Control keeps its persisted `alarm` type.
 
 ### Timer Actions
 
@@ -1971,16 +1978,15 @@ Available only when the board enables alarms:
 | `[alarm:1_ready]` | `ON` after current-boot NTP sync, otherwise `OFF` |
 | `[alarm:active_id]` | `1` while ringing/snoozed, otherwise `0` |
 | `[alarm:1_hour]`, `[alarm:1_minute]`, `[alarm:1_minutes]` | Numeric configured hour, minute, and minutes since midnight |
-| `[alarm:1_weekdays]` | Numeric repeat-day bit mask, Sunday bit 0 |
-| `[alarm:1_day_0]` through `[alarm:1_day_6]` | Individual repeat-day `ON`/`OFF`, Sunday through Saturday |
-| `[alarm:1_repeat]` | `once` for a one-time alarm, or `weekly` |
+| `[alarm:1_weekdays]` | Numeric weekday bit mask, Sunday bit 0 |
+| `[alarm:1_day_0]` through `[alarm:1_day_6]` | Individual weekday `ON`/`OFF`, Sunday through Saturday |
+| `[alarm:1_repeat]` | `once` or `weekly` |
 | `[alarm:1_snooze_minutes]`, `[alarm:1_auto_dismiss_minutes]` | Configured durations, read-only on a pad |
-| `[alarm:1_once_epoch]`, `[alarm:1_once_local]` | Saved one-time alarm epoch and device-local `YYYY-MM-DD HH:MM` |
+| `[alarm:1_once_epoch]`, `[alarm:1_once_local]` | Saved one-shot epoch and device-local `YYYY-MM-DD HH:MM` |
 | `[alarm:1_next_epoch]`, `[alarm:1_next_local]` | Next eligible scheduled occurrence, excluding handled occurrences |
-| `[alarm:1_next_seconds]` | Next scheduled alarm: whole seconds until its scheduled occurrence, excluding snooze |
-| `[alarm:1_snooze_seconds]` | Time until snooze ends: monotonic whole seconds remaining, rounded up, while snoozed |
-| `[alarm:1_dismiss_seconds]` | Time until auto-dismiss: monotonic whole seconds remaining, rounded up, while ringing |
-| `[alarm:1_next_ring_seconds]` | Next ring, including snooze: earlier of schedule/snooze countdown; zero while ringing |
+| `[alarm:1_next_seconds]` | Whole seconds until that scheduled occurrence |
+| `[alarm:1_snooze_seconds]`, `[alarm:1_dismiss_seconds]` | Monotonic whole seconds remaining, rounded up, while snoozed/ringing respectively |
+| `[alarm:1_next_ring_seconds]` | Earlier of schedule/snooze countdown; zero while ringing |
 | `[alarm:1_once_available]`, `[alarm:1_next_available]`, `[alarm:1_snooze_available]`, `[alarm:1_dismiss_available]`, `[alarm:1_next_ring_available]` | `ON`/`OFF` availability for the corresponding values |
 | `[alarm:1_ota_deferred]`, `[alarm:1_storage_error]`, `[alarm:1_hook_error]`, `[alarm:1_command_error]` | `ON`/`OFF` deferral and failure indicators |
 | `[alarm:1_command_message]` | Last command failure text, empty after successful processing |
@@ -1988,12 +1994,12 @@ Available only when the board enables alarms:
 | `[alarm:1_save_state]` | `idle`, `pending` (queued or awaiting delayed save), `saved` (verified), or `failed`; session controls also acknowledge processing |
 
 For example, use `Alarm [alarm:1_time]` as a button label and
-`[alarm:1_state]` as its secondary label, with an Alarm Control > Dismiss alarm action.
+`[alarm:1_state]` as its secondary label, with an Alarm Cancel action.
 
 Bindings are read-only and advertised in the portal/MCP binding catalog. Epochs,
 local dates and countdowns resolve to an empty string when unavailable, not zero;
 use their availability flags to distinguish absence from an imminent ring. A
-one-time alarm can be disabled while its session is still ringing or snoozed. Time
+one-shot can be disabled while its session is still ringing or snoozed. Time
 readiness gates calendar forecasts, but an existing snooze uses monotonic time.
 Weekly forecasts use the device timezone, skip nonexistent DST times, and use
 the first occurrence of repeated local times. No dedicated configuration pad or

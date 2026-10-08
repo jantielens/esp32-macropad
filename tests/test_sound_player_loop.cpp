@@ -4,7 +4,6 @@
 #include <cstring>
 #include <map>
 #include <string>
-#include "../src/app/loop_feedback.h"
 using std::min;
 #include "../src/app/sound_player.cpp"
 
@@ -27,16 +26,12 @@ char* sound_store_path(const char* name, char* output, size_t capacity) {
 class TestOutput : public AudioOutputDriver {
 public:
     size_t frames = 0;
-    bool heard_feedback = false;
     size_t interrupt_after = SIZE_MAX;
     unsigned interruption = 0;
     bool fail = false;
     bool begin(uint32_t) override { return true; }
     void setVolume(uint8_t) override {}
-    bool write(const int16_t* pcm, size_t count) override {
-        for (size_t sample = 0; sample < count * 2; ++sample) {
-            if (pcm[sample] != 0) heard_feedback = true;
-        }
+    bool write(const int16_t*, size_t count) override {
         frames += count;
         if (frames >= interrupt_after) {
             if (interruption == 1) stopped = true;
@@ -51,10 +46,6 @@ bool audio_write_with_stats(AudioOutputDriver* driver, const int16_t* frames,
     return driver->write(frames, count);
 }
 
-static void mix_feedback(void* context, int16_t* frames, size_t count) {
-    loop_feedback_mix(static_cast<ToneAlertOverlay*>(context), frames, count, 48000);
-}
-
 int main() {
     uint64_t duration_us = 0;
     assert(sound_player_duration_add(&duration_us, 1152, 44100));
@@ -65,23 +56,9 @@ int main() {
     frame[2] = char(0x90);
     storage_test_files["/sounds/clip.mp3"] = frame + frame + frame;
     TestOutput output;
-    storage_test_fail_open = true;
-    assert(!sound_player_play(&output, "clip", &stopped, playback_guard, 7, true));
-    assert(output.frames == 0);
-    storage_test_fail_open = false;
     assert(sound_player_play(&output, "clip", &stopped, playback_guard, 7));
     const size_t clip_frames = output.frames;
     assert(clip_frames > 0);
-    assert(!output.heard_feedback);
-    ToneAlertOverlay feedback = {};
-    assert(tone_alert_overlay_start(&feedback, "800:40", false, 48000, 0.25f));
-    output = TestOutput();
-    output.interrupt_after = clip_frames * 2;
-    output.interruption = 1;
-    assert(sound_player_play(&output, "clip", &stopped, playback_guard, 7, true,
-                             mix_feedback, &feedback));
-    assert(output.heard_feedback && !feedback.active);
-    assert(output.frames >= clip_frames * 2);
     for (unsigned interruption = 1; interruption <= 3; ++interruption) {
         stopped = ota = false;
         guard_valid = true;

@@ -67,6 +67,28 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertNotIn("portal_shutter", bundle)
         self.assertEqual(self.request("/api/bindings")[0], 200)
 
+    def test_recipe_catalog(self):
+        status, catalog = self.request("/api/recipes/catalog")
+        self.assertEqual(status, 200)
+        alarm = next(recipe for recipe in catalog["recipes"] if recipe["id"] == "alarm-clock")
+        self.assertFalse(alarm["provision"]["components"]["alarms"]["1"]["enabled"])
+        self.assertEqual(alarm["post_install"]["links"][0]["fragment"], "alarm-schedule")
+        info = self.request("/api/info")[1]
+        self.assertTrue(info["has_alarm"])
+        self.assertTrue(info["has_sound_player"])
+        self.assertFalse(self.request("/api/info", profile="jc3248w535")[1]["has_sound_player"])
+        self.assertFalse(self.request("/api/info", profile="reterminal-e1003-frame")[1]["has_alarm"])
+        nav = self.request("/api/portal/nav")[1]
+        pads = next(category for category in nav["categories"] if category["id"] == "pads")
+        self.assertIn("recipes", [item["id"] for item in pads["items"]])
+        self.assertEqual(self.request("/api/section/recipes", raw=True)[0], 200)
+        self.assertEqual(self.request("/api/recipes/catalog", "POST", {"schema": 2})[0], 400)
+        self.assertEqual(self.request("/api/recipes/catalog")[1], catalog)
+        empty = {"schema": 1, "catalog_version": "test", "recipes": []}
+        self.assertEqual(self.request("/api/recipes/catalog", "POST", empty)[0], 200)
+        self.assertEqual(self.request("/api/recipes/catalog")[1], empty)
+        self.assertEqual(self.request("/api/recipes/catalog", "POST", {**empty, "padding": "x" * 65536})[0], 413)
+
     def test_alarms(self):
         status, alarm = self.request("/api/component/alarms/config")
         self.assertEqual(status, 200)

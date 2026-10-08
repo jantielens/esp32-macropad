@@ -16,6 +16,7 @@
 }
 
 /* Recipes: independent compact pad placement picker. */
+#recipes-root [hidden] { display: none !important; }
 .recipes-list { display: grid; gap: 8px; margin-bottom: 16px; }
 .recipes-list-item { display: grid; gap: 3px; width: 100%; padding: 12px; text-align: left; border: 1px solid var(--portal-border); border-radius: 6px; background: var(--portal-surface); color: var(--portal-text); }
 .recipes-list-item:not(:disabled):hover { border-color: var(--portal-primary); background: var(--portal-surface-alt); }

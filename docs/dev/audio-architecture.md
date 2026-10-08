@@ -130,7 +130,7 @@ after a successful pass with accepted PCM, and checks stop, session-generation,
 and OTA guards before restarting. Output failures and files with no decoded
 audio terminate instead of repeating. Repetition is not guaranteed to be
 gapless. `alarm_tone` uses the existing repeating tone path; ordinary sound
-alerts remain single-play; legacy looping kinds on `sound_alert` are rejected.
+alerts remain one-shot unless a legacy looping kind is explicitly persisted.
 
 Music transport and catalog-refresh requests use a dedicated, bounded worker
 queue. This keeps them independent from replaceable tone/alert requests, so an
@@ -253,49 +253,16 @@ first decode occurs when the track is opened for playback.
 
 ## Alarm Tones And Cancellation
 
-The public Sound alert action supports `tone`, `mp3`, and shared audio `stop` kinds.
+Sound alerts support `tone`, `tone_loop`, `mp3`, and shared audio `stop` kinds.
 A looping tone must contain a valid duration-bearing segment; empty patterns
 use the existing default beep. Alarm-enabled builds also register dedicated
-Alarm tone (`alarm_tone`) and Alarm MP3 (`alarm_mp3`) actions with fixed internal
-`tone_loop` and `mp3_loop` kinds. Both repeat until stopped; a volume override of
-0 uses device volume, and 1-100 overrides it.
+`alarm_tone` and `alarm_mp3` actions with fixed `tone_loop` and `mp3_loop` kinds.
 Looping MP3 playback rewinds the open file and resets decoding after each
 successful pass. It does not guarantee gapless playback. Empty or corrupt
-files, output failures, cancellation, and OTA end the worker's playback attempt.
+files, output failures, cancellation, and OTA end playback rather than retrying
+indefinitely.
 Stop clears queued sound and music work, ends tone overlays, and requests a
 music stop independently of command-queue capacity.
-
-Configured tap, long-press, rocker, pad, and swipe feedback uses
-`audio_feedback()`. While a tone or MP3 loop is queued or playing, feedback
-goes into a separate latest-wins request slot rather than replacing the loop
-or flushing its command. The audio worker consumes this slot at PCM boundaries
-and owns a separate one-shot tone overlay. Tone playback mixes it into both
-tone and silence chunks; looping MP3 playback uses the decoder's existing PCM
-transform after resampling. A looping tone overlay on Music also retains its
-own state while feedback plays.
-
-Feedback uses one-quarter PCM gain and reduces primary PCM to three-quarters
-only for samples where feedback is active, leaving headroom without changing
-the output driver's volume. During standalone alarm playback, feedback follows
-the alarm's effective volume, including an override. No extra decoder, audio
-task, or file is allocated. Pending feedback belongs to its loop command;
-replacement, stop, session cancellation, playback failure, and OTA discard it
-without affecting feedback queued for a newer loop.
-
-Without a protected loop, feedback retains the normal one-shot tone behavior,
-including the existing overlay on active Music. Explicit tone, MP3, and speech
-commands remain replacing commands. Configured feedback accepts tone patterns,
-not MP3 files; this is not a general multi-source audio mixer.
-
-Queue acceptance does not confirm successful playback. Alarm ring sound actions
-report submission, storage-claim, MP3 open/decode, and tone/MP3 output failures
-to the alarm manager. The manager sets `hook_error` and automatically snoozes
-using the session's configured duration. It runs On stop cleanup, then retries
-the retained On ring actions at the snooze deadline, including for a consumed
-one-shot. Repeated failures snooze again; no fallback tone is played. Cancel
-ends these retries. Failure reports from stale sessions, ordinary buttons,
-or On stop audio cannot snooze the current ring. OTA defers a pending failure
-transition; deliberate playback interruption is not reported as a failure.
 
 Synchronous alarm dispatch supplies a session-generation guard to tone, MP3,
 and music submissions. Workers check that guard before queued execution and at
@@ -312,11 +279,6 @@ while all audio work still honors OTA checkpoints.
 `audio.cpp` reports output starvation from the time represented by queued DMA
 frames. This metric identifies whether the output writer met its timing budget;
 it does not establish MP3 decode or resampler correctness.
-
-A failed MP3 open logs its path, an existence check, and the captured `errno`.
-An existing file that cannot be opened can indicate temporary filesystem or
-resource pressure; an error value of zero means the backend supplied no errno.
-File access and this diagnostic remain on the internal-stack audio worker.
 
 Only nonzero starvation is reported, at WARN. Resampler capacity clamps emit
 one initial warning and a per-playback count at close. Output drivers own I2S

@@ -10,21 +10,14 @@ function alarmScheduleSummary() {
     });
     var enabled = document.getElementById('alarm-enabled').checked;
     var time = document.getElementById('alarm-time').value;
-    var summary = days.length ? 'Every ' + days.join(', ') + ' at ' + time
-        : 'One-time alarm at ' + time;
-    document.getElementById('alarm-repeat-summary').textContent = enabled ? summary : 'Alarm off. ' + summary;
+    var summary = days.length ? 'Weekly: ' + days.join(', ') + ' at ' + time + '.'
+        : 'Only once: next valid ' + time + ', then automatically disabled. Snooze can still ring again within that session.';
+    document.getElementById('alarm-repeat-summary').textContent = enabled ? summary : 'Disabled. Enable and save to schedule. ' + summary;
     var target = document.getElementById('alarm-once-target');
-    target.hidden = !enabled || days.length > 0 || !form.dataset.onceLocal || form.dataset.dirty === 'true';
-    if (form.dataset.onceLocal && form.dataset.dirty !== 'true') {
-        var saved = form.dataset.onceLocal.split(' ');
-        var date = new Date(saved[0] + 'T00:00:00Z');
-        target.textContent = 'Scheduled for: ' + date.toLocaleDateString('en-GB', {
-            day: 'numeric', month: 'long', timeZone: 'UTC'
-        }) + ' at ' + saved[1];
-    } else {
-        target.textContent = '';
-    }
-    document.getElementById('alarm-once-note').hidden = days.length > 0;
+    target.hidden = !enabled || days.length > 0;
+    target.textContent = form.dataset.onceLocal && form.dataset.dirty !== 'true'
+        ? 'Scheduled: ' + form.dataset.onceLocal + ' (device timezone).'
+        : 'Saving enabled one-shot settings schedules the next occurrence, usually today or tomorrow. Unchanged settings keep the saved occurrence.';
 }
 
 function alarmConfigBuild() {

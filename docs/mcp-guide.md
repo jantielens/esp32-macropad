@@ -259,9 +259,6 @@ Use `get_component_config` with `component: "alarms"` before a full-replacement
 `auto_dismiss_minutes`, `on_ring`, and `on_stop`. Hook arrays accept at most
 three available synchronous actions. Validation and persistence use the same
 manager as the portal; failed or identical saves do not dismiss an active ring.
-The portal's **Alarm > Schedule** and **Alarm > Behavior** views use scoped REST
-saves that preserve the other view's latest settings. MCP component writes still
-replace the full configuration, so read it before editing.
 The configuration root also requires device-wide `lateness_minutes`: whole
 minutes from 0 to 10080, default 360. This one inclusive window covers startup
 recovery and live scheduling delays; zero permits only on-time delivery.
@@ -308,7 +305,7 @@ reboot or power loss before verification can lose recent changes. Explicit
 definition with pending live changes. Occurrence records also save immediately
 and can flush pending settings early. Substantive edits dismiss the session and
 rearm from the next full minute.
-Dismiss alarm (`cancel`) does not disable the schedule. Write and control permissions are required.
+Cancel does not disable the schedule. Write and control permissions are required.
 
 Status also exposes `hour`, `minute`, `weekdays`, `snooze_minutes`,
 `auto_dismiss_minutes`, `next_epoch`, `next_local`, `next_seconds`,
@@ -323,13 +320,10 @@ binding dates/epochs/countdowns are empty strings.
 explicit POSIX TZ rule and applies it without rebooting. A substantive successful
 timezone change dismisses the old session and rearms from the next full minute.
 The action catalog advertises **Alarm Control** with the unchanged `alarm` type,
-plus **Alarm tone** (`alarm_tone`) and **Alarm MP3** (`alarm_mp3`) for audio that
-repeats until stopped. Loop actions use
+plus `alarm_tone` and `alarm_mp3` for repeating audio. Loop actions use
 `sound_alert_pattern` or `sound_alert_file` respectively and optional
 `sound_alert_volume`; they do not accept a `sound_alert_kind` override. Stop
-audio remains `{ "type": "sound_alert", "sound_alert_kind": "stop" }` and stops
-playback, not the alarm session. A volume override of 0 uses device volume;
-1-100 overrides it. Legacy `sound_alert` loop kinds are rejected, not migrated.
+Audio remains `{ "type": "sound_alert", "sound_alert_kind": "stop" }`.
 The portal's city catalog and non-mutating preview are REST component actions,
 not additional MCP tools; MCP timezone writes still use `set_config`.
 The [portal alarm guide](web-portal-guide.md#alarm-clock) covers scheduling and

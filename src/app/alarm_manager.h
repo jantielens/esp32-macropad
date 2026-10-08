@@ -76,7 +76,6 @@ const char* alarm_last_error();
 void alarm_config_to_json(JsonObject root);
 void alarm_status_to_json(JsonObject root);
 AlarmSnapshot alarm_snapshot();
-void alarm_manager_report_audio_failure(bool (*guard)(uint32_t), uint32_t generation);
 void alarm_command_report_error(const char* message);
 bool alarm_command_submit(const char* command, uint8_t id = 0, int value = 0, uint8_t day = 0);
 #endif

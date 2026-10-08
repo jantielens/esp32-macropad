@@ -55,7 +55,6 @@ static uint8_t stop_index = 0;
 static uint8_t ring_index = 0;
 static bool ring_pending = false;
 static bool session_started = false;
-static bool audio_failed = false;
 static time_t ring_until_epoch = 0;
 static uint64_t ring_until_ms = 0;
 static std::atomic<uint32_t> session_generation{1};
@@ -64,7 +63,6 @@ static bool schedule_log_pending = true;
 static bool logged_ota_active = false;
 
 static bool session_work_valid(uint32_t value) { return value == session_generation.load(); }
-static bool stop_work_valid(uint32_t value) { return session_work_valid(value); }
 
 using AlarmDocument = BasicJsonDocument<PsramJsonAllocator>;
 using DefinitionPtr = std::unique_ptr<AlarmDefinition, decltype(&free)>;
@@ -248,17 +246,16 @@ static bool persist(const AlarmDefinition& candidate, time_t handled, time_t onc
     return true;
 }
 
-static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const char* label, uint8_t index,
-                              bool (*guard)(uint32_t) = session_work_valid) {
+static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const char* label, uint8_t index) {
     for (; index < count; ++index) {
         if (ota_activity_is_active()) break;
         LOGI("Alarm", "%s hook %u/%u: dispatch type=%s", label, unsigned(index + 1), unsigned(count), actions[index].type);
-        const ActionResult result = action_dispatch_synchronous(actions[index], label, guard, session_generation.load());
+        const ActionResult result = action_dispatch_synchronous(actions[index], label, session_work_valid, session_generation.load());
         if (result != ACTION_COMPLETE) {
             hook_error = true;
             LOGW("Alarm", "%s hook %u/%u: failed result=%u", label, unsigned(index + 1), unsigned(count), unsigned(result));
         } else {
-            LOGI("Alarm", "%s hook %u/%u: dispatch complete", label, unsigned(index + 1), unsigned(count));
+            LOGI("Alarm", "%s hook %u/%u: complete", label, unsigned(index + 1), unsigned(count));
         }
     }
     return index;
@@ -266,7 +263,6 @@ static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const 
 
 static void stop_session() {
     session_generation.fetch_add(1);
-    audio_failed = false;
     if (session_started) {
         memcpy(pending_stop, session.on_stop, sizeof(pending_stop));
         stop_count = session.stop_count;
@@ -277,7 +273,7 @@ static void stop_session() {
 }
 
 static void flush_hooks() {
-    const uint8_t stopped = dispatch_hooks(pending_stop, stop_count, "Alarm stop", stop_index, stop_work_valid);
+    const uint8_t stopped = dispatch_hooks(pending_stop, stop_count, "Alarm stop", stop_index);
     {
         std::lock_guard<std::mutex> lock(alarm_mutex);
         stop_index = stopped;
@@ -334,7 +330,6 @@ void alarm_manager_init() {
     last_error[0] = '\0';
     stop_count = stop_index = ring_index = 0;
     ring_pending = session_started = false;
-    audio_failed = false;
     last_schedule_log_ms = 0;
     schedule_log_pending = true;
     logged_ota_active = ota_activity_is_active();
@@ -553,13 +548,6 @@ void alarm_status_to_json(JsonObject root) {
     root["save_state"] = value.save_state();
 }
 
-void alarm_manager_report_audio_failure(bool (*guard)(uint32_t), uint32_t work_generation) {
-    std::lock_guard<std::mutex> lock(alarm_mutex);
-    if (guard != session_work_valid || !session_work_valid(work_generation) || clock_core.state != ALARM_RINGING) return;
-    audio_failed = true;
-    hook_error = true;
-}
-
 void alarm_command_report_error(const char* message) {
     std::lock_guard<std::mutex> lock(alarm_mutex);
     command_error = true;
@@ -666,10 +654,6 @@ void alarm_manager_loop() {
             rearmed = rearmed || (cancel && had_session) || invalidate || command_effects;
             LOGI("Alarm", "Command=%s: %s -> %s deadline_ms=%llu", cancel ? "cancel" : "snooze",
                 state_name(previous_state), state_name(clock_core.state), static_cast<unsigned long long>(clock_core.deadline_ms));
-        }
-        if (audio_failed && !ota) {
-            if (clock_core.snooze(monotonic) & ALARM_EFFECT_STOP) stop_session();
-            LOGW("Alarm", "Audio playback failed; automatically snoozed for %umin", unsigned(session.snooze_minutes));
         }
         if (ring_pending && (now > ring_until_epoch || monotonic > ring_until_ms)) {
             LOGW("Alarm", "Pending ring expired; discarding remaining ring hooks (%u/%u dispatched)",

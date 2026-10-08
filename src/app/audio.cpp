@@ -1,7 +1,6 @@
 #include "audio.h"
 #include "ota_activity.h"
 #include "tone_alert_overlay.h"
-#include "loop_feedback.h"
 #include <atomic>
 
 #if HAS_AUDIO
@@ -50,10 +49,8 @@ struct AudioCommand {
     uint8_t volume_override; // 0 = use current
     bool loop;               // true = repeat until stop
     AudioPlaybackGuard guard;
-    AudioPlaybackFailure failure;
     uint32_t generation;
     uint32_t ota_epoch;
-    uint32_t command_id;
 #if HAS_SOUND_PLAYER
     bool is_sound;           // true = play sound file (pattern holds filename)
     bool is_memory_sound;
@@ -86,10 +83,6 @@ static volatile bool g_playing = false;
 static AudioPlaybackGuard g_playback_guard = nullptr;
 static uint32_t g_playback_generation = 0;
 static std::atomic<bool> g_music_stop_requested{false};
-static portMUX_TYPE g_audio_command_mux = portMUX_INITIALIZER_UNLOCKED;
-static LoopFeedbackMailbox g_loop_feedback;
-static ToneAlertOverlay g_feedback_tone = {};
-static uint32_t g_feedback_owner = 0;
 
 static void audio_command_dispose(AudioCommand* command) {
 #if HAS_SOUND_PLAYER
@@ -97,57 +90,6 @@ static void audio_command_dispose(AudioCommand* command) {
 #else
     (void)command;
 #endif
-}
-
-static bool audio_enqueue(AudioCommand* command, const ToneAlertOverlay* feedback = nullptr) {
-    AudioCommand discarded[AUDIO_QUEUE_DEPTH];
-    size_t discarded_count = 0;
-    portENTER_CRITICAL(&g_audio_command_mux);
-    if (ota_activity_is_active() || command->ota_epoch != ota_activity_epoch()) {
-        portEXIT_CRITICAL(&g_audio_command_mux);
-        return false;
-    }
-    if (feedback && g_loop_feedback.submit(*feedback)) {
-        portEXIT_CRITICAL(&g_audio_command_mux);
-        return true;
-    }
-    command->command_id = g_loop_feedback.replace(command->loop);
-    if (g_playing) g_stop_requested = true;
-    while (discarded_count < AUDIO_QUEUE_DEPTH &&
-           xQueueReceive(audio_queue, &discarded[discarded_count], 0) == pdTRUE) ++discarded_count;
-    const bool accepted = xQueueSend(audio_queue, command, 0) == pdTRUE;
-    if (!accepted) g_loop_feedback.finish(command->command_id);
-    portEXIT_CRITICAL(&g_audio_command_mux);
-    for (size_t index = 0; index < discarded_count; ++index) audio_command_dispose(&discarded[index]);
-    return accepted;
-}
-
-static void finish_loop_feedback(uint32_t owner) {
-    portENTER_CRITICAL(&g_audio_command_mux);
-    g_loop_feedback.finish(owner);
-    portEXIT_CRITICAL(&g_audio_command_mux);
-    tone_alert_overlay_stop(&g_feedback_tone);
-}
-
-static void mix_loop_feedback(void*, int16_t* frames, size_t count) {
-    portENTER_CRITICAL(&g_audio_command_mux);
-    const bool valid = g_loop_feedback.matches(g_feedback_owner);
-    if (valid) g_loop_feedback.take(g_feedback_owner, &g_feedback_tone);
-    portEXIT_CRITICAL(&g_audio_command_mux);
-    if (!valid || g_stop_requested || ota_activity_is_active()) {
-        tone_alert_overlay_stop(&g_feedback_tone);
-        return;
-    }
-    loop_feedback_mix(&g_feedback_tone, frames, count, AUDIO_SAMPLE_RATE);
-}
-
-static void audio_report_failure(const AudioCommand& command) {
-    if (command.failure && !g_stop_requested && !ota_activity_is_active()
-        && command.ota_epoch == ota_activity_epoch()
-        && (!command.guard || command.guard(command.generation))) {
-        LOGW(TAG, "Playback failed; notifying action owner");
-        command.failure(command.guard, command.generation);
-    }
 }
 
 #if HAS_SOUND_PLAYER
@@ -178,15 +120,11 @@ static void music_storage_playback_release() {
 }
 
 static void music_tone_alert_transform(void* context, int16_t* frames, size_t frame_count) {
-    if (g_overlay_guard && !g_overlay_guard(g_overlay_generation)) {
-        tone_alert_overlay_stop((ToneAlertOverlay*)context);
-        finish_loop_feedback(g_feedback_owner);
-    }
+    if (g_overlay_guard && !g_overlay_guard(g_overlay_generation)) tone_alert_overlay_stop((ToneAlertOverlay*)context);
 #if HAS_MUSIC_ANALYSIS
     music_analysis_process(frames, frame_count);
 #endif
     tone_alert_overlay_mix((ToneAlertOverlay*)context, frames, frame_count, AUDIO_SAMPLE_RATE);
-    mix_loop_feedback(nullptr, frames, frame_count);
 }
 
 static void music_info_set(AudioMusicStatus status, const MusicCatalogSnapshot* catalog,
@@ -258,11 +196,11 @@ void audio_log_starvation(const AudioStarvationStats& stats) {
 // ---------------------------------------------------------------------------
 // Tone generation — play one segment (freq Hz for duration_ms)
 // ---------------------------------------------------------------------------
-static bool play_tone(uint16_t freq_hz, uint16_t duration_ms, AudioStarvationStats* stats) {
-    if (!output_driver) return false;
+static void play_tone(uint16_t freq_hz, uint16_t duration_ms, AudioStarvationStats* stats) {
+    if (!output_driver) return;
 
     uint32_t total_samples = (uint32_t)AUDIO_SAMPLE_RATE * duration_ms / 1000;
-    if (total_samples == 0) return true;
+    if (total_samples == 0) return;
 
     static const size_t FRAMES_PER_CHUNK = 512;
     int16_t buf[FRAMES_PER_CHUNK * 2];
@@ -274,13 +212,10 @@ static bool play_tone(uint16_t freq_hz, uint16_t duration_ms, AudioStarvationSta
         while (frames_done < total_samples) {
             size_t chunk = (total_samples - frames_done < FRAMES_PER_CHUNK)
                          ? (total_samples - frames_done) : FRAMES_PER_CHUNK;
-            if (g_stop_requested) return true;
-            mix_loop_feedback(nullptr, buf, chunk);
-            if (!audio_write_with_stats(output_driver, buf, chunk, stats)) return false;
-            memset(buf, 0, sizeof(buf));
+            if (!audio_write_with_stats(output_driver, buf, chunk, stats)) return;
             frames_done += chunk;
         }
-        return true;
+        return;
     }
 
     float phase_inc = 2.0f * M_PI * freq_hz / AUDIO_SAMPLE_RATE;
@@ -308,12 +243,9 @@ static bool play_tone(uint16_t freq_hz, uint16_t duration_ms, AudioStarvationSta
             if (phase >= 2.0f * M_PI) phase -= 2.0f * M_PI;
         }
 
-        if (g_stop_requested) return true;
-        mix_loop_feedback(nullptr, buf, chunk);
-        if (!audio_write_with_stats(output_driver, buf, chunk, stats)) return false;
+        if (!audio_write_with_stats(output_driver, buf, chunk, stats)) return;
         frames_done += chunk;
     }
-    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,9 +253,10 @@ static bool play_tone(uint16_t freq_hz, uint16_t duration_ms, AudioStarvationSta
 //   Space-delimited: "freq:dur" for tones, bare "dur" for silence gaps
 //   e.g. "1000:200 100 1000:200" = beep, 100ms gap, beep
 // ---------------------------------------------------------------------------
-static bool play_pattern(const char* pattern, AudioStarvationStats* stats) {
+static void play_pattern(const char* pattern, AudioStarvationStats* stats) {
     if (!pattern || !pattern[0]) {
-        return play_tone(1000, 200, stats);
+        play_tone(1000, 200, stats); // default beep
+        return;
     }
 
     char buf[AUDIO_PATTERN_MAX_LEN];
@@ -332,24 +265,23 @@ static bool play_pattern(const char* pattern, AudioStarvationStats* stats) {
     char* saveptr = NULL;
     char* tok = strtok_r(buf, " ", &saveptr);
     while (tok) {
-        if (g_stop_requested) return true;
+        if (g_stop_requested) return;
         char* colon = strchr(tok, ':');
         if (colon) {
             *colon = '\0';
             uint16_t freq = (uint16_t)atoi(tok);
             uint16_t dur  = (uint16_t)atoi(colon + 1);
             if (dur > 0 && dur <= 10000) {
-                if (!play_tone(freq, dur, stats)) return false;
+                play_tone(freq, dur, stats);
             }
         } else {
             uint16_t dur = (uint16_t)atoi(tok);
             if (dur > 0 && dur <= 10000) {
-                if (!play_tone(0, dur, stats)) return false;
+                play_tone(0, dur, stats); // silence gap
             }
         }
         tok = strtok_r(NULL, " ", &saveptr);
     }
-    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -401,7 +333,6 @@ static void audio_task(void* param) {
 
     auto close_music = [&]() {
         tone_alert_overlay_stop(&music_tone_alert);
-        finish_loop_feedback(g_feedback_owner);
 #if HAS_MUSIC_ANALYSIS
         music_analysis_set_playing(false);
 #endif
@@ -485,10 +416,6 @@ static void audio_task(void* param) {
             AudioCommand discard;
             while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) audio_command_dispose(&discard);
             g_playing = false;
-            portENTER_CRITICAL(&g_audio_command_mux);
-            g_loop_feedback.replace(false);
-            portEXIT_CRITICAL(&g_audio_command_mux);
-            finish_loop_feedback(g_feedback_owner);
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
@@ -498,7 +425,6 @@ static void audio_task(void* param) {
 #else
             portMAX_DELAY;
 #endif
-#if HAS_SOUND_PLAYER
         MusicWorkCommand music_work = {};
         if (xQueueReceive(music_work_queue, &music_work, 0) == pdTRUE) {
             const bool valid = !ota_activity_is_active() && music_work.ota_epoch == ota_activity_epoch()
@@ -518,24 +444,14 @@ static void audio_task(void* param) {
             }
             continue;
         }
-#endif
         if (xQueueReceive(audio_queue, &cmd, wait) == pdTRUE) {
             if (ota_activity_is_active() || cmd.ota_epoch != ota_activity_epoch()
-                || (cmd.guard && !cmd.guard(cmd.generation))) {
-                finish_loop_feedback(cmd.command_id);
+                || (cmd.guard && !cmd.guard(cmd.generation))) { audio_command_dispose(&cmd); continue; }
+#if HAS_SOUND_PLAYER
+            if (cmd.is_memory_sound && cmd.guard && !cmd.guard(cmd.generation)) {
                 audio_command_dispose(&cmd);
                 continue;
             }
-            portENTER_CRITICAL(&g_audio_command_mux);
-            const bool current_command = cmd.command_id == g_loop_feedback.command_id;
-            if (current_command) {
-                g_stop_requested = false;
-                g_playing = true;
-            }
-            portEXIT_CRITICAL(&g_audio_command_mux);
-            if (!current_command) { audio_command_dispose(&cmd); continue; }
-            tone_alert_overlay_stop(&g_feedback_tone);
-#if HAS_SOUND_PLAYER
             if (music_player && music_transport.state() == MUSIC_TRANSPORT_PLAYING &&
                 !cmd.is_sound && !cmd.is_memory_sound) {
                 float tone_gain = 1.0f;
@@ -549,8 +465,6 @@ static void audio_task(void* param) {
                 }
                 g_overlay_guard = cmd.guard;
                 g_overlay_generation = cmd.generation;
-                g_feedback_owner = cmd.command_id;
-                g_playing = false;
                 continue;
             }
             const bool preserve_paused_music = music_player &&
@@ -564,7 +478,8 @@ static void audio_task(void* param) {
                 }
             }
 #endif
-            g_feedback_owner = cmd.command_id;
+            g_stop_requested = false;
+            g_playing = true;
             g_playback_guard = cmd.guard;
             g_playback_generation = cmd.generation;
 
@@ -574,7 +489,6 @@ static void audio_task(void* param) {
             }
             LOGD(TAG, "Play: vol=%u%% (override=%u, device=%u) loop=%d", play_vol, cmd.volume_override, current_volume, cmd.loop);
             output_driver->setVolume(play_vol);
-            bool playback_ok = true;
 
 #if HAS_SOUND_PLAYER
             if (cmd.is_memory_sound) {
@@ -583,28 +497,24 @@ static void audio_task(void* param) {
                 audio_command_dispose(&cmd);
             } else if (cmd.is_sound) {
                 if (music_storage_playback_claim()) {
-                    playback_ok = sound_player_play(output_driver, cmd.pattern, &g_stop_requested, cmd.guard, cmd.generation, cmd.loop,
-                                                    cmd.loop ? mix_loop_feedback : nullptr);
+                    sound_player_play(output_driver, cmd.pattern, &g_stop_requested, cmd.guard, cmd.generation, cmd.loop);
                     music_storage_playback_release();
                 } else {
-                    LOGW(TAG, "MP3 alert could not start while Music storage is busy");
-                    playback_ok = false;
+                    LOGW(TAG, "MP3 alert skipped while Music storage is busy");
                 }
             } else
 #endif
             if (cmd.loop) {
                 AudioStarvationStats stats = {};
                 while (!g_stop_requested && !ota_activity_is_active()) {
-                    if (!play_pattern(cmd.pattern, &stats)) { playback_ok = false; break; }
+                    play_pattern(cmd.pattern, &stats);
                 }
                 audio_log_starvation(stats);
             } else {
                 AudioStarvationStats stats = {};
-                playback_ok = play_pattern(cmd.pattern, &stats);
+                play_pattern(cmd.pattern, &stats);
                 audio_log_starvation(stats);
             }
-            if (!playback_ok) audio_report_failure(cmd);
-            finish_loop_feedback(cmd.command_id);
 
             // Restore device volume if overridden
             if (cmd.volume_override > 0 && cmd.volume_override <= 100) {
@@ -622,7 +532,6 @@ static void audio_task(void* param) {
                 g_stop_requested = false;
             }
             const SoundPlayerStepResult step = sound_player_step(music_player);
-            if (!music_tone_alert.active) finish_loop_feedback(g_feedback_owner);
             if (step != SOUND_PLAYER_STEP_PLAYING) {
                 close_music();
                 const MusicCatalogSnapshot* before_transition = music_catalog_store_active_for_audio();
@@ -738,7 +647,7 @@ uint8_t audio_get_volume() {
 }
 
 bool audio_submit_tone(const char* pattern, uint8_t volume_override, bool loop,
-                       AudioPlaybackGuard guard, uint32_t generation, AudioPlaybackFailure failure) {
+                       AudioPlaybackGuard guard, uint32_t generation) {
     if (ota_activity_is_active()) return false;
     ToneAlertOverlay parsed = {};
     if (!tone_alert_overlay_start(&parsed, pattern, loop, AUDIO_SAMPLE_RATE)) return false;
@@ -746,6 +655,15 @@ bool audio_submit_tone(const char* pattern, uint8_t volume_override, bool loop,
         LOGW(TAG, "Audio not initialized");
         return false;
     }
+
+    // If starting a new command, stop any current loop first
+    if (g_playing) {
+        g_stop_requested = true;
+    }
+
+    // Flush queue
+    AudioCommand discard;
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) audio_command_dispose(&discard);
 
     AudioCommand cmd;
     memset(&cmd, 0, sizeof(cmd));
@@ -756,20 +674,9 @@ bool audio_submit_tone(const char* pattern, uint8_t volume_override, bool loop,
     cmd.loop = loop;
     cmd.guard = guard;
     cmd.generation = generation;
-    cmd.failure = failure;
     cmd.ota_epoch = ota_activity_epoch();
 
-    return audio_enqueue(&cmd);
-}
-
-void audio_feedback(const char* pattern) {
-    if (!audio_initialized || ota_activity_is_active() || !pattern || !pattern[0] || !strcmp(pattern, "none")) return;
-    ToneAlertOverlay feedback = {};
-    if (!tone_alert_overlay_start(&feedback, pattern, false, AUDIO_SAMPLE_RATE, 0.25f)) return;
-    AudioCommand cmd = {};
-    strlcpy(cmd.pattern, pattern, sizeof(cmd.pattern));
-    cmd.ota_epoch = ota_activity_epoch();
-    audio_enqueue(&cmd, &feedback);
+    return xQueueSend(audio_queue, &cmd, 0) == pdTRUE;
 }
 
 void audio_beep(const char* pattern, uint8_t volume_override) {
@@ -782,15 +689,10 @@ void audio_play_loop(const char* pattern, uint8_t volume_override) {
 
 void audio_stop() {
     if (!audio_initialized) return;
-    AudioCommand discarded[AUDIO_QUEUE_DEPTH];
-    size_t discarded_count = 0;
-    portENTER_CRITICAL(&g_audio_command_mux);
-    g_loop_feedback.replace(false);
     g_stop_requested = true;
-    while (discarded_count < AUDIO_QUEUE_DEPTH &&
-           xQueueReceive(audio_queue, &discarded[discarded_count], 0) == pdTRUE) ++discarded_count;
-    portEXIT_CRITICAL(&g_audio_command_mux);
-    for (size_t index = 0; index < discarded_count; ++index) audio_command_dispose(&discarded[index]);
+    // Flush queued commands
+    AudioCommand discard;
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) audio_command_dispose(&discard);
     LOGD(TAG, "Stop requested");
 #if HAS_SOUND_PLAYER
     MusicWorkCommand work;
@@ -902,7 +804,7 @@ void audio_play_sound(const char* filename, uint8_t volume_override) {
     audio_submit_sound(filename, volume_override);
 }
 
-bool audio_submit_sound(const char* filename, uint8_t volume_override, AudioPlaybackGuard guard, uint32_t generation, bool loop, AudioPlaybackFailure failure) {
+bool audio_submit_sound(const char* filename, uint8_t volume_override, AudioPlaybackGuard guard, uint32_t generation, bool loop) {
     if (ota_activity_is_active()) return false;
     if (!audio_initialized) {
         LOGW(TAG, "Audio not initialized");
@@ -920,6 +822,13 @@ bool audio_submit_sound(const char* filename, uint8_t volume_override, AudioPlay
     // caller may be the LVGL task whose stack is in PSRAM (crashes on ESP32-P4).
     // sound_player_play() handles file-not-found gracefully.
 
+    // Stop any current playback
+    if (g_playing) {
+        g_stop_requested = true;
+    }
+    AudioCommand discard;
+    while (xQueueReceive(audio_queue, &discard, 0) == pdTRUE) audio_command_dispose(&discard);
+
     AudioCommand cmd;
     memset(&cmd, 0, sizeof(cmd));
     strlcpy(cmd.pattern, filename, AUDIO_PATTERN_MAX_LEN);
@@ -928,10 +837,9 @@ bool audio_submit_sound(const char* filename, uint8_t volume_override, AudioPlay
     cmd.is_sound = true;
     cmd.guard = guard;
     cmd.generation = generation;
-    cmd.failure = failure;
     cmd.ota_epoch = ota_activity_epoch();
 
-    return audio_enqueue(&cmd);
+    return xQueueSend(audio_queue, &cmd, 0) == pdTRUE;
 }
 
 void audio_play_mp3_buffer(uint8_t* mp3, size_t mp3_size, uint8_t volume_override,
@@ -949,7 +857,7 @@ void audio_play_mp3_buffer(uint8_t* mp3, size_t mp3_size, uint8_t volume_overrid
     cmd.guard = guard;
     cmd.generation = generation;
     cmd.ota_epoch = ota_activity_epoch();
-    if (!audio_enqueue(&cmd)) audio_command_dispose(&cmd);
+    if (xQueueSend(audio_queue, &cmd, 0) != pdTRUE) audio_command_dispose(&cmd);
 }
 #endif // HAS_SOUND_PLAYER
 

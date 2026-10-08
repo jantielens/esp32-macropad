@@ -2,7 +2,7 @@
 #if ALARM_ENABLED && (HAS_DISPLAY || HAS_BUTTON)
 namespace {
 const char* validate_alarm_mp3(JsonObjectConst action) {
-    if (action.containsKey("sound_alert_kind")) return "Alarm MP3 has a fixed sound kind";
+    if (action.containsKey("sound_alert_kind")) return "Loop MP3 has a fixed sound kind";
     return validate_sound_alert_payload(action, "mp3_loop");
 }
 void parse_alarm_mp3(const JsonObject& action, ButtonAction& output) {
@@ -22,7 +22,7 @@ bool alarm_mp3_available() {
 }
 void describe_alarm_mp3(JsonObject& action) {
     action["group"] = "Alarm";
-    action["label"] = "Alarm MP3";
+    action["label"] = "Loop MP3";
     describe_alarm_audio(action, true);
 }
 DEFINE_AND_REGISTER_ACTION_TYPE(kAlarmMp3ActionType, ACTION_TYPE_ALARM_MP3, parse_alarm_mp3, serialize_alarm_mp3,

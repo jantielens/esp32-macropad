@@ -12,6 +12,8 @@ let recipeState = {
     placement: null,
     buttonSizes: null,
     installedPadPage: null,
+    installing: false,
+    padLoadId: 0,
     emptyPlacement: null,
     resizeSuggestion: null,
     installationComplete: false,
@@ -64,8 +66,21 @@ function recipeValidateCatalog(catalog) {
         if (seen.has(recipe.id)) recipeError('Recipe ids must be unique.');
         seen.add(recipe.id);
         if (recipe.requires !== undefined &&
-            (!Array.isArray(recipe.requires) || recipe.requires.some(function (item) { return !['display', 'mqtt', 'audio'].includes(item); }))) {
-            recipeError('Recipe requirements must be display, mqtt, or audio.');
+            (!Array.isArray(recipe.requires) || recipe.requires.some(function (item) { return !['display', 'mqtt', 'audio', 'alarm', 'sound_player'].includes(item); }))) {
+            recipeError('Recipe requirements must be display, mqtt, audio, alarm, or sound_player.');
+        }
+        if (recipe.confirmation !== undefined && (typeof recipe.confirmation !== 'string' || !recipe.confirmation.trim())) {
+            recipeError('Recipe confirmation must be non-empty text.');
+        }
+        if (recipe.post_install !== undefined) {
+            const followup = recipe.post_install;
+            if (!recipeIsObject(followup) || typeof followup.message !== 'string' || !followup.message.trim() ||
+                (followup.links !== undefined && (!Array.isArray(followup.links) || followup.links.some(function (link) {
+                    return !recipeIsObject(link) || typeof link.label !== 'string' || !link.label.trim() ||
+                        !/^[a-z0-9][a-z0-9_-]*$/.test(link.fragment || '');
+                })))) {
+                recipeError('Recipe post_install needs a message and optional labeled fragment links.');
+            }
         }
         if (recipe.parameters !== undefined && !Array.isArray(recipe.parameters)) {
             recipeError('Recipe parameters must be an array.');
@@ -75,10 +90,10 @@ function recipeValidateCatalog(catalog) {
             if (!recipeIsObject(parameter) || !/^[a-z][a-z0-9_]*$/.test(parameter.id || '') ||
                 typeof parameter.label !== 'string' || !parameter.label ||
                 !['string', 'number'].includes(parameter.type) ||
-                parameter.default === undefined || parameterIds.has(parameter.id) ||
+                parameter.default === undefined || parameterIds.has(parameter.id) || parameter.id === 'target_pad' ||
                 (parameter.description !== undefined &&
                     (typeof parameter.description !== 'string' || !parameter.description))) {
-                recipeError('Each parameter needs a unique id, label, type, and default.');
+                recipeError('Each parameter needs a unique id, label, type, and default; target_pad is reserved.');
             }
             parameterIds.add(parameter.id);
         });
@@ -283,40 +298,48 @@ function recipePopulatePads() {
 async function recipeLoadPad() {
     const select = document.getElementById('recipe-pad-select');
     if (!select || !recipeState.selected) return;
+    const loadId = ++recipeState.padLoadId;
+    const selectedRecipe = recipeState.selected;
     recipeState.installedPadPage = null;
     recipeState.installationComplete = false;
     document.getElementById('recipe-post-install-actions').hidden = true;
+    document.getElementById('recipe-followup').hidden = true;
+    document.getElementById('recipe-install-btn').disabled = true;
+    document.getElementById('recipe-recovery-actions').hidden = true;
+    document.getElementById('recipe-placement-grid').innerHTML = '';
+    recipeState.pad = null;
+    recipeState.placement = null;
     const page = Number(select.value);
-    const isFlow = recipeIsFlowLayout(recipeState.selected.layout);
-    const bounds = isFlow ? null : recipeBounds(recipeState.selected.layout.buttons);
+    const isFlow = recipeIsFlowLayout(selectedRecipe.layout);
+    const bounds = isFlow ? null : recipeBounds(selectedRecipe.layout.buttons);
     const status = document.getElementById('recipe-placement-status');
     try {
         const response = await fetch('/api/pad?page=' + page);
+        let pad;
         if (response.status === 404) {
             if (isFlow) throw new Error('Create this pad and choose its grid dimensions before installing an adaptive recipe.');
-            recipeState.pad = { layout: 'grid', cols: bounds.cols, rows: bounds.rows, buttons: [], page: page };
+            pad = { layout: 'grid', cols: bounds.cols, rows: bounds.rows, buttons: [], page: page };
         } else if (!response.ok) {
             throw new Error('HTTP ' + response.status);
         } else {
-            recipeState.pad = await response.json();
-            recipeState.pad.page = page;
+            pad = await response.json();
+            pad.page = page;
         }
-        recipeState.placement = null;
-        recipeState.resizeSuggestion = null;
-        recipeState.buttonSizes = await padGetButtonSizes(recipeState.pad.cols, recipeState.pad.rows);
-        if (recipeState.pad.layout && recipeState.pad.layout !== 'grid') throw new Error('This pad does not use a grid layout.');
-        const emptyPad = Object.assign({}, recipeState.pad, { buttons: [] });
-        recipeState.emptyPlacement = recipeFindPlacement(recipeState.selected.layout, emptyPad, recipeState.buttonSizes);
-        if (!recipeState.emptyPlacement) {
-            recipeState.resizeSuggestion = await recipeFindMinimumResize(recipeState.selected.layout, recipeState.pad);
-        }
-        if (!isFlow && (recipeState.pad.cols < bounds.cols || recipeState.pad.rows < bounds.rows)) {
+        const buttonSizes = await padGetButtonSizes(pad.cols, pad.rows);
+        if (pad.layout && pad.layout !== 'grid') throw new Error('This pad does not use a grid layout.');
+        const emptyPad = Object.assign({}, pad, { buttons: [] });
+        const emptyPlacement = recipeFindPlacement(selectedRecipe.layout, emptyPad, buttonSizes);
+        const resizeSuggestion = emptyPlacement ? null : await recipeFindMinimumResize(selectedRecipe.layout, pad);
+        if (loadId !== recipeState.padLoadId || selectedRecipe !== recipeState.selected || document.getElementById('recipe-pad-select') !== select) return;
+        Object.assign(recipeState, { pad: pad, buttonSizes: buttonSizes, emptyPlacement: emptyPlacement, resizeSuggestion: resizeSuggestion });
+        if (!isFlow && (pad.cols < bounds.cols || pad.rows < bounds.rows)) {
             status.textContent = 'This recipe needs a ' + bounds.cols + 'x' + bounds.rows + ' footprint.';
         } else {
             status.textContent = 'Select a free position for the recipe.';
         }
         recipeRenderPlacement();
     } catch (error) {
+        if (loadId !== recipeState.padLoadId || selectedRecipe !== recipeState.selected) return;
         recipeState.pad = null;
         status.textContent = 'Unable to load pad: ' + error.message;
         document.getElementById('recipe-placement-grid').innerHTML = '';
@@ -672,6 +695,7 @@ function recipeSetProgress(steps) {
     const section = document.getElementById('recipe-progress');
     const list = document.getElementById('recipe-progress-list');
     document.getElementById('recipe-post-install-actions').hidden = true;
+    document.getElementById('recipe-followup').hidden = true;
     section.hidden = false;
     list.innerHTML = '';
     return steps.map(function (text) {
@@ -679,6 +703,22 @@ function recipeSetProgress(steps) {
         item.textContent = text;
         list.appendChild(item);
         return item;
+    });
+}
+
+function recipeRenderFollowup(recipe) {
+    const section = document.getElementById('recipe-followup');
+    const links = document.getElementById('recipe-followup-links');
+    links.innerHTML = '';
+    section.hidden = !recipe.post_install;
+    if (!recipe.post_install) return;
+    document.getElementById('recipe-followup-message').textContent = recipe.post_install.message;
+    (recipe.post_install.links || []).forEach(function (link) {
+        const anchor = document.createElement('a');
+        anchor.className = 'btn btn-outline-secondary';
+        anchor.textContent = link.label;
+        anchor.href = '#' + link.fragment;
+        links.appendChild(anchor);
     });
 }
 
@@ -705,11 +745,15 @@ function recipeOpenInstalledPadEditor() {
 }
 
 async function recipeInstall() {
-    if (!recipeState.selected || !recipeState.pad || !recipeState.placement) return;
+    if (recipeState.installing || !recipeState.selected || !recipeState.pad || !recipeState.placement) return;
+    if (recipeState.selected.confirmation && !confirm(recipeState.selected.confirmation)) return;
+    recipeState.installing = true;
+    let padSaved = false;
     try {
         recipeState.installedPadPage = null;
         recipeState.installationComplete = false;
-        const parameters = recipeParameters();
+        if (!recipeSupports(recipeState.selected)) recipeError('Device does not support this recipe.');
+        const parameters = Object.assign(recipeParameters(), { target_pad: 'pad_' + recipeState.pad.page });
         const recipe = recipeExpand(recipeState.selected, parameters);
         const provision = recipeProvision(recipe);
         const target = recipeState.pad;
@@ -729,21 +773,10 @@ async function recipeInstall() {
             return configured;
         });
         const componentIds = Object.keys(provision.components || {});
-        const progress = recipeSetProgress(componentIds.map(function (id) { return 'Configuring ' + id + '...'; }).concat([
+        const progress = recipeSetProgress([
             'Adding ' + buttons.length + ' buttons...', 'Generating button icons...', 'Saving pad...'
-        ]));
+        ].concat(componentIds.map(function (id) { return 'Configuring ' + id + '...'; })));
         let progressIndex = 0;
-        for (const id of componentIds) {
-            const currentResponse = await fetch('/api/component/' + encodeURIComponent(id) + '/config');
-            if (!currentResponse.ok) throw new Error('Failed to read ' + id + ': HTTP ' + currentResponse.status);
-            const currentConfig = await currentResponse.json();
-            const componentConfig = recipeDeepMerge(currentConfig, provision.components[id]);
-            const response = await fetch('/api/component/' + encodeURIComponent(id) + '/config', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(componentConfig),
-            });
-            if (!response.ok) throw new Error('Failed to configure ' + id + ': HTTP ' + response.status);
-            progress[progressIndex++].classList.add('complete');
-        }
         progress[progressIndex++].classList.add('complete');
         const savedPad = Object.assign({}, target, {
             buttons: (target.buttons || []).concat(buttons),
@@ -764,12 +797,25 @@ async function recipeInstall() {
             const error = await response.json().catch(function () { return {}; });
             throw new Error(error.error || 'Failed to save pad: HTTP ' + response.status);
         }
-        progress[progressIndex].classList.add('complete');
+        padSaved = true;
+        progress[progressIndex++].classList.add('complete');
+        for (const id of componentIds) {
+            const currentResponse = await fetch('/api/component/' + encodeURIComponent(id) + '/config');
+            if (!currentResponse.ok) throw new Error('Failed to read ' + id + ': HTTP ' + currentResponse.status);
+            const currentConfig = await currentResponse.json();
+            const componentConfig = recipeDeepMerge(currentConfig, provision.components[id]);
+            const response = await fetch('/api/component/' + encodeURIComponent(id) + '/config', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(componentConfig),
+            });
+            if (!response.ok) throw new Error('Failed to configure ' + id + ': HTTP ' + response.status);
+            progress[progressIndex++].classList.add('complete');
+        }
+        await recipeLoadPad();
         document.getElementById('recipe-placement-status').textContent = recipe.name + ' installed successfully.';
         showMessage(recipe.name + ' installed', 'success');
-        await recipeLoadPad();
         recipeState.installedPadPage = target.page;
         recipeState.installationComplete = true;
+        recipeRenderFollowup(recipe);
         document.getElementById('recipe-post-install-actions').hidden = false;
     } catch (error) {
         const list = document.getElementById('recipe-progress-list');
@@ -780,6 +826,12 @@ async function recipeInstall() {
             list.appendChild(item);
         }
         showMessage('Recipe install failed: ' + error.message, 'error');
+        if (padSaved) {
+            showMessage('The pad was saved, but setup did not finish. Review the component settings before retrying.', 'error');
+            await recipeLoadPad().catch(function () {});
+        }
+    } finally {
+        recipeState.installing = false;
     }
 }
 

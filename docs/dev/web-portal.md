@@ -901,7 +901,7 @@ valid JSON, and publish atomically on both LittleFS and SD storage.
 
 The portal applies the complete Recipe schema before saving. See the
 [recipe catalog sample](../samples/recipe-catalog.json) for Pomodoro and Home
-Energy definitions.
+Energy definitions, and an Alarm Clock with Schedule and Behavior follow-up links.
 
 ### Extensions
 
@@ -1074,6 +1074,7 @@ Returns comprehensive device information.
   "has_display": true,
   "has_audio": true,
   "has_sound_player": true,
+  "has_alarm": true,
   "has_camera": false,
   "has_usb_hid": false,
   "has_image_fetch": true,
@@ -1366,9 +1367,7 @@ an allocator pool walk, which can interrupt continuous MIPI-DSI scan-out.
 `ALARM_ENABLED` defaults to `HAS_DISPLAY` and can be overridden by a board with
 the action framework enabled. It gates the runtime, `alarm` action and binding,
 component, assets, and MCP tools. Shared timezone and NTP services are ungated.
-The Alarm category contains `alarm-schedule` and `alarm-behavior` fragments.
-Schedule contains enabled state, time, and repeat days. Behavior contains durations,
-actions, and maximum lateness, and uses the shared action editor with strict
+The Alarm fragment uses the shared action editor with strict
 `alarm_hook_allowed` catalog filtering. Its standalone `/portal_alarms.js` asset
 is authenticated and gated with the component.
 Hash routing loads only the selected component's advertised assets and waits
@@ -1386,19 +1385,9 @@ The alarm manager does not hold a display lock around its hook list.
 |--------|----------|----------|
 | GET | `/api/component/alarms/config` | Device-wide lateness setting and normalized ID-keyed definition |
 | POST | `/api/component/alarms/config` | Validated, durable full replacement; maximum 8192 bytes |
-| POST | `/api/component/alarms/schedule` | Durable scoped save of enabled state, time, and repeat days; maximum 8192 bytes |
-| POST | `/api/component/alarms/behavior` | Durable scoped save of durations, actions, and maximum lateness; maximum 8192 bytes |
 | GET | `/api/component/alarms/status` | Configuration values, state/readiness/failures, one-shot target, next occurrence/countdowns, queue acknowledgement |
 | POST | `/api/component/alarms/snooze` | Queue snooze for a ringing session |
 | POST | `/api/component/alarms/cancel` | Queue cancellation without disabling the schedule |
-
-Scoped saves use flat JSON objects containing exactly their own fields:
-`schedule` requires `enabled`, `hour`, `minute`, and `weekdays`; `behavior`
-requires `lateness_minutes`, `snooze_minutes`, `auto_dismiss_minutes`, `on_ring`,
-and `on_stop`. Missing or foreign fields are rejected. The main-loop handler
-merges against the latest live configuration before validation and persistence,
-so one view cannot overwrite the other view's settings with a stale snapshot.
-The MCP component API continues to use the full-replacement contract.
 
 Phase 3 accepts exactly slot `1` and a device-wide lateness setting:
 
@@ -1443,7 +1432,7 @@ including Numeric Rocker `{step}`), and `alarm_day` (Sunday=0).
 `portal_action_editor_alarm.js` owns command-specific rendering, loading,
 binding setup, and payload building through `_actionEditorExtensions`. Its
 `type` registration excludes Alarm fields from the generic renderer. It shows
-the value only for time commands and Day only for repeat-day commands;
+the value only for time commands and the weekday only for weekday commands;
 unused fields are omitted from saved actions. MCP uses the same
 command validation and queue, with integer `value` and `day` arguments. Config
 commands default to ID 1; ID 0 is reserved for active-session controls.
@@ -1494,13 +1483,6 @@ gaps are skipped, and handled history survives edits and backward clock changes.
 Snooze and auto-dismiss use monotonic time; each ring start resets its timeout.
 An overdue snooze beyond five minutes expires rather than ringing late; this
 session rule is separate from scheduled-occurrence recovery.
-
-Ring audio submission or playback failures set `hook_error` and automatically
-snooze for the session's configured duration. Stop hooks run before the retained
-ring hooks retry at the snooze deadline. Failures in stop hooks or stale audio
-work cannot snooze a current ring. Repeated failures repeat this session retry;
-Cancel ends it. These retries also work for consumed one-shots, do not consume
-another occurrence, and do not survive reboot.
 
 Persistence uses `Storage` and alternating `/config/alarm_a.json` and
 `/config/alarm_b.json` snapshots. Each bounded envelope includes schema version,
@@ -1567,17 +1549,12 @@ authoritative timezone without changing its generation or alarm state. Invalid
 input returns `400`; formatting failure returns `503`. The browser discards stale
 preview responses and does not poll.
 
-Both Alarm fragments display readiness and storage/action warnings on load and
+The Alarm fragment displays readiness and storage/action warnings on load and
 after saves, without recurring polling, live Ringing/Snoozed indicators, or
-Snooze/Dismiss alarm buttons. REST and MCP alarm controls remain available. The shared
-action editor advertises Alarm Control, Alarm tone, and Alarm MP3 in Alarm while
+Snooze/Cancel buttons. REST and MCP alarm controls remain available. The shared
+action editor advertises Alarm Control, Loop Tone, and Loop MP3 in Alarm while
 regular sound playback remains in Audio. Catalog-driven MP3 fields reuse the
 sound library and retain missing saved file names.
-Editor-field `help` metadata explains looping playback and the device-volume sentinel.
-Schedule uses Repeat days and Save schedule. Behavior uses When ringing starts/stops,
-Maximum alarm lateness, and Save behavior;
-binding help distinguishes the next scheduled alarm, the next ring including snooze,
-and time until auto-dismiss. Display labels do not rename persisted keys.
 
 ### Configuration Management
 
@@ -2879,6 +2856,18 @@ the Pads page section above.
 
 Recipes may declare a `provision` object for configuration that accompanies their
 buttons. `${parameter}` templates expand recursively throughout this object.
+The reserved `${target_pad}` value resolves to the selected pad's screen ID,
+such as `pad_6`; it cannot be declared as a user parameter. Optional `requires`
+values are `display`, `mqtt`, `audio`, `alarm`, and `sound_player`. Alarm support
+uses `/api/info`'s `has_alarm`, derived from `ALARM_ENABLED`.
+
+An optional nonempty `confirmation` string prompts before installation. Optional
+`post_install` metadata contains a nonempty `message` and a `links` array of
+`{"label":"Open alarm schedule","fragment":"alarm-schedule"}` objects.
+Fragments must be internal IDs containing lowercase letters, numbers, hyphens,
+or underscores, starting with a letter or number. Messages and labels render as
+text, not HTML; links are internal hash navigation. Follow-up instructions appear
+only after the entire installation succeeds.
 
 ```json
 {
@@ -2907,6 +2896,17 @@ intentionally limited to named bindings: a missing name is added, an identical
 name/value pair is accepted, and an existing name with a different value rejects
 the installation. This prevents a recipe from silently changing data sources used
 by existing buttons.
+
+Icons and the pad are saved before any component configuration is written. Each
+component is then read, merged, and saved in sequence. Installation is not atomic
+across the pad and components: a later failure can leave the pad and earlier
+components installed. The portal reports incomplete setup and refreshes the pad
+instead of displaying successful-installation instructions.
+
+The Alarm Clock sample replaces Alarm 1's `on_ring` and `on_stop` arrays after
+confirmation and sets `enabled` to `false`. It preserves the time, weekdays,
+snooze, auto-dismiss, and maximum lateness. Its ring actions repeat a tone and
+show `${target_pad}`. Its post-install links open Alarm Schedule and Behavior.
 
 
 #### `POST /api/pad/resolve`

@@ -55,9 +55,7 @@ void sound_player_close(SoundPlayer* player);
 // Returns true on success.
 bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
                        volatile bool* stop_flag, bool (*guard)(uint32_t) = nullptr,
-                       uint32_t generation = 0, bool loop = false,
-                       SoundPlayerPcmTransform transform = nullptr,
-                       void* transform_context = nullptr);
+                       uint32_t generation = 0, bool loop = false);
 bool sound_player_play_memory(AudioOutputDriver* output_driver, const uint8_t* data,
                               size_t size, volatile bool* stop_flag,
                               bool (*guard)(uint32_t) = nullptr,
