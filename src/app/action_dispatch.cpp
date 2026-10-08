@@ -23,7 +23,9 @@ ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* la
     const ActionTypeDef* type = action_type_find(act.type);
     if (!type || type->execution != ACTION_EXECUTION_SYNC) return ACTION_FAILED;
     const ActionDispatchContext previous = dispatch_context;
-    dispatch_context = {true, work_guard, generation};
+    dispatch_context.synchronous = true;
+    dispatch_context.work_guard = work_guard;
+    dispatch_context.generation = generation;
     const ActionResult result = action_dispatch(act, label);
     dispatch_context = previous;
     return result;

@@ -485,8 +485,16 @@ void alarm_config_to_json(JsonObject root) {
 
 AlarmSnapshot alarm_snapshot() {
     std::lock_guard<std::mutex> lock(alarm_mutex);
-    AlarmSnapshot value = {definition.enabled, definition.hour, definition.minute, clock_core.state,
-            initialized && time_service_ready(), clock_core.deferred || ring_pending || stop_index < stop_count, storage_error, hook_error.load(), once_epoch};
+    AlarmSnapshot value = {};
+    value.enabled = definition.enabled;
+    value.hour = definition.hour;
+    value.minute = definition.minute;
+    value.state = clock_core.state;
+    value.ready = initialized && time_service_ready();
+    value.deferred = clock_core.deferred || ring_pending || stop_index < stop_count;
+    value.storage_error = storage_error;
+    value.hook_error = hook_error.load();
+    value.once_epoch = once_epoch;
     value.weekdays = definition.weekdays;
     value.lateness_minutes = definition.lateness_minutes;
     value.snooze_minutes = definition.snooze_minutes;
