@@ -6,6 +6,8 @@
 #include "list_binding.h"
 #include "list_provider.h"
 #include "time_binding.h"
+#include "alarm_manager.h"
+#include "psram_json_allocator.h"
 
 #if IS_VOICE_ASSISTANT
 #include "device_classes/voice_assistant/voice_binding.h"
@@ -110,6 +112,69 @@ int main() {
     expect(all_registered_finite_keys_are_recognized(),
            "every production finite key is not unknown to its real resolver");
     expect_structural_resolvers_are_invoked();
+#if ALARM_ENABLED
+    expect(scheme_is_registered("alarm"), "alarm registered when enabled");
+    extern AlarmSnapshot binding_test_alarm;
+    auto alarm_expect = [](const char* key, const char* expected) {
+        char value[32] = {};
+        expect(binding_template_resolve_registered("alarm", 5, key, value, sizeof(value)) == BINDING_RESOLVER_RESOLVED,
+               key);
+        expect(!strcmp(value, expected), expected);
+    };
+    alarm_expect("1_time", "07:30");
+    alarm_expect("1_enabled", "ON");
+    alarm_expect("1_ready", "ON");
+    alarm_expect("1_state", "ringing");
+    alarm_expect("active_id", "1");
+    binding_test_alarm.weekdays = 62;
+    binding_test_alarm.next_epoch = 1704094200;
+    binding_test_alarm.next_seconds = 60;
+    binding_test_alarm.next_ring_seconds = 0;
+    binding_test_alarm.pending_commands = 2;
+    alarm_expect("1_day_0", "OFF");
+    alarm_expect("1_day_1", "ON");
+    alarm_expect("1_minutes", "450");
+    alarm_expect("1_next_seconds", "60");
+    alarm_expect("1_next_available", "ON");
+    alarm_expect("1_next_ring_seconds", "0");
+    alarm_expect("1_save_state", "pending");
+    binding_test_alarm.pending_commands = 0;
+    binding_test_alarm.completed_commands = 3;
+    binding_test_alarm.save_pending = true;
+    alarm_expect("1_save_state", "pending");
+    binding_test_alarm.save_failed = true;
+    alarm_expect("1_save_state", "failed");
+    binding_test_alarm.save_pending = binding_test_alarm.save_failed = false;
+    alarm_expect("1_save_state", "saved");
+    alarm_expect("1_snooze_seconds", "");
+    binding_test_alarm = {false, 0, 5, ALARM_SNOOZED, false, false, false, false, 0};
+    binding_test_alarm.snooze_remaining = 539;
+    binding_test_alarm.next_ring_seconds = 539;
+    alarm_expect("1_snooze_seconds", "539");
+    alarm_expect("1_next_ring_seconds", "539");
+    alarm_expect("1_next_seconds", "");
+    alarm_expect("1_next_available", "OFF");
+    alarm_expect("1_time", "00:05");
+    alarm_expect("1_enabled", "OFF");
+    alarm_expect("1_ready", "OFF");
+    alarm_expect("1_state", "snoozed");
+    alarm_expect("active_id", "1");
+    binding_test_alarm.state = ALARM_IDLE;
+    alarm_expect("1_state", "idle");
+    alarm_expect("active_id", "0");
+    char value[32] = {};
+    expect(binding_template_resolve_registered("alarm", 5, "2_time", value, sizeof(value)) == BINDING_RESOLVER_UNKNOWN,
+           "unknown alarm key rejected");
+#else
+    expect(!scheme_is_registered("alarm"), "alarm absent when disabled");
+#endif
+#if !HAS_PSRAM
+    expect(!psramFound(), "no PSRAM present in the no-PSRAM profile");
+    PsramJsonAllocator allocator;
+    void* memory = allocator.allocate(128);
+    expect(memory != nullptr, "JSON allocation falls back to internal heap");
+    allocator.deallocate(memory);
+#endif
 #if HAS_CAMERA && HAS_DISPLAY
     expect(scheme_is_registered("camera"), "camera scheme registered on camera display profile");
 #endif

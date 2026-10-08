@@ -1,12 +1,15 @@
 <section id="recipes-root">
   <div class="section-header">
-    <h2>Recipes</h2>
+    <h2><span class="portal-icon" aria-hidden="true">auto_awesome</span>Recipes</h2>
     <p>Install a complete setup into an existing pad without changing its current buttons.</p>
   </div>
 
+  <section class="portal-section" aria-labelledby="recipes-available-heading">
+  <h3 class="portal-section-title" id="recipes-available-heading">Available Recipes</h3>
   <div id="recipes-source" class="form-text mb-3"></div>
   <div id="recipes-empty" class="recipes-empty" hidden>No recipes are available.</div>
   <div id="recipes-list" class="recipes-list"></div>
+  </section>
 
   <section id="recipe-detail" class="card mb-3" hidden>
     <div class="card-header"><h5 id="recipe-detail-name" class="mb-0"></h5></div>
@@ -35,7 +38,11 @@
     <div class="card-header"><h5 class="mb-0">Installation</h5></div>
     <div class="card-body">
       <ol id="recipe-progress-list" class="recipe-progress-list mb-0"></ol>
-      <div id="recipe-post-install-actions" class="d-flex gap-2 mt-3" hidden>
+      <div id="recipe-followup" class="mt-3" hidden>
+        <p id="recipe-followup-message"></p>
+        <div id="recipe-followup-links" class="d-flex flex-wrap gap-2"></div>
+      </div>
+      <div id="recipe-post-install-actions" class="d-flex flex-wrap gap-2 mt-3" hidden>
         <button type="button" id="recipe-show-pad-btn" class="btn btn-outline-secondary">Show Pad</button>
         <button type="button" id="recipe-open-pad-editor-btn" class="btn btn-primary">Navigate to Pad Editor</button>
       </div>

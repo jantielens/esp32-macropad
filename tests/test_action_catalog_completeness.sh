@@ -24,6 +24,22 @@ BUILTIN_CONFIG="$SRC_DIR/pad_config.h"
 
 fail=0
 
+python3 - <<'PY'
+from pathlib import Path
+import re
+import sys
+
+failed = False
+for path in Path("src/app").rglob("*.cpp"):
+    source = path.read_text()
+    source = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
+    for registration in re.finditer(r"DEFINE_AND_REGISTER_ACTION_TYPE\s*\((.*?)\);", source, re.S):
+        if re.search(r",\s*,|^\s*,|,\s*$", registration.group(1)):
+            print(f"FAIL: empty action registration argument in {path}", file=sys.stderr)
+            failed = True
+sys.exit(1 if failed else 0)
+PY
+
 # ---------------------------------------------------------------------------
 # 1. Built-in types: every ACTION_TYPE_* declaration must have a registered
 #    builtin definition. ACTION_TYPE_NONE ("") is the empty-action sentinel.
@@ -36,22 +52,22 @@ declare -A MACRO_VALUE
 while IFS=' ' read -r macro value; do
     [ -z "$macro" ] && continue
     MACRO_VALUE["$macro"]="$value"
-done < <(grep -hE '#define ACTION_TYPE_[A-Z_]+ *"[a-z_]*"' "$BUILTIN_CONFIG" 2>/dev/null \
-    | sed -E 's/#define +(ACTION_TYPE_[A-Z_]+) *"([a-z_]*)"/\1 \2/')
+done < <(grep -hE '#define ACTION_TYPE_[A-Z0-9_]+ *"[a-z0-9_]*"' "$BUILTIN_CONFIG" 2>/dev/null \
+    | sed -E 's/#define +(ACTION_TYPE_[A-Z0-9_]+) *"([a-z0-9_]*)"/\1 \2/')
 
 if [ "${#MACRO_VALUE[@]}" -eq 0 ]; then
     echo "FAIL: found no '#define ACTION_TYPE_*' declarations under $SRC_DIR" >&2
     exit 1
 fi
 
-catalog_types="$(grep -ohE 'add_action\(actions, *"[a-z_]+"' "$CATALOG" 2>/dev/null \
-    | sed -E 's/.*"([a-z_]+)"/\1/' | sort -u)"
+catalog_types="$(grep -ohE 'add_action\(actions, *"[a-z0-9_]+"' "$CATALOG" 2>/dev/null \
+    | sed -E 's/.*"([a-z0-9_]+)"/\1/' | sort -u)"
 if [ ! -f "$ACTION_MANIFEST" ]; then
     echo "FAIL: missing built-in action module manifest: $ACTION_MANIFEST" >&2
     exit 1
 fi
 
-manifest_modules="$(grep -oE '"[a-z_]+_action\.cpp"' "$ACTION_MANIFEST" | tr -d '"')"
+manifest_modules="$(grep -oE '"[a-z0-9_]+_action\.cpp"' "$ACTION_MANIFEST" | tr -d '"')"
 if [ -z "$manifest_modules" ]; then
     echo "FAIL: found no action modules in $ACTION_MANIFEST" >&2
     exit 1
@@ -71,7 +87,7 @@ for module in $manifest_modules; do
         continue
     fi
     registered_builtin_macros="$(printf '%s\n%s' "$registered_builtin_macros" \
-        "$(grep -ohE 'ACTION_TYPE_[A-Z_]+' "$module_path")")"
+        "$(grep -ohE 'ACTION_TYPE_[A-Z0-9_]+' "$module_path")")"
 done
 registered_builtin_macros="$(printf '%s\n' "$registered_builtin_macros" | sort -u)"
 for macro in $registered_builtin_macros; do
@@ -153,9 +169,9 @@ flush_current() {
     fi
 }
 while IFS= read -r line; do
-    if echo "$line" | grep -qE 'add_action\(actions, *"[a-z_]+"'; then
+    if echo "$line" | grep -qE 'add_action\(actions, *"[a-z0-9_]+"'; then
         flush_current
-        current_type="$(echo "$line" | grep -oE '"[a-z_]+"' | head -1 | tr -d '"')"
+        current_type="$(echo "$line" | grep -oE '"[a-z0-9_]+"' | head -1 | tr -d '"')"
         has_field=0
     elif echo "$line" | grep -qE 'add_field\('; then
         has_field=1

@@ -1,10 +1,10 @@
 <div class="section-header">
-  <h2>🖨️ Print Log</h2>
+    <h2><span class="portal-icon" aria-hidden="true">print</span>Print Log</h2>
   <p>Darkroom print session history with exposure details and notes.</p>
 </div>
 
 <!-- Print List View -->
-<section id="prints-list-view">
+<section id="prints-list-view" class="portal-section portal-list-section">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
         <div style="display:flex; gap:8px;">
             <button type="button" class="btn btn-secondary prints-btn" id="prints-export-btn">Export All</button>
@@ -24,15 +24,16 @@
         </div>
     </div>
     <!-- Hero card -->
-    <div id="detail-hero"></div>
+    <div id="detail-hero" class="portal-section"></div>
     <!-- Exposure section -->
-    <div id="detail-exposure" style="margin-top:16px;"></div>
+    <div id="detail-exposure" class="portal-section"></div>
     <!-- Segments (test strip only) -->
-    <div id="detail-segments" style="display:none; margin-top:16px;"></div>
+    <div id="detail-segments" class="portal-section" style="display:none;"></div>
     <!-- Metering context section -->
-    <div id="detail-metering" style="margin-top:16px;"></div>
+    <div id="detail-metering" class="portal-section"></div>
     <!-- Notes -->
-    <div style="margin-top:16px;">
+    <div class="portal-section">
+        <h3 class="portal-section-title">Notes</h3>
         <label for="detail-notes" style="font-weight:600; font-size:14px; display:block; margin-bottom:6px;">Notes</label>
         <textarea id="detail-notes" rows="3" style="width:100%; box-sizing:border-box; font-size:14px; padding:8px; border:1px solid #d1d1d6; border-radius:8px; resize:vertical; font-family:inherit;"></textarea>
         <button type="button" class="btn btn-secondary prints-btn" id="prints-save-notes-btn" style="margin-top:6px;">Save Notes</button>

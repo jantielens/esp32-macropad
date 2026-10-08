@@ -56,6 +56,34 @@ endfunction()
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
+add_host_legacy_test(test_alarm_clock_core SOURCES test_alarm_clock_core.cpp)
+add_host_legacy_test(test_alarm_dispatch_lock
+    SOURCES test_alarm_dispatch_lock.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    OPTIONS -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
+add_host_legacy_test(test_navigation_wake
+    SOURCES test_navigation_wake.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
+set(NAVIGATION_LOCK_SOURCE "${PROJECT_SOURCE_DIR}/src/app/display_manager.cpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${NAVIGATION_LOCK_SOURCE}")
+file(READ "${NAVIGATION_LOCK_SOURCE}" NAVIGATION_LOCK_SOURCE_TEXT)
+string(FIND "${NAVIGATION_LOCK_SOURCE_TEXT}" "void DisplayManager::lockIfNeeded(" NAVIGATION_LOCK_START)
+string(FIND "${NAVIGATION_LOCK_SOURCE_TEXT}" "void DisplayManager::lock()" NAVIGATION_LOCK_END)
+if(NAVIGATION_LOCK_START LESS 0 OR NAVIGATION_LOCK_END LESS NAVIGATION_LOCK_START)
+    message(FATAL_ERROR "Navigation test could not locate display lock helpers")
+endif()
+math(EXPR NAVIGATION_LOCK_LENGTH "${NAVIGATION_LOCK_END} - ${NAVIGATION_LOCK_START}")
+string(SUBSTRING "${NAVIGATION_LOCK_SOURCE_TEXT}" ${NAVIGATION_LOCK_START}
+    ${NAVIGATION_LOCK_LENGTH} NAVIGATION_LOCK_HELPERS)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/navigation_lock_helpers.inc" "${NAVIGATION_LOCK_HELPERS}")
+target_include_directories(test_navigation_wake PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+add_host_legacy_test(test_alarm_calendar SOURCES test_alarm_calendar.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    OPTIONS -pthread)
+
 add_host_gtest(test_mousepad test_mousepad.cpp)
 add_host_legacy_test(test_remote_log SOURCES test_remote_log.cpp)
 add_host_gtest(test_gamepad test_gamepad.cpp)
@@ -275,11 +303,19 @@ set(ACTION_TEST_SOURCES
 )
 
 add_host_legacy_test(test_action_parse
-    SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES}
+    SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
+add_host_legacy_test(test_action_parse_alarm_disabled
+    SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/alarm_manager.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS ALARM_ENABLED=0 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
+    OPTIONS -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_action_bindings
     SOURCES test_action_bindings.cpp ${ACTION_TEST_SOURCES}
     INCLUDES ${HOST_ARDUINOJSON_DIR}
@@ -346,7 +382,25 @@ add_host_legacy_test(test_timer_config
 )
 add_test(NAME test_timer_config_config_mutex_failure COMMAND test_timer_config config-mutex-failure)
 add_test(NAME test_timer_config_save_mutex_failure COMMAND test_timer_config save-mutex-failure)
+add_host_legacy_test(test_alarm_manager
+    SOURCES test_alarm_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/alarm_manager.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/actions.cpp ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_parse.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp stubs.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides ${HOST_ARDUINOJSON_DIR}
+    DEFINITIONS ALARM_ENABLED=1 HOST_LOG_CAPTURE=1
+    OPTIONS -Wno-deprecated-declarations
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/Arduino.h
+    LIBRARIES m pthread)
 add_host_legacy_test(test_timer_format SOURCES test_timer_format.cpp stubs.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
+add_host_legacy_test(test_sound_player_loop
+    SOURCES test_sound_player_loop.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides
+    DEFINITIONS HAS_AUDIO=1 HAS_SOUND_PLAYER=1 AUDIO_SAMPLE_RATE=48000
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES m)
 
 add_host_legacy_test(test_shutter_curtain_stats SOURCES test_shutter_curtain_stats.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester LIBRARIES m)
 add_host_legacy_test(test_shutter_capture SOURCES test_shutter_capture.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
@@ -371,7 +425,7 @@ add_host_legacy_test(test_epaper_frame_media_conformance SOURCES test_epaper_fra
 add_host_legacy_test(test_coffee_scale_cmd_len SOURCES test_coffee_scale_cmd_len.cpp DEFINITIONS IS_COFFEE_SCALE=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_expose_dry_down SOURCES test_expose_dry_down.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 HAS_AUDIO=0 LIBRARIES m)
 add_host_legacy_test(test_meter_mag SOURCES test_meter_mag.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
-add_host_legacy_test(test_print_log SOURCES test_print_log.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m)
+add_host_legacy_test(test_print_log SOURCES test_print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/print_log_overrides ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer ${HOST_ARDUINOJSON_DIR} DEFINITIONS IS_DARKROOM_TIMER=1 LIBRARIES m pthread)
 add_host_legacy_test(test_mcp_result_strings SOURCES test_mcp_result_strings.cpp INCLUDES ${HOST_ARDUINOJSON_DIR})
 add_host_legacy_test(test_mcp_device_identity SOURCES test_mcp_device_identity.cpp ${PROJECT_SOURCE_DIR}/src/app/mcp_device_identity.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} DEFINITIONS HAS_MCP=1 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_fs_health_littlefs SOURCES test_fs_health.cpp ${PROJECT_SOURCE_DIR}/src/app/fs_health.cpp DEFINITIONS USE_SD_STORAGE=0 PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
@@ -386,11 +440,12 @@ function(add_binding_schema_profile name definition)
         SOURCES test_binding_schema_production.cpp binding_schema_profiles/stubs.cpp
             ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_builtin_schemes.cpp
             ${PROJECT_SOURCE_DIR}/src/app/health_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/alarm_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/music_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/net_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp
             ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/camera_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
-            ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${ARGN}
+            ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src
         DEFINITIONS ${definition}
         OPTIONS -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
@@ -399,8 +454,10 @@ function(add_binding_schema_profile name definition)
 endfunction()
 
 add_binding_schema_profile(baseline "")
+add_binding_schema_profile(alarm_disabled "ALARM_ENABLED=0")
 add_binding_schema_profile(camera BINDING_SCHEMA_PROFILE_CAMERA)
 add_binding_schema_profile(full BINDING_SCHEMA_PROFILE_FULL ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
+add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
 add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_binding.cpp)
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)
 add_binding_schema_profile(darkroom BINDING_SCHEMA_PROFILE_DARKROOM ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/meter.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/expose_timer.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/test_strip.cpp)
@@ -457,9 +514,14 @@ foreach(script
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} node ${PROJECT_SOURCE_DIR}/tests/${script})
+    if(script STREQUAL "test_portal_action_picker.js")
+        set_tests_properties(${name} PROPERTIES ENVIRONMENT "ACTION_CATALOG_BINARY=$<TARGET_FILE:test_action_parse>")
+    endif()
 endforeach()
 
-foreach(script portal_action_editor.js portal_binding_validator.js portal_pad_dialog.js portal_config_actions.js portal_recipes.js)
+file(GLOB action_editor_scripts CONFIGURE_DEPENDS RELATIVE "${PROJECT_SOURCE_DIR}/src/app/web"
+    "${PROJECT_SOURCE_DIR}/src/app/web/portal_action_editor*.js")
+foreach(script ${action_editor_scripts} portal_binding_validator.js portal_pad_dialog.js portal_config_actions.js portal_recipes.js)
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(check_${name}_syntax node --check ${PROJECT_SOURCE_DIR}/src/app/web/${script})
 endforeach()

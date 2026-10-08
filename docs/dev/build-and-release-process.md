@@ -395,9 +395,10 @@ This template automates the installation:
 
 ### ESP32-S3 4 MiB OTA Layout
 
-`jc3248w535`, `jc3636w518`, and `jc3636w518-sd` use `ota_4mb_16MB_ext`
-to provide firmware headroom while retaining two 4 MiB OTA slots. The 16 MiB
-layout also provides 256 KiB for native Extensions and 7.625 MiB for internal
+`esp32-4848S040`, `jc3248w535`, `jc3636w518`, and `jc3636w518-sd` use
+`ota_4mb_16MB_ext` to provide firmware headroom while retaining two 4 MiB OTA
+slots. The 16 MiB layout also provides 256 KiB for native Extensions and
+7.625 MiB for internal
 filesystem storage. Other 3 MiB-slot boards are unchanged.
 Run `./tools/install-custom-partitions.sh` before building.
 

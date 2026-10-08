@@ -13,6 +13,7 @@
 #include "components/setup_component.cpp"
 #include "components/wifi_component.cpp"
 #include "components/device_name_component.cpp"
+#include "components/timezone_component.cpp"
 #include "components/network_component.cpp"
 #if HAS_REMOTE_LOG
 #include "components/logs_component.cpp"
@@ -30,6 +31,9 @@
 #include "components/manual_upload_component.cpp"
 #include "components/version_info_component.cpp"
 #include "components/sensor_data_component.cpp"
+#if ALARM_ENABLED
+#include "components/alarms_component.cpp"
+#endif
 #if HAS_NATIVE_EXTENSIONS
 #include "components/extensions_component.cpp"
 #endif

@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-06
+ms.date: 2026-10-08
 ms.topic: reference
 ---
 
@@ -14,8 +14,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-10-08
+
+### Added
+
+* Alarm clock on alarm-enabled display boards, with persistent settings, one stable slot,
+  weekly weekday scheduling, configurable snooze and auto-dismiss, and up to
+  three synchronous ring and stop actions. Alternating checksummed filesystem
+  snapshots preserve settings and handled occurrences. Scheduling requires
+  current-boot time synchronization. One device-wide maximum lateness setting
+  covers startup recovery and live delays, defaults to six hours, and accepts
+  0-10080 whole minutes (zero allows on-time only). Only the latest eligible
+  occurrence rings; persisted edit/timezone eligibility fences prevent surprise
+  catch-up after configuration changes. Ringing and snooze sessions are not restored.
+* Alarm Clock recipe with a digital clock, scheduled-time status, Snooze, and
+  confirmed Dismiss alarm controls. It opens the selected pad when ringing and
+  installs Alarm 1 disabled, preserving its schedule and durations. Recipe
+  confirmations, the reserved `${target_pad}` substitution, alarm/audio capability
+  requirements, and recipe-specific post-install instructions and internal links
+  support setup. Component configuration runs only after the pad saves successfully;
+  partial installation failures are reported without showing completion instructions.
+* Alarm Control buttons and MCP commands for Snooze, Cancel, and editing alarm
+  time, weekdays, and enabled state. Signed minute adjustments wrap within
+  24 hours and support Numeric Rocker steps. The action editor shows only fields
+  relevant to the selected command. Read-only bindings expose settings,
+  readiness, session state, active ID, next occurrence, schedule and snooze
+  countdowns, errors, command completion, and save status.
+* Batched persistence for queued alarm-setting changes: settings apply live
+  immediately and save after 10 seconds without a substantive change. No-ops do
+  not extend the delay. Failed delayed saves retain live settings and retry;
+  OTA defers writes. Explicit configuration saves and occurrence records remain
+  immediate. Reboot or power loss before verification can lose pending changes.
+* One-shot alarms when no weekdays are selected. Save an enabled alarm to
+  schedule the next valid local occurrence; its fixed target survives reboot
+  and timezone changes. Initial triggering attempts to durably consume the
+  occurrence and disables future scheduling, while snooze remains available within the session.
+  Missed one-shots disable rather than moving to another day. The Alarm form
+  explains once versus weekly settings and displays the saved device-local date.
+  Weekly and one-shot alarms ring even when occurrence-record writes fail.
+  RAM prevents duplicates during that boot; failed records retry every ten
+  seconds and expose storage errors. Reboot before a successful retry can repeat
+  the alarm.
+* Dedicated Timezone settings with grouped city choices, a non-mutating
+  device-time preview, and save without reboot. The device timezone supplies
+  alarm scheduling and the default for clock bindings without an explicit
+  timezone override.
+* Loop Tone and Loop MP3 alarm actions, using the shared audio engine and
+  session guards. MP3 repeats after successful playback without a gapless
+  guarantee; playback stops on session invalidation, replacement audio, OTA,
+  or playback failure. Stop Audio remains available for configured cleanup.
+
+### Changed
+
+* Move specialized action forms, command handling, defaults, validation, and
+  payload construction into dedicated portal editor extensions. Keep the shared
+  editor focused on catalog-backed fields, extension dispatch, unsupported-action
+  preservation, and action-list infrastructure; preserve bindings and existing
+  widget helper consumers.
+* Portal navigation and all fragment titles use Google-hosted Material icons,
+  with clean text-only fallbacks when the font is unavailable. Content sections
+  have consistent headings, spacing, 8px corners, and theme-aware backgrounds;
+  light-mode sections are subtly tinted while inputs remain white.
+* Align standard portal content and controls with the navigation's compact
+  typography, tighten section spacing, and consolidate shared CSS rules. Tables
+  use section backgrounds, and standard text uses one scale across viewport sizes.
+  Pad inspector fields, dropdowns, tabs, helper text, and workspace headings reuse
+  the shared scales; remove duplicate input and dropdown focus styling.
+  Action slots keep the same tinted surface, accent border, and spacing in Boot
+  Actions and other hosts as in the pad/button inspector.
+* Simplify Pad Editor navigation: remove the legacy pad dropdown and duplicate
+  Pad Settings menu entry, expose button Actions and Appearance controls without
+  same-named nested accordions, and remove the repeated Pad Bindings heading.
+* Successful screen, back, and pad-cycle actions wake the display and reset
+  its sleep timer, preserving the original screen's navigation history when
+  leaving an idle screen. Internal navigation remains non-waking by default.
+* Load component-specific portal assets on first opening rather than fetching
+  every advertised script and stylesheet during portal startup.
+
 ### Fixed
 
+* Move ESP32-4848S040 to the existing 4 MiB OTA-slot layout so firmware fits
+  without removing features.
+* Preserve selected and deferred Screen action targets when refreshing available
+  screens, including list-widget synthetic targets.
+* Keep Pad Editor list labels in `Pad X: Name` format when selected or not.
+  Selection retains the regular font weight so longer labels do not wrap merely
+  because the pad is selected; color, background, and border still highlight it.
 * Restore JC3248W535's full Screen Saver settings, including the enable
   checkbox and configurable Fade In/Fade Out. Keep its combined display/touch
   controller awake while fading the backlight off, without applying the legacy

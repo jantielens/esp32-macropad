@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+class JsonObject;
 
 class JsonValue {
 public:

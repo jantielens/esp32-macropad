@@ -1,4 +1,5 @@
 #include "epaper_frame_overlay.h"
+#include "time_service.h"
 
 #if IS_EPAPER_FRAME
 
@@ -75,7 +76,7 @@ void epaper_frame_overlay_render(uint16_t battery_mv, uint32_t cycle_time_ms) {
 		if (g_epaper_config.epaper_frame_overlay_items & kItemTimestamp) {
 				const time_t now = time(nullptr);
 				struct tm tm_buf;
-				if (now > 1704067200 && localtime_r(&now, &tm_buf)) {
+				if (now > 1704067200 && time_service_localtime(now, &tm_buf)) {
 						snprintf(chunk, sizeof(chunk), "%s%02d:%02d",
 								 len ? "  " : "", tm_buf.tm_hour, tm_buf.tm_min);
 						append(chunk);

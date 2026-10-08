@@ -1,6 +1,7 @@
 import copy
 import importlib.util
 import json
+from html.parser import HTMLParser
 from pathlib import Path
 import re
 import sys
@@ -8,6 +9,7 @@ import threading
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from urllib.parse import urlencode
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +67,214 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertLess(bundle.index("function actionEditorHTML("), bundle.index("async function padInit()"))
         self.assertNotIn("portal_shutter", bundle)
         self.assertEqual(self.request("/api/bindings")[0], 200)
+
+    def test_fragment_presentation(self):
+        class FragmentParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.nodes = []
+                self.stack = []
+
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                node = {"tag": tag, "attrs": attributes,
+                        "classes": set(attributes.get("class", "").split()),
+                        "parent": self.stack[-1] if self.stack else None}
+                self.nodes.append(node)
+                if tag not in {"area", "base", "br", "col", "embed", "hr", "img",
+                               "input", "link", "meta", "param", "source", "track", "wbr"}:
+                    self.stack.append(node)
+
+            def handle_endtag(self, tag):
+                for index in range(len(self.stack) - 1, -1, -1):
+                    if self.stack[index]["tag"] == tag:
+                        del self.stack[index:]
+                        break
+
+        def descendants(nodes, parent):
+            for node in nodes:
+                ancestor = node["parent"]
+                while ancestor is not None:
+                    if ancestor is parent:
+                        yield node
+                        break
+                    ancestor = ancestor["parent"]
+
+        fragments = list((ROOT / "src/app/web").glob("*.fragment.html"))
+        fragments += list((ROOT / "src/app/device_classes").glob("*/web/*.fragment.html"))
+        for fragment in fragments:
+            with self.subTest(fragment=fragment.name):
+                parser = FragmentParser()
+                parser.feed(fragment.read_text())
+                headers = [node for node in parser.nodes if "section-header" in node["classes"]]
+                self.assertTrue(headers)
+                for header in headers:
+                    headings = [node for node in descendants(parser.nodes, header) if node["tag"] == "h2"]
+                    self.assertTrue(headings)
+                    for heading in headings:
+                        icons = [node for node in descendants(parser.nodes, heading)
+                                 if "portal-icon" in node["classes"]]
+                        self.assertEqual(len(icons), 1)
+                        self.assertEqual(icons[0]["attrs"].get("aria-hidden"), "true")
+                panels = [node for node in parser.nodes
+                          if node["classes"] & {"card", "portal-section", "pad-workspace"}]
+                self.assertTrue(panels, "Every fragment needs a content section")
+                if fragment.name == "pad-editor.fragment.html":
+                    continue
+                for panel in panels:
+                    siblings = [other for other in panels if other["parent"] is panel["parent"]]
+                    children = list(descendants(parser.nodes, panel))
+                    if len(siblings) < 2 or not children:
+                        continue
+                    self.assertTrue(any(node["tag"] in {"h2", "h3", "h4", "h5", "h6", "summary"}
+                                        or "card-header" in node["classes"] for node in children),
+                                    "Sibling sections need a title")
+
+    def test_recipe_catalog(self):
+        status, catalog = self.request("/api/recipes/catalog")
+        self.assertEqual(status, 200)
+        alarm = next(recipe for recipe in catalog["recipes"] if recipe["id"] == "alarm-clock")
+        self.assertFalse(alarm["provision"]["components"]["alarms"]["1"]["enabled"])
+        self.assertEqual(alarm["post_install"]["links"][0]["fragment"], "alarm-schedule")
+        info = self.request("/api/info")[1]
+        self.assertTrue(info["has_alarm"])
+        self.assertTrue(info["has_sound_player"])
+        self.assertFalse(self.request("/api/info", profile="jc3248w535")[1]["has_sound_player"])
+        self.assertFalse(self.request("/api/info", profile="reterminal-e1003-frame")[1]["has_alarm"])
+        nav = self.request("/api/portal/nav")[1]
+        pads = next(category for category in nav["categories"] if category["id"] == "pads")
+        self.assertIn("recipes", [item["id"] for item in pads["items"]])
+        self.assertEqual(self.request("/api/section/recipes", raw=True)[0], 200)
+        self.assertEqual(self.request("/api/recipes/catalog", "POST", {"schema": 2})[0], 400)
+        self.assertEqual(self.request("/api/recipes/catalog")[1], catalog)
+        empty = {"schema": 1, "catalog_version": "test", "recipes": []}
+        self.assertEqual(self.request("/api/recipes/catalog", "POST", empty)[0], 200)
+        self.assertEqual(self.request("/api/recipes/catalog")[1], empty)
+        self.assertEqual(self.request("/api/recipes/catalog", "POST", {**empty, "padding": "x" * 65536})[0], 413)
+
+    def test_alarms(self):
+        status, alarm = self.request("/api/component/alarms/config")
+        self.assertEqual(status, 200)
+        self.assertFalse(alarm["1"]["enabled"])
+        self.assertEqual(alarm["lateness_minutes"], 360)
+        for minutes in (0, 360, 10080):
+            alarm["lateness_minutes"] = minutes
+            self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
+            self.assertEqual(self.request("/api/component/alarms/config")[1]["lateness_minutes"], minutes)
+            self.assertEqual(self.request("/api/component/alarms/status")[1]["lateness_minutes"], minutes)
+        for minutes in (-1, 10081, 1.5, True, "360"):
+            invalid = copy.deepcopy(alarm)
+            invalid["lateness_minutes"] = minutes
+            self.assertEqual(self.request("/api/component/alarms/config", "POST", invalid)[0], 400)
+        alarm["lateness_minutes"] = 360
+        alarm["1"].update(enabled=True, hour=8, on_ring=[{"type": "alarm_tone"}])
+        self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
+        self.assertEqual(self.request("/api/component/alarms/config")[1], alarm)
+        invalid = copy.deepcopy(alarm)
+        invalid["1"]["on_ring"] = [{"type": "delay", "duration_ms": 10}]
+        self.assertEqual(self.request("/api/component/alarms/config", "POST", invalid)[0], 400)
+        self.request("/__mock/alarm", "POST", {"state": "ringing", "active_id": 1})
+        self.assertEqual(self.request("/api/component/alarms/snooze", "POST", {})[0], 200)
+        self.assertEqual(self.request("/api/component/alarms/status")[1]["state"], "snoozed")
+        self.assertEqual(self.request("/api/component/alarms/cancel", "POST", {})[0], 200)
+        self.assertEqual(self.request("/api/component/alarms/status")[1]["state"], "idle")
+        alarm["1"]["weekdays"] = 0
+        self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
+        once = self.request("/api/component/alarms/status")[1]
+        self.assertTrue(once["enabled"])
+        self.assertGreater(once["once_epoch"], PORTAL.MOCK_NOW_EPOCH)
+        self.assertRegex(once["once_local"], r"2026-10-0[78] 08:00")
+        self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
+        self.assertEqual(self.request("/api/component/alarms/status")[1]["once_epoch"], once["once_epoch"])
+        self.request("/__mock/alarm", "POST", {"state": "ringing", "active_id": 1})
+        self.assertFalse(self.request("/api/component/alarms/config")[1]["1"]["enabled"])
+        self.assertEqual(self.request("/api/component/alarms/status")[1]["once_epoch"], 0)
+        self.assertEqual(self.request("/api/component/alarms/snooze", "POST", {})[0], 200)
+        self.assertEqual(self.request("/api/component/alarms/status")[1]["state"], "snoozed")
+        self.assertEqual(self.request("/api/component/alarms/config", profile="reterminal-e1003-frame")[0], 404)
+        for fragment_id in ("alarm-schedule", "alarm-behavior"):
+            self.assertEqual(self.request("/api/section/" + fragment_id, profile="reterminal-e1003-frame", raw=True)[0], 404)
+        self.assertEqual(self.request("/portal_alarms.js", profile="reterminal-e1003-frame", raw=True)[0], 404)
+        self.assertIn("init_alarm_schedule_fragment", self.request("/portal_alarms.js", raw=True)[1])
+        self.assertIn("init_alarm_behavior_fragment", self.request("/portal_alarms.js", raw=True)[1])
+        self.assertIn('server->on("/portal_alarms.js", HTTP_GET, handlePortalAlarmsJS)',
+                  (ROOT / "src/app/web_portal_routes.cpp").read_text())
+        bundle = self.request("/portal.js", raw=True)[1]
+        self.assertIn("if (!navigationReady) return;", bundle)
+        self.assertNotIn("loadNavigationAssets(data)", bundle)
+        self.assertLess(bundle.index("await loadItemAssets("),
+            bundle.index("var initFn = window["))
+        fragment = self.request("/api/section/alarm-schedule", raw=True)[1]
+        self.assertNotIn('id="alarm-snooze"', fragment)
+        self.assertNotIn('id="alarm-cancel"', fragment)
+        self.assertNotIn('id="alarm-state"', fragment)
+        self.assertIn('id="alarm-repeat-summary"', fragment)
+        self.assertIn('id="alarm-once-target"', fragment)
+        self.assertNotIn('id="alarm-lateness-minutes"', fragment)
+        self.assertNotIn('id="alarm-snooze-minutes"', fragment)
+        behavior = self.request("/api/section/alarm-behavior", raw=True)[1]
+        self.assertIn('id="alarm-lateness-minutes"', behavior)
+        self.assertNotIn('id="alarm-time"', behavior)
+        self.assertNotIn("setTimeout", self.request("/portal_alarms.js", raw=True)[1])
+
+    def test_alarm_sections(self):
+        categories = self.request("/api/portal/nav")[1]["categories"]
+        category_ids = [category["id"] for category in categories]
+        self.assertEqual(category_ids[category_ids.index("actions") + 1], "alarm")
+        alarm_category = next(category for category in categories if category["id"] == "alarm")
+        self.assertEqual([item["display_name"] for item in alarm_category["items"]], ["Schedule", "Behavior"])
+        config = self.request("/api/component/alarms/config")[1]
+        schedule = {"enabled": True, "hour": 10, "minute": 20, "weekdays": 127}
+        self.assertEqual(self.request("/api/component/alarms/schedule", "POST", schedule)[0], 200)
+        current = self.request("/api/component/alarms/config")[1]
+        for key in ("snooze_minutes", "auto_dismiss_minutes", "on_ring", "on_stop"):
+            self.assertEqual(current["1"][key], config["1"][key])
+        self.assertEqual(current["lateness_minutes"], config["lateness_minutes"])
+        behavior = {"lateness_minutes": 12, "snooze_minutes": 4, "auto_dismiss_minutes": 15,
+                    "on_ring": [{"type": "alarm_tone"}], "on_stop": []}
+        self.assertEqual(self.request("/api/component/alarms/behavior", "POST", behavior)[0], 200)
+        current = self.request("/api/component/alarms/config")[1]
+        for key, value in schedule.items():
+            self.assertEqual(current["1"][key], value)
+        self.assertEqual(current["lateness_minutes"], 12)
+        self.assertEqual(current["1"]["snooze_minutes"], 4)
+        self.assertEqual(self.request("/api/component/alarms/schedule", "POST", {**schedule, "on_ring": []})[0], 400)
+        self.assertEqual(self.request("/api/component/alarms/behavior", "POST", {**behavior, "enabled": False})[0], 400)
+
+    def test_alarm_authoring_metadata(self):
+        catalog = self.request("/api/info?catalog=1")[1]["catalog"]
+        action = next(item for item in catalog if item["type"] == "alarm")
+        header = (ROOT / "src/app/alarm_manager.h").read_text()
+        commands = re.search(r'alarm_command_names\[\].*?\{(.*?)\}', header, re.S).group(1)
+        self.assertEqual([item["id"] for item in action["commands"]], [item for item in re.findall(r'"([^"]*)"', commands) if item])
+        fields = {field["name"]: field for field in action["editor_fields"]}
+        self.assertTrue(fields["alarm_value"]["bindable"])
+        self.assertEqual(fields["alarm_id"]["default"], "1")
+        self.assertEqual([item["id"] for item in fields["alarm_day"]["options"]], list(range(7)))
+        schema = self.request("/api/bindings")[1]
+        alarm = next(item for item in schema["schemes"] if item["name"] == "alarm")
+        source = (ROOT / "src/app/alarm_binding.cpp").read_text()
+        keys = re.search(r'alarm_keys\[\].*?\{(.*?)\}', source, re.S).group(1)
+        self.assertEqual(alarm["keys"], re.findall(r'"([^"]+)"', keys))
+
+    def test_timezone(self):
+        status, catalog = self.request("/api/component/timezone/catalog")
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(len(catalog["cities"]), 50)
+        self.assertLessEqual(len(catalog["cities"]), 70)
+        kathmandu = next(city for city in catalog["cities"] if city["name"] == "Asia/Kathmandu")
+        before = self.request("/api/config")[1]
+        status, preview = self.request("/api/component/timezone/preview?" + urlencode({"timezone": kathmandu["posix"]}))
+        self.assertEqual(status, 200)
+        self.assertEqual(preview["utc_offset"], "+0545")
+        self.assertTrue(preview["ready"])
+        self.assertEqual(self.request("/api/config")[1], before)
+        self.assertEqual(self.request("/api/component/timezone/preview?timezone=")[0], 400)
+        self.assertIn('id="timezone-city"', self.request("/api/section/timezone", raw=True)[1])
+        self.assertNotIn('id="timezone"', self.request("/api/section/device-name", raw=True)[1])
+        self.assertIn("init_timezone_fragment", self.request("/portal.js", raw=True)[1])
+        nav = self.request("/api/portal/nav", profile="reterminal-e1003-frame")[1]
+        self.assertTrue(any(item["id"] == "timezone" for category in nav["categories"] for item in category["items"]))
 
     def test_logs(self):
         status, data = self.request("/api/logs?limit=100")

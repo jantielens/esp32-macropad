@@ -1,0 +1,26 @@
+<div class="section-header"><h2><span class="portal-icon" aria-hidden="true">snooze</span>Alarm behavior</h2></div>
+<div id="alarm-readiness" role="status"></div>
+<div id="alarm-warning" role="status" class="text-danger" hidden></div>
+<form id="alarm-config-form" data-section="behavior">
+  <section class="portal-section" aria-labelledby="alarm-snooze-heading">
+  <h3 class="portal-section-title" id="alarm-snooze-heading">Snooze &amp; Dismissal</h3>
+  <div class="row">
+    <div class="form-group col-md-6"><label class="form-label" for="alarm-snooze-minutes">Snooze duration (minutes)</label><input type="number" class="form-control" id="alarm-snooze-minutes" min="1" max="1440" value="9" required></div>
+    <div class="form-group col-md-6"><label class="form-label" for="alarm-dismiss-minutes">Auto-dismiss after (minutes)</label><input type="number" class="form-control" id="alarm-dismiss-minutes" min="1" max="1440" value="30" required></div>
+  </div>
+  </section>
+  <section class="portal-section" aria-labelledby="alarm-actions-heading">
+  <h3 class="portal-section-title" id="alarm-actions-heading">Actions</h3>
+  <div class="form-group"><div class="form-label">When ringing starts</div><div id="alarm-ring-editors"></div></div>
+  <div class="form-group"><div class="form-label">When ringing stops</div><div class="form-text">Runs when ringing stops, including when snoozing or dismissing the alarm.</div><div id="alarm-stop-editors"></div></div>
+  </section>
+  <section class="portal-section" aria-labelledby="alarm-missed-heading">
+  <h3 class="portal-section-title" id="alarm-missed-heading">Missed Alarms</h3>
+  <div class="form-group">
+    <label class="form-label" for="alarm-lateness-minutes">Maximum alarm lateness (minutes)</label>
+    <input type="number" class="form-control" id="alarm-lateness-minutes" name="lateness_minutes" min="0" max="10080" step="1" value="360" aria-describedby="alarm-lateness-description" required>
+    <div id="alarm-lateness-description" class="form-text">How long after its scheduled time an alarm may still ring, including after power loss or reboot. The device waits for time synchronization and rings only the latest eligible missed occurrence, not a backlog. Default: 360 minutes (6 hours). Set to 0 to allow only on-time delivery. This does not restore snoozed alarms after reboot.</div>
+  </div>
+  </section>
+  <div class="save-bar"><button type="submit" class="btn btn-primary btn-sm" id="alarm-save" disabled>Save behavior</button></div>
+</form>

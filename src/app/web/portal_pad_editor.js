@@ -212,15 +212,12 @@ async function padInit() {
         var btnDefSec = document.getElementById('btn-defaults-section');
         if (btnDefSec) btnDefSec.style.display = 'block';
         padPopulateGridDropdowns();
-        padPopulatePadDropdown();
         padPopulateScreenDropdown();
         const requestedPage = Number(sessionStorage.getItem('esp32-macropad.recipe-pad-editor-page'));
         sessionStorage.removeItem('esp32-macropad.recipe-pad-editor-page');
         const initialPage = Number.isInteger(requestedPage) && requestedPage >= 0 &&
             requestedPage < deviceInfoCache.max_pads ? requestedPage : 0;
         padState.page = initialPage;
-        document.getElementById('pad-page-select').value = initialPage;
-        padRefreshDropdownLabels();
         padPopulateSoundDropdown();
         await padLoadInitialPage(initialPage);
     } else {
@@ -301,19 +298,6 @@ function padPopulateGridDropdowns() {
             o.value = i; o.textContent = i;
             rowSel.appendChild(o);
         }
-    }
-}
-
-function padPopulatePadDropdown() {
-    const sel = document.getElementById('pad-page-select');
-    if (!sel) return;
-    const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
-    sel.innerHTML = '';
-    for (let i = 0; i < maxPads; i++) {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = 'Pad ' + (i + 1);
-        sel.appendChild(opt);
     }
 }
 
@@ -495,7 +479,7 @@ async function padLoadPage(page, defaultsReady) {
     if (typeof padWorkspace !== 'undefined' && padWorkspace) padWorkspace.loading = true;
     padState.page = page;
     const screen = (deviceInfoCache.available_screens || []).find(screen => screen.id === 'pad_' + page);
-    document.getElementById('pad-name').value = screen ? screen.name : '';
+    document.getElementById('pad-name').value = screen ? screen.name.replace(/^Pad \d+: /, '').replace(/^Pad \d+$/, '') : '';
     padState.rawJson = null;
     padState.buttons = [];
     padState.bindings = [];
@@ -561,9 +545,6 @@ async function padLoadPage(page, defaultsReady) {
         padPopulateTemplateDropdown(page);
         await padLoadTemplateButtons();
         if (!current()) return;
-
-        // Update dropdown label
-        padUpdateDropdownLabel(page, json.name || '');
 
         // Index buttons by "col,row" for easy lookup
         padState.buttons = [];
@@ -776,7 +757,7 @@ async function padSavePage(options) {
 
         showMessage('Pad ' + (context.page + 1) + ' saved', 'success');
         padClearDirty();
-        padUpdateDropdownLabel(context.page, context.name);
+        if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
 
         if (!bulk) {
             // Refresh deviceInfoCache so target screen dropdowns pick up new pad names.
@@ -800,28 +781,4 @@ async function padSavePage(options) {
         showMessage('Save failed: ' + err.message, 'error');
         return null;
     }
-}
-
-
-function padUpdateDropdownLabel(page, name) {
-    const sel = document.getElementById('pad-page-select');
-    if (!sel) return;
-    const opt = sel.options[page];
-    if (opt) opt.textContent = name ? 'Pad ' + (page + 1) + ': ' + name : 'Pad ' + (page + 1);
-    if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
-}
-
-// Populate pad-page-select labels from deviceInfoCache.available_screens
-function padRefreshDropdownLabels() {
-    if (!deviceInfoCache || !deviceInfoCache.available_screens) return;
-    deviceInfoCache.available_screens.forEach(s => {
-        const m = s.id.match(/^pad_(\d+)$/);
-        if (m) {
-            const idx = parseInt(m[1]);
-            // Extract custom name portion after "Pad N: " if present
-            const prefixRe = /^Pad \d+: (.+)$/;
-            const match = s.name.match(prefixRe);
-            padUpdateDropdownLabel(idx, match ? match[1] : '');
-        }
-    });
 }

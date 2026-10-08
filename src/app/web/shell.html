@@ -23,11 +23,11 @@
       </button>
       <h1 class="portal-title" id="portal-device-name">{{PROJECT_DISPLAY_NAME}}</h1>
       <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
-        <span class="theme-icon-sun">☀️</span>
-        <span class="theme-icon-moon">🌙</span>
+        <span class="theme-icon-sun"><span class="portal-icon" aria-hidden="true">light_mode</span><span class="portal-icon-fallback">Light</span></span>
+        <span class="theme-icon-moon"><span class="portal-icon" aria-hidden="true">dark_mode</span><span class="portal-icon-fallback">Dark</span></span>
       </button>
       <button id="reboot-toggle" class="theme-toggle-btn reboot-toggle-btn" aria-label="Reboot device" title="Reboot device">
-        <span>🔄</span>
+        <span><span class="portal-icon" aria-hidden="true">restart_alt</span><span class="portal-icon-fallback">Reboot</span></span>
       </button>
     </div>
     <div class="portal-badges">

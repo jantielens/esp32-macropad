@@ -13,8 +13,7 @@ ActionResult dispatch_image_previous(const ButtonAction&, const char* label, uin
 }
 bool image_previous_available() { return true; }
 void describe_image_previous(JsonObject& action) { action["group"] = "Image library"; action["label"] = "Previous image"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kImagePreviousActionType, ACTION_TYPE_IMAGE_PREVIOUS,
-    nullptr, nullptr, dispatch_image_previous, nullptr, describe_image_previous, image_previous_available);
+DEFINE_AND_REGISTER_ACTION_TYPE(kImagePreviousActionType, ACTION_TYPE_IMAGE_PREVIOUS, nullptr, nullptr, dispatch_image_previous, nullptr, describe_image_previous, image_previous_available, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 }
 
 #endif // HAS_IMAGE_LIBRARY

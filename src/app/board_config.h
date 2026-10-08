@@ -99,6 +99,11 @@ struct HwButtonDef {
 #define HAS_MQTT true
 #endif
 
+// Include the persistent weekly or one-shot alarm on pad-capable display builds.
+#ifndef ALARM_ENABLED
+#define ALARM_ENABLED HAS_DISPLAY
+#endif
+
 // Enable the built-in MCP (Model Context Protocol) server (POST /mcp).
 // Lets local AI assistants inspect and control the device. Independent of
 // HAS_DISPLAY: headless boards still expose read tools and system_command,

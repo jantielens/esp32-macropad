@@ -14,6 +14,7 @@
   var categories = [];
   var itemMap = {};       // itemId → { cat, item }
   var currentItem = null;
+  var navigationReady = false;
   var activeFetchController = null;
   var fragmentLoadGeneration = 0;
   var backdropEl = null;
@@ -40,18 +41,11 @@
 
   // ---------- Two-level nav build ----------
 
-  function loadNavigationAssets(data) {
-    var scripts = {};
-    var styles = {};
-    (data.categories || []).forEach(function (category) {
-      (category.items || []).forEach(function (item) {
-        if (item.portal_script) scripts[item.portal_script] = true;
-        if (item.portal_style) styles[item.portal_style] = true;
-      });
-    });
-
+  var navigationAssetLoads = {};
+  function loadItemAssets(item) {
     function loadNavigationAsset(path, kind) {
-      return new Promise(function (resolve, reject) {
+      if (navigationAssetLoads[path]) return navigationAssetLoads[path];
+      navigationAssetLoads[path] = new Promise(function (resolve, reject) {
         var asset = document.createElement(kind === 'style' ? 'link' : 'script');
         if (kind === 'style') {
           asset.rel = 'stylesheet';
@@ -60,17 +54,19 @@
           asset.src = path;
         }
         asset.onload = resolve;
-        asset.onerror = function () { reject(new Error('Portal asset unavailable: ' + path)); };
+        asset.onerror = function () {
+          asset.remove();
+          delete navigationAssetLoads[path];
+          reject(new Error('Portal asset unavailable: ' + path));
+        };
         document.head.appendChild(asset);
       });
+      return navigationAssetLoads[path];
     }
 
-    var loads = Object.keys(styles).map(function (path) {
-      return loadNavigationAsset(path, 'style');
-    });
-    loads = loads.concat(Object.keys(scripts).map(function (path) {
-      return loadNavigationAsset(path, 'script');
-    }));
+    var loads = [];
+    if (item && item.portal_style) loads.push(loadNavigationAsset(item.portal_style, 'style'));
+    if (item && item.portal_script) loads.push(loadNavigationAsset(item.portal_script, 'script'));
     return Promise.all(loads);
   }
 
@@ -83,7 +79,7 @@
     var welcomeLink = document.createElement('a');
     welcomeLink.className = 'nav-welcome-link';
     welcomeLink.href = '#welcome';
-    welcomeLink.innerHTML = '<span class="nav-welcome-icon">🏠</span> Home';
+    welcomeLink.innerHTML = '<span class="portal-icon" aria-hidden="true">home</span> Home';
     welcomeLink.addEventListener('click', function (e) {
       e.preventDefault();
       navigateTo('welcome');
@@ -96,7 +92,7 @@
       var header = document.createElement('div');
       header.className = 'nav-category-header' + (catIdx === 0 ? ' expanded' : '');
       header.innerHTML =
-        '<span class="nav-category-icon">' + (cat.icon || '') + '</span>' +
+        portalCategoryIcon(cat.id) +
         '<span class="nav-category-label">' + escapeHtml(cat.display_name) + '</span>' +
         '<span class="nav-category-chevron"></span>';
 
@@ -205,7 +201,8 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.text();
       })
-      .then(function (html) {
+      .then(async function (html) {
+        await loadItemAssets(itemMap[itemId] && itemMap[itemId].item);
         if (loadGeneration !== fragmentLoadGeneration) return;
         contentEl.innerHTML = html;
         // Convention-based fragment init
@@ -300,6 +297,7 @@
   // ---------- Hash change (browser back/forward) ----------
 
   window.addEventListener('hashchange', function () {
+    if (!navigationReady) return;
     var item = getItemFromHash();
     if (item && item !== currentItem) {
       loadFragment(item);
@@ -371,6 +369,7 @@
   // ---------- Init ----------
 
   function init() {
+    portalEnsureMaterialSymbols();
     updateLayoutHeight();
     window.addEventListener('resize', updateLayoutHeight);
 
@@ -380,14 +379,12 @@
         return res.json();
       })
       .then(function (data) {
-        return loadNavigationAssets(data).then(function () { return data; });
-      })
-      .then(function (data) {
         // Expose primary category data for welcome hero card
         var primary = data.primary || null;
         window._portalPrimary = primary;
 
         buildNav(data.categories || []);
+        navigationReady = true;
 
         // Startup fallback chain:
         // 1. In AP mode, primary fragment wins over any hash (the wizard is

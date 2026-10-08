@@ -30,6 +30,7 @@
 #define CONFIG_SSID_MAX_LEN 32
 #define CONFIG_PASSWORD_MAX_LEN 64
 #define CONFIG_DEVICE_NAME_MAX_LEN 32
+#define CONFIG_TIMEZONE_MAX_LEN 64
 #define CONFIG_IP_STR_MAX_LEN 16
 
 // MQTT settings
@@ -84,6 +85,7 @@ struct DeviceConfig {
 		
 		// Device settings
 		char device_name[CONFIG_DEVICE_NAME_MAX_LEN];
+		char timezone[CONFIG_TIMEZONE_MAX_LEN];
 		
 		// Optional fixed IP configuration
 		char fixed_ip[CONFIG_IP_STR_MAX_LEN];

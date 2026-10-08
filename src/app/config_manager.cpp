@@ -12,6 +12,8 @@
 #include "log_manager.h"
 #include "power_config.h"
 #include "storage.h"
+#include "time_service.h"
+#include "ota_activity.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -25,6 +27,7 @@
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
 #define KEY_DEVICE_NAME    "device_name"
+#define KEY_TIMEZONE       "timezone"
 #define KEY_FIXED_IP       "fixed_ip"
 #define KEY_SUBNET_MASK    "subnet_mask"
 #define KEY_GATEWAY        "gateway"
@@ -371,6 +374,8 @@ bool config_manager_load(DeviceConfig *config) {
 		// Load device settings
 		String default_name = config_manager_get_default_device_name();
 		preferences.getString(KEY_DEVICE_NAME, config->device_name, CONFIG_DEVICE_NAME_MAX_LEN);
+		preferences.getString(KEY_TIMEZONE, config->timezone, CONFIG_TIMEZONE_MAX_LEN);
+		if (!time_service_timezone_valid(config->timezone)) strlcpy(config->timezone, "UTC0", sizeof(config->timezone));
 		if (strlen(config->device_name) == 0) {
 				strlcpy(config->device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
 		}
@@ -542,6 +547,7 @@ bool config_manager_load(DeviceConfig *config) {
 
 // Save configuration to NVS
 bool config_manager_save(const DeviceConfig *config) {
+		if (ota_activity_is_active()) return false;
 		if (!config) {
 				LOGE("Config", "Save failed: NULL pointer");
 				return false;
@@ -672,8 +678,11 @@ bool config_manager_save(const DeviceConfig *config) {
 		
 		// Save magic number last (indicates valid config)
 		preferences.putUInt(KEY_MAGIC, CONFIG_MAGIC);
-		
+		const char* timezone = config->timezone[0] ? config->timezone : "UTC0";
+		const bool timezone_saved = preferences.putString(KEY_TIMEZONE, timezone) == strlen(timezone);
 		preferences.end();
+		if (!timezone_saved) return false;
+		time_service_set_timezone(timezone);
 		
 		config_manager_print(config);
 		LOGI("Config", "Save complete");
@@ -823,6 +832,7 @@ bool config_manager_set_ble_owner_addr(const char* addr) {
 bool config_manager_is_valid(const DeviceConfig *config) {
 		if (!config) return false;
 		if (config->magic != CONFIG_MAGIC) return false;
+		if (config->timezone[0] && !time_service_timezone_valid(config->timezone)) return false;
 		if (strlen(config->device_name) == 0) return false;
 
 		const PowerMode mode = power_config_parse_power_mode(config);

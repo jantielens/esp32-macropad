@@ -143,17 +143,19 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						}
 
 						// Push current screen onto history (skip for splash and goBack)
-						if (mgr->currentScreen && !mgr->skipHistoryPush
-								&& mgr->currentScreen != &mgr->splashScreen) {
+						Screen* historyScreen = mgr->pendingHistoryScreen ? mgr->pendingHistoryScreen : mgr->currentScreen;
+						if (historyScreen && !mgr->skipHistoryPush
+								&& historyScreen != &mgr->splashScreen) {
 								if (mgr->screenHistoryCount < SCREEN_HISTORY_MAX) {
-										mgr->screenHistory[mgr->screenHistoryCount++] = mgr->currentScreen;
+										mgr->screenHistory[mgr->screenHistoryCount++] = historyScreen;
 								} else {
 										memmove(&mgr->screenHistory[0], &mgr->screenHistory[1],
 												(SCREEN_HISTORY_MAX - 1) * sizeof(Screen*));
-										mgr->screenHistory[SCREEN_HISTORY_MAX - 1] = mgr->currentScreen;
+										mgr->screenHistory[SCREEN_HISTORY_MAX - 1] = historyScreen;
 								}
 						}
 						mgr->skipHistoryPush = false;
+						mgr->pendingHistoryScreen = nullptr;
 
 						mgr->currentScreen = target;
 						mgr->currentScreen->show();

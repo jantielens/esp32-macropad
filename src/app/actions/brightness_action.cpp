@@ -68,9 +68,7 @@ void describe_brightness(JsonObject& action) {
     JsonObject editor_value = editor_fields.createNestedObject(); editor_value["name"] = "brightness_value"; editor_value["label"] = "Value (%)"; editor_value["type"] = "text"; editor_value["bindable"] = true;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kBrightnessActionType, ACTION_TYPE_BRIGHTNESS,
-    parse_brightness, serialize_brightness, dispatch_brightness, nullptr,
-    describe_brightness, brightness_available, validate_brightness, visit_brightness_fields);
+DEFINE_AND_REGISTER_ACTION_TYPE(kBrightnessActionType, ACTION_TYPE_BRIGHTNESS, parse_brightness, serialize_brightness, dispatch_brightness, nullptr, describe_brightness, brightness_available, validate_brightness, visit_brightness_fields, ACTION_EXECUTION_SYNC);
 
 } // namespace
 

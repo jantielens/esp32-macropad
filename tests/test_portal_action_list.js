@@ -73,7 +73,16 @@ const context = {
     deviceInfoCache: {
         catalog: [
             { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
-            { type: 'screen', group: 'Navigation', label: 'Navigate to screen' }
+            { type: 'screen', group: 'Navigation', label: 'Navigate to screen' },
+            { type: 'alarm', group: 'Alarm', label: 'Alarm Control',
+              commands: [{id:'cancel', label:'Cancel'}, {id:'snooze', label:'Snooze'}],
+              editor_fields: [
+                  {name:'alarm_id', label:'Alarm', type:'select', default:'1', numeric:true,
+                   options:[{id:'0', label:'Active alarm'}, {id:'1', label:'Alarm 1'}]},
+                  {name:'alarm_command', label:'Command', type:'select', default:'snooze', command_options:true},
+                  {name:'alarm_value', label:'Minutes', type:'text', bindable:true},
+                  {name:'alarm_day', label:'Weekday', type:'select', numeric:true, default:'1', options:[{id:'1', label:'Monday'}]}
+              ] }
         ]
     },
     listInjectSyntheticScreenOption() {},
@@ -83,6 +92,43 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_screen.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_cycle_pad.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_mqtt.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_key.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_sound_alert.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_timer.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_notify.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_visual_alert.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_delay.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_gamepad.js', 'utf8'), context);
+const genericHTML = context.actionEditorGenericFieldsHTML('defaults');
+assert(genericHTML.includes('<option value="1" selected>Alarm 1</option>'));
+assert(genericHTML.includes('<option value="snooze" selected>Snooze</option>'));
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_alarm.js', 'utf8'), context);
+const alarmEditor = context._actionEditorExtensions.find(extension => extension.type === 'alarm');
+assert(alarmEditor);
+assert.strictEqual(context.actionEditorGenericFields('alarm').length, 0);
+assert(!context.actionEditorGenericFieldsHTML('extension').includes('generic-alarm'));
+assert(alarmEditor.groups('extension').includes('<option value="1" selected>Alarm 1</option>'));
+assert(!fs.readFileSync('src/app/web/portal_action_editor.js', 'utf8').includes('actionEditorAlarm'));
+
+for (const command of ['set_time', 'adjust_minutes', 'weekday_enable', 'weekday_disable', 'weekday_toggle', 'enable', 'disable', 'toggle', 'cancel', 'snooze']) {
+    alarmEditor.load('alarm-test', {type:'alarm', alarm_id:1, alarm_command:command, alarm_value:'{step}', alarm_day:6});
+    const timeCommand = ['set_time', 'adjust_minutes'].includes(command);
+    const weekdayCommand = command.startsWith('weekday_');
+    assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-field').style.display, timeCommand ? '' : 'none');
+    assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_day-field').style.display, weekdayCommand ? '' : 'none');
+    assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-label').textContent, command === 'set_time' ? 'Time (minutes since midnight)' : 'Adjustment (minutes)');
+    const action = alarmEditor.build('alarm-test', 'alarm');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'alarm_value'), timeCommand);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'alarm_day'), weekdayCommand);
+}
+document.getElementById('alarm-test-generic-alarm-alarm_command').value = 'adjust_minutes';
+context.actionEditorAlarmChanged('alarm-test');
+assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value').value, '{step}');
+assert.strictEqual(document.getElementById('alarm-test-generic-alarm-alarm_value-field').style.display, '');
 
 // --- Default slot labels ---
 context.actionEditorListRender('container-a', ['a0', 'a1', 'a2']);

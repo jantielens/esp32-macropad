@@ -34,6 +34,16 @@ portal_binding_validator.js
 # Action editor + config actions UI: only reachable from pad/swipe/boot/timer
 # editors, all of which are HAS_DISPLAY-gated fragments.
 portal_action_editor.js
+portal_action_editor_screen.js
+portal_action_editor_cycle_pad.js
+portal_action_editor_mqtt.js
+portal_action_editor_key.js
+portal_action_editor_sound_alert.js
+portal_action_editor_timer.js
+portal_action_editor_notify.js
+portal_action_editor_visual_alert.js
+portal_action_editor_delay.js
+portal_action_editor_gamepad.js
 portal_config_actions.js
 
 # Home Assistant Service action-editor extension. Registers the "ha_service"
@@ -41,6 +51,7 @@ portal_config_actions.js
 # it must come after portal_action_editor.js (which defines the hook). Core
 # feature (not device-class), so it lives under src/app/web/.
 portal_action_editor_ha.js
+portal_action_editor_alarm.js
 
 # [chunk:shutter_actions IS_SHUTTER_TESTER]
 # Shutter Tester action-editor extension. Registers the "shutter" action type
@@ -66,6 +77,7 @@ portal_shutter_tests.js
 # [chunk:config]
 # Configuration (main config page — non-display settings stay always-on)
 portal_config.js
+portal_timezone.js
 
 # Firmware page
 portal_firmware.js

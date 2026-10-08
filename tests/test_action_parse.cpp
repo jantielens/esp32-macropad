@@ -14,6 +14,8 @@
 #include "action_list.h"
 #include "action_parse.h"
 #include "action_registry.h"
+#include "action_catalog.h"
+#include <string>
 
 ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
     return ACTION_COMPLETE;
@@ -278,6 +280,51 @@ TEST(legacy_alert_aliases_are_rejected) {
     ASSERT_STR(act.type, "");
     act = parse_from_string("{\"type\":\"sound\",\"sound_file\":\"chime\"}");
     ASSERT_STR(act.type, "");
+}
+
+TEST(alarm_audio_round_trip) {
+#if ALARM_ENABLED
+    ButtonAction control = round_trip("{\"type\":\"alarm\",\"alarm_command\":\"adjust_minutes\",\"alarm_value\":\"{step}\"}");
+    ASSERT_STR(control.type, "alarm");
+    ASSERT_EQ(control.payload.alarm.alarm_id, 1);
+    action_type_substitute_step(action_type_find("alarm"), control, -60);
+    ASSERT_STR(control.payload.alarm.alarm_value, "-60");
+    control = round_trip("{\"type\":\"alarm\",\"alarm_command\":\"weekday_toggle\",\"alarm_day\":6}");
+    ASSERT_EQ(control.payload.alarm.alarm_day, 6);
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"bad\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"set_time\",\"alarm_value\":\"1440\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"adjust_minutes\",\"alarm_value\":\"1.5\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"toggle\",\"alarm_id\":0}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm\",\"alarm_command\":\"weekday_toggle\"}").type, "");
+    ButtonAction tone = round_trip("{\"type\":\"alarm_tone\",\"sound_alert_pattern\":\"1000:200 800\",\"sound_alert_volume\":55}");
+    ASSERT_STR(tone.type, "alarm_tone");
+    ASSERT_STR(tone.payload.sound_alert.sound_alert_kind, "tone_loop");
+    ASSERT_STR(tone.payload.sound_alert.sound_alert_pattern, "1000:200 800");
+    ASSERT_EQ(tone.payload.sound_alert.sound_alert_volume, 55);
+    ButtonAction mp3 = round_trip("{\"type\":\"alarm_mp3\",\"sound_alert_file\":\"wake-up\",\"sound_alert_volume\":60}");
+    ASSERT_STR(mp3.type, "alarm_mp3");
+    ASSERT_STR(mp3.payload.sound_alert.sound_alert_kind, "mp3_loop");
+    ASSERT_STR(mp3.payload.sound_alert.sound_alert_file, "wake-up");
+    ASSERT_EQ(mp3.payload.sound_alert.sound_alert_volume, 60);
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm_mp3\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm_tone\",\"sound_alert_file\":\"wake-up\"}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm_mp3\",\"sound_alert_file\":\"wake-up\",\"sound_alert_volume\":101}").type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"alarm_tone\",\"sound_alert_kind\":\"stop\"}").type, "");
+    StaticJsonDocument<1024> description;
+    JsonObject metadata = description.to<JsonObject>();
+    action_type_find("alarm_mp3")->describe(metadata);
+    ASSERT_STR(metadata["group"] | "", "Alarm");
+    ASSERT_STR(metadata["label"] | "", "Loop MP3");
+    ASSERT_EQ(action_type_find("alarm_tone")->execution, ACTION_EXECUTION_SYNC);
+    ButtonAction legacy = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone_loop\",\"sound_alert_pattern\":\"1000:200 800\"}");
+    ASSERT_STR(legacy.type, "");
+    ASSERT_STR(parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"mp3_loop\",\"sound_alert_file\":\"wake-up\"}").type, "");
+#else
+    for (const char* type : {"alarm", "alarm_tone", "alarm_mp3"}) {
+        ASSERT_TRUE(action_type_find(type) == nullptr);
+        ASSERT_TRUE(!action_type_is_supported(type));
+    }
+#endif
 }
 
 // ============================================================================
@@ -759,11 +806,44 @@ TEST(registered_identifiers_survive_storage) {
     }
 }
 
-int main() {
+TEST(catalog_feature_gates_and_metadata_parity) {
+    JsonDocument portal;
+    action_catalog_emit(portal.to<JsonArray>(), false);
+    JsonDocument mcp;
+    action_catalog_emit(mcp.to<JsonArray>(), true);
+    unsigned alarm_count = 0;
+    for (JsonObject entry : mcp.as<JsonArray>()) {
+        const char* name = entry["type"];
+        const ActionTypeDef* type = action_type_find(name);
+        ASSERT_TRUE(type != nullptr);
+        ASSERT_EQ(entry["alarm_hook_allowed"].as<bool>(), type->execution == ACTION_EXECUTION_SYNC);
+        if (!strcmp(name, "alarm") || !strcmp(name, "alarm_tone") || !strcmp(name, "alarm_mp3")) ++alarm_count;
+        entry.remove("fields");
+    }
+    ASSERT_EQ(alarm_count, ALARM_ENABLED ? 3 : 0);
+    ASSERT_TRUE(action_type_find("screen")->display_lock_required);
+    ASSERT_TRUE(!action_type_find("ha_service")->display_lock_required);
+    std::string portal_json, mcp_json;
+    serializeJson(portal, portal_json);
+    serializeJson(mcp, mcp_json);
+    ASSERT_TRUE(portal_json == mcp_json);
+}
+
+int main(int argc, char** argv) {
+    if (argc == 2 && !strcmp(argv[1], "--catalog")) {
+        JsonDocument catalogs;
+        action_catalog_emit(catalogs["portal"].to<JsonArray>(), false);
+        action_catalog_emit(catalogs["mcp"].to<JsonArray>(), true);
+        std::string output;
+        serializeJson(catalogs, output);
+        std::puts(output.c_str());
+        return 0;
+    }
     printf("=== ButtonAction Parse/Serialize Tests ===\n\n");
 
     printf("--- Empty / minimal ---\n");
     RUN(registered_identifiers_survive_storage);
+    RUN(catalog_feature_gates_and_metadata_parity);
     RUN(empty_json);
     RUN(empty_to_json_produces_empty_object);
     RUN(action_list_filters_literal_none_for_pad_callers);
@@ -793,6 +873,7 @@ int main() {
     RUN(sound_alert_tone_parse);
     RUN(sound_alert_mp3_round_trip);
     RUN(legacy_alert_aliases_are_rejected);
+    RUN(alarm_audio_round_trip);
 
     printf("\n--- Volume action ---\n");
     RUN(volume_set_action_parse);

@@ -27,6 +27,46 @@ window.registerConfigFields = function (names) {
     Array.prototype.push.apply(window.__extra_config_fields, names);
 };
 
+let portalMaterialSymbolsPromise = null;
+function portalCategoryIcon(category) {
+    const icons = {
+        device: 'settings', display: 'display_settings', camera: 'photo_camera',
+        pads: 'grid_view', actions: 'bolt', alarm: 'alarm', connectivity: 'hub',
+        audio: 'volume_up', sensors: 'sensors', firmware: 'system_update',
+        coffee: 'coffee', darkroom: 'dark_mode', voice: 'record_voice_over',
+        epaper_frame: 'image', 'epaper-frame': 'image'
+    };
+    return '<span class="portal-icon" aria-hidden="true">' + (icons[category] || 'settings') + '</span>';
+}
+
+function portalEnsureMaterialSymbols() {
+    if (portalMaterialSymbolsPromise) return portalMaterialSymbolsPromise;
+    portalMaterialSymbolsPromise = new Promise(resolve => {
+        let settled = false;
+        const finish = available => {
+            if (settled) return;
+            settled = true;
+            if (available) document.documentElement.classList.add('portal-icons-ready');
+            clearTimeout(timeout);
+            resolve(available);
+        };
+        const timeout = setTimeout(() => finish(false), 4000);
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,1,0';
+        link.onload = () => {
+            if (settled) return;
+            if (!document.fonts) return finish(false);
+            document.fonts.load('24px "Material Symbols Outlined"').then(fonts => {
+                finish(fonts.length > 0);
+            }, () => finish(false));
+        };
+        link.onerror = () => finish(false);
+        document.head.appendChild(link);
+    });
+    return portalMaterialSymbolsPromise;
+}
+
 async function copyTextToClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
         try {

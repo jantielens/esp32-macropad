@@ -4,6 +4,12 @@
 
 #include <cstring>
 #include <cstddef>
+#include <cstdint>
+
+#if ALARM_ENABLED
+bool __attribute__((weak)) alarm_command_submit(const char*, uint8_t, int, uint8_t) { return false; }
+void __attribute__((weak)) alarm_command_report_error(const char*) {}
+#endif
 
 // strlcpy is available on ESP32 (newlib) and BSD but not older glibc.
 // glibc 2.38+ (Ubuntu 24.04) provides it natively — skip our fallback.

@@ -6,6 +6,7 @@
 #include "display_manager.h"
 #include "log_manager.h"
 #include "pad_cycle.h"
+#include "screen_saver_manager.h"
 
 extern portMUX_TYPE g_splash_status_mux;
 
@@ -50,25 +51,47 @@ void DisplayManager::setSplashStatus(const char* text) {
 		portEXIT_CRITICAL(&g_splash_status_mux);
 }
 
-bool DisplayManager::showScreen(const char* screen_id) {
+void DisplayManager::prepareNavigationWake() {
+		if (transientScreenActive) {
+				pendingHistoryScreen = transientResumeScreen;
+				transientResumeScreen = nullptr;
+				transientScreenActive = false;
+		}
+		screen_saver_manager_notify_activity(true);
+}
+
+bool DisplayManager::showScreen(const char* screen_id, bool wake) {
 		if (!screen_id) return false;
+		bool didLock = false;
+		lockIfNeeded(didLock);
 		
 		// Look up screen in registry
 		for (size_t i = 0; i < screenCount; i++) {
 				if (strcmp(availableScreens[i].id, screen_id) == 0) {
 						// Defer screen switch to lvglTask (non-blocking)
 						pendingScreen = availableScreens[i].instance;
+						if (wake) {
+								skipHistoryPush = false;
+								prepareNavigationWake();
+						}
 						LOGT("Display", "Queued switch to screen: %s", screen_id);
+						unlockIfNeeded(didLock);
 						return true;
 				}
 		}
 		
+		unlockIfNeeded(didLock);
 		LOGW("Display", "Screen not found: %s", screen_id);
 		return false;
 }
 
 bool DisplayManager::showTransientScreen(const char* screen_id) {
-		if (!screen_id || !currentScreen || currentScreen == &splashScreen) return false;
+		bool didLock = false;
+		lockIfNeeded(didLock);
+		if (!screen_id || !currentScreen || currentScreen == &splashScreen || pendingScreen) {
+			unlockIfNeeded(didLock);
+			return false;
+		}
 
 		for (size_t i = 0; i < screenCount; i++) {
 			if (strcmp(availableScreens[i].id, screen_id) != 0) continue;
@@ -79,40 +102,60 @@ bool DisplayManager::showTransientScreen(const char* screen_id) {
 			skipHistoryPush = true;
 			pendingScreen = availableScreens[i].instance;
 			LOGT("Display", "Queued transient screen: %s", screen_id);
+			unlockIfNeeded(didLock);
 			return true;
 		}
 
+		unlockIfNeeded(didLock);
 		LOGW("Display", "Transient screen not found: %s", screen_id);
 		return false;
 }
 
 bool DisplayManager::restoreTransientScreen() {
-		if (!transientScreenActive) return false;
+		bool didLock = false;
+		lockIfNeeded(didLock);
+		if (!transientScreenActive) {
+			unlockIfNeeded(didLock);
+			return false;
+		}
 
 		Screen* target = transientResumeScreen;
 		transientResumeScreen = nullptr;
 		transientScreenActive = false;
-		if (!target || target == currentScreen) return true;
+		if (!target || target == currentScreen) {
+			unlockIfNeeded(didLock);
+			return true;
+		}
 
 		skipHistoryPush = true;
+		pendingHistoryScreen = target;
 		pendingScreen = target;
 		LOGT("Display", "Queued transient screen restore");
+		unlockIfNeeded(didLock);
 		return true;
 }
 
-bool DisplayManager::goBack() {
-		if (screenHistoryCount == 0) return false;
+bool DisplayManager::goBack(bool wake) {
+		bool didLock = false;
+		lockIfNeeded(didLock);
+		if (screenHistoryCount == 0) {
+				unlockIfNeeded(didLock);
+				return false;
+		}
 		pendingScreen = screenHistory[--screenHistoryCount];
 		skipHistoryPush = true;
+		if (wake) prepareNavigationWake();
 		LOGT("Display", "Queued go-back (history depth: %zu)", screenHistoryCount);
+		unlockIfNeeded(didLock);
 		return true;
 }
 
-bool DisplayManager::cyclePad(int8_t direction, bool wrap, uint32_t excludedMask) {
+bool DisplayManager::cyclePad(int8_t direction, bool wrap, uint32_t excludedMask, bool wake) {
 		bool didLock = false;
 		lockIfNeeded(didLock);
 
 		Screen* anchorScreen = pendingScreen ? pendingScreen : currentScreen;
+		if (wake && transientScreenActive) anchorScreen = transientResumeScreen;
 		int anchorPad = -1;
 		for (uint8_t index = 0; index < MAX_PADS; index++) {
 				if (anchorScreen == padScreens[index]) {
@@ -126,6 +169,7 @@ bool DisplayManager::cyclePad(int8_t direction, bool wrap, uint32_t excludedMask
 		if (destination >= 0) {
 				pendingScreen = padScreens[destination];
 				skipHistoryPush = false;
+				if (wake) prepareNavigationWake();
 		}
 		unlockIfNeeded(didLock);
 

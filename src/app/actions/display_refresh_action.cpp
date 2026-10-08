@@ -59,9 +59,7 @@ void describe_display_refresh(JsonObject& action) {
     JsonObject editor_mode = editor_fields.createNestedObject(); editor_mode["name"] = "mode"; editor_mode["label"] = "Mode"; editor_mode["type"] = "select"; editor_mode["command_options"] = true;
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kDisplayRefreshActionType, ACTION_TYPE_DISPLAY_REFRESH,
-    parse_display_refresh, serialize_display_refresh, dispatch_display_refresh, nullptr,
-    describe_display_refresh, display_refresh_available, validate_display_refresh, nullptr);
+DEFINE_AND_REGISTER_ACTION_TYPE(kDisplayRefreshActionType, ACTION_TYPE_DISPLAY_REFRESH, parse_display_refresh, serialize_display_refresh, dispatch_display_refresh, nullptr, describe_display_refresh, display_refresh_available, validate_display_refresh, nullptr, ACTION_EXECUTION_SYNC);
 
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

@@ -12,7 +12,22 @@ The ESP32 Macropad includes a built-in web portal for configuring every aspect o
 | **AP Mode** (first boot / factory reset) | Wi-Fi not configured | Connect to the device's Wi-Fi, then go to `http://192.168.4.1` |
 | **Full Mode** (normal operation) | Connected to your Wi-Fi | `http://<device-name>.local` or the device's IP address |
 
-In AP mode, only the Network page is available. In Full mode, the standard four pages are accessible, and e-paper boards also expose a dedicated E-Paper page.
+In AP mode, the portal opens device setup. In Full mode, the sidebar groups
+settings by category, with additional categories and controls for supported
+hardware and device classes.
+
+## Portal Appearance
+
+Navigation categories and fragment titles use Google-hosted Material icons.
+When Google cannot be reached, for example while connected to the setup access
+point, titles and navigation remain text-only. Icon names and broken symbols
+are not displayed. The theme and reboot controls retain text labels when icons
+are unavailable.
+
+Content sections use consistent spacing and subtly contrasting backgrounds in
+both themes. Views with multiple sections give each section a descriptive title;
+single-section views do not repeat the fragment title. Standard content and
+controls use the navigation's compact text scale, with larger fragment titles.
 
 ## Device Logs
 
@@ -634,6 +649,77 @@ When a message is received on the topic, its payload is compared to the value fi
 
 The number of available trigger slots depends on the board (8 by default, fewer on memory-constrained boards). Changes apply immediately and subscriptions are re-established whenever the device reconnects to the MQTT broker.
 
+### Alarm Clock
+
+*Shown when the board enables `ALARM_ENABLED`, normally on display boards.*
+
+Open **Alarm** in the Actions category. There is one alarm, slot **1**, disabled
+by default. Selected weekdays repeat weekly. Leave all weekdays unselected for
+**Only once**: saving an enabled alarm schedules the next valid occurrence of
+its time, usually today or tomorrow. It automatically disables on its first
+scheduled ring; snooze can still ring again within that session. Enable and save
+again to schedule another one-shot. The form shows the repetition summary and,
+after saving, the scheduled date in device time. Set **Device > Timezone** before choosing the alarm's
+local time. City selection previews device time without applying the change;
+**Save** applies it without rebooting.
+
+Each ring and stop list holds up to three synchronous actions. Actions that
+pause execution, such as Delay and key sequences, are excluded. To sound an
+alarm, select **Loop Tone** or **Loop MP3** under **Alarm**; use **Sound alert >
+Stop Audio** in the stop list. MP3 repeats after successful playback, with no
+gapless guarantee, and stops on cancellation, firmware updates, or playback
+failure. Stop Audio is shared with other audio playback on the device.
+
+Use an **Alarm Control** button or MCP for Snooze and Cancel; the settings form
+does not offer live controls or Ringing/Snoozed indicators. Readiness and failure
+warnings refresh on load and after saving, without recurring status polling.
+**Snooze** ends the current ring, runs its stop actions, then rings again after
+the selected duration (default nine minutes). **Cancel** ends ringing or snooze
+without disabling the weekly schedule. Ringing automatically ends after the
+configured timeout (default 30 minutes). Idle controls do nothing.
+
+You can also configure time, weekdays, and enabled state from your own pad using
+**Alarm Control** actions, including Numeric Rocker `{step}` adjustments. Queued
+edits apply immediately and save after ten seconds without a substantive change;
+power loss before saving can lose them. Bindings expose accepted values, countdowns, readiness, and
+save failures. Durations and ring/stop lists remain in this portal form. See
+[Alarm Actions](pad-editor-guide.md#alarm-actions) and
+[Alarm Binding](pad-editor-guide.md#alarm-binding) for the authoring fields.
+
+The alarm waits for an NTP synchronization during the current boot. Once synced,
+Wi-Fi loss does not stop its clock. **Maximum lateness for all alarms** covers
+both startup recovery and live delays. It defaults to **360 minutes (six hours)**
+and accepts 0-10080 whole minutes. Zero permits only on-time delivery. An alarm
+can ring at the exact lateness boundary, but not after it. Lateness is measured
+when reliable time becomes available, not when power is restored. Only the latest
+eligible occurrence rings; several days off do not replay a backlog.
+Enabling, substantive definition edits, and timezone changes exclude earlier
+occurrences using a saved next-full-minute eligibility fence. Edits without
+synchronized time arm from the next minute after synchronization. During a
+daylight-saving transition, a repeated local time rings only on its first
+occurrence, and a nonexistent local time is skipped.
+
+A one-shot target is persisted, so reboot does not move it to another day.
+If it is within the lateness window at boot, it can ring once. Outside that window, it disables without
+ringing or rescheduling. Saving changed enabled one-shot settings chooses a new
+next occurrence; an identical save keeps the existing target. Saving before
+time synchronization leaves the target pending until the clock is ready.
+Timezone changes keep an already scheduled one-shot instant, although its local
+display time can change. Sessions, including snooze, do not survive reboot.
+
+A successful definition or timezone change dismisses an active alarm using its
+old stop actions. Identical saves, rejected input, and failed saves preserve the
+session. Definitions and handled-occurrence history use the primary filesystem,
+not NVS. Formatting or losing that filesystem can lose the alarm. Storage and
+action failures appear in the alarm status. Weekly and one-shot alarms still ring
+if saving their occurrence record fails: delivery takes priority over preventing
+a possible duplicate. RAM prevents another scheduled ring during the current
+boot; failed saves retry every ten seconds, except during firmware updates.
+A reboot before a successful retry can repeat an occurrence. Changing only
+maximum lateness preserves an active session and the existing eligibility fence.
+Older development alarm snapshots are not migrated; reconfigure alarms after
+upgrading from the previous snapshot format.
+
 ### Timers
 
 *Shown only on boards with a display.*
@@ -724,6 +810,19 @@ next diagnostic run because earlier rows use the previous column layout.
 
 *Available in Full mode only.*
 
+**Pads > Recipes** installs scenarios from the device-saved **Recipe Catalog**.
+The [sample catalog](samples/recipe-catalog.json) includes an Alarm Clock for
+boards with alarm and audio support. Choose a target pad and a free 5x5 area;
+smaller empty pads offer a grid increase. Confirm replacement of Alarm 1's
+ringing and stop actions. The alarm stays disabled, and its existing schedule
+and durations are retained. The completed-installation panel links to
+**Alarm > Schedule** to set the time, repeat days, enable the alarm, and save,
+and to **Alarm > Behavior** for snooze, auto-dismiss, and action settings.
+When ringing, the repeated tone plays and the chosen pad appears with Snooze
+and confirmed Dismiss alarm controls. A failed pad save leaves alarm settings
+untouched; a later component failure reports incomplete setup with the pad
+already saved.
+
 The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 16 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
 The Pad Editor workspace keeps pad navigation on the left, the canvas in the
@@ -737,12 +836,16 @@ fills the available content height, leaving the normal padding below it. Short
 windows retain a minimum editor height and scroll when necessary.
 
 Selecting a button opens **Content**, **Actions**, and **Appearance** tabs.
-Select the **Pad** inspector scope or **More > Pad Settings** for pad **Layout**,
+Select the **Pad** inspector scope for pad **Layout**,
 **Appearance**, **Bindings**, and **Actions**. Clicking a selected button again
 deselects it without discarding edits. Edits update the current draft directly, without an Apply/Cancel
 step; only **Save Pad** persists the current pad. Switching buttons or tabs
 retains incomplete inputs. Correct validation errors before saving; failed
 saves retain the draft for retry.
+
+Pad labels retain the `Pad X: Name` format whether selected or not. The button
+**Actions** and **Appearance** tabs expose their controls without an additional
+same-named accordion; individual action slots remain expandable.
 
 Numeric fields consistently omit spinner buttons. Mouse-wheel scrolling over
 them scrolls the inspector without changing their values or focus; typing and
@@ -847,6 +950,18 @@ All binding fields validate syntax in real time as you type — bracket balance,
 | **Device Name** | A friendly name for your device (e.g., "Kitchen Pad"). Used in the web portal, Home Assistant, and browser discovery |
 | **mDNS Name** | Auto-generated from the device name. This is the `.local` address you use to access the portal (shown as read-only) |
 
+### Timezone
+
+Open **Device > Timezone** and select a city from the geographically grouped
+catalog. The compact catalog reuses 61 supported names, including UTC. City
+choices map to POSIX rules; raw rules are visible only with **Custom** selected.
+Custom accepts supported Olson names or explicit POSIX rules.
+
+The preview shows device time in the selected timezone, its UTC offset, and
+synchronization readiness. Previewing does not save settings or disturb alarms.
+Choose **Save** to persist and apply the timezone without rebooting. A substantive
+change dismisses an active alarm and rearms it from the next full minute.
+
 ### Network Configuration (Optional)
 
 For assigning a static IP instead of using DHCP:
@@ -919,7 +1034,9 @@ The **Pads** page has its own separate footer — see [Pads Page](#pads-page) ab
 
 Each page only saves the fields shown on that page — saving on the Home page won't clear your Network settings.
 
-A **🔄 reboot button** also lives in the portal header (next to the light/dark theme toggle) and is available on every page. It prompts for confirmation, then reboots without saving — handy when you've made a change elsewhere (e.g., the API) and just need to restart.
+A reboot button also lives in the portal header next to the light/dark theme
+toggle and is available in every fragment. It prompts for confirmation, then
+reboots without saving.
 
 After a reboot, the portal shows an automatic reconnection dialog. If it can't reconnect (e.g., the device name changed), it provides a manual link with the new address.
 

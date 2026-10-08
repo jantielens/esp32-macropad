@@ -44,6 +44,6 @@ void describe_timer(JsonObject& action) {
     value["name"] = "timer_value";
     value["description"] = "countdown value, bindable";
 }
-DEFINE_AND_REGISTER_ACTION_TYPE(kTimerActionType, ACTION_TYPE_TIMER, parse_timer, serialize_timer, dispatch_timer, nullptr, describe_timer, timer_available, validate_timer, visit_timer_fields);
+DEFINE_AND_REGISTER_ACTION_TYPE(kTimerActionType, ACTION_TYPE_TIMER, parse_timer, serialize_timer, dispatch_timer, nullptr, describe_timer, timer_available, validate_timer, visit_timer_fields, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

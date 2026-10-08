@@ -185,6 +185,8 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(HAS_AUDIO ? "true" : "false");
 		response->print(",\"has_sound_player\":");
 		response->print(HAS_SOUND_PLAYER ? "true" : "false");
+		response->print(",\"has_alarm\":");
+		response->print(ALARM_ENABLED ? "true" : "false");
 		response->print(",\"has_native_extensions\":");
 		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
 		response->print(",\"has_camera\":");

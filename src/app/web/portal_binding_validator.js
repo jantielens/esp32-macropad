@@ -728,11 +728,10 @@ function bindingValidateDialog() {
         'pad-edit-lp-action-0', 'pad-edit-lp-action-1', 'pad-edit-lp-action-2',
         'pad-edit-nr-adjust'
     ];
-    var actionSuffixes = (typeof _ACTION_BIND_SUFFIXES !== 'undefined') ? _ACTION_BIND_SUFFIXES : [
-        '-notify-text', '-notify-duration', '-topic', '-payload', '-sequence',
-        '-beep-pattern', '-timer-set-sec', '-timer-adjust-sec'
-    ];
     for (var ai = 0; ai < actionPrefixes.length; ai++) {
+        var typeInput = document.getElementById(actionPrefixes[ai] + '-type');
+        var actionSuffixes = typeof actionEditorBindingSuffixes === 'function'
+            ? actionEditorBindingSuffixes(typeInput ? typeInput.value : '') : [];
         for (var si = 0; si < actionSuffixes.length; si++) {
             var el = document.getElementById(actionPrefixes[ai] + actionSuffixes[si]);
             if (el && el.value.trim() && !bindingValidateInput(el)) count++;

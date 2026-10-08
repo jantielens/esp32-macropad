@@ -3,6 +3,42 @@ const fs = require('fs');
 const vm = require('vm');
 
 async function main() {
+    for (const outcome of ['success', 'empty', 'error', 'font-error', 'timeout']) {
+        let stylesheet;
+        let timeoutCallback;
+        const classes = new Set();
+        const fontContext = {
+            window: { fetch: async () => ({}) },
+            document: {
+                createElement: () => ({}),
+                getElementById: () => null,
+                head: { appendChild: element => { stylesheet = element; } },
+                documentElement: { classList: { add: name => classes.add(name) } },
+                fonts: { load: async () => {
+                    if (outcome === 'font-error') throw new Error('Font unavailable');
+                    return outcome === 'success' ? [{}] : [];
+                } }
+            },
+            setTimeout: callback => { timeoutCallback = callback; return 1; },
+            clearTimeout() {},
+            console
+        };
+        vm.createContext(fontContext);
+        vm.runInContext(fs.readFileSync('src/app/web/portal_core.js', 'utf8'), fontContext);
+        const loaded = fontContext.portalEnsureMaterialSymbols();
+        assert.strictEqual(fontContext.portalEnsureMaterialSymbols(), loaded);
+        if (outcome === 'timeout') timeoutCallback();
+        else if (outcome === 'error') stylesheet.onerror();
+        else stylesheet.onload();
+        assert.strictEqual(await loaded, outcome === 'success');
+        assert.strictEqual(classes.has('portal-icons-ready'), outcome === 'success');
+        if (outcome === 'timeout') {
+            fontContext.document.fonts.load = async () => [{}];
+            stylesheet.onload();
+            await Promise.resolve();
+            assert(!classes.has('portal-icons-ready'), 'late responses must preserve text-only fallback');
+        }
+    }
     const requests = [];
     const timers = [];
     const nodes = new Map();
@@ -128,10 +164,20 @@ async function main() {
     }
     const extensionSelect = selectNode();
     const soundSelect = selectNode();
+    const screenSelect = selectNode();
+    screenSelect.attributes = {};
+    screenSelect.getAttribute = name => screenSelect.attributes[name];
+    screenSelect.hasAttribute = name => Object.hasOwn(screenSelect.attributes, name);
+    screenSelect.setAttribute = (name, value) => { screenSelect.attributes[name] = value; };
+    screenSelect.removeAttribute = name => { delete screenSelect.attributes[name]; };
+    screenSelect.remove = index => {
+        if (screenSelect.options[index].value === screenSelect.value) screenSelect.value = '';
+        screenSelect.options.splice(index, 1);
+    };
     context.document.createElement = () => ({ value: '', textContent: '' });
     context.document.getElementById = id => id === 'pad-edit-extension-id' ? extensionSelect :
-        id === 'test-sound-alert-file' ? soundSelect : null;
-    for (const module of ['portal_pad_dialog', 'portal_action_editor']) {
+        id === 'test-sound-alert-file' ? soundSelect : id === 'test-target' ? screenSelect : null;
+    for (const module of ['portal_pad_dialog', 'portal_action_editor', 'portal_action_editor_screen', 'portal_action_editor_sound_alert']) {
         vm.runInContext(fs.readFileSync('src/app/web/' + module + '.js', 'utf8'), context);
     }
     vm.runInContext('padExtensionCatalogLoading = true;', context);
@@ -153,6 +199,59 @@ async function main() {
     context.actionEditorPopulateSounds(['test'], ['saved.mp3']);
     assert.strictEqual(soundSelect.value, 'saved.mp3');
     assert.strictEqual(soundSelect.options.filter(option => option.value === 'saved.mp3').length, 1);
+    const screens = [{id:'pad_1', name:'Pad 2'}, {id:'pad_2', name:'Pad 3'}];
+    context.actionEditorPopulateScreens(['test'], screens);
+    screenSelect.value = 'pad_2';
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(screenSelect.value, 'pad_2', 'refresh must retain a selected screen');
+    screenSelect.setAttribute('data-pending-value', 'pad_1');
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(screenSelect.value, 'pad_1', 'refresh must restore a deferred target');
+    assert(!screenSelect.hasAttribute('data-pending-value'));
+    let soundRequests = 0;
+    context.getDeviceInfo = async () => ({ has_sound_player:false });
+    context.fetch = async url => {
+        assert.strictEqual(url, '/api/sounds/list');
+        soundRequests++;
+        return {ok:true, json:async () => ['new.mp3']};
+    };
+    await context.actionEditorWireFragment(['test']);
+    assert.strictEqual(soundRequests, 0, 'unsupported audio must not fetch sounds');
+    context.getDeviceInfo = async () => ({ has_sound_player:true });
+    await context.actionEditorWireFragment(['test']);
+    assert.strictEqual(soundRequests, 1, 'fragment wiring fetches sounds once for every editor prefix');
+    assert(soundSelect.options.some(option => option.value === 'new.mp3'));
+    assert.strictEqual(soundSelect.value, 'saved.mp3');
+    const navSource = fs.readFileSync('src/app/web/portal_nav.js', 'utf8');
+    const assets = [];
+    const assetContext = { document: {
+        createElement(tag) { return { tag, remove() {} }; },
+        head: { appendChild(asset) { assets.push(asset); } }
+    } };
+    vm.createContext(assetContext);
+    vm.runInContext(navSource.slice(navSource.indexOf('  var navigationAssetLoads'),
+        navSource.indexOf('  function buildNav')), assetContext);
+    await assetContext.loadItemAssets({ id:'welcome' });
+    assert.strictEqual(assets.length, 0, 'home must not fetch alarm assets');
+    const alarmItem = { portal_script:'/portal_alarms.js' };
+    let initialized = false;
+    const alarmAssets = assetContext.loadItemAssets(alarmItem).then(() => { initialized = true; });
+    const sharedAssets = assetContext.loadItemAssets(alarmItem);
+    assert.strictEqual(assets.length, 1, 'concurrent visits share the asset request');
+    assert.strictEqual(assets[0].src, '/portal_alarms.js');
+    assert.strictEqual(initialized, false, 'initialization waits for the script');
+    assets[0].onload();
+    await Promise.all([alarmAssets, sharedAssets]);
+    await assetContext.loadItemAssets(alarmItem);
+    assert.strictEqual(assets.length, 1, 'revisits use the loaded script');
+    const retryItem = { portal_style:'/alarm.css' };
+    const failure = assetContext.loadItemAssets(retryItem);
+    assets[1].onerror();
+    await assert.rejects(failure, /Portal asset unavailable/);
+    const retry = assetContext.loadItemAssets(retryItem);
+    assert.strictEqual(assets.length, 3, 'a failed asset can be retried');
+    assets[2].onload();
+    await retry;
     console.log('portal_startup: PASS');
 }
 

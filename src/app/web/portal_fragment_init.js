@@ -26,7 +26,7 @@ async function saveFragmentConfig(requiresReboot) {
     // Build config from DOM elements that exist in the current fragment
     var config = {};
     var fields = [
-        'wifi_ssid', 'wifi_password', 'device_name', 'fixed_ip',
+        'wifi_ssid', 'wifi_password', 'device_name', 'timezone', 'fixed_ip',
         'subnet_mask', 'gateway', 'dns1', 'dns2',
         'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
         'operating_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',
@@ -136,7 +136,7 @@ window.init_welcome_fragment = function () {
         heroEl.innerHTML =
             '<div class="card mb-3 hero-card">' +
             '<div class="card-body text-center">' +
-            '<span class="hero-icon">' + (primary.icon || '') + '</span>' +
+            portalCategoryIcon(primary.category) +
             '<h4>' + escAttr(primary.label || primary.category) + '</h4>' +
             '<a href="#' + encodeURIComponent(primary.fragment) + '" class="btn btn-primary">Open</a>' +
             '</div></div>';

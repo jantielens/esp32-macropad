@@ -1,0 +1,17 @@
+<div class="section-header"><h2><span class="portal-icon" aria-hidden="true">schedule</span>Timezone</h2></div>
+<form id="timezone-form" class="portal-section">
+  <div class="form-group">
+    <label class="form-label" for="timezone-city">City</label>
+    <select class="form-select" id="timezone-city" disabled></select>
+  </div>
+  <div class="form-group" id="timezone-custom" hidden>
+    <label class="form-label" for="timezone">Custom timezone</label>
+    <input class="form-control" id="timezone" name="timezone" maxlength="63" autocomplete="off" spellcheck="false" required>
+  </div>
+  <div class="form-group">
+    <label class="form-label" for="timezone-device-time">Device time</label>
+    <output id="timezone-device-time" class="form-control-plaintext" style="display:block;min-height:24px">Loading</output>
+    <span id="timezone-sync" role="status"></span>
+  </div>
+  <div class="save-bar"><button type="submit" class="btn btn-primary btn-sm" id="timezone-save" disabled>Save</button></div>
+</form>

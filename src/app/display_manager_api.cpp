@@ -38,23 +38,35 @@ void display_manager_set_splash_status(const char* text) {
 }
 
 void display_manager_show_screen(const char* screen_id, bool* success) {
+		display_manager_show_screen(screen_id, success, false);
+}
+
+void display_manager_show_screen(const char* screen_id, bool* success, bool wake) {
 		bool result = false;
 		if (displayManager) {
-				result = displayManager->showScreen(screen_id);
+				result = displayManager->showScreen(screen_id, wake);
 		}
 		if (success) *success = result;
 }
 
 bool display_manager_go_back() {
+		return display_manager_go_back(false);
+}
+
+bool display_manager_go_back(bool wake) {
 		if (displayManager) {
-				return displayManager->goBack();
+				return displayManager->goBack(wake);
 		}
 		return false;
 }
 
 bool display_manager_cycle_pad(int8_t direction, bool wrap, uint32_t excluded_mask) {
+		return display_manager_cycle_pad(direction, wrap, excluded_mask, false);
+}
+
+bool display_manager_cycle_pad(int8_t direction, bool wrap, uint32_t excluded_mask, bool wake) {
 		return displayManager
-				? displayManager->cyclePad(direction, wrap, excluded_mask)
+				? displayManager->cyclePad(direction, wrap, excluded_mask, wake)
 				: false;
 }
 

@@ -385,27 +385,45 @@ Recommended apps for finding devices:
 
 ## User Interface
 
-### Multi-Page Architecture
+### Shell and Fragment Presentation
 
-The web portal is organized into three separate pages for better organization and user experience:
+The portal serves one shell with category navigation and hash-selected fragments.
+Legacy Home, Network, and Firmware URLs redirect into the shell. AP mode selects
+the setup fragment and exposes only the Device category. Mobile navigation
+collapses behind the header's navigation control.
 
-| Page | URL | Description | Available In |
-|------|-----|-------------|--------------|
-| **Home** | `/` or `/home.html` | Additional/custom settings and welcome message | Full Mode only |
-| **Network** | `/network.html` | WiFi, device, and network configuration | Both modes |
-| **Firmware** | `/firmware.html` | Online update, manual upload, and factory reset | Full Mode only |
+Each fragment title contains a decorative Material Symbol with `aria-hidden="true"`.
+Navigation category icons are mapped by category ID in `portalCategoryIcon()`;
+the API's legacy emoji metadata remains unchanged. Child navigation links stay
+text-only. The shell starts the shared `portalEnsureMaterialSymbols()` loader;
+pad icon rendering reuses it rather than issuing another font request.
 
-**Navigation:**
-- Tabbed navigation at top of page
-- Active page highlighted in white
-- In AP mode (Core Mode), only Network tab is visible
+Material Symbols remain Google-hosted. Decorative icons are hidden until the
+stylesheet and font load successfully. A failed request, missing font API, or
+four-second timeout leaves text-only titles and navigation. Theme and reboot
+buttons have visible text fallbacks. Font loading never blocks fragment startup.
+There is no requirement for Internet access in AP mode.
 
-**Responsive Design:**
-- Mobile (<768px): All sections stack vertically
-- Desktop (≥768px): Related sections displayed side-by-side in 2-column grid
-  - Home page: Hello World + Sample Settings
-  - Network page: WiFi Settings + Device Settings (side-by-side), Network Config (full-width)
-- Container max-width: 900px
+Every fragment view has at least one content section. A single section may omit
+a redundant heading; multiple sibling sections have descriptive headings.
+Existing `.card` containers and `.portal-section` use shared theme-aware surfaces,
+8px corners, and consistent spacing. Light mode uses neutral tinted sections with
+white inputs; dark mode keeps distinct darker surfaces. `.portal-list-section`
+uses flat repeated rows rather than nesting framed cards. Editors, charts, and
+previews retain their functional layouts.
+
+Shared typography follows the compact navigation: standard fragment text,
+buttons, form controls, and custom dropdowns use `0.835rem`; section headings share the
+navigation category's `0.88rem` size and semibold weight. Fragment titles use
+`1.1rem`. Sections and card bodies use 14px padding, while tables inherit the
+section background. The same text scale applies across viewport sizes.
+Shared selectors consolidate navigation, section, and form presentation rules,
+including dropdown input surfaces and focus states. Pad inspector controls reuse
+these rules rather than maintaining a separate large-input style.
+
+Action slots use `.action-list-slot` for their tinted background, accent border,
+corners, and body spacing in every host, including Boot Actions and the pad/button
+inspector. Indentation follows nesting rather than controlling the action colors.
 
 ### Header Identity and Badges
 
@@ -571,9 +589,9 @@ every component in that custom section to the same category ID.
 
 **Sections:**
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
-  - **Pad selection & naming**: Dropdown for Pad 1–16 with optional custom names (max 31 chars)
+  - Pad selection and naming: Left rail for up to 16 pads with optional custom names (max 31 chars). Labels retain the `Pad X: Name` format whether selected or not; no legacy selection dropdown is needed.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
-  - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Compact action summaries expand into registry-driven editors.
+  - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading.
   - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)
@@ -588,7 +606,7 @@ every component in that custom section to the same category ID.
   - **Device config export/import**: Exports NVS settings (excluding network) plus all 16 pad pages to a single JSON file; import overwrites settings and reboots
 - **Recipes** (display boards): Installs a declared scenario into a selected pad without changing existing buttons. Adaptive recipes use ordered row or column flow; each button declares a visual shape and size, and the portal selects spans from the target pad's actual rendered button dimensions. The clicked cell is the recipe's top-left anchor; adaptive recipes may use a smaller fitting footprint when no larger forward footprint fits. The placement grid previews the resolved group and reports its bounds. Fixed-offset recipes remain supported. If an empty current grid cannot host a recipe, the portal offers the smallest supported rows/columns increase that can. If the current empty grid can host it but existing buttons block every placement, it offers a confirmed **Clear Buttons** action that retains the other pad settings. The user can then select a placement and install the recipe separately. Optional parameter descriptions appear below their inputs. The portal derives an impact summary from the recipe, and unavailable recipes identify their missing device capability. A completed installation exposes **Show Pad** and **Navigate to Pad Editor** actions for the target pad. Recipes use declarative provisioning for pad bindings and existing component configuration, such as timer expiry actions. The **Recipe Catalog** page edits the device-persisted catalog served by `GET/POST /api/recipes/catalog`; a missing catalog is an empty valid envelope. The repository sample is [docs/samples/recipe-catalog.json](../samples/recipe-catalog.json).
 - **Unsaved-changes protection**: Confirm dialog on page/pad switch and `beforeunload` event when edits are pending
-- Pad save controls: A workspace toolbar labels the pad list with Pads and provides pending-edit or saving status, Save Pad, Show on Device, and More. Clean drafts have no status label. The current pad is highlighted in the list, which shares navigation row styles with the shell. The Pad inspector scope or More > Pad Settings opens pad settings. Clicking a selected button again deselects it without discarding its draft. The canvas has no dimensions toolbar or footer. Pad and button action slots share the same accented group styles. Save Pad is also available in the mobile inspector header.
+- Pad save controls: A workspace toolbar labels the pad list with Pads and provides pending-edit or saving status, Save Pad, Show on Device, and More. Clean drafts have no status label. The current pad is highlighted in the list, which shares navigation row styles with the shell. The Pad inspector scope opens pad settings. Clicking a selected button again deselects it without discarding its draft. The canvas has no dimensions toolbar or footer. Pad and button action slots share the same accented group styles. Save Pad is also available in the mobile inspector header.
 - Pad numeric inputs: Spinner buttons are hidden consistently within the editor. A delegated, non-passive wheel listener prevents native number stepping and scrolls the nearest available scroll container, including dynamically rendered action and widget fields. Input focus and values remain unchanged; browser zoom gestures retain their native behavior.
 - Pad workspace layout: The outer frame matches the shared section corner radius (12px). Its height is measured from the content pane, workspace offset, and bottom padding rather than a fixed viewport allowance. The resize observer watches both the canvas and content pane; short screens retain the existing minimum heights and scrolling.
 
@@ -708,7 +726,11 @@ All pages include a fixed bottom footer with action buttons:
 - Always visible while scrolling
 
 **Header Reboot Button:**
-The portal header also carries a 🔄 reboot button next to the dark/light theme toggle, available on every page (including pages without the Save/Reboot footer). Clicking it prompts for confirmation, calls `POST /api/reboot`, and shows the standard reboot dialog. It does not save first.
+The portal header also carries a Material restart icon next to the dark/light
+theme toggle, available in every fragment (including fragments without the
+Save/Reboot footer). It falls back to a Reboot label if the font is unavailable.
+Clicking it prompts for confirmation, calls `POST /api/reboot`, and shows the
+standard reboot dialog. It does not save first.
 
 ## Automatic Reconnection After Reboot
 
@@ -901,7 +923,7 @@ valid JSON, and publish atomically on both LittleFS and SD storage.
 
 The portal applies the complete Recipe schema before saving. See the
 [recipe catalog sample](../samples/recipe-catalog.json) for Pomodoro and Home
-Energy definitions.
+Energy definitions, and an Alarm Clock with Schedule and Behavior follow-up links.
 
 ### Extensions
 
@@ -1074,6 +1096,7 @@ Returns comprehensive device information.
   "has_display": true,
   "has_audio": true,
   "has_sound_player": true,
+  "has_alarm": true,
   "has_camera": false,
   "has_usb_hid": false,
   "has_image_fetch": true,
@@ -1131,6 +1154,37 @@ Returns comprehensive device information.
 - Simple actions can additionally provide `editor_fields`, with a small field vocabulary: `text`, `number`, `select`, `toggle`, and `color`. `select` fields can reuse the entry's `commands` through `command_options`. Actions with conditional or specialized behavior keep their dedicated portal editor code.
 - The portal uses this projection to populate action type, command, and simple field controls. MCP capability metadata uses the same catalog source with field documentation included.
 - Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, `record_cancel`, and `speak` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. Azure transcription has a 30-second limit and no automatic retry. Failure sets `[stt:status]` to `error`, puts the reason in `[stt:text]`, and stops the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation. `speak` resolves its text field as a binding template, then queues best-effort Azure TTS with optional voice and volume overrides; it does not pause the action list, and provider failures are logged without changing the STT bindings. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
+
+**Action Editor Ownership:**
+
+The shared `portal_action_editor.js` owns catalog access, common field rendering,
+extension dispatch, unsupported-action preservation, and fixed action-list slots.
+It does not own built-in action forms or command-specific payload rules.
+Specialized actions use `portal_action_editor_<type>.js` extensions registered in
+`_actionEditorExtensions`; simple actions continue using firmware `editor_fields`
+without a JavaScript extension or a second command catalog.
+
+Each specialized extension keeps its rendering (`groups`), visibility and command
+handling (`typeChanged`), defaults (`load`), and validation/payload construction
+(`build`) together. Build hooks return `null` for other types.
+Extensions can declare `bindingSuffixes`
+and `colorSuffixes` for shared, idempotent binding setup. Dialog validation uses
+these declarations and catalog bindable fields for the selected action only.
+An optional `wireFragment(prefixes, info)` hook supplies asynchronous options;
+shared wiring awaits all hooks after fetching device info once.
+
+The Screen extension owns dynamic screen targets and list-widget synthetic
+options. Sound Alert owns sound-list population, including catalog-backed sound
+selectors. Gamepad owns the helpers also consumed by the held-control widget;
+widget markup remains in the pad editor. Register extensions after the shared
+editor and before consumers in the existing feature-gated bundle chunks.
+Unsupported actions retain their loaded payloads unchanged. This portal refactor
+does not alter firmware rejection of retired audio aliases or invalid loop kinds.
+
+Run the action picker, action-list, cycle, timer, and startup host regressions after
+each migration, followed by asset minification and desktop/mobile checks. The
+picker guards the ownership boundary and exercises payload round-trips against
+the production catalog.
 
 **Display Fields** (only when `has_display` is `true`):
 - `widget_catalog`: Present only with `?catalog=1`. Array of registered widget
@@ -1361,11 +1415,211 @@ History intentionally excludes largest-free-block measurements. Those require
 an allocator pool walk, which can interrupt continuous MIPI-DSI scan-out.
 `GET /api/health` retains its cached internal largest-block values.
 
+### Persistent Alarm Component
+
+`ALARM_ENABLED` defaults to `HAS_DISPLAY` and can be overridden by a board with
+the action framework enabled. It gates the runtime, `alarm` action and binding,
+component, assets, and MCP tools. Shared timezone and NTP services are ungated.
+The Alarm fragment uses the shared action editor with strict
+`alarm_hook_allowed` catalog filtering. Its standalone `/portal_alarms.js` asset
+is authenticated and gated with the component.
+Hash routing loads only the selected component's advertised assets and waits
+before fragment initialization, including on direct links. Home visits do not
+fetch the alarm script. Persisted forbidden hook types remain disabled and
+must be replaced or removed before saving.
+
+Synchronous dispatch uses `ActionTypeDef.display_lock_required` to protect UI
+work; its conservative default is `true`. Home Assistant service dispatch sets
+it to `false` so blocking HTTP requests do not hold the display mutex. Binding
+resolution acquires and releases the display lock separately before dispatch.
+The alarm manager does not hold a display lock around its hook list.
+
+| Method | Endpoint | Contract |
+|--------|----------|----------|
+| GET | `/api/component/alarms/config` | Device-wide lateness setting and normalized ID-keyed definition |
+| POST | `/api/component/alarms/config` | Validated, durable full replacement; maximum 8192 bytes |
+| GET | `/api/component/alarms/status` | Configuration values, state/readiness/failures, one-shot target, next occurrence/countdowns, queue acknowledgement |
+| POST | `/api/component/alarms/snooze` | Queue snooze for a ringing session |
+| POST | `/api/component/alarms/cancel` | Queue cancellation without disabling the schedule |
+
+Phase 3 accepts exactly slot `1` and a device-wide lateness setting:
+
+```json
+{
+  "lateness_minutes": 360,
+  "1": {
+    "enabled": false,
+    "hour": 7,
+    "minute": 30,
+    "weekdays": 62,
+    "snooze_minutes": 9,
+    "auto_dismiss_minutes": 30,
+    "on_ring": [],
+    "on_stop": []
+  }
+}
+```
+
+Weekdays use Sunday bit 0 through Saturday bit 6. Nonzero masks repeat weekly;
+zero means one-shot at the next valid local occurrence, usually today or tomorrow.
+The portal updates its once/weekly summary as settings change. Status includes
+`enabled`, `once_epoch` (zero if unresolved or absent), and `once_local` (device-local
+`YYYY-MM-DD HH:MM`, empty without a target). Status refreshes only on load/save.
+Hours are 0-23, minutes 0-59, and both durations are 1-1440 minutes. Hook arrays
+use the existing three-action limit. Every write path rejects unavailable,
+unknown, pausable, or invalid actions; oversized string payloads are not silently
+truncated. Other action lists retain their continuation behavior.
+
+`alarm_manager` owns runtime transitions on the main loop. REST and MCP writes
+cross the main-loop bridge, controls enter a bounded command queue, and readers
+copy mutex-protected snapshots. Ring/stop hooks are snapshotted per session and
+dispatched outside the manager lock, with display locking when available.
+Synchronous hook failures do not prevent attempts of subsequent hooks. Alarm
+Home Assistant hooks execute bounded HTTP requests directly; ordinary button
+actions retain queued delivery.
+
+The registered `alarm` action also supports slot-1 `set_time`, `adjust_minutes`,
+`enable`/`disable`/`toggle`, and weekday enable/disable/toggle. Its generic editor
+metadata exposes `alarm_id`, `alarm_command`, bindable `alarm_value` (minutes,
+including Numeric Rocker `{step}`), and `alarm_day` (Sunday=0).
+`portal_action_editor_alarm.js` owns command-specific rendering, loading,
+binding setup, and payload building through `_actionEditorExtensions`. Its
+`type` registration excludes Alarm fields from the generic renderer. It shows
+the value only for time commands and the weekday only for weekday commands;
+unused fields are omitted from saved actions. MCP uses the same
+command validation and queue, with integer `value` and `day` arguments. Config
+commands default to ID 1; ID 0 is reserved for active-session controls.
+Queued mutations serialize the current definition, alter only the selected
+fields, and use shared validation/apply logic with portal edits. The four-entry
+queue processes one command per loop without coalescing adjustments. Settings
+apply live, then save once after 10 seconds without a substantive change, using
+monotonic time. No-ops do not slide the deadline. Failed delayed saves retain live
+settings and retry after 10 seconds; OTA defers writes. Explicit
+`alarm_config_save_raw` calls remain durable before applying, including flushing
+an identical-to-live dirty definition without disturbing the session. Scheduler
+occurrence checkpoints persist immediately and clear pending settings when
+successful, avoiding a redundant delayed write. Ordinary scheduler ticks do not
+write. Dispatch only acknowledges acceptance; status exposes `pending_commands`
+and `completed_commands` for queue-wide processing, and `save_state` for delayed
+durability (`pending`, `saved`, or `failed`). `command_error` and `command_message`
+also report delayed save failures. Reboot or power loss before verification can
+lose pending settings.
+Queue-full submissions are rejected and reported through command failure status.
+
+Forecasts are cached by wall-clock minute and relevant state changes, not
+computed by binding resolution. Status exposes `next_epoch`, `next_local`,
+`next_seconds`, `snooze_seconds`, `dismiss_seconds`, and `next_ring_seconds`.
+The combined countdown is the earlier schedule/snooze deadline, zero while
+ringing. Numeric absent values are zero in JSON; `next_available`,
+`snooze_available`, and `next_ring_available` disambiguate them. Binding dates,
+epochs, and countdowns are empty when absent, with explicit `ON`/`OFF`
+availability flags. See the [pad binding reference](../pad-editor-guide.md#alarm-binding)
+for every key. This adds no dedicated screen/pad and does not expose duration or
+hook editing on the device.
+
+The shared time service requires current-boot SNTP synchronization. Local-time
+conversion and explicit binding timezone overrides share a mutex around `TZ`.
+The alarm configuration root requires device-wide `lateness_minutes` (0-10080
+whole minutes, default 360), alongside slot `"1"`. The setting is stored with
+alarm snapshots, not NVS, and exposed by the portal, component-config REST/MCP
+paths, and alarm status. Zero permits only on-time scheduled delivery.
+Startup retains the saved eligibility fence and reconciles after current-boot
+synchronization. Enabling and substantive edits establish a next-full-minute
+fence, or a pending fence when time is unavailable. The resolved fence is saved
+when synchronization arrives. Snapshot timezone mismatches and runtime timezone
+changes establish a new fence. A lateness-only edit preserves the fence and
+session. Only the newest eligible occurrence within the inclusive configured
+window is considered, across startup, clock corrections, and live delays.
+Calendar lookup covers the bounded seven-day window, stopping at the latest
+valid occurrence; it does not replay a backlog. The first DST fold is used,
+gaps are skipped, and handled history survives edits and backward clock changes.
+Snooze and auto-dismiss use monotonic time; each ring start resets its timeout.
+An overdue snooze beyond five minutes expires rather than ringing late; this
+session rule is separate from scheduled-occurrence recovery.
+
+Persistence uses `Storage` and alternating `/config/alarm_a.json` and
+`/config/alarm_b.json` snapshots. Each bounded envelope includes schema version,
+generation, config, handled epoch, one-shot epoch, eligibility fence, timezone,
+and CRC32. Schema 3 has no
+migration from earlier development snapshots. The inactive file is written,
+flushed, closed, and re-read before becoming active. A failed config save does
+not apply changes. An invalid newer snapshot falls back to the valid older one
+and reports degraded storage; two invalid snapshots leave the default disabled.
+
+One-shots persist a fixed epoch when enabled settings are saved. Without synced
+time they persist an unresolved target and resolve it once time is ready and OTA
+is inactive. Identical saves keep the target; substantive edits choose a new
+one. Reboot and timezone changes retain the instant. A target before the arming
+fence or outside the grace is disabled, not rolled forward. Initial triggering
+atomically records history, clears the target, and disables the definition
+before dispatch; snooze uses the retained session and does not consume again.
+Consumption-write failures do not suppress ringing: the target is consumed in
+RAM and the failed snapshot is retried after ten seconds. Unresolved one-shot
+targets also remain scheduled in RAM if their initial checkpoint fails.
+
+Weekly handled-occurrence history is saved before ring dispatch. If that save
+fails, the alarm still rings with RAM deduplication and degraded-storage status.
+Failed occurrence records share the ten-second persistence retry path, not
+per-tick writes. Exactly-once external effects cannot be guaranteed: a crash
+after a successful history save but before dispatch can lose a ring, while a
+failed weekly or one-shot history save followed by reboot can duplicate one. Filesystem loss is
+not recovered from NVS or another medium.
+
+OTA defers hooks and persistent writes. Interrupted hook lists retain their
+remaining suffix, while cancel, edits, and replacement invalidate stale pending
+rings. Cleanup runs before a replacement ring, and lateness remains bounded.
+Alarm audio work carries session-generation and OTA-epoch guards so canceled
+or stale queued work cannot later resume. Already-started external effects are
+cooperatively stopped where supported, not rolled back.
+
+Serial diagnostics use the `Time` and `Alarm` tags. INFO logs report timezone,
+NTP startup/synchronization, loaded or saved settings, readiness, ring starts,
+controls, and hook dispatch/results. WARN logs identify rejected saves, expired
+pending rings, and empty ring action lists. With `LOG_LEVEL=4`, enabled alarms
+also emit a DEBUG scheduling snapshot at most once per minute, plus snapshots
+after configuration, readiness, or OTA changes. Its `blocked` field explains
+readiness, weekday, arming, handled-history, cleanup, and grace-window guards;
+the snapshot includes local time, Sunday-based weekday index, and epoch values.
+Hook payloads are not logged. Capture both tags from boot through the expected
+trigger when investigating an alarm that does not ring.
+
+### Timezone Settings
+
+The ungated `timezone` component owns the dedicated Device fragment. Its city
+options reuse the time service's 61-entry Olson-to-POSIX catalog rather than
+embedding another table in portal assets. Geographical optgroups expose city
+names; only Custom exposes a raw rule. Selection previews without saving,
+and Save writes `timezone` through `/api/config?no_reboot=1`.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/component/timezone/catalog` | Return `cities` entries with `name` and `posix` |
+| GET | `/api/component/timezone/preview?timezone=<encoded-rule>` | Return `epoch`, `local_time`, `utc_offset`, and `ready` |
+
+Both routes use component authentication. Preview validates the supplied rule,
+formats one device epoch under the shared timezone mutex, and restores the
+authoritative timezone without changing its generation or alarm state. Invalid
+input returns `400`; formatting failure returns `503`. The browser discards stale
+preview responses and does not poll.
+
+The Alarm fragment displays readiness and storage/action warnings on load and
+after saves, without recurring polling, live Ringing/Snoozed indicators, or
+Snooze/Cancel buttons. REST and MCP alarm controls remain available. The shared
+action editor advertises Alarm Control, Loop Tone, and Loop MP3 in Alarm while
+regular sound playback remains in Audio. Catalog-driven MP3 fields reuse the
+sound library and retain missing saved file names.
+
 ### Configuration Management
 
 #### `GET /api/config`
 
 Returns current device configuration (passwords excluded).
+
+The `timezone` field defaults to `UTC0`. `POST /api/config?no_reboot=1` accepts
+supported Olson names or validated POSIX TZ rules, including explicit transition
+rules for DST. Successful changes apply live and dismiss/rearm an active alarm;
+unqualified time bindings use the same setting. Failed saves retain the previous
+timezone and alarm session.
 
 **Response:**
 ```json
@@ -2655,6 +2909,18 @@ the Pads page section above.
 
 Recipes may declare a `provision` object for configuration that accompanies their
 buttons. `${parameter}` templates expand recursively throughout this object.
+The reserved `${target_pad}` value resolves to the selected pad's screen ID,
+such as `pad_6`; it cannot be declared as a user parameter. Optional `requires`
+values are `display`, `mqtt`, `audio`, `alarm`, and `sound_player`. Alarm support
+uses `/api/info`'s `has_alarm`, derived from `ALARM_ENABLED`.
+
+An optional nonempty `confirmation` string prompts before installation. Optional
+`post_install` metadata contains a nonempty `message` and a `links` array of
+`{"label":"Open alarm schedule","fragment":"alarm-schedule"}` objects.
+Fragments must be internal IDs containing lowercase letters, numbers, hyphens,
+or underscores, starting with a letter or number. Messages and labels render as
+text, not HTML; links are internal hash navigation. Follow-up instructions appear
+only after the entire installation succeeds.
 
 ```json
 {
@@ -2683,6 +2949,17 @@ intentionally limited to named bindings: a missing name is added, an identical
 name/value pair is accepted, and an existing name with a different value rejects
 the installation. This prevents a recipe from silently changing data sources used
 by existing buttons.
+
+Icons and the pad are saved before any component configuration is written. Each
+component is then read, merged, and saved in sequence. Installation is not atomic
+across the pad and components: a later failure can leave the pad and earlier
+components installed. The portal reports incomplete setup and refreshes the pad
+instead of displaying successful-installation instructions.
+
+The Alarm Clock sample replaces Alarm 1's `on_ring` and `on_stop` arrays after
+confirmation and sets `enabled` to `false`. It preserves the time, weekdays,
+snooze, auto-dismiss, and maximum lateness. Its ring actions repeat a tone and
+show `${target_pad}`. Its post-install links open Alarm Schedule and Behavior.
 
 
 #### `POST /api/pad/resolve`
@@ -2960,8 +3237,10 @@ Shared JavaScript source files are concatenated into a single `portal.js` asset 
 Components can provide feature-specific assets without adding them to the shared
 bundle. Set `ComponentDef.portal_script` and/or `ComponentDef.portal_style` to
 dedicated route paths. `GET /api/portal/nav` publishes those optional paths for
-each component; `portal_nav.js` deduplicates them, loads styles and scripts, and
-waits for all assets before building navigation or loading a fragment.
+each component; `portal_nav.js` loads that item's styles and scripts when it is
+opened, before invoking its fragment initializer. Concurrent requests and
+revisits share successful asset loads. Failed loads can be retried without
+blocking unrelated navigation items.
 
 The camera components demonstrate this pattern: they advertise
 `/portal-camera.js` and `/portal-camera.css`, served by dedicated handlers in

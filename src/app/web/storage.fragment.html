@@ -1,6 +1,6 @@
 <div class="section-header d-flex align-items-center justify-content-between gap-3">
   <div>
-    <h2>Storage</h2>
+    <h2><span class="portal-icon" aria-hidden="true">storage</span>Storage</h2>
     <p class="mb-0">Persistent files on this device.</p>
   </div>
   <button id="storage-refresh-btn" class="btn btn-outline-secondary" type="button">Refresh</button>
@@ -9,6 +9,7 @@
 <div id="storage-error" class="alert alert-warning d-none" role="alert"></div>
 
 <div class="card mb-3">
+  <div class="card-header"><h5 class="mb-0">Storage Usage</h5></div>
   <div class="card-body">
     <div class="row g-3 align-items-end">
       <div class="col-sm-4"><div class="text-muted small">Backend</div><div id="storage-backend">-</div></div>
@@ -23,6 +24,7 @@
 </div>
 
 <div class="card storage-browser-card">
+  <div class="card-header"><h5 class="mb-0">Files</h5></div>
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover mb-0">

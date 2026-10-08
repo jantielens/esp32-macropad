@@ -21,6 +21,7 @@
                 <a href="#binding-docs-expr" onclick="showBindingHelp('expr'); return false;">Expr</a>
                 <a href="#binding-docs-pad" onclick="showBindingHelp('pad'); return false;">Pad</a>
                 <a href="#binding-docs-timer" onclick="showBindingHelp('timer'); return false;">Timer</a>
+                <a href="#binding-docs-alarm" onclick="showBindingHelp('alarm'); return false;">Alarm</a>
                 <a href="#binding-docs-widget" onclick="showBindingHelp('widget'); return false;">Widgets</a>
             </div>
         </div>
@@ -602,6 +603,26 @@
                         <p>Turn a button red when a countdown timer has expired.</p>
                     </article>
                 </div>
+            </section>
+
+            <section id="binding-docs-alarm" class="binding-docs-section" data-binding-section="alarm">
+                <div class="binding-docs-section-head">
+                    <div>
+                        <h4>Alarm</h4>
+                        <p>Read-only values for alarm 1, available on alarm-enabled boards.</p>
+                    </div>
+                    <pre class="binding-docs-signature"><code>[alarm:1_time]</code></pre>
+                </div>
+                <dl class="binding-docs-spec">
+                    <div><dt>1_time</dt><dd>Configured alarm time, HH:MM in device time.</dd></div>
+                    <div><dt>1_state</dt><dd>idle, ringing, or snoozed.</dd></div>
+                    <div><dt>1_repeat</dt><dd>once for a one-time alarm, or weekly for selected repeat days.</dd></div>
+                    <div><dt>1_next_seconds</dt><dd>Seconds until the next scheduled alarm; excludes snooze.</dd></div>
+                    <div><dt>1_next_ring_seconds</dt><dd>Seconds until the next ring, including snooze; zero while ringing.</dd></div>
+                    <div><dt>1_snooze_seconds</dt><dd>Seconds until snooze ends.</dd></div>
+                    <div><dt>1_dismiss_seconds</dt><dd>Seconds until auto-dismiss while ringing.</dd></div>
+                </dl>
+                <p class="binding-docs-note">Unavailable countdowns are empty, not zero. Check the corresponding ON/OFF flag: <code>[alarm:1_next_available]</code>, <code>[alarm:1_next_ring_available]</code>, <code>[alarm:1_snooze_available]</code>, or <code>[alarm:1_dismiss_available]</code>.</p>
             </section>
 
             <section id="binding-docs-widget" class="binding-docs-section" data-binding-section="widget">

@@ -72,13 +72,6 @@ static void strip_describe(JsonObject& out) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(strip_action_type,
-    /* type_name   */ ACTION_TYPE_STRIP,
-    /* parse       */ strip_parse,
-    /* serialize   */ strip_serialize,
-    /* dispatch    */ strip_dispatch,
-    /* value_field */ strip_value_field,
-    /* describe    */ strip_describe,
-);
+DEFINE_AND_REGISTER_ACTION_TYPE(strip_action_type, /* type_name   */ ACTION_TYPE_STRIP, /* parse       */ strip_parse, /* serialize   */ strip_serialize, /* dispatch    */ strip_dispatch, /* value_field */ strip_value_field, /* describe    */ strip_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

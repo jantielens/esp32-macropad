@@ -124,6 +124,14 @@ output write. MP3 Alerts are exclusive: they stop Music and use the same
 decoder session and output path. Music files can be managed through the portal
 only while neither Music nor an MP3 Alert is active.
 
+The `alarm_mp3` action submits an MP3 Alert with looping enabled. File-backed
+playback reuses its decoder and output buffers, seeks to the beginning only
+after a successful pass with accepted PCM, and checks stop, session-generation,
+and OTA guards before restarting. Output failures and files with no decoded
+audio terminate instead of repeating. Repetition is not guaranteed to be
+gapless. `alarm_tone` uses the existing repeating tone path; ordinary sound
+alerts remain one-shot unless a legacy looping kind is explicitly persisted.
+
 Music transport and catalog-refresh requests use a dedicated, bounded worker
 queue. This keeps them independent from replaceable tone/alert requests, so an
 alert cannot discard a pending refresh. Transport submission is non-blocking
@@ -242,6 +250,29 @@ truncation. When a call ends, carry the fractional position and required
 source samples into the next call so adjacent decoded frames remain continuous.
 Music uploads are published after path validation and storage completion; the
 first decode occurs when the track is opened for playback.
+
+## Alarm Tones And Cancellation
+
+Sound alerts support `tone`, `tone_loop`, `mp3`, and shared audio `stop` kinds.
+A looping tone must contain a valid duration-bearing segment; empty patterns
+use the existing default beep. Alarm-enabled builds also register dedicated
+`alarm_tone` and `alarm_mp3` actions with fixed `tone_loop` and `mp3_loop` kinds.
+Looping MP3 playback rewinds the open file and resets decoding after each
+successful pass. It does not guarantee gapless playback. Empty or corrupt
+files, output failures, cancellation, and OTA end playback rather than retrying
+indefinitely.
+Stop clears queued sound and music work, ends tone overlays, and requests a
+music stop independently of command-queue capacity.
+
+Synchronous alarm dispatch supplies a session-generation guard to tone, MP3,
+and music submissions. Workers check that guard before queued execution and at
+playback checkpoints. Cancel, snooze, replacement, edits, and timezone changes
+invalidate the previous session so stale work cannot restart its audio.
+Submissions also carry the current OTA epoch. Active OTA discards queued audio
+and music work, ends playback, and skips catalog refreshes. MP3 decoding checks
+between frames and PCM output checks before writes; cancellation is cooperative.
+Ordinary button submissions retain their existing unguarded session behavior,
+while all audio work still honors OTA checkpoints.
 
 ## Diagnostics And Logging
 

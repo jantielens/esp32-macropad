@@ -100,6 +100,8 @@ private:
 		bool skipHistoryPush;    // Set by goBack() to avoid pushing when navigating back
 		Screen* transientResumeScreen;
 		bool transientScreenActive;
+		Screen* pendingHistoryScreen = nullptr;
+		void prepareNavigationWake();
 
 		// Defer small LVGL UI updates (like splash status) to the LVGL task.
 		char pendingSplashStatus[96];
@@ -173,7 +175,7 @@ public:
 		void showTest();
 		
 		// Screen selection by ID (thread-safe, returns true if found)
-		bool showScreen(const char* screen_id);
+		bool showScreen(const char* screen_id, bool wake = false);
 
 		// Show a temporary screen without affecting navigation history. Restoring it
 		// returns to the screen that was active when the transient screen began.
@@ -181,10 +183,10 @@ public:
 		bool restoreTransientScreen();
 		
 		// Navigate back to previous screen (returns true if there was one)
-		bool goBack();
+		bool goBack(bool wake = false);
 
 		// Queue the next eligible pad relative to the queued or current screen.
-		bool cyclePad(int8_t direction, bool wrap, uint32_t excludedMask);
+		bool cyclePad(int8_t direction, bool wrap, uint32_t excludedMask, bool wake = false);
 		
 		// Get current screen ID (returns nullptr if splash or no screen)
 		const char* getCurrentScreenId();
@@ -199,7 +201,7 @@ public:
 		void lock();
 		void unlock();
 
-		// Helpers: avoid taking the LVGL mutex when already inside the LVGL task
+		// Helpers: avoid taking the LVGL mutex inside LVGL or when already owned by this task
 		bool isInLvglTask() const;
 		void lockIfNeeded(bool& didLock);
 		void unlockIfNeeded(bool didLock);
@@ -243,8 +245,11 @@ void display_manager_show_splash();
 void display_manager_show_info();
 void display_manager_show_test();
 void display_manager_show_screen(const char* screen_id, bool* success);  // success is optional output
+void display_manager_show_screen(const char* screen_id, bool* success, bool wake);
 bool display_manager_go_back();  // Navigate to previous screen
+bool display_manager_go_back(bool wake);
 bool display_manager_cycle_pad(int8_t direction, bool wrap, uint32_t excluded_mask);
+bool display_manager_cycle_pad(int8_t direction, bool wrap, uint32_t excluded_mask, bool wake);
 const char* display_manager_get_current_screen_id();
 const ScreenInfo* display_manager_get_available_screens(size_t* count);
 void display_manager_set_splash_status(const char* text);

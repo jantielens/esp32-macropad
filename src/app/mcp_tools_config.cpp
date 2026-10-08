@@ -30,6 +30,13 @@
 #if HAS_MCP
 
 #include "config_manager.h"
+#include "time_service.h"
+#include "alarm_manager.h"
+#if ALARM_ENABLED
+#define MCP_ALARM_COMPONENT_ENUM ",\"alarms\""
+#else
+#define MCP_ALARM_COMPONENT_ENUM ""
+#endif
 #include "keyboard_hid.h"
 #if HAS_USB_HID
 #include "gamepad_hid.h"
@@ -124,6 +131,7 @@ static bool tool_get_config(const JsonObject& args, JsonObject& result, String& 
 
     // Identity + network (SSID is not secret; the password is).
     result["device_name"]        = c->device_name;
+    result["timezone"]           = c->timezone;
     result["wifi_ssid"]          = c->wifi_ssid;
     result["wifi_password_set"]  = (bool)(c->wifi_password[0] != '\0');
     result["fixed_ip"]           = c->fixed_ip;
@@ -272,6 +280,9 @@ struct CompDef {
 };
 
 static const CompDef s_comps[] = {
+#if ALARM_ENABLED
+    { "alarms", nullptr, alarm_config_save_raw, 8192 },
+#endif
 #if HAS_DISPLAY
     { "timers",          "/config/timers.json",         timer_config_save_raw,    4096 },
     { "swipe",           "/config/swipe_actions.json",  swipe_config_save_raw,    4096 },
@@ -304,6 +315,14 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
                                 "unknown component (see the 'component' enum in this tool's schema)");
 
     result["component"] = entry->name;
+#if ALARM_ENABLED
+    if (strcmp(entry->name, "alarms") == 0) {
+        result["exists"] = true;
+        alarm_config_to_json(result.createNestedObject("config"));
+        alarm_status_to_json(result.createNestedObject("status"));
+        return true;
+    }
+#endif
 
 #if HAS_DISPLAY
     if (strcmp(entry->name, "timers") == 0) {
@@ -365,6 +384,9 @@ static const char* val_action_list(JsonVariantConst v) {
 
 // Per-component structural validator. Returns nullptr when ok, else a message.
 static const char* validate_component(const char* name, JsonObjectConst cfg) {
+#if ALARM_ENABLED
+    if (strcmp(name, "alarms") == 0) return nullptr;
+#endif
 #if HAS_DISPLAY
     if (strcmp(name, "timers") == 0) {
         return nullptr;  // timer_config_save_raw owns strict validation
@@ -435,7 +457,13 @@ static void exec_comp_save(const void* ctx, bool* ok, char* msg, size_t msg_len)
     if (!c->buf || !c->save) { strlcpy(msg, "no buffer", msg_len); return; }
     bool saved = c->save(c->buf, c->len);
     heap_caps_free(c->buf);
-    if (!saved) { strlcpy(msg, "save failed", msg_len); return; }
+    if (!saved) {
+#if ALARM_ENABLED
+        if (c->save == alarm_config_save_raw) { strlcpy(msg, alarm_last_error(), msg_len); return; }
+#endif
+        strlcpy(msg, "save failed", msg_len);
+        return;
+    }
     *ok = true;
     strlcpy(msg, "saved", msg_len);
 }
@@ -682,6 +710,7 @@ static bool tool_timer_control(const JsonObject& args, JsonObject& result, Strin
 // managers; then the whole config is persisted to NVS.
 struct SetConfigReq {
     bool has_device_name;   char device_name[CONFIG_DEVICE_NAME_MAX_LEN];
+    bool has_timezone;      char timezone[CONFIG_TIMEZONE_MAX_LEN];
     bool has_brightness;    uint8_t brightness;
     bool has_pub_interval;  uint16_t pub_interval;
     bool has_pub_scope;     char pub_scope[CONFIG_MQTT_SCOPE_MAX_LEN];
@@ -708,6 +737,9 @@ static void exec_set_config(const void* ctx, bool* ok, char* msg, size_t msg_len
 
     DeviceConfig* cfg = web_portal_get_current_config();
     if (!cfg) { heap_caps_free(q); strlcpy(msg, "config not initialized", msg_len); return; }
+    char previous_timezone[CONFIG_TIMEZONE_MAX_LEN];
+    strlcpy(previous_timezone, cfg->timezone, sizeof(previous_timezone));
+    if (q->has_timezone) strlcpy(cfg->timezone, q->timezone, sizeof(cfg->timezone));
 
     if (q->has_device_name) strlcpy(cfg->device_name, q->device_name, CONFIG_DEVICE_NAME_MAX_LEN);
     if (q->has_pub_interval) cfg->mqtt_publish_interval_seconds = q->pub_interval;
@@ -738,6 +770,7 @@ static void exec_set_config(const void* ctx, bool* ok, char* msg, size_t msg_len
 
     cfg->magic = CONFIG_MAGIC;
     bool saved = config_manager_save(cfg);
+    if (!saved) strlcpy(cfg->timezone, previous_timezone, sizeof(cfg->timezone));
     heap_caps_free(q);
     if (!saved) { strlcpy(msg, "save failed", msg_len); return; }
     *ok = true;
@@ -754,6 +787,13 @@ static bool tool_set_config(const JsonObject& args, JsonObject& result, String& 
 
     JsonArray applied = result.createNestedArray("applied");
     bool reboot_note = false;
+    if (args.containsKey("timezone")) {
+        const char* timezone = args["timezone"] | "";
+        if (!time_service_timezone_valid(timezone)) { heap_caps_free(q); return cfg_fail(result, err, CFG_ERR_PARAMS, "Invalid timezone"); }
+        q->has_timezone = true;
+        strlcpy(q->timezone, timezone, sizeof(q->timezone));
+        applied.add("timezone");
+    }
 
     if (args.containsKey("device_name")) {
         const char* dn = args["device_name"] | "";
@@ -904,7 +944,7 @@ static const McpTool s_tool_get_component_config = {
     "'hw-buttons' (physical button bindings), 'mqtt-triggers' (inbound MQTT -> action rules). Returns "
     "'exists=false' with firmware defaults when the feature has never been saved. Only components compiled "
     "into this board are accepted. Pair with set_component_config to write changes back.",
-    "{\"type\":\"object\",\"properties\":{\"component\":{\"type\":\"string\",\"enum\":[\"timers\",\"swipe\",\"boot\",\"button-defaults\",\"hw-buttons\",\"mqtt-triggers\"]}},\"required\":[\"component\"]}",
+    "{\"type\":\"object\",\"properties\":{\"component\":{\"type\":\"string\",\"enum\":[\"timers\",\"swipe\",\"boot\",\"button-defaults\",\"hw-buttons\",\"mqtt-triggers\"" MCP_ALARM_COMPONENT_ENUM "]}},\"required\":[\"component\"]}",
     tool_get_component_config, true, false, false
 };
 REGISTER_MCP_TOOL(s_tool_get_component_config);
@@ -921,7 +961,7 @@ static const McpTool s_tool_set_component_config = {
     "action}; boot = {actions:[]}; button-defaults = appearance fields; hw-buttons = {buttons:[{tap_actions:[], "
     "hold_actions:[]}]}; mqtt-triggers = {triggers:[{topic, value, actions:[]}]}. Only components compiled into "
     "this board are accepted; changes persist to flash and reload live.",
-    "{\"type\":\"object\",\"properties\":{\"component\":{\"type\":\"string\",\"enum\":[\"timers\",\"swipe\",\"boot\",\"button-defaults\",\"hw-buttons\",\"mqtt-triggers\"]},\"config\":{\"type\":\"object\",\"description\":\"full replacement config for the component (see get_component_config for the current shape)\"}},\"required\":[\"component\",\"config\"]}",
+    "{\"type\":\"object\",\"properties\":{\"component\":{\"type\":\"string\",\"enum\":[\"timers\",\"swipe\",\"boot\",\"button-defaults\",\"hw-buttons\",\"mqtt-triggers\"" MCP_ALARM_COMPONENT_ENUM "]},\"config\":{\"type\":\"object\",\"description\":\"full replacement config for the component (see get_component_config for the current shape)\"}},\"required\":[\"component\",\"config\"]}",
     tool_set_component_config, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_set_component_config);
@@ -981,6 +1021,45 @@ static const McpTool s_tool_timer_control = {
 REGISTER_MCP_TOOL(s_tool_timer_control);
 #endif
 
+#if ALARM_ENABLED
+static bool tool_get_alarm_status(const JsonObject&, JsonObject& result, String&) {
+    alarm_status_to_json(result);
+    return true;
+}
+static bool tool_alarm_control(const JsonObject& args, JsonObject& result, String& error) {
+    if (args.containsKey("alarm_id") && (!args["alarm_id"].is<uint8_t>() || args["alarm_id"].as<uint8_t>() > 1))
+        return cfg_fail(result, error, CFG_ERR_PARAMS, "alarm_id must be 0 or 1");
+    const char* command = args["command"] | "";
+    const uint8_t operation = alarm_command_operation(command);
+    const uint8_t id = args["alarm_id"] | (operation > 2 ? 1 : 0);
+    if ((operation == 3 || operation == 4) && !args["value"].is<int>())
+        return cfg_fail(result, error, CFG_ERR_PARAMS, "Time commands require a signed 32-bit integer value in minutes");
+    if (args.containsKey("value") && !args["value"].is<int>())
+        return cfg_fail(result, error, CFG_ERR_PARAMS, "value must be a signed 32-bit integer");
+    if ((operation >= 8 || args.containsKey("day")) && (!args["day"].is<uint8_t>() || args["day"].as<uint8_t>() > 6))
+        return cfg_fail(result, error, CFG_ERR_PARAMS, "Repeat-day commands require day: 0 (Sunday) through 6 (Saturday)");
+    const int value = args["value"] | 0;
+    const uint8_t day = args["day"] | 0;
+    const char* validation = alarm_command_validate(command, id, value, day);
+    if (validation) return cfg_fail(result, error, CFG_ERR_PARAMS, validation);
+    if (!alarm_command_submit(command, id, value, day)) return cfg_fail(result, error, CFG_ERR_BUSY, "Alarm command unavailable or queue full");
+    result["queued"] = true;
+    result["persisted"] = false;
+    result["acknowledgement"] = "Read get_alarm_status pending_commands and completed_commands for processing; save_state for delayed durability; command_error and command_message for failures";
+    return true;
+}
+static const McpTool s_tool_get_alarm_status = {
+    "get_alarm_status", "Read configured values, next local occurrence and countdown, snooze/next-ring countdowns, active state, readiness, OTA deferral, storage/hook errors and queued-command completion/failure.",
+    "{\"type\":\"object\",\"properties\":{}}", tool_get_alarm_status, true, false, false
+};
+REGISTER_MCP_TOOL(s_tool_get_alarm_status);
+static const McpTool s_tool_alarm_control = {
+    "alarm_control", "Queue cancel/snooze (default id 0) or slot-1 configuration (default id 1). set_time requires value: minutes since midnight 0-1439; adjust_minutes requires signed whole-minute value and wraps at midnight; weekday commands require day 0=Sunday..6=Saturday. Configuration persists before apply and substantive edits dismiss the session. Four queued commands maximum, one processed per loop, no coalescing. Queue acceptance is not a persistence acknowledgement; read status for completion/failure.",
+    "{\"type\":\"object\",\"properties\":{\"alarm_id\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":1},\"command\":{\"type\":\"string\",\"enum\":[\"cancel\",\"snooze\",\"set_time\",\"adjust_minutes\",\"enable\",\"disable\",\"toggle\",\"weekday_enable\",\"weekday_disable\",\"weekday_toggle\"]},\"value\":{\"type\":\"integer\",\"minimum\":-2147483648,\"maximum\":2147483647},\"day\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":6}},\"required\":[\"command\"]}", tool_alarm_control, false, false, true
+};
+REGISTER_MCP_TOOL(s_tool_alarm_control);
+#endif
+
 static const McpTool s_tool_set_config = {
     "set_config",
     "Write a curated, SAFE subset of device settings that apply live without a reboot or dropping this MCP "
@@ -994,6 +1073,7 @@ static const McpTool s_tool_set_config = {
     "writable here (they can disconnect this session) — change those in the web portal.",
     "{\"type\":\"object\",\"properties\":{"
     "\"device_name\":{\"type\":\"string\"},"
+    "\"timezone\":{\"type\":\"string\",\"maxLength\":63},"
     "\"backlight_brightness\":{\"type\":\"integer\",\"minimum\":" MCP_CONFIG_STRINGIFY(MIN_USER_BRIGHTNESS) ",\"maximum\":100},"
     "\"mqtt_publish_interval_seconds\":{\"type\":\"integer\",\"minimum\":0},"
     "\"mqtt_publish_scope\":{\"type\":\"string\",\"enum\":[\"sensors_only\",\"diagnostics_only\",\"all\"]},"
@@ -1017,6 +1097,22 @@ REGISTER_MCP_TOOL(s_tool_set_config);
 // fields and the read/write component list without probing each tool schema.
 // Board-accurate: the component list is the same s_comps table the tools use.
 void mcp_config_capabilities(JsonObject& out) {
+#if ALARM_ENABLED
+    JsonObject alarm = out.createNestedObject("alarm");
+    alarm["slots"] = 1;
+    alarm["component"] = "alarms";
+    alarm["status_tool"] = "get_alarm_status";
+    alarm["control_tool"] = "alarm_control";
+    alarm["device_configuration"] = "alarm actions: set_time, adjust_minutes (bindable string including {step}), enable/disable/toggle, weekday_enable/disable/toggle; configuration targets slot 1; read-only alarm bindings advertise settings, weekdays, next occurrence, countdowns and command feedback";
+    alarm["command_queue"] = "four queued commands, one per main-loop iteration, no coalescing; settings apply live, saved after 10 seconds without substantive changes; no-ops do not extend the delay; save_state pending/saved/failed reports durability; failures retain live settings and retry after 10 seconds; explicit config saves and occurrence records persist immediately";
+    alarm["grace_seconds"] = alarm_snapshot().lateness_minutes * 60U;
+    alarm["recovery"] = "device-wide lateness_minutes (0-10080, default 360); shared startup/live window, inclusive; zero allows on-time only; current-boot synchronized time required; latest eligible occurrence only; edits and timezone changes exclude past occurrences; no session restoration";
+    alarm["weekdays"] = "bit mask: Sunday=1, Monday=2, ... Saturday=64; selected days repeat weekly; zero rings once at the next local time, then disables; snooze remains available in that session";
+    alarm["hooks"] = "up to three explicitly synchronous actions per on_ring/on_stop; attempt every action; hooks snapshot per session";
+    alarm["config"] = "root lateness_minutes (0-10080, default 360); slot 1: enabled, hour (0-23), minute (0-59), weekdays (0-127), snooze_minutes and auto_dismiss_minutes (1-1440), on_ring and on_stop arrays";
+    alarm["persistence"] = "two checksummed filesystem snapshots; config + handled history + fixed one-shot epoch + eligibility fence and timezone; weekly and one-shot record-write failures still ring with RAM duplicate prevention, storage_error and 10-second retries; reboot before a successful retry may duplicate a ring";
+    alarm["one_shot"] = "target survives reboot and timezone changes; status exposes enabled, once_epoch and once_local; missed occurrences disable, never roll forward; enable and save to rearm";
+#endif
     JsonObject keyboard = out.createNestedObject("keyboard");
     JsonArray transports = keyboard.createNestedArray("transports");
 #if HAS_BLE_HID || HAS_USB_HID
@@ -1064,6 +1160,7 @@ void mcp_config_capabilities(JsonObject& out) {
 #endif
     JsonObject sc = out.createNestedObject("set_config_fields");
     sc["device_name"] = "string (mDNS/hostname refreshes on next reboot)";
+    sc["timezone"] = "supported Olson name or POSIX TZ rule; persisted and applied live; substantive changes dismiss active alarm";
     char brightness_description[64];
     snprintf(brightness_description, sizeof(brightness_description), "int %d-100 (persisted + applied live)", MIN_USER_BRIGHTNESS);
     sc["backlight_brightness"] = brightness_description;

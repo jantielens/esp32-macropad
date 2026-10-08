@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 304
+Total flags: 305
 
 ### Features (HAS_*)
 
@@ -189,6 +189,7 @@ Total flags: 304
 ### Other
 
 - **ACTION_CONTINUATION_SLOTS** default: `3` — Maximum independent pending action lists; each consumes about 884 bytes of internal RAM; constrained boards should override this to 1.
+- **ALARM_ENABLED** default: `HAS_DISPLAY` — Include the persistent weekly or one-shot alarm on pad-capable display builds.
 - **AUDIO_CODEC_ADDR** default: `0x18` — I2C address of the audio codec (e.g. ES8311 = 0x18).
 - **AUDIO_DEFAULT_VOLUME** default: `50` — Default volume used when no NVS value has been stored.
 - **AUDIO_DMA_DESC_NUM** default: `6` — I2S DMA descriptor count, pinned so starvation timing stays in sync with I2S.
@@ -410,6 +411,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:USAGE -->
 - **HAS_AUDIO**
+  - src/app/actions/alarm_mp3_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/volume_action.cpp
   - src/app/app.ino
@@ -505,6 +507,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_registry.h
   - src/app/action_validate.cpp
   - src/app/action_validate.h
+  - src/app/actions/alarm_mp3_action.cpp
+  - src/app/actions/alarm_tone_action.cpp
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
@@ -595,6 +599,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/action_registry.h
   - src/app/action_validate.cpp
   - src/app/action_validate.h
+  - src/app/actions/alarm_mp3_action.cpp
+  - src/app/actions/alarm_tone_action.cpp
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
@@ -1046,6 +1052,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **HAS_SENSOR_TSL2591**
   - src/app/device_classes/darkroom_timer/darkroom_timer_defaults.h
 - **HAS_SOUND_PLAYER**
+  - src/app/actions/alarm_mp3_action.cpp
   - src/app/actions/music_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/app.ino
@@ -1149,6 +1156,22 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **ACTION_CONTINUATION_SLOTS**
   - src/app/board_config.h
+- **ALARM_ENABLED**
+  - src/app/actions/alarm_action.cpp
+  - src/app/actions/alarm_mp3_action.cpp
+  - src/app/actions/alarm_tone_action.cpp
+  - src/app/actions/sound_alert_action.cpp
+  - src/app/alarm_binding.cpp
+  - src/app/alarm_manager.cpp
+  - src/app/alarm_manager.h
+  - src/app/app.ino
+  - src/app/binding_builtin_schemes.cpp
+  - src/app/board_config.h
+  - src/app/mcp_tools_config.cpp
+  - src/app/portal_components.cpp
+  - src/app/web_portal_pages.cpp
+  - src/app/web_portal_pages.h
+  - src/app/web_portal_routes.cpp
 - **AP_MAX_CONNECTIONS**
   - src/app/web_portal_ap.cpp
 - **AUDIO_CODEC_ADDR**
@@ -1409,6 +1432,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/epaper_frame_device_class.cpp
   - src/app/mqtt_manager.cpp
   - src/app/portal_components.cpp
+  - src/app/time_service.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

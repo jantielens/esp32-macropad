@@ -141,6 +141,9 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_VOLUME     "volume"
 #define ACTION_TYPE_BRIGHTNESS "brightness"
 #define ACTION_TYPE_TIMER    "timer"
+#define ACTION_TYPE_ALARM    "alarm"
+#define ACTION_TYPE_ALARM_TONE "alarm_tone"
+#define ACTION_TYPE_ALARM_MP3 "alarm_mp3"
 #define ACTION_TYPE_NOTIFY   "notify"
 #define ACTION_TYPE_SYSTEM   "system"
 #define ACTION_TYPE_HA_SERVICE "ha_service"
@@ -199,7 +202,7 @@ struct MusicPayload {
     char music_command[12];
 };
 struct SoundAlertPayload {
-    char sound_alert_kind[5];
+    char sound_alert_kind[10];
     char sound_alert_pattern[CONFIG_BEEP_PATTERN_MAX_LEN];
     char sound_alert_file[32];
     uint8_t sound_alert_volume;
@@ -211,6 +214,12 @@ struct VolumePayload {
 struct BrightnessPayload {
     char brightness_mode[CONFIG_VOLUME_MODE_MAX_LEN]; // "set" or "adjust"
     char brightness_value[CONFIG_VALUE_MAX_LEN];      // absolute 5-100, signed delta, or {step}
+};
+struct AlarmPayload {
+    uint8_t alarm_id;
+    char alarm_command[17];
+    uint8_t alarm_day;
+    char alarm_value[CONFIG_VALUE_MAX_LEN];
 };
 struct TimerPayload {
     uint8_t timer_id;                                 // 1-3
@@ -286,6 +295,7 @@ union ActionPayload {
     VolumePayload     volume;       // type == ACTION_TYPE_VOLUME
     BrightnessPayload brightness;   // type == ACTION_TYPE_BRIGHTNESS
     TimerPayload      timer;        // type == ACTION_TYPE_TIMER
+    AlarmPayload      alarm;
     NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE

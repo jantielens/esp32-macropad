@@ -7,6 +7,7 @@
 #include "music_analysis.h"
 #include "net_activity.h"
 #include "timer_engine.h"
+#include "alarm_manager.h"
 #include "log_manager.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
@@ -16,6 +17,10 @@
 #include <cstring>
 
 unsigned long millis() { return 10000; }
+#if ALARM_ENABLED
+AlarmSnapshot binding_test_alarm = {true, 7, 30, ALARM_RINGING, true, false, false, false, 0};
+AlarmSnapshot alarm_snapshot() { return binding_test_alarm; }
+#endif
 
 void log_write(LogLevel, const char*, const char*, ...) {}
 

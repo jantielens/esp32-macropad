@@ -11,11 +11,14 @@ class String {};
 #define BOARD_CONFIG_H
 #define HAS_DISPLAY 1
 #define HAS_MCP 0
+#ifndef HAS_PSRAM
 #define HAS_PSRAM 1
+#endif
 #define TELEMETRY_ALLOW_PSRAM_POOL_WALK 0
 #define HAS_CAMERA 0
 
 #if defined(BINDING_SCHEMA_PROFILE_FULL)
+#define ALARM_ENABLED 1
 #define HAS_AUDIO 1
 #define HAS_SOUND_PLAYER 1
 #define HAS_MUSIC_ANALYSIS 1

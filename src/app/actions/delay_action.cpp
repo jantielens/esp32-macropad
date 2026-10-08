@@ -64,10 +64,7 @@ void describe_delay(JsonObject& action) {
     duration["description"] = "whole milliseconds, 1-55000";
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(kDelayActionType,
-    ACTION_TYPE_DELAY, parse_delay, serialize_delay, dispatch_delay,
-    nullptr, describe_delay, nullptr, validate_delay
-);
+DEFINE_AND_REGISTER_ACTION_TYPE(kDelayActionType, ACTION_TYPE_DELAY, parse_delay, serialize_delay, dispatch_delay, nullptr, describe_delay, nullptr, validate_delay, nullptr, ACTION_EXECUTION_PAUSABLE);
 
 } // namespace
 

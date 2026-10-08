@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "catalog_version": "2026-09-09-dev",
+  "catalog_version": "2026-10-08-dev",
   "recipes": [
     {
       "id": "pomodoro",
@@ -47,6 +47,64 @@
                 },
                 { "type": "notify", "notify_text": "Focus session complete" }
               ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "alarm-clock",
+      "name": "Alarm Clock",
+      "description": "A digital clock with Snooze and Dismiss alarm controls, shown automatically when the alarm rings.",
+      "requires": ["display", "alarm", "audio", "sound_player"],
+      "confirmation": "Install Alarm Clock? This disables Alarm 1 and replaces its ringing and stop actions. Its time, repeat days, durations, and maximum lateness are kept.",
+      "post_install": {
+        "message": "Your alarm clock pad is ready. Set the time and repeat days, then enable the alarm in Alarm > Schedule.",
+        "links": [
+          {"label": "Open alarm schedule", "fragment": "alarm-schedule"},
+          {"label": "Alarm behavior", "fragment": "alarm-behavior"}
+        ]
+      },
+      "layout": {
+        "buttons": [
+          {
+            "col_offset": 0, "row_offset": 0, "col_span": 5,
+            "label_center": "[expr:[alarm:1_enabled]==\"ON\"?\"alarm scheduled for \":\"no alarm scheduled\"][expr:[alarm:1_enabled]==\"ON\"?[alarm:1_time]:\"\"]",
+            "label_center_style": "mode:wrap", "bg_color": "000000", "fg_color": "333333"
+          },
+          {
+            "col_offset": 0, "row_offset": 1, "col_span": 5, "row_span": 2,
+            "label_center": "[time:%H:%M:%S]",
+            "label_center_style": "font_family:dseg7;font_size:48;font_upscale:2",
+            "bg_color": "000000", "fg_color": "F44336",
+            "actions": [{"type": "system", "system_command": "screensaver"}]
+          },
+          {
+            "col_offset": 0, "row_offset": 3, "row_span": 2,
+            "label_bottom": "Dismiss alarm", "bg_color": "F44336", "fg_color": "FFFFFF",
+            "icon_id": "mi_alarm_off", "confirm": true, "confirm_text": "Dismiss the alarm?",
+            "btn_state": "[expr:[alarm:1_state]==\"idle\"?\"hidden\":\"\"]",
+            "actions": [{"type": "alarm", "alarm_id": 1, "alarm_command": "cancel"}]
+          },
+          {
+            "col_offset": 1, "row_offset": 3, "col_span": 4, "row_span": 2,
+            "label_bottom": "Snooze alarm", "bg_color": "8BC34A", "fg_color": "FFFFFF",
+            "icon_id": "mi_snooze",
+            "btn_state": "[expr:[alarm:1_state]!=\"ringing\"?\"hidden\":\"enabled\"]",
+            "actions": [{"type": "alarm", "alarm_id": 1, "alarm_command": "snooze"}]
+          }
+        ]
+      },
+      "provision": {
+        "components": {
+          "alarms": {
+            "1": {
+              "enabled": false,
+              "on_ring": [
+                {"type": "alarm_tone", "sound_alert_pattern": "2000:100 100 2000:100 100 2000:100 100 2000:100 700"},
+                {"type": "screen", "target": "${target_pad}"}
+              ],
+              "on_stop": []
             }
           }
         }

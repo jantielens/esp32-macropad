@@ -27,7 +27,7 @@ void serialize_cycle_pad(const ButtonAction& act, JsonObject action) {
 ActionResult dispatch_cycle_pad(const ButtonAction& act, const char* label, uint32_t) {
 #if defined(ARDUINO) && HAS_DISPLAY
     const auto& cycle = act.payload.cycle_pad;
-    if (!display_manager_cycle_pad(cycle.direction, cycle.wrap, cycle.excluded_mask)) LOGD(kCyclePadActionTag, "%s cycle_pad: no eligible destination", label);
+    if (!display_manager_cycle_pad(cycle.direction, cycle.wrap, cycle.excluded_mask, true)) LOGD(kCyclePadActionTag, "%s cycle_pad: no eligible destination", label);
 #else
     (void)act;
     LOGW(kCyclePadActionTag, "%s cycle_pad: no display", label);
@@ -41,6 +41,6 @@ const char* validate_cycle_pad(const JsonObjectConst action) {
     return action.containsKey("excluded_pads") && !action["excluded_pads"].is<const char*>() ? "cycle_pad excluded_pads must be a string" : nullptr;
 }
 void describe_cycle_pad(JsonObject& action) { action["group"] = "Navigation"; action["label"] = "Navigate pad sequence"; JsonArray fields = action.createNestedArray("fields"); JsonObject direction = fields.createNestedObject(); direction["name"] = "direction"; direction["description"] = "next or previous (default next)"; JsonObject wrap = fields.createNestedObject(); wrap["name"] = "wrap"; wrap["description"] = "boolean, default true"; }
-DEFINE_AND_REGISTER_ACTION_TYPE(kCyclePadActionType, ACTION_TYPE_CYCLE_PAD, parse_cycle_pad, serialize_cycle_pad, dispatch_cycle_pad, nullptr, describe_cycle_pad, cycle_pad_available, validate_cycle_pad);
+DEFINE_AND_REGISTER_ACTION_TYPE(kCyclePadActionType, ACTION_TYPE_CYCLE_PAD, parse_cycle_pad, serialize_cycle_pad, dispatch_cycle_pad, nullptr, describe_cycle_pad, cycle_pad_available, validate_cycle_pad, nullptr, ACTION_EXECUTION_SYNC);
 } // namespace
 #endif // HAS_DISPLAY || HAS_BUTTON

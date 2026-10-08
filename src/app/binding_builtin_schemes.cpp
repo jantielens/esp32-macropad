@@ -11,6 +11,7 @@
 #include "pad_binding.h"
 #include "time_binding.h"
 #include "timer_binding.h"
+#include "alarm_binding.h"
 
 void binding_builtin_schemes_init() {
 #if HAS_CAMERA && HAS_DISPLAY
@@ -26,6 +27,9 @@ void binding_builtin_schemes_init() {
     pad_binding_init();
 #endif
     timer_binding_init();
+#if ALARM_ENABLED
+    alarm_binding_init();
+#endif
     music_binding_init();
 #if HAS_AUDIO_INPUT && HAS_DISPLAY
     audio_input_binding_init();

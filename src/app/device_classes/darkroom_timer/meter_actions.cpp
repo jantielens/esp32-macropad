@@ -72,13 +72,6 @@ static void meter_describe(JsonObject& out) {
     }
 }
 
-DEFINE_AND_REGISTER_ACTION_TYPE(meter_action_type,
-    /* type_name   */ ACTION_TYPE_METER,
-    /* parse       */ meter_parse,
-    /* serialize   */ meter_serialize,
-    /* dispatch    */ meter_action_dispatch,
-    /* value_field */ meter_value_field,
-    /* describe    */ meter_describe,
-);
+DEFINE_AND_REGISTER_ACTION_TYPE(meter_action_type, /* type_name   */ ACTION_TYPE_METER, /* parse       */ meter_parse, /* serialize   */ meter_serialize, /* dispatch    */ meter_action_dispatch, /* value_field */ meter_value_field, /* describe    */ meter_describe, nullptr, nullptr, nullptr, ACTION_EXECUTION_SYNC);
 
 #endif // HAS_DISPLAY && IS_DARKROOM_TIMER

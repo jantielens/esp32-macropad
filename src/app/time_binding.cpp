@@ -5,6 +5,7 @@
 
 #include "binding_template.h"
 #include "log_manager.h"
+#include "time_service.h"
 
 #include <Arduino.h>
 #include <time.h>
@@ -14,100 +15,6 @@
 #include <string.h>
 
 #define TAG "TimeBind"
-
-static constexpr time_t TIME_BINDING_VALID_EPOCH = 1704067200L;
-
-// ============================================================================
-// Olson → POSIX TZ lookup table
-// ============================================================================
-
-struct TzEntry {
-    const char* olson;
-    const char* posix;
-};
-
-static const TzEntry TZ_TABLE[] = {
-    // UTC
-    {"UTC",                    "UTC0"},
-
-    // Europe
-    {"Europe/London",          "GMT0BST,M3.5.0/1,M10.5.0"},
-    {"Europe/Amsterdam",       "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Berlin",          "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Brussels",        "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Paris",           "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Rome",            "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Madrid",          "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Zurich",          "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Vienna",          "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Stockholm",       "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Oslo",            "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Copenhagen",      "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Warsaw",          "CET-1CEST,M3.5.0,M10.5.0/3"},
-    {"Europe/Helsinki",        "EET-2EEST,M3.5.0/3,M10.5.0/4"},
-    {"Europe/Athens",          "EET-2EEST,M3.5.0/3,M10.5.0/4"},
-    {"Europe/Bucharest",       "EET-2EEST,M3.5.0/3,M10.5.0/4"},
-    {"Europe/Istanbul",        "TRT-3"},
-    {"Europe/Moscow",          "MSK-3"},
-
-    // Americas
-    {"America/New_York",       "EST5EDT,M3.2.0,M11.1.0"},
-    {"America/Chicago",        "CST6CDT,M3.2.0,M11.1.0"},
-    {"America/Denver",         "MST7MDT,M3.2.0,M11.1.0"},
-    {"America/Los_Angeles",    "PST8PDT,M3.2.0,M11.1.0"},
-    {"America/Anchorage",      "AKST9AKDT,M3.2.0,M11.1.0"},
-    {"America/Phoenix",        "MST7"},
-    {"America/Toronto",        "EST5EDT,M3.2.0,M11.1.0"},
-    {"America/Vancouver",      "PST8PDT,M3.2.0,M11.1.0"},
-    {"America/Sao_Paulo",      "<-03>3"},
-    {"America/Argentina/Buenos_Aires", "<-03>3"},
-    {"America/Mexico_City",    "CST6CDT,M4.1.0,M10.5.0"},
-
-    // Asia / Pacific
-    {"Asia/Tokyo",             "JST-9"},
-    {"Asia/Shanghai",          "CST-8"},
-    {"Asia/Hong_Kong",         "HKT-8"},
-    {"Asia/Singapore",         "SGT-8"},
-    {"Asia/Seoul",             "KST-9"},
-    {"Asia/Kolkata",           "IST-5:30"},
-    {"Asia/Dubai",             "GST-4"},
-    {"Asia/Riyadh",            "AST-3"},
-    {"Asia/Bangkok",           "ICT-7"},
-    {"Asia/Jakarta",           "WIB-7"},
-
-    // Oceania
-    {"Australia/Sydney",       "AEST-10AEDT,M10.1.0,M4.1.0/3"},
-    {"Australia/Melbourne",    "AEST-10AEDT,M10.1.0,M4.1.0/3"},
-    {"Australia/Perth",        "AWST-8"},
-    {"Pacific/Auckland",       "NZST-12NZDT,M9.5.0,M4.1.0/3"},
-    {"Pacific/Honolulu",       "HST10"},
-
-    // Africa
-    {"Africa/Cairo",           "EET-2EEST,M4.5.5/0,M10.5.4/24"},
-    {"Africa/Johannesburg",    "SAST-2"},
-    {"Africa/Lagos",           "WAT-1"},
-};
-
-static const size_t TZ_TABLE_SIZE = sizeof(TZ_TABLE) / sizeof(TZ_TABLE[0]);
-
-// Look up an Olson name and return the POSIX string, or nullptr if not found.
-static const char* lookup_posix_tz(const char* name) {
-    for (size_t i = 0; i < TZ_TABLE_SIZE; i++) {
-        if (strcasecmp(TZ_TABLE[i].olson, name) == 0) return TZ_TABLE[i].posix;
-    }
-    return nullptr;
-}
-
-// ============================================================================
-// Resolve the effective POSIX TZ string from a user-supplied timezone param.
-// Tries Olson lookup first, then falls back to treating it as raw POSIX.
-// ============================================================================
-
-static const char* resolve_tz(const char* tz_param) {
-    if (!tz_param || !tz_param[0]) return "UTC0";
-    const char* posix = lookup_posix_tz(tz_param);
-    return posix ? posix : tz_param;  // fallback: treat as raw POSIX
-}
 
 // ============================================================================
 // Scheme resolver — called by binding_template_resolve()
@@ -144,7 +51,7 @@ static BindingResolverStatus time_binding_resolve(const char* params, char* out,
 
     // Check if NTP has synced (time > 2024-01-01)
     time_t now = time(nullptr);
-    if (now < TIME_BINDING_VALID_EPOCH) {
+    if (!time_service_ready()) {
         strlcpy(out, "--:--", out_len);
         return BINDING_RESOLVER_RESOLVED;
     }
@@ -153,14 +60,6 @@ static BindingResolverStatus time_binding_resolve(const char* params, char* out,
     struct timeval tv;
     gettimeofday(&tv, nullptr);
     int millis_in_sec = (int)(tv.tv_usec / 1000);  // 0-999
-
-    // Apply timezone
-    const char* posix_tz = resolve_tz(tz);
-    setenv("TZ", posix_tz, 1);
-    tzset();
-
-    struct tm ti;
-    localtime_r(&now, &ti);
 
     // Expand custom sub-second format codes before strftime:
     //   %ms  → milliseconds within second (000-999)
@@ -201,7 +100,7 @@ static BindingResolverStatus time_binding_resolve(const char* params, char* out,
     }
     *dst = '\0';
 
-    if (strftime(out, out_len, expanded, &ti) == 0) {
+    if (!time_service_format(now, expanded, tz, out, out_len)) {
         strlcpy(out, "ERR:fmt", out_len);
         return BINDING_RESOLVER_UNAVAILABLE;
     }
@@ -229,12 +128,12 @@ void time_binding_init() {
 }
 
 void time_binding_start_ntp() {
-    configTime(0, 0, "pool.ntp.org");
+    time_service_start_ntp();
     LOGI(TAG, "NTP sync started (pool.ntp.org)");
 }
 
 bool time_binding_is_synced() {
-    return time(nullptr) >= TIME_BINDING_VALID_EPOCH;
+    return time_service_ready();
 }
 
 #else // !HAS_DISPLAY

@@ -85,6 +85,17 @@ bindings keep it reusable. The editor checks syntax and previews live values.
 
 ### Automation & Timers: One Tap Starts the Routine
 
+Configure one persistent alarm in the portal's **Alarm** settings. Choose
+weekdays for weekly repetition, or leave them all unselected to ring once at the
+next selected local time and then disable. Add up to three ring and stop actions.
+Missed alarms recover within a device-wide lateness window, default six hours,
+after time synchronization. Only the latest eligible occurrence rings.
+Use **Alarm Control** on pad buttons or MCP to Snooze and Cancel. **Loop Tone**
+and **Loop MP3** are available for ring actions. The dedicated **Timezone**
+settings offer grouped cities and a device-time preview; changes apply on Save.
+The device-wide timezone also supplies the default for `[time:format]` bindings.
+See the [alarm guide](docs/web-portal-guide.md#alarm-clock).
+
 Start a focus timer, lower the brightness, and show a confirmation with one tap.
 When time is up, play a sound and pulse the screen. **Three independent timers**
 support countdowns, stopwatches, and expiry actions.
@@ -127,7 +138,8 @@ editor. Unlabeled widgets show a larger symbol and their name when space allows;
 the grid remains a configuration overview rather than a live data preview.
 
 Install parameterized recipes from your device-saved catalog, starting with the
-repository's Pomodoro and Home Energy examples. Copy buttons or pads, and
+repository's Pomodoro, Alarm Clock, and Home Energy examples. Alarm Clock installs
+disabled, with links to finish configuring its schedule and behavior. Copy buttons or pads, and
 import/export configurations as JSON to back up or share your work.
 
 The portal also handles settings, media, health diagnostics, and screen previews,

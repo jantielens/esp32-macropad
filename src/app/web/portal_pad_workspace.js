@@ -26,7 +26,6 @@ function padWorkspaceInit() {
     });
     const on = (node, event, callback) => node.addEventListener(event, callback, { signal: controller.signal });
     root.addEventListener('wheel', padWorkspaceWheel, { passive: false, signal: controller.signal });
-    on(element('pad-settings-menu-btn'), 'click', () => padWorkspaceSetScope('pad'));
     on(element('pad-workspace-pad-scope'), 'click', () => padWorkspaceSetScope('pad'));
     on(element('pad-workspace-button-scope'), 'click', () => padWorkspaceSetScope('button'));
     on(element('pad-workspace-back'), 'click', padWorkspaceReturn);
@@ -328,7 +327,7 @@ function padWorkspaceRenderTabs() {
 function padWorkspaceRefresh() {
     if (!padWorkspace || !padWorkspace.root.isConnected) return;
     padWorkspaceFit();
-    const identity = document.getElementById('pad-name').value || 'Pad ' + (padState.page + 1);
+    const name = document.getElementById('pad-name').value;
     document.getElementById('pad-workspace-status').textContent = padSaveInProgress ? 'Saving...' : padDirty ? 'Unsaved edits' : '';
     const save = document.getElementById('pad-save-btn');
     save.disabled = padSaveInProgress || padWorkspace.loading;
@@ -343,9 +342,11 @@ function padWorkspaceRefresh() {
         cell.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); cell.click(); } };
     });
     const list = document.getElementById('pad-workspace-pads');
-    const choices = Array.from(document.getElementById('pad-page-select').options).map(option => {
-        const screen = (deviceInfoCache.available_screens || []).find(screen => screen.id === 'pad_' + option.value);
-        return { value: option.value, name: Number(option.value) === padState.page ? identity : screen ? screen.name : option.textContent };
+    const choices = Array.from({ length: (deviceInfoCache && deviceInfoCache.max_pads) || 8 }, (_, page) => {
+        const label = 'Pad ' + (page + 1);
+        const screen = ((deviceInfoCache && deviceInfoCache.available_screens) || []).find(screen => screen.id === 'pad_' + page);
+        const padName = page === padState.page ? name : screen ? screen.name.replace(/^Pad \d+: /, '').replace(/^Pad \d+$/, '') : '';
+        return { value: page, name: label + (padName ? ': ' + padName : '') };
     });
     const signature = JSON.stringify([padState.page, choices]);
     if (signature === padWorkspace.railSignature) return;
@@ -384,11 +385,9 @@ function padWorkspaceConfirm(message) {
 async function padWorkspaceSwitch(page) {
     if (!padWorkspace || page === padState.page) return;
     const workspace = padWorkspace;
-    document.getElementById('pad-page-select').value = padState.page;
     if (padDirty && !await padWorkspaceConfirm('Discard edits and switch pads?')) return;
     if (workspace !== padWorkspace) return;
     await padLoadPage(page);
     if (workspace !== padWorkspace) return;
-    document.getElementById('pad-page-select').value = page;
     padWorkspaceRefresh();
 }

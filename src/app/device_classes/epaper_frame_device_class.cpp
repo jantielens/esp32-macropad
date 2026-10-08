@@ -7,6 +7,7 @@
 // directly; it dispatches through the DeviceClass registry.
 
 #include "board_config.h"
+#include "time_service.h"
 
 #if IS_EPAPER_FRAME
 
@@ -860,8 +861,7 @@ static void epaper_frame_ntp_start() {
 		portENTER_CRITICAL(&s_epaper_ntp_mux);
 		s_epaper_ntp_synced = false;
 		portEXIT_CRITICAL(&s_epaper_ntp_mux);
-		sntp_set_time_sync_notification_cb(epaper_frame_ntp_sync_cb);
-		configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+		time_service_start_ntp(epaper_frame_ntp_sync_cb);
 		s_epaper_ntp_active = true;
 }
 

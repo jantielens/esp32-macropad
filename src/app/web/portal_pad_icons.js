@@ -7,18 +7,8 @@
 let padButtonSizesCache = null;
 
 // Lazy-load Material Symbols font
-let _materialSymbolsLoaded = false;
 function padEnsureMaterialSymbols() {
-    if (_materialSymbolsLoaded) return Promise.resolve();
-    return new Promise((resolve) => {
-        _materialSymbolsLoaded = true;
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,1,0';
-        link.onload = () => document.fonts.ready.then(resolve);
-        link.onerror = resolve;
-        document.head.appendChild(link);
-    });
+    return portalEnsureMaterialSymbols();
 }
 
 // Simplify binding tokens for grid preview: [mqtt:topic;path;fmt] → [mqtt:topic]

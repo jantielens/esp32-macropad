@@ -1,6 +1,8 @@
 #include "version.h"
 #include "board_config.h"
 #include "config_manager.h"
+#include "time_service.h"
+#include "alarm_manager.h"
 #include "web_portal.h"
 #include "log_manager.h"
 #include "mqtt_manager.h"
@@ -278,6 +280,8 @@ void setup()
 	// samples its panel mode during initialization and never changes it live.
 	config_manager_init();
 	config_loaded = config_manager_load(&device_config);
+	if (!device_config.timezone[0]) strlcpy(device_config.timezone, "UTC0", sizeof(device_config.timezone));
+	time_service_set_timezone(device_config.timezone);
 	if (!config_loaded) {
 		String default_name = config_manager_get_default_device_name();
 		strlcpy(device_config.device_name, default_name.c_str(), CONFIG_DEVICE_NAME_MAX_LEN);
@@ -641,6 +645,9 @@ void setup()
 	binding_builtin_schemes_init();
 	timer_config_init();
 	#endif
+	#if ALARM_ENABLED
+	alarm_manager_init();
+	#endif
 
 	// Hardware button actions (GPIO buttons). No-op stubs when !HAS_BUTTON.
 	// Initialized after WiFi/MQTT setup so dispatched actions can fire
@@ -712,6 +719,10 @@ void setup()
 
 void loop()
 {
+	time_service_loop();
+	#if ALARM_ENABLED
+	alarm_manager_loop();
+	#endif
 	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_HOUSEKEEPING);
 	power_manager_led_loop();
 	power_manager_loop();

@@ -1,4 +1,5 @@
 #include "print_log.h"
+#include "time_service.h"
 #include "board_config.h"
 
 #if IS_DARKROOM_TIMER
@@ -67,7 +68,7 @@ static uint32_t current_date_yymmdd() {
     // If time is before 2024, NTP hasn't synced
     if (now < 1704067200) return 0;
     struct tm tm;
-    localtime_r(&now, &tm);
+    if (!time_service_localtime(now, &tm)) return 0;
     return (uint32_t)((tm.tm_year % 100) * 10000 + (tm.tm_mon + 1) * 100 + tm.tm_mday);
 }
 

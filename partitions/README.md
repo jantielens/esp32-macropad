@@ -87,8 +87,9 @@ After adding or changing partition schemes, run:
 
 After changing the partition table, the **first flash should be done over serial (USB)**. OTA updates will work normally afterwards once the correct partition table is on the device.
 
-JC3248W535 uses `ota_4mb_16MB_ext`: two 4 MiB OTA app slots, 256 KiB for
-native Extensions, and 7.625 MiB of filesystem storage within its 16 MiB flash.
+ESP32-4848S040 and JC3248W535 use `ota_4mb_16MB_ext`: two 4 MiB OTA app slots,
+256 KiB for native Extensions, and 7.625 MiB of filesystem storage within
+their 16 MiB flash.
 Other boards using `ota_3mb_16MB_ext` keep their existing layout. Re-run
 `./tools/install-custom-partitions.sh` before building on an existing machine.
 When migrating JC3248W535 from the 3 MiB layout, back up stored files and
