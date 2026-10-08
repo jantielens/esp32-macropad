@@ -821,12 +821,16 @@ fills the available content height, leaving the normal padding below it. Short
 windows retain a minimum editor height and scroll when necessary.
 
 Selecting a button opens **Content**, **Actions**, and **Appearance** tabs.
-Select the **Pad** inspector scope or **More > Pad Settings** for pad **Layout**,
+Select the **Pad** inspector scope for pad **Layout**,
 **Appearance**, **Bindings**, and **Actions**. Clicking a selected button again
 deselects it without discarding edits. Edits update the current draft directly, without an Apply/Cancel
 step; only **Save Pad** persists the current pad. Switching buttons or tabs
 retains incomplete inputs. Correct validation errors before saving; failed
 saves retain the draft for retry.
+
+Pad labels retain the `Pad X: Name` format whether selected or not. The button
+**Actions** and **Appearance** tabs expose their controls without an additional
+same-named accordion; individual action slots remain expandable.
 
 Numeric fields consistently omit spinner buttons. Mouse-wheel scrolling over
 them scrolls the inspector without changing their values or focus; typing and

@@ -406,7 +406,6 @@ async function deviceImportConfig(evt) {
                 padState.templatePad = (padJson.template_pad !== undefined &&
                     padJson.template_pad !== null && padJson.template_pad !== i)
                     ? padJson.template_pad : -1;
-                document.getElementById('pad-page-select').value = i;
                 document.getElementById('pad-cols').value = padState.cols;
                 document.getElementById('pad-rows').value = padState.rows;
                 document.getElementById('pad-name').value = padJson.name || '';
@@ -425,7 +424,6 @@ async function deviceImportConfig(evt) {
         }
 
         await getDeviceInfo(true);
-        document.getElementById('pad-page-select').value = originalPage;
         await padLoadPage(originalPage);
 
         // Reboot to apply NVS config
@@ -462,7 +460,7 @@ async function padDeletePage() {
         padPopulateTemplateDropdown(padState.page);
         document.getElementById('pad-page-bg-mode').value = 'inherit';
         document.getElementById('pad-button-shadow').value = 'inherit';
-        padUpdateDropdownLabel(padState.page, '');
+        if (typeof padWorkspaceRefresh === 'function') padWorkspaceRefresh();
         padRenderGrid();
         padMarkDirty();
     } catch (err) {

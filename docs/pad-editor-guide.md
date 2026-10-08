@@ -17,14 +17,17 @@ A pad is a grid of buttons displayed on the device — swipe or navigate between
 
 On desktop, choose a pad from the left rail, select buttons on the persistent
 canvas, and edit them in the right inspector. The **Pads** heading labels the
-list, which highlights the current pad. The toolbar shows pending edits or save
+list, which highlights the current pad without changing its `Pad X: Name` label.
+The toolbar shows pending edits or save
 progress, **Save Pad**, **Show on Device**, and **More** operations. Its status
 is empty when there are no unsaved edits. The canvas
 uses the device's display aspect ratio, spacing, and edge-inset defaults.
 
 The Button inspector has **Content**, **Actions**, and **Appearance** tabs.
 The Pad inspector has **Layout**, **Appearance**, **Bindings**, and **Actions**
-tabs. Action summaries expand into the existing complete action forms.
+tabs. Action summaries expand into the existing complete action forms. The
+Button **Actions** and **Appearance** tabs have no additional same-named
+accordion, and the Pad **Bindings** tab presents its controls directly.
 
 Edits update one in-memory pad draft directly. There is no button Apply or
 Cancel step. Switching buttons or tabs retains edits, including incomplete
@@ -47,7 +50,7 @@ confirmed operation that writes settings and pads and reboots the device.
 
 ### Pad Settings
 
-Select the **Pad** inspector scope or **More > Pad Settings** to configure the
+Select the **Pad** inspector scope to configure the
 pad:
 
 Opening pad settings clears the button selection without discarding its edits.

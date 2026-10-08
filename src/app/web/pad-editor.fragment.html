@@ -29,7 +29,6 @@
 
         <!-- Controls rows -->
         <div class="pad-controls">
-            <select id="pad-page-select" hidden></select>
             <div class="pad-controls-row" style="margin-top:6px;">
                 <div class="form-group" style="margin-bottom:0; flex:1;">
                     <label for="pad-name">Pad Name</label>
@@ -100,7 +99,6 @@
         </section>
 
         <section class="card mb-3" data-pad-tab="Bindings">
-            <div class="card-header"><h5 class="mb-0">Pad Bindings</h5></div>
             <div class="card-body">
             <div id="pad-bindings-section">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
@@ -136,8 +134,6 @@
             <div class="dropdown" style="position:relative;">
                 <button type="button" id="pad-more-btn" class="btn btn-outline-secondary btn-sm">More ▾</button>
                 <div id="pad-more-menu" class="pad-more-menu" style="display:none;">
-                    <button type="button" id="pad-settings-menu-btn">Pad Settings</button>
-                    <hr>
                     <button type="button" id="pad-fill-btn" disabled>Fill Pad</button>
                     <button type="button" id="pad-copy-btn">Copy Pad</button>
                     <button type="button" id="pad-paste-btn" disabled>Paste Pad</button>
@@ -373,9 +369,7 @@
 
                 {{WIDGET_CAMERA_PREVIEW}}
 
-                <!-- Actions group (open by default) -->
-                <details class="editor-group" open>
-                    <summary>Actions</summary>
+                <div id="pad-edit-actions-section">
                     <div class="editor-group-body">
                         <div id="pad-action-editors"></div>
                         <div id="pad-edit-confirm-group" style="margin-top:16px;">
@@ -392,7 +386,7 @@
                             <small>Leave empty to generate a message from the button label. Cancel or no response after 10 seconds runs no actions.</small>
                         </div>
                     </div>
-                </details>
+                </div>
 
                 <!-- Icon -->
                 <details class="editor-group" id="pad-edit-icon-section">
@@ -499,8 +493,7 @@
                 </div>
 
                 <!-- Appearance -->
-                <details class="editor-group" id="pad-edit-colors-section">
-                    <summary>Appearance</summary>
+                <div id="pad-edit-colors-section">
                     <div class="editor-group-body">
                         <div class="pad-appearance-row">
                             <div id="pad-edit-bg-color-wrap" style="flex:1;">
@@ -556,7 +549,7 @@
                             </select>
                         </div>
                     </div>
-                </details>
+                </div>
 
                 <!-- Button State -->
                 <details class="editor-group" id="pad-edit-btn-state-section">

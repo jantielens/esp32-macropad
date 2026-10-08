@@ -199,12 +199,14 @@ assert.deepStrictEqual(openedPosition, [0, 0], 'Clicking an unselected button op
 const refreshElements = new Map();
 const refreshContext = {
 	console, padState: { page: 0, cols: 4, rows: 3 }, padDirty: false, padSaveInProgress: false,
-	deviceInfoCache: {},
+	deviceInfoCache: { max_pads: 2, available_screens: [{ id: 'pad_0', name: 'Pad 1: Solar' }, { id: 'pad_1', name: 'Pad 2: Lights' }] },
 	document: {
 		getElementById(id) {
-			if (!refreshElements.has(id)) refreshElements.set(id, { value: 'Solar', options: [], textContent: '' });
+			assert.notStrictEqual(id, 'pad-page-select', 'Refresh must not depend on the removed pad dropdown');
+			if (!refreshElements.has(id)) refreshElements.set(id, { value: 'Solar', textContent: '', children: [], replaceChildren() { this.children = []; }, appendChild(child) { this.children.push(child); } });
 			return refreshElements.get(id);
 		},
+		createElement() { return { dataset: {}, setAttribute() {} }; },
 		querySelectorAll() { return []; }
 	}
 };
@@ -222,11 +224,30 @@ for (const [dirty, saving, status] of [[false, false, ''], [true, false, 'Unsave
 }
 assert.strictEqual(refreshElements.has('pad-workspace-position'), false, 'Refresh must not access the removed footer');
 assert.strictEqual(refreshElements.has('pad-workspace-geometry'), false, 'Refresh must not access the removed dimensions row');
+const railLabels = () => refreshElements.get('pad-workspace-pads').children.map(button => button.textContent);
+assert.deepStrictEqual(railLabels(), ['Pad 1: Solar', 'Pad 2: Lights']);
+refreshContext.padState.page = 1;
+refreshElements.get('pad-name').value = 'Lights';
+refreshContext.padWorkspaceRefresh();
+assert.deepStrictEqual(railLabels(), ['Pad 1: Solar', 'Pad 2: Lights'], 'Selecting a pad must not change its label');
+refreshContext.deviceInfoCache.available_screens[0].name = 'Solar';
+refreshContext.padWorkspaceRefresh();
+assert.deepStrictEqual(railLabels(), ['Pad 1: Solar', 'Pad 2: Lights'], 'Bare custom catalog names must receive a numbered prefix');
+refreshElements.get('pad-name').value = 'Kitchen';
+refreshContext.padWorkspaceRefresh();
+assert.deepStrictEqual(railLabels(), ['Pad 1: Solar', 'Pad 2: Kitchen'], 'Unsaved pad names must retain their numbered prefix');
+refreshElements.get('pad-name').value = '';
+refreshContext.padWorkspaceRefresh();
+assert.deepStrictEqual(railLabels(), ['Pad 1: Solar', 'Pad 2'], 'Unnamed pads must retain their numbered label');
 const fragment = fs.readFileSync('src/app/web/pad-editor.fragment.html', 'utf8');
-for (const id of ['pad-workspace-position', 'pad-workspace-geometry', 'pad-workspace-settings', 'pad-quick-save-btn', 'pad-empty-state']) {
+for (const id of ['pad-workspace-position', 'pad-workspace-geometry', 'pad-workspace-settings', 'pad-quick-save-btn', 'pad-empty-state', 'pad-page-select']) {
 	assert(!fragment.includes('id="' + id + '"'), 'Removed canvas control must not remain in the fragment: ' + id);
 }
-assert(fragment.includes('id="pad-settings-menu-btn"'), 'More must retain access to pad settings');
+assert(!fragment.includes('id="pad-settings-menu-btn"'), 'More must not duplicate the Pad scope control');
+assert(fragment.includes('id="pad-workspace-pad-scope"'), 'Pad settings must remain accessible through the scope control');
+assert(!fragment.includes('<summary>Actions</summary>'), 'The Actions tab must not contain a duplicate Actions accordion');
+assert(!fragment.includes('<summary>Appearance</summary>'), 'The Appearance tab must expose its controls directly');
+assert(!fragment.includes('<h5 class="mb-0">Pad Bindings</h5>'), 'The Bindings tab must not repeat its title');
 assert(!fragment.includes('<label for="pad-edit-bg-image-path">'), 'Local Image must not repeat its section title');
 assert(fragment.includes('aria-label="Refresh image library"'), 'The icon-only refresh button needs an accessible name');
 
@@ -294,7 +315,6 @@ async function checkSaveRaces() {
 	vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), saveContext);
 	vm.runInContext('padState.editCol = 2; padState.editRow = 0;', saveContext);
 	saveContext.padBuildSaveContext = () => ({ page: 0, name: 'Saved' });
-	saveContext.padUpdateDropdownLabel = () => {};
 	saveContext.padClearDirty = () => { saveContext.padDirty = false; };
 	saveContext.showMessage = () => {};
 	saveContext.getDeviceInfo = async () => {};

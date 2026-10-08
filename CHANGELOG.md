@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-07
+ms.date: 2026-10-08
 ms.topic: reference
 ---
 
@@ -64,6 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Simplify Pad Editor navigation: remove the legacy pad dropdown and duplicate
+  Pad Settings menu entry, expose button Actions and Appearance controls without
+  same-named nested accordions, and remove the repeated Pad Bindings heading.
 * Successful screen, back, and pad-cycle actions wake the display and reset
   its sleep timer, preserving the original screen's navigation history when
   leaving an idle screen. Internal navigation remains non-waking by default.
@@ -72,6 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Keep Pad Editor list labels in `Pad X: Name` format when selected or not.
+  Selection retains the regular font weight so longer labels do not wrap merely
+  because the pad is selected; color, background, and border still highlight it.
 * Restore JC3248W535's full Screen Saver settings, including the enable
   checkbox and configurable Fade In/Fade Out. Keep its combined display/touch
   controller awake while fading the backlight off, without applying the legacy

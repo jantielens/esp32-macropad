@@ -467,6 +467,9 @@ body {
   color: var(--portal-primary);
   background: rgba(var(--portal-primary-rgb), 0.08);
   border-left-color: var(--portal-primary);
+}
+
+.nav-item.active {
   font-weight: 600;
 }
 

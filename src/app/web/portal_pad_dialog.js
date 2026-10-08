@@ -250,12 +250,6 @@ function padDialogOpen(col, row) {
     padSetBindableColor('pad-edit-fg-color', btn.fg_color || effFg);
     padSetBindableColor('pad-edit-border-color', btn.border_color || effBorder);
 
-    // Auto-open colors section if any color has a binding or custom override
-    var hasColorOverride = btn.bg_color || btn.fg_color || btn.border_color ||
-        (btn.border_width !== undefined) || (btn.corner_radius !== undefined) ||
-        (btn.content_pad !== undefined) || (btn.button_shadow !== undefined);
-    document.getElementById('pad-edit-colors-section').open = !!hasColorOverride;
-
     var effBw = padGetEffectiveDefault('border_width');
     var effCr = padGetEffectiveDefault('corner_radius');
     var effCp = padGetEffectiveDefault('content_pad');

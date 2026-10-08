@@ -24,19 +24,12 @@ function response(ok = true, json = {}) {
 
 function makeDocument() {
     const elements = new Map();
-    for (let page = 0; page < 8; page++) {
-        const option = new Element();
-        elements.set('pad-page-option-' + page, option);
-    }
     return {
         addEventListener() {},
         getElementById(id) {
+            assert.notStrictEqual(id, 'pad-page-select', 'Import must not access the removed pad dropdown');
             if (!elements.has(id)) {
                 const element = new Element();
-                if (id === 'pad-page-select') {
-                    element.options = Array.from({ length: 8 }, (_, page) =>
-                        elements.get('pad-page-option-' + page));
-                }
                 elements.set(id, element);
             }
             return elements.get(id);
