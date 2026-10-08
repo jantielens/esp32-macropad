@@ -4,7 +4,8 @@
 This project uses a **registry-based sensor pattern** that keeps sensor implementations isolated in `src/app/sensors/`. Only a single registration point in `src/app/sensors.cpp` uses compile-time flags to include sensor adapters, which keeps the main app clean and avoids scattered `#if HAS_SENSOR_*` logic.
 
 Key points:
-- Each sensor adapter is a small wrapper around a library (no custom low-level driver).
+- Each sensor adapter is a small wrapper around a library or the board hardware
+  facade; board-specific register transactions stay in that facade.
 - Adapters append their values into a JSON object (for `/api/health` and MQTT).
 - Home Assistant discovery is still supported via the adapter.
 - Only enabled sensors are compiled (guarded in `src/app/sensors.cpp`).
@@ -104,6 +105,23 @@ The adapter publishes `battery_voltage` in volts and `battery_percentage` as an
 approximate state of charge for a resting single-cell LiPo. Adjust
 `BATTERY_ADC_CALIBRATION` after comparing the reported voltage with a trusted
 multimeter reading.
+
+### StopWatch PMIC Battery
+
+The StopWatch adapter registers through `HAS_M5STACK_STOPWATCH` and reads its
+M5PM1 through the board hardware facade on the already-initialized, locked
+internal I2C bus. It does not enable an ESP32 battery ADC or reinitialize Wire.
+Battery millivolts come from registers 0x22/0x23; input voltage and the
+active-low charger-status GPIO determine charging state.
+
+It publishes `battery_voltage` (volts), `battery_percentage` (the shared
+approximate single-cell LiPo voltage curve), and `battery_charging` (boolean)
+in `/api/health`'s `sensors` object and the normal MQTT state/discovery path.
+Invalid readings produce `null`, not a fabricated percentage or charging
+state. Percentage is not a fuel-gauge measurement and can vary under load or
+while charging. Verify voltage and charging behavior on hardware before
+relying on them. Charging-current configuration and power-button defaults are
+not changed by telemetry.
 
 ### Example: Dummy sensor (synthetic values)
 Enable it in your board override:

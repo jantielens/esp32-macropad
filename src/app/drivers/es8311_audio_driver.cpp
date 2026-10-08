@@ -4,6 +4,7 @@
 #include "driver/i2s_std.h"
 #include "i2c_bus.h"
 #include "log_manager.h"
+#include "m5stack_stopwatch.h"
 
 #define TAG "Audio"
 
@@ -99,24 +100,46 @@ static const ES8311Coeff* es8311_find_coeff(uint32_t mclk_hz, uint32_t sample_ra
     return nullptr;
 }
 
+#if HAS_M5STACK_STOPWATCH
+static bool codec_io_failed = false;
+#endif
+
 static bool es8311_write(uint8_t reg, uint8_t val) {
-    i2c_bus_lock();
+    if (!i2c_bus_lock()) {
+#if HAS_M5STACK_STOPWATCH
+        codec_io_failed = true;
+#endif
+        return false;
+    }
     Wire.beginTransmission(AUDIO_CODEC_ADDR);
-    Wire.write(reg);
-    Wire.write(val);
-    bool ok = Wire.endTransmission() == 0;
+    const bool reg_written = Wire.write(reg) == 1;
+    const bool val_written = Wire.write(val) == 1;
+    bool ok = Wire.endTransmission() == 0 && reg_written && val_written;
     i2c_bus_unlock();
+#if HAS_M5STACK_STOPWATCH
+    codec_io_failed |= !ok;
+#endif
     return ok;
 }
 
 static uint8_t es8311_read(uint8_t reg) {
-    i2c_bus_lock();
+    if (!i2c_bus_lock()) {
+#if HAS_M5STACK_STOPWATCH
+        codec_io_failed = true;
+#endif
+        return 0xff;
+    }
     Wire.beginTransmission(AUDIO_CODEC_ADDR);
-    Wire.write(reg);
-    Wire.endTransmission(false);
-    Wire.requestFrom((uint8_t)AUDIO_CODEC_ADDR, (uint8_t)1);
-    uint8_t val = Wire.available() ? Wire.read() : 0xFF;
+    const bool written = Wire.write(reg) == 1;
+    const bool ok = Wire.endTransmission(false) == 0 &&
+        written &&
+        Wire.requestFrom((uint8_t)AUDIO_CODEC_ADDR, (uint8_t)1) == 1 &&
+        Wire.available() > 0;
+    uint8_t val = ok ? Wire.read() : 0xFF;
     i2c_bus_unlock();
+#if HAS_M5STACK_STOPWATCH
+    codec_io_failed |= !ok;
+#endif
     return val;
 }
 
@@ -264,11 +287,21 @@ bool ES8311AudioDriver::initCodec(uint32_t sample_rate) {
     regv = es8311_read(ES8311_DAC_REG31) & 0x9F;
     es8311_write(ES8311_DAC_REG31, regv);
 
+#if HAS_M5STACK_STOPWATCH
+    if (codec_io_failed) return false;
+#endif
     LOGI(TAG, "ES8311 codec initialized (MCLK=%lu Hz, Fs=%lu Hz)", mclk_hz, sample_rate);
     return true;
 }
 
 bool ES8311AudioDriver::begin(uint32_t sample_rate) {
+#if HAS_M5STACK_STOPWATCH
+    codec_io_failed = false;
+    if (!m5stack_stopwatch_audio_power(true)) {
+        m5stack_stopwatch_audio_power(false);
+        return false;
+    }
+#endif
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.auto_clear = true;
     chan_cfg.dma_desc_num = AUDIO_DMA_DESC_NUM;
@@ -282,6 +315,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
     );
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_new_channel failed: %s", esp_err_to_name(err));
+        cleanup();
         return false;
     }
 
@@ -364,9 +398,21 @@ bool ES8311AudioDriver::write(const int16_t* frames, size_t frame_count) {
 void ES8311AudioDriver::setVolume(uint8_t vol_0_100) {
     uint8_t reg_val = (uint8_t)((uint16_t)vol_0_100 * 255 / 100);
     bool ok = es8311_write(ES8311_DAC_REG32, reg_val);
+#if HAS_M5STACK_STOPWATCH
+    if (!ok) setMuted(true);
+#endif
     if (ok) LOGT(TAG, "Volume: %u%% -> REG32=0x%02X", vol_0_100, reg_val);
     else LOGW(TAG, "Volume write failed: %u%% REG32=0x%02X", vol_0_100, reg_val);
 }
+
+#if HAS_M5STACK_STOPWATCH
+void ES8311AudioDriver::setMuted(bool muted) {
+    if (!m5stack_stopwatch_audio_mute(muted)) {
+        LOGW(TAG, "StopWatch amplifier control failed");
+        m5stack_stopwatch_audio_power(false);
+    }
+}
+#endif
 
 // The microphone shares the ES8311 transport only on input-enabled boards.
 #if HAS_AUDIO_INPUT
@@ -409,6 +455,11 @@ AudioInputFormat ES8311AudioDriver::inputFormat() const {
 #endif
 
 void ES8311AudioDriver::cleanup() {
+#if HAS_M5STACK_STOPWATCH
+    if (!m5stack_stopwatch_audio_power(false)) {
+        LOGW(TAG, "Failed to disable StopWatch audio power");
+    }
+#endif
 #if HAS_AUDIO_INPUT
     if (rx_handle) {
         i2s_channel_disable(rx_handle);

@@ -21,8 +21,8 @@ applyTo: "**/drivers/*, **/display_driver*, **/display_manager*, **/touch_driver
 
 | Category | Drivers |
 |---|---|
-| Display | TFT_eSPI, Arduino_GFX, ST77916, ST7701_RGB, MIPI-DSI base, ST7703_DSI, ST7701_DSI, JD9165_DSI |
-| Touch | XPT2046, AXS15231B, CST816S, GT911 |
+| Display | TFT_eSPI, Arduino_GFX, ST77916, CO5300, ST7701_RGB, MIPI-DSI base, ST7703_DSI, ST7701_DSI, JD9165_DSI |
+| Touch | XPT2046, AXS15231B, CST816S, CST820B, GT911 |
 
 ## Key Files
 
@@ -34,3 +34,12 @@ applyTo: "**/drivers/*, **/display_driver*, **/display_manager*, **/touch_driver
 - `touch_drivers.cpp` — Sketch-root compilation unit that conditionally includes exactly one touch driver `.cpp`
 - `screens/screen.h` — Screen base class interface
 - `drivers/README.md` — Driver selection conventions + generated board→drivers table
+
+## StopWatch Board Controls
+
+`m5stack-stopwatch` is a macropad board, not a device class. Its M5PM1 and
+M5IOE1 must be initialized before display startup using the shared I2C mutex.
+The CO5300 brightness path sends panel commands; reset, touch reset, display
+power, codec power, and amplifier enable are expander outputs, not ESP32 GPIOs.
+Do not reuse CST816S auto-sleep register writes for CST820B without evidence.
+Keep deferred peripherals and opt-in audio out of default installer capabilities.

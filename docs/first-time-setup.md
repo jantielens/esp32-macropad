@@ -85,6 +85,62 @@ For more details, see the [Home Assistant + MQTT guide](dev/home-assistant-mqtt.
 
 ## Troubleshooting
 
+### M5Stack StopWatch
+
+The `m5stack-stopwatch` target provides the ordinary Macropad workflow on the
+round AMOLED display. Implementation is based on
+[M5Stack's documentation](https://docs.m5stack.com/en/core/StopWatch),
+[factory reference](https://github.com/m5stack/M5StopWatch-UserDemo), and M5GFX
+bring-up code, not physical validation.
+
+**Record your hardware revision before connecting rear accessories.** On
+v1.0, a rear pin marked BAT on some stickers is **5V IN**, not a battery pin:
+never connect a battery. On v1.0.1, `*BAT` is a battery connection.
+
+- **First flash/recovery:** connect a data-capable Type-C cable to a computer.
+  Hold the power button for about two seconds until the green LED lights,
+  then release to enter download mode (vendor procedure). Use a full USB flash
+  so the firmware and partition table are installed together. Verify this
+  procedure on your unit before relying on OTA.
+- **Configuration recovery:** hold the **yellow** programmable button while
+  powering on/resetting, and keep it held through the startup configuration-mode
+  check. This enters configuration mode without erasing saved settings.
+- **Normal power button:** the vendor documents a short press for power-on/reset
+  and two quick presses for power-off. Firmware does not remap this button.
+- **Programmable buttons:** configure yellow and blue tap/hold actions through
+  the existing hardware-button controls in the portal.
+- **Brightness:** existing brightness and screen-saver controls send AMOLED
+  commands; this device has no backlight GPIO. Start at low brightness and avoid
+  leaving static content illuminated for long periods.
+- **Storage and updates:** settings and pads use internal flash. The target uses
+  two 4 MiB OTA application slots; after the first full flash, use the portal's
+  Firmware controls for updates.
+
+Before considering a unit ready, manually verify:
+
+1. Cold boot on USB and battery; serial logs report 16 MiB flash and 8 MiB PSRAM.
+2. Download-mode recovery and yellow-button configuration recovery.
+3. Correct colors, framing, partial updates, and all four rotations. Check pads,
+   splash/info screens, notifications, and buttons against the visible circle.
+   Vendor examples disagree on 466/468-pixel geometry; do not infer success from
+   a passing compilation.
+4. Touch at the center and circle edges, valid release, idle recovery, and
+   screen-saver sleep/wake without stuck presses; verify both hardware buttons.
+5. Portal Wi-Fi setup, representative actions, and settings/pad persistence
+   across reboot; successful OTA and boot into the updated firmware.
+6. Internal free RAM, largest internal/DMA-capable block, and PSRAM headroom
+   under simultaneous display, Wi-Fi, portal, and OTA traffic. Keep BLE, MCP,
+   remote image fetching, and native Extensions disabled until measured.
+7. For milestone 2, validate PMIC battery voltage and charging state against
+   actual USB/battery conditions. Audio remains disabled by default: enable
+   `HAS_AUDIO` in the board overrides only for a locally built test image, then
+   verify speaker playback, silent amplifier startup/mute, and memory headroom
+   with concurrent networking. See [audio architecture](dev/audio-architecture.md).
+
+Microphone capture, IMU, hardware RTC, haptics, and advanced low-power modes are
+deferred, not advertised firmware capabilities. No hardware revision, memory
+measurement, or hardware acceptance result is recorded by this change.
+
 ### Can't find the device's Wi-Fi network
 - Make sure the device is powered on and has finished booting (the display may show a splash screen)
 - If the device was previously configured, it will connect to the saved Wi-Fi instead. To reset, use the **Factory Reset** option from the firmware page, or hold the boot button during startup to enter config mode

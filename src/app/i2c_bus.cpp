@@ -4,11 +4,12 @@
 static SemaphoreHandle_t s_wire_mutex = NULL;
 
 void i2c_bus_init() {
-    s_wire_mutex = xSemaphoreCreateMutex();
+    if (!s_wire_mutex) s_wire_mutex = xSemaphoreCreateMutex();
+    if (!s_wire_mutex) LOGE("I2C", "Failed to create Wire mutex");
 }
 
 bool i2c_bus_lock(TickType_t timeout) {
-    if (!s_wire_mutex) return true; // not yet initialized — single-task phase
+    if (!s_wire_mutex) return false;
     return xSemaphoreTake(s_wire_mutex, timeout) == pdTRUE;
 }
 

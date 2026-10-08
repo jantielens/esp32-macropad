@@ -13,6 +13,8 @@
 #include "drivers/axs15231b/vendor/AXS15231B_touch.cpp"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_CST816S_WIRE
 #include "drivers/wire_cst816s_touch_driver.cpp"
+#elif TOUCH_DRIVER == TOUCH_DRIVER_CST820B_WIRE
+#include "drivers/wire_cst820b_touch_driver.cpp"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 #include "drivers/gt911_touch_driver.cpp"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK

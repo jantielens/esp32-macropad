@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Initial `m5stack-stopwatch` Macropad board integration: CO5300 round AMOLED,
+  CST820B touch, expander-controlled power/reset, two programmable buttons,
+  internal storage, Wi-Fi/portal, OTA, and PMIC battery telemetry. ES8311
+  speaker support is opt-in; audio and memory validation, geometry/touch
+  calibration, recovery, and USB/battery acceptance checks remain to be
+  performed on hardware. Deferred peripherals are not advertised.
+
 ### Fixed
 
 * Restore JC3248W535's full Screen Saver settings, including the enable

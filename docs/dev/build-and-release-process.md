@@ -395,11 +395,24 @@ This template automates the installation:
 
 ### ESP32-S3 4 MiB OTA Layout
 
-`jc3248w535`, `jc3636w518`, and `jc3636w518-sd` use `ota_4mb_16MB_ext`
+`jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and `m5stack-stopwatch` use `ota_4mb_16MB_ext`
 to provide firmware headroom while retaining two 4 MiB OTA slots. The 16 MiB
 layout also provides 256 KiB for native Extensions and 7.625 MiB for internal
 filesystem storage. Other 3 MiB-slot boards are unchanged.
 Run `./tools/install-custom-partitions.sh` before building.
+
+`m5stack-stopwatch` uses the existing generic ESP32-S3 toolchain with 16 MiB
+flash, OPI PSRAM, hardware USB CDC (`USBMode=hwcdc,CDCOnBoot=cdc`), and no USB
+HID in its bring-up configuration. Build only this target with
+`./build.sh m5stack-stopwatch`; inspect the log and actual application size
+against the 4 MiB OTA slot. The board is discovered through `config.sh` and
+`src/boards/m5stack-stopwatch/metadata.json`, so the existing build matrix,
+release artifacts, and installer generation require no board-specific workflow.
+The partition retains an Extensions region for layout reuse, but native
+Extensions are disabled in this firmware. The installer must not advertise
+disabled or deferred peripherals. See the
+[manual StopWatch checks](../first-time-setup.md#m5stack-stopwatch) before
+claiming hardware readiness.
 
 Back up stored files and Extension packages before migrating from
 `ota_3mb_16MB_ext`. The filesystem and Extensions offsets move, so a full

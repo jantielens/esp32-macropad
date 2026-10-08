@@ -8,7 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
-// Create the Wire bus 0 mutex. Call once during setup() before any
+// Create the Wire bus 0 mutex (idempotent). Call during setup() before any
 // multi-task I2C usage begins.
 void i2c_bus_init();
 

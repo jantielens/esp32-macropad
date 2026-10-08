@@ -252,6 +252,7 @@ more room without using the board's internal flash for those files.
 | **Guition JC3248W535** | ESP32-S3 | 3.5" IPS LCD | 480 × 320 | Landscape |
 | **Guition JC4827W543C** | ESP32-S3 | 4.3" IPS LCD | 480 x 272 | Landscape |
 | **JC3636W518** | ESP32-S3 | 3.6" IPS LCD | 360 × 360 | Round |
+| **M5Stack StopWatch** | ESP32-S3 | 1.75" AMOLED | 466 × 466 | Round |
 | **Waveshare ESP32-P4 Touch LCD 4B** | ESP32-P4 | 4.0" IPS LCD | 720 × 720 | Square |
 | **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 480 x 800 | Portrait |
 | **Guition JC1060P470C** | ESP32-P4 | 7.0" IPS LCD | 1024 × 600 | Rectangle |
@@ -281,6 +282,21 @@ for the build-time selection and branding model.
 
 More boards are welcome. The [modular display and touch drivers](docs/dev/display-touch-architecture.md)
 provide a starting point for adding yours.
+
+### M5Stack StopWatch Bring-Up
+
+`m5stack-stopwatch` is a standard Macropad target, not a stopwatch application.
+It uses the CO5300 QSPI display, CST820B touch, yellow/blue programmable buttons,
+internal flash storage, Wi-Fi, the web portal, and two OTA slots. The initial
+configuration disables BLE, USB HID, MCP, native Extensions, remote image
+fetching, and audio to preserve internal/DMA memory. ES8311 speaker support is
+available for opt-in validation; microphone capture, IMU, hardware RTC, haptics,
+and advanced low-power modes are not implemented.
+
+**Physical acceptance tests remain required.** See the
+[StopWatch setup and verification checklist](docs/first-time-setup.md#m5stack-stopwatch).
+On hardware v1.0, some rear connector pins labeled BAT are actually **5V IN:
+never connect a battery**. Only v1.0.1's `*BAT` is a battery connection.
 
 ## 🚀 Getting Started
 

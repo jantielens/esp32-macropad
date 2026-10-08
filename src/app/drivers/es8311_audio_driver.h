@@ -18,6 +18,9 @@ public:
     bool begin(uint32_t sample_rate) override;
     bool write(const int16_t* frames, size_t frame_count) override;
     void setVolume(uint8_t vol_0_100) override;
+#if HAS_M5STACK_STOPWATCH
+    void setMuted(bool muted) override;
+#endif
 #if HAS_AUDIO_INPUT
     bool inputAvailable() const override;
     bool captureStart() override;

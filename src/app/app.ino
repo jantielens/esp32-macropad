@@ -88,6 +88,7 @@
 #endif
 
 #include "i2c_bus.h"
+#include "m5stack_stopwatch.h"
 #include "sd_probe.h"
 #include "sd_storage.h"
 #include "storage.h"
@@ -262,6 +263,15 @@ void setup()
 	#endif
 	#endif
 
+	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || HAS_M5STACK_STOPWATCH
+	i2c_bus_init();
+	#endif
+	#if HAS_M5STACK_STOPWATCH
+	if (!m5stack_stopwatch_init()) {
+		LOGE("StopWatch", "Hardware initialization failed; peripherals unavailable");
+	}
+	#endif
+
 	// Initialize board-specific hardware
 	#if HAS_BUILTIN_LED
 	pinMode(LED_PIN, OUTPUT);
@@ -337,11 +347,6 @@ void setup()
 	} else {
 		LOGI("WiFi", "Early init deferred for offline wake");
 	}
-
-	#if HAS_TOUCH || HAS_CAMERA
-	// Initialize Wire bus mutex before touch, audio, and camera SCCB access.
-	i2c_bus_init();
-	#endif
 
 	#if HAS_TOUCH
 	// Initialize touch after display is ready

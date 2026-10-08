@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+
 // Per-button definition supplied by boards via HW_BUTTON_DEFS (see the
 // "Hardware Button Actions" section below). Defined before the Phase 1
 // override include so board_overrides.h can declare a typed HW_BUTTON_DEFS
@@ -40,6 +41,11 @@ struct HwButtonDef {
 
 #ifdef BOARD_HAS_OVERRIDE
 #include "board_overrides.h"
+#endif
+
+// M5Stack StopWatch shared-bus PMIC and GPIO-expander hardware.
+#ifndef HAS_M5STACK_STOPWATCH
+#define HAS_M5STACK_STOPWATCH false
 #endif
 
 // Repo-owned PSRAM capability alias, derived from the Arduino core's
@@ -991,6 +997,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER_ARDUINO_GFX_NV3041A 11
 #define DISPLAY_DRIVER_INKPLATE6FLICK 12
 #define DISPLAY_DRIVER_RETERMINAL_E1003 13
+#define DISPLAY_DRIVER_ARDUINO_GFX_CO5300 14
 
 // Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 #ifndef DISPLAY_DRIVER
@@ -1252,6 +1259,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define TOUCH_DRIVER_GT911 5
 #define TOUCH_DRIVER_CST816S_WIRE 6
 #define TOUCH_DRIVER_INKPLATE6FLICK 7
+#define TOUCH_DRIVER_CST820B_WIRE 8
 
 // Maximum AXS15231B contacts (1 or 2); enable two only on verified panels.
 #ifndef MAX_AXS15231B_CONTACTS
@@ -1447,4 +1455,3 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #endif
 
 #endif // BOARD_CONFIG_H
-

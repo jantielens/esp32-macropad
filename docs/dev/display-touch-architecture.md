@@ -55,6 +55,43 @@ graph TD
 
 ## Display Driver HAL
 
+### StopWatch AMOLED Bring-Up
+
+`m5stack-stopwatch` uses a CO5300 adapter over the existing Arduino_GFX QSPI
+transport, selected with `DISPLAY_DRIVER_ARDUINO_GFX_CO5300`. It does not need
+M5Unified/M5GFX as runtime dependencies. The shared Wire bus on SDA47/SCL48
+must be initialized and locked before M5PM1/M5IOE1 power/reset operations,
+which precede display initialization. Expander IO8 powers the display; IO5
+resets it and IO4 resets touch. They are not ordinary GPIOs.
+
+The logical canvas is the documented 466 × 466 round area. The factory
+reference configures 468 × 466 at panel offset (6, 0), while M5GFX has used
+468 × 468. This adapter crops one horizontal pixel per side, using (7, 0) for
+the 466 × 466 canvas. Touch maps the reference's 0–233 raw coordinates to
+that canvas. This choice requires physical center/edge and framing validation
+and is not a claim that all hardware revisions have been tested.
+
+Brightness uses CO5300 command 0x51 rather than LEDC/backlight PWM. Existing
+brightness controls and display sleep/wake ownership remain unchanged.
+Rotation and partial writes must be checked with asymmetric patterns and
+RGB565 color bars on hardware; the adapter does not inherit the AXS15231B
+full-frame workaround.
+
+### StopWatch CST820B Touch
+
+`TOUCH_DRIVER_CST820B_WIRE` selects a dedicated CST820B adapter on the same
+shared I2C bus, address 0x15, with interrupt GPIO13. Its coordinate report uses
+five bytes at register 0x02, like CST816S, but it does not assume CST816S's
+0xFE auto-sleep-disable command is valid. Board hardware owns touch reset.
+Transport failures are not fresh release samples; the existing touch sample
+filter provides error cancellation and recovery.
+
+Keep touch independent from AMOLED sleep so it can wake the display. Verify
+idle/wake behavior and release handling on a physical unit. Reference sources:
+[factory HAL](https://github.com/m5stack/M5StopWatch-UserDemo/tree/6b4aa125288b6fe9dca661f10159f6e1e5ee785c/main/hal),
+[M5GFX bring-up](https://github.com/m5stack/M5GFX/blob/22e94f1eaa7d5eb40eab65f42bf10713e7e89294/src/M5GFX.cpp),
+and [hardware documentation](https://docs.m5stack.com/en/core/StopWatch).
+
 ### Inkplate 6 Flick LVGL
 
 `inkplate6flick-interactive` is an experimental always-on e-paper target. Its Inkplate

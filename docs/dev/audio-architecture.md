@@ -162,6 +162,7 @@ Audio-capable boards select their driver and pin mapping in
 | `jc4880p433` | ES8311 codec | `ES8311Driver` |
 | `jc1060p470c` | ES8311 codec | `ES8311Driver` |
 | `jc3636w518` | PCM510xA DAC | `PCM510xADriver` |
+| `m5stack-stopwatch` (opt-in) | ES8311 + AW8737A, M5IOE1 power/mute | `ES8311Driver` |
 
 The audio sample rate is board-configurable. The current audio boards use
 48 kHz output; update the I2S clocking and output-buffer timing together when
@@ -175,6 +176,24 @@ the sample rate. Keep the codec configuration and I2S channel rate aligned.
 
 ES8311 provides hardware volume control, so `setVolume()` programs the codec
 rather than scaling each PCM sample in software.
+
+### StopWatch Speaker Bring-Up
+
+The StopWatch board keeps `HAS_AUDIO=false` by default until combined-load
+memory and speaker behavior have been validated on hardware. Its opt-in path
+reuses ES8311 at 48 kHz, with MCLK GPIO18, BCLK GPIO17, LRCK GPIO15, and TX
+GPIO21. `AUDIO_PA_PIN=-1`: amplifier enable and codec power are **M5IOE1 IO10
+and IO3**, respectively, not ESP32 GPIOs. Board initialization keeps both off;
+the ES8311 hardware path owns enabling and muting them through the shared I2C
+bus. The unused microphone input stays disabled.
+
+MP3 scratch is PSRAM-backed, while I2S DMA and the flash-accessing audio task
+remain in internal RAM. Check startup silence, volume, mute/shutdown, beep and
+MP3 playback, and the largest internal/DMA-capable block during simultaneous
+Wi-Fi/display activity before enabling audio in installer metadata. Power,
+charging defaults, and the PMIC power-button behavior must remain independent
+of audio playback. No physical audio test or combined-load measurement has
+been performed for this target.
 
 ## PCM510xA Output
 
