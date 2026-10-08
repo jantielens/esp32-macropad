@@ -412,6 +412,19 @@ white inputs; dark mode keeps distinct darker surfaces. `.portal-list-section`
 uses flat repeated rows rather than nesting framed cards. Editors, charts, and
 previews retain their functional layouts.
 
+Shared typography follows the compact navigation: standard fragment text,
+buttons, form controls, and custom dropdowns use `0.835rem`; section headings share the
+navigation category's `0.88rem` size and semibold weight. Fragment titles use
+`1.1rem`. Sections and card bodies use 14px padding, while tables inherit the
+section background. The same text scale applies across viewport sizes.
+Shared selectors consolidate navigation, section, and form presentation rules,
+including dropdown input surfaces and focus states. Pad inspector controls reuse
+these rules rather than maintaining a separate large-input style.
+
+Action slots use `.action-list-slot` for their tinted background, accent border,
+corners, and body spacing in every host, including Boot Actions and the pad/button
+inspector. Indentation follows nesting rather than controlling the action colors.
+
 ### Header Identity and Badges
 
 The header uses the configured device hostname as its title and updates the

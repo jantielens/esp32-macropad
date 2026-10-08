@@ -26,7 +26,8 @@ are unavailable.
 
 Content sections use consistent spacing and subtly contrasting backgrounds in
 both themes. Views with multiple sections give each section a descriptive title;
-single-section views do not repeat the fragment title.
+single-section views do not repeat the fragment title. Standard content and
+controls use the navigation's compact text scale, with larger fragment titles.
 
 ## Device Logs
 

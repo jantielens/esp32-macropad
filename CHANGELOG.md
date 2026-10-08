@@ -68,6 +68,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with clean text-only fallbacks when the font is unavailable. Content sections
   have consistent headings, spacing, 8px corners, and theme-aware backgrounds;
   light-mode sections are subtly tinted while inputs remain white.
+* Align standard portal content and controls with the navigation's compact
+  typography, tighten section spacing, and consolidate shared CSS rules. Tables
+  use section backgrounds, and standard text uses one scale across viewport sizes.
+  Pad inspector fields, dropdowns, tabs, helper text, and workspace headings reuse
+  the shared scales; remove duplicate input and dropdown focus styling.
+  Action slots keep the same tinted surface, accent border, and spacing in Boot
+  Actions and other hosts as in the pad/button inspector.
 * Simplify Pad Editor navigation: remove the legacy pad dropdown and duplicate
   Pad Settings menu entry, expose button Actions and Appearance controls without
   same-named nested accordions, and remove the repeated Pad Bindings heading.
