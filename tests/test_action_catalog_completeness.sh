@@ -24,6 +24,22 @@ BUILTIN_CONFIG="$SRC_DIR/pad_config.h"
 
 fail=0
 
+python3 - <<'PY'
+from pathlib import Path
+import re
+import sys
+
+failed = False
+for path in Path("src/app").rglob("*.cpp"):
+    source = path.read_text()
+    source = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.S)
+    for registration in re.finditer(r"DEFINE_AND_REGISTER_ACTION_TYPE\s*\((.*?)\);", source, re.S):
+        if re.search(r",\s*,|^\s*,|,\s*$", registration.group(1)):
+            print(f"FAIL: empty action registration argument in {path}", file=sys.stderr)
+            failed = True
+sys.exit(1 if failed else 0)
+PY
+
 # ---------------------------------------------------------------------------
 # 1. Built-in types: every ACTION_TYPE_* declaration must have a registered
 #    builtin definition. ACTION_TYPE_NONE ("") is the empty-action sentinel.
