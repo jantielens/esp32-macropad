@@ -9,6 +9,8 @@ static uint8_t tick(AlarmClockCore& core, time_t now, uint64_t monotonic,
 
 int main() {
     AlarmClockCore core;
+    core.lateness_seconds = 300;
+    core.rearm(6001, true);
     assert(tick(core, 6001, 0, 6000) == 0);
     assert(core.armed_from == 6060);
     assert(tick(core, 6120, 1000, 6120) == (ALARM_EFFECT_RING | ALARM_EFFECT_HANDLED));
@@ -39,7 +41,7 @@ int main() {
     assert(tick(core, 30361, 6301000, 30060) == 0);
     assert(!core.deferred);
     assert(tick(core, 30400, 6302000, 30400, false, false) == 0);
-    assert(tick(core, 30401, 6303000, 30400) == 0);
+    assert(tick(core, 30401, 6303000, 30400) & ALARM_EFFECT_RING);
 
     AlarmClockCore reboot;
     reboot.handled_epoch = core.handled_epoch;
@@ -51,5 +53,18 @@ int main() {
     assert(tick(core, 36061, 7840001, 0, true) == 0);
     assert(tick(core, 36062, 7840001, 0) == 0);
     assert(core.state == ALARM_IDLE);
+    AlarmClockCore recovery;
+    assert(tick(recovery, 30000, 0, 8400, false, false) == 0);
+    assert(tick(recovery, 30000, 1, 8400) & ALARM_EFFECT_RING);
+    assert(tick(recovery, 30000, 2, 8400) == 0);
+    recovery.cancel();
+    assert(tick(recovery, 60001, 3, 38400) == 0);
+    recovery.lateness_seconds = 0;
+    assert(tick(recovery, 70001, 4, 70000) == 0);
+    assert(tick(recovery, 70060, 5, 70060) & ALARM_EFFECT_RING);
+    recovery.cancel();
+    recovery.rearm(0, false);
+    assert(tick(recovery, 80000, 6, 80000) == 0);
+    assert(recovery.armed_from == 80040);
     std::puts("alarm clock core: PASS");
 }

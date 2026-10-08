@@ -20,8 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   weekly weekday scheduling, configurable snooze and auto-dismiss, and up to
   three synchronous ring and stop actions. Alternating checksummed filesystem
   snapshots preserve settings and handled occurrences. Scheduling requires
-  current-boot time synchronization and permits up to five minutes of live
-  lateness, without replaying alarms missed before startup readiness.
+  current-boot time synchronization. One device-wide maximum lateness setting
+  covers startup recovery and live delays, defaults to six hours, and accepts
+  0-10080 whole minutes (zero allows on-time only). Only the latest eligible
+  occurrence rings; persisted edit/timezone eligibility fences prevent surprise
+  catch-up after configuration changes. Ringing and snooze sessions are not restored.
 * Alarm Control buttons and MCP commands for Snooze, Cancel, and editing alarm
   time, weekdays, and enabled state. Signed minute adjustments wrap within
   24 hours and support Numeric Rocker steps. The action editor shows only fields
@@ -35,10 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   immediate. Reboot or power loss before verification can lose pending changes.
 * One-shot alarms when no weekdays are selected. Save an enabled alarm to
   schedule the next valid local occurrence; its fixed target survives reboot
-  and timezone changes. Initial triggering durably consumes the occurrence and
-  disables future scheduling, while snooze remains available within the session.
+  and timezone changes. Initial triggering attempts to durably consume the
+  occurrence and disables future scheduling, while snooze remains available within the session.
   Missed one-shots disable rather than moving to another day. The Alarm form
   explains once versus weekly settings and displays the saved device-local date.
+* Weekly and one-shot alarms ring even when occurrence-record writes fail.
+  RAM prevents duplicates during that boot; failed records retry every ten
+  seconds and expose storage errors. Reboot before a successful retry can repeat
+  the alarm. Alarm snapshots use schema 3 with no development-config migration.
 * Dedicated Timezone settings with grouped city choices, a non-mutating
   device-time preview, and save without reboot. The device timezone supplies
   alarm scheduling and the default for clock bindings without an explicit

@@ -26,5 +26,10 @@
   </div>
   <details class="editor-group" open><summary>On ring</summary><div class="editor-group-body" id="alarm-ring-editors"></div></details>
   <details class="editor-group" open><summary>On stop</summary><div class="editor-group-body" id="alarm-stop-editors"></div></details>
+  <div class="form-group">
+    <label class="form-label" for="alarm-lateness-minutes">Maximum lateness for all alarms (minutes)</label>
+    <input type="number" class="form-control" id="alarm-lateness-minutes" name="lateness_minutes" min="0" max="10080" step="1" value="360" aria-describedby="alarm-lateness-description" required>
+    <div id="alarm-lateness-description" class="form-text">How long after its scheduled time an alarm may still ring, including after power loss or reboot. The device waits for time synchronization and rings only the latest eligible missed occurrence, not a backlog. Default: 360 minutes (6 hours). Set to 0 to allow only on-time delivery. This does not restore snoozed alarms after reboot.</div>
+  </div>
   <div class="save-bar"><button type="submit" class="btn btn-primary btn-sm" id="alarm-save">Save Alarm</button></div>
 </form>

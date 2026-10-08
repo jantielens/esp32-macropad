@@ -6,6 +6,7 @@
 
 #if HAS_AUDIO
 typedef bool (*AudioPlaybackGuard)(uint32_t generation);
+typedef void (*AudioPlaybackFailure)(AudioPlaybackGuard guard, uint32_t generation);
 
 // Initialize the board-selected audio output driver, I2S TX channel, and background audio task.
 // I2C-attached codec boards must call this after Wire.begin() (e.g. after
@@ -27,7 +28,8 @@ uint8_t audio_get_volume();
 //                  0 = use current device volume.
 void audio_beep(const char* pattern, uint8_t volume_override);
 bool audio_submit_tone(const char* pattern, uint8_t volume_override, bool loop,
-                       AudioPlaybackGuard guard = nullptr, uint32_t generation = 0);
+                       AudioPlaybackGuard guard = nullptr, uint32_t generation = 0,
+                       AudioPlaybackFailure failure = nullptr);
 
 // Start looping a beep pattern until audio_stop() is called.
 // The pattern should include a trailing silence gap to control repeat cadence.
@@ -73,7 +75,7 @@ void audio_log_starvation(const AudioStarvationStats& stats);
 void audio_play_sound(const char* filename, uint8_t volume_override);
 bool audio_submit_sound(const char* filename, uint8_t volume_override,
                         AudioPlaybackGuard guard = nullptr, uint32_t generation = 0,
-                        bool loop = false);
+                        bool loop = false, AudioPlaybackFailure failure = nullptr);
 
 // Guard invoked on the audio task immediately before a memory-backed MP3 starts.
 // The buffer ownership transfers on every call and is released by the audio task.

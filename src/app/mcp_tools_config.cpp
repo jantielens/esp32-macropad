@@ -1105,11 +1105,12 @@ void mcp_config_capabilities(JsonObject& out) {
     alarm["control_tool"] = "alarm_control";
     alarm["device_configuration"] = "alarm actions: set_time, adjust_minutes (bindable string including {step}), enable/disable/toggle, weekday_enable/disable/toggle; configuration targets slot 1; read-only alarm bindings advertise settings, weekdays, next occurrence, countdowns and command feedback";
     alarm["command_queue"] = "four queued commands, one per main-loop iteration, no coalescing; settings apply live, saved after 10 seconds without substantive changes; no-ops do not extend the delay; save_state pending/saved/failed reports durability; failures retain live settings and retry after 10 seconds; explicit config saves and occurrence records persist immediately";
-    alarm["grace_seconds"] = 300;
+    alarm["grace_seconds"] = alarm_snapshot().lateness_minutes * 60U;
+    alarm["recovery"] = "device-wide lateness_minutes (0-10080, default 360); shared startup/live window, inclusive; zero allows on-time only; current-boot synchronized time required; latest eligible occurrence only; edits and timezone changes exclude past occurrences; no session restoration";
     alarm["weekdays"] = "bit mask: Sunday=1, Monday=2, ... Saturday=64; selected days repeat weekly; zero rings once at the next local time, then disables; snooze remains available in that session";
     alarm["hooks"] = "up to three explicitly synchronous actions per on_ring/on_stop; attempt every action; hooks snapshot per session";
-    alarm["config"] = "slot 1: enabled, hour (0-23), minute (0-59), weekdays (0-127), snooze_minutes and auto_dismiss_minutes (1-1440), on_ring and on_stop arrays";
-    alarm["persistence"] = "two checksummed filesystem snapshots; config + handled history + fixed one-shot epoch; no reboot catch-up; weekly history-write failure still rings; one-shot consumption must be durable before ringing";
+    alarm["config"] = "root lateness_minutes (0-10080, default 360); slot 1: enabled, hour (0-23), minute (0-59), weekdays (0-127), snooze_minutes and auto_dismiss_minutes (1-1440), on_ring and on_stop arrays";
+    alarm["persistence"] = "two checksummed filesystem snapshots; config + handled history + fixed one-shot epoch + eligibility fence and timezone; weekly and one-shot record-write failures still ring with RAM duplicate prevention, storage_error and 10-second retries; reboot before a successful retry may duplicate a ring";
     alarm["one_shot"] = "target survives reboot and timezone changes; status exposes enabled, once_epoch and once_local; missed occurrences disable, never roll forward; enable and save to rearm";
 #endif
     JsonObject keyboard = out.createNestedObject("keyboard");

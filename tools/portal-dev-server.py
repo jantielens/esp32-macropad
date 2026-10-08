@@ -60,12 +60,12 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.scenario = scenario
     server.mock_screen = "pad_0"
     server.mock_icons = {}
-    server.mock_alarms = {"1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
+    server.mock_alarms = {"lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
                                "on_ring": [], "on_stop": []}}
     server.mock_alarm_status = {"active_id": 0, "state": "idle", "ready": True,
                                "ota_deferred": False, "storage_error": False, "hook_error": False,
-                               "enabled": False, "once_epoch": 0, "once_local": ""}
+                               "enabled": False, "once_epoch": 0, "once_local": "", "lateness_minutes": 360}
     for action in fixture["catalog"]:
         action["alarm_hook_allowed"] = action["type"] not in ("delay", "key", "gamepad", "camera_capture", "voice_assistant")
         if action["type"] == "sound_alert":
@@ -302,7 +302,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             if path == "/api/component/alarms/config":
                 slot = data.get("1", {})
                 allowed = {action["type"] for action in self.server.pad_fixture["catalog"] if action["alarm_hook_allowed"]}
-                if (set(data) != {"1"} or type(slot.get("enabled")) is not bool
+                if (set(data) != {"1", "lateness_minutes"} or type(data.get("lateness_minutes")) is not int
+                    or not 0 <= data["lateness_minutes"] <= 10080 or type(slot.get("enabled")) is not bool
                         or any(type(slot.get(key)) is not int or not minimum <= slot[key] <= maximum for key, minimum, maximum in
                                (("hour", 0, 23), ("minute", 0, 59), ("weekdays", 0, 127), ("snooze_minutes", 1, 1440), ("auto_dismiss_minutes", 1, 1440)))
                         or any(not isinstance(slot.get(key), list) or len(slot[key]) > 3
@@ -328,6 +329,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                                 self.server.mock_alarm_status.update(once_epoch=int(epoch), once_local=local)
                                 break
                 self.server.mock_alarms = data
+                self.server.mock_alarm_status["lateness_minutes"] = data["lateness_minutes"]
             elif path == "/api/component/alarms/snooze":
                 if self.server.mock_alarm_status["state"] == "ringing":
                     self.server.mock_alarm_status["state"] = "snoozed"

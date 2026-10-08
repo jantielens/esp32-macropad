@@ -19,10 +19,14 @@ static unsigned long monotonic_clock = 0;
 static bool ready = false;
 static bool ota = false;
 static uint32_t timezone_revision = 0;
+static const char* timezone_name = "UTC0";
 static std::vector<std::string> dispatched;
+static ActionResult dispatch_result = ACTION_FAILED;
 static size_t ota_after_dispatch = SIZE_MAX;
 static bool (*last_work_guard)(uint32_t) = nullptr;
 static uint32_t last_work_generation = 0;
+static bool (*cleanup_work_guard)(uint32_t) = nullptr;
+static uint32_t cleanup_work_generation = 0;
 static std::vector<std::string> diagnostics;
 void log_noop(const char* module, const char* format, ...) {
     if (strcmp(module, "Alarm")) return;
@@ -42,6 +46,7 @@ extern "C" time_t time(time_t* output) noexcept { if (output) *output = wall_clo
 extern "C" unsigned long millis() { return monotonic_clock; }
 bool time_service_ready() { return ready; }
 uint32_t time_service_generation() { return timezone_revision; }
+void time_service_get_timezone(char* output, size_t capacity) { strlcpy(output, timezone_name, capacity); }
 bool time_service_localtime(time_t epoch, struct tm* result) { return result && gmtime_r(&epoch, result); }
 bool time_service_format(time_t epoch, const char* format, const char*, char* output, size_t capacity) {
     struct tm local = {};
@@ -62,25 +67,102 @@ time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute, uint8_t
 time_t time_service_alarm_candidate(time_t now, uint8_t hour, uint8_t minute, uint8_t weekdays) {
     struct tm local = {};
     gmtime_r(&now, &local);
-    if (!(weekdays & (1U << local.tm_wday))) return 0;
-    return now - local.tm_hour * 3600 - local.tm_min * 60 - local.tm_sec + hour * 3600 + minute * 60;
+    const time_t target = now - local.tm_hour * 3600 - local.tm_min * 60 - local.tm_sec + hour * 3600 + minute * 60;
+    for (int offset = 0; offset >= -8; --offset) {
+        const time_t candidate = target + offset * 86400;
+        struct tm date = {};
+        gmtime_r(&candidate, &date);
+        if (candidate <= now && (weekdays & (1U << date.tm_wday))) return candidate;
+    }
+    return 0;
 }
 void storage_publish_usage(bool) {}
 bool ota_activity_is_active() { return ota; }
 ActionResult action_dispatch(const ButtonAction& action, const char* label, uint32_t) {
     dispatched.emplace_back(std::string(label) + ":" + action.type);
     if (dispatched.size() == ota_after_dispatch) ota = true;
-    return ACTION_FAILED;
+    return dispatch_result;
 }
 ActionResult action_dispatch_synchronous(const ButtonAction& action, const char* label,
                                          bool (*guard)(uint32_t), uint32_t generation) {
     last_work_guard = guard;
     last_work_generation = generation;
+    if (!strcmp(label, "Alarm stop")) {
+        cleanup_work_guard = guard;
+        cleanup_work_generation = generation;
+    }
     return action_dispatch(action, label, 0);
 }
 
 static bool save(const char* json) { return alarm_config_save_raw(reinterpret_cast<const uint8_t*>(json), strlen(json)); }
-static const char* config = R"({"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"type":"screen","target":"info"}],"on_stop":[]}})";
+static const char* config = R"({"lateness_minutes":5,"1":{"enabled":true,"hour":7,"minute":30,"weekdays":62,"snooze_minutes":9,"auto_dismiss_minutes":30,"on_ring":[{"type":"screen","target":"info"}],"on_stop":[]}})";
+
+static void test_audio_failure(bool once) {
+    storage_test_files.clear();
+    ready = true;
+    ota = false;
+    ota_after_dispatch = SIZE_MAX;
+    wall_clock = 1704094140;
+    monotonic_clock = 0;
+    alarm_manager_init();
+    dispatch_result = ACTION_COMPLETE;
+    std::string with_cleanup(config);
+    if (once) with_cleanup.replace(with_cleanup.find("\"weekdays\":62"), strlen("\"weekdays\":62"), "\"weekdays\":0");
+    with_cleanup.replace(with_cleanup.find("\"on_stop\":[]"), strlen("\"on_stop\":[]"),
+        "\"on_stop\":[{\"type\":\"screen\",\"target\":\"info\"}]");
+    assert(save(with_cleanup.c_str()));
+    dispatched.clear();
+    wall_clock += 60;
+    monotonic_clock += 60000;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 1);
+    assert(!alarm_snapshot().hook_error && (!once || !alarm_snapshot().enabled));
+    const auto ring_guard = last_work_guard;
+    const auto ring_generation = last_work_generation;
+    const auto saved_files = storage_test_files;
+    alarm_manager_report_audio_failure(nullptr, ring_generation);
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING);
+    alarm_manager_report_audio_failure(ring_guard, ring_generation);
+    ota = true;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING);
+    ota = false;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_SNOOZED && alarm_snapshot().hook_error);
+    assert(alarm_snapshot().snooze_remaining == 9 * 60 && dispatched.size() == 2);
+    assert(!ring_guard(ring_generation));
+    assert(has_log("Audio playback failed; automatically snoozed"));
+    alarm_manager_report_audio_failure(ring_guard, ring_generation);
+    monotonic_clock += 9 * 60000 - 1;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_SNOOZED && dispatched.size() == 2);
+    ++monotonic_clock;
+    wall_clock += 9 * 60;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 3);
+    assert(storage_test_files == saved_files);
+    assert(cleanup_work_guard(cleanup_work_generation));
+    alarm_manager_report_audio_failure(cleanup_work_guard, cleanup_work_generation);
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING);
+    alarm_manager_report_audio_failure(ring_guard, ring_generation);
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING);
+    alarm_manager_report_audio_failure(last_work_guard, last_work_generation);
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_SNOOZED && dispatched.size() == 4);
+    assert(alarm_command_submit("cancel"));
+    alarm_manager_loop();
+    monotonic_clock += 9 * 60000;
+    wall_clock += 9 * 60;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_IDLE && dispatched.size() == 4);
+    alarm_manager_init();
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_IDLE && dispatched.size() == 4);
+    dispatch_result = ACTION_FAILED;
+}
 
 static void test_once() {
     std::string once(config);
@@ -136,8 +218,8 @@ static void test_once() {
     wall_clock += 60;
     dispatched.clear();
     alarm_manager_loop();
-    assert(alarm_snapshot().enabled && alarm_snapshot().storage_error);
-    assert(alarm_snapshot().state == ALARM_IDLE && dispatched.empty());
+    assert(!alarm_snapshot().enabled && alarm_snapshot().storage_error);
+    assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 1);
     storage_test_write_limit = SIZE_MAX;
     ++wall_clock;
     alarm_manager_loop();
@@ -167,7 +249,7 @@ static void test_once() {
     alarm_manager_init();
     dispatched.clear();
     alarm_manager_loop();
-    assert(!alarm_snapshot().enabled && dispatched.empty());
+    assert(!alarm_snapshot().enabled && dispatched.size() == 1);
     storage_test_files.clear();
     ready = false;
     wall_clock = 1704094140;
@@ -209,6 +291,204 @@ static uint64_t persisted_generation() {
             newest = std::max(newest, document["generation"].as<uint64_t>());
     }
     return newest;
+}
+
+static void test_recovery() {
+    const time_t start = 1704094140;
+    std::string recovery_config(config);
+    recovery_config.replace(recovery_config.find("\"lateness_minutes\":5"), strlen("\"lateness_minutes\":5"), "\"lateness_minutes\":360");
+    auto prepare = [&] {
+        storage_test_files.clear();
+        storage_test_fail_open = false;
+        storage_test_write_limit = SIZE_MAX;
+        ready = true;
+        ota = false;
+        timezone_name = "UTC0";
+        wall_clock = start;
+        monotonic_clock = 0;
+        dispatched.clear();
+        alarm_manager_init();
+        assert(alarm_snapshot().lateness_minutes == 360);
+        assert(save(recovery_config.c_str()));
+    };
+    auto reboot = [&](time_t elapsed, bool synchronized) {
+        wall_clock = start + elapsed;
+        monotonic_clock = 0;
+        ready = synchronized;
+        alarm_manager_init();
+        alarm_manager_loop();
+    };
+    prepare();
+    std::string legacy(recovery_config);
+    legacy.erase(1, legacy.find("\"1\"") - 1);
+    assert(!save(legacy.c_str()));
+    std::string invalid(recovery_config);
+    invalid.replace(invalid.find("360"), 3, "10081");
+    assert(!save(invalid.c_str()));
+    invalid = recovery_config;
+    invalid.replace(invalid.find("360"), 3, "1.5");
+    assert(!save(invalid.c_str()));
+    reboot(60 + 21600, false);
+    assert(dispatched.empty());
+    ready = true;
+    alarm_manager_loop();
+    assert(alarm_snapshot().state == ALARM_RINGING && dispatched.size() == 1);
+    assert(alarm_command_submit("cancel"));
+    alarm_manager_loop();
+    reboot(60 + 21600, true);
+    assert(alarm_snapshot().state == ALARM_IDLE && dispatched.size() == 1);
+    wall_clock = start;
+    alarm_manager_loop();
+    wall_clock += 600;
+    alarm_manager_loop();
+    assert(dispatched.size() == 1);
+
+    prepare();
+    reboot(60 + 21601, true);
+    assert(alarm_snapshot().state == ALARM_IDLE && dispatched.empty());
+    prepare();
+    reboot(600, false);
+    wall_clock = start + 60 + 21601;
+    ready = true;
+    alarm_manager_loop();
+    assert(dispatched.empty());
+    prepare();
+    reboot(21 * 86400 + 600, true);
+    assert(dispatched.size() == 1);
+    alarm_manager_loop();
+    assert(dispatched.size() == 1);
+
+    prepare();
+    wall_clock += 600;
+    assert(alarm_command_submit("disable", 1));
+    alarm_manager_loop();
+    assert(alarm_command_submit("enable", 1));
+    alarm_manager_loop();
+    JsonDocument edited;
+    alarm_config_to_json(edited.to<JsonObject>());
+    std::string payload;
+    serializeJson(edited, payload);
+    assert(save(payload.c_str()));
+    reboot(601, true);
+    assert(dispatched.empty());
+
+    prepare();
+    ready = false;
+    assert(alarm_command_submit("adjust_minutes", 1, 1));
+    alarm_manager_loop();
+    alarm_config_to_json(edited.to<JsonObject>());
+    payload.clear();
+    serializeJson(edited, payload);
+    assert(save(payload.c_str()));
+    reboot(600, false);
+    ready = true;
+    alarm_manager_loop();
+    reboot(601, true);
+    assert(dispatched.empty());
+
+    prepare();
+    timezone_name = "CET-1";
+    reboot(600, true);
+    assert(dispatched.empty());
+    reboot(601, true);
+    assert(dispatched.empty());
+
+    prepare();
+    reboot(600, false);
+    storage_test_fail_open = true;
+    ready = true;
+    alarm_manager_loop();
+    assert(dispatched.size() == 1 && alarm_snapshot().storage_error && alarm_snapshot().save_pending);
+    alarm_manager_loop();
+    assert(dispatched.size() == 1);
+    storage_test_fail_open = false;
+    monotonic_clock += 10000;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().storage_error && !alarm_snapshot().save_pending);
+    reboot(601, true);
+    assert(dispatched.size() == 1);
+
+    prepare();
+    reboot(600, false);
+    storage_test_fail_open = true;
+    ready = true;
+    alarm_manager_loop();
+    assert(dispatched.size() == 1);
+    storage_test_fail_open = false;
+    reboot(601, true);
+    assert(dispatched.size() == 2);
+
+    prepare();
+    std::string on_time(recovery_config);
+    on_time.replace(on_time.find("360"), 3, "0");
+    assert(save(on_time.c_str()));
+    reboot(61, true);
+    assert(dispatched.empty());
+    prepare();
+    assert(save(on_time.c_str()));
+    reboot(60, true);
+    assert(dispatched.size() == 1);
+
+    prepare();
+    wall_clock += 600;
+    std::string wider(recovery_config);
+    wider.replace(wider.find("360"), 3, "720");
+    assert(save(wider.c_str()));
+    alarm_manager_loop();
+    assert(dispatched.size() == 1 && alarm_snapshot().lateness_minutes == 720);
+    assert(save(recovery_config.c_str()));
+    assert(alarm_snapshot().state == ALARM_RINGING);
+
+    prepare();
+    std::string once(recovery_config);
+    once.replace(once.find("\"weekdays\":62"), strlen("\"weekdays\":62"), "\"weekdays\":0");
+    assert(save(once.c_str()));
+    reboot(60 + 21600, false);
+    ready = true;
+    storage_test_fail_open = true;
+    alarm_manager_loop();
+    assert(dispatched.size() == 1 && !alarm_snapshot().enabled && alarm_snapshot().storage_error);
+    assert(alarm_snapshot().once_epoch == 0 && alarm_snapshot().state == ALARM_RINGING);
+    storage_test_fail_open = false;
+    monotonic_clock += 10000;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().storage_error);
+    reboot(60 + 21600, true);
+    assert(dispatched.size() == 1 && !alarm_snapshot().enabled);
+    prepare();
+    assert(save(once.c_str()));
+    reboot(60 + 21601, true);
+    assert(dispatched.empty() && !alarm_snapshot().enabled);
+
+    prepare();
+    ready = false;
+    assert(save(once.c_str()));
+    ready = true;
+    storage_test_fail_open = true;
+    alarm_manager_loop();
+    assert(alarm_snapshot().once_epoch == start + 60);
+    wall_clock = start + 60;
+    alarm_manager_loop();
+    assert(dispatched.size() == 1 && !alarm_snapshot().enabled && alarm_snapshot().storage_error);
+    storage_test_fail_open = false;
+    monotonic_clock += 10000;
+    alarm_manager_loop();
+    assert(!alarm_snapshot().storage_error);
+
+    prepare();
+    std::string long_window(recovery_config);
+    long_window.replace(long_window.find("360"), 3, "10080");
+    long_window.replace(long_window.find("\"weekdays\":62"), strlen("\"weekdays\":62"), "\"weekdays\":2");
+    assert(save(long_window.c_str()));
+    reboot(2 * 86400 + 600, true);
+    assert(dispatched.size() == 1);
+
+    storage_test_files.clear();
+    dispatched.clear();
+    diagnostics.clear();
+    ready = false;
+    wall_clock = start;
+    monotonic_clock = 0;
 }
 
 static void test_settings_debounce() {
@@ -339,6 +619,9 @@ static void test_settings_debounce() {
 }
 
 int main() {
+    test_audio_failure(false);
+    test_audio_failure(true);
+    test_recovery();
     test_settings_debounce();
     test_once();
     alarm_manager_init();
@@ -544,7 +827,7 @@ int main() {
     assert(diagnostics.size() == 2);
     ready = true;
     alarm_manager_loop();
-    assert(has_log("Time readiness=1") && has_log("blocked=arming-after-sync"));
+    assert(has_log("Time readiness=1") && has_log("blocked=rearmed"));
     wall_clock += 60;
     monotonic_clock += 60000;
     alarm_manager_loop();

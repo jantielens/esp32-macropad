@@ -8,6 +8,7 @@ const TimezoneEntry* time_service_timezones(size_t* count);
 bool time_service_set_timezone(const char* timezone);
 bool time_service_timezone_valid(const char* timezone);
 uint32_t time_service_generation();
+void time_service_get_timezone(char* output, size_t capacity);
 struct timeval;
 void time_service_start_ntp(void (*observer)(struct timeval*) = nullptr);
 void time_service_loop();

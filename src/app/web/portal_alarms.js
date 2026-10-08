@@ -24,7 +24,7 @@ function alarmConfigBuild() {
     var time = document.getElementById('alarm-time').value.split(':');
     var weekdays = 0;
     for (var day = 0; day < 7; day++) if (document.getElementById('alarm-day-' + day).checked) weekdays |= 1 << day;
-    return {'1': {
+    return {lateness_minutes: Number(document.getElementById('alarm-lateness-minutes').value), '1': {
         enabled: document.getElementById('alarm-enabled').checked,
         hour: Number(time[0]), minute: Number(time[1]), weekdays: weekdays,
         snooze_minutes: Number(document.getElementById('alarm-snooze-minutes').value),
@@ -62,8 +62,10 @@ window.init_alarms_fragment = async function() {
         actionEditorListRender('alarm-stop-editors', ALARM_STOP_PREFIXES, null, {actionOptions:{alarmHook:true}});
         var response = await fetch('/api/component/alarms/config');
         if (!response.ok) throw new Error('Alarm configuration unavailable');
-        var config = (await response.json())['1'];
+        var settings = await response.json();
+        var config = settings['1'];
         if (document.getElementById('alarm-config-form') !== form) return;
+        document.getElementById('alarm-lateness-minutes').value = settings.lateness_minutes;
         document.getElementById('alarm-enabled').checked = config.enabled;
         document.getElementById('alarm-time').value = String(config.hour).padStart(2, '0') + ':' + String(config.minute).padStart(2, '0');
         document.getElementById('alarm-snooze-minutes').value = config.snooze_minutes;

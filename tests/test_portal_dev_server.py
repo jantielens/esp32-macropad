@@ -71,6 +71,17 @@ class PortalDevServerTest(unittest.TestCase):
         status, alarm = self.request("/api/component/alarms/config")
         self.assertEqual(status, 200)
         self.assertFalse(alarm["1"]["enabled"])
+        self.assertEqual(alarm["lateness_minutes"], 360)
+        for minutes in (0, 360, 10080):
+            alarm["lateness_minutes"] = minutes
+            self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
+            self.assertEqual(self.request("/api/component/alarms/config")[1]["lateness_minutes"], minutes)
+            self.assertEqual(self.request("/api/component/alarms/status")[1]["lateness_minutes"], minutes)
+        for minutes in (-1, 10081, 1.5, True, "360"):
+            invalid = copy.deepcopy(alarm)
+            invalid["lateness_minutes"] = minutes
+            self.assertEqual(self.request("/api/component/alarms/config", "POST", invalid)[0], 400)
+        alarm["lateness_minutes"] = 360
         alarm["1"].update(enabled=True, hour=8, on_ring=[{"type": "sound_alert", "sound_alert_kind": "tone_loop"}])
         self.assertEqual(self.request("/api/component/alarms/config", "POST", alarm)[0], 200)
         self.assertEqual(self.request("/api/component/alarms/config")[1], alarm)
@@ -112,6 +123,7 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertNotIn('id="alarm-state"', fragment)
         self.assertIn('id="alarm-repeat-summary"', fragment)
         self.assertIn('id="alarm-once-target"', fragment)
+        self.assertIn('id="alarm-lateness-minutes"', fragment)
         self.assertNotIn("setTimeout", self.request("/portal_alarms.js", raw=True)[1])
 
     def test_alarm_authoring_metadata(self):

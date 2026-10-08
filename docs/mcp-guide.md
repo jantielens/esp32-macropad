@@ -259,13 +259,24 @@ Use `get_component_config` with `component: "alarms"` before a full-replacement
 `auto_dismiss_minutes`, `on_ring`, and `on_stop`. Hook arrays accept at most
 three available synchronous actions. Validation and persistence use the same
 manager as the portal; failed or identical saves do not dismiss an active ring.
+The configuration root also requires device-wide `lateness_minutes`: whole
+minutes from 0 to 10080, default 360. This one inclusive window covers startup
+recovery and live scheduling delays; zero permits only on-time delivery.
+`get_alarm_status` exposes the configured value, and `get_capabilities` reports
+the current `grace_seconds`. After current-boot time synchronization, only the
+latest eligible missed occurrence can ring. Persisted eligibility fences exclude
+occurrences before enabling, definition edits, or timezone changes. A
+lateness-only change preserves the session and fence. Sessions are never restored.
 Nonzero weekday masks repeat weekly. A zero mask rings once at the next valid
 local time and automatically disables, while snooze remains available within
 that session. Re-enable and save for another occurrence. Identical saves retain
 the target; changed enabled settings replace it. Reboot and timezone changes
 keep the saved instant; missed targets disable instead of moving to tomorrow.
-One-shot consumption must be saved before ringing; storage errors defer it
-within the grace period. Without synchronized time the target remains pending.
+Weekly and one-shot occurrence records are attempted before ringing, but storage
+errors do not suppress delivery. Failed writes report `storage_error` and retry
+after ten seconds; RAM prevents duplicates until reboot. Reboot before a
+successful retry can duplicate a ring. Without synchronized time a new one-shot
+target remains pending. Schema 3 snapshots have no migration from older development configs.
 
 `alarm_control` accepts `snooze`/`cancel` (default `alarm_id: 0`, active session)
 or configuration for slot 1 (default `alarm_id: 1`):

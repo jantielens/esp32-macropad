@@ -1,4 +1,5 @@
 #include "../src/app/time_service.h"
+#include "../src/app/alarm_clock_core.h"
 #include <cassert>
 #include <cstdio>
 #include <thread>
@@ -45,10 +46,23 @@ int main() {
     for (const char* value : valid) assert(time_service_timezone_valid(value));
     for (const char* value : invalid) assert(!time_service_timezone_valid(value));
     const time_t repeated = utc(2026, 10, 25, 0, 30);
+    AlarmClockCore recovery;
+    const time_t fold_now = utc(2026, 10, 25, 1, 30);
+    assert(recovery.occurrence_due(fold_now, true, time_service_alarm_candidate(fold_now, 2, 30, 1)));
+    recovery.handled_epoch = repeated;
+    assert(!recovery.occurrence_due(fold_now, true, time_service_alarm_candidate(fold_now, 2, 30, 1)));
+    recovery.handled_epoch = 0;
+    const time_t gap_now = utc(2026, 3, 29, 1, 30);
+    assert(!recovery.occurrence_due(gap_now, true, time_service_alarm_candidate(gap_now, 2, 30, 1)));
+    const time_t midnight_now = utc(2026, 10, 11, 22, 2);
+    assert(recovery.occurrence_due(midnight_now, true, time_service_alarm_candidate(midnight_now, 23, 0, 1)));
+    char configured_timezone[64];
+    time_service_get_timezone(configured_timezone, sizeof(configured_timezone));
+    assert(!strcmp(configured_timezone, "CET-1CEST,M3.5.0,M10.5.0/3"));
     assert(time_service_alarm_candidate(utc(2026, 10, 25, 1, 30), 2, 30, 1) == repeated);
-    assert(time_service_alarm_candidate(utc(2026, 3, 29, 1, 30), 2, 30, 1) == 0);
+    assert(time_service_alarm_candidate(utc(2026, 3, 29, 1, 30), 2, 30, 1) == utc(2026, 3, 22, 1, 30));
     assert(time_service_alarm_candidate(utc(2026, 10, 7, 5, 0), 7, 0, 1 << 3) == utc(2026, 10, 7, 5, 0));
-    assert(time_service_alarm_candidate(utc(2026, 10, 7, 5, 0), 7, 0, 1 << 4) == 0);
+    assert(time_service_alarm_candidate(utc(2026, 10, 7, 5, 0), 7, 0, 1 << 4) == utc(2026, 10, 1, 5, 0));
     assert(time_service_alarm_candidate(utc(2026, 10, 11, 22, 2), 0, 0, 1 << 1) == utc(2026, 10, 11, 22, 0));
     assert(time_service_alarm_next(utc(2026, 10, 7, 4, 59), 7, 0) == utc(2026, 10, 7, 5, 0));
     assert(time_service_alarm_next(utc(2026, 10, 7, 5, 0), 7, 0) == utc(2026, 10, 8, 5, 0));

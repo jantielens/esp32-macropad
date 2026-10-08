@@ -56,6 +56,10 @@ int main() {
     frame[2] = char(0x90);
     storage_test_files["/sounds/clip.mp3"] = frame + frame + frame;
     TestOutput output;
+    storage_test_fail_open = true;
+    assert(!sound_player_play(&output, "clip", &stopped, playback_guard, 7, true));
+    assert(output.frames == 0);
+    storage_test_fail_open = false;
     assert(sound_player_play(&output, "clip", &stopped, playback_guard, 7));
     const size_t clip_frames = output.frames;
     assert(clip_frames > 0);

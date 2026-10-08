@@ -259,10 +259,19 @@ use the existing default beep. Alarm-enabled builds also register dedicated
 `alarm_tone` and `alarm_mp3` actions with fixed `tone_loop` and `mp3_loop` kinds.
 Looping MP3 playback rewinds the open file and resets decoding after each
 successful pass. It does not guarantee gapless playback. Empty or corrupt
-files, output failures, cancellation, and OTA end playback rather than retrying
-indefinitely.
+files, output failures, cancellation, and OTA end the worker's playback attempt.
 Stop clears queued sound and music work, ends tone overlays, and requests a
 music stop independently of command-queue capacity.
+
+Queue acceptance does not confirm successful playback. Alarm ring sound actions
+report submission, storage-claim, MP3 open/decode, and tone/MP3 output failures
+to the alarm manager. The manager sets `hook_error` and automatically snoozes
+using the session's configured duration. It runs On stop cleanup, then retries
+the retained On ring actions at the snooze deadline, including for a consumed
+one-shot. Repeated failures snooze again; no fallback tone is played. Cancel
+ends these retries. Failure reports from stale sessions, ordinary buttons,
+or On stop audio cannot snooze the current ring. OTA defers a pending failure
+transition; deliberate playback interruption is not reported as a failure.
 
 Synchronous alarm dispatch supplies a session-generation guard to tone, MP3,
 and music submissions. Workers check that guard before queued execution and at
@@ -279,6 +288,11 @@ while all audio work still honors OTA checkpoints.
 `audio.cpp` reports output starvation from the time represented by queued DMA
 frames. This metric identifies whether the output writer met its timing budget;
 it does not establish MP3 decode or resampler correctness.
+
+A failed MP3 open logs its path, an existence check, and the captured `errno`.
+An existing file that cannot be opened can indicate temporary filesystem or
+resource pressure; an error value of zero means the backend supplied no errno.
+File access and this diagnostic remain on the internal-stack audio worker.
 
 Only nonzero starvation is reported, at WARN. Resampler capacity clamps emit
 one initial warning and a per-playback count at close. Output drivers own I2S

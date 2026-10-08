@@ -63,6 +63,14 @@ static char device_timezone[64] = "UTC0";
 static std::atomic<uint32_t> timezone_generation{0};
 static std::atomic<bool> synchronized{false};
 
+void time_service_get_timezone(char* output, size_t capacity) {
+    std::lock_guard<std::mutex> lock(timezone_mutex);
+    if (output && capacity) {
+        strncpy(output, device_timezone, capacity - 1);
+        output[capacity - 1] = '\0';
+    }
+}
+
 const TimezoneEntry* time_service_timezones(size_t* count) {
     if (count) *count = sizeof(timezones) / sizeof(timezones[0]);
     return timezones;
@@ -222,8 +230,7 @@ time_t time_service_alarm_candidate(time_t now, uint8_t hour, uint8_t minute, ui
     std::lock_guard<std::mutex> lock(timezone_mutex);
     struct tm today = {};
     if (!localtime_r(&now, &today)) return 0;
-    time_t latest = 0;
-    for (int offset = -1; offset <= 0; ++offset) {
+    for (int offset = 0; offset >= -8; --offset) {
         struct tm date = today;
         date.tm_mday += offset;
         date.tm_hour = 12;
@@ -232,9 +239,9 @@ time_t time_service_alarm_candidate(time_t now, uint8_t hour, uint8_t minute, ui
         mktime(&date);
         if (!(weekdays & (1U << date.tm_wday))) continue;
         const time_t first = alarm_local_occurrence(date, hour, minute);
-        if (first && first <= now && first > latest) latest = first;
+        if (first && first <= now) return first;
     }
-    return latest;
+    return 0;
 }
 
 time_t time_service_alarm_next(time_t now, uint8_t hour, uint8_t minute, uint8_t weekdays) {

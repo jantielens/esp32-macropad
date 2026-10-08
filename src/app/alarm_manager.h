@@ -23,6 +23,7 @@ inline const char* alarm_command_validate(const char* command, uint8_t id, int v
 }
 
 struct AlarmDefinition {
+    uint16_t lateness_minutes = 360;
     bool enabled = false;
     uint8_t hour = 7;
     uint8_t minute = 0;
@@ -45,6 +46,7 @@ struct AlarmSnapshot {
     bool storage_error;
     bool hook_error;
     time_t once_epoch;
+    uint16_t lateness_minutes = 360;
     uint8_t weekdays = 0;
     uint16_t snooze_minutes = 9;
     uint16_t dismiss_minutes = 30;
@@ -72,6 +74,7 @@ const char* alarm_last_error();
 void alarm_config_to_json(JsonObject root);
 void alarm_status_to_json(JsonObject root);
 AlarmSnapshot alarm_snapshot();
+void alarm_manager_report_audio_failure(bool (*guard)(uint32_t), uint32_t generation);
 void alarm_command_report_error(const char* message);
 bool alarm_command_submit(const char* command, uint8_t id = 0, int value = 0, uint8_t day = 0);
 #endif

@@ -663,22 +663,36 @@ the selected duration (default nine minutes). **Cancel** ends ringing or snooze
 without disabling the weekly schedule. Ringing automatically ends after the
 configured timeout (default 30 minutes). Idle controls do nothing.
 
+If a ring sound cannot start or playback fails, the alarm automatically snoozes
+for its configured duration and reports an action failure. Stop actions run,
+then all ring actions run again when snooze ends. This also retries consumed
+one-shot alarms within their active session. Repeated failures snooze again;
+Cancel ends retries. No fallback sound is played, and these snoozed sessions
+are not restored after reboot.
+
 You can also configure time, weekdays, and enabled state from your own pad using
-**Alarm Control** actions, including Numeric Rocker `{step}` adjustments. Edits
-save immediately; bindings expose accepted values, countdowns, readiness, and
+**Alarm Control** actions, including Numeric Rocker `{step}` adjustments. Queued
+edits apply immediately and save after ten seconds without a substantive change;
+power loss before saving can lose them. Bindings expose accepted values, countdowns, readiness, and
 save failures. Durations and ring/stop lists remain in this portal form. See
 [Alarm Actions](pad-editor-guide.md#alarm-actions) and
 [Alarm Binding](pad-editor-guide.md#alarm-binding) for the authoring fields.
 
 The alarm waits for an NTP synchronization during the current boot. Once synced,
-Wi-Fi loss does not stop its clock. Boot, first sync, enabling, and substantive
-edits start checking from the next full minute; missed alarms before that point
-are not replayed. Live delays allow at most five minutes of lateness. During a
+Wi-Fi loss does not stop its clock. **Maximum lateness for all alarms** covers
+both startup recovery and live delays. It defaults to **360 minutes (six hours)**
+and accepts 0-10080 whole minutes. Zero permits only on-time delivery. An alarm
+can ring at the exact lateness boundary, but not after it. Lateness is measured
+when reliable time becomes available, not when power is restored. Only the latest
+eligible occurrence rings; several days off do not replay a backlog.
+Enabling, substantive definition edits, and timezone changes exclude earlier
+occurrences using a saved next-full-minute eligibility fence. Edits without
+synchronized time arm from the next minute after synchronization. During a
 daylight-saving transition, a repeated local time rings only on its first
 occurrence, and a nonexistent local time is skipped.
 
 A one-shot target is persisted, so reboot does not move it to another day.
-If it is missed at boot or more than five minutes late, it disables without
+If it is within the lateness window at boot, it can ring once. Outside that window, it disables without
 ringing or rescheduling. Saving changed enabled one-shot settings chooses a new
 next occurrence; an identical save keeps the existing target. Saving before
 time synchronization leaves the target pending until the clock is ready.
@@ -689,10 +703,14 @@ A successful definition or timezone change dismisses an active alarm using its
 old stop actions. Identical saves, rejected input, and failed saves preserve the
 session. Definitions and handled-occurrence history use the primary filesystem,
 not NVS. Formatting or losing that filesystem can lose the alarm. Storage and
-action failures appear in the alarm status. A weekly history-save failure still
-allows the current ring, but a later reboot can repeat an occurrence. A one-shot
-must record consumption before ringing; failed writes defer it within the
-five-minute grace instead of risking another scheduled ring after reboot.
+action failures appear in the alarm status. Weekly and one-shot alarms still ring
+if saving their occurrence record fails: delivery takes priority over preventing
+a possible duplicate. RAM prevents another scheduled ring during the current
+boot; failed saves retry every ten seconds, except during firmware updates.
+A reboot before a successful retry can repeat an occurrence. Changing only
+maximum lateness preserves an active session and the existing eligibility fence.
+Older development alarm snapshots are not migrated; reconfigure alarms after
+upgrading from the previous snapshot format.
 
 ### Timers
 

@@ -1382,16 +1382,17 @@ The alarm manager does not hold a display lock around its hook list.
 
 | Method | Endpoint | Contract |
 |--------|----------|----------|
-| GET | `/api/component/alarms/config` | Normalized ID-keyed definition |
+| GET | `/api/component/alarms/config` | Device-wide lateness setting and normalized ID-keyed definition |
 | POST | `/api/component/alarms/config` | Validated, durable full replacement; maximum 8192 bytes |
 | GET | `/api/component/alarms/status` | Configuration values, state/readiness/failures, one-shot target, next occurrence/countdowns, queue acknowledgement |
 | POST | `/api/component/alarms/snooze` | Queue snooze for a ringing session |
 | POST | `/api/component/alarms/cancel` | Queue cancellation without disabling the schedule |
 
-Phase 1 accepts exactly slot `1`:
+Phase 3 accepts exactly slot `1` and a device-wide lateness setting:
 
 ```json
 {
+  "lateness_minutes": 360,
   "1": {
     "enabled": false,
     "hour": 7,
@@ -1464,16 +1465,35 @@ hook editing on the device.
 
 The shared time service requires current-boot SNTP synchronization. Local-time
 conversion and explicit binding timezone overrides share a mutex around `TZ`.
-Startup, first synchronization, enabling, and substantive edits establish a
-next-full-minute fence. Live occurrences have an inclusive 300-second grace;
-only the newest eligible occurrence is considered. The first DST fold is used,
+The alarm configuration root requires device-wide `lateness_minutes` (0-10080
+whole minutes, default 360), alongside slot `"1"`. The setting is stored with
+alarm snapshots, not NVS, and exposed by the portal, component-config REST/MCP
+paths, and alarm status. Zero permits only on-time scheduled delivery.
+Startup retains the saved eligibility fence and reconciles after current-boot
+synchronization. Enabling and substantive edits establish a next-full-minute
+fence, or a pending fence when time is unavailable. The resolved fence is saved
+when synchronization arrives. Snapshot timezone mismatches and runtime timezone
+changes establish a new fence. A lateness-only edit preserves the fence and
+session. Only the newest eligible occurrence within the inclusive configured
+window is considered, across startup, clock corrections, and live delays.
+Calendar lookup covers the bounded seven-day window, stopping at the latest
+valid occurrence; it does not replay a backlog. The first DST fold is used,
 gaps are skipped, and handled history survives edits and backward clock changes.
 Snooze and auto-dismiss use monotonic time; each ring start resets its timeout.
-An overdue snooze beyond the same grace expires rather than ringing late.
+An overdue snooze beyond five minutes expires rather than ringing late; this
+session rule is separate from scheduled-occurrence recovery.
+
+Ring audio submission or playback failures set `hook_error` and automatically
+snooze for the session's configured duration. Stop hooks run before the retained
+ring hooks retry at the snooze deadline. Failures in stop hooks or stale audio
+work cannot snooze a current ring. Repeated failures repeat this session retry;
+Cancel ends it. These retries also work for consumed one-shots, do not consume
+another occurrence, and do not survive reboot.
 
 Persistence uses `Storage` and alternating `/config/alarm_a.json` and
 `/config/alarm_b.json` snapshots. Each bounded envelope includes schema version,
-generation, config, handled epoch, one-shot epoch, and CRC32. Schema 2 has no
+generation, config, handled epoch, one-shot epoch, eligibility fence, timezone,
+and CRC32. Schema 3 has no
 migration from earlier development snapshots. The inactive file is written,
 flushed, closed, and re-read before becoming active. A failed config save does
 not apply changes. An invalid newer snapshot falls back to the valid older one
@@ -1486,13 +1506,16 @@ one. Reboot and timezone changes retain the instant. A target before the arming
 fence or outside the grace is disabled, not rolled forward. Initial triggering
 atomically records history, clears the target, and disables the definition
 before dispatch; snooze uses the retained session and does not consume again.
-Consumption-write failures suppress ringing and retry within the grace.
+Consumption-write failures do not suppress ringing: the target is consumed in
+RAM and the failed snapshot is retried after ten seconds. Unresolved one-shot
+targets also remain scheduled in RAM if their initial checkpoint fails.
 
 Weekly handled-occurrence history is saved before ring dispatch. If that save
-fails, the weekly alarm still rings with RAM deduplication and degraded-storage
-status, without per-tick retries. Exactly-once external effects cannot be guaranteed: a crash
+fails, the alarm still rings with RAM deduplication and degraded-storage status.
+Failed occurrence records share the ten-second persistence retry path, not
+per-tick writes. Exactly-once external effects cannot be guaranteed: a crash
 after a successful history save but before dispatch can lose a ring, while a
-failed weekly history save followed by reboot can duplicate one. Filesystem loss is
+failed weekly or one-shot history save followed by reboot can duplicate one. Filesystem loss is
 not recovered from NVS or another medium.
 
 OTA defers hooks and persistent writes. Interrupted hook lists retain their

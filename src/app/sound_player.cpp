@@ -8,6 +8,7 @@
 #include "audio_output_driver.h"
 #include "storage.h"
 #include <esp_heap_caps.h>
+#include <errno.h>
 #include <string.h>
 #include "log_manager.h"
 #include "sound_store.h"
@@ -272,9 +273,11 @@ SoundPlayer* sound_player_begin_path(AudioOutputDriver* output_driver, const cha
                                      void* transform_context) {
     if (!output_driver || !path || !path[0]) return nullptr;
 
+    errno = 0;
     File file = Storage.open(path, "r");
     if (!file) {
-        LOGW(TAG, "File not found: %s", path);
+        const int open_error = errno;
+        LOGW(TAG, "Cannot open MP3: %s (exists=%u errno=%d)", path, unsigned(Storage.exists(path)), open_error);
         return nullptr;
     }
 
