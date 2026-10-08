@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-07
+ms.date: 2026-10-08
 ms.topic: reference
 ---
 
@@ -65,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Mix configured tap, long-press, rocker, pad, and swipe feedback tones over
+  Loop Tone and Loop MP3 without stopping or restarting the alarm. Protect
+  queued loops too; rapid feedback replaces only the previous feedback tone.
+  Reserve PCM headroom while feedback plays and clear it on cancellation,
+  replacement, playback failure, or OTA. Explicit sound actions remain replacing
+  commands; feedback remains tone-only.
 * Restore JC3248W535's full Screen Saver settings, including the enable
   checkbox and configurable Fade In/Fade Out. Keep its combined display/touch
   controller awake while fading the backlight off, without applying the legacy

@@ -27,6 +27,7 @@ uint8_t audio_get_volume();
 // volume_override: 1-100 = use this volume for this beep only (restores after).
 //                  0 = use current device volume.
 void audio_beep(const char* pattern, uint8_t volume_override);
+void audio_feedback(const char* pattern);
 bool audio_submit_tone(const char* pattern, uint8_t volume_override, bool loop,
                        AudioPlaybackGuard guard = nullptr, uint32_t generation = 0,
                        AudioPlaybackFailure failure = nullptr);

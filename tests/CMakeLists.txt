@@ -263,6 +263,20 @@ add_host_legacy_test(test_tone_alert_overlay
     LIBRARIES m
 )
 
+set(AUDIO_WORKER_SOURCE "${PROJECT_SOURCE_DIR}/src/app/audio.cpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${AUDIO_WORKER_SOURCE}")
+file(READ "${AUDIO_WORKER_SOURCE}" AUDIO_WORKER_SOURCE_TEXT)
+string(REGEX REPLACE "#include[^\n]*" "" AUDIO_WORKER_SOURCE_TEXT "${AUDIO_WORKER_SOURCE_TEXT}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/audio_worker_under_test.inc" "${AUDIO_WORKER_SOURCE_TEXT}")
+add_host_legacy_test(test_audio_loop_feedback
+    SOURCES test_audio_loop_feedback.cpp
+    INCLUDES ${CMAKE_CURRENT_BINARY_DIR}
+    DEFINITIONS HAS_AUDIO=1 HAS_SOUND_PLAYER=0 HAS_MUSIC_ANALYSIS=0 AUDIO_SAMPLE_RATE=48000
+        AUDIO_DMA_DESC_NUM=6 AUDIO_DMA_FRAME_NUM=240 AUDIO_TASK_STACK_SIZE=4096
+    OPTIONS -Wno-unused-parameter -Wno-unused-variable
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES m)
+
 add_host_legacy_test(test_key_sequence
     SOURCES test_key_sequence.cpp ${PROJECT_SOURCE_DIR}/src/app/key_sequence.cpp
         ${PROJECT_SOURCE_DIR}/src/app/key_sequence_executor.cpp

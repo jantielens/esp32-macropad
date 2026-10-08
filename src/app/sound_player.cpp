@@ -423,11 +423,12 @@ bool sound_player_get_timing(const SoundPlayer* player, uint64_t* total_us,
 }
 
 bool sound_player_play(AudioOutputDriver* output_driver, const char* filename,
-                       volatile bool* stop_flag, bool (*guard)(uint32_t), uint32_t generation, bool loop) {
+                       volatile bool* stop_flag, bool (*guard)(uint32_t), uint32_t generation, bool loop,
+                       SoundPlayerPcmTransform transform, void* transform_context) {
     if (!filename || !filename[0]) return false;
     char path[48];
     sound_store_path(filename, path, sizeof(path));
-    SoundPlayer* player = sound_player_begin_path(output_driver, path);
+    SoundPlayer* player = sound_player_begin_path(output_driver, path, transform, transform_context);
     if (!player) return false;
     SoundPlayerStepResult result = SOUND_PLAYER_STEP_PLAYING;
     uint64_t iteration_start_frames = player->elapsed_output_frames;

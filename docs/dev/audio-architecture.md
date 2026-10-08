@@ -263,6 +263,28 @@ files, output failures, cancellation, and OTA end the worker's playback attempt.
 Stop clears queued sound and music work, ends tone overlays, and requests a
 music stop independently of command-queue capacity.
 
+Configured tap, long-press, rocker, pad, and swipe feedback uses
+`audio_feedback()`. While a tone or MP3 loop is queued or playing, feedback
+goes into a separate latest-wins request slot rather than replacing the loop
+or flushing its command. The audio worker consumes this slot at PCM boundaries
+and owns a separate one-shot tone overlay. Tone playback mixes it into both
+tone and silence chunks; looping MP3 playback uses the decoder's existing PCM
+transform after resampling. A looping tone overlay on Music also retains its
+own state while feedback plays.
+
+Feedback uses one-quarter PCM gain and reduces primary PCM to three-quarters
+only for samples where feedback is active, leaving headroom without changing
+the output driver's volume. During standalone alarm playback, feedback follows
+the alarm's effective volume, including an override. No extra decoder, audio
+task, or file is allocated. Pending feedback belongs to its loop command;
+replacement, stop, session cancellation, playback failure, and OTA discard it
+without affecting feedback queued for a newer loop.
+
+Without a protected loop, feedback retains the normal one-shot tone behavior,
+including the existing overlay on active Music. Explicit tone, MP3, and speech
+commands remain replacing commands. Configured feedback accepts tone patterns,
+not MP3 files; this is not a general multi-source audio mixer.
+
 Queue acceptance does not confirm successful playback. Alarm ring sound actions
 report submission, storage-claim, MP3 open/decode, and tone/MP3 output failures
 to the alarm manager. The manager sets `hook_error` and automatically snoozes

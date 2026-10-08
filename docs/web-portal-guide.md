@@ -407,6 +407,12 @@ alert-sound files, and the Music Library.
 
 Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Sound Alert action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
+Configured feedback tones mix over active Loop Tone and Loop MP3 actions
+without interrupting them. Rapid taps replace only the previous feedback tone.
+While a standalone alarm loop plays, feedback follows its effective volume,
+including an alarm volume override. Explicit sound actions can still replace
+the loop. Feedback patterns do not accept MP3 files.
+
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.
 
 ### Voice Assistant

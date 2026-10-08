@@ -680,6 +680,11 @@ uploaded sound file. Both allow a volume override. Pair the ring hook with
 **Sound alert > Stop Audio** in the stop list. MP3 repetition is not guaranteed
 to be gapless and stops on cancellation, OTA, or playback failure.
 
+Configured tap and long-press feedback tones mix over both loop actions without
+stopping or restarting them, including during a tone pattern's silent gaps.
+Rapid feedback replaces only the previous feedback tone. Explicit sound actions
+can still replace a loop; feedback does not support MP3 files.
+
 Regular one-shot tones, MP3 playback, and Stop Audio remain under **Audio**.
 Existing `sound_alert` actions with `tone_loop` remain valid and appear as Loop
 Tone in the editor. Alarm Control keeps its persisted `alarm` type.
