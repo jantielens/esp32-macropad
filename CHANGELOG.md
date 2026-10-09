@@ -14,51 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-10-09
+
 ### Added
 
-* Firmware footprint reports from existing linker maps, without additional
-  firmware builds. A unified visual report shows full-flash partition layout,
-  app-slot usage and projected headroom, ranked subsystem attribution, static
+* Searchable Binding reference in the pad editor, built from the firmware's
+  binding registry so it lists only bindings available on the device. Each scheme
+  documents its parameters, keys, and examples; the Format strings guide lists
+  common number, clock, and duration formats, and `expr` lists its operators and
+  `threshold()`. Copy and Insert actions put tokens into the field the help was
+  opened from. `GET /api/bindings?docs=1` and the MCP manifest serve the same docs.
+* Firmware footprint view in the installer, with per-board links beside Enabled
+  features and downloadable release reports. Reports show full-flash partition
+  layout, app-slot usage and projected headroom, subsystem attribution, static
   variable RAM, and searchable owning flags. BLE HID, USB HID, shared HID, and
-  the Bluetooth stack have separate rows. Attribution is not guaranteed savings
-  from disabling a feature; flash capacity and artifact limitations are explicit.
-* Per-board footprint JSON and job summaries for PR, manual, and release builds,
-  plus a combined downloadable report ZIP and JSON that list missing boards.
-  Releases attach both files, and stable GitHub Pages deployments add a Footprint
-  view. USB-flash cards link directly to their board's report beside Enabled
-  features when data is available; older releases retain the installer without
-  report links.
+  the Bluetooth stack have separate rows. Reports use existing linker maps
+  without additional builds; PR, manual, and release builds produce per-board
+  JSON and job summaries, plus a combined report ZIP and JSON listing missing
+  boards. Attribution is not guaranteed savings from disabling a feature; flash
+  capacity and artifact limitations are explicit. Older releases retain the
+  installer without report links.
 
 ### Changed
 
-* Disable alarms on JC3248W535, JC3636W518, and JC3636W518 SD to preserve
-  internal RAM. USB HID and native extension support remain enabled.
-* Prefer PSRAM for ordinary allocations larger than 512 bytes on classic ESP32
-  and ESP32-S3 boards with PSRAM, including Inkplate builds, to preserve internal
-  RAM headroom. Other targets and boards without PSRAM retain the SDK allocation
-  policy; DMA-specific allocations and task-stack policy are unchanged.
-* The pad editor's binding help is now a searchable Binding reference built from
-  the firmware's binding registry, so it lists only bindings available on the
-  device and stays current with the code. Each scheme documents its parameters,
-  keys, and examples; the Format strings guide lists common number, clock, and
-  duration formats, and `expr` lists its operators and `threshold()`. Copy and
-  Insert actions put tokens into the field the help was opened from.
-  `GET /api/bindings?docs=1` and the MCP manifest serve the same docs; the MCP
-  `health_keys` list moved into the `health` scheme's `key_docs`.
-* The `mqtt` binding scheme registers on every MQTT display build, so pads and
-  the reference recognize it before a broker is configured; its tokens show
-  their fallback until values arrive.
-* `[meter:...]` and `[print:...]` bindings accept only a key. The portal
-  previously accepted a format parameter that the device rendered as an error.
-* Raise the binding scheme limit from 16 to 24 so device classes with several
-  schemes cannot exhaust it.
-* Require new, renamed, and removed feature flags to have maintained firmware
-  footprint classification or a reasoned exclusion, enforced by focused tests
-  and documented in the developer and agent checklists.
-* Upgrade the ESP32 Arduino core from 3.3.7 to 3.3.12, bundling ESP-Hosted
-  2.12.13 on ESP32-P4 boards. The updated transport handles SDIO RX/TX buffer
-  allocation failures without the previous assertions and includes recovery
-  fixes for dropped RX reads.
 * Color picker popover: the color-or-expression box now has an **fx** binding-help
   badge, a live preview swatch, and inline validation of colors and bindings;
   **Apply** stays disabled until the value is valid, and `#RGB` expands to
@@ -72,6 +50,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mode, hiding expression controls and rejecting bindings. Binding-capable widget
   colors have **fx** hints, including compact sparkline line colors. Waveform hints
   identify its 11-character binding limit and creation-time color resolution.
+* Disable alarms on JC3248W535, JC3636W518, and JC3636W518 SD to preserve
+  internal RAM. USB HID and native extension support remain enabled.
+* Prefer PSRAM for ordinary allocations larger than 512 bytes on classic ESP32
+  and ESP32-S3 boards with PSRAM, including Inkplate builds, to preserve internal
+  RAM headroom. Other targets and boards without PSRAM retain the SDK allocation
+  policy; DMA-specific allocations and task-stack policy are unchanged.
+* Move the MCP manifest's `health_keys` list into the `health` scheme's `key_docs`.
+* The `mqtt` binding scheme registers on every MQTT display build, so pads and
+  the reference recognize it before a broker is configured; its tokens show
+  their fallback until values arrive.
+* `[meter:...]` and `[print:...]` bindings accept only a key. The portal
+  previously accepted a format parameter that the device rendered as an error.
+* Raise the binding scheme limit from 16 to 24 so device classes with several
+  schemes cannot exhaust it.
+* Require new, renamed, and removed feature flags to have maintained firmware
+  footprint classification or a reasoned exclusion, enforced by focused tests
+  and documented in the developer and agent checklists.
+* Upgrade the ESP32 Arduino core from 3.3.7 to 3.3.12, bundling ESP-Hosted
+  2.12.13 on ESP32-P4 boards. The updated transport handles SDIO RX/TX buffer
+  allocation failures without the previous assertions and includes recovery
+  fixes for dropped RX reads. Native extension builders and package checks use
+  the matching 2601 toolchains and support explicit toolchain-directory overrides.
 
 ### Fixed
 

@@ -470,7 +470,8 @@ bash tools/build-p4-extensions.sh
 ```
 
 **Requirements:** `setup.sh` must have installed the ESP32 Arduino platform.
-The scripts locate their bundled RISC-V and Xtensa compilers automatically; set
+The scripts default to the bundled RISC-V and Xtensa toolchains (2601) from
+ESP32 Arduino core 3.3.12; set
 `ESP32_P4_TOOLCHAIN_DIR`, `ESP32_S3_TOOLCHAIN_DIR`, or `ESP32_TOOLCHAIN_DIR` only
 to override a location.
 
