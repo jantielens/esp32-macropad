@@ -78,6 +78,20 @@ static const size_t   MAX_DOWNLOAD_SIZE = 2 * 1024 * 1024;  // 2 MB
 // Per-slot persistent HTTP connections (fetch task only — no mutex needed)
 // ============================================================================
 
+template <typename ClientType>
+class ImageFetchClient : public ClientType {
+public:
+    using ClientType::read;
+
+    int read() override {
+        int result = ClientType::read();
+        if (result < 0) {
+            vTaskDelay(1);
+        }
+        return result;
+    }
+};
+
 struct SlotConn {
     WiFiClient*       plain;
     WiFiClientSecure* tls;
@@ -133,12 +147,12 @@ static bool conn_ensure(int slot, const char* url, const char* user, const char*
     // Create client on first use
     if (!c.active) {
         if (need_https) {
-            c.tls = new (std::nothrow) WiFiClientSecure();
+            c.tls = new (std::nothrow) ImageFetchClient<WiFiClientSecure>();
             if (!c.tls) { LOGE(TAG, "OOM for WiFiClientSecure"); return false; }
             c.tls->setInsecure();
             c.tls->setTimeout(HTTP_TIMEOUT_MS);
         } else {
-            c.plain = new (std::nothrow) WiFiClient();
+            c.plain = new (std::nothrow) ImageFetchClient<WiFiClient>();
             if (!c.plain) { LOGE(TAG, "OOM for WiFiClient"); return false; }
             c.plain->setTimeout(HTTP_TIMEOUT_MS);
         }

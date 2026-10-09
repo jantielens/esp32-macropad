@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Image fetching now yields for one scheduler tick when HTTP or HTTPS
+  single-byte reads have no data, preventing idle-task starvation and watchdog
+  resets while waiting for stalled or incomplete response headers. Existing
+  request timeouts are unchanged.
 * Reduce editor color swatches to 36 px and align sparkline marker/reference rows,
   gauge color rows, and mobile Button Defaults controls. Sparkline marker and
   reference color fields have explicit Color labels beside their **fx** hints.
