@@ -52,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identify its 11-character binding limit and creation-time color resolution.
 * Disable alarms on JC3248W535, JC3636W518, and JC3636W518 SD to preserve
   internal RAM. USB HID and native extension support remain enabled.
+* Disable MCP and MQTT on ESP32-C3 with sensors to reduce OTA firmware size.
+  BLE telemetry, sensor support, Wi-Fi configuration, and OTA remain enabled.
 * Prefer PSRAM for ordinary allocations larger than 512 bytes on classic ESP32
   and ESP32-S3 boards with PSRAM, including Inkplate builds, to preserve internal
   RAM headroom. Other targets and boards without PSRAM retain the SDK allocation

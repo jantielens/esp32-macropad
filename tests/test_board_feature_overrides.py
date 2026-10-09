@@ -26,6 +26,26 @@ for board in ("jc3248w535", "jc3636w518", "jc3636w518-sd"):
     assert "extensions" in metadata["capabilities"]
     print(f"PASS: {board}")
 
+board = "esp32c3-withsensors"
+subprocess.run(
+    ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+     "-fsyntax-only", "-x", "c++", "-", "-I", str(root),
+     "-I", str(root / "src/boards" / board),
+     "-DCONFIG_IDF_TARGET_ESP32C3=1", "-DBOARD_HAS_OVERRIDE"],
+    input='''#include "src/app/board_config.h"
+static_assert(!HAS_MCP, "MCP must be disabled to preserve OTA flash space");
+static_assert(HAS_BLE, "BLE telemetry must remain enabled");
+static_assert(!HAS_MQTT, "MQTT must be disabled to preserve OTA flash space");
+static_assert(HAS_SENSOR_DUMMY, "Sample sensor must remain enabled");
+''',
+    text=True, check=True,
+)
+metadata = json.loads((root / "src/boards" / board / "metadata.json").read_text())
+assert "mcp" not in metadata["capabilities"]
+assert "bthome" in metadata["capabilities"]
+assert "mqtt" not in metadata["capabilities"]
+print(f"PASS: {board}")
+
 policy_source = '''#include "src/app/board_config.h"
 static_assert(MALLOC_PSRAM_THRESHOLD_BYTES == EXPECTED_THRESHOLD, "Unexpected malloc policy");
 '''

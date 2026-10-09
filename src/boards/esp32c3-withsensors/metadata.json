@@ -1,11 +1,11 @@
 {
   "device_class": "headless",
   "board_label": "ESP32-C3",
-  "description": "ESP32-C3 Super Mini — palm-sized RISC-V board without display. Intended as a BLE / Wi-Fi sensor node.",
+  "description": "ESP32-C3 Super Mini — palm-sized RISC-V board without display. Intended as a BTHome BLE sensor node with Wi-Fi configuration and OTA.",
   "chip_family": "ESP32-C3",
   "flash_mb": 4,
   "psram_mb": 0,
-  "capabilities": ["mcp", "bthome", "mqtt"],
+  "capabilities": ["bthome"],
   "wireless": {
     "wifi": true,
     "ble": true

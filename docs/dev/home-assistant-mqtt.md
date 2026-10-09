@@ -113,9 +113,13 @@ Tip:
 
 ### 3) Build and flash
 
+Use a board with `HAS_MQTT` enabled, such as the C6 sensor board below.
+The default `esp32c3-withsensors` build disables MQTT and MCP to preserve
+OTA flash space and uses BTHome BLE telemetry instead.
+
 ```bash
-./build.sh esp32c3-withsensors
-./upload.sh esp32c3-withsensors
+./build.sh firebeetle2-esp32c6-aht10
+./upload.sh firebeetle2-esp32c6-aht10
 ./monitor.sh
 ```
 
