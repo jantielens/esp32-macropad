@@ -55,6 +55,15 @@ struct HwButtonDef {
 #  endif
 #endif
 
+// Ordinary malloc PSRAM preference threshold; ESP32/S3 with PSRAM use 512 bytes, 0 preserves SDK policy.
+#ifndef MALLOC_PSRAM_THRESHOLD_BYTES
+#if HAS_PSRAM && (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3))
+#define MALLOC_PSRAM_THRESHOLD_BYTES 512
+#else
+#define MALLOC_PSRAM_THRESHOLD_BYTES 0
+#endif
+#endif
+
 // ============================================================================
 // Remote Diagnostics
 // Include remote log capture, portal assets, and retained-crash retrieval.

@@ -66,9 +66,59 @@ static BindingResolverStatus alarm_resolve(const char* key, char* output, size_t
     else return BINDING_RESOLVER_UNKNOWN;
     return BINDING_RESOLVER_RESOLVED;
 }
+static const BindingParamDoc kAlarmParams[] = {
+    {"key", "Alarm key, see below."},
+};
+static const BindingKeyDoc kAlarmKeyDocs[] = {
+    {"1_time", "Alarm time as HH:MM", "Schedule"},
+    {"1_hour", "Alarm hour 0-23", "Schedule"},
+    {"1_minute", "Alarm minute 0-59", "Schedule"},
+    {"1_minutes", "Minutes after midnight", "Schedule"},
+    {"1_enabled", "ON when the alarm is enabled", "Schedule"},
+    {"1_ready", "ON once the alarm is loaded and the clock has synced", "Schedule"},
+    {"1_repeat", "once or weekly", "Schedule"},
+    {"1_weekdays", "Repeat days as a bitmask, bit 0 = Sunday", "Schedule"},
+    {"1_day_#", "ON when weekday 0-6 (Sunday-Saturday) repeats", "Schedule"},
+    {"1_snooze_minutes", "Snooze length in minutes", "Schedule"},
+    {"1_auto_dismiss_minutes", "Minutes until a ringing alarm stops", "Schedule"},
+    {"1_once_epoch", "One-time alarm as epoch seconds; empty if none", "Schedule"},
+    {"1_once_local", "One-time alarm as YYYY-MM-DD HH:MM; empty if none", "Schedule"},
+    {"1_once_available", "ON when a one-time alarm is set", "Schedule"},
+    {"1_state", "idle, ringing, or snoozed", "Now"},
+    {"active_id", "1 while ringing or snoozed, else 0", "Now"},
+    {"1_next_epoch", "Next scheduled alarm as epoch seconds; empty if none", "Now"},
+    {"1_next_local", "Next scheduled alarm as YYYY-MM-DD HH:MM", "Now"},
+    {"1_next_seconds", "Seconds until the next scheduled alarm, excluding snooze", "Now"},
+    {"1_next_available", "ON when 1_next_seconds has a value", "Now"},
+    {"1_next_ring_seconds", "Seconds until the next ring, including snooze", "Now"},
+    {"1_next_ring_available", "ON when 1_next_ring_seconds has a value", "Now"},
+    {"1_snooze_seconds", "Seconds until snooze ends; empty unless snoozed", "Now"},
+    {"1_snooze_available", "ON while snoozed", "Now"},
+    {"1_dismiss_seconds", "Seconds until auto-dismiss; empty unless ringing", "Now"},
+    {"1_dismiss_available", "ON while ringing", "Now"},
+    {"1_save_state", "saved, pending, or failed", "Diagnostics"},
+    {"1_pending_commands", "Queued alarm commands", "Diagnostics"},
+    {"1_completed_commands", "Completed alarm commands", "Diagnostics"},
+    {"1_command_error", "ON when the last command failed", "Diagnostics"},
+    {"1_command_message", "Message from the last command", "Diagnostics"},
+    {"1_ota_deferred", "ON when an update waits for the alarm", "Diagnostics"},
+    {"1_storage_error", "ON when settings could not be saved", "Diagnostics"},
+    {"1_hook_error", "ON when an alarm action failed", "Diagnostics"},
+};
+static const BindingExampleDoc kAlarmExamples[] = {
+    {"[alarm:1_time]", "The configured alarm time."},
+    {"[expr:[alarm:1_state]==\"ringing\"?\"#dc2626\":\"#334155\"]", "Red while the alarm rings."},
+    {"[expr:[alarm:1_next_available]==\"ON\"?\"Next alarm set\":\"No alarm\"]", "Check availability before using a countdown."},
+};
+static const BindingSchemeDoc kAlarmDoc = {
+    "Device", "Read-only state of alarm 1.",
+    BINDING_DOC_LIST(kAlarmParams), BINDING_DOC_LIST(kAlarmKeyDocs), BINDING_DOC_LIST(kAlarmExamples),
+    nullptr, false, BINDING_DOC_NONE,
+    "Countdowns are empty, not 0, when unavailable; check the matching _available key.", nullptr,
+};
 void alarm_binding_init() {
     binding_template_register("alarm", alarm_resolve, nullptr,
-        {1, 1, 1, 1, BINDING_VALIDATION_STANDARD, false, alarm_key_count, alarm_key_at});
+        {1, 1, 1, 1, BINDING_VALIDATION_STANDARD, false, alarm_key_count, alarm_key_at, &kAlarmDoc});
 }
 #else
 void alarm_binding_init() {}

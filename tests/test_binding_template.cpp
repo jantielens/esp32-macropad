@@ -36,7 +36,7 @@ static uint8_t mock_key_count() { return 1; }
 static const char* mock_key_at(uint8_t index) { return index == 0 ? "any" : nullptr; }
 
 static const BindingSchemeSpec kMockFiniteSpec = {
-    1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false, mock_key_count, mock_key_at
+    1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false, mock_key_count, mock_key_at, nullptr
 };
 
 static void check_true(bool cond, const char* label) {
@@ -113,7 +113,7 @@ static void test_metadata_parameter_validation() {
     std::printf("--- metadata parameter validation ---\n");
 
     const BindingSchemeSpec expression_spec = {
-        1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr
+        1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr, nullptr
     };
     check_true(binding_template_register("expr", mock_big_resolve, mock_collect, expression_spec),
                "expression scheme registered");

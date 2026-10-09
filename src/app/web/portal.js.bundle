@@ -29,6 +29,7 @@ portal_dropdown.js
 
 # Shared libraries (used by config and pad editor)
 portal_binding_validator.js
+portal_binding_help.js
 
 # [chunk:actions HAS_DISPLAY]
 # Action editor + config actions UI: only reachable from pad/swipe/boot/timer

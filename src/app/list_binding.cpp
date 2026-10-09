@@ -108,10 +108,29 @@ static const char* list_binding_key_at(uint8_t index) {
 // Init
 // ============================================================================
 
+static const BindingParamDoc kListParams[] = {
+    {"key", "provider.selected for a List widget provider."},
+};
+
+static const BindingKeyDoc kListKeyDocs[] = {
+    {"*.selected", "Item id last selected in a List widget for that provider", nullptr},
+};
+
+static const BindingExampleDoc kListExamples[] = {
+    {"[list:pads.selected|none]", "Selected pad with a fallback before any selection."},
+};
+
+static const BindingSchemeDoc kListDoc = {
+    "Data", "The item selected in a List widget, per list provider.",
+    BINDING_DOC_LIST(kListParams), BINDING_DOC_LIST(kListKeyDocs), BINDING_DOC_LIST(kListExamples),
+    nullptr, false, BINDING_DOC_NONE,
+    "Available providers are listed under Keys.", nullptr,
+};
+
 void list_binding_init() {
     if (!binding_template_register("list", list_binding_resolve, list_binding_collect,
                                    {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    list_binding_key_count, list_binding_key_at})) {
+                                    list_binding_key_count, list_binding_key_at, &kListDoc})) {
         LOGE(TAG, "Failed to register list binding scheme");
     } else {
         LOGI(TAG, "List binding scheme registered");

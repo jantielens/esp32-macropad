@@ -169,6 +169,12 @@ static bool check_config_mode_button() {
 
 void setup()
 {
+	#if HAS_PSRAM && MALLOC_PSRAM_THRESHOLD_BYTES > 0
+	if (psramFound()) {
+		heap_caps_malloc_extmem_enable(MALLOC_PSRAM_THRESHOLD_BYTES);
+	}
+	#endif
+
 	dma2d_arbiter_init();
 
 	// Optional device-side history for sparklines (/api/health/history)

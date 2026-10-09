@@ -398,9 +398,12 @@ Active records are never evicted. When all four records are active or retained,
 
 - `get_capabilities` — manifest of widget types + fields, button schema, label-style
   DSL, binding schemes (incl. `[pad:name]` and `template_pad`), and grid limits.
-  Binding scheme names, parameter limits, and finite keys are serialized from the
-  same live registry used by `GET /api/bindings` for the portal, so the manifest
-  reflects the current board and device class without a separate MCP catalog.
+  Binding scheme names, parameter limits, finite keys, and per-scheme docs
+  (`summary`, `params`, `key_docs`, `examples`, optional `reference`, `note`, and
+  `status`) are serialized from the same live registry used by
+  `GET /api/bindings?docs=1` for the portal, so the manifest reflects the current
+  board and device class without a separate MCP catalog. Health key descriptions
+  are in the `health` scheme's `key_docs`.
   USB HID builds include `[health:usb_status]` with values `disabled`, `ready`,
   `connected`, `suspended`, and `error`. A connected status requires host
   enumeration and an awake USB session, not merely USB power.

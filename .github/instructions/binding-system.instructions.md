@@ -24,11 +24,15 @@ Mixed static + binding: `"Temperature: [mqtt:sensors/temp;$.value;%.1f]°C"`
 
 ## Scheme Registry
 
-- Max 16 schemes registered via `binding_template_register(scheme, resolver, collector, spec)`
+- Max 24 schemes registered via `binding_template_register(scheme, resolver, collector, spec)`
 - Each scheme provides a `resolver` function and optionally a `collect_topics` function
 - Core built-in schemes register only through `binding_builtin_schemes_init()` in `binding_builtin_schemes.cpp`. Add the scheme's header and guarded init call there; do not register core schemes directly from `app.ino`.
 - Device-class schemes register through their owning device class's `on_setup_late` hook. Do not add them to the built-in aggregate.
-- The MQTT scheme registers during `mqtt_sub_store_init()` because it owns its subscription store.
+- The MQTT scheme lives in `mqtt_binding.cpp` and registers with the built-ins on MQTT display builds, even before a broker is configured; values come from `mqtt_sub_store`, and its doc `status` reports a missing broker.
+
+## Scheme Documentation
+
+Every `BindingSchemeSpec` carries a `BindingSchemeDoc`: category, summary, one `BindingParamDoc` per `max_params`, `BindingKeyDoc` entries for every finite key (patterns: `#` digits, `*` an id), examples, and optional reference rows, note, and status callback. Keep docs next to the resolver and gate them with the same `#if` as the keys. `GET /api/bindings?docs=1`, the portal Binding reference, and the MCP manifest render it. The `test_binding_schema_*` profiles fail on missing docs, undocumented or stale keys, and examples that do not validate.
 
 ## Thread Safety
 
@@ -63,7 +67,7 @@ Mixed static + binding: `"Temperature: [mqtt:sensors/temp;$.value;%.1f]°C"`
 3. Call `binding_template_register("scheme_name", resolver, collector, spec)` from the scheme's init function
 4. Add that init function to `binding_builtin_schemes_init()` for a core scheme, or its owning `on_setup_late` hook for a device-class scheme
 5. Gate with appropriate `#if HAS_*` flags
-6. **Expose it to the MCP server** (so LLM pad-authoring clients can discover and use it): provide complete `BindingSchemeSpec` metadata. The shared registry serializes it for both MCP and the portal; `tests/test_mcp_scheme_parity.sh` enforces shared registry metadata for each registered scheme.
+6. **Document it**: provide complete `BindingSchemeSpec` metadata and a `BindingSchemeDoc`. The shared registry serializes both for MCP and the portal; `tests/test_mcp_scheme_parity.sh` and the host profiles enforce them.
 
 ## Key Files
 

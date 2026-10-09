@@ -57,10 +57,10 @@ static bool all_finite_keys_are_recognized() {
 
 int main() {
     const BindingSchemeSpec finite = {
-        1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false, finite_key_count, finite_key_at
+        1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false, finite_key_count, finite_key_at, nullptr
     };
     const BindingSchemeSpec free_form = {
-        1, 1, 1, -1, BINDING_VALIDATION_STRUCTURAL_ONLY, true, nullptr, nullptr
+        1, 1, 1, -1, BINDING_VALIDATION_STRUCTURAL_ONLY, true, nullptr, nullptr, nullptr
     };
 
     expect(binding_template_register("finite", resolve, nullptr, finite), "finite scheme registered");

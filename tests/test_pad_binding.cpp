@@ -589,8 +589,8 @@ int main() {
     printf("=== pad binding integration tests ===\n\n");
 
     // Register schemes (order: inner before outer)
-    const BindingSchemeSpec free_form = {1, 3, 2, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr};
-    const BindingSchemeSpec expression = {1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr};
+    const BindingSchemeSpec free_form = {1, 3, 2, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr, nullptr};
+    const BindingSchemeSpec expression = {1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr, nullptr};
     binding_template_register("mqtt",   mock_mqtt_resolve,   mock_mqtt_collect, free_form);
     binding_template_register("health", mock_health_resolve, mock_health_collect, free_form);
     binding_template_register("expr",   expr_test_resolve,   expr_test_collect, expression);

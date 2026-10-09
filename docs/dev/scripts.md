@@ -5,6 +5,198 @@ description: Build, upload, monitoring, and local portal development script refe
 
 This project includes several bash scripts to streamline ESP32 development workflow.
 
+## tools/firmware_size_report.py
+
+Attribute subsystem sizes from an existing GNU linker map without rebuilding
+firmware. This standalone spike does not change `build.sh`.
+
+```bash
+python3 tools/firmware_size_report.py build/esp32-p4-lcd4b/app.ino.map
+python3 tools/firmware_size_report.py build/esp32-p4-lcd4b/app.ino.map --json
+python3 tests/test_firmware_size_report.py
+```
+
+The table reports retained code, other data, compressed web assets, flash
+payload, static variable RAM, and percentage of attributed flash payload in
+KiB (1024 bytes). Rows are sorted by flash payload and followed by totals.
+The text table hides rows that are zero in every column; RAM-only rows remain
+visible. JSON keeps all subsystem rows and reports exact bytes, context, and
+contributing sections for inspection.
+Initialized variables count toward
+both flash and RAM; zero-initialized and uninitialized variables count only
+toward RAM. Code copied into executable RAM counts toward flash payload but
+not the static variable RAM column.
+
+The explicit module mapping in `FEATURES` and library mapping in `LIBRARIES`
+cover major application subsystems and shared infrastructure. Examples include
+MCP, alarms, MQTT, audio, display/touch, LVGL, custom fonts, image decoding,
+pads/screens, widgets, bindings, actions, storage, OTA, and native extensions.
+Wi-Fi/networking, TLS/cryptography, Arduino/ESP-IDF core, C/C++ runtime, and
+shared web assets have separate rows. Each section belongs to only one row;
+specific feature ownership takes priority over generic subsystem rules.
+There is no feature-level drill-down. Unmatched modules and libraries remain
+shared/unattributed. Names include owning flags where applicable, but the
+reporter does not detect flag state. A zero row in JSON means no bytes were
+attributed, not necessarily that the subsystem is disabled.
+
+### Feature flag coverage
+
+The existing test suite checks every `HAS_*`, `IS_*`, and `ALARM_ENABLED`
+definition in `src/app/board_config.h` and board overrides, including inherited
+overrides. It reuses the flag-reference parser, not firmware builds. A new flag
+must be present in a `FEATURES` label, mapped to an existing subsystem through
+`FLAG_SUBSYSTEMS`, or explicitly excluded in `EXCLUDED_FLAGS` with a reason.
+Mapped flags appear in compact report rows and can be searched or filtered.
+`HAS_PSRAM` is excluded because it controls memory capacity/allocation across
+subsystems rather than owning a distinct flash payload.
+
+When adding, renaming, or removing a flag, update the classifications and any
+affected module/library/asset ownership rules, then run:
+
+```bash
+python3 tests/test_firmware_size_report.py
+```
+
+The suite fails on unclassified flags, stale entries, invalid subsystem targets,
+or exclusions without reasons. Flags outside these naming patterns need an
+explicit `FEATURE_FLAG_PATTERN` discovery rule and test. The check enforces
+maintenance coverage, not correct byte ownership, enabled flag state, or savings
+from disabling a feature. Related flags on a shared row do not imply that
+disabling any one removes the whole row.
+
+### Attribution and artifact context
+
+BLE HID (`HAS_BLE_HID`) and USB HID (`HAS_USB_HID`) have separate rows.
+Common keyboard code, the combined HID web fragment, and generic HID library
+code remain in Shared HID. Bluetooth libraries and independently gated BLE
+telemetry remain in the shared Bluetooth row rather than being charged entirely
+to BLE HID. That row lists both `HAS_BLE_HID` and `HAS_BLE`: disable both to
+remove Bluetooth support. The report does not assume either flag is currently
+enabled. USB libraries follow the USB HID row; library ownership can include
+non-HID uses, so these totals are still attribution, not guaranteed flag savings.
+
+The header infers the board name from the map's parent directory and reports
+the map modification timestamp in UTC, not a verified build timestamp. It
+reads sibling `app.ino.bin` and `app.ino.partitions.bin` files when available
+to show actual application size, per-app-partition usage and headroom, and the
+preferred app partition selected by the existing partition parser. This is
+artifact context, not detection of the device's active OTA slot. Missing or
+invalid optional artifacts produce warnings; a binary/map timestamp difference
+over 60 seconds also warns of potentially mismatched artifacts. Copy artifacts
+from the same build together when using the reporter outside a build directory.
+
+Sizes are attribution, not savings from disabling a feature. Feature-owned
+modules include any retained template instantiations they contain. Dependencies
+are attributed by library ownership, not assigned to every feature using them.
+Action aggregators remain in the actions row and combined web bundles in shared
+web assets. Linker-relaxed string/constant backing pools have a shared row:
+the linker can place many modules' merged data under the first module's name.
+Ambiguous mergeable entries without a relaxation annotation are excluded to
+avoid counting overlapping source sizes. This conservative rule may also omit
+unchanged-size mergeable sections. Individual asset copies are counted where
+linked, including the currently ungated MCP fragment. Alignment, image headers,
+and unrecognized sections are excluded. The report shows binary size minus
+attributed payload as an unreconciled difference, not an exact explanation of
+the remaining bytes. Percentages use attributed payload, not binary size.
+Runtime heap and task stacks are not measured. The parser is a GNU-map spike,
+not a general ELF memory analyzer.
+
+### Local visual report
+
+Export one or more existing builds into a single view for capacity planning
+and subsystem analysis:
+
+```bash
+python3 tools/firmware_size_report.py \
+  build/esp32-p4-lcd4b/app.ino.map \
+  build/jc1060p470c-sd/app.ino.map \
+  --site build/firmware-size-preview --demos
+python3 -m http.server 8768 --bind 127.0.0.1 --directory build/firmware-size-preview
+```
+
+Open <http://localhost:8768/>. Choose a board or demo dataset, inspect app-slot
+usage and headroom, and compare ranked subsystem sizes. Search subsystem names
+or owning flags, sort the table, or select flag-controlled rows. Table totals
+remain the full report totals when filtering. All-zero rows are hidden;
+RAM-only rows remain. The flag filter identifies mapped ownership, not detected
+build state or guaranteed removal savings.
+
+The first horizontal bar shows the complete partition layout, with the
+reference app slot highlighted and a palette distinct from the build footprint.
+Hatched portions of app slots show projected headroom if this build were placed
+in each slot, not measured free space or installed firmware contents. Missing
+binaries produce no headroom hatching; builds exceeding a slot leave no projected
+headroom in that slot. Total flash capacity comes from the matching
+board's `metadata.json` declaration, not a hardware measurement or captured
+build setting. If that declaration is unavailable, the bar uses the partition
+table's extent and explicitly labels total flash capacity as unknown. Unmapped
+tail space is not firmware headroom. Regions outside partitions may contain
+bootloader or partition-table data; the report does not measure their contents.
+
+The second bar shows the reference app's build footprint: code, other data,
+web assets, unreconciled bytes, and remaining slot capacity. The slot selector
+is hidden when app capacities match and available when they differ. Neither
+bar identifies the device's active OTA slot or installed firmware contents.
+
+The optional `--demos` adds clearly labeled synthetic near-capacity,
+over-capacity, and missing-artifact scenarios. To preview without any firmware
+artifacts, use:
+
+```bash
+python3 tools/firmware_size_report.py --site build/firmware-size-preview --demos
+```
+
+The export contains HTML, CSS, JavaScript, and versioned compact `reports.json`
+data. It does not copy firmware binaries or individual linker contributions.
+`--json` remains the detailed single-map output; it cannot be combined with
+`--site`. Regenerate the export after source or artifact changes, then reload
+the browser. The static server does not need restarting. Stop it with Ctrl+C.
+No firmware rebuild, GitHub push, workflow change, or Pages deployment is needed.
+
+### GitHub build and release reports
+
+PR, manual build, and release workflows collect a compact snapshot after each
+board build, add subsystem attribution to its job summary, and upload a separate
+`footprint-board-<board>` artifact. Collection uses the existing linker map,
+application binary, and partition table; it does not trigger another build.
+
+The `firmware-footprint` job combines those snapshots into a downloadable
+`firmware-footprint` artifact containing `firmware-footprint.zip` and
+`firmware-footprint.json`. The ZIP contains the standalone viewer and its data,
+not firmware binaries. Its board selector covers successful collection results;
+missing reports are listed explicitly, including runs with no collected data.
+Missing means a build failed, was skipped, or collection/upload was unavailable,
+not a diagnosis of the build failure. Duplicate, unexpected, malformed, or
+different-build snapshots fail aggregation instead of silently mixing results.
+
+Release assets include the same ZIP and JSON. Stable release Pages deployment
+renders the JSON using viewer assets from the repository's default branch,
+alongside the installer at `firmware-footprint/`. Navigation offers **Footprint**,
+and each USB-flash card with report data has a subtle **Firmware footprint** link
+after **Enabled features**. The `?board=<board-name>` query selects that board;
+changing the selector updates the shareable URL. Older releases without the
+JSON asset retain the installer without footprint links. Pages shows the latest
+deployed stable release, not the report for a PR or another workflow run.
+
+For a local equivalent of the CI collection and aggregation steps:
+
+```bash
+python3 tools/firmware_size_report.py build/esp32-p4-lcd4b/app.ino.map \
+  --snapshot build/footprint-inputs/esp32-p4-lcd4b.json
+python3 tools/firmware_size_report.py --snapshots build/footprint-inputs \
+  --expected-matrix '{"board":[{"name":"esp32-p4-lcd4b"}]}' \
+  --site build/firmware-footprint --archive build/firmware-footprint.zip
+```
+
+CI additionally supplies `--commit`, `--ref`, and `--run-url` consistently during
+collection and aggregation, plus `--fqbn` during collection. `--summary <path>`
+appends Markdown to a job summary. Detailed `--json` and compact `--snapshot`
+are separate output modes. CI reports never include demo scenarios.
+
+To view a downloaded report, extract the ZIP into a directory and serve it with
+`python3 -m http.server 8768 --bind 127.0.0.1 --directory <directory>`.
+Opening its HTML directly with a `file:` URL can block the JSON fetch.
+
 ## tools/portal-dev-server.py
 
 **Purpose:** Run the production portal UI locally without a device or firmware
@@ -278,7 +470,8 @@ bash tools/build-p4-extensions.sh
 ```
 
 **Requirements:** `setup.sh` must have installed the ESP32 Arduino platform.
-The scripts locate their bundled RISC-V and Xtensa compilers automatically; set
+The scripts default to the bundled RISC-V and Xtensa toolchains (2601) from
+ESP32 Arduino core 3.3.12; set
 `ESP32_P4_TOOLCHAIN_DIR`, `ESP32_S3_TOOLCHAIN_DIR`, or `ESP32_TOOLCHAIN_DIR` only
 to override a location.
 

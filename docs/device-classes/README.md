@@ -1,5 +1,9 @@
-<!-- markdownlint-disable-file MD041 -->
-# Device Classes
+---
+title: Device Classes
+description: Hardware classes and their default boards and capabilities.
+---
+
+## Overview
 
 The ESP32 Macropad firmware compiles for multiple hardware classes from a single source tree. The active class is selected at compile time through `IS_*` and `HAS_*` flags in [src/app/board_config.h](../../src/app/board_config.h) and per-board overrides under [src/boards/](../../src/boards/).
 
@@ -7,7 +11,7 @@ The ESP32 Macropad firmware compiles for multiple hardware classes from a single
 |------------------|---------------------------|-----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | `macropad`       | `ESP32 Macropad`          | `jc4880p433`, `jc3636w518`, `jc3248w535`, `esp32-p4-lcd4b`, `jc1060p470c`, `esp32-4848S040`, `reterminal-e1003-interactive` | Touch-screen control surface with configurable buttons, widgets, MQTT, BLE HID.                             |
 | `epaper_frame`   | `ESP32-MP E-Paper Frame`        | `inkplate5v2-frame`, `inkplate6flick-frame`, `reterminal-e1003-frame`      | Battery-powered image frame with schedules and a carousel.                                                   |
-| `headless`       | `ESP32-MP Headless`       | `esp32c3-withsensors`                                     | Sensor / bridge node — MQTT telemetry, BTHome BLE beacons, no display.                                      |
+| `headless`       | `ESP32-MP Headless`       | `esp32c3-withsensors`                                     | BTHome BLE sensor node with Wi-Fi configuration and OTA, no display. MCP and MQTT are disabled on this board to fit its OTA app slots. |
 | `shutter_tester` | `ESP32-MP Shutter Tester` | `jc4880p433-shutter`                                      | Specialized capture rig measuring camera shutter speeds via an ADC sensor array. See [shutter-tester/](shutter-tester/README.md). |
 | `coffee_scale`   | `ESP32-MP Coffee Scale`   | `jc4880p433-nau7802`, `jc4880p433-hx711`                  | Connected espresso / pour-over scale with a stage-based brew engine and weight logging. See [coffee-scale/](coffee-scale/README.md). |
 | `darkroom_timer` | `ESP32-MP Darkroom Timer` | `jc4880p433-darkroom`                                     | Enlarger exposure timer with f-stop test strips, light metering, relay control, and a print session log. See [darkroom-timer/](darkroom-timer/README.md). |

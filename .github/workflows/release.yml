@@ -91,6 +91,7 @@ jobs:
     needs: prepare-matrix
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     
     steps:
@@ -287,6 +288,61 @@ jobs:
         path: release-files-${{ matrix.board.name }}/*.bin
         retention-days: 90
 
+    - name: Collect firmware footprint
+      env:
+        SOURCE_SHA: ${{ needs.prepare-matrix.outputs.source_sha }}
+        SOURCE_REF: ${{ needs.prepare-matrix.outputs.tag_name }}
+      run: |
+        python3 tools/firmware_size_report.py "build/${{ matrix.board.name }}/app.ino.map" \
+          --snapshot "footprint/${{ matrix.board.name }}.json" \
+          --summary "$GITHUB_STEP_SUMMARY" --fqbn "${{ matrix.board.fqbn }}" \
+          --commit "$SOURCE_SHA" --ref "$SOURCE_REF" \
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+    - name: Upload board footprint
+      uses: actions/upload-artifact@v4
+      with:
+        name: footprint-board-${{ matrix.board.name }}
+        path: footprint/*.json
+        overwrite: true
+        if-no-files-found: error
+        retention-days: 90
+
+  firmware-footprint:
+    needs: [prepare-matrix, build]
+    if: ${{ !cancelled() && needs.prepare-matrix.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ needs.prepare-matrix.outputs.tag_name }}
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: footprint-board-*
+        path: footprint-inputs
+    - name: Assemble combined footprint
+      env:
+        EXPECTED_MATRIX: ${{ needs.prepare-matrix.outputs.matrix }}
+        SOURCE_SHA: ${{ needs.prepare-matrix.outputs.source_sha }}
+        SOURCE_REF: ${{ needs.prepare-matrix.outputs.tag_name }}
+      run: |
+        mkdir -p footprint-inputs
+        python3 tools/firmware_size_report.py --snapshots footprint-inputs \
+          --expected-matrix "$EXPECTED_MATRIX" --site build/firmware-footprint \
+          --archive build/firmware-footprint.zip --summary "$GITHUB_STEP_SUMMARY" \
+          --commit "$SOURCE_SHA" --ref "$SOURCE_REF" \
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        cp build/firmware-footprint/reports.json build/firmware-footprint.json
+    - uses: actions/upload-artifact@v4
+      with:
+        name: firmware-footprint
+        overwrite: true
+        path: |
+          build/firmware-footprint.zip
+          build/firmware-footprint.json
+        if-no-files-found: error
+        retention-days: 90
+
   extensions:
     needs: prepare-matrix
     runs-on: ubuntu-latest
@@ -343,7 +399,7 @@ jobs:
         retention-days: 90
 
   release:
-    needs: [prepare-matrix, build, extensions]
+    needs: [prepare-matrix, build, extensions, firmware-footprint]
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for creating releases
@@ -386,6 +442,12 @@ jobs:
         name: ${{ needs.prepare-matrix.outputs.project_name }}-extensions-v${{ needs.prepare-matrix.outputs.version }}
         path: release-files
     
+    - name: Download firmware footprint
+      uses: actions/download-artifact@v4
+      with:
+        name: firmware-footprint
+        path: release-files
+
     - name: Organize release files
       run: |
         mkdir -p release-files
@@ -399,7 +461,7 @@ jobs:
     - name: Generate SHA256 checksums
       run: |
         cd release-files
-        sha256sum *.bin *.elf *.ext > SHA256SUMS.txt
+        sha256sum *.bin *.elf *.ext firmware-footprint.json firmware-footprint.zip > SHA256SUMS.txt
         echo "Checksums generated:"
         cat SHA256SUMS.txt
     

@@ -35,7 +35,6 @@
 #include "binding_template.h"
 #include "binding_schema.h"
 #include "action_catalog.h"
-#include "health_binding.h"
 #include "list_provider.h"
 #include "pad_block.h"
 #if HAS_MQTT
@@ -150,20 +149,11 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     result["screen_ref_note"] = "pad tools accept the 'screen' arg as either the canonical id 'pad_N' or a pad's friendly name (case-insensitive). Names may be unset or non-unique; an ambiguous name is refused with the matching ids so you can pick one. Creating a new pad requires the 'pad_N' id. list_pads shows each pad's name.";
 
     JsonObject bindings = result.createNestedObject("bindings");
-    bindings["_about"] = "A [scheme:params] token resolves to live data at runtime; usable in labels, colors, state, and widget fields. Optional '|fallback' is supported at the outer bracket level. Tokens nest inside [expr:..].";
+    bindings["_about"] = "A [scheme:params] token resolves to live data at runtime; usable in labels, colors, state, and widget fields. Optional '|fallback' is supported at the outer bracket level. Tokens nest inside [expr:..]. Each scheme lists params, key_docs (key patterns: # = digits, * = an id), examples, and an optional status when it cannot resolve yet.";
     JsonArray binding_schemes = bindings.createNestedArray("schemes");
-    binding_schema_emit(&binding_schemes);
+    binding_schema_emit(&binding_schemes, true);
 
     // Complementary enumerations referenced by the binding detail above.
-    JsonArray hk = result.createNestedArray("health_keys");
-    for (uint8_t i = 0; i < health_binding_key_count(); ++i) {
-        const char* k = health_binding_key_at(i);
-        if (!k) continue;
-        JsonObject ko = hk.createNestedObject();
-        ko["name"] = k;
-        const char* d = health_binding_key_desc_at(i);
-        if (d) ko["desc"] = d;
-    }
     JsonArray lp = result.createNestedArray("list_providers");
     for (uint8_t i = 0; i < list_provider_count(); ++i) {
         const ListProvider* p = list_provider_at(i);

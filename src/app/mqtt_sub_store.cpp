@@ -40,90 +40,6 @@ struct SubStoreEntry {
 static SubStoreEntry* g_entries = nullptr;
 static SemaphoreHandle_t g_mutex = nullptr;
 
-// ============================================================================
-// Parse MQTT binding params: "topic;path;format"
-// Splits on first two ';' — everything after the second is format (may contain ';').
-// ============================================================================
-
-static void parse_mqtt_params(const char* params,
-                              char* topic, size_t topic_len,
-                              char* path, size_t path_len,
-                              char* fmt, size_t fmt_len) {
-    topic[0] = '\0';
-    path[0] = '\0';
-    fmt[0] = '\0';
-    if (!params || !params[0]) return;
-
-    // Find first ';'
-    const char* s1 = strchr(params, ';');
-    if (!s1) {
-        // Only topic
-        strlcpy(topic, params, topic_len);
-        return;
-    }
-    size_t tlen = (size_t)(s1 - params);
-    if (tlen >= topic_len) tlen = topic_len - 1;
-    memcpy(topic, params, tlen);
-    topic[tlen] = '\0';
-
-    // Find second ';'
-    const char* s2 = strchr(s1 + 1, ';');
-    if (!s2) {
-        // topic;path
-        strlcpy(path, s1 + 1, path_len);
-        return;
-    }
-    size_t plen = (size_t)(s2 - (s1 + 1));
-    if (plen >= path_len) plen = path_len - 1;
-    memcpy(path, s1 + 1, plen);
-    path[plen] = '\0';
-
-    // Everything after second ';' is format (may contain ';')
-    strlcpy(fmt, s2 + 1, fmt_len);
-}
-
-// ============================================================================
-// MQTT binding scheme resolver — called by binding_template_resolve()
-// ============================================================================
-
-static BindingResolverStatus mqtt_binding_resolve(const char* params, char* out, size_t out_len) {
-    char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
-    char path[CONFIG_JSON_PATH_MAX_LEN];
-    char fmt[CONFIG_FORMAT_MAX_LEN];
-
-    parse_mqtt_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
-
-    if (!topic[0]) {
-        strlcpy(out, "ERR:no topic", out_len);
-        return BINDING_RESOLVER_UNAVAILABLE;
-    }
-
-    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
-    bool truncated = false;
-    if (!mqtt_sub_store_get(topic, payload, sizeof(payload), nullptr, &truncated)) {
-        return BINDING_RESOLVER_UNAVAILABLE; // Not yet received — caller shows placeholder
-    }
-
-    // Extract value from JSON payload
-    const char* jp = (path[0]) ? path : ".";
-    char extracted[128];
-    if (!mqtt_sub_store_extract_json(payload, jp, extracted, sizeof(extracted))) {
-        strlcpy(extracted, truncated ? "ERR:too big" : payload, sizeof(extracted));
-    }
-
-    // Apply format string (best-effort)
-    if (fmt[0]) {
-        mqtt_sub_store_format_value(extracted, fmt, out, out_len);
-    } else {
-        strlcpy(out, extracted, out_len);
-    }
-    return BINDING_RESOLVER_RESOLVED;
-}
-
-// ============================================================================
-// MQTT binding scheme topic collector — called by binding_template_collect_topics()
-// ============================================================================
-
 // user_data points to a TopicCollectorCtx (defined in subscribe_all)
 struct TopicCollectorCtx {
     struct Entry { char topic[CONFIG_MQTT_TOPIC_MAX_LEN]; };
@@ -132,17 +48,9 @@ struct TopicCollectorCtx {
     int max;
 };
 
-static void mqtt_binding_collect(const char* params, void* user_data) {
-    char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
-    char path[CONFIG_JSON_PATH_MAX_LEN];
-    char fmt[CONFIG_FORMAT_MAX_LEN];
-
-    parse_mqtt_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
-
-    if (!topic[0] || !user_data) return;
-
+void mqtt_sub_store_collect_topic(void* user_data, const char* topic) {
+    if (!user_data || !topic || !topic[0]) return;
     TopicCollectorCtx* ctx = (TopicCollectorCtx*)user_data;
-    // Deduplicate
     for (int i = 0; i < *ctx->count; i++) {
         if (strcmp(ctx->list[i].topic, topic) == 0) return;
     }
@@ -150,6 +58,8 @@ static void mqtt_binding_collect(const char* params, void* user_data) {
     strlcpy(ctx->list[*ctx->count].topic, topic, CONFIG_MQTT_TOPIC_MAX_LEN);
     (*ctx->count)++;
 }
+
+bool mqtt_sub_store_active() { return g_entries != nullptr; }
 
 // ============================================================================
 // Init
@@ -172,10 +82,6 @@ void mqtt_sub_store_init() {
     g_mutex = xSemaphoreCreateMutex();
     LOGI(TAG, "Initialized (%d entries, %u bytes)", MQTT_SUB_STORE_MAX_ENTRIES,
          (unsigned)(MQTT_SUB_STORE_MAX_ENTRIES * sizeof(SubStoreEntry)));
-
-    // Register "mqtt" scheme with the binding template engine
-    binding_template_register("mqtt", mqtt_binding_resolve, mqtt_binding_collect,
-                              {1, 3, 2, 2, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr});
 }
 
 // ============================================================================

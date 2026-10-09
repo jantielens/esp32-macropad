@@ -126,10 +126,41 @@ const char* camera_binding_key_at(uint8_t index) {
     return index < camera_binding_key_count() ? kCameraBindingKeys[index].key : nullptr;
 }
 
+static const BindingParamDoc kCameraParams[] = {
+    {"key", "Motion detection key, see below."},
+    {"format", "printf format: %u for numbers, %s for ON/OFF text."},
+};
+
+static const BindingKeyDoc kCameraKeyDocs[] = {
+    {"presence", "ON while motion is detected", "Motion"},
+    {"motion_enabled", "ON when motion detection is enabled", "Motion"},
+    {"last_motion", "Epoch seconds of the last motion", "Motion"},
+    {"motion_age", "Seconds since the last motion", "Motion"},
+    {"changed_tiles", "Tiles changed in the last sample", "Detector"},
+    {"score", "Change score of the last sample", "Detector"},
+    {"tile_threshold", "Changed tiles needed for motion", "Detector"},
+    {"score_threshold", "Score needed for motion", "Detector"},
+    {"global_change", "ON when the whole image changed, e.g. lights", "Detector"},
+    {"confirm_frames", "Consecutive frames seen with motion", "Detector"},
+    {"baseline_ready", "ON once the reference image is ready", "Detector"},
+    {"sample_age", "Seconds since the last analyzed frame", "Detector"},
+};
+
+static const BindingExampleDoc kCameraExamples[] = {
+    {"[camera:presence]", "ON/OFF motion presence."},
+    {"[expr:[camera:presence]==\"ON\"?\"#f59e0b\":\"#334155\"]", "Amber while motion is detected."},
+};
+
+static const BindingSchemeDoc kCameraDoc = {
+    "Device", "Camera motion detection state.",
+    BINDING_DOC_LIST(kCameraParams), BINDING_DOC_LIST(kCameraKeyDocs), BINDING_DOC_LIST(kCameraExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+};
+
 void camera_binding_init() {
     if (!binding_template_register("camera", camera_binding_resolve, camera_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    camera_binding_key_count, camera_binding_key_at})) {
+                                    camera_binding_key_count, camera_binding_key_at, &kCameraDoc})) {
         LOGE("Camera", "Failed to register camera binding scheme");
     }
 }

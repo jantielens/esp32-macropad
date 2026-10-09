@@ -320,7 +320,7 @@ static void test_multiple_bindings_in_one_field() {
 int main() {
     printf("=== resolve_action_bindings tests ===\n\n");
 
-    const BindingSchemeSpec free_form = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr};
+    const BindingSchemeSpec free_form = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr, nullptr};
     binding_template_register("mock", mock_resolve, mock_collect, free_form);
     binding_template_register("echo", mock_echo, mock_collect, free_form);
     binding_template_register("long", mock_long, mock_collect, free_form);

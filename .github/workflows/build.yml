@@ -196,6 +196,7 @@ jobs:
     needs: [prepare-matrix, compile-flags-doc, tests]
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     
     steps:
@@ -280,6 +281,54 @@ jobs:
             echo "| $name | $size |" >> $GITHUB_STEP_SUMMARY
           fi
         done
+
+    - name: Collect firmware footprint
+      run: |
+        python3 tools/firmware_size_report.py "build/${{ matrix.board.name }}/app.ino.map" \
+          --snapshot "footprint/${{ matrix.board.name }}.json" \
+          --summary "$GITHUB_STEP_SUMMARY" --fqbn "${{ matrix.board.fqbn }}" \
+          --commit "$GITHUB_SHA" --ref "$GITHUB_REF" \
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+    - name: Upload board footprint
+      uses: actions/upload-artifact@v4
+      with:
+        name: footprint-board-${{ matrix.board.name }}
+        path: footprint/*.json
+        overwrite: true
+        if-no-files-found: error
+        retention-days: 30
+
+  firmware-footprint:
+    needs: [prepare-matrix, build]
+    if: ${{ !cancelled() && needs.prepare-matrix.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: footprint-board-*
+        path: footprint-inputs
+    - name: Assemble combined footprint
+      env:
+        EXPECTED_MATRIX: ${{ needs.prepare-matrix.outputs.matrix }}
+      run: |
+        mkdir -p footprint-inputs
+        python3 tools/firmware_size_report.py --snapshots footprint-inputs \
+          --expected-matrix "$EXPECTED_MATRIX" --site build/firmware-footprint \
+          --archive build/firmware-footprint.zip --summary "$GITHUB_STEP_SUMMARY" \
+          --commit "$GITHUB_SHA" --ref "$GITHUB_REF" \
+          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        cp build/firmware-footprint/reports.json build/firmware-footprint.json
+    - uses: actions/upload-artifact@v4
+      with:
+        name: firmware-footprint
+        overwrite: true
+        path: |
+          build/firmware-footprint.zip
+          build/firmware-footprint.json
+        if-no-files-found: error
+        retention-days: 30
 
   # Post PR comment with release instructions
   pr-comment:

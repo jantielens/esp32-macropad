@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-08
+ms.date: 2026-10-09
 ms.topic: reference
 ---
 
@@ -13,6 +13,86 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.39.0] - 2026-10-09
+
+### Added
+
+* Searchable Binding reference in the pad editor, built from the firmware's
+  binding registry so it lists only bindings available on the device. Each scheme
+  documents its parameters, keys, and examples; the Format strings guide lists
+  common number, clock, and duration formats, and `expr` lists its operators and
+  `threshold()`. Copy and Insert actions put tokens into the field the help was
+  opened from. `GET /api/bindings?docs=1` and the MCP manifest serve the same docs.
+* Firmware footprint view in the installer, with per-board links beside Enabled
+  features and downloadable release reports. Reports show full-flash partition
+  layout, app-slot usage and projected headroom, subsystem attribution, static
+  variable RAM, and searchable owning flags. BLE HID, USB HID, shared HID, and
+  the Bluetooth stack have separate rows. Reports use existing linker maps
+  without additional builds; PR, manual, and release builds produce per-board
+  JSON and job summaries, plus a combined report ZIP and JSON listing missing
+  boards. Attribution is not guaranteed savings from disabling a feature; flash
+  capacity and artifact limitations are explicit. Older releases retain the
+  installer without report links.
+
+### Changed
+
+* Color picker popover: the color-or-expression box now has an **fx** binding-help
+  badge, a live preview swatch, and inline validation of colors and bindings;
+  **Apply** stays disabled until the value is valid, and `#RGB` expands to
+  `#RRGGBB`. A **+** swatch opens the browser color picker. "Recently Used" is now
+  "Used in your pads" and includes bindings. The threshold helper reloads an
+  existing `threshold()` expression, supports adding and removing stops, shows
+  visible default breakpoints, and flags missing or descending thresholds instead
+  of guessing. Swatches and the close control are keyboard-accessible buttons, and
+  Escape closes the popover regardless of focus.
+* Rocker and Numeric Rocker indicator colors use the shared picker in literal-only
+  mode, hiding expression controls and rejecting bindings. Binding-capable widget
+  colors have **fx** hints, including compact sparkline line colors. Waveform hints
+  identify its 11-character binding limit and creation-time color resolution.
+* Disable alarms on JC3248W535, JC3636W518, and JC3636W518 SD to preserve
+  internal RAM. USB HID and native extension support remain enabled.
+* Disable MCP and MQTT on ESP32-C3 with sensors to reduce OTA firmware size.
+  BLE telemetry, sensor support, Wi-Fi configuration, and OTA remain enabled.
+* Prefer PSRAM for ordinary allocations larger than 512 bytes on classic ESP32
+  and ESP32-S3 boards with PSRAM, including Inkplate builds, to preserve internal
+  RAM headroom. Other targets and boards without PSRAM retain the SDK allocation
+  policy; DMA-specific allocations and task-stack policy are unchanged.
+* Move the MCP manifest's `health_keys` list into the `health` scheme's `key_docs`.
+* The `mqtt` binding scheme registers on every MQTT display build, so pads and
+  the reference recognize it before a broker is configured; its tokens show
+  their fallback until values arrive.
+* `[meter:...]` and `[print:...]` bindings accept only a key. The portal
+  previously accepted a format parameter that the device rendered as an error.
+* Raise the binding scheme limit from 16 to 24 so device classes with several
+  schemes cannot exhaust it.
+* Require new, renamed, and removed feature flags to have maintained firmware
+  footprint classification or a reasoned exclusion, enforced by focused tests
+  and documented in the developer and agent checklists.
+* Upgrade the ESP32 Arduino core from 3.3.7 to 3.3.12, bundling ESP-Hosted
+  2.12.13 on ESP32-P4 boards. The updated transport handles SDIO RX/TX buffer
+  allocation failures without the previous assertions and includes recovery
+  fixes for dropped RX reads. Native extension builders and package checks use
+  the matching 2601 toolchains and support explicit toolchain-directory overrides.
+
+### Fixed
+
+* Fix internal RAM leakage when time bindings use a timezone different from
+  the device timezone, including Word Clock and Nixie Clock extensions.
+  Reuse bounded timezone storage while preserving timezone overrides,
+  device timezone restoration, and extension ticks.
+* Image fetching now yields for one scheduler tick when HTTP or HTTPS
+  single-byte reads have no data, preventing idle-task starvation and watchdog
+  resets while waiting for stalled or incomplete response headers. Existing
+  request timeouts are unchanged.
+* Reduce editor color swatches to 36 px and align sparkline marker/reference rows,
+  gauge color rows, and mobile Button Defaults controls. Sparkline marker and
+  reference color fields have explicit Color labels beside their **fx** hints.
+* Match waveform, sparkline marker/reference, and bar background color input limits
+  to firmware storage so the picker rejects values that would be truncated.
+* Firmware color parsing now requires exactly 3 or 6 hex digits. `#RGB` expands
+  correctly (previously `#FFF` rendered as blue), and values with extra digits or
+  trailing characters are rejected instead of being silently truncated.
 
 ## [1.38.0] - 2026-10-08
 

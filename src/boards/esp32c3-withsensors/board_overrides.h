@@ -4,14 +4,14 @@
 // Board Overrides: esp32c3-withsensors
 // ==========================================================================
 
-// Enable MQTT (required for HA discovery in this sample when always-on or duty_cycle_mqtt)
-#define HAS_MQTT true
+#define HAS_MQTT false
 
 // Headless board: no display, touch, audio, or BLE HID keyboard.
 #define HAS_DISPLAY false
 #define HAS_TOUCH false
 #define HAS_AUDIO false
 #define HAS_BLE_HID false
+#define HAS_MCP false
 
 // The OTA-only partition table has no filesystem partition, so omit the
 // unusable portal/MCP storage browser and preserve firmware space.
@@ -30,7 +30,7 @@
 // One client is sufficient for first-time provisioning.
 #define AP_MAX_CONNECTIONS 1
 
-// Enable BTHome v2 BLE telemetry as an alternative transport (duty_cycle_ble mode).
+// Enable BTHome v2 BLE telemetry (duty_cycle_ble mode).
 #define HAS_BLE true
 
 // GPIO9 remains available as the boot-hold configuration-mode input, but this
@@ -66,7 +66,3 @@
 
 // Optional: BME280 address (0x76 or 0x77)
 // #define BME280_I2C_ADDR 0x76
-
-// MQTT triggers: this board has no PSRAM, so the trigger config cache falls
-// back to internal SRAM. Cap at 3 triggers (~4.3 KB) to limit SRAM cost.
-#define MAX_MQTT_TRIGGERS 3

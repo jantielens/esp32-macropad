@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "binding_builtin_schemes.h"
 #include "binding_template.h"
@@ -87,7 +88,134 @@ static bool scheme_is_registered(const char* expected) {
     return false;
 }
 
-int main() {
+static bool has_text(const char* value) { return value && value[0]; }
+
+static bool is_pattern(const char* key) {
+    return std::strchr(key, '#') || std::strchr(key, '*');
+}
+
+static const BindingSchemeDoc* scheme_doc(const char* scheme, size_t length) {
+    for (uint8_t index = 0; index < binding_template_scheme_count(); ++index) {
+        const char* name = binding_template_scheme_name(index);
+        if (name && std::strlen(name) == length && std::strncmp(name, scheme, length) == 0) {
+            return binding_template_scheme_spec(index)->doc;
+        }
+    }
+    return nullptr;
+}
+
+static bool pattern_documents(const BindingSchemeDoc* doc, const char* key, size_t key_length) {
+    char buffer[64] = {};
+    std::snprintf(buffer, sizeof(buffer), "%.*s", (int)key_length, key);
+    for (uint8_t index = 0; doc && index < doc->key_doc_count; ++index) {
+        if (is_pattern(doc->keys[index].key) && binding_key_doc_matches(doc->keys[index].key, buffer)) return true;
+    }
+    return false;
+}
+
+// Validates every [scheme:params] token in text, including nested ones.
+static bool example_is_valid(const char* text, const char* context) {
+    bool valid = true;
+    for (const char* p = std::strchr(text, '['); p; p = std::strchr(p + 1, '[')) {
+        const char* scheme = p + 1;
+        const char* colon = scheme;
+        while ((*colon >= 'a' && *colon <= 'z') || *colon == '_') ++colon;
+        if (*colon != ':' || colon == scheme) continue;
+        int depth = 1;
+        const char* end = colon + 1;
+        for (; *end && depth; ++end) {
+            if (*end == '[') ++depth;
+            else if (*end == ']') --depth;
+        }
+        const size_t scheme_length = (size_t)(colon - scheme);
+        std::string params(colon + 1, (size_t)(end - colon - 2));
+        if (depth || !binding_template_scheme_known(scheme, scheme_length)) {
+            std::printf("  BAD EXAMPLE [%s]: %s\n", context, text);
+            valid = false;
+            continue;
+        }
+        const char* error = binding_template_validate_params(scheme, scheme_length, params.c_str());
+        size_t key_length = 0;
+        while (params[key_length] && params[key_length] != ';' && params[key_length] != '|') ++key_length;
+        if (error && !(std::strcmp(error, "unknown binding key") == 0 &&
+                       pattern_documents(scheme_doc(scheme, scheme_length), params.c_str(), key_length))) {
+            std::printf("  BAD EXAMPLE [%s]: %s (%s)\n", context, text, error);
+            valid = false;
+        }
+    }
+    return valid;
+}
+
+static void expect_scheme_docs_complete() {
+    for (uint8_t scheme_index = 0; scheme_index < binding_template_scheme_count(); ++scheme_index) {
+        const char* scheme = binding_template_scheme_name(scheme_index);
+        const BindingSchemeSpec* spec = binding_template_scheme_spec(scheme_index);
+        const BindingSchemeDoc* doc = spec->doc;
+        if (!doc) {
+            std::printf("  UNDOCUMENTED [%s]\n", scheme);
+            ++g_failures;
+            continue;
+        }
+        bool ok = has_text(doc->category) && has_text(doc->summary) && doc->example_count > 0 &&
+                  doc->param_count == spec->max_params;
+        for (uint8_t i = 0; i < doc->param_count; ++i) {
+            ok = ok && has_text(doc->params[i].name) && has_text(doc->params[i].desc);
+        }
+        for (uint8_t i = 0; i < doc->key_doc_count; ++i) {
+            ok = ok && has_text(doc->keys[i].key) && has_text(doc->keys[i].desc);
+        }
+        for (uint8_t i = 0; i < doc->example_count; ++i) {
+            ok = ok && has_text(doc->examples[i].desc) && example_is_valid(doc->examples[i].code, scheme);
+        }
+        for (uint8_t i = 0; i < doc->reference_count; ++i) {
+            const BindingReferenceDoc& row = doc->reference[i];
+            ok = ok && has_text(row.syntax) && has_text(row.desc) &&
+                 (!row.example || example_is_valid(row.example, scheme));
+        }
+        ok = ok && (doc->reference_count == 0 || has_text(doc->reference_title));
+        if (!ok) {
+            std::printf("  INCOMPLETE DOC [%s]\n", scheme);
+            ++g_failures;
+        }
+
+        if (spec->free_form) continue;
+        for (uint8_t key_index = 0; key_index < spec->key_count(); ++key_index) {
+            const char* key = spec->key_at(key_index);
+            bool documented = false;
+            for (uint8_t i = 0; i < doc->key_doc_count && !documented; ++i) {
+                documented = binding_key_doc_matches(doc->keys[i].key, key);
+            }
+            if (!documented) {
+                std::printf("  UNDOCUMENTED KEY [%s:%s]\n", scheme, key);
+                ++g_failures;
+            }
+        }
+        for (uint8_t i = 0; i < doc->key_doc_count; ++i) {
+            if (is_pattern(doc->keys[i].key)) continue;
+            bool exists = false;
+            for (uint8_t key_index = 0; key_index < spec->key_count() && !exists; ++key_index) {
+                exists = std::strcmp(doc->keys[i].key, spec->key_at(key_index)) == 0;
+            }
+            if (!exists) {
+                std::printf("  STALE KEY DOC [%s:%s]\n", scheme, doc->keys[i].key);
+                ++g_failures;
+            }
+        }
+    }
+}
+
+static void expect_key_patterns() {
+    expect(binding_key_doc_matches("#_state", "12_state"), "# matches digits");
+    expect(!binding_key_doc_matches("#_state", "_state"), "# needs a digit");
+    expect(!binding_key_doc_matches("#", "1_state"), "# does not span non-digits");
+    expect(binding_key_doc_matches("*.selected", "pads.selected"), "* matches an id");
+    expect(!binding_key_doc_matches("*.selected", "a.b.selected"), "* stops at a dot");
+    expect(binding_key_doc_matches("seg_time:#", "seg_time:11"), "pattern suffix digits");
+}
+
+void binding_schema_dump_json();
+
+int main(int argc, char** argv) {
     list_provider_register(&kFixtureProvider);
     list_binding_set_selected("fixture", "selected-item");
     binding_builtin_schemes_init();
@@ -108,7 +236,16 @@ int main() {
     shutter_binding_init();
 #endif
 
+    if (argc > 1 && std::strcmp(argv[1], "--emit-json") == 0) {
+        binding_schema_dump_json();
+        return 0;
+    }
+
     expect(binding_template_scheme_count() > 0, "production profile registered binding schemes");
+    expect(scheme_is_registered("mqtt") && scheme_is_registered("pad"),
+           "mqtt and pad schemes registered on MQTT display profiles");
+    expect_key_patterns();
+    expect_scheme_docs_complete();
     expect(all_registered_finite_keys_are_recognized(),
            "every production finite key is not unknown to its real resolver");
     expect_structural_resolvers_are_invoked();

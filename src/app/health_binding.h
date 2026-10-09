@@ -11,4 +11,3 @@ void health_binding_init();
 // Returns 0 / nullptr on builds without the health resolver.
 uint8_t health_binding_key_count();
 const char* health_binding_key_at(uint8_t index);
-const char* health_binding_key_desc_at(uint8_t index);

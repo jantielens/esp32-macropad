@@ -120,9 +120,41 @@ static void time_binding_collect(const char* params, void* user_data) {
 // Public API
 // ============================================================================
 
+static const BindingParamDoc kTimeParams[] = {
+    {"format", "strftime format plus %ms, %cs, %ds, or %ums for uptime."},
+    {"timezone", "Olson name such as Europe/Amsterdam, or a POSIX TZ string."},
+};
+
+static const BindingExampleDoc kTimeExamples[] = {
+    {"[time:%H:%M;Europe/Amsterdam]", "Local time with daylight saving."},
+    {"[time:%a %d %b]", "Short date in the device timezone."},
+    {"[time:%ums]", "Uptime in ms; works before NTP sync."},
+};
+
+static const BindingReferenceDoc kTimeFormats[] = {
+    {nullptr, "%H:%M", "14:05", "24-hour clock", "[time:%H:%M]"},
+    {nullptr, "%I:%M %p", "02:05 PM", "12-hour clock", "[time:%I:%M %p]"},
+    {nullptr, "%H:%M:%S", "14:05:09", "With seconds", "[time:%H:%M:%S]"},
+    {nullptr, "%H:%M:%S.%ms", "14:05:09.347", "Milliseconds; %cs and %ds give 1/100 and 1/10", "[time:%H:%M:%S.%ms]"},
+    {nullptr, "%a %d %b", "Fri 09 Oct", "Short date", "[time:%a %d %b]"},
+    {nullptr, "%A", "Friday", "Weekday name", "[time:%A]"},
+    {nullptr, "%d-%m-%Y", "09-10-2026", "Day-month-year", "[time:%d-%m-%Y]"},
+    {nullptr, "%Y-%m-%d", "2026-10-09", "ISO date", "[time:%Y-%m-%d]"},
+    {nullptr, "%V", "41", "ISO week number", "[time:Week %V]"},
+    {nullptr, "%ums", "734512", "Uptime in ms, before NTP sync too", "[time:%ums]"},
+};
+
+static const BindingSchemeDoc kTimeDoc = {
+    "Time", "Wall clock and date via strftime, plus sub-second codes.",
+    BINDING_DOC_LIST(kTimeParams), BINDING_DOC_NONE, BINDING_DOC_LIST(kTimeExamples),
+    "Clock & date", true, BINDING_DOC_LIST(kTimeFormats),
+    "Shows --:-- until the clock has synced over NTP. The format cannot contain ';'.", nullptr,
+};
+
 void time_binding_init() {
     if (!binding_template_register("time", time_binding_resolve, time_binding_collect,
-                                   {1, 2, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr})) {
+                                   {1, 2, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
+                                    &kTimeDoc})) {
         LOGE(TAG, "Failed to register time binding scheme");
     }
 }

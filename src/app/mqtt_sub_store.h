@@ -30,8 +30,14 @@ extern "C" {
 #endif
 
 // Initialize the store (allocates memory). Call once during boot.
-// Also registers the "mqtt" binding scheme with the binding_template engine.
 void mqtt_sub_store_init();
+
+// True once the store is allocated, i.e. a broker is configured.
+bool mqtt_sub_store_active();
+
+// Add a topic to the collector context passed to binding_template_collect_topics()
+// by mqtt_sub_store. Used by the "mqtt" binding scheme's collector.
+void mqtt_sub_store_collect_topic(void* user_data, const char* topic);
 
 // Scan all pad page configs and subscribe to every unique MQTT topic found
 // in label bindings. Call after MQTT connects and after config saves.

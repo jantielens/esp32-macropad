@@ -100,6 +100,21 @@ jobs:
           echo "Downloaded assets:"
           ls -lh release-assets
 
+      - name: Download firmware footprint when available
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          asset=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[] | select(.name == "firmware-footprint.json") | .name')
+          if [[ -n "$asset" ]]; then
+            gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --dir release-assets --pattern firmware-footprint.json
+          else
+            echo "This release predates firmware footprint reports; leaving report links hidden."
+          fi
+
       - name: Fetch release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -162,6 +177,9 @@ jobs:
       - name: Build installer site (latest stable)
         run: |
           chmod +x tools/build-esp-web-tools-site.sh
+          if [[ -f release-assets/firmware-footprint.json ]]; then
+            export FOOTPRINT_DATASET="$PWD/release-assets/firmware-footprint.json"
+          fi
           RELEASE_TAG="${{ steps.release_meta.outputs.tag_name }}" RELEASE_NOTES_PATH="release-notes.md" ./tools/build-esp-web-tools-site.sh site
 
       - name: Check Pages status

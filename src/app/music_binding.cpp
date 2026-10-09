@@ -111,12 +111,47 @@ void music_binding_collect(const char* params, void* user_data) {
     (void)user_data;
 }
 
+const BindingParamDoc kMusicParams[] = {
+    {"key", "Player key, see below."},
+};
+
+const BindingKeyDoc kMusicKeyDocs[] = {
+    {"status", "playing, paused, stopped, empty, unavailable, or error", "Player"},
+    {"index", "Current track index in the playlist", "Player"},
+    {"count", "Number of tracks; -1 when unavailable", "Player"},
+    {"elapsed_s", "Elapsed seconds", "Player"},
+    {"total_s", "Track length in seconds; -1 when unknown", "Player"},
+    {"file", "Full path of the current file", "Track"},
+    {"file_name", "File name without folders", "Track"},
+    {"title", "MP3 title tag", "Track"},
+    {"artist", "MP3 artist tag", "Track"},
+    {"album", "MP3 album tag", "Track"},
+    {"track", "MP3 track number tag", "Track"},
+#if HAS_MUSIC_ANALYSIS
+    {"analysis.rms", "Playback loudness, RMS level", "Analysis"},
+    {"analysis.peak", "Playback peak level", "Analysis"},
+    {"analysis.band.#", "Spectrum band 0-7, low to high", "Analysis"},
+#endif
+};
+
+const BindingExampleDoc kMusicExamples[] = {
+    {"[music:title]", "Track title; shows --- when the tag is empty."},
+    {"[music:artist] - [music:title]", "Artist and title in one label."},
+    {"[expr:[music:status]==\"playing\"?\"#22c55e\":\"#64748b\"]", "Green while music plays."},
+};
+
+const BindingSchemeDoc kMusicDoc = {
+    "Device", "Now-playing state of the on-device music player.",
+    BINDING_DOC_LIST(kMusicParams), BINDING_DOC_LIST(kMusicKeyDocs), BINDING_DOC_LIST(kMusicExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+};
+
 } // namespace
 
 void music_binding_init() {
     if (!binding_template_register("music", music_binding_resolve, music_binding_collect,
                                    {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    music_binding_key_count, music_binding_key_at})) {
+                                    music_binding_key_count, music_binding_key_at, &kMusicDoc})) {
         LOGE("MusicBind", "Failed to register music binding scheme");
         return;
     }

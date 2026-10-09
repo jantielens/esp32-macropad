@@ -20,15 +20,15 @@ build_package() {
     case "$target" in
         p4)
             target_abi="rv32imafc-ilp32f"
-            readelf="$HOME/.arduino15/packages/esp32/tools/esp-rv32/2511/bin/riscv32-esp-elf-readelf"
+            readelf="${ESP32_P4_TOOLCHAIN_DIR:-$HOME/.arduino15/packages/esp32/tools/esp-rv32/2601/bin}/riscv32-esp-elf-readelf"
             ;;
         s3)
             target_abi="xtensa-esp32s3"
-            readelf="$HOME/.arduino15/packages/esp32/tools/esp-x32/2511/bin/xtensa-esp32s3-elf-readelf"
+            readelf="${ESP32_S3_TOOLCHAIN_DIR:-$HOME/.arduino15/packages/esp32/tools/esp-x32/2601/bin}/xtensa-esp32s3-elf-readelf"
             ;;
         esp32)
             target_abi="xtensa-esp32"
-            readelf="$HOME/.arduino15/packages/esp32/tools/esp-x32/2511/bin/xtensa-esp32-elf-readelf"
+            readelf="${ESP32_TOOLCHAIN_DIR:-$HOME/.arduino15/packages/esp32/tools/esp-x32/2601/bin}/xtensa-esp32-elf-readelf"
             ;;
         *)
             echo "Unknown test target: $target" >&2

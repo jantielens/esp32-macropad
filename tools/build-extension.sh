@@ -15,7 +15,7 @@ API_HEADER="$PROJECT_DIR/src/app/native_extension_api.h"
 
 case "$TARGET" in
     p4)
-        TOOLCHAIN_DIR=${ESP32_P4_TOOLCHAIN_DIR:-"$HOME/.arduino15/packages/esp32/tools/esp-rv32/2511/bin"}
+        TOOLCHAIN_DIR=${ESP32_P4_TOOLCHAIN_DIR:-"$HOME/.arduino15/packages/esp32/tools/esp-rv32/2601/bin"}
         CXX="$TOOLCHAIN_DIR/riscv32-esp-elf-g++"
         READELF="$TOOLCHAIN_DIR/riscv32-esp-elf-readelf"
         TARGET_ABI="rv32imafc-ilp32f"
@@ -27,7 +27,7 @@ case "$TARGET" in
         EXPECTED_MACHINE="RISC-V"
         ;;
     s3)
-        TOOLCHAIN_DIR=${ESP32_S3_TOOLCHAIN_DIR:-"$HOME/.arduino15/packages/esp32/tools/esp-x32/2511/bin"}
+        TOOLCHAIN_DIR=${ESP32_S3_TOOLCHAIN_DIR:-"$HOME/.arduino15/packages/esp32/tools/esp-x32/2601/bin"}
         CXX="$TOOLCHAIN_DIR/xtensa-esp32s3-elf-g++"
         READELF="$TOOLCHAIN_DIR/xtensa-esp32s3-elf-readelf"
         TARGET_ABI="xtensa-esp32s3"
@@ -37,7 +37,7 @@ case "$TARGET" in
         EXPECTED_MACHINE="Tensilica Xtensa Processor"
         ;;
     esp32)
-        TOOLCHAIN_DIR=${ESP32_TOOLCHAIN_DIR:-"$HOME/.arduino15/packages/esp32/tools/esp-x32/2511/bin"}
+        TOOLCHAIN_DIR=${ESP32_TOOLCHAIN_DIR:-"$HOME/.arduino15/packages/esp32/tools/esp-x32/2601/bin"}
         CXX="$TOOLCHAIN_DIR/xtensa-esp32-elf-g++"
         READELF="$TOOLCHAIN_DIR/xtensa-esp32-elf-readelf"
         TARGET_ABI="xtensa-esp32"

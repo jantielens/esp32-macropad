@@ -223,7 +223,7 @@ int main() {
     check_str(stored.type, fitting_type.type_name, "maximum fitting name survives storage");
     check_true(action_type_find(stored.type) == &fitting_type, "stored name resolves registered type");
 
-    const BindingSchemeSpec free_form = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr};
+    const BindingSchemeSpec free_form = {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr, nullptr};
     binding_template_register("mock", mock_resolve, mock_collect, free_form);
     binding_template_register("long", long_resolve, mock_collect, free_form);
     action_type_register(&fake_action_type);

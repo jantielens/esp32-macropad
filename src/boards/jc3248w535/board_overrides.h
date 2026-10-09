@@ -25,6 +25,7 @@
 // BLE HID disabled — ESP32-S3 lacks internal RAM for NimBLE + WiFi + display.
 #define HAS_BLE_HID false
 #define HAS_USB_HID true
+#define ALARM_ENABLED false
 
 // ============================================================================
 // Driver Selection (HAL)

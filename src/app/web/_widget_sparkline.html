@@ -7,7 +7,7 @@
                         <div class="sparkline-source">
                             <div class="sparkline-source-heading">
                                 <span>Line 1</span>
-                                <div class="bindable-color" title="Line color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color" class="bc-input" aria-label="Line 1 color" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                                <div class="bindable-color" title="Line color"><label for="pad-edit-sparkline-line-color"><span class="fx-hint" onclick="showBindingHelp()" title="Line color supports bindings">fx</span></label><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color" class="bc-input" aria-label="Line 1 color" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
                             </div>
                             <div class="form-group">
                             <label for="pad-edit-sparkline-data-binding">Live Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
@@ -43,7 +43,7 @@
                         <div class="sparkline-source">
                             <div class="sparkline-source-heading">
                                 <span>Line 2 <small>(optional)</small></span>
-                                <div class="bindable-color" title="Line color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-2" class="bc-input" aria-label="Line 2 color" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
+                                <div class="bindable-color" title="Line color"><label for="pad-edit-sparkline-line-color-2"><span class="fx-hint" onclick="showBindingHelp()" title="Line color supports bindings">fx</span></label><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-2" class="bc-input" aria-label="Line 2 color" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
                             </div>
                             <div class="form-group">
                             <label for="pad-edit-sparkline-data-binding-2">Live Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
@@ -65,7 +65,7 @@
                         <div class="sparkline-source">
                             <div class="sparkline-source-heading">
                                 <span>Line 3 <small>(optional)</small></span>
-                                <div class="bindable-color" title="Line color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-3" class="bc-input" aria-label="Line 3 color" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
+                                <div class="bindable-color" title="Line color"><label for="pad-edit-sparkline-line-color-3"><span class="fx-hint" onclick="showBindingHelp()" title="Line color supports bindings">fx</span></label><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-3" class="bc-input" aria-label="Line 3 color" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
                             </div>
                             <div class="form-group">
                             <label for="pad-edit-sparkline-data-binding-3">Live Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
@@ -141,7 +141,7 @@
 
                         <div class="widget-sub-heading">Minimum Marker</div>
 
-                        <div style="display:flex;gap:8px;align-items:end;">
+                        <div class="sparkline-color-row">
                             <div class="form-group" style="flex:0 0 60px;">
                                 <label for="pad-edit-sparkline-marker-size-min">Size</label>
                                 <input type="number" id="pad-edit-sparkline-marker-size-min" min="0" max="20" value="0" placeholder="0">
@@ -151,14 +151,14 @@
                                 <input type="text" id="pad-edit-sparkline-min-fmt" maxlength="15" placeholder="%.0f">
                             </div>
                             <div class="form-group" style="flex:0 0 auto;">
-                                <label for="pad-edit-sparkline-min-label-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-min-label-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FFFFFF"></div>
+                                <label for="pad-edit-sparkline-min-label-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-min-label-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
                         </div>
 
                         <div class="widget-sub-heading">Maximum Marker</div>
 
-                        <div style="display:flex;gap:8px;align-items:end;">
+                        <div class="sparkline-color-row">
                             <div class="form-group" style="flex:0 0 60px;">
                                 <label for="pad-edit-sparkline-marker-size-max">Size</label>
                                 <input type="number" id="pad-edit-sparkline-marker-size-max" min="0" max="20" value="0" placeholder="0">
@@ -168,8 +168,8 @@
                                 <input type="text" id="pad-edit-sparkline-max-fmt" maxlength="15" placeholder="%.0f">
                             </div>
                             <div class="form-group" style="flex:0 0 auto;">
-                                <label for="pad-edit-sparkline-max-label-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-max-label-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FFFFFF"></div>
+                                <label for="pad-edit-sparkline-max-label-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-max-label-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
                         </div>
                         <small>Size 0 = off. Format: e.g. hi %.1f kW. Color white = auto (follows line color).</small>
@@ -205,14 +205,14 @@
 
                         <div class="widget-sub-heading">Reference Lines</div>
 
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;" id="pad-edit-sparkline-ref-1-row">
+                        <div class="sparkline-color-row" id="pad-edit-sparkline-ref-1-row">
                             <div class="form-group" style="flex:1;min-width:70px;">
                                 <label for="pad-edit-sparkline-ref-1-y">Line 1 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-1-y" step="any" placeholder="off">
                             </div>
                             <div class="form-group" style="flex:0 0 auto;">
-                                <label for="pad-edit-sparkline-ref-1-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-1-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#888888"></div>
+                                <label for="pad-edit-sparkline-ref-1-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-1-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#888888"></div>
                             </div>
                             <div class="form-group" style="flex:1;min-width:80px;">
                                 <label for="pad-edit-sparkline-ref-1-pattern">Pattern</label>
@@ -223,14 +223,14 @@
                                 </select>
                             </div>
                         </div>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;" id="pad-edit-sparkline-ref-2-row">
+                        <div class="sparkline-color-row" id="pad-edit-sparkline-ref-2-row">
                             <div class="form-group" style="flex:1;min-width:70px;">
                                 <label for="pad-edit-sparkline-ref-2-y">Line 2 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-2-y" step="any" placeholder="off">
                             </div>
                             <div class="form-group" style="flex:0 0 auto;">
-                                <label for="pad-edit-sparkline-ref-2-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-2-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#888888"></div>
+                                <label for="pad-edit-sparkline-ref-2-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-2-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#888888"></div>
                             </div>
                             <div class="form-group" style="flex:1;min-width:80px;">
                                 <label for="pad-edit-sparkline-ref-2-pattern">Pattern</label>
@@ -241,14 +241,14 @@
                                 </select>
                             </div>
                         </div>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;" id="pad-edit-sparkline-ref-3-row">
+                        <div class="sparkline-color-row" id="pad-edit-sparkline-ref-3-row">
                             <div class="form-group" style="flex:1;min-width:70px;">
                                 <label for="pad-edit-sparkline-ref-3-y">Line 3 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-3-y" step="any" placeholder="off">
                             </div>
                             <div class="form-group" style="flex:0 0 auto;">
-                                <label for="pad-edit-sparkline-ref-3-color"><span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-3-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#888888"></div>
+                                <label for="pad-edit-sparkline-ref-3-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-ref-3-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#888888"></div>
                             </div>
                             <div class="form-group" style="flex:1;min-width:80px;">
                                 <label for="pad-edit-sparkline-ref-3-pattern">Pattern</label>

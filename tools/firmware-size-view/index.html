@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Firmware Footprint | ESP32</title>
+  <link rel="stylesheet" href="report.css">
+  <script src="report.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="identity"><span class="mark" aria-hidden="true">F</span><span>ESP32 <span class="muted">/ Build Analysis</span></span></div>
+    <a id="installer-link" href="../index.html" class="export-link" hidden>Installer</a>
+    <a href="reports.json" download="firmware-footprint.json" class="export-link">Download JSON</a>
+  </header>
+  <main>
+    <section class="title-band">
+      <div><p class="eyebrow">Flash &amp; Memory</p><h1>Firmware Footprint</h1></div>
+      <label class="board-picker">Board / dataset<select id="board-select" disabled><option>Loading reports...</option></select></label>
+    </section>
+    <p id="load-status" role="status">Loading build data...</p>
+    <p id="run-notice" class="warnings" role="status" hidden></p>
+    <div id="report" hidden>
+      <div class="build-line"><span id="source-label"></span><span id="build-time" class="muted"></span></div>
+      <p id="build-provenance" class="muted" hidden></p>
+      <ul id="warnings" class="warnings" hidden></ul>
+      <section class="metrics" aria-label="Build summary">
+        <div><span class="metric-label">Application binary</span><strong id="binary-value"></strong><span id="binary-detail" class="metric-detail"></span></div>
+        <div><span class="metric-label">App slot used</span><strong id="usage-value"></strong><span id="slot-detail" class="metric-detail"></span></div>
+        <div><span id="headroom-label" class="metric-label">Headroom</span><strong id="headroom-value"></strong><span id="headroom-detail" class="metric-detail"></span></div>
+        <div><span class="metric-label">Static variable RAM</span><strong id="ram-value"></strong><span class="metric-detail">Heap and task stacks excluded</span></div>
+      </section>
+      <section class="capacity-section" aria-label="Full flash partition layout">
+        <div class="section-heading"><h2 id="layout-heading">Full flash layout</h2><span id="flash-source" class="muted"></span></div>
+        <div id="flash-layout-bar" class="capacity-bar flash-layout-bar" role="img"></div>
+        <div class="allocation-totals"><span id="partition-extent"></span><span id="unmapped-total"></span></div>
+        <div id="partition-legend" class="legend partition-legend" aria-label="Flash partitions"></div>
+        <div id="app-headroom-legend" class="legend" hidden><span><i class="projected-free"></i>Projected app headroom</span></div>
+      </section>
+      <section class="capacity-section" aria-label="Flash composition">
+        <div class="section-heading"><h2 id="footprint-heading">App0 / Build footprint</h2><label id="slot-picker">App slot <select id="slot-select"></select></label></div>
+        <div id="capacity-bar" class="capacity-bar" role="img"></div>
+        <div class="allocation-totals"><span id="attribution-total"></span><span id="gap-total"></span></div>
+        <div class="legend" aria-label="Composition colors"><span><i class="code"></i>Code</span><span><i class="data"></i>Other data</span><span><i class="assets"></i>Web assets</span><span><i class="gap"></i>Unreconciled</span><span><i class="free"></i>Free</span></div>
+      </section>
+      <section class="subsystems" aria-labelledby="subsystem-heading">
+        <div class="table-toolbar">
+          <div><h2 id="subsystem-heading">Subsystems</h2><span id="row-count" class="muted"></span></div>
+          <div class="filters"><input id="search" type="search" aria-label="Search subsystems or flags" placeholder="Search subsystem or flag"><label class="checkbox-label"><input id="flag-filter" type="checkbox">Flag-controlled only</label></div>
+        </div>
+        <div class="table-scroll" tabindex="0" aria-label="Subsystem sizes table">
+          <table>
+            <thead><tr>
+              <th scope="col" data-key="name" aria-sort="none"><button type="button" data-sort="name">Subsystem <span class="sort-marker"></span></button></th>
+              <th scope="col">Owning flag</th>
+              <th scope="col" class="composition-column">Flash composition</th>
+              <th scope="col" data-key="flash" aria-sort="descending"><button type="button" data-sort="flash">Flash / KiB <span class="sort-marker">v</span></button></th>
+              <th scope="col" data-key="percent" aria-sort="none"><button type="button" data-sort="percent">Share <span class="sort-marker"></span></button></th>
+              <th scope="col" data-key="static_ram" aria-sort="none"><button type="button" data-sort="static_ram">RAM / KiB <span class="sort-marker"></span></button></th>
+            </tr></thead>
+            <tbody id="subsystem-rows"></tbody>
+            <tfoot><tr><th scope="row">Full report total</th><td></td><td class="composition-column"></td><td id="table-flash-total"></td><td>100%</td><td id="table-ram-total"></td></tr></tfoot>
+          </table>
+        </div>
+        <p id="empty-state" hidden>No matching subsystems.</p>
+      </section>
+      <footer class="report-notes"><p>Partition regions show allocation, not installed contents or the active OTA slot. Hatched app regions project headroom from this build's binary size. Outside-partition regions may contain bootloader and table data; unmapped space is not app-slot headroom.</p><p>Attributed sizes are not guaranteed savings from disabling flags. Flag state was not captured in these artifacts.</p><p>Flash shares use attributed payload, not binary size. Alignment, image headers, and ambiguous linker entries remain unreconciled. Static RAM excludes executable RAM, heap, and task stacks.</p></footer>
+    </div>
+  </main>
+</body>
+</html>

@@ -377,6 +377,9 @@ code {
   margin-top: 6px;
 }
 
+.board-footprint-link { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 10px; white-space: nowrap; }
+.board-footprint-link:hover { color: var(--text); }
+
 .capabilities-label {
   color: rgb(94, 234, 212);
   font-size: 12px;

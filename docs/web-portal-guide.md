@@ -296,6 +296,7 @@ firmware from hardware CDC to TinyUSB may assign a different Windows COM port.
 
 JC3248W535 also offers only Off or USB for HID. Its native USB connector no
 longer provides a serial log console; diagnostics use UART0 at 115200 baud.
+JC3248W535 and both JC3636W518 variants disable alarms to preserve internal RAM.
 For native USB flashing when the running firmware has no serial port, hold
 BOOT while resetting to enter the ESP32-S3 download mode, or use OTA updates.
 Migrating from its older 3 MiB firmware slots requires a full serial flash of
