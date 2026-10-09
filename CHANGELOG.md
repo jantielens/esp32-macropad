@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-08
+ms.date: 2026-10-09
 ms.topic: reference
 ---
 
@@ -25,9 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   visible default breakpoints, and flags missing or descending thresholds instead
   of guessing. Swatches and the close control are keyboard-accessible buttons, and
   Escape closes the popover regardless of focus.
+* Rocker and Numeric Rocker indicator colors use the shared picker in literal-only
+  mode, hiding expression controls and rejecting bindings. Binding-capable widget
+  colors have **fx** hints, including compact sparkline line colors. Waveform hints
+  identify its 11-character binding limit and creation-time color resolution.
 
 ### Fixed
 
+* Reduce editor color swatches to 36 px and align sparkline marker/reference rows,
+  gauge color rows, and mobile Button Defaults controls. Sparkline marker and
+  reference color fields have explicit Color labels beside their **fx** hints.
+* Match waveform, sparkline marker/reference, and bar background color input limits
+  to firmware storage so the picker rejects values that would be truncated.
 * Firmware color parsing now requires exactly 3 or 6 hex digits. `#RGB` expands
   correctly (previously `#FFF` rendered as blue), and values with extra digits or
   trailing characters are rejected instead of being silently truncated.

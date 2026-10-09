@@ -1974,13 +1974,18 @@ body {
 /* Bindable color field */
 .bindable-color { margin-bottom: 4px; }
 .bindable-color .bc-swatch {
-  width: 44px; height: 44px; border-radius: 6px;
+  width: 36px; height: 36px; border-radius: 6px;
   border: 2px solid var(--portal-border); cursor: pointer; box-sizing: border-box;
 }
 .bindable-color .bc-swatch.bc-binding {
   background: linear-gradient(90deg, #f44336, #ff9800, #ffeb3b, #4caf50, #2196f3, #9c27b0) !important;
 }
 .bindable-color .bc-input { display: none; }
+
+.pad-default-color-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 8px; }
+.pad-default-color-row > div { flex: 1 1 auto; }
+.pad-default-color-row label { white-space: nowrap; }
+.pad-default-color-row .bindable-color { margin-bottom: 0; }
 
 .pad-background-control-row {
   display: flex;
@@ -2068,6 +2073,9 @@ body {
 .sparkline-source-heading .bindable-color label { margin: 0; }
 .portal-form .sparkline-source-heading small { display: inline; font-weight: 400; }
 .sparkline-source-heading .bindable-color .bc-input { display: none; }
+.sparkline-color-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-bottom: 12px; }
+.sparkline-color-row > .form-group,
+.sparkline-color-row .bindable-color { margin-bottom: 0; }
 .sparkline-history-toggle { display: block; margin: 4px 0; }
 .sparkline-history-dependency { display: block; }
 .sparkline-history-fields { margin-top: 6px; }
@@ -2098,8 +2106,9 @@ body {
 :root[data-bs-theme="dark"] .portal-form small.editor-warn { color: #f0b429; }
 
 /* Widget threshold / status color row */
-.bar-chart-colors { display: flex; gap: 8px; align-items: end; }
-.bar-chart-colors .form-group { flex: 1; min-width: 0; }
+.bar-chart-colors { display: flex; gap: 8px; align-items: end; margin-bottom: 12px; }
+.bar-chart-colors .form-group { flex: 1; min-width: 0; margin-bottom: 0; }
+.bar-chart-colors .bindable-color { margin-bottom: 0; }
 
 /* Binding input: flex row with ? help button */
 .binding-input-wrap { display: flex; align-items: center; gap: 6px; }
