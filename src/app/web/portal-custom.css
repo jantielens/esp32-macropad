@@ -2064,6 +2064,8 @@ body {
 .sparkline-binding-color-row .bindable-color .bc-input { display: none; }
 .sparkline-source { margin-top: 12px; padding-left: 10px; border-left: 2px solid var(--portal-border-light); }
 .sparkline-source-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
+.sparkline-source-heading .bindable-color { display: flex; align-items: center; gap: 6px; }
+.sparkline-source-heading .bindable-color label { margin: 0; }
 .portal-form .sparkline-source-heading small { display: inline; font-weight: 400; }
 .sparkline-source-heading .bindable-color .bc-input { display: none; }
 .sparkline-history-toggle { display: block; margin: 4px 0; }

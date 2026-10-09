@@ -421,6 +421,15 @@ The **Colors** section (collapsible) controls the button's appearance:
 
 Each color field accepts either a static `#hex` value or a binding expression for dynamic colors — more on that in [Dynamic Colors](#dynamic-colors-with-bindings). Click the color swatch to open the color picker popover. It offers colors already used in your pads (including bindings), a palette, a **+** swatch that opens your browser's color picker, and the **Generate Color by Threshold** helper. The **Color or expression** box at the bottom accepts `#RRGGBB`, `#RGB` (expanded to `#RRGGBB`), or a binding expression such as `[expr:...]`; click its **fx** badge for binding help. The picker validates the value as you type and disables **Apply** until it is valid.
 
+Widget color controls use the same picker. An **fx** hint identifies a color that
+supports bindings, including the compact sparkline line colors. Rocker and Numeric
+Rocker indicator colors accept only literal colors: their picker hides binding
+help and the threshold generator, and rejects expressions. Waveform colors accept
+short bindings of up to 11 characters, resolved when the widget is created rather
+than updated live. The picker checks each field's storage limit before applying a
+value; sparkline minimum/maximum marker colors, reference-line colors, and bar
+backgrounds allow up to 63 characters.
+
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
 **Border width** (0–10 px) and **corner radius** (0–50 px) let you fine-tune the look. A radius of 0 gives sharp corners; higher values create rounded buttons. When a button doesn't have an explicit value, it inherits from the device-level [Pad and Button Defaults](#pad-and-button-defaults). If you set a custom value, a **↩** reset link appears next to the label: click it to revert to the inherited default.

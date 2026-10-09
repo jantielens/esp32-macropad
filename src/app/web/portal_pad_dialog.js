@@ -463,7 +463,7 @@ function padDialogOpen(col, row) {
 
     // Rocker widget fields
     document.getElementById('pad-edit-rocker-axis').value = btn.widget_rocker_axis || 'vertical';
-    document.getElementById('pad-edit-rocker-color').value = btn.widget_rocker_color || '#FFFFFF';
+    padSetBindableColor('pad-edit-rocker-color', btn.widget_rocker_color, '#FFFFFF');
     document.getElementById('pad-edit-rocker-opacity').value = (btn.widget_rocker_opacity !== undefined) ? btn.widget_rocker_opacity : 80;
 
     document.getElementById('pad-edit-mousepad-sensitivity').value =
@@ -498,7 +498,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-numericrocker-small-step').value = (btn.widget_numericrocker_small_step !== undefined) ? btn.widget_numericrocker_small_step : 1;
     document.getElementById('pad-edit-numericrocker-large-step').value = (btn.widget_numericrocker_large_step !== undefined) ? btn.widget_numericrocker_large_step : 10;
     document.getElementById('pad-edit-numericrocker-zone-scale').value = (btn.widget_numericrocker_zone_scale_pct !== undefined) ? btn.widget_numericrocker_zone_scale_pct : 100;
-    document.getElementById('pad-edit-numericrocker-color').value = btn.widget_numericrocker_color || '#FFFFFF';
+    padSetBindableColor('pad-edit-numericrocker-color', btn.widget_numericrocker_color, '#FFFFFF');
     document.getElementById('pad-edit-numericrocker-opacity').value = (btn.widget_numericrocker_opacity !== undefined) ? btn.widget_numericrocker_opacity : 80;
 
     // Numeric Rocker adjustment action

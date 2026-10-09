@@ -64,18 +64,19 @@ function padColorNormalizeLiteral(val) {
  * normalized value to store, error is '' when valid. Empty input has no error
  * but an empty value.
  */
-function padColorCheck(raw, maxLen) {
+function padColorCheck(raw, maxLen, allowBindings) {
     var v = String(raw == null ? '' : raw).trim();
     if (!v) return { value: '', error: '' };
     var value = v;
     if (v.indexOf('[') !== -1) {
+        if (allowBindings === false) return { value: v, error: 'This field requires a color, not an expression' };
         if (typeof validateBinding === 'function') {
             var r = validateBinding(v);
             if (!r.valid) return { value: v, error: r.errors[0].message };
         }
     } else {
         value = padColorNormalizeLiteral(v);
-        if (!value) return { value: v, error: 'Not a color \u2014 use #RRGGBB, #RGB, or a [binding]' };
+        if (!value) return { value: v, error: 'Not a color \u2014 use #RRGGBB or #RGB' + (allowBindings === false ? '' : ', or a [binding]') };
     }
     if (maxLen > 0 && value.length > maxLen)
         return { value: value, error: 'Too long for this field (max ' + maxLen + ' characters)' };
@@ -142,7 +143,7 @@ function padColorPopoverCreate() {
             '</div>' +
         '</details>' +
         '<div class="color-popover-input-row">' +
-            '<label class="cp-gen-label" for="cp-input">Color or expression <span class="fx-hint" id="cp-fx" title="Binding help">fx</span></label>' +
+            '<label class="cp-gen-label" for="cp-input"><span id="cp-input-label">Color or expression</span> <span class="fx-hint" id="cp-fx" title="Binding help">fx</span></label>' +
             '<div class="cp-input-wrap">' +
                 '<span class="cp-preview" id="cp-preview" aria-hidden="true"></span>' +
                 '<input type="text" id="cp-input" maxlength="191" placeholder="#RRGGBB or [expr:\u2026]" spellcheck="false" aria-describedby="cp-error">' +
@@ -229,7 +230,7 @@ function padColorPopoverValidate(showError) {
     if (!_cpPopover) return null;
     var pop = _cpPopover.pop;
     var target = _cpPopover.target;
-    var res = padColorCheck(pop.querySelector('#cp-input').value, target && target.maxLength > 0 ? target.maxLength : 0);
+    var res = padColorCheck(pop.querySelector('#cp-input').value, target && target.maxLength > 0 ? target.maxLength : 0, !target || target.dataset.allowBindings !== 'false');
     var preview = pop.querySelector('#cp-preview');
     var ok = !!res.value && !res.error;
     preview.classList.toggle('cp-preview-binding', ok && res.value.charAt(0) !== '#');
@@ -265,7 +266,12 @@ function padColorPopoverOpen(swatch, input) {
     cp.target = input;
     cp.anchor = swatch;
     cp.returnFocus = document.activeElement;
-    padThresholdGenLoad(input.value);
+    var allowBindings = input.dataset.allowBindings !== 'false';
+    cp.pop.querySelector('#cp-gen').style.display = allowBindings ? '' : 'none';
+    cp.pop.querySelector('#cp-fx').style.display = allowBindings ? '' : 'none';
+    cp.pop.querySelector('#cp-input-label').textContent = allowBindings ? 'Color or expression' : 'Color';
+    cp.pop.querySelector('#cp-input').placeholder = allowBindings ? '#RRGGBB or [expr:\u2026]' : '#RRGGBB';
+    padThresholdGenLoad(allowBindings ? input.value : '');
     // Show off-screen first so we can measure
     cp.pop.style.left = '-9999px';
     cp.pop.style.top = '-9999px';
@@ -277,7 +283,7 @@ function padColorPopoverOpen(swatch, input) {
     recentGrid.innerHTML = '';
     padCollectUsedColors(padState.editCol || -1, padState.editRow || -1).forEach(function(val) {
         var hex = padColorNormalizeLiteral(val);
-        if (hex || val.charAt(0) === '[') recentGrid.appendChild(padColorSwatchButton(hex || val));
+        if (hex || (allowBindings && val.charAt(0) === '[')) recentGrid.appendChild(padColorSwatchButton(hex || val));
     });
     recentHeading.style.display = recentGrid.children.length ? '' : 'none';
     // Highlight active color in palette & used list
