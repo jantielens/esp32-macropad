@@ -552,10 +552,41 @@ bool meter_get_has_results() {
 }
 #endif // HAS_MCP
 
+static const BindingParamDoc kMeterParams[] = {
+    {"key", "Meter key, see below."},
+};
+
+static const BindingKeyDoc kMeterKeyDocs[] = {
+    {"lref", "Reference reading for Zone V, lux", "Calibration"},
+    {"zone5_time", "Exposure time for the reference, seconds", "Calibration"},
+    {"l_bright", "Highlight reading, lux", "Readings"},
+    {"l_dark", "Shadow reading, lux", "Readings"},
+    {"sbr", "Subject brightness range, log units", "Results"},
+    {"grade", "Suggested paper grade 0-5", "Results"},
+    {"grade_label", "Suggested grade as text", "Results"},
+    {"time", "Suggested exposure time, seconds", "Results"},
+    {"mag_lux_a", "Reading before a height change, lux", "Magnification"},
+    {"mag_lux_b", "Reading after a height change, lux", "Magnification"},
+    {"mag_factor", "Exposure factor from the two readings", "Magnification"},
+    {"mag_time", "Exposure time corrected for magnification, seconds", "Magnification"},
+};
+
+static const BindingExampleDoc kMeterExamples[] = {
+    {"Grade [meter:grade]", "Suggested paper grade."},
+    {"[meter:time|---] s", "Suggested time once both readings are taken."},
+};
+
+static const BindingSchemeDoc kMeterDoc = {
+    "Darkroom", "Light meter readings, paper grade, and suggested times.",
+    BINDING_DOC_LIST(kMeterParams), BINDING_DOC_LIST(kMeterKeyDocs), BINDING_DOC_LIST(kMeterExamples),
+    nullptr, false, BINDING_DOC_NONE,
+    "Values show --- until the needed readings exist.", nullptr,
+};
+
 void meter_init() {
     if (!binding_template_register("meter", meter_resolve, meter_collect,
-                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    meter_binding_key_count, meter_binding_key_at})) {
+                                   {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
+                                    meter_binding_key_count, meter_binding_key_at, &kMeterDoc})) {
         LOGE(TAG, "Failed to register meter binding scheme");
     } else {
         LOGI(TAG, "Meter binding scheme registered");

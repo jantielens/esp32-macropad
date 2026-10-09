@@ -484,10 +484,45 @@ const char* expose_state_str(uint8_t state) {
 }
 #endif // HAS_MCP
 
+static const BindingParamDoc kExposeParams[] = {
+    {"key", "Exposure key, see below."},
+    {"format", "Duration format for time keys: mm:ss, hh:mm:ss, ss, mm:ss.d, ss.d."},
+};
+
+static const BindingKeyDoc kExposeKeyDocs[] = {
+    {"time", "Set exposure time, seconds", nullptr},
+    {"remaining", "Seconds left; the full time when stopped", nullptr},
+    {"elapsed", "Seconds since the exposure started", nullptr},
+    {"effective_time", "Exposure time after dry-down, seconds", nullptr},
+    {"state", "stopped, running, paused, or focus", nullptr},
+    {"relay", "ON while the enlarger lamp is on", nullptr},
+    {"dry_down", "Dry-down compensation %", nullptr},
+};
+
+static const BindingExampleDoc kExposeExamples[] = {
+    {"[expose:remaining;mm:ss.d]", "Countdown with tenths."},
+    {"[expose:state]", "Current exposure state."},
+};
+
+static const BindingReferenceDoc kExposeFormats[] = {
+    {nullptr, "mm:ss", "1:05", "Minutes and seconds (default)", "[expose:remaining;mm:ss]"},
+    {nullptr, "mm:ss.d", "1:05.3", "With tenths", "[expose:remaining;mm:ss.d]"},
+    {nullptr, "ss.d", "65.3", "Seconds with tenths", "[expose:remaining;ss.d]"},
+    {nullptr, "ss", "65", "Whole seconds", "[expose:remaining;ss]"},
+    {nullptr, "hh:mm:ss", "0:01:05", "With hours", "[expose:remaining;hh:mm:ss]"},
+};
+
+static const BindingSchemeDoc kExposeDoc = {
+    "Darkroom", "Enlarger exposure timer and lamp state.",
+    BINDING_DOC_LIST(kExposeParams), BINDING_DOC_LIST(kExposeKeyDocs), BINDING_DOC_LIST(kExposeExamples),
+    "Exposure durations", true, BINDING_DOC_LIST(kExposeFormats),
+    "Without a format, time keys show seconds with one decimal.", nullptr,
+};
+
 void expose_timer_init() {
     if (!binding_template_register("expose", expose_resolve, expose_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    expose_binding_key_count, expose_binding_key_at})) {
+                                    expose_binding_key_count, expose_binding_key_at, &kExposeDoc})) {
         LOGE(TAG, "Failed to register expose binding scheme");
     } else {
         LOGT(TAG, "Expose binding scheme registered");

@@ -295,9 +295,28 @@ void pad_resolve(const char* const* inputs, size_t count,
 // Init
 // ============================================================================
 
+static const BindingParamDoc kPadParams[] = {
+    {"name", "Name from the pad's Bindings list."},
+    {"format", "printf float format such as %.1f, or %s for text."},
+};
+
+static const BindingExampleDoc kPadExamples[] = {
+    {"[pad:power]", "Raw value of the named pad binding."},
+    {"[pad:power;%.0f W]", "Local format without redefining the source."},
+    {"[expr:[pad:power] > 3000 ? \"High\" : \"Low\"]", "Reuse a named value inside an expression."},
+};
+
+static const BindingSchemeDoc kPadDoc = {
+    "Logic", "Reuse a binding defined once in the pad's Bindings list.",
+    BINDING_DOC_LIST(kPadParams), BINDING_DOC_NONE, BINDING_DOC_LIST(kPadExamples),
+    nullptr, false, BINDING_DOC_NONE,
+    "Pads only. Use it to shorten long tokens in fields with a smaller length limit.", nullptr,
+};
+
 void pad_binding_init() {
     if (!binding_template_register("pad", pad_binding_resolve, pad_binding_collect,
-                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr})) {
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
+                                    &kPadDoc})) {
         LOGE(TAG, "Failed to register pad binding scheme");
     }
 }

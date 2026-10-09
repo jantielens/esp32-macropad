@@ -1,0 +1,1240 @@
+{
+  "schemes": [
+    {
+      "name": "health",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "cpu",
+        "cpu_core_0",
+        "cpu_core_1",
+        "uptime",
+        "chip",
+        "chip_rev",
+        "chip_cores",
+        "cpu_freq",
+        "flash_size",
+        "firmware",
+        "board",
+        "mac",
+        "reset_reason",
+        "heap_total",
+        "heap_free",
+        "heap_min",
+        "heap_largest",
+        "heap_internal_total",
+        "heap_internal",
+        "heap_internal_used",
+        "psram_total",
+        "psram_free",
+        "psram_used",
+        "psram_min",
+        "psram_largest",
+        "wifi_connected",
+        "wifi_ssid",
+        "rssi",
+        "ip",
+        "hostname",
+        "brightness",
+        "volume",
+        "ble_status",
+        "ble_name",
+        "ble_state",
+        "ble_pairing",
+        "ble_bonded",
+        "ble_encrypted",
+        "ble_peer_addr",
+        "ble_peer_id_addr",
+        "table",
+        "extended_table"
+      ],
+      "category": "Device",
+      "summary": "Local device telemetry. Works without a network.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Telemetry key, see below.",
+          "required": true
+        },
+        {
+          "name": "format",
+          "desc": "printf format: %d for numbers, %s for text, e.g. %d B.",
+          "required": false
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "cpu",
+          "desc": "CPU usage % (0-100)",
+          "group": "System"
+        },
+        {
+          "key": "cpu_core_0",
+          "desc": "Core 0 CPU usage % (0-100; ? if unavailable)",
+          "group": "System"
+        },
+        {
+          "key": "cpu_core_1",
+          "desc": "Core 1 CPU usage % (0-100; ? if unavailable)",
+          "group": "System"
+        },
+        {
+          "key": "uptime",
+          "desc": "Seconds since boot",
+          "group": "System"
+        },
+        {
+          "key": "chip",
+          "desc": "SoC model, e.g. ESP32-S3",
+          "group": "System"
+        },
+        {
+          "key": "chip_rev",
+          "desc": "Silicon revision number",
+          "group": "System"
+        },
+        {
+          "key": "chip_cores",
+          "desc": "CPU core count",
+          "group": "System"
+        },
+        {
+          "key": "cpu_freq",
+          "desc": "CPU clock, MHz",
+          "group": "System"
+        },
+        {
+          "key": "flash_size",
+          "desc": "Flash chip size, bytes",
+          "group": "System"
+        },
+        {
+          "key": "firmware",
+          "desc": "Firmware version string",
+          "group": "System"
+        },
+        {
+          "key": "board",
+          "desc": "Board name used at build time",
+          "group": "System"
+        },
+        {
+          "key": "mac",
+          "desc": "WiFi MAC address",
+          "group": "System"
+        },
+        {
+          "key": "reset_reason",
+          "desc": "Last reset cause, e.g. Power On",
+          "group": "System"
+        },
+        {
+          "key": "heap_total",
+          "desc": "Total heap, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "heap_free",
+          "desc": "Free heap, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "heap_min",
+          "desc": "Heap low-water mark, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "heap_largest",
+          "desc": "Largest free heap block, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "heap_internal_total",
+          "desc": "Total internal RAM, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "heap_internal",
+          "desc": "Free internal RAM, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "heap_internal_used",
+          "desc": "Used internal RAM, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "psram_total",
+          "desc": "Total PSRAM, bytes (0 if absent)",
+          "group": "Memory"
+        },
+        {
+          "key": "psram_free",
+          "desc": "Free PSRAM, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "psram_used",
+          "desc": "Used PSRAM, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "psram_min",
+          "desc": "PSRAM low-water mark, bytes",
+          "group": "Memory"
+        },
+        {
+          "key": "psram_largest",
+          "desc": "Unavailable on this board; add a |fallback",
+          "group": "Memory"
+        },
+        {
+          "key": "wifi_connected",
+          "desc": "ON/OFF WiFi connection state",
+          "group": "WiFi"
+        },
+        {
+          "key": "wifi_ssid",
+          "desc": "Connected network name",
+          "group": "WiFi"
+        },
+        {
+          "key": "rssi",
+          "desc": "WiFi signal strength, dBm",
+          "group": "WiFi"
+        },
+        {
+          "key": "ip",
+          "desc": "Device IP address",
+          "group": "WiFi"
+        },
+        {
+          "key": "hostname",
+          "desc": "Device hostname",
+          "group": "WiFi"
+        },
+        {
+          "key": "brightness",
+          "desc": "Backlight brightness 0-100",
+          "group": "Display & audio"
+        },
+        {
+          "key": "volume",
+          "desc": "Audio volume 0-100",
+          "group": "Display & audio"
+        },
+        {
+          "key": "ble_status",
+          "desc": "BLE: disabled/ready/pairing/connected/error",
+          "group": "USB & BLE"
+        },
+        {
+          "key": "ble_name",
+          "desc": "Current BLE keyboard name",
+          "group": "USB & BLE"
+        },
+        {
+          "key": "ble_state",
+          "desc": "Detailed BLE state, e.g. advertising",
+          "group": "USB & BLE"
+        },
+        {
+          "key": "ble_pairing",
+          "desc": "ON/OFF pairing mode active",
+          "group": "USB & BLE"
+        },
+        {
+          "key": "ble_bonded",
+          "desc": "ON/OFF current connection bonded",
+          "group": "USB & BLE"
+        },
+        {
+          "key": "ble_encrypted",
+          "desc": "ON/OFF current connection encrypted",
+          "group": "USB & BLE"
+        },
+        {
+          "key": "ble_peer_addr",
+          "desc": "Connected peer Bluetooth address",
+          "group": "USB & BLE"
+        },
+        {
+          "key": "ble_peer_id_addr",
+          "desc": "Connected peer identity address",
+          "group": "USB & BLE"
+        },
+        {
+          "key": "table",
+          "desc": "Device summary table for the Table widget",
+          "group": "Tables"
+        },
+        {
+          "key": "extended_table",
+          "desc": "Extended device table for the Table widget",
+          "group": "Tables"
+        }
+      ],
+      "examples": [
+        {
+          "code": "CPU [health:cpu]%",
+          "desc": "Text around a token is kept."
+        },
+        {
+          "code": "[health:heap_free;%d B]",
+          "desc": "Number with a unit inside the format."
+        },
+        {
+          "code": "[health:wifi_ssid] ([health:rssi] dBm)",
+          "desc": "Network name and signal strength."
+        },
+        {
+          "code": "[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]",
+          "desc": "Green or red color for WiFi state."
+        },
+        {
+          "code": "[health:table]",
+          "desc": "Exact single token for a Table widget."
+        }
+      ]
+    },
+    {
+      "name": "time",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": true,
+      "category": "Time",
+      "summary": "Wall clock and date via strftime, plus sub-second codes.",
+      "note": "Shows --:-- until the clock has synced over NTP. The format cannot contain ';'.",
+      "params": [
+        {
+          "name": "format",
+          "desc": "strftime format plus %ms, %cs, %ds, or %ums for uptime.",
+          "required": true
+        },
+        {
+          "name": "timezone",
+          "desc": "Olson name such as Europe/Amsterdam, or a POSIX TZ string.",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "code": "[time:%H:%M;Europe/Amsterdam]",
+          "desc": "Local time with daylight saving."
+        },
+        {
+          "code": "[time:%a %d %b]",
+          "desc": "Short date in the device timezone."
+        },
+        {
+          "code": "[time:%ums]",
+          "desc": "Uptime in ms; works before NTP sync."
+        }
+      ],
+      "reference": {
+        "title": "Clock & date",
+        "formats": true,
+        "rows": [
+          {
+            "syntax": "%H:%M",
+            "sample": "14:05",
+            "desc": "24-hour clock",
+            "example": "[time:%H:%M]"
+          },
+          {
+            "syntax": "%I:%M %p",
+            "sample": "02:05 PM",
+            "desc": "12-hour clock",
+            "example": "[time:%I:%M %p]"
+          },
+          {
+            "syntax": "%H:%M:%S",
+            "sample": "14:05:09",
+            "desc": "With seconds",
+            "example": "[time:%H:%M:%S]"
+          },
+          {
+            "syntax": "%H:%M:%S.%ms",
+            "sample": "14:05:09.347",
+            "desc": "Milliseconds; %cs and %ds give 1/100 and 1/10",
+            "example": "[time:%H:%M:%S.%ms]"
+          },
+          {
+            "syntax": "%a %d %b",
+            "sample": "Fri 09 Oct",
+            "desc": "Short date",
+            "example": "[time:%a %d %b]"
+          },
+          {
+            "syntax": "%A",
+            "sample": "Friday",
+            "desc": "Weekday name",
+            "example": "[time:%A]"
+          },
+          {
+            "syntax": "%d-%m-%Y",
+            "sample": "09-10-2026",
+            "desc": "Day-month-year",
+            "example": "[time:%d-%m-%Y]"
+          },
+          {
+            "syntax": "%Y-%m-%d",
+            "sample": "2026-10-09",
+            "desc": "ISO date",
+            "example": "[time:%Y-%m-%d]"
+          },
+          {
+            "syntax": "%V",
+            "sample": "41",
+            "desc": "ISO week number",
+            "example": "[time:Week %V]"
+          },
+          {
+            "syntax": "%ums",
+            "sample": "734512",
+            "desc": "Uptime in ms, before NTP sync too",
+            "example": "[time:%ums]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "expr",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 1,
+      "free_form": true,
+      "category": "Logic",
+      "summary": "Calculate values, compare them, and choose text or colors.",
+      "note": "Quote strings with double quotes. There are no && or || operators; nest ternaries instead.",
+      "params": [
+        {
+          "name": "expression",
+          "desc": "Arithmetic, comparisons, ternaries, and threshold(); inner tokens resolve first.",
+          "required": true
+        },
+        {
+          "name": "format",
+          "desc": "printf format applied to the result, e.g. %.1f.",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "code": "[expr:[health:cpu] > 80 ? \"High\" : \"OK\"]",
+          "desc": "Text chosen by a condition."
+        },
+        {
+          "code": "[expr:([health:heap_free] / 1024);%.0f KB]",
+          "desc": "Derived number with a unit."
+        },
+        {
+          "code": "[expr:threshold([health:cpu],\"#16a34a\",50,\"#f59e0b\",80,\"#dc2626\")]",
+          "desc": "Map a number to color zones."
+        },
+        {
+          "code": "[expr:[time:%ms] % 500 < 250 ? \"#dc2626\" : \"#f8fafc\"]",
+          "desc": "Blink between two colors."
+        }
+      ],
+      "reference": {
+        "title": "Operators & functions",
+        "formats": false,
+        "rows": [
+          {
+            "group": "Arithmetic",
+            "syntax": "a + b",
+            "desc": "Add; also - * /",
+            "example": "[expr:[health:heap_free] / 1024;%.0f]"
+          },
+          {
+            "group": "Arithmetic",
+            "syntax": "a % b",
+            "desc": "Remainder, useful for blinking",
+            "example": "[expr:[time:%ms] % 500 < 250]"
+          },
+          {
+            "group": "Arithmetic",
+            "syntax": "-a",
+            "desc": "Negate",
+            "example": "[expr:-[health:rssi]]"
+          },
+          {
+            "group": "Arithmetic",
+            "syntax": "( a )",
+            "desc": "Grouping",
+            "example": "[expr:([health:cpu] + 5) * 2]"
+          },
+          {
+            "group": "Comparison",
+            "syntax": "a > b",
+            "desc": "Also < >= <=; result is 1 or 0",
+            "example": "[expr:[health:cpu] > 80]"
+          },
+          {
+            "group": "Comparison",
+            "syntax": "a == b",
+            "desc": "Equal on numbers or \"strings\"; also !=",
+            "example": "[expr:[health:wifi_connected]==\"ON\"]"
+          },
+          {
+            "group": "Conditional",
+            "syntax": "c ? x : y",
+            "desc": "Ternary; branches can be numbers or \"strings\" and can be chained",
+            "example": "[expr:[health:cpu] > 80 ? \"High\" : \"OK\"]"
+          },
+          {
+            "group": "Functions",
+            "syntax": "threshold(v, c0, t1, c1, ...)",
+            "desc": "c0 below t1, c1 below t2, ..., else the last value; thresholds ascend",
+            "example": "[expr:threshold([health:cpu],\"#16a34a\",50,\"#dc2626\")]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mqtt",
+      "min_params": 1,
+      "max_params": 3,
+      "widget_max_params": 2,
+      "format_param": 2,
+      "validation_mode": 0,
+      "free_form": true,
+      "category": "Data",
+      "summary": "Live values from MQTT topics, optionally from a JSON field.",
+      "note": "Topics are subscribed when the pad is saved. Values show --- until the first message.",
+      "status": "No MQTT broker configured",
+      "params": [
+        {
+          "name": "topic",
+          "desc": "MQTT topic to subscribe to.",
+          "required": true
+        },
+        {
+          "name": "path",
+          "desc": "JSON field such as temperature or a.b; empty or . for the raw payload.",
+          "required": false
+        },
+        {
+          "name": "format",
+          "desc": "printf format: %d, %.1f, %s, with units inside, e.g. %.1f °C.",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "code": "[mqtt:sensors/temp]",
+          "desc": "Raw payload of a topic."
+        },
+        {
+          "code": "[mqtt:sensors/state;temperature;%.1f °C]",
+          "desc": "JSON field formatted with a unit."
+        },
+        {
+          "code": "[mqtt:solar/power;watts|0]",
+          "desc": "Show 0 until the first message arrives."
+        },
+        {
+          "code": "Power: [mqtt:grid;power;%d] W",
+          "desc": "Text around a token is kept."
+        }
+      ]
+    },
+    {
+      "name": "pad",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 0,
+      "free_form": true,
+      "category": "Logic",
+      "summary": "Reuse a binding defined once in the pad's Bindings list.",
+      "note": "Pads only. Use it to shorten long tokens in fields with a smaller length limit.",
+      "params": [
+        {
+          "name": "name",
+          "desc": "Name from the pad's Bindings list.",
+          "required": true
+        },
+        {
+          "name": "format",
+          "desc": "printf float format such as %.1f, or %s for text.",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "code": "[pad:power]",
+          "desc": "Raw value of the named pad binding."
+        },
+        {
+          "code": "[pad:power;%.0f W]",
+          "desc": "Local format without redefining the source."
+        },
+        {
+          "code": "[expr:[pad:power] > 3000 ? \"High\" : \"Low\"]",
+          "desc": "Reuse a named value inside an expression."
+        }
+      ]
+    },
+    {
+      "name": "timer",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "1",
+        "1_state",
+        "1_mode",
+        "1_expired",
+        "1_target",
+        "2",
+        "2_state",
+        "2_mode",
+        "2_expired",
+        "2_target",
+        "3",
+        "3_state",
+        "3_mode",
+        "3_expired",
+        "3_target"
+      ],
+      "category": "Device",
+      "summary": "Value and state of the 3 on-device timers.",
+      "note": "Countdowns that run past zero show negative values, e.g. -0:05.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Timer number 1-3, or N_state, N_mode, N_expired, N_target.",
+          "required": true
+        },
+        {
+          "name": "format",
+          "desc": "Duration format for the timer value, see Format strings.",
+          "required": false
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "#",
+          "desc": "Timer value; default 245.3 (seconds with tenths)"
+        },
+        {
+          "key": "#_state",
+          "desc": "running, paused, or stopped"
+        },
+        {
+          "key": "#_mode",
+          "desc": "up (count-up) or down (countdown)"
+        },
+        {
+          "key": "#_expired",
+          "desc": "ON once a countdown has passed zero"
+        },
+        {
+          "key": "#_target",
+          "desc": "Countdown preset in whole seconds; 0 for count-up"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[timer:1;mm:ss]",
+          "desc": "Timer 1 as minutes and seconds."
+        },
+        {
+          "code": "[timer:1_target]",
+          "desc": "Stable maximum for a countdown gauge."
+        },
+        {
+          "code": "[expr:[timer:1_expired]==\"ON\"?\"#dc2626\":\"#333333\"]",
+          "desc": "Red once the countdown expires."
+        }
+      ],
+      "reference": {
+        "title": "Timer durations",
+        "formats": true,
+        "rows": [
+          {
+            "syntax": "mm:ss",
+            "sample": "4:05",
+            "desc": "Minutes and seconds",
+            "example": "[timer:1;mm:ss]"
+          },
+          {
+            "syntax": "hh:mm:ss",
+            "sample": "0:04:05",
+            "desc": "With hours",
+            "example": "[timer:1;hh:mm:ss]"
+          },
+          {
+            "syntax": "mm:ss.d",
+            "sample": "4:05.3",
+            "desc": "With tenths",
+            "example": "[timer:1;mm:ss.d]"
+          },
+          {
+            "syntax": "ss",
+            "sample": "245",
+            "desc": "Whole seconds",
+            "example": "[timer:1;ss]"
+          }
+        ]
+      }
+    },
+    {
+      "name": "alarm",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "1_time",
+        "1_enabled",
+        "1_state",
+        "1_ready",
+        "active_id",
+        "1_hour",
+        "1_minute",
+        "1_minutes",
+        "1_weekdays",
+        "1_day_0",
+        "1_day_1",
+        "1_day_2",
+        "1_day_3",
+        "1_day_4",
+        "1_day_5",
+        "1_day_6",
+        "1_repeat",
+        "1_snooze_minutes",
+        "1_auto_dismiss_minutes",
+        "1_once_epoch",
+        "1_once_local",
+        "1_once_available",
+        "1_next_epoch",
+        "1_next_local",
+        "1_next_seconds",
+        "1_next_available",
+        "1_snooze_seconds",
+        "1_snooze_available",
+        "1_dismiss_seconds",
+        "1_dismiss_available",
+        "1_next_ring_seconds",
+        "1_next_ring_available",
+        "1_ota_deferred",
+        "1_storage_error",
+        "1_hook_error",
+        "1_command_error",
+        "1_command_message",
+        "1_pending_commands",
+        "1_completed_commands",
+        "1_save_state"
+      ],
+      "category": "Device",
+      "summary": "Read-only state of alarm 1.",
+      "note": "Countdowns are empty, not 0, when unavailable; check the matching _available key.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Alarm key, see below.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "1_time",
+          "desc": "Alarm time as HH:MM",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_hour",
+          "desc": "Alarm hour 0-23",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_minute",
+          "desc": "Alarm minute 0-59",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_minutes",
+          "desc": "Minutes after midnight",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_enabled",
+          "desc": "ON when the alarm is enabled",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_ready",
+          "desc": "ON once the alarm is loaded and the clock has synced",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_repeat",
+          "desc": "once or weekly",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_weekdays",
+          "desc": "Repeat days as a bitmask, bit 0 = Sunday",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_day_#",
+          "desc": "ON when weekday 0-6 (Sunday-Saturday) repeats",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_snooze_minutes",
+          "desc": "Snooze length in minutes",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_auto_dismiss_minutes",
+          "desc": "Minutes until a ringing alarm stops",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_once_epoch",
+          "desc": "One-time alarm as epoch seconds; empty if none",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_once_local",
+          "desc": "One-time alarm as YYYY-MM-DD HH:MM; empty if none",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_once_available",
+          "desc": "ON when a one-time alarm is set",
+          "group": "Schedule"
+        },
+        {
+          "key": "1_state",
+          "desc": "idle, ringing, or snoozed",
+          "group": "Now"
+        },
+        {
+          "key": "active_id",
+          "desc": "1 while ringing or snoozed, else 0",
+          "group": "Now"
+        },
+        {
+          "key": "1_next_epoch",
+          "desc": "Next scheduled alarm as epoch seconds; empty if none",
+          "group": "Now"
+        },
+        {
+          "key": "1_next_local",
+          "desc": "Next scheduled alarm as YYYY-MM-DD HH:MM",
+          "group": "Now"
+        },
+        {
+          "key": "1_next_seconds",
+          "desc": "Seconds until the next scheduled alarm, excluding snooze",
+          "group": "Now"
+        },
+        {
+          "key": "1_next_available",
+          "desc": "ON when 1_next_seconds has a value",
+          "group": "Now"
+        },
+        {
+          "key": "1_next_ring_seconds",
+          "desc": "Seconds until the next ring, including snooze",
+          "group": "Now"
+        },
+        {
+          "key": "1_next_ring_available",
+          "desc": "ON when 1_next_ring_seconds has a value",
+          "group": "Now"
+        },
+        {
+          "key": "1_snooze_seconds",
+          "desc": "Seconds until snooze ends; empty unless snoozed",
+          "group": "Now"
+        },
+        {
+          "key": "1_snooze_available",
+          "desc": "ON while snoozed",
+          "group": "Now"
+        },
+        {
+          "key": "1_dismiss_seconds",
+          "desc": "Seconds until auto-dismiss; empty unless ringing",
+          "group": "Now"
+        },
+        {
+          "key": "1_dismiss_available",
+          "desc": "ON while ringing",
+          "group": "Now"
+        },
+        {
+          "key": "1_save_state",
+          "desc": "saved, pending, or failed",
+          "group": "Diagnostics"
+        },
+        {
+          "key": "1_pending_commands",
+          "desc": "Queued alarm commands",
+          "group": "Diagnostics"
+        },
+        {
+          "key": "1_completed_commands",
+          "desc": "Completed alarm commands",
+          "group": "Diagnostics"
+        },
+        {
+          "key": "1_command_error",
+          "desc": "ON when the last command failed",
+          "group": "Diagnostics"
+        },
+        {
+          "key": "1_command_message",
+          "desc": "Message from the last command",
+          "group": "Diagnostics"
+        },
+        {
+          "key": "1_ota_deferred",
+          "desc": "ON when an update waits for the alarm",
+          "group": "Diagnostics"
+        },
+        {
+          "key": "1_storage_error",
+          "desc": "ON when settings could not be saved",
+          "group": "Diagnostics"
+        },
+        {
+          "key": "1_hook_error",
+          "desc": "ON when an alarm action failed",
+          "group": "Diagnostics"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[alarm:1_time]",
+          "desc": "The configured alarm time."
+        },
+        {
+          "code": "[expr:[alarm:1_state]==\"ringing\"?\"#dc2626\":\"#334155\"]",
+          "desc": "Red while the alarm rings."
+        },
+        {
+          "code": "[expr:[alarm:1_next_available]==\"ON\"?\"Next alarm set\":\"No alarm\"]",
+          "desc": "Check availability before using a countdown."
+        }
+      ]
+    },
+    {
+      "name": "music",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "file",
+        "file_name",
+        "title",
+        "artist",
+        "album",
+        "track",
+        "index",
+        "count",
+        "elapsed_s",
+        "total_s",
+        "status",
+        "analysis.rms",
+        "analysis.peak",
+        "analysis.band.0",
+        "analysis.band.1",
+        "analysis.band.2",
+        "analysis.band.3",
+        "analysis.band.4",
+        "analysis.band.5",
+        "analysis.band.6",
+        "analysis.band.7"
+      ],
+      "category": "Device",
+      "summary": "Now-playing state of the on-device music player.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Player key, see below.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "status",
+          "desc": "playing, paused, stopped, empty, unavailable, or error",
+          "group": "Player"
+        },
+        {
+          "key": "index",
+          "desc": "Current track index in the playlist",
+          "group": "Player"
+        },
+        {
+          "key": "count",
+          "desc": "Number of tracks; -1 when unavailable",
+          "group": "Player"
+        },
+        {
+          "key": "elapsed_s",
+          "desc": "Elapsed seconds",
+          "group": "Player"
+        },
+        {
+          "key": "total_s",
+          "desc": "Track length in seconds; -1 when unknown",
+          "group": "Player"
+        },
+        {
+          "key": "file",
+          "desc": "Full path of the current file",
+          "group": "Track"
+        },
+        {
+          "key": "file_name",
+          "desc": "File name without folders",
+          "group": "Track"
+        },
+        {
+          "key": "title",
+          "desc": "MP3 title tag",
+          "group": "Track"
+        },
+        {
+          "key": "artist",
+          "desc": "MP3 artist tag",
+          "group": "Track"
+        },
+        {
+          "key": "album",
+          "desc": "MP3 album tag",
+          "group": "Track"
+        },
+        {
+          "key": "track",
+          "desc": "MP3 track number tag",
+          "group": "Track"
+        },
+        {
+          "key": "analysis.rms",
+          "desc": "Playback loudness, RMS level",
+          "group": "Analysis"
+        },
+        {
+          "key": "analysis.peak",
+          "desc": "Playback peak level",
+          "group": "Analysis"
+        },
+        {
+          "key": "analysis.band.#",
+          "desc": "Spectrum band 0-7, low to high",
+          "group": "Analysis"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[music:title]",
+          "desc": "Track title; shows --- when the tag is empty."
+        },
+        {
+          "code": "[music:artist] - [music:title]",
+          "desc": "Artist and title in one label."
+        },
+        {
+          "code": "[expr:[music:status]==\"playing\"?\"#22c55e\":\"#64748b\"]",
+          "desc": "Green while music plays."
+        }
+      ]
+    },
+    {
+      "name": "audio",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "input.rms",
+        "input.peak",
+        "input.active"
+      ],
+      "category": "Device",
+      "summary": "Live microphone level meter.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "Microphone meter key, see below.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "input.rms",
+          "desc": "Microphone loudness, RMS level"
+        },
+        {
+          "key": "input.peak",
+          "desc": "Microphone peak level"
+        },
+        {
+          "key": "input.active",
+          "desc": "true while sound is above the activity threshold"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[audio:input.rms]",
+          "desc": "Feed a gauge or bar chart with the input level."
+        },
+        {
+          "code": "[expr:[audio:input.active]==\"true\"?\"#22c55e\":\"#334155\"]",
+          "desc": "Light up while someone speaks."
+        }
+      ]
+    },
+    {
+      "name": "list",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "fixture.selected"
+      ],
+      "category": "Data",
+      "summary": "The item selected in a List widget, per list provider.",
+      "note": "Available providers are listed under Keys.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "provider.selected for a List widget provider.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "*.selected",
+          "desc": "Item id last selected in a List widget for that provider"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[list:pads.selected|none]",
+          "desc": "Selected pad with a fallback before any selection."
+        }
+      ]
+    },
+    {
+      "name": "net",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": -1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "portal",
+        "mcp",
+        "mqtt_rx",
+        "mqtt_tx",
+        "mqtt",
+        "http",
+        "ble",
+        "ota",
+        "any"
+      ],
+      "category": "Device",
+      "summary": "Short activity pulses per network transport, for blinking indicators.",
+      "note": "age is capped at 999999, which also means never.",
+      "params": [
+        {
+          "name": "channel",
+          "desc": "Transport channel, see below.",
+          "required": true
+        },
+        {
+          "name": "sub",
+          "desc": "Omit for 1/0 activity in the last ~400 ms, or age for ms since last activity.",
+          "required": false
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "portal",
+          "desc": "Inbound web portal requests"
+        },
+        {
+          "key": "mcp",
+          "desc": "Inbound MCP calls"
+        },
+        {
+          "key": "mqtt_rx",
+          "desc": "Inbound MQTT messages"
+        },
+        {
+          "key": "mqtt_tx",
+          "desc": "Outbound MQTT publishes"
+        },
+        {
+          "key": "mqtt",
+          "desc": "Either MQTT direction"
+        },
+        {
+          "key": "http",
+          "desc": "Outbound HTTP, e.g. image fetch or Home Assistant"
+        },
+        {
+          "key": "ble",
+          "desc": "BLE HID reports"
+        },
+        {
+          "key": "ota",
+          "desc": "Firmware update flash writes"
+        },
+        {
+          "key": "any",
+          "desc": "Any channel above"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[expr:[net:any]?\"#22c55e\":\"#334155\"]",
+          "desc": "Icon color that pulses on any traffic."
+        },
+        {
+          "code": "[expr:[net:mqtt_rx]?\"#f59e0b\":\"#1e293b\"]",
+          "desc": "Flash when an MQTT message arrives."
+        },
+        {
+          "code": "[expr:[net:portal;age] < 1000 ? \"ACTIVE\" : \"idle\"]",
+          "desc": "Label for a second after a portal request."
+        }
+      ]
+    }
+  ]
+}

@@ -2167,99 +2167,138 @@ input[type="text"].label-style-input {
 .pad-icon-preview canvas { border: 1px dashed #48484a; border-radius: 4px; }
 
 /* ================================================================
-   Binding Docs Overlay (migrated from portal.css)
+   Binding Reference Dialog
    ================================================================ */
 /* Above .color-popover so the fx hint inside the popover can open it */
 .binding-docs-overlay { align-items: center; z-index: 10002; }
 
 .binding-docs-modal {
-  max-width: 780px;
-  width: min(780px, calc(100vw - 24px));
+  display: flex; flex-direction: column;
+  max-width: 1080px; width: min(1080px, calc(100vw - 24px));
+  height: min(760px, calc(100vh - 48px));
   padding: 0; text-align: left;
   background: var(--portal-docs-bg);
-  border-radius: 20px;
-  border: 1px solid var(--portal-docs-border);
+  border: 1px solid var(--portal-docs-border); border-radius: 16px;
   box-shadow: 0 30px 80px rgba(15, 23, 42, 0.22);
   overflow: hidden;
 }
 
 .binding-docs-header {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 16px; padding: 24px 28px 18px;
+  display: flex; align-items: center; gap: 12px; padding: 14px 18px;
   border-bottom: 1px solid var(--portal-docs-border);
   background: var(--portal-docs-header-bg);
 }
-
-.binding-docs-kicker {
-  margin: 0 0 6px; font-size: 12px; font-weight: 700;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--portal-link-blue);
-}
-
-.binding-docs-header h3 {
-  margin: 0; font-size: 24px; font-weight: 700;
-  letter-spacing: -0.03em; color: var(--portal-docs-heading);
-}
-
-.binding-docs-lead {
-  margin: 10px 0 0; max-width: 56ch;
-  font-size: 14px; color: var(--portal-docs-body); line-height: 1.6;
-}
-
+.binding-docs-header h3 { margin: 0; font-size: 18px; font-weight: 700; color: var(--portal-docs-heading); }
+.binding-docs-lead { margin: 2px 0 0; font-size: 12px; color: var(--portal-docs-body); }
 .binding-docs-close {
-  width: 34px; height: 34px; min-width: 34px;
+  margin-left: auto; width: 34px; height: 34px; min-width: 34px;
   border: 1px solid var(--portal-docs-border); border-radius: 999px;
   background: var(--portal-surface); color: var(--portal-docs-body);
-  font-size: 24px; line-height: 1; cursor: pointer;
+  font-size: 22px; line-height: 1; cursor: pointer;
 }
 .binding-docs-close:hover { border-color: var(--portal-link-blue); color: var(--portal-link-blue); }
 
-.binding-docs-body {
-  max-height: 60vh; overflow-y: auto; padding: 20px 28px 28px;
+.binding-docs-search {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px; border-bottom: 1px solid var(--portal-docs-border);
 }
+.binding-docs-search input { flex: 1; }
+.binding-docs-count { min-width: 80px; font-size: 12px; color: var(--portal-text-muted); text-align: right; }
 
-.binding-docs-toolbar {
-  padding: 10px 28px; background: var(--portal-surface-alt);
-  border-bottom: 1px solid var(--portal-docs-border);
+.binding-docs-main { flex: 1; display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0; }
+
+.binding-docs-nav {
+  overflow-y: auto; padding: 10px 8px;
+  border-right: 1px solid var(--portal-docs-border); background: var(--portal-surface-alt);
 }
-
-.binding-docs-toc { display: flex; flex-wrap: wrap; gap: 8px; }
-.binding-docs-toc a {
-  display: inline-flex; align-items: center;
-  padding: 6px 10px; border: 1px solid var(--portal-docs-border);
-  border-radius: 999px; background: var(--portal-surface);
-  color: var(--portal-docs-heading); font-size: 12px; font-weight: 600;
-  text-decoration: none;
+.binding-docs-nav h6 {
+  margin: 12px 8px 4px; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--portal-text-muted);
 }
-.binding-docs-toc a:hover { border-color: var(--portal-link-blue); color: var(--portal-link-blue); }
-
-.binding-docs-section + .binding-docs-section {
-  margin-top: 28px; padding-top: 28px;
-  border-top: 1px solid var(--portal-docs-border);
+.binding-docs-nav h6:first-child { margin-top: 2px; }
+.binding-docs-nav-group { margin: 0 0 4px 10px; padding-left: 6px; border-left: 2px solid var(--portal-docs-border); }
+.binding-docs-nav button {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 10px; border: 0; border-radius: 6px; background: none;
+  color: var(--portal-docs-heading); font-size: 13px; text-align: left; cursor: pointer;
 }
+.binding-docs-nav button:hover { background: var(--portal-surface-hover); }
+.binding-docs-nav button.active { background: var(--portal-docs-badge-bg); color: var(--portal-docs-badge-color); font-weight: 600; }
+.binding-docs-nav button code { color: inherit; font-size: 12.5px; }
+.binding-docs-nav button .binding-docs-muted { margin-left: auto; font-size: 11px; }
+.binding-docs-dot { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: #f59e0b; }
+.binding-docs-dot + .binding-docs-muted { margin-left: 6px; }
 
-.binding-docs-section.is-active { scroll-margin-top: 8px; }
-
-.binding-docs-section-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 16px; margin-bottom: 14px;
+.binding-docs-body { overflow-y: auto; padding: 18px 22px 28px; color: var(--portal-docs-body); font-size: 13px; }
+.binding-docs-body h4 { margin: 0 0 4px; font-size: 18px; font-weight: 700; color: var(--portal-docs-heading); }
+.binding-docs-body h5 {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 8px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--portal-text-muted);
 }
-.binding-docs-section-head h4 { margin: 0; font-size: 18px; font-weight: 700; color: var(--portal-docs-heading); }
-.binding-docs-section-head p  { margin: 6px 0 0; max-width: 60ch; color: var(--portal-docs-body); font-size: 14px; }
-
+.binding-docs-body section { margin-top: 20px; }
+.binding-docs-body code { color: var(--portal-docs-heading); word-break: break-word; }
+.binding-docs-body mark { padding: 0 1px; border-radius: 2px; background: #fde68a; color: #1d1d1f; }
+.binding-docs-title { display: flex; align-items: center; gap: 8px; }
+.binding-docs-summary { margin: 0 0 12px; max-width: 75ch; line-height: 1.55; }
+.binding-docs-muted { color: var(--portal-text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.binding-docs-note { margin: 12px 0 0; max-width: 75ch; line-height: 1.55; }
+.binding-docs-status { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: rgba(245, 158, 11, 0.15); color: var(--portal-docs-heading); }
+.binding-docs-empty { padding: 32px 0; color: var(--portal-text-muted); text-align: center; }
+.binding-docs-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  background: var(--portal-docs-badge-bg); color: var(--portal-docs-badge-color);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+}
 .binding-docs-signature {
-  margin: 0; padding: 10px 12px;
-  border: 1px solid var(--portal-docs-border); border-radius: 10px;
+  margin: 0; padding: 10px 14px; border-radius: 8px;
+  background: var(--portal-docs-code-bg); font-size: 14px; overflow-x: auto;
+}
+.binding-docs-signature code { color: var(--portal-docs-code-color); }
+.binding-docs-req { font-size: 10px; color: var(--portal-text-muted); }
+.binding-docs-key-filter { width: 180px; margin-left: auto; text-transform: none; letter-spacing: 0; }
+
+.binding-docs-table { width: 100%; border-collapse: collapse; }
+.binding-docs-table td { padding: 7px 10px; border-bottom: 1px solid var(--portal-docs-border); vertical-align: top; }
+.binding-docs-table tr:hover td { background: var(--portal-surface-hover); }
+.binding-docs-table .binding-docs-key { width: 1%; white-space: nowrap; }
+.binding-docs-table .binding-docs-sample { width: 1%; white-space: nowrap; font-family: var(--bs-font-monospace, monospace); color: var(--portal-text-muted); }
+.binding-docs-table .binding-docs-actions { width: 1%; white-space: nowrap; text-align: right; }
+.binding-docs-table .binding-docs-actions button { opacity: 0; }
+.binding-docs-table tr:hover .binding-docs-actions button,
+.binding-docs-table .binding-docs-actions button:focus { opacity: 1; }
+.binding-docs-group td {
+  padding-top: 12px; background: var(--portal-surface-alt);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--portal-text-muted);
+}
+.binding-docs-inline { font-size: 12px; }
+.binding-docs-available { display: block; margin-top: 2px; font-size: 12px; color: var(--portal-text-muted); }
+.binding-docs-link { padding: 0; border: 0; background: none; color: var(--portal-link-blue); font: inherit; cursor: pointer; }
+.binding-docs-hits + .binding-docs-hits { margin-top: 18px; }
+.binding-docs-hits h5 { text-transform: none; letter-spacing: 0; font-size: 14px; }
+
+.binding-example-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 8px; }
+.binding-example {
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--portal-docs-border); border-radius: 10px; background: var(--portal-surface);
+}
+.binding-example-code {
+  margin: 0; padding: 10px 12px; background: var(--portal-docs-code-bg);
+  font-size: 12.5px; white-space: pre-wrap; word-break: break-all;
+}
+.binding-example-code code { color: var(--portal-docs-code-color); }
+.binding-example p { flex: 1; margin: 0; padding: 8px 12px 0; line-height: 1.5; }
+.binding-example-actions { display: flex; justify-content: flex-end; gap: 6px; padding: 8px 12px 10px; }
+
+.binding-copy-btn {
+  padding: 4px 10px; border: 1px solid var(--portal-docs-border); border-radius: 6px;
   background: var(--portal-surface); color: var(--portal-docs-heading);
-  font-size: 13px; overflow-x: auto;
+  font-size: 12px; font-weight: 600; line-height: 1.2; cursor: pointer; white-space: nowrap;
 }
-
-.binding-docs-note {
-  margin: 0 0 14px; max-width: 70ch;
-  color: var(--portal-docs-body); font-size: 13px; line-height: 1.6;
-}
-
-.binding-docs-note-strong { color: var(--portal-docs-heading); font-weight: 600; }
+.binding-copy-btn + .binding-copy-btn { margin-left: 4px; }
+.binding-copy-btn:hover { border-color: var(--portal-link-blue); color: var(--portal-link-blue); }
+.binding-insert-btn { border-color: var(--portal-primary); background: var(--portal-primary); color: #fff; }
+.binding-insert-btn:hover { color: #fff; filter: brightness(1.1); }
+.binding-copy-btn.is-copied { border-color: #15803d; background: #dcfce7; color: #166534; }
 
 .binding-maxlen-hint {
   display: block; width: 100%; box-sizing: border-box;
@@ -2271,56 +2310,6 @@ input[type="text"].label-style-input {
 .binding-maxlen-hint a { color: var(--portal-link-blue); text-decoration: underline; cursor: pointer; }
 .binding-maxlen-hint code { font-size: 11px; }
 
-.binding-docs-badge {
-  display: inline-block; margin-left: 8px; padding: 2px 8px;
-  border-radius: 999px; background: var(--portal-docs-badge-bg);
-  color: var(--portal-docs-badge-color); font-size: 11px;
-  font-weight: 700; letter-spacing: 0.02em; vertical-align: middle;
-}
-
-.binding-docs-spec {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px; margin: 0 0 16px;
-}
-.binding-docs-spec div {
-  padding: 12px 14px; border: 1px solid var(--portal-docs-border);
-  border-radius: 12px; background: var(--portal-docs-spec-bg);
-}
-.binding-docs-spec dt {
-  margin: 0 0 6px; font-size: 12px; font-weight: 700;
-  letter-spacing: 0.04em; color: var(--portal-text-muted);
-}
-.binding-docs-spec dd { margin: 0; font-size: 13px; color: var(--portal-docs-heading); line-height: 1.6; }
-
-.binding-example-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.binding-example-grid-compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-
-.binding-example {
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 14px; border: 1px solid var(--portal-docs-border);
-  border-radius: 14px; background: var(--portal-surface);
-}
-
-.binding-example-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.binding-example-title { font-size: 13px; font-weight: 700; color: var(--portal-docs-heading); }
-
-.binding-copy-btn {
-  border: 1px solid var(--portal-docs-border); border-radius: 999px;
-  background: var(--portal-surface); color: var(--portal-docs-heading);
-  font-size: 12px; font-weight: 600; line-height: 1;
-  padding: 7px 10px; cursor: pointer; white-space: nowrap;
-}
-.binding-copy-btn:hover { border-color: var(--portal-link-blue); color: var(--portal-link-blue); }
-.binding-copy-btn.is-copied { border-color: #15803d; background: #dcfce7; color: #166534; }
-
-.binding-example-code {
-  margin: 0; padding: 12px; border-radius: 12px;
-  background: var(--portal-docs-code-bg); color: var(--portal-docs-code-color);
-  font-size: 12px; line-height: 1.55;
-  overflow-x: auto; white-space: pre-wrap; word-break: break-word;
-}
-
-.binding-example p { margin: 0; color: var(--portal-docs-body); font-size: 13px; line-height: 1.6; }
 
 /* ================================================================
    Responsive Overrides (migrated from portal.css)
@@ -2331,14 +2320,16 @@ input[type="text"].label-style-input {
 
 @media (max-width: 767px) {
   .editor-group .editor-group { margin-left: 8px; }
-  .binding-docs-modal { width: calc(100vw - 12px); }
-  .binding-docs-header,
-  .binding-docs-body,
-  .binding-docs-toolbar { padding-left: 16px; padding-right: 16px; }
-  .binding-docs-section-head { flex-direction: column; }
-  .binding-docs-signature { width: 100%; }
-  .binding-example-grid,
-  .binding-example-grid-compact { grid-template-columns: 1fr; }
+  .binding-docs-overlay { padding: 0; }
+  .binding-docs-modal { width: 100vw; height: 100%; border-radius: 0; }
+  .binding-docs-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .binding-docs-nav { display: flex; gap: 4px; padding: 6px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--portal-docs-border); }
+  .binding-docs-nav h6 { display: none; }
+  .binding-docs-nav-group { display: contents; }
+  .binding-docs-nav button { width: auto; white-space: nowrap; }
+  .binding-docs-body { padding: 14px 14px 24px; }
+  .binding-docs-table .binding-docs-actions button { opacity: 1; }
+  .binding-example-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ================================================================

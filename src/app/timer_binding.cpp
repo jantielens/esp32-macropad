@@ -119,6 +119,39 @@ static const char* timer_binding_key_at(uint8_t index) {
     return index < timer_binding_key_count() ? kTimerBindingKeys[index].name : nullptr;
 }
 
+static const BindingParamDoc kTimerParams[] = {
+    {"key", "Timer number 1-3, or N_state, N_mode, N_expired, N_target."},
+    {"format", "Duration format for the timer value, see Format strings."},
+};
+
+static const BindingKeyDoc kTimerKeyDocs[] = {
+    {"#", "Timer value; default 245.3 (seconds with tenths)", nullptr},
+    {"#_state", "running, paused, or stopped", nullptr},
+    {"#_mode", "up (count-up) or down (countdown)", nullptr},
+    {"#_expired", "ON once a countdown has passed zero", nullptr},
+    {"#_target", "Countdown preset in whole seconds; 0 for count-up", nullptr},
+};
+
+static const BindingExampleDoc kTimerExamples[] = {
+    {"[timer:1;mm:ss]", "Timer 1 as minutes and seconds."},
+    {"[timer:1_target]", "Stable maximum for a countdown gauge."},
+    {"[expr:[timer:1_expired]==\"ON\"?\"#dc2626\":\"#333333\"]", "Red once the countdown expires."},
+};
+
+static const BindingReferenceDoc kTimerFormats[] = {
+    {nullptr, "mm:ss", "4:05", "Minutes and seconds", "[timer:1;mm:ss]"},
+    {nullptr, "hh:mm:ss", "0:04:05", "With hours", "[timer:1;hh:mm:ss]"},
+    {nullptr, "mm:ss.d", "4:05.3", "With tenths", "[timer:1;mm:ss.d]"},
+    {nullptr, "ss", "245", "Whole seconds", "[timer:1;ss]"},
+};
+
+static const BindingSchemeDoc kTimerDoc = {
+    "Device", "Value and state of the 3 on-device timers.",
+    BINDING_DOC_LIST(kTimerParams), BINDING_DOC_LIST(kTimerKeyDocs), BINDING_DOC_LIST(kTimerExamples),
+    "Timer durations", true, BINDING_DOC_LIST(kTimerFormats),
+    "Countdowns that run past zero show negative values, e.g. -0:05.", nullptr,
+};
+
 // ============================================================================
 // Init
 // ============================================================================
@@ -127,7 +160,7 @@ void timer_binding_init() {
     timer_engine_init();
     if (!binding_template_register("timer", timer_binding_resolve, timer_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    timer_binding_key_count, timer_binding_key_at})) {
+                                    timer_binding_key_count, timer_binding_key_at, &kTimerDoc})) {
         LOGE(TAG, "Failed to register timer binding scheme");
     } else {
         LOGI(TAG, "Timer binding scheme registered");

@@ -450,8 +450,7 @@ class PortalDevServerTest(unittest.TestCase):
         schema = self.server.pad_fixture["binding_schema"]["schemes"]
         fields = ("min_params", "max_params", "widget_max_params", "format_param", "validation_mode", "free_form")
         for scheme in schema:
-            filename = "mqtt_sub_store.cpp" if scheme["name"] == "mqtt" else scheme["name"] + "_binding.cpp"
-            source = (ROOT / "src/app" / filename).read_text()
+            source = (ROOT / "src/app" / (scheme["name"] + "_binding.cpp")).read_text()
             match = re.search(r'binding_template_register\("' + scheme["name"] + r'"[^{}]+\{([^}]+)\}', source)
             self.assertIsNotNone(match)
             parts = match[1].split(",")[:6]

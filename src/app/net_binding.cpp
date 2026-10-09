@@ -125,10 +125,40 @@ static const char* net_binding_key_at(uint8_t index) {
 // Init — register the "net" scheme
 // ============================================================================
 
+static const BindingParamDoc kNetParams[] = {
+    {"channel", "Transport channel, see below."},
+    {"sub", "Omit for 1/0 activity in the last ~400 ms, or age for ms since last activity."},
+};
+
+static const BindingKeyDoc kNetKeyDocs[] = {
+    {"portal", "Inbound web portal requests", nullptr},
+    {"mcp", "Inbound MCP calls", nullptr},
+    {"mqtt_rx", "Inbound MQTT messages", nullptr},
+    {"mqtt_tx", "Outbound MQTT publishes", nullptr},
+    {"mqtt", "Either MQTT direction", nullptr},
+    {"http", "Outbound HTTP, e.g. image fetch or Home Assistant", nullptr},
+    {"ble", "BLE HID reports", nullptr},
+    {"ota", "Firmware update flash writes", nullptr},
+    {"any", "Any channel above", nullptr},
+};
+
+static const BindingExampleDoc kNetExamples[] = {
+    {"[expr:[net:any]?\"#22c55e\":\"#334155\"]", "Icon color that pulses on any traffic."},
+    {"[expr:[net:mqtt_rx]?\"#f59e0b\":\"#1e293b\"]", "Flash when an MQTT message arrives."},
+    {"[expr:[net:portal;age] < 1000 ? \"ACTIVE\" : \"idle\"]", "Label for a second after a portal request."},
+};
+
+static const BindingSchemeDoc kNetDoc = {
+    "Device", "Short activity pulses per network transport, for blinking indicators.",
+    BINDING_DOC_LIST(kNetParams), BINDING_DOC_LIST(kNetKeyDocs), BINDING_DOC_LIST(kNetExamples),
+    nullptr, false, BINDING_DOC_NONE,
+    "age is capped at 999999, which also means never.", nullptr,
+};
+
 void net_binding_init() {
     if (!binding_template_register("net", net_binding_resolve, net_binding_collect,
                                    {1, 2, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    net_binding_key_count, net_binding_key_at})) {
+                                    net_binding_key_count, net_binding_key_at, &kNetDoc})) {
         LOGE(TAG, "Failed to register net binding scheme");
     }
 }

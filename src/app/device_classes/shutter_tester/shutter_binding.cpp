@@ -521,9 +521,82 @@ static void shutter_binding_collect(const char* params, void* user_data) {
 // Init
 // ============================================================================
 
+static const BindingParamDoc kShutterParams[] = {
+    {"key", "Measurement key, see below."},
+    {"format", "printf format for numeric values, e.g. %.1f."},
+};
+
+static const BindingKeyDoc kShutterKeyDocs[] = {
+    {"speed", "Measured speed, e.g. 1/1000", "Measurement"},
+    {"speed_seconds", "Measured speed in seconds", "Measurement"},
+    {"duration_ms", "Measured open time, ms", "Measurement"},
+    {"target_speed", "Target speed, e.g. 1/1000s", "Measurement"},
+    {"target_ms", "Target open time, ms", "Measurement"},
+    {"deviation", "Error vs target, signed %", "Measurement"},
+    {"deviation_abs", "Absolute error, %", "Measurement"},
+    {"deviation_stops", "Error in stops", "Measurement"},
+    {"verdict", "pass, warning, or fail", "Measurement"},
+    {"available", "true once a measurement exists", "Measurement"},
+    {"count", "Measurements taken", "Measurement"},
+    {"capture_id", "Changes with every new measurement", "Measurement"},
+    {"speed_locked", "true when the target speed is locked", "Measurement"},
+    {"preset_id", "Selected preset id", "Measurement"},
+    {"preset_name", "Selected preset name", "Measurement"},
+    {"history_json", "Recent measurements as JSON", "Measurement"},
+    {"spread", "Difference between sensors, %", "Sensors"},
+    {"spread_ms", "Difference between sensors, ms", "Sensors"},
+    {"capping_gradient", "Curtain capping, stops/mm; empty if n/a", "Sensors"},
+    {"capping_frame_stops", "Capping across the frame, stops; empty if n/a", "Sensors"},
+    {"sensor_count", "Active sensors", "Sensors"},
+    {"valid_sensor_count", "Sensors with a valid reading", "Sensors"},
+    {"worst_noise_rms", "Highest sensor noise, ADC units", "Sensors"},
+    {"sensor_#_ms", "Open time seen by sensor N, ms", "Sensors"},
+    {"sensor_#_valid", "true when sensor N has a valid reading", "Sensors"},
+    {"sensor_#_depth", "Signal depth of sensor N, ADC units", "Sensors"},
+    {"sensor_#_snr", "Signal-to-noise ratio of sensor N", "Sensors"},
+    {"sensor_#_saturated", "true when sensor N saturated", "Sensors"},
+    {"sensor_#_min_adc", "Lowest ADC value of sensor N", "Sensors"},
+    {"sensor_#_threshold", "Trigger threshold of sensor N", "Sensors"},
+    {"align.active", "true while alignment mode runs", "Alignment"},
+    {"align.status", "Alignment verdict text", "Alignment"},
+    {"align.hint", "Alignment guidance text", "Alignment"},
+    {"align.spread", "Spread between sensors, %", "Alignment"},
+    {"align.sensor_count", "Sensors in alignment mode", "Alignment"},
+    {"align.s#_pct", "Light level of sensor N, 0-100", "Alignment"},
+    {"align.s#_raw", "Raw ADC average of sensor N", "Alignment"},
+    {"calib.active", "1 while calibration runs", "Alignment"},
+    {"session.active", "true while a test session runs", "Session"},
+    {"session.id", "Session id", "Session"},
+    {"session.type", "Session type", "Session"},
+    {"session.count", "Shots taken in the session", "Session"},
+    {"session.guide.name", "Guided test name", "Session"},
+    {"session.guide.id", "Guided test id", "Session"},
+    {"session.guide.target", "Target speed of the current step", "Session"},
+    {"session.guide.step", "Current step", "Session"},
+    {"session.guide.steps", "Total steps", "Session"},
+    {"session.guide.shot", "Current shot in the step", "Session"},
+    {"session.guide.shots", "Shots per step", "Session"},
+    {"session.guide.taking", "true while waiting for a shot", "Session"},
+    {"session.guide.total", "Total progress text", "Session"},
+};
+
+static const BindingExampleDoc kShutterExamples[] = {
+    {"[shutter:speed] ([shutter:deviation;%+.1f]%)", "Measured speed and signed error."},
+    {"[shutter:sensor_1_ms;%.2f] ms", "Open time seen by sensor 1."},
+    {"[expr:[shutter:verdict]==\"pass\"?\"#16a34a\":\"#dc2626\"]", "Green on pass, red otherwise."},
+};
+
+static const BindingSchemeDoc kShutterDoc = {
+    "Shutter tester", "Shutter speed measurements, sensors, alignment, and guided sessions.",
+    BINDING_DOC_LIST(kShutterParams), BINDING_DOC_LIST(kShutterKeyDocs), BINDING_DOC_LIST(kShutterExamples),
+    nullptr, false, BINDING_DOC_NONE,
+    "N is a sensor number from 1 to sensor_count.", nullptr,
+};
+
 void shutter_binding_init() {
     if (!binding_template_register("shutter", shutter_binding_resolve, shutter_binding_collect,
-                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr})) {
+                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
+                                    &kShutterDoc})) {
         LOGE(TAG, "Failed to register shutter binding scheme");
     }
 }

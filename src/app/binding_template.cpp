@@ -36,6 +36,20 @@ bool binding_template_register(const char* scheme, binding_resolver_fn resolver,
 
 uint8_t binding_template_scheme_count() { return (uint8_t)g_scheme_count; }
 
+bool binding_key_doc_matches(const char* pattern, const char* key) {
+    if (!pattern || !key) return false;
+    if (!*pattern) return !*key;
+    if (*pattern == '#' || *pattern == '*') {
+        for (size_t n = 0; key[n]; ++n) {
+            const char c = key[n];
+            if (*pattern == '#' ? (c < '0' || c > '9') : (c == '.' || c == ';')) break;
+            if (binding_key_doc_matches(pattern + 1, key + n + 1)) return true;
+        }
+        return false;
+    }
+    return *pattern == *key && binding_key_doc_matches(pattern + 1, key + 1);
+}
+
 const char* binding_template_scheme_name(uint8_t index) {
     return (index < g_scheme_count) ? g_schemes[index].name : nullptr;
 }

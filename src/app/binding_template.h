@@ -8,20 +8,19 @@
 // Binding Template Engine
 // ============================================================================
 // Labels can contain binding tokens: [scheme:params]
-// Built-in schemes: "mqtt" and "health"
-//   [mqtt:topic;json_path;format]   — live MQTT data
-//   [health:key;format]              — local device telemetry
 //   "prefix [mqtt:topic;path;fmt] suffix" — mixed static + binding
 //
-// Additional schemes can be added by registering a resolver
-// via binding_template_register().
+// Schemes register a resolver plus metadata and user-facing docs via
+// binding_template_register(). GET /api/bindings?docs=1 and the MCP
+// capability manifest serialize the registry, so only compiled-in schemes
+// are documented.
 //
 // Thread safety: resolve is NOT thread-safe (uses internal buffers).
 // Call only from the LVGL task.
 
 #define BINDING_TEMPLATE_MAX_LEN       192   // Max resolved output length
 #define BINDING_MAX_TOKENS             4     // Max binding tokens per label
-#define BINDING_MAX_SCHEMES             16    // Max registered binding schemes
+#define BINDING_MAX_SCHEMES             24    // Max registered binding schemes
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,6 +64,59 @@ enum BindingValidationMode : uint8_t {
     BINDING_VALIDATION_STRUCTURAL_ONLY,
 };
 
+// User-facing scheme documentation, rendered by the portal binding reference
+// and the MCP manifest. Key patterns use '#' for one or more digits and '*'
+// for one or more characters other than '.' or ';'.
+struct BindingParamDoc {
+    const char* name;
+    const char* desc;
+};
+
+struct BindingKeyDoc {
+    const char* key;
+    const char* desc;
+    const char* group;  // optional
+};
+
+struct BindingExampleDoc {
+    const char* code;
+    const char* desc;
+};
+
+struct BindingReferenceDoc {
+    const char* group;    // optional
+    const char* syntax;
+    const char* sample;   // optional example output
+    const char* desc;
+    const char* example;  // optional complete token
+};
+
+// Returns nullptr when the scheme can resolve, else a short reason.
+typedef const char* (*binding_status_fn)(void);
+
+struct BindingSchemeDoc {
+    const char* category;
+    const char* summary;
+    const BindingParamDoc* params;  // one entry per max_params
+    uint8_t param_count;
+    const BindingKeyDoc* keys;
+    uint8_t key_doc_count;
+    const BindingExampleDoc* examples;
+    uint8_t example_count;
+    const char* reference_title;     // optional
+    bool reference_is_formats;
+    const BindingReferenceDoc* reference;
+    uint8_t reference_count;
+    const char* note;                // optional
+    binding_status_fn status;        // optional
+};
+
+#define BINDING_DOC_LIST(array) (array), (uint8_t)(sizeof(array) / sizeof((array)[0]))
+#define BINDING_DOC_NONE nullptr, 0
+
+// True when a documented key or pattern matches a concrete key.
+bool binding_key_doc_matches(const char* pattern, const char* key);
+
 struct BindingSchemeSpec {
     uint8_t min_params;
     uint8_t max_params;
@@ -74,6 +126,7 @@ struct BindingSchemeSpec {
     bool free_form;
     binding_key_count_fn key_count;
     binding_key_at_fn key_at;
+    const BindingSchemeDoc* doc;
 };
 
 // Register a scheme resolver and its complete metadata contract. The metadata

@@ -449,61 +449,79 @@ static void health_binding_collect(const char* params, void* user_data) {
 // Init — register the "health" scheme
 // ============================================================================
 
-struct HealthKeyDef { const char* key; const char* desc; };
-static const HealthKeyDef HEALTH_KEYS[] = {
-    {"cpu",                 "CPU usage % (0-100)"},
-    {"cpu_core_0",          "Core 0 CPU usage % (0-100; ? if unavailable)"},
-    {"cpu_core_1",          "Core 1 CPU usage % (0-100; ? if unavailable)"},
-    {"rssi",                "WiFi signal strength, dBm"},
-    {"uptime",              "seconds since boot"},
-    {"chip",                "SoC model, e.g. ESP32-S3"},
-    {"chip_rev",            "silicon revision number"},
-    {"chip_cores",          "CPU core count"},
-    {"cpu_freq",            "CPU clock, MHz"},
-    {"flash_size",          "flash chip size, bytes"},
-    {"firmware",            "firmware version string"},
-    {"board",              "board name used at build time"},
-    {"mac",                 "WiFi MAC address"},
-    {"reset_reason",        "last reset cause"},
-    {"heap_total",          "total heap, bytes"},
-    {"heap_free",           "free heap, bytes"},
-    {"heap_min",            "heap low-water mark, bytes"},
-    {"heap_largest",        "largest free heap block, bytes"},
-    {"heap_internal_total", "total internal RAM, bytes"},
-    {"heap_internal",       "free internal RAM, bytes"},
-    {"heap_internal_used",  "used internal RAM, bytes"},
-    {"psram_total",         "total PSRAM, bytes (0 if absent)"},
-    {"psram_free",          "free PSRAM, bytes"},
-    {"psram_used",          "used PSRAM, bytes"},
-    {"psram_min",           "PSRAM low-water mark, bytes"},
+static const BindingKeyDoc HEALTH_KEYS[] = {
+    {"cpu",                 "CPU usage % (0-100)", "System"},
+    {"cpu_core_0",          "Core 0 CPU usage % (0-100; ? if unavailable)", "System"},
+    {"cpu_core_1",          "Core 1 CPU usage % (0-100; ? if unavailable)", "System"},
+    {"uptime",              "Seconds since boot", "System"},
+    {"chip",                "SoC model, e.g. ESP32-S3", "System"},
+    {"chip_rev",            "Silicon revision number", "System"},
+    {"chip_cores",          "CPU core count", "System"},
+    {"cpu_freq",            "CPU clock, MHz", "System"},
+    {"flash_size",          "Flash chip size, bytes", "System"},
+    {"firmware",            "Firmware version string", "System"},
+    {"board",               "Board name used at build time", "System"},
+    {"mac",                 "WiFi MAC address", "System"},
+    {"reset_reason",        "Last reset cause, e.g. Power On", "System"},
+    {"heap_total",          "Total heap, bytes", "Memory"},
+    {"heap_free",           "Free heap, bytes", "Memory"},
+    {"heap_min",            "Heap low-water mark, bytes", "Memory"},
+    {"heap_largest",        "Largest free heap block, bytes", "Memory"},
+    {"heap_internal_total", "Total internal RAM, bytes", "Memory"},
+    {"heap_internal",       "Free internal RAM, bytes", "Memory"},
+    {"heap_internal_used",  "Used internal RAM, bytes", "Memory"},
+    {"psram_total",         "Total PSRAM, bytes (0 if absent)", "Memory"},
+    {"psram_free",          "Free PSRAM, bytes", "Memory"},
+    {"psram_used",          "Used PSRAM, bytes", "Memory"},
+    {"psram_min",           "PSRAM low-water mark, bytes", "Memory"},
 #if TELEMETRY_ALLOW_PSRAM_POOL_WALK
-    {"psram_largest",       "largest free PSRAM block, bytes"},
+    {"psram_largest",       "Largest free PSRAM block, bytes", "Memory"},
 #else
-    {"psram_largest",       "unavailable on MIPI-DSI boards; use a pipe fallback"},
+    {"psram_largest",       "Unavailable on this board; add a |fallback", "Memory"},
 #endif
-    {"wifi_connected",      "ON/OFF WiFi connection state"},
-    {"wifi_ssid",           "connected network name"},
-    {"ip",                  "device IP address"},
-    {"hostname",            "device hostname"},
-    {"brightness",          "backlight brightness 0-100"},
+    {"wifi_connected",      "ON/OFF WiFi connection state", "WiFi"},
+    {"wifi_ssid",           "Connected network name", "WiFi"},
+    {"rssi",                "WiFi signal strength, dBm", "WiFi"},
+    {"ip",                  "Device IP address", "WiFi"},
+    {"hostname",            "Device hostname", "WiFi"},
+    {"brightness",          "Backlight brightness 0-100", "Display & audio"},
 #if HAS_AUDIO
-    {"volume",              "audio volume 0-100"},
+    {"volume",              "Audio volume 0-100", "Display & audio"},
 #endif
-    {"table",               "structured table payload (for the table widget)"},
-    {"extended_table",      "structured table payload, extended schema"},
 #if HAS_USB_HID
-    {"usb_status",          "compact USB HID status (disabled/ready/connected/suspended/error)"},
+    {"usb_status",          "USB HID: disabled/ready/connected/suspended/error", "USB & BLE"},
 #endif
 #if HAS_BLE_HID
-    {"ble_status",          "compact BLE status (disabled/ready/pairing/connected/error)"},
-    {"ble_name",            "current BLE keyboard name"},
-    {"ble_state",           "detailed BLE state"},
-    {"ble_pairing",         "ON/OFF BLE pairing-mode active"},
-    {"ble_bonded",          "ON/OFF current connection bonded"},
-    {"ble_encrypted",       "ON/OFF current connection encrypted"},
-    {"ble_peer_addr",       "connected peer Bluetooth address"},
-    {"ble_peer_id_addr",    "connected peer identity address"},
+    {"ble_status",          "BLE: disabled/ready/pairing/connected/error", "USB & BLE"},
+    {"ble_name",            "Current BLE keyboard name", "USB & BLE"},
+    {"ble_state",           "Detailed BLE state, e.g. advertising", "USB & BLE"},
+    {"ble_pairing",         "ON/OFF pairing mode active", "USB & BLE"},
+    {"ble_bonded",          "ON/OFF current connection bonded", "USB & BLE"},
+    {"ble_encrypted",       "ON/OFF current connection encrypted", "USB & BLE"},
+    {"ble_peer_addr",       "Connected peer Bluetooth address", "USB & BLE"},
+    {"ble_peer_id_addr",    "Connected peer identity address", "USB & BLE"},
 #endif
+    {"table",               "Device summary table for the Table widget", "Tables"},
+    {"extended_table",      "Extended device table for the Table widget", "Tables"},
+};
+
+static const BindingParamDoc kHealthParams[] = {
+    {"key", "Telemetry key, see below."},
+    {"format", "printf format: %d for numbers, %s for text, e.g. %d B."},
+};
+
+static const BindingExampleDoc kHealthExamples[] = {
+    {"CPU [health:cpu]%", "Text around a token is kept."},
+    {"[health:heap_free;%d B]", "Number with a unit inside the format."},
+    {"[health:wifi_ssid] ([health:rssi] dBm)", "Network name and signal strength."},
+    {"[expr:[health:wifi_connected]==\"ON\"?\"#16a34a\":\"#dc2626\"]", "Green or red color for WiFi state."},
+    {"[health:table]", "Exact single token for a Table widget."},
+};
+
+static const BindingSchemeDoc kHealthDoc = {
+    "Device", "Local device telemetry. Works without a network.",
+    BINDING_DOC_LIST(kHealthParams), BINDING_DOC_LIST(HEALTH_KEYS), BINDING_DOC_LIST(kHealthExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
 
 uint8_t health_binding_key_count() {
@@ -512,10 +530,6 @@ uint8_t health_binding_key_count() {
 
 const char* health_binding_key_at(uint8_t index) {
     return (index < health_binding_key_count()) ? HEALTH_KEYS[index].key : nullptr;
-}
-
-const char* health_binding_key_desc_at(uint8_t index) {
-    return (index < health_binding_key_count()) ? HEALTH_KEYS[index].desc : nullptr;
 }
 
 static bool health_key_known(const char* key) {
@@ -529,7 +543,7 @@ static bool health_key_known(const char* key) {
 void health_binding_init() {
     if (!binding_template_register("health", health_binding_resolve, health_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    health_binding_key_count, health_binding_key_at})) {
+                                    health_binding_key_count, health_binding_key_at, &kHealthDoc})) {
         LOGE(TAG, "Failed to register health binding scheme");
     }
 }
@@ -538,7 +552,6 @@ void health_binding_init() {
 
 uint8_t health_binding_key_count() { return 0; }
 const char* health_binding_key_at(uint8_t index) { (void)index; return nullptr; }
-const char* health_binding_key_desc_at(uint8_t index) { (void)index; return nullptr; }
 void health_binding_init() {}
 
 #endif

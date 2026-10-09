@@ -2,37 +2,6 @@
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_pad_editor.js during minification.
 
-function showBindingHelp(section) {
-    const overlay = document.getElementById('binding-help-overlay');
-    if (!overlay) return;
-
-    overlay.style.display = 'flex';
-
-    const body = overlay.querySelector('.binding-docs-body');
-    const target = section ? overlay.querySelector(`[data-binding-section="${section}"]`) : null;
-    overlay.querySelectorAll('.binding-docs-section').forEach(sectionEl => {
-        sectionEl.classList.toggle('is-active', sectionEl === target);
-    });
-
-    requestAnimationFrame(() => {
-        if (target) {
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else if (body) {
-            body.scrollTop = 0;
-        }
-    });
-}
-
-function closeBindingHelp() {
-    const overlay = document.getElementById('binding-help-overlay');
-    if (!overlay) return;
-
-    overlay.style.display = 'none';
-    overlay.querySelectorAll('.binding-docs-section').forEach(sectionEl => {
-        sectionEl.classList.remove('is-active');
-    });
-}
-
 function showStyleHelp() {
     document.getElementById('style-help-overlay').style.display = 'flex';
 }

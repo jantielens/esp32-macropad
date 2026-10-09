@@ -31,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* The pad editor's binding help is now a searchable Binding reference built from
+  the firmware's binding registry, so it lists only bindings available on the
+  device and stays current with the code. Each scheme documents its parameters,
+  keys, and examples; the Format strings guide lists common number, clock, and
+  duration formats, and `expr` lists its operators and `threshold()`. Copy and
+  Insert actions put tokens into the field the help was opened from.
+  `GET /api/bindings?docs=1` and the MCP manifest serve the same docs; the MCP
+  `health_keys` list moved into the `health` scheme's `key_docs`.
+* The `mqtt` binding scheme registers on every MQTT display build, so pads and
+  the reference recognize it before a broker is configured; its tokens show
+  their fallback until values arrive.
+* `[meter:...]` and `[print:...]` bindings accept only a key. The portal
+  previously accepted a format parameter that the device rendered as an error.
+* Raise the binding scheme limit from 16 to 24 so device classes with several
+  schemes cannot exhaust it.
 * Require new, renamed, and removed feature flags to have maintained firmware
   footprint classification or a reasoned exclusion, enforced by focused tests
   and documented in the developer and agent checklists.

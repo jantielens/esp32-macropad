@@ -438,6 +438,13 @@ add_host_legacy_test(test_storage_policy_littlefs SOURCES test_storage_policy.cp
 add_host_legacy_test(test_storage_policy_sdmmc SOURCES test_storage_policy.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/storage_policy_overrides DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1)
 add_host_legacy_test(test_factory_reset_storage SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 
+# Real ArduinoJson for the schema emitter; the profiles use a minimal JSON stub.
+add_library(binding_schema_json OBJECT
+    ${PROJECT_SOURCE_DIR}/src/app/binding_schema.cpp binding_schema_profiles/dump_json.cpp)
+target_compile_features(binding_schema_json PRIVATE cxx_std_17)
+target_compile_options(binding_schema_json PRIVATE -Wall -Wextra -Werror)
+target_include_directories(binding_schema_json PRIVATE ${HOST_ARDUINOJSON_DIR} ${PROJECT_SOURCE_DIR}/src/app)
+
 function(add_binding_schema_profile name definition)
     add_host_legacy_test(test_binding_schema_${name}
         SOURCES test_binding_schema_production.cpp binding_schema_profiles/stubs.cpp
@@ -448,7 +455,8 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp
             ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/camera_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
-            ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp ${ARGN}
+            ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/mqtt_binding.cpp $<TARGET_OBJECTS:binding_schema_json> ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src
         DEFINITIONS ${definition}
         OPTIONS -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
@@ -460,6 +468,11 @@ add_binding_schema_profile(baseline "")
 add_binding_schema_profile(alarm_disabled "ALARM_ENABLED=0")
 add_binding_schema_profile(camera BINDING_SCHEMA_PROFILE_CAMERA)
 add_binding_schema_profile(full BINDING_SCHEMA_PROFILE_FULL ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
+# Portal dev-server fixture for GET /api/bindings?docs=1; regenerate with
+# build/host-tests/tests/test_binding_schema_full --emit-json > tools/mock-data/binding-docs.json
+add_test(NAME test_binding_docs_fixture
+    COMMAND sh -c "$<TARGET_FILE:test_binding_schema_full> --emit-json | diff -u tools/mock-data/binding-docs.json -")
+set_tests_properties(test_binding_docs_fixture PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
 add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_binding.cpp)
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)
@@ -514,6 +527,7 @@ foreach(script
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
     test_portal_ble_config.js test_portal_pad_preview.js test_portal_startup.js
     test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js
+    test_portal_binding_help.js
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} node ${PROJECT_SOURCE_DIR}/tests/${script})

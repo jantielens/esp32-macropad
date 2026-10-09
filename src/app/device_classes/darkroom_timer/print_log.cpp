@@ -448,6 +448,29 @@ static const char* print_binding_key_at(uint8_t index) {
     return index < print_binding_key_count() ? kPrintBindingKeys[index] : nullptr;
 }
 
+static const BindingParamDoc kPrintParams[] = {
+    {"key", "Print log key, see below."},
+};
+
+static const BindingKeyDoc kPrintKeyDocs[] = {
+    {"id", "ID the next print will get, YYMMDD-NNN", nullptr},
+    {"last_id", "ID of the last logged print", nullptr},
+    {"count", "Number of logged prints", nullptr},
+    {"starred", "1 when the last print is starred, else 0", nullptr},
+    {"star_label", "* when the last print is starred, else empty", nullptr},
+};
+
+static const BindingExampleDoc kPrintExamples[] = {
+    {"Next [print:id]", "ID for the next exposure."},
+    {"[print:last_id] [print:star_label]", "Last print with its star."},
+};
+
+static const BindingSchemeDoc kPrintDoc = {
+    "Darkroom", "Print log IDs, count, and star state.",
+    BINDING_DOC_LIST(kPrintParams), BINDING_DOC_LIST(kPrintKeyDocs), BINDING_DOC_LIST(kPrintExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+};
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -547,8 +570,8 @@ void print_log_init() {
     s_last_starred = false;
 
     if (!binding_template_register("print", print_resolve, print_collect,
-                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    print_binding_key_count, print_binding_key_at})) {
+                                   {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
+                                    print_binding_key_count, print_binding_key_at, &kPrintDoc})) {
         LOGE(TAG, "Failed to register print binding scheme");
     } else {
         LOGI(TAG, "Print binding scheme registered");

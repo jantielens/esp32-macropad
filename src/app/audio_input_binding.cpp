@@ -70,13 +70,35 @@ const char* audio_input_binding_key_at(uint8_t index) {
     return index < audio_input_binding_key_count() ? kAudioInputKeys[index].name : nullptr;
 }
 
+const BindingParamDoc kAudioParams[] = {
+    {"key", "Microphone meter key, see below."},
+};
+
+const BindingKeyDoc kAudioKeyDocs[] = {
+    {"input.rms", "Microphone loudness, RMS level", nullptr},
+    {"input.peak", "Microphone peak level", nullptr},
+    {"input.active", "true while sound is above the activity threshold", nullptr},
+};
+
+const BindingExampleDoc kAudioExamples[] = {
+    {"[audio:input.rms]", "Feed a gauge or bar chart with the input level."},
+    {"[expr:[audio:input.active]==\"true\"?\"#22c55e\":\"#334155\"]", "Light up while someone speaks."},
+};
+
+const BindingSchemeDoc kAudioDoc = {
+    "Device", "Live microphone level meter.",
+    BINDING_DOC_LIST(kAudioParams), BINDING_DOC_LIST(kAudioKeyDocs), BINDING_DOC_LIST(kAudioExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+};
+
 } // namespace
 
 void audio_input_binding_init() {
     if (!binding_template_register("audio", audio_input_binding_resolve,
                                    audio_input_binding_collect,
                                    {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    audio_input_binding_key_count, audio_input_binding_key_at})) {
+                                    audio_input_binding_key_count, audio_input_binding_key_at,
+                                    &kAudioDoc})) {
         LOGE("AudioInputBind", "Failed to register audio input binding scheme");
         return;
     }

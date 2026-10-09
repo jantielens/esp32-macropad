@@ -9,6 +9,7 @@
 #include "timer_engine.h"
 #include "alarm_manager.h"
 #include "log_manager.h"
+#include "mqtt_sub_store.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -223,4 +224,21 @@ int timer_format(uint8_t, const char*, char* out, size_t out_len) {
 
 uint32_t net_activity_age_ms(net_channel_t) { return NET_ACTIVITY_NEVER; }
 uint32_t net_activity_age_any_ms() { return NET_ACTIVITY_NEVER; }
+
+bool mqtt_sub_store_active() { return false; }
+bool mqtt_sub_store_get(const char*, char* buf, size_t buf_len, bool* changed, bool* truncated) {
+    if (buf && buf_len) buf[0] = '\0';
+    if (changed) *changed = false;
+    if (truncated) *truncated = false;
+    return false;
+}
+bool mqtt_sub_store_extract_json(const char*, const char*, char* out, size_t out_len) {
+    if (out && out_len) out[0] = '\0';
+    return false;
+}
+void mqtt_sub_store_format_value(const char* raw, const char*, char* out, size_t out_len) {
+    if (out && out_len) std::snprintf(out, out_len, "%s", raw ? raw : "");
+}
+void mqtt_sub_store_collect_topic(void*, const char*) {}
+void mqtt_sub_store_ensure_binding_subscribed(const char*) {}
 uint32_t net_activity_age_mqtt_ms() { return NET_ACTIVITY_NEVER; }

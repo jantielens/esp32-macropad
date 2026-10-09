@@ -1052,6 +1052,26 @@ format syntax. The device validates saved configurations authoritatively.
 The MCP `get_capabilities` manifest serializes its binding-scheme list from the
 same registry, so portal and MCP clients receive equivalent metadata.
 
+`GET /api/bindings?docs=1` adds the user-facing reference that each scheme
+registers next to its resolver (`BindingSchemeDoc`): `category`, `summary`,
+`params` (`name`, `desc`, `required`), `key_docs` (`key`, `desc`, optional
+`group`), `examples` (`code`, `desc`), an optional `reference` table (`title`,
+`formats`, `rows`), an optional `note`, and an optional `status` when the scheme
+cannot resolve yet, such as `No MQTT broker configured`. Key docs may be
+patterns: `#` matches digits and `*` matches an id segment. The Binding
+reference dialog fetches this once when opened; the validator keeps using the
+smaller response without docs.
+
+The dialog (`portal_binding_help.js`, markup in `_binding_help.html`) lists
+guides and the registered schemes by category, searches scheme names, keys,
+descriptions, examples, and format codes, and offers Copy and Insert actions.
+Insert targets the text field next to the `fx` hint or `?` button that opened
+the dialog, inserting at the cursor when that field had focus and appending
+otherwise. Host profile tests require every registered scheme to document all
+parameters and keys and validate every example; the portal dev server serves
+`tools/mock-data/binding-docs.json`, generated from the full host profile and
+checked by `test_binding_docs_fixture`.
+
 On `HAS_USB_HID` builds, the health key list includes `usb_status` for
 `[health:usb_status]`: `disabled`, `ready`, `connected`, `suspended`, or `error`.
 `connected` requires host enumeration and an awake USB session; USB power alone

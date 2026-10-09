@@ -10,6 +10,7 @@ class String {};
 
 #define BOARD_CONFIG_H
 #define HAS_DISPLAY 1
+#define HAS_MQTT 1
 #define HAS_MCP 0
 #ifndef HAS_PSRAM
 #define HAS_PSRAM 1

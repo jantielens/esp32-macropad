@@ -386,11 +386,11 @@ for (const label of ['Repeat days', 'Snooze duration (minutes)', 'Auto-dismiss a
     'When ringing starts', 'When ringing stops', 'Maximum alarm lateness (minutes)']) {
     assert(alarmFragment.includes(label));
 }
-const bindingHelp = fs.readFileSync('src/app/web/_binding_help.html', 'utf8');
-assert(bindingHelp.includes('data-binding-section="alarm"'));
-for (const label of ['Seconds until the next scheduled alarm; excludes snooze.',
-    'Seconds until the next ring, including snooze;', 'Seconds until auto-dismiss while ringing.']) {
-    assert(bindingHelp.includes(label));
+const bindingDocs = JSON.parse(fs.readFileSync('tools/mock-data/binding-docs.json', 'utf8'));
+const alarmDocs = bindingDocs.schemes.find(scheme => scheme.name === 'alarm');
+assert(alarmDocs, 'alarm scheme documented');
+for (const key of ['1_next_seconds', '1_next_ring_seconds', '1_dismiss_seconds']) {
+    assert(alarmDocs.key_docs.some(doc => doc.key === key && doc.desc), key);
 }
 console.log('portal_action_picker: PASS');
 context.deviceInfoCache.catalog = productionCatalogs.portal;

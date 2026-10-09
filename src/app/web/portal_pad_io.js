@@ -1,27 +1,6 @@
 // portal_pad_io.js - Pad clipboard, import/export, and device config I/O
 // Part of the ESP32 Macropad configuration portal.
 
-function copyBindingExample(button) {
-    const example = button.closest('.binding-example');
-    const code = example ? example.querySelector('code') : null;
-    if (!code) return;
-
-    copyTextToClipboard(code.textContent.trim())
-        .then(() => {
-            const original = button.dataset.label || button.textContent;
-            button.dataset.label = original;
-            button.textContent = 'Copied';
-            button.classList.add('is-copied');
-            window.setTimeout(() => {
-                button.textContent = original;
-                button.classList.remove('is-copied');
-            }, 1200);
-        })
-        .catch(() => {
-            showMessage('Could not copy binding', 'error');
-        });
-}
-
 function padStripPosition(btn) {
     const copy = Object.assign({}, btn);
     delete copy.col;

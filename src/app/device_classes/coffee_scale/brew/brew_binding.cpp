@@ -376,6 +376,58 @@ static const char* brew_binding_key_at(uint8_t index) {
     return key;
 }
 
+static const BindingParamDoc kBrewParams[] = {
+    {"key", "Brew key, see below."},
+    {"format", "printf float format such as %.1f; timer takes mm:ss, hh:mm:ss, ss, or mm:ss.d."},
+};
+
+static const BindingKeyDoc kBrewKeyDocs[] = {
+    {"weight", "Current weight, grams", "Live"},
+    {"flow_rate", "Flow rate, g/s", "Live"},
+    {"timer", "Elapsed brew time, default mm:ss", "Live"},
+    {"active", "1 while a brew runs, else 0", "Live"},
+    {"stage", "Current stage name", "Stage"},
+    {"stage_status", "Stage progress summary text", "Stage"},
+    {"instruction", "Instruction text for the current stage", "Stage"},
+    {"next_label", "Label for the next action", "Stage"},
+    {"advance_state", "State of the advance button", "Stage"},
+    {"stage_weight_target", "Stage weight target, grams", "Stage"},
+    {"stage_weight_current", "Weight poured in this stage, grams", "Stage"},
+    {"stage_weight_remaining", "Grams left in this stage", "Stage"},
+    {"stage_weight_pct", "Stage weight progress %", "Stage"},
+    {"stage_time_target", "Stage time target, seconds", "Stage"},
+    {"stage_time_current", "Time spent in this stage, seconds", "Stage"},
+    {"stage_time_remaining", "Seconds left in this stage", "Stage"},
+    {"stage_time_pct", "Stage time progress %", "Stage"},
+    {"stage_flow_target", "Stage flow target, g/s", "Stage"},
+    {"stage_flow_current", "Current flow in this stage, g/s", "Stage"},
+    {"stage_flow_pct", "Flow relative to target %", "Stage"},
+    {"dose", "Dose weight, grams", "Summary"},
+    {"water", "Water weight, grams", "Summary"},
+    {"ratio", "Water-to-dose ratio", "Summary"},
+    {"stages_json", "Stage table for the Table widget", "Summary"},
+    {"summary_json", "Brew summary for the Table widget", "Summary"},
+    {"template", "Active template name, or Idle", "Templates"},
+    {"display_name", "Screen title of the active template", "Templates"},
+    {"template_count", "Number of saved brew templates", "Templates"},
+    {"tpl_#_name", "Name of template N (from 0)", "Templates"},
+    {"tpl_#_display_name", "Display name of template N", "Templates"},
+    {"tpl_#_description", "Description of template N", "Templates"},
+    {"tpl_#_stages", "Stage count of template N", "Templates"},
+};
+
+static const BindingExampleDoc kBrewExamples[] = {
+    {"[brew:weight;%.1f g]", "Current weight with a unit."},
+    {"[brew:timer;mm:ss]", "Brew time as minutes and seconds."},
+    {"[brew:stages_json]", "Exact single token for a Table widget."},
+};
+
+static const BindingSchemeDoc kBrewDoc = {
+    "Coffee scale", "Guided brew state: weight, flow, timer, and stage progress.",
+    BINDING_DOC_LIST(kBrewParams), BINDING_DOC_LIST(kBrewKeyDocs), BINDING_DOC_LIST(kBrewExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+};
+
 // ============================================================================
 // Init
 // ============================================================================
@@ -383,7 +435,7 @@ static const char* brew_binding_key_at(uint8_t index) {
 void brew_binding_init() {
     if (!binding_template_register("brew", brew_binding_resolve, brew_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    brew_binding_key_count, brew_binding_key_at})) {
+                                    brew_binding_key_count, brew_binding_key_at, &kBrewDoc})) {
         LOGE(TAG, "Failed to register brew binding scheme");
     }
 }

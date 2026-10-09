@@ -7,6 +7,7 @@
 #include "image_binding.h"
 #include "list_binding.h"
 #include "music_binding.h"
+#include "mqtt_binding.h"
 #include "net_binding.h"
 #include "pad_binding.h"
 #include "time_binding.h"
@@ -24,6 +25,7 @@ void binding_builtin_schemes_init() {
     time_binding_init();
     expr_binding_init();
 #if HAS_DISPLAY && HAS_MQTT
+    mqtt_binding_init();
     pad_binding_init();
 #endif
     timer_binding_init();

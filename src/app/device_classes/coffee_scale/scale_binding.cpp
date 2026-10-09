@@ -128,6 +128,32 @@ static const char* scale_binding_key_at(uint8_t index) {
     return index < scale_binding_key_count() ? kScaleBindingKeys[index] : nullptr;
 }
 
+static const BindingParamDoc kScaleParams[] = {
+    {"key", "Scale key, see below."},
+    {"format", "printf float format such as %.1f, or %s for text."},
+};
+
+static const BindingKeyDoc kScaleKeyDocs[] = {
+    {"weight", "Current weight, grams", nullptr},
+    {"flow_rate", "Flow rate, g/s", nullptr},
+    {"available", "ON when the load cell responds", nullptr},
+    {"status", "Scale status text", nullptr},
+    {"calibration_factor", "Load cell calibration factor", nullptr},
+    {"offset", "Tare offset, raw units", nullptr},
+    {"cal_weight", "Calibration reference weight, grams", nullptr},
+};
+
+static const BindingExampleDoc kScaleExamples[] = {
+    {"[scale:weight;%.1f g]", "Current weight with a unit."},
+    {"[scale:flow_rate;%.1f g/s]", "Flow rate with a unit."},
+};
+
+static const BindingSchemeDoc kScaleDoc = {
+    "Coffee scale", "Raw scale readings and calibration.",
+    BINDING_DOC_LIST(kScaleParams), BINDING_DOC_LIST(kScaleKeyDocs), BINDING_DOC_LIST(kScaleExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+};
+
 // ============================================================================
 // Init — register the "scale" scheme
 // ============================================================================
@@ -135,7 +161,7 @@ static const char* scale_binding_key_at(uint8_t index) {
 void scale_binding_init() {
     if (!binding_template_register("scale", scale_binding_resolve, scale_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    scale_binding_key_count, scale_binding_key_at})) {
+                                    scale_binding_key_count, scale_binding_key_at, &kScaleDoc})) {
         LOGE(TAG, "Failed to register scale binding scheme");
     }
 }

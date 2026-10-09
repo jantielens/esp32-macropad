@@ -56,12 +56,32 @@ uint8_t voice_binding_key_count() {
 const char* voice_binding_key_at(uint8_t index) {
     return index < voice_binding_key_count() ? kVoiceBindingKeys[index].name : nullptr;
 }
+
+const BindingParamDoc kVoiceParams[] = {
+    {"key", "status or text."},
+};
+
+const BindingKeyDoc kVoiceKeyDocs[] = {
+    {"status", "idle, recording, listening, transcribing, ready, or error", nullptr},
+    {"text", "Latest transcription; unavailable until the first one", nullptr},
+};
+
+const BindingExampleDoc kVoiceExamples[] = {
+    {"[stt:text|Say something]", "Latest transcription with a placeholder."},
+    {"[expr:[stt:status]==\"listening\"?\"#dc2626\":\"#334155\"]", "Red while listening."},
+};
+
+const BindingSchemeDoc kVoiceDoc = {
+    "Voice", "Speech-to-text status and the latest transcription.",
+    BINDING_DOC_LIST(kVoiceParams), BINDING_DOC_LIST(kVoiceKeyDocs), BINDING_DOC_LIST(kVoiceExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+};
 } // namespace
 
 void voice_binding_init() {
     binding_template_register("stt", voice_binding_resolve, voice_binding_collect,
                               {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                               voice_binding_key_count, voice_binding_key_at});
+                               voice_binding_key_count, voice_binding_key_at, &kVoiceDoc});
 }
 
 #endif // IS_VOICE_ASSISTANT

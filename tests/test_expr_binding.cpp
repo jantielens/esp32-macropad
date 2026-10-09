@@ -645,8 +645,8 @@ int main() {
     printf("=== expr binding integration tests ===\n\n");
 
     // Register schemes (order matters — inner schemes before expr)
-    const BindingSchemeSpec free_form = { 1, 3, 2, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr };
-    const BindingSchemeSpec expression = { 1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr };
+    const BindingSchemeSpec free_form = { 1, 3, 2, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr, nullptr };
+    const BindingSchemeSpec expression = { 1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr, nullptr };
     binding_template_register("mqtt",   mock_mqtt_resolve,   mock_mqtt_collect, free_form);
     binding_template_register("health", mock_health_resolve, mock_health_collect, free_form);
     binding_template_register("time",   mock_time_resolve,   nullptr,            free_form);

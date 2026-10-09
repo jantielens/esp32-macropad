@@ -688,6 +688,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_pads.cpp
   - src/app/message_bubble.cpp
   - src/app/message_bubble.h
+  - src/app/mqtt_binding.cpp
   - src/app/mqtt_notify.cpp
   - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
@@ -909,6 +910,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_audio.cpp
   - src/app/mqtt_audio.h
+  - src/app/mqtt_binding.cpp
   - src/app/mqtt_camera.cpp
   - src/app/mqtt_camera.h
   - src/app/mqtt_manager.cpp

@@ -217,9 +217,40 @@ static void expr_binding_collect(const char* params, void* user_data) {
 // Init — register the "expr" scheme
 // ============================================================================
 
+static const BindingParamDoc kExprParams[] = {
+    {"expression", "Arithmetic, comparisons, ternaries, and threshold(); inner tokens resolve first."},
+    {"format", "printf format applied to the result, e.g. %.1f."},
+};
+
+static const BindingExampleDoc kExprExamples[] = {
+    {"[expr:[health:cpu] > 80 ? \"High\" : \"OK\"]", "Text chosen by a condition."},
+    {"[expr:([health:heap_free] / 1024);%.0f KB]", "Derived number with a unit."},
+    {"[expr:threshold([health:cpu],\"#16a34a\",50,\"#f59e0b\",80,\"#dc2626\")]", "Map a number to color zones."},
+    {"[expr:[time:%ms] % 500 < 250 ? \"#dc2626\" : \"#f8fafc\"]", "Blink between two colors."},
+};
+
+static const BindingReferenceDoc kExprReference[] = {
+    {"Arithmetic", "a + b", nullptr, "Add; also - * /", "[expr:[health:heap_free] / 1024;%.0f]"},
+    {"Arithmetic", "a % b", nullptr, "Remainder, useful for blinking", "[expr:[time:%ms] % 500 < 250]"},
+    {"Arithmetic", "-a", nullptr, "Negate", "[expr:-[health:rssi]]"},
+    {"Arithmetic", "( a )", nullptr, "Grouping", "[expr:([health:cpu] + 5) * 2]"},
+    {"Comparison", "a > b", nullptr, "Also < >= <=; result is 1 or 0", "[expr:[health:cpu] > 80]"},
+    {"Comparison", "a == b", nullptr, "Equal on numbers or \"strings\"; also !=", "[expr:[health:wifi_connected]==\"ON\"]"},
+    {"Conditional", "c ? x : y", nullptr, "Ternary; branches can be numbers or \"strings\" and can be chained", "[expr:[health:cpu] > 80 ? \"High\" : \"OK\"]"},
+    {"Functions", "threshold(v, c0, t1, c1, ...)", nullptr, "c0 below t1, c1 below t2, ..., else the last value; thresholds ascend", "[expr:threshold([health:cpu],\"#16a34a\",50,\"#dc2626\")]"},
+};
+
+static const BindingSchemeDoc kExprDoc = {
+    "Logic", "Calculate values, compare them, and choose text or colors.",
+    BINDING_DOC_LIST(kExprParams), BINDING_DOC_NONE, BINDING_DOC_LIST(kExprExamples),
+    "Operators & functions", false, BINDING_DOC_LIST(kExprReference),
+    "Quote strings with double quotes. There are no && or || operators; nest ternaries instead.", nullptr,
+};
+
 void expr_binding_init(void) {
     if (!binding_template_register("expr", expr_binding_resolve, expr_binding_collect,
-                                   {1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr})) {
+                                   {1, 2, 1, 1, BINDING_VALIDATION_EXPRESSION, true, nullptr, nullptr,
+                                    &kExprDoc})) {
         LOGE(TAG, "Failed to register expr binding scheme");
     }
 }

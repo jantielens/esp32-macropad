@@ -325,19 +325,20 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		request->send(response);
 }
 
-// GET /api/bindings - Live binding scheme metadata for portal validation.
+// GET /api/bindings - Live binding scheme metadata; ?docs=1 adds the user-facing reference.
 void handleGetBindings(AsyncWebServerRequest *request) {
 		WebPortalTiming timing;
 		if (!portal_auth_gate(request)) return;
 		timing.mark("auth");
 
+		const bool include_docs = request->hasParam("docs");
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (!doc || doc->capacity() == 0) {
 			request->send(503, "application/json", "{\"error\":\"binding schema unavailable\"}");
 			return;
 		}
 		JsonArray schemes = (*doc)["schemes"].to<JsonArray>();
-		binding_schema_emit(&schemes);
+		binding_schema_emit(&schemes, include_docs);
 		timing.mark("schema");
 		web_portal_send_json_chunked(request, doc, 200, &timing);
 }

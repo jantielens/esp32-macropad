@@ -38,6 +38,26 @@ const char* image_binding_key_at(uint8_t index) {
     static constexpr const char* kKeys[] = {"current", "error"};
     return index < 2 ? kKeys[index] : nullptr;
 }
+
+const BindingParamDoc kImageParams[] = {
+    {"key", "current or error."},
+};
+
+const BindingKeyDoc kImageKeyDocs[] = {
+    {"current", "Path of the image library's current image", nullptr},
+    {"error", "Last image load error as stage:detail, or ok", nullptr},
+};
+
+const BindingExampleDoc kImageExamples[] = {
+    {"[image:current]", "Use as a button image source to follow the library."},
+    {"[image:error]", "Show why the last image failed to load."},
+};
+
+const BindingSchemeDoc kImageDoc = {
+    "Data", "Current image of the on-device image library.",
+    BINDING_DOC_LIST(kImageParams), BINDING_DOC_LIST(kImageKeyDocs), BINDING_DOC_LIST(kImageExamples),
+    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+};
 }
 
 void image_binding_set_error(const char* stage, const char* detail) {
@@ -50,7 +70,7 @@ void image_binding_set_error(const char* stage, const char* detail) {
 void image_binding_init() {
     if (!binding_template_register("image", image_binding_resolve, nullptr,
                                    {1, 1, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    image_binding_key_count, image_binding_key_at})) {
+                                    image_binding_key_count, image_binding_key_at, &kImageDoc})) {
         LOGE("ImageBind", "Failed to register image binding scheme");
     }
 }

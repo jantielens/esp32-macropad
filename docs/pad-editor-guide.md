@@ -326,7 +326,7 @@ state:
 Microphone sampling starts only while an audio input binding is being resolved
 on a visible button.
 
-> **Tip**: The button editor has a **?** button next to each label field that opens a built-in binding reference with examples.
+> **Tip**: Click the **fx** badge next to a field to open the binding reference. It lists only the bindings available on your device, has a search box, and each key and example has **Copy** and **Insert** buttons; Insert puts the token into the field you opened it from.
 
 ### Label Style Overrides
 

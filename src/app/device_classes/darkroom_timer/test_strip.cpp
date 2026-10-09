@@ -666,6 +666,46 @@ static const char* strip_binding_key_at(uint8_t index) {
     snprintf(key, sizeof(key), "%s%u", prefixes[dynamic_index % 3], (unsigned)segment);
     return key;
 }
+
+static const BindingParamDoc kStripParams[] = {
+    {"key", "Test strip key, see below."},
+    {"format", "Duration format for remaining, elapsed, total_time: mm:ss, ss.d, ..."},
+};
+
+static const BindingKeyDoc kStripKeyDocs[] = {
+    {"state", "idle, countdown, exposing, or pausing", "Sequence"},
+    {"segment", "Current segment, 0 when idle", "Sequence"},
+    {"segments", "Number of segments", "Sequence"},
+    {"progress", "Progress as current/total, e.g. 3/7", "Sequence"},
+    {"relay", "ON while the enlarger lamp is on", "Sequence"},
+    {"remaining", "Seconds left in the current phase", "Timing"},
+    {"elapsed", "Seconds into the current phase", "Timing"},
+    {"seg_inc", "Duration of the current segment, seconds", "Timing"},
+    {"total_time", "Estimated sequence length, seconds", "Timing"},
+    {"base_time", "Center exposure time, seconds", "Settings"},
+    {"step", "Stop increment between segments, e.g. 1/3", "Settings"},
+    {"range", "Shortest-longest cumulative time, seconds", "Settings"},
+    {"countdown", "Countdown before the first segment, seconds", "Settings"},
+    {"pause", "Pause between segments, seconds", "Settings"},
+    {"tick", "on or off: audible tick during exposure", "Settings"},
+    {"table", "Segment table for the Table widget, darkroom colors", "Settings"},
+    {"seg_time:#", "Cumulative time up to segment N, seconds", "Segments"},
+    {"seg_offset:#", "Stop offset of segment N from the base time", "Segments"},
+    {"seg_inc:#", "Duration of segment N, seconds", "Segments"},
+};
+
+static const BindingExampleDoc kStripExamples[] = {
+    {"[strip:progress] [strip:remaining;ss.d]", "Segment progress and phase countdown."},
+    {"[strip:seg_time:1]", "Cumulative time of the first segment."},
+    {"[strip:table]", "Exact single token for a Table widget."},
+};
+
+static const BindingSchemeDoc kStripDoc = {
+    "Darkroom", "Test strip sequence state, timing, and per-segment times.",
+    BINDING_DOC_LIST(kStripParams), BINDING_DOC_LIST(kStripKeyDocs), BINDING_DOC_LIST(kStripExamples),
+    nullptr, false, BINDING_DOC_NONE,
+    "Duration formats match the expose scheme.", nullptr,
+};
 // ============================================================================
 // Public API
 // ============================================================================
@@ -819,7 +859,7 @@ void test_strip_init() {
     recalculate_segments();
     if (!binding_template_register("strip", strip_resolve, strip_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    strip_binding_key_count, strip_binding_key_at})) {
+                                    strip_binding_key_count, strip_binding_key_at, &kStripDoc})) {
         LOGE(TAG, "Failed to register strip binding scheme");
     } else {
         LOGT(TAG, "Strip binding scheme registered");
