@@ -27,7 +27,7 @@ portal_core.js
 # Custom dropdown (replaces native <select> popup; auto-enhances on load)
 portal_dropdown.js
 
-# Shared libraries (used by config and pad editor)
+# [chunk:bindings HAS_DISPLAY]
 portal_binding_validator.js
 portal_binding_help.js
 
@@ -93,8 +93,7 @@ portal_storage.js
 # [chunk:music HAS_SOUND_PLAYER]
 portal_music.js
 
-# [chunk:extensions]
-# Extensions manager is safe to ship on all variants; navigation is firmware-gated.
+# [chunk:extensions HAS_NATIVE_EXTENSIONS]
 portal_extensions.js
 
 # [chunk:pad HAS_DISPLAY]

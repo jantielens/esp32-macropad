@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Reduce firmware size by replacing general-purpose regex URL routing with
+  validated path segments, excluding unused portal assets, and minifying
+  JavaScript with pinned Terser while preserving HTML callback names.
+* Exclude LittleFS from the filesystem-less C3 OTA target. Factory reset clears
+  NVS without formatting a nonexistent partition; filesystem-backed boards retain
+  their existing reset behavior.
+
 ## [1.39.0] - 2026-10-09
 
 ### Added

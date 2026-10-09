@@ -551,7 +551,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_production_bundle(self):
         files = []
         enabled = True
-        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
+        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
         for line in (APP_WEB_DIR / "portal.js.bundle").read_text(encoding="utf-8").splitlines():

@@ -3212,7 +3212,7 @@ DNS server redirects all requests to device IP in AP mode:
   - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders in HTML pages
    - Minifies HTML (removes comments, collapses whitespace)
    - Minifies CSS using `csscompressor`
-   - Concatenates JS modules per `portal.js.bundle` manifest, then minifies using `rjsmin`
+  - Concatenates JS modules per `portal.js.bundle` chunk, then minifies using pinned Terser
    - Concatenates CSS fragments per `*.css.bundle` manifests (if present), then minifies using `csscompressor`
    - Gzip compresses all assets (level 9)
   - Generates `src/app/web_assets.h` with embedded byte arrays
@@ -3235,6 +3235,17 @@ DNS server redirects all requests to device IP in AP mode:
    ```
 
 ### Asset Bundle System
+
+JavaScript minification requires Node.js 18 or newer and npm. Run
+`npm ci --prefix tools` to install the locked build dependency before an offline
+build; otherwise the generator installs it when missing. Top-level function names
+and property names remain intact for inline HTML and dynamically loaded scripts.
+
+The shared bundle excludes binding-editor modules when `HAS_DISPLAY` is false
+and extension-manager code when `HAS_NATIVE_EXTENSIONS` is false. Fragment arrays
+and their lookup entries use the same feature conditions as the owning components,
+including MCP, music, recipes, hardware buttons, and camera motion. Each board
+links one selected gzip stream rather than all generated variants.
 
 The minifier supports `.bundle` manifests for both JavaScript and CSS. A bundle manifest lists source files that should be concatenated into a single asset at build time, reducing HTTP requests, route handlers, and flash usage on the ESP32.
 

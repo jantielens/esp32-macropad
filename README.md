@@ -356,6 +356,10 @@ USB/OTG for HID and USB-UART for flashing and logs; see
 
 ### Developer Documentation
 
+Building firmware requires Node.js 18 or newer and npm for the pinned Terser
+asset minifier, alongside the Arduino and Python tooling. Run `npm ci --prefix tools`
+before building offline. See the [build guide](docs/dev/build-and-release-process.md).
+
 Building from source, contributing, or adding new board support? See the [developer docs](docs/dev/).
 For a feature-size attribution report from an existing build, use the
 [standalone firmware size reporting spike](docs/dev/scripts.md#toolsfirmware_size_reportpy).

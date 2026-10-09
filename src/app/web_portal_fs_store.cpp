@@ -7,6 +7,7 @@
 #include "web_portal_auth.h"
 #include "web_portal_json.h"
 #include "web_portal_utils.h"
+#include "web_portal_path.h"
 
 #include "storage.h"
 #include <string.h>
@@ -25,7 +26,11 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
     // GET {base_url} — return manifest JSON (fast, served from RAM cache)
     // -----------------------------------------------------------------------
     String list_url = String(base_url);
-    server.on(list_url.c_str(), HTTP_GET,
+    const String item_prefix = list_url + "/";
+    auto item_filter = [item_prefix](AsyncWebServerRequest* request) {
+        return portal_path_matches(request->url().c_str(), item_prefix.c_str(), 1);
+    };
+    server.on(AsyncURIMatcher::exact(list_url.c_str()), HTTP_GET,
         [&store](AsyncWebServerRequest* request) {
             if (!portal_auth_gate(request)) return;
 
@@ -45,14 +50,13 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
     // Uses exists() for a manifest-only validation (no file I/O), then
     // streams via AsyncFileResponse — avoids loading 30-50 KB into RAM.
     // -----------------------------------------------------------------------
-    String get_pattern = String("^") + base_url + "/([^/]+)$";
     server.on(
-        AsyncURIMatcher::regex(get_pattern.c_str()),
+        AsyncURIMatcher::prefix(item_prefix.c_str()),
         HTTP_GET,
-        [&store](AsyncWebServerRequest* request) {
+        [&store, item_prefix](AsyncWebServerRequest* request) {
             if (!portal_auth_gate(request)) return;
 
-            String id = request->pathArg(0);
+            String id = portal_path_arg(request->url(), item_prefix.c_str(), 0);
             if (id.isEmpty()) {
                 request->send(400, "application/json",
                               "{\"success\":false,\"message\":\"Missing id\"}");
@@ -79,19 +83,19 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
             // exhaustion on ESP-Hosted (SDIO).
             sendFileThrottled(request, file_path.c_str(), "application/json");
         }
-    );
+    ).setFilter(item_filter);
 
     // -----------------------------------------------------------------------
     // DELETE {base_url}/{id} — delete document and update manifest
     // Returns 404 if the entry does not exist.
     // -----------------------------------------------------------------------
     server.on(
-        AsyncURIMatcher::regex(get_pattern.c_str()),
+        AsyncURIMatcher::prefix(item_prefix.c_str()),
         HTTP_DELETE,
-        [&store](AsyncWebServerRequest* request) {
+        [&store, item_prefix](AsyncWebServerRequest* request) {
             if (!portal_auth_gate(request)) return;
 
-            String id = request->pathArg(0);
+            String id = portal_path_arg(request->url(), item_prefix.c_str(), 0);
             if (id.isEmpty()) {
                 request->send(400, "application/json",
                               "{\"success\":false,\"message\":\"Missing id\"}");
@@ -105,7 +109,7 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
             }
             request->send(200, "application/json", "{\"success\":true}");
         }
-    );
+    ).setFilter(item_filter);
 
     // -----------------------------------------------------------------------
     // PATCH {base_url}/{id} — update metadata fields
@@ -126,7 +130,7 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
     };
 
     server.on(
-        AsyncURIMatcher::regex(get_pattern.c_str()),
+        AsyncURIMatcher::prefix(item_prefix.c_str()),
         HTTP_PATCH,
         // Request handler fires after all body chunks — frees per-request state.
         [](AsyncWebServerRequest* request) {
@@ -137,7 +141,7 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
         },
         nullptr,
         // Body handler — accumulates chunks into per-request heap state.
-        [&store](AsyncWebServerRequest* request,
+        [&store, item_prefix](AsyncWebServerRequest* request,
                  uint8_t* data, size_t len,
                  size_t index, size_t total) {
             if (index == 0) {
@@ -150,7 +154,7 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
                 state->id[0]    = '\0';
                 request->_tempObject = state;
 
-                String id = request->pathArg(0);
+                String id = portal_path_arg(request->url(), item_prefix.c_str(), 0);
                 if (id.isEmpty() || id.length() >= sizeof(state->id)) {
                     state->errored = true;
                     request->send(400, "application/json",
@@ -194,7 +198,7 @@ void fs_indexed_store_register_routes(AsyncWebServer& server,
                               "{\"success\":false,\"message\":\"Not found or patch failed\"}");
             }
         }
-    );
+    ).setFilter(item_filter);
 
     LOGI(TAG, "Registered routes for %s", base_url);
 }

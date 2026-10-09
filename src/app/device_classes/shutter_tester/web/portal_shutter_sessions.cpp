@@ -8,6 +8,7 @@
 #include "web_portal_json.h"
 #include "web_portal_utils.h"
 #include "web_portal_routes.h"
+#include "web_portal_path.h"
 #include "log_manager.h"
 #include "component_registry.h"
 
@@ -43,6 +44,9 @@ extern FsIndexedStore& shutter_session_get_store();
 
 static void shutter_sessions_register(AsyncWebServer* server) {
     FsIndexedStore& store = shutter_session_get_store();
+    auto item_filter = [](AsyncWebServerRequest* request) {
+        return portal_path_matches(request->url().c_str(), "/api/sessions/", 1);
+    };
 
     // GET, DELETE standard routes (GET list, GET by id, DELETE by id).
     // The generic PATCH from fs_indexed_store_register_routes() is intentionally
@@ -74,11 +78,11 @@ static void shutter_sessions_register(AsyncWebServer* server) {
     // GET /api/sessions/{id} — stream raw data file (must be registered BEFORE
     // the exact-string GET /api/sessions handler).
     server->on(
-        AsyncURIMatcher::regex("^/api/sessions/([^/]+)$"),
+        AsyncURIMatcher::prefix("/api/sessions/"),
         HTTP_GET,
         [&store](AsyncWebServerRequest* request) {
             if (!portal_auth_gate(request)) return;
-            String id = request->pathArg(0);
+            String id = portal_path_arg(request->url(), "/api/sessions/", 0);
             if (id.isEmpty()) {
                 request->send(400, "application/json",
                               "{\"success\":false,\"message\":\"Missing id\"}");
@@ -97,15 +101,15 @@ static void shutter_sessions_register(AsyncWebServer* server) {
             }
             sendFileThrottled(request, file_path.c_str(), "application/json");
         }
-    );
+    ).setFilter(item_filter);
 
     // DELETE /api/sessions/{id}
     server->on(
-        AsyncURIMatcher::regex("^/api/sessions/([^/]+)$"),
+        AsyncURIMatcher::prefix("/api/sessions/"),
         HTTP_DELETE,
         [&store](AsyncWebServerRequest* request) {
             if (!portal_auth_gate(request)) return;
-            String id = request->pathArg(0);
+            String id = portal_path_arg(request->url(), "/api/sessions/", 0);
             if (id.isEmpty()) {
                 request->send(400, "application/json",
                               "{\"success\":false,\"message\":\"Missing id\"}");
@@ -118,7 +122,7 @@ static void shutter_sessions_register(AsyncWebServer* server) {
             }
             request->send(200, "application/json", "{\"success\":true}");
         }
-    );
+    ).setFilter(item_filter);
 
     // GET /api/sessions — manifest list. Exact match for the same reason as
     // the DELETE clear_all handler above (avoid BackwardCompatible prefix match).
@@ -149,7 +153,7 @@ static void shutter_sessions_register(AsyncWebServer* server) {
     };
 
     server->on(
-        AsyncURIMatcher::regex("^/api/sessions/([^/]+)$"),
+        AsyncURIMatcher::prefix("/api/sessions/"),
         HTTP_PATCH,
         [](AsyncWebServerRequest* request) {
             if (request->_tempObject) {
@@ -171,7 +175,7 @@ static void shutter_sessions_register(AsyncWebServer* server) {
                 state->id[0]    = '\0';
                 request->_tempObject = state;
 
-                String id = request->pathArg(0);
+                String id = portal_path_arg(request->url(), "/api/sessions/", 0);
                 if (id.isEmpty() || id.length() >= sizeof(state->id)) {
                     state->errored = true;
                     request->send(400, "application/json",
@@ -232,7 +236,7 @@ static void shutter_sessions_register(AsyncWebServer* server) {
                               "{\"success\":false,\"message\":\"Patch failed\"}");
             }
         }
-    );
+    ).setFilter(item_filter);
 
     LOGI(TAG, "Registered /api/sessions routes");
 }

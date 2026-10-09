@@ -164,6 +164,40 @@ The build system automatically applies project branding during compilation:
 6. `build.sh` also embeds the board name as a compile-time string define (`BUILD_BOARD_NAME`) so the portal can report the active board
 7. Firmware compiles with branded values embedded
 
+Firmware builds require Node.js 18 or newer and npm for JavaScript minification.
+The asset generator installs the pinned Terser dependency with `npm ci --prefix tools`
+when it is missing. For an offline build, run that command beforehand. The version
+and dependency graph are recorded in `tools/package.json` and `tools/package-lock.json`.
+Terser compresses code and mangles local names, but preserves top-level names and
+properties used by HTML handlers and dynamically loaded portal scripts.
+
+Component, indexed-store, and shutter-session routes use prefix matchers with
+explicit segment validation, not `ASYNCWEBSERVER_REGEX`. This avoids linking the
+general-purpose C++ regex engine while keeping route precedence and body handlers.
+
+Boards without a persistent filesystem partition or SD backend must set
+`HAS_FILESYSTEM=false`. The C3 OTA-only target uses this setting to exclude
+LittleFS; NVS settings and NVS-only factory reset remain available. Do not infer
+filesystem availability from the display or storage-browser feature flags.
+
+### Firmware Size Verification
+
+Fresh before/after builds on 2026-10-09 with ESP32 Arduino core 3.3.12 measured
+the combined routing, asset-gating, Terser, and filesystem-exclusion changes.
+TLS, BLE, MQTT, MCP, and partition settings were otherwise unchanged.
+
+| Board | Baseline bytes | Optimized bytes | Saved bytes | Optimized OTA headroom bytes |
+|-------|---------------:|----------------:|------------:|----------------------------:|
+| `esp32c3-withsensors` | 2,013,344 | 1,686,192 | 327,152 (16.25%) | 345,424 |
+| `esp32-p4-lcd4b` | 3,656,832 | 3,387,104 | 269,728 (7.38%) | 3,166,496 |
+
+C3 headroom increased from 18,272 to 345,424 bytes. Regex replacement alone
+reduced its intermediate binary by 274,560 bytes. These are application binary
+measurements, not sums of linker attribution categories. Both final builds passed
+without compiler warnings. Focused host tests and desktop/mobile browser checks
+of the embedded minified assets passed; device behavior still requires manual
+hardware validation.
+
 ### Malloc PSRAM Preference
 
 `MALLOC_PSRAM_THRESHOLD_BYTES` defaults to `512` for classic ESP32 and ESP32-S3

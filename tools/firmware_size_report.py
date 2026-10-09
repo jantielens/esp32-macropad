@@ -169,6 +169,7 @@ FLAG_SUBSYSTEMS = {
     "HAS_SENSOR_NAU7802": "Sensors / power",
     "HAS_SENSOR_TSL2591": "Sensors / power",
     "HAS_STORAGE_BROWSER": "Storage",
+    "HAS_FILESYSTEM": "Storage",
     "IS_COFFEE_SCALE": "Device classes",
     "IS_DARKROOM_TIMER": "Device classes",
     "IS_EPAPER_FRAME": "Device classes",

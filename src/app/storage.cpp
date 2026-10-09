@@ -1,5 +1,6 @@
 #include "storage.h"
 
+#if HAS_FILESYSTEM
 #include "fs_health.h"
 #include "log_manager.h"
 #if USE_SD_STORAGE
@@ -80,3 +81,7 @@ bool storage_mount() {
 
     return true;
 }
+#else
+void storage_publish_usage(bool) {}
+bool storage_mount() { return false; }
+#endif

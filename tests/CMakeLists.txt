@@ -59,6 +59,22 @@ endfunction()
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
+file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_component_api.cpp" PORTAL_ROUTE_SOURCE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/src/app/web_portal_component_api.cpp")
+string(FIND "${PORTAL_ROUTE_SOURCE}" "static void handleComponentGetConfig(" PORTAL_ROUTE_START)
+string(SUBSTRING "${PORTAL_ROUTE_SOURCE}" ${PORTAL_ROUTE_START} -1 PORTAL_ROUTE_HANDLERS)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_route_handlers.inc" "${PORTAL_ROUTE_HANDLERS}")
+file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_fs_store.cpp" PORTAL_STORE_SOURCE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/src/app/web_portal_fs_store.cpp")
+string(FIND "${PORTAL_STORE_SOURCE}" "void fs_indexed_store_register_routes(" PORTAL_STORE_START)
+string(FIND "${PORTAL_STORE_SOURCE}" "#endif // HAS_DISPLAY" PORTAL_STORE_END)
+math(EXPR PORTAL_STORE_LENGTH "${PORTAL_STORE_END} - ${PORTAL_STORE_START}")
+string(SUBSTRING "${PORTAL_STORE_SOURCE}" ${PORTAL_STORE_START} ${PORTAL_STORE_LENGTH} PORTAL_STORE_HANDLERS)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/portal_store_handlers.inc" "${PORTAL_STORE_HANDLERS}")
+add_host_legacy_test(test_web_portal_path SOURCES test_web_portal_path.cpp)
+target_include_directories(test_web_portal_path PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 add_host_legacy_test(test_alarm_clock_core SOURCES test_alarm_clock_core.cpp)
 add_host_legacy_test(test_alarm_dispatch_lock
     SOURCES test_alarm_dispatch_lock.cpp
@@ -438,6 +454,10 @@ add_host_legacy_test(test_fs_health_telemetry SOURCES test_fs_health_telemetry.c
 add_host_legacy_test(test_storage_policy_littlefs SOURCES test_storage_policy.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/storage_policy_overrides DEFINITIONS USE_SD_STORAGE=0)
 add_host_legacy_test(test_storage_policy_sdmmc SOURCES test_storage_policy.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/storage_policy_overrides DEFINITIONS USE_SD_STORAGE=1 HAS_SD_CARD=1)
 add_host_legacy_test(test_factory_reset_storage SOURCES test_factory_reset_storage.cpp INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
+add_host_legacy_test(test_factory_reset_no_filesystem SOURCES test_factory_reset_storage.cpp
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/factory_reset_overrides
+    DEFINITIONS HAS_FILESYSTEM=0 USE_SD_STORAGE=0
+    OPTIONS -ffunction-sections -fdata-sections LIBRARIES -Wl,--gc-sections)
 
 # Real ArduinoJson for the schema emitter; the profiles use a minimal JSON stub.
 add_library(binding_schema_json OBJECT
@@ -528,7 +548,7 @@ foreach(script
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
     test_portal_ble_config.js test_portal_pad_preview.js test_portal_startup.js
     test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js
-    test_portal_binding_help.js
+    test_portal_binding_help.js test_portal_asset_gates.js
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} node ${PROJECT_SOURCE_DIR}/tests/${script})

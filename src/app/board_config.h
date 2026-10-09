@@ -141,9 +141,14 @@ struct HwButtonDef {
 #  define NATIVE_EXTENSION_TARGET_ABI "xtensa-esp32"
 #endif
 
+// Enable a persistent filesystem partition or SD card backend.
+#ifndef HAS_FILESYSTEM
+#define HAS_FILESYSTEM true
+#endif
+
 // Enable the portal and MCP browser for a filesystem partition or SD card.
 #ifndef HAS_STORAGE_BROWSER
-#define HAS_STORAGE_BROWSER true
+#define HAS_STORAGE_BROWSER HAS_FILESYSTEM
 #endif
 
 // Enable BLE HID keyboard support.

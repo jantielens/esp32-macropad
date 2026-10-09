@@ -16,6 +16,7 @@
 // The OTA-only partition table has no filesystem partition, so omit the
 // unusable portal/MCP storage browser and preserve firmware space.
 #define HAS_STORAGE_BROWSER false
+#define HAS_FILESYSTEM false
 
 // ESP32-C3 only has ~320 KB internal SRAM, most of it consumed by WiFi softAP
 // + lwIP + AsyncTCP. Shrink the HTTP streaming chunk size so each TX pbuf

@@ -1017,6 +1017,9 @@ Upload a compiled `.bin` firmware file directly from your computer. A progress b
 
 Erases all configuration and restarts the device in AP mode. You'll need to go through the [first-time setup](first-time-setup.md) again.
 
+On boards without a filesystem, including the OTA-only C3 sensor target, reset
+clears NVS settings without attempting to format a nonexistent filesystem.
+
 > **Warning**: This cannot be undone. Everything stored on the device is wiped: all settings (WiFi, MQTT, BLE, display), all pad layouts, pad and button defaults, timers, swipe and boot actions, stored icons, stored sounds, indexed-store data (e.g. shutter / scale sessions), and any BLE pairings.
 
 ---

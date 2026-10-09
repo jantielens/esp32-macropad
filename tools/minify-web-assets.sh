@@ -478,6 +478,15 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
+if ! command -v node >/dev/null || ! command -v npm >/dev/null; then
+    echo "Error: Node.js and npm are required for JavaScript minification" >&2
+    exit 1
+fi
+TERSER="$PROJECT_ROOT/tools/node_modules/.bin/terser"
+if [[ ! -x "$TERSER" ]]; then
+    npm ci --prefix "$PROJECT_ROOT/tools" --no-audit --no-fund
+fi
+
 # Check/install required Python packages
 if [ ${#HTML_FILES[@]} -gt 0 ] || [ ${#CSS_FILES[@]} -gt 0 ] || [ ${#JS_FILES[@]} -gt 0 ]; then
     echo "Checking Python dependencies..."
@@ -487,10 +496,6 @@ if [ ${#HTML_FILES[@]} -gt 0 ] || [ ${#CSS_FILES[@]} -gt 0 ] || [ ${#JS_FILES[@]
         python3 -m pip install --user csscompressor
     fi
     
-    if [ ${#JS_FILES[@]} -gt 0 ] && ! python3 -c "import rjsmin" 2>/dev/null; then
-        echo "Installing rjsmin..."
-        python3 -m pip install --user rjsmin
-    fi
     echo
 fi
 
@@ -550,7 +555,7 @@ gzip_to_c_array() {
 # concatenate from a .bundle manifest (chunked or plain), minify, gzip, store
 # into kind-specific associative arrays, then emit 2^N #if-guarded PROGMEM
 # variants for chunked bundles. The only per-kind differences are the
-# minifier (csscompressor vs rjsmin), the file extension, the symbol-suffix,
+# minifier (csscompressor vs Terser), the file extension, the symbol-suffix,
 # and an optional `node --check` syntax pass on JS.
 
 # Minify a source file with the kind-specific minifier.
@@ -566,11 +571,7 @@ with open('$src', 'r') as f:
 "
             ;;
         js)
-            python3 -c "
-import rjsmin
-with open('$src', 'r') as f:
-    print(rjsmin.jsmin(f.read()), end='')
-"
+            "$TERSER" "$src" --compress --mangle --format comments=false
             ;;
         *)
             echo "minify_source: unknown kind '$kind'" >&2
@@ -711,7 +712,7 @@ emit_chunked_variants() {
 
     local bundle_name chunks ckey f n_flags n_indep n_classes n_variants
     local if_expr active_flags cflag include
-    local max_variants=80
+    local max_variants=128
     local variant_tmp variant_orig_size variant_gz_size variant_gz vnum
     for bundle_name in "${!bundle_chunks_ref[@]}"; do
         chunks="${bundle_chunks_ref[$bundle_name]}"
@@ -740,8 +741,8 @@ emit_chunked_variants() {
         # model only independent flags expand exponentially, so this cap is
         # far harder to hit than the old 2^N one; it exists to catch a bundle
         # that accidentally accumulates many independent flags.
-        # Four independent feature chunks plus the four mutually exclusive
-        # device classes produce 80 reachable variants. Keep a bounded cap so
+        # Four independent feature chunks plus the five mutually exclusive
+        # device classes produce 96 reachable variants. Keep a bounded cap so
         # a future independent chunk cannot silently explode generated assets.
         if [[ $n_variants -gt $max_variants ]]; then
             echo "  ✗ Bundle $bundle_name expands to $n_variants variants" \
@@ -993,7 +994,7 @@ cat > "$OUTPUT_FILE" << 'HEADER_START'
  * Processing:
  *   - HTML files: template substitution + basic minification + gzip compression
  *   - CSS files:  minified using csscompressor + gzip compression
- *   - JS files:   minified using rjsmin + gzip compression
+ *   - JS files:   minified using pinned Terser + gzip compression
  * 
  * All assets are stored in gzipped format with Content-Encoding: gzip headers.
  * This reduces flash storage and bandwidth by 60-80%.
@@ -1044,13 +1045,25 @@ asset_feature_flag() {
             echo "HAS_DISPLAY" ;;
         mqtt|ha_discovery)
             echo "HAS_MQTT" ;;
+        mqtt_triggers)
+            echo "HAS_MQTT && (HAS_DISPLAY || HAS_BUTTON)" ;;
+        hw_buttons)
+            echo "HAS_BUTTON" ;;
+        mcp)
+            echo "HAS_MCP" ;;
+        recipes|recipe_catalog)
+            echo "HAS_DISPLAY" ;;
+        extensions|portal_extensions)
+            echo "HAS_NATIVE_EXTENSIONS" ;;
+        camera_motion)
+            echo "HAS_CAMERA && (HAS_DISPLAY || HAS_BUTTON)" ;;
         hid)
             echo "HAS_BLE_HID || HAS_USB_HID" ;;
-        volume)
+        volume|feedback)
             echo "HAS_AUDIO" ;;
         camera|camera_snapshots|portal_camera|portal_camera_snapshots)
             echo "HAS_CAMERA" ;;
-        sounds)
+        sounds|music)
             echo "HAS_SOUND_PLAYER" ;;
         storage)
             echo "HAS_STORAGE_BROWSER" ;;

@@ -228,7 +228,7 @@ build_board() {
     # see macros defined only in board_overrides.h.
     # Keep this allowlisted to avoid arbitrary #define injection.
     EXTRA_GLOBAL_DEFINES=""
-    EXTRA_GLOBAL_FLAGS=" -DASYNCWEBSERVER_REGEX"
+    EXTRA_GLOBAL_FLAGS=""
     if [[ -f "$board_overrides_file" ]]; then
         # Numeric-valued defines (exported as -DNAME=value)
         # NOTE: Keep this allowlist tight; only export values needed by libraries.

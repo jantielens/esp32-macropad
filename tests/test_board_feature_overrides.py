@@ -36,6 +36,7 @@ subprocess.run(
 static_assert(!HAS_MCP, "MCP must be disabled to preserve OTA flash space");
 static_assert(HAS_BLE, "BLE telemetry must remain enabled");
 static_assert(!HAS_MQTT, "MQTT must be disabled to preserve OTA flash space");
+static_assert(!HAS_FILESYSTEM, "OTA-only C3 has no filesystem partition");
 static_assert(HAS_SENSOR_DUMMY, "Sample sensor must remain enabled");
 ''',
     text=True, check=True,

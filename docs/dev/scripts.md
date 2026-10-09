@@ -309,6 +309,10 @@ declare -A FQBN_TARGETS=(
 
 ## build.sh
 
+Firmware asset generation requires Node.js 18 or newer and npm for pinned Terser
+minification, plus Python 3 and `csscompressor` for CSS. The generator installs
+missing dependencies. Run `npm ci --prefix tools` before an offline build.
+
 **Purpose:** Compile the Arduino sketch into ESP32 firmware for one or more board variants.
 
 **Usage:**

@@ -692,6 +692,7 @@ bool config_manager_save(const DeviceConfig *config) {
 // Recursively remove a directory tree on the active Storage backend.
 // Returns true if `path` no longer exists (or never did) after the call.
 // Individual remove/rmdir failures are logged.
+#if HAS_FILESYSTEM && USE_SD_STORAGE
 static bool factory_reset_rmrf(const char* path) {
 		if (!path || !*path) return true;
 		if (!Storage.exists(path)) return true;
@@ -745,6 +746,7 @@ static bool factory_reset_rmrf(const char* path) {
 		}
 		return ok;
 }
+#endif
 
 // Factory reset: erase the entire NVS partition and wipe user data on the
 // filesystem (pad configs, button defaults, timer/swipe/boot actions, icons,
@@ -760,8 +762,9 @@ bool config_manager_factory_reset() {
 		// (logging, BLE deinit, etc.) does not crash on a closed partition.
 		nvs_flash_init();
 
-		LOGI("Config", "Factory reset: wiping filesystem");
 		bool fs_ok = true;
+#if HAS_FILESYSTEM
+		LOGI("Config", "Factory reset: wiping filesystem");
 #if USE_SD_STORAGE
 		// SD: cannot safely format from firmware. Selectively remove the
 		// directories the firmware owns; leave any user files at root alone.
@@ -770,12 +773,13 @@ bool config_manager_factory_reset() {
 		});
 #else
 		// LittleFS: format wipes everything in the data partition cleanly.
-		if (!LittleFS.format()) {
+		if (!Storage.format()) {
 				LOGE("Config", "LittleFS.format() failed");
 				fs_ok = false;
 		} else {
 				LOGI("Config", "LittleFS formatted");
 		}
+#endif
 #endif
 
 		const bool ok = (err == ESP_OK) && fs_ok;
