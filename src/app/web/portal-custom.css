@@ -2106,9 +2106,9 @@ body {
 :root[data-bs-theme="dark"] .portal-form small.editor-warn { color: #f0b429; }
 
 /* Widget threshold / status color row */
-.bar-chart-colors { display: flex; gap: 8px; align-items: end; margin-bottom: 12px; }
-.bar-chart-colors .form-group { flex: 1; min-width: 0; margin-bottom: 0; }
-.bar-chart-colors .bindable-color { margin-bottom: 0; }
+.bar-chart-colors { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
+.bar-chart-colors .form-group { display: flex; flex-direction: column; flex: 1; min-width: 0; margin-bottom: 0; }
+.bar-chart-colors .bindable-color { margin-top: auto; margin-bottom: 0; }
 
 /* Binding input: flex row with ? help button */
 .binding-input-wrap { display: flex; align-items: center; gap: 6px; }
