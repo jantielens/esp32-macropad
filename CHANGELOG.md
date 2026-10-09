@@ -69,6 +69,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fix internal RAM leakage when time bindings use a timezone different from
+  the device timezone, including Word Clock and Nixie Clock extensions.
+  Reuse bounded timezone storage while preserving timezone overrides,
+  device timezone restoration, and extension ticks.
 * Image fetching now yields for one scheduler tick when HTTP or HTTPS
   single-byte reads have no data, preventing idle-task starvation and watchdog
   resets while waiting for stalled or incomplete response headers. Existing

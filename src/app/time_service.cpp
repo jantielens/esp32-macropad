@@ -4,6 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mutex>
+#include <unistd.h>
+#if defined(__NEWLIB__)
+extern "C" {
+#include <envlock.h>
+}
+#endif
 #if defined(ARDUINO)
 #include <Arduino.h>
 #include "board_config.h"
@@ -60,6 +66,7 @@ static const TimezoneEntry timezones[] = {
 };
 static std::mutex timezone_mutex;
 static char device_timezone[64] = "UTC0";
+static char timezone_environment[sizeof(device_timezone) + 3] = "TZ=UTC0";
 static std::atomic<uint32_t> timezone_generation{0};
 static std::atomic<bool> synchronized{false};
 
@@ -81,6 +88,27 @@ static const char* resolve_timezone(const char* timezone) {
     for (const auto& entry : timezones)
         if (!strcasecmp(timezone, entry.name)) return entry.posix;
     return timezone;
+}
+
+static bool apply_timezone(const char* posix) {
+    if (strlen(posix) >= sizeof(device_timezone)) return false;
+    if (!getenv("TZ") && setenv("TZ", "", 0)) return false;
+#if defined(__NEWLIB__)
+    __env_lock(_REENT);
+#endif
+    bool found = false;
+    for (char** entry = environ; entry && *entry; ++entry) {
+        if (strncmp(*entry, "TZ=", 3)) continue;
+        strcpy(timezone_environment + 3, posix);
+        *entry = timezone_environment;
+        found = true;
+        break;
+    }
+#if defined(__NEWLIB__)
+    __env_unlock(_REENT);
+#endif
+    if (found) tzset();
+    return found;
 }
 
 static bool timezone_number(const char*& cursor, unsigned minimum, unsigned maximum) {
@@ -147,6 +175,7 @@ bool time_service_set_timezone(const char* timezone) {
     if (!time_service_timezone_valid(timezone)) return false;
     std::lock_guard<std::mutex> lock(timezone_mutex);
     const char* posix = resolve_timezone(timezone);
+    if (!apply_timezone(posix)) return false;
     if (strcmp(posix, device_timezone)) {
         strcpy(device_timezone, posix);
         timezone_generation.fetch_add(1);
@@ -154,8 +183,6 @@ bool time_service_set_timezone(const char* timezone) {
         LOGI("Time", "Device timezone=%s resolved=%s", timezone, device_timezone);
 #endif
     }
-    setenv("TZ", device_timezone, 1);
-    tzset();
     return true;
 }
 
@@ -174,9 +201,8 @@ void time_service_start_ntp(void (*observer)(struct timeval*)) {
         LOGI("Time", "NTP synchronized: epoch=%lld", static_cast<long long>(value ? value->tv_sec : time(nullptr)));
         if (auto callback = sync_observer.load()) callback(value);
     });
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-    setenv("TZ", device_timezone, 1);
-    tzset();
+    if (!apply_timezone(device_timezone)) return;
+    configTzTime(device_timezone, "pool.ntp.org", "time.nist.gov");
     started = true;
     LOGI("Time", "NTP started: pool.ntp.org, time.nist.gov; timezone=%s", device_timezone);
 #else
@@ -198,13 +224,10 @@ bool time_service_localtime(time_t epoch, struct tm* result) {
 bool time_service_format(time_t epoch, const char* format, const char* timezone,
                          char* out, size_t capacity) {
     std::lock_guard<std::mutex> lock(timezone_mutex);
-    setenv("TZ", resolve_timezone(timezone), 1);
-    tzset();
+    if (!apply_timezone(resolve_timezone(timezone))) return false;
     struct tm local = {};
     const bool ok = localtime_r(&epoch, &local) && strftime(out, capacity, format, &local);
-    setenv("TZ", device_timezone, 1);
-    tzset();
-    return ok;
+    return apply_timezone(device_timezone) && ok;
 }
 
 static time_t alarm_local_occurrence(const struct tm& date, uint8_t hour, uint8_t minute) {
