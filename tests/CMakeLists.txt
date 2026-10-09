@@ -5,6 +5,7 @@ include(CMakeParseArguments)
 add_test(NAME test_log_manager COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager.py)
 add_test(NAME test_log_manager_serial COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager_serial.py)
 add_test(NAME test_image_fetch_client COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_image_fetch_client.py)
+add_test(NAME test_board_feature_overrides COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_board_feature_overrides.py)
 add_test(NAME test_remote_log_runtime COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_remote_log_runtime.py)
 add_test(NAME test_firmware_size_report COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_firmware_size_report.py)
 add_test(NAME test_config_identifier_guards COMMAND python3

@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Disable alarms on JC3248W535, JC3636W518, and JC3636W518 SD to preserve
+  internal RAM. USB HID and native extension support remain enabled.
+* Prefer PSRAM for ordinary allocations larger than 512 bytes on classic ESP32
+  and ESP32-S3 boards with PSRAM, including Inkplate builds, to preserve internal
+  RAM headroom. Other targets and boards without PSRAM retain the SDK allocation
+  policy; DMA-specific allocations and task-stack policy are unchanged.
 * The pad editor's binding help is now a searchable Binding reference built from
   the firmware's binding registry, so it lists only bindings available on the
   device and stays current with the code. Each scheme documents its parameters,

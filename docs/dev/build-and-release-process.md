@@ -164,6 +164,22 @@ The build system automatically applies project branding during compilation:
 6. `build.sh` also embeds the board name as a compile-time string define (`BUILD_BOARD_NAME`) so the portal can report the active board
 7. Firmware compiles with branded values embedded
 
+### Malloc PSRAM Preference
+
+`MALLOC_PSRAM_THRESHOLD_BYTES` defaults to `512` for classic ESP32 and ESP32-S3
+targets when `HAS_PSRAM` is enabled, including Inkplate builds. Other targets
+and boards without PSRAM default to `0`, which leaves the SDK allocation policy
+unchanged. Board overrides can select another threshold or opt out with `0`.
+At the beginning of `setup()`, before subsystem initialization, firmware applies
+the preference through `heap_caps_malloc_extmem_enable()` only when PSRAM is
+compiled in and `psramFound()` confirms it is available.
+
+Ordinary allocations larger than 512 bytes prefer PSRAM, while smaller
+allocations prefer internal RAM. The allocator can fall back to the other pool.
+Explicit capability allocations, including DMA-specific buffers, and task-stack
+policy are unchanged. The preference does not move existing allocations,
+including those made before `setup()`.
+
 ### Build Directory Layout
 
 Each board gets its own isolated build tree under `build/`. Final binaries (`.bin` files) are placed directly in `build/<board>/`, while `arduino-cli`'s intermediate object cache lives in a separate `intermediate/` subdirectory per board. This prevents cache thrashing when switching between boards — building board A, then board B, then board A again is incremental (seconds) rather than a full rebuild.

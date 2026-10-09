@@ -278,7 +278,8 @@ more room without using the board's internal flash for those files.
 | Capability | What to check |
 |------------|---------------|
 | USB keyboard, mouse, and gamepad | JC3248W535, JC1060P470C, JC4880P433, JC3636W518, their `-sd` variants, and ESP32-P4 LCD 4B Macropad builds |
-| BLE keyboard | Board-dependent; both JC3636W518 variants disable BLE |
+| BLE keyboard | Board-dependent; JC3248W535 and both JC3636W518 variants disable BLE HID |
+| Alarms | Display builds by default; JC3248W535 and both JC3636W518 variants disable alarms to preserve internal RAM |
 | Native Extensions | Supported ESP32-P4 and ESP32-S3 builds, plus Inkplate 6FLICK Interactive; slot capacity varies |
 | Audio, microphones, and cameras | Hardware and firmware support vary; check the exact installer target |
 | SD primary storage | JC1060P470C, JC3636W518, and JC4880P433 `-sd` builds require a FAT32 card and do not fall back to internal flash |
