@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Upgrade the ESP32 Arduino core from 3.3.7 to 3.3.12, bundling ESP-Hosted
+  2.12.13 on ESP32-P4 boards. The updated transport handles SDIO RX/TX buffer
+  allocation failures without the previous assertions and includes recovery
+  fixes for dropped RX reads.
 * Color picker popover: the color-or-expression box now has an **fx** binding-help
   badge, a live preview swatch, and inline validation of colors and bindings;
   **Apply** stays disabled until the value is valid, and `#RGB` expands to
