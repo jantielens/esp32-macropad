@@ -14,8 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Firmware footprint reports from existing linker maps, without additional
+  firmware builds. A unified visual report shows full-flash partition layout,
+  app-slot usage and projected headroom, ranked subsystem attribution, static
+  variable RAM, and searchable owning flags. BLE HID, USB HID, shared HID, and
+  the Bluetooth stack have separate rows. Attribution is not guaranteed savings
+  from disabling a feature; flash capacity and artifact limitations are explicit.
+* Per-board footprint JSON and job summaries for PR, manual, and release builds,
+  plus a combined downloadable report ZIP and JSON that list missing boards.
+  Releases attach both files, and stable GitHub Pages deployments add a Footprint
+  view. USB-flash cards link directly to their board's report beside Enabled
+  features when data is available; older releases retain the installer without
+  report links.
+
 ### Changed
 
+* Require new, renamed, and removed feature flags to have maintained firmware
+  footprint classification or a reasoned exclusion, enforced by focused tests
+  and documented in the developer and agent checklists.
 * Upgrade the ESP32 Arduino core from 3.3.7 to 3.3.12, bundling ESP-Hosted
   2.12.13 on ESP32-P4 boards. The updated transport handles SDIO RX/TX buffer
   allocation failures without the previous assertions and includes recovery

@@ -520,6 +520,13 @@ Macropad, matching firmware device-class metadata. The old
 `/?device=<address>` links from the device portal redirect to `update.html`
 with the address intact.
 
+When release report data is available, the shared navigation adds **Footprint**
+at `firmware-footprint/`. USB-flash board cards link to that board's report next
+to **Enabled features**, using `?board=<board-name>`. The report shows its source
+ref, commit, and build-run link, plus a release link for version tags. It reports
+attributed subsystem sizes, app-slot capacity, and projected headroom, not
+guaranteed savings from disabling a flag or installed-device measurements.
+
 ### Why multi-part flashing is required
 
 For custom partition layouts, flashing a single “merged.bin at offset 0” can overwrite areas like NVS (and can fail to boot if `app0` is not at the default offset).
@@ -550,6 +557,14 @@ To avoid CORS issues in browsers, the **installer page**, **manifest JSON**, and
   - Copies Extension ELFs and signed `.ext` packages into `build/extensions/`.
 - **Output**: `tools/build-esp-web-tools-site.sh` generates `site/` (HTML pages, `manifests/*.json`, `firmware/<board>/*.bin`, and `extensions/*.ext`) which is deployed via GitHub Pages "Source: GitHub Actions". Existing firmware and manifest paths remain unchanged.
 
+The workflow also downloads `firmware-footprint.json` when that asset exists and
+passes its path as `FOOTPRINT_DATASET`. The generator exports the viewer after
+resetting and generating the installer output. Viewer code comes from the
+trusted default-branch checkout; release JSON is data, not executable site code.
+Older releases without report assets omit the report and its links. Hosted
+reports follow the installer's stable-release policy; PR reports remain
+downloadable workflow artifacts, without hosted previews or report history.
+
 ### Local site preview
 
 Build a preview from the firmware and Extension packages already present locally:
@@ -566,6 +581,11 @@ only boards with compiled firmware artifacts can be included. Class pages withou
 local builds display an unavailable-preview message. Run
 `bash tests/test_esp_web_tools_site.sh` for fixture-based coverage of every
 class without building firmware; the fixture binaries are not flashable.
+
+To include an existing report in that preview, prefix the generator command
+with `FOOTPRINT_DATASET="$PWD/build/firmware-footprint/reports.json"`. Only board
+cards represented in the dataset get individual report links. Export the data
+with `tools/firmware_size_report.py` as described in [Scripts](scripts.md).
 
 ---
 
@@ -622,9 +642,13 @@ git push origin v0.0.5
   - `esp32-template-esp32-nodisplay-v0.0.5-merged.bin` (legacy; may overwrite NVS)
   - Native Extension development ELFs named `<extension-id>@<package-semver>.elf`
   - Signed installable Extension packages named `<extension-id>@<package-semver>.ext`
+  - `firmware-footprint.zip` (interactive report) and `firmware-footprint.json`
   - `SHA256SUMS.txt`
 - Release notes populated from CHANGELOG.md (no auto-generated “What’s Changed” section)
 - Debug symbols (`.elf`) and build metadata available in workflow artifacts
+- Per-board footprint snapshots and job summaries; one combined downloadable
+  footprint artifact, also produced for PR and manual builds. Matrix builds do
+  not fail fast, so one failed board does not cancel report collection for others.
 - Publishes the release after all assets upload. The final publish operation retries up to five times; if every attempt fails, the completed release remains a draft for manual publication.
 
 **Additional automation for stable releases**:

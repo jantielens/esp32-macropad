@@ -19,6 +19,11 @@ fi
 OUT_DIR="${1:-$REPO_ROOT/site}"
 CLASS_CONTENT="$TEMPLATE_DIR/device-classes.json"
 class_slugs=(macropad headless epaper_frame coffee_scale darkroom_timer shutter_tester voice_assistant)
+footprint_nav=""
+if [[ -n "${FOOTPRINT_DATASET:-}" ]]; then
+  jq -e '.schema_version == 1 and (.reports | type == "array")' "$FOOTPRINT_DATASET" >/dev/null
+  footprint_nav='<a href="./firmware-footprint/">Footprint</a>'
+fi
 
 # Only deploy “latest” (site output is overwritten each deploy)
 rm -rf "$OUT_DIR"
@@ -273,6 +278,7 @@ render_index() {
       -v display_version="$DISPLAY_VERSION" \
       -v version_href="$VERSION_HREF" \
       -v changelog_href="$CHANGELOG_HREF" \
+      -v footprint_nav="$footprint_nav" \
       -v frag="$board_fragment" \
       -v extension_frag="$extension_fragment" \
       '
@@ -281,6 +287,7 @@ render_index() {
           gsub(/{{DISPLAY_VERSION}}/, display_version)
           gsub(/{{VERSION_HREF}}/, version_href)
           gsub(/{{CHANGELOG_HREF}}/, changelog_href)
+          gsub(/{{FOOTPRINT_NAV}}/, footprint_nav)
         }
         /{{BOARD_ENTRIES}}/ {
           while ((getline line < frag) > 0) print line
@@ -487,8 +494,14 @@ EOF
   done
 
   capabilities_html=""
+  footprint_link=""
+  if [[ -n "${FOOTPRINT_DATASET:-}" ]] && jq -e --arg board "$board_name" '.reports | any(.board == $board)' "$FOOTPRINT_DATASET" >/dev/null; then
+    footprint_link="<a class=\"board-footprint-link\" href=\"./firmware-footprint/?board=${board_name}\">Firmware footprint</a>"
+  fi
   if [[ -n "$capability_badges_html" ]]; then
-    capabilities_html="<div class=\"board-capabilities\"><div class=\"capabilities-label\">✨ Enabled features</div><div class=\"pill-row\">${capability_badges_html}</div></div>"
+    capabilities_html="<div class=\"board-capabilities\"><div class=\"capabilities-label\">✨ Enabled features ${footprint_link}</div><div class=\"pill-row\">${capability_badges_html}</div></div>"
+  elif [[ -n "$footprint_link" ]]; then
+    capabilities_html="<div class=\"board-capabilities\">${footprint_link}</div>"
   fi
 
   downloads_html="<details class=\"board-downloads\"><summary>Advanced downloads</summary><div class=\"pill-row\"><a class=\"badge download-badge\" href=\"./manifests/${board_name}.json\">Flash manifest</a><a class=\"badge download-badge\" href=\"./firmware/${board_name}/app.bin\">OTA firmware</a><a class=\"badge download-badge\" href=\"./ota/${board_name}.json\">OTA metadata</a></div></details>"
@@ -619,9 +632,11 @@ EOF
   if [[ ! -f "$class_fragment_dir/$class_slug" ]]; then
     echo '<p>No builds for this device class are included in this preview.</p>' > "$class_fragment_dir/$class_slug"
   fi
-  awk -v title="$(html_escape "$title")" -v intro="$(html_escape "$class_intro")" -v slug="$class_slug" \
+  device_footprint_nav="${footprint_nav/.\/firmware-footprint/..\/firmware-footprint}"
+  awk -v footprint_nav="$device_footprint_nav" -v title="$(html_escape "$title")" -v intro="$(html_escape "$class_intro")" -v slug="$class_slug" \
     -v icon="$(html_escape "$icon")" -v related="$class_related" -v guidance="$class_guidance" -v boards="$class_fragment_dir/$class_slug" '
     { gsub(/{{CLASS_TITLE}}/, title); gsub(/{{CLASS_INTRO}}/, intro); gsub(/{{CLASS_SLUG}}/, slug); gsub(/{{CLASS_ICON}}/, icon) }
+    { gsub(/{{FOOTPRINT_NAV}}/, footprint_nav) }
     /{{CLASS_RELATED}}/ { print related; next }
     /{{CLASS_GUIDANCE}}/ { print guidance; next }
     /{{CLASS_BOARDS}}/ { while ((getline line < boards) > 0) print line; close(boards); next }
@@ -637,6 +652,9 @@ cat > "$OUT_DIR/devices/epaper.html" <<'EOF'
 <html lang="en"><head><meta charset="utf-8" /><meta http-equiv="refresh" content="0; url=./epaper_frame.html" /><title>E-Paper Frame | ESP32 Macropad</title><script>location.replace('./epaper_frame.html' + location.search + location.hash);</script></head><body><a href="./epaper_frame.html">E-Paper Frame</a></body></html>
 EOF
 render_index "$TEMPLATE_DIR/index.template.html" "$OUT_DIR/index.html" "$class_cards" "$extension_fragment_tmp"
+if [[ -n "${FOOTPRINT_DATASET:-}" ]]; then
+  python3 "$REPO_ROOT/tools/firmware_size_report.py" --dataset "$FOOTPRINT_DATASET" --site "$OUT_DIR/firmware-footprint"
+fi
 
 echo "Built ESP Web Tools site at: $OUT_DIR" >&2
 echo "Manifests: $OUT_DIR/manifests" >&2

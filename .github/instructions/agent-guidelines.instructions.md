@@ -87,6 +87,7 @@ If the build fails:
 - Build workflow modified → Update `README.md` CI/CD section and `docs/dev/build-and-release-process.md`
 - Board configuration system changed → Update `README.md` board configuration section and `docs/dev/build-and-release-process.md`
 - Board feature flags changed → Review the board's `src/boards/<board>/metadata.json` `capabilities` list. Update it when the installer should display a different user-facing capability; this metadata is manual and is not generated from `HAS_*` or `IS_*` flags.
+- Feature flag added, renamed, or removed (`HAS_*`, `IS_*`, or `ALARM_ENABLED`) → Update `tools/firmware_size_report.py` ownership and classification (`FEATURES`, `FLAG_SUBSYSTEMS`, or reasoned `EXCLUDED_FLAGS`), update the generated flag reference, and run `python3 tests/test_firmware_size_report.py`. A mapped flag must appear on its compact report row; an exclusion must explain why separate flash attribution is inappropriate. See the compile-time flag instructions for the full checklist.
 - Release workflow modified → Update `docs/dev/build-and-release-process.md` and `README.md` release section
 - New requirement added → Update `README.md` prerequisites
 - REST API endpoint added/changed → Update `docs/dev/web-portal.md` and `README.md` API table

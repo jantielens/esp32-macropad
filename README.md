@@ -308,6 +308,14 @@ No compiler or command-line tools are needed.
 Already running an OTA-capable build? [Update over Wi-Fi](https://jantielens.github.io/esp32-macropad/update.html)
 from the site or use the device's web portal.
 
+The installer's **Footprint** view shows firmware sizes for the latest deployed
+stable release. A **Firmware footprint** link beside each board's enabled
+features opens its report when data is available. PR and manual build reports
+are downloadable from the workflow's `firmware-footprint` artifact; releases
+also attach the combined report ZIP and JSON. See the
+[report guide](docs/dev/scripts.md#github-build-and-release-reports) for details
+and local viewing.
+
 ### First-Time Setup
 
 After flashing, the device creates its own Wi-Fi hotspot for initial configuration:
@@ -348,6 +356,8 @@ USB/OTG for HID and USB-UART for flashing and logs; see
 ### Developer Documentation
 
 Building from source, contributing, or adding new board support? See the [developer docs](docs/dev/).
+For a feature-size attribution report from an existing build, use the
+[standalone firmware size reporting spike](docs/dev/scripts.md#toolsfirmware_size_reportpy).
 For portal-only UI work, use the [device-free portal development server](docs/dev/web-portal.md#local-device-free-development) to work against production assets without flashing a board. Its default P4 profile includes memory-backed pad editor fixtures and failure scenarios.
 
 ### Running Tests

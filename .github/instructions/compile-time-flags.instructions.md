@@ -1,6 +1,6 @@
 ---
-description: "Compile-time flag conventions — HAS_* feature gates, driver selectors, board overrides, and conditional compilation patterns"
-applyTo: "**/board_config.h, **/board_overrides.h, **/display_drivers.cpp, **/touch_drivers.cpp, **/widgets.cpp, **/screens.cpp, **/custom_fonts.cpp"
+description: "Compile-time flag conventions and firmware-size report coverage for feature gates, board overrides, and driver selection"
+applyTo: "**/board_config.h, **/board_overrides.h, **/display_drivers.cpp, **/touch_drivers.cpp, **/widgets.cpp, **/screens.cpp, **/custom_fonts.cpp, **/firmware_size_report.py, **/test_firmware_size_report.py"
 ---
 
 # Compile-Time Flag Conventions
@@ -65,6 +65,13 @@ When adding a new driver or widget, add its `#include` to the corresponding comp
 2. Override in relevant `board_overrides.h` files
 3. Gate all related code with `#if HAS_xxx` (hardware capability) or `#if IS_xxx` (product / device-class identity)
 4. Update `docs/compile-time-flags.md` by running: `python3 tools/compile_flags_report.py md --out docs/compile-time-flags.md`
+5. Classify the flag in `tools/firmware_size_report.py`: include it in a `FEATURES` row label, map it to an existing row through `FLAG_SUBSYSTEMS`, or add an `EXCLUDED_FLAGS` entry with a specific reason. Add related module, library, and asset ownership rules when needed; flag classification alone does not attribute their bytes.
+6. Run `python3 tests/test_firmware_size_report.py`. Its coverage check discovers `HAS_*`, `IS_*`, and `ALARM_ENABLED` in default definitions and board overrides, including inherited overrides. New unclassified flags, stale classifications, invalid target rows, and unexplained exclusions fail without a firmware build.
+
+Apply the report updates and coverage check when renaming or removing a flag
+as well. Do not bypass coverage with a wildcard exemption or an unexplained
+allowlist. Flags outside the supported naming patterns require an explicit
+discovery rule in `FEATURE_FLAG_PATTERN` and a regression test.
 
 ## Reference
 

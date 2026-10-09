@@ -131,10 +131,19 @@ grep -q 'id="deviceBase"' "$TMP_DIR/site/update.html"
 find "$TMP_DIR/site/extensions" -maxdepth 1 -name '*.ext' -print -quit | grep -q .
 grep -q 'ESP32 download' "$TMP_DIR/site/extensions.html"
 test -f "$TMP_DIR/site/extensions/hello-world@1.0.0-esp32.ext"
+! grep -q 'board-footprint-link' "$TMP_DIR/site/flash.html"
+! grep -q '{{FOOTPRINT_NAV}}' "$TMP_DIR/site/flash.html"
+! grep -q 'firmware-footprint/' "$TMP_DIR/site/index.html"
 
-BOARD_FILTER=esp32-4848S040 BUILD_DIR="$TMP_DIR/build" \
+printf '%s\n' '{"schema_version":1,"reports":[{"board":"esp32-4848S040"}]}' > "$TMP_DIR/footprint.json"
+FOOTPRINT_DATASET="$TMP_DIR/footprint.json" BOARD_FILTER=esp32-4848S040 BUILD_DIR="$TMP_DIR/build" \
     ./tools/build-esp-web-tools-site.sh "$TMP_DIR/filtered-site"
 test -f "$TMP_DIR/filtered-site/devices/coffee_scale.html"
 grep -q 'No builds for this device class are included in this preview.' "$TMP_DIR/filtered-site/devices/coffee_scale.html"
+grep -q 'Enabled features <a class="board-footprint-link" href="./firmware-footprint/?board=esp32-4848S040"' "$TMP_DIR/filtered-site/flash.html"
+grep -q 'href="./firmware-footprint/">Footprint' "$TMP_DIR/filtered-site/index.html"
+grep -q 'href="../firmware-footprint/">Footprint' "$TMP_DIR/filtered-site/devices/macropad.html"
+test -f "$TMP_DIR/filtered-site/firmware-footprint/index.html"
+jq -e '.installer_url == "../index.html"' "$TMP_DIR/filtered-site/firmware-footprint/reports.json" >/dev/null
 
 echo "ESP Web Tools site smoke test passed"
