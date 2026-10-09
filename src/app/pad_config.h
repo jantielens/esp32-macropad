@@ -54,20 +54,34 @@
 #define PAD_MAX_BINDINGS              16
 #define PAD_BINDING_NAME_MAX_LEN      32
 
-// Parse hex color string (#RRGGBB, RRGGBB, 0xRRGGBB) to uint32_t.
-// Returns false if unparseable (e.g. "---", "ERR:...", empty).
+// Parse hex color string (#RRGGBB, RRGGBB, 0xRRGGBB, or #RGB shorthand) to uint32_t.
+// Trailing whitespace is ignored. Returns false for anything else (e.g. "---",
+// "ERR:...", empty, wrong digit count).
 static inline bool parse_hex_color(const char* s, uint32_t* out) {
-    if (!s || !s[0]) return false;
+    if (!s) return false;
     if (s[0] == '#') s++;
     else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
-    // Quick-reject non-hex leading chars (e.g. "ERR:...", "---")
-    char c = s[0];
-    if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')))
+    uint32_t val = 0;
+    size_t n = 0;
+    for (; s[n]; n++) {
+        char c = s[n];
+        uint32_t d;
+        if (c >= '0' && c <= '9') d = (uint32_t)(c - '0');
+        else if (c >= 'a' && c <= 'f') d = (uint32_t)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') d = (uint32_t)(c - 'A' + 10);
+        else break;
+        if (n >= 6) return false;
+        val = (val << 4) | d;
+    }
+    for (const char* t = s + n; *t; t++) {
+        if (*t != ' ' && *t != '\t' && *t != '\r' && *t != '\n') return false;
+    }
+    if (n == 3) {
+        val = ((val & 0xF00) * 0x1100) | ((val & 0x0F0) * 0x110) | ((val & 0x00F) * 0x11);
+    } else if (n != 6) {
         return false;
-    char* end = nullptr;
-    unsigned long val = strtoul(s, &end, 16);
-    if (end == s) return false;
-    *out = (uint32_t)(val & 0xFFFFFF);
+    }
+    *out = val;
     return true;
 }
 #define CONFIG_COLOR_MAX_LEN            192

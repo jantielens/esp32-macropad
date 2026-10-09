@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Color picker popover: the color-or-expression box now has an **fx** binding-help
+  badge, a live preview swatch, and inline validation of colors and bindings;
+  **Apply** stays disabled until the value is valid, and `#RGB` expands to
+  `#RRGGBB`. A **+** swatch opens the browser color picker. "Recently Used" is now
+  "Used in your pads" and includes bindings. The threshold helper reloads an
+  existing `threshold()` expression, supports adding and removing stops, shows
+  visible default breakpoints, and flags missing or descending thresholds instead
+  of guessing. Swatches and the close control are keyboard-accessible buttons, and
+  Escape closes the popover regardless of focus.
+
+### Fixed
+
+* Firmware color parsing now requires exactly 3 or 6 hex digits. `#RGB` expands
+  correctly (previously `#FFF` rendered as blue), and values with extra digits or
+  trailing characters are rejected instead of being silently truncated.
+
 ## [1.38.0] - 2026-10-08
 
 ### Added

@@ -419,7 +419,7 @@ The **Colors** section (collapsible) controls the button's appearance:
 - **Text color** — applies to labels and Material Symbol icons
 - **Border color** — the button outline
 
-Each color field accepts either a static `#hex` value or a binding expression for dynamic colors — more on that in [Dynamic Colors](#dynamic-colors-with-bindings). Click the color swatch to open the color picker popover. Fields that support bindings show an **fx** badge above the swatch — type a binding expression (e.g. `[expr:...]`) directly into the picker input.
+Each color field accepts either a static `#hex` value or a binding expression for dynamic colors — more on that in [Dynamic Colors](#dynamic-colors-with-bindings). Click the color swatch to open the color picker popover. It offers colors already used in your pads (including bindings), a palette, a **+** swatch that opens your browser's color picker, and the **Generate Color by Threshold** helper. The **Color or expression** box at the bottom accepts `#RRGGBB`, `#RGB` (expanded to `#RRGGBB`), or a binding expression such as `[expr:...]`; click its **fx** badge for binding help. The picker validates the value as you type and disables **Apply** until it is valid.
 
 **Default color** is the fallback used while a binding hasn't resolved yet or if it returns an error. Set this to a sensible neutral color so buttons don't flash unexpectedly on startup.
 
@@ -1373,7 +1373,7 @@ The bar chart widget draws one or more vertical or horizontal bars that fill bas
 | **Target Value** | A bindable value on the scale drawn as a marker line across the bar (e.g. a setpoint). Empty = no target |
 | **Target Zone %** | A shaded band centered on the target, sized as a percentage of the min–max range (0 = no band). The marker line width and the marker/zone colors are configurable and bindable |
 
-**Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: pick your zone colors, set breakpoints, and the expression auto-generates as you type. For a solar panel with a 5 kW max:
+**Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: enter a data source, pick zone colors, set ascending breakpoints, and add or remove stops as needed. The expression updates as you type. Opening the picker on an existing `threshold()` expression loads it back into the helper for editing. For a solar panel with a 5 kW max:
 
 ```
 [expr:threshold([mqtt:solar/power;watts], "#4CAF50", 1000, "#8BC34A", 3000, "#FF9800", 4500, "#F44336")]
