@@ -75,8 +75,12 @@ overflow is reported; neither buffer survives reboot or deep sleep.
 
 The logger stores complete 288-byte formatted records, with the existing
 serial truncation and suppression behavior. Disconnected USB CDC does not
-prevent capture and does not update serial repetition state. Direct serial
-writes, ROM/bootloader logs, and ISR logging are outside this feature.
+prevent capture and does not update serial repetition state. Hardware USB CDC
+serial output uses a zero write timeout and skips a log line when its TX buffer
+has insufficient space, including when a connected computer has no serial
+reader. Portal capture still receives that line, subject to its normal capture
+limits. UART and native USB CDC behavior is unchanged. Direct serial writes,
+ROM/bootloader logs, and ISR logging are outside this feature.
 
 One startup allocation reserves approximately 127 KiB of PSRAM for records,
 a 32-record response snapshot, and a fixed JSON serialization arena. There

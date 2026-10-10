@@ -83,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prevent StopWatch freezes or sluggish operation when reconnecting USB to a
+  computer without a serial reader. Hardware USB CDC logging uses zero-timeout
+  writes and skips lines when the TX buffer lacks space while preserving portal
+  log capture. PC unplug/replug has been confirmed on hardware; UART and native
+  USB CDC behavior is unchanged.
 * Serialize screensaver brightness fades with LVGL display transactions. On
   StopWatch, brightness is a QSPI panel command; concurrent fade and pixel
   writes could trigger a `spi_device_polling_end` assertion when entering sleep.
