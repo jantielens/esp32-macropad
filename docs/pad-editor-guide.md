@@ -1703,6 +1703,28 @@ Multiple bindings in one label, showing indoor conditions:
 
 **Syntax:** `[health:key;format]`
 
+### Local Sensor Binding
+
+Display firmware with registered local sensors provides
+`[sensor:key;format|fallback]`, without an MQTT broker. The binding reference
+lists the fields available on your board, including board-specific sensors.
+
+```text
+Temperature: [sensor:temperature;%.1f|N/A]
+Battery: [sensor:battery_voltage;%.2f] V
+[expr:[sensor:presence] ? "Occupied" : "Clear"]
+```
+
+The sensor defines its refresh interval (two seconds by default). Bindings
+read the latest cached sample; resolving a label never reads hardware.
+Use float formats such as `%.0f`, `%.1f`, or `%g`. Booleans default to `0`
+or `1`. Before the first successful reading, the binding shows `---` or the
+supplied fallback. Later failures retain the last good value until reboot.
+If sensors share a key, the later registered sensor wins.
+
+This supports current readings in labels, expressions, and numeric widgets.
+It does not remove existing MQTT-related history feature gates.
+
 ### Camera Motion Binding
 
 Camera-enabled display boards provide live camera motion data with

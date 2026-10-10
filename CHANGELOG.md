@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Local `[sensor:key;format|fallback]` bindings with board-aware field metadata,
+  numeric formatting, and expression support, without an MQTT broker.
 * Initial `m5stack-stopwatch` Macropad board integration: CO5300 round AMOLED,
   CST820B touch, expander-controlled power/reset, two programmable buttons,
   internal storage, Wi-Fi/portal, OTA, and PMIC battery telemetry. Retain the
@@ -49,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Sensor adapters declare a sampling callback, field catalog, and optional
+  interval (two seconds by default). API, MQTT, and bindings share cached
+  readings and retain last-good values after failures. Event sensors refresh
+  on changes; MQTT/BLE duty-cycle wakes sample once before publishing.
 * Move StopWatch shared hardware and its battery provider into board-local
   modules selected through opt-in compile-time composition. Configure CO5300
   display and CST820B touch drivers through concrete hardware settings rather

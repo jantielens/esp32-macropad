@@ -1052,6 +1052,16 @@ format syntax. The device validates saved configurations authoritatively.
 The MCP `get_capabilities` manifest serializes its binding-scheme list from the
 same registry, so portal and MCP clients receive equivalent metadata.
 
+Display builds with local sensors register `[sensor:key;format]`. Its keys
+and descriptions come from the sensor registrations, including board-specific
+providers. For example, `[sensor:temperature;%.1f|N/A]` reads the shared cache
+without MQTT or hardware I/O. API and MQTT reads use the same sampled values.
+Adapters default to two-second sampling and may declare a different interval;
+MQTT/BLE duty-cycle wakes sample once before publishing. Failed samples retain
+last-good values until reboot; fields with no successful sample are unavailable.
+Boolean bindings resolve as `0` or `1`, while API/MQTT retain JSON booleans.
+See the [sensor registration contract](sensors.md#sampling-contract).
+
 `GET /api/bindings?docs=1` adds the user-facing reference that each scheme
 registers next to its resolver (`BindingSchemeDoc`): `category`, `summary`,
 `params` (`name`, `desc`, `required`), `key_docs` (`key`, `desc`, optional

@@ -9,13 +9,22 @@
 class MqttManager;
 #endif
 
+struct SensorField {
+	const char *key;
+	const char *summary;
+};
+
 struct SensorCallbacks {
 	const char *name;
 	void (*init)();
 	// Optional per-loop handler for ISR-deferred work (e.g., event publishing).
-	void (*loop)();
-	void (*append_api)(JsonObject &doc);
-	void (*append_mqtt)(JsonObject &doc);
+	bool (*loop)();
+	void (*sample)(JsonObject &doc);
+	uint32_t sample_interval_ms = 2000;
+	bool event_driven = false;
+	bool include_in_mqtt = true;
+	const SensorField *fields;
+	size_t field_count;
 #if HAS_MQTT
 	void (*publish_ha)(MqttManager &mqtt);
 #endif
@@ -35,6 +44,11 @@ void sensor_manager_init();
 
 // Optional: per-loop handler for event-driven sensors (safe, non-ISR context).
 void sensor_manager_loop();
+
+void sensor_manager_sample_once();
+bool sensor_manager_get_number(const char *key, double *value, bool *is_bool = nullptr);
+size_t sensor_manager_field_count();
+const SensorField *sensor_manager_field_at(size_t index);
 
 // Append sensor readings into API or MQTT JSON payloads.
 void sensor_manager_append_api(JsonObject &doc);

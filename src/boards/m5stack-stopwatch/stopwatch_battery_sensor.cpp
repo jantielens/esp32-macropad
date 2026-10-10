@@ -45,10 +45,16 @@ void stopwatch_battery_publish_ha(MqttManager& mqtt) {
 }
 
 void board_register_sensors(SensorRegistry& registry) {
+    static const SensorField fields[] = {
+        {"battery_voltage", "Battery voltage in volts."},
+        {"battery_charging", "Battery charging: 1 or 0."},
+        {"battery_percentage", "Estimated battery charge in percent."},
+    };
     SensorCallbacks callbacks = {};
     callbacks.name = "StopWatch PMIC";
-    callbacks.append_api = stopwatch_battery_append;
-    callbacks.append_mqtt = stopwatch_battery_append;
+    callbacks.sample = stopwatch_battery_append;
+    callbacks.fields = fields;
+    callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
 #if HAS_MQTT
     callbacks.publish_ha = stopwatch_battery_publish_ha;
 #endif

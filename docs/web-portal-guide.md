@@ -982,6 +982,13 @@ For the complete guide — including binding template syntax, widget configurati
 
 All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health, timer, and Music keys (including `table`, `extended_table`, and `status`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
 
+Local sensor fields appear in the binding reference on supported display
+boards. Use `[sensor:temperature;%.1f|N/A]` or a field listed for your board
+to display readings without MQTT. Sensor Data, MQTT telemetry, and bindings
+read cached samples; the sensor defines its interval, defaulting to two seconds.
+Failures retain the last good value until reboot. See
+[Local Sensor Binding](pad-editor-guide.md#local-sensor-binding).
+
 ---
 
 ## Network Page

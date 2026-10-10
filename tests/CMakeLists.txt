@@ -60,6 +60,13 @@ endfunction()
 set(HOST_ARDUINOJSON_DIR "$ENV{HOME}/Arduino/libraries/ArduinoJson/src")
 set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
+add_host_legacy_test(test_sensor_manager
+    SOURCES test_sensor_manager.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    OPTIONS -Wno-deprecated-declarations
+)
+add_host_command_test(test_sensor_manager_duty_cycle $<TARGET_FILE:test_sensor_manager> --duty-cycle)
+
 file(READ "${PROJECT_SOURCE_DIR}/src/app/web_portal_component_api.cpp" PORTAL_ROUTE_SOURCE)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/src/app/web_portal_component_api.cpp")
@@ -530,6 +537,7 @@ function(add_binding_schema_profile name definition)
         SOURCES test_binding_schema_production.cpp binding_schema_profiles/stubs.cpp
             ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_builtin_schemes.cpp
             ${PROJECT_SOURCE_DIR}/src/app/health_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/sensor_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/alarm_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/music_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/net_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/list_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/list_provider.cpp

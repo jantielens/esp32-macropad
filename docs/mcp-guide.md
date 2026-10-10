@@ -23,6 +23,16 @@ point.
 > `system_command`, while display tools (`set_screen`, `set_backlight`, `wake`,
 > `list_screens`, pads) only appear on boards with a screen.
 
+## Local Sensor Bindings
+
+On display builds with registered sensors, `get_capabilities` advertises the
+`sensor` binding and its board-specific keys and documentation. Existing pad
+authoring tools can use `[sensor:key;format|fallback]` in supported binding
+fields; no new MCP tool is required. For example,
+`[sensor:temperature;%.1f|N/A]` reads the local cache without MQTT.
+Booleans resolve as `0` or `1`; failed samples retain last-good values until
+reboot. See [Local Sensor Binding](pad-editor-guide.md#local-sensor-binding).
+
 ## Font Authoring
 
 Existing pad-authoring tools can set uploaded font styles such as

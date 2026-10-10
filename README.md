@@ -81,6 +81,10 @@ Combine MQTT values and JSON fields with clocks, timers, health, and data from
 enabled media or camera features. Expressions, formatting, fallbacks, and named
 bindings keep it reusable. The editor checks syntax and previews live values.
 
+Read enabled local sensors without MQTT using
+`[sensor:temperature;%.1f|N/A]` or a key listed for your board. See
+[local sensor bindings](docs/pad-editor-guide.md#local-sensor-binding).
+
 [Explore binding templates](docs/pad-editor-guide.md#binding-templates).
 
 ### Automation & Timers: One Tap Starts the Routine

@@ -36,9 +36,7 @@ bool duty_cycle_run(DeviceConfig *config) {
 				}
 		}
 
-		// Collect sensor data. As a side effect this triggers each sensor's
-		// update path, which is where BLE telemetry values are buffered for
-		// the upcoming advertisement.
+		sensor_manager_sample_once();
 		StaticJsonDocument<512> sensors_doc;
 		build_sensor_json(sensors_doc);
 

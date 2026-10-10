@@ -49,7 +49,6 @@ bool Bme280Sensor::begin() {
 void Bme280Sensor::update() {
 		if (!_available) return;
 
-		// Synchronous read; called on demand by appendJson().
 		_temperature_c = g_bme280.readTemperature();
 		_humidity_pct = g_bme280.readHumidity();
 		_pressure_hpa = g_bme280.readPressure() / 100.0f;
@@ -76,7 +75,6 @@ void Bme280Sensor::update() {
 
 void Bme280Sensor::appendJson(JsonObject &doc) {
 		if (available()) {
-				// On-demand sampling keeps the framework simple (API/MQTT read the same cache).
 				update();
 		}
 
@@ -89,10 +87,9 @@ void Bme280Sensor::appendJson(JsonObject &doc) {
 				return;
 		}
 
-		// Sensor missing: emit min-range sentinel values.
-		doc["temperature"] = -327.68f;
-		doc["humidity"] = 0.0f;
-		doc["pressure"] = 0.0f;
+		sensor_manager_set_number(doc, "temperature", 0, false);
+		sensor_manager_set_number(doc, "humidity", 0, false);
+		sensor_manager_set_number(doc, "pressure", 0, false);
 }
 
 #if HAS_MQTT
@@ -108,11 +105,7 @@ static void bme280_init() {
 		g_bme280_adapter.begin();
 }
 
-static void bme280_append_api(JsonObject &doc) {
-		g_bme280_adapter.appendJson(doc);
-}
-
-static void bme280_append_mqtt(JsonObject &doc) {
+static void bme280_sample(JsonObject &doc) {
 		g_bme280_adapter.appendJson(doc);
 }
 
@@ -124,11 +117,17 @@ static void bme280_publish_ha(MqttManager &mqtt) {
 #endif
 
 void register_bme280_sensor(SensorRegistry &registry) {
+		static const SensorField fields[] = {
+				{"temperature", "Temperature in degrees Celsius."},
+				{"humidity", "Relative humidity in percent."},
+				{"pressure", "Atmospheric pressure in hPa."},
+		};
 		SensorCallbacks callbacks = {};
 		callbacks.name = "BME280";
 		callbacks.init = bme280_init;
-		callbacks.append_api = bme280_append_api;
-		callbacks.append_mqtt = bme280_append_mqtt;
+		callbacks.sample = bme280_sample;
+		callbacks.fields = fields;
+		callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
 #if HAS_MQTT
 		callbacks.publish_ha = bme280_publish_ha;
 #endif

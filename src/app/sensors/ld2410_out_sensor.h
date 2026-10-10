@@ -8,7 +8,7 @@
 class Ld2410OutSensor {
 public:
 		bool begin();
-		void loop();
+		bool loop();
 		void appendJson(JsonObject &doc);
 		void handleChangeFromISR();
 

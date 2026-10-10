@@ -302,6 +302,60 @@
       ]
     },
     {
+      "name": "sensor",
+      "min_params": 1,
+      "max_params": 2,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "temperature",
+        "humidity",
+        "battery_voltage",
+        "presence"
+      ],
+      "category": "Device",
+      "summary": "Latest local sensor readings, without an MQTT broker.",
+      "note": "Values retain the last successful sample until reboot. Booleans are 0 or 1. Later registered sensors win on duplicate keys.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "A local sensor field registered by this board's firmware.",
+          "required": true
+        },
+        {
+          "name": "format",
+          "desc": "Single printf float format, e.g. %.1f or %.0f; invalid formats use the default.",
+          "required": false
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "temperature",
+          "desc": "Temperature in degrees Celsius."
+        },
+        {
+          "key": "humidity",
+          "desc": "Relative humidity in percent."
+        },
+        {
+          "key": "battery_voltage",
+          "desc": "Battery voltage in volts."
+        },
+        {
+          "key": "presence",
+          "desc": "Presence detected: 1 or 0."
+        }
+      ],
+      "examples": [
+        {
+          "code": "[sensor:temperature;%.1f|N/A]",
+          "desc": "Local reading with one decimal place and an unavailable fallback."
+        }
+      ]
+    },
+    {
       "name": "time",
       "min_params": 1,
       "max_params": 2,

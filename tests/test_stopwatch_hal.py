@@ -344,11 +344,16 @@ struct JsonObject {
     std::map<std::string, JsonValue> values;
     JsonValue& operator[](const char* key) { return values[key]; }
 };
+struct SensorField {
+    const char* key;
+    const char* summary;
+};
 struct SensorCallbacks {
     const char* name = nullptr;
     void (*init)() = nullptr;
-    void (*append_api)(JsonObject&) = nullptr;
-    void (*append_mqtt)(JsonObject&) = nullptr;
+    void (*sample)(JsonObject&) = nullptr;
+    const SensorField* fields = nullptr;
+    size_t field_count = 0;
 };
 class SensorRegistry {
 public:
@@ -747,13 +752,13 @@ int main() {
 
     SensorRegistry registry;
     board_register_sensors(registry);
-    assert(registry.callbacks.append_api && registry.callbacks.append_mqtt);
+    assert(registry.callbacks.sample && registry.callbacks.field_count == 3);
     JsonObject doc;
     battery(4200, 5000, 0);
-    registry.callbacks.append_api(doc);
+    registry.callbacks.sample(doc);
     assert(doc["battery_percentage"].value == 100 && doc["battery_charging"].value == 1);
     battery(2000, 5000, 0);
-    registry.callbacks.append_mqtt(doc);
+    registry.callbacks.sample(doc);
     assert(doc["battery_voltage"].null && doc["battery_percentage"].null && doc["battery_charging"].null);
 
     Wire_CST820B_TouchDriver driver(board_cst820b_config());

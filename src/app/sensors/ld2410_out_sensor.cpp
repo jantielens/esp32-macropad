@@ -59,8 +59,8 @@ void Ld2410OutSensor::consumeChangeLog(bool presence) {
 		LOGI("Sensor", "LD2410 presence: %s", presence ? "true" : "false");
 }
 
-void Ld2410OutSensor::loop() {
-		if (!_available) return;
+bool Ld2410OutSensor::loop() {
+		if (!_available) return false;
 
 		bool changed = false;
 		bool presence = false;
@@ -86,6 +86,7 @@ void Ld2410OutSensor::loop() {
 				_pending_publish = false;
 		}
 #endif
+		return changed;
 }
 
 void Ld2410OutSensor::appendJson(JsonObject &doc) {
@@ -97,12 +98,12 @@ static void ld2410_out_init() {
 		g_ld2410_out.begin();
 }
 
-static void ld2410_out_append_api(JsonObject &doc) {
+static void ld2410_out_sample(JsonObject &doc) {
 		g_ld2410_out.appendJson(doc);
 }
 
-static void ld2410_out_loop() {
-		g_ld2410_out.loop();
+static bool ld2410_out_loop() {
+		return g_ld2410_out.loop();
 }
 
 #if HAS_MQTT
@@ -120,11 +121,16 @@ static void ld2410_out_publish_ha(MqttManager &mqtt) {
 #endif
 
 void register_ld2410_out_sensor(SensorRegistry &registry) {
+		static const SensorField fields[] = {{"presence", "Presence detected: 1 or 0."}};
 		SensorCallbacks callbacks = {};
 		callbacks.name = "LD2410_OUT";
 		callbacks.init = ld2410_out_init;
 		callbacks.loop = ld2410_out_loop;
-		callbacks.append_api = ld2410_out_append_api;
+		callbacks.sample = ld2410_out_sample;
+		callbacks.event_driven = true;
+		callbacks.include_in_mqtt = false;
+		callbacks.fields = fields;
+		callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
 #if HAS_MQTT
 		callbacks.publish_ha = ld2410_out_publish_ha;
 #endif

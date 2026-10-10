@@ -89,7 +89,14 @@ bool initialize() {
         }
     }
     if (!expander) {
-        LOGE("StopWatch", "Expander unavailable after 200ms with power rails enabled");
+        uint8_t identity[4] = {}, source = 0, power = 0;
+           if (!read(kPmic, 0x00, identity, sizeof(identity))) memset(identity, 0xff, sizeof(identity));
+           if (!read(kPmic, 0x04, &source, 1)) source = 0xff;
+           if (!read(kPmic, 0x06, &power, 1)) power = 0xff;
+           LOGE("StopWatch", "Expander unavailable after 200ms; PMIC id=%02x model=%02x hw=%02x sw=%02x source=%02x power=%02x (ff=read failed)",
+               identity[0], identity[1], identity[2], identity[3], source, power);
+        probe(0x4f);
+        probe(0x6f);
         return false;
     }
 

@@ -4,6 +4,7 @@
 #include "camera_binding.h"
 #include "expr_binding.h"
 #include "health_binding.h"
+#include "sensor_binding.h"
 #include "image_binding.h"
 #include "list_binding.h"
 #include "music_binding.h"
@@ -22,6 +23,7 @@ void binding_builtin_schemes_init() {
     image_binding_init();
 #endif
     health_binding_init();
+    sensor_binding_init();
     time_binding_init();
     expr_binding_init();
 #if HAS_DISPLAY && HAS_MQTT
