@@ -1,5 +1,8 @@
 #include "stopwatch_hardware.h"
 #include "audio_output_driver.h"
+#include "audio.h"
+#include "action_continuation.h"
+#include "ota_activity.h"
 
 #include "i2c_bus.h"
 #include "log_manager.h"
@@ -14,6 +17,14 @@ uint8_t expander = 0;
 bool wireStarted = false;
 bool ready = false;
 bool audioPowered = false;
+bool motorRunning = false;
+uint32_t motorDeadline = 0;
+uint16_t motorSteps[STOPWATCH_VIBRATION_MAX_STEPS] = {};
+uint8_t motorStepCount = 0;
+uint8_t motorStepIndex = 0;
+uint32_t shutdownToken = 0;
+bool shutdownCommandSent = false;
+uint32_t shutdownDeadline = 0;
 
 // All helpers run with the shared Wire lock held.
 bool probe(uint8_t address, bool reportFailure = true) {
@@ -179,6 +190,8 @@ bool m5stack_stopwatch_init() {
     if (!i2c_bus_lock()) return false;
     if (!ready) {
         audioPowered = false;
+        motorRunning = false;
+        motorStepCount = 0;
         ready = initialize();
         if (!ready && expander) {
             // Best-effort safe outputs even if the bus failed midway.
@@ -207,9 +220,126 @@ bool m5stack_stopwatch_set_charging_mode(StopWatchChargingMode mode) {
     if (mode != StopWatchChargingMode::Off && mode != StopWatchChargingMode::Low &&
         mode != StopWatchChargingMode::High) return false;
     if (!i2c_bus_lock()) return false;
-    const bool result = ready && set_charging_mode(mode);
+    const bool result = ready && !shutdownToken && set_charging_mode(mode);
     i2c_bus_unlock();
     return result;
+}
+
+bool m5stack_stopwatch_set_status_led(bool enabled) {
+    if (!i2c_bus_lock()) return false;
+    const bool result = ready && !shutdownToken && update(kPmic, 0x06, 0x10, enabled ? 0x10 : 0);
+    i2c_bus_unlock();
+    return result;
+}
+
+bool m5stack_stopwatch_vibrate(uint32_t duration_ms) {
+    if (duration_ms > 5000 || !i2c_bus_lock()) return false;
+    const bool allowed = ready && !shutdownToken;
+    if (allowed && duration_ms) {
+        motorStepCount = 0;
+        motorRunning = true;
+        motorDeadline = static_cast<uint32_t>(millis()) + duration_ms;
+    }
+    const bool result = allowed && update(expander, 0x06, 0x01, duration_ms ? 0x01 : 0);
+    if (result) {
+        motorStepCount = 0;
+        motorRunning = duration_ms != 0;
+    }
+    i2c_bus_unlock();
+    return result;
+}
+
+bool m5stack_stopwatch_vibrate_pattern(const uint16_t* durations, uint8_t count) {
+    if (!durations || !count || count > STOPWATCH_VIBRATION_MAX_STEPS || !(count & 1)) return false;
+    if (count == 1 && !durations[0]) return m5stack_stopwatch_vibrate(0);
+    uint32_t total = 0;
+    for (uint8_t index = 0; index < count; ++index) {
+        if (!durations[index]) return false;
+        total += durations[index];
+    }
+    if (total > 5000 || !i2c_bus_lock()) return false;
+    const bool allowed = ready && !shutdownToken;
+    if (allowed) {
+        motorRunning = true;
+        motorStepCount = 0;
+        motorDeadline = static_cast<uint32_t>(millis()) + durations[0];
+    }
+    const bool result = allowed && update(expander, 0x06, 0x01, 0x01);
+    if (result) {
+        memcpy(motorSteps, durations, count * sizeof(uint16_t));
+        motorStepCount = count;
+        motorStepIndex = 0;
+    }
+    i2c_bus_unlock();
+    return result;
+}
+
+bool m5stack_stopwatch_request_shutdown(uint32_t continuation_token) {
+    if (!continuation_token || !i2c_bus_lock()) return false;
+    const bool result = ready && !shutdownToken && ota_activity_try_begin();
+    if (result) {
+        shutdownToken = continuation_token;
+        shutdownCommandSent = false;
+    }
+    i2c_bus_unlock();
+    return result;
+}
+
+void m5stack_stopwatch_loop() {
+    if (!i2c_bus_lock()) return;
+    const uint32_t now = static_cast<uint32_t>(millis());
+    if (ready && (motorRunning || motorStepCount) &&
+        static_cast<int32_t>(now - motorDeadline) >= 0) {
+        const uint8_t next = motorStepIndex + 1;
+        const bool hasNext = motorStepCount && next < motorStepCount && !shutdownToken;
+        const bool enabled = hasNext && !(next & 1);
+        if (update(expander, 0x06, 0x01, enabled ? 0x01 : 0)) {
+            motorRunning = enabled;
+            if (hasNext) {
+                motorStepIndex = next;
+                motorDeadline = static_cast<uint32_t>(millis()) + motorSteps[next];
+            } else {
+                motorStepCount = 0;
+            }
+        } else {
+            motorStepCount = 0;
+            motorRunning = true;
+        }
+    }
+    const uint32_t token = shutdownToken;
+    const bool sent = shutdownCommandSent;
+    const bool timedOut = sent && static_cast<int32_t>(now - shutdownDeadline) >= 0;
+    if (timedOut) shutdownToken = 0;
+    i2c_bus_unlock();
+    if (!token || (sent && !timedOut)) return;
+    bool failed = timedOut;
+    if (!sent) {
+#if HAS_AUDIO
+        audio_stop();
+#endif
+        if (!i2c_bus_lock()) return;
+        const bool outputsOff = ready && update(expander, 0x06, 0x03, 0) &&
+            update(expander, 0x05, 0x04, 0);
+        if (outputsOff) {
+            motorRunning = false;
+            motorStepCount = 0;
+            audioPowered = false;
+        }
+        const bool accepted = outputsOff && write(kPmic, 0x0c, 0xa1);
+        if (accepted) {
+            shutdownCommandSent = true;
+            shutdownDeadline = static_cast<uint32_t>(millis()) + 500;
+        } else {
+            shutdownToken = 0;
+            failed = true;
+        }
+        i2c_bus_unlock();
+    }
+    if (failed) {
+        ota_activity_finish();
+        action_continuation_complete(token, false);
+        LOGE("StopWatch", "Shutdown failed; device remains powered");
+    }
 }
 
 static void initialize_stopwatch_panel(Arduino_DataBus* bus) {
@@ -251,7 +381,7 @@ CST820BConfig board_cst820b_config() {
 
 bool m5stack_stopwatch_audio_power(bool enabled) {
     if (!i2c_bus_lock()) return false;
-    const bool muted = ready && update(expander, 0x06, 0x02, 0);
+    const bool muted = ready && (!enabled || !shutdownToken) && update(expander, 0x06, 0x02, 0);
     // A mute transport failure must not prevent attempting to shut the rail off.
     const bool powered = ready && (muted || !enabled) &&
         update(expander, 0x05, 0x04, enabled ? 0x04 : 0);
@@ -264,7 +394,7 @@ bool m5stack_stopwatch_audio_power(bool enabled) {
 
 bool m5stack_stopwatch_audio_mute(bool muted) {
     if (!i2c_bus_lock()) return false;
-    const bool ok = ready && (muted || audioPowered) &&
+    const bool ok = ready && (muted || (audioPowered && !shutdownToken)) &&
         update(expander, 0x06, 0x02, muted ? 0 : 0x02);
     i2c_bus_unlock();
     return ok;

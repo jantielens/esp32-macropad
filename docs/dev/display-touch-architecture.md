@@ -173,10 +173,52 @@ charging state may remain. Physical validation of all three modes and continued
 USB operation with charging off remains required.
 
 `BOARD_ACTION_SOURCE` selects the board-local action module through `actions.cpp`.
-Its payload uses the existing opaque action storage. Other boards do not compile
-this module, its metadata, or the StopWatch hardware implementation. The generic
-catalog-driven editor supplies the select control; there are no charging-specific
-portal assets or generic configuration settings.
+`stopwatch_actions.cpp` registers `charging_mode`, `status_led`, `vibrate`, and
+`shutdown` under **M5Stack StopWatch**. Their payloads use the existing opaque
+action storage. The board raises `ACTION_TYPE_REGISTRY_MAX_TYPES` to 28 to fit
+the built-in catalog and four board actions. Other boards do not compile this
+module, its metadata, or the StopWatch hardware implementation. The generic
+catalog-driven editor supplies the controls; there are no board-specific portal
+assets or generic configuration settings.
+
+`status_led` uses `{"type":"status_led","mode":"on"}` or `"off"` and changes
+only PWR_CFG bit 4 (LED_EN). No preference is persisted. Every firmware boot
+explicitly restores LED_EN high before boot actions, including ESP32-only
+restarts that do not reset the PMIC. This controls the PMIC's LED enable level;
+its proprietary status/download signalling may override the visible state.
+Physical on/off behavior still needs hardware validation.
+
+`vibrate` accepts `{"type":"vibrate","pattern":"200"}` (default `200`);
+`pattern: "0"` stops vibration. IO9 is driven
+through the expander GPIO latch without changing shared PWM frequency or other
+channels. `{"type":"vibrate","pattern":"20,100,20"}` runs
+20 ms on, 100 ms off, and 20 ms on. Patterns accept whitespace around commas,
+1-15 positive whole-millisecond steps with an odd count, and at most 5000 ms
+total including pauses. A standalone `0` is the only zero-duration pattern.
+`pattern` is the sole action field; `duration_ms` is not supported.
+The action payload stores compiled durations without growing the existing
+96-byte allocation; the driver copies them into a fixed array without heap
+allocation. Pulses and patterns are nonblocking; a new request replaces the
+active sequence, and a successful `0` pattern cancels it.
+`BOARD_HARDWARE_LOOP` selects the board-only main-loop hook, which checks motor
+deadlines even during OTA and retries failed motor-off writes. A failed start
+also leaves a precautionary stop scheduled. Failed pattern transitions cancel
+remaining steps and retry motor-off. Each step's deadline is measured from its
+actual transition, so delayed servicing does not skip pulses. Timing depends on main-loop
+service and I2C availability, so the deadline is not a hardware timer guarantee.
+Startup disables retained motor PWM and clears its output.
+
+`{"type":"shutdown"}` is a terminal pausable action. A nonzero continuation
+token is required; the action reserves the existing OTA activity gate before
+queueing power-off, so an active update rejects it and a new update cannot race
+the power cut. The main-loop hook stops audio outside the I2C lock, clears motor
+and amplifier outputs, cuts the audio rail, then writes SYS_CMD `0xA1`.
+The RTC/IMU LDO hold policy and charging configuration are preserved. If I2C
+fails, or execution continues 500 ms after the command, the gate is released
+and the continuation fails, discarding the suffix. Successful power-off retains
+ownership until power is removed. Shutdown does not save unsaved portal drafts
+or flush unrelated uploads; finish saves/uploads before invoking it. PMIC
+power-off and subsequent power-button recovery still need hardware validation.
 
 The StopWatch QSPI clock is now 80 MHz for hardware evaluation against the
 factory configuration. The previously confirmed display, touch, audio, and

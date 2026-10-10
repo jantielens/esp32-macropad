@@ -91,6 +91,9 @@
 
 #include "i2c_bus.h"
 #include "board_hardware.h"
+#ifdef BOARD_HARDWARE_LOOP
+#include BOARD_HARDWARE_HEADER
+#endif
 #include "sd_probe.h"
 #include "sd_storage.h"
 #include "storage.h"
@@ -728,6 +731,9 @@ void setup()
 
 void loop()
 {
+#ifdef BOARD_HARDWARE_LOOP
+	BOARD_HARDWARE_LOOP();
+#endif
 	time_service_loop();
 	#if ALARM_ENABLED
 	alarm_manager_loop();

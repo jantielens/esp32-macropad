@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* StopWatch-only **Shutdown**, **Vibrate**, and **Status LED** actions under
+  **M5Stack StopWatch**, also the new category for **Set charging mode**.
+  Vibration is nonblocking, using comma-separated vibrate/pause patterns such
+  as `20,100,20` (default `200`; `0` stops it; up to 15 steps,
+  odd count, positive whole milliseconds, at most 5 seconds including pauses).
+  LED on/off
+  is session-only and reboot restores the boot level. Shutdown stops audio
+  and vibration before PMIC power-off, excludes OTA through its ownership
+  gate, and never resumes later actions. Other boards contain no new action
+  metadata or hardware loop, and no board-specific portal assets are added.
 * StopWatch-only boot charging policy (`STOPWATCH_CHARGING_MODE`: 0 off,
   1 low/default, 2 high) and **Set charging mode** action for off, nominal
   185 mA, or nominal 425 mA charging. Runtime changes reset on reboot. Charging

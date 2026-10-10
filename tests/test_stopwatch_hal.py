@@ -173,6 +173,18 @@ static std::vector<int> delays;
 static unsigned long clockMs = 0;
 static unsigned long totalDelayMs = 0;
 static unsigned long millis() { return clockMs; }
+static bool otaActive = false;
+static bool ota_activity_try_begin() {
+    if (otaActive) return false;
+    otaActive = true; return true;
+}
+static void ota_activity_finish() { assert(otaActive); otaActive = false; }
+static std::vector<uint32_t> failedShutdowns;
+static bool action_continuation_complete(uint32_t token, bool success) {
+    assert(!success); failedShutdowns.push_back(token); return true;
+}
+static int audioStops = 0;
+static void audio_stop() { ++audioStops; }
 static void delay(int value) {
     delays.push_back(value); totalDelayMs += value;
     if (txEnabled) audioEvents.push_back("clockedDelay");
@@ -545,6 +557,10 @@ TESTS = r'''
 static void reset() {
     Wire = MockWire{};
     expander = 0; wireStarted = ready = audioPowered = false;
+    motorRunning = false; motorDeadline = 0; clockMs = 0;
+    motorStepCount = motorStepIndex = 0;
+    shutdownToken = 0; shutdownCommandSent = false; shutdownDeadline = 0;
+    otaActive = false; failedShutdowns.clear(); audioStops = 0;
     delays.clear(); commands.clear(); drawn.clear();
     totalDelayMs = 0;
     allocationFails = false; gfxBegins = true; irq = 1;
@@ -664,6 +680,138 @@ int main() {
             assert(address != 0x6e || reg != 6 || !(value & 1));
     }
     Wire.failureAt = -1;
+    const uint8_t power = Wire.regs[0x6e][6];
+    assert(m5stack_stopwatch_set_status_led(false));
+    assert(Wire.regs[0x6e][6] == (power & ~0x10));
+    assert(m5stack_stopwatch_set_status_led(true));
+    assert(Wire.regs[0x6e][6] == power);
+    Wire.failureAt = Wire.transactions + 1;
+    assert(!m5stack_stopwatch_set_status_led(false));
+    assert(Wire.regs[0x6e][6] == power && lockDepth == 0);
+    Wire.failureAt = -1;
+    const uint8_t outputs = Wire.regs[0x4f][6];
+    const auto elapsed = totalDelayMs;
+    assert(!m5stack_stopwatch_vibrate(5001));
+    assert(m5stack_stopwatch_vibrate(200));
+    assert(totalDelayMs == elapsed && Wire.regs[0x4f][6] == (outputs | 1));
+    clockMs = 199; m5stack_stopwatch_loop();
+    assert(Wire.regs[0x4f][6] == (outputs | 1));
+    assert(m5stack_stopwatch_vibrate(300));
+    clockMs = 498; m5stack_stopwatch_loop();
+    assert(motorRunning);
+    clockMs = 499;
+    Wire.failureAt = Wire.transactions + 1;
+    m5stack_stopwatch_loop();
+    assert(motorRunning && lockDepth == 0);
+    Wire.failureAt = -1; m5stack_stopwatch_loop();
+    assert(!motorRunning && Wire.regs[0x4f][6] == outputs);
+    clockMs = UINT32_MAX - 99;
+    assert(m5stack_stopwatch_vibrate(200));
+    clockMs = 99; m5stack_stopwatch_loop(); assert(motorRunning);
+    clockMs = 100; m5stack_stopwatch_loop(); assert(!motorRunning);
+    assert(m5stack_stopwatch_vibrate(5000));
+    assert(m5stack_stopwatch_vibrate(0));
+    assert(!motorRunning && Wire.regs[0x4f][6] == outputs);
+    Wire.failureAt = Wire.transactions + 1;
+    assert(!m5stack_stopwatch_vibrate(200) && motorRunning);
+    Wire.failureAt = -1; clockMs += 200;
+    m5stack_stopwatch_loop();
+    assert(!motorRunning && Wire.regs[0x4f][6] == outputs);
+    lockFails = true;
+    const uint16_t pattern[] = {20, 100, 20};
+    assert(!m5stack_stopwatch_vibrate_pattern(pattern, 3));
+    lockFails = false;
+    assert(!m5stack_stopwatch_vibrate_pattern(nullptr, 3));
+    assert(!m5stack_stopwatch_vibrate_pattern(pattern, 0));
+    assert(!m5stack_stopwatch_vibrate_pattern(pattern, 2));
+    const uint16_t zeroStep[] = {20, 0, 20};
+    const uint16_t tooLong[] = {2500, 1, 2500};
+    assert(!m5stack_stopwatch_vibrate_pattern(zeroStep, 3));
+    const uint16_t stopPattern[] = {0};
+    assert(m5stack_stopwatch_vibrate_pattern(stopPattern, 1));
+    assert(!motorRunning && !motorStepCount);
+    assert(!m5stack_stopwatch_vibrate_pattern(tooLong, 3));
+    clockMs = 0;
+    assert(m5stack_stopwatch_vibrate_pattern(pattern, 3));
+    clockMs = 19; m5stack_stopwatch_loop(); assert(motorRunning);
+    clockMs = 20; m5stack_stopwatch_loop(); assert(!motorRunning && motorStepCount == 3);
+    clockMs = 119; m5stack_stopwatch_loop(); assert(!motorRunning);
+    clockMs = 120; m5stack_stopwatch_loop(); assert(motorRunning);
+    clockMs = 140; m5stack_stopwatch_loop(); assert(!motorRunning && !motorStepCount);
+    assert(Wire.regs[0x4f][6] == outputs && totalDelayMs == elapsed);
+    clockMs = UINT32_MAX - 9;
+    assert(m5stack_stopwatch_vibrate_pattern(pattern, 3));
+    clockMs = 9; m5stack_stopwatch_loop(); assert(motorRunning);
+    clockMs = 10; m5stack_stopwatch_loop(); assert(!motorRunning);
+    assert(m5stack_stopwatch_vibrate(200) && !motorStepCount);
+    assert(m5stack_stopwatch_vibrate_pattern(pattern, 3));
+    assert(m5stack_stopwatch_vibrate(0) && !motorStepCount && !motorRunning);
+    assert(m5stack_stopwatch_vibrate_pattern(pattern, 3));
+    clockMs += 20;
+    Wire.failureAt = Wire.transactions + 1; m5stack_stopwatch_loop();
+    assert(!motorStepCount && motorRunning);
+    Wire.failureAt = -1; m5stack_stopwatch_loop();
+    assert(!motorRunning && Wire.regs[0x4f][6] == outputs);
+    assert(m5stack_stopwatch_vibrate_pattern(pattern, 3));
+    clockMs += 20; m5stack_stopwatch_loop(); assert(!motorRunning && motorStepCount);
+    clockMs += 100;
+    Wire.failureAt = Wire.transactions + 1; m5stack_stopwatch_loop();
+    assert(!motorStepCount && motorRunning);
+    Wire.failureAt = -1; m5stack_stopwatch_loop(); assert(!motorRunning);
+    assert(m5stack_stopwatch_vibrate_pattern(pattern, 3));
+    clockMs += 20; m5stack_stopwatch_loop();
+    assert(m5stack_stopwatch_vibrate_pattern(pattern, 3) && motorRunning && motorStepIndex == 0);
+    assert(m5stack_stopwatch_vibrate(0));
+    lockFails = true;
+    assert(!m5stack_stopwatch_vibrate(200));
+    assert(!m5stack_stopwatch_set_status_led(false));
+    assert(!m5stack_stopwatch_request_shutdown(42));
+    m5stack_stopwatch_loop();
+    lockFails = false;
+    ready = false;
+    assert(!m5stack_stopwatch_vibrate(200));
+    assert(!m5stack_stopwatch_set_status_led(false));
+    assert(!m5stack_stopwatch_request_shutdown(42));
+    ready = true;
+    otaActive = true;
+    assert(!m5stack_stopwatch_request_shutdown(42));
+    otaActive = false;
+    assert(!m5stack_stopwatch_request_shutdown(0));
+    assert(m5stack_stopwatch_vibrate(5000));
+    const int beforeShutdown = Wire.transactions;
+    assert(m5stack_stopwatch_request_shutdown(42) && otaActive);
+    assert(Wire.transactions == beforeShutdown);
+    assert(!m5stack_stopwatch_request_shutdown(43));
+    assert(!ota_activity_try_begin());
+    assert(!m5stack_stopwatch_vibrate(200));
+    assert(!m5stack_stopwatch_set_status_led(false));
+    assert(!m5stack_stopwatch_set_charging_mode(StopWatchChargingMode::Off));
+    assert(!m5stack_stopwatch_audio_power(true));
+    assert(!m5stack_stopwatch_audio_mute(false));
+    Wire.writes.clear();
+    lockFails = true; m5stack_stopwatch_loop(); lockFails = false;
+    assert(Wire.writes.empty() && otaActive && shutdownToken == 42);
+    m5stack_stopwatch_loop();
+    assert(audioStops == 1 && shutdownCommandSent && !motorRunning && !audioPowered);
+    assert(Wire.writes.size() == 3);
+    assert(Wire.writes[0] == std::make_tuple(0x4f, 6, outputs & ~3));
+    assert(Wire.writes[1] == std::make_tuple(0x4f, 5, 0xfb));
+    assert(Wire.writes[2] == std::make_tuple(0x6e, 0x0c, 0xa1));
+    assert(failedShutdowns.empty() && otaActive);
+    clockMs += 499; m5stack_stopwatch_loop();
+    assert(failedShutdowns.empty() && otaActive);
+    ++clockMs; m5stack_stopwatch_loop();
+    assert(failedShutdowns == std::vector<uint32_t>({42}) && !otaActive && !shutdownToken);
+    for (int failure = 0; failure < 5; ++failure) {
+        assert(m5stack_stopwatch_request_shutdown(44));
+        Wire.failureAt = Wire.transactions + failure;
+        Wire.writes.clear(); m5stack_stopwatch_loop();
+        assert(!shutdownToken && !otaActive && lockDepth == 0);
+        assert(failedShutdowns.back() == 44);
+        for (auto [address, reg, value] : Wire.writes)
+            assert(address != 0x6e || reg != 0x0c);
+        Wire.failureAt = -1;
+    }
     // Confirm the power/reset waveform rather than only its final state.
     std::vector<int> resetLatch;
     for (auto [address, reg, value] : successfulWrites)
@@ -1006,6 +1154,13 @@ int main() {
     if (STOPWATCH_CHARGING_MODE == 0)
         for (auto [address, reg, value] : Wire.writes)
             assert(address != 0x6e || reg != 6 || !(value & 1));
+    assert(m5stack_stopwatch_set_status_led(false));
+    assert(!(Wire.regs[0x6e][6] & 0x10));
+    assert(m5stack_stopwatch_vibrate(5000));
+    ready = false;
+    assert(m5stack_stopwatch_init());
+    assert(Wire.begins == 1 && (Wire.regs[0x6e][6] & 0x10));
+    assert(!(Wire.regs[0x4f][6] & 1) && !motorRunning);
 }
 '''
         source.write_text(PRELUDE.replace("#define STOPWATCH_CHARGING_MODE 2",
@@ -1026,11 +1181,15 @@ int main() {
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+#include <vector>
 #define HAS_DISPLAY 1
 #define HAS_BUTTON 1
 #define HAS_MQTT 0
 #define CONFIG_ACTION_TYPE_MAX_LEN 16
 #define STOPWATCH_CHARGING_MODE 2
+#define ACTION_CONTINUATION_SLOTS 1
+constexpr uint8_t STOPWATCH_VIBRATION_MAX_STEPS = 15;
 struct ButtonAction { char type[16]; union { uint8_t device_class[96]; } payload; };
 #ifdef BOARD_ACTION_SOURCE
 static bool setterOk = true;
@@ -1041,12 +1200,35 @@ bool m5stack_stopwatch_set_charging_mode(StopWatchChargingMode mode) {
     requestedMode = mode;
     return setterOk && static_cast<uint8_t>(mode) <= 2;
 }
+static bool requestedLed;
+static uint32_t requestedToken;
+bool m5stack_stopwatch_set_status_led(bool enabled) {
+    requestedLed = enabled; return setterOk;
+}
+static uint16_t requestedSteps[STOPWATCH_VIBRATION_MAX_STEPS];
+static uint8_t requestedStepCount;
+bool m5stack_stopwatch_vibrate_pattern(const uint16_t* durations, uint8_t count) {
+    if (!count || count > STOPWATCH_VIBRATION_MAX_STEPS) return false;
+    requestedStepCount = count;
+    memcpy(requestedSteps, durations, count * sizeof(uint16_t));
+    return setterOk;
+}
+bool m5stack_stopwatch_request_shutdown(uint32_t token) {
+    requestedToken = token; return setterOk && token != 0;
+}
 #endif
 '''
     action_tests = r'''
 int main() {
 #ifdef BOARD_ACTION_SOURCE
-    assert(action_type_count() == 1 && action_type_is_supported("charging_mode"));
+    assert(action_type_count() == 4 && action_type_is_supported("charging_mode"));
+    for (const char* name : {"charging_mode", "status_led", "vibrate", "shutdown"}) {
+        const auto* registered = action_type_find(name);
+        assert(registered && !registered->display_lock_required);
+        JsonDocument catalog;
+        auto metadata = catalog.to<JsonObject>(); registered->describe(metadata);
+        assert(strcmp(metadata["group"], "M5Stack StopWatch") == 0);
+    }
     const auto* type = action_type_find("charging_mode");
     assert(type->execution == ACTION_EXECUTION_SYNC && !type->display_lock_required);
     JsonDocument catalog;
@@ -1083,22 +1265,105 @@ int main() {
     assert(action_type_validate(type, input.to<JsonObject>()));
     input["mode"] = 1;
     assert(action_type_validate(type, input.as<JsonObjectConst>()));
+    const auto* led = action_type_find("status_led");
+    assert(led->execution == ACTION_EXECUTION_SYNC);
+    for (const char* mode : {"on", "off"}) {
+        input.clear(); input["mode"] = mode;
+        assert(!action_type_validate(led, input.as<JsonObjectConst>()));
+        ButtonAction act{}; led->parse(input.as<JsonObject>(), act);
+        JsonDocument output; led->serialize(act, output.to<JsonObject>());
+        assert(strcmp(output["mode"], mode) == 0);
+        assert(led->dispatch(act, "test", 0) == ACTION_COMPLETE);
+        assert(requestedLed == (strcmp(mode, "on") == 0));
+        setterOk = false; assert(led->dispatch(act, "test", 0) == ACTION_FAILED); setterOk = true;
+    }
+    for (const char* mode : {"", "ON", "low", "high", "unknown", "[mqtt:x]"}) {
+        input.clear(); input["mode"] = mode;
+        assert(action_type_validate(led, input.as<JsonObjectConst>()));
+        ButtonAction act{}; led->parse(input.as<JsonObject>(), act);
+        assert(led->dispatch(act, "test", 0) == ACTION_FAILED);
+    }
+    input.clear(); assert(action_type_validate(led, input.to<JsonObject>()));
+    input["mode"] = true; assert(action_type_validate(led, input.as<JsonObjectConst>()));
+    const auto* vibrate = action_type_find("vibrate");
+    assert(vibrate->execution == ACTION_EXECUTION_SYNC);
+    JsonDocument vibrationCatalog;
+    auto vibrationMetadata = vibrationCatalog.to<JsonObject>(); vibrate->describe(vibrationMetadata);
+    assert(vibrationMetadata["editor_fields"].size() == 1);
+    assert(vibrationMetadata["fields"].size() == 1);
+    assert(strcmp(vibrationMetadata["editor_fields"][0]["name"], "pattern") == 0);
+    assert(strcmp(vibrationMetadata["editor_fields"][0]["default"], "200") == 0);
+    for (int duration : {-1, 0, 200, 5000, 5001}) {
+        input.clear(); input["duration_ms"] = duration;
+        assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
+        ButtonAction act{}; vibrate->parse(input.as<JsonObject>(), act);
+        assert(vibrate->dispatch(act, "test", 0) == ACTION_FAILED);
+    }
+    for (const char* invalid : {"1.5", "200", "true", "null", "[]", "{}", "4294967296"}) {
+        input.clear(); deserializeJson(input, std::string("{\"pattern\":") + invalid + "}");
+        assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
+        ButtonAction act{}; vibrate->parse(input.as<JsonObject>(), act);
+        assert(vibrate->dispatch(act, "test", 0) == ACTION_FAILED);
+    }
+    input.clear(); auto empty = input.to<JsonObject>();
+    assert(!action_type_validate(vibrate, empty));
+    ButtonAction act{}; vibrate->parse(empty, act);
+    assert(vibrate->dispatch(act, "test", 0) == ACTION_COMPLETE && requestedStepCount == 1 && requestedSteps[0] == 200);
+    const auto* shutdown = action_type_find("shutdown");
+    for (const char* pattern : {"0", "200", "5000", "20,100,20", " 20 , 100 , 20 \t", "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"}) {
+        input.clear(); input["pattern"] = pattern;
+        assert(!action_type_validate(vibrate, input.as<JsonObjectConst>()));
+        vibrate->parse(input.as<JsonObject>(), act);
+        assert(vibrate->dispatch(act, "test", 0) == ACTION_COMPLETE);
+        assert(requestedStepCount & 1);
+        JsonDocument output; vibrate->serialize(act, output.to<JsonObject>());
+        assert(output["pattern"].is<const char*>() && !output.containsKey("duration_ms"));
+        assert(!action_type_validate(vibrate, output.as<JsonObjectConst>()));
+        setterOk = false; assert(vibrate->dispatch(act, "test", 0) == ACTION_FAILED); setterOk = true;
+    }
+    for (const char* pattern : {"", "0,100,20", "20,0,20", "20,100,0", "20,100", "20,,20", "20,", "-20", "1.5", "v20 p100 v20", "5001", "2500,1,2500", "9999999999999999999", "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"}) {
+        input.clear(); input["pattern"] = pattern;
+        assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
+        vibrate->parse(input.as<JsonObject>(), act);
+        assert(vibrate->dispatch(act, "test", 0) == ACTION_FAILED);
+    }
+    input.clear(); input["pattern"] = "20,100,20"; input["duration_ms"] = 200;
+    assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
+    input.clear(); input["pattern"] = 200;
+    assert(action_type_validate(vibrate, input.as<JsonObjectConst>()));
+    assert(shutdown->execution == ACTION_EXECUTION_PAUSABLE);
+    assert(!shutdown->parse && !shutdown->serialize);
+    assert(shutdown->dispatch(act, "test", 0) == ACTION_FAILED);
+    assert(shutdown->dispatch(act, "test", 42) == ACTION_PENDING && requestedToken == 42);
+    setterOk = false; assert(shutdown->dispatch(act, "test", 42) == ACTION_FAILED); setterOk = true;
+    static char names[22][16];
+    std::vector<ActionTypeDef> fillers; fillers.reserve(22);
+    for (int index = 0; index < 22; ++index) {
+        snprintf(names[index], sizeof(names[index]), "filler%d", index);
+        fillers.emplace_back(names[index], nullptr, nullptr, nullptr, nullptr, nullptr);
+        action_type_register(&fillers.back());
+    }
+    assert(action_type_count() == 26);
 #else
     assert(action_type_count() == 0);
 #endif
 }
 '''
     module = directory / "board-action.inc"
-    module.write_text(production("src/boards/m5stack-stopwatch/stopwatch_charging_action.cpp"))
+    module.write_text(production("src/boards/m5stack-stopwatch/stopwatch_actions.cpp"))
     aggregator = (ROOT / "src/app/actions.cpp").read_text().replace(
         '#include "actions/action_modules.inc"', "")
     registry = production("src/app/action_registry.h") + production("src/app/action_registry.cpp")
     for overrides in (ROOT / "src/boards").glob("*/board_overrides.h"):
         if overrides.parent.name != "m5stack-stopwatch":
-            assert "stopwatch_charging_action" not in overrides.read_text()
+            assert "stopwatch_actions" not in overrides.read_text()
+            assert "m5stack_stopwatch_loop" not in overrides.read_text()
             assert "STOPWATCH_CHARGING_MODE" not in overrides.read_text()
     for board_action in (False, True):
-        define = f'#define BOARD_ACTION_SOURCE "{module}"\n' if board_action else ""
+        capacity = re.search(r"#define ACTION_TYPE_REGISTRY_MAX_TYPES (\d+)",
+                     (ROOT / "src/boards/m5stack-stopwatch/board_overrides.h").read_text()).group(1)
+        define = (f'#define BOARD_ACTION_SOURCE "{module}"\n'
+              f'#define ACTION_TYPE_REGISTRY_MAX_TYPES {capacity}\n') if board_action else ""
         header = production("src/boards/m5stack-stopwatch/stopwatch_hardware.h").replace("#pragma once", "")
         enum = re.search(r"enum class StopWatchChargingMode[^;]+;", header).group(0)
         source.write_text(define + "#include <cstdint>\n" + enum + action_prelude +
@@ -1116,7 +1381,36 @@ int main() {
             assert "charging_mode" not in strings
             assert "Set charging mode" not in strings
             assert "charging_mode mode must" not in strings
+            for identifier in ("status_led", "vibrate", "shutdown", "M5Stack StopWatch"):
+                assert identifier not in strings
     print("PASS: all boot charging modes, board action round trips, validation, dispatch, and generic exclusion", flush=True)
+    loop_hook = re.search(r"void loop\(\)\s*\{(.*?)\s*time_service_loop\(\);",
+                          (ROOT / "src/app/app.ino").read_text(), re.S).group(1)
+    for enabled in (False, True):
+        define = "#define BOARD_HARDWARE_LOOP m5stack_stopwatch_loop\n" if enabled else ""
+        source.write_text(define + r'''
+#include <cassert>
+static int loopCalls = 0;
+#ifdef BOARD_HARDWARE_LOOP
+void m5stack_stopwatch_loop() { ++loopCalls; }
+#endif
+void main_loop() {
+''' + loop_hook + r'''
+}
+int main() {
+    main_loop();
+#ifdef BOARD_HARDWARE_LOOP
+    assert(loopCalls == 1);
+#else
+    assert(loopCalls == 0);
+#endif
+}
+''')
+        subprocess.run(["c++", "-std=c++17", str(source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+        if not enabled:
+            assert "m5stack_stopwatch" not in subprocess.check_output(["nm", "-C", str(executable)], text=True)
+    print("PASS: board main-loop hook executes only when selected; generic binary excludes it", flush=True)
     brightness_code = re.search(
         r"static void apply_brightness\(uint8_t brightness\) \{.*?\n\}",
         (ROOT / "src/app/screen_saver_manager.cpp").read_text(), re.S

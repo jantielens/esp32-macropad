@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 312
+Total flags: 314
 
 ### Features (HAS_*)
 
@@ -142,6 +142,7 @@ Total flags: 312
 
 ### Limits & Tuning
 
+- **ACTION_TYPE_REGISTRY_MAX_TYPES** default: `(no default)` — Room for the built-in catalog and four board-local actions.
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
 - **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
 - **CAMERA_MJPEG_MAX_CLIENTS** default: `1` — Maximum simultaneous MJPEG clients; boards with constrained WiFi or PSRAM can keep the default.
@@ -214,6 +215,7 @@ Total flags: 312
 - **BOARD_AUDIO_CONTROL_FACTORY** default: `(no default)` — Board-owned codec rail and amplifier controls for the selected audio driver.
 - **BOARD_DRIVER_TABLE_NOTES** default: `(no default)` — Generated driver-table validation note.
 - **BOARD_HARDWARE_HEADER** default: `(no default)` — Board-local declarations used only by compilation and factory wiring.
+- **BOARD_HARDWARE_LOOP** default: `(no default)` — Board-owned deferred shutdown and motor safety deadlines.
 - **BOARD_HARDWARE_SOURCE** default: `(no default)` — Board-local shared hardware compiled through the sketch-root aggregator.
 - **BOARD_SENSOR_SOURCE** default: `(no default)` — Board-local sensor provider compiled and registered by the sensor aggregator.
 - **BUTTON_ACTIVE_LOW** default: `true` — Button polarity: true when pressed = LOW.
@@ -447,6 +449,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/swipe_actions.cpp
   - src/app/web_portal_config.cpp
   - src/boards/m5stack-stopwatch/board_overrides.h
+  - src/boards/m5stack-stopwatch/stopwatch_hardware.cpp
 - **HAS_AUDIO_INPUT**
   - src/app/app.ino
   - src/app/audio_input.cpp
@@ -556,7 +559,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
   - src/app/web_portal_device_api.cpp
-  - src/boards/m5stack-stopwatch/stopwatch_charging_action.cpp
+  - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
 - **HAS_CAMERA**
   - src/app/actions/camera_capture_action.cpp
   - src/app/app.ino
@@ -768,7 +771,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
   - src/app/widgets/widget_registry.h
-  - src/boards/m5stack-stopwatch/stopwatch_charging_action.cpp
+  - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
 - **HAS_EPAPER_FRAME_WAKE_BUTTON**
   - src/app/board_config.h
   - src/app/device_classes/epaper_frame/epaper_frame_config.h
@@ -1196,6 +1199,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/touch_manager.cpp
 - **ACTION_CONTINUATION_SLOTS**
   - src/app/board_config.h
+- **ACTION_TYPE_REGISTRY_MAX_TYPES**
+  - src/app/action_registry.cpp
 - **ALARM_ENABLED**
   - src/app/actions/alarm_action.cpp
   - src/app/actions/alarm_mp3_action.cpp
@@ -1265,6 +1270,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/audio_output_drivers.cpp
 - **BOARD_HARDWARE_HEADER**
   - src/app/audio_output_drivers.cpp
+- **BOARD_HARDWARE_LOOP**
+  - src/app/app.ino
 - **BOARD_HARDWARE_SOURCE**
   - src/app/app.ino
   - src/app/board_hardware.cpp

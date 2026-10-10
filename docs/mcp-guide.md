@@ -508,10 +508,20 @@ Active records are never evicted. When all four records are active or retained,
   keys to author. For example, `cycle_pad` documents `direction`
   (`next` or `previous`), `wrap` (boolean, default `true`), and
   `excluded_pads` (comma-separated 1-based pad numbers).
-  A StopWatch build with MCP enabled also advertises `charging_mode`, with
-  `mode` set to `off`, `low`, or `high`. It changes charging for the current
-  session only; reboot restores the compiled boot setting. The standard
-  StopWatch firmware disables MCP, and other boards do not include this action.
+  A StopWatch build with MCP enabled also advertises **M5Stack StopWatch**
+  actions: `charging_mode` (`mode`: `off`, `low`, `high`), `status_led`
+  (`mode`: `on`, `off`), `vibrate` (`pattern`: `"20,100,20"` for
+  vibrate/pause/vibrate, default `"200"`, standalone `"0"` stops),
+  and fieldless `shutdown`. Patterns allow whitespace around commas and need
+  1-15 positive whole-millisecond durations, an odd count, and at most 5000 ms
+  total including pauses. `pattern` is the only field; `duration_ms` is not supported.
+  Vibration is nonblocking; a new request replaces the active sequence.
+  Charging and LED settings are
+  session-only; reboot restores their boot settings. Shutdown powers off
+  through the PMIC and discards the remaining action list; it rejects active
+  OTA and does not save unsaved portal drafts or flush uploads. Finish writes
+  before invoking it. The standard StopWatch firmware disables MCP, and other
+  boards do not include these actions.
   It also carries a `device_config` section advertising `set_config`'s writable
   fields and the read/write component list. Its `storage` object advertises the storage
   tool names, 128-entry listing limit, and 65,536-byte Base64 file-read limit.

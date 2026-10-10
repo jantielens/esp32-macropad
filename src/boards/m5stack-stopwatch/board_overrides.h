@@ -8,12 +8,16 @@
 #define BOARD_HARDWARE_SOURCE "stopwatch_hardware.cpp"
 // Board-local declarations used only by compilation and factory wiring.
 #define BOARD_HARDWARE_HEADER "stopwatch_hardware.h"
+// Board-owned deferred shutdown and motor safety deadlines.
+#define BOARD_HARDWARE_LOOP m5stack_stopwatch_loop
 // Board-owned codec rail and amplifier controls for the selected audio driver.
 #define BOARD_AUDIO_CONTROL_FACTORY stopwatch_audio_control
 // Board-local sensor provider compiled and registered by the sensor aggregator.
 #define BOARD_SENSOR_SOURCE "stopwatch_battery_sensor.cpp"
 // Board-local action module compiled through the action aggregator.
-#define BOARD_ACTION_SOURCE "stopwatch_charging_action.cpp"
+#define BOARD_ACTION_SOURCE "stopwatch_actions.cpp"
+// Room for the built-in catalog and four board-local actions.
+#define ACTION_TYPE_REGISTRY_MAX_TYPES 28
 #ifndef STOPWATCH_CHARGING_MODE
 // StopWatch boot charging: 0 off, 1 low (185 mA), 2 high (425 mA).
 #define STOPWATCH_CHARGING_MODE 1

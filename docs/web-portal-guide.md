@@ -899,11 +899,27 @@ Pad labels retain the `Pad X: Name` format whether selected or not. The button
 **Actions** and **Appearance** tabs expose their controls without an additional
 same-named accordion; individual action slots remain expandable.
 
-On StopWatch, the action picker includes **StopWatch > Set charging mode**:
-**Off**, **Low (185 mA)**, or **High (425 mA)**. These are nominal charging
-currents, not measured battery current. The change lasts until reboot, which
-restores the compiled boot setting (low by default). Other boards do not offer
-this action.
+On StopWatch, the action picker includes the **M5Stack StopWatch** category:
+
+* **Set charging mode**: Off, Low (185 mA), or High (425 mA). These are nominal
+	currents, not measured battery current. Reboot restores the compiled boot
+	setting (low by default).
+* **Status LED**: On or Off for the current session. Reboot restores the boot
+	LED level, not your last selection. PMIC status/download signalling may
+	override the visible state.
+* **Vibrate**: Enter a pattern such as `20,100,20` (20 ms vibrate, 100 ms pause,
+	20 ms vibrate), or `200` for one 200 ms pulse (the default).
+	Patterns accept whitespace
+	around commas and require 1-15 positive durations, an odd count, and at most
+	5000 ms total including pauses. Standalone `0` stops vibration; another request
+	replaces the active sequence. It does not block other actions. Timing depends
+	on main-loop and I2C availability.
+* **Shutdown**: Stop audio/vibration and power off. Later actions do not run.
+	Active OTA rejects shutdown. Finish saves and uploads before using it;
+	unsaved portal edits are not saved automatically. Use the power button to
+	start again; physical power-off/recovery and LED behavior still need testing.
+
+Other boards do not offer these actions.
 
 Numeric fields consistently omit spinner buttons. Mouse-wheel scrolling over
 them scrolls the inspector without changing their values or focus; typing and
