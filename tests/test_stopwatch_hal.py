@@ -69,7 +69,7 @@ using std::min;
 #define LCD_QSPI_D1 42
 #define LCD_QSPI_D2 46
 #define LCD_QSPI_D3 45
-#define TFT_SPI_FREQ_HZ 40000000
+#define TFT_SPI_FREQ_HZ 80000000
 #define INPUT_PULLUP 2
 #define OUTPUT 1
 #define HIGH 1
@@ -320,7 +320,7 @@ public:
     }
     virtual ~Arduino_CO5300() = default;
     bool begin(int hz) {
-        assert(hz == 40000000);
+        assert(hz == 80000000);
         if (!gfxBegins) return false;
         tftInit(); return true;
     }
@@ -567,11 +567,15 @@ static void reset() {
         Wire.regs[address][0x26] = 0xab;
     }
     Wire.regs[0x6e][0x06] = 0xe8; // Cold battery boot: LDO/DCDC initially OFF.
+    Wire.regs[0x6e][0x07] = 0xd5;
     Wire.regs[0x6e][0x0b] = 0xa5;
-    Wire.regs[0x6e][0x11] = 0x08; // CHG_PROG programming left untouched.
-    Wire.regs[0x6e][0x10] = 0x1f;
+    Wire.regs[0x6e][0x11] = 0xff;
+    Wire.regs[0x6e][0x13] = 0xff;
+    Wire.regs[0x6e][0x10] = 0xf7;
     Wire.regs[0x6e][0x14] = 0xff;
     Wire.regs[0x6e][0x16] = 0xff;
+    Wire.regs[0x6e][0x49] = 0xd8;
+    Wire.regs[0x6e][0x4a] = 0xa5;
     assert(lockDepth == 0);
 }
 static void battery(int vbat, int vin, uint8_t gpio) {
@@ -613,17 +617,24 @@ int main() {
     assert(Wire.regs[0x4f][0x21] == 0x88);
     assert(Wire.regs[0x4f][0x25] == 0xa5 && Wire.regs[0x4f][0x26] == 0xab);
     assert(Wire.regs[0x6e][6] == 0xf7); // boost OFF; other bits preserved.
-    assert(Wire.regs[0x6e][0x0b] == 0xa5 && Wire.regs[0x6e][0x11] == 8);
-    assert(Wire.regs[0x6e][0x10] == 0x1b && Wire.regs[0x6e][0x14] == 0xcf);
-    assert(Wire.regs[0x6e][0x16] == 0xcf); // GPIO3 mode/pull/function preserved.
+    assert(Wire.regs[0x6e][0x07] == 0xf5);
+    assert(Wire.regs[0x6e][0x49] == 0xdf && Wire.regs[0x6e][0x4a] == 0xa5);
+    assert(Wire.regs[0x6e][0x0b] == 0xa5 && Wire.regs[0x6e][0x11] == 0xf7);
+    assert(Wire.regs[0x6e][0x13] == 0xf7);
+    assert(Wire.regs[0x6e][0x10] == 0xfb && Wire.regs[0x6e][0x14] == 0x0f);
+    assert(Wire.regs[0x6e][0x16] == 0x0f);
     int railsEnabled = -1, firstExpanderAccess = -1;
+    int chargeLatchLow = -1, chargeOutputEnabled = -1;
     for (size_t i = 0; i < Wire.operations.size(); ++i) {
         const auto [address, reg, value] = Wire.operations[i];
         if (address == 0x6e && reg == 6 && value == 0xf7) railsEnabled = i;
+        if (address == 0x6e && reg == 0x11 && value == 0xf7) chargeLatchLow = i;
+        if (address == 0x6e && reg == 0x10 && value == 0xfb) chargeOutputEnabled = i;
         if ((address == 0x4f || address == 0x6f) && firstExpanderAccess < 0)
             firstExpanderAccess = i;
     }
     assert(railsEnabled >= 0 && firstExpanderAccess > railsEnabled);
+    assert(chargeLatchLow >= 0 && chargeOutputEnabled > chargeLatchLow);
     const auto successfulWrites = Wire.writes;
     const int count = Wire.transactions;
     assert(m5stack_stopwatch_init() && Wire.begins == 1 && Wire.transactions == count);

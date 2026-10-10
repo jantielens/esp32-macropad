@@ -145,7 +145,22 @@ and retain safe owned outputs on failure where hardware communication permits.
 Shared-register updates and I2C transactions use the existing bus mutex;
 drivers must not reinitialize a bus already owned by board hardware. The
 StopWatch implementation preserves unrelated PMIC and expander bits and does
-not change charging-current or power-button defaults.
+configure the owned charging and power-button fields to match the factory HAL:
+charging enabled, CHG_PROG (PMIC GPIO3) driven low as a push-pull output without
+pulls for the board's 425 mA setting, CHG_STAT (GPIO2) configured as an input
+without pulls, and the RTC/IMU LDO retained after power-off. PMIC idle sleep and
+watchdog remain disabled. The power button uses a 1-second single-click delay
+with single-click reset disabled; long-press, double-click, and download-lock
+fields are preserved. The charge-programming latch is set before enabling its
+output. Battery percentage remains the existing voltage-based estimate, not
+the factory demo's filtering or percentage calculation.
+
+The StopWatch QSPI clock is now 80 MHz for hardware evaluation against the
+factory configuration. The previously confirmed display, touch, audio, and
+cold-boot behavior does not establish acceptance of this clock or power-policy
+change. Check charging status and voltage trend, battery temperature, display
+integrity during updates and animations, repeated cold boots, and sleep/wake
+on the device before declaring these changes verified.
 
 The CO5300 and CST820B factories receive concrete, copied configuration values
 from `board_co5300_config()` and `board_cst820b_config()`. Factories perform no

@@ -58,7 +58,7 @@
 #define LCD_QSPI_D1 42
 #define LCD_QSPI_D2 46
 #define LCD_QSPI_D3 45
-#define TFT_SPI_FREQ_HZ (40 * 1000 * 1000)
+#define TFT_SPI_FREQ_HZ (80 * 1000 * 1000)
 
 // One shared internal bus, initialized by the board hardware module.
 #define TOUCH_I2C_SDA 47

@@ -145,10 +145,13 @@ bool initialize() {
         !update(expander, 0x04, 0x03, 0x03) ||
         !update(expander, 0x05, 0x04, 0)) return false;
 
-    // Preserve charging-current programming and power-button configuration.
-    if (!update(kPmic, 0x16, 0x30, 0) ||
-        !update(kPmic, 0x10, 0x04, 0) ||
-        !update(kPmic, 0x14, 0x30, 0)) return false;
+    if (!update(kPmic, 0x07, 0x20, 0x20) ||
+        !update(kPmic, 0x49, 0x07, 0x07) ||
+        !update(kPmic, 0x11, 0x08, 0) ||
+        !update(kPmic, 0x13, 0x08, 0) ||
+        !update(kPmic, 0x16, 0xf0, 0) ||
+        !update(kPmic, 0x14, 0xf0, 0) ||
+        !update(kPmic, 0x10, 0x0c, 0x08)) return false;
 
     // IO1 USB mux HIGH, IO3 audio OFF, IO4/IO5 resets, IO8 OLED power.
     if (!update(expander, 0x13, 0x9d, 0) ||
