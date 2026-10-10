@@ -16,7 +16,6 @@ static bool guard_valid = true;
 static volatile bool stopped = false;
 bool ota_activity_is_active() { return ota; }
 static bool playback_guard(uint32_t generation) { return guard_valid && generation == 7; }
-void AudioOutputDriver::setMuted(bool) {}
 void audio_log_starvation(const AudioStarvationStats&) {}
 char* sound_store_path(const char* name, char* output, size_t capacity) {
     snprintf(output, capacity, "/sounds/%s.mp3", name);
@@ -30,7 +29,10 @@ public:
     unsigned interruption = 0;
     bool fail = false;
     bool begin(uint32_t) override { return true; }
-    void setVolume(uint8_t) override {}
+    bool setVolume(uint8_t) override { return true; }
+    bool setMuted(bool) override { return true; }
+    bool isAvailable() const override { return true; }
+    bool end() override { return true; }
     bool write(const int16_t*, size_t count) override {
         frames += count;
         if (frames >= interrupt_after) {

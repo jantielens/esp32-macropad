@@ -1,40 +1,23 @@
 #include "arduino_gfx_co5300_driver.h"
-#include "../m5stack_stopwatch.h"
 #include "../log_manager.h"
 #include <esp_heap_caps.h>
 #include <new>
 #include <cstring>
 
-#if !HAS_M5STACK_STOPWATCH
-#error "StopWatch CO5300 requires HAS_M5STACK_STOPWATCH"
-#endif
-
 namespace {
-constexpr uint16_t panelWidth = DISPLAY_WIDTH + 2;
-constexpr uint32_t scratchPixels = LVGL_BUFFER_SIZE + 2 * DISPLAY_HEIGHT + 2 * panelWidth + 4;
-// The factory's 468x466 viewport at (6,0) is cropped by one column each
-// side to expose the documented 466-square screen. CO5300 has no 90° MADCTL.
-class StopWatchPanel final : public Arduino_CO5300 {
+class ConfiguredCO5300Panel final : public Arduino_CO5300 {
 public:
-    explicit StopWatchPanel(Arduino_DataBus* bus)
-        : Arduino_CO5300(bus, GFX_NOT_DEFINED, 0, panelWidth, DISPLAY_HEIGHT,
-                6, 0, 6, 0) {}
+    ConfiguredCO5300Panel(Arduino_DataBus* bus, const CO5300PanelConfig& config)
+        : Arduino_CO5300(bus, config.resetPin, 0, config.nativeWidth, config.nativeHeight,
+                config.offsetX, config.offsetY, config.offsetX, config.offsetY),
+          initialize(config.initialize) {}
 protected:
     void tftInit() override {
-        _bus->sendCommand(0x11);
-        delay(150);
-        _bus->beginWrite();
-        _bus->writeC8D8(0xc4, 0x80);
-        _bus->writeC8D8(0x35, 0x80);
-        _bus->writeC8D16(0x44, 0x01d2);
-        _bus->writeC8D8(0x3a, 0x55);
-        _bus->writeC8D8(0x53, 0x20);
-        _bus->writeCommand(0x20);
-        _bus->writeC8D8(0x36, 0);
-        _bus->writeC8D8(0x51, 0);
-        _bus->writeCommand(0x29);
-        _bus->endWrite();
+        if (initialize) initialize(_bus);
+        else Arduino_CO5300::tftInit();
     }
+private:
+    void (*initialize)(Arduino_DataBus*);
 };
 }
 
@@ -47,15 +30,22 @@ Arduino_GFX_CO5300_Driver::~Arduino_GFX_CO5300_Driver() {
 
 void Arduino_GFX_CO5300_Driver::init() {
     if (available) return;
-    if (!m5stack_stopwatch_ready()) return;
+    if ((config.prepare && !config.prepare()) ||
+        config.cropX + DISPLAY_WIDTH > config.nativeWidth ||
+        config.cropY + DISPLAY_HEIGHT > config.nativeHeight ||
+        (config.nativeWidth & 1) || (config.nativeHeight & 1) ||
+        (config.offsetX & 1) || (config.offsetY & 1)) return;
+    const uint16_t panelWidth = config.nativeWidth;
+    const uint32_t scratchPixels = LVGL_BUFFER_SIZE +
+        2 * (DISPLAY_WIDTH > DISPLAY_HEIGHT ? DISPLAY_WIDTH : DISPLAY_HEIGHT) + 2 * panelWidth + 4;
     scratch = static_cast<uint16_t*>(heap_caps_malloc(
         scratchPixels * sizeof(uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     framebuffer = static_cast<uint16_t*>(heap_caps_malloc(
-        uint32_t(panelWidth) * DISPLAY_HEIGHT * sizeof(uint16_t),
+        uint32_t(panelWidth) * config.nativeHeight * sizeof(uint16_t),
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     bus = new (std::nothrow) Arduino_ESP32QSPI(
         LCD_QSPI_CS, LCD_QSPI_PCLK, LCD_QSPI_D0, LCD_QSPI_D1, LCD_QSPI_D2, LCD_QSPI_D3);
-    if (bus) gfx = new (std::nothrow) StopWatchPanel(bus);
+    if (bus) gfx = new (std::nothrow) ConfiguredCO5300Panel(bus, config);
     if (!scratch || !framebuffer || !gfx || !gfx->begin(TFT_SPI_FREQ_HZ)) {
         LOGE("CO5300", "Display initialization failed");
         delete gfx; gfx = nullptr;
@@ -66,8 +56,8 @@ void Arduino_GFX_CO5300_Driver::init() {
         framebuffer = nullptr;
         return;
     }
-    memset(framebuffer, 0, uint32_t(panelWidth) * DISPLAY_HEIGHT * sizeof(uint16_t));
-    pinMode(38, INPUT_PULLUP);
+    memset(framebuffer, 0, uint32_t(panelWidth) * config.nativeHeight * sizeof(uint16_t));
+    if (config.tearingPin >= 0) pinMode(config.tearingPin, INPUT_PULLUP);
     available = true;
     gfx->fillScreen(RGB565_BLACK);
     setBacklightBrightness(brightness);
@@ -92,6 +82,7 @@ void Arduino_GFX_CO5300_Driver::pushColors(uint16_t* data, uint32_t len, bool sw
     if (!available || !data || !w || !h || x < 0 || y < 0 ||
         x + w > width() || y + h > height() || len < uint32_t(w) * h ||
         uint32_t(w) * h > LVGL_BUFFER_SIZE) return;
+    const uint16_t panelWidth = config.nativeWidth;
     const uint32_t stride = flushSrcStride ? flushSrcStride / sizeof(uint16_t) : w;
     if (stride < w) return;
     int16_t px = x, py = y;
@@ -106,15 +97,15 @@ void Arduino_GFX_CO5300_Driver::pushColors(uint16_t* data, uint32_t len, bool sw
             if (rotation == 1) { dx = h - 1 - sy; dy = sx; }
             if (rotation == 2) { dx = w - 1 - sx; dy = h - 1 - sy; }
             if (rotation == 3) { dx = sy; dy = w - 1 - sx; }
-            framebuffer[uint32_t(py + dy) * panelWidth + px + dx + 1] =
+            framebuffer[uint32_t(py + dy + config.cropY) * panelWidth + px + dx + config.cropX] =
                 data[uint32_t(sy) * stride + sx];
         }
     }
-    const uint16_t left = (px + 1) & ~1;
-    const uint16_t right = (px + pw) | 1;
+    const uint16_t left = (px + config.cropX) & ~1;
+    const uint16_t right = (px + config.cropX + pw - 1) | 1;
     const uint16_t alignedWidth = right - left + 1;
-    const uint16_t top = py & ~1;
-    const uint16_t bottom = (py + ph - 1) | 1;
+    const uint16_t top = (py + config.cropY) & ~1;
+    const uint16_t bottom = (py + config.cropY + ph - 1) | 1;
     const uint16_t alignedHeight = bottom - top + 1;
     for (uint16_t row = 0; row < alignedHeight; ++row) {
         memcpy(scratch + uint32_t(row) * alignedWidth,

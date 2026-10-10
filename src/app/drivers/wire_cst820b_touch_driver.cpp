@@ -1,10 +1,7 @@
 #include "wire_cst820b_touch_driver.h"
-#include "../m5stack_stopwatch.h"
+#include "../i2c_bus.h"
+#include <Wire.h>
 #include <atomic>
-
-#if !HAS_M5STACK_STOPWATCH
-#error "StopWatch CST820B requires HAS_M5STACK_STOPWATCH"
-#endif
 
 namespace {
 std::atomic<bool> cst820b_irq_pending{false};
@@ -14,16 +11,19 @@ void IRAM_ATTR cst820b_interrupt() {
 }
 
 Wire_CST820B_TouchDriver::~Wire_CST820B_TouchDriver() {
-    if (available) detachInterrupt(digitalPinToInterrupt(13));
+    if (available) detachInterrupt(digitalPinToInterrupt(config.interruptPin));
 }
 
 void Wire_CST820B_TouchDriver::init() {
     if (available) return;
-    available = m5stack_stopwatch_ready();
-    pinMode(13, INPUT_PULLUP);
+    if (config.interruptPin < 0 || config.nativeWidth < 2 || config.nativeHeight < 2 ||
+        config.cropX + DISPLAY_WIDTH > config.nativeWidth ||
+        config.cropY + DISPLAY_HEIGHT > config.nativeHeight) return;
+    available = !config.prepare || config.prepare();
+    pinMode(config.interruptPin, INPUT_PULLUP);
     if (available) {
         cst820b_irq_pending.store(false, std::memory_order_relaxed);
-        attachInterrupt(digitalPinToInterrupt(13), cst820b_interrupt, FALLING);
+        attachInterrupt(digitalPinToInterrupt(config.interruptPin), cst820b_interrupt, FALLING);
     }
     // No CST816S-only 0xFE write: CST820B uses 0xE5=3 for explicit sleep.
 }
@@ -50,7 +50,7 @@ TouchSample Wire_CST820B_TouchDriver::readSample() {
     const bool pending = cst820b_irq_pending.exchange(false, std::memory_order_relaxed);
     const uint32_t now = millis();
     if (recovering && !pending && int32_t(now - retryAfter) < 0) return sample;
-    if (!pending && digitalRead(13) != LOW && !last.pressed && !recovering) {
+    if (!pending && digitalRead(config.interruptPin) != LOW && !last.pressed && !recovering) {
         sample.status = TouchReadStatus::Unchanged;
         return sample;
     }
@@ -59,7 +59,21 @@ TouchSample Wire_CST820B_TouchDriver::readSample() {
     recovering = true;
     retryAfter = now + 50;
     uint8_t data[5];
-    if (!m5stack_stopwatch_touch_read(data, sizeof(data))) return sample;
+    if (!i2c_bus_lock()) return sample;
+    Wire.beginTransmission(config.address);
+    const bool written = Wire.write(0x02) == 1;
+    bool ok = Wire.endTransmission(false) == 0 && written &&
+        Wire.requestFrom(config.address, uint8_t(sizeof(data))) == sizeof(data) &&
+        Wire.available() >= int(sizeof(data));
+    if (ok) {
+        for (size_t index = 0; index < sizeof(data); ++index) {
+            const int value = Wire.read();
+            if (value < 0) { ok = false; break; }
+            data[index] = uint8_t(value);
+        }
+    }
+    i2c_bus_unlock();
+    if (!ok) return sample;
     const uint8_t event = data[1] >> 6;
     if (data[0] > 1 || (data[0] && event == 3)) return sample;
     sample.status = TouchReadStatus::Fresh;
@@ -71,11 +85,14 @@ TouchSample Wire_CST820B_TouchDriver::readSample() {
         if (x > xmax) x = xmax;
         if (y < ymin) y = ymin;
         if (y > ymax) y = ymax;
-        // Factory native X=468, Y=466; crop one X pixel from each side.
-        x = uint32_t(x - xmin) * (calibration ? DISPLAY_WIDTH - 1 : 467) / (xmax - xmin);
-        y = uint32_t(y - ymin) * (DISPLAY_HEIGHT - 1) / (ymax - ymin);
-        if (!calibration) x = x == 0 ? 0 : x - 1;
+        x = uint32_t(x - xmin) * (calibration ? DISPLAY_WIDTH - 1 : config.nativeWidth - 1) / (xmax - xmin);
+        y = uint32_t(y - ymin) * (calibration ? DISPLAY_HEIGHT - 1 : config.nativeHeight - 1) / (ymax - ymin);
+        if (!calibration) {
+            x = x < config.cropX ? 0 : x - config.cropX;
+            y = y < config.cropY ? 0 : y - config.cropY;
+        }
         if (x >= DISPLAY_WIDTH) x = DISPLAY_WIDTH - 1;
+        if (y >= DISPLAY_HEIGHT) y = DISPLAY_HEIGHT - 1;
         uint16_t tx = x, ty = y;
         if (rotation == 1) { tx = y; ty = DISPLAY_WIDTH - 1 - x; }
         if (rotation == 2) { tx = DISPLAY_WIDTH - 1 - x; ty = DISPLAY_HEIGHT - 1 - y; }

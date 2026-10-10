@@ -292,7 +292,7 @@ void TouchManager::init(uint8_t rotation) {
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_CST816S_WIRE
 		driver = new Wire_CST816S_TouchDriver();
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_CST820B_WIRE
-		driver = new Wire_CST820B_TouchDriver();
+		driver = new Wire_CST820B_TouchDriver(board_cst820b_config());
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 		driver = new GT911_TouchDriver();
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK

@@ -71,7 +71,10 @@ public:
     uint8_t volume = 0;
     bool fail = false;
     bool begin(uint32_t) override { return true; }
-    void setVolume(uint8_t value) override { volume = value; }
+    bool setVolume(uint8_t value) override { volume = value; return true; }
+    bool setMuted(bool) override { return true; }
+    bool isAvailable() const override { return true; }
+    bool end() override { return true; }
     bool write(const int16_t* frames, size_t count) override {
         pcm.insert(pcm.end(), frames, frames + count * 2);
         if (on_write) on_write();
@@ -79,7 +82,6 @@ public:
     }
 };
 static TestOutput output;
-void AudioOutputDriver::setMuted(bool) {}
 AudioOutputDriver* audio_output_driver_create() { return &output; }
 
 #include "audio_worker_under_test.inc"

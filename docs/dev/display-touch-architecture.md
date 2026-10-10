@@ -98,12 +98,44 @@ horizontal lines, and reported improvement after bounded cold-start discovery.
 Touch mapping and audio playback were also confirmed. All rotations, the
 USB/battery boot matrix, and sleep/wake acceptance remain to be verified.
 
-This MVE retains shared board hardware in `src/app/m5stack_stopwatch.*` and
-StopWatch-specific audio lifecycle branches. Follow-up work should move the
-implementation under `src/boards/m5stack-stopwatch`, retain sketch-root
-aggregation for Arduino compilation, and route initialization and audio
-power/mute through small board hooks and the existing audio HAL. This is
-acknowledged architectural debt, not an established board-HAL pattern.
+These hardware observations precede the board-composition refactor. Repeat
+the acceptance checks after that refactor; host tests and compilation do not
+establish physical timing, framing, or startup silence.
+
+### Board Composition Contract
+
+Boards that coordinate shared power, reset, or buses opt in with
+`BOARD_HARDWARE_SOURCE` in their board override. The sketch-root
+[src/app/board_hardware.cpp](../../src/app/board_hardware.cpp) includes that
+board-local implementation because Arduino does not compile subdirectory
+sources independently. Existing boards use the default initialization and
+need no new board files. This is compile-time composition, not a peripheral
+registry or a catch-all board HAL.
+
+`board_hardware_init()` runs before dependent display, touch, and audio
+initialization. A board implementation must be idempotent, report failure,
+and retain safe owned outputs on failure where hardware communication permits.
+Shared-register updates and I2C transactions use the existing bus mutex;
+drivers must not reinitialize a bus already owned by board hardware. The
+StopWatch implementation preserves unrelated PMIC and expander bits and does
+not change charging-current or power-button defaults.
+
+The CO5300 and CST820B factories receive concrete, copied configuration values
+from `board_co5300_config()` and `board_cst820b_config()`. Factories perform no
+I/O. Native dimensions, offsets, crop, interrupt/tearing pins, and optional
+callbacks describe hardware without testing board identity inside a driver.
+Callbacks must remain valid for the driver's lifetime. StopWatch preparation
+callbacks check board readiness; its panel callback supplies the module's
+command sequence while the driver owns bus transactions and rendering.
+The default CST820B preparation initializes its otherwise unowned bus once.
+
+Board hardware owns shared rails, resets, wiring, and provider selection.
+Drivers own controller protocols, alignment, transport resources, timing, and
+errors. Managers own application resources and state. UI code uses canvas
+geometry and bounded text presentation, not board identity: pads retain the
+full 466 x 466 logical canvas, and status/info text is bounded generically.
+Audio control uses the existing audio HAL's injected board callbacks; see
+[the audio lifecycle contract](audio-architecture.md#output-lifecycle-contract).
 
 ### StopWatch CST820B Touch
 

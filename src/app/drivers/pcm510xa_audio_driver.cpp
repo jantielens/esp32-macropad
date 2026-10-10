@@ -10,11 +10,14 @@
 #define TAG "Audio"
 
 static constexpr uint32_t kClockSettleMs = 10;
-static constexpr uint32_t kMuteSettleMs =
-    (150UL * 1000UL + AUDIO_SAMPLE_RATE - 1) / AUDIO_SAMPLE_RATE + 1 + 1;
 
 bool PCM510xADriver::begin(uint32_t sample_rate) {
-    setMuted(true);
+    if (!sample_rate) return false;
+    if (tx_handle) return initialized && setMuted(true);
+    if (!setMuted(true) || (control.power && !control.power(true))) {
+        end();
+        return false;
+    }
     pinMode(AUDIO_I2S_MCLK, OUTPUT);
     digitalWrite(AUDIO_I2S_MCLK, LOW);
 
@@ -25,6 +28,7 @@ bool PCM510xADriver::begin(uint32_t sample_rate) {
     esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle, NULL);
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_new_channel failed: %s", esp_err_to_name(err));
+        end();
         return false;
     }
 
@@ -50,28 +54,26 @@ bool PCM510xADriver::begin(uint32_t sample_rate) {
     err = i2s_channel_init_std_mode(tx_handle, &std_cfg);
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_channel_init_std_mode failed: %s", esp_err_to_name(err));
-        i2s_del_channel(tx_handle);
-        tx_handle = nullptr;
+        end();
         return false;
     }
     err = i2s_channel_enable(tx_handle);
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_channel_enable failed: %s", esp_err_to_name(err));
-        i2s_del_channel(tx_handle);
-        tx_handle = nullptr;
+        end();
         return false;
     }
 
+    tx_running = true;
+    this->sample_rate = sample_rate;
     vTaskDelay(pdMS_TO_TICKS(kClockSettleMs));
     initialized = true;
-    setMuted(false);
-    setVolume(volume);
     LOGT(TAG, "PCM510xA: %u Hz, 16-bit data in 32-bit slots", sample_rate);
     return true;
 }
 
 bool PCM510xADriver::write(const int16_t* frames, size_t frame_count) {
-    if (!tx_handle || !frames || frame_count == 0) return false;
+    if (!isAvailable() || !frames || frame_count == 0) return false;
 
     int16_t scratch[512];
     const size_t total_samples = frame_count * 2;
@@ -86,7 +88,7 @@ bool PCM510xADriver::write(const int16_t* frames, size_t frame_count) {
         esp_err_t err = i2s_channel_write(tx_handle, scratch, sample_count * sizeof(int16_t),
                                           &written, portMAX_DELAY);
         if (err != ESP_OK || written != sample_count * sizeof(int16_t)) {
-              LOGE(TAG, "I2S write error: %s bytes=%u/%u", esp_err_to_name(err),
+            LOGE(TAG, "I2S write error: %s bytes=%u/%u", esp_err_to_name(err),
                   unsigned(written), unsigned(sample_count * sizeof(int16_t)));
             return false;
         }
@@ -95,24 +97,37 @@ bool PCM510xADriver::write(const int16_t* frames, size_t frame_count) {
     return true;
 }
 
-void PCM510xADriver::setVolume(uint8_t vol_0_100) {
+bool PCM510xADriver::setVolume(uint8_t vol_0_100) {
     volume = vol_0_100 > 100 ? 100 : vol_0_100;
+    return true;
 }
 
-// Intentionally not inherited: the base no-pin guard silently succeeds, which is unsafe for DAC soft-mute.
-void PCM510xADriver::setMuted(bool muted) {
-    if (!initialized && !muted) return;
-    pinMode(AUDIO_PA_PIN, OUTPUT);
-    const bool enabled = !muted;
-    digitalWrite(AUDIO_PA_PIN, (enabled ^ AUDIO_PA_ACTIVE_LOW) ? HIGH : LOW);
+bool PCM510xADriver::setMuted(bool muted) {
+    if ((!initialized && !muted) || !control.mute) return false;
+    return control.mute(muted);
 }
 
-// A future teardown must mute and wait kMuteSettleMs with LRCK running.
-// It must then disable and delete the I2S channel before any DAC power is removed.
-// This firmware has no teardown path: the channel is created once at boot and
-// lives for the rest of the firmware run.
+bool PCM510xADriver::end() {
+    bool ok = setMuted(true);
+    if (tx_handle) {
+        if (tx_running) {
+            const uint32_t settleMs = (150UL * 1000UL + sample_rate - 1) / sample_rate + 2;
+            vTaskDelay(pdMS_TO_TICKS(settleMs));
+            if (i2s_channel_disable(tx_handle) == ESP_OK) tx_running = false;
+            else ok = false;
+        }
+        if (i2s_del_channel(tx_handle) == ESP_OK) {
+            tx_handle = nullptr;
+            tx_running = false;
+        } else ok = false;
+    }
+    initialized = false;
+    if (control.power && !control.power(false)) ok = false;
+    return ok;
+}
+
 AudioOutputDriver* audio_output_driver_create() {
-    static PCM510xADriver driver;
+    static PCM510xADriver driver(audio_board_control_create());
     return &driver;
 }
 

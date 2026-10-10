@@ -96,7 +96,6 @@ void InfoScreen::create() {
 		lv_obj_align(ipLabel, LV_ALIGN_CENTER, 0, 60);
 		lv_obj_clear_flag(ipLabel, LV_OBJ_FLAG_CLICKABLE);  // Click-transparent
 
-		#if HAS_M5STACK_STOPWATCH
 		const DisplayContentRect content = display_safe_content_rect(
 			lv_obj_get_width(screen), lv_obj_get_height(screen));
 		lv_obj_t* labels[] = {uptimeLabel, versionLabel, heapLabel, deviceNameLabel,
@@ -110,7 +109,6 @@ void InfoScreen::create() {
 		}
 		lv_obj_set_width(separatorTop, content.w);
 		lv_obj_set_width(separatorBottom, content.w);
-		#endif
 		
 
 		

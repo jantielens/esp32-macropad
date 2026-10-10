@@ -1,4 +1,5 @@
 #include "board_config.h"
+#include "board_hardware.h"
 #include "sensors/sensor_manager.h"
 
 // Arduino build system only compiles .cpp files in the sketch root directory.
@@ -12,12 +13,12 @@
 #include "sensors/aht10_sensor.cpp"
 #endif
 
-#if HAS_SENSOR_BATTERY_ADC || HAS_M5STACK_STOPWATCH
+#if HAS_SENSOR_BATTERY_ADC
 #include "sensors/battery_adc_sensor.cpp"
 #endif
 
-#if HAS_M5STACK_STOPWATCH
-#include "sensors/stopwatch_battery_sensor.cpp"
+#ifdef BOARD_SENSOR_SOURCE
+#include BOARD_SENSOR_SOURCE
 #endif
 
 #if HAS_SENSOR_LD2410_OUT
@@ -33,8 +34,8 @@
 #endif
 
 void sensor_manager_register_all(SensorRegistry &registry) {
-	#if HAS_M5STACK_STOPWATCH
-	register_stopwatch_battery_sensor(registry);
+	#ifdef BOARD_SENSOR_SOURCE
+	board_register_sensors(registry);
 	#endif
 	#if HAS_SENSOR_BME280
 	register_bme280_sensor(registry);

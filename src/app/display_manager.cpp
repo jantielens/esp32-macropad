@@ -77,7 +77,7 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ARDUINO_GFX_NV3041A
 		driver = new Arduino_GFX_NV3041A_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ARDUINO_GFX_CO5300
-		driver = new Arduino_GFX_CO5300_Driver();
+		driver = new Arduino_GFX_CO5300_Driver(board_co5300_config());
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_RGB
 		driver = new ST7701_RGB_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7703_DSI

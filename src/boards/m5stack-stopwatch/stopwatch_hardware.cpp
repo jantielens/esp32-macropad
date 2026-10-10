@@ -1,14 +1,15 @@
-#include "m5stack_stopwatch.h"
+#include "stopwatch_hardware.h"
+#include "audio_output_driver.h"
 
-#if HAS_M5STACK_STOPWATCH
 #include "i2c_bus.h"
 #include "log_manager.h"
 #include <Arduino.h>
 #include <Wire.h>
+#include "drivers/arduino_gfx_co5300_driver.h"
+#include "drivers/wire_cst820b_touch_driver.h"
 
 namespace {
 constexpr uint8_t kPmic = 0x6e;
-constexpr uint8_t kTouch = 0x15;
 uint8_t expander = 0;
 bool wireStarted = false;
 bool ready = false;
@@ -142,11 +143,50 @@ bool m5stack_stopwatch_init() {
     return result;
 }
 
+bool board_hardware_init() { return m5stack_stopwatch_init(); }
+
 bool m5stack_stopwatch_ready() {
     if (!i2c_bus_lock()) return false;
     const bool result = ready;
     i2c_bus_unlock();
     return result;
+}
+
+static void initialize_stopwatch_panel(Arduino_DataBus* bus) {
+    bus->sendCommand(0x11);
+    delay(150);
+    bus->beginWrite();
+    bus->writeC8D8(0xc4, 0x80);
+    bus->writeC8D8(0x35, 0x80);
+    bus->writeC8D16(0x44, 0x01d2);
+    bus->writeC8D8(0x3a, 0x55);
+    bus->writeC8D8(0x53, 0x20);
+    bus->writeCommand(0x20);
+    bus->writeC8D8(0x36, 0);
+    bus->writeC8D8(0x51, 0);
+    bus->writeCommand(0x29);
+    bus->endWrite();
+}
+
+CO5300PanelConfig board_co5300_config() {
+    CO5300PanelConfig config;
+    config.nativeWidth = 468;
+    config.nativeHeight = 466;
+    config.offsetX = 6;
+    config.cropX = 1;
+    config.tearingPin = 38;
+    config.prepare = m5stack_stopwatch_ready;
+    config.initialize = initialize_stopwatch_panel;
+    return config;
+}
+
+CST820BConfig board_cst820b_config() {
+    CST820BConfig config;
+    config.nativeWidth = 468;
+    config.nativeHeight = 466;
+    config.cropX = 1;
+    config.prepare = m5stack_stopwatch_ready;
+    return config;
 }
 
 bool m5stack_stopwatch_audio_power(bool enabled) {
@@ -170,11 +210,11 @@ bool m5stack_stopwatch_audio_mute(bool muted) {
     return ok;
 }
 
-bool m5stack_stopwatch_touch_read(uint8_t* data, size_t length) {
-    if (!data || length != 5 || !i2c_bus_lock()) return false;
-    const bool ok = ready && read(kTouch, 0x02, data, length);
-    i2c_bus_unlock();
-    return ok;
+AudioBoardControl stopwatch_audio_control() {
+    AudioBoardControl control;
+    control.power = m5stack_stopwatch_audio_power;
+    control.mute = m5stack_stopwatch_audio_mute;
+    return control;
 }
 
 bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging) {
@@ -190,4 +230,3 @@ bool m5stack_stopwatch_battery_read(uint16_t& millivolts, bool& charging) {
     i2c_bus_unlock();
     return ok;
 }
-#endif

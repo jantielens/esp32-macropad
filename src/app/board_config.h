@@ -43,11 +43,6 @@ struct HwButtonDef {
 #include "board_overrides.h"
 #endif
 
-// M5Stack StopWatch shared-bus PMIC and GPIO-expander hardware.
-#ifndef HAS_M5STACK_STOPWATCH
-#define HAS_M5STACK_STOPWATCH false
-#endif
-
 // Repo-owned PSRAM capability alias, derived from the Arduino core's
 // BOARD_HAS_PSRAM (defined by PSRAM-enabled board menus / FQBN options). Safe
 // default of 0 so a board that does not advertise PSRAM is treated as

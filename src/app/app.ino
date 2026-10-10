@@ -90,7 +90,7 @@
 #endif
 
 #include "i2c_bus.h"
-#include "m5stack_stopwatch.h"
+#include "board_hardware.h"
 #include "sd_probe.h"
 #include "sd_storage.h"
 #include "storage.h"
@@ -271,14 +271,12 @@ void setup()
 	#endif
 	#endif
 
-	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || HAS_M5STACK_STOPWATCH
+	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || defined(BOARD_HARDWARE_SOURCE)
 	i2c_bus_init();
 	#endif
-	#if HAS_M5STACK_STOPWATCH
-	if (!m5stack_stopwatch_init()) {
-		LOGE("StopWatch", "Hardware initialization failed; peripherals unavailable");
+	if (!board_hardware_init()) {
+		LOGE("Board", "Hardware initialization failed; dependent peripherals unavailable");
 	}
-	#endif
 
 	// Initialize board-specific hardware
 	#if HAS_BUILTIN_LED

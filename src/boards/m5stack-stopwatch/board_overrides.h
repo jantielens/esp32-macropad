@@ -4,7 +4,14 @@
 // M5Stack StopWatch: ESP32-S3R8, 16 MiB flash, 8 MiB OPI PSRAM.
 // Reference: https://docs.m5stack.com/en/core/StopWatch
 // Power/reset pins are M5IOE1 outputs, not ESP32 GPIO numbers.
-#define HAS_M5STACK_STOPWATCH true
+// Board-local shared hardware compiled through the sketch-root aggregator.
+#define BOARD_HARDWARE_SOURCE "stopwatch_hardware.cpp"
+// Board-local declarations used only by compilation and factory wiring.
+#define BOARD_HARDWARE_HEADER "stopwatch_hardware.h"
+// Board-owned codec rail and amplifier controls for the selected audio driver.
+#define BOARD_AUDIO_CONTROL_FACTORY stopwatch_audio_control
+// Board-local sensor provider compiled and registered by the sensor aggregator.
+#define BOARD_SENSOR_SOURCE "stopwatch_battery_sensor.cpp"
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_BACKLIGHT true

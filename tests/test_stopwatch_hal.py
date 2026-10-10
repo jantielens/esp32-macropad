@@ -26,7 +26,7 @@ PRELUDE = r'''
 #include <string>
 #include <tuple>
 #include <vector>
-#define HAS_M5STACK_STOPWATCH true
+using std::min;
 #define HAS_SENSOR_BATTERY_ADC false
 #define HAS_MQTT false
 #define HAS_BLE false
@@ -34,6 +34,18 @@ PRELUDE = r'''
 #define HAS_AUDIO_INPUT false
 #define HAS_SOUND_PLAYER true
 #define HAS_MUSIC_ANALYSIS false
+#define HAS_AUDIO true
+#define AUDIO_OUTPUT_DRIVER_ES8311 1
+#define AUDIO_OUTPUT_DRIVER_PCM510XA 2
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
+#define AUDIO_PA_PIN 27
+#define AUDIO_PA_ACTIVE_LOW false
+#define AUDIO_MIC_ADC_ADDR 0x40
+#define AUDIO_I2S_DIN 20
+#define DISPLAY_DRIVER 1
+#define DISPLAY_DRIVER_ARDUINO_GFX_CO5300 14
+#define TOUCH_DRIVER 1
+#define TOUCH_DRIVER_CST820B_WIRE 8
 #define AUDIO_CODEC_ADDR 0x18
 #define AUDIO_SAMPLE_RATE 48000
 #define AUDIO_I2S_MCLK 18
@@ -49,6 +61,7 @@ PRELUDE = r'''
 #define DISPLAY_WIDTH 466
 #define DISPLAY_HEIGHT 466
 #define DISPLAY_ROTATION 0
+#define TOUCH_INT 13
 #define LVGL_BUFFER_SIZE (466 * 16)
 #define LCD_QSPI_CS 39
 #define LCD_QSPI_PCLK 40
@@ -58,6 +71,8 @@ PRELUDE = r'''
 #define LCD_QSPI_D3 45
 #define TFT_SPI_FREQ_HZ 40000000
 #define INPUT_PULLUP 2
+#define OUTPUT 1
+#define HIGH 1
 #define LOW 0
 #define FALLING 3
 #define IRAM_ATTR
@@ -75,9 +90,11 @@ using esp_err_t = int;
 using gpio_num_t = int;
 using i2s_chan_handle_t = int*;
 #define ESP_OK 0
+#define ESP_ERR_TIMEOUT 2
 #define I2S_NUM_0 0
 #define I2S_ROLE_MASTER 0
 #define I2S_DATA_BIT_WIDTH_16BIT 16
+#define I2S_SLOT_BIT_WIDTH_32BIT 32
 #define I2S_SLOT_MODE_STEREO 2
 #define I2S_GPIO_UNUSED -1
 struct i2s_chan_config_t {
@@ -85,7 +102,7 @@ struct i2s_chan_config_t {
     int dma_desc_num = 0, dma_frame_num = 0;
 };
 struct i2s_std_clk_config_t { int rate = 0, mclk_multiple = 0; };
-struct i2s_std_slot_config_t { int width = 16; };
+struct i2s_std_slot_config_t { int width = 16, slot_bit_width = 16, ws_width = 16; };
 struct i2s_std_gpio_config_t {
     int mclk, bclk, ws, dout, din;
     struct { bool mclk_inv, bclk_inv, ws_inv; } invert_flags;
@@ -98,38 +115,76 @@ struct i2s_std_config_t {
 #define I2S_CHANNEL_DEFAULT_CONFIG(...) i2s_chan_config_t{}
 #define I2S_STD_CLK_DEFAULT_CONFIG(rate) i2s_std_clk_config_t{int(rate),0}
 #define I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(...) i2s_std_slot_config_t{}
-static int channel = 0, liveChannels = 0;
+static int channel = 0, receiveChannel = 0, liveChannels = 0;
 static bool channelFails = false, channelWriteFails = false;
+static bool channelInitFails = false, channelEnableFails = false, channelReadFails = false;
+static bool channelWriteShort = false, testingPcm = false, txEnabled = false;
+static std::vector<std::string> audioEvents;
 static bool lifecycleTesting = false, silentFrameWritten = false;
-static esp_err_t i2s_new_channel(i2s_chan_config_t* config, i2s_chan_handle_t* tx, void*) {
+static esp_err_t i2s_new_channel(i2s_chan_config_t* config, i2s_chan_handle_t* tx, i2s_chan_handle_t* rx) {
     assert(config->auto_clear);
     if (channelFails) return 1;
-    *tx = &channel; ++liveChannels; return ESP_OK;
-}
-static esp_err_t i2s_channel_init_std_mode(i2s_chan_handle_t, i2s_std_config_t* config) {
-    assert(config->clk_cfg.rate == 48000 && config->clk_cfg.mclk_multiple == 256);
+    *tx = &channel; ++liveChannels;
+    if (rx) { *rx = &receiveChannel; ++liveChannels; }
     return ESP_OK;
 }
-static esp_err_t i2s_channel_enable(i2s_chan_handle_t) { return ESP_OK; }
-static esp_err_t i2s_channel_disable(i2s_chan_handle_t) { return ESP_OK; }
-static esp_err_t i2s_del_channel(i2s_chan_handle_t) { --liveChannels; return ESP_OK; }
+static esp_err_t i2s_channel_init_std_mode(i2s_chan_handle_t, i2s_std_config_t* config) {
+    assert(config->clk_cfg.rate == 48000);
+    if (testingPcm) {
+        assert(config->gpio_cfg.mclk == I2S_GPIO_UNUSED);
+        assert(config->slot_cfg.slot_bit_width == 32 && config->slot_cfg.ws_width == 32);
+    } else assert(config->clk_cfg.mclk_multiple == 256);
+    if (channelInitFails) return 1;
+    return ESP_OK;
+}
+static esp_err_t i2s_channel_enable(i2s_chan_handle_t handle) {
+    if (channelEnableFails) return 1;
+    audioEvents.push_back(handle == &channel ? "enableTX" : "enableRX");
+    if (handle == &channel) txEnabled = true;
+    return ESP_OK;
+}
+static esp_err_t i2s_channel_disable(i2s_chan_handle_t handle) {
+    audioEvents.push_back(handle == &channel ? "disableTX" : "disableRX");
+    if (handle == &channel) txEnabled = false;
+    return ESP_OK;
+}
+static esp_err_t i2s_del_channel(i2s_chan_handle_t) {
+    audioEvents.push_back("delete"); --liveChannels; return ESP_OK;
+}
+static esp_err_t i2s_channel_read(i2s_chan_handle_t, void* frames, size_t count, size_t* read, int) {
+    if (channelReadFails) return ESP_ERR_TIMEOUT;
+    memset(frames, 0, count); *read = count; return ESP_OK;
+}
 static esp_err_t i2s_channel_write(i2s_chan_handle_t, const void* frames, size_t count,
                                  size_t* written, int) {
     if (channelWriteFails) return 1;
     const auto* bytes = static_cast<const uint8_t*>(frames);
-    assert(count == 128);
-    for (size_t i = 0; i < count; ++i) assert(bytes[i] == 0);
+    if (!testingPcm) {
+        assert(count == 128);
+        for (size_t i = 0; i < count; ++i) assert(bytes[i] == 0);
+    }
     silentFrameWritten = true;
-    *written = count; return ESP_OK;
+    audioEvents.push_back("write");
+    *written = channelWriteShort ? count - 1 : count; return ESP_OK;
 }
 using lv_display_t = int;
 static std::vector<int> delays;
 static unsigned long clockMs = 0;
 static unsigned long totalDelayMs = 0;
 static unsigned long millis() { return clockMs; }
-static void delay(int value) { delays.push_back(value); totalDelayMs += value; }
+static void delay(int value) {
+    delays.push_back(value); totalDelayMs += value;
+    if (txEnabled) audioEvents.push_back("clockedDelay");
+}
 static void vTaskDelay(int value) { delay(value); }
-static void pinMode(int pin, int mode) { assert((pin == 13 || pin == 38) && mode == INPUT_PULLUP); }
+static void pinMode(int pin, int mode) {
+    assert(((pin == 13 || pin == 38) && mode == INPUT_PULLUP) ||
+           ((pin == 18 || pin == 27) && mode == OUTPUT));
+}
+static void digitalWrite(int pin, int value) {
+    if (pin == 18) { assert(value == LOW); audioEvents.push_back("sckLow"); }
+    else { assert(pin == 27); audioEvents.push_back(value == LOW ? "mute" : "unmute"); }
+}
 static int irq = 1;
 static int digitalRead(int pin) { assert(pin == 13); return irq; }
 static int digitalPinToInterrupt(int pin) { return pin; }
@@ -173,7 +228,7 @@ struct MockWire {
     bool failCodecVolume = false;
     bool failAmpEnable = false;
     unsigned long expanderStartupMs = 0, railsEnabledAt = 0;
-    bool begin(int sda, int scl, int hz) {
+    bool begin(int sda, int scl, int hz = 100000) {
         assert(lockDepth == 1 && sda == 47 && scl == 48 && hz == 100000);
         ++begins; return true;
     }
@@ -300,28 +355,28 @@ BODY = "\n".join(production(path) for path in [
     "src/app/touch_sample.h",
     "src/app/touch_driver.h",
     "src/app/display_driver.h",
-    "src/app/m5stack_stopwatch.h",
+    "src/boards/m5stack-stopwatch/stopwatch_hardware.h",
+    "src/app/audio_output_driver.h",
     "src/app/i2c_bus.cpp",
-    "src/app/m5stack_stopwatch.cpp",
     "src/app/drivers/wire_cst820b_touch_driver.h",
-    "src/app/drivers/wire_cst820b_touch_driver.cpp",
     "src/app/drivers/arduino_gfx_co5300_driver.h",
+    "src/boards/m5stack-stopwatch/stopwatch_hardware.cpp",
+    "src/app/drivers/wire_cst820b_touch_driver.cpp",
     "src/app/drivers/arduino_gfx_co5300_driver.cpp",
     "src/app/sensors/battery_adc_sensor.cpp",
-    "src/app/sensors/stopwatch_battery_sensor.cpp",
+    "src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp",
 ])
 
 audio = production("src/app/drivers/es8311_audio_driver.cpp")
-BODY += production("src/app/audio_output_driver.h")
-BODY += "\nvoid AudioOutputDriver::setMuted(bool) {}\n"
+BODY += "\nAudioBoardControl audio_board_control_create() { return stopwatch_audio_control(); }\n"
 BODY += production("src/app/drivers/es8311_audio_driver.h").replace("private:", "public:")
 BODY += audio[audio.index("#define TAG"):audio.index("#if HAS_ES7210_MIC")]
 BODY += audio[audio.index("struct ES8311Coeff"):
               audio.index("#if HAS_ES7210_MIC", audio.index("static bool es8311_write"))]
 BODY += audio[audio.index("bool ES8311AudioDriver::initCodec"):
               audio.index("// The microphone shares")]
-BODY += audio[audio.index("void ES8311AudioDriver::cleanup"):]
-BODY += r'''
+BODY += audio[audio.index("bool ES8311AudioDriver::cleanup"):]
+LIFECYCLE_DOUBLES = r'''
 static AudioOutputDriver* output_driver = nullptr;
 static uint8_t current_volume = 0;
 static bool audio_initialized = false;
@@ -352,10 +407,109 @@ static bool rtos_create_task_internal_stack_pinned(
 }
 static void device_telemetry_log_memory_snapshot(const char*) {}
 '''
+BODY += LIFECYCLE_DOUBLES
 audio_lifecycle = production("src/app/audio.cpp")
-BODY += audio_lifecycle[audio_lifecycle.index("#if HAS_M5STACK_STOPWATCH",
+LIFECYCLE_CODE = audio_lifecycle[audio_lifecycle.index("static void audio_init_abort",
                                              audio_lifecycle.index("// Public API")):
                         audio_lifecycle.index("void audio_set_volume")]
+BODY += LIFECYCLE_CODE
+
+GENERIC_TESTS = r'''
+static void clear_failures() {
+    queueFailureAt = -1; queueCreates = 0;
+    semaphoreFails = taskFails = channelFails = channelWriteFails = false;
+    channelInitFails = channelEnableFails = channelReadFails = channelWriteShort = false;
+    Wire.failCodecVolume = false;
+}
+int main() {
+    assert(board_hardware_init() && Wire.begins == 0);
+    const AudioBoardControl control = audio_board_control_create();
+    assert(control.mute && !control.power);
+    i2c_bus_init();
+    assert(i2c_bus_lock()); Wire.begin(47,48,100000); i2c_bus_unlock();
+#if AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_PCM510XA
+    testingPcm = true;
+#endif
+    for (int failure = -1; failure < 10; ++failure) {
+        clear_failures(); audioEvents.clear(); silentFrameWritten = false;
+        audio_initialized = false;
+        if (failure == 0) queueFailureAt = 0;
+        if (failure == 1) queueFailureAt = 1;
+        if (failure == 2) semaphoreFails = true;
+        if (failure == 3) taskFails = true;
+        if (failure == 4) channelFails = true;
+        if (failure == 5) channelInitFails = true;
+        if (failure == 6) channelEnableFails = true;
+#if AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_ES8311
+        if (failure == 7) Wire.failCodecVolume = true;
+        if (failure == 8) channelWriteFails = true;
+        if (failure == 9) channelWriteShort = true;
+#else
+        if (failure >= 7) continue;
+#endif
+        audio_init(30);
+        if (failure >= 0) {
+            assert(!audio_initialized && liveChannels == 0 && liveQueues == 0);
+            assert(audio_queue == nullptr && music_work_queue == nullptr);
+            assert(std::find(audioEvents.begin(), audioEvents.end(), "mute") != audioEvents.end());
+            clear_failures();
+            audio_init(30);
+        }
+        assert(audio_initialized && output_driver->isAvailable());
+        assert(liveChannels == (HAS_AUDIO_INPUT ? 2 : 1) && liveQueues == 2);
+        const auto enabled = std::find(audioEvents.begin(), audioEvents.end(), "enableTX");
+        const auto unmuted = std::find(audioEvents.begin(), audioEvents.end(), "unmute");
+        assert(enabled != audioEvents.end() && unmuted > enabled);
+        const int creates = queueCreates;
+        audio_init(30); assert(queueCreates == creates);
+#if HAS_AUDIO_INPUT
+        AudioInputDriver* input = audio_input_driver_create();
+        assert(input && input->inputAvailable());
+        assert(input->inputFormat().sample_rate == 48000 && input->inputFormat().channels == 2);
+        assert(input->captureStart());
+        const size_t events = audioEvents.size();
+        assert(input->captureStart() && audioEvents.size() == events);
+        int16_t frames[64] = {};
+        assert(input->readFrames(frames, 32, 5) == 32);
+        channelReadFails = true;
+        assert(input->readFrames(frames, 32, 5) == 0);
+        channelReadFails = false;
+        input->captureStop();
+        assert(input->captureStart());
+#endif
+        audioEvents.clear(); audio_init_abort(); audio_initialized = false;
+        assert(liveChannels == 0 && liveQueues == 0 && !output_driver->isAvailable());
+        const auto muted = std::find(audioEvents.begin(), audioEvents.end(), "mute");
+        const auto disabled = std::find(audioEvents.begin(), audioEvents.end(), "disableTX");
+        assert(muted < disabled);
+#if AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_PCM510XA
+        const auto settled = std::find(audioEvents.begin(), audioEvents.end(), "clockedDelay");
+        assert(muted < settled && settled < disabled);
+#endif
+        assert(output_driver->end());
+    }
+#if AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_PCM510XA
+    PCM510xADriver missingMute(AudioBoardControl{});
+    assert(!missingMute.begin(48000) && liveChannels == 0);
+    AudioBoardControl powered = control;
+    powered.power = [](bool enabled) {
+        audioEvents.push_back(enabled ? "powerOn" : "powerOff"); return true;
+    };
+    PCM510xADriver driver(powered);
+    assert(driver.begin(48000));
+    assert(std::find(audioEvents.begin(), audioEvents.end(), "sckLow") != audioEvents.end());
+    assert(driver.setVolume(100) && driver.setMuted(false));
+    int16_t frames[64] = {};
+    assert(driver.write(frames, 32));
+    channelWriteShort = true; assert(!driver.write(frames, 32)); channelWriteShort = false;
+    audioEvents.clear(); assert(driver.end());
+    const auto disabled = std::find(audioEvents.begin(), audioEvents.end(), "disableTX");
+    const auto poweredOff = std::find(audioEvents.begin(), audioEvents.end(), "powerOff");
+    assert(disabled < poweredOff);
+#endif
+    assert(lockDepth == 0);
+}
+'''
 
 TESTS = r'''
 static void reset() {
@@ -460,7 +614,7 @@ int main() {
     assert(!m5stack_stopwatch_audio_power(false)); // Failed mute still cuts rail.
     assert(!(Wire.regs[0x4f][5] & 4));
     reset(); assert(m5stack_stopwatch_init());
-    ES8311AudioDriver codec;
+    ES8311AudioDriver codec(stopwatch_audio_control());
     codec_io_failed = false;
     const int codecStart = Wire.transactions;
     assert(codec.initCodec(48000));
@@ -473,8 +627,7 @@ int main() {
     }
     assert(!codec.initCodec(44100)); // Reject unsupported clock coefficients.
     reset(); assert(m5stack_stopwatch_init());
-    assert(m5stack_stopwatch_audio_power(true));
-    codec_io_failed = false;
+    assert(codec.begin(48000));
     codec.setMuted(false); assert(Wire.regs[0x4f][6] & 2);
     Wire.failureAt = Wire.transactions;
     codec.setVolume(50); // Codec I/O failure must mute amplifier.
@@ -482,6 +635,7 @@ int main() {
     Wire.failureAt = Wire.transactions;
     codec.setMuted(false); // Amplifier I/O failure cuts audio rail.
     assert(!(Wire.regs[0x4f][5] & 4));
+    codec.end();
     // Exercise the actual audio_init function and actual ES8311 begin,
     // volume, mute, cleanup methods against queue/task/I2S doubles.
     for (int failure = -1; failure < 8; ++failure) {
@@ -512,7 +666,7 @@ int main() {
             audio_init(30);
             assert(Wire.transactions == afterInit && liveChannels == 1);
             vQueueDelete(audio_queue); audio_queue = nullptr;
-            audio_stopwatch_init_abort();
+            audio_init_abort();
         } else {
             assert(!audio_initialized && liveChannels == 0 && liveQueues == 0);
             assert(!(Wire.regs[0x4f][5] & 4) && !(Wire.regs[0x4f][6] & 2));
@@ -563,10 +717,9 @@ int main() {
     reset(); assert(m5stack_stopwatch_init());
     lockFails = true;
     const int beforeLock = Wire.transactions;
-    uint8_t touch[5]; uint16_t millivolts = 0; bool charging = false;
+    uint16_t millivolts = 0; bool charging = false;
     assert(!m5stack_stopwatch_ready());
     assert(!m5stack_stopwatch_audio_power(true));
-    assert(!m5stack_stopwatch_touch_read(touch, 5));
     assert(!m5stack_stopwatch_battery_read(millivolts, charging));
     assert(Wire.transactions == beforeLock && lockDepth == 0);
     lockFails = false;
@@ -581,7 +734,7 @@ int main() {
     Wire.shortRead = false;
 
     SensorRegistry registry;
-    register_stopwatch_battery_sensor(registry);
+    board_register_sensors(registry);
     assert(registry.callbacks.append_api && registry.callbacks.append_mqtt);
     JsonObject doc;
     battery(4200, 5000, 0);
@@ -591,7 +744,7 @@ int main() {
     registry.callbacks.append_mqtt(doc);
     assert(doc["battery_voltage"].null && doc["battery_percentage"].null && doc["battery_charging"].null);
 
-    Wire_CST820B_TouchDriver driver;
+    Wire_CST820B_TouchDriver driver(board_cst820b_config());
     driver.init();
     const int beforeTouch = Wire.transactions;
     assert(driver.readSample().status == TouchReadStatus::Unchanged && Wire.transactions == beforeTouch);
@@ -638,7 +791,7 @@ int main() {
 
     // An error during a released IRQ pulse must not leave the filter stuck
     // after IRQ deasserts. Only a successfully read release clears it.
-    Wire_CST820B_TouchDriver idleRecovery;
+    Wire_CST820B_TouchDriver idleRecovery(board_cst820b_config());
     idleRecovery.init();
     TouchSampleFilter filter;
     irq = 1; cst820b_interrupt(); Wire.shortRead = true;
@@ -660,7 +813,7 @@ int main() {
     contact(1,0,100,100); cst820b_interrupt(); clockMs = 1201;
     assert(filter.update(idleRecovery.readSample(), clockMs).pressed);
 
-    Arduino_GFX_CO5300_Driver display;
+    Arduino_GFX_CO5300_Driver display(board_co5300_config());
     display.init();
     assert((display.isAvailable() && offsets == std::array<int,4>({6,0,6,0})));
     const std::vector<std::pair<int,int>> expectedCommands{
@@ -733,10 +886,10 @@ int main() {
     display.displayWakeDisplayOn();
     assert((commands == std::vector<std::pair<int,int>>({{0x28,-1},{0x10,-1},{0x11,-1},{0x29,-1}})));
     allocationFails = true;
-    Arduino_GFX_CO5300_Driver failedDisplay;
+    Arduino_GFX_CO5300_Driver failedDisplay(board_co5300_config());
     failedDisplay.init(); assert(!failedDisplay.isAvailable());
     allocationFails = false; gfxBegins = false;
-    Arduino_GFX_CO5300_Driver failedBus;
+    Arduino_GFX_CO5300_Driver failedBus(board_co5300_config());
     failedBus.init(); assert(!failedBus.isAvailable());
     assert(lockDepth == 0);
 }
@@ -748,9 +901,34 @@ try:
     source = directory / "check.cpp"
     executable = directory / "check"
     source.write_text(PRELUDE + BODY.replace("#pragma once", "") + TESTS)
-    subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-Wno-unused-parameter",
+    subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-Wno-unused-parameter", "-Wno-unused-function",
                     str(source), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
+    print("PASS: StopWatch board composition and hardware regressions", flush=True)
+    for profile in ("es8311-gpio", "es8311-microphone", "pcm510xa-gpio"):
+        prelude = PRELUDE
+        if profile == "es8311-microphone":
+            prelude = prelude.replace("#define HAS_AUDIO_INPUT false", "#define HAS_AUDIO_INPUT true")
+            prelude = prelude.replace("#define HAS_ES7210_MIC false", "#define HAS_ES7210_MIC true")
+        pcm = profile == "pcm510xa-gpio"
+        if pcm:
+            prelude = prelude.replace("#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311",
+                                      "#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_PCM510XA")
+        paths = ["src/app/audio_output_driver.h", "src/app/audio_input_driver.h",
+                 "src/app/i2c_bus.cpp", "src/app/board_hardware.cpp",
+                 "src/app/audio_output_drivers.cpp"]
+        if pcm:
+            paths += ["src/app/drivers/audio_gain.h", "src/app/drivers/pcm510xa_audio_driver.h",
+                      "src/app/drivers/pcm510xa_audio_driver.cpp"]
+        else:
+            paths += ["src/app/drivers/es8311_audio_driver.h", "src/app/drivers/es8311_audio_driver.cpp"]
+        body = "\n".join(production(path) for path in paths)
+        source.write_text(prelude + body.replace("#pragma once", "") + LIFECYCLE_DOUBLES +
+                          LIFECYCLE_CODE + GENERIC_TESTS)
+        subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror", "-Wno-unused-parameter", "-Wno-unused-function",
+                        str(source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+        print(f"PASS: {profile} lifecycle, retry, and cleanup", flush=True)
 finally:
     shutil.rmtree(directory)
 print("PASS: StopWatch power sequence, failure paths, locking, PMIC sensors, CST820B, CO5300 geometry/lifecycle")

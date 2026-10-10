@@ -1,7 +1,12 @@
-#include "../m5stack_stopwatch.h"
-#include "battery_adc_sensor.h"
-#include "sensor_manager.h"
-#include "../ble_telemetry.h"
+#include "stopwatch_hardware.h"
+#include "sensors/battery_adc_sensor.h"
+#include "sensors/sensor_manager.h"
+#include "ble_telemetry.h"
+
+#if HAS_SENSOR_BATTERY_ADC
+#error "Select one battery provider: StopWatch PMIC or battery ADC"
+#endif
+#include "sensors/battery_adc_sensor.cpp"
 
 #if HAS_MQTT
 #include "ha_discovery.h"
@@ -39,7 +44,7 @@ void stopwatch_battery_publish_ha(MqttManager& mqtt) {
 #endif
 }
 
-void register_stopwatch_battery_sensor(SensorRegistry& registry) {
+void board_register_sensors(SensorRegistry& registry) {
     SensorCallbacks callbacks = {};
     callbacks.name = "StopWatch PMIC";
     callbacks.append_api = stopwatch_battery_append;

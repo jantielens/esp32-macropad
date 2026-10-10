@@ -3,8 +3,22 @@
 #include "../display_driver.h"
 #include <Arduino_GFX_Library.h>
 
+struct CO5300PanelConfig {
+    uint16_t nativeWidth = DISPLAY_WIDTH;
+    uint16_t nativeHeight = DISPLAY_HEIGHT;
+    uint16_t offsetX = 0, offsetY = 0;
+    uint16_t cropX = 0, cropY = 0;
+    int resetPin = -1;
+    int tearingPin = -1;
+    bool (*prepare)() = nullptr;
+    void (*initialize)(Arduino_DataBus*) = nullptr;
+};
+
+CO5300PanelConfig board_co5300_config();
+
 class Arduino_GFX_CO5300_Driver final : public DisplayDriver {
 public:
+    explicit Arduino_GFX_CO5300_Driver(const CO5300PanelConfig& value) : config(value) {}
     ~Arduino_GFX_CO5300_Driver() override;
     void init() override;
     bool isAvailable() const override { return available; }
@@ -26,6 +40,7 @@ public:
     void displayWakeDisplayOn() override;
 
 private:
+    CO5300PanelConfig config;
     Arduino_DataBus* bus = nullptr;
     Arduino_CO5300* gfx = nullptr;
     uint16_t* scratch = nullptr;

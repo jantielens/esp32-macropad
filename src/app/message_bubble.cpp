@@ -117,9 +117,7 @@ static void create_bubble(const MessageBubbleParams* p) {
     lv_obj_set_style_min_width(s_container, content.w * 40 / 100, 0);
     lv_obj_set_style_max_width(s_container, content.w * 85 / 100, 0);
     lv_obj_set_height(s_container, LV_SIZE_CONTENT);
-    #if HAS_M5STACK_STOPWATCH
     lv_obj_set_style_max_height(s_container, content.h * 70 / 100, 0);
-    #endif
 
     // Padding
     lv_obj_set_style_pad_left(s_container, pad_h, 0);

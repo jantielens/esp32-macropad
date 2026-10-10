@@ -80,10 +80,8 @@ void SplashScreen::create() {
 		const DisplayContentRect content = display_safe_content_rect(
 			lv_obj_get_width(screen), lv_obj_get_height(screen));
 		lv_obj_set_width(statusLabel, (lv_coord_t)(content.w - 24));
-		#if HAS_M5STACK_STOPWATCH
 		lv_obj_set_style_max_height(statusLabel, content.h / 3, 0);
 		lv_label_set_long_mode(statusLabel, LV_LABEL_LONG_DOT);
-		#endif
 		lv_obj_set_style_text_align(statusLabel, LV_TEXT_ALIGN_CENTER, 0);
 		#if HAS_LVGL_EPAPER
 		lv_obj_set_style_text_color(statusLabel, lv_color_black(), 0);

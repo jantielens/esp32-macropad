@@ -108,8 +108,15 @@ multimeter reading.
 
 ### StopWatch PMIC Battery
 
-The StopWatch adapter registers through `HAS_M5STACK_STOPWATCH` and reads its
-M5PM1 through the board hardware facade on the already-initialized, locked
+The StopWatch board selects
+[src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp](../../src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp)
+through `BOARD_SENSOR_SOURCE`. The sketch-root sensor aggregator includes it
+and calls `board_register_sensors()`. This opt-in provider uses the existing
+sensor registry; generic sensor code does not test board identity. The provider
+rejects simultaneous `HAS_SENSOR_BATTERY_ADC` selection to avoid duplicate
+battery fields, while reusing its single-cell voltage curve helper.
+
+It reads M5PM1 through the board hardware facade on the already-initialized, locked
 internal I2C bus. It does not enable an ESP32 battery ADC or reinitialize Wire.
 Battery millivolts come from registers 0x22/0x23; input voltage and the
 active-low charger-status GPIO determine charging state.

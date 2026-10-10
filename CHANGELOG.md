@@ -18,10 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Initial `m5stack-stopwatch` Macropad board integration: CO5300 round AMOLED,
   CST820B touch, expander-controlled power/reset, two programmable buttons,
-  internal storage, Wi-Fi/portal, OTA, and PMIC battery telemetry. ES8311
-  speaker support is opt-in; audio and memory validation, geometry/touch
-  calibration, recovery, and USB/battery acceptance checks remain to be
-  performed on hardware. Deferred peripherals are not advertised.
+  internal storage, Wi-Fi/portal, OTA, and PMIC battery telemetry. Retain the
+  full 466 x 466 logical canvas. ES8311 speaker support is enabled for hardware
+  validation but remains unadvertised in installer capabilities. Initial touch,
+  partial-update rendering, MP3 playback, and volume checks have passed on
+  hardware; all rotations, cold USB/battery boot, sleep/wake, and worst-case
+  memory/load acceptance remain pending. Deferred peripherals are not advertised.
 * Recipe font provisioning through direct HTTPS links to static TTF files.
   Install missing fonts before saving the pad and reuse installed font names.
   Recipes requiring fonts are unavailable on devices without TTF support.
@@ -47,6 +49,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Move StopWatch shared hardware and its battery provider into board-local
+  modules selected through opt-in compile-time composition. Configure CO5300
+  display and CST820B touch drivers through concrete hardware settings rather
+  than board-identity branches; existing boards need no new configuration files.
+* Require explicit audio availability, mute, volume, and teardown results.
+  Share startup allocation and failure cleanup across audio boards while keeping
+  codec programming, silence priming, and clock-settling sequences inside the
+  selected ES8311 or PCM510xA driver. Inject board-owned power/mute controls
+  without coupling either driver to StopWatch wiring.
+* Bound splash, info, and notification text through generic presentation rules
+  instead of StopWatch-specific UI branches, without shrinking the pad canvas.
 * Use downloadable DSEG7 Classic segment text in the Alarm Clock sample recipe.
   Show available pad names alongside pad numbers in the recipe Target Pad list.
 
