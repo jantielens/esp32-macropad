@@ -63,6 +63,13 @@ bool update(uint8_t address, uint8_t reg, uint8_t mask, uint8_t value) {
         write(address, reg, (old & ~mask) | (value & mask));
 }
 
+bool set_charging_mode(StopWatchChargingMode mode) {
+    if (!update(kPmic, 0x06, 0x01, 0)) return false;
+    if (mode == StopWatchChargingMode::Off) return true;
+    return update(kPmic, 0x11, 0x08, mode == StopWatchChargingMode::Low ? 0x08 : 0) &&
+        update(kPmic, 0x06, 0x01, 0x01);
+}
+
 void diagnose_expander() {
     for (uint8_t address : {uint8_t(0x4f), uint8_t(0x6f)}) {
         for (unsigned attempt = 0; attempt < 3; ++attempt) {
@@ -105,7 +112,7 @@ bool initialize() {
     if (!probe(kPmic) ||
         !write(kPmic, 0x09, 0) ||
         !write(kPmic, 0x0a, 0) ||
-        !update(kPmic, 0x06, 0x1f, 0x17)) return false;
+        !update(kPmic, 0x06, 0x1f, 0x16)) return false;
     expander = 0;
     constexpr unsigned expanderTimeoutMs = 2000;
     constexpr unsigned expanderProbeIntervalMs = 10;
@@ -147,11 +154,12 @@ bool initialize() {
 
     if (!update(kPmic, 0x07, 0x20, 0x20) ||
         !update(kPmic, 0x49, 0x07, 0x07) ||
-        !update(kPmic, 0x11, 0x08, 0) ||
+        !update(kPmic, 0x11, 0x08, STOPWATCH_CHARGING_MODE == 1 ? 0x08 : 0) ||
         !update(kPmic, 0x13, 0x08, 0) ||
         !update(kPmic, 0x16, 0xf0, 0) ||
         !update(kPmic, 0x14, 0xf0, 0) ||
-        !update(kPmic, 0x10, 0x0c, 0x08)) return false;
+        !update(kPmic, 0x10, 0x0c, 0x08) ||
+        !set_charging_mode(static_cast<StopWatchChargingMode>(STOPWATCH_CHARGING_MODE))) return false;
 
     // IO1 USB mux HIGH, IO3 audio OFF, IO4/IO5 resets, IO8 OLED power.
     if (!update(expander, 0x13, 0x9d, 0) ||
@@ -191,6 +199,15 @@ bool board_hardware_init() { return m5stack_stopwatch_init(); }
 bool m5stack_stopwatch_ready() {
     if (!i2c_bus_lock()) return false;
     const bool result = ready;
+    i2c_bus_unlock();
+    return result;
+}
+
+bool m5stack_stopwatch_set_charging_mode(StopWatchChargingMode mode) {
+    if (mode != StopWatchChargingMode::Off && mode != StopWatchChargingMode::Low &&
+        mode != StopWatchChargingMode::High) return false;
+    if (!i2c_bus_lock()) return false;
+    const bool result = ready && set_charging_mode(mode);
     i2c_bus_unlock();
     return result;
 }

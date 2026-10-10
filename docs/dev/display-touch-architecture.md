@@ -144,16 +144,39 @@ initialization. A board implementation must be idempotent, report failure,
 and retain safe owned outputs on failure where hardware communication permits.
 Shared-register updates and I2C transactions use the existing bus mutex;
 drivers must not reinitialize a bus already owned by board hardware. The
-StopWatch implementation preserves unrelated PMIC and expander bits and does
-configure the owned charging and power-button fields to match the factory HAL:
-charging enabled, CHG_PROG (PMIC GPIO3) driven low as a push-pull output without
-pulls for the board's 425 mA setting, CHG_STAT (GPIO2) configured as an input
+StopWatch implementation preserves unrelated PMIC and expander bits and
+configures the owned charging and power-button fields. Charging defaults to
+low (nominal 185 mA), with CHG_PROG (PMIC GPIO3) driven high as a push-pull output
+without pulls. CHG_STAT (GPIO2) is configured as an input
 without pulls, and the RTC/IMU LDO retained after power-off. PMIC idle sleep and
 watchdog remain disabled. The power button uses a 1-second single-click delay
 with single-click reset disabled; long-press, double-click, and download-lock
 fields are preserved. The charge-programming latch is set before enabling its
 output. Battery percentage remains the existing voltage-based estimate, not
 the factory demo's filtering or percentage calculation.
+
+`STOPWATCH_CHARGING_MODE` in `src/boards/m5stack-stopwatch/board_overrides.h`
+selects the boot policy: `0` off, `1` low (default, nominal 185 mA, CHG_PROG high), or
+`2` high (nominal 425 mA, CHG_PROG low). Change this board-local setting
+and rebuild StopWatch to select another default. Invalid values fail compilation.
+Startup disables retained charging before configuring CHG_PROG; an off boot
+never deliberately enables charging. The board-local `charging_mode` action
+uses flat JSON such as `{"type":"charging_mode","mode":"low"}`; its mode is
+`off`, `low`, or `high`. Runtime changes are not persisted: reboot applies the
+boot setting again, before any configured boot actions.
+
+Boot and runtime share the PMIC setter, which holds the I2C mutex, disables
+charging, changes CHG_PROG for low/high, then enables charging only on success.
+Off changes only CHG_EN, not the power rails. I2C failure returns failure without
+attempting a later enable; if the initial disable itself fails, the previous
+charging state may remain. Physical validation of all three modes and continued
+USB operation with charging off remains required.
+
+`BOARD_ACTION_SOURCE` selects the board-local action module through `actions.cpp`.
+Its payload uses the existing opaque action storage. Other boards do not compile
+this module, its metadata, or the StopWatch hardware implementation. The generic
+catalog-driven editor supplies the select control; there are no charging-specific
+portal assets or generic configuration settings.
 
 The StopWatch QSPI clock is now 80 MHz for hardware evaluation against the
 factory configuration. The previously confirmed display, touch, audio, and

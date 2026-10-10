@@ -12,6 +12,12 @@
 #define BOARD_AUDIO_CONTROL_FACTORY stopwatch_audio_control
 // Board-local sensor provider compiled and registered by the sensor aggregator.
 #define BOARD_SENSOR_SOURCE "stopwatch_battery_sensor.cpp"
+// Board-local action module compiled through the action aggregator.
+#define BOARD_ACTION_SOURCE "stopwatch_charging_action.cpp"
+#ifndef STOPWATCH_CHARGING_MODE
+// StopWatch boot charging: 0 off, 1 low (185 mA), 2 high (425 mA).
+#define STOPWATCH_CHARGING_MODE 1
+#endif
 #define HAS_DISPLAY true
 #define HAS_TOUCH true
 #define HAS_BACKLIGHT true

@@ -70,6 +70,7 @@ using std::min;
 #define LCD_QSPI_D2 46
 #define LCD_QSPI_D3 45
 #define TFT_SPI_FREQ_HZ 80000000
+#define STOPWATCH_CHARGING_MODE 2
 #define INPUT_PULLUP 2
 #define OUTPUT 1
 #define HIGH 1
@@ -627,8 +628,8 @@ int main() {
     int chargeLatchLow = -1, chargeOutputEnabled = -1;
     for (size_t i = 0; i < Wire.operations.size(); ++i) {
         const auto [address, reg, value] = Wire.operations[i];
-        if (address == 0x6e && reg == 6 && value == 0xf7) railsEnabled = i;
-        if (address == 0x6e && reg == 0x11 && value == 0xf7) chargeLatchLow = i;
+        if (address == 0x6e && reg == 6 && value == 0xf6 && railsEnabled < 0) railsEnabled = i;
+        if (address == 0x6e && reg == 0x11 && value == 0xf7 && chargeLatchLow < 0) chargeLatchLow = i;
         if (address == 0x6e && reg == 0x10 && value == 0xfb) chargeOutputEnabled = i;
         if ((address == 0x4f || address == 0x6f) && firstExpanderAccess < 0)
             firstExpanderAccess = i;
@@ -638,6 +639,31 @@ int main() {
     const auto successfulWrites = Wire.writes;
     const int count = Wire.transactions;
     assert(m5stack_stopwatch_init() && Wire.begins == 1 && Wire.transactions == count);
+    for (auto mode : {StopWatchChargingMode::Off, StopWatchChargingMode::Low, StopWatchChargingMode::High}) {
+        Wire.writes.clear();
+        assert(m5stack_stopwatch_set_charging_mode(mode));
+        assert(lockDepth == 0 && (Wire.regs[0x6e][6] & 0xfe) == 0xf6);
+        assert(bool(Wire.regs[0x6e][6] & 1) == (mode != StopWatchChargingMode::Off));
+        assert(Wire.writes.front() == std::make_tuple(0x6e, 6, 0xf6));
+        if (mode != StopWatchChargingMode::Off) {
+            assert(Wire.writes.size() == 3);
+            assert(Wire.writes[1] == std::make_tuple(0x6e, 0x11, mode == StopWatchChargingMode::Low ? 0xff : 0xf7));
+            assert(Wire.writes.back() == std::make_tuple(0x6e, 6, 0xf7));
+        } else assert(Wire.writes.size() == 1);
+    }
+    const int beforeInvalidMode = Wire.transactions;
+    assert(!m5stack_stopwatch_set_charging_mode(static_cast<StopWatchChargingMode>(3)));
+    assert(Wire.transactions == beforeInvalidMode);
+    for (int failure = 0; failure < 6; ++failure) {
+        Wire.failureAt = Wire.transactions + failure;
+        Wire.writes.clear();
+        assert(!m5stack_stopwatch_set_charging_mode(StopWatchChargingMode::Low));
+        assert(lockDepth == 0);
+        if (failure >= 2) assert(!(Wire.regs[0x6e][6] & 1));
+        for (auto [address, reg, value] : Wire.writes)
+            assert(address != 0x6e || reg != 6 || !(value & 1));
+    }
+    Wire.failureAt = -1;
     // Confirm the power/reset waveform rather than only its final state.
     std::vector<int> resetLatch;
     for (auto [address, reg, value] : successfulWrites)
@@ -768,6 +794,7 @@ int main() {
     uint16_t millivolts = 0; bool charging = false;
     assert(!m5stack_stopwatch_ready());
     assert(!m5stack_stopwatch_audio_power(true));
+    assert(!m5stack_stopwatch_set_charging_mode(StopWatchChargingMode::High));
     assert(!m5stack_stopwatch_battery_read(millivolts, charging));
     assert(Wire.transactions == beforeLock && lockDepth == 0);
     lockFails = false;
@@ -965,6 +992,131 @@ try:
                     str(source), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
     print("PASS: StopWatch board composition and hardware regressions", flush=True)
+    for boot_mode in (0, 1, 2):
+        boot_test = TESTS[:TESTS.index("int main() {")] + r'''
+int main() {
+    reset();
+    Wire.regs[0x6e][6] |= 1;
+    assert(!m5stack_stopwatch_set_charging_mode(StopWatchChargingMode::High));
+    assert(Wire.transactions == 0);
+    assert(m5stack_stopwatch_init());
+    assert((Wire.regs[0x6e][6] & 0xfe) == 0xf6);
+    assert(bool(Wire.regs[0x6e][6] & 1) == (STOPWATCH_CHARGING_MODE != 0));
+    assert(bool(Wire.regs[0x6e][0x11] & 8) == (STOPWATCH_CHARGING_MODE == 1));
+    if (STOPWATCH_CHARGING_MODE == 0)
+        for (auto [address, reg, value] : Wire.writes)
+            assert(address != 0x6e || reg != 6 || !(value & 1));
+}
+'''
+        source.write_text(PRELUDE.replace("#define STOPWATCH_CHARGING_MODE 2",
+                                         f"#define STOPWATCH_CHARGING_MODE {boot_mode}") +
+                          BODY.replace("#pragma once", "") + boot_test)
+        subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                        "-Wno-unused-parameter", "-Wno-unused-function", str(source),
+                        "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+    for invalid_mode in (-1, 3, 1.5):
+        header = production("src/boards/m5stack-stopwatch/stopwatch_hardware.h").replace("#pragma once", "")
+        source.write_text(f"#include <cstdint>\n#define STOPWATCH_CHARGING_MODE {invalid_mode}\n" + header)
+        result = subprocess.run(["c++", "-std=c++17", "-fsyntax-only", str(source)],
+                                capture_output=True, text=True)
+        assert result.returncode != 0 and "STOPWATCH_CHARGING_MODE must be" in result.stderr
+    action_prelude = r'''
+#include <ArduinoJson.h>
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#define HAS_DISPLAY 1
+#define HAS_BUTTON 1
+#define HAS_MQTT 0
+#define CONFIG_ACTION_TYPE_MAX_LEN 16
+#define STOPWATCH_CHARGING_MODE 2
+struct ButtonAction { char type[16]; union { uint8_t device_class[96]; } payload; };
+#ifdef BOARD_ACTION_SOURCE
+static bool setterOk = true;
+static int setterCalls = 0;
+static StopWatchChargingMode requestedMode;
+bool m5stack_stopwatch_set_charging_mode(StopWatchChargingMode mode) {
+    ++setterCalls;
+    requestedMode = mode;
+    return setterOk && static_cast<uint8_t>(mode) <= 2;
+}
+#endif
+'''
+    action_tests = r'''
+int main() {
+#ifdef BOARD_ACTION_SOURCE
+    assert(action_type_count() == 1 && action_type_is_supported("charging_mode"));
+    const auto* type = action_type_find("charging_mode");
+    assert(type->execution == ACTION_EXECUTION_SYNC && !type->display_lock_required);
+    JsonDocument catalog;
+    auto metadata = catalog.to<JsonObject>();
+    type->describe(metadata);
+    assert(strcmp(metadata["label"], "Set charging mode") == 0);
+    assert(metadata["commands"].size() == 3);
+    assert(metadata["editor_fields"][0]["command_options"].as<bool>());
+    for (const char* mode : {"off", "low", "high"}) {
+        JsonDocument input, output;
+        auto action = input.to<JsonObject>();
+        action["mode"] = mode;
+        assert(!action_type_validate(type, action));
+        ButtonAction act{};
+        type->parse(action, act);
+        type->serialize(act, output.to<JsonObject>());
+        assert(strcmp(output["mode"], mode) == 0);
+        assert(type->dispatch(act, "test", 0) == ACTION_COMPLETE);
+        assert(static_cast<uint8_t>(requestedMode) == act.payload.device_class[0]);
+        setterOk = false;
+        assert(type->dispatch(act, "test", 0) == ACTION_FAILED);
+        setterOk = true;
+    }
+    for (const char* invalid : {"", "HIGH", "highx", "unknown", "[mqtt:x]"}) {
+        JsonDocument input;
+        auto action = input.to<JsonObject>();
+        action["mode"] = invalid;
+        assert(action_type_validate(type, action));
+        ButtonAction act{};
+        type->parse(action, act);
+        assert(type->dispatch(act, "test", 0) == ACTION_FAILED);
+    }
+    JsonDocument input;
+    assert(action_type_validate(type, input.to<JsonObject>()));
+    input["mode"] = 1;
+    assert(action_type_validate(type, input.as<JsonObjectConst>()));
+#else
+    assert(action_type_count() == 0);
+#endif
+}
+'''
+    module = directory / "board-action.inc"
+    module.write_text(production("src/boards/m5stack-stopwatch/stopwatch_charging_action.cpp"))
+    aggregator = (ROOT / "src/app/actions.cpp").read_text().replace(
+        '#include "actions/action_modules.inc"', "")
+    registry = production("src/app/action_registry.h") + production("src/app/action_registry.cpp")
+    for overrides in (ROOT / "src/boards").glob("*/board_overrides.h"):
+        if overrides.parent.name != "m5stack-stopwatch":
+            assert "stopwatch_charging_action" not in overrides.read_text()
+            assert "STOPWATCH_CHARGING_MODE" not in overrides.read_text()
+    for board_action in (False, True):
+        define = f'#define BOARD_ACTION_SOURCE "{module}"\n' if board_action else ""
+        header = production("src/boards/m5stack-stopwatch/stopwatch_hardware.h").replace("#pragma once", "")
+        enum = re.search(r"enum class StopWatchChargingMode[^;]+;", header).group(0)
+        source.write_text(define + "#include <cstdint>\n" + enum + action_prelude +
+                          production("src/app/action_result.h") + registry.replace("#pragma once", "") +
+                  aggregator + action_tests)
+        subprocess.run(["c++", "-std=c++17", "-Wno-deprecated-declarations",
+                        "-I", str(pathlib.Path.home() / "Arduino/libraries/ArduinoJson/src"),
+                        str(source), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
+        if not board_action:
+            symbols = subprocess.check_output(["nm", "-C", str(executable)], text=True)
+            strings = subprocess.check_output(["strings", str(executable)], text=True)
+            assert "charging_mode" not in symbols
+            assert "m5stack_stopwatch" not in symbols
+            assert "charging_mode" not in strings
+            assert "Set charging mode" not in strings
+            assert "charging_mode mode must" not in strings
+    print("PASS: all boot charging modes, board action round trips, validation, dispatch, and generic exclusion", flush=True)
     brightness_code = re.search(
         r"static void apply_brightness\(uint8_t brightness\) \{.*?\n\}",
         (ROOT / "src/app/screen_saver_manager.cpp").read_text(), re.S

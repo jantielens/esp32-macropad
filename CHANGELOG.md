@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* StopWatch-only boot charging policy (`STOPWATCH_CHARGING_MODE`: 0 off,
+  1 low/default, 2 high) and **Set charging mode** action for off, nominal
+  185 mA, or nominal 425 mA charging. Runtime changes reset on reboot. Charging
+  is disabled before current changes; failed I2C operations do not trigger a
+  later enable. Other firmware variants contain no charging action module or
+  metadata, and no charging-specific portal assets are added.
 * Local `[sensor:key;format|fallback]` bindings with board-aware field metadata,
   numeric formatting, and expression support, without an MQTT broker.
 * Initial `m5stack-stopwatch` Macropad board integration: CO5300 round AMOLED,

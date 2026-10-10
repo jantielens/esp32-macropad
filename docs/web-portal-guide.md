@@ -899,6 +899,12 @@ Pad labels retain the `Pad X: Name` format whether selected or not. The button
 **Actions** and **Appearance** tabs expose their controls without an additional
 same-named accordion; individual action slots remain expandable.
 
+On StopWatch, the action picker includes **StopWatch > Set charging mode**:
+**Off**, **Low (185 mA)**, or **High (425 mA)**. These are nominal charging
+currents, not measured battery current. The change lasts until reboot, which
+restores the compiled boot setting (low by default). Other boards do not offer
+this action.
+
 Numeric fields consistently omit spinner buttons. Mouse-wheel scrolling over
 them scrolls the inspector without changing their values or focus; typing and
 keyboard arrow keys remain available.

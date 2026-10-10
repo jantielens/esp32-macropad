@@ -508,6 +508,10 @@ Active records are never evicted. When all four records are active or retained,
   keys to author. For example, `cycle_pad` documents `direction`
   (`next` or `previous`), `wrap` (boolean, default `true`), and
   `excluded_pads` (comma-separated 1-based pad numbers).
+  A StopWatch build with MCP enabled also advertises `charging_mode`, with
+  `mode` set to `off`, `low`, or `high`. It changes charging for the current
+  session only; reboot restores the compiled boot setting. The standard
+  StopWatch firmware disables MCP, and other boards do not include this action.
   It also carries a `device_config` section advertising `set_config`'s writable
   fields and the read/write component list. Its `storage` object advertises the storage
   tool names, 128-entry listing limit, and 65,536-byte Base64 file-read limit.

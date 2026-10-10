@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 310
+Total flags: 312
 
 ### Features (HAS_*)
 
@@ -210,6 +210,7 @@ Total flags: 310
 - **BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS** default: `100` — BLE telemetry advertising interval (ms between adv packets within a burst).
 - **BLE_TELEMETRY_DEFAULT_BURST_COUNT** default: `3` — BLE telemetry advertising burst count (packets per wake in duty_cycle_ble mode).
 - **BME280_I2C_ADDR** default: `0x76` — BME280 I2C address (0x76 or 0x77).
+- **BOARD_ACTION_SOURCE** default: `(no default)` — Board-local action module compiled through the action aggregator.
 - **BOARD_AUDIO_CONTROL_FACTORY** default: `(no default)` — Board-owned codec rail and amplifier controls for the selected audio driver.
 - **BOARD_DRIVER_TABLE_NOTES** default: `(no default)` — Generated driver-table validation note.
 - **BOARD_HARDWARE_HEADER** default: `(no default)` — Board-local declarations used only by compilation and factory wiring.
@@ -329,6 +330,7 @@ Total flags: 310
 - **ST7703_VSYNC_BACK_PORCH** default: `20` — VSYNC back porch in lines.
 - **ST7703_VSYNC_FRONT_PORCH** default: `20` — VSYNC front porch in lines.
 - **ST7703_VSYNC_PULSE_WIDTH** default: `4` — VSYNC pulse width in lines.
+- **STOPWATCH_CHARGING_MODE** default: `(no default)` — StopWatch boot charging: 0 off, 1 low (185 mA), 2 high (425 mA).
 - **TELEMETRY_CACHE_INTERNAL_POOL_WALK** default: `(!TELEMETRY_ALLOW_PSRAM_POOL_WALK)` — DSI boards sample the internal largest-free-block metric off the LVGL task.
 - **TFT_BACKLIGHT_DUTY_MAX** default: `255` — Duty cycle at full saturation (before constant DC).
 - **TFT_BACKLIGHT_DUTY_MIN** default: `0` — Duty cycle where backlight first turns on.
@@ -554,6 +556,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
   - src/app/web_portal_device_api.cpp
+  - src/boards/m5stack-stopwatch/stopwatch_charging_action.cpp
 - **HAS_CAMERA**
   - src/app/actions/camera_capture_action.cpp
   - src/app/app.ino
@@ -765,6 +768,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
   - src/app/widgets/widget_registry.h
+  - src/boards/m5stack-stopwatch/stopwatch_charging_action.cpp
 - **HAS_EPAPER_FRAME_WAKE_BUTTON**
   - src/app/board_config.h
   - src/app/device_classes/epaper_frame/epaper_frame_config.h
@@ -1255,6 +1259,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **BME280_I2C_ADDR**
   - src/app/board_config.h
+- **BOARD_ACTION_SOURCE**
+  - src/app/actions.cpp
 - **BOARD_AUDIO_CONTROL_FACTORY**
   - src/app/audio_output_drivers.cpp
 - **BOARD_HARDWARE_HEADER**
@@ -1764,6 +1770,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **ST7703_VSYNC_PULSE_WIDTH**
   - src/app/board_config.h
   - src/boards/esp32-p4-lcd4b/board_overrides.h
+- **STOPWATCH_CHARGING_MODE**
+  - src/boards/m5stack-stopwatch/board_overrides.h
 - **TELEMETRY_CACHE_INTERNAL_POOL_WALK**
   - src/app/board_config.h
   - src/app/device_telemetry.cpp
