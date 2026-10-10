@@ -6,6 +6,7 @@
 #include "display_manager.h"
 #include "log_manager.h"
 #include "pad_layout.h"
+#include "config_psram.h"
 
 #include <lvgl.h>
 #include <stdio.h>
@@ -16,7 +17,7 @@ static const uint32_t CONFIRM_TIMEOUT_MS = 10000;
 
 static lv_obj_t* s_overlay = nullptr;
 static lv_timer_t* s_timeout_timer = nullptr;
-static ButtonAction s_actions[MAX_BUTTON_ACTIONS];
+static ButtonAction* s_actions = nullptr;
 static uint8_t s_action_count = 0;
 static char s_event_label[24];
 
@@ -87,6 +88,11 @@ bool button_confirmation_show(const ButtonAction* actions, uint8_t count,
     if (!actions || count == 0 || count > MAX_BUTTON_ACTIONS) return false;
     if (!displayManager || !lv_layer_top()) return false;
 
+    if (!s_actions) {
+        s_actions = static_cast<ButtonAction*>(config_psram_alloc(
+            sizeof(ButtonAction) * MAX_BUTTON_ACTIONS, "button_confirmation"));
+        if (!s_actions) return false;
+    }
     destroy_prompt();
     memcpy(s_actions, actions, count * sizeof(ButtonAction));
     s_action_count = count;

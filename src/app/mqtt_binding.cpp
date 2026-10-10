@@ -5,8 +5,11 @@
 #include "binding_template.h"
 #include "mqtt_sub_store.h"
 #include "pad_config.h"
+#include "config_psram.h"
 
 #include <string.h>
+
+static char* s_payload = nullptr;
 
 // Splits "topic;path;format" on the first two ';'; the format may contain ';'.
 static void parse_mqtt_params(const char* params,
@@ -53,16 +56,16 @@ static BindingResolverStatus mqtt_binding_resolve(const char* params, char* out,
         return BINDING_RESOLVER_UNAVAILABLE;
     }
 
-    static char payload[MQTT_SUB_STORE_MAX_VALUE_LEN];
+    if (!s_payload) return BINDING_RESOLVER_UNAVAILABLE;
     bool truncated = false;
-    if (!mqtt_sub_store_get(topic, payload, sizeof(payload), nullptr, &truncated)) {
+    if (!mqtt_sub_store_get(topic, s_payload, MQTT_SUB_STORE_MAX_VALUE_LEN, nullptr, &truncated)) {
         return BINDING_RESOLVER_UNAVAILABLE;
     }
 
     const char* jp = (path[0]) ? path : ".";
     char extracted[128];
-    if (!mqtt_sub_store_extract_json(payload, jp, extracted, sizeof(extracted))) {
-        strlcpy(extracted, truncated ? "ERR:too big" : payload, sizeof(extracted));
+    if (!mqtt_sub_store_extract_json(s_payload, jp, extracted, sizeof(extracted))) {
+        strlcpy(extracted, truncated ? "ERR:too big" : s_payload, sizeof(extracted));
     }
 
     if (fmt[0]) {
@@ -108,6 +111,9 @@ static const BindingSchemeDoc kMqttDoc = {
 };
 
 void mqtt_binding_init() {
+    if (!s_payload) {
+        s_payload = static_cast<char*>(config_psram_alloc(MQTT_SUB_STORE_MAX_VALUE_LEN, "mqtt_binding"));
+    }
     binding_template_register("mqtt", mqtt_binding_resolve, mqtt_binding_collect,
                               {1, 3, 2, 2, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
                                &kMqttDoc});

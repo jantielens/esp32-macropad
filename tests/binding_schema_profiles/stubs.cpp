@@ -43,6 +43,7 @@ AlarmSnapshot alarm_snapshot() { return binding_test_alarm; }
 #endif
 
 void log_write(LogLevel, const char*, const char*, ...) {}
+bool log_diagnostics_enabled(const char*) { return false; }
 
 HostEsp ESP;
 HostWiFi WiFi;

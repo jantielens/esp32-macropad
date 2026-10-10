@@ -1627,6 +1627,36 @@ Each board compiles with its own display driver and settings.
 - **Per screen:** ~200-500 bytes (depends on widget count)
 - **Total:** ~50-60 KB for display subsystem
 
+Alarm configuration and session actions, timer instances, MQTT binding scratch,
+device-level button defaults, the pad-list cache, and saved confirmation actions
+use `config_psram_alloc()`. Each block is allocated once when its subsystem
+initializes, except confirmation actions, which allocate on first use. Button
+defaults also allocate on an early getter call. Reinitialization and cache
+rebuilds reuse the blocks. The allocator prefers PSRAM and falls back to internal
+RAM on boards without PSRAM or when PSRAM allocation fails.
+
+If both allocations fail, timers and alarms stay unavailable, MQTT bindings
+resolve as unavailable, the pad list stays empty, and confirmation returns false
+without dispatching actions. The defaults getter remains non-null by returning
+immutable built-in styling from flash; saving defaults fails before writing.
+Failed allocations can be retried by initialization or the next relevant call.
+Task stacks, synchronization state, and DMA buffers remain in their existing
+memory regions.
+
+The `m5stack-stopwatch` static-state migration measures as follows in the ELF:
+
+| Internal section | Before (bytes) | After (bytes) |
+| --- | ---: | ---: |
+| `.dram0.data` | 33,824 | 28,848 |
+| `.dram0.bss` | 57,080 | 45,960 |
+| Total | 90,904 | 74,808 |
+
+This frees 16,096 bytes of static internal RAM. Confirm the live heap gain with
+`/api/health` after flashing and a power-on boot using the same configuration,
+uptime, and workload; the ELF delta alone does not establish runtime free heap
+or fragmentation. `python3 tests/test_static_state.py` checks allocator fallback,
+cache failure/retry, and reuse paths with C++11 production-source harnesses.
+
 ### Rendering Performance
 
 Display performance snapshots use a shared sampling window protected by the

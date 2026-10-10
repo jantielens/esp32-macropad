@@ -6,6 +6,7 @@
 #include "fs_health.h"
 #include "pad_config.h"
 #include "psram_json_allocator.h"
+#include "config_psram.h"
 
 #include <ArduinoJson.h>
 #include "storage.h"
@@ -15,24 +16,28 @@
 
 static const char* BTN_DEFAULTS_PATH = "/config/button_defaults.json";
 
-// RAM cache (always valid — all-empty if file missing)
-static ButtonDefaults g_defaults;
-static bool g_loaded = false;
+static ButtonDefaults* g_defaults = nullptr;
+static const ButtonDefaults g_empty_defaults = {
+    "", "", "", "", "", "", "", "", "", "", ICON_POS_ABOVE,
+    {false, BUTTON_SHADOW_TYPE_OPAQUE, BUTTON_SHADOW_COLOR_FIXED, "#101010", 35, 0, 5, 4},
+    {6, 0, 0, 0, 0, 4}
+};
+
+static bool ensure_defaults() {
+    if (!g_defaults) {
+        g_defaults = static_cast<ButtonDefaults*>(config_psram_alloc(sizeof(ButtonDefaults), "button_defaults"));
+        if (!g_defaults) return false;
+        *g_defaults = g_empty_defaults;
+    }
+    return true;
+}
 
 static void init_shadow_defaults(ButtonShadowSettings* shadow) {
-    memset(shadow, 0, sizeof(*shadow));
-    shadow->type = BUTTON_SHADOW_TYPE_OPAQUE;
-    shadow->color_mode = BUTTON_SHADOW_COLOR_FIXED;
-    strlcpy(shadow->color, "#101010", sizeof(shadow->color));
-    shadow->darken_pct = 35;
-    shadow->offset_y_px = 5;
-    shadow->drop_blur_px = 4;
+    *shadow = g_empty_defaults.shadow;
 }
 
 static void init_layout_defaults(PadLayoutSettings* layout) {
-    memset(layout, 0, sizeof(*layout));
-    layout->spacing_px = 6;
-    layout->pixel_shift_distance_px = 4;
+    *layout = g_empty_defaults.layout;
 }
 
 // Forward declaration of parse helper from pad_config.cpp — we duplicate the
@@ -135,8 +140,8 @@ static bool load_from_flash(ButtonDefaults* d) {
 }
 
 void button_defaults_init() {
-    bool loaded = load_from_flash(&g_defaults);
-    g_loaded = true;
+    if (!ensure_defaults()) return;
+    bool loaded = load_from_flash(g_defaults);
 
     // If defaults were loaded, rebuild pad caches so they pick up the
     // saved defaults (pad_config_init runs first with empty defaults).
@@ -146,13 +151,7 @@ void button_defaults_init() {
 }
 
 const ButtonDefaults* button_defaults_get() {
-    if (!g_loaded) {
-        memset(&g_defaults, 0, sizeof(ButtonDefaults));
-        init_shadow_defaults(&g_defaults.shadow);
-        init_layout_defaults(&g_defaults.layout);
-        g_loaded = true;
-    }
-    return &g_defaults;
+    return ensure_defaults() ? g_defaults : &g_empty_defaults;
 }
 
 uint8_t button_defaults_get_pixel_shift_distance() {
@@ -161,6 +160,7 @@ uint8_t button_defaults_get_pixel_shift_distance() {
 
 bool button_defaults_save_raw(const uint8_t* json, size_t len) {
     if (!json || len == 0) return false;
+    if (!ensure_defaults()) return false;
 
     File f = Storage.open(BTN_DEFAULTS_PATH, "w");
     if (!f) {
@@ -177,7 +177,7 @@ bool button_defaults_save_raw(const uint8_t* json, size_t len) {
     }
 
     // Update RAM cache
-    load_from_flash(&g_defaults);
+    load_from_flash(g_defaults);
     storage_publish_usage(false);
 
     // Rebuild all pad caches so they pick up the new defaults

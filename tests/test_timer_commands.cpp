@@ -14,6 +14,14 @@
 static unsigned long g_now = 0;
 extern "C" unsigned long millis() { return g_now; }
 
+static bool g_fail_calloc = false;
+static unsigned g_calloc_calls = 0;
+extern "C" void* __real_calloc(size_t count, size_t size);
+extern "C" void* __wrap_calloc(size_t count, size_t size) {
+    ++g_calloc_calls;
+    return g_fail_calloc ? nullptr : __real_calloc(count, size);
+}
+
 static int g_dispatched = 0;
 static bool g_restart_on_first = false;
 static bool g_snapshot_ok = false;
@@ -420,7 +428,31 @@ static void test_pre_initialization_controls() {
     assert(!timer_reset(1));
 }
 
+static void test_state_allocation_failure() {
+    g_fail_calloc = true;
+    timer_engine_init();
+    test_pre_initialization_controls();
+    assert(!timer_configure_and_start(1, TIMER_MODE_UP, 0, nullptr, 0));
+    assert(timer_get_state(1) == TIMER_STOPPED);
+    assert(timer_get_ms(1) == 0);
+    timer_engine_tick();
+    g_fail_calloc = false;
+    timer_engine_init();
+    assert(timer_configure_and_start(1, TIMER_MODE_UP, 0, nullptr, 0));
+    const unsigned allocated = g_calloc_calls;
+    g_fail_calloc = true;
+    timer_engine_init();
+    assert(g_calloc_calls == allocated);
+    assert(timer_get_state(1) == TIMER_STOPPED);
+    assert(timer_configure_and_start(1, TIMER_MODE_UP, 0, nullptr, 0));
+}
+
 int main(int argc, char** argv) {
+    if (argc > 1 && strcmp(argv[1], "allocation-failure") == 0) {
+        test_state_allocation_failure();
+        std::puts("timer_commands allocation-failure: PASS");
+        return 0;
+    }
     if (argc > 1 && strcmp(argv[1], "pre-init-controls") == 0) {
         test_pre_initialization_controls();
         std::puts("timer_commands pre-init-controls: PASS");

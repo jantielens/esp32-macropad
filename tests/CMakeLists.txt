@@ -442,20 +442,21 @@ add_host_legacy_test(test_component_registry SOURCES test_component_registry.cpp
 add_host_command_test(test_portal_asset_cache bash ${PROJECT_SOURCE_DIR}/tests/test_portal_asset_cache.sh)
 
 add_host_legacy_test(test_timer_binding_target
-    SOURCES test_timer_binding_target.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_engine.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
+    SOURCES test_timer_binding_target.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_engine.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
     OPTIONS -ffunction-sections -fdata-sections
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES m pthread -Wl,--gc-sections
 )
 add_host_legacy_test(test_timer_commands
-    SOURCES test_timer_commands.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_command.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_mcp_adapter.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_engine.cpp stubs.cpp
+    SOURCES test_timer_commands.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_command.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_mcp_adapter.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_engine.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp stubs.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides ${HOST_ARDUINOJSON_DIR}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
-    LIBRARIES m pthread
+    LIBRARIES m pthread -Wl,--wrap=calloc
 )
 add_test(NAME test_timer_commands_pre_init_controls COMMAND test_timer_commands pre-init-controls)
 add_test(NAME test_timer_commands_mutex_failure COMMAND test_timer_commands mutex-failure)
+add_test(NAME test_timer_commands_allocation_failure COMMAND test_timer_commands allocation-failure)
 add_host_legacy_test(test_timer_config
     SOURCES test_timer_config.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_config.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
         ${PROJECT_SOURCE_DIR}/src/app/actions.cpp ${PROJECT_SOURCE_DIR}/src/app/music_command.cpp
@@ -476,10 +477,12 @@ add_host_legacy_test(test_alarm_manager
         ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp
         ${PROJECT_SOURCE_DIR}/src/app/pad_cycle.cpp ${PROJECT_SOURCE_DIR}/src/app/action_registry.cpp stubs.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS ALARM_ENABLED=1 HOST_LOG_CAPTURE=1
+    DEFINITIONS ALARM_ENABLED=1 HOST_LOG_CAPTURE=1 HAS_FILESYSTEM=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/Arduino.h
-    LIBRARIES m pthread)
+    LIBRARIES m pthread -Wl,--wrap=calloc)
+add_test(NAME test_alarm_manager_allocation_failure COMMAND test_alarm_manager allocation-failure)
+add_host_command_test(test_static_state python3 ${PROJECT_SOURCE_DIR}/tests/test_static_state.py)
 add_host_legacy_test(test_timer_format SOURCES test_timer_format.cpp stubs.cpp INCLUDES ${HOST_ARDUINOJSON_DIR} PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_sound_player_loop
     SOURCES test_sound_player_loop.cpp
@@ -544,7 +547,8 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/expr_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_binding.cpp
             ${PROJECT_SOURCE_DIR}/src/app/camera_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
             ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
-            ${PROJECT_SOURCE_DIR}/src/app/mqtt_binding.cpp $<TARGET_OBJECTS:binding_schema_json> ${ARGN}
+            ${PROJECT_SOURCE_DIR}/src/app/mqtt_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
+            $<TARGET_OBJECTS:binding_schema_json> ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src
         DEFINITIONS ${definition}
         OPTIONS -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function

@@ -5,6 +5,7 @@
 
 #include "action_list.h"
 #include "pad_config.h"
+#include "config_psram.h"
 
 #include <Arduino.h>
 #include <freertos/semphr.h>
@@ -28,7 +29,7 @@ struct TimerInstance {
     bool       expiry_snapshot_pending;
 };
 
-static TimerInstance s_timers[TIMER_COUNT];
+static TimerInstance* s_timers = nullptr;
 static SemaphoreHandle_t s_timer_mutex = nullptr;
 static bool s_timer_ready = false;
 
@@ -94,7 +95,16 @@ void timer_engine_init() {
         return;
     }
     timer_lock();
-    memset(s_timers, 0, sizeof(s_timers));
+    if (!s_timers) {
+        s_timers = static_cast<TimerInstance*>(config_psram_alloc(
+            sizeof(TimerInstance) * TIMER_COUNT, "timer_state"));
+    }
+    if (!s_timers) {
+        s_timer_ready = false;
+        timer_unlock();
+        return;
+    }
+    memset(s_timers, 0, sizeof(TimerInstance) * TIMER_COUNT);
     s_timer_ready = true;
     timer_unlock();
 }

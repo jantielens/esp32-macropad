@@ -67,6 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Move alarm configuration/session actions, timer state, MQTT binding scratch,
+  button defaults, the pad-list cache, and confirmation actions to persistent
+  PSRAM-preferring allocations with internal-RAM fallback. StopWatch static
+  internal RAM falls from 90,904 to 74,808 bytes, freeing 16,096 bytes.
+  Allocation failures leave the affected feature unavailable or use immutable
+  default styling; task stacks, DMA buffers, and the action ABI are unchanged.
 * Sensor adapters declare a sampling callback, field catalog, and optional
   interval (two seconds by default). API, MQTT, and bindings share cached
   readings and retain last-good values after failures. Event sensors refresh
