@@ -227,10 +227,18 @@ struct MockWire {
     bool primary = true, fallback = false, pmic = true, shortRead = false, shortWrite = false;
     bool failCodecVolume = false;
     bool failAmpEnable = false;
+    bool expanderProbeFails = false;
+    int expanderReadHz = 0, frequency = 100000;
+    std::vector<int> clockChanges;
+    std::vector<std::pair<int, int>> identityReads;
     unsigned long expanderStartupMs = 0, railsEnabledAt = 0;
     bool begin(int sda, int scl, int hz = 100000) {
         assert(lockDepth == 1 && sda == 47 && scl == 48 && hz == 100000);
         ++begins; return true;
+    }
+    bool setClock(uint32_t hz) {
+        assert(lockDepth == 1 && (hz == 100000 || hz == 400000));
+        frequency = hz; clockChanges.push_back(hz); return true;
     }
     void beginTransmission(uint8_t addr) {
         assert(lockDepth == 1); address = addr; tx.clear();
@@ -248,6 +256,8 @@ struct MockWire {
         if ((address == 0x4f || address == 0x6f) && (regs[0x6e][6] & 6) != 6) return 4;
         if ((address == 0x4f || address == 0x6f) &&
             totalDelayMs - railsEnabledAt < expanderStartupMs) return 2;
+        if ((address == 0x4f || address == 0x6f) && expanderProbeFails && tx.empty()) return 2;
+        if ((address == 0x4f || address == 0x6f) && expanderReadHz && frequency != expanderReadHz) return 2;
         if (failCodecVolume && address == 0x18 && tx.size() == 2 && tx[0] == 0x32) return 4;
         if (lifecycleTesting && address == 0x4f && tx.size() == 2 && tx[0] == 6 && (tx[1] & 2))
             assert(silentFrameWritten);
@@ -262,6 +272,8 @@ struct MockWire {
     }
     size_t requestFrom(uint8_t addr, uint8_t length) {
         assert(lockDepth == 1 && addr == address && tx.size() == 1);
+        if ((addr == 0x4f || addr == 0x6f) && tx[0] == 0 && length == 2)
+            identityReads.emplace_back(addr, frequency);
         rx.clear(); cursor = 0;
         for (int i = 0; i < (shortRead ? length - 1 : length); ++i)
             rx.push_back(regs[addr][tx[0] + i]);
@@ -709,15 +721,23 @@ int main() {
         const int failedCount = Wire.transactions;
         assert(m5stack_stopwatch_init() && Wire.transactions > failedCount && Wire.begins == 1);
     }
-    for (unsigned long startup : {50UL, 190UL, 200UL}) {
+    for (unsigned long startup : {50UL, 190UL, 200UL, 210UL, 500UL, 1990UL, 2000UL}) {
         reset(); Wire.expanderStartupMs = startup;
         assert(m5stack_stopwatch_init() && ready && expander == 0x4f);
         assert(totalDelayMs == startup + 70 && lockDepth == 0);
     }
-    reset(); Wire.expanderStartupMs = 201;
+    reset(); Wire.expanderStartupMs = 4000;
     assert(!m5stack_stopwatch_init() && !ready && !expander && lockDepth == 0);
-    assert(totalDelayMs == 200);
+    assert(totalDelayMs == 3660 && Wire.frequency == 100000);
     assert(!(Wire.regs[0x6e][6] & 8));
+    for (int frequency : {100000, 400000}) {
+        reset(); Wire.expanderProbeFails = true; Wire.expanderReadHz = frequency;
+        assert(!m5stack_stopwatch_init() && !ready && !expander && lockDepth == 0);
+        assert(Wire.frequency == 100000);
+        assert(Wire.clockChanges == std::vector<int>({100000,100000,400000,100000,100000,400000,100000}));
+        assert(std::find(Wire.identityReads.begin(), Wire.identityReads.end(),
+                         std::make_pair(0x4f, frequency)) != Wire.identityReads.end());
+    }
     reset(); Wire.primary = false; Wire.fallback = true;
     Wire.expanderStartupMs = 50;
     assert(m5stack_stopwatch_init() && expander == 0x6f);

@@ -63,6 +63,35 @@ bool update(uint8_t address, uint8_t reg, uint8_t mask, uint8_t value) {
         write(address, reg, (old & ~mask) | (value & mask));
 }
 
+void diagnose_expander() {
+    for (uint8_t address : {uint8_t(0x4f), uint8_t(0x6f)}) {
+        for (unsigned attempt = 0; attempt < 3; ++attempt) {
+            const uint32_t frequency = attempt == 2 ? 400000 : 100000;
+            if (!Wire.setClock(frequency)) {
+                LOGE("StopWatch", "Diagnostic clock change failed: hz=%lu",
+                     static_cast<unsigned long>(frequency));
+                break;
+            }
+            if (attempt == 1) delay(800);
+            const bool addressAck = probe(address, false);
+            Wire.beginTransmission(address);
+            Wire.write(0x00);
+            Wire.endTransmission();
+            delay(10);
+            uint8_t identity[2] = {};
+            const bool identityRead = read(address, 0x00, identity, sizeof(identity));
+            if (!identityRead) memset(identity, 0xff, sizeof(identity));
+            LOGW("StopWatch", "Expander diagnostic: address=0x%02x attempt=%u hz=%lu ack=%u uid_read=%u uid=%02x%02x",
+                 address, attempt + 1, static_cast<unsigned long>(frequency),
+                 addressAck, identityRead, identity[0], identity[1]);
+            (void)addressAck;
+        }
+    }
+    if (!Wire.setClock(100000)) {
+        LOGE("StopWatch", "Failed to restore shared I2C clock to 100000 Hz");
+    }
+}
+
 bool initialize() {
     if (!wireStarted) {
         if (!Wire.begin(47, 48, 100000)) {
@@ -78,23 +107,27 @@ bool initialize() {
         !write(kPmic, 0x0a, 0) ||
         !update(kPmic, 0x06, 0x1f, 0x17)) return false;
     expander = 0;
-    for (uint8_t attempt = 0; attempt < 20; ++attempt) {
-        delay(10);
+    constexpr unsigned expanderTimeoutMs = 2000;
+    constexpr unsigned expanderProbeIntervalMs = 10;
+    for (unsigned waitedMs = expanderProbeIntervalMs; waitedMs <= expanderTimeoutMs;
+         waitedMs += expanderProbeIntervalMs) {
+        delay(expanderProbeIntervalMs);
         if (probe(0x4f, false)) expander = 0x4f;
         else if (probe(0x6f, false)) expander = 0x6f;
         if (expander) {
             LOGI("StopWatch", "Expander ready: address=0x%02x wait=%ums",
-                 expander, unsigned(attempt + 1) * 10);
+                  expander, waitedMs);
             break;
         }
     }
     if (!expander) {
+        diagnose_expander();
         uint8_t identity[4] = {}, source = 0, power = 0;
            if (!read(kPmic, 0x00, identity, sizeof(identity))) memset(identity, 0xff, sizeof(identity));
            if (!read(kPmic, 0x04, &source, 1)) source = 0xff;
            if (!read(kPmic, 0x06, &power, 1)) power = 0xff;
-           LOGE("StopWatch", "Expander unavailable after 200ms; PMIC id=%02x model=%02x hw=%02x sw=%02x source=%02x power=%02x (ff=read failed)",
-               identity[0], identity[1], identity[2], identity[3], source, power);
+           LOGE("StopWatch", "Expander unavailable after %ums; PMIC id=%02x model=%02x hw=%02x sw=%02x source=%02x power=%02x (ff=read failed)",
+               expanderTimeoutMs, identity[0], identity[1], identity[2], identity[3], source, power);
         probe(0x4f);
         probe(0x6f);
         return false;

@@ -62,9 +62,17 @@ transport, selected with `DISPLAY_DRIVER_ARDUINO_GFX_CO5300`. It does not need
 M5Unified/M5GFX as runtime dependencies. The shared Wire bus on SDA47/SCL48
 must be initialized and locked before M5PM1/M5IOE1 power/reset operations,
 which precede display initialization. After enabling the PMIC rails, firmware
-polls the expander every 10 ms for up to 200 ms to allow cold-start MCU boot;
-it logs the detected address and wait time, or leaves peripherals unavailable
-on timeout. Expander IO8 powers the display; IO5
+polls the expander every 10 ms for up to 2 seconds. On timeout, a failure-only
+diagnostic compares address acknowledgments and two-byte UID register reads
+at both `0x4f` and `0x6f`. Each address receives a wake transaction, a 10 ms
+wait, a 100 kHz attempt, another 100 kHz attempt after 800 ms, then a 400 kHz
+attempt. The shared bus returns to 100 kHz before PMIC diagnostics. These
+checks add about 1.66 seconds plus transaction time and leave peripherals
+unavailable even if a diagnostic read succeeds. Repeated cold boots confirmed
+display, touch, and audible audio operation with the extended timeout; one
+observed boot discovered the expander after 250 ms, beyond the previous
+200 ms limit. The failure-only diagnostic was not exercised on those boots.
+Expander IO8 powers the display; IO5
 resets it and IO4 resets touch. They are not ordinary GPIOs.
 
 The logical canvas is the documented 466 × 466 round area. The factory
