@@ -8,9 +8,10 @@ const root = path.resolve(__dirname, '..');
 execFileSync('bash', ['tools/minify-web-assets.sh', 'esp32-macropad', 'ESP32 Macropad'],
     {cwd: root, stdio: 'pipe'});
 
-for (const [board, target] of [['esp32c3-withsensors', 'ESP32C3'], ['esp32-p4-lcd4b', 'ESP32P4']]) {
+for (const [board, target, psram] of [['esp32c3-withsensors', 'ESP32C3', false], ['esp32-p4-lcd4b', 'ESP32P4', true], ['esp32-p4-lcd4b', 'ESP32P4', false]]) {
     const source = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
-        '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE', '-DCONFIG_IDF_TARGET_' + target],
+        '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE', '-DCONFIG_IDF_TARGET_' + target,
+        ...(psram ? ['-DBOARD_HAS_PSRAM'] : [])],
         {cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
     const assets = new Map();
     const pattern = /const uint8_t (\w+_gz)\[\] PROGMEM = \{([\s\S]*?)\};/g;
@@ -27,6 +28,19 @@ for (const [board, target] of [['esp32c3-withsensors', 'ESP32C3'], ['esp32-p4-lc
     assert(js.includes('function uploadFirmware('), 'HTML upload callback was removed');
     assert(js.includes('function saveFragmentConfig('), 'Fragment save callback was removed');
     const display = board === 'esp32-p4-lcd4b';
+    assert.equal(assets.has('fonts_fragment_html_gz'), display && psram);
+    assert.equal(assets.has('portal_fonts_js_gz'), display && psram);
+    if (display && psram) {
+        const fonts = assets.get('fonts_fragment_html_gz');
+        const idPattern = fonts.match(/pattern="([^"]+)"/)[1];
+        const validId = new RegExp('^(?:' + idPattern + ')$', 'v');
+        assert(validId.test('my-font_1'));
+        assert(!validId.test('Bad.ttf'));
+        assert(!validId.test('../font'));
+        assert(fonts.includes('portal-icon-fallback'));
+        assert(assets.get('portal_fonts_js_gz').includes('portal-icon-fallback'));
+        assert(!fonts.includes('data-icon='));
+    }
     assert.equal(js.includes('function showBindingHelp('), display);
     assert.equal(js.includes('function bindingValidateHomeConfig('), display);
     assert.equal(js.includes('init_extensions_fragment'), display);

@@ -466,7 +466,7 @@ void DisplayManager::init() {
 		static constexpr uint32_t kLvglStackBytes = 16384;
 		lvglTaskStopped = false;
 		#if CONFIG_FREERTOS_UNICORE
-		#if LVGL_TASK_USE_PSRAM_STACK
+		#if LVGL_TASK_USE_PSRAM_STACK && !(HAS_TTF_FONTS && !USE_SD_STORAGE)
 		const bool lvglTaskCreated = rtos_create_task_psram_stack(
 				lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY,
 				&lvglTaskHandle, &lvglTaskAlloc);
@@ -484,7 +484,7 @@ void DisplayManager::init() {
 				LOGT("Display", "Rendering task created (single-core, %s stack)", lvglStackLocation);
 		}
 		#else
-		#if LVGL_TASK_USE_PSRAM_STACK
+		#if LVGL_TASK_USE_PSRAM_STACK && !(HAS_TTF_FONTS && !USE_SD_STORAGE)
 		const bool lvglTaskCreated = rtos_create_task_psram_stack_pinned(
 				lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY,
 				&lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE);

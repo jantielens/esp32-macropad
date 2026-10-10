@@ -114,9 +114,51 @@ file(GLOB_RECURSE HOST_LVGL_SOURCES CONFIGURE_DEPENDS
 add_library(host_lvgl STATIC EXCLUDE_FROM_ALL ${HOST_LVGL_SOURCES})
 target_include_directories(host_lvgl PUBLIC ${HOST_LVGL_DIR})
 target_compile_definitions(host_lvgl PUBLIC LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
+    LV_MEM_SIZE=1048576
+    LV_USE_TINY_TTF=1 LV_TINY_TTF_FILE_SUPPORT=0
+    LV_TINY_TTF_CACHE_GLYPH_CNT=16 LV_TINY_TTF_CACHE_KERNING_CNT=16
     LV_FONT_MONTSERRAT_12=1 LV_FONT_MONTSERRAT_18=1 LV_FONT_MONTSERRAT_24=1
-    LV_FONT_MONTSERRAT_32=1 LV_FONT_MONTSERRAT_36=1 LV_FONT_MONTSERRAT_48=1)
+    LV_FONT_MONTSERRAT_32=1 LV_FONT_MONTSERRAT_36=1)
+add_host_legacy_test(test_runtime_ttf_oom
+    SOURCES test_runtime_ttf_oom.cpp
+    LIBRARIES host_lvgl m
+)
+target_link_options(test_runtime_ttf_oom PRIVATE
+    "-Wl,--wrap=lv_malloc_core" "-Wl,--wrap=lv_realloc_core")
+set_tests_properties(test_runtime_ttf_oom PROPERTIES TIMEOUT 15)
+add_host_legacy_test(test_font_store
+    SOURCES test_font_store.cpp ${PROJECT_SOURCE_DIR}/src/app/font_store.cpp
+    DEFINITIONS HAS_TTF_FONTS=0
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+add_host_legacy_test(test_pad_font_cache
+    SOURCES test_pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
+    DEFINITIONS HAS_TTF_FONTS=1 HOST_LOG_CAPTURE
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/font_runtime_overrides.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES host_lvgl m
+)
+set_tests_properties(test_pad_font_cache PROPERTIES TIMEOUT 15)
+foreach(font_backend IN ITEMS internal sd)
+    if(font_backend STREQUAL "sd")
+        set(font_sd 1)
+    else()
+        set(font_sd 0)
+    endif()
+    add_host_legacy_test(test_font_store_${font_backend}
+        SOURCES test_font_store.cpp ${PROJECT_SOURCE_DIR}/src/app/font_store.cpp
+        DEFINITIONS HAS_TTF_FONTS=1 HAS_FILESYSTEM=1 USE_SD_STORAGE=${font_sd} TEST_HEAP_CAPS_ALLOCATOR HOST_LOG_CAPTURE
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    )
+    set_tests_properties(test_font_store_${font_backend} PROPERTIES TIMEOUT 15)
+endforeach()
 add_host_gtest(test_gamepad_widgets test_gamepad_widgets.cpp)
+add_host_legacy_test(test_font_routes
+    SOURCES test_font_routes.cpp ${PROJECT_SOURCE_DIR}/src/app/font_store.cpp ${PROJECT_SOURCE_DIR}/src/app/web_portal_fonts.cpp
+    DEFINITIONS HAS_TTF_FONTS=1 HAS_FILESYSTEM=1 TEST_HEAP_CAPS_ALLOCATOR
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/font_portal_overrides.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+)
 target_include_directories(test_gamepad_widgets PRIVATE ${HOST_ARDUINOJSON_DIR})
 target_compile_options(test_gamepad_widgets PRIVATE
     -Wno-deprecated-declarations

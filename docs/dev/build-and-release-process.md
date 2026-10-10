@@ -386,6 +386,13 @@ BOARD_PROFILE=psram ./build.sh esp32-nodisplay
 PROFILE=16m ./build.sh esp32c3-withsensors
 ```
 
+Uploaded fonts are a production capability selected by `HAS_TTF_FONTS`, not an
+experimental build environment switch. Eligible LVGL display builds require
+filesystem support and PSRAM; runtime PSRAM detection also controls availability.
+Uploaded `.ttf` bytes are not linked into the application image. Decorative
+bitmap generation has been retired; Montserrat 12/14/18/24/32/36 remains.
+See the [font lifecycle and accepted backend limitation](display-touch-architecture.md#uploaded-truetype-fonts).
+
 **Example Implementation:**
 ```bash
 # Add to config.sh to define custom build properties

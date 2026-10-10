@@ -501,6 +501,114 @@ Current built-in sources:
 
 ## Rendering System
 
+### Uploaded TrueType Fonts
+
+`HAS_TTF_FONTS` requires `HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM`.
+Runtime PSRAM detection also gates portal navigation and loading. Assets are
+static, single-face TrueType files under `/fonts/<id>.ttf`; variable fonts,
+collections, CFF/OpenType, WOFF, and WOFF2 are unsupported. The streaming
+validator checks identifiers, signatures, required table bounds, the selected
+Unicode `cmap` and its glyph indexes, monotonic `loca` offsets, simple glyph
+payloads, and composite references. Cyclic composites, nesting beyond 32
+levels, conflicting transforms, and point-attached components unsupported by
+the renderer are rejected. SFNT offsets must fit the renderer's signed offset
+representation. This is not a hardened font parser or a validator for every
+optional OpenType table. Upload trusted fonts only.
+
+`font:my-font;font_size:96` selects an uploaded asset. Sizes are positive
+`uint16_t` pixel heights; omitted sizes use the automatic bitmap default's
+line height. Montserrat 12/14/18/24/32/36 remain for UI and fallback. Missing
+or unloadable assets use the supplied automatic bitmap font, ignoring the
+requested custom size. `font_family`, its aliases, numeric `font:` size
+shorthand, decorative generated families, and Montserrat 48 are removed.
+
+Opt-in `font_metrics:bounds` expands ascent/descent to cover the TTF `head`
+vertical bounds, with pixel-rounding clearance, without changing glyph scale.
+`font_metrics:2` (or another finite multiplier from 1 to 65535) scales existing
+ascent/descent instead. Omitted or `1` preserves original metrics. Corrections
+with invalid bounds or line heights exceeding the signed 32767px layout limit
+use cached bitmap fallback. This corrects font-metric clipping, not button
+overflow. Whole-font bounds keep live text stable but may add whitespace.
+Size, fallback font, and metrics mode/factor all participate in the instance
+cache key; distinct settings consume additional cache memory. No LVGL/STB
+backend patch or uploaded-file modification is involved.
+
+Each `PadScreen` owns its source buffers and immutable font instances through
+`PadFontCache`. Sources use PSRAM-only allocation; LVGL scratch and glyph
+caches retain the existing allocator policy. Instances are reused within a
+pad, including list/table widget text, but never shared between pads. Hiding
+a cached pad retains its fonts. Rebuild, eviction, deletion, and teardown
+delete referencing LVGL objects before destroying fonts and freeing sources.
+Successful store changes increment an atomic generation; the display thread
+evicts all cached pads after OTA activity clears. HTTP callbacks never mutate
+LVGL. Native extension measure/draw remains bitmap-only because its canvas
+requires packed 4-bit glyphs, while tiny_ttf produces A8 glyphs.
+
+Cold loads pin their selected file while allocation, chunked reads, and
+in-memory validation run outside the font-store mutex. Unrelated store
+operations may proceed; deleting a pinned font returns a retryable conflict.
+The file is closed before its pin is released, including error paths. Mounting
+and directory mutations remain serialized. Load chunks and validation reads
+check OTA activity and abandon their own work when an update starts.
+
+Serial diagnostics use the `Fonts` module. Debug logs record cold file loads
+and durations, instance creation (asset ID, size, cache-owner address, free heap
+and largest blocks), generation invalidation, and nonempty cache teardown.
+Uploads and deletions emit info summaries with bytes or the new generation.
+Warnings report storage, validation, allocation, framing, and fallback failures.
+Missing-font and failed-instance attempts are cached; metadata allocation
+warnings are limited to one per cache lifetime between clears. Cache hits, glyph
+lookups, successful upload chunks, ordinary list requests, and empty clears
+are silent. Use `LOG_LEVEL=4` for the debug breadcrumbs; info and warnings
+remain available at their existing lower levels.
+
+#### Accepted Backend OOM Limitation
+
+This implementation intentionally uses unpatched LVGL 9.5.0/STB. Allocation
+failure inside font cache creation or rasterization can assert forever,
+crash, or reboot, even for a valid font. Watchdog recovery is not guaranteed;
+a saved font-heavy pad may fail again after reboot. There are no new font
+caps, budgets, global caches, allocator changes, or guarantees of graceful
+backend OOM fallback. Ordinary upload/storage errors still clean up their
+own transaction and report errors. `test_runtime_ttf_oom` characterizes the
+known cache-creation assertion rather than proving OOM recovery.
+
+Future work, if device stability warrants it: a repository-managed,
+version-checked LVGL/STB allocation-error patch covering cache creation,
+partial cleanup, kerning, and raster scratch; reproducible local/CI
+integration; and allocation-failure plus neighboring-widget tests. That
+option needs new approval and must stop for reassessment if it becomes a
+substantial renderer rewrite. An alternative renderer is another possible
+follow-up, not part of this implementation. Hardware stability, visual
+quality, cold/warm latency, and peak PSRAM remain manual acceptance checks.
+
+#### Hardware Acceptance
+
+The automated checks do not establish device stability or rendering quality.
+After building `esp32-p4-lcd4b`, upload and monitor the firmware manually:
+
+```bash
+./upload.sh esp32-p4-lcd4b
+./monitor.sh esp32-p4-lcd4b
+```
+
+1. Open **Pads > Fonts** in the device portal and upload a trusted static TTF
+    as `my-font`. Confirm duplicate rejection and reboot persistence.
+2. Set top, center, and bottom label styles to `font:my-font;font_size:37`,
+    `font:my-font;font_size:96`, and `font:my-font;font_size:300`. Also try
+    `font:my-font` without a size. Save, reload, and check the device output.
+3. Check list and table text that inherits these styles. Use a missing font
+    ID and confirm automatic bitmap fallback, not the requested custom size.
+4. Navigate away and back within pad-cache residency. Then visit enough pads
+    to evict earlier pads and repeatedly edit/rebuild them. Check responsiveness
+    and that internal and PSRAM heap use stabilizes after warm-up.
+5. Delete `my-font` while a referencing pad is visible, then repeat while it
+    is hidden but cached. Confirm safe bitmap fallback on both paths. Re-upload
+    the same ID and confirm the referencing pads render it after invalidation.
+6. Record cold/warm latency, visual quality, peak internal/PSRAM use, and any
+    assertion, crash, or reboot. Backend OOM instability remains an accepted
+    limitation, not a successful graceful-fallback test.
+
 ### FreeRTOS Task-Based Architecture
 
 DisplayManager creates a dedicated task for LVGL rendering:
@@ -552,6 +660,14 @@ LittleFS, Preferences/NVS, OTA, or other storage affected by SPI-flash cache
 disable must use `rtos_create_task_internal_stack()`. The internal helper
 allocates with `MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT` and verifies that both
 ends of the stack are internal RAM before creating the task.
+
+With `HAS_TTF_FONTS && !USE_SD_STORAGE`, the LVGL rendering task uses an
+internal stack even when the board requests `LVGL_TASK_USE_PSRAM_STACK`.
+Synchronous font loading invokes LittleFS, whose reads can also disable the
+SPI-flash cache and assert when the calling stack is in PSRAM. The 16 KiB
+rendering stack therefore consumes internal RAM; font source buffers remain
+in PSRAM. SD-backed fonts, TTF-disabled builds, and the separate presentation
+task retain their existing stack selection.
 
 ### Async Present Task (Buffered Render Mode)
 

@@ -1065,6 +1065,8 @@ asset_feature_flag() {
             echo "HAS_CAMERA" ;;
         sounds|music)
             echo "HAS_SOUND_PLAYER" ;;
+        fonts|portal_fonts)
+            echo "HAS_TTF_FONTS" ;;
         storage)
             echo "HAS_STORAGE_BROWSER" ;;
         logs|portal_logs)

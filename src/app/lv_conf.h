@@ -168,7 +168,7 @@
 #define LV_FONT_MONTSERRAT_42 0
 #define LV_FONT_MONTSERRAT_44 0
 #define LV_FONT_MONTSERRAT_46 0
-#define LV_FONT_MONTSERRAT_48 1
+#define LV_FONT_MONTSERRAT_48 0
 
 /* Demonstrate special features */
 #define LV_FONT_MONTSERRAT_12_SUBPX      0
@@ -329,7 +329,10 @@
 #define LV_USE_QRCODE 0
 
 /* Tiny TTF font engine */
-#define LV_USE_TINY_TTF 0
+#define LV_USE_TINY_TTF HAS_TTF_FONTS
+#define LV_TINY_TTF_FILE_SUPPORT 0
+#define LV_TINY_TTF_CACHE_GLYPH_CNT 16
+#define LV_TINY_TTF_CACHE_KERNING_CNT 16
 
 /* FreeType font engine */
 #define LV_USE_FREETYPE 0

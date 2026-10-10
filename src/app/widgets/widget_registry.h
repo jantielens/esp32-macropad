@@ -13,11 +13,13 @@
 typedef struct _lv_obj_t lv_obj_t;
 struct PadRect;
 struct UIScaleInfo;
+class PadFontCache;
 
 #define WIDGET_STATE_MAX_BYTES 256
 
 struct WidgetState {
     uint8_t data[WIDGET_STATE_MAX_BYTES];
+    PadFontCache* font_owner = nullptr;
 };
 
 struct WidgetPreview {

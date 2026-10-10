@@ -25,6 +25,9 @@
 #if HAS_SOUND_PLAYER
 #include "web_portal_sounds.h"
 #endif
+#if HAS_TTF_FONTS
+#include "web_portal_fonts.h"
+#endif
 
 #if HAS_CAMERA
 #include "web_portal_camera.h"
@@ -261,6 +264,15 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		});
 #endif
 
+#if HAS_TTF_FONTS
+	registerOptions("/api/fonts/list");
+	server->on("/portal_fonts.js", HTTP_GET, handlePortalFontsJS);
+	registerOptions("/api/fonts/upload");
+	registerOptions("/api/fonts");
+	server->on("/api/fonts/list", HTTP_GET, handleGetFonts);
+	server->on("/api/fonts", HTTP_DELETE, handleDeleteFont);
+	server->on("/api/fonts/upload", HTTP_POST, handleFontUploadComplete, nullptr, handleFontUploadBody);
+#endif
 #if HAS_SOUND_PLAYER
 		// Sound file management endpoints
 		registerOptions("/api/sounds/upload");

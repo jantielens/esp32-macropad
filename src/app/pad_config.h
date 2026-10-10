@@ -51,6 +51,7 @@
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
 #define CONFIG_BG_IMAGE_PASS_MAX_LEN   64
 #define CONFIG_LABEL_STYLE_MAX_LEN    128
+#define CONFIG_FONT_ID_MAX_LEN         32
 #define PAD_MAX_BINDINGS              16
 #define PAD_BINDING_NAME_MAX_LEN      32
 
@@ -106,7 +107,7 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 // ============================================================================
 // Label Style — per-label visual overrides (parsed from DSL string)
 // ============================================================================
-// DSL format: "font:24;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000"
+// DSL format: "font:my-font;font_size:24;font_upscale:1.4;align:right"
 // All fields default to 0 which means "use default behavior".
 
 // Text alignment values
@@ -123,8 +124,9 @@ static inline bool parse_hex_color(const char* s, uint32_t* out) {
 #define LABEL_MODE_WRAP      4
 
 struct LabelStyle {
-    uint8_t font_size;     // 0 = auto (from scale tier), 12/14/18/24/32/36/48
-    uint8_t font_family;   // 0 = default (Montserrat), 1 = dseg7, 2 = bebas, 3 = doto
+    uint16_t font_size;
+    char font_name[CONFIG_FONT_ID_MAX_LEN];
+    float font_metrics;
     uint16_t font_upscale; // 0 = 1.0x (disabled), else LVGL transform scale (256 = 1.0x)
     int16_t x_offset;      // pixel nudge from default anchor (-999..+999)
     int16_t y_offset;      // pixel nudge from default anchor (-999..+999)

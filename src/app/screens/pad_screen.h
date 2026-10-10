@@ -148,6 +148,7 @@ private:
     // --- Lazily allocated arrays (heavy, freed on LRU eviction) ---
     ButtonTile* tiles;
     uint8_t tileCount;
+    PadFontCache fontCache;
 
     static const int MAX_BINDINGS = MAX_PAD_BUTTONS * 3;
     RuntimeLabelBinding* bindings;

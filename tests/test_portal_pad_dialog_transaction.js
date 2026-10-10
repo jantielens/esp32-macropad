@@ -75,6 +75,13 @@ assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
 
+document.getElementById('pad-edit-label-center-style').value = 'font:my-font;font_size:300;align:right';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].label_center_style, 'font:my-font;font_size:300;align:right');
+document.getElementById('pad-edit-label-center-style').value = '';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].label_center_style, undefined);
+
 const savedCredentialButton = {
     col: 1,
     row: 2,

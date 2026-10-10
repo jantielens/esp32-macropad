@@ -9,7 +9,7 @@
 // Label Style DSL parser
 // ============================================================================
 // Format: "key:value;key:value;..."
-// Keys: font (12/14/18/24/32/36/48), font_upscale (1.0..2.0),
+// Keys: font (uploaded asset ID), font_size (positive integer pixels), font_upscale (1.0..2.0),
 //        align (left/center/right), x/y (int offset),
 //        mode (clip/scroll/dot/wrap), color (#RRGGBB or a [scheme:...] binding)
 //
@@ -52,15 +52,34 @@ void label_style_parse(const char* dsl, LabelStyle* out,
             const char* key = token;
             const char* val = colon + 1;
 
-            if (strcmp(key, "font_size") == 0 || strcmp(key, "font") == 0) {
-                int sz = atoi(val);
-                if (sz == 12 || sz == 14 || sz == 18 || sz == 24 || sz == 32 || sz == 36 || sz == 48) {
-                    out->font_size = (uint8_t)sz;
+            if (strcmp(key, "font_size") == 0) {
+                uint32_t size = 0;
+                bool valid = *val != '\0';
+                for (const char* digit = val; *digit; ++digit) {
+                    if (*digit < '0' || *digit > '9') { valid = false; break; }
+                    size = size * 10 + static_cast<unsigned>(*digit - '0');
+                    if (size > UINT16_MAX) { valid = false; break; }
                 }
-            } else if (strcmp(key, "font_family") == 0) {
-                if (strcmp(val, "segment") == 0 || strcmp(val, "dseg7") == 0)  out->font_family = 1;
-                else if (strcmp(val, "bebas") == 0)                           out->font_family = 2;
-                else if (strcmp(val, "doto") == 0 || strcmp(val, "pixel") == 0) out->font_family = 3;
+                out->font_size = valid && size > 0 ? static_cast<uint16_t>(size) : 0;
+            } else if (strcmp(key, "font") == 0) {
+                const size_t length = strlen(val);
+                bool valid = length > 0 && length < sizeof(out->font_name);
+                for (const char* character = val; valid && *character; ++character) {
+                    valid = (*character >= 'a' && *character <= 'z') ||
+                            (*character >= '0' && *character <= '9') ||
+                            *character == '_' || *character == '-';
+                }
+                out->font_name[0] = '\0';
+                if (valid) strlcpy(out->font_name, val, sizeof(out->font_name));
+            } else if (strcmp(key, "font_metrics") == 0) {
+                out->font_metrics = 0;
+                if (strcmp(val, "bounds") == 0) out->font_metrics = -1;
+                else {
+                    char* end = nullptr;
+                    const double factor = strtod(val, &end);
+                    if (end != val && !*end && factor >= 1 && factor <= 65535)
+                        out->font_metrics = factor == 1 ? 0 : static_cast<float>(factor);
+                }
             } else if (strcmp(key, "font_upscale") == 0) {
                 char* end = nullptr;
                 double f = strtod(val, &end);

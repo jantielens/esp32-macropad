@@ -336,8 +336,9 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 | Property | Values | What it does |
 |----------|--------|-------------|
-| `font_size` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
-| `font_family` | `dseg7` / `segment`, `bebas`, `doto` / `pixel` | Use an alternate display font (see below) |
+| `font` | Uploaded font ID, without `.ttf` | Select a static TrueType font uploaded through Pads > Fonts |
+| `font_size` | Positive whole pixels, up to 65535 | Uploaded font size; default Montserrat supports exact sizes 12, 14, 18, 24, 32, and 36 |
+| `font_metrics` | `bounds` or a multiplier from 1 to 65535, such as `1.5` or `2` | TTF-only vertical metric correction; adjusts line height and baseline, not glyph size or horizontal spacing. Omitted preserves original metrics. |
 | `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Scale the current font size at runtime for hero text |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
@@ -347,8 +348,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 Combine them with semicolons:
 
-``` 
-font_size:48;align:left;mode:dot
+```text
+font:my-font;font_size:96;align:left;mode:dot
 ```
 
 This renders a hero-sized left-aligned label that shows "..." when the text is too long.
@@ -357,9 +358,9 @@ A few more examples:
 
 - `font_size:14;color:#FF0` — small yellow text
 - `font_size:36;font_upscale:1.4` — extra-large hero text (combined scale)
-- `font_family:dseg7;font_size:48` — 7-segment LCD style for sensor readings
-- `font_family:bebas;font_size:48` — bold condensed headline
-- `font_family:doto` — dot-matrix / pixel style
+- `font:my-font;font_size:96` - uploaded font at 96 pixels
+- `font:my-font;font_size:300` - uploaded font above 255 pixels
+- `font:my-font` - uploaded font at the automatic label height
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
 - `font_size:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
@@ -369,25 +370,34 @@ A few more examples:
 
 > Without style overrides, font size is chosen automatically based on the grid dimensions and display resolution. The default alignment is center, and overflow is clipped.
 
-#### Font Families
+#### Uploaded Fonts
 
-Three additional font families are available alongside the default Montserrat:
+On eligible LVGL display builds with a filesystem and working PSRAM, open
+**Pads > Fonts** to upload a trusted static TrueType-outline `.ttf` file.
+Use its lowercase ID in `font:my-font`, not its filename or a filesystem path.
+Variable fonts, collections, CFF/OpenType, WOFF, and WOFF2 are unsupported.
+See the [Fonts workflow](web-portal-guide.md#fonts) for upload and deletion.
 
-| Family | DSL value | Aliases | Style | Available sizes |
-|--------|-----------|---------|-------|----------------|
-| DSEG7 Classic Bold | `dseg7` | `segment` | 7-segment LCD display | 12, 14, 18, 24, 32, 36, 48 |
-| Bebas Neue | `bebas` | — | Bold condensed display | 12, 14, 18, 24, 32, 36, 48 |
-| Doto | `doto` | `pixel` | Dot-matrix / pixel | 12, 14, 18, 24, 32, 36, 48 |
+The Pomodoro and Alarm Clock sample recipes reference `dseg7`. Upload a trusted
+static TrueType font under that ID for their custom text; otherwise they use
+the automatic bitmap default.
 
-All font families share the same set of sizes as the built-in Montserrat font. You can combine `font_family` with an explicit `font_size`:
+Omitting `font` uses Montserrat. Without an explicit uploaded-font size, the
+automatic label font's line height selects the size. A missing or unloadable
+uploaded font uses the automatic bitmap default and ignores the requested size.
+Without an uploaded font, an unavailable Montserrat size also uses that default.
+Negative, fractional, overflowing, and malformed sizes are ignored.
 
-```
-font_family:dseg7;font_size:48
-```
+The former `font_family` property, family aliases, numeric `font` size shorthand,
+and Montserrat 48 are no longer supported. Native extension canvas text remains
+bitmap-only; list/table text can use uploaded fonts through its pad context.
 
-This is ideal for hero values like temperature readings, power measurements, or countdown timers where a specialized display font adds visual impact.
-
-> **Note**: Custom fonts include digits 0–9, uppercase A–Z, lowercase a–z, and common symbols (`. , : ; - + / % °`). Characters outside this set fall back to Montserrat.
+> [!WARNING]
+> Stock LVGL/STB can hang or crash when font rendering runs out of memory, even
+> with valid fonts. This release intentionally has no font-memory budget or
+> instance cap. Device stability remains a hardware acceptance check. The
+> [accepted limitation and future backend work](dev/display-touch-architecture.md#accepted-backend-oom-limitation)
+> describe this tradeoff.
 
 ### Icons
 
@@ -1548,7 +1558,7 @@ The table widget renders multi-column row data from a structured binding payload
 | Setting | Description |
 |---------|-------------|
 | **Data binding** | Must resolve to a table schema payload. Use an exact single-token binding expression such as `[health:table]` or `[health:extended_table]` |
-| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font_family:bebas`) |
+| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font:my-font;font_size:96`) |
 | **Scroll** | Enable or disable table scrolling |
 
 **Important:** Do not wrap the table binding in static text and do not add a format parameter. The table widget expects the resolved structured payload, not formatted text.
@@ -2347,10 +2357,10 @@ These are complete, copy-paste-ready configurations for common use cases. Each e
 
 | Button | Position | Top label | Bottom label | Style | Widget |
 |--------|----------|-----------|--------------|-------|--------|
-| Solar | col 0 | `Solar` | `[mqtt:home/solar;power;%.0f W]` | `font:14` on top | Bar chart, max: 5000, thresholds: 1000/3000/4500 |
-| Grid | col 1 | `Grid` | `[mqtt:home/grid;power;%.0f W]` | `font:14` on top | Bar chart, max: 5000, use absolute value on |
-| Battery | col 2 | `Battery` | `[mqtt:home/battery;soc;%.0f%%]` | `font:14` on top | Bar chart, max: 100, thresholds: 20/50/80 |
-| Net | col 3 | `Net` | `[expr:[mqtt:home/solar;power]-[mqtt:home/grid;power];%.0f W]` | `font:14` on top | Bar chart, max: 5000 |
+| Solar | col 0 | `Solar` | `[mqtt:home/solar;power;%.0f W]` | `font_size:14` on top | Bar chart, max: 5000, thresholds: 1000/3000/4500 |
+| Grid | col 1 | `Grid` | `[mqtt:home/grid;power;%.0f W]` | `font_size:14` on top | Bar chart, max: 5000, use absolute value on |
+| Battery | col 2 | `Battery` | `[mqtt:home/battery;soc;%.0f%%]` | `font_size:14` on top | Bar chart, max: 100, thresholds: 20/50/80 |
+| Net | col 3 | `Net` | `[expr:[mqtt:home/solar;power]-[mqtt:home/grid;power];%.0f W]` | `font_size:14` on top | Bar chart, max: 5000 |
 
 **Bar chart data bindings:**
 - Solar: `[mqtt:home/solar;power]`
@@ -2404,7 +2414,7 @@ Each button uses the **top label** with a small font for the camera name:
 ```
 Front Door
 ```
-Style: `font:14;color:#FFF;align:left`
+Style: `font_size:14;color:#FFF;align:left`
 
 ### World Clock
 
@@ -2412,7 +2422,7 @@ Style: `font:14;color:#FFF;align:left`
 
 **Pad settings**: 1 column × 4 rows, name "Clock", background `#1A1A1A`.
 
-| Button | Top label (style: `font:14;color:#888`) | Center label (style: `font:36`) | Bottom label (style: `font:14;color:#888`) |
+| Button | Top label (style: `font_size:14;color:#888`) | Center label (style: `font_size:36`) | Bottom label (style: `font_size:14;color:#888`) |
 |--------|---------|--------------|--------------|
 | New York | `New York` | `[time:%I:%M %p;America/New_York]` | `[time:%a %d %b;America/New_York]` |
 | London | `London` | `[time:%H:%M;Europe/London]` | `[time:%a %d %b;Europe/London]` |
@@ -2427,11 +2437,11 @@ Style: `font:14;color:#FFF;align:left`
 
 | Button | Center label | Bottom label | Notes |
 |--------|-------------|--------------|-------|
-| CPU | `CPU` | `[health:cpu]%` (style: `font:36`) | Background: `[expr:[health:cpu]>80?"#B71C1C":"#1B5E20"]` |
-| Memory | `Memory` | `[expr:[health:heap_free]/1024;%.0f KB]` (style: `font:24`) | Background: `[expr:[health:heap_free]<50000?"#FF6F00":"#1B5E20"]` |
-| WiFi | `WiFi` | `[health:rssi] dBm` (style: `font:24`) | Background: `[expr:[health:rssi]<-75?"#FF6F00":"#1B5E20"]` |
+| CPU | `CPU` | `[health:cpu]%` (style: `font_size:36`) | Background: `[expr:[health:cpu]>80?"#B71C1C":"#1B5E20"]` |
+| Memory | `Memory` | `[expr:[health:heap_free]/1024;%.0f KB]` (style: `font_size:24`) | Background: `[expr:[health:heap_free]<50000?"#FF6F00":"#1B5E20"]` |
+| WiFi | `WiFi` | `[health:rssi] dBm` (style: `font_size:24`) | Background: `[expr:[health:rssi]<-75?"#FF6F00":"#1B5E20"]` |
 | IP | `[health:ip]` | `[health:hostname]` | Static green background |
-| Uptime | `Uptime` | `[health:uptime;%d]s` (style: `font:24`) | — |
+| Uptime | `Uptime` | `[health:uptime;%d]s` (style: `font_size:24`) | — |
 | Server | `Server` | `[mqtt:server/status;state]` | Button state: `[expr:[mqtt:server/status;state]=="offline"?"disabled":"enabled"]` |
 
 ### Climate Control
@@ -2442,12 +2452,12 @@ Style: `font:14;color:#FFF;align:left`
 
 | Button | Center label | Color binding | Action |
 |--------|-------------|---------------|--------|
-| Living Room | `[mqtt:climate/living;current_temperature;%.1f°C]` (style: `font:32`) | Bg: `[expr:[mqtt:climate/living;current_temperature]>25?"#FF5722":[mqtt:climate/living;current_temperature]<18?"#2196F3":"#4CAF50"]` | — |
-| Thermostat ▲ | `▲` (style: `font:36`) | Static `#1B5E20` | MQTT → `climate/living/set` / `{"temperature_up":1}` |
-| Thermostat ▼ | `▼` (style: `font:36`) | Static `#B71C1C` | MQTT → `climate/living/set` / `{"temperature_down":1}` |
+| Living Room | `[mqtt:climate/living;current_temperature;%.1f°C]` (style: `font_size:32`) | Bg: `[expr:[mqtt:climate/living;current_temperature]>25?"#FF5722":[mqtt:climate/living;current_temperature]<18?"#2196F3":"#4CAF50"]` | — |
+| Thermostat ▲ | `▲` (style: `font_size:36`) | Static `#1B5E20` | MQTT → `climate/living/set` / `{"temperature_up":1}` |
+| Thermostat ▼ | `▼` (style: `font_size:36`) | Static `#B71C1C` | MQTT → `climate/living/set` / `{"temperature_down":1}` |
 | Target | `Target` | — | — |
-| — | `[mqtt:climate/living;temperature;%.1f°C]` (style: `font:32`) | — | — |
-| Mode | `[mqtt:climate/living;mode]` (style: `font:18`) | Bg: `[expr:[mqtt:climate/living;mode]=="heat"?"#FF5722":[mqtt:climate/living;mode]=="cool"?"#2196F3":"#666"]` | MQTT → `climate/living/mode/set` / `auto` |
+| — | `[mqtt:climate/living;temperature;%.1f°C]` (style: `font_size:32`) | — | — |
+| Mode | `[mqtt:climate/living;mode]` (style: `font_size:18`) | Bg: `[expr:[mqtt:climate/living;mode]=="heat"?"#FF5722":[mqtt:climate/living;mode]=="cool"?"#2196F3":"#666"]` | MQTT → `climate/living/mode/set` / `auto` |
 
 ---
 

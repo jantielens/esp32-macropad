@@ -2,8 +2,8 @@
   "button_defaults": {
     "default_pad_bg_color": "#101820", "bg_color": "#273641", "fg_color": "#ffffff",
     "border_color": "#52636e", "border_width": "1", "corner_radius": "8", "content_pad": "6",
-    "button_shadow_enabled": true, "label_top_style": "font:18;align:center",
-    "label_center_style": "font:28;align:center", "label_bottom_style": "font:16;align:center"
+    "button_shadow_enabled": true, "label_top_style": "font_size:18;align:center",
+    "label_center_style": "font_size:24;align:center", "label_bottom_style": "font_size:14;align:center"
   },
   "pads": {
     "0": {

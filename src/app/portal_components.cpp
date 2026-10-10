@@ -102,6 +102,10 @@
 #include "components/music_component.cpp"
 #endif // HAS_SOUND_PLAYER
 
+#if HAS_TTF_FONTS
+#include "components/fonts_component.cpp"
+#endif
+
 // --- Shutter Tester components ---
 #if IS_SHUTTER_TESTER
 #include "device_classes/shutter_tester/components/shutter_component.cpp"

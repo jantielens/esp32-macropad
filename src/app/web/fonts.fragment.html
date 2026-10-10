@@ -1,0 +1,34 @@
+<div id="fonts-panel">
+    <div class="section-header">
+        <h2><span class="portal-icon" aria-hidden="true">text_fields</span>TTF Fonts</h2>
+        <p>Upload trusted, static, single-face TrueType (.ttf) fonts with TrueType outlines. Variable fonts, font collections, CFF/OpenType outlines, and WOFF/WOFF2 files are not supported.</p>
+        <p>In the pad editor, set a button label or widget's text style to <code>font:my-font;font_size:32</code>, using the uploaded font ID. Omit <code>font_size</code> for automatic sizing. Missing or unloadable fonts use the built-in bitmap fallback.</p>
+    </div>
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+                <button id="font-refresh" class="btn btn-secondary btn-sm" type="button" title="Refresh fonts" aria-label="Refresh fonts"><span class="portal-icon" aria-hidden="true">refresh</span><span class="portal-icon-fallback">Refresh</span></button>
+            </div>
+            <div id="font-list" class="list-group mb-3" aria-live="polite"></div>
+            <form id="font-upload-form">
+                <div class="row g-2 align-items-end">
+                    <div class="col-sm-4">
+                        <label class="form-label" for="font-name">Font ID</label>
+                        <input class="form-control" id="font-name" type="text" placeholder="my-font" required maxlength="31" pattern="[a-z0-9_\-]+" autocomplete="off" spellcheck="false" aria-describedby="font-id-help">
+                    </div>
+                    <div class="col-sm-5">
+                        <label class="form-label" for="font-file">TTF File</label>
+                        <input class="form-control" id="font-file" type="file" accept=".ttf" required style="max-width:100%;box-sizing:border-box;">
+                    </div>
+                    <div class="col-sm-3">
+                        <button id="font-upload" class="btn btn-primary w-100 d-flex align-items-center justify-content-center gap-2" type="submit"><span class="portal-icon" aria-hidden="true">upload</span><span>Upload</span></button>
+                    </div>
+                </div>
+                <progress id="font-progress" max="100" value="0" hidden style="width:100%;margin-top:12px;"></progress>
+            </form>
+            <div id="font-status" class="form-text mt-2" role="status" aria-live="polite" style="overflow-wrap:anywhere;"></div>
+            <div id="font-id-help" class="form-text mt-1">1-31 lowercase letters, digits, underscores, or hyphens. Files are stored under <code>/fonts</code>.</div>
+        </div>
+    </div>
+    <p class="form-text"><strong>PSRAM:</strong> Each distinct TTF size or metrics setting needs a separate cached font instance. Reuse sizes and metrics settings where possible; many instances or very large sizes consume more PSRAM.</p>
+</div>

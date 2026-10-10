@@ -229,9 +229,9 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-label-center-style').value = btn.label_center_style || '';
     document.getElementById('pad-edit-label-bottom-style').value = btn.label_bottom_style || '';
     // Set label style placeholders from pad defaults
-    document.getElementById('pad-edit-label-top-style').placeholder = padState.buttonDefaults.label_top_style || 'font:24;align:left;mode:dot';
-    document.getElementById('pad-edit-label-center-style').placeholder = padState.buttonDefaults.label_center_style || 'font:24;align:left;mode:dot';
-    document.getElementById('pad-edit-label-bottom-style').placeholder = padState.buttonDefaults.label_bottom_style || 'font:24;align:left;mode:dot';
+    document.getElementById('pad-edit-label-top-style').placeholder = padState.buttonDefaults.label_top_style || 'font_size:24;align:left;mode:dot';
+    document.getElementById('pad-edit-label-center-style').placeholder = padState.buttonDefaults.label_center_style || 'font_size:24;align:left;mode:dot';
+    document.getElementById('pad-edit-label-bottom-style').placeholder = padState.buttonDefaults.label_bottom_style || 'font_size:24;align:left;mode:dot';
     ['top', 'center', 'bottom'].forEach(syncLabelStyleVisibility);
 
     // Button state

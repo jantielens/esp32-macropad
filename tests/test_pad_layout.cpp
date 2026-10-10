@@ -9,7 +9,6 @@ extern const lv_font_t lv_font_montserrat_18 = {};
 extern const lv_font_t lv_font_montserrat_24 = {};
 extern const lv_font_t lv_font_montserrat_32 = {};
 extern const lv_font_t lv_font_montserrat_36 = {};
-extern const lv_font_t lv_font_montserrat_48 = {};
 
 static void test_layout_spacing_and_insets() {
     const uint8_t positions[] = {0, 1, 0, 1};

@@ -23,6 +23,26 @@ point.
 > `system_command`, while display tools (`set_screen`, `set_backlight`, `wake`,
 > `list_screens`, pads) only appear on boards with a screen.
 
+## Font Authoring
+
+Existing pad-authoring tools can set uploaded font styles such as
+`font:my-font;font_size:96`. IDs exclude `.ttf`; omit the size for the automatic
+label height. Missing fonts use the automatic bitmap default, ignoring the
+requested custom size. The former decorative family aliases and numeric `font`
+size shorthand are no longer supported.
+
+For fonts with clipped vertical metrics, add `font_metrics:bounds` to expand
+the line using whole-font bounds, or `font_metrics:2` (also `1.5`) to multiply
+ascent and descent without enlarging glyphs. Omitted metrics remain unchanged;
+bitmap fonts ignore the option. `get_capabilities` advertises these settings.
+Distinct metric settings create separate cached font instances.
+
+Upload and delete fonts through **Pads > Fonts** or the authenticated
+[Font API](dev/web-portal.md#font-file-api). No additional MCP font-upload protocol
+or tools are introduced. Native extension canvas text remains bitmap-only.
+See the [accepted stock-renderer OOM risk](dev/display-touch-architecture.md#accepted-backend-oom-limitation)
+before using large sizes or many cached font instances.
+
 ## Security model at a glance
 
 | Layer | Behavior |

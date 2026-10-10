@@ -93,7 +93,7 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     uint32_t fg_raw = 0xFFFFFF;
     parse_hex_color(btn->fg_color, &fg_raw);
     lv_color_t fg = lv_color_hex(fg_raw);
-    st->item_font = pad_resolve_font(btn->style_center, scale->font_large);
+    st->item_font = pad_resolve_font(btn->style_center, scale->font_large, state->font_owner);
     st->item_color = pad_resolve_label_color(btn->style_center, fg);
     st->item_radius = (lv_coord_t)strtol(btn->corner_radius, nullptr, 10);
 
@@ -147,8 +147,8 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // padding (pad_all) consistently with labels and other widgets.
     lv_obj_update_layout(tile);
     const lv_coord_t cont_w_full = lv_obj_get_content_width(tile);
-    const lv_font_t* top_font = pad_resolve_font(btn->style_top, scale->font_small);
-    const lv_font_t* bot_font = pad_resolve_font(btn->style_bottom, scale->font_small);
+    const lv_font_t* top_font = pad_resolve_font(btn->style_top, scale->font_small, state->font_owner);
+    const lv_font_t* bot_font = pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner);
     const lv_coord_t top_h = btn->label_top[0] ? lv_font_get_line_height(top_font) : 0;
     const lv_coord_t bot_h = btn->label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
     const lv_coord_t cont_h = lv_obj_get_content_height(tile) - top_h - bot_h;

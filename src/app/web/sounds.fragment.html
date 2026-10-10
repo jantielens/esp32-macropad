@@ -1,10 +1,13 @@
 <div class="section-header">
-  <h2><span class="portal-icon" aria-hidden="true">notifications_active</span>Alert Sounds</h2>
+  <h2><span class="portal-icon" aria-hidden="true">notifications_active</span>Sound Files</h2>
   <p>Upload MP3 files for Sound Alert actions and MQTT triggers.</p>
 </div>
 <div class="card mb-3" id="sound-files-section">
   <div class="card-body">
-    <div id="sound-list" class="mb-3"></div>
+    <div class="d-flex justify-content-end align-items-center gap-2 mb-2">
+      <button class="btn btn-secondary btn-sm" type="button" onclick="loadSoundList()" title="Refresh sounds" aria-label="Refresh sounds"><span class="portal-icon" aria-hidden="true">refresh</span><span class="portal-icon-fallback">Refresh</span></button>
+    </div>
+    <div id="sound-list" class="list-group mb-3"></div>
     <div class="row g-2 align-items-end">
       <div class="col-sm-4">
         <label class="form-label" for="sound-upload-name">Name</label>
@@ -12,13 +15,13 @@
       </div>
       <div class="col-sm-5">
         <label class="form-label" for="sound-upload-file">MP3 File</label>
-        <input type="file" class="form-control" id="sound-upload-file" accept=".mp3,audio/mpeg" onchange="soundFileSelected(this)">
+        <input type="file" class="form-control" id="sound-upload-file" accept=".mp3,audio/mpeg" onchange="soundFileSelected(this)" style="max-width:100%;box-sizing:border-box;">
       </div>
       <div class="col-sm-3">
-        <button type="button" class="btn btn-primary w-100" onclick="uploadSound()" id="sound-upload-btn">Upload</button>
+        <button type="button" class="btn btn-primary w-100 d-flex align-items-center justify-content-center gap-2" onclick="uploadSound()" id="sound-upload-btn"><span class="portal-icon" aria-hidden="true">upload</span><span>Upload</span></button>
       </div>
     </div>
-    <div id="sound-upload-status" class="form-text mt-2"></div>
+    <div id="sound-upload-status" class="form-text mt-2" role="status" aria-live="polite" style="overflow-wrap:anywhere;"></div>
     <div class="form-text mt-1">Max 512 KB per file.</div>
   </div>
 </div>

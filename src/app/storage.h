@@ -51,7 +51,7 @@ inline bool storage_boot_should_halt(bool sd_mount_succeeded) {
 template <typename RemoveRoot>
 inline bool storage_remove_sd_owned_roots(RemoveRoot remove_root) {
   static const char* const owned_roots[] = {
-    "/camera", "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
+    "/camera", "/config", "/icons", "/sounds", "/fonts", "/storage", "/prints", "/brews",
   };
   bool ok = true;
   for (const char* root : owned_roots) {

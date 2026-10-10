@@ -5,6 +5,9 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#if HAS_TTF_FONTS
+#include "font_store.h"
+#endif
 #include "binding_schema.h"
 #include "config_manager.h"
 #include "device_telemetry.h"
@@ -189,6 +192,12 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(ALARM_ENABLED ? "true" : "false");
 		response->print(",\"has_native_extensions\":");
 		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
+	response->print(",\"has_ttf_fonts\":");
+#if HAS_TTF_FONTS
+	response->print(font_store_available() ? "true" : "false");
+#else
+	response->print("false");
+#endif
 		response->print(",\"has_camera\":");
 		response->print(HAS_CAMERA ? "true" : "false");
 		response->print(",\"has_usb_hid\":");

@@ -51,7 +51,10 @@ FEATURES = {
         ("brightness_fragment_html_gz", "rotation_fragment_html_gz", "screen_preview_fragment_html_gz"),
     ),
     "LVGL": (("lvgl*.cpp.o",), ()),
-    "Fonts (HAS_CUSTOM_FONTS)": (("custom_fonts.cpp.o",), ()),
+    "Fonts (HAS_TTF_FONTS)": (
+        ("font_store.cpp.o", "pad_font_cache.cpp.o", "web_portal_fonts.cpp.o", "lv_tiny_ttf.c.o"),
+        ("fonts_fragment_html_gz", "portal_fonts_js_gz"),
+    ),
     "Image decoding / encoding": (("image_decoder.cpp.o", "jpeg_encoder_service.cpp.o"), ()),
     "Image fetch (HAS_IMAGE_FETCH)": (("image_fetch.cpp.o",), ()),
     "Image library (HAS_IMAGE_LIBRARY)": (
@@ -381,7 +384,7 @@ def compact_snapshot(totals, context, demo=False):
 def demo_snapshots():
     totals = {
         "LVGL": dict(code=180000, data=250000, assets=0, static_ram=8000),
-        "Fonts (HAS_CUSTOM_FONTS)": dict(code=128, data=230000, assets=0, static_ram=0),
+        "Fonts (HAS_TTF_FONTS)": dict(code=24000, data=512, assets=2048, static_ram=32),
         "MCP (HAS_MCP)": dict(code=47000, data=1500, assets=2000, static_ram=500),
         "Web portal assets (shared)": dict(code=0, data=0, assets=150000, static_ram=0),
         "Bindings / expressions with an exceptionally long subsystem name":

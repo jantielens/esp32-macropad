@@ -2836,6 +2836,45 @@ Delete a specific icon file from `/icons/`.
 
 ---
 
+### Font File API
+
+The `fonts` component belongs to category `pads`. Its fragment, JavaScript
+chunk, and API routes are gated by `HAS_TTF_FONTS`; detected runtime PSRAM also
+controls availability. The component is aggregated in `portal_components.cpp`,
+the fragment is served through the generated asset registry, and
+`portal_fonts.js` initializes it through the existing shell. Configured portal
+authentication and OPTIONS registration apply to all routes.
+
+The fragment heading is **TTF Fonts**. Format and pad-style notes precede a
+Music Library-style catalog and responsive upload row, with the required font
+ID field and byte-transfer progress retained.
+
+| Method | Route | Response |
+|--------|-------|----------|
+| GET | `/api/fonts/list` | Array of `{name, size_bytes}` for completed assets |
+| POST | `/api/fonts/upload?name=<id>` | Raw static TTF body; `{"status":"ok"}` after publication |
+| DELETE | `/api/fonts?name=<id>` | `{"status":"ok"}` after deletion |
+
+IDs contain 1-31 lowercase ASCII letters, digits, `_`, or `-`, without `.ttf`.
+Assets persist through `Storage` at `/fonts/<id>.ttf`. One upload transaction is
+active at a time, with request-owned state and a temporary file. Completion
+validates and renames the file; disconnects and failures remove the request's
+temporary data. Lists never include incomplete uploads. Storage changes publish
+health usage and an atomic generation; the display thread rebuilds cached pads
+at a safe point without HTTP callbacks touching LVGL.
+
+Invalid IDs and unsupported files return 400; missing assets return 404;
+duplicates, competing uploads, and deletion of a font being loaded return 409;
+retry a load conflict shortly. Unavailable runtime PSRAM returns
+503; storage or resource failures return 507. Delete first to replace an ID.
+Deletion is permitted even when pads reference the font, once any cold load
+finishes. There is no fixed
+upload-byte cap, font-instance cap, or font-memory budget.
+
+See the [Fonts workflow](../web-portal-guide.md#fonts),
+[label styles](../pad-editor-guide.md#uploaded-fonts), and
+[accepted backend OOM limitation](display-touch-architecture.md#accepted-backend-oom-limitation).
+
 ### Sound File API
 
 All sound endpoints require `HAS_SOUND_PLAYER` (defaults to `HAS_AUDIO`) and are gated by Basic Auth when enabled. Sound files are stored on LittleFS at `/sounds/<name>.mp3`.

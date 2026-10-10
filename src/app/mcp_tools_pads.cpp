@@ -23,6 +23,9 @@
 #include "board_config.h"
 
 #if HAS_MCP && HAS_DISPLAY
+#if HAS_TTF_FONTS
+#include "font_store.h"
+#endif
 
 #include "mcp_tool_registry.h"
 #include "mcp_tool_util.h"
@@ -120,7 +123,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     };
     for (const char* f : fields) bf.add(f);
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
-    btn["labels_note"] = "labels render with LVGL bitmap fonts (Latin text, digits, basic punctuation only). Do NOT use emoji or Unicode symbols — they render as blank/tofu. Use plain text, or an icon_id for graphics.";
+    btn["labels_note"] = "Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon_id for graphics.";
     btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
     btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
     JsonArray states = btn.createNestedArray("btn_state");
@@ -129,10 +132,16 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     btn["confirm_note"] = "confirm=true requires an on-device Cancel/Confirm prompt before normal button tap or long-press actions run; unsupported on widgets; confirm_text is optional plain text (max 127 chars); timeout is 10 seconds; programmatic MCP press_button bypasses the dialog";
 
     JsonObject style = result.createNestedObject("label_style");
-    style["format"] = "font:24;font_family:dseg7;font_upscale:1.4;align:right;y:-3;mode:scroll;color:#FF0000";
+#if HAS_TTF_FONTS
+    style["uploaded_fonts_available"] = font_store_available();
+#else
+    style["uploaded_fonts_available"] = false;
+#endif
+    style["format"] = "font:my-font;font_size:96;font_metrics:bounds;align:right;y:-3;mode:scroll;color:#FF0000";
     style["color_note"] = "color: accepts either a #RRGGBB hex value or a binding token (e.g. [expr:...] or [net:...]) that resolves live, like fg_color and the other color fields; a per-label color overrides fg_color. Style DSL max length 127 chars.";
-    JsonArray fam = style.createNestedArray("font_family");
-    fam.add("dseg7"); fam.add("bebas"); fam.add("doto");
+    style["font"] = "Uploaded font ID without .ttf; lowercase ASCII letters/digits/underscore/hyphen, 1-31 bytes. Missing or unloadable fonts use the automatic bitmap default, ignoring requested size.";
+    style["font_size"] = "Positive integer 1-65535. Omitted: automatic. Without font: retained bitmap sizes are 12,14,18,24,32,36; other sizes use automatic default.";
+    style["font_metrics"] = "TTF only: bounds expands vertical metrics from whole-font bounds; numeric factor 1-65535 (e.g. 1.5 or 2) scales ascent/descent. Omitted or 1: original metrics. Glyph size and horizontal spacing unchanged. Different settings use separate cache instances; corrections beyond 32767px line height fall back to bitmap.";
     JsonArray al = style.createNestedArray("align");
     al.add("left"); al.add("right"); al.add("center");
     JsonArray md = style.createNestedArray("mode");

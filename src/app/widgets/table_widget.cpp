@@ -329,7 +329,7 @@ static void table_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (cfg->table_style[0]) {
         label_style_parse(cfg->table_style, &ls);
     }
-    const lv_font_t* table_font = pad_resolve_font(ls, scale->font_small);
+    const lv_font_t* table_font = pad_resolve_font(ls, scale->font_small, state->font_owner);
 
     lv_obj_t* tbl = lv_table_create(tile);
     st->table = tbl;

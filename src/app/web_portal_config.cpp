@@ -5,6 +5,9 @@
 #include "portal_idle.h"
 
 #include "board_config.h"
+#if HAS_TTF_FONTS
+#include "font_store.h"
+#endif
 #include "config_manager.h"
 #include "time_service.h"
 #include "keyboard_hid.h"
@@ -161,6 +164,11 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["usb_hid"] = (bool)HAS_USB_HID;
 				caps["mcp"] = (bool)HAS_MCP;
 				caps["ha_history"] = (bool)HAS_HA_HISTORY;
+#if HAS_TTF_FONTS
+				caps["ttf_fonts"] = font_store_available();
+#else
+				caps["ttf_fonts"] = false;
+#endif
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;

@@ -1,6 +1,9 @@
 #include "web_portal_component_api.h"
 #include "board_config.h"
 #include "component_registry.h"
+#if HAS_TTF_FONTS
+#include "font_store.h"
+#endif
 #include "web_portal_auth.h"
 #include "web_portal_cors.h"
 #include "web_portal_json.h"
@@ -111,6 +114,9 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         uint8_t item_count = 0;
         for (uint8_t i = 0; i < component_registry_count(); i++) {
             ComponentDef* comp = component_registry_get(i);
+#if HAS_TTF_FONTS
+            if (strcmp(comp->id, "fonts") == 0 && !font_store_available()) continue;
+#endif
             if (strcmp(comp->category, PORTAL_PRIMARY_CATEGORY) == 0) {
                 const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
                 items[item_count++] = {nav_id, comp->display_name, comp->nav_order,
@@ -184,6 +190,9 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         uint8_t item_count = 0;
         for (uint8_t i = 0; i < component_registry_count(); i++) {
             ComponentDef* comp = component_registry_get(i);
+#if HAS_TTF_FONTS
+            if (strcmp(comp->id, "fonts") == 0 && !font_store_available()) continue;
+#endif
             if (strcmp(comp->category, cat.id) != 0) continue;
             #if HAS_REMOTE_LOG
             if (strcmp(comp->id, "logs") == 0 && !portal_logs_full_mode_enabled()) continue;

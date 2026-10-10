@@ -29,6 +29,47 @@ both themes. Views with multiple sections give each section a descriptive title;
 single-section views do not repeat the fragment title. Standard content and
 controls use the navigation's compact text scale, with larger fragment titles.
 
+## Fonts
+
+On eligible LVGL display devices with storage and working PSRAM, open
+**Pads > Fonts**. Other builds retain only the standard Montserrat bitmap fonts
+and do not expose font upload controls.
+
+The **TTF Fonts** view explains supported formats and button/widget text styles.
+Its catalog and responsive file-input/Upload row follow the Music Library layout,
+with an additional font ID field and upload progress indicator.
+
+1. Choose a trusted static TrueType-outline `.ttf` file.
+2. Set a font ID using 1-31 lowercase letters, digits, `_`, or `-`, without `.ttf`.
+3. Upload and wait for completion. Progress shows bytes sent; the success message
+	confirms storage validation and publication.
+4. Apply the font through a label's **Aa** raw style input, for example
+	`font:my-font;font_size:96`. Omit `font_size` for the automatic label height.
+
+The list shows font IDs and file sizes. Refresh reloads it; delete asks for
+confirmation. Referenced fonts can be deleted, and cached pads rebuild with
+their automatic bitmap defaults. Delete an existing ID before replacing it;
+re-uploading that ID lets missing references resolve again. Fonts persist across
+reboot on the selected storage backend and are removed by factory reset.
+
+Variable fonts, collections, CFF/OpenType, WOFF, and WOFF2 are unsupported.
+For TTF text clipped by incorrect vertical metrics, add `font_metrics:bounds`
+to calculate line height and baseline from the whole-font bounds, or use a
+multiplier such as `font_metrics:2`. Glyph size stays unchanged. Different
+sizes and metrics settings use separate cached instances and consume more
+memory; reuse settings where possible. The Label Style Reference includes
+these options. This does not fix text that exceeds its button.
+There is no preview, conversion service, replacement command, or per-label picker.
+The upload progress and error message remain available for retry after failure.
+
+> [!WARNING]
+> Only upload trusted fonts. Basic format checks are not a hardened font sandbox.
+> Stock LVGL/STB allocation failure can hang or crash the device, even for valid
+> fonts; a watchdog reboot is not guaranteed. Large text and multiple cached pads
+> can increase memory pressure. A reproducible backend allocation-error patch is
+> [potential future work](dev/display-touch-architecture.md#accepted-backend-oom-limitation),
+> subject to device stability results.
+
 ## Device Logs
 
 On builds with `HAS_REMOTE_LOG`, open **Device > Logs** in Full Mode. This

@@ -15,7 +15,7 @@
             "shape": "wide",
             "label_center": "[timer:1;mm:ss]",
             "label_bottom": "(tap to toggle, \nhold to reset)",
-            "label_center_style": "font_family:dseg7",
+            "label_center_style": "font:dseg7",
             "label_bottom_style": "color:999999",
             "icon_id": "mi_timer",
             "icon_scale_pct": 50,
@@ -75,7 +75,7 @@
           {
             "col_offset": 0, "row_offset": 1, "col_span": 5, "row_span": 2,
             "label_center": "[time:%H:%M:%S]",
-            "label_center_style": "font_family:dseg7;font_size:48;font_upscale:2",
+            "label_center_style": "font:dseg7;font_size:96",
             "bg_color": "000000", "fg_color": "F44336",
             "actions": [{"type": "system", "system_command": "screensaver"}]
           },

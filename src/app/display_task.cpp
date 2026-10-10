@@ -80,8 +80,14 @@ void DisplayManager::flushCallback(lv_display_t *disp, const lv_area_t *area, ui
 }
 
 // FreeRTOS task for continuous LVGL rendering
+#if HAS_TTF_FONTS
+#include "font_store.h"
+#endif
 void DisplayManager::lvglTask(void* pvParameter) {
 		DisplayManager* mgr = (DisplayManager*)pvParameter;
+#if HAS_TTF_FONTS
+        uint32_t font_generation_seen = font_store_generation();
+#endif
 		
 		LOGI("Display", "LVGL render task start (core %d)", xPortGetCoreID());
 		portENTER_CRITICAL(&g_perf_mux);
@@ -111,6 +117,16 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						continue;
 					}
 					device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_DEFERRED_WORK);
+#if HAS_TTF_FONTS
+					const uint32_t font_generation = font_store_generation();
+					if (font_generation != font_generation_seen) {
+						LOGD("Fonts", "Store generation %lu -> %lu: invalidate pad caches", static_cast<unsigned long>(font_generation_seen), static_cast<unsigned long>(font_generation));
+						for (uint8_t index = 0; index < MAX_PADS; ++index) {
+							if (mgr->padScreens[index]) mgr->padScreens[index]->evict();
+						}
+						font_generation_seen = font_generation;
+					}
+#endif
 					mgr->processDisplayJob();
 					action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
 

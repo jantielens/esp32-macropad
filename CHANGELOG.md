@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-09
+ms.date: 2026-10-10
 ms.topic: reference
 ---
 
@@ -14,8 +14,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Uploaded TrueType fonts for pad button labels and widget text on supported
+  display boards with storage and PSRAM. Manage trusted, static `.ttf` files
+  through **Pads > Fonts** or the authenticated font API, then use styles such
+  as `font:my-font;font_size:40`. Missing or unloadable fonts fall back to the
+  automatic bitmap font. Boards can disable `HAS_TTF_FONTS` for bitmap-only
+  builds; native extension canvas text remains bitmap-only.
+* TTF vertical metrics correction with `font_metrics:bounds` or a multiplier
+  such as `font_metrics:1.5`, adjusting line spacing and baseline without
+  changing glyph size. Font instances are cached per pad and released when
+  the pad rebuilds or is destroyed. Very large sizes or many simultaneous
+  instances can exhaust memory; the stock LVGL/STB renderer can hang or reboot
+  on allocation failure. See the
+  [font memory limitations](docs/dev/display-touch-architecture.md#accepted-backend-oom-limitation).
+* Validate TTF glyph offsets, payloads, Unicode mappings, and composite
+  references before rendering; reject cyclic or excessively nested composites.
+  Cold font loads no longer hold the font-store mutex during allocation,
+  bulk reads, or validation. Deleting a font being loaded returns a retryable
+  conflict while unrelated store operations can proceed.
+
 ### Changed
 
+* Replace decorative Bebas, Doto, and DSEG bitmap fonts with uploaded TTF
+  support. Retain the Montserrat bitmap family at 12, 14, 18, 24, 32, and 36 px;
+  remove the 48 px bitmap, former decorative family aliases, and numeric
+  `font` size shorthand. Use `font_size` for bitmap sizes. The Label Style
+  Reference now shares the Binding reference dialog's theme and styling.
 * Reduce firmware size by replacing general-purpose regex URL routing with
   validated path segments, excluding unused portal assets, and minifying
   JavaScript with pinned Terser while preserving HTML callback names.

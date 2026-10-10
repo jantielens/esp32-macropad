@@ -137,6 +137,23 @@ Offline widget type icons identify both local and inherited buttons in the pad
 editor. Unlabeled widgets show a larger symbol and their name when space allows;
 the grid remains a configuration overview rather than a live data preview.
 
+Eligible LVGL display builds with storage and working PSRAM expose **Pads > Fonts**
+for uploaded static TrueType fonts. Apply an uploaded ID with
+`font:my-font;font_size:96`; Montserrat 12/14/18/24/32/36 remains the bitmap default.
+Fonts persist on storage, not in firmware. See the
+[Fonts workflow](docs/web-portal-guide.md#fonts),
+[style reference](docs/pad-editor-guide.md#uploaded-fonts), and
+[accepted stock-renderer OOM risk and future work](docs/dev/display-touch-architecture.md#accepted-backend-oom-limitation).
+
+| Method | Font API | Purpose |
+|--------|----------|---------|
+| GET | `/api/fonts/list` | List completed font IDs and byte sizes |
+| POST | `/api/fonts/upload?name=<id>` | Upload raw static TTF bytes |
+| DELETE | `/api/fonts?name=<id>` | Delete a font and invalidate cached pads |
+
+See the [Font API reference](docs/dev/web-portal.md#font-file-api) for gates,
+authentication, format checks, and error responses.
+
 Install parameterized recipes from your device-saved catalog, starting with the
 repository's Pomodoro, Alarm Clock, and Home Energy examples. Alarm Clock installs
 disabled, with links to finish configuring its schedule and behavior. Copy buttons or pads, and

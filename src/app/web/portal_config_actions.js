@@ -60,17 +60,14 @@ async function loadSoundList() {
             container.innerHTML = '<small style="color:#86868b;">No alert sounds uploaded yet.</small>';
             return;
         }
-        let html = '<table style="width:100%; border-collapse:collapse; font-size:13px;">';
-        html += '<tr style="border-bottom:1px solid #e5e5ea;"><th style="text-align:left;padding:4px 8px;">Name</th><th style="width:120px;"></th></tr>';
+        let html = '';
         names.forEach(function(name) {
-            html += '<tr style="border-bottom:1px solid #f0f0f0;">';
-            html += '<td style="padding:6px 8px;"><code>' + soundEsc(name) + '</code></td>';
-            html += '<td style="text-align:right; padding:4px 8px; white-space:nowrap;">';
-            html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; margin-right:4px;" onclick="playSound(\'' + soundEsc(name) + '\')">\u25B6 Play</button>';
-            html += '<button type="button" class="btn" style="font-size:12px; padding:2px 10px; color:#ff3b30;" onclick="deleteSound(\'' + soundEsc(name) + '\')">&times; Delete</button>';
-            html += '</td></tr>';
+            html += '<div class="list-group-item" style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;">';
+            html += '<code style="overflow-wrap:anywhere;">' + soundEsc(name) + '</code>';
+            html += '<button type="button" class="btn btn-secondary btn-sm" title="Play ' + soundEsc(name) + '" aria-label="Play ' + soundEsc(name) + '" onclick="playSound(\'' + soundEsc(name) + '\')"><span class="portal-icon" aria-hidden="true">play_arrow</span><span class="portal-icon-fallback">Play</span></button>';
+            html += '<button type="button" class="btn btn-outline-danger btn-sm" title="Delete ' + soundEsc(name) + '" aria-label="Delete ' + soundEsc(name) + '" onclick="deleteSound(\'' + soundEsc(name) + '\')"><span class="portal-icon" aria-hidden="true">delete</span><span class="portal-icon-fallback">Delete</span></button>';
+            html += '</div>';
         });
-        html += '</table>';
         container.innerHTML = html;
     } catch (err) {
         container.innerHTML = '<small style="color:#ff3b30;">Error loading sounds.</small>';

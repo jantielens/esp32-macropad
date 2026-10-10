@@ -13,7 +13,6 @@
 #define HAS_BLE false
 #define HAS_IMAGE_FETCH false
 #define HAS_IMAGE_LIBRARY false
-#define HAS_CUSTOM_FONTS true
 #define HAS_NATIVE_EXTENSIONS true
 #define HAS_BUTTON false
 #define HAS_BACKLIGHT true

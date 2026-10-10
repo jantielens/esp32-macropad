@@ -43,10 +43,11 @@ class PortalDevServerTest(unittest.TestCase):
 
     def setUp(self):
         PORTAL.reset_pad_fixtures(self.server)
+        self.server.mock_fonts = {}
 
     def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False):
         headers = {"Cookie": "portal_mock_profile=" + profile}
-        data = json.dumps(body).encode() if body is not None else None
+        data = body if isinstance(body, bytes) else json.dumps(body).encode() if body is not None else None
         request = Request(self.base + path, data=data, headers=headers, method=method)
         try:
             response = urlopen(request, timeout=5)
@@ -151,6 +152,20 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/recipes/catalog", "POST", empty)[0], 200)
         self.assertEqual(self.request("/api/recipes/catalog")[1], empty)
         self.assertEqual(self.request("/api/recipes/catalog", "POST", {**empty, "padding": "x" * 65536})[0], 413)
+
+    def test_font_storage_workflow(self):
+        source = (ROOT / "tests/fixtures/BebasNeue.inc").read_text()
+        font = bytes(int(value, 16) for value in re.findall(r"0x([0-9a-fA-F]{2})", source))
+        self.assertEqual(self.request("/api/fonts/list"), (200, []))
+        self.assertEqual(self.request("/api/fonts/upload?name=test-font", "POST", font)[0], 200)
+        self.assertEqual(self.request("/api/fonts/list")[1], [{"name": "test-font", "size_bytes": len(font)}])
+        self.assertEqual(self.request("/api/fonts/upload?name=test-font", "POST", font)[0], 409)
+        self.assertEqual(self.request("/api/fonts/upload?name=Bad.ttf", "POST", font)[0], 400)
+        self.assertEqual(self.request("/api/fonts/upload?name=invalid", "POST", b"OTTO")[0], 400)
+        self.assertEqual(self.request("/api/fonts/list", profile="reterminal-e1003-frame")[0], 404)
+        self.assertEqual(self.request("/api/fonts?name=test-font", "DELETE")[0], 200)
+        self.assertEqual(self.request("/api/fonts?name=test-font", "DELETE")[0], 404)
+        self.assertEqual(self.request("/api/fonts/list"), (200, []))
 
     def test_alarms(self):
         status, alarm = self.request("/api/component/alarms/config")
