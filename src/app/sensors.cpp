@@ -12,8 +12,12 @@
 #include "sensors/aht10_sensor.cpp"
 #endif
 
-#if HAS_SENSOR_BATTERY_ADC
+#if HAS_SENSOR_BATTERY_ADC || HAS_M5STACK_STOPWATCH
 #include "sensors/battery_adc_sensor.cpp"
+#endif
+
+#if HAS_M5STACK_STOPWATCH
+#include "sensors/stopwatch_battery_sensor.cpp"
 #endif
 
 #if HAS_SENSOR_LD2410_OUT
@@ -29,6 +33,9 @@
 #endif
 
 void sensor_manager_register_all(SensorRegistry &registry) {
+	#if HAS_M5STACK_STOPWATCH
+	register_stopwatch_battery_sensor(registry);
+	#endif
 	#if HAS_SENSOR_BME280
 	register_bme280_sensor(registry);
 	#endif
