@@ -140,6 +140,8 @@ class PortalDevServerTest(unittest.TestCase):
         info = self.request("/api/info")[1]
         self.assertTrue(info["has_alarm"])
         self.assertTrue(info["has_sound_player"])
+        self.assertTrue(info["has_ttf_fonts"])
+        self.assertFalse(self.request("/api/info", profile="reterminal-e1003-frame")[1]["has_ttf_fonts"])
         self.assertFalse(self.request("/api/info", profile="jc3248w535")[1]["has_sound_player"])
         self.assertFalse(self.request("/api/info", profile="reterminal-e1003-frame")[1]["has_alarm"])
         nav = self.request("/api/portal/nav")[1]

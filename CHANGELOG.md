@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Recipe font provisioning through direct HTTPS links to static TTF files.
+  Install missing fonts before saving the pad and reuse installed font names.
+  Recipes requiring fonts are unavailable on devices without TTF support.
+
 * Uploaded TrueType fonts for pad button labels and widget text on supported
   display boards with storage and PSRAM. Manage trusted, static `.ttf` files
   through **Pads > Fonts** or the authenticated font API, then use styles such
@@ -36,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conflict while unrelated store operations can proceed.
 
 ### Changed
+
+* Use downloadable DSEG7 Classic segment text in the Alarm Clock sample recipe.
+  Show available pad names alongside pad numbers in the recipe Target Pad list.
 
 * Replace decorative Bebas, Doto, and DSEG bitmap fonts with uploaded TTF
   support. Retain the Montserrat bitmap family at 12, 14, 18, 24, 32, and 36 px;

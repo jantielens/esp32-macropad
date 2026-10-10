@@ -721,7 +721,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "cpu_freq": 360, "flash_chip_size": 16 * 1024 * 1024,
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
             "ap_active": False, "has_mqtt": True, "has_alarm": False,
-            "has_touch": True, "has_usb_hid": True}
+            "has_touch": True, "has_usb_hid": True, "has_ttf_fonts": self._fonts_available()}
         if self._profile() in ("esp32-p4-lcd4b", "jc3248w535"):
             info.update(device_class="Macropad", board=self._profile(), has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,

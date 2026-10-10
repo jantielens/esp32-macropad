@@ -66,8 +66,21 @@ function recipeValidateCatalog(catalog) {
         if (seen.has(recipe.id)) recipeError('Recipe ids must be unique.');
         seen.add(recipe.id);
         if (recipe.requires !== undefined &&
-            (!Array.isArray(recipe.requires) || recipe.requires.some(function (item) { return !['display', 'mqtt', 'audio', 'alarm', 'sound_player'].includes(item); }))) {
-            recipeError('Recipe requirements must be display, mqtt, audio, alarm, or sound_player.');
+            (!Array.isArray(recipe.requires) || recipe.requires.some(function (item) { return !['display', 'mqtt', 'audio', 'alarm', 'sound_player', 'ttf_fonts'].includes(item); }))) {
+            recipeError('Recipe requirements must be display, mqtt, audio, alarm, sound_player, or ttf_fonts.');
+        }
+        if (recipe.fonts !== undefined) {
+            if (!Array.isArray(recipe.fonts)) recipeError('Recipe fonts must be an array.');
+            const names = new Set();
+            recipe.fonts.forEach(function (font) {
+                if (!recipeIsObject(font) || typeof font.name !== 'string' || !/^[a-z0-9_-]{1,31}$/.test(font.name) ||
+                    typeof font.url !== 'string') recipeError('Recipe fonts need a valid name and HTTPS URL.');
+                let url;
+                try { url = new URL(font.url); } catch (_) { recipeError('Recipe fonts need a valid HTTPS URL.'); }
+                if (url.protocol !== 'https:' || url.username || url.password) recipeError('Recipe fonts need a valid HTTPS URL.');
+                if (names.has(font.name)) recipeError('Recipe font names must be unique.');
+                names.add(font.name);
+            });
         }
         if (recipe.confirmation !== undefined && (typeof recipe.confirmation !== 'string' || !recipe.confirmation.trim())) {
             recipeError('Recipe confirmation must be non-empty text.');
@@ -185,7 +198,9 @@ function recipeSupports(recipe) {
 
 function recipeMissingRequirements(recipe) {
     const info = deviceInfoCache || {};
-    return (recipe.requires || []).filter(function (requirement) {
+    const requirements = new Set(recipe.requires || []);
+    if (recipe.fonts && recipe.fonts.length) requirements.add('ttf_fonts');
+    return Array.from(requirements).filter(function (requirement) {
         return requirement !== 'display' && info['has_' + requirement] !== true;
     });
 }
@@ -202,6 +217,8 @@ function recipeImpactSummary(recipe) {
     const provision = recipeProvision(recipe);
     const bindingCount = Object.keys((provision.pad && provision.pad.bindings) || {}).length;
     const componentCount = Object.keys(provision.components || {}).length;
+    const fontCount = (recipe.fonts || []).length;
+    if (fontCount) parts.push('installs ' + fontCount + ' font' + (fontCount === 1 ? '' : 's'));
     if (bindingCount) parts.push('adds ' + bindingCount + ' named binding' + (bindingCount === 1 ? '' : 's'));
     if (componentCount) parts.push('configures ' + componentCount + ' component' + (componentCount === 1 ? '' : 's'));
     return parts.join(' | ');
@@ -285,10 +302,14 @@ function recipePopulatePads() {
     if (!select) return;
     select.innerHTML = '';
     const maxPads = (deviceInfoCache && deviceInfoCache.max_pads) || 8;
+    const screens = (deviceInfoCache && deviceInfoCache.available_screens) || [];
     for (let index = 0; index < maxPads; index++) {
         const option = document.createElement('option');
         option.value = String(index);
-        option.textContent = 'Pad ' + (index + 1);
+        const label = 'Pad ' + (index + 1);
+        const screen = screens.find(function (entry) { return entry.id === 'pad_' + index; });
+        const name = screen && typeof screen.name === 'string' ? screen.name.trim() : '';
+        option.textContent = name && name !== label ? label + ': ' + name : label;
         select.appendChild(option);
     }
     select.onchange = recipeLoadPad;
@@ -744,6 +765,29 @@ function recipeOpenInstalledPadEditor() {
     window.location.hash = '#pad-editor';
 }
 
+async function recipeInstallFonts(fonts) {
+    if (!fonts || !fonts.length) return;
+    const response = await fetch('/api/fonts/list');
+    if (!response.ok) recipeError('Failed to list fonts: HTTP ' + response.status);
+    const installed = await response.json();
+    if (!Array.isArray(installed)) recipeError('Invalid font list.');
+    const names = new Set(installed.map(function (font) { return font.name; }));
+    for (const font of fonts) {
+        if (names.has(font.name)) continue;
+        const download = await fetch(font.url, { credentials: 'omit' });
+        if (!download.ok) recipeError('Failed to download font ' + font.name + ': HTTP ' + download.status);
+        const data = await download.blob();
+        const upload = await fetch('/api/fonts/upload?name=' + encodeURIComponent(font.name), {
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: data,
+        });
+        if (!upload.ok) {
+            const error = await upload.json().catch(function () { return {}; });
+            recipeError('Failed to upload font ' + font.name + ': ' + (error.message || error.error || 'HTTP ' + upload.status));
+        }
+        names.add(font.name);
+    }
+}
+
 async function recipeInstall() {
     if (recipeState.installing || !recipeState.selected || !recipeState.pad || !recipeState.placement) return;
     if (recipeState.selected.confirmation && !confirm(recipeState.selected.confirmation)) return;
@@ -774,8 +818,10 @@ async function recipeInstall() {
         });
         const componentIds = Object.keys(provision.components || {});
         const progress = recipeSetProgress([
-            'Adding ' + buttons.length + ' buttons...', 'Generating button icons...', 'Saving pad...'
-        ].concat(componentIds.map(function (id) { return 'Configuring ' + id + '...'; })));
+            'Adding ' + buttons.length + ' buttons...'
+        ].concat(recipe.fonts && recipe.fonts.length ? ['Installing fonts...'] : []).concat([
+            'Generating button icons...', 'Saving pad...'
+        ]).concat(componentIds.map(function (id) { return 'Configuring ' + id + '...'; })));
         let progressIndex = 0;
         progress[progressIndex++].classList.add('complete');
         const savedPad = Object.assign({}, target, {
@@ -783,6 +829,10 @@ async function recipeInstall() {
             bindings: recipeMergeBindings(target.bindings, provision.pad && provision.pad.bindings),
         });
         delete savedPad.page;
+        if (recipe.fonts && recipe.fonts.length) {
+            await recipeInstallFonts(recipe.fonts);
+            progress[progressIndex++].classList.add('complete');
+        }
         await padUploadPageIcons({
             page: target.page,
             cols: savedPad.cols,

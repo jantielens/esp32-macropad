@@ -2970,8 +2970,35 @@ Recipes may declare a `provision` object for configuration that accompanies thei
 buttons. `${parameter}` templates expand recursively throughout this object.
 The reserved `${target_pad}` value resolves to the selected pad's screen ID,
 such as `pad_6`; it cannot be declared as a user parameter. Optional `requires`
-values are `display`, `mqtt`, `audio`, `alarm`, and `sound_player`. Alarm support
+values are `display`, `mqtt`, `audio`, `alarm`, `sound_player`, and `ttf_fonts`. Alarm support
 uses `/api/info`'s `has_alarm`, derived from `ALARM_ENABLED`.
+
+An optional recipe-level `fonts` array declares downloadable static TrueType
+fonts. Each entry needs a unique lowercase `name` (1-31 letters, digits,
+underscores, or hyphens) and a direct HTTPS `url`. Buttons reference that name
+with the existing text style syntax, such as `font:dseg7-classic;font_size:96`.
+
+```json
+{
+  "fonts": [
+    {
+      "name": "dseg7-classic",
+      "url": "https://cdn.jsdelivr.net/npm/dseg@0.46.0/fonts/DSEG7-Classic/DSEG7Classic-Regular.ttf"
+    }
+  ]
+}
+```
+
+Recipes declaring fonts automatically require `/api/info`'s `has_ttf_fonts`.
+Before changing icons or saving the pad, the browser lists installed fonts,
+skips existing names, and downloads and uploads missing fonts through
+`POST /api/fonts/upload?name=<name>`. URLs must permit browser cross-origin
+fetches and return static TTF bytes, not ZIP, WOFF2, or variable fonts. External
+downloads omit credentials. The device's existing font validation remains in
+effect. Font names are assumed to identify stable content: recipes do not
+compare hashes or replace installed fonts. A font failure stops installation
+before pad or component changes; fonts uploaded before a later failure remain
+available for retry. Use trusted sources and observe each font's license.
 
 An optional nonempty `confirmation` string prompts before installation. Optional
 `post_install` metadata contains a nonempty `message` and a `links` array of
@@ -3019,6 +3046,9 @@ The Alarm Clock sample replaces Alarm 1's `on_ring` and `on_stop` arrays after
 confirmation and sets `enabled` to `false`. It preserves the time, weekdays,
 snooze, auto-dismiss, and maximum lateness. Its ring actions repeat a tone and
 show `${target_pad}`. Its post-install links open Alarm Schedule and Behavior.
+The clock uses the downloadable DSEG7 Classic segment font from the DSEG npm
+package via jsDelivr, distributed under the
+[SIL Open Font License](https://github.com/keshikan/DSEG/blob/master/DSEG-LICENSE.txt).
 
 
 #### `POST /api/pad/resolve`

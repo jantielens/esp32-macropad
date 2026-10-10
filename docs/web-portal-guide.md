@@ -854,7 +854,7 @@ next diagnostic run because earlier rows use the previous column layout.
 
 **Pads > Recipes** installs scenarios from the device-saved **Recipe Catalog**.
 The [sample catalog](samples/recipe-catalog.json) includes an Alarm Clock for
-boards with alarm and audio support. Choose a target pad and a free 5x5 area;
+boards with alarm, audio, and TTF font support. Choose a target pad and a free 5x5 area;
 smaller empty pads offer a grid increase. Confirm replacement of Alarm 1's
 ringing and stop actions. The alarm stays disabled, and its existing schedule
 and durations are retained. The completed-installation panel links to
@@ -864,6 +864,16 @@ When ringing, the repeated tone plays and the chosen pad appears with Snooze
 and confirmed Dismiss alarm controls. A failed pad save leaves alarm settings
 untouched; a later component failure reports incomplete setup with the pad
 already saved.
+
+The Alarm Clock downloads the DSEG7 Classic segment TrueType font in your
+browser and uploads it before saving the pad. The first installation needs
+internet access; later installations reuse the font already on the device.
+Font download or upload failures leave the pad and alarm settings unchanged.
+Uploaded fonts remain available if a later step fails. Manage them in
+**Pads > Fonts**. Recipe authors must use unique, stable font names and direct
+HTTPS URLs for static TTF files; ZIP downloads and variable fonts are not
+supported. DSEG is distributed under the
+[SIL Open Font License](https://github.com/keshikan/DSEG/blob/master/DSEG-LICENSE.txt).
 
 The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 16 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
