@@ -299,6 +299,7 @@ class Arduino_CO5300 {
 protected:
     Arduino_DataBus* _bus;
     virtual void tftInit() {}
+    bool sleeping = false;
 public:
     Arduino_CO5300(Arduino_DataBus* bus, int rst, int rotation, int w, int h,
                    int x1, int y1, int x2, int y2) : _bus(bus) {
@@ -313,7 +314,18 @@ public:
     }
     void fillScreen(int color) { assert(color == 0); }
     void setBrightness(int value) { panelBrightness = value; }
+    void displayOff() {
+        _bus->sendCommand(0x28); delay(120);
+        _bus->sendCommand(0x10); delay(120);
+        sleeping = true;
+    }
+    void displayOn() {
+        _bus->sendCommand(0x29); delay(120);
+        _bus->sendCommand(0x11); delay(120);
+        sleeping = false;
+    }
     void draw16bitRGBBitmap(int x, int y, uint16_t* pixels, int w, int h) {
+        if (sleeping) return;
         assert(((x + offsets[0]) & 1) == 0 && (w & 1) == 0);
         assert((y & 1) == 0 && (h & 1) == 0);
         assert(x >= 0 && x + w <= 468 && y >= 0 && y + h <= 466);
@@ -881,10 +893,22 @@ int main() {
     display.pushColors(const_cast<uint16_t*>(pixels),4);
     assert(drawn.empty());
     commands.clear(); delays.clear();
-    display.displaySleep(); display.displayWakeSleepOut();
-    assert(delays.empty()); // Two-phase methods must not block LVGL lock.
+    display.setBacklightBrightness(0);
+    assert(!display.needsTwoPhaseWake());
+    display.displaySleep();
+    drawn.clear();
+    display.setAddrWindow(465,465,1,1);
+    display.pushColors(&neighbor,1);
+    assert(drawn.empty());
+    display.displayWakeSleepOut();
+    assert((delays == std::vector<int>({120,120,120,120})));
+    assert((rectangle == std::array<int,4>({0,0,468,466})));
+    assert(drawn.size() == 468 * 466);
+    assert(drawn[465 * 468 + 466] == 77);
     display.displayWakeDisplayOn();
-    assert((commands == std::vector<std::pair<int,int>>({{0x28,-1},{0x10,-1},{0x11,-1},{0x29,-1}})));
+    assert((commands == std::vector<std::pair<int,int>>({{0x28,-1},{0x10,-1},{0x29,-1},{0x11,-1}})));
+    display.setBacklightBrightness(88);
+    assert(panelBrightness == 224);
     allocationFails = true;
     Arduino_GFX_CO5300_Driver failedDisplay(board_co5300_config());
     failedDisplay.init(); assert(!failedDisplay.isAvailable());
@@ -905,6 +929,68 @@ try:
                     str(source), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
     print("PASS: StopWatch board composition and hardware regressions", flush=True)
+    brightness_code = re.search(
+        r"static void apply_brightness\(uint8_t brightness\) \{.*?\n\}",
+        (ROOT / "src/app/screen_saver_manager.cpp").read_text(), re.S
+    ).group(0)
+    brightness_doubles = r'''
+#include <cassert>
+#include <cstdint>
+static int displayLockDepth = 0;
+static bool unlockedWrite = false;
+class DisplayDriver {
+public:
+    bool adjustable = true;
+    uint8_t brightness = 0;
+    bool on = false;
+    bool hasBacklightControl() { return adjustable; }
+    void setBacklightBrightness(uint8_t value) {
+        unlockedWrite |= displayLockDepth != 1;
+        brightness = value;
+    }
+    void setBacklight(bool value) {
+        unlockedWrite |= displayLockDepth != 1;
+        on = value;
+    }
+};
+class DisplayManager {
+public:
+    DisplayDriver* driver = nullptr;
+    DisplayDriver* getDriver() { return driver; }
+    void lock() { assert(displayLockDepth == 0); ++displayLockDepth; }
+    void unlock() { assert(displayLockDepth == 1); --displayLockDepth; }
+};
+static DisplayManager* displayManager = nullptr;
+'''
+    brightness_tests = r'''
+int main() {
+    apply_brightness(30);
+    DisplayManager manager;
+    displayManager = &manager;
+    apply_brightness(30);
+    DisplayDriver driver;
+    manager.driver = &driver;
+    apply_brightness(30);
+    assert(driver.brightness == 30 && displayLockDepth == 0);
+    driver.adjustable = false;
+    apply_brightness(0);
+    assert(!driver.on && displayLockDepth == 0);
+    apply_brightness(30);
+    assert(driver.on && displayLockDepth == 0);
+    return unlockedWrite ? 1 : 0;
+}
+'''
+    for unlocked in (False, True):
+        code = brightness_code
+        if unlocked:
+            code = code.replace("displayManager->lock();", "")
+            code = code.replace("displayManager->unlock();", "")
+        source.write_text(brightness_doubles + code + brightness_tests)
+        subprocess.run(["c++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                        str(source), "-o", str(executable)], check=True)
+        result = subprocess.run([str(executable)])
+        assert result.returncode == (1 if unlocked else 0)
+    print("PASS: screensaver brightness holds display lock; unlocked regression rejected", flush=True)
     for profile in ("es8311-gpio", "es8311-microphone", "pcm510xa-gpio"):
         prelude = PRELUDE
         if profile == "es8311-microphone":

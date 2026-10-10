@@ -75,6 +75,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   NVS without formatting a nonexistent partition; filesystem-backed boards retain
   their existing reset behavior.
 
+### Fixed
+
+* Serialize screensaver brightness fades with LVGL display transactions. On
+  StopWatch, brightness is a QSPI panel command; concurrent fade and pixel
+  writes could trigger a `spi_device_polling_end` assertion when entering sleep.
+* Use the CO5300 library's controller-specific sleep/wake sequence and settling
+  delays on StopWatch instead of generic two-phase wake. Restore the full retained
+  framebuffer after wake so LVGL redraws consumed while the panel slept are not
+  lost. Repeated touch-wake cycles have been confirmed on hardware without the
+  previous crash or black-panel symptom.
+
 ## [1.39.0] - 2026-10-09
 
 ### Added

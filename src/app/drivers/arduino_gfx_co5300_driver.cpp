@@ -117,22 +117,16 @@ void Arduino_GFX_CO5300_Driver::pushColors(uint16_t* data, uint32_t len, bool sw
 
 void Arduino_GFX_CO5300_Driver::displaySleep() {
     if (!available) return;
-    bus->sendCommand(0x28);
-    bus->sendCommand(0x10);
+    gfx->displayOff();
 }
 
 void Arduino_GFX_CO5300_Driver::displayWakeSleepOut() {
-    if (available) bus->sendCommand(0x11);
-}
-
-void Arduino_GFX_CO5300_Driver::displayWakeDisplayOn() {
-    if (!available) return;
-    bus->sendCommand(0x29);
-    setBacklight(backlightOn);
+    displayWake();
 }
 
 void Arduino_GFX_CO5300_Driver::displayWake() {
-    displayWakeSleepOut();
-    delay(120);
-    displayWakeDisplayOn();
+    if (!available) return;
+    gfx->displayOn();
+    gfx->draw16bitRGBBitmap(0, 0, framebuffer, config.nativeWidth, config.nativeHeight);
+    setBacklight(backlightOn);
 }

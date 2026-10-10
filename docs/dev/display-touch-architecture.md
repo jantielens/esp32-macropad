@@ -82,6 +82,25 @@ validation remains necessary for each hardware revision.
 
 Brightness uses CO5300 command 0x51 rather than LEDC/backlight PWM. Existing
 brightness controls and display sleep/wake ownership remain unchanged.
+Screensaver brightness updates must hold the display manager mutex, just like
+sleep/wake commands, because they share the QSPI device with LVGL pixel flushes.
+The main-loop fade must not issue panel commands concurrently with the LVGL
+task; SPI polling transactions are not safe to interleave on the same device.
+CO5300 uses Arduino_GFX's controller-specific sleep/wake sequence instead of
+the generic two-phase DCS wake. Display Off and Sleep In each settle for 120 ms;
+wake sends Display On, waits 120 ms, then Sleep Out and another 120 ms before
+restoring brightness. The existing single-step wake contract keeps that sequence
+under the display lock, pausing rendering for approximately 240 ms. This avoids
+interleaving pixel writes with controller settling and leaves other drivers'
+two-phase behavior unchanged. After wake, the driver uploads its full native
+backing framebuffer before restoring brightness. Removing the sleep overlay
+can trigger LVGL redraws before the panel wakes; those redraws update the backing
+buffer but may not reach a sleeping panel. Re-uploading it avoids relying on
+LVGL to invalidate the same content again. The library sequence alone did not
+resolve the reported black-panel symptom. With framebuffer restoration added,
+user testing on 2026-10-10 confirmed two touch-wake cycles without the previous
+crash or black panel. The necessity of the library sequence has not been tested
+independently of framebuffer restoration; long-duration sleep remains unverified.
 Rotation and partial writes must be checked with asymmetric patterns and
 RGB565 color bars on hardware; the adapter does not inherit the AXS15231B
 full-frame workaround.

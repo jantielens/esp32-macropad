@@ -37,7 +37,7 @@ public:
     void displaySleep() override;
     void displayWake() override;
     void displayWakeSleepOut() override;
-    void displayWakeDisplayOn() override;
+    bool needsTwoPhaseWake() const override { return false; }
 
 private:
     CO5300PanelConfig config;
