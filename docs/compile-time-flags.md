@@ -1298,7 +1298,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **CAMERA_SENSOR_ID_REG_HIGH**
   - src/app/board_config.h
 - **CONFIG_ASYNC_TCP_STACK_SIZE**
-  - src/app/web_portal.cpp
+  - src/app/async_tcp_config.h
+  - src/app/web_portal_device_api.cpp
 - **CONFIG_DEFAULT_PORTAL_IDLE_SECONDS**
   - src/app/board_config.h
 - **DATA_STREAM_MAX_STREAMS**

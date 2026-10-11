@@ -1657,6 +1657,12 @@ uptime, and workload; the ELF delta alone does not establish runtime free heap
 or fragmentation. `python3 tests/test_static_state.py` checks allocator fallback,
 cache failure/retry, and reuse paths with C++11 production-source harnesses.
 
+Portal startup and OTA do not automatically scan AsyncTCP's stack. Request
+`/api/health?async_tcp_stack=1` explicitly to sample its lifetime minimum free
+stack after a workload. The scan walks unused stack memory and has timing cost;
+do not enable it in ordinary health polling or use it during timing-sensitive
+display tests. Reboot resets the watermark.
+
 ### Rendering Performance
 
 Display performance snapshots use a shared sampling window protected by the

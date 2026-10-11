@@ -1269,6 +1269,15 @@ native serialization with MCP disabled.
 
 Returns real-time device health statistics.
 
+The optional `?async_tcp_stack=1` query adds `async_tcp_stack` with the current
+callback task's `task` name, `minimum_free_bytes`, and `configured_bytes` when
+the stack size is configured. Existing authentication applies. Peak observed
+usage is configured bytes minus minimum free bytes; the watermark covers the
+task's lifetime and resets at reboot. This scans unused stack memory only when
+explicitly requested and can affect timing. Normal health polling, portal
+startup, and OTA do not perform this scan. Do not poll this diagnostic
+continuously.
+
 **Response:**
 ```json
 {

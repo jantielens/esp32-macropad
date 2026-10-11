@@ -365,6 +365,17 @@ Driver implementations are conditionally compiled via the sketch-root translatio
 5. Default values are defined with `#ifndef` guards so overrides take precedence (Phase 2)
 6. If no override directory exists, uses defaults only
 
+The build force-includes `src/app/async_tcp_config.h` for C/C++ compilation,
+including separately compiled Arduino libraries. It defaults
+`CONFIG_ASYNC_TCP_STACK_SIZE` to 8192 bytes on classic ESP32 and ESP32-S3;
+other chip families retain the library default. An explicit numeric definition
+in the board's `board_overrides.h` is exported to the compiler and takes
+precedence. This saves 8 KB of internal RAM where the library previously used
+16 KB. StopWatch portal testing with the 8 KB stack observed a 4,792-byte peak
+and 3,400 bytes of remaining stack; a sample during OTA retained that watermark.
+This does not cover OTA finalization after the sample or validate other boards.
+Repeat upload, save, and OTA stress testing for each board configuration.
+
 **Benefits:**
 - ✅ Single codebase works for all board variants
 - ✅ Zero runtime overhead (dead code elimination)

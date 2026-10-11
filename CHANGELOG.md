@@ -67,6 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Default AsyncTCP to an 8 KB internal task stack on classic ESP32 and ESP32-S3,
+  saving 8 KB versus the library default. Apply the setting to separately
+  compiled libraries and preserve explicit board overrides; other chip families
+  retain their defaults. Remove the automatic portal startup watermark scan;
+  authenticated `/api/health?async_tcp_stack=1` reports lifetime minimum free
+  stack only when explicitly requested.
 * Consolidate core portal CORS preflight routes into one handler with a
   flash-resident, feature-gated path table. Preserve OPTIONS-only dispatch,
   exact-or-child-path matching, and existing CORS responses. StopWatch portal

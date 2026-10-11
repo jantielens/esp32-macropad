@@ -116,6 +116,66 @@ int main() {
 
 
 def main():
+    health = (ROOT / "src/app/web_portal_device_api.cpp").read_text()
+    health = health[health.index("void handleGetHealth("):health.index("void handleGetHealthHistory(")]
+    start_probe = health.index('if (request->hasParam("async_tcp_stack")')
+    assert health.index("portal_auth_gate(request)") < start_probe
+    probe = health[start_probe:health.index("if (doc->overflowed())", start_probe)]
+    for path in ROOT.glob("src/app/web_portal*.cpp"):
+        if path.name != "web_portal_device_api.cpp":
+            assert "uxTaskGetStackHighWaterMark" not in path.read_text(), path
+    with tempfile.TemporaryDirectory(prefix="portal-stack-") as directory:
+        test = pathlib.Path(directory) / "test.cpp"
+        binary = pathlib.Path(directory) / "test"
+        test.write_text(r'''
+#include <cassert>
+#include <string>
+static unsigned scans = 0;
+unsigned uxTaskGetStackHighWaterMark(void* task) {
+    assert(task == nullptr);
+    ++scans;
+    return 4096;
+}
+const char* pcTaskGetName(void*) { return "async_tcp"; }
+struct JsonObject {
+    struct Field { template<typename Value> void operator=(Value) {} };
+    Field operator[](const char*) { return {}; }
+};
+struct Document {
+    struct Field { template<typename Value> Value to() { return {}; } };
+    Field operator[](const char*) { return {}; }
+};
+struct Request {
+    bool present = false;
+    std::string parameter;
+    bool hasParam(const char*) const { return present; }
+    Request* getParam(const char*) { return this; }
+    const std::string& value() const { return parameter; }
+};
+void sample(Request* request, Document* doc) {
+''' + probe + r'''
+}
+int main() {
+    Document doc;
+    Request request;
+    sample(&request, &doc);
+    assert(scans == 0);
+    request.present = true;
+    for (const auto* value : {"", "0", "true", "2"}) {
+        request.parameter = value;
+        sample(&request, &doc);
+        assert(scans == 0);
+    }
+    request.parameter = "1";
+    sample(&request, &doc);
+    assert(scans == 1);
+}
+''')
+        for definitions in ([], ["-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"]):
+            subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
+                            *definitions, str(test), "-o", str(binary)], check=True)
+            subprocess.run([str(binary)], check=True)
+    print("Portal stack scans are query-only and follow the authentication gate")
     routes = (ROOT / "src/app/web_portal_routes.cpp").read_text()
     start = routes.index("static const char* const core_preflight_paths")
     end = routes.index("void web_portal_register_routes", start)

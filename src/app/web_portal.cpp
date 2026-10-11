@@ -41,31 +41,6 @@
 
 #include <esp_heap_caps.h>
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-
-static void log_async_tcp_stack_watermark_once() {
-		static bool logged = false;
-		if (logged) return;
-		logged = true;
-
-		// AsyncTCP task name varies by library/core version; try a few common ones.
-		TaskHandle_t task = xTaskGetHandle("async_tcp");
-		if (!task) task = xTaskGetHandle("async_tcp_task");
-		if (!task) task = xTaskGetHandle("AsyncTCP");
-		if (!task) return;
-
-		const UBaseType_t high_water_words = uxTaskGetStackHighWaterMark(task);
-		const unsigned high_water_bytes = (unsigned)high_water_words * (unsigned)sizeof(StackType_t);
-
-		#ifdef CONFIG_ASYNC_TCP_STACK_SIZE
-				LOGT("Portal", "AsyncTCP stack watermark: %u bytes (CONFIG_ASYNC_TCP_STACK_SIZE=%u)", high_water_bytes, (unsigned)CONFIG_ASYNC_TCP_STACK_SIZE);
-		#else
-				LOGT("Portal", "AsyncTCP stack watermark: %u bytes (CONFIG_ASYNC_TCP_STACK_SIZE not set)", high_water_bytes);
-		#endif
-}
-
-
 // Web server on port 80 (pointer to avoid constructor issues)
 AsyncWebServer *server = nullptr;
 
@@ -122,7 +97,6 @@ void web_portal_init(DeviceConfig *config) {
 		delay(100);
 		server->begin();
 
-		log_async_tcp_stack_watermark_once();
 		LOGI("Portal", "Init complete");
 }
 

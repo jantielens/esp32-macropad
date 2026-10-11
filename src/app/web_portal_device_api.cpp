@@ -25,6 +25,8 @@
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 extern DeviceConfig device_config;
 
@@ -361,6 +363,15 @@ void handleGetHealth(AsyncWebServerRequest *request) {
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (doc && doc->capacity() > 0) {
 				device_telemetry_fill_api(*doc);
+				if (request->hasParam("async_tcp_stack") &&
+						request->getParam("async_tcp_stack")->value() == "1") {
+						JsonObject stack = (*doc)["async_tcp_stack"].to<JsonObject>();
+						stack["task"] = pcTaskGetName(nullptr);
+						stack["minimum_free_bytes"] = uxTaskGetStackHighWaterMark(nullptr);
+						#ifdef CONFIG_ASYNC_TCP_STACK_SIZE
+						stack["configured_bytes"] = CONFIG_ASYNC_TCP_STACK_SIZE;
+						#endif
+				}
 				if (doc->overflowed()) {
 						LOGE("Portal", "/api/health JSON overflow");
 				}

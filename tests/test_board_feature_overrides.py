@@ -72,6 +72,27 @@ for flags, expected in policy_cases:
     )
 print(f"PASS: {len(policy_cases)} target, PSRAM, and override combinations")
 
+with tempfile.TemporaryDirectory() as directory:
+    pathlib.Path(directory, "sdkconfig.h").write_text("")
+    for target in ("ESP32", "ESP32S3", "ESP32C3", "ESP32C6", "ESP32P4", None):
+        for override in (None, 12288):
+            expected = override or (8192 if target in ("ESP32", "ESP32S3") else 16384)
+            flags = [f"-DCONFIG_IDF_TARGET_{target}=1"] if target else []
+            if override:
+                flags.append(f"-DCONFIG_ASYNC_TCP_STACK_SIZE={override}")
+            subprocess.run(
+                ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+                 "-x", "c++", "-", "-I", directory, *flags,
+                 "-include", str(root / "src/app/async_tcp_config.h")],
+                input=f'''#ifndef CONFIG_ASYNC_TCP_STACK_SIZE
+#define CONFIG_ASYNC_TCP_STACK_SIZE 16384
+#endif
+static_assert(CONFIG_ASYNC_TCP_STACK_SIZE == {expected}, "Unexpected AsyncTCP stack size");
+''', text=True, check=True,
+            )
+assert "-include $SCRIPT_DIR/src/app/async_tcp_config.h" in (root / "build.sh").read_text()
+print("PASS: AsyncTCP target defaults and explicit overrides")
+
 setup_prefix = (root / "src/app/app.ino").read_text().split("void setup()", 1)[1].split("dma2d_arbiter_init();", 1)[0]
 runtime_source = '''#include <cassert>
 #include <cstddef>
