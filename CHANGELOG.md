@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 * Authenticated, opt-in health stack reports through `?task=<name>` for
-  `audio`, `async_tcp`, `img_local`, `LVGL`, and `loopTask`, with no arbitrary
+  `audio`, `async_tcp`, `img_local`, `img_fetch`, `LVGL`, and `loopTask`, with no arbitrary
   task lookup. Preserve the older AsyncTCP query; sampling does not alter
   audio capabilities or configured stack sizes. LVGL samples through its
   shutdown-aware display-job bridge; local image sampling waits for worker creation.
@@ -72,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Enable remote image fetching and disable the local image library on StopWatch
+  for hardware validation; retain the remote worker's 16 KB stack for measurement.
 * Reduce the local image worker stack from 12 KB to 8 KB, saving 4 KB internal
   RAM when active. Keep image buffers in PSRAM and the stack in internal RAM.
 

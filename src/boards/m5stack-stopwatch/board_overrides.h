@@ -33,7 +33,8 @@
 #define HAS_USB_HID false
 #define HAS_NATIVE_EXTENSIONS false
 #define HAS_MCP false
-#define HAS_IMAGE_FETCH false
+#define HAS_IMAGE_FETCH true
+#define HAS_IMAGE_LIBRARY false
 #define HAS_HA_HISTORY false
 #define HAS_MUSIC_ANALYSIS false
 #define HAS_AUDIO_INPUT false

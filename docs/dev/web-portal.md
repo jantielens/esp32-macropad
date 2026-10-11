@@ -1271,9 +1271,9 @@ Returns real-time device health statistics.
 
 The optional `?task=<name>` query adds `task_stack` with
 `task`, `minimum_free_bytes`, and `configured_bytes` when the size is known.
-Supported case-sensitive names are `audio`, `async_tcp`, `img_local`, `LVGL`,
+Supported case-sensitive names are `audio`, `async_tcp`, `img_local`, `img_fetch`, `LVGL`,
 and `loopTask`; arbitrary task lookup is not performed. AsyncTCP samples the
-request's own task. Audio and local images sample atomically published handles
+request's own task. Audio, local images, and remote images sample atomically published handles
 through their owners; these workers are never deleted during normal operation.
 Arduino owns the permanent loop task and provides its configured stack size.
 LVGL samples itself through the shutdown-aware display-job bridge, which owns
@@ -1282,6 +1282,10 @@ the result until it is copied back to the request. Existing authentication appli
 An empty `task` returns `400`; unsupported names, including `audio_stack`,
 return `404`. A disabled or uninitialized worker returns `503`. The local image
 worker is created on demand; requesting its report does not initialize it.
+The remote image report uses the existing `img_fetch` worker and its unchanged
+16384-byte stack; requesting a report does not initialize it. StopWatch enables
+remote images and disables the local image library for hardware validation,
+so `?task=img_local` returns `503` on that build.
 LVGL also returns `503` during OTA or when the bridge is busy or cannot complete
 within 250 ms. The query does not bypass rendering suspension or shutdown.
 `?async_tcp_stack=1` remains a compatibility alias with its original

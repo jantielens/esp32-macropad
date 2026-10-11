@@ -5,6 +5,9 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#if HAS_IMAGE_FETCH
+#include "image_fetch.h"
+#endif
 #if HAS_IMAGE_LIBRARY
 #include "local_image_loader.h"
 #endif
@@ -400,6 +403,17 @@ static bool fill_requested_task_stack(AsyncWebServerRequest* request, JsonDocume
 				request->send(503, "application/json", "{\"error\":\"local image task unavailable\"}");
 				return false;
 				#endif
+		} else if (task == "img_fetch") {
+				#if HAS_IMAGE_FETCH
+				if (!image_fetch_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"image fetch task unavailable\"}");
+						return false;
+				}
+				task_name = "img_fetch";
+				#else
+				request->send(503, "application/json", "{\"error\":\"image fetch task unavailable\"}");
+				return false;
+				#endif
 		} else if (task == "LVGL") {
 				#if HAS_DISPLAY
 				if (!display_manager_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
@@ -421,7 +435,7 @@ static bool fill_requested_task_stack(AsyncWebServerRequest* request, JsonDocume
 				configured_bytes = getArduinoLoopTaskStackSize();
 		} else {
 				request->send(task.length() == 0 ? 400 : 404, "application/json",
-						"{\"error\":\"supported tasks: audio, async_tcp, img_local, LVGL, loopTask\"}");
+						"{\"error\":\"supported tasks: audio, async_tcp, img_local, img_fetch, LVGL, loopTask\"}");
 				return false;
 		}
 

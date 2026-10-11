@@ -179,7 +179,7 @@ See the [log viewer guide](docs/web-portal-guide.md#device-logs) and
 [log API reference](docs/dev/web-portal.md#remote-logs).
 
 For stack measurements, authenticated `GET /api/health?task=<name>` adds an
-opt-in watermark report for `audio`, `async_tcp`, `img_local`, `LVGL`, or `loopTask`.
+opt-in watermark report for `audio`, `async_tcp`, `img_local`, `img_fetch`, `LVGL`, or `loopTask`.
 Ordinary health polling does not scan stacks. See the
 [health API reference](docs/dev/web-portal.md#health-monitoring) for timing costs
 and unavailable-task responses.

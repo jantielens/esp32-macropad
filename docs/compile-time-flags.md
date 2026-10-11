@@ -367,7 +367,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ✅ |  |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| m5stack-stopwatch | ✅ |  | ✅ |  |  |  | ✅ |  | ✅ | ✅ |  |  |  |  |  | ✅ |  |  | ? |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| m5stack-stopwatch | ✅ |  | ✅ |  |  |  | ✅ |  | ✅ | ✅ |  |  |  |  |  | ✅ |  | ✅ |  |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
@@ -816,6 +816,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen.h
   - src/app/screens/pad_screen_poll.cpp
   - src/app/screens/pad_tile_builder.cpp
+  - src/app/web_portal_device_api.cpp
   - src/app/web_portal_firmware.cpp
 - **HAS_IMAGE_LIBRARY**
   - src/app/actions/image_next_action.cpp

@@ -138,6 +138,15 @@ def main():
                          image.index("local_image_slot_t local_image_loader_request(")]
     assert "vTaskDelete" not in image
     assert "g_sample_task.store(g_task, std::memory_order_release)" in image
+    fetch = (ROOT / "src/app/image_fetch.cpp").read_text()
+    fetch_getter = fetch[fetch.index("bool image_fetch_get_stack_watermark("):
+                         fetch.index("image_slot_t image_fetch_request(")]
+    assert "vTaskDelete" not in fetch
+    assert "fetch_sample_task.store(g_task, std::memory_order_release)" in fetch
+    assert "FETCH_TASK_STACK_BYTES = 16384;" in fetch
+    board = (ROOT / "src/boards/m5stack-stopwatch/board_overrides.h").read_text()
+    assert "#define HAS_IMAGE_FETCH true" in board
+    assert "#define HAS_IMAGE_LIBRARY false" in board
     display = (ROOT / "src/app/display_task.cpp").read_text()
     display_getter = display[display.index("static void sample_lvgl_stack("):
                              display.index("// Definition for the async-flush-busy")]
@@ -168,9 +177,14 @@ static TaskHandle_t test_image_task = reinterpret_cast<void*>(3);
 static unsigned loop_scans = 0;
 static unsigned image_scans = 0;
 static unsigned lvgl_scans = 0;
+static unsigned fetch_scans = 0;
+static TaskHandle_t test_fetch_task = reinterpret_cast<void*>(4);
+static std::atomic<TaskHandle_t> fetch_sample_task{nullptr};
+static constexpr uint32_t FETCH_TASK_STACK_BYTES = 16384;
 static bool in_lvgl = false;
 size_t getArduinoLoopTaskStackSize() { return 8192; }
 unsigned uxTaskGetStackHighWaterMark(void* task) {
+    if (task == test_fetch_task) { ++fetch_scans; return 11000; }
     if (in_lvgl) { assert(task == nullptr); ++lvgl_scans; return 9000; }
     if (task == test_loop_task) { ++loop_scans; return 5000; }
     if (task == test_image_task) { ++image_scans; return 7000; }
@@ -232,7 +246,7 @@ struct AsyncWebServerRequest {
     Param* getParam(const char* key) { active.parameter = params.at(key); return &active; }
     void send(int code, const char*, const char*) { status = code; }
 };
-''' + "#if HAS_AUDIO\n" + handle + "\n" + getter + "\n#endif\n" + image_getter + display_getter + probe + r'''
+''' + "#if HAS_AUDIO\n" + handle + "\n" + getter + "\n#endif\n" + image_getter + fetch_getter + display_getter + probe + r'''
 int main() {
     JsonDocument doc;
     AsyncWebServerRequest request;
@@ -299,6 +313,24 @@ int main() {
     assert(!fill_requested_task_stack(&request, doc));
     assert(request.status == 503 && image_scans == 0);
 #endif
+    assert(fetch_scans == 0);
+    request.params["task"] = "img_fetch";
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(request.status == 503 && fetch_scans == 0);
+    uint32_t minimum = 0, configured = 0;
+    assert(!image_fetch_get_stack_watermark(nullptr, &configured));
+    assert(!image_fetch_get_stack_watermark(&minimum, nullptr));
+    fetch_sample_task.store(test_fetch_task, std::memory_order_release);
+#if HAS_IMAGE_FETCH
+    assert(fill_requested_task_stack(&request, doc));
+    assert(fetch_scans == 1);
+    assert(doc.values["task_stack"]["task"] == "img_fetch");
+    assert(doc.values["task_stack"]["configured_bytes"] == "16384");
+    assert(doc.values["task_stack"]["minimum_free_bytes"] == "11000");
+#else
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(request.status == 503 && fetch_scans == 0);
+#endif
     request.params["task"] = "LVGL";
     for (const auto status : {DISPLAY_TASK_DISPATCH_UNAVAILABLE, DISPLAY_TASK_DISPATCH_BUSY,
                              DISPLAY_TASK_DISPATCH_TIMEOUT}) {
@@ -329,6 +361,11 @@ int main() {
                              "-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"],
                             ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=8192",
                              "-DHAS_IMAGE_LIBRARY=1", "-DHAS_DISPLAY=1",
+                             "-DHAS_IMAGE_FETCH=1",
+                             "-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"],
+                            ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=8192",
+                             "-DHAS_IMAGE_LIBRARY=0", "-DHAS_DISPLAY=1",
+                             "-DHAS_IMAGE_FETCH=1",
                              "-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"]):
             subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
                             *definitions, str(test), "-o", str(binary)], check=True)
