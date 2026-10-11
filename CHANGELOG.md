@@ -72,6 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Make coding-agent test additions risk-based: reuse existing checks, justify
+  new test files and harnesses, and avoid assertions tied to implementation
+  details. Preserve important failure-path coverage, align KISS reviews with
+  the policy, and distinguish focused local verification from the full CI suite.
 * Enable Home Assistant history hydration on StopWatch for hardware validation;
   retain the HA statistics worker's 16 KB stack for measurement.
 * Enable remote image fetching and disable the local image library on StopWatch

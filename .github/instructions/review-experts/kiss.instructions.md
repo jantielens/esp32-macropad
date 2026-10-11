@@ -33,6 +33,20 @@ Review code changes for violations of the Keep It Simple principle: over-enginee
 * Function parameters that are unused or always passed the same constant value.
 * Configurable limits (e.g., `MAX_WIDGETS`) set to values far beyond any foreseeable use case without justification.
 
+### Disproportionate Testing
+
+* New test files or custom harnesses without a concrete regression risk or an
+	explanation of why existing coverage cannot be extended.
+* Assertions that freeze source spelling, comments, incidental log messages,
+	or CSS structure rather than behavior. Narrow registration and build-contract
+	checks are exceptions when no existing check enforces the contract.
+* Repeated cases for trivial helpers, duplicated platform scaffolding, or
+	production refactors whose testing benefit does not justify their complexity.
+* Evaluate test additions using the
+	[test addition policy](../agent-guidelines.instructions.md#verification-does-not-require-new-tests).
+	Do not demand new tests merely because code changed; preserve coverage for
+	meaningful failure paths even when the production fix is small.
+
 ## Severity Guidelines
 
 | Severity | Criteria |
@@ -50,6 +64,8 @@ Review code changes for violations of the Keep It Simple principle: over-enginee
 ## DON'T
 
 * Flag established project patterns. If the codebase consistently uses a HAL pattern with single implementations, that is a convention, not over-engineering.
-* Flag complexity that serves testability. A thin interface that enables mocking is a valid use of abstraction.
+* Reject testability-driven interfaces automatically. A thin interface can be
+	justified, but evaluate whether the concrete regression coverage warrants
+	the added production and harness complexity.
 * Flag Arduino/embedded patterns that enable compile-time selection (e.g., conditional includes, board override patterns). These are architectural necessities.
 * Suggest simplifications that would break the project's modular compilation approach.
