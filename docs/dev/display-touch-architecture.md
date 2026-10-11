@@ -272,7 +272,7 @@ The driver copies the mode-specific drawing framebuffer into a PSRAM presentatio
 snapshot while holding its mutex, then releases the mutex before the blocking
 waveform. That preserves writes made during the waveform for the next
 presentation and permits no-op detection against the last presented frame. B/W
-pixels use ordered dithering and can use `partialUpdate()`; 3-bit grayscale can
+pixels use a fixed luminance threshold of 128 and can use `partialUpdate()`; 3-bit grayscale can
 only use full waveforms. The driver, rather than InkplateLibrary's automatic
 threshold, owns the periodic B/W full-refresh cadence.
 
@@ -288,11 +288,38 @@ Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
 It copies a settled LVGL frame under the framebuffer mutex, then uploads and
 refreshes the presentation snapshot outside that mutex so later LVGL flushes
 remain queued. Both modes coalesce LVGL flush rectangles into one aligned IT8951
-region. B/W uses ordered dithering and regional DU; grayscale uses regional GC16.
+region. B/W uses a fixed luminance threshold of 128 and regional DU; grayscale uses regional GC16.
 Initial and forced presentations use full-panel GC16, as do scheduled refreshes
 in both modes. Regional grayscale quality still needs hardware validation.
 Touch uses the existing GT911 driver on the E1003's shared
 GPIO19/GPIO20 I2C lines.
+
+### CrowPanel 4.2 A-Revision
+
+`crowpanel-4.2-interactive` selects `DISPLAY_DRIVER_CROWPANEL_42`, a buffered
+400 x 300 B/W driver. Two 15,000-byte PSRAM buffers separate LVGL writes from
+the SPI presentation snapshot. The driver follows Elecrow's V1.2A sample
+clear/partial sequence with GC/DU waveforms, applies cadence and no-op coalescing, and stops accepting
+requests after a bounded BUSY timeout. It has no touch or backlight control.
+
+The standard `button_nav` action is available on every `HAS_DISPLAY` board,
+independent of touch, e-paper, or physical inputs. It navigates pad buttons,
+rocker zones, and Cancel/Confirm choices, not arbitrary screen controls.
+Pads start without a selection; Previous
+selects the last actionable target and Next selects the first. Tap and Tap & Hold
+require a selection. Screen selection uses custom pads, not a built-in picker.
+All LVGL changes are
+submitted through the display-job bridge. The action opts out of the caller's
+display lock so it cannot hold that lock while waiting for the LVGL task.
+See the [CrowPanel profile](interactive-epaper.md#crowpanel-42-profile) for wiring,
+default hardware actions, refresh commands, and hardware acceptance checks.
+
+Boards may define `HW_BUTTON_DEFAULTS_JSON` in their overrides using the same
+`buttons` array as the hardware-button configuration API. Each positional entry
+contains ordinary `tap_actions` and/or `hold_actions` lists. The shared loader
+parses these through the action registry without board-specific dispatch logic.
+Saved event lists replace defaults; omitted events retain defaults and explicit
+empty lists disable them. Without board defaults, events remain unassigned.
 
 ### Purpose
 

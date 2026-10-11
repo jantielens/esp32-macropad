@@ -581,7 +581,14 @@ every component in that custom section to the same category ID.
   and screen saver configuration. Interactive display builds expose screen
   rotation as a separate Rotation component under Display; changes take effect
   after reboot.
-  - Boards with `HAS_LVGL_EPAPER` additionally expose persisted e-paper presentation settings: boot-only panel mode, mode-specific passive binding and minimum presentation intervals, optional clock refreshes at minute boundaries, and the B/W scheduled full-refresh threshold. A zero threshold disables scheduled B/W full refreshes and can cause ghosting.
+  - Boards with `HAS_LVGL_EPAPER` additionally expose persisted e-paper presentation settings: boot-only panel mode, shared passive binding and minimum presentation intervals, optional clock refreshes at minute boundaries, and the scheduled full-refresh threshold. A zero threshold disables scheduled full refreshes and can cause ghosting.
+  - `epaper_supported_render_modes` is a read-only array in `GET /api/config`.
+    The portal disables unavailable modes; CrowPanel 4.2 supports only `bw`.
+
+  - All `HAS_DISPLAY` boards expose the standard `button_nav` action in shared
+    action editors with Previous, Next, Tap, and Tap & Hold commands, including
+    confirmation-dialog navigation. No physical buttons or e-paper panel are
+    required. Screen selection uses screen actions on a custom pad.
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
@@ -2103,6 +2110,9 @@ Save new configuration. Device reboots after successful save.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
 - Interactive E-Paper fields are available only when `HAS_LVGL_EPAPER` is enabled. `epaper_render_mode` is read at boot and requires a restart. The shared intervals, minute-boundary setting, and full-refresh threshold apply live. Binding intervals must be 100 to 60,000 ms and refresh intervals must be 250 to 60,000 ms. An `epaper_full_refresh_threshold` of `0` disables scheduled full refreshes and can increase ghosting. Inkplate grayscale always refreshes the full panel and does not use the threshold.
+- `GET /api/config` returns `epaper_supported_render_modes` for Interactive
+  E-Paper. CrowPanel returns `["bw"]`; grayscale-capable profiles return
+  `["bw", "grayscale"]`. Unsupported `epaper_render_mode` writes return HTTP 400.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 

@@ -170,6 +170,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_IMAGE_NEXT "image_next"
 #define ACTION_TYPE_IMAGE_PREVIOUS "image_previous"
 #define ACTION_TYPE_DISPLAY_REFRESH "display_refresh"
+#define ACTION_TYPE_BUTTON_NAVIGATION "button_nav"
 
 #define ACTION_DELAY_MAX_DURATION_MS 55000U
 
@@ -283,6 +284,9 @@ struct CameraCapturePayload {
 struct DisplayRefreshPayload {
     char mode[5];                                  // "full"
 };
+struct ButtonNavigationPayload {
+    char command[9];
+};
 
 // Opaque slot reserved for device-class action payloads. Each device class
 // registers its own ActionTypeDef (via REGISTER_ACTION_TYPE) and casts the
@@ -320,6 +324,7 @@ union ActionPayload {
     DelayPayload      delay;        // type == ACTION_TYPE_DELAY
     CameraCapturePayload camera_capture; // type == ACTION_TYPE_CAMERA_CAPTURE
     DisplayRefreshPayload display_refresh; // type == ACTION_TYPE_DISPLAY_REFRESH
+    ButtonNavigationPayload button_navigation;
     uint8_t           device_class[ACTION_PAYLOAD_DEVICE_CLASS_BYTES];
                                     // opaque; owned by a registered ActionTypeDef
     // back, ble_pair, and "" (none) carry no payload data — only the type tag.

@@ -1,4 +1,147 @@
 #include "pad_screen.h"
+#include "../widgets/numericrocker_zones.h"
+#include <cstring>
+#if HAS_DISPLAY
+bool PadScreen::navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) const {
+    if (!navigationZoneCount(tile)) return false;
+    if (!tile.widget_type) return tile.action_count || tile.lp_action_count;
+    if (strcmp(tile.widget_type->name, "rocker") == 0) return zone ? tile.lp_action_count : tile.action_count;
+    if (strcmp(tile.widget_type->name, "numericrocker") == 0 && navigationZoneCount(tile) == 5) {
+        const auto* config = reinterpret_cast<const NumericRockerConfig*>(tile.widget_cfg.data);
+        if (zone == 2) return tile.action_count || tile.lp_action_count;
+        if (!(zone == 0 || zone == 4 ? config->large_step > 0 : config->small_step > 0)) return false;
+        const lv_area_t area = navigationArea(tile, zone);
+        return area.x2 >= area.x1 && area.y2 >= area.y1;
+    }
+    return tile.action_count || tile.lp_action_count;
+}
+
+uint8_t PadScreen::navigationZoneCount(const ButtonTile& tile) const {
+    if (padActionOverlay && padActionCount) return 0;
+    if (!tile.obj || lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
+        lv_obj_has_state(tile.obj, LV_STATE_DISABLED)) return 0;
+    if (tile.widget_type && strcmp(tile.widget_type->name, "numericrocker") == 0) {
+        const auto* config = reinterpret_cast<const NumericRockerConfig*>(tile.widget_cfg.data);
+        if (config->adjust_action.type[0] && (config->small_step > 0 || config->large_step > 0)) return 5;
+    }
+    if (!tile.action_count && !tile.lp_action_count) return 0;
+    return tile.widget_type && strcmp(tile.widget_type->name, "rocker") == 0 ? 2 : 1;
+}
+
+lv_area_t PadScreen::navigationArea(const ButtonTile& tile, uint8_t zone) const {
+    lv_area_t area;
+    lv_obj_get_coords(tile.obj, &area);
+    if (!tile.widget_type) return area;
+    if (strcmp(tile.widget_type->name, "rocker") == 0) {
+        if (tile.widget_cfg.data[0]) {
+            const int middle = (area.x1 + area.x2) / 2;
+            if (zone) area.x1 = middle + 1;
+            else area.x2 = middle;
+        } else {
+            const int middle = (area.y1 + area.y2) / 2;
+            if (zone) area.y1 = middle + 1;
+            else area.y2 = middle;
+        }
+    } else if (strcmp(tile.widget_type->name, "numericrocker") == 0 && navigationZoneCount(tile) == 5) {
+        const auto* config = reinterpret_cast<const NumericRockerConfig*>(tile.widget_cfg.data);
+        lv_obj_get_content_coords(tile.obj, &area);
+        const int span = config->horizontal ? area.x2 - area.x1 + 1 : area.y2 - area.y1 + 1;
+        const NRZoneLayout layout = nr_compute_zones(span, config->small_step, config->large_step, config->zone_scale_pct);
+        const int bounds[] = {0, layout.outer_end, layout.inner_end, layout.inner2_start, layout.outer2_start, span};
+        if (config->horizontal) { area.x2 = area.x1 + bounds[zone + 1] - 1; area.x1 += bounds[zone]; }
+        else { area.y2 = area.y1 + bounds[zone + 1] - 1; area.y1 += bounds[zone]; }
+    }
+    return area;
+}
+
+void PadScreen::refreshNavigationFocus() {
+    if (navigationTile == -1) {
+        if (navigationFocus) lv_obj_add_flag(navigationFocus, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    const bool padActionActive = padActionOverlay && padActionCount;
+    lv_obj_update_layout(container);
+    const bool selectedAvailable = padActionActive
+        ? navigationTile == NAVIGATION_PAD_ACTION
+        : tiles && navigationTile >= 0 && navigationTile < tileCount &&
+            navigationZoneAvailable(tiles[navigationTile], navigationZone);
+    if (!selectedAvailable) {
+        navigationTile = -1;
+        navigationZone = 0;
+        if (navigationFocus) lv_obj_add_flag(navigationFocus, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    if (!navigationFocus) {
+        navigationFocus = lv_obj_create(container);
+        lv_obj_remove_style_all(navigationFocus);
+        lv_obj_remove_flag(navigationFocus, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(navigationFocus, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_bg_opa(navigationFocus, LV_OPA_TRANSP, 0);
+    }
+    lv_obj_t* appearance = padActionActive ? container : tiles[navigationTile].obj;
+    const int32_t borderWidth = lv_obj_get_style_border_width(appearance, LV_PART_MAIN);
+    lv_obj_set_style_border_width(navigationFocus, borderWidth > 1 ? borderWidth * 2 : 2, 0);
+    lv_obj_set_style_border_color(navigationFocus, borderWidth > 0
+        ? lv_obj_get_style_border_color(appearance, LV_PART_MAIN)
+        : lv_obj_get_style_text_color(appearance, LV_PART_MAIN), 0);
+    lv_obj_set_style_border_opa(navigationFocus, borderWidth > 0
+        ? lv_obj_get_style_border_opa(appearance, LV_PART_MAIN) : LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(navigationFocus, lv_obj_get_style_radius(appearance, LV_PART_MAIN), 0);
+    lv_obj_update_layout(container);
+    lv_area_t area;
+    if (padActionActive) lv_obj_get_coords(padActionOverlay, &area);
+    else area = navigationArea(tiles[navigationTile], navigationZone);
+    lv_area_t origin;
+    lv_obj_get_coords(container, &origin);
+    lv_obj_set_pos(navigationFocus, area.x1 - origin.x1, area.y1 - origin.y1);
+    lv_obj_set_size(navigationFocus, area.x2 - area.x1 + 1, area.y2 - area.y1 + 1);
+    lv_obj_remove_flag(navigationFocus, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(navigationFocus);
+}
+
+bool PadScreen::navigateButtons(const char* command) {
+    update();
+    struct Target { int16_t tile; uint8_t zone; };
+    Target targets[MAX_PAD_BUTTONS * 5 + 1];
+    size_t count = 0;
+    int selected = -1;
+    if (padActionOverlay && padActionCount) {
+        targets[count++] = {NAVIGATION_PAD_ACTION, 0};
+        if (navigationTile == NAVIGATION_PAD_ACTION) selected = 0;
+    }
+    for (uint8_t index = 0; index < tileCount; ++index) {
+        for (uint8_t zone = 0; zone < navigationZoneCount(tiles[index]); ++zone) {
+            if (!navigationZoneAvailable(tiles[index], zone)) continue;
+            if (index == navigationTile && zone == navigationZone) selected = count;
+            targets[count++] = {index, zone};
+        }
+    }
+    if (!count) return false;
+    if (strcmp(command, "previous") == 0 || strcmp(command, "next") == 0) {
+        const bool previous = strcmp(command, "previous") == 0;
+        selected = selected < 0 ? (previous ? count - 1 : 0)
+            : (previous ? (selected + count - 1) % count : (selected + 1) % count);
+        navigationTile = targets[selected].tile;
+        navigationZone = targets[selected].zone;
+        refreshNavigationFocus();
+        return true;
+    }
+    if (strcmp(command, "tap") != 0 && strcmp(command, "tap_hold") != 0) return false;
+    if (selected < 0) return true;
+    if (targets[selected].tile == NAVIGATION_PAD_ACTION) {
+        if (strcmp(command, "tap") == 0) lv_obj_send_event(padActionOverlay, LV_EVENT_CLICKED, nullptr);
+        return true;
+    }
+    lv_obj_update_layout(container);
+    ButtonTile* tile = &tiles[targets[selected].tile];
+    const lv_area_t area = navigationArea(*tile, targets[selected].zone);
+    const lv_point_t point = {(area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2};
+    if (strcmp(command, "tap_hold") == 0) longPressAt(tile, point);
+    else tapAt(tile, point);
+    return true;
+}
+#endif
+#include "pad_screen.h"
 #include "../action_list.h"
 #include "../button_confirmation.h"
 #include "../display_manager.h"
@@ -225,6 +368,16 @@ void PadScreen::onPress(lv_event_t* e) {
 void PadScreen::onTap(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
     if (!tile || !tile->obj) return;
+    lv_point_t point = {};
+    if (tile->widget_type && strcmp(tile->widget_type->name, "numericrocker") == 0 &&
+        tile->touch_start_valid) point = tile->touch_start;
+    else if (lv_indev_active()) lv_indev_get_point(lv_indev_active(), &point);
+    tapAt(tile, point);
+}
+
+void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
+    if (!tile || !tile->obj) return;
+    tile->touch_start_valid = false;
 
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
@@ -246,8 +399,6 @@ void PadScreen::onTap(lv_event_t* e) {
 
     if (tile->widget_type && strcmp(tile->widget_type->name, "rocker") == 0) {
         // Determine which zone was tapped (primary vs secondary)
-        lv_point_t point;
-        lv_indev_get_point(lv_indev_active(), &point);
         lv_area_t area;
         lv_obj_get_coords(tile->obj, &area);
 
@@ -277,11 +428,6 @@ void PadScreen::onTap(lv_event_t* e) {
         // Numeric rocker: outer/inner zones use adjust_action with {step} substitution;
         // center zone falls through to standard tap dispatch (actions[0-2]).
         auto* cfg = reinterpret_cast<const NumericRockerConfig*>(tile->widget_cfg.data);
-
-        lv_point_t point;
-        if (tile->touch_start_valid) point = tile->touch_start;
-        else lv_indev_get_point(lv_indev_active(), &point);
-        tile->touch_start_valid = false;
 
         lv_area_t content;
         lv_area_t tile_area;
@@ -390,6 +536,14 @@ void PadScreen::onTap(lv_event_t* e) {
 void PadScreen::onLongPress(lv_event_t* e) {
     ButtonTile* tile = (ButtonTile*)lv_event_get_user_data(e);
     if (!tile || !tile->obj) return;
+    lv_point_t point = {};
+    if (lv_indev_active()) lv_indev_get_point(lv_indev_active(), &point);
+    longPressAt(tile, point);
+}
+
+void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
+    if (!tile || !tile->obj) return;
+    (void)point;
 
 #if HAS_NATIVE_EXTENSIONS
     if (strcmp(tile->widget_cfg.type, "external") == 0) {
@@ -406,8 +560,6 @@ void PadScreen::onLongPress(lv_event_t* e) {
     if (tile->widget_type &&
         strcmp(tile->widget_type->name, "numericrocker") == 0) {
         auto* cfg = reinterpret_cast<const NumericRockerConfig*>(tile->widget_cfg.data);
-        lv_point_t point;
-        lv_indev_get_point(lv_indev_active(), &point);
         lv_area_t area;
         lv_obj_get_coords(tile->obj, &area);
         int span = cfg->horizontal ? (area.x2 - area.x1) : (area.y2 - area.y1);

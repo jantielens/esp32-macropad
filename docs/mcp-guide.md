@@ -505,7 +505,17 @@ Active records are never evicted. When all four records are active or retained,
   carries `type`, `group`, `label`, an optional `commands` array (`id`/`label`
   pairs) for multi-command types, an optional `command_families` array for
   Shutter Tester, and a `fields` array (`name`/`description`) of the flat JSON
-  keys to author. For example, `cycle_pad` documents `direction`
+  keys to author. All `HAS_DISPLAY` boards advertise `button_nav` with `command`:
+  `previous`, `next`, `tap`, or `tap_hold`, labeled Previous, Next, Tap, and
+  Tap & Hold. These actions use pad focus and the normal confirmation path;
+  they do not synthesize touch. Each pad visit starts without a selection;
+  Previous selects the last actionable target and Next selects the first.
+  Tap commands do nothing until selected. Use screen actions on a custom pad for
+  screen selection. Physical buttons and e-paper are not required; navigation
+  actions do not target arbitrary controls outside pads and confirmation dialogs.
+  Monochrome Interactive E-Paper configuration advertises only `bw` in
+  `epaper_supported_render_modes` and rejects grayscale writes.
+  For example, `cycle_pad` documents `direction`
   (`next` or `previous`), `wrap` (boolean, default `true`), and
   `excluded_pads` (comma-separated 1-based pad numbers).
   A StopWatch build with MCP enabled also advertises **M5Stack StopWatch**

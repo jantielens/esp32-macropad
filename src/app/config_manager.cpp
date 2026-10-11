@@ -152,8 +152,7 @@ static EpaperRefreshSettings epaper_refresh_from_config(const DeviceConfig* conf
 }
 
 bool config_manager_validate_epaper_refresh_settings(const EpaperRefreshSettings& settings) {
-		return (settings.epaper_render_mode == EPAPER_RENDER_MODE_BW ||
-						settings.epaper_render_mode == EPAPER_RENDER_MODE_GRAYSCALE) &&
+		return config_manager_epaper_mode_supported(settings.epaper_render_mode) &&
 				settings.epaper_binding_refresh_interval_ms >= EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS &&
 				settings.epaper_binding_refresh_interval_ms <= EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS &&
 				settings.epaper_min_refresh_interval_ms >= EPAPER_REFRESH_INTERVAL_MIN_MS &&
@@ -164,7 +163,7 @@ bool config_manager_normalize_epaper_refresh_settings(DeviceConfig* config) {
 		if (!config) return false;
 		const EpaperRefreshSettings defaults = epaper_refresh_defaults();
 		bool changed = false;
-		if (config->epaper_render_mode != EPAPER_RENDER_MODE_BW && config->epaper_render_mode != EPAPER_RENDER_MODE_GRAYSCALE) {
+		if (!config_manager_epaper_mode_supported(config->epaper_render_mode)) {
 				config->epaper_render_mode = defaults.epaper_render_mode;
 				changed = true;
 		}
@@ -277,6 +276,11 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_BLE_HID || HAS_USB_HID
 		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
+		#endif
+
+		#if HAS_LVGL_EPAPER
+		config_manager_apply_epaper_refresh_defaults(config);
+		config_manager_publish_epaper_refresh_settings(config);
 		#endif
 
 		LOGT("Config", "Load start");

@@ -20,8 +20,13 @@ static lv_timer_t* s_timeout_timer = nullptr;
 static ButtonAction* s_actions = nullptr;
 static uint8_t s_action_count = 0;
 static char s_event_label[24];
+static lv_obj_t* s_cancel_button = nullptr;
+static lv_obj_t* s_confirm_button = nullptr;
+static bool s_confirm_selected = false;
 
 static void destroy_prompt() {
+    s_cancel_button = nullptr;
+    s_confirm_button = nullptr;
     if (s_timeout_timer) {
         lv_timer_delete(s_timeout_timer);
         s_timeout_timer = nullptr;
@@ -62,6 +67,21 @@ static void on_confirm(lv_event_t* event) {
     LOGI(TAG, "Confirmed; dispatching %u action(s)", count);
     action_list_dispatch(s_actions, count, s_event_label,
                          ACTION_CONTINUATION_OWNER_LVGL);
+}
+
+bool button_confirmation_navigate(const char* command) {
+    if (!s_overlay) return false;
+    lv_obj_set_style_outline_width(s_cancel_button, s_confirm_selected ? 0 : 3, 0);
+    lv_obj_set_style_outline_width(s_confirm_button, s_confirm_selected ? 3 : 0, 0);
+    if (strcmp(command, "tap") == 0) {
+        if (s_confirm_selected) on_confirm(nullptr);
+        else cancel_prompt();
+    } else if (strcmp(command, "previous") == 0 || strcmp(command, "next") == 0) {
+        s_confirm_selected = !s_confirm_selected;
+        lv_obj_set_style_outline_width(s_cancel_button, s_confirm_selected ? 0 : 3, 0);
+        lv_obj_set_style_outline_width(s_confirm_button, s_confirm_selected ? 3 : 0, 0);
+    }
+    return true;
 }
 
 static lv_obj_t* create_button(lv_obj_t* parent, const char* text,
@@ -164,6 +184,11 @@ bool button_confirmation_show(const ButtonAction* actions, uint8_t count,
     lv_obj_t* confirm = create_button(dialog, "Confirm", lv_color_hex(0xB3261E), on_confirm);
     lv_obj_set_size(confirm, button_width, button_height);
     lv_obj_align(confirm, LV_ALIGN_BOTTOM_RIGHT, -12, -12);
+    s_cancel_button = cancel;
+    s_confirm_button = confirm;
+    s_confirm_selected = false;
+    lv_obj_set_style_outline_color(cancel, lv_color_white(), 0);
+    lv_obj_set_style_outline_color(confirm, lv_color_white(), 0);
 
     s_timeout_timer = lv_timer_create(on_timeout, CONFIRM_TIMEOUT_MS, nullptr);
     if (!s_timeout_timer) {

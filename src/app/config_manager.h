@@ -69,6 +69,9 @@
 
 // Configuration structure
 #if HAS_LVGL_EPAPER
+constexpr bool config_manager_epaper_mode_supported(uint8_t mode) {
+	return mode == EPAPER_RENDER_MODE_BW || (HAS_EPAPER_GRAYSCALE && mode == EPAPER_RENDER_MODE_GRAYSCALE);
+}
 struct EpaperRefreshSettings {
 		uint8_t epaper_render_mode;
 		uint32_t epaper_binding_refresh_interval_ms;

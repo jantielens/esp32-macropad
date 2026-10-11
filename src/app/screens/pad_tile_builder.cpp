@@ -78,6 +78,8 @@ static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
 // ============================================================================
 
 void PadScreen::clearTiles() {
+    if (navigationFocus) lv_obj_delete(navigationFocus);
+    navigationFocus = nullptr;
     #if HAS_TOUCH
     if (tileCount && screen && screen == lv_screen_active()) touch_manager_cancel_physical_input();
     #endif

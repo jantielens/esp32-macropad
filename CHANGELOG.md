@@ -16,6 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Crisp B/W interactive e-paper rendering with a shared luminance threshold of
+  128 instead of ordered dithering on CrowPanel, Inkplate, and reTerminal.
+  Grayscale conversion and panel refresh waveforms are unchanged.
+* CrowPanel 4.2 Interactive Macropad profile with a B/W SSD1683 driver based on
+  Elecrow's reference wiring and refresh sequence. All six readable contacts
+  are configurable; defaults provide button and rocker focus, Tap/Tap & Hold,
+  confirmation, and full refresh. Pads open without a selection; Previous/Next
+  selects the last/first actionable target. Screen selection uses custom pads.
+  The profile uses 8 MB
+  flash/OPI PSRAM with OTA and LittleFS; SPI-SD and electrical Reset are not
+  software inputs/features.
+* Previous, Next, Tap, and Tap & Hold navigation actions on all display boards,
+  independent of e-paper or hardware inputs. CrowPanel retains its preassigned
+  bindings through generic board-default action JSON; other boards' defaults
+  remain unchanged. No navigation-specific feature flag is required.
+* Read-only `epaper_supported_render_modes` configuration capability. B/W-only
+  panels disable grayscale in the portal and reject it in API writes.
 * Authenticated, opt-in health stack reports through `?task=<name>` for
   `audio`, `async_tcp`, `img_local`, `img_fetch`, `ha_stats`, `LVGL`, and `loopTask`, with no arbitrary
   task lookup. Preserve the older AsyncTCP query; sampling does not alter

@@ -593,6 +593,35 @@ apply it to both the screen and touch input.
 Use this section to select **Grayscale** or **Black & white** panel mode. The
 choice applies after restart. Both modes share one passive binding interval
 (100 to 60,000 ms) and minimum presentation interval (250 to 60,000 ms).
+Unavailable modes are disabled. CrowPanel 4.2 Interactive supports only
+**Black & white**.
+
+B/W interactive e-paper rendering uses a fixed luminance threshold: values below
+128 become black, and values at or above 128 become white. This avoids dithered
+text and icon edges. The conversion applies to the complete rendered frame,
+including images; grayscale mode is unchanged.
+
+All display boards offer Navigate buttons actions: Previous, Next, Tap, and
+Tap & Hold. Assign them through the normal action editor when needed; physical
+buttons are not required. These actions navigate pad buttons and confirmation
+choices, not arbitrary controls on other screens. Other boards' hardware action
+defaults are unchanged.
+
+CrowPanel's six readable contacts are preassigned in the hardware action editor:
+Menu and Back taps are unassigned, rotary Up/Down selects focus, rotary
+OK uses Tap, and holding OK uses Tap & Hold on the focused button. Boot
+requests a full refresh. Reset is electrical reset, not a configurable input.
+Holding Menu retains the configuration-entry gesture. An empty saved action list
+disables a default. Each pad visit starts without a selection: Next selects the
+first actionable button or rocker zone, Previous selects the last, and Tap or
+Tap & Hold does nothing until a selection is made. Use a custom pad with screen
+actions for screen selection. Selection follows the button's border color and
+corner radius, doubles its border width with a minimum of 2 pixels, and uses
+text color for borderless buttons. Saved appearance settings are unchanged.
+Confirmation dialogs initially select Cancel, with the outline shown only when
+navigation is used;
+Previous or Next switches between Cancel and Confirm, and Tap chooses the
+highlighted option. Tap & Hold does nothing in a confirmation dialog.
 
 Enable **Refresh clock values on minute boundary** to update pads containing
 time bindings at the minute edge. When disabled, those values update through

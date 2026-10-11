@@ -37,6 +37,8 @@
 #include "drivers/inkplate6flick_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
 #include "drivers/reterminal_e1003_epaper_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+#include "drivers/crowpanel42_epaper_driver.h"
 #endif
 
 #include <SPI.h>
@@ -90,6 +92,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new Inkplate6FlickEpaperDriver(config);
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
 		driver = new ReTerminalE1003EpaperDriver(config);
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+		driver = new CrowPanel42EpaperDriver();
 		#else
 		#error "No display driver selected or unknown driver type"
 		#endif

@@ -197,6 +197,9 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["screen_saver_keeps_panel_awake"] = SCREENSAVER_KEEP_PANEL_AWAKE;
 				#if HAS_LVGL_EPAPER
 				(*doc)["epaper_render_mode"] = current_config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale";
+				JsonArray render_modes = (*doc)["epaper_supported_render_modes"].to<JsonArray>();
+				render_modes.add("bw");
+				if (HAS_EPAPER_GRAYSCALE) render_modes.add("grayscale");
 				(*doc)["epaper_binding_refresh_interval_ms"] = current_config->epaper_binding_refresh_interval_ms;
 				(*doc)["epaper_min_refresh_interval_ms"] = current_config->epaper_min_refresh_interval_ms;
 				(*doc)["epaper_refresh_clock_on_minute_boundary"] = current_config->epaper_refresh_clock_on_minute_boundary;

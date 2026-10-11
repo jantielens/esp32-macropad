@@ -180,6 +180,7 @@ FLAG_SUBSYSTEMS = {
     "IS_VOICE_ASSISTANT": "Device classes",
 }
 EXCLUDED_FLAGS = {
+    "HAS_EPAPER_GRAYSCALE": "Panel rendering capability; presentation drivers own both monochrome and grayscale paths without an independent flash boundary.",
     "HAS_PSRAM": "Memory capacity and allocation affect many subsystems; there is no distinct flash owner.",
 }
 FEATURE_FLAG_PATTERN = re.compile(r"\b(?:HAS_[A-Z0-9_]+|IS_[A-Z0-9_]+|ALARM_ENABLED)\b")

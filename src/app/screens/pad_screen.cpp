@@ -191,6 +191,9 @@ void PadScreen::destroy() {
 }
 
 void PadScreen::show() {
+    navigationTile = -1;
+    navigationZone = 0;
+    if (navigationFocus) lv_obj_add_flag(navigationFocus, LV_OBJ_FLAG_HIDDEN);
     if (screen) {
         lv_screen_load(screen);
     }
@@ -259,6 +262,7 @@ void PadScreen::update() {
     uint32_t gen = pad_config_get_generation();
     if (tilesBuilt && gen == cachedGeneration) {
     pollLiveData();
+    refreshNavigationFocus();
     return;
     }
 
@@ -277,6 +281,7 @@ void PadScreen::update() {
     // Resolve the first frame before LVGL renders it. Slow-refresh displays
     // should never spend a full waveform showing placeholder binding values.
     pollLiveData(true);
+    refreshNavigationFocus();
 }
 
 void PadScreen::pollLiveData(bool force) {

@@ -171,6 +171,10 @@ struct HwButtonDef {
 #ifndef HAS_LVGL_EPAPER
 #define HAS_LVGL_EPAPER false
 #endif
+// Panel supports the grayscale presentation mode.
+#ifndef HAS_EPAPER_GRAYSCALE
+#define HAS_EPAPER_GRAYSCALE HAS_LVGL_EPAPER
+#endif
 // Select the sleep-first E-Paper Frame product class.
 #ifndef IS_EPAPER_FRAME
 #define IS_EPAPER_FRAME false
@@ -1016,6 +1020,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER_INKPLATE6FLICK 12
 #define DISPLAY_DRIVER_RETERMINAL_E1003 13
 #define DISPLAY_DRIVER_ARDUINO_GFX_CO5300 14
+#define DISPLAY_DRIVER_CROWPANEL_42 15
 
 // Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 #ifndef DISPLAY_DRIVER

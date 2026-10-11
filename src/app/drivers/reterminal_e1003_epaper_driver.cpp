@@ -1,4 +1,5 @@
 #include "reterminal_e1003_epaper_driver.h"
+#include "monochrome_render.h"
 
 #include "../board_config.h"
 #include "../log_manager.h"
@@ -312,8 +313,7 @@ void ReTerminalE1003EpaperDriver::writePixel(int16_t x, int16_t y, uint16_t rgb5
 		const uint8_t luminance = ((uint16_t)red * 77 + (uint16_t)green * 150 + (uint16_t)blue * 29) >> 8;
 		uint8_t gray = (uint16_t(luminance) * 15 + 127) / 255;
 		if (usesBwMode()) {
-			static constexpr uint8_t bayer4x4[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
-			gray = luminance >= bayer4x4[y & 3][x & 3] * 16 + 8 ? 15 : 0;
+			gray = monochrome_is_white(luminance) ? 15 : 0;
 		}
 		const size_t offset = (size_t)drawY * (kPanelWidth / 2) + drawX / 2;
 		if (drawX & 1) drawingFramebuffer[offset] = (drawingFramebuffer[offset] & 0xF0) | gray;

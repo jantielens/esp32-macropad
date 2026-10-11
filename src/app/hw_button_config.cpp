@@ -21,9 +21,31 @@ static const char* HW_BUTTONS_PATH = "/config/hw_buttons.json";
 static HwButtonConfig* g_config = nullptr;
 static bool g_loaded = false;
 
+static uint8_t apply_action_lists(JsonArray buttons) {
+    uint8_t count = 0;
+    for (size_t index = 0; index < buttons.size() && index < NUM_HW_BUTTONS; ++index) {
+        JsonObject button = buttons[index].as<JsonObject>();
+        if (button.isNull()) continue;
+        if (button.containsKey("tap_actions")) g_config[index].tap_count =
+            action_list_parse(button["tap_actions"], g_config[index].tap_actions, MAX_BUTTON_ACTIONS);
+        if (button.containsKey("hold_actions")) g_config[index].hold_count =
+            action_list_parse(button["hold_actions"], g_config[index].hold_actions, MAX_BUTTON_ACTIONS);
+        ++count;
+    }
+    return count;
+}
+
 static void apply_defaults() {
     if (!g_config) return;
     memset(g_config, 0, NUM_HW_BUTTONS * sizeof(HwButtonConfig));
+#ifdef HW_BUTTON_DEFAULTS_JSON
+    BasicJsonDocument<PsramJsonAllocator> doc(4096);
+    if (deserializeJson(doc, HW_BUTTON_DEFAULTS_JSON)) {
+        LOGE(TAG, "Invalid board hardware button defaults");
+        return;
+    }
+    apply_action_lists(doc["buttons"].as<JsonArray>());
+#endif
 }
 
 static bool load_from_flash() {
@@ -63,18 +85,7 @@ static bool load_from_flash() {
         return false;
     }
 
-    // Parse up to NUM_HW_BUTTONS entries; extras (board changed) are ignored,
-    // missing entries default to empty.
-    uint8_t n = 0;
-    for (size_t i = 0; i < buttons.size() && i < NUM_HW_BUTTONS; i++) {
-        JsonObject b = buttons[i].as<JsonObject>();
-        if (b.isNull()) continue;
-        g_config[i].tap_count =
-            action_list_parse(b["tap_actions"], g_config[i].tap_actions, MAX_BUTTON_ACTIONS);
-        g_config[i].hold_count =
-            action_list_parse(b["hold_actions"], g_config[i].hold_actions, MAX_BUTTON_ACTIONS);
-        n++;
-    }
+    const uint8_t n = apply_action_lists(buttons);
 
     LOGI(TAG, "Loaded config for %u button(s)", n);
     return true;

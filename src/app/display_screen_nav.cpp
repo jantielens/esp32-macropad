@@ -1,5 +1,24 @@
 // Display Manager - Screen navigation, splash status, and screen history
 #include "board_config.h"
+#if HAS_DISPLAY
+#include "button_confirmation.h"
+#include "display_manager.h"
+#include "screen_saver_manager.h"
+#endif
+#if HAS_DISPLAY
+bool DisplayManager::navigateButtons(const char* command) {
+	if (!command || !isInLvglTask()) return false;
+	const bool wasAsleep = screen_saver_manager_is_asleep();
+	prepareNavigationWake();
+	if (wasAsleep || !screen_saver_manager_input_ready()) return true;
+	if (button_confirmation_navigate(command)) return true;
+	if (pendingScreen) return false;
+	for (uint8_t index = 0; index < MAX_PADS; ++index) {
+		if (currentScreen == padScreens[index]) return padScreens[index]->navigateButtons(command);
+	}
+	return false;
+}
+#endif
 
 #if HAS_DISPLAY
 

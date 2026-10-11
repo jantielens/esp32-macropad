@@ -1,0 +1,11 @@
+{
+  "device_class": "macropad",
+  "board_label": "CrowPanel 4.2 Interactive",
+  "description": "Always-on monochrome e-paper Macropad with Menu, Back, three-way rotary switch, and Boot button.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 8,
+  "psram_mb": 8,
+  "capabilities": ["mqtt", "mcp"],
+  "wireless": {"wifi": true, "ble": false},
+  "display": {"size": "4.2\"", "resolution": "400x300", "type": "E-Paper", "touch": false}
+}

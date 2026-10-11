@@ -17,6 +17,10 @@ window.init_epaper_refresh_fragment = function () {
 
     loadConfig().then(function () {
         savedMode = window.deviceConfig && window.deviceConfig.epaper_render_mode || 'bw';
+        var supported = window.deviceConfig && window.deviceConfig.epaper_supported_render_modes || ['bw', 'grayscale'];
+        document.querySelectorAll('input[name="epaper_render_mode"]').forEach(function (input) {
+            input.disabled = supported.indexOf(input.value) === -1;
+        });
         var selected = document.querySelector('input[name="epaper_render_mode"][value="' + savedMode + '"]');
         if (selected) selected.checked = true;
     });

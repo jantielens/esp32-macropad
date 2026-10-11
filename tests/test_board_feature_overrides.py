@@ -6,6 +6,56 @@ import tempfile
 
 
 root = pathlib.Path(__file__).resolve().parents[1]
+subprocess.run(
+    ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+     "-x", "c++", "-", "-I", str(root),
+     "-I", str(root / "src/boards/crowpanel-4.2-interactive"),
+     "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
+    input='''#include "src/app/board_config.h"
+static_assert(HAS_DISPLAY && HAS_LVGL_EPAPER && HAS_EPAPER_PANEL, "Interactive profile required");
+static_assert(!HAS_TOUCH && !IS_EPAPER_FRAME && !HAS_EPAPER_GRAYSCALE, "Monochrome non-touch profile required");
+static_assert(NUM_HW_BUTTONS == 6 && MAX_HW_BUTTONS >= 6, "All six inputs required");
+static_assert(HW_BUTTON_DEFS[0].pin == 2 && HW_BUTTON_DEFS[1].pin == 1, "Menu and Back pins");
+static_assert(HW_BUTTON_DEFS[2].pin == 6 && HW_BUTTON_DEFS[3].pin == 4 && HW_BUTTON_DEFS[4].pin == 5, "Jog switch pins");
+static_assert(HW_BUTTON_DEFS[5].pin == 0 && BUTTON_PIN == 2, "Boot strap and configuration pins");
+''', text=True, check=True,
+)
+print("PASS: crowpanel-4.2-interactive")
+with tempfile.TemporaryDirectory() as directory:
+    executable = pathlib.Path(directory) / "button-defaults"
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-x", "c++", "-",
+         "-I", str(root), "-I", str(root / "src/boards/crowpanel-4.2-interactive"),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1",
+         "-o", str(executable)],
+        input='''#include "src/app/board_config.h"
+#include <cstdio>
+int main() { std::puts(HW_BUTTON_DEFAULTS_JSON); }
+''', text=True, check=True,
+    )
+    defaults = json.loads(subprocess.check_output([str(executable)], text=True))["buttons"]
+    assert defaults == [
+        {}, {},
+        {"tap_actions": [{"type": "button_nav", "command": "previous"}]},
+        {"tap_actions": [{"type": "button_nav", "command": "next"}]},
+        {"tap_actions": [{"type": "button_nav", "command": "tap"}],
+         "hold_actions": [{"type": "button_nav", "command": "tap_hold"}]},
+        {"tap_actions": [{"type": "display_refresh", "mode": "full"}]},
+    ]
+print("PASS: CrowPanel generic hardware action defaults")
+for grayscale in (0, 1):
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "tests"),
+         "-DHAS_DISPLAY=1", "-DHAS_EPAPER_PANEL=1", "-DHAS_LVGL_EPAPER=1",
+         f"-DHAS_EPAPER_GRAYSCALE={grayscale}"],
+        input='''#include "src/app/config_manager.h"
+static_assert(config_manager_epaper_mode_supported(EPAPER_RENDER_MODE_BW), "B/W required");
+static_assert(config_manager_epaper_mode_supported(EPAPER_RENDER_MODE_GRAYSCALE) == HAS_EPAPER_GRAYSCALE, "Grayscale capability required");
+static_assert(!config_manager_epaper_mode_supported(255), "Unknown mode rejected");
+''', text=True, check=True,
+    )
+print("PASS: monochrome and grayscale panel mode capabilities")
 source = '''#include "src/app/board_config.h"
 static_assert(HAS_USB_HID, "USB HID must remain enabled");
 static_assert(!ALARM_ENABLED, "Alarms must be disabled");

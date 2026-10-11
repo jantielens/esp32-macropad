@@ -14,5 +14,6 @@ bool button_confirmation_show(const ButtonAction* actions, uint8_t count,
 
 // Cancel an active prompt. Must be called from the LVGL task.
 void button_confirmation_cancel();
+bool button_confirmation_navigate(const char* command);
 
 #endif // HAS_DISPLAY

@@ -233,6 +233,12 @@ for offline refreshes between network syncs.
 Want buttons instead? **Interactive E-Paper** runs the customizable pad UI with
 black-and-white or grayscale rendering. It is a different firmware experience
 from the sleep-first image frame.
+The B/W-only **CrowPanel 4.2 Interactive** uses its physical three-way rotary
+switch instead of touch: Up/Down selects buttons, OK taps the selection, holding
+OK uses Tap & Hold, and Boot requests a full refresh. Pads start without a
+selection. Menu and Back taps are unassigned; use a custom pad for screen selection.
+Previous, Next, Tap, and Tap & Hold are standard actions on every display board;
+CrowPanel preassigns them, while other boards can assign them as needed.
 
 [Choose an e-paper experience](docs/epaper-architectures.md) or
 [set up an E-Paper Frame](docs/epaper-frame-guide.md).
@@ -299,6 +305,7 @@ more room without using the board's internal flash for those files.
 | **Soldered Inkplate 5V2** | ESP32 | 5.17" 3-bit grayscale e-paper | 720 × 1280 | Portrait |
 | **Soldered Inkplate 6FLICK** | ESP32 | 6.0" e-paper, Frame or Interactive firmware | 1024 x 758 | Landscape |
 | **Seeed reTerminal E1003** | ESP32-S3 | 10.3" e-paper, Frame or Interactive firmware | 1404 x 1872 | Portrait |
+| **Elecrow CrowPanel 4.2 Interactive** | ESP32-S3 | 4.2" SSD1683 B/W e-paper, physical inputs, no touch | 400 x 300 | Landscape |
 | **ESP32-C3 Super Mini** | ESP32-C3 | Headless sensor node | N/A | N/A |
 | **DFRobot FireBeetle 2 ESP32-C6** | ESP32-C6 | Headless AHT10 sensor node | N/A | N/A |
 

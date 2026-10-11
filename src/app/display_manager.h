@@ -217,6 +217,7 @@ public:
 				const void* ctx, size_t ctxLen,
 				uint32_t timeoutMs, bool* outOk, char* outMsg, size_t outMsgLen);
 		bool requestFullRefresh();
+		bool navigateButtons(const char* command);
 
 		// Active LVGL logical resolution (post driver->configureLVGL()).
 		// Prefer using these instead of calling LVGL APIs from non-LVGL tasks.
