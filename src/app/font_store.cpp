@@ -325,10 +325,10 @@ static void font_store_path(const char* name, char* path, size_t size) {
     snprintf(path, size, "/fonts/%s.ttf", name);
 }
 
-static bool font_file_read(void* context, size_t offset, uint8_t* data, size_t length) {
-    File* file = static_cast<File*>(context);
-    return !ota_activity_is_active() && offset <= UINT32_MAX && file->seek(static_cast<uint32_t>(offset)) &&
-           file->read(data, length) == length;
+static bool font_memory_read(void* context, size_t offset, uint8_t* data, size_t length) {
+    if (ota_activity_is_active()) return false;
+    memcpy(data, static_cast<const uint8_t*>(context) + offset, length);
+    return true;
 }
 
 static void font_abort_locked(FontUpload& upload) {
@@ -380,7 +380,26 @@ FontStoreResult font_store_finish(FontUpload& upload, size_t expected) {
     File file = Storage.open(font_temp_path, "r");
     FontStoreResult result = FontStoreResult::Ok;
     if (!file || file.size() != expected || upload.received != expected) result = FontStoreResult::IoError;
-    else if (!font_ttf_validate(file.size(), font_file_read, &file)) result = FontStoreResult::Invalid;
+    else {
+        uint8_t* data = static_cast<uint8_t*>(heap_caps_malloc(expected, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (!data) {
+            LOGW("Fonts", "Upload '%s': PSRAM validation allocation failed for %zu bytes", upload.name, expected);
+            result = FontStoreResult::IoError;
+        }
+        else {
+            for (size_t offset = 0; offset < expected;) {
+                const size_t chunk = expected - offset > 4096 ? 4096 : expected - offset;
+                if (ota_activity_is_active() || file.read(data + offset, chunk) != chunk) {
+                    result = FontStoreResult::IoError;
+                    break;
+                }
+                offset += chunk;
+            }
+            if (result == FontStoreResult::Ok && !font_ttf_validate(expected, font_memory_read, data))
+                result = FontStoreResult::Invalid;
+            heap_caps_free(data);
+        }
+    }
     file.close();
     char path[48];
     font_store_path(upload.name, path, sizeof(path));
@@ -493,11 +512,7 @@ uint8_t* font_store_load(const char* name, size_t& length) {
         }
         offset += chunk;
     }
-    if (!font_ttf_validate(size, [](void* context, size_t offset, uint8_t* target, size_t count) {
-        if (ota_activity_is_active()) return false;
-        memcpy(target, static_cast<const uint8_t*>(context) + offset, count);
-        return true;
-    }, data)) {
+    if (!font_ttf_validate(size, font_memory_read, data)) {
         LOGW("Fonts", "Load '%s': TrueType validation failed or interrupted", name);
         heap_caps_free(data);
         return nullptr;

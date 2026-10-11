@@ -19,6 +19,7 @@ static bool psram_ready = true;
 static bool ota_active = false;
 static bool allocation_failure = false;
 static void (*allocation_hook)() = nullptr;
+static size_t validation_reads = 0;
 static std::vector<std::string> log_lines;
 void log_noop(const char*, const char* format, ...) {
     char line[288];
@@ -205,7 +206,10 @@ int main(int argument_count, char** arguments) {
         font_store_write(first, fixture + 16, sizeof(fixture) - 16) != FontStoreResult::Ok ||
         log_lines.size() != upload_log_count) return 1;
     if (Storage.exists("/fonts/test-font.ttf")) return 1;
+    Storage.read_hook = []() { ++validation_reads; };
     if (font_store_finish(first, sizeof(fixture)) != FontStoreResult::Ok || font_store_generation() != 1) return 1;
+    Storage.read_hook = nullptr;
+    if (validation_reads != (sizeof(fixture) + 4095) / 4096) return 1;
     if (log_lines.back().find("Uploaded 'test-font': 61400 bytes, generation=1") == std::string::npos) return 1;
     if (font_store_begin(second, "test-font") != FontStoreResult::Duplicate) return 1;
     size_t length = 0;
@@ -258,6 +262,20 @@ int main(int argument_count, char** arguments) {
     if (font_store_begin(second, "partial") != FontStoreResult::Ok) return 1;
     font_store_abort(second);
     if (Storage.exists("/fonts/.upload.tmp")) return 1;
+    for (unsigned failure = 0; failure < 3; ++failure) {
+        if (font_store_begin(second, "failed-validation") != FontStoreResult::Ok ||
+            font_store_write(second, fixture, sizeof(fixture)) != FontStoreResult::Ok) return 1;
+        allocation_failure = failure == 0;
+        Storage.short_read = failure == 1;
+        if (failure == 2)
+            allocation_hook = []() { allocation_hook = nullptr; ota_active = true; };
+        if (font_store_finish(second, sizeof(fixture)) != FontStoreResult::IoError ||
+            Storage.exists("/fonts/failed-validation.ttf") || Storage.exists("/fonts/.upload.tmp") ||
+            font_store_generation() != 3) return 1;
+        allocation_failure = false;
+        Storage.short_read = false;
+        ota_active = false;
+    }
     if (font_store_begin(second, "invalid") != FontStoreResult::Ok ||
         font_store_write(second, bytes.data(), bytes.size()) != FontStoreResult::Ok ||
         font_store_finish(second, bytes.size()) != FontStoreResult::Invalid ||
