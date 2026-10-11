@@ -72,7 +72,7 @@ struct MusicWorkCommand {
 
 static QueueHandle_t audio_queue = NULL;
 static QueueHandle_t music_work_queue = NULL;
-static TaskHandle_t audio_task_handle = NULL;
+static std::atomic<TaskHandle_t> audio_task_handle{nullptr};
 // Cross-task flags: written by audio_enqueue()/audio_stop() (caller task),
 // read/written by audio_task (FreeRTOS task).  volatile provides visibility;
 // no mutex needed because the only race (g_playing read in audio_enqueue vs
@@ -643,17 +643,27 @@ void audio_init(uint8_t initial_volume) {
         return;
     }
 
+    TaskHandle_t created_task = nullptr;
     if (!rtos_create_task_internal_stack_pinned(
             audio_task, "audio", AUDIO_TASK_STACK_SIZE, NULL, 5,
-            &audio_task_handle, nullptr, 1)) {
+            &created_task, nullptr, 1)) {
         LOGE(TAG, "Failed to create audio task with internal stack");
         audio_init_abort();
         return;
     }
 
+    audio_task_handle.store(created_task, std::memory_order_release);
     audio_initialized = true;
     device_telemetry_log_memory_snapshot("audio");
     LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume);
+}
+
+bool audio_get_stack_watermark(uint32_t* minimum_free_bytes) {
+    if (!minimum_free_bytes) return false;
+    const TaskHandle_t task = audio_task_handle.load(std::memory_order_acquire);
+    if (!task) return false;
+    *minimum_free_bytes = uxTaskGetStackHighWaterMark(task);
+    return true;
 }
 
 void audio_set_volume(uint8_t vol_0_100) {

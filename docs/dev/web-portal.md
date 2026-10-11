@@ -1269,14 +1269,37 @@ native serialization with MCP disabled.
 
 Returns real-time device health statistics.
 
-The optional `?async_tcp_stack=1` query adds `async_tcp_stack` with the current
-callback task's `task` name, `minimum_free_bytes`, and `configured_bytes` when
-the stack size is configured. Existing authentication applies. Peak observed
-usage is configured bytes minus minimum free bytes; the watermark covers the
-task's lifetime and resets at reboot. This scans unused stack memory only when
-explicitly requested and can affect timing. Normal health polling, portal
-startup, and OTA do not perform this scan. Do not poll this diagnostic
-continuously.
+The optional `?task=audio` or `?task=async_tcp` query adds `task_stack` with
+`task`, `minimum_free_bytes`, and `configured_bytes` when the size is known.
+Only these two long-lived tasks are supported; arbitrary task lookup is not
+performed. AsyncTCP samples the request's own task. Audio samples an
+atomically published handle through the audio owner, whose worker is never
+deleted during normal operation. Existing authentication applies.
+
+An empty `task` returns `400`; unsupported names, including `audio_stack`,
+return `404`. Audio disabled or not successfully initialized returns `503`.
+`?async_tcp_stack=1` remains a compatibility alias with its original
+`async_tcp_stack` response field. An explicit `task` takes precedence when
+both parameters are present.
+
+Optional field example:
+
+```json
+{
+  "task_stack": {
+    "task": "audio",
+    "minimum_free_bytes": 21704,
+    "configured_bytes": 24576
+  }
+}
+```
+
+All sizes are bytes. Peak observed usage is configured bytes minus minimum
+free bytes; the watermark covers the task's lifetime and resets at reboot.
+This scans unused stack memory only when explicitly requested and can affect
+timing. Normal health polling, portal startup, and OTA do not trigger these
+health-query scans. Do not poll this diagnostic continuously. A sample during
+OTA does not cover later finalization or a subsequent reboot.
 
 **Response:**
 ```json

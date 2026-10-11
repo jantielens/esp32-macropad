@@ -5,6 +5,9 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#if HAS_AUDIO
+#include "audio.h"
+#endif
 #if HAS_TTF_FONTS
 #include "font_store.h"
 #endif
@@ -354,6 +357,47 @@ void handleGetBindings(AsyncWebServerRequest *request) {
 		web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
+static bool fill_requested_task_stack(AsyncWebServerRequest* request, JsonDocument& doc) {
+		const bool named_task = request->hasParam("task");
+		const bool legacy_query = request->hasParam("async_tcp_stack") &&
+				request->getParam("async_tcp_stack")->value() == "1";
+		if (!named_task && !legacy_query) return true;
+
+		const String task = named_task ? request->getParam("task")->value() : String("async_tcp");
+		const char* task_name = nullptr;
+		uint32_t minimum_free_bytes = 0;
+		uint32_t configured_bytes = 0;
+		if (task == "async_tcp") {
+				task_name = pcTaskGetName(nullptr);
+				minimum_free_bytes = uxTaskGetStackHighWaterMark(nullptr);
+				#ifdef CONFIG_ASYNC_TCP_STACK_SIZE
+				configured_bytes = CONFIG_ASYNC_TCP_STACK_SIZE;
+				#endif
+		} else if (task == "audio") {
+				#if HAS_AUDIO
+				if (!audio_get_stack_watermark(&minimum_free_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"audio task unavailable\"}");
+						return false;
+				}
+				task_name = "audio";
+				configured_bytes = AUDIO_TASK_STACK_SIZE;
+				#else
+				request->send(503, "application/json", "{\"error\":\"audio task unavailable\"}");
+				return false;
+				#endif
+		} else {
+				request->send(task.length() == 0 ? 400 : 404, "application/json",
+						"{\"error\":\"supported tasks: audio, async_tcp\"}");
+				return false;
+		}
+
+		JsonObject stack = doc[named_task ? "task_stack" : "async_tcp_stack"].to<JsonObject>();
+		stack["task"] = task_name;
+		stack["minimum_free_bytes"] = minimum_free_bytes;
+		if (configured_bytes) stack["configured_bytes"] = configured_bytes;
+		return true;
+}
+
 // GET /api/health - Get device health statistics
 void handleGetHealth(AsyncWebServerRequest *request) {
 		WebPortalTiming timing;
@@ -363,15 +407,7 @@ void handleGetHealth(AsyncWebServerRequest *request) {
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (doc && doc->capacity() > 0) {
 				device_telemetry_fill_api(*doc);
-				if (request->hasParam("async_tcp_stack") &&
-						request->getParam("async_tcp_stack")->value() == "1") {
-						JsonObject stack = (*doc)["async_tcp_stack"].to<JsonObject>();
-						stack["task"] = pcTaskGetName(nullptr);
-						stack["minimum_free_bytes"] = uxTaskGetStackHighWaterMark(nullptr);
-						#ifdef CONFIG_ASYNC_TCP_STACK_SIZE
-						stack["configured_bytes"] = CONFIG_ASYNC_TCP_STACK_SIZE;
-						#endif
-				}
+				if (!fill_requested_task_stack(request, *doc)) return;
 				if (doc->overflowed()) {
 						LOGE("Portal", "/api/health JSON overflow");
 				}

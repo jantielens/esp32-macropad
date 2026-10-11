@@ -466,9 +466,14 @@ struct HwButtonDef {
 #define AUDIO_MP3_SCRATCH_PSRAM false
 #endif
 
-// Audio worker stack size in bytes.
+// Audio worker stack bytes: 8 KB on ESP32/S3 with tones or PSRAM MP3 scratch; otherwise 24 KB.
 #ifndef AUDIO_TASK_STACK_SIZE
+#if (defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)) && \
+    (!HAS_SOUND_PLAYER || AUDIO_MP3_SCRATCH_PSRAM)
+#define AUDIO_TASK_STACK_SIZE 8192
+#else
 #define AUDIO_TASK_STACK_SIZE 24576
+#endif
 #endif
 
 // Audio output sample rate in Hz.

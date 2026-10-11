@@ -144,7 +144,7 @@ Total flags: 314
 
 - **ACTION_TYPE_REGISTRY_MAX_TYPES** default: `(no default)` — Room for the built-in catalog and four board-local actions.
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
-- **AUDIO_TASK_STACK_SIZE** default: `24576` — Audio worker stack size in bytes.
+- **AUDIO_TASK_STACK_SIZE** default: `(no default)` — Audio worker stack bytes: 8 KB on ESP32/S3 with tones or PSRAM MP3 scratch; otherwise 24 KB.
 - **CAMERA_MJPEG_MAX_CLIENTS** default: `1` — Maximum simultaneous MJPEG clients; boards with constrained WiFi or PSRAM can keep the default.
 - **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
@@ -448,6 +448,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_screen_events.cpp
   - src/app/swipe_actions.cpp
   - src/app/web_portal_config.cpp
+  - src/app/web_portal_device_api.cpp
   - src/boards/m5stack-stopwatch/board_overrides.h
   - src/boards/m5stack-stopwatch/stopwatch_hardware.cpp
 - **HAS_AUDIO_INPUT**

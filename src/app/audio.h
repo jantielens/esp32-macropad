@@ -13,6 +13,8 @@ typedef bool (*AudioPlaybackGuard)(uint32_t generation);
 // initial_volume: 0-100 (from NVS config)
 void audio_init(uint8_t initial_volume);
 
+bool audio_get_stack_watermark(uint32_t* minimum_free_bytes);
+
 // Set device-level volume (0-100). Takes effect immediately.
 void audio_set_volume(uint8_t vol_0_100);
 

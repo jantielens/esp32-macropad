@@ -116,11 +116,22 @@ int main() {
 
 
 def main():
-    health = (ROOT / "src/app/web_portal_device_api.cpp").read_text()
+    source = (ROOT / "src/app/web_portal_device_api.cpp").read_text()
+    probe = source[source.index("static bool fill_requested_task_stack("):
+                   source.index("// GET /api/health -")]
+    health = source
     health = health[health.index("void handleGetHealth("):health.index("void handleGetHealthHistory(")]
-    start_probe = health.index('if (request->hasParam("async_tcp_stack")')
+    start_probe = health.index("fill_requested_task_stack(request, *doc)")
+    assert "if (!portal_auth_gate(request)) return;" in health
     assert health.index("portal_auth_gate(request)") < start_probe
-    probe = health[start_probe:health.index("if (doc->overflowed())", start_probe)]
+    audio = (ROOT / "src/app/audio.cpp").read_text()
+    getter = audio[audio.index("bool audio_get_stack_watermark("):
+                   audio.index("void audio_set_volume(")]
+    handle = next(line for line in audio.splitlines()
+                  if line.startswith("static std::atomic<TaskHandle_t> audio_task_handle"))
+    assert "vTaskDelete" not in audio
+    assert "audio_task_handle.store(created_task, std::memory_order_release)" in audio
+    assert "xTaskGetHandle" not in probe
     for path in ROOT.glob("src/app/web_portal*.cpp"):
         if path.name != "web_portal_device_api.cpp":
             assert "uxTaskGetStackHighWaterMark" not in path.read_text(), path
@@ -129,49 +140,104 @@ def main():
         binary = pathlib.Path(directory) / "test"
         test.write_text(r'''
 #include <cassert>
+#include <atomic>
+#include <cstdint>
+#include <map>
 #include <string>
-static unsigned scans = 0;
+using String = std::string;
+using TaskHandle_t = void*;
+static unsigned tcp_scans = 0;
+static unsigned audio_scans = 0;
+static TaskHandle_t test_audio_task = reinterpret_cast<void*>(1);
 unsigned uxTaskGetStackHighWaterMark(void* task) {
-    assert(task == nullptr);
-    ++scans;
-    return 4096;
+    if (task == nullptr) { ++tcp_scans; return 3400; }
+    assert(task == test_audio_task);
+    ++audio_scans;
+    return 21704;
 }
 const char* pcTaskGetName(void*) { return "async_tcp"; }
 struct JsonObject {
-    struct Field { template<typename Value> void operator=(Value) {} };
-    Field operator[](const char*) { return {}; }
+    std::map<std::string, std::string>* values;
+    struct Field {
+        std::map<std::string, std::string>* values;
+        std::string key;
+        void operator=(const char* value) { (*values)[key] = value; }
+        void operator=(uint32_t value) { (*values)[key] = std::to_string(value); }
+    };
+    Field operator[](const char* key) { return {values, key}; }
 };
-struct Document {
-    struct Field { template<typename Value> Value to() { return {}; } };
-    Field operator[](const char*) { return {}; }
+struct JsonDocument {
+    std::map<std::string, std::map<std::string, std::string>> values;
+    struct Field {
+        std::map<std::string, std::string>* values;
+        template<typename Value> Value to() { return {values}; }
+    };
+    Field operator[](const char* key) { return {&values[key]}; }
 };
-struct Request {
-    bool present = false;
-    std::string parameter;
-    bool hasParam(const char*) const { return present; }
-    Request* getParam(const char*) { return this; }
-    const std::string& value() const { return parameter; }
+struct AsyncWebServerRequest {
+    std::map<std::string, std::string> params;
+    struct Param {
+        std::string parameter;
+        const std::string& value() const { return parameter; }
+    } active;
+    int status = 200;
+    bool hasParam(const char* key) const { return params.count(key) != 0; }
+    Param* getParam(const char* key) { active.parameter = params.at(key); return &active; }
+    void send(int code, const char*, const char*) { status = code; }
 };
-void sample(Request* request, Document* doc) {
-''' + probe + r'''
-}
+''' + "#if HAS_AUDIO\n" + handle + "\n" + getter + "\n#endif\n" + probe + r'''
 int main() {
-    Document doc;
-    Request request;
-    sample(&request, &doc);
-    assert(scans == 0);
-    request.present = true;
+    JsonDocument doc;
+    AsyncWebServerRequest request;
+    assert(fill_requested_task_stack(&request, doc));
+    assert(tcp_scans == 0 && audio_scans == 0 && doc.values.empty());
     for (const auto* value : {"", "0", "true", "2"}) {
-        request.parameter = value;
-        sample(&request, &doc);
-        assert(scans == 0);
+        request.params["async_tcp_stack"] = value;
+        assert(fill_requested_task_stack(&request, doc));
+        assert(tcp_scans == 0 && audio_scans == 0 && doc.values.empty());
     }
-    request.parameter = "1";
-    sample(&request, &doc);
-    assert(scans == 1);
+    request.params["async_tcp_stack"] = "1";
+    assert(fill_requested_task_stack(&request, doc));
+    assert(tcp_scans == 1);
+    assert(doc.values["async_tcp_stack"]["minimum_free_bytes"] == "3400");
+    doc.values.clear();
+    request.params["task"] = "async_tcp";
+    assert(fill_requested_task_stack(&request, doc));
+    assert(tcp_scans == 2 && audio_scans == 0);
+    assert(doc.values["task_stack"]["task"] == "async_tcp");
+    assert(doc.values.count("async_tcp_stack") == 0);
+#ifdef CONFIG_ASYNC_TCP_STACK_SIZE
+    assert(doc.values["task_stack"]["configured_bytes"] == "8192");
+#else
+    assert(doc.values["task_stack"].count("configured_bytes") == 0);
+#endif
+    for (const auto* value : {"", "XXX", "audio_stack", "loopTask"}) {
+        request.params["task"] = value;
+        assert(!fill_requested_task_stack(&request, doc));
+        assert(request.status == (request.params["task"].empty() ? 400 : 404));
+        assert(tcp_scans == 2 && audio_scans == 0);
+    }
+    request.params["task"] = "audio";
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(request.status == 503 && tcp_scans == 2 && audio_scans == 0);
+#if HAS_AUDIO
+    assert(!audio_get_stack_watermark(nullptr));
+    audio_task_handle.store(test_audio_task, std::memory_order_release);
+    assert(!audio_get_stack_watermark(nullptr));
+    request.status = 200;
+    assert(fill_requested_task_stack(&request, doc));
+    assert(request.status == 200 && audio_scans == 1 && tcp_scans == 2);
+    assert(doc.values["task_stack"]["task"] == "audio");
+    assert(doc.values["task_stack"]["minimum_free_bytes"] == "21704");
+    assert(doc.values["task_stack"]["configured_bytes"] == std::to_string(AUDIO_TASK_STACK_SIZE));
+#endif
 }
 ''')
-        for definitions in ([], ["-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"]):
+        for definitions in (["-DHAS_AUDIO=0"], ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=24576"],
+                            ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=24576",
+                             "-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"],
+                            ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=8192",
+                             "-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"]):
             subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
                             *definitions, str(test), "-o", str(binary)], check=True)
             subprocess.run([str(binary)], check=True)

@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Authenticated, opt-in health stack reports through `?task=audio` and
+  `?task=async_tcp`, limited to known, long-lived workers with no arbitrary
+  task lookup. Preserve the older AsyncTCP query; sampling does not alter
+  audio capabilities or configured stack sizes.
 * StopWatch-only **Shutdown**, **Vibrate**, and **Status LED** actions under
   **M5Stack StopWatch**, also the new category for **Set charging mode**.
   Vibration is nonblocking, using comma-separated vibrate/pause patterns such
@@ -67,6 +71,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Default ESP32/S3 audio workers to an 8 KB internal stack for tone-only builds
+  or MP3 builds with PSRAM decoder scratch. Retain 24 KB for on-stack MP3
+  scratch and other chip families, and preserve explicit board overrides.
+  StopWatch inherits 8 KB with MP3 still enabled, saving 16 KB of internal RAM.
 * Default AsyncTCP to an 8 KB internal task stack on classic ESP32 and ESP32-S3,
   saving 8 KB versus the library default. Apply the setting to separately
   compiled libraries and preserve explicit board overrides; other chip families

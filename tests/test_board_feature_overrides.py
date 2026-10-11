@@ -93,6 +93,30 @@ static_assert(CONFIG_ASYNC_TCP_STACK_SIZE == {expected}, "Unexpected AsyncTCP st
 assert "-include $SCRIPT_DIR/src/app/async_tcp_config.h" in (root / "build.sh").read_text()
 print("PASS: AsyncTCP target defaults and explicit overrides")
 
+audio_cases = 0
+for target in ("ESP32", "ESP32S3", "ESP32C3", "ESP32C6", "ESP32P4", None):
+    for sound_player in (0, 1):
+        for psram_scratch in (0, 1):
+            for override in (None, 12288):
+                expected = override or (
+                    8192 if target in ("ESP32", "ESP32S3") and
+                    (not sound_player or psram_scratch) else 24576
+                )
+                flags = [f"-DCONFIG_IDF_TARGET_{target}=1"] if target else []
+                if override:
+                    flags.append(f"-DAUDIO_TASK_STACK_SIZE={override}")
+                subprocess.run(
+                    ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+                     "-x", "c++", "-", "-I", str(root), "-DHAS_AUDIO=1",
+                     f"-DHAS_SOUND_PLAYER={sound_player}",
+                     f"-DAUDIO_MP3_SCRATCH_PSRAM={psram_scratch}", *flags],
+                    input=f'''#include "src/app/board_config.h"
+static_assert(AUDIO_TASK_STACK_SIZE == {expected}, "Unexpected audio stack size");
+''', text=True, check=True,
+                )
+                audio_cases += 1
+print(f"PASS: {audio_cases} audio target, MP3 scratch, and override combinations")
+
 setup_prefix = (root / "src/app/app.ino").read_text().split("void setup()", 1)[1].split("dma2d_arbiter_init();", 1)[0]
 runtime_source = '''#include <cassert>
 #include <cstddef>

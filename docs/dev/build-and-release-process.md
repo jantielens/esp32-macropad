@@ -376,6 +376,13 @@ and 3,400 bytes of remaining stack; a sample during OTA retained that watermark.
 This does not cover OTA finalization after the sample or validate other boards.
 Repeat upload, save, and OTA stress testing for each board configuration.
 
+The audio worker uses a separate default in `src/app/board_config.h`:
+8192 bytes on ESP32/S3 for tone-only builds or MP3 builds with decoder scratch
+in PSRAM. MP3 builds with on-stack scratch and other chip families keep
+24576 bytes. Explicit `AUDIO_TASK_STACK_SIZE` board overrides take precedence;
+this setting needs no library force-include. Use `GET /api/health?task=audio`
+to validate the worker's stack headroom after representative workloads.
+
 **Benefits:**
 - ✅ Single codebase works for all board variants
 - ✅ Zero runtime overhead (dead code elimination)

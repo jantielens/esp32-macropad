@@ -178,6 +178,12 @@ storage and leaves serial output independent.
 See the [log viewer guide](docs/web-portal-guide.md#device-logs) and
 [log API reference](docs/dev/web-portal.md#remote-logs).
 
+For stack measurements, authenticated `GET /api/health?task=audio` or
+`?task=async_tcp` adds an opt-in watermark report for that long-lived task.
+Ordinary health polling does not scan stacks. See the
+[health API reference](docs/dev/web-portal.md#health-monitoring) for timing costs
+and unavailable-task responses.
+
 `POST /api/debug/crash` supports abort, assertion, and invalid-write tests,
 with no web UI. `DEBUG_CRASH_API_ENABLED` defaults off on every board. Enable
 it explicitly only in an isolated dev/test build; never ship it enabled in

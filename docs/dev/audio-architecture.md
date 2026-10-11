@@ -301,6 +301,16 @@ audio-task stack.
 The audio worker stack itself remains in internal RAM because it accesses
 flash-backed storage.
 
+`AUDIO_TASK_STACK_SIZE` defaults to 8192 bytes on classic ESP32 and ESP32-S3
+when `HAS_SOUND_PLAYER` is false or `AUDIO_MP3_SCRATCH_PSRAM` is true. MP3
+builds that keep decoder scratch on the stack retain 24576 bytes; other chip
+families also retain that default. Explicit board overrides take precedence.
+StopWatch inherits the 8 KB default with MP3 still enabled, saving 16 KB of
+internal RAM. Hardware boot and MP3/tone tests with the reduced stack observed
+a 3,896-byte peak and 4,296 bytes remaining, matching the earlier 24 KB peak.
+Broader music playback, catalog, cancellation, and OTA workloads remain
+unvalidated; check them using `GET /api/health?task=audio`.
+
 The Music catalog is also PSRAM-backed. A catalog retains at most 32 stable,
 lexicographically ordered paths; when more files exist, discovery continues,
 publishes the first 32, and records overflow metadata. Failed filesystem
@@ -344,6 +354,17 @@ Ordinary button submissions retain their existing unguarded session behavior,
 while all audio work still honors OTA checkpoints.
 
 ## Diagnostics And Logging
+
+`GET /api/health?task=audio` reports the worker's configured stack size and
+lifetime minimum free stack in bytes, using the existing portal authentication.
+The owner publishes the handle atomically only after task creation succeeds;
+the worker remains alive until reboot. Disabled or unavailable audio returns
+`503`. If worker deletion is introduced later, this getter must be updated to
+synchronize sampling with deletion before that lifecycle change can ship.
+The getter performs no lookup or scan of other tasks and is not used by normal
+health polling. A requested watermark scan still has timing cost; sample after
+a workload rather than polling during timing-sensitive playback tests.
+This diagnostic does not change `HAS_SOUND_PLAYER` or `AUDIO_TASK_STACK_SIZE`.
 
 `audio.cpp` reports output starvation from the time represented by queued DMA
 frames. This metric identifies whether the output writer met its timing budget;
