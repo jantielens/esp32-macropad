@@ -12,14 +12,33 @@ static uint32_t clock_ms = 1000, busy_until = 0;
 static bool busy_stuck = false, ota_active = false;
 static int pin_values[49] = {};
 static int allocations = 0, fail_allocation = 0, live_allocations = 0;
+static int live_mutexes = 0;
+static bool fail_mutex = false;
+static size_t individual_data_transfers = 0;
 static int failures = 0;
 static std::function<void()> waveform_hook;
+static std::function<void()> wait_hook;
 static EpaperRefreshSettings settings = {EPAPER_RENDER_MODE_BW, 1000, 500, true, 2};
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %d: %s\n", __LINE__, #condition); ++failures; } } while (0)
 
 extern "C" unsigned long millis() { return clock_ms; }
+SemaphoreHandle_t test_freertos_create_mutex() {
+    if (fail_mutex) return nullptr;
+    auto* semaphore = new StaticSemaphore_t{};
+    semaphore->signaled = true;
+    ++live_mutexes;
+    return semaphore;
+}
+void test_freertos_delete_mutex(SemaphoreHandle_t semaphore) {
+    CHECK(live_mutexes > 0);
+    --live_mutexes;
+    delete semaphore;
+}
 void delay(unsigned long milliseconds) { clock_ms += milliseconds; }
-void vTaskDelay(TickType_t ticks) { clock_ms += ticks; }
+void vTaskDelay(TickType_t ticks) {
+    clock_ms += ticks;
+    if (wait_hook) wait_hook();
+}
 void pinMode(int, int) {}
 void digitalWrite(int pin, int value) { pin_values[pin] = value; }
 int digitalRead(int pin) {
@@ -39,11 +58,14 @@ void crowpanel_test_spi_byte(uint8_t value) {
             busy_until = clock_ms + 10;
             if (waveform_hook) waveform_hook();
         }
-    } else commands.back().data.push_back(value);
+    } else {
+        ++individual_data_transfers;
+        commands.back().data.push_back(value);
+    }
 }
 void crowpanel_test_spi_data(const uint8_t* data, size_t length) {
     CHECK(pin_values[45] == LOW && pin_values[46] == HIGH);
-    commands.back().data.assign(data, data + length);
+    commands.back().data.insert(commands.back().data.end(), data, data + length);
 }
 void* heap_caps_malloc(size_t size, uint32_t) {
     if (++allocations == fail_allocation) return nullptr;
@@ -63,7 +85,10 @@ static void reset() {
     ota_active = false;
     allocations = 0;
     fail_allocation = 0;
+    fail_mutex = false;
+    individual_data_transfers = 0;
     waveform_hook = nullptr;
+    wait_hook = nullptr;
     settings.epaper_full_refresh_threshold = 2;
 }
 static void pixel(CrowPanel42EpaperDriver& driver, int x, int y, uint16_t color) {
@@ -125,7 +150,13 @@ int main() {
         driver.present();
         CHECK(update_modes() == std::vector<uint8_t>({0xf7, 0xf7}));
         size_t activations = 0;
+        size_t white_planes = 0;
         for (const auto& command : commands) {
+            if (command.code == 0x10 || (command.code == 0x13 && white_planes == 1)) {
+                CHECK(command.data.size() == 15000);
+                for (uint8_t value : command.data) CHECK(value == 0xff);
+                ++white_planes;
+            }
             if (command.code >= 0x20 && command.code <= 0x24) {
                 CHECK(command.data.size() == 42);
                 CHECK(command.data.at(0) == 1 && command.data.at(5) == 1);
@@ -137,6 +168,8 @@ int main() {
             }
         }
         CHECK(activations == 2);
+        CHECK(white_planes == 2);
+        CHECK(individual_data_transfers == 0);
         auto images = frames();
         CHECK(images.size() == 2 && images.back().size() == 15000);
         CHECK(images.back().at(0) == 0x7f && images.back().at(50) == 0xff);
@@ -171,8 +204,34 @@ int main() {
         const uint8_t values[] = {0x7f, 0xfe, 0xfe, 0x7f};
         CHECK(frames().back().at(indices[rotation]) == values[rotation]);
     }
-    reset();
-    {
+    for (bool alreadyPresented : {false, true}) {
+        reset();
+        CrowPanel42EpaperDriver driver;
+        driver.init();
+        if (alreadyPresented) {
+            pixel(driver, 20, 0, 0);
+            driver.present();
+        }
+        pixel(driver, 0, 0, 0);
+        const uint32_t started = clock_ms;
+        uint32_t firstWaveform = 0;
+        int redraws = 0;
+        wait_hook = [&] {
+            if (redraws < 10) pixel(driver, ++redraws, 0, 0);
+        };
+        waveform_hook = [&] {
+            if (!firstWaveform) {
+                firstWaveform = clock_ms;
+                wait_hook = nullptr;
+            }
+        };
+        driver.present();
+        CHECK(firstWaveform != 0 && firstWaveform - started <= 750);
+        waveform_hook = nullptr;
+        wait_hook = nullptr;
+    }
+    for (bool requestFull : {false, true}) {
+        reset();
         CrowPanel42EpaperDriver driver;
         driver.init();
         pixel(driver, 0, 0, 0);
@@ -181,13 +240,14 @@ int main() {
             if (injected || frames().size() != 2) return;
             injected = true;
             pixel(driver, 1, 0, 0);
-            CHECK(driver.requestFullRefresh());
+            if (requestFull) CHECK(driver.requestFullRefresh());
         };
         driver.present();
         CHECK(injected);
-        CHECK(update_modes() == std::vector<uint8_t>({0xf7, 0xf7, 0xf7, 0xf7}));
+        CHECK(update_modes() == (requestFull ? std::vector<uint8_t>({0xf7, 0xf7, 0xf7, 0xf7})
+                                             : std::vector<uint8_t>({0xf7, 0xf7, 0xff})));
         auto images = frames();
-        CHECK(images.at(1).at(0) == 0x7f && images.at(3).at(0) == 0x3f);
+        CHECK(images.at(1).at(0) == 0x7f && images.back().at(0) == 0x3f);
         waveform_hook = nullptr;
     }
     reset();
@@ -223,18 +283,23 @@ int main() {
         CHECK(!driver.isAvailable() && !driver.requestFullRefresh());
         CHECK(clock_ms - start <= 15600 && clock_ms - start >= 15420);
     }
-    for (int failure = 1; failure <= 2; ++failure) {
+    for (int failure = 1; failure <= 3; ++failure) {
         reset();
         {
             CrowPanel42EpaperDriver driver;
-            fail_allocation = failure;
+            fail_allocation = failure <= 2 ? failure : 0;
+            fail_mutex = failure == 3;
             driver.init();
             CHECK(!driver.isAvailable() && !driver.requestFullRefresh());
+            CHECK(live_allocations == 0);
+            CHECK(live_mutexes == 0);
             driver.present();
             CHECK(commands.empty());
         }
         CHECK(live_allocations == 0);
+        CHECK(live_mutexes == 0);
     }
+    CHECK(live_mutexes == 0);
     std::printf("CrowPanel driver: %s\n", failures ? "FAIL" : "PASS");
     return failures ? 1 : 0;
 }

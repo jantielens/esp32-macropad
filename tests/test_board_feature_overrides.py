@@ -18,6 +18,9 @@ static_assert(NUM_HW_BUTTONS == 6 && MAX_HW_BUTTONS >= 6, "All six inputs requir
 static_assert(HW_BUTTON_DEFS[0].pin == 2 && HW_BUTTON_DEFS[1].pin == 1, "Menu and Back pins");
 static_assert(HW_BUTTON_DEFS[2].pin == 6 && HW_BUTTON_DEFS[3].pin == 4 && HW_BUTTON_DEFS[4].pin == 5, "Jog switch pins");
 static_assert(HW_BUTTON_DEFS[5].pin == 0 && BUTTON_PIN == 2, "Boot strap and configuration pins");
+static_assert(EPAPER_SPI_SCK_PIN == 12 && EPAPER_SPI_MOSI_PIN == 11, "Panel SPI pins");
+static_assert(EPAPER_CS_PIN == 45 && EPAPER_DC_PIN == 46, "Panel control pins");
+static_assert(EPAPER_RESET_PIN == 47 && EPAPER_BUSY_PIN == 48 && EPAPER_POWER_PIN == 7, "Panel lifecycle pins");
 ''', text=True, check=True,
 )
 print("PASS: crowpanel-4.2-interactive")

@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 316
+Total flags: 323
 
 ### Features (HAS_*)
 
@@ -85,12 +85,19 @@ Total flags: 316
 - **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin.
 - **BATTERY_ADC_PIN** default: `-1` — ADC GPIO connected to the battery divider. Use -1 to disable the adapter.
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
+- **EPAPER_BUSY_PIN** default: `(no default)` — E-paper BUSY GPIO, ready LOW.
+- **EPAPER_CS_PIN** default: `(no default)` — E-paper chip-select GPIO, active LOW.
+- **EPAPER_DC_PIN** default: `(no default)` — E-paper data/command GPIO.
 - **EPAPER_FRAME_BATTERY_ADC_PIN** default: `(no default)` — ADC pin for the battery sense divider (GPIO1 on the E1003).
 - **EPAPER_FRAME_BATTERY_ENABLE_PIN** default: `(no default)` — Drive HIGH ~5ms before sampling to gate the battery divider on (GPIO40 on E1003).
 - **EPAPER_FRAME_BUTTON_PIN** default: `36` — (typical Inkplate wiring uses GPIO36 with an external pullup).
 - **EPAPER_FRAME_SD_CS_PIN** default: `(no default)` — default; enable via the portal (Image & Schedule -> "Cache images on SD").
 - **EPAPER_FRAME_SD_DET_PIN** default: `(no default)` — microSD card-detect input (reads LOW when a card is inserted).
 - **EPAPER_FRAME_SD_EN_PIN** default: `(no default)` — microSD power-enable gate (drive HIGH ~5 ms before mounting the card).
+- **EPAPER_POWER_PIN** default: `(no default)` — E-paper power-enable GPIO, active HIGH.
+- **EPAPER_RESET_PIN** default: `(no default)` — E-paper reset GPIO, active LOW.
+- **EPAPER_SPI_MOSI_PIN** default: `(no default)` — E-paper SPI data-output GPIO.
+- **EPAPER_SPI_SCK_PIN** default: `(no default)` — E-paper SPI clock GPIO.
 - **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.

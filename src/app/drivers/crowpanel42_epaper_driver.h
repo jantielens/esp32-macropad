@@ -39,8 +39,9 @@ private:
     int16_t currentX = 0, currentY = 0;
     uint16_t currentW = 0, currentH = 0;
     bool pending = false, forceFull = false, hasPresented = false;
-    uint32_t lastChange = 0, lastRefresh = 0;
+    uint32_t lastChange = 0, firstPendingChange = 0, lastRefresh = 0;
     uint16_t partialsSinceFull = 0;
+    void releaseResources();
     void send(uint8_t command, const uint8_t* data = nullptr, size_t length = 0);
     void fillRam(uint8_t command);
     bool waitReady(const char* stage);

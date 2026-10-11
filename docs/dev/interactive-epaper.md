@@ -92,6 +92,11 @@ targets that A-revision protocol, not the older SSD1683 examples.
 | Rotary Up / Down / OK | 6 / 4 / 5 | Three active LOW contacts, not quadrature |
 | Boot | 0 | Active LOW boot strap |
 
+The board overrides own the panel wiring through `EPAPER_SPI_SCK_PIN`,
+`EPAPER_SPI_MOSI_PIN`, `EPAPER_CS_PIN`, `EPAPER_DC_PIN`, `EPAPER_RESET_PIN`,
+`EPAPER_BUSY_PIN`, and `EPAPER_POWER_PIN`. The driver uses these definitions
+rather than hardcoded GPIO assignments.
+
 Reset connects to ESP32 EN and is not a configurable GPIO input. The SD slot
 uses SPI GPIO39/40/13/10 and power GPIO42; the existing SD_MMC storage backend
 cannot drive it. This profile deliberately does not advertise SD support.
@@ -104,6 +109,9 @@ then a second reset/initialization and the image through `0x13` with GC waveform
 Full refresh follows the reference's 500 ms clear stabilization, additional
 100 ms reset stabilization, 300 ms initialization stabilization, and 500 ms
 redraw stabilization. Ordinary partial updates use DU waveforms.
+White-plane clears use 256-byte SPI writes, with a shorter final write for
+each 15,000-byte plane. Failed buffer or mutex allocation immediately releases
+all partially allocated resources and leaves the driver unavailable.
 Five 42-byte waveform tables are
 written to `0x20` through `0x24`; `0x17` with `0xA5` activates the refresh.
 Partial updates transfer the
@@ -111,6 +119,10 @@ full frame. The always-on controller stays awake between updates; unlike the
 sample's final sleep step, it does not issue deep sleep after presentation.
 BUSY waits are bounded at 15 seconds. A timeout marks the display unavailable
 until reboot. The presentation loop defers new waveforms during OTA.
+Pixel changes normally settle for 150 ms before presentation, but settling is
+capped at 500 ms from the first pending change so repeated LVGL redraws cannot
+postpone a frame indefinitely. The configured minimum refresh interval still
+applies independently; waveform time is additional.
 
 All `HAS_DISPLAY` boards provide the standard action `button_nav` with commands
 `previous`, `next`, `tap`, and `tap_hold`, labeled Previous, Next, Tap, and

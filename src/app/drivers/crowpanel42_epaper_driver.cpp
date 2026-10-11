@@ -7,14 +7,15 @@
 #include <cstring>
 
 namespace {
-constexpr int crowpanelClock = 12;
-constexpr int crowpanelMosi = 11;
-constexpr int crowpanelReset = 47;
-constexpr int crowpanelDc = 46;
-constexpr int crowpanelCs = 45;
-constexpr int crowpanelBusy = 48;
-constexpr int crowpanelPower = 7;
+constexpr int crowpanelClock = EPAPER_SPI_SCK_PIN;
+constexpr int crowpanelMosi = EPAPER_SPI_MOSI_PIN;
+constexpr int crowpanelReset = EPAPER_RESET_PIN;
+constexpr int crowpanelDc = EPAPER_DC_PIN;
+constexpr int crowpanelCs = EPAPER_CS_PIN;
+constexpr int crowpanelBusy = EPAPER_BUSY_PIN;
+constexpr int crowpanelPower = EPAPER_POWER_PIN;
 constexpr uint32_t crowpanelBusyTimeoutMs = 15000;
+constexpr uint32_t crowpanelMaxSettleMs = 500;
 constexpr uint8_t crowpanelGc[5][7] = {
     {0x01, 0x14, 0x0a, 0x14, 0x00, 0x01, 0x01},
     {0x01, 0x54, 0x0a, 0x94, 0x00, 0x01, 0x01},
@@ -32,9 +33,16 @@ constexpr uint8_t crowpanelDu[5][7] = {
 }
 
 CrowPanel42EpaperDriver::~CrowPanel42EpaperDriver() {
+    releaseResources();
+}
+
+void CrowPanel42EpaperDriver::releaseResources() {
     if (mutex) vSemaphoreDelete(mutex);
     if (drawing) heap_caps_free(drawing);
     if (snapshot) heap_caps_free(snapshot);
+    mutex = nullptr;
+    drawing = nullptr;
+    snapshot = nullptr;
 }
 
 void CrowPanel42EpaperDriver::send(uint8_t command, const uint8_t* data, size_t length) {
@@ -53,10 +61,16 @@ void CrowPanel42EpaperDriver::send(uint8_t command, const uint8_t* data, size_t 
 }
 
 void CrowPanel42EpaperDriver::fillRam(uint8_t command) {
+    uint8_t white[256];
+    memset(white, 0xff, sizeof(white));
     send(command);
     spi.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
     digitalWrite(crowpanelCs, LOW);
-    for (size_t index = 0; index < framebufferBytes; ++index) spi.transfer(0xff);
+    for (size_t remaining = framebufferBytes; remaining;) {
+        const size_t length = remaining < sizeof(white) ? remaining : sizeof(white);
+        spi.writeBytes(white, length);
+        remaining -= length;
+    }
     digitalWrite(crowpanelCs, HIGH);
     spi.endTransaction();
 }
@@ -108,6 +122,7 @@ void CrowPanel42EpaperDriver::init() {
     mutex = xSemaphoreCreateMutex();
     if (!drawing || !snapshot || !mutex) {
         LOGE("CrowPanel", "Unable to allocate display framebuffers or mutex");
+        releaseResources();
         return;
     }
     memset(drawing, 0xff, framebufferBytes);
@@ -160,6 +175,7 @@ void CrowPanel42EpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
         }
     }
     if (changed || !hasPresented) {
+        if (!pending) firstPendingChange = millis();
         pending = true;
         if (changed) lastChange = millis();
     }
@@ -206,8 +222,11 @@ void CrowPanel42EpaperDriver::present() {
         const uint32_t now = millis();
         const uint32_t refreshWait = hasPresented && now - lastRefresh < settings.epaper_min_refresh_interval_ms
             ? settings.epaper_min_refresh_interval_ms - (now - lastRefresh) : 0;
-        const uint32_t settleWait = !forceFull && now - lastChange < EPAPER_REFRESH_SETTLE_MS
+        const uint32_t quietWait = !forceFull && now - lastChange < EPAPER_REFRESH_SETTLE_MS
             ? EPAPER_REFRESH_SETTLE_MS - (now - lastChange) : 0;
+        const uint32_t deadlineWait = now - firstPendingChange < crowpanelMaxSettleMs
+            ? crowpanelMaxSettleMs - (now - firstPendingChange) : 0;
+        const uint32_t settleWait = quietWait < deadlineWait ? quietWait : deadlineWait;
         const uint32_t wait = refreshWait > settleWait ? refreshWait : settleWait;
         if (wait) {
             xSemaphoreGive(mutex);
@@ -225,7 +244,11 @@ void CrowPanel42EpaperDriver::present() {
         pending = false;
         forceFull = false;
         xSemaphoreGive(mutex);
+          const uint32_t refreshStarted = millis();
+          LOGD("CrowPanel", "Presenting %s frame", full ? "full" : "partial");
         const bool success = refresh(full);
+          LOGD("CrowPanel", "Presentation %s after %lu ms", success ? "completed" : "failed",
+                 static_cast<unsigned long>(millis() - refreshStarted));
         xSemaphoreTake(mutex, portMAX_DELAY);
         hasPresented = success;
         lastRefresh = millis();

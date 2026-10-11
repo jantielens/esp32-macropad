@@ -21,6 +21,20 @@
 #define DISPLAY_HEIGHT 300
 #define DISPLAY_ROTATION 0
 #define DISPLAY_SHAPE DISPLAY_SHAPE_RECT
+// E-paper SPI clock GPIO.
+#define EPAPER_SPI_SCK_PIN 12
+// E-paper SPI data-output GPIO.
+#define EPAPER_SPI_MOSI_PIN 11
+// E-paper chip-select GPIO, active LOW.
+#define EPAPER_CS_PIN 45
+// E-paper data/command GPIO.
+#define EPAPER_DC_PIN 46
+// E-paper reset GPIO, active LOW.
+#define EPAPER_RESET_PIN 47
+// E-paper BUSY GPIO, ready LOW.
+#define EPAPER_BUSY_PIN 48
+// E-paper power-enable GPIO, active HIGH.
+#define EPAPER_POWER_PIN 7
 #define EPAPER_DEFAULT_RENDER_MODE EPAPER_RENDER_MODE_BW
 #define EPAPER_MIN_REFRESH_INTERVAL_MS 500
 #define EPAPER_REFRESH_SETTLE_MS 150
