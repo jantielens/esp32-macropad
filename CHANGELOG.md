@@ -67,6 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Consolidate core portal CORS preflight routes into one handler with a
+  flash-resident, feature-gated path table. Preserve OPTIONS-only dispatch,
+  exact-or-child-path matching, and existing CORS responses. StopWatch portal
+  startup consumes 5,420 fewer bytes of internal heap (36,160 to 30,740 bytes)
+  with no task-stack changes.
 * Move alarm configuration/session actions, timer state, MQTT binding scratch,
   button defaults, the pad-list cache, and confirmation actions to persistent
   PSRAM-preferring allocations with internal-RAM fallback. StopWatch static

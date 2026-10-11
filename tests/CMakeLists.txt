@@ -3,6 +3,7 @@ include(GoogleTest)
 include(CMakeParseArguments)
 
 add_test(NAME test_log_manager COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager.py)
+add_test(NAME test_portal_preflight COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_preflight.py)
 add_test(NAME test_stopwatch_hal COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_stopwatch_hal.py)
 add_test(NAME test_log_manager_serial COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager_serial.py)
 add_test(NAME test_image_fetch_client COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_image_fetch_client.py)
