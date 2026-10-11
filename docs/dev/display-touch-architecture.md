@@ -1660,7 +1660,7 @@ cache failure/retry, and reuse paths with C++11 production-source harnesses.
 Portal startup and OTA do not automatically scan AsyncTCP's stack. Request
 `/api/health?task=<name>` explicitly to sample a task's lifetime minimum free
 stack after a workload. Supported names are `async_tcp`, `audio`, `img_local`,
-`img_fetch`, `LVGL`, and `loopTask`; the older `?async_tcp_stack=1` alias remains available.
+`img_fetch`, `ha_stats`, `LVGL`, and `loopTask`; the older `?async_tcp_stack=1` alias remains available.
 LVGL samples from inside its own task through the display-job bridge, not an
 external task handle that could race with shutdown. The bridge owns the result,
 including on timeout. OTA, a busy bridge, or a 250 ms dispatch timeout returns
@@ -1677,6 +1677,11 @@ local-image buttons will not load in this build. Measure the remote worker with
 `/api/health?task=img_fetch`; its stack remains 16384 bytes and uses the existing
 PSRAM-preferred task helper. Its owner atomically publishes the permanent worker
 handle after creation, and missing workers return `503` without initialization.
+StopWatch also enables `HAS_HA_HISTORY` for history hydration testing. Query
+`/api/health?task=ha_stats` after data-stream initialization and actual HA Recorder
+requests. This worker retains its 16384-byte PSRAM-preferred stack; its permanent
+handle is atomically published only after successful creation. Missing workers
+return `503`; sampling does not initialize the worker or request history.
 The scan walks unused stack memory and has timing cost;
 do not enable it in ordinary health polling or use it during timing-sensitive
 display tests. Reboot resets the watermark.

@@ -367,7 +367,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ✅ |  |  |  |  |  | ✅ | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| m5stack-stopwatch | ✅ |  | ✅ |  |  |  | ✅ |  | ✅ | ✅ |  |  |  |  |  | ✅ |  | ✅ |  |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| m5stack-stopwatch | ✅ |  | ✅ |  |  |  | ✅ |  | ✅ | ✅ |  |  |  |  |  | ✅ | ✅ | ✅ |  |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  |  |  |  | ✅ | ? |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ | ✅ | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
@@ -802,6 +802,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.h
   - src/app/ha_stats.cpp
   - src/app/ha_stats.h
+  - src/app/web_portal_device_api.cpp
   - src/app/widgets/sparkline_widget.cpp
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino

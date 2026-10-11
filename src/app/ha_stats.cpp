@@ -17,6 +17,7 @@
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
+#include <atomic>
 #include <math.h>
 #include <new>
 #include <string.h>
@@ -83,6 +84,7 @@ static BasicJsonDocument<PsramJsonAllocator>* g_doc = nullptr;
 static uint16_t       g_value_count = 0;
 static SemaphoreHandle_t g_wake = nullptr;
 static TaskHandle_t   g_task = nullptr;
+static std::atomic<TaskHandle_t> ha_stats_sample_task{nullptr};
 static uint32_t       g_blocked_until_ms = 0;
 static uint32_t       g_retry_delay_ms = HA_STATS_RETRY_BASE_MS;
 
@@ -360,7 +362,17 @@ void ha_stats_init() {
         g_doc = nullptr;
         return;
     }
+    ha_stats_sample_task.store(g_task, std::memory_order_release);
     LOGI(TAG, "History hydration ready");
+}
+
+bool ha_stats_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes) {
+    if (!minimum_free_bytes || !configured_bytes) return false;
+    const TaskHandle_t task = ha_stats_sample_task.load(std::memory_order_acquire);
+    if (!task) return false;
+    *minimum_free_bytes = uxTaskGetStackHighWaterMark(task);
+    *configured_bytes = HA_STATS_TASK_STACK_BYTES;
+    return true;
 }
 
 bool ha_stats_busy() {

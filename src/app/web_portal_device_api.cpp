@@ -5,6 +5,9 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#if HAS_HA_HISTORY
+#include "ha_stats.h"
+#endif
 #if HAS_IMAGE_FETCH
 #include "image_fetch.h"
 #endif
@@ -414,6 +417,17 @@ static bool fill_requested_task_stack(AsyncWebServerRequest* request, JsonDocume
 				request->send(503, "application/json", "{\"error\":\"image fetch task unavailable\"}");
 				return false;
 				#endif
+		} else if (task == "ha_stats") {
+				#if HAS_HA_HISTORY
+				if (!ha_stats_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"HA statistics task unavailable\"}");
+						return false;
+				}
+				task_name = "ha_stats";
+				#else
+				request->send(503, "application/json", "{\"error\":\"HA statistics task unavailable\"}");
+				return false;
+				#endif
 		} else if (task == "LVGL") {
 				#if HAS_DISPLAY
 				if (!display_manager_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
@@ -435,7 +449,7 @@ static bool fill_requested_task_stack(AsyncWebServerRequest* request, JsonDocume
 				configured_bytes = getArduinoLoopTaskStackSize();
 		} else {
 				request->send(task.length() == 0 ? 400 : 404, "application/json",
-						"{\"error\":\"supported tasks: audio, async_tcp, img_local, img_fetch, LVGL, loopTask\"}");
+						"{\"error\":\"supported tasks: audio, async_tcp, img_local, img_fetch, ha_stats, LVGL, loopTask\"}");
 				return false;
 		}
 

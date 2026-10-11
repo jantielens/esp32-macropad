@@ -144,9 +144,16 @@ def main():
     assert "vTaskDelete" not in fetch
     assert "fetch_sample_task.store(g_task, std::memory_order_release)" in fetch
     assert "FETCH_TASK_STACK_BYTES = 16384;" in fetch
+    stats = (ROOT / "src/app/ha_stats.cpp").read_text()
+    stats_getter = stats[stats.index("bool ha_stats_get_stack_watermark("):
+                         stats.index("bool ha_stats_busy(")]
+    assert "vTaskDelete" not in stats
+    assert "ha_stats_sample_task.store(g_task, std::memory_order_release)" in stats
+    assert "#define HA_STATS_TASK_STACK_BYTES 16384" in stats
     board = (ROOT / "src/boards/m5stack-stopwatch/board_overrides.h").read_text()
     assert "#define HAS_IMAGE_FETCH true" in board
     assert "#define HAS_IMAGE_LIBRARY false" in board
+    assert "#define HAS_HA_HISTORY true" in board
     display = (ROOT / "src/app/display_task.cpp").read_text()
     display_getter = display[display.index("static void sample_lvgl_stack("):
                              display.index("// Definition for the async-flush-busy")]
@@ -181,9 +188,14 @@ static unsigned fetch_scans = 0;
 static TaskHandle_t test_fetch_task = reinterpret_cast<void*>(4);
 static std::atomic<TaskHandle_t> fetch_sample_task{nullptr};
 static constexpr uint32_t FETCH_TASK_STACK_BYTES = 16384;
+static unsigned stats_scans = 0;
+static TaskHandle_t test_stats_task = reinterpret_cast<void*>(5);
+static std::atomic<TaskHandle_t> ha_stats_sample_task{nullptr};
+static constexpr uint32_t HA_STATS_TASK_STACK_BYTES = 16384;
 static bool in_lvgl = false;
 size_t getArduinoLoopTaskStackSize() { return 8192; }
 unsigned uxTaskGetStackHighWaterMark(void* task) {
+    if (task == test_stats_task) { ++stats_scans; return 12000; }
     if (task == test_fetch_task) { ++fetch_scans; return 11000; }
     if (in_lvgl) { assert(task == nullptr); ++lvgl_scans; return 9000; }
     if (task == test_loop_task) { ++loop_scans; return 5000; }
@@ -246,7 +258,7 @@ struct AsyncWebServerRequest {
     Param* getParam(const char* key) { active.parameter = params.at(key); return &active; }
     void send(int code, const char*, const char*) { status = code; }
 };
-''' + "#if HAS_AUDIO\n" + handle + "\n" + getter + "\n#endif\n" + image_getter + fetch_getter + display_getter + probe + r'''
+''' + "#if HAS_AUDIO\n" + handle + "\n" + getter + "\n#endif\n" + image_getter + fetch_getter + stats_getter + display_getter + probe + r'''
 int main() {
     JsonDocument doc;
     AsyncWebServerRequest request;
@@ -331,6 +343,23 @@ int main() {
     assert(!fill_requested_task_stack(&request, doc));
     assert(request.status == 503 && fetch_scans == 0);
 #endif
+    assert(stats_scans == 0);
+    request.params["task"] = "ha_stats";
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(request.status == 503 && stats_scans == 0);
+    assert(!ha_stats_get_stack_watermark(nullptr, &configured));
+    assert(!ha_stats_get_stack_watermark(&minimum, nullptr));
+    ha_stats_sample_task.store(test_stats_task, std::memory_order_release);
+#if HAS_HA_HISTORY
+    assert(fill_requested_task_stack(&request, doc));
+    assert(stats_scans == 1);
+    assert(doc.values["task_stack"]["task"] == "ha_stats");
+    assert(doc.values["task_stack"]["configured_bytes"] == "16384");
+    assert(doc.values["task_stack"]["minimum_free_bytes"] == "12000");
+#else
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(request.status == 503 && stats_scans == 0);
+#endif
     request.params["task"] = "LVGL";
     for (const auto status : {DISPLAY_TASK_DISPATCH_UNAVAILABLE, DISPLAY_TASK_DISPATCH_BUSY,
                              DISPLAY_TASK_DISPATCH_TIMEOUT}) {
@@ -366,6 +395,7 @@ int main() {
                             ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=8192",
                              "-DHAS_IMAGE_LIBRARY=0", "-DHAS_DISPLAY=1",
                              "-DHAS_IMAGE_FETCH=1",
+                             "-DHAS_HA_HISTORY=1",
                              "-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"]):
             subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
                             *definitions, str(test), "-o", str(binary)], check=True)

@@ -1271,9 +1271,10 @@ Returns real-time device health statistics.
 
 The optional `?task=<name>` query adds `task_stack` with
 `task`, `minimum_free_bytes`, and `configured_bytes` when the size is known.
-Supported case-sensitive names are `audio`, `async_tcp`, `img_local`, `img_fetch`, `LVGL`,
-and `loopTask`; arbitrary task lookup is not performed. AsyncTCP samples the
-request's own task. Audio, local images, and remote images sample atomically published handles
+Supported case-sensitive names are `audio`, `async_tcp`, `img_local`, `img_fetch`,
+`ha_stats`, `LVGL`, and `loopTask`; arbitrary task lookup is not performed.
+AsyncTCP samples the request's own task. Audio, local images, remote images,
+and HA statistics sample atomically published handles
 through their owners; these workers are never deleted during normal operation.
 Arduino owns the permanent loop task and provides its configured stack size.
 LVGL samples itself through the shutdown-aware display-job bridge, which owns
@@ -1286,6 +1287,12 @@ The remote image report uses the existing `img_fetch` worker and its unchanged
 16384-byte stack; requesting a report does not initialize it. StopWatch enables
 remote images and disables the local image library for hardware validation,
 so `?task=img_local` returns `503` on that build.
+The `ha_stats` report requires `HAS_HA_HISTORY` and successful data-stream
+subsystem initialization. StopWatch enables this feature for hardware validation.
+The worker retains its 16384-byte PSRAM-preferred stack and waits for history
+hydration requests; the diagnostic query does not initialize it or trigger HA
+network requests. Measure after actual Recorder history hydration, including
+HTTPS and large responses, rather than relying on the idle post-boot watermark.
 LVGL also returns `503` during OTA or when the bridge is busy or cannot complete
 within 250 ms. The query does not bypass rendering suspension or shutdown.
 `?async_tcp_stack=1` remains a compatibility alias with its original
