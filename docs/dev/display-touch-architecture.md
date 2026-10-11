@@ -1658,9 +1658,19 @@ or fragmentation. `python3 tests/test_static_state.py` checks allocator fallback
 cache failure/retry, and reuse paths with C++11 production-source harnesses.
 
 Portal startup and OTA do not automatically scan AsyncTCP's stack. Request
-`/api/health?task=async_tcp` or `/api/health?task=audio` explicitly to sample
-that long-lived task's lifetime minimum free stack after a workload. Arbitrary
-tasks are not supported; the older `?async_tcp_stack=1` alias remains available.
+`/api/health?task=<name>` explicitly to sample a task's lifetime minimum free
+stack after a workload. Supported names are `async_tcp`, `audio`, `img_local`,
+`LVGL`, and `loopTask`; the older `?async_tcp_stack=1` alias remains available.
+LVGL samples from inside its own task through the display-job bridge, not an
+external task handle that could race with shutdown. The bridge owns the result,
+including on timeout. OTA, a busy bridge, or a 250 ms dispatch timeout returns
+`503`. The local image worker must already have been created by an image request.
+Its stack is 8192 bytes in internal RAM because local storage can use LittleFS.
+StopWatch measurements with the previous 12288-byte stack reached 2632 bytes
+of observed usage, leaving 5560 bytes against that peak with the smaller stack.
+This is not a worst-case guarantee across image formats or boards. Image source
+and decoded buffers remain in PSRAM; reducing the stack does not let oversized
+decoded images fit in PSRAM.
 The scan walks unused stack memory and has timing cost;
 do not enable it in ordinary health polling or use it during timing-sensitive
 display tests. Reboot resets the watermark.

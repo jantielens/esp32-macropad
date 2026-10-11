@@ -5,6 +5,9 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#if HAS_IMAGE_LIBRARY
+#include "local_image_loader.h"
+#endif
 #if HAS_AUDIO
 #include "audio.h"
 #endif
@@ -32,6 +35,7 @@
 #include <freertos/task.h>
 
 extern DeviceConfig device_config;
+extern TaskHandle_t loopTaskHandle;
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -385,9 +389,39 @@ static bool fill_requested_task_stack(AsyncWebServerRequest* request, JsonDocume
 				request->send(503, "application/json", "{\"error\":\"audio task unavailable\"}");
 				return false;
 				#endif
+		} else if (task == "img_local") {
+				#if HAS_IMAGE_LIBRARY
+				if (!local_image_loader_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"local image task unavailable\"}");
+						return false;
+				}
+				task_name = "img_local";
+				#else
+				request->send(503, "application/json", "{\"error\":\"local image task unavailable\"}");
+				return false;
+				#endif
+		} else if (task == "LVGL") {
+				#if HAS_DISPLAY
+				if (!display_manager_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"LVGL task unavailable or busy\"}");
+						return false;
+				}
+				task_name = "LVGL";
+				#else
+				request->send(503, "application/json", "{\"error\":\"LVGL task unavailable\"}");
+				return false;
+				#endif
+		} else if (task == "loopTask") {
+				if (!loopTaskHandle) {
+						request->send(503, "application/json", "{\"error\":\"loop task unavailable\"}");
+						return false;
+				}
+				task_name = "loopTask";
+				minimum_free_bytes = uxTaskGetStackHighWaterMark(loopTaskHandle);
+				configured_bytes = getArduinoLoopTaskStackSize();
 		} else {
 				request->send(task.length() == 0 ? 400 : 404, "application/json",
-						"{\"error\":\"supported tasks: audio, async_tcp\"}");
+						"{\"error\":\"supported tasks: audio, async_tcp, img_local, LVGL, loopTask\"}");
 				return false;
 		}
 

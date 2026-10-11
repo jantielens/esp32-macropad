@@ -1269,15 +1269,21 @@ native serialization with MCP disabled.
 
 Returns real-time device health statistics.
 
-The optional `?task=audio` or `?task=async_tcp` query adds `task_stack` with
+The optional `?task=<name>` query adds `task_stack` with
 `task`, `minimum_free_bytes`, and `configured_bytes` when the size is known.
-Only these two long-lived tasks are supported; arbitrary task lookup is not
-performed. AsyncTCP samples the request's own task. Audio samples an
-atomically published handle through the audio owner, whose worker is never
-deleted during normal operation. Existing authentication applies.
+Supported case-sensitive names are `audio`, `async_tcp`, `img_local`, `LVGL`,
+and `loopTask`; arbitrary task lookup is not performed. AsyncTCP samples the
+request's own task. Audio and local images sample atomically published handles
+through their owners; these workers are never deleted during normal operation.
+Arduino owns the permanent loop task and provides its configured stack size.
+LVGL samples itself through the shutdown-aware display-job bridge, which owns
+the result until it is copied back to the request. Existing authentication applies.
 
 An empty `task` returns `400`; unsupported names, including `audio_stack`,
-return `404`. Audio disabled or not successfully initialized returns `503`.
+return `404`. A disabled or uninitialized worker returns `503`. The local image
+worker is created on demand; requesting its report does not initialize it.
+LVGL also returns `503` during OTA or when the bridge is busy or cannot complete
+within 250 ms. The query does not bypass rendering suspension or shutdown.
 `?async_tcp_stack=1` remains a compatibility alias with its original
 `async_tcp_stack` response field. An explicit `task` takes precedence when
 both parameters are present.
@@ -1298,8 +1304,9 @@ All sizes are bytes. Peak observed usage is configured bytes minus minimum
 free bytes; the watermark covers the task's lifetime and resets at reboot.
 This scans unused stack memory only when explicitly requested and can affect
 timing. Normal health polling, portal startup, and OTA do not trigger these
-health-query scans. Do not poll this diagnostic continuously. A sample during
-OTA does not cover later finalization or a subsequent reboot.
+health-query scans. Do not poll this diagnostic continuously. LVGL queries are
+unavailable during OTA; other task samples during OTA do not cover later
+finalization or a subsequent reboot.
 
 **Response:**
 ```json

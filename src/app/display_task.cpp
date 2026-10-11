@@ -43,6 +43,27 @@ void DisplayManager::processDisplayJob() {
 		displayJobSlot().drain();
 }
 
+static void sample_lvgl_stack(const void*, bool* ok, char* msg, size_t msg_len) {
+		const uint32_t minimum_free_bytes = uxTaskGetStackHighWaterMark(nullptr);
+		const int written = snprintf(msg, msg_len, "%lu", static_cast<unsigned long>(minimum_free_bytes));
+		*ok = written > 0 && static_cast<size_t>(written) < msg_len;
+}
+
+bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes) {
+		if (!minimum_free_bytes || !configured_bytes || ota_activity_is_active()) return false;
+		bool ok = false;
+		char result[16] = {};
+		const DisplayTaskDispatchResult status = display_manager_dispatch(
+				sample_lvgl_stack, nullptr, nullptr, 0, 250, &ok, result, sizeof(result));
+		if (status != DISPLAY_TASK_DISPATCH_OK || !ok) return false;
+		char* end = nullptr;
+		const unsigned long value = strtoul(result, &end, 10);
+		if (end == result || *end != '\0' || value > UINT32_MAX) return false;
+		*minimum_free_bytes = static_cast<uint32_t>(value);
+		*configured_bytes = DisplayManager::stackSizeBytes();
+		return true;
+}
+
 // Definition for the async-flush-busy flag declared in display_driver.h.
 // Set true by async drivers (e.g. MIPI-DSI DMA2D) while a pixel transfer
 // is in flight; cleared from the completion ISR.

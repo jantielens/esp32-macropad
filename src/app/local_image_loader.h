@@ -36,4 +36,6 @@ const uint16_t* local_image_loader_get_frame(
 
 uint32_t local_image_loader_get_drops(local_image_slot_t slot);
 
+bool local_image_loader_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes);
+
 #endif // HAS_IMAGE_LIBRARY

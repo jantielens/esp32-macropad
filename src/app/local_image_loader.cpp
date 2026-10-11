@@ -11,6 +11,7 @@
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <atomic>
 #include <string.h>
 
 #define TAG "ImgLocal"
@@ -18,7 +19,7 @@
 namespace {
 
 constexpr size_t MAX_SOURCE_SIZE = 4 * 1024 * 1024;
-constexpr uint32_t LOADER_TASK_STACK_BYTES = 12288;
+constexpr uint32_t LOADER_TASK_STACK_BYTES = 8192;
 constexpr UBaseType_t LOADER_TASK_PRIORITY = 1;
 constexpr uint32_t IDLE_DELAY_MS = 100;
 
@@ -42,6 +43,7 @@ struct LocalImageSlot {
 LocalImageSlot* g_slots = nullptr;
 SemaphoreHandle_t g_mutex = nullptr;
 TaskHandle_t g_task = nullptr;
+std::atomic<TaskHandle_t> g_sample_task{nullptr};
 RtosTaskPsramAlloc g_task_alloc;
 
 bool is_valid_slot(local_image_slot_t slot) {
@@ -209,7 +211,18 @@ static void local_image_loader_init() {
         heap_caps_free(g_slots);
         g_slots = nullptr;
         LOGE(TAG, "Failed to create local image task");
+    } else {
+        g_sample_task.store(g_task, std::memory_order_release);
     }
+}
+
+bool local_image_loader_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes) {
+    if (!minimum_free_bytes || !configured_bytes) return false;
+    const TaskHandle_t task = g_sample_task.load(std::memory_order_acquire);
+    if (!task) return false;
+    *minimum_free_bytes = uxTaskGetStackHighWaterMark(task);
+    *configured_bytes = LOADER_TASK_STACK_BYTES;
+    return true;
 }
 
 local_image_slot_t local_image_loader_request(

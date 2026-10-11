@@ -27,7 +27,7 @@ for unicore in 0 1; do
         for ttf in 0 1; do
             for sd in 0 1; do
                 stack_path=$(awk '
-                    /static constexpr uint32_t kLvglStackBytes/ { capture = 1 }
+                    /Create LVGL rendering task/ { capture = 1 }
                     /Create async present task/ { capture = 0 }
                     capture
                 ' "$DISPLAY" | c++ -E -P -x c++ \

@@ -467,7 +467,6 @@ void DisplayManager::init() {
 		// On single-core: runs on Core 0 (time-sliced with Arduino loop)
 		// Stack location is selected per board. Classic ESP32 targets must keep
 		// static task stacks in internal RAM.
-		static constexpr uint32_t kLvglStackBytes = 16384;
 		lvglTaskStopped = false;
 		#if CONFIG_FREERTOS_UNICORE
 		#if LVGL_TASK_USE_PSRAM_STACK && !(HAS_TTF_FONTS && !USE_SD_STORAGE)

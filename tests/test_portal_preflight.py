@@ -132,6 +132,17 @@ def main():
     assert "vTaskDelete" not in audio
     assert "audio_task_handle.store(created_task, std::memory_order_release)" in audio
     assert "xTaskGetHandle" not in probe
+    image = (ROOT / "src/app/local_image_loader.cpp").read_text()
+    assert "constexpr uint32_t LOADER_TASK_STACK_BYTES = 8192;" in image
+    image_getter = image[image.index("bool local_image_loader_get_stack_watermark("):
+                         image.index("local_image_slot_t local_image_loader_request(")]
+    assert "vTaskDelete" not in image
+    assert "g_sample_task.store(g_task, std::memory_order_release)" in image
+    display = (ROOT / "src/app/display_task.cpp").read_text()
+    display_getter = display[display.index("static void sample_lvgl_stack("):
+                             display.index("// Definition for the async-flush-busy")]
+    assert "lvglTaskHandle" not in display_getter
+    assert "sample_lvgl_stack, nullptr, nullptr, 0" in display_getter
     for path in ROOT.glob("src/app/web_portal*.cpp"):
         if path.name != "web_portal_device_api.cpp":
             assert "uxTaskGetStackHighWaterMark" not in path.read_text(), path
@@ -142,6 +153,8 @@ def main():
 #include <cassert>
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <string>
 using String = std::string;
@@ -149,13 +162,47 @@ using TaskHandle_t = void*;
 static unsigned tcp_scans = 0;
 static unsigned audio_scans = 0;
 static TaskHandle_t test_audio_task = reinterpret_cast<void*>(1);
+static TaskHandle_t loopTaskHandle = nullptr;
+static TaskHandle_t test_loop_task = reinterpret_cast<void*>(2);
+static TaskHandle_t test_image_task = reinterpret_cast<void*>(3);
+static unsigned loop_scans = 0;
+static unsigned image_scans = 0;
+static unsigned lvgl_scans = 0;
+static bool in_lvgl = false;
+size_t getArduinoLoopTaskStackSize() { return 8192; }
 unsigned uxTaskGetStackHighWaterMark(void* task) {
+    if (in_lvgl) { assert(task == nullptr); ++lvgl_scans; return 9000; }
+    if (task == test_loop_task) { ++loop_scans; return 5000; }
+    if (task == test_image_task) { ++image_scans; return 7000; }
     if (task == nullptr) { ++tcp_scans; return 3400; }
     assert(task == test_audio_task);
     ++audio_scans;
     return 21704;
 }
 const char* pcTaskGetName(void*) { return "async_tcp"; }
+static std::atomic<TaskHandle_t> g_sample_task{nullptr};
+static constexpr uint32_t LOADER_TASK_STACK_BYTES = 8192;
+static bool ota_active = false;
+bool ota_activity_is_active() { return ota_active; }
+enum DisplayTaskDispatchResult { DISPLAY_TASK_DISPATCH_OK, DISPLAY_TASK_DISPATCH_BUSY,
+    DISPLAY_TASK_DISPATCH_TIMEOUT, DISPLAY_TASK_DISPATCH_UNAVAILABLE };
+static DisplayTaskDispatchResult dispatch_result = DISPLAY_TASK_DISPATCH_UNAVAILABLE;
+static unsigned dispatch_calls = 0;
+class DisplayManager {
+public:
+    static uint32_t stackSizeBytes() { return 16384; }
+};
+DisplayTaskDispatchResult display_manager_dispatch(
+    void (*exec)(const void*, bool*, char*, size_t), void (*cleanup)(const void*),
+    const void* ctx, size_t ctx_len, uint32_t timeout, bool* ok, char* msg, size_t msg_len) {
+    assert(cleanup == nullptr && ctx == nullptr && ctx_len == 0 && timeout == 250);
+    ++dispatch_calls;
+    if (dispatch_result != DISPLAY_TASK_DISPATCH_OK) return dispatch_result;
+    in_lvgl = true;
+    exec(nullptr, ok, msg, msg_len);
+    in_lvgl = false;
+    return DISPLAY_TASK_DISPATCH_OK;
+}
 struct JsonObject {
     std::map<std::string, std::string>* values;
     struct Field {
@@ -185,7 +232,7 @@ struct AsyncWebServerRequest {
     Param* getParam(const char* key) { active.parameter = params.at(key); return &active; }
     void send(int code, const char*, const char*) { status = code; }
 };
-''' + "#if HAS_AUDIO\n" + handle + "\n" + getter + "\n#endif\n" + probe + r'''
+''' + "#if HAS_AUDIO\n" + handle + "\n" + getter + "\n#endif\n" + image_getter + display_getter + probe + r'''
 int main() {
     JsonDocument doc;
     AsyncWebServerRequest request;
@@ -211,7 +258,7 @@ int main() {
 #else
     assert(doc.values["task_stack"].count("configured_bytes") == 0);
 #endif
-    for (const auto* value : {"", "XXX", "audio_stack", "loopTask"}) {
+    for (const auto* value : {"", "XXX", "audio_stack", "lvgl"}) {
         request.params["task"] = value;
         assert(!fill_requested_task_stack(&request, doc));
         assert(request.status == (request.params["task"].empty() ? 400 : 404));
@@ -231,12 +278,57 @@ int main() {
     assert(doc.values["task_stack"]["minimum_free_bytes"] == "21704");
     assert(doc.values["task_stack"]["configured_bytes"] == std::to_string(AUDIO_TASK_STACK_SIZE));
 #endif
+    request.params["task"] = "loopTask";
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(request.status == 503 && loop_scans == 0);
+    loopTaskHandle = test_loop_task;
+    assert(fill_requested_task_stack(&request, doc));
+    assert(loop_scans == 1);
+    assert(doc.values["task_stack"]["configured_bytes"] == "8192");
+    assert(doc.values["task_stack"]["minimum_free_bytes"] == "5000");
+    request.params["task"] = "img_local";
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(request.status == 503 && image_scans == 0);
+    g_sample_task.store(test_image_task, std::memory_order_release);
+#if HAS_IMAGE_LIBRARY
+    assert(fill_requested_task_stack(&request, doc));
+    assert(image_scans == 1);
+    assert(doc.values["task_stack"]["task"] == "img_local");
+    assert(doc.values["task_stack"]["configured_bytes"] == "8192");
+#else
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(request.status == 503 && image_scans == 0);
+#endif
+    request.params["task"] = "LVGL";
+    for (const auto status : {DISPLAY_TASK_DISPATCH_UNAVAILABLE, DISPLAY_TASK_DISPATCH_BUSY,
+                             DISPLAY_TASK_DISPATCH_TIMEOUT}) {
+        dispatch_result = status;
+        assert(!fill_requested_task_stack(&request, doc));
+        assert(request.status == 503 && lvgl_scans == 0);
+    }
+    dispatch_result = DISPLAY_TASK_DISPATCH_OK;
+    ota_active = true;
+    const unsigned calls = dispatch_calls;
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(dispatch_calls == calls && lvgl_scans == 0);
+    ota_active = false;
+#if HAS_DISPLAY
+    assert(fill_requested_task_stack(&request, doc));
+    assert(lvgl_scans == 1);
+    assert(doc.values["task_stack"]["task"] == "LVGL");
+    assert(doc.values["task_stack"]["configured_bytes"] == "16384");
+    assert(doc.values["task_stack"]["minimum_free_bytes"] == "9000");
+#else
+    assert(!fill_requested_task_stack(&request, doc));
+    assert(dispatch_calls == 0 && lvgl_scans == 0);
+#endif
 }
 ''')
         for definitions in (["-DHAS_AUDIO=0"], ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=24576"],
                             ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=24576",
                              "-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"],
                             ["-DHAS_AUDIO=1", "-DAUDIO_TASK_STACK_SIZE=8192",
+                             "-DHAS_IMAGE_LIBRARY=1", "-DHAS_DISPLAY=1",
                              "-DCONFIG_ASYNC_TCP_STACK_SIZE=8192"]):
             subprocess.run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror",
                             *definitions, str(test), "-o", str(binary)], check=True)

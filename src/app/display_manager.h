@@ -67,6 +67,7 @@ enum DisplayTaskDispatchResult {
 
 class DisplayManager {
 private:
+		static constexpr uint32_t kLvglStackBytes = 16384;
 		// Hardware (display driver abstraction)
 		DisplayDriver* driver;
 		lv_display_t* display;    // v9 display object
@@ -163,6 +164,7 @@ private:
 		static void presentTask(void* pvParameter);
 		
 public:
+		static uint32_t stackSizeBytes() { return kLvglStackBytes; }
 		DisplayManager(DeviceConfig* config);
 		~DisplayManager();
 		
@@ -276,5 +278,7 @@ void display_manager_unlock_if_needed(bool did_lock);
 // Best-effort perf stats for diagnostics (/api/health).
 // Returns false until a first stats window has been captured.
 bool display_manager_get_perf_stats(DisplayPerfStats* out);
+
+bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes);
 
 #endif // DISPLAY_MANAGER_H
