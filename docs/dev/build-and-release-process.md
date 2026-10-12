@@ -273,6 +273,34 @@ The build system supports optional board-specific configuration using compile-ti
 - WiFi settings (max attempts, retry delays)
 - Power management settings
 
+#### Appearance Defaults
+
+Boards can override `DEFAULT_*` appearance macros in `board_overrides.h`.
+Boards without overrides retain the LCD palette and 4 px pixel shift distance.
+Use literal `#RRGGBB` strings for colors; button border width, corner radius,
+and content padding are pixel-count strings. Layout distances are integers.
+
+```cpp
+#define DEFAULT_PAD_BG_COLOR "#FFFFFF"
+#define DEFAULT_BUTTON_BG_COLOR "#FFFFFF"
+#define DEFAULT_BUTTON_FG_COLOR "#000000"
+#define DEFAULT_BUTTON_BORDER_WIDTH "1"
+#define DEFAULT_PIXEL_SHIFT_DISTANCE 0
+#define DEFAULT_WIDGET_SERIES_COLOR "#000000"
+#define DEFAULT_WIDGET_INDICATOR_COLOR "#000000"
+```
+
+The [flag reference](../compile-time-flags.md) lists all pad, button, shadow,
+layout, and widget palette macros. Gauge, bar chart, and sparkline series share
+four series colors; tracks, ticks, indicators, zones, reference lines, and table
+colors have separate roles. These defaults apply to missing configuration and
+unresolved color bindings. Explicit saved appearance fields take precedence.
+
+CrowPanel and Inkplate interactive targets use monochrome defaults. E1003
+interactive uses grayscale series colors. All three select a light LVGL theme
+and disable pixel shifting by default. `LVGL_THEME_DARK_MODE` controls the LVGL
+theme separately from pad and widget appearance.
+
 **Board-Specific Overrides** (Optional): Create `src/boards/[board-name]/board_overrides.h`:
 
 ```bash

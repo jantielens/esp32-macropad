@@ -319,9 +319,9 @@ static void table_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     st->button_row = btn->row;
     table_set_state(state, st);
 
-    st->default_bg = resolve_lv_color("#12122a", 0x12122a);
-    st->default_text_color = resolve_lv_color("#b0b0d0", 0xb0b0d0);
-    st->hdr_text_color = resolve_lv_color("#404070", 0x404070);
+    st->default_bg = resolve_lv_color(DEFAULT_WIDGET_TABLE_BG_COLOR, widget_default_rgb(DEFAULT_WIDGET_TABLE_BG_COLOR));
+    st->default_text_color = resolve_lv_color(DEFAULT_WIDGET_TABLE_FG_COLOR, widget_default_rgb(DEFAULT_WIDGET_TABLE_FG_COLOR));
+    st->hdr_text_color = resolve_lv_color(DEFAULT_WIDGET_TABLE_HEADER_COLOR, widget_default_rgb(DEFAULT_WIDGET_TABLE_HEADER_COLOR));
     st->hdr_border_color = st->hdr_text_color;
     table_reset_colors(st);
 

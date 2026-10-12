@@ -17,6 +17,11 @@
 
 #include "widgets/widget.h"
 
+static_assert(widget_default_rgb("#4CAF50") == 0x4CAF50, "Uppercase palette conversion");
+static_assert(widget_default_rgb("#b0b0d0") == 0xb0b0d0, "Lowercase palette conversion");
+static_assert(widget_default_rgb("#000000") == 0, "Black palette conversion");
+static_assert(widget_default_rgb("#FFFFFF") == 0xFFFFFF, "White palette conversion");
+
 // ---------------------------------------------------------------------------
 // Minimal test harness
 // ---------------------------------------------------------------------------

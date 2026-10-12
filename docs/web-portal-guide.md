@@ -981,6 +981,13 @@ and layout defaults alongside button colors, borders, and label styles, with
 its own save control. Pads and buttons inherit applicable settings; explicit
 overrides still take precedence.
 
+The initial appearance is selected by the board firmware. Interactive e-paper
+boards start with white backgrounds, dark text and widget indicators, and no
+burn-in pixel shift or reserved shift margin. E1003 uses grayscale widget series;
+CrowPanel and Inkplate use monochrome colors. Other boards retain the LCD defaults.
+Saving untouched device defaults keeps them inherited; existing explicit colors
+and layout values remain overrides until you change or clear them.
+
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 
 For sensitive normal-button actions, open **Action Safety** in the Actions group and enable **Confirm before tap or long-press actions**. The device shows an explicit Cancel/Confirm prompt before running either action list, uses the optional custom message when present, and cancels automatically after 10 seconds.

@@ -1220,6 +1220,139 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define LVGL_THEME_DARK_MODE true
 #endif
 
+// Default pad background, as a literal #RRGGBB color.
+#ifndef DEFAULT_PAD_BG_COLOR
+#define DEFAULT_PAD_BG_COLOR "#000000"
+#endif
+// Default button background, as a literal #RRGGBB color.
+#ifndef DEFAULT_BUTTON_BG_COLOR
+#define DEFAULT_BUTTON_BG_COLOR "#333333"
+#endif
+// Default button text and icon color, as a literal #RRGGBB color.
+#ifndef DEFAULT_BUTTON_FG_COLOR
+#define DEFAULT_BUTTON_FG_COLOR "#FFFFFF"
+#endif
+// Default button border, as a literal #RRGGBB color.
+#ifndef DEFAULT_BUTTON_BORDER_COLOR
+#define DEFAULT_BUTTON_BORDER_COLOR "#000000"
+#endif
+// Default button border width, as a pixel-count string.
+#ifndef DEFAULT_BUTTON_BORDER_WIDTH
+#define DEFAULT_BUTTON_BORDER_WIDTH "0"
+#endif
+// Default button corner radius, as a pixel-count string.
+#ifndef DEFAULT_BUTTON_CORNER_RADIUS
+#define DEFAULT_BUTTON_CORNER_RADIUS "8"
+#endif
+// Default button content padding, as a pixel-count string.
+#ifndef DEFAULT_BUTTON_CONTENT_PAD
+#define DEFAULT_BUTTON_CONTENT_PAD "4"
+#endif
+// Default burn-in pixel shift distance in pixels (0 disables shifting).
+#ifndef DEFAULT_PIXEL_SHIFT_DISTANCE
+#define DEFAULT_PIXEL_SHIFT_DISTANCE 4
+#endif
+// Default spacing between buttons in pixels.
+#ifndef DEFAULT_BUTTON_SPACING_PX
+#define DEFAULT_BUTTON_SPACING_PX 6
+#endif
+// Default extra inset at the top of a pad in pixels.
+#ifndef DEFAULT_PAD_INSET_TOP_PX
+#define DEFAULT_PAD_INSET_TOP_PX 0
+#endif
+// Default extra inset at the right of a pad in pixels.
+#ifndef DEFAULT_PAD_INSET_RIGHT_PX
+#define DEFAULT_PAD_INSET_RIGHT_PX 0
+#endif
+// Default extra inset at the bottom of a pad in pixels.
+#ifndef DEFAULT_PAD_INSET_BOTTOM_PX
+#define DEFAULT_PAD_INSET_BOTTOM_PX 0
+#endif
+// Default extra inset at the left of a pad in pixels.
+#ifndef DEFAULT_PAD_INSET_LEFT_PX
+#define DEFAULT_PAD_INSET_LEFT_PX 0
+#endif
+// Whether buttons inherit an enabled shadow by default.
+#ifndef DEFAULT_BUTTON_SHADOW_ENABLED
+#define DEFAULT_BUTTON_SHADOW_ENABLED false
+#endif
+// Default shadow type: BUTTON_SHADOW_TYPE_OPAQUE or BUTTON_SHADOW_TYPE_DROP.
+#ifndef DEFAULT_BUTTON_SHADOW_TYPE
+#define DEFAULT_BUTTON_SHADOW_TYPE BUTTON_SHADOW_TYPE_OPAQUE
+#endif
+// Default shadow mode: BUTTON_SHADOW_COLOR_FIXED or BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND.
+#ifndef DEFAULT_BUTTON_SHADOW_COLOR_MODE
+#define DEFAULT_BUTTON_SHADOW_COLOR_MODE BUTTON_SHADOW_COLOR_FIXED
+#endif
+// Default fixed shadow color, as a literal #RRGGBB color.
+#ifndef DEFAULT_BUTTON_SHADOW_COLOR
+#define DEFAULT_BUTTON_SHADOW_COLOR "#101010"
+#endif
+// Default percentage used to darken a background-following shadow.
+#ifndef DEFAULT_BUTTON_SHADOW_DARKEN_PCT
+#define DEFAULT_BUTTON_SHADOW_DARKEN_PCT 35
+#endif
+// Default horizontal shadow offset in pixels.
+#ifndef DEFAULT_BUTTON_SHADOW_OFFSET_X_PX
+#define DEFAULT_BUTTON_SHADOW_OFFSET_X_PX 0
+#endif
+// Default vertical shadow offset in pixels.
+#ifndef DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX
+#define DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX 5
+#endif
+// Default drop-shadow blur width in pixels.
+#ifndef DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX
+#define DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX 4
+#endif
+// Default first series color for gauges, bar charts, and sparklines (#RRGGBB).
+#ifndef DEFAULT_WIDGET_SERIES_COLOR
+#define DEFAULT_WIDGET_SERIES_COLOR "#4CAF50"
+#endif
+// Default second widget series color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_SERIES_COLOR_2
+#define DEFAULT_WIDGET_SERIES_COLOR_2 "#2196F3"
+#endif
+// Default third widget series color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_SERIES_COLOR_3
+#define DEFAULT_WIDGET_SERIES_COLOR_3 "#9C27B0"
+#endif
+// Default fourth widget series color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_SERIES_COLOR_4
+#define DEFAULT_WIDGET_SERIES_COLOR_4 "#FF9800"
+#endif
+// Default inactive gauge arc and bar chart track color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_TRACK_COLOR
+#define DEFAULT_WIDGET_TRACK_COLOR "#1A1A1A"
+#endif
+// Default gauge needle, marker line, and rocker indicator color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_INDICATOR_COLOR
+#define DEFAULT_WIDGET_INDICATOR_COLOR "#FFFFFF"
+#endif
+// Default widget tick and gridline color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_TICK_COLOR
+#define DEFAULT_WIDGET_TICK_COLOR "#808080"
+#endif
+// Default widget marker zone color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_ZONE_COLOR
+#define DEFAULT_WIDGET_ZONE_COLOR "#FF5722"
+#endif
+// Default sparkline reference line color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_REFERENCE_COLOR
+#define DEFAULT_WIDGET_REFERENCE_COLOR "#888888"
+#endif
+// Default table widget cell background color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_TABLE_BG_COLOR
+#define DEFAULT_WIDGET_TABLE_BG_COLOR "#12122a"
+#endif
+// Default table widget cell text color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_TABLE_FG_COLOR
+#define DEFAULT_WIDGET_TABLE_FG_COLOR "#b0b0d0"
+#endif
+// Default table widget header text color (#RRGGBB).
+#ifndef DEFAULT_WIDGET_TABLE_HEADER_COLOR
+#define DEFAULT_WIDGET_TABLE_HEADER_COLOR "#404070"
+#endif
+
 // ============================================================================
 // Backlight Configuration
 // ============================================================================

@@ -5,6 +5,7 @@
 #if HAS_DISPLAY
 
 #include "pad_config.h"  // ButtonDefaults struct
+#include <ArduinoJson.h>
 
 // Load device-level pad and button defaults from LittleFS. Call after pad_config_init().
 void button_defaults_init();
@@ -14,6 +15,8 @@ const ButtonDefaults* button_defaults_get();
 
 // Device-wide burn-in pixel shift distance. Zero disables shifting.
 uint8_t button_defaults_get_pixel_shift_distance();
+
+bool button_defaults_load_overrides(JsonDocument& doc);
 
 // Save raw JSON to LittleFS and update RAM cache. Returns true on success.
 bool button_defaults_save_raw(const uint8_t* json, size_t len);

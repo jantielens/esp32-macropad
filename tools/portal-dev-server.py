@@ -30,7 +30,7 @@ PROTO_DIR = SCRIPT_DIR / "portal-prototype"
 MOCK_DIR = SCRIPT_DIR / "mock-data"
 APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
-PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame")
+PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
 MOCK_NOW_EPOCH = 1791370589
 SCREENSAVER_DEFAULTS = {
@@ -130,6 +130,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _fonts_available(self):
         return self._profile() in ("esp32-p4-lcd4b", "jc3248w535")
 
+    def _firmware_defaults(self):
+        defaults = dict(self.server.pad_fixture["firmware_defaults"])
+        if self._profile() == "crowpanel-4.2-interactive":
+            defaults.update(self.server.pad_fixture["epaper_firmware_defaults"])
+        return defaults
+
     @staticmethod
     def _valid_font_name(name):
         return re.fullmatch(r"[a-z0-9_-]{1,31}", name) is not None
@@ -217,7 +223,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 else:
                     self._serve_json({"error": "Pad not found"}, 404)
         elif path == "/api/component/button-defaults/config":
-            self._serve_json(self.server.mock_defaults)
+            self._serve_json({**self.server.mock_defaults, "firmware_defaults": self._firmware_defaults()})
         elif path in ("/api/component/alarms/config", "/api/component/alarms/status"):
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
                 self._serve_json({"error": "Alarm unavailable"}, 404)
@@ -245,7 +251,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 return
             defaults = self.server.mock_defaults
             gap = int(defaults.get("button_spacing_px", 6))
-            margin = int(defaults.get("pixel_shift_distance_px", 4))
+            margin = int(defaults.get("pixel_shift_distance_px", self._firmware_defaults()["pixel_shift_distance_px"]))
             width = 720 - 2 * margin - int(defaults.get("pad_inset_left_px", 0)) - int(defaults.get("pad_inset_right_px", 0))
             height = 720 - 2 * margin - int(defaults.get("pad_inset_top_px", 0)) - int(defaults.get("pad_inset_bottom_px", 0))
             self._serve_json({"display_w": 720, "display_h": 720,
@@ -462,7 +468,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     return
                 self.server.mock_pads[page] = data
             elif path == "/api/component/button-defaults/config":
-                self.server.mock_defaults.update(data)
+                self.server.mock_defaults = data
             elif path == "/api/component/display/screen":
                 target = data.get("screen")
                 if target not in {screen["id"] for screen in self._device_info()["available_screens"]}:
@@ -619,6 +625,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
         files = []
         enabled = True
         flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
+        if self._profile() == "crowpanel-4.2-interactive":
+            flags = {"HAS_DISPLAY"}
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
         for line in (APP_WEB_DIR / "portal.js.bundle").read_text(encoding="utf-8").splitlines():
@@ -695,7 +703,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if item["id"] == "ble":
                     item["id"] = "hid"
                     item["display_name"] = "Keyboard, Mouse & Gamepad"
-        if profile in ("esp32-p4-lcd4b", "jc3248w535"):
+        if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
             nav["primary"] = {"fragment": "pad-editor", "label": "Pad Editor", "icon": ""}
             nav["categories"] = [category for category in nav["categories"] if category["id"] != "sensors"]
             return nav
@@ -722,7 +730,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
             "ap_active": False, "has_mqtt": True, "has_alarm": False,
             "has_touch": True, "has_usb_hid": True, "has_ttf_fonts": self._fonts_available()}
-        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535"):
+        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
             info.update(device_class="Macropad", board=self._profile(), has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
@@ -735,6 +743,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 info.update(chip_model="ESP32-S3", has_audio=False, has_sound_player=False,
                             has_image_fetch=False, has_image_library=False,
                             display_coord_width=480, display_coord_height=320)
+            if self._profile() == "crowpanel-4.2-interactive":
+                info.update(chip_model="ESP32-S3", has_touch=False, has_audio=False, has_sound_player=False,
+                            has_backlight=False, has_alarm=False, has_native_extensions=False,
+                            has_image_fetch=False, has_image_library=False,
+                            display_coord_width=400, display_coord_height=300)
             if include_catalog:
                 info["catalog"] = self.server.pad_fixture["catalog"]
                 info["widget_catalog"] = self.server.pad_fixture["widget_catalog"]

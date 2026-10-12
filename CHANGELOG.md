@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-10
+ms.date: 2026-10-12
 ms.topic: reference
 ---
 
@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Board-overridable defaults for pad and button appearance, shared widget
+  palettes, shadows, spacing, insets, and pixel shifting. Interactive e-paper
+  boards use high-contrast colors, a light theme, square bordered buttons, and
+  pixel shift distance 0; boards without overrides retain their LCD defaults.
+  The portal uses firmware-provided defaults without saving inherited values
+  as device overrides. Explicit device, pad, and button settings remain in
+  effect; device-class widget palettes are unchanged.
 * Crisp B/W interactive e-paper rendering with a shared luminance threshold of
   128 instead of ordered dithering on CrowPanel, Inkplate, and reTerminal.
   Grayscale conversion and panel refresh waveforms are unchanged.

@@ -609,8 +609,9 @@ every component in that custom section to the same category ID.
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Camera Preview widget**: Available only on camera-enabled boards. It displays the shared camera feed with Cover, Letterbox, or Center crop scaling.
   - **Numeric rocker tap areas**: The numeric rocker settings include a per-button Tap Area Scale control from 50% to 150%. It scales both fine and coarse zones while the firmware reserves a center action area.
-  - **Pad and Button Defaults**: Separate Button Appearance, Pad Appearance and Layout, Button Labels and Icon, and Button Shadow sections on the Pads page. Pad Appearance and Layout provides device-wide button spacing, `default_pad_bg_color`, Burn-in Pixel Shift Distance (`pixel_shift_distance_px`, 0-8 px), and extra top, right, bottom, and left edge insets inside that distance. A live 2×2 diagram updates with those controls and labels their current pixel values. A value of 0 disables pixel shifting and its layout reserve. A pad without an explicit background inherits the device default. Shadows can be opaque backing plates or LVGL drop shadows, with free-form offsets and blur that may overlap or clip. Shadow color can use either a specific color or a darker tint of each button's background, including dynamic background bindings. Pads and buttons can enable or disable the device shadow setting. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
+  - **Pad and Button Defaults**: Separate Button Appearance, Pad Appearance and Layout, Button Labels and Icon, and Button Shadow sections on the Pads page. Pad Appearance and Layout provides device-wide button spacing, `default_pad_bg_color`, Burn-in Pixel Shift Distance (`pixel_shift_distance_px`, 0-8 px), and extra top, right, bottom, and left edge insets inside that distance. A live 2×2 diagram updates with those controls and labels their current pixel values. A value of 0 disables pixel shifting and its layout reserve. A pad without an explicit background inherits the device default. Shadows can be opaque backing plates or LVGL drop shadows, with free-form offsets and blur that may overlap or clip. Shadow color can use either a specific color or a darker tint of each button's background, including dynamic background bindings. Pads and buttons can enable or disable the device shadow setting. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/component/button-defaults/config`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
+  - Board appearance defaults: `GET /api/component/button-defaults/config` returns saved device overrides plus a read-only `firmware_defaults` object containing the board-selected pad, button, layout, shadow, and widget palette defaults. `POST` accepts device overrides only. The portal uses the firmware defaults for controls, widget colors, previews, and appearance resets; unchanged inherited values are omitted from device-default saves. Device exports exclude `firmware_defaults`. E-paper interactive boards use high-contrast defaults and pixel shift distance 0; other boards retain their existing defaults.
   - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode — green/red ghost overlay shows valid/invalid positions. Blocks check grid dimensions, free cells, and 64-button limit. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
@@ -2802,18 +2803,19 @@ Save the MQTT trigger configuration.
 
 All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. These defaults are stored on LittleFS at `/config/button_defaults.json`.
 
-#### `GET /api/button-defaults`
+#### `GET /api/component/button-defaults/config`
 
-Returns the current device-level pad and button defaults.
+Returns saved device-level pad and button overrides and the board-selected firmware defaults.
 
-- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
-- Default (no file saved): empty JSON object `{}`.
+- **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
+- `firmware_defaults` contains the board's appearance, layout, and shadow defaults plus widget palette fields: `widget_series_color` (and `_2`, `_3`, `_4`), `widget_track_color`, `widget_indicator_color`, `widget_tick_color`, `widget_zone_color`, `widget_reference_color`, `widget_table_bg_color`, `widget_table_fg_color`, and `widget_table_header_color`.
+- With no saved file, the response contains only `firmware_defaults`. Missing overrides inherit firmware defaults; explicit values including `0` and `false` remain authoritative.
 
-#### `POST /api/button-defaults`
+#### `POST /api/component/button-defaults/config`
 
-Save device-level pad and button defaults to LittleFS.
+Replace saved device-level pad and button overrides on LittleFS.
 
-- **Body:** JSON object with any subset of the fields listed above.
+- **Body:** JSON object with any subset of the override fields listed above. Do not include `firmware_defaults`; send `{}` to clear all device overrides.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - All pad caches are rebuilt immediately so changes take effect without reboot.
 

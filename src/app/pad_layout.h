@@ -14,9 +14,6 @@
 // Pure-computation layout engine: display dimensions + grid config → tile rects.
 // No LVGL object creation — just math. Used by PadScreen to position tiles.
 
-// Default burn-in pixel shift distance. Device defaults can override it at runtime.
-#define DEFAULT_PIXEL_SHIFT_DISTANCE 4
-
 // ============================================================================
 // UI Scale Table
 // ============================================================================

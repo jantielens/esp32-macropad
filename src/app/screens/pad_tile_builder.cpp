@@ -183,7 +183,7 @@ void PadScreen::buildTiles() {
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
     strlcpy(pageBgTemplate, cfg->bg_color, sizeof(pageBgTemplate));
-    { uint32_t bg = 0x000000; parse_hex_color(cfg->bg_color, &bg); pageBgDefault = bg; }
+    { uint32_t bg = widget_default_rgb(DEFAULT_PAD_BG_COLOR); parse_hex_color(cfg->bg_color, &bg); pageBgDefault = bg; }
     if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
 
     // Cache page-level named bindings for [pad:] scheme resolution
@@ -252,8 +252,8 @@ void PadScreen::buildTiles() {
         const int16_t shadow_offset_y = cfg->shadow.offset_y_px;
         const uint8_t drop_blur = cfg->shadow.drop_blur_px;
 
-        uint32_t bg_def = 0x333333; parse_hex_color(bcfg.bg_color, &bg_def);
-        uint32_t shadow_def = 0x101010;
+        uint32_t bg_def = widget_default_rgb(DEFAULT_BUTTON_BG_COLOR); parse_hex_color(bcfg.bg_color, &bg_def);
+        uint32_t shadow_def = widget_default_rgb(DEFAULT_BUTTON_SHADOW_COLOR);
         if (tile.shadow_follows_background) shadow_def = button_shadow_darken_color(bg_def, tile.shadow_darken_pct);
         else parse_hex_color(cfg->shadow.color, &shadow_def);
         const lv_coord_t cr_def = (lv_coord_t)strtol(bcfg.corner_radius, nullptr, 10);
@@ -278,8 +278,8 @@ void PadScreen::buildTiles() {
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
         // Styling — compute initial colors from config strings
-        uint32_t fg_def = 0xFFFFFF; parse_hex_color(bcfg.fg_color, &fg_def);
-        uint32_t border_def = 0x000000; parse_hex_color(bcfg.border_color, &border_def);
+        uint32_t fg_def = widget_default_rgb(DEFAULT_BUTTON_FG_COLOR); parse_hex_color(bcfg.fg_color, &fg_def);
+        uint32_t border_def = widget_default_rgb(DEFAULT_BUTTON_BORDER_COLOR); parse_hex_color(bcfg.border_color, &border_def);
         lv_obj_set_style_bg_color(obj, rgb_to_lv(bg_def), 0);
         lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(obj, rgb_to_lv(border_def), 0);

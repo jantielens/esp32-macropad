@@ -6,6 +6,48 @@ import tempfile
 
 
 root = pathlib.Path(__file__).resolve().parents[1]
+fixture = json.loads((root / "tools/mock-data/pad-editor.json").read_text())
+appearance_macros = {
+    "default_pad_bg_color": "DEFAULT_PAD_BG_COLOR",
+    "bg_color": "DEFAULT_BUTTON_BG_COLOR", "fg_color": "DEFAULT_BUTTON_FG_COLOR",
+    "border_color": "DEFAULT_BUTTON_BORDER_COLOR", "border_width": "DEFAULT_BUTTON_BORDER_WIDTH",
+    "corner_radius": "DEFAULT_BUTTON_CORNER_RADIUS", "content_pad": "DEFAULT_BUTTON_CONTENT_PAD",
+    "pixel_shift_distance_px": "DEFAULT_PIXEL_SHIFT_DISTANCE",
+}
+for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interactive", "ESP32S3"),
+                      ("inkplate6flick-interactive", "ESP32"), ("reterminal-e1003-interactive", "ESP32S3")):
+    expected = dict(fixture["firmware_defaults"])
+    if board != "m5stack-stopwatch":
+        expected.update(fixture["epaper_firmware_defaults"])
+    if board == "reterminal-e1003-interactive":
+        expected.update(widget_series_color_2="#555555", widget_series_color_3="#888888",
+                        widget_series_color_4="#AAAAAA", widget_track_color="#DDDDDD",
+                        widget_tick_color="#555555", widget_zone_color="#888888", widget_reference_color="#555555")
+    output = []
+    for field in expected:
+        macro = appearance_macros.get(field, "DEFAULT_" + field.upper())
+        if field == "button_shadow_type":
+            macro = f'({macro} == BUTTON_SHADOW_TYPE_DROP ? "drop" : "opaque")'
+        elif field == "button_shadow_color_mode":
+            macro = f'({macro} == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND ? "darken_background" : "fixed")'
+        output.append(f'std::cout << {macro} << "\\n";')
+    source = '''#include <iostream>
+#include "src/app/board_config.h"
+enum { BUTTON_SHADOW_TYPE_OPAQUE, BUTTON_SHADOW_TYPE_DROP };
+enum { BUTTON_SHADOW_COLOR_FIXED, BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND };
+int main() {\n''' + "\n".join(output) + "\n}"
+    with tempfile.TemporaryDirectory() as directory:
+        executable = pathlib.Path(directory) / "appearance"
+        subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-x", "c++", "-",
+                        "-I", str(root), "-I", str(root / "src/boards" / board),
+                        "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", f"-DCONFIG_IDF_TARGET_{target}=1",
+                        "-o", str(executable)], input=source, text=True, check=True)
+        actual = subprocess.check_output([str(executable)], text=True).splitlines()
+    for (field, value), actual_value in zip(expected.items(), actual):
+        assert actual_value == str(int(value) if isinstance(value, bool) else value), (board, field, actual_value, value)
+    assert len(actual) == len(expected)
+print("PASS: LCD and e-paper board appearance defaults match portal fixtures")
+
 subprocess.run(
     ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
      "-x", "c++", "-", "-I", str(root),

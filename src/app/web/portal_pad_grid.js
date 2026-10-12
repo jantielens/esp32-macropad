@@ -158,7 +158,7 @@ function padRenderGrid() {
         grid.style.aspectRatio = deviceInfoCache.display_coord_width + ' / ' + deviceInfoCache.display_coord_height;
     }
     const pageBgInput = document.getElementById('pad-edit-page-bg-color');
-    grid.style.background = (pageBgInput && /^#[0-9a-fA-F]{6}$/.test(pageBgInput.value.trim())) ? pageBgInput.value.trim() : '#000000';
+    grid.style.background = (pageBgInput && /^#[0-9a-fA-F]{6}$/.test(pageBgInput.value.trim())) ? pageBgInput.value.trim() : padGetEffectiveDefault('default_pad_bg_color');
     grid.innerHTML = '';
 
     // Track which cells are "covered" by a spanning button

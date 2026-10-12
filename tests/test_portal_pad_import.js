@@ -119,6 +119,7 @@ async function runImport(options = {}) {
                 .filter(function(a) { return a && a.type; });
         },
         padColorsToHex() {},
+        padGetEffectiveDefault() { return '#000000'; },
         padGetBindableColor() { return '#000000'; },
         padSetBindableColor() {},
         padInitBindableColor() {},

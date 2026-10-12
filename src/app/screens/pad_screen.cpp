@@ -81,7 +81,7 @@ PadScreen::PadScreen(uint8_t page, DisplayManager* manager)
       padHoldMask(0), padHeldMask(0) {
     wakeScreen[0] = '\0';
     pageBgTemplate[0] = '\0';
-    pageBgDefault = 0x000000;
+    pageBgDefault = widget_default_rgb(DEFAULT_PAD_BG_COLOR);
 }
 
 PadScreen::~PadScreen() {

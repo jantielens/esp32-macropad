@@ -427,8 +427,25 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/pad/button_sizes?cols=0&rows=3")[0], 400)
         self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {"corner_radius": "4"})[0], 200)
         self.assertEqual(self.request("/api/component/button-defaults/config")[1]["corner_radius"], "4")
+        defaults = self.request("/api/component/button-defaults/config")[1]
+        self.assertEqual(defaults["firmware_defaults"]["bg_color"], "#333333")
+        self.assertEqual(defaults["firmware_defaults"]["pixel_shift_distance_px"], 4)
+        self.assertNotIn("bg_color", defaults)
         for path in ("/api/pad/blocks", "/api/sounds/list", "/api/extensions", "/api/images"):
             self.assertEqual(self.request(path)[0], 200)
+
+    def test_epaper_appearance_defaults(self):
+        profile = "crowpanel-4.2-interactive"
+        self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {}, profile=profile)[0], 200)
+        defaults = self.request("/api/component/button-defaults/config", profile=profile)[1]
+        self.assertEqual(set(defaults), {"firmware_defaults"})
+        self.assertEqual(defaults["firmware_defaults"]["bg_color"], "#FFFFFF")
+        self.assertEqual(defaults["firmware_defaults"]["fg_color"], "#000000")
+        self.assertEqual(defaults["firmware_defaults"]["pixel_shift_distance_px"], 0)
+        self.assertEqual(self.request("/api/pad/button_sizes?cols=4&rows=3", profile=profile)[1]["pixel_shift_margin"], 0)
+        bundle = self.request("/portal.js", profile=profile, raw=True)[1]
+        self.assertIn("function padLoadButtonDefaults(defs)", bundle)
+        self.assertEqual(self.request("/api/info", profile=profile)[1]["display_coord_width"], 400)
 
     def test_failure_scenarios(self):
         self.request("/__mock/reset", "POST", {"scenario": "load-error"})

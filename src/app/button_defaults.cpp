@@ -19,8 +19,11 @@ static const char* BTN_DEFAULTS_PATH = "/config/button_defaults.json";
 static ButtonDefaults* g_defaults = nullptr;
 static const ButtonDefaults g_empty_defaults = {
     "", "", "", "", "", "", "", "", "", "", ICON_POS_ABOVE,
-    {false, BUTTON_SHADOW_TYPE_OPAQUE, BUTTON_SHADOW_COLOR_FIXED, "#101010", 35, 0, 5, 4},
-    {6, 0, 0, 0, 0, 4}
+    {DEFAULT_BUTTON_SHADOW_ENABLED, DEFAULT_BUTTON_SHADOW_TYPE, DEFAULT_BUTTON_SHADOW_COLOR_MODE,
+     DEFAULT_BUTTON_SHADOW_COLOR, DEFAULT_BUTTON_SHADOW_DARKEN_PCT,
+     DEFAULT_BUTTON_SHADOW_OFFSET_X_PX, DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX, DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX},
+    {DEFAULT_BUTTON_SPACING_PX, DEFAULT_PAD_INSET_TOP_PX, DEFAULT_PAD_INSET_RIGHT_PX,
+     DEFAULT_PAD_INSET_BOTTOM_PX, DEFAULT_PAD_INSET_LEFT_PX, DEFAULT_PIXEL_SHIFT_DISTANCE}
 };
 
 static bool ensure_defaults() {
@@ -61,11 +64,7 @@ static void parse_bindable(JsonVariant v, char* out, size_t out_len, const char*
     strlcpy(out, def, out_len);
 }
 
-static bool load_from_flash(ButtonDefaults* d) {
-    memset(d, 0, sizeof(ButtonDefaults));
-    init_shadow_defaults(&d->shadow);
-    init_layout_defaults(&d->layout);
-
+bool button_defaults_load_overrides(JsonDocument& doc) {
     if (!Storage.exists(BTN_DEFAULTS_PATH)) {
         LOGD(TAG, "No pad and button defaults file, using empty defaults");
         return false;
@@ -84,47 +83,53 @@ static bool load_from_flash(ButtonDefaults* d) {
         return false;
     }
 
-    BasicJsonDocument<PsramJsonAllocator> doc(2048);
     DeserializationError err = deserializeJson(doc, f);
     f.close();
 
     if (err) {
         LOGE(TAG, "JSON parse error: %s", err.c_str());
+        doc.clear();
         return false;
     }
+    return doc.is<JsonObject>();
+}
+
+static bool load_from_flash(ButtonDefaults* d) {
+    memset(d, 0, sizeof(ButtonDefaults));
+    init_shadow_defaults(&d->shadow);
+    init_layout_defaults(&d->layout);
+    BasicJsonDocument<PsramJsonAllocator> doc(2048);
+    if (!button_defaults_load_overrides(doc)) return false;
 
     parse_bindable(doc["bg_color"], d->bg_color, CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["default_pad_bg_color"], d->default_pad_bg_color,
                    CONFIG_COLOR_MAX_LEN, "");
-    if (!d->default_pad_bg_color[0]) {
-        // Preserve device defaults saved while this feature used its initial key.
-        parse_bindable(doc["pad_bg_color"], d->default_pad_bg_color,
-                       CONFIG_COLOR_MAX_LEN, "");
-    }
     parse_bindable(doc["fg_color"], d->fg_color, CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["border_color"], d->border_color, CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["border_width"], d->border_width, CONFIG_BINDABLE_SHORT_LEN, "", false);
     parse_bindable(doc["corner_radius"], d->corner_radius, CONFIG_BINDABLE_SHORT_LEN, "", false);
     parse_bindable(doc["content_pad"], d->content_pad, CONFIG_BINDABLE_SHORT_LEN, "", false);
-    d->shadow.enabled = doc["button_shadow_enabled"] | false;
-    const char* shadow_type = doc["button_shadow_type"] | "opaque";
+    d->shadow.enabled = doc["button_shadow_enabled"] | g_empty_defaults.shadow.enabled;
+    const char* shadow_type = doc["button_shadow_type"] |
+        (g_empty_defaults.shadow.type == BUTTON_SHADOW_TYPE_DROP ? "drop" : "opaque");
     d->shadow.type = strcmp(shadow_type, "drop") == 0
         ? BUTTON_SHADOW_TYPE_DROP : BUTTON_SHADOW_TYPE_OPAQUE;
-    const char* shadow_color_mode = doc["button_shadow_color_mode"] | "fixed";
+    const char* shadow_color_mode = doc["button_shadow_color_mode"] |
+        (g_empty_defaults.shadow.color_mode == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND ? "darken_background" : "fixed");
     d->shadow.color_mode = strcmp(shadow_color_mode, "darken_background") == 0
         ? BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND : BUTTON_SHADOW_COLOR_FIXED;
     parse_bindable(doc["button_shadow_color"], d->shadow.color,
-                   sizeof(d->shadow.color), "#101010");
-    d->shadow.darken_pct = constrain(doc["button_shadow_darken_pct"] | 35, 0, 100);
-    d->shadow.offset_x_px = constrain(doc["button_shadow_offset_x_px"] | 0, -64, 64);
-    d->shadow.offset_y_px = constrain(doc["button_shadow_offset_y_px"] | 5, -64, 64);
-    d->shadow.drop_blur_px = constrain(doc["button_shadow_drop_blur_px"] | 4, 0, 32);
-    d->layout.spacing_px = constrain(doc["button_spacing_px"] | 6, 0, 64);
-    d->layout.inset_top_px = constrain(doc["pad_inset_top_px"] | 0, 0, 64);
-    d->layout.inset_right_px = constrain(doc["pad_inset_right_px"] | 0, 0, 64);
-    d->layout.inset_bottom_px = constrain(doc["pad_inset_bottom_px"] | 0, 0, 64);
-    d->layout.inset_left_px = constrain(doc["pad_inset_left_px"] | 0, 0, 64);
-    d->layout.pixel_shift_distance_px = constrain(doc["pixel_shift_distance_px"] | 4, 0, 8);
+                   sizeof(d->shadow.color), DEFAULT_BUTTON_SHADOW_COLOR);
+    d->shadow.darken_pct = constrain(doc["button_shadow_darken_pct"] | DEFAULT_BUTTON_SHADOW_DARKEN_PCT, 0, 100);
+    d->shadow.offset_x_px = constrain(doc["button_shadow_offset_x_px"] | DEFAULT_BUTTON_SHADOW_OFFSET_X_PX, -64, 64);
+    d->shadow.offset_y_px = constrain(doc["button_shadow_offset_y_px"] | DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX, -64, 64);
+    d->shadow.drop_blur_px = constrain(doc["button_shadow_drop_blur_px"] | DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX, 0, 32);
+    d->layout.spacing_px = constrain(doc["button_spacing_px"] | DEFAULT_BUTTON_SPACING_PX, 0, 64);
+    d->layout.inset_top_px = constrain(doc["pad_inset_top_px"] | DEFAULT_PAD_INSET_TOP_PX, 0, 64);
+    d->layout.inset_right_px = constrain(doc["pad_inset_right_px"] | DEFAULT_PAD_INSET_RIGHT_PX, 0, 64);
+    d->layout.inset_bottom_px = constrain(doc["pad_inset_bottom_px"] | DEFAULT_PAD_INSET_BOTTOM_PX, 0, 64);
+    d->layout.inset_left_px = constrain(doc["pad_inset_left_px"] | DEFAULT_PAD_INSET_LEFT_PX, 0, 64);
+    d->layout.pixel_shift_distance_px = constrain(doc["pixel_shift_distance_px"] | DEFAULT_PIXEL_SHIFT_DISTANCE, 0, 8);
     strlcpy(d->label_top_style, doc["label_top_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
     strlcpy(d->label_center_style, doc["label_center_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);
     strlcpy(d->label_bottom_style, doc["label_bottom_style"] | "", CONFIG_LABEL_STYLE_MAX_LEN);

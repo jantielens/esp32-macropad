@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 323
+Total flags: 356
 
 ### Features (HAS_*)
 
@@ -236,6 +236,39 @@ Total flags: 323
 - **CAMERA_SENSOR_ID_REG_HIGH** default: `0x0000` — Camera sensor product ID high-byte register.
 - **CONFIG_DEFAULT_PORTAL_IDLE_SECONDS** default: `120` — the device on a fresh flash.
 - **DEBUG_CRASH_API_ENABLED** default: `0` — Dev/test-only crash API; defaults off on every board and must stay off in production.
+- **DEFAULT_BUTTON_BG_COLOR** default: `"#333333"` — Default button background, as a literal #RRGGBB color.
+- **DEFAULT_BUTTON_BORDER_COLOR** default: `"#000000"` — Default button border, as a literal #RRGGBB color.
+- **DEFAULT_BUTTON_BORDER_WIDTH** default: `"0"` — Default button border width, as a pixel-count string.
+- **DEFAULT_BUTTON_CONTENT_PAD** default: `"4"` — Default button content padding, as a pixel-count string.
+- **DEFAULT_BUTTON_CORNER_RADIUS** default: `"8"` — Default button corner radius, as a pixel-count string.
+- **DEFAULT_BUTTON_FG_COLOR** default: `"#FFFFFF"` — Default button text and icon color, as a literal #RRGGBB color.
+- **DEFAULT_BUTTON_SHADOW_COLOR** default: `"#101010"` — Default fixed shadow color, as a literal #RRGGBB color.
+- **DEFAULT_BUTTON_SHADOW_COLOR_MODE** default: `BUTTON_SHADOW_COLOR_FIXED` — Default shadow mode: BUTTON_SHADOW_COLOR_FIXED or BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND.
+- **DEFAULT_BUTTON_SHADOW_DARKEN_PCT** default: `35` — Default percentage used to darken a background-following shadow.
+- **DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX** default: `4` — Default drop-shadow blur width in pixels.
+- **DEFAULT_BUTTON_SHADOW_ENABLED** default: `false` — Whether buttons inherit an enabled shadow by default.
+- **DEFAULT_BUTTON_SHADOW_OFFSET_X_PX** default: `0` — Default horizontal shadow offset in pixels.
+- **DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX** default: `5` — Default vertical shadow offset in pixels.
+- **DEFAULT_BUTTON_SHADOW_TYPE** default: `BUTTON_SHADOW_TYPE_OPAQUE` — Default shadow type: BUTTON_SHADOW_TYPE_OPAQUE or BUTTON_SHADOW_TYPE_DROP.
+- **DEFAULT_BUTTON_SPACING_PX** default: `6` — Default spacing between buttons in pixels.
+- **DEFAULT_PAD_BG_COLOR** default: `"#000000"` — Default pad background, as a literal #RRGGBB color.
+- **DEFAULT_PAD_INSET_BOTTOM_PX** default: `0` — Default extra inset at the bottom of a pad in pixels.
+- **DEFAULT_PAD_INSET_LEFT_PX** default: `0` — Default extra inset at the left of a pad in pixels.
+- **DEFAULT_PAD_INSET_RIGHT_PX** default: `0` — Default extra inset at the right of a pad in pixels.
+- **DEFAULT_PAD_INSET_TOP_PX** default: `0` — Default extra inset at the top of a pad in pixels.
+- **DEFAULT_PIXEL_SHIFT_DISTANCE** default: `4` — Default burn-in pixel shift distance in pixels (0 disables shifting).
+- **DEFAULT_WIDGET_INDICATOR_COLOR** default: `"#FFFFFF"` — Default gauge needle, marker line, and rocker indicator color (#RRGGBB).
+- **DEFAULT_WIDGET_REFERENCE_COLOR** default: `"#888888"` — Default sparkline reference line color (#RRGGBB).
+- **DEFAULT_WIDGET_SERIES_COLOR** default: `"#4CAF50"` — Default first series color for gauges, bar charts, and sparklines (#RRGGBB).
+- **DEFAULT_WIDGET_SERIES_COLOR_2** default: `"#2196F3"` — Default second widget series color (#RRGGBB).
+- **DEFAULT_WIDGET_SERIES_COLOR_3** default: `"#9C27B0"` — Default third widget series color (#RRGGBB).
+- **DEFAULT_WIDGET_SERIES_COLOR_4** default: `"#FF9800"` — Default fourth widget series color (#RRGGBB).
+- **DEFAULT_WIDGET_TABLE_BG_COLOR** default: `"#12122a"` — Default table widget cell background color (#RRGGBB).
+- **DEFAULT_WIDGET_TABLE_FG_COLOR** default: `"#b0b0d0"` — Default table widget cell text color (#RRGGBB).
+- **DEFAULT_WIDGET_TABLE_HEADER_COLOR** default: `"#404070"` — Default table widget header text color (#RRGGBB).
+- **DEFAULT_WIDGET_TICK_COLOR** default: `"#808080"` — Default widget tick and gridline color (#RRGGBB).
+- **DEFAULT_WIDGET_TRACK_COLOR** default: `"#1A1A1A"` — Default inactive gauge arc and bar chart track color (#RRGGBB).
+- **DEFAULT_WIDGET_ZONE_COLOR** default: `"#FF5722"` — Default widget marker zone color (#RRGGBB).
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS** default: `1` — point-in-time values without min/max window bands or CPU %.
 - **DEVICE_TELEMETRY_CPU_MONITOR** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable CPU monitoring (idle-hook based, 1 Hz esp_timer).
 - **DEVICE_TELEMETRY_HEALTH_WINDOW** default: `DEVICE_TELEMETRY_BACKGROUND_TASKS` — Enable health-window min/max sampling timer.
@@ -1329,6 +1362,72 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_logs.cpp
   - src/app/web_portal_logs.h
   - src/app/web_portal_routes.cpp
+- **DEFAULT_BUTTON_BG_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_BORDER_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_BORDER_WIDTH**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_CONTENT_PAD**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_CORNER_RADIUS**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_FG_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SHADOW_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SHADOW_COLOR_MODE**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SHADOW_DARKEN_PCT**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SHADOW_ENABLED**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SHADOW_OFFSET_X_PX**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SHADOW_TYPE**
+  - src/app/board_config.h
+- **DEFAULT_BUTTON_SPACING_PX**
+  - src/app/board_config.h
+- **DEFAULT_PAD_BG_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_PAD_INSET_BOTTOM_PX**
+  - src/app/board_config.h
+- **DEFAULT_PAD_INSET_LEFT_PX**
+  - src/app/board_config.h
+- **DEFAULT_PAD_INSET_RIGHT_PX**
+  - src/app/board_config.h
+- **DEFAULT_PAD_INSET_TOP_PX**
+  - src/app/board_config.h
+- **DEFAULT_PIXEL_SHIFT_DISTANCE**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_INDICATOR_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_REFERENCE_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_SERIES_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_SERIES_COLOR_2**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_SERIES_COLOR_3**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_SERIES_COLOR_4**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_TABLE_BG_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_TABLE_FG_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_TABLE_HEADER_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_TICK_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_TRACK_COLOR**
+  - src/app/board_config.h
+- **DEFAULT_WIDGET_ZONE_COLOR**
+  - src/app/board_config.h
 - **DEVICE_TELEMETRY_BACKGROUND_TASKS**
   - src/app/board_config.h
 - **DEVICE_TELEMETRY_CPU_MONITOR**
