@@ -232,11 +232,23 @@ add_host_legacy_test(test_stopwatch_round_layout
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 
+file(GLOB HOST_PNG_INPUTS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/assets/png/*.png")
+add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp" "${CMAKE_CURRENT_BINARY_DIR}/png_assets.h"
+    COMMAND python3 "${PROJECT_SOURCE_DIR}/tools/png2lvgl_assets.py"
+        "${PROJECT_SOURCE_DIR}/assets/png"
+        "${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp"
+        "${CMAKE_CURRENT_BINARY_DIR}/png_assets.h"
+        --prefix img_
+    DEPENDS "${PROJECT_SOURCE_DIR}/tools/png2lvgl_assets.py" ${HOST_PNG_INPUTS}
+    VERBATIM
+)
+
 add_host_legacy_test(test_stopwatch_round_ui
-    SOURCES test_stopwatch_round_ui.cpp ${PROJECT_SOURCE_DIR}/src/app/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
+    SOURCES test_stopwatch_round_ui.cpp ${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
     DEFINITIONS UI_SCALE_TIER=1 DISPLAY_DISABLE_ANIMATIONS=1
     OPTIONS -Wno-missing-field-initializers
-    INCLUDES ${HOST_LVGL_DIR}
+    INCLUDES ${CMAKE_CURRENT_BINARY_DIR} ${HOST_LVGL_DIR}
     LIBRARIES host_lvgl
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
