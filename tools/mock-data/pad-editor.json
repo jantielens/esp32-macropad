@@ -94,6 +94,7 @@
     {"type": "screen", "group": "Navigation", "label": "Navigate to screen"},
     {"type": "back", "group": "Navigation", "label": "Navigate back"},
     {"type": "cycle_pad", "group": "Navigation", "label": "Navigate pad sequence"},
+    {"type": "button_navigation", "group": "Navigation", "label": "Navigate buttons", "commands": [{"id": "previous", "label": "Previous"}, {"id": "next", "label": "Next"}, {"id": "tap", "label": "Tap"}, {"id": "tap_hold", "label": "Tap & Hold"}], "fields": [{"name": "command", "description": "previous, next, tap, or tap_hold"}], "editor_fields": [{"name": "command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message"},
     {"type": "ha_service", "group": "Connectivity", "label": "Call Home Assistant service"},
     {"type": "notify", "group": "Display", "label": "Show notification"},
