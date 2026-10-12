@@ -52,13 +52,14 @@ static uint32_t s_debug_last_log_ms = 0;
 // Internal helpers
 // ============================================================================
 
-static void poll_once() {
-    if (!s_available) return;
-    if (!s_nau.available()) return;
+static bool poll_once() {
+    if (!s_available) return false;
+    if (!s_nau.available()) return false;
 
     long raw = s_nau.getReading();
     float calibrated = (s_cal_factor != 0.0f) ? (float)(raw - s_offset) / s_cal_factor : 0.0f;
     scale_smoothing_process(s_smooth_state, calibrated, millis());
+    return true;
 }
 
 // ============================================================================
@@ -222,7 +223,8 @@ static void nau7802_init_cb() {
     scale_smoothing_apply(coffee_scale_config.scale_smoothing);
 }
 
-static void nau7802_loop_cb() {
+static bool nau7802_loop_cb() {
+    bool changed = false;
     if (s_tare_requested && s_available) {
         s_tare_requested = false;
         bool persist = s_tare_persist;
@@ -230,6 +232,7 @@ static void nau7802_loop_cb() {
         nau7802_tare();
         if (persist) s_persist_requested = true;
         s_status = SCALE_IDLE;
+        changed = true;
     }
 
     if (s_calibrate_requested && s_available) {
@@ -242,6 +245,7 @@ static void nau7802_loop_cb() {
             LOGW(TAG, "Deferred calibrate failed (zero raw delta)");
         }
         s_status = SCALE_IDLE;
+        changed = true;
     }
 
     // Persist calibration + offset to NVS when a tare or calibrate completed.
@@ -259,7 +263,7 @@ static void nau7802_loop_cb() {
              s_cal_factor, s_offset);
     }
 
-    poll_once();
+    changed = poll_once() || changed;
 
 #if SCALE_DEBUG_LOG_HZ > 0
     if (s_available) {
@@ -271,25 +275,28 @@ static void nau7802_loop_cb() {
         }
     }
 #endif
+    return changed;
 }
 
-static void nau7802_append_api(JsonObject &doc) {
+static void nau7802_sample(JsonObject &doc) {
     if (!s_available) return;
     sensor_manager_set_number(doc, "weight_g", s_smooth_state.weight_display, true);
     sensor_manager_set_number(doc, "flow_rate", s_smooth_state.flow_rate, true);
 }
 
-static void nau7802_append_mqtt(JsonObject &doc) {
-    nau7802_append_api(doc);
-}
-
 void register_nau7802_sensor(SensorRegistry &registry) {
+    static const SensorField fields[] = {
+        {"weight_g", "Weight in grams."},
+        {"flow_rate", "Flow rate in grams per second."},
+    };
     SensorCallbacks callbacks = {};
     callbacks.name        = "NAU7802";
     callbacks.init        = nau7802_init_cb;
     callbacks.loop        = nau7802_loop_cb;
-    callbacks.append_api  = nau7802_append_api;
-    callbacks.append_mqtt = nau7802_append_mqtt;
+    callbacks.sample      = nau7802_sample;
+    callbacks.event_driven = true;
+    callbacks.fields      = fields;
+    callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
     registry.add(callbacks);
 }
 

@@ -51,12 +51,13 @@ static uint32_t s_debug_last_log_ms = 0;
 // ============================================================================
 
 // Read one sample from HX711, apply EMA, update flow rate.
-static void poll_once() {
-    if (!s_available) return;
-    if (!s_scale.is_ready()) return;
+static bool poll_once() {
+    if (!s_available) return false;
+    if (!s_scale.is_ready()) return false;
 
     float raw = s_scale.get_units(1);  // single sample, calibrated
     scale_smoothing_process(s_smooth_state, raw, millis());
+    return true;
 }
 
 // ============================================================================
@@ -197,7 +198,8 @@ static void hx711_init_cb() {
     scale_smoothing_apply(coffee_scale_config.scale_smoothing);
 }
 
-static void hx711_loop_cb() {
+static bool hx711_loop_cb() {
+    bool changed = false;
     // Deferred tare — runs on main task (internal RAM stack, no LVGL blocking)
     if (s_tare_requested && s_available) {
         s_tare_requested = false;
@@ -206,6 +208,7 @@ static void hx711_loop_cb() {
         hx711_tare();
         if (persist) s_persist_requested = true;
         s_status = SCALE_IDLE;
+        changed = true;
     }
 
     // Deferred calibrate — runs on main task
@@ -219,6 +222,7 @@ static void hx711_loop_cb() {
             LOGW(TAG, "Deferred calibrate failed (zero raw delta)");
         }
         s_status = SCALE_IDLE;
+        changed = true;
     }
 
     // Persist calibration + offset to NVS when a tare or calibrate completed.
@@ -236,7 +240,7 @@ static void hx711_loop_cb() {
              s_scale.get_scale(), s_scale.get_offset());
     }
 
-    poll_once();
+    changed = poll_once() || changed;
 
 #if SCALE_DEBUG_LOG_HZ > 0
     if (s_available) {
@@ -248,25 +252,28 @@ static void hx711_loop_cb() {
         }
     }
 #endif
+    return changed;
 }
 
-static void hx711_append_api(JsonObject &doc) {
+static void hx711_sample(JsonObject &doc) {
     if (!s_available) return;
     sensor_manager_set_number(doc, "weight_g", s_smooth_state.weight_display, true);
     sensor_manager_set_number(doc, "flow_rate", s_smooth_state.flow_rate, true);
 }
 
-static void hx711_append_mqtt(JsonObject &doc) {
-    hx711_append_api(doc);
-}
-
 void register_hx711_sensor(SensorRegistry &registry) {
+    static const SensorField fields[] = {
+        {"weight_g", "Weight in grams."},
+        {"flow_rate", "Flow rate in grams per second."},
+    };
     SensorCallbacks callbacks = {};
     callbacks.name        = "HX711";
     callbacks.init        = hx711_init_cb;
     callbacks.loop        = hx711_loop_cb;
-    callbacks.append_api  = hx711_append_api;
-    callbacks.append_mqtt = hx711_append_mqtt;
+    callbacks.sample      = hx711_sample;
+    callbacks.event_driven = true;
+    callbacks.fields      = fields;
+    callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
     registry.add(callbacks);
 }
 
