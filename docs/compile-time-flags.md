@@ -85,7 +85,7 @@ Total flags: 356
 - **AUDIO_PA_PIN** default: `-1` — NS4150B power amplifier enable pin.
 - **BATTERY_ADC_PIN** default: `-1` — ADC GPIO connected to the battery divider. Use -1 to disable the adapter.
 - **BUTTON_PIN** default: `0` — GPIO pin for the optional user button (active level defined below).
-- **EPAPER_BUSY_PIN** default: `(no default)` — E-paper BUSY GPIO, ready LOW.
+- **EPAPER_BUSY_PIN** default: `(no default)` — E-paper BUSY GPIO, treated as active LOW by the driver.
 - **EPAPER_CS_PIN** default: `(no default)` — E-paper chip-select GPIO, active LOW.
 - **EPAPER_DC_PIN** default: `(no default)` — E-paper data/command GPIO.
 - **EPAPER_FRAME_BATTERY_ADC_PIN** default: `(no default)` — ADC pin for the battery sense divider (GPIO1 on the E1003).

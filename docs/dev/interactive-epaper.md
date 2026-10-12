@@ -86,7 +86,7 @@ targets that A-revision protocol, not the older SSD1683 examples.
 | Signal | GPIO | Behavior |
 |---|---|---|
 | EPD SCK / MOSI / CS | 12 / 11 / 45 | SPI mode 0 |
-| EPD DC / RESET / BUSY | 46 / 47 / 48 | BUSY HIGH while refreshing |
+| EPD DC / RESET / BUSY | 46 / 47 / 48 | Driver treats BUSY LOW as active |
 | EPD power | 7 | HIGH enables the panel |
 | Menu / Back | 2 / 1 | Active LOW contacts |
 | Rotary Up / Down / OK | 6 / 4 / 5 | Three active LOW contacts, not quadrature |
@@ -117,6 +117,11 @@ written to `0x20` through `0x24`; `0x17` with `0xA5` activates the refresh.
 Partial updates transfer the
 full frame. The always-on controller stays awake between updates; unlike the
 sample's final sleep step, it does not issue deep sleep after presentation.
+The driver treats raw BUSY LOW as active and HIGH as ready. Hardware testing
+confirmed this polarity on the V1.2A unit: full waveforms took about 1.17 seconds
+and partial waveforms about 0.57 seconds, ending with a LOW-to-HIGH transition.
+It differs from the A-revision sample's wait condition. Debug logs report the
+raw pin level at wait entry and exit along with elapsed time.
 BUSY waits are bounded at 15 seconds. A timeout marks the display unavailable
 until reboot. The presentation loop defers new waveforms during OTA.
 Pixel changes normally settle for 150 ms before presentation, but settling is

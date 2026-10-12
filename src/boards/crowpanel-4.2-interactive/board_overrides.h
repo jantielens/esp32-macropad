@@ -52,7 +52,7 @@
 #define EPAPER_DC_PIN 46
 // E-paper reset GPIO, active LOW.
 #define EPAPER_RESET_PIN 47
-// E-paper BUSY GPIO, ready LOW.
+// E-paper BUSY GPIO, treated as active LOW by the driver.
 #define EPAPER_BUSY_PIN 48
 // E-paper power-enable GPIO, active HIGH.
 #define EPAPER_POWER_PIN 7

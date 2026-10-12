@@ -44,7 +44,7 @@ void digitalWrite(int pin, int value) { pin_values[pin] = value; }
 int digitalRead(int pin) {
     if (pin == 47 || pin == 7) return pin_values[pin];
     CHECK(pin == 48);
-    return busy_stuck || int32_t(busy_until - clock_ms) > 0 ? HIGH : LOW;
+    return busy_stuck || int32_t(busy_until - clock_ms) > 0 ? LOW : HIGH;
 }
 void crowpanel_test_spi_begin(int clock, int miso, int mosi, int cs) {
     CHECK(clock == 12 && miso == -1 && mosi == 11 && cs == 45);
@@ -183,6 +183,7 @@ int main() {
         const uint32_t start = clock_ms;
         pixel(driver, 1, 0, 0);
         driver.present();
+        CHECK(int32_t(clock_ms - busy_until) >= 0);
         pixel(driver, 2, 0, 0);
         driver.present();
         pixel(driver, 3, 0, 0);

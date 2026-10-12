@@ -77,7 +77,8 @@ void CrowPanel42EpaperDriver::fillRam(uint8_t command) {
 
 bool CrowPanel42EpaperDriver::waitReady(const char* stage) {
     const uint32_t started = millis();
-    while (digitalRead(crowpanelBusy) != LOW) {
+    LOGD("CrowPanel", "%s wait: BUSY=%d (LOW=active)", stage, digitalRead(crowpanelBusy));
+    while (digitalRead(crowpanelBusy) == LOW) {
         if (millis() - started >= crowpanelBusyTimeoutMs) {
             available.store(false);
             LOGE("CrowPanel", "V1.2A BUSY timeout at %s: busy=%d reset=%d power=%d; reboot to reinitialize display",
@@ -86,6 +87,8 @@ bool CrowPanel42EpaperDriver::waitReady(const char* stage) {
         }
         vTaskDelay(pdMS_TO_TICKS(1) ? pdMS_TO_TICKS(1) : 1);
     }
+    LOGD("CrowPanel", "%s ready after %lu ms: BUSY=%d", stage,
+         static_cast<unsigned long>(millis() - started), digitalRead(crowpanelBusy));
     return true;
 }
 
