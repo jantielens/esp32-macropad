@@ -87,6 +87,7 @@ bool health_table_build(bool, HealthTableLookupFn, char*, size_t) { return false
 #if HAS_AUDIO
 uint8_t audio_get_volume() { return 0; }
 void audio_beep(const char*, uint8_t) {}
+void audio_feedback(const char*) {}
 #endif
 
 #if IS_DARKROOM_TIMER
