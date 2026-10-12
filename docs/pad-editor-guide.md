@@ -996,17 +996,32 @@ not offer this setting. The JSON field is `widget_disable_pad_swipes` (boolean).
 
 Mousepad also offers **Show Back button**, default off
 (`widget_mousepad_back`, boolean). It adds a top-left arrow with a touch target
-up to 44 pixels square, separate from mouse input. A short stationary tap
+that defaults to 44 pixels square, separate from mouse input. Set **Back button
+size (px)** (`widget_mousepad_back_size`, integer 1-512, default 44) to change
+both the visible button and its touch target. The button shrinks to fit the
+mousepad's content area, and the centered arrow scales with it. The size setting
+does not enable the button by itself. A short stationary tap
 uses existing screen history; moving more than 8 pixels or holding cancels it.
 It works without USB, stops mouse activity, and does nothing when history is
 empty. Provide a separate navigation button if your pad has no history.
+
+For a high-resolution display, use an 88-pixel Back button:
+
+```json
+{
+  "widget_type": "mousepad",
+  "widget_mousepad_back": true,
+  "widget_mousepad_back_size": 88
+}
+```
 
 JSON fields are `widget_mousepad_sensitivity` (0.1-5, default 1),
 `widget_mousepad_acceleration` (0-5, default 0),
 `widget_mousepad_movement_threshold` (0-12, default 3),
 `widget_mousepad_reverse` (boolean, default false),
 `widget_mousepad_inertia` (0-5, default 0),
-`widget_mousepad_buttons` (boolean, default false), and the two navigation
+`widget_mousepad_buttons` (boolean, default false), the Back button size,
+and the two navigation
 toggles described above. Authoring validation rejects
 non-numeric, non-finite, or out-of-range numbers and non-boolean toggle values.
 Gesture timing and axis policy are internal constants, not per-button controls.

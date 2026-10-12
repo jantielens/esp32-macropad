@@ -465,6 +465,9 @@ Active records are never evicted. When all four records are active or retained,
   zones supporting pointer-finger repositioning while a mouse button is held.
   `widget_mousepad_back` (boolean, default false) adds a top-left Back button
   isolated from mouse input, using existing history with no empty-history fallback.
+  `widget_mousepad_back_size` (integer 1-512 device pixels, default 44) sets its
+  visible and touch-target side length, constrained to fit the mousepad. Use
+  `88` for a larger target on a high-resolution display.
   Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button also advertise
   `widget_disable_pad_swipes` (boolean, default false). Enabling it on any
   one input widget disables all swipe actions across its entire pad,

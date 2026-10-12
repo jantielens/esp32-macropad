@@ -477,6 +477,8 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-mousepad-reverse').checked = btn.widget_mousepad_reverse === true;
     document.getElementById('pad-edit-mousepad-buttons').checked = btn.widget_mousepad_buttons === true;
     document.getElementById('pad-edit-mousepad-back').checked = btn.widget_mousepad_back === true;
+    document.getElementById('pad-edit-mousepad-back-size').value =
+        (btn.widget_mousepad_back_size !== undefined) ? btn.widget_mousepad_back_size : 44;
     document.getElementById('pad-edit-disable-pad-swipes').checked = btn.widget_disable_pad_swipes === true;
     document.getElementById('pad-edit-scrollpad-axis').value =
         btn.widget_scrollpad_axis === 'horizontal' ? 'horizontal' : 'vertical';
@@ -700,6 +702,7 @@ function padDialogBuildButton() {
             btn.widget_mousepad_reverse = document.getElementById('pad-edit-mousepad-reverse').checked;
             btn.widget_mousepad_buttons = document.getElementById('pad-edit-mousepad-buttons').checked;
             btn.widget_mousepad_back = document.getElementById('pad-edit-mousepad-back').checked;
+            btn.widget_mousepad_back_size = Math.round(padGetBoundedWidgetNumber('pad-edit-mousepad-back-size', 44, 1, 512));
         }
         if (wtype === 'bar_chart') {
             const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();

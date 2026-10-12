@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Configurable Mousepad Back button size through the pad editor and
+  `widget_mousepad_back_size` (integer 1-512 device pixels, default 44).
+  The visible button and touch target shrink to fit the widget, and the arrow
+  scales around its center. Preserve opt-in visibility and navigation without
+  mouse movement or clicks. Addresses [#119](https://github.com/jantielens/esp32-macropad/issues/119).
 * Reboot-applied device default font and proportional base text size in Button
   Defaults, the existing defaults API, and MCP component configuration.
   Family and size inherit independently; `font:@builtin` selects Montserrat,

@@ -243,7 +243,7 @@ protected:
         button_config.actions[0].payload.gamepad = {0, 0, 1};
     }
 
-    void create(const char* name, bool mouse_buttons = false, bool show_back = false) {
+    void create(const char* name, bool mouse_buttons = false, bool show_back = false, int back_size = 0) {
         strlcpy(config.type, name, sizeof(config.type));
         ASSERT_STREQ(config.type, name);
         type = widget_find(config.type);
@@ -251,6 +251,7 @@ protected:
         JsonDocument document;
         document["widget_mousepad_buttons"] = mouse_buttons;
         document["widget_mousepad_back"] = show_back;
+        if (back_size) document["widget_mousepad_back_size"] = back_size;
         type->parseConfig(document.as<JsonObject>(), config.data);
         type->createUI(button, &config, &button_config, nullptr, nullptr, nullptr, nullptr, &state);
         lv_obj_update_layout(button);
@@ -1366,6 +1367,37 @@ TEST_F(GamepadWidget, MousepadBackIsOptInAndConsumesTapsWithoutUsb) {
     EXPECT_TRUE(mouse_reports().empty());
 }
 
+TEST_F(GamepadWidget, MousepadEnlargedBackConsumesTapsOutsideOldTarget) {
+    create("mousepad", false, true, 88);
+    lv_obj_t* back = lv_obj_get_child(button, 0);
+    EXPECT_EQ(lv_obj_get_width(back), 88);
+    EXPECT_EQ(lv_obj_get_height(back), 88);
+    lv_obj_t* arrow = lv_obj_get_child(back, 0);
+    EXPECT_EQ(lv_obj_get_style_transform_scale_x(arrow, LV_PART_MAIN), 512);
+    EXPECT_EQ(lv_obj_get_style_transform_scale_y(arrow, LV_PART_MAIN), 512);
+    mouse_reports();
+    point = {70, 70};
+    read(true);
+    read(false);
+    EXPECT_EQ(widget_back_requests, 1U);
+    EXPECT_EQ(ordinary_actions, 0U);
+    EXPECT_EQ(swipe_actions, 0U);
+    EXPECT_TRUE(mouse_reports().empty());
+}
+
+TEST_F(GamepadWidget, MousepadBackSizeFitsSmallWidget) {
+    lv_obj_set_size(button, 40, 30);
+    create("mousepad", false, true, 512);
+    lv_obj_t* back = lv_obj_get_child(button, 0);
+    EXPECT_EQ(lv_obj_get_width(back), 22);
+    EXPECT_EQ(lv_obj_get_height(back), 22);
+}
+
+TEST_F(GamepadWidget, MousepadBackSizeDoesNotEnableBack) {
+    create("mousepad", false, false, 88);
+    EXPECT_EQ(lv_obj_get_child_count(button), 0U);
+}
+
 TEST_F(GamepadWidget, MousepadBackCancelsMovedAndLongPresses) {
     create("mousepad", false, true);
     mouse_reports();
@@ -1460,6 +1492,7 @@ TEST_F(GamepadWidget, MousepadAuthoringValidationAndParse) {
     EXPECT_EQ(parsed->sensitivity, 1);
     EXPECT_FALSE(parsed->button_zones_enabled);
     EXPECT_FALSE(parsed->show_back);
+    EXPECT_EQ(parsed->back_size, 44);
     document["widget_mousepad_back"] = "true";
     EXPECT_NE(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
     document["widget_mousepad_back"] = true;
@@ -1475,6 +1508,30 @@ TEST_F(GamepadWidget, MousepadAuthoringValidationAndParse) {
     document["widget_mousepad_inertia"] = 20;
     mousepad->parseConfig(document.as<JsonObject>(), config.data);
     EXPECT_EQ(parsed->inertia, 5);
+}
+
+TEST_F(GamepadWidget, MousepadBackSizeValidationAndParse) {
+    const auto* mousepad = widget_find("mousepad");
+    JsonDocument document;
+    for (int size : {1, 44, 88, 512}) {
+        document["widget_mousepad_back_size"] = size;
+        EXPECT_EQ(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
+        mousepad->parseConfig(document.as<JsonObject>(), config.data);
+        EXPECT_EQ(reinterpret_cast<const MousepadConfig*>(config.data)->back_size, size);
+    }
+    for (int size : {0, -1, 513}) {
+        document["widget_mousepad_back_size"] = size;
+        EXPECT_NE(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
+        mousepad->parseConfig(document.as<JsonObject>(), config.data);
+        EXPECT_EQ(reinterpret_cast<const MousepadConfig*>(config.data)->back_size,
+                  clamp_val<int>(size, 1, 512));
+    }
+    document["widget_mousepad_back_size"] = "88";
+    EXPECT_NE(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
+    document["widget_mousepad_back_size"] = 88.5;
+    EXPECT_NE(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
+    document["widget_mousepad_back_size"] = true;
+    EXPECT_NE(mousepad->validateConfig(document.as<JsonObject>()), nullptr);
 }
 
 TEST(GamepadWidgetRegistry, SupportsFullFeaturedBoards) {

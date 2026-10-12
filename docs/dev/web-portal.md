@@ -1923,6 +1923,10 @@ The zones use unfilled rounded dashed text-color outlines; a held zone has a
 thicker outline. `widget_mousepad_back` is boolean (default false), adding
 a top-left Back button that consumes its touches without mouse output and
 uses existing screen history, with no fallback when history is empty.
+`widget_mousepad_back_size` accepts an integer from 1 to 512 device pixels
+(default 44) for its side length. The visible button and touch target shrink
+to fit the mousepad's content area; the centered arrow scales proportionally.
+The editor exposes this as **Back button size (px)** beside **Show Back button**.
 Pad storage and import/export preserve these fields through the existing raw JSON path. The editor
 loads/saves these fields and bounds numeric inputs. Shared widget validation
 rejects invalid types, non-finite/out-of-range numbers, and non-boolean toggle

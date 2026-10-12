@@ -17,6 +17,7 @@ struct MousepadConfig {
     bool reverse;
     bool button_zones_enabled;
     bool show_back;
+    uint16_t back_size;
 };
 
 struct MousepadState {
@@ -57,6 +58,11 @@ static const char* mousepad_validate(JsonObjectConst button) {
         return "widget_mousepad_buttons must be boolean";
     if (button.containsKey("widget_mousepad_back") && !button["widget_mousepad_back"].is<bool>())
         return "widget_mousepad_back must be boolean";
+    if (button.containsKey("widget_mousepad_back_size") &&
+        (!button["widget_mousepad_back_size"].is<int>() ||
+         button["widget_mousepad_back_size"].as<int>() < 1 ||
+         button["widget_mousepad_back_size"].as<int>() > 512))
+        return "widget_mousepad_back_size must be an integer from 1 to 512";
     return nullptr;
 }
 
@@ -75,6 +81,7 @@ static void mousepad_parse(const JsonObject& btn, uint8_t* data) {
     cfg->reverse = btn["widget_mousepad_reverse"] | false;
     cfg->button_zones_enabled = btn["widget_mousepad_buttons"] | false;
     cfg->show_back = btn["widget_mousepad_back"] | false;
+    cfg->back_size = clamp_val<int>(btn["widget_mousepad_back_size"] | 44, 1, 512);
 }
 
 static void mousepad_back_event(lv_event_t* event) {
@@ -224,7 +231,8 @@ static void mousepad_create(lv_obj_t* tile, const WidgetConfig* cfg,
     if (reinterpret_cast<const MousepadConfig*>(cfg->data)->show_back) {
         lv_obj_update_layout(tile);
         lv_obj_t* back = lv_obj_create(tile);
-        const int size = clamp_val<int>(std::min(lv_obj_get_content_width(tile), lv_obj_get_content_height(tile)) - 8, 1, 44);
+        const int available = std::max<int>(1, std::min(lv_obj_get_content_width(tile), lv_obj_get_content_height(tile)) - 8);
+        const int size = std::min<int>(reinterpret_cast<const MousepadConfig*>(cfg->data)->back_size, available);
         lv_obj_set_size(back, size, size);
         lv_obj_set_style_pad_all(back, 0, LV_PART_MAIN);
         lv_obj_set_style_radius(back, 6, LV_PART_MAIN);
@@ -236,6 +244,10 @@ static void mousepad_create(lv_obj_t* tile, const WidgetConfig* cfg,
         lv_obj_add_event_cb(back, mousepad_back_event, LV_EVENT_ALL, mousepad);
         lv_obj_t* arrow = lv_label_create(back);
         lv_label_set_text(arrow, LV_SYMBOL_LEFT);
+        lv_obj_set_style_transform_pivot_x(arrow, lv_pct(50), LV_PART_MAIN);
+        lv_obj_set_style_transform_pivot_y(arrow, lv_pct(50), LV_PART_MAIN);
+        lv_obj_set_style_transform_scale_x(arrow, size * 256 / 44, LV_PART_MAIN);
+        lv_obj_set_style_transform_scale_y(arrow, size * 256 / 44, LV_PART_MAIN);
         lv_obj_center(arrow);
     }
 }
@@ -287,6 +299,10 @@ static void mousepad_describe(JsonObject& out) {
     back["name"] = "widget_mousepad_back";
     back["type"] = "boolean";
     back["desc"] = "Show a top-left Back button isolated from mouse input (default false); uses screen history, with no fallback when empty";
+    JsonObject back_size = fields.createNestedObject();
+    back_size["name"] = "widget_mousepad_back_size";
+    back_size["type"] = "number";
+    back_size["desc"] = "Back button side length, integer 1-512 device pixels (default 44); constrained to fit the mousepad";
     out["note"] = "USB mousepad: one finger moves; a short stationary tap sends left click. "
                   "A stationary second tap double-clicks; movement after a tap never holds a mouse button. "
                   "Two contacts starting in this mousepad scroll "

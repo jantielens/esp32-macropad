@@ -2009,9 +2009,12 @@ navigation rather than mouse capture. Its handler consumes touch events and
 calls existing back navigation on a short stationary tap. Movement over
 8 pixels or a long press cancels the tap. Pressing Back clears mouse input,
 releases its held button, and stops inertia without changing the HID generation
-and invalidating the navigation contact. The target is at most 44 pixels square
-and shrinks to the mousepad's content bounds. Both settings default off; empty
-screen history has no special handling.
+and invalidating the navigation contact. `widget_mousepad_back_size` sets the
+square target's side length in device pixels (integer 1-512, default 44).
+The LVGL child is both the visible button and the touch target; it shrinks to
+the mousepad's content bounds with 4-pixel margins. The arrow label scales
+around its center with the rendered size. Back visibility and pad swipe
+suppression default off; empty screen history has no special handling.
 
 `MousepadInput` owns relative baselines, fractional sensitivity remainders,
 threshold checks, and time-based acceleration. Its pointer, scrolling, button-held,

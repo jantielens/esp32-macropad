@@ -722,6 +722,9 @@ off; enabling it on any one widget disables all swipe actions across that pad,
 regardless of touch location or USB connection. Mousepad's optional
 **Show Back button** adds a top-left arrow that uses screen history without
 sending mouse input. It defaults off and does nothing when history is empty.
+**Back button size (px)** defaults to 44 and accepts integers from 1 to 512.
+For high-resolution displays, try 88. The button and touch target shrink to
+fit the mousepad, and the arrow remains centered and scales with the button.
 
 ### Boot Actions
 
