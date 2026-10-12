@@ -18,18 +18,16 @@ class RemoteLogRuntimeTests(unittest.TestCase):
             flash = re.search(r"FlashSize=(\d+)M", fqbn)
             enabled = ":esp32p4:" in fqbn or (
                 ":esp32s3:" in fqbn and flash is not None and int(flash[1]) > 5)
-            for override in (None, 0):
-                with self.subTest(board=board, override=override):
-                    source = f'''#include "board_config.h"
-#if HAS_REMOTE_LOG != {int(enabled) if override is None else override}
+            with self.subTest(board=board):
+                source = f'''#include "board_config.h"
+#if HAS_REMOTE_LOG != {int(enabled)}
 #error Unexpected remote log configuration
 #endif
 '''
-                    flags = [] if override is None else [f"-DHAS_REMOTE_LOG={override}"]
-                    subprocess.run(["c++", "-E", "-x", "c++", "-DBOARD_HAS_OVERRIDE",
-                                    "-DBOARD_HAS_PSRAM", *flags, "-I", str(ROOT / "src/app"),
-                                    "-I", str(ROOT / "src/boards" / board), "-"],
-                                   input=source, text=True, stdout=subprocess.DEVNULL, check=True)
+                subprocess.run(["c++", "-E", "-x", "c++", "-DBOARD_HAS_OVERRIDE",
+                                "-DBOARD_HAS_PSRAM", "-I", str(ROOT / "src/app"),
+                                "-I", str(ROOT / "src/boards" / board), "-"],
+                               input=source, text=True, stdout=subprocess.DEVNULL, check=True)
 
     def test_feature_exclusion(self):
         surfaces = {

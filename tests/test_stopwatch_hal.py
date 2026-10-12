@@ -424,7 +424,9 @@ static uint8_t current_volume = 0;
 static bool audio_initialized = false;
 static int* audio_queue = nullptr;
 static int* music_work_queue = nullptr;
-static int* audio_task_handle = nullptr;
+using TaskHandle_t = int*;
+static std::atomic<TaskHandle_t> audio_task_handle{nullptr};
+static uint32_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return 512; }
 static SemaphoreHandle_t g_music_catalog_refresh_sem = nullptr;
 static int g_music_catalog_refresh_sem_storage = 0;
 struct AudioCommand { int value; };

@@ -90,6 +90,21 @@ void mqtt_sub_store_format_value(const char* value, const char*, char* output, s
 struct lv_obj_t {};
 struct lv_timer_t {};
 struct lv_event_t {};
+struct lv_font_t {};
+static lv_font_t test_font;
+const lv_font_t* pad_typography_font(int) { return &test_font; }
+int pad_font_pixel_size(int) { return 24; }
+int lv_font_get_line_height(const lv_font_t*) { return 24; }
+const lv_font_t* lv_obj_get_style_text_font(lv_obj_t*, int) { return &test_font; }
+struct DeviceTypography { const char* font_name; uint16_t base_size; };
+const DeviceTypography& device_typography_get() {
+    static const DeviceTypography active = {"@builtin", 0};
+    return active;
+}
+bool font_store_validate_name(const char*) { return false; }
+#ifndef HAS_TTF_FONTS
+#define HAS_TTF_FONTS 0
+#endif
 using lv_color_t = int;
 using lv_event_cb_t = void (*)(lv_event_t*);
 static lv_obj_t top_layer;
@@ -110,6 +125,8 @@ lv_color_t lv_color_hex(uint32_t color) { return color; }
 #define LV_ALIGN_BOTTOM_LEFT 2
 #define LV_ALIGN_BOTTOM_RIGHT 3
 #define LV_LABEL_LONG_WRAP 1
+#define LV_LABEL_LONG_DOT 2
+#define LV_PART_MAIN 0
 #define LV_TEXT_ALIGN_CENTER 1
 #define LV_PCT(value) (value)
 #define NOOP(name) template <typename... Args> void name(Args...) {}
@@ -126,6 +143,8 @@ NOOP(lv_obj_center)
 NOOP(lv_obj_set_size)
 NOOP(lv_obj_set_style_border_color)
 NOOP(lv_obj_set_style_border_width)
+NOOP(lv_obj_set_style_outline_width)
+NOOP(lv_obj_set_style_outline_color)
 NOOP(lv_obj_align)
 NOOP(lv_label_set_long_mode)
 NOOP(lv_obj_set_width)
@@ -271,6 +290,7 @@ def main():
                   + "\n#undef TAG\n".join(production(name) for name in sources) + CHECKS)
         subprocess.run([
             compiler, "-std=c++11", "-Wall", "-Wextra", "-Werror", "-Wno-deprecated-declarations",
+            "-iquote", str(ROOT / "tests"),
             "-I", str(ROOT / "tests/timer_test_overrides"),
             "-I", str(ROOT / "tests"), "-I", str(ROOT / "src/app"),
             "-I", str(json_headers), str(source), str(ROOT / "tests/stubs.cpp"),
