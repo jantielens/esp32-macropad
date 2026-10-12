@@ -101,6 +101,18 @@ static_assert(!config_manager_epaper_mode_supported(255), "Unknown mode rejected
 ''', text=True, check=True,
     )
 print("PASS: monochrome and grayscale panel mode capabilities")
+for board, target in (("esp32c3-withsensors", "ESP32C3"), ("esp32-p4-lcd4b", "ESP32P4"),
+                      ("reterminal-e1003-frame", "ESP32S3")):
+    for header in ("config_manager.h", "drivers/monochrome_render.h"):
+        source = subprocess.check_output(
+            ["c++", "-E", "-P", "-x", "c++", str(root / "src/app" / header),
+             "-I", str(root / "tests"), "-I", str(root / "src/boards" / board),
+             "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", f"-DCONFIG_IDF_TARGET_{target}=1"],
+            text=True, stderr=subprocess.PIPE,
+        )
+        for token in ("epaper_bw_conversion", "epaper_bw_threshold", "monochrome_is_white", "blueNoise"):
+            assert token not in source, (board, header, token)
+print("PASS: B/W conversion and settings excluded from non-interactive profiles")
 source = '''#include "src/app/board_config.h"
 static_assert(HAS_USB_HID, "USB HID must remain enabled");
 static_assert(!ALARM_ENABLED, "Alarms must be disabled");

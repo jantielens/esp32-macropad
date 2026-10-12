@@ -18,7 +18,7 @@ static size_t individual_data_transfers = 0;
 static int failures = 0;
 static std::function<void()> waveform_hook;
 static std::function<void()> wait_hook;
-static EpaperRefreshSettings settings = {EPAPER_RENDER_MODE_BW, 1000, 500, true, 2};
+static EpaperRefreshSettings settings = {EPAPER_RENDER_MODE_BW, 1000, 500, true, 2, MONOCHROME_CONVERSION_THRESHOLD, MONOCHROME_THRESHOLD};
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %d: %s\n", __LINE__, #condition); ++failures; } } while (0)
 
 extern "C" unsigned long millis() { return clock_ms; }
@@ -90,6 +90,8 @@ static void reset() {
     waveform_hook = nullptr;
     wait_hook = nullptr;
     settings.epaper_full_refresh_threshold = 2;
+    settings.epaper_bw_conversion = MONOCHROME_CONVERSION_THRESHOLD;
+    settings.epaper_bw_threshold = MONOCHROME_THRESHOLD;
 }
 static void pixel(CrowPanel42EpaperDriver& driver, int x, int y, uint16_t color) {
     driver.flushSrcStride = 0;
@@ -113,6 +115,35 @@ int main() {
     CHECK(!monochrome_is_white(127));
     CHECK(monochrome_is_white(128));
     CHECK(monochrome_is_white(255));
+    CHECK(!monochrome_is_white(63, 0, 0, MONOCHROME_CONVERSION_THRESHOLD, 64));
+    CHECK(monochrome_is_white(64, 0, 0, MONOCHROME_CONVERSION_THRESHOLD, 64));
+    CHECK(monochrome_is_white(1, 0, 0, MONOCHROME_CONVERSION_THRESHOLD, 1));
+    CHECK(!monochrome_is_white(254, 0, 0, MONOCHROME_CONVERSION_THRESHOLD, 255));
+    CHECK(monochrome_is_white(255, 0, 0, MONOCHROME_CONVERSION_THRESHOLD, 255));
+    unsigned bayerWhite = 0;
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            CHECK(!monochrome_is_white(0, column, row, MONOCHROME_CONVERSION_BAYER));
+            CHECK(monochrome_is_white(255, column, row, MONOCHROME_CONVERSION_BAYER));
+            const bool white = monochrome_is_white(128, column, row, MONOCHROME_CONVERSION_BAYER);
+            bayerWhite += white;
+            CHECK(white == monochrome_is_white(128, column + 4, row + 4, MONOCHROME_CONVERSION_BAYER, 1));
+        }
+    }
+    CHECK(bayerWhite == 8);
+    for (uint8_t tone : {uint8_t(64), uint8_t(128), uint8_t(192)}) {
+        unsigned blueWhite = 0;
+        for (int row = 0; row < 64; ++row) {
+            for (int column = 0; column < 64; ++column) {
+                CHECK(!monochrome_is_white(0, column, row, MONOCHROME_CONVERSION_BLUE_NOISE));
+                CHECK(monochrome_is_white(255, column, row, MONOCHROME_CONVERSION_BLUE_NOISE));
+                const bool white = monochrome_is_white(tone, column, row, MONOCHROME_CONVERSION_BLUE_NOISE);
+                blueWhite += white;
+                CHECK(white == monochrome_is_white(tone, column + 64, row + 64, MONOCHROME_CONVERSION_BLUE_NOISE, 1));
+            }
+        }
+        CHECK(blueWhite == unsigned(tone) * 16);
+    }
     reset();
     {
         CrowPanel42EpaperDriver driver;
@@ -133,6 +164,34 @@ int main() {
     CHECK(live_allocations == 0);
     static_assert(config_manager_epaper_mode_supported(EPAPER_RENDER_MODE_BW), "B/W required");
     static_assert(!config_manager_epaper_mode_supported(EPAPER_RENDER_MODE_GRAYSCALE), "Grayscale unsupported");
+    for (uint8_t conversion : {uint8_t(MONOCHROME_CONVERSION_THRESHOLD), uint8_t(MONOCHROME_CONVERSION_BAYER), uint8_t(MONOCHROME_CONVERSION_BLUE_NOISE)}) {
+        for (uint8_t rotation : {uint8_t(0), uint8_t(1)}) {
+            reset();
+            settings.epaper_bw_conversion = conversion;
+            settings.epaper_bw_threshold = 64;
+            {
+                CrowPanel42EpaperDriver driver;
+                driver.init();
+                driver.setRotation(rotation);
+                settings.epaper_bw_conversion = MONOCHROME_CONVERSION_THRESHOLD;
+                settings.epaper_bw_threshold = 255;
+                for (int row = 0; row < 64; ++row) {
+                    for (int column = 0; column < 64; ++column) pixel(driver, column + 3, row + 5, 0x7bef);
+                }
+                driver.present();
+                std::vector<uint8_t> image(15000);
+                CHECK(driver.copyPresentedFrame(image.data(), image.size()));
+                for (int row = 0; row < 64; ++row) {
+                    for (int column = 0; column < 64; ++column) {
+                        const size_t offset = size_t(row + 5) * driver.width() + column + 3;
+                        const bool white = image[offset / 8] & (0x80 >> (offset & 7));
+                        CHECK(white == monochrome_is_white(124, column + 3, row + 5, conversion, 64));
+                    }
+                }
+            }
+            CHECK(live_allocations == 0);
+        }
+    }
     reset();
     {
         CrowPanel42EpaperDriver driver;

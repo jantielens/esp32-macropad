@@ -1750,6 +1750,8 @@ timezone and alarm session.
   "display_rotation": 0,
   "screen_saver_backlight_only": false,
   "epaper_render_mode": "grayscale",
+  "epaper_bw_conversion": "threshold",
+  "epaper_bw_threshold": 128,
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
@@ -2055,6 +2057,8 @@ Save new configuration. Device reboots after successful save.
   "backlight_brightness": 70,
   "display_rotation": 1,
   "epaper_render_mode": "bw",
+  "epaper_bw_conversion": "blue_noise",
+  "epaper_bw_threshold": 128,
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
@@ -2114,6 +2118,14 @@ Save new configuration. Device reboots after successful save.
 - `GET /api/config` returns `epaper_supported_render_modes` for Interactive
   E-Paper. CrowPanel returns `["bw"]`; grayscale-capable profiles return
   `["bw", "grayscale"]`. Unsupported `epaper_render_mode` writes return HTTP 400.
+- E-paper Presentation exposes `epaper_bw_conversion` (`threshold`, `bayer4x4`,
+  or `blue_noise`) and `epaper_bw_threshold` (an integer from 1 to 255, default
+  128). Both require restart and are present only with `HAS_LVGL_EPAPER`.
+  The threshold level affects only `threshold` conversion. Invalid conversion
+  names or threshold levels return HTTP 400 without changing the e-paper
+  presentation settings. The portal disables B/W controls for grayscale and
+  hides the level for dithering. These fields do not change the font backend
+  or E-Paper Frame image rendering.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 

@@ -69,6 +69,31 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertNotIn("portal_shutter", bundle)
         self.assertEqual(self.request("/api/bindings")[0], 200)
 
+    def test_epaper_presentation_config(self):
+        profile = "crowpanel-4.2-interactive"
+        status, config = self.request("/api/config", profile=profile)
+        self.assertEqual(status, 200)
+        self.assertEqual(config["epaper_bw_conversion"], "threshold")
+        self.assertEqual(config["epaper_bw_threshold"], 128)
+        self.assertEqual(config["epaper_supported_render_modes"], ["bw"])
+        nav = self.request("/api/portal/nav", profile=profile)[1]
+        items = [item for category in nav["categories"] for item in category["items"]]
+        presentation = next(item for item in items if item["id"] == "epaper-refresh")
+        self.assertEqual(self.request(presentation["portal_script"], profile=profile, raw=True)[0], 200)
+        self.assertEqual(self.request(presentation["portal_script"], raw=True)[0], 404)
+        previous = copy.deepcopy(self.server.mock_config)
+        try:
+            self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
+                body={"epaper_bw_conversion": "blue_noise", "epaper_bw_threshold": "96"}, profile=profile)[0], 200)
+            saved = self.request("/api/config", profile=profile)[1]
+            self.assertEqual(saved["epaper_bw_conversion"], "blue_noise")
+            self.assertEqual(int(saved["epaper_bw_threshold"]), 96)
+            lcd = self.request("/api/config")[1]
+            self.assertNotIn("epaper_bw_conversion", lcd)
+            self.assertNotIn("epaper_bw_threshold", lcd)
+        finally:
+            self.server.mock_config = previous
+
     def test_fragment_presentation(self):
         class FragmentParser(HTMLParser):
             def __init__(self):

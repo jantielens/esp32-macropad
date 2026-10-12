@@ -120,6 +120,9 @@ bool CrowPanel42EpaperDriver::initializePanel(uint32_t resetSettleMs) {
 }
 
 void CrowPanel42EpaperDriver::init() {
+    const EpaperRefreshSettings settings = config_manager_get_epaper_refresh_settings();
+    bwConversion = settings.epaper_bw_conversion;
+    bwThreshold = settings.epaper_bw_threshold;
     drawing = static_cast<uint8_t*>(heap_caps_malloc(framebufferBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     snapshot = static_cast<uint8_t*>(heap_caps_malloc(framebufferBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     mutex = xSemaphoreCreateMutex();
@@ -169,7 +172,7 @@ void CrowPanel42EpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
             const uint32_t green = ((color >> 5) & 63) * 255 / 63;
             const uint32_t blue = (color & 31) * 255 / 31;
             const uint32_t luminance = (red * 77 + green * 150 + blue * 29) >> 8;
-            const bool white = monochrome_is_white(luminance);
+            const bool white = monochrome_is_white(luminance, logicalX, logicalY, bwConversion, bwThreshold);
             const size_t index = size_t(nativeY) * 50 + size_t(nativeX) / 8;
             const uint8_t mask = uint8_t(0x80 >> (nativeX & 7));
             const uint8_t value = white ? drawing[index] | mask : drawing[index] & ~mask;

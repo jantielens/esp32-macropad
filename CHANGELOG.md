@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Restart-applied B/W conversion controls in E-paper Presentation: adjustable
+  threshold (1 to 255, default 128), 4x4 Bayer dithering, and fixed 64x64
+  blue-noise dithering. Interactive e-paper drivers share screen-anchored
+  conversion without extra framebuffers. Grayscale, E-Paper Frame images, and
+  monochrome uploaded-font rendering remain unchanged. Settings and portal
+  assets are excluded from builds without `HAS_LVGL_EPAPER`.
 * Auto-hinted monochrome uploaded fonts on eligible interactive e-paper builds,
   selected by `HAS_FREETYPE_FONTS` (enabled by default). Vendor a pinned minimal
   FreeType 2.13.2 library, license notices, and checked heap-workspace patch;

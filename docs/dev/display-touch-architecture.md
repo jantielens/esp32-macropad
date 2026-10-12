@@ -272,7 +272,8 @@ The driver copies the mode-specific drawing framebuffer into a PSRAM presentatio
 snapshot while holding its mutex, then releases the mutex before the blocking
 waveform. That preserves writes made during the waveform for the next
 presentation and permits no-op detection against the last presented frame. B/W
-pixels use a fixed luminance threshold of 128 and can use `partialUpdate()`; 3-bit grayscale can
+pixels use the boot-selected threshold, Bayer, or blue-noise conversion and can
+use `partialUpdate()`; 3-bit grayscale can
 only use full waveforms. The driver, rather than InkplateLibrary's automatic
 threshold, owns the periodic B/W full-refresh cadence.
 
@@ -288,7 +289,8 @@ Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
 It copies a settled LVGL frame under the framebuffer mutex, then uploads and
 refreshes the presentation snapshot outside that mutex so later LVGL flushes
 remain queued. Both modes coalesce LVGL flush rectangles into one aligned IT8951
-region. B/W uses a fixed luminance threshold of 128 and regional DU; grayscale uses regional GC16.
+region. B/W uses the boot-selected threshold, Bayer, or blue-noise conversion
+and regional DU; grayscale uses regional GC16.
 Initial and forced presentations use full-panel GC16, as do scheduled refreshes
 in both modes. Regional grayscale quality still needs hardware validation.
 Touch uses the existing GT911 driver on the E1003's shared
@@ -301,6 +303,14 @@ GPIO19/GPIO20 I2C lines.
 the SPI presentation snapshot. The driver follows Elecrow's V1.2A sample
 clear/partial sequence with GC/DU waveforms, applies cadence and no-op coalescing, and stops accepting
 requests after a bounded BUSY timeout. It has no touch or backlight control.
+
+All three interactive drivers share `drivers/monochrome_render.h`. B/W
+conversion and its threshold level are cached at startup. Threshold defaults
+to 128; Bayer uses a 4x4 matrix; blue noise uses a fixed 64x64 threshold map.
+Patterns use logical screen coordinates, independent of flush rectangle
+boundaries. Conversion needs no extra framebuffer and does not change
+grayscale conversion or monochrome font rasterization. The helper and map are
+guarded by `HAS_LVGL_EPAPER`, as are persistence, API fields, and portal assets.
 
 The standard `button_nav` action is available on every `HAS_DISPLAY` board,
 independent of touch, e-paper, or physical inputs. It navigates pad buttons,

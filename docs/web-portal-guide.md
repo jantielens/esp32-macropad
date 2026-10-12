@@ -590,16 +590,24 @@ apply it to both the screen and touch input.
 
 *Shown only on boards with configurable e-paper presentation support.*
 
-Use this section to select **Grayscale** or **Black & white** panel mode. The
-choice applies after restart. Both modes share one passive binding interval
+In **Rendering**, select **Grayscale** or **Black & white** panel mode. The
+choice applies after restart. **Refresh Settings** groups the shared passive binding interval
 (100 to 60,000 ms) and minimum presentation interval (250 to 60,000 ms).
 Unavailable modes are disabled. CrowPanel 4.2 Interactive supports only
 **Black & white**.
 
-B/W interactive e-paper rendering uses a fixed luminance threshold: values below
-128 become black, and values at or above 128 become white. This avoids dithered
-text and icon edges. The conversion applies to the complete rendered frame,
-including images; grayscale mode is unchanged.
+**B/W conversion** selects Threshold, Ordered dithering (4x4 Bayer), or Blue
+noise. Threshold is the default: luminance below the selected level becomes
+black, and luminance at or above it becomes white. Adjust **Threshold level**
+from 1 to 255 with the slider or numeric input; the default is 128. Higher levels
+make more pixels black. The level is shown only for Threshold.
+
+Bayer produces a repeating pattern; Blue noise produces less structured
+stippling. Both simulate intermediate tones without changing the panel mode.
+Conversion settings apply after restart, affect the complete rendered frame
+including images, and are disabled when Grayscale is selected. Grayscale and
+E-Paper Frame image rendering are unchanged. Auto-hinted monochrome uploaded
+fonts retain their crisp glyph rendering with every conversion option.
 
 All display boards offer Navigate buttons actions: Previous, Next, Tap, and
 Tap & Hold. Assign them through the normal action editor when needed; physical

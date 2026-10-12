@@ -18,6 +18,8 @@ Inkplate* inkplate6flick_lvgl_instance() {
 Inkplate6FlickEpaperDriver::Inkplate6FlickEpaperDriver(DeviceConfig* cfg)
 		: display(nullptr), config(cfg), framebufferMutex(nullptr), currentX(0), currentY(0),
 			currentW(0), currentH(0), rotation(0), panelMode(cfg ? cfg->epaper_render_mode : EPAPER_DEFAULT_RENDER_MODE),
+				bwConversion(cfg ? cfg->epaper_bw_conversion : MONOCHROME_CONVERSION_THRESHOLD),
+				bwThreshold(cfg ? cfg->epaper_bw_threshold : MONOCHROME_THRESHOLD),
 			lastRefreshMs(0), lastChangeMs(0), drawingFramebuffer(nullptr), presentedFramebuffer(nullptr), refreshCount(0), partialUpdateCount(0),
 			bwPartialUpdatesSinceFull(0), noOpSkipCount(0), backlightBrightness(0), frontlightLevel(0), pendingChanges(false),
 			frontlightEnabled(false), fullRefreshRequested(false), hasPresentedFrame(false), initialized(false) {}
@@ -143,7 +145,7 @@ void Inkplate6FlickEpaperDriver::writePixel(int16_t x, int16_t y, uint16_t rgb56
 			const size_t offset = (size_t)(DISPLAY_WIDTH / 8) * drawY + drawX / 8;
 			const uint8_t mask = 1U << (drawX & 7);
 			drawingFramebuffer[offset] = (drawingFramebuffer[offset] & ~mask) |
-					(monochrome_is_white(luminance >> 8) ? 0 : mask);
+					(monochrome_is_white(luminance >> 8, x, y, bwConversion, bwThreshold) ? 0 : mask);
 			return;
 		}
 		const uint8_t gray = (luminance * 7 + (255 * 128)) / (255 * 256);

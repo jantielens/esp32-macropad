@@ -57,9 +57,26 @@ configuration. Use `EpaperRefreshSettings` and the `EPAPER_*` constants:
 
 The portal exposes one shared passive binding interval, minimum presentation
 interval, and full-refresh threshold for both modes. The render mode is
-boot-only; refresh cadence and threshold apply live through the synchronized
+boot-only; refresh cadence and full-refresh threshold apply live through the synchronized
 configuration snapshot. Inkplate grayscale always uses full waveforms, so its
 full-refresh threshold has no effect in that mode.
+
+B/W conversion is also boot-only: `epaper_bw_conversion` selects `threshold`
+(default), `bayer4x4`, or `blue_noise`. `epaper_bw_threshold` ranges from 1 to
+255, defaults to 128, and affects only threshold conversion. Drivers cache
+these settings at startup and use the shared `monochrome_is_white()` helper
+with logical screen coordinates, so partial flushes cannot shift a pattern.
+Grayscale, E-Paper Frame rendering, and monochrome uploaded-font rasterization
+are independent of these settings.
+
+The blue-noise map in `drivers/blue_noise_64.h` is a precomputed, periodic
+64x64 void-and-cluster rank map. Generation uses a 10% seeded initial pattern
+(Python `random.Random(1400).sample(range(4096), 409)`), a toroidal Gaussian
+kernel with sigma 1.5 and radius 7, cluster/void relaxation, and three rank
+phases: removing clusters to zero, filling voids to half, and removing clusters
+from the complemented half-pattern. Dividing each rank by 16 gives 256 levels
+with 16 pixels each. The 4 KiB table is read-only and gated by
+`HAS_LVGL_EPAPER`; firmware needs neither a generator nor random state.
 
 `HAS_EPAPER_GRAYSCALE` defaults to the existing Interactive E-Paper capability.
 Monochrome panels override it to `false`. `GET /api/config` advertises
@@ -108,7 +125,8 @@ On every eligible interactive e-paper board, enabled builds use FreeType 2.13.2
 for uploaded fonts when the active driver presents in B/W mode. Grayscale
 retains LVGL/STB. Set the flag to `0` in a board override to select STB for both
 modes. There is no separate runtime font backend setting. Built-in Montserrat
-fonts and the panel threshold are unchanged.
+fonts are unchanged. B/W conversion is configured independently of the font
+backend.
 
 The monochrome adapter loads outlines with
 `FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_MONO | FT_LOAD_NO_BITMAP`, renders with
@@ -144,8 +162,8 @@ CrowPanel's presented pixels.
 
 ### Panel Refresh Implementation
 
-The driver keeps two 15,000-byte PSRAM buffers, converts RGB565 with a fixed
-luminance threshold of 128, and applies the A-revision sample's controller sequence:
+The driver keeps two 15,000-byte PSRAM buffers, converts RGB565 with the selected
+B/W conversion (threshold 128 by default), and applies the A-revision sample's controller sequence:
 RESET HIGH 10 ms, LOW 100 ms, HIGH 100 ms; initialization without a pre-command
 BUSY wait; white RAM planes `0x10`/`0x13` and GC waveforms for a full clear;
 then a second reset/initialization and the image through `0x13` with GC waveforms.
@@ -227,7 +245,7 @@ does not preserve files from the old layout.
 The render mode selects the Inkplate library framebuffer at boot:
 
 * **B/W** uses the 1-bit framebuffer. The driver converts RGB565 pixels with a
-   fixed luminance threshold of 128. `partialUpdate()` is available only in this mode;
+   boot-selected threshold, Bayer, or blue-noise conversion. `partialUpdate()` is available only in this mode;
    the first presentation and scheduled ghosting-control refreshes use a full
    waveform. The Inkplate library's partial update still scans the entire
    panel; it does not provide regional transport.

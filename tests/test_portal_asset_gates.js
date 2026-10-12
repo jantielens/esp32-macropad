@@ -21,7 +21,11 @@ for (const [board, target, psram] of [['esp32c3-withsensors', 'ESP32C3', false],
         assets.set(match[1], zlib.gunzipSync(bytes).toString());
     }
     assert(assets.has('portal_js_gz'));
+    assert(!assets.has('epaper_refresh_fragment_html_gz'));
+    assert(!assets.has('portal_epaper_refresh_js_gz'));
     for (const [name, text] of assets) {
+        assert(!text.includes('epaper_bw_conversion'), 'E-paper conversion leaked into ' + board + '/' + name);
+        assert(!text.includes('epaper_bw_threshold'), 'E-paper threshold leaked into ' + board + '/' + name);
         if (name.endsWith('_js_gz')) new vm.Script(text, {filename: board + '/' + name});
     }
     const js = assets.get('portal_js_gz');

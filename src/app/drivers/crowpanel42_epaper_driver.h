@@ -37,6 +37,7 @@ private:
     uint8_t* snapshot = nullptr;
     std::atomic<bool> available{false};
     uint8_t rotation = 0;
+    uint8_t bwConversion = 0, bwThreshold = 128;
     int16_t currentX = 0, currentY = 0;
     uint16_t currentW = 0, currentH = 0;
     bool pending = false, forceFull = false, hasPresented = false;

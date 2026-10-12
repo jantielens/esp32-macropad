@@ -39,6 +39,12 @@ SCREENSAVER_DEFAULTS = {
     "screen_saver_wake_on_touch": True, "screen_saver_wake_binding": "",
     "idle_screen_enabled": False, "idle_screen_timeout_seconds": 60, "idle_screen_pad": "",
 }
+EPAPER_PRESENTATION_DEFAULTS = {
+    "epaper_render_mode": "bw", "epaper_supported_render_modes": ["bw"],
+    "epaper_bw_conversion": "threshold", "epaper_bw_threshold": 128,
+    "epaper_binding_refresh_interval_ms": 1000, "epaper_min_refresh_interval_ms": 500,
+    "epaper_refresh_clock_on_minute_boundary": True, "epaper_full_refresh_threshold": 10,
+}
 
 
 def remote_log_response_limit():
@@ -165,6 +171,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_file(EPAPER_WEB_DIR / "epaper_init.js")
         elif path == "/portal-logs.js":
             self._serve_file(APP_WEB_DIR / "portal_logs.js")
+        elif path == "/portal-epaper-refresh.js":
+            if self._profile() == "crowpanel-4.2-interactive":
+                self._serve_file(APP_WEB_DIR / "portal_epaper_refresh.js")
+            else:
+                self.send_error(404, "E-paper presentation unavailable")
         elif path == "/portal_fonts.js":
             if self._fonts_available():
                 self._serve_file(APP_WEB_DIR / "portal_fonts.js")
@@ -191,6 +202,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 config["caps"].update(ble=False, ble_hid=False, display=True, touch=True, ha_history=True)
             elif self._profile() == "jc3248w535":
                 config["caps"].update(ble=False, ble_hid=False, usb_hid=True, display=True, touch=True, ha_history=True)
+            if self._profile() == "crowpanel-4.2-interactive":
+                config["caps"].update(display=True, touch=False)
+                for key, value in EPAPER_PRESENTATION_DEFAULTS.items():
+                    config.setdefault(key, value)
+            else:
+                for key in EPAPER_PRESENTATION_DEFAULTS:
+                    config.pop(key, None)
             config["screen_saver_backlight_only"] = False
             config.setdefault("timezone", "Europe/Brussels")
             config["screen_saver_keeps_panel_awake"] = self._profile() == "jc3248w535"
@@ -690,6 +708,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
+            if category["id"] == "display" and profile == "crowpanel-4.2-interactive":
+                category["items"].append({"id": "epaper-refresh", "display_name": "E-paper Presentation",
+                                          "portal_script": "/portal-epaper-refresh.js"})
             if category["id"] == "pads" and profile in ("esp32-p4-lcd4b", "jc3248w535"):
                 category["items"].extend([
                     {"id": "recipes", "display_name": "Recipes"},

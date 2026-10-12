@@ -905,6 +905,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/config_manager.cpp
   - src/app/config_manager.h
+  - src/app/drivers/monochrome_render.h
   - src/app/lv_conf.h
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
