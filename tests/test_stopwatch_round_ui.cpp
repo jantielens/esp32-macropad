@@ -32,6 +32,13 @@ int main() {
     lv_init();
     lv_display_t* display = lv_display_create(466, 466);
     assert(display);
+    device_typography_init("missing-on-bitmap-board", 30);
+    const uint16_t medium = pad_font_pixel_size(pad_get_scale_info().font_medium);
+    assert(pad_typography_font(pad_get_scale_info().font_small) == pad_nearest_bitmap_font(pad_font_pixel_size(pad_get_scale_info().font_small) * 30, medium));
+    LabelStyle absolute{};
+    absolute.font_size = 21;
+    assert(pad_resolve_font(absolute, pad_get_scale_info().font_small) == &lv_font_montserrat_24);
+    device_typography_init("@builtin", 0);
     {
         SplashScreen splash;
         splash.create();

@@ -103,6 +103,8 @@ The separate **Button Defaults** navigation item sets device-wide defaults for p
 
 | Setting | Description |
 |---------|-------------|
+| **Default font** | Montserrat or an uploaded font ID; activates after reboot |
+| **Base text size** | Automatic or 1-65535 px; scales automatic text roles proportionally after reboot |
 | **Background color** | Default button fill color |
 | **Text color** | Default label/icon color |
 | **Border color** | Default button outline color |
@@ -114,7 +116,15 @@ The separate **Button Defaults** navigation item sets device-wide defaults for p
 
 The button cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius, 4px content padding). The pad background cascade is: **Pad background → `default_pad_bg_color` → `#000000`**.
 
-> **Tip**: Set pad and button defaults first, then add buttons. Changing a default immediately updates all inheriting pads or buttons, both in the editor preview and on the device.
+> **Tip**: Set pad and button defaults first, then add buttons. Appearance defaults update inheriting pads and buttons immediately. Default font and base text size activate only after reboot; the portal reports pending typography changes.
+
+Automatic base size retains the board's existing role sizes. With a numeric base,
+each automatic role targets `original_role_px * base_text_size / original_medium_px`.
+TTF targets round to a positive whole pixel without a 36 px ceiling. Bitmap
+targets choose the nearest of 12, 14, 18, 24, 32, and 36 from the unrounded target,
+with ties upward and endpoint clamping. Roles can converge at the bitmap limits.
+Grid geometry, icons, and symbols do not scale. Large text can still clip or wrap;
+this is not automatic fitting.
 
 When editing a button, fields that match the device default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the device default.
 
@@ -336,10 +346,10 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 | Property | Values | What it does |
 |----------|--------|-------------|
-| `font` | Uploaded font ID, without `.ttf` | Select a static TrueType font uploaded through Pads > Fonts |
-| `font_size` | Positive whole pixels, up to 65535 | Uploaded font size; default Montserrat supports exact sizes 12, 14, 18, 24, 32, and 36 |
+| `font` | Uploaded font ID or `@builtin` | Omit to inherit the device family; `@builtin` selects Montserrat |
+| `font_size` | Positive whole pixels, up to 65535 | Absolute size, independent of the device base; bitmap resolves to the nearest compiled size |
 | `font_metrics` | `bounds` or a multiplier from 1 to 65535, such as `1.5` or `2` | TTF-only vertical metric correction; adjusts line height and baseline, not glyph size or horizontal spacing. Omitted preserves original metrics. |
-| `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Scale the current font size at runtime for hero text |
+| `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Transform bitmap text only, including TTF fallback; ignored for successful TTF |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
 | `y` | `-999` to `999` | Shift the label up (negative) or down (positive) in pixels |
@@ -382,10 +392,12 @@ The Pomodoro and Alarm Clock sample recipes reference `dseg7`. Upload a trusted
 static TrueType font under that ID for their custom text; otherwise they use
 the automatic bitmap default.
 
-Omitting `font` uses Montserrat. Without an explicit uploaded-font size, the
-automatic label font's line height selects the size. A missing or unloadable
-uploaded font uses the automatic bitmap default and ignores the requested size.
-Without an uploaded font, an unavailable Montserrat size also uses that default.
+Omitting `font` uses the active device family. Family and size inherit
+independently, after the existing effective label style is selected; style
+strings are not merged. A style containing only a color inherits both, while
+`font_size:60` keeps the device family at an absolute 60 px. `font:my-font`
+keeps proportional automatic sizing. Missing or unloadable uploaded fonts and
+bitmap-only builds use the nearest bitmap font for the resolved target size.
 Negative, fractional, overflowing, and malformed sizes are ignored.
 
 The former `font_family` property, family aliases, numeric `font` size shorthand,
@@ -400,7 +412,8 @@ uploaded font IDs and label styles are unchanged.
 > [!WARNING]
 > The grayscale and flag-disabled LVGL/STB paths can hang or crash when font rendering runs out of memory, even
 > with valid fonts. This release intentionally has no font-memory budget or
-> instance cap. Device stability remains a hardware acceptance check. The
+> per-pad instance cap. The device-lifetime typography cache is limited to 32
+> instances, but this does not bound glyph memory. Device stability remains a hardware acceptance check. The
 > [accepted limitation and future backend work](dev/display-touch-architecture.md#accepted-backend-oom-limitation)
 > describe this tradeoff.
 

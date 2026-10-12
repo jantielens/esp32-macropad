@@ -140,7 +140,9 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     style["format"] = "font:my-font;font_size:96;font_metrics:bounds;align:right;y:-3;mode:scroll;color:#FF0000";
     style["color_note"] = "color: accepts either a #RRGGBB hex value or a binding token (e.g. [expr:...] or [net:...]) that resolves live, like fg_color and the other color fields; a per-label color overrides fg_color. Style DSL max length 127 chars.";
     style["font"] = "Uploaded font ID without .ttf; lowercase ASCII letters/digits/underscore/hyphen, 1-31 bytes. Missing or unloadable fonts use the automatic bitmap default, ignoring requested size.";
-    style["font_size"] = "Positive integer 1-65535. Omitted: automatic. Without font: retained bitmap sizes are 12,14,18,24,32,36; other sizes use automatic default.";
+    style["font"] = "Omitted: inherit device default font. Uploaded font ID selects TTF. @builtin explicitly selects Montserrat. Family and size inherit independently.";
+    style["font_size"] = "Absolute pixels 1-65535, unaffected by device base scaling. Omitted: original role size multiplied by configured base / board medium. Bitmap chooses nearest 12,14,18,24,32,36 (ties upward, endpoints clamp); TTF rounds to integer pixels without a bitmap ceiling. Load, allocation, numeric, or cache-limit failure uses bitmap fallback.";
+    style["font_upscale"] = "1.0-2.0 bitmap transform only, including bitmap fallback; ignored for successfully loaded TTF. Use font_size for TTF enlargement.";
     style["font_metrics"] = "TTF only: bounds expands vertical metrics from whole-font bounds; numeric factor 1-65535 (e.g. 1.5 or 2) scales ascent/descent. Omitted or 1: original metrics. Glyph size and horizontal spacing unchanged. Different settings use separate cache instances; corrections beyond 32767px line height fall back to bitmap.";
     JsonArray al = style.createNestedArray("align");
     al.add("left"); al.add("right"); al.add("center");

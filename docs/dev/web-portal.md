@@ -2828,7 +2828,7 @@ Save the MQTT trigger configuration.
 
 ### Pad and Button Defaults API
 
-All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. These defaults are stored on LittleFS at `/config/button_defaults.json`.
+All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. These defaults are stored on the selected storage backend at `/config/button_defaults.json`.
 
 #### `GET /api/component/button-defaults/config`
 
@@ -2836,15 +2836,17 @@ Returns saved device-level pad and button overrides and the board-selected firmw
 
 - **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
 - `firmware_defaults` contains the board's appearance, layout, and shadow defaults plus widget palette fields: `widget_series_color` (and `_2`, `_3`, `_4`), `widget_track_color`, `widget_indicator_color`, `widget_tick_color`, `widget_zone_color`, `widget_reference_color`, `widget_table_bg_color`, `widget_table_fg_color`, and `widget_table_header_color`.
-- With no saved file, the response contains only `firmware_defaults`. Missing overrides inherit firmware defaults; explicit values including `0` and `false` remain authoritative.
+- Typography overrides are `default_font` (`@builtin` or a valid uploaded ID) and `base_text_size` (`0` for Automatic, or an integer from 1 to 65535). Defaults are `@builtin` and `0`. Unavailable IDs remain saved and fall back to bitmap text.
+- Read-only `typography_status` contains `active_font`, `active_base_text_size`, `board_medium_size`, `ttf_supported`, and `reboot_required`. It describes the boot snapshot, not whether every requested font instance loaded successfully.
+- With no saved file, the response contains `firmware_defaults` and `typography_status`. Missing overrides inherit firmware defaults; explicit values including `0` and `false` remain authoritative.
 
 #### `POST /api/component/button-defaults/config`
 
-Replace saved device-level pad and button overrides on LittleFS.
+Replace saved device-level pad and button overrides on the selected storage backend.
 
-- **Body:** JSON object with any subset of the override fields listed above. Do not include `firmware_defaults`; send `{}` to clear all device overrides.
+- **Body:** JSON object with any subset of the override fields listed above. Do not include read-only metadata; send `{}` to clear all device overrides. Invalid typography values are rejected before writing.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
-- All pad caches are rebuilt immediately so changes take effect without reboot.
+- Appearance changes rebuild pad caches immediately. Typography changes require reboot and retain the current active font owner until then. The portal exposes both typography controls in Button Defaults, including a preserved unavailable-font selection.
 
 ---
 

@@ -52,6 +52,21 @@ their automatic bitmap defaults. Delete an existing ID before replacing it;
 re-uploading that ID lets missing references resolve again. Fonts persist across
 reboot on the selected storage backend and are removed by factory reset.
 
+In **Button Defaults > Device Typography**, select Montserrat or an uploaded
+font and leave Base Text Size blank for Automatic, or enter 1-65535 px. Saving
+shows pending typography changes until reboot. Unavailable selections remain
+visible and saved, including on bitmap-only builds. Reboot retries missing
+fonts and applies replacements to the device default; existing device-default
+font instances stay alive until then. Explicit pad font instances can reload
+after their pad cache rebuilds.
+
+Family and size inherit independently. Automatic roles scale proportionally
+from the board's medium role; explicit `font_size` stays absolute.
+`font:@builtin` selects Montserrat without opting out of automatic sizing.
+Bitmap text and failed TTF requests select the nearest of 12/14/18/24/32/36
+(ties upward, endpoint clamp). This does not resize icons or grid geometry,
+automatically fit overflowing text, or change portal/extension/E-Paper Frame text.
+
 Variable fonts, collections, CFF/OpenType, WOFF, and WOFF2 are unsupported.
 For TTF text clipped by incorrect vertical metrics, add `font_metrics:bounds`
 to calculate line height and baseline from the whole-font bounds, or use a

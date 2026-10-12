@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Reboot-applied device default font and proportional base text size in Button
+  Defaults, the existing defaults API, and MCP component configuration.
+  Family and size inherit independently; `font:@builtin` selects Montserrat,
+  explicit sizes stay absolute, and bitmap fallback uses the nearest compiled
+  size. Shared device typography covers LVGL labels, widget annotations,
+  dialogs, notifications, and system text without scaling icons or geometry.
+  Missing selections remain saved, with pending-reboot status in the portal.
+
 * Restart-applied B/W conversion controls in E-paper Presentation: adjustable
   threshold (1 to 255, default 128), 4x4 Bayer dithering, and fixed 64x64
   blue-noise dithering. Interactive e-paper drivers share screen-anchored

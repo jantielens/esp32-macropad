@@ -7,6 +7,8 @@
 #include "pad_config.h"
 #include "psram_json_allocator.h"
 #include "config_psram.h"
+#include "pad_layout.h"
+#include "font_store.h"
 
 #include <ArduinoJson.h>
 #include "storage.h"
@@ -23,7 +25,7 @@ static const ButtonDefaults g_empty_defaults = {
      DEFAULT_BUTTON_SHADOW_COLOR, DEFAULT_BUTTON_SHADOW_DARKEN_PCT,
      DEFAULT_BUTTON_SHADOW_OFFSET_X_PX, DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX, DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX},
     {DEFAULT_BUTTON_SPACING_PX, DEFAULT_PAD_INSET_TOP_PX, DEFAULT_PAD_INSET_RIGHT_PX,
-     DEFAULT_PAD_INSET_BOTTOM_PX, DEFAULT_PAD_INSET_LEFT_PX, DEFAULT_PIXEL_SHIFT_DISTANCE}
+        DEFAULT_PAD_INSET_BOTTOM_PX, DEFAULT_PAD_INSET_LEFT_PX, DEFAULT_PIXEL_SHIFT_DISTANCE}, "@builtin", 0
 };
 
 static bool ensure_defaults() {
@@ -96,10 +98,16 @@ bool button_defaults_load_overrides(JsonDocument& doc) {
 
 static bool load_from_flash(ButtonDefaults* d) {
     memset(d, 0, sizeof(ButtonDefaults));
+    strlcpy(d->default_font, "@builtin", sizeof(d->default_font));
     init_shadow_defaults(&d->shadow);
     init_layout_defaults(&d->layout);
     BasicJsonDocument<PsramJsonAllocator> doc(2048);
     if (!button_defaults_load_overrides(doc)) return false;
+
+    const char* font = doc["default_font"] | "@builtin";
+    if (strcmp(font, "@builtin") == 0 || font_store_validate_name(font))
+        strlcpy(d->default_font, font, sizeof(d->default_font));
+    if (doc["base_text_size"].is<uint16_t>()) d->base_text_size = doc["base_text_size"].as<uint16_t>();
 
     parse_bindable(doc["bg_color"], d->bg_color, CONFIG_COLOR_MAX_LEN, "");
     parse_bindable(doc["default_pad_bg_color"], d->default_pad_bg_color,
@@ -163,8 +171,34 @@ uint8_t button_defaults_get_pixel_shift_distance() {
     return button_defaults_get()->layout.pixel_shift_distance_px;
 }
 
+const char* button_defaults_validate(JsonObjectConst config) {
+    if (config.containsKey("default_font")) {
+        if (!config["default_font"].is<const char*>()) return "default_font must be @builtin or an uploaded font ID";
+        const char* name = config["default_font"].as<const char*>();
+        if (strcmp(name, "@builtin") != 0 && !font_store_validate_name(name))
+            return "default_font must be @builtin or an uploaded font ID";
+    }
+    if (config.containsKey("base_text_size") && !config["base_text_size"].is<uint16_t>())
+        return "base_text_size must be 0 (Automatic) or an integer from 1 to 65535";
+    return nullptr;
+}
+
+void button_defaults_typography_status(JsonObject status) {
+    const DeviceTypography& active = device_typography_get();
+    const ButtonDefaults* saved = button_defaults_get();
+    const char* active_font = active.font_name[0] ? active.font_name : "@builtin";
+    status["active_font"] = active_font;
+    status["active_base_text_size"] = active.base_size;
+    status["board_medium_size"] = pad_font_pixel_size(pad_get_scale_info().font_medium);
+    status["ttf_supported"] = bool(HAS_TTF_FONTS);
+    status["reboot_required"] = strcmp(active_font, saved->default_font) != 0 || active.base_size != saved->base_text_size;
+}
+
 bool button_defaults_save_raw(const uint8_t* json, size_t len) {
-    if (!json || len == 0) return false;
+    if (!json || len == 0 || len > 4096) return false;
+    BasicJsonDocument<PsramJsonAllocator> document(2048);
+    if (deserializeJson(document, json, len) || !document.is<JsonObject>() ||
+        button_defaults_validate(document.as<JsonObjectConst>())) return false;
     if (!ensure_defaults()) return false;
 
     File f = Storage.open(BTN_DEFAULTS_PATH, "w");

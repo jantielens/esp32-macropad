@@ -8,13 +8,13 @@
                 <p class="binding-docs-summary">Override individual label styling with a compact <code>key:value;...</code> syntax.</p>
                 <section>
                 <h4>Built-in bitmap font</h4>
-                <p class="binding-docs-summary">Omit <code>font</code>. Use <code>font_size</code> only with <code>12</code>, <code>14</code>, <code>18</code>, <code>24</code>, <code>32</code>, or <code>36</code>. Omit the size for automatic sizing. Optionally use <code>font_upscale</code> from <code>1.0</code> to <code>2.0</code> to scale the bitmap font.</p>
+                <p class="binding-docs-summary">Omit <code>font</code> to inherit the device family, or set <code>font:@builtin</code> to select Montserrat. Family and size inherit independently. Omit <code>font_size</code> for proportional sizing from the device base text size; an explicit size is absolute. Bitmap text selects the nearest compiled size: <code>12</code>, <code>14</code>, <code>18</code>, <code>24</code>, <code>32</code>, or <code>36</code>, with ties upward and endpoint clamping. <code>font_upscale</code> from <code>1.0</code> to <code>2.0</code> applies only to resolved bitmap text, including TTF fallback.</p>
                 </section>
                 <section>
                 <h4>Uploaded TTF font</h4>
                 <p class="binding-docs-summary">Set <code>font</code> to the uploaded font ID without <code>.ttf</code>. <code>font_size</code> accepts any positive integer pixel height from <code>1</code> to <code>65535</code>, not just the bitmap sizes. Omit the size for automatic sizing. Do not use <code>font_upscale</code>; choose the desired pixel height instead.</p>
                 <p class="binding-docs-summary">If a font is clipped at the top or bottom despite enough button space, add <code>font_metrics:bounds</code> to calculate vertical metrics from the whole-font bounds. Alternatively use a multiplier such as <code>font_metrics:2</code> or <code>font_metrics:1.5</code> (1-65535). This adjusts vertical spacing and baseline, not glyph size or horizontal spacing. Omit it to keep the original metrics. Bitmap fonts ignore this option.</p>
-                <p class="binding-docs-note">Missing or unloadable fonts, or metric corrections exceeding the 32767px layout limit, fall back to the automatic bitmap font.</p>
+                <p class="binding-docs-note">Missing or unloadable fonts, unsupported TTF builds, exhausted device cache capacity, and unrepresentable sizes or metrics fall back to the nearest bitmap size for the same resolved target. Device family and base text size changes require reboot.</p>
                 </section>
                 <section>
                 <h4>Other style keys</h4>
@@ -41,7 +41,7 @@
                 <h4>Examples</h4>
                 <div class="binding-example-grid">
                     <div class="binding-example"><pre class="binding-example-code"><code>font:my-font;font_size:40;font_metrics:bounds</code></pre><p>TTF with automatic vertical correction</p></div>
-                    <div class="binding-example"><pre class="binding-example-code"><code>font_size:36;align:left;mode:dot</code></pre><p>Bitmap 36px, left-aligned, ellipsis</p></div>
+                    <div class="binding-example"><pre class="binding-example-code"><code>font:@builtin;font_size:36;align:left;mode:dot</code></pre><p>Bitmap 36px, left-aligned, ellipsis</p></div>
                     <div class="binding-example"><pre class="binding-example-code"><code>font:my-font;font_size:96</code></pre><p>Uploaded TTF at 96px</p></div>
                     <div class="binding-example"><pre class="binding-example-code"><code>font_size:14;color:#FF0</code></pre><p>Small yellow text</p></div>
                     <div class="binding-example"><pre class="binding-example-code"><code>y:-4;align:right</code></pre><p>Shifted up, right-aligned</p></div>

@@ -170,6 +170,7 @@ public:
 		
 		// Initialize hardware + LVGL + screens + rendering task (shows splash automatically)
 		void init();
+		void initTypography(const char* font_name, uint16_t base_size);
 		
 		// Navigation API (thread-safe)
 		void showSplash();

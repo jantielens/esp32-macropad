@@ -97,7 +97,11 @@ static lv_obj_t* create_button(lv_obj_t* parent, const char* text,
     lv_obj_t* label = lv_label_create(button);
     lv_label_set_text(label, text);
     lv_obj_set_style_text_color(label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(label, pad_get_scale_info().font_medium, 0);
+    lv_obj_set_style_text_font(label, pad_typography_font(pad_get_scale_info().font_medium), 0);
+    lv_obj_set_width(label, LV_PCT(100));
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    lv_obj_set_height(label, lv_font_get_line_height(lv_obj_get_style_text_font(label, LV_PART_MAIN)));
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label);
     return button;
 }
@@ -134,6 +138,20 @@ bool button_confirmation_show(const ButtonAction* actions, uint8_t count,
     int dialog_height = screen_height * 52 / 100;
     if (dialog_height < 180) dialog_height = 180;
     if (dialog_height > screen_height * 85 / 100) dialog_height = screen_height * 85 / 100;
+    const lv_font_t* title_font = pad_typography_font(pad_get_scale_info().font_large);
+    const lv_font_t* body_font = pad_typography_font(pad_get_scale_info().font_medium);
+    int title_height = lv_font_get_line_height(title_font);
+    const int body_height = lv_font_get_line_height(body_font);
+    int title_bottom = title_height + 28 > 62 ? title_height + 28 : 62;
+    int button_height = screen_height < 300 ? 42 : 48;
+    if (button_height < body_height + 16) button_height = body_height + 16;
+    const int minimum_height = title_bottom + body_height * 2 + button_height + 36;
+    if (dialog_height < minimum_height) dialog_height = minimum_height;
+    if (dialog_height > screen_height * 85 / 100) dialog_height = screen_height * 85 / 100;
+    if (button_height > dialog_height / 3) button_height = dialog_height / 3;
+    const int title_limit = dialog_height / 3 - 28;
+    if (title_height > title_limit) title_height = title_limit > 1 ? title_limit : 1;
+    if (title_bottom > title_height + 28) title_bottom = title_height + 28;
 
     s_overlay = lv_obj_create(lv_layer_top());
     if (!s_overlay) {
@@ -159,23 +177,26 @@ bool button_confirmation_show(const ButtonAction* actions, uint8_t count,
     lv_obj_t* title = lv_label_create(dialog);
     lv_label_set_text(title, "Confirm action");
     lv_obj_set_style_text_color(title, lv_color_white(), 0);
-    lv_obj_set_style_text_font(title, pad_get_scale_info().font_large, 0);
+    lv_obj_set_style_text_font(title, title_font, 0);
+    lv_obj_set_width(title, dialog_width - 32);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+    lv_obj_set_height(title, title_height);
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
 
     int button_width = (dialog_width - 48) / 2;
-    int button_height = screen_height < 300 ? 42 : 48;
 
     lv_obj_t* message = lv_label_create(dialog);
     lv_label_set_text(message, prompt);
     lv_label_set_long_mode(message, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(message, dialog_width - 32);
-    int message_height = dialog_height - 62 - button_height - 36;
-    if (message_height < 36) message_height = 36;
+    int message_height = dialog_height - title_bottom - button_height - 36;
+    if (message_height < 1) message_height = 1;
     lv_obj_set_height(message, message_height);
     lv_obj_set_style_text_color(message, lv_color_hex(0xE8EAED), 0);
-    lv_obj_set_style_text_font(message, pad_get_scale_info().font_medium, 0);
+    lv_obj_set_style_text_font(message, body_font, 0);
     lv_obj_set_style_text_align(message, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(message, LV_ALIGN_TOP_MID, 0, 62);
+    lv_obj_align(message, LV_ALIGN_TOP_MID, 0, title_bottom);
 
     lv_obj_t* cancel = create_button(dialog, "Cancel", lv_color_hex(0x5F6368), on_cancel);
     lv_obj_set_size(cancel, button_width, button_height);

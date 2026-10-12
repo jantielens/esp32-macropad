@@ -196,11 +196,15 @@ foreach(font_backend IN ITEMS internal sd)
     set_tests_properties(test_font_store_${font_backend} PROPERTIES TIMEOUT 15)
 endforeach()
 add_host_gtest(test_gamepad_widgets test_gamepad_widgets.cpp)
+target_sources(test_gamepad_widgets PRIVATE ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp)
 add_host_legacy_test(test_font_routes
     SOURCES test_font_routes.cpp ${PROJECT_SOURCE_DIR}/src/app/font_store.cpp ${PROJECT_SOURCE_DIR}/src/app/web_portal_fonts.cpp
-    DEFINITIONS HAS_TTF_FONTS=1 HAS_FILESYSTEM=1 TEST_HEAP_CAPS_ALLOCATOR
+        ${PROJECT_SOURCE_DIR}/src/app/button_defaults.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
+    DEFINITIONS HAS_TTF_FONTS=1 HAS_FREETYPE_FONTS=0 HAS_FILESYSTEM=1 TEST_HEAP_CAPS_ALLOCATOR
+    OPTIONS -Wno-deprecated-declarations
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/font_store_overrides ${HOST_ARDUINOJSON_DIR}
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/font_portal_overrides.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES host_lvgl m
 )
 target_include_directories(test_gamepad_widgets PRIVATE ${HOST_ARDUINOJSON_DIR})
 target_compile_options(test_gamepad_widgets PRIVATE
@@ -229,7 +233,7 @@ add_host_legacy_test(test_stopwatch_round_layout
 )
 
 add_host_legacy_test(test_stopwatch_round_ui
-    SOURCES test_stopwatch_round_ui.cpp ${PROJECT_SOURCE_DIR}/src/app/png_assets.cpp
+    SOURCES test_stopwatch_round_ui.cpp ${PROJECT_SOURCE_DIR}/src/app/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
     DEFINITIONS UI_SCALE_TIER=1 DISPLAY_DISABLE_ANIMATIONS=1
     OPTIONS -Wno-missing-field-initializers
     INCLUDES ${HOST_LVGL_DIR}

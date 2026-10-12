@@ -17,6 +17,8 @@ const ButtonDefaults* button_defaults_get();
 uint8_t button_defaults_get_pixel_shift_distance();
 
 bool button_defaults_load_overrides(JsonDocument& doc);
+const char* button_defaults_validate(JsonObjectConst config);
+void button_defaults_typography_status(JsonObject status);
 
 // Save raw JSON to LittleFS and update RAM cache. Returns true on success.
 bool button_defaults_save_raw(const uint8_t* json, size_t len);

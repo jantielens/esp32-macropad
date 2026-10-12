@@ -6,6 +6,13 @@ size_t heap_caps_get_largest_free_block(uint32_t) { return 4096; }
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include "../src/app/button_defaults.h"
+#include "../src/app/pad_layout.h"
+
+bool psramFound() { return true; }
+void* heap_caps_realloc(void* data, size_t size, uint32_t) { return realloc(data, size); }
+void* config_psram_alloc(size_t size, const char*) { return calloc(1, size); }
+void pad_config_rebuild_all_caches() {}
 
 FakeFontStorage LittleFS;
 FakeFontStorage SD_MMC;
@@ -30,6 +37,34 @@ static AsyncWebServerRequest upload_request(const char* name) {
     return request;
 }
 int main() {
+    lv_init();
+    button_defaults_init();
+    assert(strcmp(button_defaults_get()->default_font, "@builtin") == 0);
+    auto save_defaults = [](const char* text) {
+        return button_defaults_save_raw(reinterpret_cast<const uint8_t*>(text), strlen(text));
+    };
+    assert(save_defaults("{\"default_font\":\"missing\",\"base_text_size\":30}"));
+    assert(strcmp(button_defaults_get()->default_font, "missing") == 0);
+    assert(button_defaults_get()->base_text_size == 30);
+    assert(device_typography_get().base_size == 0);
+    JsonDocument status;
+    button_defaults_typography_status(status.to<JsonObject>());
+    assert(status["reboot_required"].as<bool>());
+    button_defaults_init();
+    device_typography_init(button_defaults_get()->default_font, button_defaults_get()->base_text_size);
+    assert(device_typography_get().base_size == 30);
+    assert(pad_typography_font(&lv_font_montserrat_14) == pad_nearest_bitmap_font(14 * 30, pad_font_pixel_size(pad_get_scale_info().font_medium)));
+    for (const char* invalid : {"{\"base_text_size\":-1}", "{\"base_text_size\":65536}",
+                               "{\"base_text_size\":1.5}", "{\"base_text_size\":true}",
+                               "{\"default_font\":\"../font\"}", "{\"default_font\":null}"})
+        assert(!save_defaults(invalid));
+    assert(button_defaults_get()->base_text_size == 30);
+    assert(save_defaults("{}"));
+    assert(button_defaults_get()->base_text_size == 0);
+    assert(strcmp(button_defaults_get()->default_font, "@builtin") == 0);
+    assert(device_typography_get().base_size == 30);
+    device_typography_fonts().clear();
+    device_typography_init("@builtin", 0);
     const uint32_t initial_generation = font_store_generation();
     auto first = upload_request("first");
     auto second = upload_request("second");

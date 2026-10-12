@@ -521,6 +521,10 @@ void setup()
 
 	// Load device-level pad and button defaults from LittleFS
 	button_defaults_init();
+	if (displayManager) {
+		const ButtonDefaults* defaults = button_defaults_get();
+		displayManager->initTypography(defaults->default_font, defaults->base_text_size);
+	}
 
 	// Load boot actions from LittleFS
 	boot_actions_init();

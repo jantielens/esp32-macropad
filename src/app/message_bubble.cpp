@@ -169,12 +169,9 @@ static void create_bubble(const MessageBubbleParams* p) {
     lv_obj_set_style_text_align(s_label, LV_TEXT_ALIGN_CENTER, 0);
 
     // Font: explicit override or scale-tier default (matches center label on buttons)
-    if (p->font_size > 0) {
-        const lv_font_t* font = pad_font_by_size(p->font_size);
-        if (font) lv_obj_set_style_text_font(s_label, font, 0);
-    } else {
-        lv_obj_set_style_text_font(s_label, pad_get_scale_info().font_large, 0);
-    }
+    LabelStyle style{};
+    style.font_size = p->font_size;
+    lv_obj_set_style_text_font(s_label, pad_resolve_font(style, pad_get_scale_info().font_large), 0);
 
     // Tap to dismiss
     lv_obj_add_flag(s_container, LV_OBJ_FLAG_CLICKABLE);

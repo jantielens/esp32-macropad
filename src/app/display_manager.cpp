@@ -4,6 +4,7 @@
 
 #include "data_stream.h"
 #include "display_manager.h"
+#include "pad_layout.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "pad_config.h"
@@ -436,6 +437,21 @@ void DisplayManager::initLVGL() {
 		LOGT("Display", "LVGL v9 init complete");
 }
 
+void DisplayManager::initTypography(const char* font_name, uint16_t base_size) {
+		lock();
+		device_typography_init(font_name, base_size);
+		lv_theme_t* theme = lv_theme_default_init(display, lv_color_hex(0x3399FF),
+			lv_color_hex(0x303030), LVGL_THEME_DARK_MODE, pad_typography_font(LV_FONT_DEFAULT));
+		lv_display_set_theme(display, theme);
+		infoScreen.create();
+		testScreen.create();
+		fpsScreen.create();
+		#if HAS_TOUCH && LV_USE_CANVAS
+		touchTestScreen.create();
+		#endif
+		unlock();
+}
+
 void DisplayManager::init() {
 		// Initialize hardware (TFT + gamma fix)
 		initHardware();
@@ -451,12 +467,6 @@ void DisplayManager::init() {
 		
 		// Create all screens
 		splashScreen.create();
-		infoScreen.create();
-	testScreen.create();
-		fpsScreen.create();
-		#if HAS_TOUCH && LV_USE_CANVAS
-		touchTestScreen.create();
-		#endif
 		for (uint8_t i = 0; i < MAX_PADS; i++) {
 				padScreens[i]->create();
 		}

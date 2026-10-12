@@ -2,6 +2,22 @@
 #if HAS_DISPLAY
 #include "pad_font_cache.h"
 
+#include <string.h>
+static DeviceTypography typography = {};
+
+const DeviceTypography& device_typography_get() { return typography; }
+
+void device_typography_init(const char* font_name, uint16_t base_size) {
+    strncpy(typography.font_name, font_name ? font_name : "", sizeof(typography.font_name) - 1);
+    typography.font_name[sizeof(typography.font_name) - 1] = '\0';
+    typography.base_size = base_size;
+}
+
+PadFontCache& device_typography_fonts() {
+    static PadFontCache fonts(32);
+    return fonts;
+}
+
 #if HAS_TTF_FONTS
 #include "font_store.h"
 #include "log_manager.h"
@@ -48,6 +64,8 @@ struct PadFontCache::Instance {
 
 static bool font_correct_metrics(lv_font_t* font, const uint8_t* data, size_t length,
                                  uint16_t size, float metrics) {
+    if (font->line_height < 1 || font->line_height > INT16_MAX ||
+        font->base_line < 0 || font->base_line > font->line_height) return false;
     if (!metrics) return true;
     double ascent = font->line_height - font->base_line;
     double descent = font->base_line;
@@ -101,13 +119,16 @@ const lv_font_t* PadFontCache::resolve(const char* name, uint16_t size, const lv
 #if HAS_FREETYPE_FONTS
     const bool monochrome = display_manager_get_presentation_mode() == EPAPER_RENDER_MODE_BW;
 #endif
+    uint16_t instance_count = 0;
     for (Instance* instance = instances; instance; instance = instance->next) {
+        ++instance_count;
 #if HAS_FREETYPE_FONTS
         if (instance->monochrome != monochrome) continue;
 #endif
         if (instance->asset == asset && instance->size == size && instance->fallback == fallback && instance->metrics == metrics)
             return instance->font ? instance->font : fallback;
     }
+    if (instance_limit && instance_count >= instance_limit) return fallback;
     Instance* instance = new (std::nothrow) Instance;
     if (!instance) {
         if (!allocation_warning_logged) LOGW("Fonts", "Cache %p: instance metadata allocation failed; using bitmap fallback", static_cast<void*>(this));

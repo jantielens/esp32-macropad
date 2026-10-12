@@ -115,6 +115,10 @@ int main() {
         CHECK(strcmp(style.font_name, "my-font") == 0 && style.font_size == 96);
         label_style_parse("font:my-font", &style);
         CHECK(style.font_size == 0);
+        label_style_parse("font:@builtin;font_size:24", &style);
+        CHECK(strcmp(style.font_name, "@builtin") == 0 && style.font_size == 24);
+        label_style_parse("font:@other", &style);
+        CHECK(style.font_name[0] == '\0');
         label_style_parse("font:;font_size:18", &style);
         CHECK(style.font_name[0] == '\0' && style.font_size == 18);
         label_style_parse("font_family:bebas;font:24", &style);

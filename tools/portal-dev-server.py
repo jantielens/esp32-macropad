@@ -63,6 +63,7 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.pad_fixture = fixture
     server.mock_pads = fixture["pads"]
     server.mock_defaults = fixture["button_defaults"]
+    server.mock_typography = {"default_font": "@builtin", "base_text_size": 0}
     server.scenario = scenario
     server.mock_screen = "pad_0"
     server.mock_icons = {}
@@ -241,7 +242,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 else:
                     self._serve_json({"error": "Pad not found"}, 404)
         elif path == "/api/component/button-defaults/config":
-            self._serve_json({**self.server.mock_defaults, "firmware_defaults": self._firmware_defaults()})
+            active = getattr(self.server, "mock_typography", {"default_font": "@builtin", "base_text_size": 0})
+            saved = self.server.mock_defaults
+            self._serve_json({**saved, "firmware_defaults": {**self._firmware_defaults(), "default_font": "@builtin", "base_text_size": 0},
+                              "typography_status": {"active_font": active["default_font"], "active_base_text_size": active["base_text_size"],
+                                                    "board_medium_size": 24, "ttf_supported": self._fonts_available(),
+                                                    "reboot_required": active["default_font"] != saved.get("default_font", "@builtin") or
+                                                    active["base_text_size"] != saved.get("base_text_size", 0)}})
         elif path in ("/api/component/alarms/config", "/api/component/alarms/status"):
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
                 self._serve_json({"error": "Alarm unavailable"}, 404)
@@ -486,6 +493,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     return
                 self.server.mock_pads[page] = data
             elif path == "/api/component/button-defaults/config":
+                font = data.get("default_font", "@builtin")
+                size = data.get("base_text_size", 0)
+                if not isinstance(font, str) or (font != "@builtin" and not re.fullmatch(r"[a-z0-9_-]{1,31}", font)) or \
+                        type(size) is not int or not 0 <= size <= 65535:
+                    self._serve_json({"error": "Invalid typography settings"}, 400)
+                    return
                 self.server.mock_defaults = data
             elif path == "/api/component/display/screen":
                 target = data.get("screen")
@@ -529,6 +542,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 return
             self._serve_json({"success": True, "message": "Saved to local mock"})
         elif path == "/api/reboot":
+            self.server.mock_typography = {"default_font": self.server.mock_defaults.get("default_font", "@builtin"),
+                                          "base_text_size": self.server.mock_defaults.get("base_text_size", 0)}
             self.server.mock_config["keyboard_active_transport"] = self.server.mock_config["keyboard_transport"]
             self.server.mock_config["keyboard_status"] = "disabled" if self.server.mock_config["keyboard_transport"] == "none" else "ready"
             self._serve_json({"success": True, "message": "Mock reboot complete"})

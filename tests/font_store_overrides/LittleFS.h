@@ -17,6 +17,8 @@ public:
     size_t size() const;
     size_t write(const uint8_t* data, size_t length);
     size_t read(uint8_t* data, size_t length);
+    int read() { uint8_t value; return read(&value, 1) == 1 ? value : -1; }
+    size_t readBytes(char* data, size_t length) { return read(reinterpret_cast<uint8_t*>(data), length); }
     bool seek(uint32_t offset) { position = offset; return valid; }
     void flush() {}
     void close() { valid = false; }

@@ -463,7 +463,7 @@ class PortalDevServerTest(unittest.TestCase):
         profile = "crowpanel-4.2-interactive"
         self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {}, profile=profile)[0], 200)
         defaults = self.request("/api/component/button-defaults/config", profile=profile)[1]
-        self.assertEqual(set(defaults), {"firmware_defaults"})
+        self.assertEqual(set(defaults), {"firmware_defaults", "typography_status"})
         self.assertEqual(defaults["firmware_defaults"]["bg_color"], "#FFFFFF")
         self.assertEqual(defaults["firmware_defaults"]["fg_color"], "#000000")
         self.assertEqual(defaults["firmware_defaults"]["pixel_shift_distance_px"], 0)
@@ -471,6 +471,25 @@ class PortalDevServerTest(unittest.TestCase):
         bundle = self.request("/portal.js", profile=profile, raw=True)[1]
         self.assertIn("function padLoadButtonDefaults(defs)", bundle)
         self.assertEqual(self.request("/api/info", profile=profile)[1]["display_coord_width"], 400)
+
+    def test_typography_defaults(self):
+        path = "/api/component/button-defaults/config"
+        settings = {"default_font": "missing-font", "base_text_size": 60}
+        self.assertEqual(self.request(path, "POST", settings)[0], 200)
+        saved = self.request(path)[1]
+        self.assertEqual(saved["default_font"], "missing-font")
+        self.assertEqual(saved["base_text_size"], 60)
+        self.assertTrue(saved["typography_status"]["reboot_required"])
+        self.assertEqual(saved["typography_status"]["active_font"], "@builtin")
+        self.assertEqual(self.request("/api/reboot", "POST", {})[0], 200)
+        active = self.request(path)[1]["typography_status"]
+        self.assertEqual(active["active_font"], "missing-font")
+        self.assertEqual(active["active_base_text_size"], 60)
+        self.assertFalse(active["reboot_required"])
+        for settings in ({"base_text_size": -1}, {"base_text_size": 65536}, {"base_text_size": 1.5},
+                         {"base_text_size": True}, {"default_font": "../font"}):
+            self.assertEqual(self.request(path, "POST", settings)[0], 400)
+        self.assertEqual(self.request(path)[1]["default_font"], "missing-font")
 
     def test_failure_scenarios(self):
         self.request("/__mock/reset", "POST", {"scenario": "load-error"})

@@ -10,6 +10,8 @@
 #include <ArduinoJson.h>
 
 static void button_defaults_write_firmware_defaults(JsonObject defaults) {
+    defaults["default_font"] = "@builtin";
+    defaults["base_text_size"] = 0;
     defaults["default_pad_bg_color"] = DEFAULT_PAD_BG_COLOR;
     defaults["bg_color"] = DEFAULT_BUTTON_BG_COLOR;
     defaults["fg_color"] = DEFAULT_BUTTON_FG_COLOR;
@@ -52,6 +54,7 @@ static void button_defaults_get_config(AsyncWebServerRequest *request) {
     button_defaults_load_overrides(*doc);
     timing.mark("defaults");
     button_defaults_write_firmware_defaults((*doc)["firmware_defaults"].to<JsonObject>());
+    button_defaults_typography_status((*doc)["typography_status"].to<JsonObject>());
 
     timing.mark("defaults_json");
     web_portal_send_json_chunked(request, doc, 200, &timing);

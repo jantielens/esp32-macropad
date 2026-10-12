@@ -409,7 +409,9 @@ void handleGetButtonSizes(AsyncWebServerRequest *request) {
 
     const UIScaleInfo& scale = pad_get_scale_info();
     const uint8_t padding = 4;  // Matches lv_obj_set_style_pad_all(obj, 4, 0)
-    const uint8_t font_small_h = lv_font_get_line_height(scale.font_small);
+    if (displayManager) displayManager->lock();
+    const uint32_t font_small_h = lv_font_get_line_height(pad_typography_font(scale.font_small));
+    if (displayManager) displayManager->unlock();
 
     AsyncResponseStream *response = request->beginResponseStream("application/json");
     response->printf(

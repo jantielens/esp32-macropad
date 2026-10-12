@@ -70,7 +70,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
                             *character == '_' || *character == '-';
                 }
                 out->font_name[0] = '\0';
-                if (valid) strlcpy(out->font_name, val, sizeof(out->font_name));
+                if (valid || strcmp(val, "@builtin") == 0) strlcpy(out->font_name, val, sizeof(out->font_name));
             } else if (strcmp(key, "font_metrics") == 0) {
                 out->font_metrics = 0;
                 if (strcmp(val, "bounds") == 0) out->font_metrics = -1;

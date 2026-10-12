@@ -18,6 +18,7 @@ static const uint8_t fixture[] = {
 };
 static unsigned loads = 0;
 static bool ota_active = false;
+static bool missing_available = false;
 static int presentation_mode = EPAPER_RENDER_MODE_BW;
 static std::unordered_set<void*> buffers;
 static unsigned failures = 0;
@@ -93,7 +94,7 @@ int display_manager_get_presentation_mode() { return presentation_mode; }
 bool font_store_validate_name(const char* name) { return name && *name && strlen(name) < FONT_NAME_MAX_LEN; }
 uint8_t* font_store_load(const char* name, size_t& length) {
     ++loads;
-    if (strcmp(name, "missing") == 0) return nullptr;
+    if (strcmp(name, "missing") == 0 && !missing_available) return nullptr;
     const bool external = strcmp(name, "broken-metrics") == 0 && !external_font.empty();
     length = external ? external_font.size() : sizeof(fixture);
     auto* data = static_cast<uint8_t*>(malloc(length));
@@ -139,8 +140,8 @@ int main(int argument_count, char** arguments) {
         CHECK(matching_logs("internal free=8192 largest=4096; PSRAM free=8192 largest=4096") == 1);
         CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &second) != font);
         CHECK(buffers.size() == 2);
-        CHECK(pad_resolve_font(style, &lv_font_montserrat_18, &first) != font);
-        CHECK(font->fallback == &lv_font_montserrat_14);
+        CHECK(pad_resolve_font(style, &lv_font_montserrat_18, &first) == font);
+        CHECK(font->fallback == &lv_font_montserrat_36);
     #if HAS_FREETYPE_FONTS
         const auto mono_image = glyph_image(font, '8');
         CHECK(!mono_image.pixels.empty());
@@ -168,7 +169,7 @@ int main(int argument_count, char** arguments) {
         CHECK(bounded->line_height >= font->line_height);
         CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == bounded);
         style.font_metrics = 65535;
-        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_14);
+        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_36);
         style.font_metrics = 0;
         lv_display_t* display = lv_display_create(320, 240);
         lv_obj_t* label = lv_label_create(lv_display_get_screen_active(display));
@@ -208,7 +209,7 @@ int main(int argument_count, char** arguments) {
             CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == font);
         CHECK(log_lines.size() == warm_log_count);
         ota_active = true;
-        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_14);
+        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_36);
         CHECK(font->get_glyph_bitmap(&glyph, nullptr) == nullptr);
     #if HAS_FREETYPE_FONTS
         lv_font_glyph_dsc_t blocked{};
@@ -224,11 +225,11 @@ int main(int argument_count, char** arguments) {
         CHECK(loads == 2);
         strcpy(style.font_name, "missing");
         style.font_size = 36;
-        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_14);
-        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_14);
+        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_36);
+        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_36);
         CHECK(loads == 3);
         CHECK(matching_logs("'missing' unavailable") == 1);
-        CHECK(pad_resolve_font(style, &lv_font_montserrat_14) == &lv_font_montserrat_14);
+        CHECK(pad_resolve_font(style, &lv_font_montserrat_14) == &lv_font_montserrat_36);
         lv_display_delete(display);
         first.clear();
         const size_t clear_log_count = log_lines.size();
@@ -240,7 +241,58 @@ int main(int argument_count, char** arguments) {
     CHECK(buffers.empty());
     CHECK(matching_logs("cleared") == 2);
     {
+        device_typography_init("test-font", 30);
+        LabelStyle inherited{};
+        const uint16_t medium = pad_font_pixel_size(pad_get_scale_info().font_medium);
+        const lv_font_t* automatic = pad_resolve_font(inherited, &lv_font_montserrat_24);
+        CHECK(automatic != &lv_font_montserrat_24);
+        PadFontCache pad_owner;
+        pad_owner.clear();
+        CHECK(pad_resolve_font(inherited, &lv_font_montserrat_24) == automatic);
+        CHECK(automatic == device_typography_fonts().resolve("test-font", (24 * 30 + medium / 2) / medium, pad_nearest_bitmap_font(24 * 30, medium)));
+        inherited.font_size = 60;
+        CHECK(pad_resolve_font(inherited, &lv_font_montserrat_14) == device_typography_fonts().resolve("test-font", 60, &lv_font_montserrat_36));
+        strcpy(inherited.font_name, "@builtin");
+        CHECK(pad_resolve_font(inherited, &lv_font_montserrat_14) == &lv_font_montserrat_36);
+        inherited.font_size = 0;
+        CHECK(pad_resolve_font(inherited, &lv_font_montserrat_14) == pad_nearest_bitmap_font(14 * 30, medium));
+        CHECK(pad_nearest_bitmap_font(1) == &lv_font_montserrat_12);
+        CHECK(pad_nearest_bitmap_font(65535) == &lv_font_montserrat_36);
+        CHECK(pad_nearest_bitmap_font(208, 10) == &lv_font_montserrat_18);
+        CHECK(pad_nearest_bitmap_font(21) == &lv_font_montserrat_24);
+        lv_display_t* display = lv_display_create(320, 240);
+        lv_obj_t* label = lv_label_create(lv_display_get_screen_active(display));
+        inherited.font_upscale = 384;
+        inherited.font_name[0] = '\0';
+        lv_obj_set_style_text_font(label, pad_resolve_font(inherited, &lv_font_montserrat_14), 0);
+        pad_apply_font_upscale(label, inherited, PAD_LABEL_ANCHOR_CENTER);
+        CHECK(lv_obj_get_style_transform_scale_x(label, LV_PART_MAIN) == 256);
+        strcpy(inherited.font_name, "@builtin");
+        lv_obj_set_style_text_font(label, pad_resolve_font(inherited, &lv_font_montserrat_14), 0);
+        pad_apply_font_upscale(label, inherited, PAD_LABEL_ANCHOR_CENTER);
+        CHECK(lv_obj_get_style_transform_scale_x(label, LV_PART_MAIN) == 384);
+        lv_display_delete(display);
+        device_typography_init("test-font", 65535);
+        CHECK(pad_resolve_font(LabelStyle{}, &lv_font_montserrat_36) == &lv_font_montserrat_36);
+        device_typography_init("missing", 0);
+        CHECK(pad_resolve_font(LabelStyle{}, &lv_font_montserrat_14) == &lv_font_montserrat_14);
+        missing_available = true;
+        CHECK(pad_resolve_font(LabelStyle{}, &lv_font_montserrat_14) == &lv_font_montserrat_14);
+        device_typography_fonts().clear();
+        CHECK(pad_resolve_font(LabelStyle{}, &lv_font_montserrat_14) != &lv_font_montserrat_14);
+        device_typography_fonts().clear();
+        missing_available = false;
+        device_typography_init("@builtin", 0);
+    }
+    CHECK(buffers.empty());
+    {
         PadFontCache owner;
+        PadFontCache bounded_owner(2);
+        const lv_font_t* retained = bounded_owner.resolve("test-font", 24, &lv_font_montserrat_24);
+        CHECK(retained != &lv_font_montserrat_24);
+        CHECK(bounded_owner.resolve("test-font", 32, &lv_font_montserrat_32) != &lv_font_montserrat_32);
+        CHECK(bounded_owner.resolve("test-font", 36, &lv_font_montserrat_36) == &lv_font_montserrat_36);
+        CHECK(bounded_owner.resolve("test-font", 24, &lv_font_montserrat_24) == retained);
         const lv_font_t* normal = owner.resolve("broken-metrics", 40, &lv_font_montserrat_14);
         const lv_font_t* corrected = owner.resolve("broken-metrics", 40, &lv_font_montserrat_14, -1);
         CHECK(normal != &lv_font_montserrat_14 && corrected != &lv_font_montserrat_14);

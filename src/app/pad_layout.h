@@ -7,6 +7,7 @@
 #include <lvgl.h>
 #include "pad_font_cache.h"
 #include <stdint.h>
+#include <string.h>
 
 // ============================================================================
 // Pad Layout Engine
@@ -58,16 +59,50 @@ static inline const lv_font_t* pad_font_by_size(uint16_t size) {
     }
 }
 
-// Resolve font for a label: use style override if set, otherwise the provided default.
-// Uploaded fonts require an owning pad; ownerless consumers remain bitmap-only.
+static inline uint16_t pad_font_pixel_size(const lv_font_t* font) {
+    const uint16_t sizes[] = {12, 14, 18, 24, 32, 36};
+    for (uint16_t size : sizes) if (pad_font_by_size(size) == font) return size;
+    return font ? lv_font_get_line_height(font) : 14;
+}
+
+static inline const lv_font_t* pad_nearest_bitmap_font(uint32_t size, uint32_t denominator = 1) {
+    const uint16_t sizes[] = {12, 14, 18, 24, 32, 36};
+    uint16_t nearest = 12;
+    uint32_t distance = size > 12 * denominator ? size - 12 * denominator : 12 * denominator - size;
+    for (uint16_t candidate : sizes) {
+        const uint32_t value = candidate * denominator;
+        const uint32_t delta = size > value ? size - value : value - size;
+        if (delta <= distance) { nearest = candidate; distance = delta; }
+    }
+    return pad_font_by_size(nearest);
+}
+
 static inline const lv_font_t* pad_resolve_font(const LabelStyle& style, const lv_font_t* default_font,
                                                PadFontCache* owner = nullptr) {
-    if (style.font_name[0]) return owner ? owner->resolve(style.font_name, style.font_size, default_font, style.font_metrics) : default_font;
-    if (style.font_size) {
-        const lv_font_t* f = pad_font_by_size(style.font_size);
-        if (f) return f;
-    }
-    return default_font;
+    const DeviceTypography& defaults = device_typography_get();
+    const uint32_t medium = pad_font_pixel_size(pad_get_scale_info().font_medium);
+    const uint32_t original = pad_font_pixel_size(default_font);
+    const uint32_t denominator = !style.font_size && defaults.base_size ? medium : 1;
+    const uint32_t numerator = style.font_size ? style.font_size : defaults.base_size
+        ? original * defaults.base_size : original;
+    const uint32_t rounded = (numerator + denominator / 2) / denominator;
+    const uint32_t size = rounded ? rounded : 1;
+    const lv_font_t* fallback = (!style.font_size && !defaults.base_size)
+        ? default_font : pad_nearest_bitmap_font(numerator, denominator);
+    const char* name = style.font_name[0] ? style.font_name : defaults.font_name;
+    if (!name[0] || strcmp(name, "@builtin") == 0 || !size || size > UINT16_MAX) return fallback;
+    PadFontCache* cache = style.font_name[0] ? owner : &device_typography_fonts();
+    return cache ? cache->resolve(name, static_cast<uint16_t>(size), fallback, style.font_metrics) : fallback;
+}
+
+static inline const lv_font_t* pad_typography_font(const lv_font_t* original) {
+    return pad_resolve_font(LabelStyle{}, original);
+}
+
+static inline bool pad_is_bitmap_font(const lv_font_t* font) {
+    const uint16_t sizes[] = {12, 14, 18, 24, 32, 36};
+    for (uint16_t size : sizes) if (font == pad_font_by_size(size)) return true;
+    return false;
 }
 
 enum PadLabelAnchorY : uint8_t {
@@ -79,7 +114,7 @@ enum PadLabelAnchorY : uint8_t {
 // Apply optional runtime text upscale for hero-style labels.
 // Uses anchor-aware transform pivot to keep labels visually pinned in place.
 static inline void pad_apply_font_upscale(lv_obj_t* lbl, const LabelStyle& style, PadLabelAnchorY anchor_y) {
-    if (style.font_upscale == 0) return;
+    if (style.font_upscale == 0 || !pad_is_bitmap_font(lv_obj_get_style_text_font(lbl, LV_PART_MAIN))) return;
 
     lv_obj_update_layout(lbl);
     const lv_coord_t w = lv_obj_get_width(lbl);

@@ -317,9 +317,10 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Compute layout — same pattern as bar chart
     bool has_top = btn->label_top[0];
     bool has_bot = btn->label_bottom[0];
-    int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
-    int16_t top_h = has_top ? label_h : 0;
-    int16_t bot_h = has_bot ? label_h : 0;
+    const lv_font_t* annotation_font = pad_typography_font(scale->font_small);
+    int32_t label_h = lv_font_get_line_height(annotation_font) + 2;
+    int32_t top_h = has_top ? lv_font_get_line_height(pad_resolve_font(btn->style_top, scale->font_small, state->font_owner)) + 2 : 0;
+    int32_t bot_h = has_bot ? lv_font_get_line_height(pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner)) + 2 : 0;
     const int16_t ui_ofs_x = btn->ui_offset_x;
     const int16_t ui_ofs_y = btn->ui_offset_y;
 
@@ -329,12 +330,12 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         icon_h = (int16_t)lv_obj_get_height(icon_img);
         if (icon_h <= 0) icon_h = rect->h / 4;
     }
-    int16_t center_label_h = 0;
+    int32_t center_label_h = 0;
     if (center_label) {
         lv_obj_update_layout(center_label);
-        center_label_h = (int16_t)lv_obj_get_height(center_label);
+        center_label_h = lv_obj_get_height(center_label);
     }
-    int16_t header_h = icon_h;
+    int32_t header_h = icon_h;
     if (center_label_h > 0) {
         if (icon_h > 0) header_h += 4 + center_label_h;
         else             header_h = center_label_h;
@@ -353,17 +354,18 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     // Reserve margin for min/max labels above and below chart
-    int16_t mm_margin = 0;
+    int32_t mm_margin = 0;
     if (cfg->marker_size_min > 0 || cfg->marker_size_max > 0) {
         mm_margin = label_h + 3;  // label height + dot radius + gap
     }
 
-    int16_t chart_top = top_h + header_h + gap + mm_margin;
-    int16_t bot_margin = bot_h + 4 + mm_margin;
+    int32_t chart_top = top_h + header_h + gap + mm_margin;
+    int32_t bot_margin = bot_h + 4 + mm_margin;
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
-    int16_t chart_h = content_h - chart_top - bot_margin;
+    if (chart_top > content_h) chart_top = content_h;
+    int32_t chart_h = content_h - chart_top - bot_margin;
     if (chart_h < 8) chart_h = 8;
     int16_t chart_w = content_w;
     chart_top += ui_ofs_y;
@@ -461,7 +463,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         *out_dot = dot;
 
         lv_obj_t* lbl = lv_label_create(tile);
-        lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+        lv_obj_set_style_text_font(lbl, annotation_font, 0);
         lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
         lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
@@ -491,7 +493,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         for (uint8_t i = 0; i < st->line_count; i++) {
             if (!cur_labels[i][0]) { st->lbl_current[i] = nullptr; continue; }
             lv_obj_t* lbl = lv_label_create(tile);
-            lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+            lv_obj_set_style_text_font(lbl, annotation_font, 0);
             lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
             lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
             lv_obj_set_width(lbl, st->label_margin_r);

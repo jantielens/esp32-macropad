@@ -757,10 +757,13 @@ representation. This is not a hardened font parser or a validator for every
 optional OpenType table. Upload trusted fonts only.
 
 `font:my-font;font_size:96` selects an uploaded asset. Sizes are positive
-`uint16_t` pixel heights; omitted sizes use the automatic bitmap default's
-line height. Montserrat 12/14/18/24/32/36 remain for UI and fallback. Missing
-or unloadable assets use the supplied automatic bitmap font, ignoring the
-requested custom size. `font_family`, its aliases, numeric `font:` size
+`uint16_t` pixel heights. Omitted family and size independently inherit the
+boot typography snapshot; `font:@builtin` explicitly selects Montserrat.
+Automatic targets are nominal role pixels multiplied by the configured base
+and divided by the board's nominal medium role. TTF rounds to whole pixels;
+bitmap fallback chooses the nearest compiled 12/14/18/24/32/36 size directly
+from the rational target, with ties upward and endpoint clamping. Explicit
+sizes remain absolute, including fallback. `font_family`, its aliases, numeric `font:` size
 shorthand, decorative generated families, and Montserrat 48 are removed.
 
 Opt-in `font_metrics:bounds` expands ascent/descent to cover the TTF `head`
@@ -783,13 +786,27 @@ for the rendering flags, heap-workspace patch, and ownership contract.
 
 Each `PadScreen` owns its source buffers and immutable font instances through
 `PadFontCache`. Sources use PSRAM-only allocation; LVGL scratch and glyph
-caches retain the existing allocator policy. Instances are reused within a
+caches retain the existing allocator policy. Explicit uploaded instances are reused within a
 pad, including list/table widget text, but never shared between pads. Hiding
 a cached pad retains its fonts. Rebuild, eviction, deletion, and teardown
 delete referencing LVGL objects before destroying fonts and freeing sources.
 Successful store changes increment an atomic generation; the display thread
 evicts all cached pads after OTA activity clears. HTTP callbacks never mutate
-LVGL. Native extension measure/draw remains bitmap-only because its canvas
+LVGL. Inherited device-family instances use a separate device-lifetime
+`PadFontCache` limited to 32 instances, with bitmap fallback once full and no
+eviction while objects reference them. Its loaded source remains immutable
+through pad rebuilds, font deletion, or replacement; reboot retries unavailable
+assets and loads replacements. This cap is not a glyph-memory budget.
+
+The snapshot comes from `default_font` and `base_text_size` in
+`/config/button_defaults.json`, activated under the display lock after storage
+initialization. Saving never changes active typography. System screens and the
+LVGL theme are initialized then; the early boot splash keeps built-in fonts.
+Pad labels, widget text/annotations, dialogs, notifications, and system text
+use the resolver. Per-style metrics remain opt-in, and `font_upscale` only
+transforms actual bitmap fonts. Icons, symbol-only controls, E-Paper Frame GFX
+text, portal typography, and extension-owned canvas text remain independent.
+Native extension measure/draw remains bitmap-only because its canvas
 requires packed 4-bit glyphs, while both uploaded-font backends produce A8 glyphs.
 
 Cold loads pin their selected file while allocation, chunked reads, and

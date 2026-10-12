@@ -519,15 +519,16 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // ---- Compute available space ----
     bool has_top = btn->label_top[0];
     bool has_bot = btn->label_bottom[0];
-    int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
-    int16_t top_h = has_top ? label_h : 0;
-    int16_t bot_h = has_bot ? label_h : 0;
+    const lv_font_t* annotation_font = pad_typography_font(scale->font_small);
+    int32_t top_h = has_top ? lv_font_get_line_height(pad_resolve_font(btn->style_top, scale->font_small, state->font_owner)) + 2 : 0;
+    int32_t bot_h = has_bot ? lv_font_get_line_height(pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner)) + 2 : 0;
 
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
 
-    int16_t avail_h = content_h - top_h - bot_h - 4;
+    if (top_h > content_h) top_h = content_h;
+    int32_t avail_h = content_h - top_h - bot_h - 4;
     int16_t avail_w = content_w - 4;
     if (avail_h < 20) avail_h = 20;
     if (avail_w < 20) avail_w = 20;
@@ -586,7 +587,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_set_style_arc_opa(st->arc_dual_1_neg, LV_OPA_TRANSP, LV_PART_MAIN);
     }
     if (cfg->start_label[0]) {
-        st->start_label_1 = gauge_create_start_label(tile, scale->font_small,
+        st->start_label_1 = gauge_create_start_label(tile, annotation_font,
                                                      resolve_lv_color(cfg->arc_color, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR)));
         st->start_label_slot_1 = ring_slot;
         gauge_update_start_label(st->start_label_1, cfg->start_label, cfg, st, ring_slot);
@@ -599,7 +600,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (!st->dual_pair_1_active && has_slot2) {
         st->arc_ring2 = gauge_create_arc(tile, cfg, cx, cy, r_cur, arc_width);
         if (cfg->start_label_2[0]) {
-            st->start_label_2 = gauge_create_start_label(tile, scale->font_small,
+            st->start_label_2 = gauge_create_start_label(tile, annotation_font,
                                                          resolve_lv_color(cfg->arc_color_2, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_2)));
             st->start_label_slot_2 = ring_slot;
             gauge_update_start_label(st->start_label_2, cfg->start_label_2, cfg, st, ring_slot);
@@ -619,7 +620,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                 lv_obj_set_style_arc_opa(st->arc_dual_2_neg, LV_OPA_TRANSP, LV_PART_MAIN);
             }
             if (cfg->start_label_3[0]) {
-                st->start_label_3 = gauge_create_start_label(tile, scale->font_small,
+                st->start_label_3 = gauge_create_start_label(tile, annotation_font,
                                                              resolve_lv_color(cfg->arc_color_3, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3)));
                 st->start_label_slot_3 = ring_slot;
                 gauge_update_start_label(st->start_label_3, cfg->start_label_3, cfg, st, ring_slot);
@@ -636,7 +637,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                 lv_obj_set_style_arc_opa(st->arc_dual_2_neg, LV_OPA_TRANSP, LV_PART_MAIN);
             }
             if (cfg->start_label_3[0]) {
-                st->start_label_2 = gauge_create_start_label(tile, scale->font_small,
+                st->start_label_2 = gauge_create_start_label(tile, annotation_font,
                                                              resolve_lv_color(cfg->arc_color_3, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3)));
                 st->start_label_slot_2 = ring_slot;
                 gauge_update_start_label(st->start_label_2, cfg->start_label_3, cfg, st, ring_slot);
@@ -652,7 +653,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (st->dual_pair_1_active) {
             st->arc_ring3 = gauge_create_arc(tile, cfg, cx, cy, r_cur, arc_width);
             if (cfg->start_label_4[0]) {
-                st->start_label_3 = gauge_create_start_label(tile, scale->font_small,
+                st->start_label_3 = gauge_create_start_label(tile, annotation_font,
                                                              resolve_lv_color(cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4)));
                 st->start_label_slot_3 = ring_slot;
                 gauge_update_start_label(st->start_label_3, cfg->start_label_4, cfg, st, ring_slot);
@@ -660,7 +661,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         } else {
             st->arc_ring4 = gauge_create_arc(tile, cfg, cx, cy, r_cur, arc_width);
             if (cfg->start_label_4[0]) {
-                st->start_label_4 = gauge_create_start_label(tile, scale->font_small,
+                st->start_label_4 = gauge_create_start_label(tile, annotation_font,
                                                              resolve_lv_color(cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4)));
                 st->start_label_slot_4 = ring_slot;
                 gauge_update_start_label(st->start_label_4, cfg->start_label_4, cfg, st, ring_slot);

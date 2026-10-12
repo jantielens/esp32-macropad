@@ -110,7 +110,7 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_label_set_text(lbl, "Source not found");
         lv_obj_center(lbl);
         lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), 0);
-        lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+        lv_obj_set_style_text_font(lbl, pad_typography_font(scale->font_small), 0);
         return;
     }
 
@@ -129,7 +129,7 @@ static void list_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_label_set_text(lbl, "No items");
         lv_obj_center(lbl);
         lv_obj_set_style_text_color(lbl, lv_color_hex(0x888888), 0);
-        lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+        lv_obj_set_style_text_font(lbl, pad_typography_font(scale->font_small), 0);
         return;
     }
 

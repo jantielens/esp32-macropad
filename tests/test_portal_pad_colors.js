@@ -166,4 +166,32 @@ assert.strictEqual(zeroAppearance.border_width, '0');
 assert.strictEqual(zeroAppearance.corner_radius, '0');
 assert.strictEqual(zeroAppearance.content_pad, '0');
 
-console.log('portal_pad_colors: PASS');
+(async function testDefaultsSaveRebootWarning() {
+    let pendingCalls = 0;
+    const messages = [];
+    context.padCollectButtonDefaults = () => ({ base_text_size: 30 });
+    context.padRenderGrid = () => {};
+    context.setPendingReboot = () => { ++pendingCalls; };
+    context.showMessage = (message, type) => messages.push({ message, type });
+    context.fetch = async () => ({ ok: true });
+    context.padLoadButtonDefaultsFromDevice = async () => context.padLoadButtonDefaults({
+        typography_status: { reboot_required: false }
+    });
+    await context.padSaveButtonDefaults();
+    assert.strictEqual(pendingCalls, 0);
+    assert.strictEqual(messages.pop().type, 'success');
+
+    context.padLoadButtonDefaultsFromDevice = async () => context.padLoadButtonDefaults({
+        typography_status: { reboot_required: true }
+    });
+    await context.padSaveButtonDefaults();
+    assert.strictEqual(pendingCalls, 1);
+    assert.strictEqual(messages.length, 0);
+
+    context.fetch = async () => ({ ok: false, status: 500, json: async () => ({ error: 'Save failed' }) });
+    context.console = { error() {} };
+    await context.padSaveButtonDefaults();
+    assert.strictEqual(pendingCalls, 1);
+    assert.strictEqual(messages.pop().type, 'error');
+    console.log('portal_pad_colors: PASS');
+})().catch(error => { console.error(error); process.exitCode = 1; });

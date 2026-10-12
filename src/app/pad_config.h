@@ -517,6 +517,8 @@ struct ButtonDefaults {
     uint8_t icon_position;                         // ICON_POS_ABOVE (0) = default
     ButtonShadowSettings shadow;
     PadLayoutSettings layout;
+    char default_font[CONFIG_FONT_ID_MAX_LEN];
+    uint16_t base_text_size;
 };
 
 // Per-pad config

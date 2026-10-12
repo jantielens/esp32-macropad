@@ -36,9 +36,11 @@ reboot. See [Local Sensor Binding](pad-editor-guide.md#local-sensor-binding).
 ## Font Authoring
 
 Existing pad-authoring tools can set uploaded font styles such as
-`font:my-font;font_size:96`. IDs exclude `.ttf`; omit the size for the automatic
-label height. Missing fonts use the automatic bitmap default, ignoring the
-requested custom size. The former decorative family aliases and numeric `font`
+`font:my-font;font_size:96`. IDs exclude `.ttf`; omitted family and size
+independently inherit active device typography. `font:@builtin` selects
+Montserrat. Explicit sizes are absolute; automatic roles scale proportionally
+from the device base. Missing fonts use the nearest compiled bitmap size for
+the resolved target (ties upward, endpoint clamp). The former decorative family aliases and numeric `font`
 size shorthand are no longer supported.
 
 For fonts with clipped vertical metrics, add `font_metrics:bounds` to expand
@@ -46,6 +48,17 @@ the line using whole-font bounds, or `font_metrics:2` (also `1.5`) to multiply
 ascent and descent without enlarging glyphs. Omitted metrics remain unchanged;
 bitmap fonts ignore the option. `get_capabilities` advertises these settings.
 Distinct metric settings create separate cached font instances.
+
+Use `get_component_config` and `set_component_config` with component
+`button-defaults` for every device typography setting: `default_font` is
+`@builtin` or a valid uploaded ID; `base_text_size` is `0` (Automatic) or an
+integer from 1 to 65535. The setter replaces the whole configuration, so retain
+other desired overrides. The getter returns read-only `typography_status`
+with active values, board medium size, TTF support, and `reboot_required`.
+Save then reboot through the existing device control tool to activate typography.
+`font_upscale` transforms bitmap text only, including TTF fallback. The device
+cache retains up to 32 instances until reboot; full caches use bitmap fallback,
+and missing/default replacements retry on reboot.
 
 Upload and delete fonts through **Pads > Fonts** or the authenticated
 [Font API](dev/web-portal.md#font-file-api). No additional MCP font-upload protocol
