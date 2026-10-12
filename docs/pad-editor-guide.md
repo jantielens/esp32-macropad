@@ -741,12 +741,22 @@ from the next full minute. Removing all weekdays selects one-shot mode.
 The **Alarm** group also contains **Loop Tone** (`alarm_tone`) and **Loop MP3**
 (`alarm_mp3`). Loop Tone accepts a bindable tone pattern; Loop MP3 selects an
 uploaded sound file. Both allow a volume override. Pair the ring hook with
-**Sound alert > Stop Audio** in the stop list. MP3 repetition is not guaranteed
-to be gapless and stops on cancellation, OTA, or playback failure.
+**Sound alert > Stop alerts** in the stop list. MP3 repetition is not guaranteed
+to be gapless. Failed MP3 alarms attempt a bounded fallback tone.
 
-Regular one-shot tones, MP3 playback, and Stop Audio remain under **Audio**.
-Existing `sound_alert` actions with `tone_loop` remain valid and appear as Loop
-Tone in the editor. Alarm Control keeps its persisted `alarm` type.
+Regular one-shot tones, MP3 playback, **Stop alerts**, and **Stop all audio** remain
+under **Audio**. Stop alerts leaves Music intent and scheduled ringing ownership
+unchanged; Stop all audio additionally clears Music intent and feedback. Neither
+command disables future scheduled alarms. Alarm Control keeps its `alarm` type.
+
+Alarm audio takes priority over ordinary alerts, which take priority over Music.
+Ordinary alerts during alarms are discarded. Tap and confirmation feedback can
+sound over any source without cancelling it. Interrupted Music restarts its
+remembered track from the beginning only if its desired state remains Playing.
+Play/Pause changes that intent; Next/Previous changes the selected track without
+forcing playback. Scheduled alarms retain ownership through silence until
+Cancel, Snooze, or timeout. MP3 options require sound-player support; beep-only
+boards expose tones and the stop commands.
 
 ### Timer Actions
 
@@ -2141,7 +2151,7 @@ are available on boards with audio and the sound player enabled.
 | `count` | Number of discovered tracks | Returns `-1` while the catalog is unavailable |
 | `elapsed_s` | Whole seconds played in the current track | Returns `0` before playback starts |
 | `total_s` | Whole-track duration in seconds | Returns `-1` when duration is unavailable |
-| `status` | Transport state | `playing`, `paused`, `stopped`, `empty`, `unavailable`, or `error` |
+| `status` | Transport state | `playing`, `interrupted`, `paused`, `stopped`, `empty`, `unavailable`, or `error` |
 
 When enabled by the board firmware, Music analysis bindings expose the current
 track's pre-volume PCM level. They are demand-driven, so playback skips the

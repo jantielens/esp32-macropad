@@ -703,7 +703,6 @@ bool voice_speak(const char* text, const char* voice, uint8_t volume) {
     job.generation = ++g_tts_generation;
     portEXIT_CRITICAL(&g_state_mux);
     LOGD(TAG, "TTS generation %u queued", (unsigned)job.generation);
-    audio_stop();
     VoiceTtsJob discarded = {};
     while (xQueueReceive(g_tts_queue, &discarded, 0) == pdTRUE) {}
     if (xQueueSend(g_tts_queue, &job, 0) != pdTRUE) return false;

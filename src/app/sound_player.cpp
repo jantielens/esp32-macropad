@@ -252,6 +252,14 @@ static void sound_player_record_accepted_output(SoundPlayer* player, int out_fra
     }
 }
 
+bool sound_player_restart(SoundPlayer* player) {
+    if (!player || !player->elapsed_output_frames || ota_activity_is_active()) return false;
+    player->elapsed_output_frames = 0;
+    player->elapsed_us = 0;
+    sound_player_reset_decode(player);
+    return true;
+}
+
 void sound_player_close(SoundPlayer* player) {
     if (!player) return;
     if (player->truncated_frames) LOGW(TAG, "Playback resampler truncation: frames=%lu cap=%d",

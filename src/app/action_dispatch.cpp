@@ -19,13 +19,15 @@
 static thread_local ActionDispatchContext dispatch_context;
 ActionDispatchContext action_dispatch_context() { return dispatch_context; }
 ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* label,
-                                         bool (*work_guard)(uint32_t), uint32_t generation) {
+                                         bool (*work_guard)(uint32_t), uint32_t generation,
+                                         bool alarm_audio) {
     const ActionTypeDef* type = action_type_find(act.type);
     if (!type || type->execution != ACTION_EXECUTION_SYNC) return ACTION_FAILED;
     const ActionDispatchContext previous = dispatch_context;
     dispatch_context.synchronous = true;
     dispatch_context.work_guard = work_guard;
     dispatch_context.generation = generation;
+    dispatch_context.alarm_audio = alarm_audio;
     const ActionResult result = action_dispatch(act, label);
     dispatch_context = previous;
     return result;

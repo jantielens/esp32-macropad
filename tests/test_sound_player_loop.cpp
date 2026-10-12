@@ -61,6 +61,14 @@ int main() {
     assert(sound_player_play(&output, "clip", &stopped, playback_guard, 7));
     const size_t clip_frames = output.frames;
     assert(clip_frames > 0);
+    SoundPlayer* incremental = sound_player_begin_path(&output, "/sounds/clip.mp3");
+    assert(incremental && !sound_player_restart(incremental));
+    while (sound_player_step(incremental) == SOUND_PLAYER_STEP_PLAYING) {}
+    assert(sound_player_restart(incremental));
+    const size_t before_restart = output.frames;
+    while (sound_player_step(incremental) == SOUND_PLAYER_STEP_PLAYING) {}
+    assert(output.frames - before_restart == clip_frames);
+    sound_player_close(incremental);
     for (unsigned interruption = 1; interruption <= 3; ++interruption) {
         stopped = ota = false;
         guard_valid = true;

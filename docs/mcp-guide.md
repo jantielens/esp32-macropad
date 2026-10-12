@@ -366,7 +366,12 @@ The action catalog advertises **Alarm Control** with the unchanged `alarm` type,
 plus `alarm_tone` and `alarm_mp3` for repeating audio. Loop actions use
 `sound_alert_pattern` or `sound_alert_file` respectively and optional
 `sound_alert_volume`; they do not accept a `sound_alert_kind` override. Stop
-Audio remains `{ "type": "sound_alert", "sound_alert_kind": "stop" }`.
+alerts uses `{ "type": "sound_alert", "sound_alert_kind": "stop" }`;
+Stop all audio uses `sound_alert_kind: "stop_all"` and also clears Music intent.
+Neither dismisses the scheduled ringing session or disables future alarms.
+Alarm audio takes priority over ordinary alerts and Music. Interrupted Music
+restarts its remembered track from the beginning only if Playing intent remains;
+`[music:status]` reports `interrupted` while that intent is blocked.
 The portal's city catalog and non-mutating preview are REST component actions,
 not additional MCP tools; MCP timezone writes still use `set_config`.
 The [portal alarm guide](web-portal-guide.md#alarm-clock) covers scheduling and

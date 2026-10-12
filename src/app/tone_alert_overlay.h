@@ -35,6 +35,7 @@ static inline bool tone_alert_overlay_start(ToneAlertOverlay* overlay, const cha
                                             bool loop, uint32_t sample_rate, float gain = 1.0f) {
     ToneAlertOverlay next = {};
     next.loop = loop;
+    if (!sample_rate || (pattern && strlen(pattern) >= TONE_ALERT_PATTERN_MAX_LEN)) return false;
 
     char buffer[TONE_ALERT_PATTERN_MAX_LEN] = {};
     if (!pattern || !pattern[0]) {
@@ -48,11 +49,15 @@ static inline bool tone_alert_overlay_start(ToneAlertOverlay* overlay, const cha
          token = strtok_r(nullptr, " ", &saveptr)) {
         if (next.segment_count == TONE_ALERT_MAX_SEGMENTS) return false;
         char* colon = strchr(token, ':');
-        const uint16_t frequency_hz = colon ? (uint16_t)atoi(token) : 0;
-        const uint16_t duration_ms = (uint16_t)atoi(colon ? colon + 1 : token);
-        if (duration_ms == 0 || duration_ms > 10000) continue;
+        if (colon) *colon = '\0';
+        char* end = nullptr;
+        const unsigned long frequency_hz = colon ? strtoul(token, &end, 10) : 0;
+        if (colon && (token[0] < '0' || token[0] > '9' || !end || *end || frequency_hz > sample_rate / 2 || frequency_hz > UINT16_MAX)) return false;
+        const char* duration = colon ? colon + 1 : token;
+        const unsigned long duration_ms = strtoul(duration, &end, 10);
+        if (duration[0] < '0' || duration[0] > '9' || !end || *end || duration_ms == 0 || duration_ms > 10000) return false;
         ToneAlertSegment& segment = next.segments[next.segment_count++];
-        segment.frequency_hz = frequency_hz;
+        segment.frequency_hz = (uint16_t)frequency_hz;
         segment.frame_count = (uint32_t)sample_rate * duration_ms / 1000;
     }
     if (next.segment_count == 0) return false;

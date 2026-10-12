@@ -1038,7 +1038,7 @@
       "key_docs": [
         {
           "key": "status",
-          "desc": "playing, paused, stopped, empty, unavailable, or error",
+          "desc": "playing, interrupted, paused, stopped, empty, unavailable, or error",
           "group": "Player"
         },
         {

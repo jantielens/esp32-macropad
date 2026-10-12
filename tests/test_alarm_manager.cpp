@@ -88,7 +88,7 @@ ActionResult action_dispatch(const ButtonAction& action, const char* label, uint
     return ACTION_FAILED;
 }
 ActionResult action_dispatch_synchronous(const ButtonAction& action, const char* label,
-                                         bool (*guard)(uint32_t), uint32_t generation) {
+                                         bool (*guard)(uint32_t), uint32_t generation, bool) {
     last_work_guard = guard;
     last_work_generation = generation;
     return action_dispatch(action, label, 0);

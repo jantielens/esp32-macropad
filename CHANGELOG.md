@@ -125,6 +125,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Arbitrate one primary audio source with alarm > ordinary alert > Music
+  priority, consistently for tones and MP3. Ordinary alerts cannot replace
+  alarms; tap and confirmation feedback overlays any source without cancelling
+  or ducking it. Scheduled alarms retain ownership through one-shot silence
+  until dismissal, snooze, or timeout. Failed MP3 alarms attempt bounded tone
+  fallback. No-audio, beep-only, and MP3 capability boundaries remain intact.
+* Restart interrupted Music from the beginning of its remembered track only
+  while Playing intent remains. Play/Pause changes that intent, and interrupted
+  Next/Previous changes selection without forcing playback. Missing tracks fail
+  rather than substituting another song; Music bindings expose `interrupted`.
+* Separate Stop alerts (`sound_alert_kind: "stop"`), Music Stop, and Stop all
+  audio (`sound_alert_kind: "stop_all"`). Stop alerts preserves Music intent and
+  scheduled ringing ownership; Stop all also clears Music intent and feedback.
+  Firmware updates stop all playback without automatic Music restart. Master
+  volume changes during an alert survive its volume override.
 * Make coding-agent test additions risk-based: reuse existing checks, justify
   new test files and harnesses, and avoid assertions tied to implementation
   details. Preserve important failure-path coverage, align KISS reviews with
@@ -189,6 +204,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Preserve an active MQTT siren and its deadline when a replacement is rejected
+  for an invalid tone or full audio queue. Publish replacement ownership only
+  after successful admission, synchronized with audio-worker guard checks.
 * Prevent StopWatch freezes or sluggish operation when reconnecting USB to a
   computer without a serial reader. Hardware USB CDC logging uses zero-timeout
   writes and skips lines when the TX buffer lacks space while preserving portal

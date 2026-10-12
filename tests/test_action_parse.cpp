@@ -304,6 +304,14 @@ TEST(sound_alert_mp3_round_trip) {
     ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 100);
 }
 
+TEST(sound_alert_stop_choices) {
+    ButtonAction stop = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop\"}");
+    ASSERT_STR(stop.payload.sound_alert.sound_alert_kind, "stop");
+    stop = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop_all\"}");
+    ASSERT_STR(stop.payload.sound_alert.sound_alert_kind, "stop_all");
+    ASSERT_STR(parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop_all\",\"sound_alert_pattern\":\"1000:200\"}").type, "");
+}
+
 TEST(legacy_alert_aliases_are_rejected) {
     ButtonAction act = parse_from_string(
         "{\"type\":\"beep\",\"beep_pattern\":\"1000:100\"}");
@@ -902,6 +910,7 @@ int main(int argc, char** argv) {
     printf("\n--- Sound Alert action ---\n");
     RUN(sound_alert_tone_parse);
     RUN(sound_alert_mp3_round_trip);
+    RUN(sound_alert_stop_choices);
     RUN(legacy_alert_aliases_are_rejected);
     RUN(alarm_audio_round_trip);
 

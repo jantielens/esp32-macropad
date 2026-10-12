@@ -9,6 +9,9 @@
 #include "storage.h"
 #include "time_service.h"
 #include "ota_activity.h"
+#if defined(ARDUINO) && HAS_AUDIO
+#include "audio.h"
+#endif
 #include "log_manager.h"
 #include <memory>
 #include <algorithm>
@@ -250,11 +253,12 @@ static bool persist(const AlarmDefinition& candidate, time_t handled, time_t onc
     return true;
 }
 
-static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const char* label, uint8_t index) {
+static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const char* label, uint8_t index,
+                              bool alarm_audio = false) {
     for (; index < count; ++index) {
         if (ota_activity_is_active()) break;
         LOGI("Alarm", "%s hook %u/%u: dispatch type=%s", label, unsigned(index + 1), unsigned(count), actions[index].type);
-        const ActionResult result = action_dispatch_synchronous(actions[index], label, session_work_valid, session_generation.load());
+        const ActionResult result = action_dispatch_synchronous(actions[index], label, session_work_valid, session_generation.load(), alarm_audio);
         if (result != ACTION_COMPLETE) {
             hook_error = true;
             LOGW("Alarm", "%s hook %u/%u: failed result=%u", label, unsigned(index + 1), unsigned(count), unsigned(result));
@@ -283,7 +287,10 @@ static void flush_hooks() {
         stop_index = stopped;
     }
     if (stopped < stop_count || !ring_pending || ota_activity_is_active()) return;
-    const uint8_t next = dispatch_hooks(alarm_state->session.on_ring, alarm_state->session.ring_count, "Alarm ring", ring_index);
+#if defined(ARDUINO) && HAS_AUDIO
+    if (!ring_index && !audio_alarm_session(session_work_valid, session_generation.load())) return;
+#endif
+    const uint8_t next = dispatch_hooks(alarm_state->session.on_ring, alarm_state->session.ring_count, "Alarm ring", ring_index, true);
     std::lock_guard<std::mutex> lock(alarm_mutex);
     if (next > ring_index || !alarm_state->session.ring_count) session_started = true;
     ring_index = next;

@@ -9,7 +9,7 @@
 namespace {
 constexpr const char* kSoundAlertActionTag = "Action";
 const char* validate_sound_alert_payload(const JsonObjectConst action, const char* kind) {
-    if (strcmp(kind, "tone") && strcmp(kind, "tone_loop") && strcmp(kind, "mp3") && strcmp(kind, "mp3_loop") && strcmp(kind, "stop")) return "Invalid sound_alert_kind";
+    if (strcmp(kind, "tone") && strcmp(kind, "tone_loop") && strcmp(kind, "mp3") && strcmp(kind, "mp3_loop") && strcmp(kind, "stop") && strcmp(kind, "stop_all")) return "Invalid sound_alert_kind";
     const char* names[] = {"sound_alert_pattern", "sound_alert_file"};
     const size_t capacities[] = {sizeof(SoundAlertPayload::sound_alert_pattern), sizeof(SoundAlertPayload::sound_alert_file)};
     for (uint8_t index = 0; index < 2; ++index)
@@ -20,12 +20,15 @@ const char* validate_sound_alert_payload(const JsonObjectConst action, const cha
     const bool mp3 = !strcmp(kind, "mp3") || !strcmp(kind, "mp3_loop");
     if (mp3 && (pattern[0] || !file[0])) return "MP3 requires a file and no tone pattern";
     if (!mp3 && file[0]) return "Tone and stop actions do not accept a file";
-    if (!strcmp(kind, "stop") && pattern[0]) return "Stop does not accept a tone pattern";
+    if ((!strcmp(kind, "stop") || !strcmp(kind, "stop_all")) && pattern[0]) return "Stop does not accept a tone pattern";
+#if !HAS_SOUND_PLAYER
+    if (mp3) return "MP3 playback is unavailable";
+#endif
     return nullptr;
 }
 const char* validate_sound_alert(const JsonObjectConst action) {
     const char* kind = action["sound_alert_kind"] | "";
-    if (strcmp(kind, "tone") && strcmp(kind, "mp3") && strcmp(kind, "stop")) return "Sound alert kind must be tone, mp3, or stop; use Alarm tone or Alarm MP3 for loops";
+    if (strcmp(kind, "tone") && strcmp(kind, "mp3") && strcmp(kind, "stop") && strcmp(kind, "stop_all")) return "Sound alert kind must be tone, mp3, stop, or stop_all; use Alarm tone or Alarm MP3 for loops";
     return validate_sound_alert_payload(action, kind);
 }
 void parse_sound_alert_payload(const JsonObject& action, ButtonAction& act, const char* kind) {
@@ -46,13 +49,17 @@ ActionResult dispatch_sound_alert(const ButtonAction& act, const char* label, ui
     const auto& alert = act.payload.sound_alert;
     const ActionDispatchContext context = action_dispatch_context();
     bool accepted = true;
-    if (!strcmp(alert.sound_alert_kind, "stop")) audio_stop();
+    if (!strcmp(alert.sound_alert_kind, "stop_all")) audio_stop_all();
+    else if (!strcmp(alert.sound_alert_kind, "stop")) {
+        if (context.work_guard) audio_stop_owned(context.work_guard, context.generation);
+        else audio_stop();
+    }
     else if (!strcmp(alert.sound_alert_kind, "tone") || !strcmp(alert.sound_alert_kind, "tone_loop"))
-        accepted = audio_submit_tone(alert.sound_alert_pattern, alert.sound_alert_volume, !strcmp(alert.sound_alert_kind, "tone_loop"), context.work_guard, context.generation);
+        accepted = audio_submit_tone(alert.sound_alert_pattern, alert.sound_alert_volume, !strcmp(alert.sound_alert_kind, "tone_loop"), context.work_guard, context.generation, context.alarm_audio);
     else if (!strcmp(alert.sound_alert_kind, "mp3") || !strcmp(alert.sound_alert_kind, "mp3_loop")) {
 #if HAS_SOUND_PLAYER
         accepted = audio_submit_sound(alert.sound_alert_file, alert.sound_alert_volume, context.work_guard, context.generation,
-            !strcmp(alert.sound_alert_kind, "mp3_loop"));
+            !strcmp(alert.sound_alert_kind, "mp3_loop"), context.alarm_audio);
 #else
         LOGW(kSoundAlertActionTag, "%s sound_alert MP3: not compiled", label);
 #endif
@@ -74,7 +81,7 @@ bool sound_alert_available() {
 #endif
 }
 bool visit_sound_alert_fields(ButtonAction& act, ActionBindableFieldVisitor visitor, void* context) { return (strcmp(act.payload.sound_alert.sound_alert_kind, "tone") && strcmp(act.payload.sound_alert.sound_alert_kind, "tone_loop")) || !act.payload.sound_alert.sound_alert_pattern[0] || visitor(act.payload.sound_alert.sound_alert_pattern, sizeof(act.payload.sound_alert.sound_alert_pattern), false, context); }
-void describe_sound_alert(JsonObject& action) { action["group"] = "Audio"; action["label"] = "Sound alert"; JsonArray fields = action.createNestedArray("fields"); JsonObject kind = fields.createNestedObject(); kind["name"] = "sound_alert_kind"; kind["description"] = "tone, mp3, or stop; use Alarm tone or Alarm MP3 for loops"; }
+void describe_sound_alert(JsonObject& action) { action["group"] = "Audio"; action["label"] = "Sound alert"; JsonArray fields = action.createNestedArray("fields"); JsonObject kind = fields.createNestedObject(); kind["name"] = "sound_alert_kind"; kind["description"] = "tone, mp3, stop (alerts only), or stop_all; use Alarm tone or Alarm MP3 for loops"; }
 #if ALARM_ENABLED
 void describe_alarm_audio(JsonObject& action, bool mp3) {
     JsonArray fields = action.createNestedArray("fields");

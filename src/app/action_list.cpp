@@ -9,6 +9,16 @@
 
 #include <string.h>
 
+bool action_list_has_audio(const ButtonAction* actions, uint8_t count) {
+    if (!actions) return false;
+    for (uint8_t index = 0; index < count; ++index) {
+        const char* type = actions[index].type;
+        if (!strcmp(type, ACTION_TYPE_SOUND_ALERT) || !strcmp(type, ACTION_TYPE_ALARM_TONE) ||
+            !strcmp(type, ACTION_TYPE_ALARM_MP3)) return true;
+    }
+    return false;
+}
+
 uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max,
                           bool filter_literal_none) {
     if (!out || max == 0) return 0;

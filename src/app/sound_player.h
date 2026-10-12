@@ -38,6 +38,8 @@ SoundPlayer* sound_player_begin_memory(AudioOutputDriver* output_driver,
 // Decode and emit at most one MP3 frame through the supplied session.
 SoundPlayerStepResult sound_player_step(SoundPlayer* player);
 
+bool sound_player_restart(SoundPlayer* player);
+
 // Snapshot current-track timing. total_us is zero when no total duration is
 // available; elapsed_us advances after each accepted PCM output block.
 bool sound_player_get_timing(const SoundPlayer* player, uint64_t* total_us,

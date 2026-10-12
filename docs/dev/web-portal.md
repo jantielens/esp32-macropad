@@ -983,9 +983,16 @@ playback or track-selection controls.
 | `POST` | `/api/music?path=/media/...mp3` | Streams a canonical MP3 to a temporary file, atomically publishes it, and refreshes the catalog before returning `201` |
 | `DELETE` | `/api/music?path=/media/...mp3` | Deletes an exact canonical Music file, including one omitted from an overflowed catalog |
 
-Uploads and deletes return `409` while Music, an MP3 Alert, or another Music
+Uploads and deletes return `409` while Music (including paused or interrupted intent), an MP3 Alert, or another Music
 storage mutation is active. Paths must be canonical `/media` descendants with
 a case-insensitive `.mp3` final extension.
+
+The shared sound-alert editor offers Tone Alert, MP3 Alert on sound-player builds,
+Stop alerts (`stop`), and Stop all audio (`stop_all`). Alarm audio owns the primary
+source ahead of ordinary alerts and Music; tap feedback is independent. Music
+bindings report `interrupted` while Playing intent waits for an alert or scheduled
+ringing session to release ownership. Restart begins at the remembered track's
+start, not its former elapsed position.
 
 Successful uploads and deletes rebuild the published catalog before the API
 response is sent, so the Music Library immediately returns the updated list.

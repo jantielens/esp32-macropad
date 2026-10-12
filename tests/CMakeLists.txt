@@ -532,6 +532,22 @@ add_host_legacy_test(test_sound_player_loop
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES m)
 
+foreach(audio_profile IN ITEMS disabled beep mp3)
+    set(profile_audio 1)
+    set(profile_mp3 0)
+    if(audio_profile STREQUAL "disabled")
+        set(profile_audio 0)
+    elseif(audio_profile STREQUAL "mp3")
+        set(profile_mp3 1)
+    endif()
+    add_host_legacy_test(test_audio_worker_${audio_profile}
+        SOURCES test_audio_worker.cpp ${PROJECT_SOURCE_DIR}/src/app/music_transport.cpp ${PROJECT_SOURCE_DIR}/src/app/music_catalog.cpp
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/audio_worker_overrides ${HOST_ARDUINOJSON_DIR}
+        DEFINITIONS HAS_AUDIO=${profile_audio} HAS_SOUND_PLAYER=${profile_mp3} HAS_MUSIC_ANALYSIS=0 AUDIO_SAMPLE_RATE=48000 AUDIO_DMA_DESC_NUM=6 AUDIO_DMA_FRAME_NUM=512 AUDIO_TASK_STACK_SIZE=16384
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/Arduino.h
+        LIBRARIES m)
+endforeach()
+
 add_host_legacy_test(test_shutter_curtain_stats SOURCES test_shutter_curtain_stats.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_curtain_stats.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester LIBRARIES m)
 add_host_legacy_test(test_shutter_capture SOURCES test_shutter_capture.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h)
 add_host_legacy_test(test_shutter_measure SOURCES test_shutter_measure.cpp stubs.cpp INCLUDES ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester DEFINITIONS IS_SHUTTER_TESTER=true PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h LIBRARIES m)

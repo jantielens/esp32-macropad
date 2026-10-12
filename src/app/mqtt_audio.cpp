@@ -17,6 +17,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 #include <string.h>
+#include <atomic>
+#include <mutex>
 
 static const char* TAG = "MqttAudio";
 
@@ -73,6 +75,18 @@ static char g_sound_pending_name[32] = {0};
 static bool g_siren_on = false;
 static unsigned long g_siren_stop_at_ms = 0; // 0 = no auto-stop
 static uint8_t g_last_published_volume = 255; // force initial publish
+static std::atomic<uint32_t> g_siren_generation{1};
+static std::atomic<uint32_t> g_siren_finished{0};
+static std::mutex g_siren_admission_mutex;
+
+static bool siren_guard(uint32_t generation) {
+    std::lock_guard<std::mutex> lock(g_siren_admission_mutex);
+    return generation == g_siren_generation.load();
+}
+
+static void siren_finished(uint32_t generation) {
+    g_siren_finished.store(generation);
+}
 
 // ---------------------------------------------------------------------------
 // Preset tones → DSL patterns (trailing pause controls loop cadence)
@@ -285,14 +299,24 @@ void mqtt_audio_loop() {
 
         if (on) {
             const char* pattern = resolve_tone(tone);
-            audio_play_loop(pattern, vol);
-            g_siren_stop_at_ms = (dur > 0) ? millis() + (unsigned long)dur * 1000UL : 0;
-            if (!g_siren_on) {
-                g_siren_on = true;
-                mqtt_manager.publish(g_siren_state_topic, "ON", true);
+            bool admitted;
+            {
+                std::lock_guard<std::mutex> lock(g_siren_admission_mutex);
+                const uint32_t generation = g_siren_generation.load() + 1;
+                admitted = audio_submit_tone(pattern, vol, true, siren_guard, generation, true, siren_finished);
+                if (admitted) g_siren_generation.store(generation);
+            }
+            if (!admitted) {
+                LOGW(TAG, "Siren request rejected");
+            } else {
+                g_siren_stop_at_ms = (dur > 0) ? millis() + (unsigned long)dur * 1000UL : 0;
+                if (!g_siren_on) {
+                    g_siren_on = true;
+                    mqtt_manager.publish(g_siren_state_topic, "ON", true);
+                }
             }
         } else {
-            audio_stop();
+            g_siren_generation.fetch_add(1);
             g_siren_stop_at_ms = 0;
             if (g_siren_on) {
                 g_siren_on = false;
@@ -303,7 +327,7 @@ void mqtt_audio_loop() {
 
     // Auto-stop after duration elapsed
     if (g_siren_on && g_siren_stop_at_ms > 0 && millis() >= g_siren_stop_at_ms) {
-        audio_stop();
+        g_siren_generation.fetch_add(1);
         g_siren_stop_at_ms = 0;
         g_siren_on = false;
         mqtt_manager.publish(g_siren_state_topic, "OFF", true);
@@ -311,7 +335,7 @@ void mqtt_audio_loop() {
     }
 
     // Auto-detect siren stopped (loop ended naturally — shouldn't happen, but safety)
-    if (g_siren_on && !audio_is_playing()) {
+    if (g_siren_on && g_siren_finished.load() == g_siren_generation.load()) {
         g_siren_on = false;
         g_siren_stop_at_ms = 0;
         mqtt_manager.publish(g_siren_state_topic, "OFF", true);
@@ -325,12 +349,6 @@ void mqtt_audio_loop() {
     portEXIT_CRITICAL(&g_mux);
 
     if (beep != BEEP_NONE) {
-        // A beep stops any running siren
-        if (g_siren_on) {
-            g_siren_on = false;
-            g_siren_stop_at_ms = 0;
-            mqtt_manager.publish(g_siren_state_topic, "OFF", true);
-        }
         const char* pattern = (beep == BEEP_TRIPLE) ? PATTERN_TRIPLE
                             : (beep == BEEP_DOUBLE) ? PATTERN_DOUBLE
                             : PATTERN_SINGLE;
@@ -376,13 +394,6 @@ void mqtt_audio_loop() {
         strlcpy(name, g_sound_pending_name, sizeof(name));
         g_sound_pending = false;
         portEXIT_CRITICAL(&g_mux);
-
-        // Stop siren if playing
-        if (g_siren_on) {
-            g_siren_on = false;
-            g_siren_stop_at_ms = 0;
-            mqtt_manager.publish(g_siren_state_topic, "OFF", true);
-        }
 
         audio_play_sound(name, 0);
         LOGT(TAG, "Sound play: %s", name);

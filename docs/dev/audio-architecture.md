@@ -151,18 +151,36 @@ track metadata plus Xing/Info, VBRI, or CBR-estimated duration. This avoids a
 full-file decode before playback; elapsed time advances only after PCM output
 is accepted.
 
-Tone Alerts overlay active Music after resampling and before the existing sole
-output write. MP3 Alerts are exclusive: they stop Music and use the same
-decoder session and output path. Music files can be managed through the portal
-only while neither Music nor an MP3 Alert is active.
+The worker has one primary source, not a general mixer. Priority is alarm,
+ordinary alert, then Music, identically for tones and MP3. Ordinary alerts replace
+ordinary alerts and are discarded during an alarm. TTS and sound previews are
+ordinary alerts; MQTT sirens have alarm priority. Only one MP3 decoder is allocated
+at a time. `HAS_AUDIO` gates all playback, and `HAS_SOUND_PLAYER` separately gates
+MP3, TTS playback, and Music; beep-only builds retain tones and feedback.
+
+An interruption closes Music and remembers its canonical track path. On release,
+Music restarts that track from the beginning only if its desired state is Playing.
+Play/Pause changes that intent while interrupted; Next/Previous changes selection
+without forcing Playing. A missing remembered file produces an error rather than
+substituting another track. The binding status is `interrupted` while Playing
+intent is blocked. Music files cannot be managed through the portal while Music
+is playing, paused, or interrupted, or while an MP3 Alert is active.
+
+Tap and confirmation feedback uses `audio_feedback()` independently of the primary
+source. It lasts at most 250 ms and never stops or ducks an alarm. The common PCM
+writer reserves fixed headroom (primary gain 0.75, feedback gain 0.15) before the
+sole driver write. Alert volume overrides affect only that primary; master volume
+changes made during an alert are retained afterward.
 
 The `alarm_mp3` action submits an MP3 Alert with looping enabled. File-backed
 playback reuses its decoder and output buffers, seeks to the beginning only
 after a successful pass with accepted PCM, and checks stop, session-generation,
 and OTA guards before restarting. Output failures and files with no decoded
 audio terminate instead of repeating. Repetition is not guaranteed to be
-gapless. `alarm_tone` uses the existing repeating tone path; ordinary sound
-alerts remain one-shot unless a legacy looping kind is explicitly persisted.
+gapless. `alarm_tone` uses the incremental repeating tone path; ordinary sound
+alerts remain one-shot. Failed MP3 alarms attempt a bounded one-shot fallback
+tone instead of retrying a broken decoder indefinitely. Failed ordinary alerts
+restore eligible Music.
 
 Music transport and catalog-refresh requests use a dedicated, bounded worker
 queue. This keeps them independent from replaceable tone/alert requests, so an
@@ -332,23 +350,32 @@ first decode occurs when the track is opened for playback.
 
 ## Alarm Tones And Cancellation
 
-Sound alerts support `tone`, `tone_loop`, `mp3`, and shared audio `stop` kinds.
+Sound alerts support `tone`, `mp3`, `stop`, and `stop_all` kinds.
 A looping tone must contain a valid duration-bearing segment; empty patterns
 use the existing default beep. Alarm-enabled builds also register dedicated
 `alarm_tone` and `alarm_mp3` actions with fixed `tone_loop` and `mp3_loop` kinds.
 Looping MP3 playback rewinds the open file and resets decoding after each
 successful pass. It does not guarantee gapless playback. Empty or corrupt
-files, output failures, cancellation, and OTA end playback rather than retrying
-indefinitely.
-Stop clears queued sound and music work, ends tone overlays, and requests a
-music stop independently of command-queue capacity.
+files and output failures trigger bounded alarm fallback; cancellation and OTA
+end playback without fallback.
+
+Stop alerts (`stop`, `audio_stop()`) ends current and queued alert audio without
+changing Music intent or dismissing a scheduled ringing session. Music Stop
+clears Music intent without stopping alerts. Stop all audio (`stop_all`,
+`audio_stop_all()`) also clears Music intent and feedback independently of queue
+capacity. It does not disable future scheduled alarms or dismiss a current
+scheduled ringing session.
+
+A scheduled alarm retains primary ownership through silence after a one-shot
+hook until dismissal, snooze, or timeout. A standalone loop retains ownership only
+while its audio is active. Owner-scoped stops cannot cancel replacement audio.
 
 Synchronous alarm dispatch supplies a session-generation guard to tone, MP3,
 and music submissions. Workers check that guard before queued execution and at
 playback checkpoints. Cancel, snooze, replacement, edits, and timezone changes
 invalidate the previous session so stale work cannot restart its audio.
 Submissions also carry the current OTA epoch. Active OTA discards queued audio
-and music work, ends playback, and skips catalog refreshes. MP3 decoding checks
+and music work, ends playback without automatic Music restart, and skips catalog refreshes. MP3 decoding checks
 between frames and PCM output checks before writes; cancellation is cooperative.
 Ordinary button submissions retain their existing unguarded session behavior,
 while all audio work still honors OTA checkpoints.

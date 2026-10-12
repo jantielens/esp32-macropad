@@ -283,8 +283,8 @@ rather than only its filename. Duration is read from Xing/Info, VBRI, or a CBR
 bitrate estimate without decoding the complete track; estimated durations are
 marked as such.
 
-Upload and delete are unavailable while Music or an MP3 Alert is active. Tone
-Alerts do not block library management. After a successful upload or delete,
+Upload and delete are unavailable while Music is playing, paused, or interrupted,
+or an MP3 Alert is active. Tone Alerts alone do not block library management. After a successful upload or delete,
 the list refreshes automatically. The portal validates the destination path and
 publishes the uploaded bytes without decoding the entire MP3 first.
 
@@ -760,9 +760,15 @@ local time. City selection previews device time without applying the change;
 Each ring and stop list holds up to three synchronous actions. Actions that
 pause execution, such as Delay and key sequences, are excluded. To sound an
 alarm, select **Loop Tone** or **Loop MP3** under **Alarm**; use **Sound alert >
-Stop Audio** in the stop list. MP3 repeats after successful playback, with no
-gapless guarantee, and stops on cancellation, firmware updates, or playback
-failure. Stop Audio is shared with other audio playback on the device.
+Stop alerts** in the stop list. MP3 repeats after successful playback, with no
+gapless guarantee; failed MP3 alarms attempt a bounded fallback tone. Alarm
+ownership continues through one-shot silence until Cancel, Snooze, or timeout.
+Ordinary alerts cannot replace an alarm, but short tap feedback can overlay it.
+Interrupted Music restarts its remembered track from the beginning only when its
+desired state remains Playing. Stop alerts does not stop Music or dismiss the
+ringing session. **Stop all audio** additionally clears Music intent and feedback,
+without disabling future scheduled alarms. Firmware updates stop playback without
+automatic Music restart.
 
 Use an **Alarm Control** button or MCP for Snooze and Cancel; the settings form
 does not offer live controls or Ringing/Snoozed indicators. Readiness and failure
