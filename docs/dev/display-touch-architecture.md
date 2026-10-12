@@ -760,9 +760,16 @@ ascent/descent instead. Omitted or `1` preserves original metrics. Corrections
 with invalid bounds or line heights exceeding the signed 32767px layout limit
 use cached bitmap fallback. This corrects font-metric clipping, not button
 overflow. Whole-font bounds keep live text stable but may add whitespace.
-Size, fallback font, and metrics mode/factor all participate in the instance
-cache key; distinct settings consume additional cache memory. No LVGL/STB
-backend patch or uploaded-file modification is involved.
+Size, fallback font, metrics mode/factor, and selected rasterizer all participate
+in the instance cache key; distinct settings consume additional cache memory.
+Metrics correction does not modify uploaded files or rasterization algorithms.
+
+`HAS_FREETYPE_FONTS` defaults to `HAS_TTF_FONTS && HAS_LVGL_EPAPER`.
+Enabled builds select the pinned project-local FreeType 2.13.2 monochrome
+auto-hinter for B/W presentation; grayscale and flag-disabled builds retain
+LVGL/STB. The driver's actual presentation mode selects the backend, not a new
+font setting. See [Interactive E-Paper font rendering](interactive-epaper.md#monochrome-uploaded-fonts)
+for the rendering flags, heap-workspace patch, and ownership contract.
 
 Each `PadScreen` owns its source buffers and immutable font instances through
 `PadFontCache`. Sources use PSRAM-only allocation; LVGL scratch and glyph
@@ -773,7 +780,7 @@ delete referencing LVGL objects before destroying fonts and freeing sources.
 Successful store changes increment an atomic generation; the display thread
 evicts all cached pads after OTA activity clears. HTTP callbacks never mutate
 LVGL. Native extension measure/draw remains bitmap-only because its canvas
-requires packed 4-bit glyphs, while tiny_ttf produces A8 glyphs.
+requires packed 4-bit glyphs, while both uploaded-font backends produce A8 glyphs.
 
 Cold loads pin their selected file while allocation, chunked reads, and
 in-memory validation run outside the font-store mutex. Unrelated store
@@ -795,7 +802,7 @@ remain available at their existing lower levels.
 
 #### Accepted Backend OOM Limitation
 
-This implementation intentionally uses unpatched LVGL 9.5.0/STB. Allocation
+The grayscale and flag-disabled paths use unpatched LVGL 9.5.0/STB. Allocation
 failure inside font cache creation or rasterization can assert forever,
 crash, or reboot, even for a valid font. Watchdog recovery is not guaranteed;
 a saved font-heavy pad may fail again after reboot. There are no new font
@@ -809,9 +816,10 @@ version-checked LVGL/STB allocation-error patch covering cache creation,
 partial cleanup, kerning, and raster scratch; reproducible local/CI
 integration; and allocation-failure plus neighboring-widget tests. That
 option needs new approval and must stop for reassessment if it becomes a
-substantial renderer rewrite. An alternative renderer is another possible
-follow-up, not part of this implementation. Hardware stability, visual
-quality, cold/warm latency, and peak PSRAM remain manual acceptance checks.
+substantial renderer rewrite. The monochrome FreeType path checks allocation
+failures and recreates its face and library before retrying a glyph; it does
+not repair the STB path. Hardware stability, visual quality, cold/warm latency,
+and peak PSRAM remain manual acceptance checks.
 
 #### Hardware Acceptance
 

@@ -16,6 +16,12 @@
 #include <memory>
 #include <new>
 
+#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+#include "drivers/crowpanel42_epaper_driver.h"
+#define LODEPNG_NO_COMPILE_CPP
+#include <libs/lodepng/lodepng.h>
+#endif
+
 #ifdef CONFIG_IDF_TARGET_ESP32P4
 #include "driver/jpeg_encode.h"
 #include "dma2d_arbiter.h"
@@ -62,6 +68,7 @@ struct ScreenshotContext {
 enum class ScreenshotFormat {
 		Bmp,
 		Jpeg,
+		Png,
 };
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
@@ -77,6 +84,7 @@ struct ScreenshotCaptureResult {
 
 struct ScreenshotCaptureRequest {
 		ScreenshotCaptureResult* result;
+		bool monochrome;
 };
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
@@ -192,6 +200,32 @@ static void captureScreenshot(const void* opaque, bool* ok, char* msg, size_t ms
 				snprintf(msg, msgLen, "invalid capture request");
 				return;
 		}
+
+#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+		if (request->monochrome) {
+				auto* driver = displayManager ? static_cast<CrowPanel42EpaperDriver*>(displayManager->getDriver()) : nullptr;
+				if (!driver || !driver->isAvailable()) {
+						snprintf(msg, msgLen, "panel capture unavailable");
+						return;
+				}
+				result->width = driver->width();
+				result->height = driver->height();
+				const size_t bytes = (size_t(result->width) * result->height + 7) / 8;
+				result->pixels = static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+				if (!result->pixels) {
+						snprintf(msg, msgLen, "screenshot buffer allocation failed");
+						return;
+				}
+				if (!driver->copyPresentedFrame(result->pixels, bytes)) {
+						free(result->pixels);
+						result->pixels = nullptr;
+						snprintf(msg, msgLen, "no presented panel frame available");
+						return;
+				}
+				*ok = true;
+				return;
+		}
+#endif
 
 		lv_draw_buf_t* drawBuf = lv_snapshot_take(lv_screen_active(), LV_COLOR_FORMAT_RGB565);
 		if (!drawBuf) {
@@ -374,6 +408,37 @@ static bool sendJpeg(AsyncWebServerRequest* request, ScreenshotCaptureResult* ca
 }
 #endif
 
+#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+static void sendMonochromePng(AsyncWebServerRequest* request, ScreenshotCaptureResult* capture) {
+		unsigned char* pngBuf = nullptr;
+		size_t pngSize = 0;
+		const unsigned error = lodepng_encode_memory(&pngBuf, &pngSize, capture->pixels,
+				capture->width, capture->height, LCT_GREY, 1);
+		free(capture->pixels);
+		delete capture;
+		if (error) {
+				lv_free(pngBuf);
+				LOGE(TAG, "PNG encoding failed: %u", error);
+				request->send(500, "text/plain", "PNG encoding failed");
+				return;
+		}
+		std::shared_ptr<unsigned char> payload(pngBuf, lv_free);
+		AsyncWebServerResponse* response = request->beginChunkedResponse(
+				"image/png",
+				[payload, pngSize](uint8_t* buffer, size_t maxLen, size_t index) mutable -> size_t {
+						if (index >= pngSize) return 0;
+						size_t count = pngSize - index;
+						if (count > maxLen) count = maxLen;
+						memcpy(buffer, payload.get() + index, count);
+						if (index + count >= pngSize) payload.reset();
+						return count;
+				});
+		web_portal_add_cors_headers(response);
+		response->addHeader("Cache-Control", "no-store");
+		request->send(response);
+}
+#endif
+
 static bool parseQuality(AsyncWebServerRequest* request, uint8_t* quality) {
 		*quality = DEFAULT_JPEG_QUALITY;
 		if (!request->hasParam("quality")) return true;
@@ -423,6 +488,13 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 				value.toLowerCase();
 				if (value == "bmp") {
 						format = ScreenshotFormat::Bmp;
+				} else if (value == "png") {
+#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+						format = ScreenshotFormat::Png;
+#else
+						request->send(400, "text/plain", "Monochrome PNG screenshots are not supported on this board");
+						return;
+#endif
 				} else if (value == "jpg") {
 						#ifdef CONFIG_IDF_TARGET_ESP32P4
 						format = ScreenshotFormat::Jpeg;
@@ -431,7 +503,7 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 						return;
 						#endif
 				} else {
-						request->send(400, "text/plain", "Invalid format; expected bmp or jpg");
+						request->send(400, "text/plain", "Invalid format; expected bmp, jpg, or png (CrowPanel only)");
 						return;
 				}
 		}
@@ -455,7 +527,7 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 				request->send(500, "text/plain", "Out of memory");
 				return;
 		}
-		ScreenshotCaptureRequest captureRequest = { capture };
+		ScreenshotCaptureRequest captureRequest = { capture, format == ScreenshotFormat::Png };
 		bool captureOk = false;
 		char captureMessage[160] = {0};
 		DisplayTaskDispatchResult dispatchResult = display_manager_dispatch(
@@ -493,6 +565,12 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 				return;
 		}
 
+#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+		if (format == ScreenshotFormat::Png) {
+				sendMonochromePng(request, capture);
+				return;
+		}
+#endif
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
 		if (format == ScreenshotFormat::Jpeg) {
 			if (sendJpeg(request, capture, quality, subSample)) return;

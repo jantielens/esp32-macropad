@@ -392,8 +392,13 @@ The former `font_family` property, family aliases, numeric `font` size shorthand
 and Montserrat 48 are no longer supported. Native extension canvas text remains
 bitmap-only; list/table text can use uploaded fonts through its pad context.
 
+Interactive e-paper builds use auto-hinted monochrome uploaded fonts for B/W
+presentation when `HAS_FREETYPE_FONTS` is enabled (the default). Grayscale
+keeps the STB renderer. Disabling the build flag restores STB for both modes;
+uploaded font IDs and label styles are unchanged.
+
 > [!WARNING]
-> Stock LVGL/STB can hang or crash when font rendering runs out of memory, even
+> The grayscale and flag-disabled LVGL/STB paths can hang or crash when font rendering runs out of memory, even
 > with valid fonts. This release intentionally has no font-memory budget or
 > instance cap. Device stability remains a hardware acceptance check. The
 > [accepted limitation and future backend work](dev/display-touch-architecture.md#accepted-backend-oom-limitation)

@@ -261,6 +261,31 @@ void CrowPanel42EpaperDriver::present() {
     }
 }
 
+bool CrowPanel42EpaperDriver::copyPresentedFrame(uint8_t* pixels, size_t length) {
+    if (!isAvailable() || !pixels || length < framebufferBytes) return false;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    if (!hasPresented) { xSemaphoreGive(mutex); return false; }
+    memset(pixels, 0, framebufferBytes);
+    const int logicalWidth = width();
+    const int logicalHeight = height();
+    for (int row = 0; row < logicalHeight; ++row) {
+        for (int column = 0; column < logicalWidth; ++column) {
+            int nativeX = column;
+            int nativeY = row;
+            if (rotation == 1) { nativeX = 399 - row; nativeY = column; }
+            else if (rotation == 2) { nativeX = 399 - column; nativeY = 299 - row; }
+            else if (rotation == 3) { nativeX = row; nativeY = 299 - column; }
+            const size_t sourceIndex = size_t(nativeY) * 50 + size_t(nativeX) / 8;
+            if (snapshot[sourceIndex] & (0x80 >> (nativeX & 7))) {
+                const size_t pixelIndex = size_t(row) * logicalWidth + column;
+                pixels[pixelIndex / 8] |= uint8_t(0x80 >> (pixelIndex & 7));
+            }
+        }
+    }
+    xSemaphoreGive(mutex);
+    return true;
+}
+
 bool CrowPanel42EpaperDriver::requestFullRefresh() {
     if (!isAvailable()) return false;
     xSemaphoreTake(mutex, portMAX_DELAY);

@@ -6,6 +6,10 @@
 #include "font_store.h"
 #include "log_manager.h"
 #include "ota_activity.h"
+#if HAS_FREETYPE_FONTS
+#include "freetype_mono_font.h"
+#include "display_manager.h"
+#endif
 #include <Arduino.h>
 #include <esp_heap_caps.h>
 #include <new>
@@ -25,8 +29,21 @@ struct PadFontCache::Instance {
     float metrics = 0;
     const lv_font_t* fallback = nullptr;
     lv_font_t* font = nullptr;
+#if HAS_FREETYPE_FONTS
+    bool monochrome = false;
+#endif
     const void* (*bitmap)(lv_font_glyph_dsc_t*, lv_draw_buf_t*) = nullptr;
     Instance* next = nullptr;
+
+    void destroy_font() {
+#if HAS_FREETYPE_FONTS
+        if (monochrome) {
+            freetype_mono_font_destroy(font);
+            return;
+        }
+#endif
+        lv_tiny_ttf_destroy(font);
+    }
 };
 
 static bool font_correct_metrics(lv_font_t* font, const uint8_t* data, size_t length,
@@ -81,7 +98,13 @@ const lv_font_t* PadFontCache::resolve(const char* name, uint16_t size, const lv
         if (!asset->data) LOGW("Fonts", "Cache %p: '%s' unavailable; using automatic bitmap fallback", static_cast<void*>(this), name);
     }
     if (!asset->data) return fallback;
+#if HAS_FREETYPE_FONTS
+    const bool monochrome = display_manager_get_presentation_mode() == EPAPER_RENDER_MODE_BW;
+#endif
     for (Instance* instance = instances; instance; instance = instance->next) {
+#if HAS_FREETYPE_FONTS
+        if (instance->monochrome != monochrome) continue;
+#endif
         if (instance->asset == asset && instance->size == size && instance->fallback == fallback && instance->metrics == metrics)
             return instance->font ? instance->font : fallback;
     }
@@ -95,6 +118,9 @@ const lv_font_t* PadFontCache::resolve(const char* name, uint16_t size, const lv
     instance->size = size;
     instance->metrics = metrics;
     instance->fallback = fallback;
+#if HAS_FREETYPE_FONTS
+    instance->monochrome = monochrome;
+#endif
     instance->next = instances;
     instances = instance;
     const unsigned long started = millis();
@@ -104,14 +130,21 @@ const lv_font_t* PadFontCache::resolve(const char* name, uint16_t size, const lv
             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
             heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT),
             heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    instance->font = lv_tiny_ttf_create_data_ex(asset->data, asset->length, size, LV_FONT_KERNING_NORMAL, 16);
+#if HAS_FREETYPE_FONTS
+    if (monochrome) {
+        instance->font = freetype_mono_font_create(asset->data, asset->length, size);
+    } else
+#endif
+    {
+        instance->font = lv_tiny_ttf_create_data_ex(asset->data, asset->length, size, LV_FONT_KERNING_NORMAL, 16);
+    }
     if (!instance->font) {
         LOGW("Fonts", "Cache %p: '%s' size=%u creation failed; using automatic bitmap fallback", static_cast<void*>(this), name, static_cast<unsigned>(size));
         return fallback;
     }
     if (!font_correct_metrics(instance->font, asset->data, asset->length, size, metrics)) {
         LOGW("Fonts", "Cache %p: '%s' size=%u metrics=%g invalid or too large; using bitmap fallback", static_cast<void*>(this), name, static_cast<unsigned>(size), static_cast<double>(metrics));
-        lv_tiny_ttf_destroy(instance->font);
+        instance->destroy_font();
         instance->font = nullptr;
         return fallback;
     }
@@ -135,7 +168,9 @@ void PadFontCache::clear() {
     while (instances) {
         Instance* instance = instances;
         instances = instance->next;
-        if (instance->font) lv_tiny_ttf_destroy(instance->font);
+        if (instance->font) {
+            instance->destroy_font();
+        }
         delete instance;
         ++instance_count;
     }

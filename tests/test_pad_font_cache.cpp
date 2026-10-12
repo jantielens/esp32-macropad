@@ -9,16 +9,36 @@
 #include <unordered_set>
 #include <fstream>
 #include <iterator>
+#if HAS_FREETYPE_FONTS
+#include "freetype_mono_font.h"
+#endif
 
 static const uint8_t fixture[] = {
 #include "fixtures/BebasNeue.inc"
 };
 static unsigned loads = 0;
 static bool ota_active = false;
+static int presentation_mode = EPAPER_RENDER_MODE_BW;
 static std::unordered_set<void*> buffers;
 static unsigned failures = 0;
 static std::vector<std::string> log_lines;
 static std::vector<uint8_t> external_font;
+
+#if HAS_FREETYPE_FONTS
+static int allocation_budget = -1;
+extern "C" void* __real_lv_malloc_core(size_t size);
+extern "C" void* __real_lv_realloc_core(void* block, size_t size);
+extern "C" void* __wrap_lv_malloc_core(size_t size) {
+    if (allocation_budget == 0) return nullptr;
+    if (allocation_budget > 0) --allocation_budget;
+    return __real_lv_malloc_core(size);
+}
+extern "C" void* __wrap_lv_realloc_core(void* block, size_t size) {
+    if (allocation_budget == 0) return nullptr;
+    if (allocation_budget > 0) --allocation_budget;
+    return __real_lv_realloc_core(block, size);
+}
+#endif
 
 extern "C" unsigned long millis() { return 0; }
 size_t heap_caps_get_free_size(uint32_t) { return 8192; }
@@ -41,7 +61,35 @@ static size_t matching_logs(const char* text) {
 
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %d: %s\n", __LINE__, #condition); ++failures; } } while (0)
 
+#if HAS_FREETYPE_FONTS
+struct GlyphImage {
+    lv_font_glyph_dsc_t descriptor{};
+    std::vector<uint8_t> pixels;
+    bool operator==(const GlyphImage& other) const {
+        return descriptor.adv_w == other.descriptor.adv_w &&
+            descriptor.box_w == other.descriptor.box_w && descriptor.box_h == other.descriptor.box_h &&
+            descriptor.ofs_x == other.descriptor.ofs_x && descriptor.ofs_y == other.descriptor.ofs_y &&
+            pixels == other.pixels;
+    }
+};
+
+static GlyphImage glyph_image(const lv_font_t* font, uint32_t character) {
+    GlyphImage image;
+    CHECK(lv_font_get_glyph_dsc(font, &image.descriptor, character, 0));
+    const auto* bitmap = static_cast<const lv_draw_buf_t*>(lv_font_get_glyph_bitmap(&image.descriptor, nullptr));
+    CHECK(bitmap != nullptr);
+    if (bitmap) {
+        for (unsigned row = 0; row < image.descriptor.box_h; ++row)
+            for (unsigned column = 0; column < image.descriptor.box_w; ++column)
+                image.pixels.push_back(bitmap->data[row * bitmap->header.stride + column]);
+    }
+    lv_font_glyph_release_draw_data(&image.descriptor);
+    return image;
+}
+#endif
+
 bool ota_activity_is_active() { return ota_active; }
+int display_manager_get_presentation_mode() { return presentation_mode; }
 bool font_store_validate_name(const char* name) { return name && *name && strlen(name) < FONT_NAME_MAX_LEN; }
 uint8_t* font_store_load(const char* name, size_t& length) {
     ++loads;
@@ -93,6 +141,21 @@ int main(int argument_count, char** arguments) {
         CHECK(buffers.size() == 2);
         CHECK(pad_resolve_font(style, &lv_font_montserrat_18, &first) != font);
         CHECK(font->fallback == &lv_font_montserrat_14);
+    #if HAS_FREETYPE_FONTS
+        const auto mono_image = glyph_image(font, '8');
+        CHECK(!mono_image.pixels.empty());
+        for (uint8_t pixel : mono_image.pixels) CHECK(pixel == 0 || pixel == 255);
+        presentation_mode = EPAPER_RENDER_MODE_GRAYSCALE;
+        const lv_font_t* grayscale = pad_resolve_font(style, &lv_font_montserrat_14, &first);
+        CHECK(grayscale != font && grayscale != &lv_font_montserrat_14);
+        lv_font_t* stb_reference = lv_tiny_ttf_create_data_ex(fixture, sizeof(fixture), 37, LV_FONT_KERNING_NORMAL, 16);
+        CHECK(stb_reference != nullptr);
+        CHECK(glyph_image(grayscale, '8') == glyph_image(stb_reference, '8'));
+        lv_tiny_ttf_destroy(stb_reference);
+        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == grayscale);
+        presentation_mode = EPAPER_RENDER_MODE_BW;
+        CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == font);
+    #endif
         style.font_metrics = 2;
         const lv_font_t* doubled = pad_resolve_font(style, &lv_font_montserrat_14, &first);
         CHECK(doubled != font && doubled != &lv_font_montserrat_14);
@@ -146,7 +209,14 @@ int main(int argument_count, char** arguments) {
         CHECK(log_lines.size() == warm_log_count);
         ota_active = true;
         CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == &lv_font_montserrat_14);
+        CHECK(font->get_glyph_bitmap(&glyph, nullptr) == nullptr);
+    #if HAS_FREETYPE_FONTS
+        lv_font_glyph_dsc_t blocked{};
+        CHECK(!font->get_glyph_dsc(font, &blocked, '8', 0));
+    #endif
         ota_active = false;
+        CHECK(lv_font_get_glyph_bitmap(&glyph, nullptr) == bitmap);
+        lv_font_glyph_release_draw_data(&glyph);
         style.font_size = 300;
         CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) != &lv_font_montserrat_14);
         style.font_size = 0;
@@ -192,6 +262,91 @@ int main(int argument_count, char** arguments) {
         CHECK(owner.resolve("broken-metrics", 40, &lv_font_montserrat_14) == normal);
     }
     CHECK(buffers.empty());
+#if HAS_FREETYPE_FONTS
+    lv_mem_monitor_t baseline{};
+    lv_mem_monitor(&baseline);
+    CHECK(freetype_mono_font_create(nullptr, sizeof(fixture), 40) == nullptr);
+    CHECK(freetype_mono_font_create(fixture, 0, 40) == nullptr);
+    CHECK(freetype_mono_font_create(fixture, sizeof(fixture), 0) == nullptr);
+    lv_font_t* reference = freetype_mono_font_create(fixture, sizeof(fixture), 40);
+    CHECK(reference != nullptr);
+    const auto expected = glyph_image(reference, 'W');
+    lv_font_glyph_dsc_t held[16]{};
+    for (unsigned index = 0; index < 16; ++index) {
+        CHECK(lv_font_get_glyph_dsc(reference, &held[index], 'A' + index, 0));
+        CHECK(lv_font_get_glyph_bitmap(&held[index], nullptr) != nullptr);
+    }
+    lv_font_glyph_dsc_t full{};
+    CHECK(!reference->get_glyph_dsc(reference, &full, 'Q', 0));
+    lv_font_glyph_release_draw_data(&held[0]);
+    CHECK(!glyph_image(reference, 'Q').pixels.empty());
+    for (unsigned index = 1; index < 16; ++index) lv_font_glyph_release_draw_data(&held[index]);
+    freetype_mono_font_destroy(reference);
+    for (int budget = 0; budget < 100; ++budget) {
+        allocation_budget = budget;
+        lv_font_t* font = freetype_mono_font_create(fixture, sizeof(fixture), 40);
+        allocation_budget = -1;
+        freetype_mono_font_destroy(font);
+        lv_mem_monitor_t after{};
+        lv_mem_monitor(&after);
+        CHECK(after.used_cnt == baseline.used_cnt && after.free_size == baseline.free_size);
+    }
+    for (int budget = 0; budget < 100; ++budget) {
+        lv_font_t* font = freetype_mono_font_create(fixture, sizeof(fixture), 40);
+        CHECK(font != nullptr);
+        allocation_budget = budget;
+        lv_font_glyph_dsc_t failed{};
+        font->get_glyph_dsc(font, &failed, 'W', 0);
+        allocation_budget = -1;
+        CHECK(glyph_image(font, 'W') == expected);
+        lv_font_glyph_dsc_t pinned{};
+        CHECK(lv_font_get_glyph_dsc(font, &pinned, '8', 0));
+        const auto* bitmap = static_cast<const lv_draw_buf_t*>(lv_font_get_glyph_bitmap(&pinned, nullptr));
+        CHECK(bitmap != nullptr);
+        const std::vector<uint8_t> saved(bitmap->data, bitmap->data + bitmap->header.stride * bitmap->header.h);
+        allocation_budget = 0;
+        font->get_glyph_dsc(font, &failed, 'A', 0);
+        allocation_budget = -1;
+        CHECK(glyph_image(font, 'W') == expected);
+        CHECK(glyph_image(font, 'A').pixels.size() > 0);
+        for (unsigned character = 'B'; character <= 'Z'; ++character) glyph_image(font, character);
+        CHECK(!memcmp(saved.data(), bitmap->data, saved.size()));
+        lv_font_glyph_release_draw_data(&pinned);
+        freetype_mono_font_destroy(font);
+        lv_mem_monitor_t after{};
+        lv_mem_monitor(&after);
+        CHECK(after.used_cnt == baseline.used_cnt && after.free_size == baseline.free_size);
+    }
+    std::ifstream unicode_input(TEST_UNICODE_FONT_PATH, std::ios::binary);
+    const std::vector<uint8_t> unicode_font{std::istreambuf_iterator<char>(unicode_input), std::istreambuf_iterator<char>()};
+    CHECK(!unicode_font.empty());
+    reference = freetype_mono_font_create(unicode_font.data(), unicode_font.size(), 16);
+    CHECK(reference != nullptr);
+    if (reference) {
+        const auto unicode_expected = glyph_image(reference, 0x915);
+        freetype_mono_font_destroy(reference);
+        for (int budget = 0; budget < 100; ++budget) {
+            lv_font_t* font = freetype_mono_font_create(unicode_font.data(), unicode_font.size(), 16);
+            CHECK(font != nullptr);
+            lv_font_glyph_dsc_t pinned{};
+            CHECK(lv_font_get_glyph_dsc(font, &pinned, '8', 0));
+            const auto* bitmap = static_cast<const lv_draw_buf_t*>(lv_font_get_glyph_bitmap(&pinned, nullptr));
+            CHECK(bitmap != nullptr);
+            const std::vector<uint8_t> saved(bitmap->data, bitmap->data + bitmap->header.stride * bitmap->header.h);
+            allocation_budget = budget;
+            lv_font_glyph_dsc_t failed{};
+            font->get_glyph_dsc(font, &failed, 0x915, 0);
+            allocation_budget = -1;
+            CHECK(glyph_image(font, 0x915) == unicode_expected);
+            CHECK(!memcmp(saved.data(), bitmap->data, saved.size()));
+            lv_font_glyph_release_draw_data(&pinned);
+            freetype_mono_font_destroy(font);
+            lv_mem_monitor_t after{};
+            lv_mem_monitor(&after);
+            CHECK(after.used_cnt == baseline.used_cnt && after.free_size == baseline.free_size);
+        }
+    }
+#endif
     lv_deinit();
     return failures ? 1 : 0;
 }

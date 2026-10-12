@@ -101,6 +101,49 @@ Reset connects to ESP32 EN and is not a configurable GPIO input. The SD slot
 uses SPI GPIO39/40/13/10 and power GPIO42; the existing SD_MMC storage backend
 cannot drive it. This profile deliberately does not advertise SD support.
 
+### Monochrome Uploaded Fonts
+
+`HAS_FREETYPE_FONTS` defaults to `HAS_TTF_FONTS && HAS_LVGL_EPAPER`.
+On every eligible interactive e-paper board, enabled builds use FreeType 2.13.2
+for uploaded fonts when the active driver presents in B/W mode. Grayscale
+retains LVGL/STB. Set the flag to `0` in a board override to select STB for both
+modes. There is no separate runtime font backend setting. Built-in Montserrat
+fonts and the panel threshold are unchanged.
+
+The monochrome adapter loads outlines with
+`FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_MONO | FT_LOAD_NO_BITMAP`, renders with
+`FT_RENDER_MODE_MONO`, and expands packed pixels into A8 coverage containing
+only 0 and 255. Existing fallback fonts and metrics corrections still apply.
+The active presentation mode participates in the font-instance cache key.
+
+Each instance owns a FreeType library and face and caches up to 16 glyphs.
+Drawing pins bitmap buffers until LVGL releases them. FreeType allocations use
+the PSRAM-first LVGL allocator, with internal RAM fallback. Failed allocations
+invalidate the face and library; the next glyph request recreates them before
+retrying. Cached bitmap buffers remain independent and valid while pinned.
+Initial instance-creation failures use the existing cached bitmap fallback.
+OTA guards block new font resolution and glyph work while an update is active.
+
+The pinned minimal library, license notices, provenance, and heap-workspace patch
+live in `libraries/MacropadFreeType`. `build.sh` discovers this project-local
+library without a download, global installation, or temporary symlink. See
+[Library Management](library-management.md#project-local-freetype).
+The patch moves large auto-hinter and monochrome raster workspaces to checked
+per-call heap allocations. It preserves the rendering algorithms and pool size.
+The adapter requires its `FT_AutoMono_Heap_Workspaces` marker; an unpatched
+library cannot silently link against the original 16 KiB LVGL stack.
+
+Host tests cover mode selection, grayscale/STB parity, binary monochrome pixels,
+Latin and Devanagari allocation-failure retries, pinned cache eviction, and
+cleanup. Hardware testing confirmed expected rendering and navigation with the
+production integration. Actual task stack watermark, peak internal/PSRAM use,
+latency, and OTA stress need separate measurements; successful functional
+testing alone does not establish them. Capture
+`/api/screenshot?format=png` after the physical refresh settles to inspect the
+CrowPanel's presented pixels.
+
+### Panel Refresh Implementation
+
 The driver keeps two 15,000-byte PSRAM buffers, converts RGB565 with a fixed
 luminance threshold of 128, and applies the A-revision sample's controller sequence:
 RESET HIGH 10 ms, LOW 100 ms, HIGH 100 ms; initialization without a pre-command

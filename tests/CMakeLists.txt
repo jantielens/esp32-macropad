@@ -152,11 +152,35 @@ add_host_legacy_test(test_font_store
 )
 add_host_legacy_test(test_pad_font_cache
     SOURCES test_pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
-    DEFINITIONS HAS_TTF_FONTS=1 HOST_LOG_CAPTURE
+    DEFINITIONS HAS_TTF_FONTS=1 HAS_FREETYPE_FONTS=0 HOST_LOG_CAPTURE
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/font_runtime_overrides.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES host_lvgl m
 )
 set_tests_properties(test_pad_font_cache PROPERTIES TIMEOUT 15)
+file(GLOB HOST_FREETYPE_SOURCES CONFIGURE_DEPENDS
+    "${PROJECT_SOURCE_DIR}/libraries/MacropadFreeType/src/automono_*.c")
+add_library(host_freetype STATIC EXCLUDE_FROM_ALL ${HOST_FREETYPE_SOURCES})
+target_include_directories(host_freetype PUBLIC
+    "${PROJECT_SOURCE_DIR}/libraries/MacropadFreeType/src")
+add_host_legacy_test(test_pad_font_cache_freetype
+    SOURCES test_pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/freetype_mono_font.cpp
+    DEFINITIONS HAS_TTF_FONTS=1 HAS_FREETYPE_FONTS=1 HOST_LOG_CAPTURE
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/font_runtime_overrides.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
+    LIBRARIES host_lvgl host_freetype m
+)
+set_tests_properties(test_pad_font_cache_freetype PROPERTIES TIMEOUT 15)
+target_link_options(test_pad_font_cache_freetype PRIVATE
+    "-Wl,--wrap=lv_malloc_core" "-Wl,--wrap=lv_realloc_core")
+target_compile_definitions(test_pad_font_cache_freetype PRIVATE
+    TEST_UNICODE_FONT_PATH="${PROJECT_SOURCE_DIR}/tests/fixtures/DevanagariTest.ttf")
+foreach(disabled_font_feature IN ITEMS HAS_DISPLAY HAS_TTF_FONTS HAS_FREETYPE_FONTS)
+    add_test(NAME test_freetype_disabled_${disabled_font_feature}
+        COMMAND ${CMAKE_CXX_COMPILER} -DBOARD_CONFIG_H
+            -DHAS_DISPLAY=1 -DHAS_TTF_FONTS=1 -DHAS_FREETYPE_FONTS=1
+            -U${disabled_font_feature} -D${disabled_font_feature}=0
+            -fsyntax-only ${PROJECT_SOURCE_DIR}/src/app/freetype_mono_font.cpp)
+endforeach()
 foreach(font_backend IN ITEMS internal sd)
     if(font_backend STREQUAL "sd")
         set(font_sd 1)

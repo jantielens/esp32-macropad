@@ -55,6 +55,7 @@ FEATURES = {
         ("font_store.cpp.o", "pad_font_cache.cpp.o", "web_portal_fonts.cpp.o", "lv_tiny_ttf.c.o"),
         ("fonts_fragment_html_gz", "portal_fonts_js_gz"),
     ),
+    "Monochrome fonts (HAS_FREETYPE_FONTS)": (("freetype_mono_font.cpp.o", "automono_*.c.o"), ()),
     "Image decoding / encoding": (("image_decoder.cpp.o", "jpeg_encoder_service.cpp.o"), ()),
     "Image fetch (HAS_IMAGE_FETCH)": (("image_fetch.cpp.o",), ()),
     "Image library (HAS_IMAGE_LIBRARY)": (
@@ -109,6 +110,7 @@ FEATURES = {
     "Linker-merged strings / constants (shared)": ((), ()),
 }
 LIBRARIES = {
+    "Monochrome fonts (HAS_FREETYPE_FONTS)": ("MacropadFreeType",),
     "LVGL": ("lvgl", "liblvgl.a"),
     "Display / touch (HAS_DISPLAY / HAS_TOUCH)": (
         "TFT_eSPI", "LovyanGFX", "Arduino_GFX*", "libesp_lcd.a", "libesp_driver_ppa.a",

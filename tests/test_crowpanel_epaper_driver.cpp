@@ -199,11 +199,24 @@ int main() {
         driver.setRotation(rotation);
         CHECK(driver.width() == (rotation & 1 ? 300 : 400));
         CHECK(driver.height() == (rotation & 1 ? 400 : 300));
+        std::vector<uint8_t> captured(15000);
+        CHECK(!driver.copyPresentedFrame(captured.data(), captured.size()));
         pixel(driver, 0, 0, 0);
+        pixel(driver, driver.width() - 1, 1, 0);
         driver.present();
         const size_t indices[] = {0, 49, 14999, 14950};
         const uint8_t values[] = {0x7f, 0xfe, 0xfe, 0x7f};
         CHECK(frames().back().at(indices[rotation]) == values[rotation]);
+        CHECK(!driver.copyPresentedFrame(nullptr, captured.size()));
+        CHECK(!driver.copyPresentedFrame(captured.data(), captured.size() - 1));
+        pixel(driver, 1, 0, 0);
+        const size_t commandCount = commands.size();
+        CHECK(driver.copyPresentedFrame(captured.data(), captured.size()));
+        CHECK(commands.size() == commandCount);
+        for (size_t pixelIndex = 0; pixelIndex < 120000; ++pixelIndex) {
+            const bool white = captured[pixelIndex / 8] & (0x80 >> (pixelIndex & 7));
+            CHECK(white == (pixelIndex != 0 && pixelIndex != size_t(driver.width() * 2 - 1)));
+        }
     }
     for (bool alreadyPresented : {false, true}) {
         reset();

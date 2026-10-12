@@ -348,6 +348,7 @@ build_board() {
     set +e
     build_output=$("$ARDUINO_CLI" compile \
         --fqbn "$fqbn" \
+        --libraries "$SCRIPT_DIR/libraries" \
         --build-path "$board_intermediate_path" \
         "${EXTRA_FLAGS[@]}" \
         "${BUILD_PROPS_ARR[@]}" \

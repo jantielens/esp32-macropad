@@ -1,0 +1,28 @@
+Upstream: FreeType 2.13.2
+Source: https://download.savannah.gnu.org/releases/freetype/freetype-2.13.2.tar.xz
+SHA-256: 12991c4e55c506dd7f9b765933e62fd2be2e06d421505d7950a132e4f1bb484d
+License: FreeType License (FTL.TXT); upstream also offers GPLv2 (GPLv2.TXT).
+
+The public include tree and the source closure for the wrapper translation
+units are vendored. No download or global Arduino library installation is
+needed. Module selection and external dependency exclusions are in src/.
+
+Local change: heap-workspaces.patch moves the large auto-hinter metrics,
+glyph hints, and monochrome raster pool onto the configured FreeType heap.
+It checks allocation failures, propagates width-init allocation errors,
+and exports FT_AutoMono_Heap_Workspaces for the adapter's patch check.
+Rasterization algorithms, pool size, and hinting choices are unchanged.
+
+To reproduce from the release archive (after verifying its SHA-256):
+	tar -xf freetype-2.13.2.tar.xz
+	patch -d freetype-2.13.2 -p1 < heap-workspaces.patch
+	cp -R freetype-2.13.2/include/freetype src/
+	cp freetype-2.13.2/include/ft2build.h src/
+	for module in autofit base bzip2 gzip lzw psnames raster sfnt truetype; do
+		cp -R freetype-2.13.2/src/$module upstream/src/
+	done
+	cp freetype-2.13.2/LICENSE.TXT .
+	cp freetype-2.13.2/docs/{FTL.TXT,GPLv2.TXT} .
+Keep this library's automono wrappers/configuration and MacropadFreeType.h.
+upstream/ stays outside Arduino's recursive src/ directory to avoid duplicate
+compilation. Both licenses are retained; this project selects the FTL option.

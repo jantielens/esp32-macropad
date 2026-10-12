@@ -16,6 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Auto-hinted monochrome uploaded fonts on eligible interactive e-paper builds,
+  selected by `HAS_FREETYPE_FONTS` (enabled by default). Vendor a pinned minimal
+  FreeType 2.13.2 library, license notices, and checked heap-workspace patch;
+  no global installation or temporary symlink is required. Grayscale retains
+  STB, and disabling the flag restores STB for both modes. Keep the original
+  16 KB rendering stack, recover glyph rendering after allocation failures,
+  and preserve pinned bitmap buffers during recovery and cache eviction.
+  Disabled display, TTF, or FreeType features exclude the adapter dependencies
+  and FreeType-specific cache state. Hardware rendering and navigation checks
+  passed, alongside backend-selection, allocation-retry, OTA-guard, and
+  feature-isolation host checks.
+* CrowPanel presented-frame PNG screenshots through
+  `GET /api/screenshot?format=png`, using the last completed physical
+  presentation rather than pending drawing-buffer changes. Preserve the
+  existing default screenshot format and return 503 before a frame is available.
 * Board-overridable defaults for pad and button appearance, shared widget
   palettes, shadows, spacing, insets, and pixel shifting. Interactive e-paper
   boards use high-contrast colors, a light theme, square bordered buttons, and
@@ -85,8 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   such as `font_metrics:1.5`, adjusting line spacing and baseline without
   changing glyph size. Font instances are cached per pad and released when
   the pad rebuilds or is destroyed. Very large sizes or many simultaneous
-  instances can exhaust memory; the stock LVGL/STB renderer can hang or reboot
-  on allocation failure. See the
+  instances can exhaust memory; the grayscale and flag-disabled stock LVGL/STB
+  paths can hang or reboot on allocation failure. See the
   [font memory limitations](docs/dev/display-touch-architecture.md#accepted-backend-oom-limitation).
 * Validate TTF glyph offsets, payloads, Unicode mappings, and composite
   references before rendering; reject cyclic or excessively nested composites.

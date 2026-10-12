@@ -935,6 +935,11 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define HAS_TTF_FONTS (HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM)
 #endif
 
+// Auto-hinted monochrome uploaded fonts; grayscale retains the STB backend.
+#ifndef HAS_FREETYPE_FONTS
+#define HAS_FREETYPE_FONTS (HAS_TTF_FONTS && HAS_LVGL_EPAPER)
+#endif
+
 // Enable background image fetch for pad button tiles.
 // Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 #ifndef HAS_IMAGE_FETCH

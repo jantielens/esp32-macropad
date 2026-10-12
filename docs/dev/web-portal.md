@@ -2604,12 +2604,24 @@ Requires `HAS_DISPLAY`. Gated by Basic Auth when enabled.
 Capture the current display contents as an image. ESP32-P4 boards default to a
 hardware-encoded high-fidelity JPEG; other boards retain the 24-bit BMP default.
 
-- **Query parameters:** `format=bmp|jpg` overrides the format. `quality=1..100` controls JPEG quality and defaults to `85`. On ESP32-P4, `subsample=420|422|444` controls JPEG chroma subsampling and defaults to `444`.
-- **Response:** `image/jpeg` for JPEG or `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order).
+- **Query parameters:** `format=bmp|jpg|png` overrides the format. PNG is supported only by the CrowPanel 4.2 driver and captures its presented monochrome frame. `quality=1..100` controls JPEG quality and defaults to `85`. On ESP32-P4, `subsample=420|422|444` controls JPEG chroma subsampling and defaults to `444`.
+- **Response:** `image/jpeg` for JPEG, `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order), or `image/png` for a lossless 1-bit grayscale PNG on CrowPanel.
 - **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV444 subsampling by default. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
 - **Memory:** Per-request snapshot, conversion, and JPEG buffers are released as soon as the final response chunk is produced. Interrupted responses release any remaining buffers when their response context is destroyed. On ESP32-P4, the lazily initialized JPEG encoder and its synchronization primitive remain allocated after first use.
 - **Thread safety:** The AsyncTCP handler synchronously dispatches capture work through a fixed 64-byte single slot to the LVGL task, which runs it under the existing LVGL mutex. A request that reaches its 3-second deadline keeps the slot occupied until the LVGL task finishes; its captured payload is then reclaimed on that task. Returns `503 Screenshot service busy` for a concurrent capture, `503 Screenshot service unavailable` before display dispatch is ready, and `504 Screenshot capture timed out` when the LVGL task has not completed by the deadline.
 - **Fallback:** If hardware JPEG encoding fails, the endpoint transparently returns BMP with `Content-Type: image/bmp`. Requesting `format=jpg` on a non-P4 board returns `400`.
+
+On CrowPanel, `format=png` copies the last successfully presented framebuffer
+under the driver mutex and restores logical display orientation. It does not
+render LVGL again or trigger a panel refresh. Pixels pending a refresh are not
+included. LodePNG encodes the captured buffer after display dispatch completes;
+the encoded buffer is released after streaming or on disconnect. PNG responses
+use `Cache-Control: no-store`. A missing presented frame or encoding failure
+returns `500`; requesting PNG on another driver returns `400`.
+
+Compare this PNG with a panel photo to distinguish monochrome rasterization
+from physical refresh artifacts. The existing BMP capture retains LVGL's
+pre-threshold antialiasing and can differ from the presented PNG.
 
 **Example:**
 
@@ -2626,6 +2638,9 @@ curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=70' -o s
 
 # Smaller JPEG for photo-like screens, with reduced color detail
 curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=85&subsample=420' -o screenshot.jpg
+
+# CrowPanel's presented black-and-white pixels
+curl -u user:pass 'http://<device-ip>/api/screenshot?format=png' -o panel.png
 ```
 
 **Notes:**

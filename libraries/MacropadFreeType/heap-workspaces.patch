@@ -1,0 +1,273 @@
+--- a/src/autofit/afmodule.c
++++ b/src/autofit/afmodule.c
+@@ -476,12 +476,15 @@
+ 
+ #else /* !FT_DEBUG_AUTOFIT */
+ 
+-    AF_GlyphHintsRec  hints[1];
++    AF_GlyphHints    hints = NULL;
+     AF_LoaderRec      loader[1];
+ 
+     FT_UNUSED( size );
+ 
+ 
++    if ( FT_NEW( hints ) )
++      return error;
++
+     af_glyph_hints_init( hints, memory );
+     af_loader_init( loader, hints );
+ 
+@@ -490,6 +493,7 @@
+ 
+     af_loader_done( loader );
+     af_glyph_hints_done( hints );
++    FT_FREE( hints );
+ 
+     return error;
+ 
+@@ -497,6 +501,13 @@
+   }
+ 
+ 
++  FT_EXPORT_DEF( FT_UInt )
++  FT_AutoMono_Heap_Workspaces( void )
++  {
++    return 1;
++  }
++
++
+   FT_DEFINE_AUTOHINTER_INTERFACE(
+     af_autofitter_interface,
+ 
+--- a/src/autofit/aflatin.c
++++ b/src/autofit/aflatin.c
+@@ -50,12 +50,23 @@
+   /* Find segments and links, compute all stem widths, and initialize */
+   /* standard width and height for the glyph with given charcode.     */
+ 
+-  FT_LOCAL_DEF( void )
++  FT_LOCAL_DEF( FT_Error )
+   af_latin_metrics_init_widths( AF_LatinMetrics  metrics,
+                                 FT_Face          face )
+   {
+     /* scan the array of segments in each direction */
+-    AF_GlyphHintsRec  hints[1];
++    FT_Memory       memory = face->memory;
++    FT_Error        error = FT_Err_Ok;
++    AF_GlyphHints   hints = NULL;
++    AF_LatinMetrics dummy = NULL;
++
++
++    if ( FT_NEW( hints ) || FT_NEW( dummy ) )
++    {
++      FT_FREE( dummy );
++      FT_FREE( hints );
++      return error;
++    }
+ 
+ 
+     FT_TRACE5(( "\n" ));
+@@ -70,10 +81,8 @@
+     metrics->axis[AF_DIMENSION_VERT].width_count = 0;
+ 
+     {
+-      FT_Error            error;
+       FT_ULong            glyph_index;
+       int                 dim;
+-      AF_LatinMetricsRec  dummy[1];
+       AF_Scaler           scaler = &dummy->root.scaler;
+ 
+       AF_StyleClass   style_class  = metrics->root.style_class;
+@@ -265,6 +274,9 @@
+     FT_TRACE5(( "\n" ));
+ 
+     af_glyph_hints_done( hints );
++    FT_FREE( dummy );
++    FT_FREE( hints );
++    return FT_ERR_EQ( error, Out_Of_Memory ) ? error : FT_Err_Ok;
+   }
+ 
+ 
+@@ -1145,7 +1157,9 @@
+ 
+     if ( !FT_Select_Charmap( face, FT_ENCODING_UNICODE ) )
+     {
+-      af_latin_metrics_init_widths( metrics, face );
++      error = af_latin_metrics_init_widths( metrics, face );
++      if ( error )
++        goto Exit;
+       if ( af_latin_metrics_init_blues( metrics, face ) )
+       {
+         /* use internal error code to indicate missing blue zones */
+--- a/src/autofit/aflatin.h
++++ b/src/autofit/aflatin.h
+@@ -123,7 +123,7 @@
+   af_latin_metrics_scale( AF_StyleMetrics  metrics,
+                           AF_Scaler        scaler );
+ 
+-  FT_LOCAL( void )
++  FT_LOCAL( FT_Error )
+   af_latin_metrics_init_widths( AF_LatinMetrics  metrics,
+                                 FT_Face          face );
+ 
+--- a/src/autofit/afcjk.c
++++ b/src/autofit/afcjk.c
+@@ -59,12 +59,23 @@
+   /* Basically the Latin version with AF_CJKMetrics */
+   /* to replace AF_LatinMetrics.                    */
+ 
+-  FT_LOCAL_DEF( void )
++  FT_LOCAL_DEF( FT_Error )
+   af_cjk_metrics_init_widths( AF_CJKMetrics  metrics,
+                               FT_Face        face )
+   {
+     /* scan the array of segments in each direction */
+-    AF_GlyphHintsRec  hints[1];
++    FT_Memory      memory = face->memory;
++    FT_Error       error = FT_Err_Ok;
++    AF_GlyphHints  hints = NULL;
++    AF_CJKMetrics  dummy = NULL;
++
++
++    if ( FT_NEW( hints ) || FT_NEW( dummy ) )
++    {
++      FT_FREE( dummy );
++      FT_FREE( hints );
++      return error;
++    }
+ 
+ 
+     FT_TRACE5(( "\n" ));
+@@ -79,10 +90,8 @@
+     metrics->axis[AF_DIMENSION_VERT].width_count = 0;
+ 
+     {
+-      FT_Error          error;
+       FT_ULong          glyph_index;
+       int               dim;
+-      AF_CJKMetricsRec  dummy[1];
+       AF_Scaler         scaler = &dummy->root.scaler;
+ 
+       AF_StyleClass   style_class  = metrics->root.style_class;
+@@ -268,6 +277,9 @@
+     FT_TRACE5(( "\n" ));
+ 
+     af_glyph_hints_done( hints );
++    FT_FREE( dummy );
++    FT_FREE( hints );
++    return FT_ERR_EQ( error, Out_Of_Memory ) ? error : FT_Err_Ok;
+   }
+ 
+ 
+@@ -638,19 +650,23 @@
+   {
+     AF_CJKMetrics  metrics = (AF_CJKMetrics)metrics_;
+     FT_CharMap     oldmap  = face->charmap;
++    FT_Error       error = FT_Err_Ok;
+ 
+ 
+     metrics->units_per_em = face->units_per_EM;
+ 
+     if ( !FT_Select_Charmap( face, FT_ENCODING_UNICODE ) )
+     {
+-      af_cjk_metrics_init_widths( metrics, face );
++      error = af_cjk_metrics_init_widths( metrics, face );
++      if ( error )
++        goto Exit;
+       af_cjk_metrics_init_blues( metrics, face );
+       af_cjk_metrics_check_digits( metrics, face );
+     }
+ 
++  Exit:
+     face->charmap = oldmap;
+-    return FT_Err_Ok;
++    return error;
+   }
+ 
+ 
+--- a/src/autofit/afcjk.h
++++ b/src/autofit/afcjk.h
+@@ -125,7 +125,7 @@
+   af_cjk_metrics_check_digits( AF_CJKMetrics  metrics,
+                                FT_Face        face );
+ 
+-  FT_LOCAL( void )
++  FT_LOCAL( FT_Error )
+   af_cjk_metrics_init_widths( AF_CJKMetrics  metrics,
+                               FT_Face        face );
+ #endif /* AF_CONFIG_OPTION_CJK */
+--- a/src/autofit/afindic.c
++++ b/src/autofit/afindic.c
+@@ -36,6 +36,7 @@
+ 
+     /* skip blue zone init in CJK routines */
+     FT_CharMap  oldmap = face->charmap;
++    FT_Error    error = FT_Err_Ok;
+ 
+ 
+     metrics->units_per_em = face->units_per_EM;
+@@ -44,7 +45,9 @@
+       face->charmap = NULL;
+     else
+     {
+-      af_cjk_metrics_init_widths( metrics, face );
++      error = af_cjk_metrics_init_widths( metrics, face );
++      if ( error )
++        goto Exit;
+ #if 0
+       /* either need indic specific blue_chars[] or just skip blue zones */
+       af_cjk_metrics_init_blues( metrics, face, af_cjk_blue_chars );
+@@ -52,8 +55,9 @@
+       af_cjk_metrics_check_digits( metrics, face );
+     }
+ 
++  Exit:
+     face->charmap = oldmap;
+-    return FT_Err_Ok;
++    return error;
+   }
+ 
+ 
+--- a/src/raster/ftraster.c
++++ b/src/raster/ftraster.c
+@@ -3233,7 +3233,13 @@
+     black_TWorker  worker[1];
+ #endif
+ 
++#ifdef STANDALONE_
+     Long  buffer[FT_MAX_BLACK_POOL];
++#else
++  Long*      buffer = NULL;
++  FT_Memory  memory;
++  FT_Error   error;
++#endif
+ 
+ 
+     if ( !raster )
+@@ -3268,13 +3274,25 @@
+     if ( !target_map->buffer )
+       return FT_THROW( Invalid_Argument );
+ 
++#ifndef STANDALONE_
++    memory = (FT_Memory)((black_PRaster)raster)->memory;
++    if ( FT_NEW_ARRAY( buffer, FT_MAX_BLACK_POOL ) )
++      return error;
++#endif
++
+     ras.outline = *outline;
+     ras.target  = *target_map;
+ 
+     ras.buff     = buffer;
+-    ras.sizeBuff = (&buffer)[1]; /* Points to right after buffer. */
++    ras.sizeBuff = buffer + FT_MAX_BLACK_POOL;
+ 
++#ifdef STANDALONE_
+     return Render_Glyph( RAS_VAR );
++#else
++    error = Render_Glyph( RAS_VAR );
++    FT_FREE( buffer );
++    return error;
++#endif
+   }
+ 
+ 

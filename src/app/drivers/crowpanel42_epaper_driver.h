@@ -27,6 +27,7 @@ public:
     bool requestFullRefresh() override;
     bool isAvailable() const override { return available.load(); }
     int presentationMode() const override { return 0; }
+    bool copyPresentedFrame(uint8_t* pixels, size_t length);
 
 private:
     static constexpr size_t framebufferBytes = 15000;

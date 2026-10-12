@@ -1,10 +1,41 @@
-# Library Management
+---
+title: Library Management
+description: Manage installed Arduino dependencies and the pinned project-local FreeType library.
+---
 
 This project uses a configuration file to manage Arduino libraries, ensuring consistent dependencies across local development and CI/CD environments.
 
 > **Note:** The template ships with a small set of libraries already configured. Treat `arduino-libraries.txt` as the source of truth and add/remove entries as your project evolves.
 
 ## Configuration File
+
+### Project-Local FreeType
+
+`libraries/MacropadFreeType` vendors the minimal FreeType 2.13.2 profile used by
+`HAS_FREETYPE_FONTS`. `build.sh` passes this directory's parent with
+`arduino-cli compile --libraries`; local and CI builds need no global FreeType
+installation, symlink, or extra setup download. This library is not managed by
+`library.sh` or `arduino-libraries.txt`.
+
+The module profile contains TrueType, SFNT, autofit, monochrome rasterization,
+and PS names. External PNG, zlib, bzip2, Brotli, and HarfBuzz dependencies are
+disabled. Public headers and selected upstream sources are retained with their
+license notices. Wrapper translation units live under `src/`; upstream sources
+stay outside it to prevent duplicate Arduino compilation.
+
+`PROVENANCE.txt` records the release URL, SHA-256, selected source directories,
+and reproduction steps. `heap-workspaces.patch` is applied to the vendored
+sources and keeps large transient auto-hinter and raster workspaces off the
+16 KiB rendering stack. `FTL.TXT`, `GPLv2.TXT`, and `LICENSE.TXT` preserve
+upstream licensing; this project uses the FreeType License option. When
+updating the release or patch, rerun both font-cache host tests and the
+interactive e-paper board builds.
+
+Portions of this software are copyright 2023
+[The FreeType Project](https://freetype.org/). All rights reserved.
+This software is based in part on the work of the FreeType Team.
+
+### Installed Libraries
 
 **`arduino-libraries.txt`** - Contains the list of required Arduino libraries
 
