@@ -69,9 +69,9 @@ function padLoadButtonDefaults(defs) {
     padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
     padSetBindableColor('pad-def-border-color', defs.border_color || '', PAD_FIRMWARE_DEFAULTS.border_color);
     var el;
-    el = document.getElementById('pad-def-border-width'); if (el) el.value = defs.border_width || '';
-    el = document.getElementById('pad-def-corner-radius'); if (el) el.value = defs.corner_radius || '';
-    el = document.getElementById('pad-def-content-pad'); if (el) el.value = defs.content_pad || '';
+    el = document.getElementById('pad-def-border-width'); if (el) el.value = defs.border_width ?? '';
+    el = document.getElementById('pad-def-corner-radius'); if (el) el.value = defs.corner_radius ?? '';
+    el = document.getElementById('pad-def-content-pad'); if (el) el.value = defs.content_pad ?? '';
     el = document.getElementById('pad-def-button-shadow-enabled'); if (el) el.checked = padGetEffectiveDefault('button_shadow_enabled');
     el = document.getElementById('pad-def-button-shadow-type'); if (el) el.value = padGetEffectiveDefault('button_shadow_type');
     el = document.getElementById('pad-def-button-shadow-color-mode'); if (el) el.value = padGetEffectiveDefault('button_shadow_color_mode');

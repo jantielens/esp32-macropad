@@ -153,4 +153,17 @@ assert.strictEqual(saved.pixel_shift_distance_px, 0);
 assert.strictEqual(saved.button_shadow_enabled, false);
 assert.strictEqual(saved.firmware_defaults, undefined);
 
+for (const id of ['pad-def-border-width', 'pad-def-corner-radius', 'pad-def-content-pad']) {
+    defaultInputs.set(id, { value: '', checked: false, dispatchEvent() {} });
+}
+context.padLoadButtonDefaults({ firmware_defaults: monoDefaults, border_width: 0, corner_radius: 0, content_pad: 0 });
+for (const id of ['pad-def-border-width', 'pad-def-corner-radius', 'pad-def-content-pad']) {
+    assert.strictEqual(defaultInputs.get(id).value, 0);
+    defaultInputs.get(id).value = '0';
+}
+const zeroAppearance = JSON.parse(JSON.stringify(context.padCollectButtonDefaults()));
+assert.strictEqual(zeroAppearance.border_width, '0');
+assert.strictEqual(zeroAppearance.corner_radius, '0');
+assert.strictEqual(zeroAppearance.content_pad, '0');
+
 console.log('portal_pad_colors: PASS');
