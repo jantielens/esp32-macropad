@@ -3,6 +3,7 @@
 #include "../board_config.h"
 #include "../display_manager.h"
 #include "../swipe_actions.h"
+#include "../pad_layout.h"
 
 FpsScreen::FpsScreen(DisplayManager* manager)
 		: screen(nullptr), displayMgr(manager),
@@ -42,14 +43,14 @@ void FpsScreen::create() {
 		fpsValueLabel = lv_label_create(screen);
 		lv_label_set_text(fpsValueLabel, "--");
 		lv_obj_set_style_text_color(fpsValueLabel, lv_color_white(), 0);
-		lv_obj_set_style_text_font(fpsValueLabel, &lv_font_montserrat_24, 0);
+		lv_obj_set_style_text_font(fpsValueLabel, pad_typography_font(&lv_font_montserrat_24), 0);
 		lv_obj_align(fpsValueLabel, LV_ALIGN_CENTER, 0, -28);
 		lv_obj_clear_flag(fpsValueLabel, LV_OBJ_FLAG_CLICKABLE);
 
 		fpsUnitLabel = lv_label_create(screen);
 		lv_label_set_text(fpsUnitLabel, "FPS");
 		lv_obj_set_style_text_color(fpsUnitLabel, lv_color_hex(0x3399FF), 0);
-		lv_obj_set_style_text_font(fpsUnitLabel, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_font(fpsUnitLabel, pad_typography_font(&lv_font_montserrat_14), 0);
 		lv_obj_align(fpsUnitLabel, LV_ALIGN_CENTER, 0, -4);
 		lv_obj_clear_flag(fpsUnitLabel, LV_OBJ_FLAG_CLICKABLE);
 
@@ -57,23 +58,39 @@ void FpsScreen::create() {
 		presentLabel = lv_label_create(screen);
 		lv_label_set_text(presentLabel, "Present:  -- ms");
 		lv_obj_set_style_text_color(presentLabel, lv_color_hex(0xBBBBBB), 0);
-		lv_obj_set_style_text_font(presentLabel, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_font(presentLabel, pad_typography_font(&lv_font_montserrat_14), 0);
 		lv_obj_align(presentLabel, LV_ALIGN_CENTER, 0, 55);
 		lv_obj_clear_flag(presentLabel, LV_OBJ_FLAG_CLICKABLE);
 
 		renderLabel = lv_label_create(screen);
 		lv_label_set_text(renderLabel, "Render:   -- ms");
 		lv_obj_set_style_text_color(renderLabel, lv_color_hex(0xBBBBBB), 0);
-		lv_obj_set_style_text_font(renderLabel, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_font(renderLabel, pad_typography_font(&lv_font_montserrat_14), 0);
 		lv_obj_align(renderLabel, LV_ALIGN_CENTER, 0, 73);
 		lv_obj_clear_flag(renderLabel, LV_OBJ_FLAG_CLICKABLE);
 
 		cycleLabel = lv_label_create(screen);
 		lv_label_set_text(cycleLabel, "Cycle:    -- ms");
 		lv_obj_set_style_text_color(cycleLabel, lv_color_hex(0xBBBBBB), 0);
-		lv_obj_set_style_text_font(cycleLabel, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_font(cycleLabel, pad_typography_font(&lv_font_montserrat_14), 0);
 		lv_obj_align(cycleLabel, LV_ALIGN_CENTER, 0, 91);
 		lv_obj_clear_flag(cycleLabel, LV_OBJ_FLAG_CLICKABLE);
+		if (device_typography_get().base_size || (device_typography_get().font_name[0] &&
+			strcmp(device_typography_get().font_name, "@builtin") != 0)) {
+			lv_obj_update_layout(screen);
+			const int value_height = lv_obj_get_height(fpsValueLabel);
+			const int unit_height = lv_obj_get_height(fpsUnitLabel);
+			lv_obj_align(fpsValueLabel, LV_ALIGN_CENTER, 0, -20 - unit_height / 2 - 2);
+			lv_obj_align(fpsUnitLabel, LV_ALIGN_CENTER, 0, -20 + value_height / 2 + 2);
+			lv_obj_t* stats[] = {presentLabel, renderLabel, cycleLabel};
+			int offset = 55;
+			const int text_bottom = -20 + (value_height + unit_height) / 2 + 8;
+			if (offset < text_bottom) offset = text_bottom;
+			for (lv_obj_t* label : stats) {
+				lv_obj_align(label, LV_ALIGN_TOP_MID, 0, lv_obj_get_height(screen) / 2 + offset);
+				offset += lv_obj_get_height(label) + 4;
+			}
+		}
 
 		// Add touch event handler - tap anywhere to go back
 		lv_obj_add_event_cb(screen, touchEventCallback, LV_EVENT_CLICKED, this);

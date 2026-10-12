@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
-const context = { console, Blob, Set };
+const context = { console, Blob, Set, URL };
 context.window = context;
 vm.createContext(context);
 vm.runInContext(
@@ -12,6 +12,21 @@ vm.runInContext(
 );
 
 const fixture = fs.readFileSync('docs/samples/recipe-catalog.json', 'utf8');
+const padOptions = [];
+context.document = {
+    getElementById: () => ({ appendChild: option => padOptions.push(option) }),
+    createElement: () => ({}),
+};
+context.deviceInfoCache = { max_pads: 4, available_screens: [
+    { id: 'pad_0', name: 'Kitchen' }, { id: 'pad_1', name: 'Pad 2' },
+    { id: 'pad_2', name: '  ' }, { id: 'info', name: 'Device Info' },
+] };
+const originalLoadPad = context.recipeLoadPad;
+context.recipeLoadPad = () => {};
+context.recipePopulatePads();
+assert.deepStrictEqual(padOptions.map(option => option.textContent), ['Pad 1: Kitchen', 'Pad 2', 'Pad 3', 'Pad 4']);
+assert.deepStrictEqual(padOptions.map(option => option.value), ['0', '1', '2', '3']);
+context.recipeLoadPad = originalLoadPad;
 const catalog = context.recipeLoadCatalogJson(fixture);
 assert.strictEqual(catalog.recipes.length, 3);
 assert.strictEqual(catalog.recipes[0].id, 'pomodoro');
@@ -50,8 +65,13 @@ assert.strictEqual(clockRecipe.provision.components.alarms['1'].enabled, false);
 assert.strictEqual(clockRecipe.provision.components.alarms['1'].hour, undefined);
 assert.strictEqual(context.recipeExpand(clockRecipe, { target_pad: 'pad_12' }).provision.components.alarms['1'].on_ring[1].target, 'pad_12');
 assert.strictEqual(clockRecipe.post_install.links[0].fragment, 'alarm-schedule');
-context.deviceInfoCache = { has_alarm: true, has_audio: true, has_sound_player: true };
+assert.strictEqual(clockRecipe.fonts[0].name, 'dseg7-classic');
+assert.strictEqual(clockRecipe.layout.buttons[1].label_center_style, 'font:dseg7-classic;font_size:96');
+context.deviceInfoCache = { has_alarm: true, has_audio: true, has_sound_player: true, has_ttf_fonts: true };
 assert.strictEqual(context.recipeSupports(clockRecipe), true);
+context.deviceInfoCache.has_ttf_fonts = false;
+assert.strictEqual(context.recipeSupports(clockRecipe), false);
+context.deviceInfoCache.has_ttf_fonts = true;
 context.deviceInfoCache.has_alarm = false;
 assert.strictEqual(context.recipeSupports(clockRecipe), false);
 context.deviceInfoCache.has_alarm = true;
@@ -145,6 +165,15 @@ assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)),
 alarmRecipe.post_install.links[0].fragment = 'alarm-schedule';
 alarmRecipe.confirmation = '';
 assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)), /confirmation/);
+alarmRecipe.confirmation = 'Install?';
+for (const fonts of [{}, [{ name: 123, url: 'https://example.org/font.ttf' }], [{ name: 'Bad Name', url: 'https://example.org/font.ttf' }],
+    [{ name: 'digital', url: 'http://example.org/font.ttf' }],
+    [{ name: 'digital', url: 'not-a-url' }],
+    [{ name: 'digital', url: 'https://example.org/font.ttf' }, { name: 'digital', url: 'https://example.org/other.ttf' }]]) {
+    alarmRecipe.fonts = fonts;
+    assert.throws(() => context.recipeLoadCatalogJson(JSON.stringify(alarmCatalog)), /font/i);
+}
+delete alarmRecipe.fonts;
 
 context.deviceInfoCache = { max_grid_cols: 4, max_grid_rows: 4 };
 context.padGetButtonSizes = async function () { return { button_w: 100, button_h: 100, gap: 0 }; };
@@ -159,23 +188,50 @@ context.recipeFindMinimumResize({
 });
 
 async function testInstallation() {
-    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported']) {
+    for (const outcome of ['success', 'cancel', 'pad-failure', 'component-failure', 'unsupported',
+        'font-success', 'font-existing', 'font-list-failure', 'font-download-failure',
+        'font-network-failure', 'font-upload-failure', 'font-unsupported']) {
         const elements = new Map();
         function element() {
             return { hidden: true, children: [], classList: { add() {} }, appendChild(child) { this.children.push(child); } };
         }
         const writes = [];
         const messages = [];
+        const downloads = [];
+        let iconsUploaded = false;
+        const usesFont = outcome.startsWith('font-');
+        const success = ['success', 'font-success', 'font-existing'].includes(outcome);
+        const fontData = new Blob([new Uint8Array([0, 1, 0, 0])]);
         const install = {
-            console, Blob, Set, deviceInfoCache: { has_alarm: outcome !== 'unsupported', has_sound_player: true },
+            console, Blob, Set, URL, deviceInfoCache: { has_alarm: outcome !== 'unsupported', has_sound_player: true,
+                has_ttf_fonts: outcome !== 'font-unsupported' },
             confirm: () => outcome !== 'cancel',
             showMessage: (message) => messages.push(message),
-            padUploadPageIcons: async () => {},
+            padUploadPageIcons: async () => { iconsUploaded = true; },
             document: {
                 getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); },
                 createElement: element,
             },
             fetch: async (url, options) => {
+                if (url === '/api/fonts/list') {
+                    return { ok: outcome !== 'font-list-failure', status: 503,
+                        json: async () => outcome === 'font-existing' ? [{ name: 'digital', size_bytes: 4 }] : [] };
+                }
+                if (url === 'https://example.org/digital.ttf') {
+                    assert.strictEqual(iconsUploaded, false);
+                    assert.strictEqual(options.credentials, 'omit');
+                    downloads.push(url);
+                    if (outcome === 'font-network-failure') throw new Error('Network failure');
+                    return { ok: outcome !== 'font-download-failure', status: 404, blob: async () => fontData };
+                }
+                if (url.startsWith('/api/fonts/upload')) {
+                    assert.strictEqual(iconsUploaded, false);
+                    assert.strictEqual(options.headers['Content-Type'], 'application/octet-stream');
+                    assert.strictEqual(options.body, fontData);
+                    writes.push({ url, body: options.body });
+                    return { ok: outcome !== 'font-upload-failure', status: 400,
+                        json: async () => ({ message: 'Unsupported static TrueType file' }) };
+                }
                 if (options && options.method === 'POST') {
                     writes.push({ url, body: JSON.parse(options.body) });
                     const failed = outcome === 'pad-failure' && url.startsWith('/api/pad?') ||
@@ -192,21 +248,32 @@ async function testInstallation() {
         install.recipeLoadPad = async () => {};
         install.state.selected = JSON.parse(JSON.stringify(alarmCatalog.recipes[0]));
         install.state.selected.confirmation = 'Replace Alarm 1 actions and disable its schedule?';
+        if (usesFont) install.state.selected.fonts = [{ name: 'digital', url: 'https://example.org/digital.ttf' }];
         install.state.pad = { page: 6, cols: 2, rows: 2, buttons: [] };
         install.state.placement = { col: 0, row: 0 };
         install.state.buttonSizes = { button_w: 100, button_h: 100, gap: 0 };
         await Promise.all([install.recipeInstall(), install.recipeInstall()]);
         assert.strictEqual(install.state.installing, false);
-        if (outcome === 'cancel' || outcome === 'unsupported') {
-            assert.strictEqual(writes.length, 0);
+        const configWrites = writes.filter(write => !write.url.startsWith('/api/fonts/'));
+        if (outcome === 'cancel' || outcome === 'unsupported' || usesFont && !success) {
+            assert.strictEqual(configWrites.length, 0);
+            assert.strictEqual(iconsUploaded, false);
         } else {
-            assert.strictEqual(writes[0].url, '/api/pad?page=6');
-            assert.strictEqual(writes.length, outcome === 'pad-failure' ? 1 : 2);
+            assert.strictEqual(configWrites[0].url, '/api/pad?page=6');
+            assert.strictEqual(configWrites.length, outcome === 'pad-failure' ? 1 : 2);
         }
-        if (outcome === 'success') {
-            assert.strictEqual(writes[1].body['1'].enabled, false);
-            assert.strictEqual(writes[1].body['1'].hour, 8);
-            assert.strictEqual(writes[1].body['1'].on_ring[0].target, 'pad_6');
+        if (outcome === 'font-existing') {
+            assert.strictEqual(downloads.length, 0);
+            assert.strictEqual(writes.length, 2);
+        }
+        if (outcome === 'font-success') {
+            assert.strictEqual(downloads.length, 1);
+            assert.strictEqual(writes[0].url, '/api/fonts/upload?name=digital');
+        }
+        if (success) {
+            assert.strictEqual(configWrites[1].body['1'].enabled, false);
+            assert.strictEqual(configWrites[1].body['1'].hour, 8);
+            assert.strictEqual(configWrites[1].body['1'].on_ring[0].target, 'pad_6');
             assert.strictEqual(install.state.installationComplete, true);
             assert.strictEqual(elements.get('recipe-followup').hidden, false);
             assert.strictEqual(elements.get('recipe-followup-links').children[0].href, '#alarm-schedule');
@@ -233,6 +300,6 @@ async function testInstallation() {
             if (outcome === 'component-failure') assert(messages.some(message => message.includes('pad was saved')));
         }
     }
-    console.log('recipe installation: PASS (success, cancellation, unsupported device, pad and component failures)');
+    console.log('recipe installation: PASS (font download/upload, reuse, capability gating, failures, and existing flows)');
 }
 testInstallation().catch(error => { console.error(error); process.exitCode = 1; });

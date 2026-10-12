@@ -315,6 +315,10 @@ static bool tool_get_component_config(const JsonObject& args, JsonObject& result
                                 "unknown component (see the 'component' enum in this tool's schema)");
 
     result["component"] = entry->name;
+#if HAS_DISPLAY
+    if (strcmp(entry->name, "button-defaults") == 0)
+        button_defaults_typography_status(result["typography_status"].to<JsonObject>());
+#endif
 #if ALARM_ENABLED
     if (strcmp(entry->name, "alarms") == 0) {
         result["exists"] = true;
@@ -405,7 +409,7 @@ static const char* validate_component(const char* name, JsonObjectConst cfg) {
         return val_action_list(cfg["actions"]);
     }
     if (strcmp(name, "button-defaults") == 0) {
-        return nullptr;  // all fields optional appearance strings; loader is defensive
+        return button_defaults_validate(cfg);
     }
 #endif
 #if HAS_BUTTON
@@ -952,8 +956,9 @@ REGISTER_MCP_TOOL(s_tool_get_component_config);
 static const McpTool s_tool_set_component_config = {
     "set_component_config",
     "Overwrite one auxiliary feature's configuration with a full replacement 'config' object — the write "
-    "counterpart of get_component_config for 'timers', 'swipe', 'boot', 'button-defaults', 'hw-buttons', or "
-    "'mqtt-triggers'. This REPLACES the whole config (it is not a merge), so read the current config first, "
+    "counterpart of get_component_config for the listed components. Typography default_font (@builtin or uploaded ID) "
+    "and base_text_size (0=Automatic, 1-65535px) take effect after reboot. "
+    "This REPLACES the whole config (it is not a merge), so read the current config first, "
     "edit the returned object, and send it back. The config is structurally validated before saving (correct "
     "shape, action lists capped at 3 entries each with a 'type', counts within the board's limits, MQTT "
     "trigger topics non-wildcard) and rejected with a reason if malformed. Expected shapes: timers = object "

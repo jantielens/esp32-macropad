@@ -1,0 +1,7 @@
+{
+  "name": "esp32-macropad-build-tools",
+  "private": true,
+  "dependencies": {
+    "terser": "5.51.2"
+  }
+}

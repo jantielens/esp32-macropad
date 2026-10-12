@@ -1,6 +1,7 @@
 #include "web_portal_utils.h"
 
 #include "storage.h"
+#if HAS_FILESYSTEM
 #include <memory>
 
 struct FileStreamContext {
@@ -35,3 +36,8 @@ void sendFileThrottled(AsyncWebServerRequest *request,
 		response->addHeader("X-Content-Type-Options", "nosniff");
 		request->send(response);
 }
+#else
+void sendFileThrottled(AsyncWebServerRequest* request, const char*, const char*) {
+    if (request) request->send(404, "application/json", "{\"error\":\"filesystem unavailable\"}");
+}
+#endif

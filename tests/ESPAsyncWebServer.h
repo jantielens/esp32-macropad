@@ -10,12 +10,28 @@
 #include <cstddef>
 #include <functional>
 #include <string>
+#include <map>
+
+class AsyncWebParameter {
+public:
+    std::string text;
+    const std::string& value() const { return text; }
+};
 
 class AsyncWebServerRequest {
 public:
     void* _tempObject = nullptr;
     int response_code = 0;
     std::string response_body;
+    bool authorized = true;
+    size_t body_length = 0;
+    std::map<std::string, AsyncWebParameter> parameters;
+    std::function<void()> disconnect_handler;
+    bool hasParam(const char* name) const { return parameters.count(name) != 0; }
+    AsyncWebParameter* getParam(const char* name) { return &parameters[name]; }
+    size_t contentLength() const { return body_length; }
+    void onDisconnect(std::function<void()> handler) { disconnect_handler = std::move(handler); }
+    void disconnect() { if (disconnect_handler) disconnect_handler(); }
 
     void send(int code, const char* = nullptr, const char* body = nullptr) {
         response_code = code;

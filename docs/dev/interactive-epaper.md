@@ -57,9 +57,183 @@ configuration. Use `EpaperRefreshSettings` and the `EPAPER_*` constants:
 
 The portal exposes one shared passive binding interval, minimum presentation
 interval, and full-refresh threshold for both modes. The render mode is
-boot-only; refresh cadence and threshold apply live through the synchronized
+boot-only; refresh cadence and full-refresh threshold apply live through the synchronized
 configuration snapshot. Inkplate grayscale always uses full waveforms, so its
 full-refresh threshold has no effect in that mode.
+
+B/W conversion is also boot-only: `epaper_bw_conversion` selects `threshold`
+(default), `bayer4x4`, or `blue_noise`. `epaper_bw_threshold` ranges from 1 to
+255, defaults to 128, and affects only threshold conversion. Drivers cache
+these settings at startup and use the shared `monochrome_is_white()` helper
+with logical screen coordinates, so partial flushes cannot shift a pattern.
+Grayscale, E-Paper Frame rendering, and monochrome uploaded-font rasterization
+are independent of these settings.
+
+The blue-noise map in `drivers/blue_noise_64.h` is a precomputed, periodic
+64x64 void-and-cluster rank map. Generation uses a 10% seeded initial pattern
+(Python `random.Random(1400).sample(range(4096), 409)`), a toroidal Gaussian
+kernel with sigma 1.5 and radius 7, cluster/void relaxation, and three rank
+phases: removing clusters to zero, filling voids to half, and removing clusters
+from the complemented half-pattern. Dividing each rank by 16 gives 256 levels
+with 16 pixels each. The 4 KiB table is read-only and gated by
+`HAS_LVGL_EPAPER`; firmware needs neither a generator nor random state.
+
+`HAS_EPAPER_GRAYSCALE` defaults to the existing Interactive E-Paper capability.
+Monochrome panels override it to `false`. `GET /api/config` advertises
+`epaper_supported_render_modes`; unsupported persisted modes normalize to the
+board default, and API writes reject unsupported modes.
+
+## CrowPanel 4.2 Profile
+
+Build `crowpanel-4.2-interactive` for the ESP32-S3-WROOM-1-N8R8 with 8 MB flash,
+8 MB OPI PSRAM, and the 400 x 300 B/W A-revision panel. The profile uses the 3 MiB
+OTA layout with LittleFS, hardware-UART serial, no touch, and no SPI-SD support.
+Run `./tools/install-custom-partitions.sh` if the ESP32 core does not yet know
+the `ota_3mb_8MB` partition option, then `./build.sh crowpanel-4.2-interactive`.
+
+The [Elecrow wiki](https://www.elecrow.com/wiki/CrowPanel_ESP32_E-paper_4.2-inch_HMI_Display.html),
+its [Arduino examples](https://www.elecrow.com/download/product/CrowPanel/E-paper/4.2-DIE07300S/Arduino/Examples.zip),
+and [hardware files](https://www.elecrow.com/download/product/CrowPanel/E-paper/4.2-DIE07300S/CrowPanel-ESP32-Display-4.2E-Inch.zip)
+are the reference for wiring. Controller commands follow the separate
+[A-revision examples](https://github.com/Elecrow-RD/CrowPanel-ESP32-4.2-E-paper-HMI-Display-with-400-300/tree/master/example/arduino_A_green_circular_sticker_on_the_back).
+V1.2A factory firmware was confirmed working on a unit whose PCB is marked V1.2;
+the PCB marking alone does not distinguish the panel protocol. This profile
+targets that A-revision protocol, not the older SSD1683 examples.
+
+| Signal | GPIO | Behavior |
+|---|---|---|
+| EPD SCK / MOSI / CS | 12 / 11 / 45 | SPI mode 0 |
+| EPD DC / RESET / BUSY | 46 / 47 / 48 | Driver treats BUSY LOW as active |
+| EPD power | 7 | HIGH enables the panel |
+| Menu / Back | 2 / 1 | Active LOW contacts |
+| Rotary Up / Down / OK | 6 / 4 / 5 | Three active LOW contacts, not quadrature |
+| Boot | 0 | Active LOW boot strap |
+
+The board overrides own the panel wiring through `EPAPER_SPI_SCK_PIN`,
+`EPAPER_SPI_MOSI_PIN`, `EPAPER_CS_PIN`, `EPAPER_DC_PIN`, `EPAPER_RESET_PIN`,
+`EPAPER_BUSY_PIN`, and `EPAPER_POWER_PIN`. The driver uses these definitions
+rather than hardcoded GPIO assignments.
+
+Reset connects to ESP32 EN and is not a configurable GPIO input. The SD slot
+uses SPI GPIO39/40/13/10 and power GPIO42; the existing SD_MMC storage backend
+cannot drive it. This profile deliberately does not advertise SD support.
+
+### Monochrome Uploaded Fonts
+
+`HAS_FREETYPE_FONTS` defaults to `HAS_TTF_FONTS && HAS_LVGL_EPAPER`.
+On every eligible interactive e-paper board, enabled builds use FreeType 2.13.2
+for uploaded fonts when the active driver presents in B/W mode. Grayscale
+retains LVGL/STB. Set the flag to `0` in a board override to select STB for both
+modes. There is no separate runtime font backend setting. Built-in Montserrat
+fonts are unchanged. B/W conversion is configured independently of the font
+backend.
+
+The monochrome adapter loads outlines with
+`FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_MONO | FT_LOAD_NO_BITMAP`, renders with
+`FT_RENDER_MODE_MONO`, and expands packed pixels into A8 coverage containing
+only 0 and 255. Existing fallback fonts and metrics corrections still apply.
+The active presentation mode participates in the font-instance cache key.
+
+Each instance owns a FreeType library and face and caches up to 16 glyphs.
+Drawing pins bitmap buffers until LVGL releases them. FreeType allocations use
+the PSRAM-first LVGL allocator, with internal RAM fallback. Failed allocations
+invalidate the face and library; the next glyph request recreates them before
+retrying. Cached bitmap buffers remain independent and valid while pinned.
+Initial instance-creation failures use the existing cached bitmap fallback.
+OTA guards block new font resolution and glyph work while an update is active.
+
+The pinned minimal library, license notices, provenance, and heap-workspace patch
+live in `libraries/MacropadFreeType`. `build.sh` discovers this project-local
+library without a download, global installation, or temporary symlink. See
+[Library Management](library-management.md#project-local-freetype).
+The patch moves large auto-hinter and monochrome raster workspaces to checked
+per-call heap allocations. It preserves the rendering algorithms and pool size.
+The adapter requires its `FT_AutoMono_Heap_Workspaces` marker; an unpatched
+library cannot silently link against the original 16 KiB LVGL stack.
+
+Host tests cover mode selection, grayscale/STB parity, binary monochrome pixels,
+Latin and Devanagari allocation-failure retries, pinned cache eviction, and
+cleanup. Hardware testing confirmed expected rendering and navigation with the
+production integration. Actual task stack watermark, peak internal/PSRAM use,
+latency, and OTA stress need separate measurements; successful functional
+testing alone does not establish them. Capture
+`/api/screenshot?format=png` after the physical refresh settles to inspect the
+CrowPanel's presented pixels.
+
+### Panel Refresh Implementation
+
+The driver keeps two 15,000-byte PSRAM buffers, converts RGB565 with the selected
+B/W conversion (threshold 128 by default), and applies the A-revision sample's controller sequence:
+RESET HIGH 10 ms, LOW 100 ms, HIGH 100 ms; initialization without a pre-command
+BUSY wait; white RAM planes `0x10`/`0x13` and GC waveforms for a full clear;
+then a second reset/initialization and the image through `0x13` with GC waveforms.
+Full refresh follows the reference's 500 ms clear stabilization, additional
+100 ms reset stabilization, 300 ms initialization stabilization, and 500 ms
+redraw stabilization. Ordinary partial updates use DU waveforms.
+White-plane clears use 256-byte SPI writes, with a shorter final write for
+each 15,000-byte plane. Failed buffer or mutex allocation immediately releases
+all partially allocated resources and leaves the driver unavailable.
+Five 42-byte waveform tables are
+written to `0x20` through `0x24`; `0x17` with `0xA5` activates the refresh.
+Partial updates transfer the
+full frame. The always-on controller stays awake between updates; unlike the
+sample's final sleep step, it does not issue deep sleep after presentation.
+The driver treats raw BUSY LOW as active and HIGH as ready. Hardware testing
+confirmed this polarity on the V1.2A unit: full waveforms took about 1.17 seconds
+and partial waveforms about 0.57 seconds, ending with a LOW-to-HIGH transition.
+It differs from the A-revision sample's wait condition. Debug logs report the
+raw pin level at wait entry and exit along with elapsed time.
+BUSY waits are bounded at 15 seconds. A timeout marks the display unavailable
+until reboot. The presentation loop defers new waveforms during OTA.
+Pixel changes normally settle for 150 ms before presentation, but settling is
+capped at 500 ms from the first pending change so repeated LVGL redraws cannot
+postpone a frame indefinitely. The configured minimum refresh interval still
+applies independently; waveform time is additional.
+
+All `HAS_DISPLAY` boards provide the standard action `button_nav` with commands
+`previous`, `next`, `tap`, and `tap_hold`, labeled Previous, Next, Tap, and
+Tap & Hold. CrowPanel preassigns these through `HW_BUTTON_DEFAULTS_JSON`, using
+the normal hardware-button action format. Other boards keep their existing
+defaults and can assign navigation through the action editor:
+
+| Input | Tap | Hold |
+|---|---|---|
+| Menu | None | Existing configuration-entry gesture |
+| Back | None | None |
+| Rotary Up / Down | Previous / next actionable focus | None |
+| Rotary OK | Tap focused button or rocker zone | Tap & Hold focused button or rocker zone |
+| Boot | Full refresh | None |
+
+An explicit saved empty action array disables that event's default. Navigation
+runs on the LVGL task, skips hidden/disabled buttons and inactive rocker zones,
+and reuses normal tap/hold dispatch. Each pad visit starts without a selection:
+Next selects the first actionable target, Previous selects the last, and Tap or
+Tap & Hold does nothing until a target is selected. If a selected target becomes
+unavailable, selection clears. A pad-wide action takes precedence over individual
+buttons and must also be selected before tapping. Screen selection uses a custom
+pad with screen actions; there is no built-in screen picker.
+
+Selection follows the button's live border color, opacity, and corner radius,
+with twice its border width and a minimum of 2 pixels. Borderless buttons use
+a 2-pixel border in their text color. Rocker selection frames the selected zone.
+This temporary highlight does not change saved appearance settings.
+
+Confirmation defaults to Cancel; its focus outline appears when a navigation
+action is used. Previous or Next switches between Cancel
+and Confirm; Tap chooses the highlighted option. Tap & Hold does nothing in the
+dialog. Confirmation cannot be bypassed by physical navigation. The first press
+when asleep only wakes the screen.
+
+Hardware acceptance checks remain required:
+
+* Cold boot, BUSY polarity, white clear and image orientation at all four rotations
+* Partial-update latency, ghosting, and forced/scheduled full refreshes
+* Every physical contact, release debounce, OK hold without a following tap,
+   Menu configuration entry, and Boot without unintended bootloader entry
+* Unselected pad entry, first/last selection, custom screen-selection pads,
+   disabled/hidden bindings, both rocker types, confirmation
+   cancellation/acceptance, wake-first behavior, and pad saves while focused
+* Framebuffer changes during a waveform and OTA while a refresh is pending
 
 ## Inkplate 6FLICK Profile
 
@@ -71,7 +245,7 @@ does not preserve files from the old layout.
 The render mode selects the Inkplate library framebuffer at boot:
 
 * **B/W** uses the 1-bit framebuffer. The driver converts RGB565 pixels with a
-   stable 4x4 Bayer dither. `partialUpdate()` is available only in this mode;
+   boot-selected threshold, Bayer, or blue-noise conversion. `partialUpdate()` is available only in this mode;
    the first presentation and scheduled ghosting-control refreshes use a full
    waveform. The Inkplate library's partial update still scans the entire
    panel; it does not provide regional transport.
@@ -159,8 +333,8 @@ reads so another touch observer cannot consume a one-shot report.
 
 ## Validation
 
-Build the board and exercise both render modes on hardware. Verify that touch
-continues to work while a waveform is pending, a full refresh can be queued,
+Build the board and exercise its supported render modes on hardware. Verify that
+touch or physical input continues to work while a waveform is pending, a full refresh can be queued,
 and changes made during a waveform appear on the next refresh. Confirm that
 failed snapshot allocation reports the display as unavailable instead of using a
 partially initialized driver.

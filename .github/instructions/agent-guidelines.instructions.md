@@ -1,5 +1,5 @@
 ---
-description: "Copilot agent guidelines — approval workflow, build verification, and documentation update checklist for significant changes"
+description: "Copilot agent guidelines — approval workflow, risk-based test additions, build verification, and documentation updates"
 applyTo: "**"
 ---
 
@@ -43,6 +43,39 @@ After every significant change, the agent must:
 
 3. **Update existing documentation** if changes affect documented behavior
 4. **Before creating new documentation files**, ask the user first
+
+## Verification Does Not Require New Tests
+
+Run existing focused checks first. Add permanent coverage only for a concrete
+regression risk, meaningful behavioral contract, or important uncovered failure
+path. Test scope follows risk, not the number of changed lines; a small change
+can still affect memory ownership, allocation failure, concurrency, persistence,
+parsing boundaries, or hardware lifecycle safety.
+
+- Prefer extending an existing test. Before adding a test file or custom
+   harness, briefly state the regression it catches and why existing coverage
+   is insufficient. Do not create a new harness merely to demonstrate that a
+   small edit works.
+- Assert observable behavior, not source spelling, private helper names,
+   comments, incidental log wording, or CSS structure. Keep source checks narrow
+   and limited to otherwise-unchecked registration or build contracts; they do
+   not prove runtime behavior.
+- Use representative boundaries and distinct failure paths. Avoid exhaustive
+   combinations for trivial helpers or repeated cases exercising the same
+   behavior. Test both frontend and firmware implementations when they enforce
+   separate contracts; similar inputs alone do not make coverage redundant.
+- Temporary diagnostics normally warrant temporary verification, not permanent
+   scaffolding. Keep a permanent test only when it protects a lasting contract.
+- Reuse existing fixtures and production interfaces. Do not refactor production
+   code solely to support a disproportionate test harness, or build a miniature
+   platform by stripping includes and concatenating source when a simpler check
+   suffices. Justify unavoidable hardware doubles by the failure risk they cover.
+- Register permanent tests in the normal suite. When no new test is warranted,
+   report the existing checks or manual verification used instead; do not add
+   a test to satisfy a checklist.
+
+These rules do not waive the action, binding, feature-flag, OTA, or other
+subsystem verification requirements. Reuse their existing checks where possible.
 
 ## Build Verification
 

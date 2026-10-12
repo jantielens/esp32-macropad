@@ -40,6 +40,8 @@ private:
 		uint16_t currentH;
 		uint8_t rotation;
 		uint8_t panelMode;
+		uint8_t bwConversion;
+		uint8_t bwThreshold;
 		uint32_t lastRefreshMs;
 		uint32_t lastChangeMs;
 		uint32_t bwPartialUpdatesSinceFull;

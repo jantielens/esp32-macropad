@@ -41,6 +41,9 @@ void log_init(unsigned long baud) {
 		if (!g_log_mutex) g_log_mutex = xSemaphoreCreateMutexStatic(&g_log_mutex_storage);
 		#endif
 		Serial.begin(baud);
+#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+		Serial.setTxTimeoutMs(0);
+#endif
 		g_log_manager_begun = true;
 			   #if HAS_REMOTE_LOG
 		remote_log_init();
@@ -155,7 +158,13 @@ void log_write(LogLevel level, const char* module, const char* format, ...) {
 		} else {
 		    snprintf(line, sizeof(line), "[%lums] %c %.24s: %s\n", t, log_level_char(level), safe_module, msgbuf);
 		}
-		if (serial_ready) Serial.print(line);
+		if (serial_ready) {
+#if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+			if (Serial.availableForWrite() >= static_cast<int>(strlen(line))) Serial.print(line);
+#else
+			Serial.print(line);
+#endif
+		}
 			   #if HAS_REMOTE_LOG
 		remote_log_append(line);
 		#endif

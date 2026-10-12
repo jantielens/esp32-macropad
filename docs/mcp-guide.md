@@ -23,6 +23,49 @@ point.
 > `system_command`, while display tools (`set_screen`, `set_backlight`, `wake`,
 > `list_screens`, pads) only appear on boards with a screen.
 
+## Local Sensor Bindings
+
+On display builds with registered sensors, `get_capabilities` advertises the
+`sensor` binding and its board-specific keys and documentation. Existing pad
+authoring tools can use `[sensor:key;format|fallback]` in supported binding
+fields; no new MCP tool is required. For example,
+`[sensor:temperature;%.1f|N/A]` reads the local cache without MQTT.
+Booleans resolve as `0` or `1`; failed samples retain last-good values until
+reboot. See [Local Sensor Binding](pad-editor-guide.md#local-sensor-binding).
+
+## Font Authoring
+
+Existing pad-authoring tools can set uploaded font styles such as
+`font:my-font;font_size:96`. IDs exclude `.ttf`; omitted family and size
+independently inherit active device typography. `font:@builtin` selects
+Montserrat. Explicit sizes are absolute; automatic roles scale proportionally
+from the device base. Missing fonts use the nearest compiled bitmap size for
+the resolved target (ties upward, endpoint clamp). The former decorative family aliases and numeric `font`
+size shorthand are no longer supported.
+
+For fonts with clipped vertical metrics, add `font_metrics:bounds` to expand
+the line using whole-font bounds, or `font_metrics:2` (also `1.5`) to multiply
+ascent and descent without enlarging glyphs. Omitted metrics remain unchanged;
+bitmap fonts ignore the option. `get_capabilities` advertises these settings.
+Distinct metric settings create separate cached font instances.
+
+Use `get_component_config` and `set_component_config` with component
+`button-defaults` for every device typography setting: `default_font` is
+`@builtin` or a valid uploaded ID; `base_text_size` is `0` (Automatic) or an
+integer from 1 to 65535. The setter replaces the whole configuration, so retain
+other desired overrides. The getter returns read-only `typography_status`
+with active values, board medium size, TTF support, and `reboot_required`.
+Save then reboot through the existing device control tool to activate typography.
+`font_upscale` transforms bitmap text only, including TTF fallback. The device
+cache retains up to 32 instances until reboot; full caches use bitmap fallback,
+and missing/default replacements retry on reboot.
+
+Upload and delete fonts through **Pads > Fonts** or the authenticated
+[Font API](dev/web-portal.md#font-file-api). No additional MCP font-upload protocol
+or tools are introduced. Native extension canvas text remains bitmap-only.
+See the [accepted stock-renderer OOM risk](dev/display-touch-architecture.md#accepted-backend-oom-limitation)
+before using large sizes or many cached font instances.
+
 ## Security model at a glance
 
 | Layer | Behavior |
@@ -323,7 +366,12 @@ The action catalog advertises **Alarm Control** with the unchanged `alarm` type,
 plus `alarm_tone` and `alarm_mp3` for repeating audio. Loop actions use
 `sound_alert_pattern` or `sound_alert_file` respectively and optional
 `sound_alert_volume`; they do not accept a `sound_alert_kind` override. Stop
-Audio remains `{ "type": "sound_alert", "sound_alert_kind": "stop" }`.
+alerts uses `{ "type": "sound_alert", "sound_alert_kind": "stop" }`;
+Stop all audio uses `sound_alert_kind: "stop_all"` and also clears Music intent.
+Neither dismisses the scheduled ringing session or disables future alarms.
+Alarm audio takes priority over ordinary alerts and Music. Interrupted Music
+restarts its remembered track from the beginning only if Playing intent remains;
+`[music:status]` reports `interrupted` while that intent is blocked.
 The portal's city catalog and non-mutating preview are REST component actions,
 not additional MCP tools; MCP timezone writes still use `set_config`.
 The [portal alarm guide](web-portal-guide.md#alarm-clock) covers scheduling and
@@ -417,6 +465,9 @@ Active records are never evicted. When all four records are active or retained,
   zones supporting pointer-finger repositioning while a mouse button is held.
   `widget_mousepad_back` (boolean, default false) adds a top-left Back button
   isolated from mouse input, using existing history with no empty-history fallback.
+  `widget_mousepad_back_size` (integer 1-512 device pixels, default 44) sets its
+  visible and touch-target side length, constrained to fit the mousepad. Use
+  `88` for a larger target on a high-resolution display.
   Mousepad, Scrollpad, Gamepad Joystick, and Gamepad Button also advertise
   `widget_disable_pad_swipes` (boolean, default false). Enabling it on any
   one input widget disables all swipe actions across its entire pad,
@@ -475,9 +526,33 @@ Active records are never evicted. When all four records are active or retained,
   carries `type`, `group`, `label`, an optional `commands` array (`id`/`label`
   pairs) for multi-command types, an optional `command_families` array for
   Shutter Tester, and a `fields` array (`name`/`description`) of the flat JSON
-  keys to author. For example, `cycle_pad` documents `direction`
+  keys to author. All `HAS_DISPLAY` boards advertise `button_nav` with `command`:
+  `previous`, `next`, `tap`, or `tap_hold`, labeled Previous, Next, Tap, and
+  Tap & Hold. These actions use pad focus and the normal confirmation path;
+  they do not synthesize touch. Each pad visit starts without a selection;
+  Previous selects the last actionable target and Next selects the first.
+  Tap commands do nothing until selected. Use screen actions on a custom pad for
+  screen selection. Physical buttons and e-paper are not required; navigation
+  actions do not target arbitrary controls outside pads and confirmation dialogs.
+  Monochrome Interactive E-Paper configuration advertises only `bw` in
+  `epaper_supported_render_modes` and rejects grayscale writes.
+  For example, `cycle_pad` documents `direction`
   (`next` or `previous`), `wrap` (boolean, default `true`), and
   `excluded_pads` (comma-separated 1-based pad numbers).
+  A StopWatch build with MCP enabled also advertises **M5Stack StopWatch**
+  actions: `charging_mode` (`mode`: `off`, `low`, `high`), `status_led`
+  (`mode`: `on`, `off`), `vibrate` (`pattern`: `"20,100,20"` for
+  vibrate/pause/vibrate, default `"200"`, standalone `"0"` stops),
+  and fieldless `shutdown`. Patterns allow whitespace around commas and need
+  1-15 positive whole-millisecond durations, an odd count, and at most 5000 ms
+  total including pauses. `pattern` is the only field; `duration_ms` is not supported.
+  Vibration is nonblocking; a new request replaces the active sequence.
+  Charging and LED settings are
+  session-only; reboot restores their boot settings. Shutdown powers off
+  through the PMIC and discards the remaining action list; it rejects active
+  OTA and does not save unsaved portal drafts or flush uploads. Finish writes
+  before invoking it. The standard StopWatch firmware disables MCP, and other
+  boards do not include these actions.
   It also carries a `device_config` section advertising `set_config`'s writable
   fields and the read/write component list. Its `storage` object advertises the storage
   tool names, 128-entry listing limit, and 65,536-byte Base64 file-read limit.

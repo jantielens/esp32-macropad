@@ -97,4 +97,6 @@ const uint16_t* image_fetch_get_frame(image_slot_t slot, uint16_t* out_w, uint16
 // interval is faster than the LVGL render loop can consume.
 uint32_t image_fetch_get_drops(image_slot_t slot);
 
+bool image_fetch_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes);
+
 #endif // HAS_IMAGE_FETCH

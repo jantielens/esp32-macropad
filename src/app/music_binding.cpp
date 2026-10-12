@@ -51,6 +51,7 @@ const char* status_text(AudioMusicStatus status) {
         case AUDIO_MUSIC_EMPTY: return "empty";
         case AUDIO_MUSIC_UNAVAILABLE: return "unavailable";
         case AUDIO_MUSIC_ERROR: return "error";
+        case AUDIO_MUSIC_INTERRUPTED: return "interrupted";
     }
     return "unavailable";
 }
@@ -116,7 +117,7 @@ const BindingParamDoc kMusicParams[] = {
 };
 
 const BindingKeyDoc kMusicKeyDocs[] = {
-    {"status", "playing, paused, stopped, empty, unavailable, or error", "Player"},
+    {"status", "playing, interrupted, paused, stopped, empty, unavailable, or error", "Player"},
     {"index", "Current track index in the playlist", "Player"},
     {"count", "Number of tracks; -1 when unavailable", "Player"},
     {"elapsed_s", "Elapsed seconds", "Player"},

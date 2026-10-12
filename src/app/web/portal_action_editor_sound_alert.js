@@ -3,7 +3,8 @@ function actionEditorSoundAlertChanged(prefix) {
     var tone = document.getElementById(prefix + '-sound-alert-tone-group');
     var mp3 = document.getElementById(prefix + '-sound-alert-mp3-group');
     var isMp3 = kind && kind.value === 'mp3';
-    if (tone) tone.style.display = isMp3 || (kind && kind.value === 'stop') ? 'none' : '';
+    var isStop = kind && (kind.value === 'stop' || kind.value === 'stop_all');
+    if (tone) tone.style.display = isMp3 || isStop ? 'none' : '';
     if (mp3) mp3.style.display = isMp3 ? '' : 'none';
 }
 
@@ -42,7 +43,9 @@ _actionEditorExtensions.push({
         h += '<div id="' + prefix + '-sound-alert-group" style="display:none;">';
         h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-kind">Kind</label>';
         h += '<select class="form-select form-select-sm" id="' + prefix + '-sound-alert-kind" onchange="actionEditorSoundAlertChanged(\'' + prefix + '\')">';
-        h += '<option value="tone">Tone Alert</option><option value="mp3">MP3 Alert</option><option value="stop">Stop audio</option></select></div>';
+        h += '<option value="tone">Tone Alert</option>';
+        if (!opts || opts.has_sound_player !== false) h += '<option value="mp3">MP3 Alert</option>';
+        h += '<option value="stop">Stop alerts</option><option value="stop_all">Stop all audio</option></select></div>';
         h += '<div id="' + prefix + '-sound-alert-tone-group">';
         h += '<div class="form-group"><label class="form-label" for="' + prefix + '-sound-alert-pattern">Tone pattern <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
         h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-sound-alert-pattern" maxlength="127" placeholder="e.g. 1000:200 100 1000:200"></div></div>';
@@ -101,7 +104,16 @@ _actionEditorExtensions.push({
         return act;
     },
     wireFragment: function(prefixes, info) {
-        if (!info || info.has_sound_player !== true) return;
+        if (!info || info.has_sound_player !== true) {
+            prefixes.forEach(function(prefix) {
+                var kind = document.getElementById(prefix + '-sound-alert-kind');
+                if (kind) Array.from(kind.options).forEach(function(option) {
+                    if (option.value === 'mp3') option.remove();
+                });
+                actionEditorSoundAlertChanged(prefix);
+            });
+            return;
+        }
         return fetch('/api/sounds/list').then(function(response) { return response.ok ? response.json() : []; })
             .then(function(sounds) { actionEditorPopulateSounds(prefixes, sounds); })
             .catch(function() {});

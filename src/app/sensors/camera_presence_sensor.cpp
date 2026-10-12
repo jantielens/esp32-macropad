@@ -33,7 +33,7 @@ bool camera_presence_remove_discovery() {
 }
 #endif
 
-void camera_presence_loop() {
+bool camera_presence_loop() {
     bool presence = false;
     const bool presence_changed = camera_motion_take_presence_change(&presence);
 #if HAS_DISPLAY
@@ -62,9 +62,17 @@ void camera_presence_loop() {
         if (presence) camera_motion_actions_on_presence_started();
 #endif
     }
+    const CameraMotionStatus snapshot = camera_motion_get_status();
+    static bool previous_enabled = false;
+    static uint32_t previous_motion = 0;
+    const uint32_t motion = snapshot.has_last_motion ? snapshot.last_motion_epoch : 0;
+    const bool changed = presence_changed || previous_enabled != snapshot.enabled || previous_motion != motion;
+    previous_enabled = snapshot.enabled;
+    previous_motion = motion;
+    return changed;
 }
 
-void camera_presence_append_api(JsonObject& doc) {
+void camera_presence_sample(JsonObject& doc) {
     const CameraMotionStatus status = camera_motion_get_status();
     sensor_manager_set_bool(doc, "camera_presence", status.presence, status.enabled);
     if (status.enabled) {
@@ -86,10 +94,18 @@ void camera_presence_publish_ha(MqttManager& mqtt) {
 } // namespace
 
 void register_camera_presence_sensor(SensorRegistry& registry) {
+    static const SensorField fields[] = {
+        {"camera_presence", "Camera presence detected: 1 or 0."},
+        {"camera_last_motion", "Last camera motion as Unix seconds; 0 if none."},
+    };
     SensorCallbacks callbacks = {};
     callbacks.name = "Camera Presence";
     callbacks.loop = camera_presence_loop;
-    callbacks.append_api = camera_presence_append_api;
+    callbacks.sample = camera_presence_sample;
+    callbacks.event_driven = true;
+    callbacks.include_in_mqtt = false;
+    callbacks.fields = fields;
+    callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
 #if HAS_MQTT
     callbacks.publish_ha = camera_presence_publish_ha;
 #endif

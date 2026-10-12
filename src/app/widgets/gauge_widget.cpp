@@ -48,13 +48,13 @@ struct GaugeConfig {
     char     start_label_2[CONFIG_BINDABLE_SHORT_LEN];     // Slot 2 start label (plain text or binding)
     char     start_label_3[CONFIG_BINDABLE_SHORT_LEN];     // Slot 3 start label (plain text or binding)
     char     start_label_4[CONFIG_BINDABLE_SHORT_LEN];     // 4th ring start label (plain text or binding)
-    char     arc_color[CONFIG_COLOR_MAX_LEN];               // Arc indicator color (bindable, default "#4CAF50")
-    char     arc_color_2[CONFIG_COLOR_MAX_LEN];             // Ring 2 indicator color (bindable, default "#2196F3")
-    char     arc_color_3[CONFIG_COLOR_MAX_LEN];             // Ring 3 indicator color (bindable, default "#9C27B0")
-    char     arc_color_4[CONFIG_COLOR_MAX_LEN];             // Ring 4 indicator color (bindable, default "#FF9800")
-    char     track_color[CONFIG_BINDABLE_SHORT_LEN];        // Inactive arc background (default "#1A1A1A")
-    char     needle_color[CONFIG_BINDABLE_SHORT_LEN];       // Needle color (default "#FFFFFF")
-    char     tick_color[CONFIG_BINDABLE_SHORT_LEN];          // Tick mark color (default "#808080")
+    char     arc_color[CONFIG_COLOR_MAX_LEN];               // Arc indicator color (bindable, default DEFAULT_WIDGET_SERIES_COLOR)
+    char     arc_color_2[CONFIG_COLOR_MAX_LEN];             // Ring 2 indicator color (bindable, default DEFAULT_WIDGET_SERIES_COLOR_2)
+    char     arc_color_3[CONFIG_COLOR_MAX_LEN];             // Ring 3 indicator color (bindable, default DEFAULT_WIDGET_SERIES_COLOR_3)
+    char     arc_color_4[CONFIG_COLOR_MAX_LEN];             // Ring 4 indicator color (bindable, default DEFAULT_WIDGET_SERIES_COLOR_4)
+    char     track_color[CONFIG_BINDABLE_SHORT_LEN];        // Inactive arc background (default DEFAULT_WIDGET_TRACK_COLOR)
+    char     needle_color[CONFIG_BINDABLE_SHORT_LEN];       // Needle color (default DEFAULT_WIDGET_INDICATOR_COLOR)
+    char     tick_color[CONFIG_BINDABLE_SHORT_LEN];          // Tick mark color (default DEFAULT_WIDGET_TICK_COLOR)
     uint8_t  arc_width_pct;          // Arc thickness as % of radius (5–50, default 15)
     uint8_t  tick_count;             // Major tick count (0 = none, default 5)
     uint8_t  needle_width;           // Needle line width in pixels (1–10, default 2)
@@ -66,8 +66,8 @@ struct GaugeConfig {
     bool     dual_binding_pair_2;    // Slots 3/4 share one ring (pos/neg)
     // Marker: bindable position tick + zone spanning all rings (disabled when marker_value is empty)
     char     marker_value[CONFIG_BINDABLE_SHORT_LEN];  // Position on scale (bindable, default "" = disabled)
-    char     marker_tick_color[CONFIG_BINDABLE_SHORT_LEN]; // Tick color (bindable, default "#FFFFFF")
-    char     marker_zone_color[CONFIG_BINDABLE_SHORT_LEN]; // Zone color (bindable, default "#FF5722")
+    char     marker_tick_color[CONFIG_BINDABLE_SHORT_LEN]; // Tick color (bindable, default DEFAULT_WIDGET_INDICATOR_COLOR)
+    char     marker_zone_color[CONFIG_BINDABLE_SHORT_LEN]; // Zone color (bindable, default DEFAULT_WIDGET_ZONE_COLOR)
     uint8_t  marker_zone_deg;        // Zone total angle in degrees (0 = no zone, max 90; halved for ± rendering)
     uint8_t  marker_tick_width;      // Tick line width px (0 = no tick, default 2)
     uint16_t anim_ms;                // Transition duration in ms (0 = instant, default 300)
@@ -223,7 +223,7 @@ static lv_obj_t* gauge_create_arc(lv_obj_t* tile, const GaugeConfig* cfg,
     lv_arc_set_bg_angles(arc, 0, cfg->arc_degrees);
     lv_arc_set_mode(arc, LV_ARC_MODE_NORMAL);
     // Track
-    lv_obj_set_style_arc_color(arc, resolve_lv_color(cfg->track_color, 0x1A1A1A), LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, resolve_lv_color(cfg->track_color, widget_default_rgb(DEFAULT_WIDGET_TRACK_COLOR)), LV_PART_MAIN);
     lv_obj_set_style_arc_width(arc, arc_width, LV_PART_MAIN);
     lv_obj_set_style_arc_rounded(arc, false, LV_PART_MAIN);
     // Indicator
@@ -429,14 +429,14 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
     widget_parse_field(btn["widget_gauge_start_label_4"], cfg->start_label_4, sizeof(cfg->start_label_4), "", false);
 
     // Per-ring arc indicator colors (bindable — may contain threshold() expressions)
-    widget_parse_field(btn["widget_arc_color"],   cfg->arc_color,   sizeof(cfg->arc_color),   "#4CAF50");
-    widget_parse_field(btn["widget_arc_color_2"], cfg->arc_color_2, sizeof(cfg->arc_color_2), "#2196F3");
-    widget_parse_field(btn["widget_arc_color_3"], cfg->arc_color_3, sizeof(cfg->arc_color_3), "#9C27B0");
-    widget_parse_field(btn["widget_arc_color_4"], cfg->arc_color_4, sizeof(cfg->arc_color_4), "#FF9800");
+    widget_parse_field(btn["widget_arc_color"],   cfg->arc_color,   sizeof(cfg->arc_color),   DEFAULT_WIDGET_SERIES_COLOR);
+    widget_parse_field(btn["widget_arc_color_2"], cfg->arc_color_2, sizeof(cfg->arc_color_2), DEFAULT_WIDGET_SERIES_COLOR_2);
+    widget_parse_field(btn["widget_arc_color_3"], cfg->arc_color_3, sizeof(cfg->arc_color_3), DEFAULT_WIDGET_SERIES_COLOR_3);
+    widget_parse_field(btn["widget_arc_color_4"], cfg->arc_color_4, sizeof(cfg->arc_color_4), DEFAULT_WIDGET_SERIES_COLOR_4);
 
-    widget_parse_field(btn["widget_gauge_track_color"],  cfg->track_color,  sizeof(cfg->track_color),  "#1A1A1A");
-    widget_parse_field(btn["widget_gauge_needle_color"], cfg->needle_color, sizeof(cfg->needle_color), "#FFFFFF");
-    widget_parse_field(btn["widget_gauge_tick_color"],   cfg->tick_color,   sizeof(cfg->tick_color),   "#808080");
+    widget_parse_field(btn["widget_gauge_track_color"],  cfg->track_color,  sizeof(cfg->track_color),  DEFAULT_WIDGET_TRACK_COLOR);
+    widget_parse_field(btn["widget_gauge_needle_color"], cfg->needle_color, sizeof(cfg->needle_color), DEFAULT_WIDGET_INDICATOR_COLOR);
+    widget_parse_field(btn["widget_gauge_tick_color"],   cfg->tick_color,   sizeof(cfg->tick_color),   DEFAULT_WIDGET_TICK_COLOR);
 
     uint8_t awpct = btn["widget_gauge_arc_width_pct"] | (uint8_t)15;
     cfg->arc_width_pct = clamp_val<uint8_t>(awpct, 5, 50);
@@ -455,8 +455,8 @@ static void gauge_parse(const JsonObject& btn, uint8_t* data) {
 
     // Marker (disabled when marker_value is empty)
     widget_parse_field(btn["widget_gauge_marker_value"], cfg->marker_value, sizeof(cfg->marker_value), "", false);
-    widget_parse_field(btn["widget_gauge_marker_tick_color"], cfg->marker_tick_color, sizeof(cfg->marker_tick_color), "#FFFFFF");
-    widget_parse_field(btn["widget_gauge_marker_zone_color"], cfg->marker_zone_color, sizeof(cfg->marker_zone_color), "#FF5722");
+    widget_parse_field(btn["widget_gauge_marker_tick_color"], cfg->marker_tick_color, sizeof(cfg->marker_tick_color), DEFAULT_WIDGET_INDICATOR_COLOR);
+    widget_parse_field(btn["widget_gauge_marker_zone_color"], cfg->marker_zone_color, sizeof(cfg->marker_zone_color), DEFAULT_WIDGET_ZONE_COLOR);
     uint8_t mzd = btn["widget_gauge_marker_zone_deg"] | (uint8_t)0;
     cfg->marker_zone_deg = (mzd > 90) ? 90 : mzd;
     uint8_t mtw = btn["widget_gauge_marker_tick_width"] | (uint8_t)2;
@@ -519,15 +519,16 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // ---- Compute available space ----
     bool has_top = btn->label_top[0];
     bool has_bot = btn->label_bottom[0];
-    int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
-    int16_t top_h = has_top ? label_h : 0;
-    int16_t bot_h = has_bot ? label_h : 0;
+    const lv_font_t* annotation_font = pad_typography_font(scale->font_small);
+    int32_t top_h = has_top ? lv_font_get_line_height(pad_resolve_font(btn->style_top, scale->font_small, state->font_owner)) + 2 : 0;
+    int32_t bot_h = has_bot ? lv_font_get_line_height(pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner)) + 2 : 0;
 
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
 
-    int16_t avail_h = content_h - top_h - bot_h - 4;
+    if (top_h > content_h) top_h = content_h;
+    int32_t avail_h = content_h - top_h - bot_h - 4;
     int16_t avail_w = content_w - 4;
     if (avail_h < 20) avail_h = 20;
     if (avail_w < 20) avail_w = 20;
@@ -586,8 +587,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         lv_obj_set_style_arc_opa(st->arc_dual_1_neg, LV_OPA_TRANSP, LV_PART_MAIN);
     }
     if (cfg->start_label[0]) {
-        st->start_label_1 = gauge_create_start_label(tile, scale->font_small,
-                                                     resolve_lv_color(cfg->arc_color, 0x4CAF50));
+        st->start_label_1 = gauge_create_start_label(tile, annotation_font,
+                                                     resolve_lv_color(cfg->arc_color, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR)));
         st->start_label_slot_1 = ring_slot;
         gauge_update_start_label(st->start_label_1, cfg->start_label, cfg, st, ring_slot);
     }
@@ -599,8 +600,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (!st->dual_pair_1_active && has_slot2) {
         st->arc_ring2 = gauge_create_arc(tile, cfg, cx, cy, r_cur, arc_width);
         if (cfg->start_label_2[0]) {
-            st->start_label_2 = gauge_create_start_label(tile, scale->font_small,
-                                                         resolve_lv_color(cfg->arc_color_2, 0x2196F3));
+            st->start_label_2 = gauge_create_start_label(tile, annotation_font,
+                                                         resolve_lv_color(cfg->arc_color_2, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_2)));
             st->start_label_slot_2 = ring_slot;
             gauge_update_start_label(st->start_label_2, cfg->start_label_2, cfg, st, ring_slot);
         }
@@ -619,8 +620,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                 lv_obj_set_style_arc_opa(st->arc_dual_2_neg, LV_OPA_TRANSP, LV_PART_MAIN);
             }
             if (cfg->start_label_3[0]) {
-                st->start_label_3 = gauge_create_start_label(tile, scale->font_small,
-                                                             resolve_lv_color(cfg->arc_color_3, 0x9C27B0));
+                st->start_label_3 = gauge_create_start_label(tile, annotation_font,
+                                                             resolve_lv_color(cfg->arc_color_3, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3)));
                 st->start_label_slot_3 = ring_slot;
                 gauge_update_start_label(st->start_label_3, cfg->start_label_3, cfg, st, ring_slot);
             }
@@ -636,8 +637,8 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                 lv_obj_set_style_arc_opa(st->arc_dual_2_neg, LV_OPA_TRANSP, LV_PART_MAIN);
             }
             if (cfg->start_label_3[0]) {
-                st->start_label_2 = gauge_create_start_label(tile, scale->font_small,
-                                                             resolve_lv_color(cfg->arc_color_3, 0x9C27B0));
+                st->start_label_2 = gauge_create_start_label(tile, annotation_font,
+                                                             resolve_lv_color(cfg->arc_color_3, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3)));
                 st->start_label_slot_2 = ring_slot;
                 gauge_update_start_label(st->start_label_2, cfg->start_label_3, cfg, st, ring_slot);
             }
@@ -652,16 +653,16 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (st->dual_pair_1_active) {
             st->arc_ring3 = gauge_create_arc(tile, cfg, cx, cy, r_cur, arc_width);
             if (cfg->start_label_4[0]) {
-                st->start_label_3 = gauge_create_start_label(tile, scale->font_small,
-                                                             resolve_lv_color(cfg->arc_color_4, 0xFF9800));
+                st->start_label_3 = gauge_create_start_label(tile, annotation_font,
+                                                             resolve_lv_color(cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4)));
                 st->start_label_slot_3 = ring_slot;
                 gauge_update_start_label(st->start_label_3, cfg->start_label_4, cfg, st, ring_slot);
             }
         } else {
             st->arc_ring4 = gauge_create_arc(tile, cfg, cx, cy, r_cur, arc_width);
             if (cfg->start_label_4[0]) {
-                st->start_label_4 = gauge_create_start_label(tile, scale->font_small,
-                                                             resolve_lv_color(cfg->arc_color_4, 0xFF9800));
+                st->start_label_4 = gauge_create_start_label(tile, annotation_font,
+                                                             resolve_lv_color(cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4)));
                 st->start_label_slot_4 = ring_slot;
                 gauge_update_start_label(st->start_label_4, cfg->start_label_4, cfg, st, ring_slot);
             }
@@ -670,7 +671,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // ---- Tick marks (repeat across all active rings) ----
     if (cfg->tick_count > 0) {
-        lv_color_t tick_color = resolve_lv_color(cfg->tick_color, 0x808080);
+        lv_color_t tick_color = resolve_lv_color(cfg->tick_color, widget_default_rgb(DEFAULT_WIDGET_TICK_COLOR));
         uint16_t total_tick_lines = (uint16_t)cfg->tick_count * active_ring_count;
         st->tick_lines = (lv_obj_t**)lv_malloc(sizeof(lv_obj_t*) * total_tick_lines);
         if (!st->tick_lines) {
@@ -692,7 +693,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
         // Create zone arcs (semi-transparent overlays drawn on top of ring arcs).
         if (want_zone) {
-            lv_color_t zone_clr = resolve_lv_color(cfg->marker_zone_color, 0xFF5722);
+            lv_color_t zone_clr = resolve_lv_color(cfg->marker_zone_color, widget_default_rgb(DEFAULT_WIDGET_ZONE_COLOR));
             for (uint8_t i = 0; i < active_ring_count; i++) {
                 int16_t rr = gauge_radius_for_slot(st, i);
                 if (rr < 8) rr = 8;
@@ -721,7 +722,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
 
         // Create marker tick lines (initially at start angle; repositioned in tick)
         if (want_tick) {
-            lv_color_t mtick_clr = resolve_lv_color(cfg->marker_tick_color, 0xFFFFFF);
+            lv_color_t mtick_clr = resolve_lv_color(cfg->marker_tick_color, widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR));
             float init_angle = (float)cfg->start_angle;
             float a_rad = init_angle * (float)M_PI / 180.0f;
             float cos_a = cosf(a_rad);
@@ -748,7 +749,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         st->n_pts = (lv_point_precise_t*)lv_malloc(sizeof(lv_point_precise_t) * 2);
         if (st->n_pts) {
             st->needle = lv_line_create(tile);
-            lv_obj_set_style_line_color(st->needle, resolve_lv_color(cfg->needle_color, 0xFFFFFF), 0);
+            lv_obj_set_style_line_color(st->needle, resolve_lv_color(cfg->needle_color, widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR)), 0);
             lv_obj_set_style_line_width(st->needle, cfg->needle_width, 0);
             lv_obj_clear_flag(st->needle, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
 
@@ -973,7 +974,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // Ring 1 always maps to slot 1 (positive direction).
     if (ok0) {
-        gauge_update_ring(st->arc_bg, cfg, min_val, max_val, v0, &st->last_value, cfg->arc_color, 0x4CAF50,
+        gauge_update_ring(st->arc_bg, cfg, min_val, max_val, v0, &st->last_value, cfg->arc_color, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR),
                           &st->cached_arc1, st->start_label_1,
                           st->dual_pair_1_active, animate);
     }
@@ -983,11 +984,11 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         float neg_mag = ok1 ? v1 : 0.0f;
         if (neg_mag < 0.0f) neg_mag = 0.0f;
         gauge_update_ring(st->arc_dual_1_neg, cfg, min_val, max_val, -neg_mag, &st->last_value_neg_1,
-                          cfg->arc_color_2, 0x2196F3, &st->cached_arc_neg1, nullptr, true, animate);
+                          cfg->arc_color_2, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_2), &st->cached_arc_neg1, nullptr, true, animate);
     } else if (st->arc_ring2) {
         // Non-dual: slot 2 is its own ring.
         if (ok1) {
-            gauge_update_ring(st->arc_ring2, cfg, min_val, max_val, v1, &st->last_value_2, cfg->arc_color_2, 0x2196F3,
+            gauge_update_ring(st->arc_ring2, cfg, min_val, max_val, v1, &st->last_value_2, cfg->arc_color_2, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_2),
                               &st->cached_arc2, st->start_label_2, false, animate);
         }
     }
@@ -996,7 +997,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (st->dual_pair_1_active) {
         if (st->arc_ring2) {
             if (ok2) {
-                gauge_update_ring(st->arc_ring2, cfg, min_val, max_val, v2, &st->last_value_2, cfg->arc_color_3, 0x9C27B0,
+                gauge_update_ring(st->arc_ring2, cfg, min_val, max_val, v2, &st->last_value_2, cfg->arc_color_3, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3),
                                   &st->cached_arc3, st->start_label_2,
                                   st->dual_pair_2_active, animate);
             }
@@ -1004,7 +1005,7 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
     } else {
         if (st->arc_ring3) {
             if (ok2) {
-                gauge_update_ring(st->arc_ring3, cfg, min_val, max_val, v2, &st->last_value_3, cfg->arc_color_3, 0x9C27B0,
+                gauge_update_ring(st->arc_ring3, cfg, min_val, max_val, v2, &st->last_value_3, cfg->arc_color_3, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3),
                                   &st->cached_arc3, st->start_label_3,
                                   st->dual_pair_2_active, animate);
             }
@@ -1016,18 +1017,18 @@ static void gauge_update(lv_obj_t* tile, const WidgetConfig* wcfg,
         float neg_mag = ok3 ? v3 : 0.0f;
         if (neg_mag < 0.0f) neg_mag = 0.0f;
         gauge_update_ring(st->arc_dual_2_neg, cfg, min_val, max_val, -neg_mag, &st->last_value_neg_2,
-                          cfg->arc_color_4, 0xFF9800, &st->cached_arc_neg2, nullptr, true, animate);
+                          cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4), &st->cached_arc_neg2, nullptr, true, animate);
     } else if (st->dual_pair_1_active) {
         if (st->arc_ring3) {
             if (ok3) {
-                gauge_update_ring(st->arc_ring3, cfg, min_val, max_val, v3, &st->last_value_3, cfg->arc_color_4, 0xFF9800,
+                gauge_update_ring(st->arc_ring3, cfg, min_val, max_val, v3, &st->last_value_3, cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4),
                                   &st->cached_arc4, st->start_label_3, false, animate);
             }
         }
     } else {
         if (st->arc_ring4) {
             if (ok3) {
-                gauge_update_ring(st->arc_ring4, cfg, min_val, max_val, v3, &st->last_value_4, cfg->arc_color_4, 0xFF9800,
+                gauge_update_ring(st->arc_ring4, cfg, min_val, max_val, v3, &st->last_value_4, cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4),
                                   &st->cached_arc4, st->start_label_4, false, animate);
             }
         }
@@ -1092,7 +1093,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     lv_color_t clr;
 
     // Track color (background arc)
-    if (resolve_color_changed(cfg->track_color, 0x1A1A1A, &st->cached_track, &clr)) {
+    if (resolve_color_changed(cfg->track_color, widget_default_rgb(DEFAULT_WIDGET_TRACK_COLOR), &st->cached_track, &clr)) {
         lv_obj_set_style_arc_color(st->arc_bg, clr, LV_PART_MAIN);
         if (st->arc_ring2) lv_obj_set_style_arc_color(st->arc_ring2, clr, LV_PART_MAIN);
         if (st->arc_ring3) lv_obj_set_style_arc_color(st->arc_ring3, clr, LV_PART_MAIN);
@@ -1101,20 +1102,20 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // Needle color
     if (st->needle) {
-        if (resolve_color_changed(cfg->needle_color, 0xFFFFFF, &st->cached_needle, &clr))
+        if (resolve_color_changed(cfg->needle_color, widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR), &st->cached_needle, &clr))
             lv_obj_set_style_line_color(st->needle, clr, 0);
     }
 
     // Tick mark color (uses cached tick line pointers — no child scan)
     if (st->tick_line_count > 0) {
-        if (resolve_color_changed(cfg->tick_color, 0x808080, &st->cached_tick, &clr)) {
+        if (resolve_color_changed(cfg->tick_color, widget_default_rgb(DEFAULT_WIDGET_TICK_COLOR), &st->cached_tick, &clr)) {
             for (uint8_t i = 0; i < st->tick_line_count; i++)
                 lv_obj_set_style_line_color(st->tick_lines[i], clr, 0);
         }
     }
 
     // Indicator colors
-    if (resolve_color_changed(cfg->arc_color, 0x4CAF50, &st->cached_arc1, &clr))
+    if (resolve_color_changed(cfg->arc_color, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR), &st->cached_arc1, &clr))
         lv_obj_set_style_arc_color(st->arc_bg, clr, LV_PART_INDICATOR);
     if (st->start_label_1) {
         gauge_update_start_label(st->start_label_1, cfg->start_label, cfg, st, st->start_label_slot_1);
@@ -1122,7 +1123,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
     if (st->arc_ring2) {
         const char* arc2_color = st->dual_pair_1_active ? cfg->arc_color_3 : cfg->arc_color_2;
-        uint32_t arc2_def = st->dual_pair_1_active ? 0x9C27B0 : 0x2196F3;
+        uint32_t arc2_def = st->dual_pair_1_active ? widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3) : widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_2);
         uint32_t* arc2_cache = st->dual_pair_1_active ? &st->cached_arc3 : &st->cached_arc2;
         if (resolve_color_changed(arc2_color, arc2_def, arc2_cache, &clr))
             lv_obj_set_style_arc_color(st->arc_ring2, clr, LV_PART_INDICATOR);
@@ -1134,7 +1135,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
     if (st->arc_ring3) {
         const char* arc3_color = st->dual_pair_1_active ? cfg->arc_color_4 : cfg->arc_color_3;
-        uint32_t arc3_def = st->dual_pair_1_active ? 0xFF9800 : 0x9C27B0;
+        uint32_t arc3_def = st->dual_pair_1_active ? widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4) : widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3);
         uint32_t* arc3_cache = st->dual_pair_1_active ? &st->cached_arc4 : &st->cached_arc3;
         if (resolve_color_changed(arc3_color, arc3_def, arc3_cache, &clr))
             lv_obj_set_style_arc_color(st->arc_ring3, clr, LV_PART_INDICATOR);
@@ -1145,7 +1146,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
     }
     if (st->arc_ring4) {
-        if (resolve_color_changed(cfg->arc_color_4, 0xFF9800, &st->cached_arc4, &clr))
+        if (resolve_color_changed(cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4), &st->cached_arc4, &clr))
             lv_obj_set_style_arc_color(st->arc_ring4, clr, LV_PART_INDICATOR);
         if (st->start_label_4) {
             gauge_update_start_label(st->start_label_4, cfg->start_label_4, cfg, st, st->start_label_slot_4);
@@ -1153,11 +1154,11 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
     }
     if (st->arc_dual_1_neg) {
-        if (resolve_color_changed(cfg->arc_color_2, 0x2196F3, &st->cached_arc_neg1, &clr))
+        if (resolve_color_changed(cfg->arc_color_2, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_2), &st->cached_arc_neg1, &clr))
             lv_obj_set_style_arc_color(st->arc_dual_1_neg, clr, LV_PART_INDICATOR);
     }
     if (st->arc_dual_2_neg) {
-        if (resolve_color_changed(cfg->arc_color_4, 0xFF9800, &st->cached_arc_neg2, &clr))
+        if (resolve_color_changed(cfg->arc_color_4, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4), &st->cached_arc_neg2, &clr))
             lv_obj_set_style_arc_color(st->arc_dual_2_neg, clr, LV_PART_INDICATOR);
     }
 
@@ -1204,7 +1205,7 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
                     int16_t y1 = st->cy + (int16_t)roundf(sin_a * tick_inner);
                     int16_t x2 = st->cx + (int16_t)roundf(cos_a * tick_outer);
                     int16_t y2 = st->cy + (int16_t)roundf(sin_a * tick_outer);
-                    lv_color_t mtclr = resolve_lv_color(cfg->marker_tick_color, 0xFFFFFF);
+                    lv_color_t mtclr = resolve_lv_color(cfg->marker_tick_color, widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR));
                     st->marker_ticks[i] = gauge_create_line(
                         tile, x1, y1, x2, y2,
                         mtclr, cfg->marker_tick_width);
@@ -1222,14 +1223,14 @@ static void gauge_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
 
         // Update marker tick color
-        if (resolve_color_changed(cfg->marker_tick_color, 0xFFFFFF, &st->cached_marker_tick_color, &clr)) {
+        if (resolve_color_changed(cfg->marker_tick_color, widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR), &st->cached_marker_tick_color, &clr)) {
             for (uint8_t i = 0; i < st->marker_ring_count; i++) {
                 if (st->marker_ticks[i])
                     lv_obj_set_style_line_color(st->marker_ticks[i], clr, 0);
             }
         }
         // Update marker zone color (arcs)
-        if (resolve_color_changed(cfg->marker_zone_color, 0xFF5722, &st->cached_marker_zone_color, &clr)) {
+        if (resolve_color_changed(cfg->marker_zone_color, widget_default_rgb(DEFAULT_WIDGET_ZONE_COLOR), &st->cached_marker_zone_color, &clr)) {
             for (uint8_t i = 0; i < st->marker_ring_count; i++) {
                 if (st->marker_zones[i])
                     lv_obj_set_style_arc_color(st->marker_zones[i], clr, LV_PART_INDICATOR);

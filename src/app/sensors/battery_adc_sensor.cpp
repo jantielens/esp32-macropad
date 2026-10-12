@@ -91,18 +91,22 @@ void BatteryAdcSensor::publishHaDiscovery(MqttManager &mqtt) {
 #endif
 
 static void battery_adc_init() { g_battery_adc_adapter.begin(); }
-static void battery_adc_append_api(JsonObject &doc) { g_battery_adc_adapter.appendJson(doc); }
-static void battery_adc_append_mqtt(JsonObject &doc) { g_battery_adc_adapter.appendJson(doc); }
+static void battery_adc_sample(JsonObject &doc) { g_battery_adc_adapter.appendJson(doc); }
 #if HAS_MQTT
 static void battery_adc_publish_ha(MqttManager &mqtt) { g_battery_adc_adapter.publishHaDiscovery(mqtt); }
 #endif
 
 void register_battery_adc_sensor(SensorRegistry &registry) {
+	static const SensorField fields[] = {
+		{"battery_voltage", "Battery voltage in volts."},
+		{"battery_percentage", "Estimated battery charge in percent."},
+	};
 	SensorCallbacks callbacks = {};
 	callbacks.name = "Battery ADC";
 	callbacks.init = battery_adc_init;
-	callbacks.append_api = battery_adc_append_api;
-	callbacks.append_mqtt = battery_adc_append_mqtt;
+	callbacks.sample = battery_adc_sample;
+	callbacks.fields = fields;
+	callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
 #if HAS_MQTT
 	callbacks.publish_ha = battery_adc_publish_ha;
 #endif

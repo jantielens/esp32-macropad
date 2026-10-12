@@ -27,6 +27,38 @@ flowchart TD
 `AUDIO_OUTPUT_DRIVER`. New output hardware must implement `AudioOutputDriver`
 rather than adding hardware-specific behavior to callers.
 
+### Output Lifecycle Contract
+
+`AudioOutputDriver` requires explicit availability, mute, volume, and teardown
+implementations. `begin()` prepares a usable transport but leaves any external
+amplifier muted. Repeated initialization must not allocate another transport.
+The driver owns codec programming, clock settling, and any silence priming;
+the manager must not impose an ES8311 sequence on a PCM510xA DAC.
+
+The manager sets initial volume, checks availability, allocates its queues and
+semaphore, then unmutes and creates the worker. Startup failure calls `end()`
+and releases those manager resources. Volume and mute report control errors;
+availability reflects actual initialized hardware rather than a default `true`.
+`end()` attempts mute, releases owned I2S channels, and removes a controllable
+rail. It reports failure, retains handles that could not be deleted for a
+later cleanup attempt, and does not claim availability after teardown. Safe
+electrical state is best-effort when bus or GPIO control itself fails.
+
+`AudioBoardControl` injects only board-owned power and amplifier-mute callbacks.
+The default factory uses the existing `AUDIO_PA_PIN` and polarity settings;
+boards need no new files. A null power callback means an always-powered device.
+ES8311 permits a null external-mute callback for hardware without that control,
+but cannot promise physical amplifier silence in that configuration. PCM510xA
+requires mute control. StopWatch selects its board-local factory through
+`BOARD_AUDIO_CONTROL_FACTORY` and supplies declarations through
+`BOARD_HARDWARE_HEADER`; neither driver knows which board supplied them.
+
+Lifecycle operations are startup/cleanup operations, not a concurrent runtime
+shutdown API. Callers must stop workers and capture owners before teardown.
+The manager currently tears down only during startup failure, before a worker
+exists. The microphone driver tracks capture activation separately from TX
+and makes repeated capture start/stop calls safe.
+
 ## Microphone Input
 
 Boards with `HAS_AUDIO_INPUT` expose a board-neutral capture API in
@@ -119,18 +151,36 @@ track metadata plus Xing/Info, VBRI, or CBR-estimated duration. This avoids a
 full-file decode before playback; elapsed time advances only after PCM output
 is accepted.
 
-Tone Alerts overlay active Music after resampling and before the existing sole
-output write. MP3 Alerts are exclusive: they stop Music and use the same
-decoder session and output path. Music files can be managed through the portal
-only while neither Music nor an MP3 Alert is active.
+The worker has one primary source, not a general mixer. Priority is alarm,
+ordinary alert, then Music, identically for tones and MP3. Ordinary alerts replace
+ordinary alerts and are discarded during an alarm. TTS and sound previews are
+ordinary alerts; MQTT sirens have alarm priority. Only one MP3 decoder is allocated
+at a time. `HAS_AUDIO` gates all playback, and `HAS_SOUND_PLAYER` separately gates
+MP3, TTS playback, and Music; beep-only builds retain tones and feedback.
+
+An interruption closes Music and remembers its canonical track path. On release,
+Music restarts that track from the beginning only if its desired state is Playing.
+Play/Pause changes that intent while interrupted; Next/Previous changes selection
+without forcing Playing. A missing remembered file produces an error rather than
+substituting another track. The binding status is `interrupted` while Playing
+intent is blocked. Music files cannot be managed through the portal while Music
+is playing, paused, or interrupted, or while an MP3 Alert is active.
+
+Tap and confirmation feedback uses `audio_feedback()` independently of the primary
+source. It lasts at most 250 ms and never stops or ducks an alarm. The common PCM
+writer reserves fixed headroom (primary gain 0.75, feedback gain 0.15) before the
+sole driver write. Alert volume overrides affect only that primary; master volume
+changes made during an alert are retained afterward.
 
 The `alarm_mp3` action submits an MP3 Alert with looping enabled. File-backed
 playback reuses its decoder and output buffers, seeks to the beginning only
 after a successful pass with accepted PCM, and checks stop, session-generation,
 and OTA guards before restarting. Output failures and files with no decoded
 audio terminate instead of repeating. Repetition is not guaranteed to be
-gapless. `alarm_tone` uses the existing repeating tone path; ordinary sound
-alerts remain one-shot unless a legacy looping kind is explicitly persisted.
+gapless. `alarm_tone` uses the incremental repeating tone path; ordinary sound
+alerts remain one-shot. Failed MP3 alarms attempt a bounded one-shot fallback
+tone instead of retrying a broken decoder indefinitely. Failed ordinary alerts
+restore eligible Music.
 
 Music transport and catalog-refresh requests use a dedicated, bounded worker
 queue. This keeps them independent from replaceable tone/alert requests, so an
@@ -170,6 +220,7 @@ Audio-capable boards select their driver and pin mapping in
 | `jc4880p433` | ES8311 codec | `ES8311Driver` |
 | `jc1060p470c` | ES8311 codec | `ES8311Driver` |
 | `jc3636w518` | PCM510xA DAC | `PCM510xADriver` |
+| `m5stack-stopwatch` (hardware validation pending) | ES8311 + AW8737A, M5IOE1 power/mute | `ES8311Driver` |
 
 The audio sample rate is board-configurable. The current audio boards use
 48 kHz output; update the I2S clocking and output-buffer timing together when
@@ -184,6 +235,37 @@ the sample rate. Keep the codec configuration and I2S channel rate aligned.
 ES8311 provides hardware volume control, so `setVolume()` programs the codec
 rather than scaling each PCM sample in software.
 
+### StopWatch Speaker Bring-Up
+
+The StopWatch board enables `HAS_AUDIO` and derived MP3 playback support for
+hardware validation; installer audio capabilities remain unadvertised until
+combined-load memory and speaker behavior have been validated. Its output path
+reuses ES8311 at 48 kHz, with MCLK GPIO18, BCLK GPIO17, LRCK GPIO15, and TX
+GPIO21. `AUDIO_PA_PIN=-1`: amplifier enable and codec power are **M5IOE1 IO10
+and IO3**, respectively, not ESP32 GPIOs. Board initialization keeps both off;
+the ES8311 hardware path owns enabling and muting them through the shared I2C
+bus. The unused microphone input stays disabled.
+
+StopWatch startup keeps the amplifier muted through codec initialization,
+initial volume programming, and a short silence write, then unmutes it.
+Transport/control errors and audio queue/task allocation failures tear down
+the output and attempt to leave the amplifier and audio rail off. The same
+manager lifecycle applies to all audio boards; transport-specific sequencing
+stays inside the selected driver.
+
+MP3 scratch is PSRAM-backed, while I2S DMA and the flash-accessing audio task
+remain in internal RAM. Check startup silence, volume, mute/shutdown, beep and
+MP3 playback, and the largest internal/DMA-capable block during simultaneous
+Wi-Fi/display activity before enabling audio in installer metadata. Power,
+charging defaults, and the PMIC power-button behavior must remain independent
+of audio playback. On 2026-10-10, user testing confirmed MP3 speaker playback
+and volume changes. Logs showed successful 48 kHz codec initialization and
+44.1 kHz stereo MP3 decoding, approximately 53 KB free internal RAM during
+playback, and a 31,732-byte largest internal block after setup. These observations
+precede the board-composition refactor and require hardware retesting. No audio
+or allocation errors appeared in the supplied logs. Cold-start silence,
+mute/shutdown, and worst-case display/network/OTA load remain unverified.
+
 ## PCM510xA Output
 
 The PCM510xA has no I2C or SPI control interface. The driver creates a
@@ -192,6 +274,11 @@ TX-only I2S channel and controls the external mute pin through `AUDIO_PA_PIN`.
 The DAC derives its clocks from BCK and LRCK. Its SCK input is held push-pull
 LOW before I2S starts so the DAC PLL can lock. Do not leave SCK floating or
 start and stop the clock while a stream is active.
+
+Teardown asserts mute and waits at least 150 sample periods plus a guard while
+BCK/LRCK still run, then disables/deletes TX and removes any controllable rail.
+Failed setup uses that same cleanup path. The generic manager does not add
+codec-specific silence writes or delays.
 
 The PCM510xA path applies the shared Q15 gain table in `audio_gain.h` to each
 16-bit PCM sample before DMA transfer. The table ranges from silence at volume
@@ -232,6 +319,16 @@ audio-task stack.
 The audio worker stack itself remains in internal RAM because it accesses
 flash-backed storage.
 
+`AUDIO_TASK_STACK_SIZE` defaults to 8192 bytes on classic ESP32 and ESP32-S3
+when `HAS_SOUND_PLAYER` is false or `AUDIO_MP3_SCRATCH_PSRAM` is true. MP3
+builds that keep decoder scratch on the stack retain 24576 bytes; other chip
+families also retain that default. Explicit board overrides take precedence.
+StopWatch inherits the 8 KB default with MP3 still enabled, saving 16 KB of
+internal RAM. Hardware boot and MP3/tone tests with the reduced stack observed
+a 3,896-byte peak and 4,296 bytes remaining, matching the earlier 24 KB peak.
+Broader music playback, catalog, cancellation, and OTA workloads remain
+unvalidated; check them using `GET /api/health?task=audio`.
+
 The Music catalog is also PSRAM-backed. A catalog retains at most 32 stable,
 lexicographically ordered paths; when more files exist, discovery continues,
 publishes the first 32, and records overflow metadata. Failed filesystem
@@ -253,28 +350,48 @@ first decode occurs when the track is opened for playback.
 
 ## Alarm Tones And Cancellation
 
-Sound alerts support `tone`, `tone_loop`, `mp3`, and shared audio `stop` kinds.
+Sound alerts support `tone`, `mp3`, `stop`, and `stop_all` kinds.
 A looping tone must contain a valid duration-bearing segment; empty patterns
 use the existing default beep. Alarm-enabled builds also register dedicated
 `alarm_tone` and `alarm_mp3` actions with fixed `tone_loop` and `mp3_loop` kinds.
 Looping MP3 playback rewinds the open file and resets decoding after each
 successful pass. It does not guarantee gapless playback. Empty or corrupt
-files, output failures, cancellation, and OTA end playback rather than retrying
-indefinitely.
-Stop clears queued sound and music work, ends tone overlays, and requests a
-music stop independently of command-queue capacity.
+files and output failures trigger bounded alarm fallback; cancellation and OTA
+end playback without fallback.
+
+Stop alerts (`stop`, `audio_stop()`) ends current and queued alert audio without
+changing Music intent or dismissing a scheduled ringing session. Music Stop
+clears Music intent without stopping alerts. Stop all audio (`stop_all`,
+`audio_stop_all()`) also clears Music intent and feedback independently of queue
+capacity. It does not disable future scheduled alarms or dismiss a current
+scheduled ringing session.
+
+A scheduled alarm retains primary ownership through silence after a one-shot
+hook until dismissal, snooze, or timeout. A standalone loop retains ownership only
+while its audio is active. Owner-scoped stops cannot cancel replacement audio.
 
 Synchronous alarm dispatch supplies a session-generation guard to tone, MP3,
 and music submissions. Workers check that guard before queued execution and at
 playback checkpoints. Cancel, snooze, replacement, edits, and timezone changes
 invalidate the previous session so stale work cannot restart its audio.
 Submissions also carry the current OTA epoch. Active OTA discards queued audio
-and music work, ends playback, and skips catalog refreshes. MP3 decoding checks
+and music work, ends playback without automatic Music restart, and skips catalog refreshes. MP3 decoding checks
 between frames and PCM output checks before writes; cancellation is cooperative.
 Ordinary button submissions retain their existing unguarded session behavior,
 while all audio work still honors OTA checkpoints.
 
 ## Diagnostics And Logging
+
+`GET /api/health?task=audio` reports the worker's configured stack size and
+lifetime minimum free stack in bytes, using the existing portal authentication.
+The owner publishes the handle atomically only after task creation succeeds;
+the worker remains alive until reboot. Disabled or unavailable audio returns
+`503`. If worker deletion is introduced later, this getter must be updated to
+synchronize sampling with deletion before that lifecycle change can ship.
+The getter performs no lookup or scan of other tasks and is not used by normal
+health polling. A requested watermark scan still has timing cost; sample after
+a workload rather than polling during timing-sensitive playback tests.
+This diagnostic does not change `HAS_SOUND_PLAYER` or `AUDIO_TASK_STACK_SIZE`.
 
 `audio.cpp` reports output starvation from the time represented by queued DMA
 frames. This metric identifies whether the output writer met its timing budget;

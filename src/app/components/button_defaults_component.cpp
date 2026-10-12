@@ -9,39 +9,52 @@
 
 #include <ArduinoJson.h>
 
+static void button_defaults_write_firmware_defaults(JsonObject defaults) {
+    defaults["default_font"] = "@builtin";
+    defaults["base_text_size"] = 0;
+    defaults["default_pad_bg_color"] = DEFAULT_PAD_BG_COLOR;
+    defaults["bg_color"] = DEFAULT_BUTTON_BG_COLOR;
+    defaults["fg_color"] = DEFAULT_BUTTON_FG_COLOR;
+    defaults["border_color"] = DEFAULT_BUTTON_BORDER_COLOR;
+    defaults["border_width"] = DEFAULT_BUTTON_BORDER_WIDTH;
+    defaults["corner_radius"] = DEFAULT_BUTTON_CORNER_RADIUS;
+    defaults["content_pad"] = DEFAULT_BUTTON_CONTENT_PAD;
+    defaults["button_shadow_enabled"] = DEFAULT_BUTTON_SHADOW_ENABLED;
+    defaults["button_shadow_type"] = DEFAULT_BUTTON_SHADOW_TYPE == BUTTON_SHADOW_TYPE_DROP ? "drop" : "opaque";
+    defaults["button_shadow_color_mode"] = DEFAULT_BUTTON_SHADOW_COLOR_MODE == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND
+        ? "darken_background" : "fixed";
+    defaults["button_shadow_color"] = DEFAULT_BUTTON_SHADOW_COLOR;
+    defaults["button_shadow_darken_pct"] = DEFAULT_BUTTON_SHADOW_DARKEN_PCT;
+    defaults["button_shadow_offset_x_px"] = DEFAULT_BUTTON_SHADOW_OFFSET_X_PX;
+    defaults["button_shadow_offset_y_px"] = DEFAULT_BUTTON_SHADOW_OFFSET_Y_PX;
+    defaults["button_shadow_drop_blur_px"] = DEFAULT_BUTTON_SHADOW_DROP_BLUR_PX;
+    defaults["button_spacing_px"] = DEFAULT_BUTTON_SPACING_PX;
+    defaults["pad_inset_top_px"] = DEFAULT_PAD_INSET_TOP_PX;
+    defaults["pad_inset_right_px"] = DEFAULT_PAD_INSET_RIGHT_PX;
+    defaults["pad_inset_bottom_px"] = DEFAULT_PAD_INSET_BOTTOM_PX;
+    defaults["pad_inset_left_px"] = DEFAULT_PAD_INSET_LEFT_PX;
+    defaults["pixel_shift_distance_px"] = DEFAULT_PIXEL_SHIFT_DISTANCE;
+    defaults["widget_series_color"] = DEFAULT_WIDGET_SERIES_COLOR;
+    defaults["widget_series_color_2"] = DEFAULT_WIDGET_SERIES_COLOR_2;
+    defaults["widget_series_color_3"] = DEFAULT_WIDGET_SERIES_COLOR_3;
+    defaults["widget_series_color_4"] = DEFAULT_WIDGET_SERIES_COLOR_4;
+    defaults["widget_track_color"] = DEFAULT_WIDGET_TRACK_COLOR;
+    defaults["widget_indicator_color"] = DEFAULT_WIDGET_INDICATOR_COLOR;
+    defaults["widget_tick_color"] = DEFAULT_WIDGET_TICK_COLOR;
+    defaults["widget_zone_color"] = DEFAULT_WIDGET_ZONE_COLOR;
+    defaults["widget_reference_color"] = DEFAULT_WIDGET_REFERENCE_COLOR;
+    defaults["widget_table_bg_color"] = DEFAULT_WIDGET_TABLE_BG_COLOR;
+    defaults["widget_table_fg_color"] = DEFAULT_WIDGET_TABLE_FG_COLOR;
+    defaults["widget_table_header_color"] = DEFAULT_WIDGET_TABLE_HEADER_COLOR;
+}
+
 static void button_defaults_get_config(AsyncWebServerRequest *request) {
     WebPortalTiming timing;
-    const ButtonDefaults* d = button_defaults_get();
+    auto doc = make_psram_json_doc(4096);
+    button_defaults_load_overrides(*doc);
     timing.mark("defaults");
-
-    auto doc = make_psram_json_doc(1024);
-    if (d->default_pad_bg_color[0]) (*doc)["default_pad_bg_color"] = d->default_pad_bg_color;
-    if (d->bg_color[0])          (*doc)["bg_color"]          = d->bg_color;
-    if (d->fg_color[0])          (*doc)["fg_color"]          = d->fg_color;
-    if (d->border_color[0])      (*doc)["border_color"]      = d->border_color;
-    if (d->border_width[0])      (*doc)["border_width"]      = d->border_width;
-    if (d->corner_radius[0])     (*doc)["corner_radius"]     = d->corner_radius;
-    if (d->content_pad[0])       (*doc)["content_pad"]       = d->content_pad;
-    (*doc)["button_shadow_enabled"] = d->shadow.enabled;
-    (*doc)["button_shadow_type"] = d->shadow.type == BUTTON_SHADOW_TYPE_DROP ? "drop" : "opaque";
-    (*doc)["button_shadow_color_mode"] = d->shadow.color_mode == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND
-        ? "darken_background" : "fixed";
-    (*doc)["button_shadow_color"] = d->shadow.color;
-    (*doc)["button_shadow_darken_pct"] = d->shadow.darken_pct;
-    (*doc)["button_shadow_offset_x_px"] = d->shadow.offset_x_px;
-    (*doc)["button_shadow_offset_y_px"] = d->shadow.offset_y_px;
-    (*doc)["button_shadow_drop_blur_px"] = d->shadow.drop_blur_px;
-    (*doc)["button_spacing_px"] = d->layout.spacing_px;
-    (*doc)["pad_inset_top_px"] = d->layout.inset_top_px;
-    (*doc)["pad_inset_right_px"] = d->layout.inset_right_px;
-    (*doc)["pad_inset_bottom_px"] = d->layout.inset_bottom_px;
-    (*doc)["pad_inset_left_px"] = d->layout.inset_left_px;
-    (*doc)["pixel_shift_distance_px"] = d->layout.pixel_shift_distance_px;
-    if (d->label_top_style[0])   (*doc)["label_top_style"]   = d->label_top_style;
-    if (d->label_center_style[0]) (*doc)["label_center_style"] = d->label_center_style;
-    if (d->label_bottom_style[0]) (*doc)["label_bottom_style"] = d->label_bottom_style;
-    if (d->icon_position == ICON_POS_LEFT)   (*doc)["icon_position"] = "left";
-    else if (d->icon_position == ICON_POS_CENTER) (*doc)["icon_position"] = "center";
+    button_defaults_write_firmware_defaults((*doc)["firmware_defaults"].to<JsonObject>());
+    button_defaults_typography_status((*doc)["typography_status"].to<JsonObject>());
 
     timing.mark("defaults_json");
     web_portal_send_json_chunked(request, doc, 200, &timing);

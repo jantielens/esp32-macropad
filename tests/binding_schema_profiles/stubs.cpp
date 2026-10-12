@@ -10,6 +10,7 @@
 #include "alarm_manager.h"
 #include "log_manager.h"
 #include "mqtt_sub_store.h"
+#include "sensors/sensor_manager.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -18,12 +19,31 @@
 #include <cstring>
 
 unsigned long millis() { return 10000; }
+
+static const SensorField kFixtureSensorFields[] = {
+    {"temperature", "Temperature in degrees Celsius."},
+    {"humidity", "Relative humidity in percent."},
+    {"battery_voltage", "Battery voltage in volts."},
+    {"presence", "Presence detected: 1 or 0."},
+};
+size_t sensor_manager_field_count() {
+#if defined(BINDING_SCHEMA_PROFILE_FULL)
+    return sizeof(kFixtureSensorFields) / sizeof(kFixtureSensorFields[0]);
+#else
+    return 0;
+#endif
+}
+const SensorField *sensor_manager_field_at(size_t index) {
+    return index < sensor_manager_field_count() ? &kFixtureSensorFields[index] : nullptr;
+}
+bool sensor_manager_get_number(const char*, double*, bool*) { return false; }
 #if ALARM_ENABLED
 AlarmSnapshot binding_test_alarm = {true, 7, 30, ALARM_RINGING, true, false, false, false, 0};
 AlarmSnapshot alarm_snapshot() { return binding_test_alarm; }
 #endif
 
 void log_write(LogLevel, const char*, const char*, ...) {}
+bool log_diagnostics_enabled(const char*) { return false; }
 
 HostEsp ESP;
 HostWiFi WiFi;
@@ -67,6 +87,7 @@ bool health_table_build(bool, HealthTableLookupFn, char*, size_t) { return false
 #if HAS_AUDIO
 uint8_t audio_get_volume() { return 0; }
 void audio_beep(const char*, uint8_t) {}
+void audio_feedback(const char*) {}
 #endif
 
 #if IS_DARKROOM_TIMER

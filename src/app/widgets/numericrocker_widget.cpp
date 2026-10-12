@@ -61,7 +61,7 @@ static void numericrocker_parse(const JsonObject& btn, uint8_t* data) {
                                              NR_ZONE_SCALE_MAX_PCT);
 
     widget_parse_field(btn["widget_numericrocker_color"], cfg->indicator_color,
-                       sizeof(cfg->indicator_color), "#FFFFFF");
+                       sizeof(cfg->indicator_color), DEFAULT_WIDGET_INDICATOR_COLOR);
 
     int opa = btn["widget_numericrocker_opacity"] | 80;
     cfg->indicator_opa = (uint8_t)clamp_val(opa, 0, 255);
@@ -86,7 +86,7 @@ static void numericrocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     memset(st, 0, sizeof(NumericRockerState));
 
     // Resolve indicator color
-    uint32_t rgb = 0xFFFFFF;
+    uint32_t rgb = widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR);
     parse_hex_color(cfg->indicator_color, &rgb);
     lv_color_t color = lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 

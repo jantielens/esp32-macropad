@@ -8,13 +8,14 @@
 // ============================================================================
 //
 // Provides a `Storage` macro that resolves to either the Arduino `LittleFS`
-// global (internal-flash backend, the default for every board) or the
+// global (internal-flash backend) or the
 // `SD_MMC` global (external SD card backend). Both implement the same
 // `fs::FS` API surface, so call sites can use `Storage.open()`,
 // `Storage.exists()`, `Storage.usedBytes()`, etc. without caring which
 // backend is active.
 //
-// The selection is driven by the `USE_SD_STORAGE` compile-time flag from
+// HAS_FILESYSTEM=false excludes both backends; no Storage object is available.
+// The backend selection is driven by the `USE_SD_STORAGE` compile-time flag from
 // `board_config.h`. When `USE_SD_STORAGE` is false (the default), this
 // header is a no-op rename of `LittleFS` and behavior is identical to the
 // pre-facade code.
@@ -24,10 +25,10 @@
 
 #include "board_config.h"
 
-#if USE_SD_STORAGE
+#if HAS_FILESYSTEM && USE_SD_STORAGE
   #include <SD_MMC.h>
   #define Storage SD_MMC
-#else
+#elif HAS_FILESYSTEM
   #include <LittleFS.h>
   #define Storage LittleFS
 #endif
@@ -50,7 +51,7 @@ inline bool storage_boot_should_halt(bool sd_mount_succeeded) {
 template <typename RemoveRoot>
 inline bool storage_remove_sd_owned_roots(RemoveRoot remove_root) {
   static const char* const owned_roots[] = {
-    "/camera", "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
+    "/camera", "/config", "/icons", "/sounds", "/fonts", "/storage", "/prints", "/brews",
   };
   bool ok = true;
   for (const char* root : owned_roots) {

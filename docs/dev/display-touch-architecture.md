@@ -55,6 +55,210 @@ graph TD
 
 ## Display Driver HAL
 
+### StopWatch AMOLED Bring-Up
+
+`m5stack-stopwatch` uses a CO5300 adapter over the existing Arduino_GFX QSPI
+transport, selected with `DISPLAY_DRIVER_ARDUINO_GFX_CO5300`. It does not need
+M5Unified/M5GFX as runtime dependencies. The shared Wire bus on SDA47/SCL48
+must be initialized and locked before M5PM1/M5IOE1 power/reset operations,
+which precede display initialization. After enabling the PMIC rails, firmware
+polls the expander every 10 ms for up to 2 seconds. On timeout, a failure-only
+diagnostic compares address acknowledgments and two-byte UID register reads
+at both `0x4f` and `0x6f`. Each address receives a wake transaction, a 10 ms
+wait, a 100 kHz attempt, another 100 kHz attempt after 800 ms, then a 400 kHz
+attempt. The shared bus returns to 100 kHz before PMIC diagnostics. These
+checks add about 1.66 seconds plus transaction time and leave peripherals
+unavailable even if a diagnostic read succeeds. Repeated cold boots confirmed
+display, touch, and audible audio operation with the extended timeout; one
+observed boot discovered the expander after 250 ms, beyond the previous
+200 ms limit. The failure-only diagnostic was not exercised on those boots.
+Expander IO8 powers the display; IO5
+resets it and IO4 resets touch. They are not ordinary GPIOs.
+
+The logical canvas is the documented 466 × 466 round area. The factory
+reference configures 468 × 466 at panel offset (6, 0), while M5GFX has used
+468 × 468. This adapter crops one horizontal pixel per side, giving the
+466 × 466 canvas a physical origin of (7, 0). A 468 × 466 RGB565 backing
+buffer in PSRAM preserves adjacent pixels while expanding partial updates
+to even physical X/Y coordinates and even widths/heights, matching the
+vendor AMOLED framebuffer path. The panel transport retains offset (6, 0), including the cropped
+columns. Software rotation is applied before alignment. The backing buffer
+uses 436,176 bytes; the temporary transfer buffer uses 18,656 bytes.
+Touch defaults to raw X 0–467 and Y 0–465, removing the extra horizontal
+column when mapping to the logical canvas. Physical center/edge and framing
+validation remains necessary for each hardware revision.
+
+Brightness uses CO5300 command 0x51 rather than LEDC/backlight PWM. Existing
+brightness controls and display sleep/wake ownership remain unchanged.
+Screensaver brightness updates must hold the display manager mutex, just like
+sleep/wake commands, because they share the QSPI device with LVGL pixel flushes.
+The main-loop fade must not issue panel commands concurrently with the LVGL
+task; SPI polling transactions are not safe to interleave on the same device.
+CO5300 uses Arduino_GFX's controller-specific sleep/wake sequence instead of
+the generic two-phase DCS wake. Display Off and Sleep In each settle for 120 ms;
+wake sends Display On, waits 120 ms, then Sleep Out and another 120 ms before
+restoring brightness. The existing single-step wake contract keeps that sequence
+under the display lock, pausing rendering for approximately 240 ms. This avoids
+interleaving pixel writes with controller settling and leaves other drivers'
+two-phase behavior unchanged. After wake, the driver uploads its full native
+backing framebuffer before restoring brightness. Removing the sleep overlay
+can trigger LVGL redraws before the panel wakes; those redraws update the backing
+buffer but may not reach a sleeping panel. Re-uploading it avoids relying on
+LVGL to invalidate the same content again. The library sequence alone did not
+resolve the reported black-panel symptom. With framebuffer restoration added,
+user testing on 2026-10-10 confirmed two touch-wake cycles without the previous
+crash or black panel. The necessity of the library sequence has not been tested
+independently of framebuffer restoration; long-duration sleep remains unverified.
+Rotation and partial writes must be checked with asymmetric patterns and
+RGB565 color bars on hardware; the adapter does not inherit the AXS15231B
+full-frame workaround.
+
+StopWatch content uses the full 466 × 466 canvas, like other round boards.
+`display_safe_content_rect()` returns the full display bounds for pad grid
+computation (including the portal button-size calculation), splash/status text,
+info labels, and notifications. The physical circle clips the canvas corners.
+Runtime pad insets and pixel-shift reserves still apply; this does not introduce
+a stopwatch screen or device class.
+
+User testing on 2026-10-10 confirmed corrected partial updates, including
+horizontal lines, and reported improvement after bounded cold-start discovery.
+Touch mapping and audio playback were also confirmed. All rotations, the
+USB/battery boot matrix, and sleep/wake acceptance remain to be verified.
+
+These hardware observations precede the board-composition refactor. Repeat
+the acceptance checks after that refactor; host tests and compilation do not
+establish physical timing, framing, or startup silence.
+
+### Board Composition Contract
+
+Boards that coordinate shared power, reset, or buses opt in with
+`BOARD_HARDWARE_SOURCE` in their board override. The sketch-root
+[src/app/board_hardware.cpp](../../src/app/board_hardware.cpp) includes that
+board-local implementation because Arduino does not compile subdirectory
+sources independently. Existing boards use the default initialization and
+need no new board files. This is compile-time composition, not a peripheral
+registry or a catch-all board HAL.
+
+`board_hardware_init()` runs before dependent display, touch, and audio
+initialization. A board implementation must be idempotent, report failure,
+and retain safe owned outputs on failure where hardware communication permits.
+Shared-register updates and I2C transactions use the existing bus mutex;
+drivers must not reinitialize a bus already owned by board hardware. The
+StopWatch implementation preserves unrelated PMIC and expander bits and
+configures the owned charging and power-button fields. Charging defaults to
+low (nominal 185 mA), with CHG_PROG (PMIC GPIO3) driven high as a push-pull output
+without pulls. CHG_STAT (GPIO2) is configured as an input
+without pulls, and the RTC/IMU LDO retained after power-off. PMIC idle sleep and
+watchdog remain disabled. The power button uses a 1-second single-click delay
+with single-click reset disabled; long-press, double-click, and download-lock
+fields are preserved. The charge-programming latch is set before enabling its
+output. Battery percentage remains the existing voltage-based estimate, not
+the factory demo's filtering or percentage calculation.
+
+`STOPWATCH_CHARGING_MODE` in `src/boards/m5stack-stopwatch/board_overrides.h`
+selects the boot policy: `0` off, `1` low (default, nominal 185 mA, CHG_PROG high), or
+`2` high (nominal 425 mA, CHG_PROG low). Change this board-local setting
+and rebuild StopWatch to select another default. Invalid values fail compilation.
+Startup disables retained charging before configuring CHG_PROG; an off boot
+never deliberately enables charging. The board-local `charging_mode` action
+uses flat JSON such as `{"type":"charging_mode","mode":"low"}`; its mode is
+`off`, `low`, or `high`. Runtime changes are not persisted: reboot applies the
+boot setting again, before any configured boot actions.
+
+Boot and runtime share the PMIC setter, which holds the I2C mutex, disables
+charging, changes CHG_PROG for low/high, then enables charging only on success.
+Off changes only CHG_EN, not the power rails. I2C failure returns failure without
+attempting a later enable; if the initial disable itself fails, the previous
+charging state may remain. Physical validation of all three modes and continued
+USB operation with charging off remains required.
+
+`BOARD_ACTION_SOURCE` selects the board-local action module through `actions.cpp`.
+`stopwatch_actions.cpp` registers `charging_mode`, `status_led`, `vibrate`, and
+`shutdown` under **M5Stack StopWatch**. Their payloads use the existing opaque
+action storage. The board raises `ACTION_TYPE_REGISTRY_MAX_TYPES` to 28 to fit
+the built-in catalog and four board actions. Other boards do not compile this
+module, its metadata, or the StopWatch hardware implementation. The generic
+catalog-driven editor supplies the controls; there are no board-specific portal
+assets or generic configuration settings.
+
+`status_led` uses `{"type":"status_led","mode":"on"}` or `"off"` and changes
+only PWR_CFG bit 4 (LED_EN). No preference is persisted. Every firmware boot
+explicitly restores LED_EN high before boot actions, including ESP32-only
+restarts that do not reset the PMIC. This controls the PMIC's LED enable level;
+its proprietary status/download signalling may override the visible state.
+Physical on/off behavior still needs hardware validation.
+
+`vibrate` accepts `{"type":"vibrate","pattern":"200"}` (default `200`);
+`pattern: "0"` stops vibration. IO9 is driven
+through the expander GPIO latch without changing shared PWM frequency or other
+channels. `{"type":"vibrate","pattern":"20,100,20"}` runs
+20 ms on, 100 ms off, and 20 ms on. Patterns accept whitespace around commas,
+1-15 positive whole-millisecond steps with an odd count, and at most 5000 ms
+total including pauses. A standalone `0` is the only zero-duration pattern.
+`pattern` is the sole action field; `duration_ms` is not supported.
+The action payload stores compiled durations without growing the existing
+96-byte allocation; the driver copies them into a fixed array without heap
+allocation. Pulses and patterns are nonblocking; a new request replaces the
+active sequence, and a successful `0` pattern cancels it.
+`BOARD_HARDWARE_LOOP` selects the board-only main-loop hook, which checks motor
+deadlines even during OTA and retries failed motor-off writes. A failed start
+also leaves a precautionary stop scheduled. Failed pattern transitions cancel
+remaining steps and retry motor-off. Each step's deadline is measured from its
+actual transition, so delayed servicing does not skip pulses. Timing depends on main-loop
+service and I2C availability, so the deadline is not a hardware timer guarantee.
+Startup disables retained motor PWM and clears its output.
+
+`{"type":"shutdown"}` is a terminal pausable action. A nonzero continuation
+token is required; the action reserves the existing OTA activity gate before
+queueing power-off, so an active update rejects it and a new update cannot race
+the power cut. The main-loop hook stops audio outside the I2C lock, clears motor
+and amplifier outputs, cuts the audio rail, then writes SYS_CMD `0xA1`.
+The RTC/IMU LDO hold policy and charging configuration are preserved. If I2C
+fails, or execution continues 500 ms after the command, the gate is released
+and the continuation fails, discarding the suffix. Successful power-off retains
+ownership until power is removed. Shutdown does not save unsaved portal drafts
+or flush unrelated uploads; finish saves/uploads before invoking it. PMIC
+power-off and subsequent power-button recovery still need hardware validation.
+
+The StopWatch QSPI clock is now 80 MHz for hardware evaluation against the
+factory configuration. The previously confirmed display, touch, audio, and
+cold-boot behavior does not establish acceptance of this clock or power-policy
+change. Check charging status and voltage trend, battery temperature, display
+integrity during updates and animations, repeated cold boots, and sleep/wake
+on the device before declaring these changes verified.
+
+The CO5300 and CST820B factories receive concrete, copied configuration values
+from `board_co5300_config()` and `board_cst820b_config()`. Factories perform no
+I/O. Native dimensions, offsets, crop, interrupt/tearing pins, and optional
+callbacks describe hardware without testing board identity inside a driver.
+Callbacks must remain valid for the driver's lifetime. StopWatch preparation
+callbacks check board readiness; its panel callback supplies the module's
+command sequence while the driver owns bus transactions and rendering.
+The default CST820B preparation initializes its otherwise unowned bus once.
+
+Board hardware owns shared rails, resets, wiring, and provider selection.
+Drivers own controller protocols, alignment, transport resources, timing, and
+errors. Managers own application resources and state. UI code uses canvas
+geometry and bounded text presentation, not board identity: pads retain the
+full 466 x 466 logical canvas, and status/info text is bounded generically.
+Audio control uses the existing audio HAL's injected board callbacks; see
+[the audio lifecycle contract](audio-architecture.md#output-lifecycle-contract).
+
+### StopWatch CST820B Touch
+
+`TOUCH_DRIVER_CST820B_WIRE` selects a dedicated CST820B adapter on the same
+shared I2C bus, address 0x15, with interrupt GPIO13. Its coordinate report uses
+five bytes at register 0x02, like CST816S, but it does not assume CST816S's
+0xFE auto-sleep-disable command is valid. Board hardware owns touch reset.
+Transport failures are not fresh release samples; the existing touch sample
+filter provides error cancellation and recovery.
+
+Keep touch independent from AMOLED sleep so it can wake the display. Verify
+idle/wake behavior and release handling on a physical unit. Reference sources:
+[factory HAL](https://github.com/m5stack/M5StopWatch-UserDemo/tree/6b4aa125288b6fe9dca661f10159f6e1e5ee785c/main/hal),
+[M5GFX bring-up](https://github.com/m5stack/M5GFX/blob/22e94f1eaa7d5eb40eab65f42bf10713e7e89294/src/M5GFX.cpp),
+and [hardware documentation](https://docs.m5stack.com/en/core/StopWatch).
+
 ### Inkplate 6 Flick LVGL
 
 `inkplate6flick-interactive` is an experimental always-on e-paper target. Its Inkplate
@@ -68,7 +272,8 @@ The driver copies the mode-specific drawing framebuffer into a PSRAM presentatio
 snapshot while holding its mutex, then releases the mutex before the blocking
 waveform. That preserves writes made during the waveform for the next
 presentation and permits no-op detection against the last presented frame. B/W
-pixels use ordered dithering and can use `partialUpdate()`; 3-bit grayscale can
+pixels use the boot-selected threshold, Bayer, or blue-noise conversion and can
+use `partialUpdate()`; 3-bit grayscale can
 only use full waveforms. The driver, rather than InkplateLibrary's automatic
 threshold, owns the periodic B/W full-refresh cadence.
 
@@ -84,11 +289,47 @@ Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
 It copies a settled LVGL frame under the framebuffer mutex, then uploads and
 refreshes the presentation snapshot outside that mutex so later LVGL flushes
 remain queued. Both modes coalesce LVGL flush rectangles into one aligned IT8951
-region. B/W uses ordered dithering and regional DU; grayscale uses regional GC16.
+region. B/W uses the boot-selected threshold, Bayer, or blue-noise conversion
+and regional DU; grayscale uses regional GC16.
 Initial and forced presentations use full-panel GC16, as do scheduled refreshes
 in both modes. Regional grayscale quality still needs hardware validation.
 Touch uses the existing GT911 driver on the E1003's shared
 GPIO19/GPIO20 I2C lines.
+
+### CrowPanel 4.2 A-Revision
+
+`crowpanel-4.2-interactive` selects `DISPLAY_DRIVER_CROWPANEL_42`, a buffered
+400 x 300 B/W driver. Two 15,000-byte PSRAM buffers separate LVGL writes from
+the SPI presentation snapshot. The driver follows Elecrow's V1.2A sample
+clear/partial sequence with GC/DU waveforms, applies cadence and no-op coalescing, and stops accepting
+requests after a bounded BUSY timeout. It has no touch or backlight control.
+
+All three interactive drivers share `drivers/monochrome_render.h`. B/W
+conversion and its threshold level are cached at startup. Threshold defaults
+to 128; Bayer uses a 4x4 matrix; blue noise uses a fixed 64x64 threshold map.
+Patterns use logical screen coordinates, independent of flush rectangle
+boundaries. Conversion needs no extra framebuffer and does not change
+grayscale conversion or monochrome font rasterization. The helper and map are
+guarded by `HAS_LVGL_EPAPER`, as are persistence, API fields, and portal assets.
+
+The standard `button_nav` action is available on every `HAS_DISPLAY` board,
+independent of touch, e-paper, or physical inputs. It navigates pad buttons,
+rocker zones, and Cancel/Confirm choices, not arbitrary screen controls.
+Pads start without a selection; Previous
+selects the last actionable target and Next selects the first. Tap and Tap & Hold
+require a selection. Screen selection uses custom pads, not a built-in picker.
+All LVGL changes are
+submitted through the display-job bridge. The action opts out of the caller's
+display lock so it cannot hold that lock while waiting for the LVGL task.
+See the [CrowPanel profile](interactive-epaper.md#crowpanel-42-profile) for wiring,
+default hardware actions, refresh commands, and hardware acceptance checks.
+
+Boards may define `HW_BUTTON_DEFAULTS_JSON` in their overrides using the same
+`buttons` array as the hardware-button configuration API. Each positional entry
+contains ordinary `tap_actions` and/or `hold_actions` lists. The shared loader
+parses these through the action registry without board-specific dispatch logic.
+Saved event lists replace defaults; omitted events retain defaults and explicit
+empty lists disable them. Without board defaults, events remain unassigned.
 
 ### Purpose
 
@@ -501,6 +742,139 @@ Current built-in sources:
 
 ## Rendering System
 
+### Uploaded TrueType Fonts
+
+`HAS_TTF_FONTS` requires `HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM`.
+Runtime PSRAM detection also gates portal navigation and loading. Assets are
+static, single-face TrueType files under `/fonts/<id>.ttf`; variable fonts,
+collections, CFF/OpenType, WOFF, and WOFF2 are unsupported. The streaming
+validator checks identifiers, signatures, required table bounds, the selected
+Unicode `cmap` and its glyph indexes, monotonic `loca` offsets, simple glyph
+payloads, and composite references. Cyclic composites, nesting beyond 32
+levels, conflicting transforms, and point-attached components unsupported by
+the renderer are rejected. SFNT offsets must fit the renderer's signed offset
+representation. This is not a hardened font parser or a validator for every
+optional OpenType table. Upload trusted fonts only.
+
+`font:my-font;font_size:96` selects an uploaded asset. Sizes are positive
+`uint16_t` pixel heights. Omitted family and size independently inherit the
+boot typography snapshot; `font:@builtin` explicitly selects Montserrat.
+Automatic targets are nominal role pixels multiplied by the configured base
+and divided by the board's nominal medium role. TTF rounds to whole pixels;
+bitmap fallback chooses the nearest compiled 12/14/18/24/32/36 size directly
+from the rational target, with ties upward and endpoint clamping. Explicit
+sizes remain absolute, including fallback. `font_family`, its aliases, numeric `font:` size
+shorthand, decorative generated families, and Montserrat 48 are removed.
+
+Opt-in `font_metrics:bounds` expands ascent/descent to cover the TTF `head`
+vertical bounds, with pixel-rounding clearance, without changing glyph scale.
+`font_metrics:2` (or another finite multiplier from 1 to 65535) scales existing
+ascent/descent instead. Omitted or `1` preserves original metrics. Corrections
+with invalid bounds or line heights exceeding the signed 32767px layout limit
+use cached bitmap fallback. This corrects font-metric clipping, not button
+overflow. Whole-font bounds keep live text stable but may add whitespace.
+Size, fallback font, metrics mode/factor, and selected rasterizer all participate
+in the instance cache key; distinct settings consume additional cache memory.
+Metrics correction does not modify uploaded files or rasterization algorithms.
+
+`HAS_FREETYPE_FONTS` defaults to `HAS_TTF_FONTS && HAS_LVGL_EPAPER`.
+Enabled builds select the pinned project-local FreeType 2.13.2 monochrome
+auto-hinter for B/W presentation; grayscale and flag-disabled builds retain
+LVGL/STB. The driver's actual presentation mode selects the backend, not a new
+font setting. See [Interactive E-Paper font rendering](interactive-epaper.md#monochrome-uploaded-fonts)
+for the rendering flags, heap-workspace patch, and ownership contract.
+
+Each `PadScreen` owns its source buffers and immutable font instances through
+`PadFontCache`. Sources use PSRAM-only allocation; LVGL scratch and glyph
+caches retain the existing allocator policy. Explicit uploaded instances are reused within a
+pad, including list/table widget text, but never shared between pads. Hiding
+a cached pad retains its fonts. Rebuild, eviction, deletion, and teardown
+delete referencing LVGL objects before destroying fonts and freeing sources.
+Successful store changes increment an atomic generation; the display thread
+evicts all cached pads after OTA activity clears. HTTP callbacks never mutate
+LVGL. Inherited device-family instances use a separate device-lifetime
+`PadFontCache` limited to 32 instances, with bitmap fallback once full and no
+eviction while objects reference them. Its loaded source remains immutable
+through pad rebuilds, font deletion, or replacement; reboot retries unavailable
+assets and loads replacements. This cap is not a glyph-memory budget.
+
+The snapshot comes from `default_font` and `base_text_size` in
+`/config/button_defaults.json`, activated under the display lock after storage
+initialization. Saving never changes active typography. System screens and the
+LVGL theme are initialized then; the early boot splash keeps built-in fonts.
+Pad labels, widget text/annotations, dialogs, notifications, and system text
+use the resolver. Per-style metrics remain opt-in, and `font_upscale` only
+transforms actual bitmap fonts. Icons, symbol-only controls, E-Paper Frame GFX
+text, portal typography, and extension-owned canvas text remain independent.
+Native extension measure/draw remains bitmap-only because its canvas
+requires packed 4-bit glyphs, while both uploaded-font backends produce A8 glyphs.
+
+Cold loads pin their selected file while allocation, chunked reads, and
+in-memory validation run outside the font-store mutex. Unrelated store
+operations may proceed; deleting a pinned font returns a retryable conflict.
+The file is closed before its pin is released, including error paths. Mounting
+and directory mutations remain serialized. Load chunks and validation reads
+check OTA activity and abandon their own work when an update starts.
+
+Serial diagnostics use the `Fonts` module. Debug logs record cold file loads
+and durations, instance creation (asset ID, size, cache-owner address, free heap
+and largest blocks), generation invalidation, and nonempty cache teardown.
+Uploads and deletions emit info summaries with bytes or the new generation.
+Warnings report storage, validation, allocation, framing, and fallback failures.
+Missing-font and failed-instance attempts are cached; metadata allocation
+warnings are limited to one per cache lifetime between clears. Cache hits, glyph
+lookups, successful upload chunks, ordinary list requests, and empty clears
+are silent. Use `LOG_LEVEL=4` for the debug breadcrumbs; info and warnings
+remain available at their existing lower levels.
+
+#### Accepted Backend OOM Limitation
+
+The grayscale and flag-disabled paths use unpatched LVGL 9.5.0/STB. Allocation
+failure inside font cache creation or rasterization can assert forever,
+crash, or reboot, even for a valid font. Watchdog recovery is not guaranteed;
+a saved font-heavy pad may fail again after reboot. There are no new font
+caps, budgets, global caches, allocator changes, or guarantees of graceful
+backend OOM fallback. Ordinary upload/storage errors still clean up their
+own transaction and report errors. `test_runtime_ttf_oom` characterizes the
+known cache-creation assertion rather than proving OOM recovery.
+
+Future work, if device stability warrants it: a repository-managed,
+version-checked LVGL/STB allocation-error patch covering cache creation,
+partial cleanup, kerning, and raster scratch; reproducible local/CI
+integration; and allocation-failure plus neighboring-widget tests. That
+option needs new approval and must stop for reassessment if it becomes a
+substantial renderer rewrite. The monochrome FreeType path checks allocation
+failures and recreates its face and library before retrying a glyph; it does
+not repair the STB path. Hardware stability, visual quality, cold/warm latency,
+and peak PSRAM remain manual acceptance checks.
+
+#### Hardware Acceptance
+
+The automated checks do not establish device stability or rendering quality.
+After building `esp32-p4-lcd4b`, upload and monitor the firmware manually:
+
+```bash
+./upload.sh esp32-p4-lcd4b
+./monitor.sh esp32-p4-lcd4b
+```
+
+1. Open **Pads > Fonts** in the device portal and upload a trusted static TTF
+    as `my-font`. Confirm duplicate rejection and reboot persistence.
+2. Set top, center, and bottom label styles to `font:my-font;font_size:37`,
+    `font:my-font;font_size:96`, and `font:my-font;font_size:300`. Also try
+    `font:my-font` without a size. Save, reload, and check the device output.
+3. Check list and table text that inherits these styles. Use a missing font
+    ID and confirm automatic bitmap fallback, not the requested custom size.
+4. Navigate away and back within pad-cache residency. Then visit enough pads
+    to evict earlier pads and repeatedly edit/rebuild them. Check responsiveness
+    and that internal and PSRAM heap use stabilizes after warm-up.
+5. Delete `my-font` while a referencing pad is visible, then repeat while it
+    is hidden but cached. Confirm safe bitmap fallback on both paths. Re-upload
+    the same ID and confirm the referencing pads render it after invalidation.
+6. Record cold/warm latency, visual quality, peak internal/PSRAM use, and any
+    assertion, crash, or reboot. Backend OOM instability remains an accepted
+    limitation, not a successful graceful-fallback test.
+
 ### FreeRTOS Task-Based Architecture
 
 DisplayManager creates a dedicated task for LVGL rendering:
@@ -552,6 +926,14 @@ LittleFS, Preferences/NVS, OTA, or other storage affected by SPI-flash cache
 disable must use `rtos_create_task_internal_stack()`. The internal helper
 allocates with `MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT` and verifies that both
 ends of the stack are internal RAM before creating the task.
+
+With `HAS_TTF_FONTS && !USE_SD_STORAGE`, the LVGL rendering task uses an
+internal stack even when the board requests `LVGL_TASK_USE_PSRAM_STACK`.
+Synchronous font loading invokes LittleFS, whose reads can also disable the
+SPI-flash cache and assert when the calling stack is in PSRAM. The 16 KiB
+rendering stack therefore consumes internal RAM; font source buffers remain
+in PSRAM. SD-backed fonts, TTF-disabled builds, and the separate presentation
+task retain their existing stack selection.
 
 ### Async Present Task (Buffered Render Mode)
 
@@ -1307,6 +1689,65 @@ Each board compiles with its own display driver and settings.
 - **Per screen:** ~200-500 bytes (depends on widget count)
 - **Total:** ~50-60 KB for display subsystem
 
+Alarm configuration and session actions, timer instances, MQTT binding scratch,
+device-level button defaults, the pad-list cache, and saved confirmation actions
+use `config_psram_alloc()`. Each block is allocated once when its subsystem
+initializes, except confirmation actions, which allocate on first use. Button
+defaults also allocate on an early getter call. Reinitialization and cache
+rebuilds reuse the blocks. The allocator prefers PSRAM and falls back to internal
+RAM on boards without PSRAM or when PSRAM allocation fails.
+
+If both allocations fail, timers and alarms stay unavailable, MQTT bindings
+resolve as unavailable, the pad list stays empty, and confirmation returns false
+without dispatching actions. The defaults getter remains non-null by returning
+immutable built-in styling from flash; saving defaults fails before writing.
+Failed allocations can be retried by initialization or the next relevant call.
+Task stacks, synchronization state, and DMA buffers remain in their existing
+memory regions.
+
+The `m5stack-stopwatch` static-state migration measures as follows in the ELF:
+
+| Internal section | Before (bytes) | After (bytes) |
+| --- | ---: | ---: |
+| `.dram0.data` | 33,824 | 28,848 |
+| `.dram0.bss` | 57,080 | 45,960 |
+| Total | 90,904 | 74,808 |
+
+This frees 16,096 bytes of static internal RAM. Confirm the live heap gain with
+`/api/health` after flashing and a power-on boot using the same configuration,
+uptime, and workload; the ELF delta alone does not establish runtime free heap
+or fragmentation. `python3 tests/test_static_state.py` checks allocator fallback,
+cache failure/retry, and reuse paths with C++11 production-source harnesses.
+
+Portal startup and OTA do not automatically scan AsyncTCP's stack. Request
+`/api/health?task=<name>` explicitly to sample a task's lifetime minimum free
+stack after a workload. Supported names are `async_tcp`, `audio`, `img_local`,
+`img_fetch`, `ha_stats`, `LVGL`, and `loopTask`; the older `?async_tcp_stack=1` alias remains available.
+LVGL samples from inside its own task through the display-job bridge, not an
+external task handle that could race with shutdown. The bridge owns the result,
+including on timeout. OTA, a busy bridge, or a 250 ms dispatch timeout returns
+`503`. The local image worker must already have been created by an image request.
+Its stack is 8192 bytes in internal RAM because local storage can use LittleFS.
+StopWatch measurements with the previous 12288-byte stack reached 2632 bytes
+of observed usage, leaving 5560 bytes against that peak with the smaller stack.
+This is not a worst-case guarantee across image formats or boards. Image source
+and decoded buffers remain in PSRAM; reducing the stack does not let oversized
+decoded images fit in PSRAM.
+StopWatch currently enables remote image fetching (`HAS_IMAGE_FETCH`) and disables
+the local image library (`HAS_IMAGE_LIBRARY`) for hardware validation. Existing
+local-image buttons will not load in this build. Measure the remote worker with
+`/api/health?task=img_fetch`; its stack remains 16384 bytes and uses the existing
+PSRAM-preferred task helper. Its owner atomically publishes the permanent worker
+handle after creation, and missing workers return `503` without initialization.
+StopWatch also enables `HAS_HA_HISTORY` for history hydration testing. Query
+`/api/health?task=ha_stats` after data-stream initialization and actual HA Recorder
+requests. This worker retains its 16384-byte PSRAM-preferred stack; its permanent
+handle is atomically published only after successful creation. Missing workers
+return `503`; sampling does not initialize the worker or request history.
+The scan walks unused stack memory and has timing cost;
+do not enable it in ordinary health polling or use it during timing-sensitive
+display tests. Reboot resets the watermark.
+
 ### Rendering Performance
 
 Display performance snapshots use a shared sampling window protected by the
@@ -1568,9 +2009,12 @@ navigation rather than mouse capture. Its handler consumes touch events and
 calls existing back navigation on a short stationary tap. Movement over
 8 pixels or a long press cancels the tap. Pressing Back clears mouse input,
 releases its held button, and stops inertia without changing the HID generation
-and invalidating the navigation contact. The target is at most 44 pixels square
-and shrinks to the mousepad's content bounds. Both settings default off; empty
-screen history has no special handling.
+and invalidating the navigation contact. `widget_mousepad_back_size` sets the
+square target's side length in device pixels (integer 1-512, default 44).
+The LVGL child is both the visible button and the touch target; it shrinks to
+the mousepad's content bounds with 4-pixel margins. The arrow label scales
+around its center with the rendered size. Back visibility and pad swipe
+suppression default off; empty screen history has no special handling.
 
 `MousepadInput` owns relative baselines, fractional sensitivity remainders,
 threshold checks, and time-based acceleration. Its pointer, scrolling, button-held,

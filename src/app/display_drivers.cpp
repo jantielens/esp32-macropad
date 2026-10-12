@@ -14,6 +14,8 @@
 #include "drivers/arduino_gfx_st77916_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_ARDUINO_GFX_NV3041A
 #include "drivers/arduino_gfx_nv3041a_driver.cpp"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ARDUINO_GFX_CO5300
+#include "drivers/arduino_gfx_co5300_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_RGB
 #include "drivers/st7701_rgb_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7703_DSI
@@ -29,6 +31,8 @@
 #include "drivers/inkplate6flick_epaper_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
 #include "drivers/reterminal_e1003_epaper_driver.cpp"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+#include "drivers/crowpanel42_epaper_driver.cpp"
 #else
 #error "No display driver selected or unknown driver type"
 #endif

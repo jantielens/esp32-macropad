@@ -22,6 +22,11 @@ removing complexity or reusing an existing path before adding code; introduce
 an abstraction only when it solves a present problem. Preserve correctness,
 security, accessibility, and focused validation.
 
+Verification does not require a new test for every edit. Prefer existing checks
+and add permanent coverage for concrete behavioral risks, not implementation
+details. Follow the [test addition policy](instructions/agent-guidelines.instructions.md#verification-does-not-require-new-tests)
+before adding test files or custom harnesses.
+
 ## Task-Specific Contracts
 
 Read the relevant instruction before editing, including for cross-cutting work

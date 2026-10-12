@@ -228,7 +228,7 @@ build_board() {
     # see macros defined only in board_overrides.h.
     # Keep this allowlisted to avoid arbitrary #define injection.
     EXTRA_GLOBAL_DEFINES=""
-    EXTRA_GLOBAL_FLAGS=" -DASYNCWEBSERVER_REGEX"
+    EXTRA_GLOBAL_FLAGS=" -include $SCRIPT_DIR/src/app/async_tcp_config.h"
     if [[ -f "$board_overrides_file" ]]; then
         # Numeric-valued defines (exported as -DNAME=value)
         # NOTE: Keep this allowlist tight; only export values needed by libraries.
@@ -348,6 +348,7 @@ build_board() {
     set +e
     build_output=$("$ARDUINO_CLI" compile \
         --fqbn "$fqbn" \
+        --libraries "$SCRIPT_DIR/libraries" \
         --build-path "$board_intermediate_path" \
         "${EXTRA_FLAGS[@]}" \
         "${BUILD_PROPS_ARR[@]}" \

@@ -164,6 +164,40 @@ The build system automatically applies project branding during compilation:
 6. `build.sh` also embeds the board name as a compile-time string define (`BUILD_BOARD_NAME`) so the portal can report the active board
 7. Firmware compiles with branded values embedded
 
+Firmware builds require Node.js 18 or newer and npm for JavaScript minification.
+The asset generator installs the pinned Terser dependency with `npm ci --prefix tools`
+when it is missing. For an offline build, run that command beforehand. The version
+and dependency graph are recorded in `tools/package.json` and `tools/package-lock.json`.
+Terser compresses code and mangles local names, but preserves top-level names and
+properties used by HTML handlers and dynamically loaded portal scripts.
+
+Component, indexed-store, and shutter-session routes use prefix matchers with
+explicit segment validation, not `ASYNCWEBSERVER_REGEX`. This avoids linking the
+general-purpose C++ regex engine while keeping route precedence and body handlers.
+
+Boards without a persistent filesystem partition or SD backend must set
+`HAS_FILESYSTEM=false`. The C3 OTA-only target uses this setting to exclude
+LittleFS; NVS settings and NVS-only factory reset remain available. Do not infer
+filesystem availability from the display or storage-browser feature flags.
+
+### Firmware Size Verification
+
+Fresh before/after builds on 2026-10-09 with ESP32 Arduino core 3.3.12 measured
+the combined routing, asset-gating, Terser, and filesystem-exclusion changes.
+TLS, BLE, MQTT, MCP, and partition settings were otherwise unchanged.
+
+| Board | Baseline bytes | Optimized bytes | Saved bytes | Optimized OTA headroom bytes |
+|-------|---------------:|----------------:|------------:|----------------------------:|
+| `esp32c3-withsensors` | 2,013,344 | 1,686,192 | 327,152 (16.25%) | 345,424 |
+| `esp32-p4-lcd4b` | 3,656,832 | 3,387,104 | 269,728 (7.38%) | 3,166,496 |
+
+C3 headroom increased from 18,272 to 345,424 bytes. Regex replacement alone
+reduced its intermediate binary by 274,560 bytes. These are application binary
+measurements, not sums of linker attribution categories. Both final builds passed
+without compiler warnings. Focused host tests and desktop/mobile browser checks
+of the embedded minified assets passed; device behavior still requires manual
+hardware validation.
+
 ### Malloc PSRAM Preference
 
 `MALLOC_PSRAM_THRESHOLD_BYTES` defaults to `512` for classic ESP32 and ESP32-S3
@@ -238,6 +272,34 @@ The build system supports optional board-specific configuration using compile-ti
 - Pin mappings (GPIO numbers)
 - WiFi settings (max attempts, retry delays)
 - Power management settings
+
+#### Appearance Defaults
+
+Boards can override `DEFAULT_*` appearance macros in `board_overrides.h`.
+Boards without overrides retain the LCD palette and 4 px pixel shift distance.
+Use literal `#RRGGBB` strings for colors; button border width, corner radius,
+and content padding are pixel-count strings. Layout distances are integers.
+
+```cpp
+#define DEFAULT_PAD_BG_COLOR "#FFFFFF"
+#define DEFAULT_BUTTON_BG_COLOR "#FFFFFF"
+#define DEFAULT_BUTTON_FG_COLOR "#000000"
+#define DEFAULT_BUTTON_BORDER_WIDTH "1"
+#define DEFAULT_PIXEL_SHIFT_DISTANCE 0
+#define DEFAULT_WIDGET_SERIES_COLOR "#000000"
+#define DEFAULT_WIDGET_INDICATOR_COLOR "#000000"
+```
+
+The [flag reference](../compile-time-flags.md) lists all pad, button, shadow,
+layout, and widget palette macros. Gauge, bar chart, and sparkline series share
+four series colors; tracks, ticks, indicators, zones, reference lines, and table
+colors have separate roles. These defaults apply to missing configuration and
+unresolved color bindings. Explicit saved appearance fields take precedence.
+
+CrowPanel and Inkplate interactive targets use monochrome defaults. E1003
+interactive uses grayscale series colors. All three select a light LVGL theme
+and disable pixel shifting by default. `LVGL_THEME_DARK_MODE` controls the LVGL
+theme separately from pad and widget appearance.
 
 **Board-Specific Overrides** (Optional): Create `src/boards/[board-name]/board_overrides.h`:
 
@@ -331,6 +393,24 @@ Driver implementations are conditionally compiled via the sketch-root translatio
 5. Default values are defined with `#ifndef` guards so overrides take precedence (Phase 2)
 6. If no override directory exists, uses defaults only
 
+The build force-includes `src/app/async_tcp_config.h` for C/C++ compilation,
+including separately compiled Arduino libraries. It defaults
+`CONFIG_ASYNC_TCP_STACK_SIZE` to 8192 bytes on classic ESP32 and ESP32-S3;
+other chip families retain the library default. An explicit numeric definition
+in the board's `board_overrides.h` is exported to the compiler and takes
+precedence. This saves 8 KB of internal RAM where the library previously used
+16 KB. StopWatch portal testing with the 8 KB stack observed a 4,792-byte peak
+and 3,400 bytes of remaining stack; a sample during OTA retained that watermark.
+This does not cover OTA finalization after the sample or validate other boards.
+Repeat upload, save, and OTA stress testing for each board configuration.
+
+The audio worker uses a separate default in `src/app/board_config.h`:
+8192 bytes on ESP32/S3 for tone-only builds or MP3 builds with decoder scratch
+in PSRAM. MP3 builds with on-stack scratch and other chip families keep
+24576 bytes. Explicit `AUDIO_TASK_STACK_SIZE` board overrides take precedence;
+this setting needs no library force-include. Use `GET /api/health?task=audio`
+to validate the worker's stack headroom after representative workloads.
+
 **Benefits:**
 - ✅ Single codebase works for all board variants
 - ✅ Zero runtime overhead (dead code elimination)
@@ -351,6 +431,13 @@ Driver implementations are conditionally compiled via the sketch-root translatio
 BOARD_PROFILE=psram ./build.sh esp32-nodisplay
 PROFILE=16m ./build.sh esp32c3-withsensors
 ```
+
+Uploaded fonts are a production capability selected by `HAS_TTF_FONTS`, not an
+experimental build environment switch. Eligible LVGL display builds require
+filesystem support and PSRAM; runtime PSRAM detection also controls availability.
+Uploaded `.ttf` bytes are not linked into the application image. Decorative
+bitmap generation has been retired; Montserrat 12/14/18/24/32/36 remains.
+See the [font lifecycle and accepted backend limitation](display-touch-architecture.md#uploaded-truetype-fonts).
 
 **Example Implementation:**
 ```bash
@@ -411,12 +498,26 @@ This template automates the installation:
 
 ### ESP32-S3 4 MiB OTA Layout
 
-`esp32-4848S040`, `jc3248w535`, `jc3636w518`, and `jc3636w518-sd` use
+`esp32-4848S040`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and
+`m5stack-stopwatch` use
 `ota_4mb_16MB_ext` to provide firmware headroom while retaining two 4 MiB OTA
 slots. The 16 MiB layout also provides 256 KiB for native Extensions and
 7.625 MiB for internal
 filesystem storage. Other 3 MiB-slot boards are unchanged.
 Run `./tools/install-custom-partitions.sh` before building.
+
+`m5stack-stopwatch` uses the existing generic ESP32-S3 toolchain with 16 MiB
+flash, OPI PSRAM, hardware USB CDC (`USBMode=hwcdc,CDCOnBoot=cdc`), and no USB
+HID in its bring-up configuration. Build only this target with
+`./build.sh m5stack-stopwatch`; inspect the log and actual application size
+against the 4 MiB OTA slot. The board is discovered through `config.sh` and
+`src/boards/m5stack-stopwatch/metadata.json`, so the existing build matrix,
+release artifacts, and installer generation require no board-specific workflow.
+The partition retains an Extensions region for layout reuse, but native
+Extensions are disabled in this firmware. The installer must not advertise
+disabled or deferred peripherals. See the
+[manual StopWatch checks](../first-time-setup.md#m5stack-stopwatch) before
+claiming hardware readiness.
 
 Back up stored files and Extension packages before migrating from
 `ota_3mb_16MB_ext`. The filesystem and Extensions offsets move, so a full

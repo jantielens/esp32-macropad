@@ -32,7 +32,7 @@ int main() {
           "negative mixed PCM did not saturate");
 
     ToneAlertOverlay short_alert = {};
-    check(tone_alert_overlay_start(&short_alert, "1000:1", false, 1000),
+      check(tone_alert_overlay_start(&short_alert, "250:1", false, 1000),
           "short tone alert was rejected");
     int16_t frames[] = {0, 0, 0, 0};
     tone_alert_overlay_mix(&short_alert, frames, 2, 1000);

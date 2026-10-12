@@ -5,6 +5,8 @@
 #include "../board_config.h"
 #include "../display_manager.h"
 #include "../swipe_actions.h"
+#include "../display_geometry.h"
+#include "../pad_layout.h"
 #include <WiFi.h>
 #include <esp_chip_info.h>
 
@@ -53,7 +55,7 @@ void InfoScreen::create() {
 		deviceNameLabel = lv_label_create(screen);
 		lv_label_set_text(deviceNameLabel, "...");  // Will be set in update()
 		lv_obj_set_style_text_color(deviceNameLabel, lv_color_white(), 0);
-		lv_obj_set_style_text_font(deviceNameLabel, &lv_font_montserrat_18, 0);
+		lv_obj_set_style_text_font(deviceNameLabel, pad_typography_font(&lv_font_montserrat_18), 0);
 		lv_obj_align(deviceNameLabel, LV_ALIGN_CENTER, 0, 0);
 		lv_obj_clear_flag(deviceNameLabel, LV_OBJ_FLAG_CLICKABLE);  // Click-transparent
 		
@@ -94,6 +96,38 @@ void InfoScreen::create() {
 		lv_obj_set_style_text_color(ipLabel, lv_color_make(100, 200, 255), 0);
 		lv_obj_align(ipLabel, LV_ALIGN_CENTER, 0, 60);
 		lv_obj_clear_flag(ipLabel, LV_OBJ_FLAG_CLICKABLE);  // Click-transparent
+
+		const DisplayContentRect content = display_safe_content_rect(
+			lv_obj_get_width(screen), lv_obj_get_height(screen));
+		lv_obj_t* labels[] = {uptimeLabel, versionLabel, heapLabel, deviceNameLabel,
+			chipLabel, mdnsLabel, ipLabel};
+		for (lv_obj_t* label : labels) {
+			lv_obj_set_width(label, content.w - 24);
+			lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+			lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+			lv_obj_set_height(label, lv_font_get_line_height(
+				lv_obj_get_style_text_font(label, LV_PART_MAIN)));
+		}
+		lv_obj_set_width(separatorTop, content.w);
+		lv_obj_set_width(separatorBottom, content.w);
+		if (device_typography_get().base_size || (device_typography_get().font_name[0] &&
+			strcmp(device_typography_get().font_name, "@builtin") != 0)) {
+			lv_obj_update_layout(screen);
+			const int small_height = lv_obj_get_height(uptimeLabel);
+			const int hero_height = lv_obj_get_height(deviceNameLabel);
+			const int gap = 4;
+			const int half_hero = hero_height / 2;
+			lv_obj_align(deviceNameLabel, LV_ALIGN_CENTER, 0, 0);
+			lv_obj_align(separatorTop, LV_ALIGN_CENTER, 0, -half_hero - gap);
+			lv_obj_align(separatorBottom, LV_ALIGN_CENTER, 0, half_hero + gap);
+			lv_obj_t* above[] = {heapLabel, versionLabel, uptimeLabel};
+			lv_obj_t* below[] = {chipLabel, mdnsLabel, ipLabel};
+			for (int index = 0; index < 3; ++index) {
+				const int offset = half_hero + 2 * gap + small_height / 2 + index * (small_height + gap);
+				lv_obj_align(above[index], LV_ALIGN_CENTER, 0, -offset);
+				lv_obj_align(below[index], LV_ALIGN_CENTER, 0, offset);
+			}
+		}
 		
 
 		

@@ -3,20 +3,17 @@
 
 #include "board_config.h"
 #include "pad_config.h"
-#if HAS_CUSTOM_FONTS
-#include "fonts/custom_fonts.h"
-#endif
+#include "display_geometry.h"
 #include <lvgl.h>
+#include "pad_font_cache.h"
 #include <stdint.h>
+#include <string.h>
 
 // ============================================================================
 // Pad Layout Engine
 // ============================================================================
 // Pure-computation layout engine: display dimensions + grid config → tile rects.
 // No LVGL object creation — just math. Used by PadScreen to position tiles.
-
-// Default burn-in pixel shift distance. Device defaults can override it at runtime.
-#define DEFAULT_PIXEL_SHIFT_DISTANCE 4
 
 // ============================================================================
 // UI Scale Table
@@ -50,7 +47,7 @@ static inline const UIScaleInfo& pad_get_scale_info() {
 // ============================================================================
 
 // Look up a compiled Montserrat font by pixel size. Returns nullptr if not compiled in.
-static inline const lv_font_t* pad_font_by_size(uint8_t size) {
+static inline const lv_font_t* pad_font_by_size(uint16_t size) {
     switch (size) {
         case 12: return &lv_font_montserrat_12;
         case 14: return &lv_font_montserrat_14;
@@ -58,29 +55,54 @@ static inline const lv_font_t* pad_font_by_size(uint8_t size) {
         case 24: return &lv_font_montserrat_24;
         case 32: return &lv_font_montserrat_32;
         case 36: return &lv_font_montserrat_36;
-        case 48: return &lv_font_montserrat_48;
         default: return nullptr;
     }
 }
 
-// Resolve font for a label: use style override if set, otherwise the provided default.
-// When font_family is set and HAS_CUSTOM_FONTS is enabled, dispatches to custom fonts.
-// When only font_size is set, uses the built-in Montserrat font at that size.
-static inline const lv_font_t* pad_resolve_font(const LabelStyle& style, const lv_font_t* default_font) {
-#if HAS_CUSTOM_FONTS
-    if (style.font_family != 0) {
-        // Custom font family requested — use custom font lookup with requested or default size
-        uint8_t sz = style.font_size ? style.font_size : lv_font_get_line_height(default_font);
-        const lv_font_t* f = pad_custom_font_lookup(style.font_family, sz);
-        if (f) return f;
-        // Fall through to Montserrat if custom family not found
+static inline uint16_t pad_font_pixel_size(const lv_font_t* font) {
+    const uint16_t sizes[] = {12, 14, 18, 24, 32, 36};
+    for (uint16_t size : sizes) if (pad_font_by_size(size) == font) return size;
+    return font ? lv_font_get_line_height(font) : 14;
+}
+
+static inline const lv_font_t* pad_nearest_bitmap_font(uint32_t size, uint32_t denominator = 1) {
+    const uint16_t sizes[] = {12, 14, 18, 24, 32, 36};
+    uint16_t nearest = 12;
+    uint32_t distance = size > 12 * denominator ? size - 12 * denominator : 12 * denominator - size;
+    for (uint16_t candidate : sizes) {
+        const uint32_t value = candidate * denominator;
+        const uint32_t delta = size > value ? size - value : value - size;
+        if (delta <= distance) { nearest = candidate; distance = delta; }
     }
-#endif
-    if (style.font_size) {
-        const lv_font_t* f = pad_font_by_size(style.font_size);
-        if (f) return f;
-    }
-    return default_font;
+    return pad_font_by_size(nearest);
+}
+
+static inline const lv_font_t* pad_resolve_font(const LabelStyle& style, const lv_font_t* default_font,
+                                               PadFontCache* owner = nullptr) {
+    const DeviceTypography& defaults = device_typography_get();
+    const uint32_t medium = pad_font_pixel_size(pad_get_scale_info().font_medium);
+    const uint32_t original = pad_font_pixel_size(default_font);
+    const uint32_t denominator = !style.font_size && defaults.base_size ? medium : 1;
+    const uint32_t numerator = style.font_size ? style.font_size : defaults.base_size
+        ? original * defaults.base_size : original;
+    const uint32_t rounded = (numerator + denominator / 2) / denominator;
+    const uint32_t size = rounded ? rounded : 1;
+    const lv_font_t* fallback = (!style.font_size && !defaults.base_size)
+        ? default_font : pad_nearest_bitmap_font(numerator, denominator);
+    const char* name = style.font_name[0] ? style.font_name : defaults.font_name;
+    if (!name[0] || strcmp(name, "@builtin") == 0 || !size || size > UINT16_MAX) return fallback;
+    PadFontCache* cache = style.font_name[0] ? owner : &device_typography_fonts();
+    return cache ? cache->resolve(name, static_cast<uint16_t>(size), fallback, style.font_metrics) : fallback;
+}
+
+static inline const lv_font_t* pad_typography_font(const lv_font_t* original) {
+    return pad_resolve_font(LabelStyle{}, original);
+}
+
+static inline bool pad_is_bitmap_font(const lv_font_t* font) {
+    const uint16_t sizes[] = {12, 14, 18, 24, 32, 36};
+    for (uint16_t size : sizes) if (font == pad_font_by_size(size)) return true;
+    return false;
 }
 
 enum PadLabelAnchorY : uint8_t {
@@ -92,7 +114,7 @@ enum PadLabelAnchorY : uint8_t {
 // Apply optional runtime text upscale for hero-style labels.
 // Uses anchor-aware transform pivot to keep labels visually pinned in place.
 static inline void pad_apply_font_upscale(lv_obj_t* lbl, const LabelStyle& style, PadLabelAnchorY anchor_y) {
-    if (style.font_upscale == 0) return;
+    if (style.font_upscale == 0 || !pad_is_bitmap_font(lv_obj_get_style_text_font(lbl, LV_PART_MAIN))) return;
 
     lv_obj_update_layout(lbl);
     const lv_coord_t w = lv_obj_get_width(lbl);
@@ -213,8 +235,9 @@ static inline void pad_compute_grid(
         ? layout_space->pixel_shift_margin : DEFAULT_PIXEL_SHIFT_DISTANCE;
     const uint16_t inset_w = 2 * pixel_shift_margin + left + right;
     const uint16_t inset_h = 2 * pixel_shift_margin + top + bottom;
-    const uint16_t safe_w = display_w > inset_w ? display_w - inset_w : 0;
-    const uint16_t safe_h = display_h > inset_h ? display_h - inset_h : 0;
+    const DisplayContentRect content = display_safe_content_rect(display_w, display_h);
+    const uint16_t safe_w = content.w > inset_w ? content.w - inset_w : 0;
+    const uint16_t safe_h = content.h > inset_h ? content.h - inset_h : 0;
 
     const uint16_t total_gap_x = (cols - 1) * gap_x;
     const uint16_t total_gap_y = (rows - 1) * gap_y;
@@ -227,8 +250,8 @@ static inline void pad_compute_grid(
         const uint8_t cs = button_col_spans[i] > 0 ? button_col_spans[i] : 1;
         const uint8_t rs = button_row_spans[i] > 0 ? button_row_spans[i] : 1;
 
-        out_rects[i].x = pixel_shift_margin + left + c * (tile_w + gap_x);
-        out_rects[i].y = pixel_shift_margin + top + r * (tile_h + gap_y);
+        out_rects[i].x = content.x + pixel_shift_margin + left + c * (tile_w + gap_x);
+        out_rects[i].y = content.y + pixel_shift_margin + top + r * (tile_h + gap_y);
         out_rects[i].w = cs * tile_w + (cs - 1) * gap_x;
         out_rects[i].h = rs * tile_h + (rs - 1) * gap_y;
     }

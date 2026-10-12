@@ -15,9 +15,13 @@ class ES8311AudioDriver final : public AudioOutputDriver
 #endif
 {
 public:
+    explicit ES8311AudioDriver(const AudioBoardControl& value) : control(value) {}
     bool begin(uint32_t sample_rate) override;
     bool write(const int16_t* frames, size_t frame_count) override;
-    void setVolume(uint8_t vol_0_100) override;
+    bool setVolume(uint8_t vol_0_100) override;
+    bool setMuted(bool muted) override;
+    bool isAvailable() const override;
+    bool end() override { return cleanup(); }
 #if HAS_AUDIO_INPUT
     bool inputAvailable() const override;
     bool captureStart() override;
@@ -28,12 +32,15 @@ public:
 
 private:
     bool initCodec(uint32_t sample_rate);
-    void cleanup();
+    bool cleanup();
 
+    AudioBoardControl control;
     i2s_chan_handle_t tx_handle = NULL;
+    bool tx_running = false;
 #if HAS_AUDIO_INPUT
     i2s_chan_handle_t rx_handle = NULL;
     uint32_t sample_rate = 0;
+    bool capture_active = false;
 #endif
 };
 

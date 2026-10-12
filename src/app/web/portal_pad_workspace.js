@@ -102,11 +102,10 @@ function padWorkspaceFit() {
     const grid = document.getElementById('pad-grid');
     grid.style.width = Math.max(0, width) + 'px';
     grid.style.height = Math.max(0, width / ratio) + 'px';
-    const defaults = padState.buttonDefaults || {};
     const scale = Math.max(0, width) / ((deviceInfoCache && deviceInfoCache.display_coord_width) || width || 1);
-    const reserve = defaults.pixel_shift_distance_px ?? 4;
-    grid.style.gap = (defaults.button_spacing_px ?? 6) * scale + 'px';
-    grid.style.padding = ['top', 'right', 'bottom', 'left'].map(edge => (reserve + (defaults['pad_inset_' + edge + '_px'] || 0)) * scale + 'px').join(' ');
+    const reserve = padGetEffectiveDefault('pixel_shift_distance_px');
+    grid.style.gap = padGetEffectiveDefault('button_spacing_px') * scale + 'px';
+    grid.style.padding = ['top', 'right', 'bottom', 'left'].map(edge => (reserve + padGetEffectiveDefault('pad_inset_' + edge + '_px')) * scale + 'px').join(' ');
 }
 
 function padWorkspaceMoveSelection(col, row, button) {

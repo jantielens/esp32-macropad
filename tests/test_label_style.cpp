@@ -10,6 +10,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 #include "pad_config.h"
 
@@ -24,6 +25,21 @@ static int g_failures = 0;
 
 int main() {
     printf("=== label_style_parse tests ===\n");
+    {
+        LabelStyle style{};
+        label_style_parse("font_metrics:bounds", &style);
+        CHECK(style.font_metrics == -1);
+        label_style_parse("font_metrics:2", &style);
+        CHECK(style.font_metrics == 2);
+        label_style_parse("font_metrics:1.5", &style);
+        CHECK(style.font_metrics == 1.5f);
+        for (const char* value : {"", "0.5", "nan", "inf", "2junk", "65536", "1"}) {
+            char text[80];
+            snprintf(text, sizeof(text), "font_metrics:%s", value);
+            label_style_parse(text, &style);
+            CHECK(style.font_metrics == 0);
+        }
+    }
 
     // 1. Standard keys still parse; no color → marker clear, capture empty.
     {
@@ -87,6 +103,40 @@ int main() {
         label_style_parse("", &s, bind, sizeof(bind));
         CHECK(bind[0] == '\0');
         CHECK(s.font_size == 0);
+    }
+
+    {
+        LabelStyle style{};
+        label_style_parse("font:my-font;font_size:300;align:right;x:-2;y:3", &style);
+        CHECK(strcmp(style.font_name, "my-font") == 0);
+        CHECK(style.font_size == 300);
+        CHECK(style.x_offset == -2 && style.y_offset == 3);
+        label_style_parse("font_size:96;font:my-font", &style);
+        CHECK(strcmp(style.font_name, "my-font") == 0 && style.font_size == 96);
+        label_style_parse("font:my-font", &style);
+        CHECK(style.font_size == 0);
+        label_style_parse("font:@builtin;font_size:24", &style);
+        CHECK(strcmp(style.font_name, "@builtin") == 0 && style.font_size == 24);
+        label_style_parse("font:@other", &style);
+        CHECK(style.font_name[0] == '\0');
+        label_style_parse("font:;font_size:18", &style);
+        CHECK(style.font_name[0] == '\0' && style.font_size == 18);
+        label_style_parse("font_family:bebas;font:24", &style);
+        CHECK(strcmp(style.font_name, "24") == 0 && style.font_size == 0);
+        for (const char* value : {"0", "-1", "+12", "12.5", "12px", "65536", "999999999999", " 12", ""}) {
+            char dsl[64];
+            snprintf(dsl, sizeof(dsl), "font_size:%s", value);
+            label_style_parse(dsl, &style);
+            CHECK(style.font_size == 0);
+        }
+        label_style_parse("font_size:65535", &style);
+        CHECK(style.font_size == 65535);
+        for (const char* value : {"../font", "my/font", "UPPER", "font.ttf", "abcdefghijklmnopqrstuvwxyz123456"}) {
+            char dsl[96];
+            snprintf(dsl, sizeof(dsl), "font:%s", value);
+            label_style_parse(dsl, &style);
+            CHECK(style.font_name[0] == '\0');
+        }
     }
 
     if (g_failures == 0) {

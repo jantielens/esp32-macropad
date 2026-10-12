@@ -12,8 +12,9 @@
 
 ## Verification
 
-* [ ] Complete host test suite passed
-* [ ] Relevant firmware build passed
+* [ ] Relevant focused checks passed locally (list commands and results)
+* [ ] Complete host test suite passed in CI (or record a local full-suite run)
+* [ ] Relevant firmware build passed, when required by the build verification policy
 * [ ] Hardware validation completed, where applicable
 
 ## Related Issues

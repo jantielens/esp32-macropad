@@ -32,11 +32,13 @@ class MusicTransport {
 public:
     MusicTransport();
 
-    MusicTransportResult apply(MusicTransportCommand command, uint8_t track_count);
+    MusicTransportResult apply(MusicTransportCommand command, uint8_t track_count,
+                               bool interrupted = false);
 
     MusicTransportState state() const { return state_; }
     uint8_t track_index() const { return track_index_; }
     bool has_current_track() const { return state_ != MUSIC_TRANSPORT_STOPPED; }
+    void select_track(uint8_t index) { track_index_ = index; }
 
 private:
     MusicTransportState state_;

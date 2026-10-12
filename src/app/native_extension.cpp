@@ -664,17 +664,10 @@ void host_canvas_draw_circle(void* canvas, int32_t x, int32_t y, int32_t radius,
         else { --dx; error += 2 * (dy - dx + 1); }
     }
 }
-uint8_t host_font_family_id(const char* font_name) {
-    if (!font_name || !font_name[0] || strcmp(font_name, "default") == 0) return 0;
-    if (strcmp(font_name, "dseg7") == 0) return 1;
-    if (strcmp(font_name, "bebas") == 0) return 2;
-    if (strcmp(font_name, "doto") == 0) return 3;
-    return 0;
-}
 int32_t host_canvas_measure_text(const char* text, const char* font_name, uint8_t size) {
     if (!text || !*text) return 0;
     LabelStyle style{};
-    style.font_family = host_font_family_id(font_name);
+    (void)font_name;
     style.font_size = size;
     const lv_font_t* font = pad_resolve_font(style, &lv_font_montserrat_14);
     if (!font) return 0;
@@ -692,7 +685,7 @@ void host_canvas_draw_text(void* canvas, int32_t x, int32_t y, const char* text,
     if (!entry || !entry->pixels || !text || !*text) return;
 
     LabelStyle style{};
-    style.font_family = host_font_family_id(font_name);
+    (void)font_name;
     style.font_size = size;
     const lv_font_t* font = pad_resolve_font(style, &lv_font_montserrat_14);
     if (!font) return;

@@ -2,10 +2,11 @@
   <h2><span class="portal-icon" aria-hidden="true">refresh</span>E-paper Presentation</h2>
   <p>Choose how the panel updates live content.</p>
 </div>
-<div class="card mb-3">
+<section class="card mb-3" aria-labelledby="epaper-rendering-heading">
+  <div class="card-header"><h5 class="mb-0" id="epaper-rendering-heading">Rendering</h5></div>
   <div class="card-body">
     <div class="mb-3">
-      <label class="form-label">Presentation mode</label>
+      <label class="form-label me-2">Presentation mode</label>
       <div class="btn-group" role="group" aria-label="Presentation mode">
         <input type="radio" class="btn-check" name="epaper_render_mode" id="panel-mode-grayscale" value="grayscale">
         <label class="btn btn-outline-secondary" for="panel-mode-grayscale">Grayscale</label>
@@ -15,6 +16,33 @@
       <div class="form-text">The selected mode is used after the next restart. Refresh settings apply to both modes.</div>
     </div>
 
+    <div class="mb-3">
+      <label class="form-label" for="epaper_bw_conversion">B/W conversion</label>
+      <select class="form-select" id="epaper_bw_conversion" name="epaper_bw_conversion" aria-describedby="epaper-bw-conversion-help">
+        <option value="threshold">Threshold</option>
+        <option value="bayer4x4">Ordered dithering (4x4 Bayer)</option>
+        <option value="blue_noise">Blue noise</option>
+      </select>
+      <div class="form-text" id="epaper-bw-conversion-help">Threshold uses a brightness cutoff to choose black or white. Dithering simulates gray with patterns of black and white pixels: Bayer uses a repeating 4x4 grid; Blue noise uses a less regular pattern.</div>
+    </div>
+    <div class="mb-3" id="epaper-bw-threshold-controls">
+      <label class="form-label" for="epaper_bw_threshold">Threshold level</label>
+      <div class="row align-items-center g-3">
+        <div class="col">
+          <input class="form-range" type="range" min="1" max="255" step="1" value="128" id="epaper-bw-threshold-range" aria-label="Threshold level" aria-describedby="epaper-bw-threshold-help">
+        </div>
+        <div class="col-auto">
+          <input class="form-control" type="number" min="1" max="255" step="1" value="128" id="epaper_bw_threshold" name="epaper_bw_threshold" style="width: 6rem" aria-describedby="epaper-bw-threshold-help">
+        </div>
+      </div>
+      <div class="form-text" id="epaper-bw-threshold-help">Pixels at or above this level become white; the rest become black. Higher levels make the image darker.</div>
+    </div>
+
+  </div>
+</section>
+<section class="card mb-3" aria-labelledby="epaper-refresh-settings-heading">
+  <div class="card-header"><h5 class="mb-0" id="epaper-refresh-settings-heading">Refresh Settings</h5></div>
+  <div class="card-body">
     <label class="form-label" for="epaper_binding_refresh_interval_ms">Passive binding interval (ms)</label>
     <input class="form-control" type="number" min="100" max="60000" id="epaper_binding_refresh_interval_ms" name="epaper_binding_refresh_interval_ms">
     <div class="form-text">How often idle data bindings are checked. Higher values reduce panel updates.</div>
@@ -30,9 +58,9 @@
       <label class="form-check-label" for="epaper_refresh_clock_on_minute_boundary">Refresh clock values on minute boundary</label>
       <div class="form-text">Updates visible time bindings when the minute changes, even between passive binding checks.</div>
     </div>
-    <div class="save-bar mt-3">
-      <button type="button" class="btn btn-primary btn-sm" id="epaper-refresh-save-btn">Save</button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="epaper-full-refresh-btn">Full refresh now</button>
-    </div>
   </div>
+</section>
+<div class="save-bar mt-3">
+  <button type="button" class="btn btn-primary btn-sm" id="epaper-refresh-save-btn">Save</button>
+  <button type="button" class="btn btn-outline-secondary btn-sm" id="epaper-full-refresh-btn">Full refresh now</button>
 </div>

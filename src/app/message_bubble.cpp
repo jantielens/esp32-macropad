@@ -3,6 +3,7 @@
 #if HAS_DISPLAY
 
 #include "display_manager.h"
+#include "display_geometry.h"
 #include "pad_layout.h"
 #include "log_manager.h"
 
@@ -99,6 +100,7 @@ static void create_bubble(const MessageBubbleParams* p) {
 
     int scr_w = displayManager->getActiveWidth();
     int scr_h = displayManager->getActiveHeight();
+    const DisplayContentRect content = display_safe_content_rect(scr_w, scr_h);
 
     // Container
     s_container = lv_obj_create(layer);
@@ -112,9 +114,10 @@ static void create_bubble(const MessageBubbleParams* p) {
 
     // Size: auto-width based on content, min 40% / max 85% of screen
     lv_obj_set_width(s_container, LV_SIZE_CONTENT);
-    lv_obj_set_style_min_width(s_container, scr_w * 40 / 100, 0);
-    lv_obj_set_style_max_width(s_container, scr_w * 85 / 100, 0);
+    lv_obj_set_style_min_width(s_container, content.w * 40 / 100, 0);
+    lv_obj_set_style_max_width(s_container, content.w * 85 / 100, 0);
     lv_obj_set_height(s_container, LV_SIZE_CONTENT);
+    lv_obj_set_style_max_height(s_container, content.h * 70 / 100, 0);
 
     // Padding
     lv_obj_set_style_pad_left(s_container, pad_h, 0);
@@ -144,7 +147,7 @@ static void create_bubble(const MessageBubbleParams* p) {
     lv_obj_set_align(s_container, LV_ALIGN_TOP_MID);
     switch (p->location) {
         case NOTIFY_LOC_TOP:
-            lv_obj_set_y(s_container, scr_h / 10);
+            lv_obj_set_y(s_container, content.y + content.h / 10);
             break;
         case NOTIFY_LOC_CENTER:
             lv_obj_set_align(s_container, LV_ALIGN_CENTER);
@@ -152,7 +155,7 @@ static void create_bubble(const MessageBubbleParams* p) {
         case NOTIFY_LOC_BOTTOM:
         default:
             lv_obj_set_align(s_container, LV_ALIGN_BOTTOM_MID);
-            lv_obj_set_y(s_container, -(scr_h * 15 / 100));
+            lv_obj_set_y(s_container, -(scr_h - content.y - content.h + content.h * 15 / 100));
             break;
     }
 
@@ -162,16 +165,13 @@ static void create_bubble(const MessageBubbleParams* p) {
     lv_obj_set_style_text_color(s_label, lv_color_hex(p->text_color), 0);
     lv_label_set_long_mode(s_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(s_label, LV_SIZE_CONTENT);
-    lv_obj_set_style_max_width(s_label, scr_w * 85 / 100 - 2 * pad_h, 0);
+    lv_obj_set_style_max_width(s_label, content.w * 85 / 100 - 2 * pad_h, 0);
     lv_obj_set_style_text_align(s_label, LV_TEXT_ALIGN_CENTER, 0);
 
     // Font: explicit override or scale-tier default (matches center label on buttons)
-    if (p->font_size > 0) {
-        const lv_font_t* font = pad_font_by_size(p->font_size);
-        if (font) lv_obj_set_style_text_font(s_label, font, 0);
-    } else {
-        lv_obj_set_style_text_font(s_label, pad_get_scale_info().font_large, 0);
-    }
+    LabelStyle style{};
+    style.font_size = p->font_size;
+    lv_obj_set_style_text_font(s_label, pad_resolve_font(style, pad_get_scale_info().font_large), 0);
 
     // Tap to dismiss
     lv_obj_add_flag(s_container, LV_OBJ_FLAG_CLICKABLE);

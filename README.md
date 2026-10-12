@@ -81,6 +81,10 @@ Combine MQTT values and JSON fields with clocks, timers, health, and data from
 enabled media or camera features. Expressions, formatting, fallbacks, and named
 bindings keep it reusable. The editor checks syntax and previews live values.
 
+Read enabled local sensors without MQTT using
+`[sensor:temperature;%.1f|N/A]` or a key listed for your board. See
+[local sensor bindings](docs/pad-editor-guide.md#local-sensor-binding).
+
 [Explore binding templates](docs/pad-editor-guide.md#binding-templates).
 
 ### Automation & Timers: One Tap Starts the Routine
@@ -137,6 +141,23 @@ Offline widget type icons identify both local and inherited buttons in the pad
 editor. Unlabeled widgets show a larger symbol and their name when space allows;
 the grid remains a configuration overview rather than a live data preview.
 
+Eligible LVGL display builds with storage and working PSRAM expose **Pads > Fonts**
+for uploaded static TrueType fonts. Apply an uploaded ID with
+`font:my-font;font_size:96`; Montserrat 12/14/18/24/32/36 remains the bitmap default.
+Fonts persist on storage, not in firmware. See the
+[Fonts workflow](docs/web-portal-guide.md#fonts),
+[style reference](docs/pad-editor-guide.md#uploaded-fonts), and
+[accepted stock-renderer OOM risk and future work](docs/dev/display-touch-architecture.md#accepted-backend-oom-limitation).
+
+| Method | Font API | Purpose |
+|--------|----------|---------|
+| GET | `/api/fonts/list` | List completed font IDs and byte sizes |
+| POST | `/api/fonts/upload?name=<id>` | Upload raw static TTF bytes |
+| DELETE | `/api/fonts?name=<id>` | Delete a font and invalidate cached pads |
+
+See the [Font API reference](docs/dev/web-portal.md#font-file-api) for gates,
+authentication, format checks, and error responses.
+
 Install parameterized recipes from your device-saved catalog, starting with the
 repository's Pomodoro, Alarm Clock, and Home Energy examples. Alarm Clock installs
 disabled, with links to finish configuring its schedule and behavior. Copy buttons or pads, and
@@ -145,6 +166,11 @@ import/export configurations as JSON to back up or share your work.
 The portal also handles settings, media, health diagnostics, and screen previews,
 with optional HTTP Basic Auth. Supported builds offer **over-the-air updates**
 with rollback protection.
+
+On CrowPanel 4.2, `GET /api/screenshot?format=png` captures the presented
+black-and-white framebuffer without refreshing the panel. The default BMP
+captures LVGL before monochrome conversion. See the
+[Screenshot API reference](docs/dev/web-portal.md#screenshot-api).
 
 Builds with `HAS_REMOTE_LOG` offer **Device > Logs** with Full Mode access:
 all configured ESP32-P4 boards and ESP32-S3 boards with more than 5 MB flash.
@@ -156,6 +182,13 @@ Access follows the device's authentication settings. Capture uses bounded PSRAM
 storage and leaves serial output independent.
 See the [log viewer guide](docs/web-portal-guide.md#device-logs) and
 [log API reference](docs/dev/web-portal.md#remote-logs).
+
+For stack measurements, authenticated `GET /api/health?task=<name>` adds an
+opt-in watermark report for `audio`, `async_tcp`, `img_local`, `img_fetch`,
+`ha_stats`, `LVGL`, or `loopTask`.
+Ordinary health polling does not scan stacks. See the
+[health API reference](docs/dev/web-portal.md#health-monitoring) for timing costs
+and unavailable-task responses.
 
 `POST /api/debug/crash` supports abort, assertion, and invalid-write tests,
 with no web UI. `DEBUG_CRASH_API_ENABLED` defaults off on every board. Enable
@@ -205,6 +238,12 @@ for offline refreshes between network syncs.
 Want buttons instead? **Interactive E-Paper** runs the customizable pad UI with
 black-and-white or grayscale rendering. It is a different firmware experience
 from the sleep-first image frame.
+The B/W-only **CrowPanel 4.2 Interactive** uses its physical three-way rotary
+switch instead of touch: Up/Down selects buttons, OK taps the selection, holding
+OK uses Tap & Hold, and Boot requests a full refresh. Pads start without a
+selection. Menu and Back taps are unassigned; use a custom pad for screen selection.
+Previous, Next, Tap, and Tap & Hold are standard actions on every display board;
+CrowPanel preassigns them, while other boards can assign them as needed.
 
 [Choose an e-paper experience](docs/epaper-architectures.md) or
 [set up an E-Paper Frame](docs/epaper-frame-guide.md).
@@ -264,12 +303,14 @@ more room without using the board's internal flash for those files.
 | **Guition JC3248W535** | ESP32-S3 | 3.5" IPS LCD | 480 × 320 | Landscape |
 | **Guition JC4827W543C** | ESP32-S3 | 4.3" IPS LCD | 480 x 272 | Landscape |
 | **JC3636W518** | ESP32-S3 | 3.6" IPS LCD | 360 × 360 | Round |
+| **M5Stack StopWatch** | ESP32-S3 | 1.75" AMOLED | 466 × 466 | Round |
 | **Waveshare ESP32-P4 Touch LCD 4B** | ESP32-P4 | 4.0" IPS LCD | 720 × 720 | Square |
 | **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 480 x 800 | Portrait |
 | **Guition JC1060P470C** | ESP32-P4 | 7.0" IPS LCD | 1024 × 600 | Rectangle |
 | **Soldered Inkplate 5V2** | ESP32 | 5.17" 3-bit grayscale e-paper | 720 × 1280 | Portrait |
 | **Soldered Inkplate 6FLICK** | ESP32 | 6.0" e-paper, Frame or Interactive firmware | 1024 x 758 | Landscape |
 | **Seeed reTerminal E1003** | ESP32-S3 | 10.3" e-paper, Frame or Interactive firmware | 1404 x 1872 | Portrait |
+| **Elecrow CrowPanel 4.2 Interactive** | ESP32-S3 | 4.2" SSD1683 B/W e-paper, physical inputs, no touch | 400 x 300 | Landscape |
 | **ESP32-C3 Super Mini** | ESP32-C3 | Headless sensor node | N/A | N/A |
 | **DFRobot FireBeetle 2 ESP32-C6** | ESP32-C6 | Headless AHT10 sensor node | N/A | N/A |
 
@@ -294,6 +335,21 @@ for the build-time selection and branding model.
 
 More boards are welcome. The [modular display and touch drivers](docs/dev/display-touch-architecture.md)
 provide a starting point for adding yours.
+
+### M5Stack StopWatch Bring-Up
+
+`m5stack-stopwatch` is a standard Macropad target, not a stopwatch application.
+It uses the CO5300 QSPI display, CST820B touch, yellow/blue programmable buttons,
+internal flash storage, Wi-Fi, the web portal, and two OTA slots. The initial
+configuration disables BLE, USB HID, MCP, native Extensions, remote image
+fetching to preserve internal/DMA memory. ES8311 speaker and MP3 playback are
+enabled for hardware validation; microphone capture, IMU, hardware RTC, haptics,
+and advanced low-power modes are not implemented.
+
+**Physical acceptance tests remain required.** See the
+[StopWatch setup and verification checklist](docs/first-time-setup.md#m5stack-stopwatch).
+On hardware v1.0, some rear connector pins labeled BAT are actually **5V IN:
+never connect a battery**. Only v1.0.1's `*BAT` is a battery connection.
 
 ## 🚀 Getting Started
 
@@ -355,6 +411,10 @@ USB/OTG for HID and USB-UART for flashing and logs; see
 | [Extension Developer Guide](docs/dev/extensions.md) | Build, install, and author trusted native ESP32-P4, ESP32-S3, and classic ESP32 Extensions |
 
 ### Developer Documentation
+
+Building firmware requires Node.js 18 or newer and npm for the pinned Terser
+asset minifier, alongside the Arduino and Python tooling. Run `npm ci --prefix tools`
+before building offline. See the [build guide](docs/dev/build-and-release-process.md).
 
 Building from source, contributing, or adding new board support? See the [developer docs](docs/dev/).
 For a feature-size attribution report from an existing build, use the

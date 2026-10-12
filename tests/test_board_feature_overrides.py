@@ -6,6 +6,113 @@ import tempfile
 
 
 root = pathlib.Path(__file__).resolve().parents[1]
+fixture = json.loads((root / "tools/mock-data/pad-editor.json").read_text())
+appearance_macros = {
+    "default_pad_bg_color": "DEFAULT_PAD_BG_COLOR",
+    "bg_color": "DEFAULT_BUTTON_BG_COLOR", "fg_color": "DEFAULT_BUTTON_FG_COLOR",
+    "border_color": "DEFAULT_BUTTON_BORDER_COLOR", "border_width": "DEFAULT_BUTTON_BORDER_WIDTH",
+    "corner_radius": "DEFAULT_BUTTON_CORNER_RADIUS", "content_pad": "DEFAULT_BUTTON_CONTENT_PAD",
+    "pixel_shift_distance_px": "DEFAULT_PIXEL_SHIFT_DISTANCE",
+}
+for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interactive", "ESP32S3"),
+                      ("inkplate6flick-interactive", "ESP32"), ("reterminal-e1003-interactive", "ESP32S3")):
+    expected = dict(fixture["firmware_defaults"])
+    if board != "m5stack-stopwatch":
+        expected.update(fixture["epaper_firmware_defaults"])
+    if board == "reterminal-e1003-interactive":
+        expected.update(widget_series_color_2="#555555", widget_series_color_3="#888888",
+                        widget_series_color_4="#AAAAAA", widget_track_color="#DDDDDD",
+                        widget_tick_color="#555555", widget_zone_color="#888888", widget_reference_color="#555555")
+    output = []
+    for field in expected:
+        macro = appearance_macros.get(field, "DEFAULT_" + field.upper())
+        if field == "button_shadow_type":
+            macro = f'({macro} == BUTTON_SHADOW_TYPE_DROP ? "drop" : "opaque")'
+        elif field == "button_shadow_color_mode":
+            macro = f'({macro} == BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND ? "darken_background" : "fixed")'
+        output.append(f'std::cout << {macro} << "\\n";')
+    source = '''#include <iostream>
+#include "src/app/board_config.h"
+enum { BUTTON_SHADOW_TYPE_OPAQUE, BUTTON_SHADOW_TYPE_DROP };
+enum { BUTTON_SHADOW_COLOR_FIXED, BUTTON_SHADOW_COLOR_DARKEN_BACKGROUND };
+int main() {\n''' + "\n".join(output) + "\n}"
+    with tempfile.TemporaryDirectory() as directory:
+        executable = pathlib.Path(directory) / "appearance"
+        subprocess.run(["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-x", "c++", "-",
+                        "-I", str(root), "-I", str(root / "src/boards" / board),
+                        "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", f"-DCONFIG_IDF_TARGET_{target}=1",
+                        "-o", str(executable)], input=source, text=True, check=True)
+        actual = subprocess.check_output([str(executable)], text=True).splitlines()
+    for (field, value), actual_value in zip(expected.items(), actual):
+        assert actual_value == str(int(value) if isinstance(value, bool) else value), (board, field, actual_value, value)
+    assert len(actual) == len(expected)
+print("PASS: LCD and e-paper board appearance defaults match portal fixtures")
+
+subprocess.run(
+    ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+     "-x", "c++", "-", "-I", str(root),
+     "-I", str(root / "src/boards/crowpanel-4.2-interactive"),
+     "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
+    input='''#include "src/app/board_config.h"
+static_assert(HAS_DISPLAY && HAS_LVGL_EPAPER && HAS_EPAPER_PANEL, "Interactive profile required");
+static_assert(!HAS_TOUCH && !IS_EPAPER_FRAME && !HAS_EPAPER_GRAYSCALE, "Monochrome non-touch profile required");
+static_assert(NUM_HW_BUTTONS == 6 && MAX_HW_BUTTONS >= 6, "All six inputs required");
+static_assert(HW_BUTTON_DEFS[0].pin == 2 && HW_BUTTON_DEFS[1].pin == 1, "Menu and Back pins");
+static_assert(HW_BUTTON_DEFS[2].pin == 6 && HW_BUTTON_DEFS[3].pin == 4 && HW_BUTTON_DEFS[4].pin == 5, "Jog switch pins");
+static_assert(HW_BUTTON_DEFS[5].pin == 0 && BUTTON_PIN == 2, "Boot strap and configuration pins");
+static_assert(EPAPER_SPI_SCK_PIN == 12 && EPAPER_SPI_MOSI_PIN == 11, "Panel SPI pins");
+static_assert(EPAPER_CS_PIN == 45 && EPAPER_DC_PIN == 46, "Panel control pins");
+static_assert(EPAPER_RESET_PIN == 47 && EPAPER_BUSY_PIN == 48 && EPAPER_POWER_PIN == 7, "Panel lifecycle pins");
+''', text=True, check=True,
+)
+print("PASS: crowpanel-4.2-interactive")
+with tempfile.TemporaryDirectory() as directory:
+    executable = pathlib.Path(directory) / "button-defaults"
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-x", "c++", "-",
+         "-I", str(root), "-I", str(root / "src/boards/crowpanel-4.2-interactive"),
+         "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1",
+         "-o", str(executable)],
+        input='''#include "src/app/board_config.h"
+#include <cstdio>
+int main() { std::puts(HW_BUTTON_DEFAULTS_JSON); }
+''', text=True, check=True,
+    )
+    defaults = json.loads(subprocess.check_output([str(executable)], text=True))["buttons"]
+    assert defaults == [
+        {}, {},
+        {"tap_actions": [{"type": "button_nav", "command": "previous"}]},
+        {"tap_actions": [{"type": "button_nav", "command": "next"}]},
+        {"tap_actions": [{"type": "button_nav", "command": "tap"}],
+         "hold_actions": [{"type": "button_nav", "command": "tap_hold"}]},
+        {"tap_actions": [{"type": "display_refresh", "mode": "full"}]},
+    ]
+print("PASS: CrowPanel generic hardware action defaults")
+for grayscale in (0, 1):
+    subprocess.run(
+        ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+         "-x", "c++", "-", "-I", str(root), "-I", str(root / "tests"),
+         "-DHAS_DISPLAY=1", "-DHAS_EPAPER_PANEL=1", "-DHAS_LVGL_EPAPER=1",
+         f"-DHAS_EPAPER_GRAYSCALE={grayscale}"],
+        input='''#include "src/app/config_manager.h"
+static_assert(config_manager_epaper_mode_supported(EPAPER_RENDER_MODE_BW), "B/W required");
+static_assert(config_manager_epaper_mode_supported(EPAPER_RENDER_MODE_GRAYSCALE) == HAS_EPAPER_GRAYSCALE, "Grayscale capability required");
+static_assert(!config_manager_epaper_mode_supported(255), "Unknown mode rejected");
+''', text=True, check=True,
+    )
+print("PASS: monochrome and grayscale panel mode capabilities")
+for board, target in (("esp32c3-withsensors", "ESP32C3"), ("esp32-p4-lcd4b", "ESP32P4"),
+                      ("reterminal-e1003-frame", "ESP32S3")):
+    for header in ("config_manager.h", "drivers/monochrome_render.h"):
+        source = subprocess.check_output(
+            ["c++", "-E", "-P", "-x", "c++", str(root / "src/app" / header),
+             "-I", str(root / "tests"), "-I", str(root / "src/boards" / board),
+             "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", f"-DCONFIG_IDF_TARGET_{target}=1"],
+            text=True, stderr=subprocess.PIPE,
+        )
+        for token in ("epaper_bw_conversion", "epaper_bw_threshold", "monochrome_is_white", "blueNoise"):
+            assert token not in source, (board, header, token)
+print("PASS: B/W conversion and settings excluded from non-interactive profiles")
 source = '''#include "src/app/board_config.h"
 static_assert(HAS_USB_HID, "USB HID must remain enabled");
 static_assert(!ALARM_ENABLED, "Alarms must be disabled");
@@ -36,6 +143,7 @@ subprocess.run(
 static_assert(!HAS_MCP, "MCP must be disabled to preserve OTA flash space");
 static_assert(HAS_BLE, "BLE telemetry must remain enabled");
 static_assert(!HAS_MQTT, "MQTT must be disabled to preserve OTA flash space");
+static_assert(!HAS_FILESYSTEM, "OTA-only C3 has no filesystem partition");
 static_assert(HAS_SENSOR_DUMMY, "Sample sensor must remain enabled");
 ''',
     text=True, check=True,
@@ -70,6 +178,51 @@ for flags, expected in policy_cases:
         input=policy_source, text=True, check=True,
     )
 print(f"PASS: {len(policy_cases)} target, PSRAM, and override combinations")
+
+with tempfile.TemporaryDirectory() as directory:
+    pathlib.Path(directory, "sdkconfig.h").write_text("")
+    for target in ("ESP32", "ESP32S3", "ESP32C3", "ESP32C6", "ESP32P4", None):
+        for override in (None, 12288):
+            expected = override or (8192 if target in ("ESP32", "ESP32S3") else 16384)
+            flags = [f"-DCONFIG_IDF_TARGET_{target}=1"] if target else []
+            if override:
+                flags.append(f"-DCONFIG_ASYNC_TCP_STACK_SIZE={override}")
+            subprocess.run(
+                ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+                 "-x", "c++", "-", "-I", directory, *flags,
+                 "-include", str(root / "src/app/async_tcp_config.h")],
+                input=f'''#ifndef CONFIG_ASYNC_TCP_STACK_SIZE
+#define CONFIG_ASYNC_TCP_STACK_SIZE 16384
+#endif
+static_assert(CONFIG_ASYNC_TCP_STACK_SIZE == {expected}, "Unexpected AsyncTCP stack size");
+''', text=True, check=True,
+            )
+assert "-include $SCRIPT_DIR/src/app/async_tcp_config.h" in (root / "build.sh").read_text()
+print("PASS: AsyncTCP target defaults and explicit overrides")
+
+audio_cases = 0
+for target in ("ESP32", "ESP32S3", "ESP32C3", "ESP32C6", "ESP32P4", None):
+    for sound_player in (0, 1):
+        for psram_scratch in (0, 1):
+            for override in (None, 12288):
+                expected = override or (
+                    8192 if target in ("ESP32", "ESP32S3") and
+                    (not sound_player or psram_scratch) else 24576
+                )
+                flags = [f"-DCONFIG_IDF_TARGET_{target}=1"] if target else []
+                if override:
+                    flags.append(f"-DAUDIO_TASK_STACK_SIZE={override}")
+                subprocess.run(
+                    ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+                     "-x", "c++", "-", "-I", str(root), "-DHAS_AUDIO=1",
+                     f"-DHAS_SOUND_PLAYER={sound_player}",
+                     f"-DAUDIO_MP3_SCRATCH_PSRAM={psram_scratch}", *flags],
+                    input=f'''#include "src/app/board_config.h"
+static_assert(AUDIO_TASK_STACK_SIZE == {expected}, "Unexpected audio stack size");
+''', text=True, check=True,
+                )
+                audio_cases += 1
+print(f"PASS: {audio_cases} audio target, MP3 scratch, and override combinations")
 
 setup_prefix = (root / "src/app/app.ino").read_text().split("void setup()", 1)[1].split("dma2d_arbiter_init();", 1)[0]
 runtime_source = '''#include <cassert>

@@ -6,12 +6,15 @@
 
 #if HAS_AUDIO
 typedef bool (*AudioPlaybackGuard)(uint32_t generation);
+typedef void (*AudioPlaybackFinished)(uint32_t generation);
 
 // Initialize the board-selected audio output driver, I2S TX channel, and background audio task.
 // I2C-attached codec boards must call this after Wire.begin() (e.g. after
 // touch_manager_init on boards that share the I2C bus).
 // initial_volume: 0-100 (from NVS config)
 void audio_init(uint8_t initial_volume);
+
+bool audio_get_stack_watermark(uint32_t* minimum_free_bytes);
 
 // Set device-level volume (0-100). Takes effect immediately.
 void audio_set_volume(uint8_t vol_0_100);
@@ -26,16 +29,21 @@ uint8_t audio_get_volume();
 // volume_override: 1-100 = use this volume for this beep only (restores after).
 //                  0 = use current device volume.
 void audio_beep(const char* pattern, uint8_t volume_override);
+void audio_feedback(const char* pattern);
 bool audio_submit_tone(const char* pattern, uint8_t volume_override, bool loop,
-                       AudioPlaybackGuard guard = nullptr, uint32_t generation = 0);
+                       AudioPlaybackGuard guard = nullptr, uint32_t generation = 0,
+                       bool alarm = false, AudioPlaybackFinished finished = nullptr);
 
 // Start looping a beep pattern until audio_stop() is called.
 // The pattern should include a trailing silence gap to control repeat cadence.
 // volume_override: same semantics as audio_beep().
 void audio_play_loop(const char* pattern, uint8_t volume_override);
 
-// Stop any currently playing or looping audio. Flushes the queue.
+// Stop alerts without changing Music intent or dismissing a scheduled alarm.
 void audio_stop();
+void audio_stop_all();
+void audio_stop_owned(AudioPlaybackGuard guard, uint32_t generation);
+bool audio_alarm_session(AudioPlaybackGuard guard, uint32_t generation);
 
 // Returns true if a pattern is currently playing (one-shot or loop).
 bool audio_is_playing();
@@ -73,7 +81,7 @@ void audio_log_starvation(const AudioStarvationStats& stats);
 void audio_play_sound(const char* filename, uint8_t volume_override);
 bool audio_submit_sound(const char* filename, uint8_t volume_override,
                         AudioPlaybackGuard guard = nullptr, uint32_t generation = 0,
-                        bool loop = false);
+                        bool loop = false, bool alarm = false);
 
 // Guard invoked on the audio task immediately before a memory-backed MP3 starts.
 // The buffer ownership transfers on every call and is released by the audio task.
@@ -87,6 +95,7 @@ enum AudioMusicStatus : uint8_t {
     AUDIO_MUSIC_EMPTY,
     AUDIO_MUSIC_UNAVAILABLE,
     AUDIO_MUSIC_ERROR,
+    AUDIO_MUSIC_INTERRUPTED,
 };
 
 struct AudioMusicInfo {

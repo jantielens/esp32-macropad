@@ -32,7 +32,7 @@ static PadGridLayoutSpace pad_layout_space(const PadLayoutSettings& layout) {
 static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
                                   const PadRect& rect, int16_t padding,
                                   const UIScaleInfo& scale,
-                                  const IconRef& icon) {
+                                  const IconRef& icon, PadFontCache* font_owner) {
     const uint32_t source_width = icon.dsc->header.w;
     const uint32_t source_height = icon.dsc->header.h;
     if (source_width != ICON_MAX_DIMENSION && source_height != ICON_MAX_DIMENSION) {
@@ -45,11 +45,11 @@ static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
 
     if (button.label_top[0]) {
         target_height -= lv_font_get_line_height(
-            pad_resolve_font(button.style_top, scale.font_small));
+            pad_resolve_font(button.style_top, scale.font_small, font_owner));
     }
     if (button.label_bottom[0]) {
         target_height -= lv_font_get_line_height(
-            pad_resolve_font(button.style_bottom, scale.font_small));
+            pad_resolve_font(button.style_bottom, scale.font_small, font_owner));
     }
     if (strcmp(button.widget.type, "bar_chart") == 0) target_height /= 2;
     if (strcmp(button.widget.type, "gauge") == 0) {
@@ -78,6 +78,8 @@ static uint16_t capped_icon_scale(const ScreenButtonConfig& button,
 // ============================================================================
 
 void PadScreen::clearTiles() {
+    if (navigationFocus) lv_obj_delete(navigationFocus);
+    navigationFocus = nullptr;
     #if HAS_TOUCH
     if (tileCount && screen && screen == lv_screen_active()) touch_manager_cancel_physical_input();
     #endif
@@ -86,6 +88,7 @@ void PadScreen::clearTiles() {
     padActions = nullptr;
     padActionCount = 0;
     if (!tiles) {
+        fontCache.clear();
         tileCount = 0;
         tilesBuilt = false;
         icon_store_collect_retired(pageIndex);
@@ -150,6 +153,7 @@ void PadScreen::clearTiles() {
     btnStateBindingCount = 0;
     hasTimeBinding = false;
     tilesBuilt = false;
+    fontCache.clear();
     icon_store_collect_retired(pageIndex);
 }
 
@@ -179,7 +183,7 @@ void PadScreen::buildTiles() {
     // Cache page-level settings
     strlcpy(wakeScreen, cfg->wake_screen, sizeof(wakeScreen));
     strlcpy(pageBgTemplate, cfg->bg_color, sizeof(pageBgTemplate));
-    { uint32_t bg = 0x000000; parse_hex_color(cfg->bg_color, &bg); pageBgDefault = bg; }
+    { uint32_t bg = widget_default_rgb(DEFAULT_PAD_BG_COLOR); parse_hex_color(cfg->bg_color, &bg); pageBgDefault = bg; }
     if (screen) lv_obj_set_style_bg_color(screen, rgb_to_lv(pageBgDefault), 0);
 
     // Cache page-level named bindings for [pad:] scheme resolution
@@ -248,8 +252,8 @@ void PadScreen::buildTiles() {
         const int16_t shadow_offset_y = cfg->shadow.offset_y_px;
         const uint8_t drop_blur = cfg->shadow.drop_blur_px;
 
-        uint32_t bg_def = 0x333333; parse_hex_color(bcfg.bg_color, &bg_def);
-        uint32_t shadow_def = 0x101010;
+        uint32_t bg_def = widget_default_rgb(DEFAULT_BUTTON_BG_COLOR); parse_hex_color(bcfg.bg_color, &bg_def);
+        uint32_t shadow_def = widget_default_rgb(DEFAULT_BUTTON_SHADOW_COLOR);
         if (tile.shadow_follows_background) shadow_def = button_shadow_darken_color(bg_def, tile.shadow_darken_pct);
         else parse_hex_color(cfg->shadow.color, &shadow_def);
         const lv_coord_t cr_def = (lv_coord_t)strtol(bcfg.corner_radius, nullptr, 10);
@@ -274,8 +278,8 @@ void PadScreen::buildTiles() {
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
         // Styling — compute initial colors from config strings
-        uint32_t fg_def = 0xFFFFFF; parse_hex_color(bcfg.fg_color, &fg_def);
-        uint32_t border_def = 0x000000; parse_hex_color(bcfg.border_color, &border_def);
+        uint32_t fg_def = widget_default_rgb(DEFAULT_BUTTON_FG_COLOR); parse_hex_color(bcfg.fg_color, &fg_def);
+        uint32_t border_def = widget_default_rgb(DEFAULT_BUTTON_BORDER_COLOR); parse_hex_color(bcfg.border_color, &border_def);
         lv_obj_set_style_bg_color(obj, rgb_to_lv(bg_def), 0);
         lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(obj, rgb_to_lv(border_def), 0);
@@ -308,7 +312,7 @@ void PadScreen::buildTiles() {
         if (bcfg.label_top[0]) {
             lbl_top = lv_label_create(obj);
             lv_obj_set_style_text_color(lbl_top, pad_resolve_label_color(bcfg.style_top, fg), 0);
-            lv_obj_set_style_text_font(lbl_top, pad_resolve_font(bcfg.style_top, scale.font_small), 0);
+            lv_obj_set_style_text_font(lbl_top, pad_resolve_font(bcfg.style_top, scale.font_small, &fontCache), 0);
             lv_obj_set_width(lbl_top, lbl_w);
             pad_apply_long_mode(lbl_top, bcfg.style_top);
             lv_label_set_text(lbl_top, bcfg.label_top);
@@ -325,7 +329,7 @@ void PadScreen::buildTiles() {
         if (bcfg.label_center[0]) {
             lbl_center = lv_label_create(obj);
             lv_obj_set_style_text_color(lbl_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
-            lv_obj_set_style_text_font(lbl_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
+            lv_obj_set_style_text_font(lbl_center, pad_resolve_font(bcfg.style_center, scale.font_large, &fontCache), 0);
             lv_obj_set_width(lbl_center, lbl_w);
             pad_apply_long_mode(lbl_center, bcfg.style_center);
             lv_label_set_text(lbl_center, bcfg.label_center);
@@ -348,7 +352,7 @@ void PadScreen::buildTiles() {
             if (icon_store_lookup(icon_key, &ref)) {
                 icon_img = lv_image_create(obj);
                 lv_image_set_src(icon_img, ref.dsc);
-                icon_scale = capped_icon_scale(bcfg, r, pad, scale, ref);
+                icon_scale = capped_icon_scale(bcfg, r, pad, scale, ref, &fontCache);
                 lv_image_set_scale(icon_img, icon_scale);
                 lv_obj_clear_flag(icon_img, LV_OBJ_FLAG_CLICKABLE);
                 if (ref.kind == ICON_KIND_MONO) {
@@ -370,8 +374,8 @@ void PadScreen::buildTiles() {
             const int16_t icon_w = (int16_t)(lv_obj_get_width(icon_img) * icon_scale / LV_SCALE_NONE);
             const int16_t lbl_h = (int16_t)lv_obj_get_height(lbl_center);
 
-            const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small);
-            const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small);
+            const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small, &fontCache);
+            const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small, &fontCache);
             const int16_t top_h = bcfg.label_top[0] ? lv_font_get_line_height(top_font) : 0;
             const int16_t bot_h = bcfg.label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
             const int16_t label_bias = (top_h - bot_h) / 2;
@@ -415,8 +419,8 @@ void PadScreen::buildTiles() {
             }
         } else if (icon_img) {
             // Icon only (no center label) — center in available space
-            const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small);
-            const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small);
+            const lv_font_t* top_font = pad_resolve_font(bcfg.style_top, scale.font_small, &fontCache);
+            const lv_font_t* bot_font = pad_resolve_font(bcfg.style_bottom, scale.font_small, &fontCache);
             const int16_t top_h = bcfg.label_top[0] ? lv_font_get_line_height(top_font) : 0;
             const int16_t bot_h = bcfg.label_bottom[0] ? lv_font_get_line_height(bot_font) : 0;
             const int16_t y_ofs = (top_h - bot_h) / 2;
@@ -429,7 +433,7 @@ void PadScreen::buildTiles() {
         if (bcfg.label_bottom[0]) {
             lbl_bottom = lv_label_create(obj);
             lv_obj_set_style_text_color(lbl_bottom, pad_resolve_label_color(bcfg.style_bottom, fg), 0);
-            lv_obj_set_style_text_font(lbl_bottom, pad_resolve_font(bcfg.style_bottom, scale.font_small), 0);
+            lv_obj_set_style_text_font(lbl_bottom, pad_resolve_font(bcfg.style_bottom, scale.font_small, &fontCache), 0);
             lv_obj_set_width(lbl_bottom, lbl_w);
             pad_apply_long_mode(lbl_bottom, bcfg.style_bottom);
             lv_label_set_text(lbl_bottom, bcfg.label_bottom);
@@ -465,7 +469,7 @@ void PadScreen::buildTiles() {
         if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center) {
             tile.label_center = lv_label_create(obj);
             lv_obj_set_style_text_color(tile.label_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
-            lv_obj_set_style_text_font(tile.label_center, pad_resolve_font(bcfg.style_center, scale.font_large), 0);
+            lv_obj_set_style_text_font(tile.label_center, pad_resolve_font(bcfg.style_center, scale.font_large, &fontCache), 0);
             lv_obj_set_width(tile.label_center, lbl_w);
             pad_apply_long_mode(tile.label_center, bcfg.style_center);
             lv_label_set_text(tile.label_center, "");
@@ -506,6 +510,7 @@ void PadScreen::buildTiles() {
                     strlcpy(tile.widget_binding[wb], bcfg.widget.data_binding[wb], CONFIG_LABEL_MAX_LEN);
                 }
                 if (wt->createUI) {
+                    tile.widget_state.font_owner = &fontCache;
                     wt->createUI(obj, &tile.widget_cfg, &bcfg, &r, &scale,
                                  tile.icon_img, tile.label_center, &tile.widget_state);
                 }

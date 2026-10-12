@@ -12,7 +12,7 @@ Choose the architecture from the runtime experience, not from the panel vendor.
 
 | Architecture | E-Paper Frame | Interactive E-Paper |
 |---|---|---|
-| User experience | Scheduled full-screen images | Touch UI with pads, widgets, and bindings |
+| User experience | Scheduled full-screen images | Touch or physical-input UI with pads, widgets, and bindings |
 | Runtime | Wake, refresh, then deep sleep | Always-on LVGL application |
 | Identity | `IS_EPAPER_FRAME` | `HAS_LVGL_EPAPER` |
 | Required hardware flag | `HAS_EPAPER_PANEL` | `HAS_EPAPER_PANEL` |
@@ -23,7 +23,7 @@ Choose the architecture from the runtime experience, not from the panel vendor.
 flowchart TD
     Start[Choose the runtime experience] --> Sleep{Refresh an image then sleep?}
     Sleep -->|Yes| Frame[E-Paper Frame]
-    Sleep -->|No| Interactive{Need touch UI, pads, or live bindings?}
+    Sleep -->|No| Interactive{Need interactive pads or live bindings?}
     Interactive -->|Yes| Lvgl[Interactive E-Paper]
     Interactive -->|No| Reassess[Choose the product architecture first]
     Frame --> FrameFlags[HAS_EPAPER_PANEL + IS_EPAPER_FRAME]
@@ -59,6 +59,7 @@ Board targets use product behavior rather than a graphics-library implementation
 * `reterminal-e1003-frame`
 * `inkplate6flick-interactive`
 * `reterminal-e1003-interactive`
+* `crowpanel-4.2-interactive`
 
 The `-interactive` suffix stays stable even if the rendering implementation
 changes. LVGL is an implementation detail of the current interactive stack.

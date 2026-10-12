@@ -75,6 +75,13 @@ assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
 
+document.getElementById('pad-edit-label-center-style').value = 'font:my-font;font_size:300;align:right';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].label_center_style, 'font:my-font;font_size:300;align:right');
+document.getElementById('pad-edit-label-center-style').value = '';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].label_center_style, undefined);
+
 const savedCredentialButton = {
     col: 1,
     row: 2,
@@ -133,16 +140,20 @@ assert.strictEqual(context.padState.buttons[0].widget_mousepad_reverse, false);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_buttons, false);
 assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, false);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_back, false);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_back_size, 44);
 document.getElementById('pad-edit-disable-pad-swipes').checked = true;
 document.getElementById('pad-edit-mousepad-back').checked = true;
+document.getElementById('pad-edit-mousepad-back-size').value = '88';
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, true);
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_back, true);
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_back_size, 88);
 for (const widgetType of ['scrollpad', 'gamepad_stick', 'gamepad_button']) {
     document.getElementById('pad-edit-widget-type').value = widgetType;
     context.padWorkspaceEdit();
     assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, true);
     assert.strictEqual(context.padState.buttons[0].widget_mousepad_back, undefined);
+    assert.strictEqual(context.padState.buttons[0].widget_mousepad_back_size, undefined);
     document.getElementById('pad-edit-disable-pad-swipes').checked = false;
     context.padWorkspaceEdit();
     assert.strictEqual(context.padState.buttons[0].widget_disable_pad_swipes, false);
@@ -174,6 +185,13 @@ for (const [input, expected] of [['', 1], ['   ', 1], ['0', 0.1], ['-1', 0.1], [
     document.getElementById('pad-edit-mousepad-sensitivity').value = input;
     context.padWorkspaceEdit();
     assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, expected);
+}
+
+for (const [input, expected] of [['88', 88], ['88.5', 89], ['0', 1], ['513', 512],
+    ['Infinity', 44], ['NaN', 44], ['', 44]]) {
+    document.getElementById('pad-edit-mousepad-back-size').value = input;
+    context.padWorkspaceEdit();
+    assert.strictEqual(context.padState.buttons[0].widget_mousepad_back_size, expected);
 }
 
 for (const [input, expected] of [['3', 3], ['10', 5], ['-1', 0], ['Infinity', 0], ['NaN', 0], ['', 0]]) {

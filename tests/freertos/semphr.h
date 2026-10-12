@@ -9,6 +9,10 @@
 
 typedef StaticSemaphore_t* SemaphoreHandle_t;
 typedef void (*TestSemaphoreTakeHook)(SemaphoreHandle_t semaphore, TickType_t ticks);
+#ifdef TEST_FREERTOS_MUTEX_LIFECYCLE
+SemaphoreHandle_t test_freertos_create_mutex();
+void test_freertos_delete_mutex(SemaphoreHandle_t semaphore);
+#endif
 
 #ifndef portMAX_DELAY
 #define portMAX_DELAY ((TickType_t)0xffffffffUL)
@@ -31,12 +35,16 @@ inline SemaphoreHandle_t xSemaphoreCreateBinary() {
 }
 
 inline SemaphoreHandle_t xSemaphoreCreateMutex() {
+#ifdef TEST_FREERTOS_MUTEX_LIFECYCLE
+	return test_freertos_create_mutex();
+#else
 	SemaphoreHandle_t semaphore = xSemaphoreCreateBinary();
 	if (semaphore) {
 		std::lock_guard<std::mutex> lock(semaphore->mutex);
 		semaphore->signaled = true;
 	}
 	return semaphore;
+#endif
 }
 
 inline BaseType_t xSemaphoreTake(SemaphoreHandle_t semaphore, TickType_t ticks) {
@@ -79,6 +87,10 @@ inline BaseType_t xSemaphoreGive(SemaphoreHandle_t semaphore) {
 
 inline void vSemaphoreDelete(SemaphoreHandle_t semaphore) {
 	if (!semaphore) return;
+#ifdef TEST_FREERTOS_MUTEX_LIFECYCLE
+	test_freertos_delete_mutex(semaphore);
+#else
 	std::lock_guard<std::mutex> lock(semaphore->mutex);
 	semaphore->signaled = false;
+#endif
 }

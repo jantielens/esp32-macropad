@@ -28,6 +28,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 
 | Board | Display backend | Panel | Bus | Res | Rot | Touch backend | Notes |
 |---|---|---|---:|---:|---:|---|---|
+| crowpanel-4.2-interactive | CROWPANEL_42 | SSD1683 | SPI | 400×300 | 0 | none |  |
 | cyd-v2 | TFT_ESPI | ILI9341 | SPI | 320×240 | 1 | XPT2046 | inversion on, gamma fix |
 | esp32-4848S040 | ST7701_RGB | ST7701 | SPI | 480×480 | 0 | GT911 |  |
 | esp32-p4-lcd4b | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
@@ -49,6 +50,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | jc4880p433-nau7802 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-sd | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-shutter | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| m5stack-stopwatch | ARDUINO_GFX_CO5300 | CO5300 | QSPI | 466×466 | 0 | CST820B |  |
 | reterminal-e1003-frame | ? | ? | ? | ?×? | ? | none |  |
 | reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | ? | 1872×1404 | 1 | GT911 |  |
 

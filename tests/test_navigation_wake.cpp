@@ -13,15 +13,23 @@ portMUX_TYPE g_splash_status_mux = 0;
 #define portENTER_CRITICAL(mutex) ((void)(mutex))
 #define portEXIT_CRITICAL(mutex) ((void)(mutex))
 static unsigned wake_requests = 0;
+static bool asleep = false;
+static bool input_ready = true;
+static bool confirmation_open = false;
+bool screen_saver_manager_is_asleep() { return asleep; }
+bool screen_saver_manager_input_ready() { return input_ready; }
+bool button_confirmation_navigate(const char*) { return confirmation_open; }
 void screen_saver_manager_notify_activity(bool wake) {
     assert(wake);
     ++wake_requests;
 }
 
 static uint32_t eligible_mask = 7;
-uint32_t pad_config_get_eligible_mask() { return eligible_mask; }
+extern "C" uint32_t pad_config_get_eligible_mask() { return eligible_mask; }
 
 struct Screen {
+    unsigned navigation_calls = 0;
+    bool navigateButtons(const char*) { ++navigation_calls; return true; }
     void show() {}
     void hide() {}
     void setStatus(const char*) {}
@@ -78,6 +86,7 @@ public:
     void showTest();
     void setSplashStatus(const char* text);
     void prepareNavigationWake();
+    bool navigateButtons(const char* command);
     bool showScreen(const char* id, bool wake = false);
     bool showTransientScreen(const char* id);
     bool restoreTransientScreen();
@@ -98,6 +107,31 @@ public:
 #include "../src/app/display_screen_nav.cpp"
 
 int main() {
+    {
+        DisplayManager manager;
+        assert(!manager.navigateButtons("next"));
+        manager.lvglTaskHandle = current_task;
+        assert(!manager.navigateButtons(nullptr));
+        asleep = true;
+        assert(manager.navigateButtons("tap"));
+        assert(manager.firstPad.navigation_calls == 0);
+        asleep = false;
+        input_ready = false;
+        assert(manager.navigateButtons("tap"));
+        assert(manager.firstPad.navigation_calls == 0);
+        input_ready = true;
+        confirmation_open = true;
+        assert(manager.navigateButtons("next"));
+        assert(manager.firstPad.navigation_calls == 0);
+        confirmation_open = false;
+        manager.pendingScreen = &manager.secondPad;
+        assert(!manager.navigateButtons("next"));
+        manager.pendingScreen = nullptr;
+        assert(manager.navigateButtons("next"));
+        assert(manager.firstPad.navigation_calls == 1);
+        manager.currentScreen = &manager.infoScreen;
+        assert(!manager.navigateButtons("next"));
+    }
     {
         DisplayManager manager;
         manager.lock();

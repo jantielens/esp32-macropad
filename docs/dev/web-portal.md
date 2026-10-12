@@ -75,8 +75,12 @@ overflow is reported; neither buffer survives reboot or deep sleep.
 
 The logger stores complete 288-byte formatted records, with the existing
 serial truncation and suppression behavior. Disconnected USB CDC does not
-prevent capture and does not update serial repetition state. Direct serial
-writes, ROM/bootloader logs, and ISR logging are outside this feature.
+prevent capture and does not update serial repetition state. Hardware USB CDC
+serial output uses a zero write timeout and skips a log line when its TX buffer
+has insufficient space, including when a connected computer has no serial
+reader. Portal capture still receives that line, subject to its normal capture
+limits. UART and native USB CDC behavior is unchanged. Direct serial writes,
+ROM/bootloader logs, and ISR logging are outside this feature.
 
 One startup allocation reserves approximately 127 KiB of PSRAM for records,
 a 32-record response snapshot, and a fixed JSON serialization arena. There
@@ -577,7 +581,14 @@ every component in that custom section to the same category ID.
   and screen saver configuration. Interactive display builds expose screen
   rotation as a separate Rotation component under Display; changes take effect
   after reboot.
-  - Boards with `HAS_LVGL_EPAPER` additionally expose persisted e-paper presentation settings: boot-only panel mode, mode-specific passive binding and minimum presentation intervals, optional clock refreshes at minute boundaries, and the B/W scheduled full-refresh threshold. A zero threshold disables scheduled B/W full refreshes and can cause ghosting.
+  - Boards with `HAS_LVGL_EPAPER` additionally expose persisted e-paper presentation settings: boot-only panel mode, shared passive binding and minimum presentation intervals, optional clock refreshes at minute boundaries, and the scheduled full-refresh threshold. A zero threshold disables scheduled full refreshes and can cause ghosting.
+  - `epaper_supported_render_modes` is a read-only array in `GET /api/config`.
+    The portal disables unavailable modes; CrowPanel 4.2 supports only `bw`.
+
+  - All `HAS_DISPLAY` boards expose the standard `button_nav` action in shared
+    action editors with Previous, Next, Tap, and Tap & Hold commands, including
+    confirmation-dialog navigation. No physical buttons or e-paper panel are
+    required. Screen selection uses screen actions on a custom pad.
 
 **Layout:** Sections use 2-column grids on desktop (≥768px), stacked on mobile
 
@@ -598,8 +609,9 @@ every component in that custom section to the same category ID.
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
   - **Camera Preview widget**: Available only on camera-enabled boards. It displays the shared camera feed with Cover, Letterbox, or Center crop scaling.
   - **Numeric rocker tap areas**: The numeric rocker settings include a per-button Tap Area Scale control from 50% to 150%. It scales both fine and coarse zones while the firmware reserves a center action area.
-  - **Pad and Button Defaults**: Separate Button Appearance, Pad Appearance and Layout, Button Labels and Icon, and Button Shadow sections on the Pads page. Pad Appearance and Layout provides device-wide button spacing, `default_pad_bg_color`, Burn-in Pixel Shift Distance (`pixel_shift_distance_px`, 0-8 px), and extra top, right, bottom, and left edge insets inside that distance. A live 2×2 diagram updates with those controls and labels their current pixel values. A value of 0 disables pixel shifting and its layout reserve. A pad without an explicit background inherits the device default. Shadows can be opaque backing plates or LVGL drop shadows, with free-form offsets and blur that may overlap or clip. Shadow color can use either a specific color or a darker tint of each button's background, including dynamic background bindings. Pads and buttons can enable or disable the device shadow setting. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/button-defaults`)
+  - **Pad and Button Defaults**: Separate Button Appearance, Pad Appearance and Layout, Button Labels and Icon, and Button Shadow sections on the Pads page. Pad Appearance and Layout provides device-wide button spacing, `default_pad_bg_color`, Burn-in Pixel Shift Distance (`pixel_shift_distance_px`, 0-8 px), and extra top, right, bottom, and left edge insets inside that distance. A live 2×2 diagram updates with those controls and labels their current pixel values. A value of 0 disables pixel shifting and its layout reserve. A pad without an explicit background inherits the device default. Shadows can be opaque backing plates or LVGL drop shadows, with free-form offsets and blur that may overlap or clip. Shadow color can use either a specific color or a darker tint of each button's background, including dynamic background bindings. Pads and buttons can enable or disable the device shadow setting. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/component/button-defaults/config`)
   - **Template Pad**: Dropdown to inherit buttons from another pad into empty grid positions. Template buttons appear as ghost overlays in the editor. Merge includes bindings (target wins on conflict, no chaining)
+  - Board appearance defaults: `GET /api/component/button-defaults/config` returns saved device overrides plus a read-only `firmware_defaults` object containing the board-selected pad, button, layout, shadow, and widget palette defaults. `POST` accepts device overrides only. The portal uses the firmware defaults for controls, widget colors, previews, and appearance resets; unchanged inherited values are omitted from device-default saves. Device exports exclude `firmware_defaults`. E-paper interactive boards use high-contrast defaults and pixel shift distance 0; other boards retain their existing defaults.
   - **Building Blocks**: Pre-configured button groups available in the More ▾ menu under "━━ Blocks ━━". Select a block to enter placement mode — green/red ghost overlay shows valid/invalid positions. Blocks check grid dimensions, free cells, and 64-button limit. Uses extensible registration API (`pad_block_register()`) so feature branches add blocks independently. Catalog served by `GET /api/pad/blocks`
   - **Button copy/paste**: Copy button settings from one cell and paste into another; position-independent
   - **Pad actions via "More ▾" menu**: Fill Pad (fill all cells with copied button), Copy/Paste Pad (entire page), Export/Import Pad (JSON file), Export/Import Device Config (NVS + all 16 pad configs), Clear Pad
@@ -971,9 +983,16 @@ playback or track-selection controls.
 | `POST` | `/api/music?path=/media/...mp3` | Streams a canonical MP3 to a temporary file, atomically publishes it, and refreshes the catalog before returning `201` |
 | `DELETE` | `/api/music?path=/media/...mp3` | Deletes an exact canonical Music file, including one omitted from an overflowed catalog |
 
-Uploads and deletes return `409` while Music, an MP3 Alert, or another Music
+Uploads and deletes return `409` while Music (including paused or interrupted intent), an MP3 Alert, or another Music
 storage mutation is active. Paths must be canonical `/media` descendants with
 a case-insensitive `.mp3` final extension.
+
+The shared sound-alert editor offers Tone Alert, MP3 Alert on sound-player builds,
+Stop alerts (`stop`), and Stop all audio (`stop_all`). Alarm audio owns the primary
+source ahead of ordinary alerts and Music; tap feedback is independent. Music
+bindings report `interrupted` while Playing intent waits for an alert or scheduled
+ringing session to release ownership. Restart begins at the remembered track's
+start, not its former elapsed position.
 
 Successful uploads and deletes rebuild the published catalog before the API
 response is sent, so the Music Library immediately returns the updated list.
@@ -1051,6 +1070,16 @@ format syntax. The device validates saved configurations authoritatively.
 
 The MCP `get_capabilities` manifest serializes its binding-scheme list from the
 same registry, so portal and MCP clients receive equivalent metadata.
+
+Display builds with local sensors register `[sensor:key;format]`. Its keys
+and descriptions come from the sensor registrations, including board-specific
+providers. For example, `[sensor:temperature;%.1f|N/A]` reads the shared cache
+without MQTT or hardware I/O. API and MQTT reads use the same sampled values.
+Adapters default to two-second sampling and may declare a different interval;
+MQTT/BLE duty-cycle wakes sample once before publishing. Failed samples retain
+last-good values until reboot; fields with no successful sample are unavailable.
+Boolean bindings resolve as `0` or `1`, while API/MQTT retain JSON booleans.
+See the [sensor registration contract](sensors.md#sampling-contract).
 
 `GET /api/bindings?docs=1` adds the user-facing reference that each scheme
 registers next to its resolver (`BindingSchemeDoc`): `category`, `summary`,
@@ -1173,6 +1202,7 @@ Returns comprehensive device information.
 - Each catalog entry contains `type`, `group`, and `label`. Multi-command entries also contain `commands`, an array of `{id, label}` objects; device-class entries may additionally contain `command_families`.
 - Simple actions can additionally provide `editor_fields`, with a small field vocabulary: `text`, `number`, `select`, `toggle`, and `color`. `select` fields can reuse the entry's `commands` through `command_options`. Actions with conditional or specialized behavior keep their dedicated portal editor code.
 - The portal uses this projection to populate action type, command, and simple field controls. MCP capability metadata uses the same catalog source with field documentation included.
+- StopWatch builds add the **M5Stack StopWatch** group: `charging_mode` (**Set charging mode**, `mode`: `off`, `low`, `high`), `status_led` (**Status LED**, `mode`: `on`, `off`), `vibrate` (**Vibrate**, `pattern`: comma-separated vibrate/pause durations such as `20,100,20`, 1-15 positive steps with an odd count and total at most 5000 ms; default `200`, standalone `0` stops), and fieldless `shutdown` (**Shutdown**). Vibration has one text field; `duration_ms` is not supported. Charging and LED overrides reset at boot; vibration does not pause the action list, and shutdown never resumes its remaining actions. Shutdown excludes OTA but does not save unsaved edits or flush uploads. The board-local `BOARD_ACTION_SOURCE` module supplies catalog metadata and validation; no board-specific JS, HTML, or configuration API fields are included in other firmware variants.
 - Voice Assistant builds add the `Audio` / `Voice Assistant` catalog type with `record_start`, `record_stop_transcribe`, `record_until_silence`, `record_cancel`, and `speak` commands. `record_until_silence` exposes trailing-silence and speech-level threshold fields and returns pending until transcription completes, then resumes the remaining action list. Azure transcription has a 30-second limit and no automatic retry. Failure sets `[stt:status]` to `error`, puts the reason in `[stt:text]`, and stops the remaining action list. During automatic recording, `record_stop_transcribe` stops capture immediately while the original automatic action retains the remaining action list. `record_cancel` discards the active recording and any pending automatic continuation. `speak` resolves its text field as a binding template, then queues best-effort Azure TTS with optional voice and volume overrides; it does not pause the action list, and provider failures are logged without changing the STT bindings. The Text-to-Speech settings also expose optional ISO-639-1 language guidance and verbatim Azure instructions. A newer speech request replaces active or queued speech.
 
 **Action Editor Ownership:**
@@ -1253,6 +1283,56 @@ native serialization with MCP disabled.
 #### `GET /api/health`
 
 Returns real-time device health statistics.
+
+The optional `?task=<name>` query adds `task_stack` with
+`task`, `minimum_free_bytes`, and `configured_bytes` when the size is known.
+Supported case-sensitive names are `audio`, `async_tcp`, `img_local`, `img_fetch`,
+`ha_stats`, `LVGL`, and `loopTask`; arbitrary task lookup is not performed.
+AsyncTCP samples the request's own task. Audio, local images, remote images,
+and HA statistics sample atomically published handles
+through their owners; these workers are never deleted during normal operation.
+Arduino owns the permanent loop task and provides its configured stack size.
+LVGL samples itself through the shutdown-aware display-job bridge, which owns
+the result until it is copied back to the request. Existing authentication applies.
+
+An empty `task` returns `400`; unsupported names, including `audio_stack`,
+return `404`. A disabled or uninitialized worker returns `503`. The local image
+worker is created on demand; requesting its report does not initialize it.
+The remote image report uses the existing `img_fetch` worker and its unchanged
+16384-byte stack; requesting a report does not initialize it. StopWatch enables
+remote images and disables the local image library for hardware validation,
+so `?task=img_local` returns `503` on that build.
+The `ha_stats` report requires `HAS_HA_HISTORY` and successful data-stream
+subsystem initialization. StopWatch enables this feature for hardware validation.
+The worker retains its 16384-byte PSRAM-preferred stack and waits for history
+hydration requests; the diagnostic query does not initialize it or trigger HA
+network requests. Measure after actual Recorder history hydration, including
+HTTPS and large responses, rather than relying on the idle post-boot watermark.
+LVGL also returns `503` during OTA or when the bridge is busy or cannot complete
+within 250 ms. The query does not bypass rendering suspension or shutdown.
+`?async_tcp_stack=1` remains a compatibility alias with its original
+`async_tcp_stack` response field. An explicit `task` takes precedence when
+both parameters are present.
+
+Optional field example:
+
+```json
+{
+  "task_stack": {
+    "task": "audio",
+    "minimum_free_bytes": 21704,
+    "configured_bytes": 24576
+  }
+}
+```
+
+All sizes are bytes. Peak observed usage is configured bytes minus minimum
+free bytes; the watermark covers the task's lifetime and resets at reboot.
+This scans unused stack memory only when explicitly requested and can affect
+timing. Normal health polling, portal startup, and OTA do not trigger these
+health-query scans. Do not poll this diagnostic continuously. LVGL queries are
+unavailable during OTA; other task samples during OTA do not cover later
+finalization or a subsequent reboot.
 
 **Response:**
 ```json
@@ -1677,6 +1757,8 @@ timezone and alarm session.
   "display_rotation": 0,
   "screen_saver_backlight_only": false,
   "epaper_render_mode": "grayscale",
+  "epaper_bw_conversion": "threshold",
+  "epaper_bw_threshold": 128,
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
@@ -1841,6 +1923,10 @@ The zones use unfilled rounded dashed text-color outlines; a held zone has a
 thicker outline. `widget_mousepad_back` is boolean (default false), adding
 a top-left Back button that consumes its touches without mouse output and
 uses existing screen history, with no fallback when history is empty.
+`widget_mousepad_back_size` accepts an integer from 1 to 512 device pixels
+(default 44) for its side length. The visible button and touch target shrink
+to fit the mousepad's content area; the centered arrow scales proportionally.
+The editor exposes this as **Back button size (px)** beside **Show Back button**.
 Pad storage and import/export preserve these fields through the existing raw JSON path. The editor
 loads/saves these fields and bounds numeric inputs. Shared widget validation
 rejects invalid types, non-finite/out-of-range numbers, and non-boolean toggle
@@ -1982,6 +2068,8 @@ Save new configuration. Device reboots after successful save.
   "backlight_brightness": 70,
   "display_rotation": 1,
   "epaper_render_mode": "bw",
+  "epaper_bw_conversion": "blue_noise",
+  "epaper_bw_threshold": 128,
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
@@ -2038,6 +2126,17 @@ Save new configuration. Device reboots after successful save.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
 - Interactive E-Paper fields are available only when `HAS_LVGL_EPAPER` is enabled. `epaper_render_mode` is read at boot and requires a restart. The shared intervals, minute-boundary setting, and full-refresh threshold apply live. Binding intervals must be 100 to 60,000 ms and refresh intervals must be 250 to 60,000 ms. An `epaper_full_refresh_threshold` of `0` disables scheduled full refreshes and can increase ghosting. Inkplate grayscale always refreshes the full panel and does not use the threshold.
+- `GET /api/config` returns `epaper_supported_render_modes` for Interactive
+  E-Paper. CrowPanel returns `["bw"]`; grayscale-capable profiles return
+  `["bw", "grayscale"]`. Unsupported `epaper_render_mode` writes return HTTP 400.
+- E-paper Presentation exposes `epaper_bw_conversion` (`threshold`, `bayer4x4`,
+  or `blue_noise`) and `epaper_bw_threshold` (an integer from 1 to 255, default
+  128). Both require restart and are present only with `HAS_LVGL_EPAPER`.
+  The threshold level affects only `threshold` conversion. Invalid conversion
+  names or threshold levels return HTTP 400 without changing the e-paper
+  presentation settings. The portal disables B/W controls for grayscale and
+  hides the level for dithering. These fields do not change the font backend
+  or E-Paper Frame image rendering.
 - Device automatically reboots after successful save
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 
@@ -2528,12 +2627,24 @@ Requires `HAS_DISPLAY`. Gated by Basic Auth when enabled.
 Capture the current display contents as an image. ESP32-P4 boards default to a
 hardware-encoded high-fidelity JPEG; other boards retain the 24-bit BMP default.
 
-- **Query parameters:** `format=bmp|jpg` overrides the format. `quality=1..100` controls JPEG quality and defaults to `85`. On ESP32-P4, `subsample=420|422|444` controls JPEG chroma subsampling and defaults to `444`.
-- **Response:** `image/jpeg` for JPEG or `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order).
+- **Query parameters:** `format=bmp|jpg|png` overrides the format. PNG is supported only by the CrowPanel 4.2 driver and captures its presented monochrome frame. `quality=1..100` controls JPEG quality and defaults to `85`. On ESP32-P4, `subsample=420|422|444` controls JPEG chroma subsampling and defaults to `444`.
+- **Response:** `image/jpeg` for JPEG, `image/bmp` for a 24-bit uncompressed BMP (RGB888, bottom-up row order), or `image/png` for a lossless 1-bit grayscale PNG on CrowPanel.
 - **Mechanism:** Uses LVGL `lv_snapshot_take()` to render the active screen to a temporary RGB565 buffer. On ESP32-P4, the hardware JPEG encoder consumes RGB565 directly with YUV444 subsampling by default. The BMP path converts RGB565 to BGR888 and streams the result as a chunked HTTP response.
 - **Memory:** Per-request snapshot, conversion, and JPEG buffers are released as soon as the final response chunk is produced. Interrupted responses release any remaining buffers when their response context is destroyed. On ESP32-P4, the lazily initialized JPEG encoder and its synchronization primitive remain allocated after first use.
 - **Thread safety:** The AsyncTCP handler synchronously dispatches capture work through a fixed 64-byte single slot to the LVGL task, which runs it under the existing LVGL mutex. A request that reaches its 3-second deadline keeps the slot occupied until the LVGL task finishes; its captured payload is then reclaimed on that task. Returns `503 Screenshot service busy` for a concurrent capture, `503 Screenshot service unavailable` before display dispatch is ready, and `504 Screenshot capture timed out` when the LVGL task has not completed by the deadline.
 - **Fallback:** If hardware JPEG encoding fails, the endpoint transparently returns BMP with `Content-Type: image/bmp`. Requesting `format=jpg` on a non-P4 board returns `400`.
+
+On CrowPanel, `format=png` copies the last successfully presented framebuffer
+under the driver mutex and restores logical display orientation. It does not
+render LVGL again or trigger a panel refresh. Pixels pending a refresh are not
+included. LodePNG encodes the captured buffer after display dispatch completes;
+the encoded buffer is released after streaming or on disconnect. PNG responses
+use `Cache-Control: no-store`. A missing presented frame or encoding failure
+returns `500`; requesting PNG on another driver returns `400`.
+
+Compare this PNG with a panel photo to distinguish monochrome rasterization
+from physical refresh artifacts. The existing BMP capture retains LVGL's
+pre-threshold antialiasing and can differ from the presented PNG.
 
 **Example:**
 
@@ -2550,6 +2661,9 @@ curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=70' -o s
 
 # Smaller JPEG for photo-like screens, with reduced color detail
 curl -u user:pass 'http://<device-ip>/api/screenshot?format=jpg&quality=85&subsample=420' -o screenshot.jpg
+
+# CrowPanel's presented black-and-white pixels
+curl -u user:pass 'http://<device-ip>/api/screenshot?format=png' -o panel.png
 ```
 
 **Notes:**
@@ -2725,22 +2839,25 @@ Save the MQTT trigger configuration.
 
 ### Pad and Button Defaults API
 
-All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. These defaults are stored on LittleFS at `/config/button_defaults.json`.
+All pad-and-button-defaults endpoints require `HAS_DISPLAY` and are gated by Basic Auth when enabled. These defaults are stored on the selected storage backend at `/config/button_defaults.json`.
 
-#### `GET /api/button-defaults`
+#### `GET /api/component/button-defaults/config`
 
-Returns the current device-level pad and button defaults.
+Returns saved device-level pad and button overrides and the board-selected firmware defaults.
 
-- **Response:** JSON object with only the fields that have been explicitly set. Possible fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
-- Default (no file saved): empty JSON object `{}`.
+- **Response:** JSON object with explicitly saved fields and a read-only `firmware_defaults` object. Possible override fields: `default_pad_bg_color`, `button_spacing_px`, `pixel_shift_distance_px`, `pad_inset_top_px`, `pad_inset_right_px`, `pad_inset_bottom_px`, `pad_inset_left_px`, `bg_color`, `fg_color`, `border_color`, `border_width`, `corner_radius`, `content_pad`, `label_top_style`, `label_center_style`, `label_bottom_style`, `button_shadow_enabled`, `button_shadow_type`, `button_shadow_color_mode`, `button_shadow_color`, `button_shadow_darken_pct`, `button_shadow_offset_x_px`, `button_shadow_offset_y_px`, and `button_shadow_drop_blur_px`.
+- `firmware_defaults` contains the board's appearance, layout, and shadow defaults plus widget palette fields: `widget_series_color` (and `_2`, `_3`, `_4`), `widget_track_color`, `widget_indicator_color`, `widget_tick_color`, `widget_zone_color`, `widget_reference_color`, `widget_table_bg_color`, `widget_table_fg_color`, and `widget_table_header_color`.
+- Typography overrides are `default_font` (`@builtin` or a valid uploaded ID) and `base_text_size` (`0` for Automatic, or an integer from 1 to 65535). Defaults are `@builtin` and `0`. Unavailable IDs remain saved and fall back to bitmap text.
+- Read-only `typography_status` contains `active_font`, `active_base_text_size`, `board_medium_size`, `ttf_supported`, and `reboot_required`. It describes the boot snapshot, not whether every requested font instance loaded successfully.
+- With no saved file, the response contains `firmware_defaults` and `typography_status`. Missing overrides inherit firmware defaults; explicit values including `0` and `false` remain authoritative.
 
-#### `POST /api/button-defaults`
+#### `POST /api/component/button-defaults/config`
 
-Save device-level pad and button defaults to LittleFS.
+Replace saved device-level pad and button overrides on the selected storage backend.
 
-- **Body:** JSON object with any subset of the fields listed above.
+- **Body:** JSON object with any subset of the override fields listed above. Do not include read-only metadata; send `{}` to clear all device overrides. Invalid typography values are rejected before writing.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
-- All pad caches are rebuilt immediately so changes take effect without reboot.
+- Appearance changes rebuild pad caches immediately. Typography changes require reboot and retain the current active font owner until then. The portal exposes both typography controls in Button Defaults, including a preserved unavailable-font selection.
 
 ---
 
@@ -2835,6 +2952,45 @@ Delete a specific icon file from `/icons/`.
 - **Response:** `{"success": true}`
 
 ---
+
+### Font File API
+
+The `fonts` component belongs to category `pads`. Its fragment, JavaScript
+chunk, and API routes are gated by `HAS_TTF_FONTS`; detected runtime PSRAM also
+controls availability. The component is aggregated in `portal_components.cpp`,
+the fragment is served through the generated asset registry, and
+`portal_fonts.js` initializes it through the existing shell. Configured portal
+authentication and OPTIONS registration apply to all routes.
+
+The fragment heading is **TTF Fonts**. Format and pad-style notes precede a
+Music Library-style catalog and responsive upload row, with the required font
+ID field and byte-transfer progress retained.
+
+| Method | Route | Response |
+|--------|-------|----------|
+| GET | `/api/fonts/list` | Array of `{name, size_bytes}` for completed assets |
+| POST | `/api/fonts/upload?name=<id>` | Raw static TTF body; `{"status":"ok"}` after publication |
+| DELETE | `/api/fonts?name=<id>` | `{"status":"ok"}` after deletion |
+
+IDs contain 1-31 lowercase ASCII letters, digits, `_`, or `-`, without `.ttf`.
+Assets persist through `Storage` at `/fonts/<id>.ttf`. One upload transaction is
+active at a time, with request-owned state and a temporary file. Completion
+validates and renames the file; disconnects and failures remove the request's
+temporary data. Lists never include incomplete uploads. Storage changes publish
+health usage and an atomic generation; the display thread rebuilds cached pads
+at a safe point without HTTP callbacks touching LVGL.
+
+Invalid IDs and unsupported files return 400; missing assets return 404;
+duplicates, competing uploads, and deletion of a font being loaded return 409;
+retry a load conflict shortly. Unavailable runtime PSRAM returns
+503; storage or resource failures return 507. Delete first to replace an ID.
+Deletion is permitted even when pads reference the font, once any cold load
+finishes. There is no fixed
+upload-byte cap, font-instance cap, or font-memory budget.
+
+See the [Fonts workflow](../web-portal-guide.md#fonts),
+[label styles](../pad-editor-guide.md#uploaded-fonts), and
+[accepted backend OOM limitation](display-touch-architecture.md#accepted-backend-oom-limitation).
 
 ### Sound File API
 
@@ -2931,8 +3087,35 @@ Recipes may declare a `provision` object for configuration that accompanies thei
 buttons. `${parameter}` templates expand recursively throughout this object.
 The reserved `${target_pad}` value resolves to the selected pad's screen ID,
 such as `pad_6`; it cannot be declared as a user parameter. Optional `requires`
-values are `display`, `mqtt`, `audio`, `alarm`, and `sound_player`. Alarm support
+values are `display`, `mqtt`, `audio`, `alarm`, `sound_player`, and `ttf_fonts`. Alarm support
 uses `/api/info`'s `has_alarm`, derived from `ALARM_ENABLED`.
+
+An optional recipe-level `fonts` array declares downloadable static TrueType
+fonts. Each entry needs a unique lowercase `name` (1-31 letters, digits,
+underscores, or hyphens) and a direct HTTPS `url`. Buttons reference that name
+with the existing text style syntax, such as `font:dseg7-classic;font_size:96`.
+
+```json
+{
+  "fonts": [
+    {
+      "name": "dseg7-classic",
+      "url": "https://cdn.jsdelivr.net/npm/dseg@0.46.0/fonts/DSEG7-Classic/DSEG7Classic-Regular.ttf"
+    }
+  ]
+}
+```
+
+Recipes declaring fonts automatically require `/api/info`'s `has_ttf_fonts`.
+Before changing icons or saving the pad, the browser lists installed fonts,
+skips existing names, and downloads and uploads missing fonts through
+`POST /api/fonts/upload?name=<name>`. URLs must permit browser cross-origin
+fetches and return static TTF bytes, not ZIP, WOFF2, or variable fonts. External
+downloads omit credentials. The device's existing font validation remains in
+effect. Font names are assumed to identify stable content: recipes do not
+compare hashes or replace installed fonts. A font failure stops installation
+before pad or component changes; fonts uploaded before a later failure remain
+available for retry. Use trusted sources and observe each font's license.
 
 An optional nonempty `confirmation` string prompts before installation. Optional
 `post_install` metadata contains a nonempty `message` and a `links` array of
@@ -2980,6 +3163,9 @@ The Alarm Clock sample replaces Alarm 1's `on_ring` and `on_stop` arrays after
 confirmation and sets `enabled` to `false`. It preserves the time, weekdays,
 snooze, auto-dismiss, and maximum lateness. Its ring actions repeat a tone and
 show `${target_pad}`. Its post-install links open Alarm Schedule and Behavior.
+The clock uses the downloadable DSEG7 Classic segment font from the DSEG npm
+package via jsDelivr, distributed under the
+[SIL Open Font License](https://github.com/keshikan/DSEG/blob/master/DSEG-LICENSE.txt).
 
 
 #### `POST /api/pad/resolve`
@@ -3212,7 +3398,7 @@ DNS server redirects all requests to device IP in AP mode:
   - Replaces `{{HEADER}}`, `{{NAV}}`, `{{FOOTER}}`, `{{BINDING_HELP}}` placeholders in HTML pages
    - Minifies HTML (removes comments, collapses whitespace)
    - Minifies CSS using `csscompressor`
-   - Concatenates JS modules per `portal.js.bundle` manifest, then minifies using `rjsmin`
+  - Concatenates JS modules per `portal.js.bundle` chunk, then minifies using pinned Terser
    - Concatenates CSS fragments per `*.css.bundle` manifests (if present), then minifies using `csscompressor`
    - Gzip compresses all assets (level 9)
   - Generates `src/app/web_assets.h` with embedded byte arrays
@@ -3235,6 +3421,17 @@ DNS server redirects all requests to device IP in AP mode:
    ```
 
 ### Asset Bundle System
+
+JavaScript minification requires Node.js 18 or newer and npm. Run
+`npm ci --prefix tools` to install the locked build dependency before an offline
+build; otherwise the generator installs it when missing. Top-level function names
+and property names remain intact for inline HTML and dynamically loaded scripts.
+
+The shared bundle excludes binding-editor modules when `HAS_DISPLAY` is false
+and extension-manager code when `HAS_NATIVE_EXTENSIONS` is false. Fragment arrays
+and their lookup entries use the same feature conditions as the owning components,
+including MCP, music, recipes, hardware buttons, and camera motion. Each board
+links one selected gzip stream rather than all generated variants.
 
 The minifier supports `.bundle` manifests for both JavaScript and CSS. A bundle manifest lists source files that should be concatenated into a single asset at build time, reducing HTTP requests, route handlers, and flash usage on the ESP32.
 

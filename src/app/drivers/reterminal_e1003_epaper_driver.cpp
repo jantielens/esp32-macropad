@@ -1,4 +1,5 @@
 #include "reterminal_e1003_epaper_driver.h"
+#include "monochrome_render.h"
 
 #include "../board_config.h"
 #include "../log_manager.h"
@@ -203,7 +204,9 @@ bool refreshPanel(const PanelRegion& region, uint8_t waveform) {
 
 ReTerminalE1003EpaperDriver::ReTerminalE1003EpaperDriver(DeviceConfig* cfg)
 		: config(cfg), currentX(0), currentY(0), currentW(0), currentH(0), rotation(0),
-			panelMode(cfg ? cfg->epaper_render_mode : EPAPER_DEFAULT_RENDER_MODE), lastRefreshMs(0), lastChangeMs(0),
+				panelMode(cfg ? cfg->epaper_render_mode : EPAPER_DEFAULT_RENDER_MODE),
+				bwConversion(cfg ? cfg->epaper_bw_conversion : MONOCHROME_CONVERSION_THRESHOLD),
+				bwThreshold(cfg ? cfg->epaper_bw_threshold : MONOCHROME_THRESHOLD), lastRefreshMs(0), lastChangeMs(0),
 			bwPartialUpdatesSinceFull(0), grayscalePartialUpdatesSinceFull(0), drawingFramebuffer(nullptr), presentedFramebuffer(nullptr), framebufferMutex(nullptr),
 			pendingChanges(false), fullRefreshRequested(false), hasPresentedFrame(false), initialized(false), dirtyRegionValid(false),
 			dirtyX(0), dirtyY(0), dirtyX2(0), dirtyY2(0) {}
@@ -312,8 +315,7 @@ void ReTerminalE1003EpaperDriver::writePixel(int16_t x, int16_t y, uint16_t rgb5
 		const uint8_t luminance = ((uint16_t)red * 77 + (uint16_t)green * 150 + (uint16_t)blue * 29) >> 8;
 		uint8_t gray = (uint16_t(luminance) * 15 + 127) / 255;
 		if (usesBwMode()) {
-			static constexpr uint8_t bayer4x4[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
-			gray = luminance >= bayer4x4[y & 3][x & 3] * 16 + 8 ? 15 : 0;
+			gray = monochrome_is_white(luminance, x, y, bwConversion, bwThreshold) ? 15 : 0;
 		}
 		const size_t offset = (size_t)drawY * (kPanelWidth / 2) + drawX / 2;
 		if (drawX & 1) drawingFramebuffer[offset] = (drawingFramebuffer[offset] & 0xF0) | gray;

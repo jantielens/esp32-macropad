@@ -116,6 +116,13 @@ void handleFragment(AsyncWebServerRequest *request) {
 		request->send(response);
 }
 
+#if HAS_TTF_FONTS
+void handlePortalFontsJS(AsyncWebServerRequest* request) {
+	if (!portal_auth_gate(request)) return;
+	request->send(begin_gzipped_asset_response(request, "application/javascript", portal_fonts_js_gz, portal_fonts_js_gz_len, "no-cache", nullptr));
+}
+#endif
+
 #if HAS_REMOTE_LOG
 void handlePortalLogsJS(AsyncWebServerRequest *request) {
 	if (!portal_logs_full_mode_enabled()) {

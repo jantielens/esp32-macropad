@@ -4,6 +4,7 @@
 #include "driver/i2s_std.h"
 #include "i2c_bus.h"
 #include "log_manager.h"
+#include <atomic>
 
 #define TAG "Audio"
 
@@ -99,34 +100,45 @@ static const ES8311Coeff* es8311_find_coeff(uint32_t mclk_hz, uint32_t sample_ra
     return nullptr;
 }
 
+static std::atomic<bool> codec_io_failed{false};
+
 static bool es8311_write(uint8_t reg, uint8_t val) {
-    i2c_bus_lock();
+    if (!i2c_bus_lock()) {
+        codec_io_failed = true;
+        return false;
+    }
     Wire.beginTransmission(AUDIO_CODEC_ADDR);
-    Wire.write(reg);
-    Wire.write(val);
-    bool ok = Wire.endTransmission() == 0;
+    const bool reg_written = Wire.write(reg) == 1;
+    const bool val_written = Wire.write(val) == 1;
+    bool ok = Wire.endTransmission() == 0 && reg_written && val_written;
     i2c_bus_unlock();
+    if (!ok) codec_io_failed = true;
     return ok;
 }
 
 static uint8_t es8311_read(uint8_t reg) {
-    i2c_bus_lock();
+    if (!i2c_bus_lock()) {
+        codec_io_failed = true;
+        return 0xff;
+    }
     Wire.beginTransmission(AUDIO_CODEC_ADDR);
-    Wire.write(reg);
-    Wire.endTransmission(false);
-    Wire.requestFrom((uint8_t)AUDIO_CODEC_ADDR, (uint8_t)1);
-    uint8_t val = Wire.available() ? Wire.read() : 0xFF;
+    const bool written = Wire.write(reg) == 1;
+    const bool ok = Wire.endTransmission(false) == 0 &&
+        written &&
+        Wire.requestFrom((uint8_t)AUDIO_CODEC_ADDR, (uint8_t)1) == 1 &&
+        Wire.available() > 0;
+    uint8_t val = ok ? Wire.read() : 0xFF;
     i2c_bus_unlock();
+    if (!ok) codec_io_failed = true;
     return val;
 }
 
 #if HAS_ES7210_MIC
 static bool es7210_write(uint8_t reg, uint8_t val) {
-    i2c_bus_lock();
+    if (!i2c_bus_lock()) return false;
     Wire.beginTransmission(AUDIO_MIC_ADC_ADDR);
-    Wire.write(reg);
-    Wire.write(val);
-    bool ok = Wire.endTransmission() == 0;
+    const bool written = Wire.write(reg) == 1 && Wire.write(val) == 1;
+    bool ok = Wire.endTransmission() == 0 && written;
     i2c_bus_unlock();
     return ok;
 }
@@ -264,11 +276,18 @@ bool ES8311AudioDriver::initCodec(uint32_t sample_rate) {
     regv = es8311_read(ES8311_DAC_REG31) & 0x9F;
     es8311_write(ES8311_DAC_REG31, regv);
 
+    if (codec_io_failed) return false;
     LOGI(TAG, "ES8311 codec initialized (MCLK=%lu Hz, Fs=%lu Hz)", mclk_hz, sample_rate);
     return true;
 }
 
 bool ES8311AudioDriver::begin(uint32_t sample_rate) {
+    if (tx_handle) return isAvailable() && setMuted(true);
+    codec_io_failed = false;
+    if (!setMuted(true) || (control.power && !control.power(true))) {
+        cleanup();
+        return false;
+    }
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.auto_clear = true;
     chan_cfg.dma_desc_num = AUDIO_DMA_DESC_NUM;
@@ -282,6 +301,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
     );
     if (err != ESP_OK) {
         LOGE(TAG, "i2s_new_channel failed: %s", esp_err_to_name(err));
+        cleanup();
         return false;
     }
 
@@ -328,6 +348,7 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
         cleanup();
         return false;
     }
+    tx_running = true;
     LOGT(TAG, "I2S TX: %u Hz, 16-bit stereo, MCLK=%lu Hz (%lux)",
          sample_rate, sample_rate * static_cast<uint32_t>(kEs8311MclkMultiple),
          static_cast<uint32_t>(kEs8311MclkMultiple));
@@ -347,12 +368,17 @@ bool ES8311AudioDriver::begin(uint32_t sample_rate) {
 #if HAS_AUDIO_INPUT
     this->sample_rate = sample_rate;
 #endif
+    int16_t silence[64] = {};
+    if (!write(silence, 32)) {
+        cleanup();
+        return false;
+    }
     return true;
 }
 
 bool ES8311AudioDriver::write(const int16_t* frames, size_t frame_count) {
-    if (!tx_handle || !frames || frame_count == 0) return false;
-    size_t written;
+    if (!isAvailable() || !frames || frame_count == 0) return false;
+    size_t written = 0;
     esp_err_t err = i2s_channel_write(tx_handle, frames, frame_count * 2 * sizeof(int16_t), &written, portMAX_DELAY);
     if (err != ESP_OK) {
         LOGE(TAG, "I2S write error: %s", esp_err_to_name(err));
@@ -361,31 +387,54 @@ bool ES8311AudioDriver::write(const int16_t* frames, size_t frame_count) {
     return written == frame_count * 2 * sizeof(int16_t);
 }
 
-void ES8311AudioDriver::setVolume(uint8_t vol_0_100) {
+bool ES8311AudioDriver::setVolume(uint8_t vol_0_100) {
+    if (vol_0_100 > 100) vol_0_100 = 100;
     uint8_t reg_val = (uint8_t)((uint16_t)vol_0_100 * 255 / 100);
     bool ok = es8311_write(ES8311_DAC_REG32, reg_val);
+    if (!ok) setMuted(true);
     if (ok) LOGT(TAG, "Volume: %u%% -> REG32=0x%02X", vol_0_100, reg_val);
     else LOGW(TAG, "Volume write failed: %u%% REG32=0x%02X", vol_0_100, reg_val);
+    return ok;
 }
 
-// The microphone shares the ES8311 transport only on input-enabled boards.
-#if HAS_AUDIO_INPUT
-bool ES8311AudioDriver::inputAvailable() const {
-    return rx_handle != nullptr && sample_rate != 0;
+bool ES8311AudioDriver::isAvailable() const {
+    return tx_handle != nullptr && tx_running && !codec_io_failed;
 }
 
-bool ES8311AudioDriver::captureStart() {
-    if (!inputAvailable()) return false;
-    const esp_err_t err = i2s_channel_enable(rx_handle);
-    if (err != ESP_OK) {
-        LOGE(TAG, "I2S RX enable failed: %s", esp_err_to_name(err));
+bool ES8311AudioDriver::setMuted(bool muted) {
+    if (!muted && !isAvailable()) {
+        if (control.power) control.power(false);
+        return false;
+    }
+    if (control.mute && !control.mute(muted)) {
+        codec_io_failed = true;
+        LOGW(TAG, "Amplifier control failed");
+        if (control.power) control.power(false);
         return false;
     }
     return true;
 }
 
+// The microphone shares the ES8311 transport only on input-enabled boards.
+#if HAS_AUDIO_INPUT
+bool ES8311AudioDriver::inputAvailable() const {
+    return rx_handle != nullptr && sample_rate != 0 && isAvailable();
+}
+
+bool ES8311AudioDriver::captureStart() {
+    if (!inputAvailable()) return false;
+    if (capture_active) return true;
+    const esp_err_t err = i2s_channel_enable(rx_handle);
+    if (err != ESP_OK) {
+        LOGE(TAG, "I2S RX enable failed: %s", esp_err_to_name(err));
+        return false;
+    }
+    capture_active = true;
+    return true;
+}
+
 size_t ES8311AudioDriver::readFrames(int16_t* frames, size_t frame_count, uint32_t timeout_ms) {
-    if (!inputAvailable() || !frames || frame_count == 0) return 0;
+    if (!inputAvailable() || !capture_active || !frames || frame_count == 0) return 0;
     size_t bytes_read = 0;
     const size_t requested_bytes = frame_count * 2 * sizeof(int16_t);
     const esp_err_t err = i2s_channel_read(rx_handle, frames, requested_bytes, &bytes_read,
@@ -398,9 +447,10 @@ size_t ES8311AudioDriver::readFrames(int16_t* frames, size_t frame_count, uint32
 }
 
 void ES8311AudioDriver::captureStop() {
-    if (!rx_handle) return;
+    if (!rx_handle || !capture_active) return;
     const esp_err_t err = i2s_channel_disable(rx_handle);
     if (err != ESP_OK) LOGW(TAG, "I2S RX disable failed: %s", esp_err_to_name(err));
+    else capture_active = false;
 }
 
 AudioInputFormat ES8311AudioDriver::inputFormat() const {
@@ -408,23 +458,35 @@ AudioInputFormat ES8311AudioDriver::inputFormat() const {
 }
 #endif
 
-void ES8311AudioDriver::cleanup() {
+bool ES8311AudioDriver::cleanup() {
+    bool ok = setMuted(true);
 #if HAS_AUDIO_INPUT
     if (rx_handle) {
-        i2s_channel_disable(rx_handle);
-        i2s_del_channel(rx_handle);
-        rx_handle = NULL;
+        if (capture_active && i2s_channel_disable(rx_handle) != ESP_OK) ok = false;
+        if (i2s_del_channel(rx_handle) == ESP_OK) {
+            rx_handle = NULL;
+            capture_active = false;
+        } else ok = false;
     }
+    sample_rate = 0;
 #endif
     if (tx_handle) {
-        i2s_channel_disable(tx_handle);
-        i2s_del_channel(tx_handle);
-        tx_handle = NULL;
+        if (tx_running) {
+            if (i2s_channel_disable(tx_handle) == ESP_OK) tx_running = false;
+            else ok = false;
+        }
+        if (i2s_del_channel(tx_handle) == ESP_OK) {
+            tx_handle = NULL;
+            tx_running = false;
+        } else ok = false;
     }
+    if (control.power && !control.power(false)) ok = false;
+    codec_io_failed = true;
+    return ok;
 }
 
 AudioOutputDriver* audio_output_driver_create() {
-    static ES8311AudioDriver driver;
+    static ES8311AudioDriver driver(audio_board_control_create());
     return &driver;
 }
 

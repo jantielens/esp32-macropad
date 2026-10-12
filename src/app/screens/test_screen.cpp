@@ -1,4 +1,5 @@
 #include "test_screen.h"
+#include "../pad_layout.h"
 #include "log_manager.h"
 #include "../board_config.h"
 #include "../display_manager.h"
@@ -28,7 +29,7 @@ void TestScreen::create() {
 		titleLabel = lv_label_create(screen);
 		lv_label_set_text(titleLabel, "Display Test");
 		lv_obj_set_style_text_color(titleLabel, lv_color_white(), 0);
-		lv_obj_set_style_text_font(titleLabel, &lv_font_montserrat_18, 0);
+		lv_obj_set_style_text_font(titleLabel, pad_typography_font(&lv_font_montserrat_18), 0);
 		lv_obj_align(titleLabel, LV_ALIGN_TOP_MID, 0, 8);  // Use TOP alignment to verify Y orientation
 		lv_obj_clear_flag(titleLabel, LV_OBJ_FLAG_CLICKABLE);  // Click-transparent
 		
@@ -105,6 +106,18 @@ void TestScreen::create() {
 		lv_obj_set_style_text_color(infoLabel, lv_color_make(150, 150, 150), 0);
 		lv_obj_align(infoLabel, LV_ALIGN_BOTTOM_MID, 0, -8);  // Use BOTTOM alignment to verify Y orientation
 		lv_obj_clear_flag(infoLabel, LV_OBJ_FLAG_CLICKABLE);  // Click-transparent
+
+		lv_obj_update_layout(screen);
+		const int content_width = lv_obj_get_content_width(screen);
+		const int text_limit = (lv_obj_get_content_height(screen) - 144) / 2;
+		lv_obj_t* text_labels[] = {titleLabel, infoLabel};
+		for (lv_obj_t* label : text_labels) {
+			lv_obj_set_width(label, content_width);
+			lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+			lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+			const int height = lv_font_get_line_height(lv_obj_get_style_text_font(label, LV_PART_MAIN));
+			lv_obj_set_height(label, height < text_limit ? height : text_limit > 1 ? text_limit : 1);
+		}
 		
 		// Add touch event handler - tap anywhere to go to InfoScreen
 		lv_obj_add_event_cb(screen, touchEventCallback, LV_EVENT_CLICKED, this);

@@ -3,16 +3,18 @@
 #if HAS_DISPLAY
 
 #include "pad_config.h"
+#include "config_psram.h"
 #include <ArduinoJson.h>
 #include <stdio.h>
 #include <string.h>
 
 // Cache pad items at init time — provide() is called from the LVGL task
 // which has a PSRAM stack, making LittleFS reads (SPI flash) unsafe.
-static ListItem s_cached_items[LIST_MAX_ITEMS];
+static ListItem* s_cached_items = nullptr;
 static uint8_t  s_cached_count = 0;
 
 static uint8_t pads_provide(ListItem* items, uint8_t max_items) {
+    if (!items || !s_cached_items || !s_cached_count || !max_items) return 0;
     uint8_t n = (s_cached_count < max_items) ? s_cached_count : max_items;
     memcpy(items, s_cached_items, n * sizeof(ListItem));
     return n;
@@ -20,6 +22,11 @@ static uint8_t pads_provide(ListItem* items, uint8_t max_items) {
 
 static void pads_cache_rebuild() {
     s_cached_count = 0;
+    if (!s_cached_items) {
+        s_cached_items = static_cast<ListItem*>(config_psram_alloc(
+            sizeof(ListItem) * LIST_MAX_ITEMS, "pads_list"));
+        if (!s_cached_items) return;
+    }
     for (uint8_t i = 0; i < MAX_PADS && s_cached_count < LIST_MAX_ITEMS; i++) {
         if (!pad_config_exists(i)) continue;
 

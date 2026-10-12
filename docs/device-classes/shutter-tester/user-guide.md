@@ -981,6 +981,9 @@ The per-sensor waveform charts in the session detail view show a semi-transparen
 
 The following is a complete pad configuration showing an advanced shutter tester layout with gauges, per-sensor waveforms, and an all-sensors overlay:
 
+Upload a trusted static TrueType font as `doto` in **Pads > Fonts** to use the
+custom speed label. Without that asset, the label uses its automatic bitmap font.
+
 ```json
 {
   "layout": "grid",
@@ -992,7 +995,7 @@ The following is a complete pad configuration showing an advanced shutter tester
       "label_top": "measured",
       "label_center": "[shutter:speed]",
       "label_top_style": "font_size:24",
-      "label_center_style": "font_family:doto;font_size:48",
+      "label_center_style": "font:doto;font_size:48",
       "bg_color": "E91E63"
     },
     {

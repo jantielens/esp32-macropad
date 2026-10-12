@@ -1,4 +1,5 @@
 #include "inkplate6flick_epaper_driver.h"
+#include "monochrome_render.h"
 
 #include "../board_config.h"
 #include "../log_manager.h"
@@ -10,13 +11,6 @@
 
 static Inkplate* s_inkplate = nullptr;
 
-static constexpr uint8_t BAYER_4X4[4][4] = {
-		{ 0, 8, 2, 10 },
-		{ 12, 4, 14, 6 },
-		{ 3, 11, 1, 9 },
-		{ 15, 7, 13, 5 },
-};
-
 Inkplate* inkplate6flick_lvgl_instance() {
 		return s_inkplate;
 }
@@ -24,6 +18,8 @@ Inkplate* inkplate6flick_lvgl_instance() {
 Inkplate6FlickEpaperDriver::Inkplate6FlickEpaperDriver(DeviceConfig* cfg)
 		: display(nullptr), config(cfg), framebufferMutex(nullptr), currentX(0), currentY(0),
 			currentW(0), currentH(0), rotation(0), panelMode(cfg ? cfg->epaper_render_mode : EPAPER_DEFAULT_RENDER_MODE),
+				bwConversion(cfg ? cfg->epaper_bw_conversion : MONOCHROME_CONVERSION_THRESHOLD),
+				bwThreshold(cfg ? cfg->epaper_bw_threshold : MONOCHROME_THRESHOLD),
 			lastRefreshMs(0), lastChangeMs(0), drawingFramebuffer(nullptr), presentedFramebuffer(nullptr), refreshCount(0), partialUpdateCount(0),
 			bwPartialUpdatesSinceFull(0), noOpSkipCount(0), backlightBrightness(0), frontlightLevel(0), pendingChanges(false),
 			frontlightEnabled(false), fullRefreshRequested(false), hasPresentedFrame(false), initialized(false) {}
@@ -146,11 +142,10 @@ void Inkplate6FlickEpaperDriver::writePixel(int16_t x, int16_t y, uint16_t rgb56
 				break;
 		}
 		if (usesBwMode()) {
-			const uint8_t threshold = BAYER_4X4[y & 3][x & 3] * 16 + 8;
 			const size_t offset = (size_t)(DISPLAY_WIDTH / 8) * drawY + drawX / 8;
 			const uint8_t mask = 1U << (drawX & 7);
 			drawingFramebuffer[offset] = (drawingFramebuffer[offset] & ~mask) |
-					((luminance >> 8) < threshold ? mask : 0);
+					(monochrome_is_white(luminance >> 8, x, y, bwConversion, bwThreshold) ? 0 : mask);
 			return;
 		}
 		const uint8_t gray = (luminance * 7 + (255 * 128)) / (255 * 256);

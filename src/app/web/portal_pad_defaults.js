@@ -28,12 +28,32 @@ function syncLabelStyleVisibility(slot) {
 
 // --- Pad and Button Defaults helpers ---
 
-// Firmware hardcoded defaults (must match init_button_defaults in pad_config.cpp)
-const PAD_FIRMWARE_DEFAULTS = {
-    default_pad_bg_color: '#000000',
-    bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000',
-    border_width: '0', corner_radius: '8', content_pad: '4',
-};
+let PAD_FIRMWARE_DEFAULTS = {};
+let PAD_TYPOGRAPHY_STATUS = {};
+
+async function padLoadTypographyFonts() {
+    var select = document.getElementById('pad-def-default-font');
+    if (!select) return;
+    var selected = padState.buttonDefaults.default_font || '@builtin';
+    select.replaceChildren(new Option('Montserrat (built-in)', '@builtin'));
+    var available = false;
+    if (PAD_TYPOGRAPHY_STATUS.ttf_supported) {
+        try {
+            var response = await fetch('/api/fonts/list');
+            if (!response.ok) throw new Error('Font list unavailable');
+            var fonts = await response.json();
+            if (!Array.isArray(fonts)) throw new Error('Invalid font list');
+            fonts.forEach(function(font) {
+                select.add(new Option(font.name, font.name));
+                if (font.name === selected) available = true;
+            });
+        } catch (error) {
+            console.error('Typography font list:', error);
+        }
+    }
+    if (selected !== '@builtin' && !available) select.add(new Option(selected + ' (unavailable)', selected));
+    select.value = selected;
+}
 
 // Load device-level button defaults from the REST API
 async function padLoadButtonDefaultsFromDevice() {
@@ -53,7 +73,12 @@ async function padLoadButtonDefaultsFromDevice() {
 }
 
 function padLoadButtonDefaults(defs) {
-    padState.buttonDefaults = defs || {};
+    if (defs.firmware_defaults) PAD_FIRMWARE_DEFAULTS = defs.firmware_defaults;
+    PAD_TYPOGRAPHY_STATUS = defs.typography_status || {};
+    defs = { ...defs };
+    delete defs.firmware_defaults;
+    delete defs.typography_status;
+    padState.buttonDefaults = defs;
     // NOTE: This function does double duty. It always caches button defaults in
     // padState (used by the pad-editor grid renderer), and also populates the
     // form fields below — but those fields only exist in the button-defaults
@@ -71,23 +96,29 @@ function padLoadButtonDefaults(defs) {
     padSetBindableColor('pad-def-fg-color', defs.fg_color || '', PAD_FIRMWARE_DEFAULTS.fg_color);
     padSetBindableColor('pad-def-border-color', defs.border_color || '', PAD_FIRMWARE_DEFAULTS.border_color);
     var el;
-    el = document.getElementById('pad-def-border-width'); if (el) el.value = defs.border_width || '';
-    el = document.getElementById('pad-def-corner-radius'); if (el) el.value = defs.corner_radius || '';
-    el = document.getElementById('pad-def-content-pad'); if (el) el.value = defs.content_pad || '';
-    el = document.getElementById('pad-def-button-shadow-enabled'); if (el) el.checked = !!defs.button_shadow_enabled;
-    el = document.getElementById('pad-def-button-shadow-type'); if (el) el.value = defs.button_shadow_type || 'opaque';
-    el = document.getElementById('pad-def-button-shadow-color-mode'); if (el) el.value = defs.button_shadow_color_mode || 'fixed';
-    el = document.getElementById('pad-def-button-shadow-color'); if (el) el.value = defs.button_shadow_color || '#101010';
-    el = document.getElementById('pad-def-button-shadow-darken'); if (el) el.value = defs.button_shadow_darken_pct ?? 35;
-    el = document.getElementById('pad-def-button-shadow-offset-x'); if (el) el.value = defs.button_shadow_offset_x_px ?? 0;
-    el = document.getElementById('pad-def-button-shadow-offset-y'); if (el) el.value = defs.button_shadow_offset_y_px ?? 5;
-    el = document.getElementById('pad-def-button-shadow-drop-blur'); if (el) el.value = defs.button_shadow_drop_blur_px ?? 4;
-    el = document.getElementById('pad-def-button-spacing'); if (el) el.value = defs.button_spacing_px ?? 6;
-    el = document.getElementById('pad-def-pixel-shift-distance'); if (el) el.value = defs.pixel_shift_distance_px ?? 4;
-    el = document.getElementById('pad-def-inset-top'); if (el) el.value = defs.pad_inset_top_px ?? 0;
-    el = document.getElementById('pad-def-inset-right'); if (el) el.value = defs.pad_inset_right_px ?? 0;
-    el = document.getElementById('pad-def-inset-bottom'); if (el) el.value = defs.pad_inset_bottom_px ?? 0;
-    el = document.getElementById('pad-def-inset-left'); if (el) el.value = defs.pad_inset_left_px ?? 0;
+    el = document.getElementById('pad-def-base-text-size'); if (el) el.value = defs.base_text_size || '';
+    el = document.getElementById('pad-def-base-text-size-hint');
+    if (el) el.textContent = 'Automatic: ' + (PAD_TYPOGRAPHY_STATUS.board_medium_size || 24) + ' px';
+    el = document.getElementById('pad-def-typography-status');
+    if (el) el.textContent = PAD_TYPOGRAPHY_STATUS.reboot_required ? 'Typography changes pending reboot.' : 'Typography is active.';
+    padLoadTypographyFonts();
+    el = document.getElementById('pad-def-border-width'); if (el) el.value = defs.border_width ?? '';
+    el = document.getElementById('pad-def-corner-radius'); if (el) el.value = defs.corner_radius ?? '';
+    el = document.getElementById('pad-def-content-pad'); if (el) el.value = defs.content_pad ?? '';
+    el = document.getElementById('pad-def-button-shadow-enabled'); if (el) el.checked = padGetEffectiveDefault('button_shadow_enabled');
+    el = document.getElementById('pad-def-button-shadow-type'); if (el) el.value = padGetEffectiveDefault('button_shadow_type');
+    el = document.getElementById('pad-def-button-shadow-color-mode'); if (el) el.value = padGetEffectiveDefault('button_shadow_color_mode');
+    el = document.getElementById('pad-def-button-shadow-color'); if (el) el.value = padGetEffectiveDefault('button_shadow_color');
+    el = document.getElementById('pad-def-button-shadow-darken'); if (el) el.value = padGetEffectiveDefault('button_shadow_darken_pct');
+    el = document.getElementById('pad-def-button-shadow-offset-x'); if (el) el.value = padGetEffectiveDefault('button_shadow_offset_x_px');
+    el = document.getElementById('pad-def-button-shadow-offset-y'); if (el) el.value = padGetEffectiveDefault('button_shadow_offset_y_px');
+    el = document.getElementById('pad-def-button-shadow-drop-blur'); if (el) el.value = padGetEffectiveDefault('button_shadow_drop_blur_px');
+    el = document.getElementById('pad-def-button-spacing'); if (el) el.value = padGetEffectiveDefault('button_spacing_px');
+    el = document.getElementById('pad-def-pixel-shift-distance'); if (el) el.value = padGetEffectiveDefault('pixel_shift_distance_px');
+    el = document.getElementById('pad-def-inset-top'); if (el) el.value = padGetEffectiveDefault('pad_inset_top_px');
+    el = document.getElementById('pad-def-inset-right'); if (el) el.value = padGetEffectiveDefault('pad_inset_right_px');
+    el = document.getElementById('pad-def-inset-bottom'); if (el) el.value = padGetEffectiveDefault('pad_inset_bottom_px');
+    el = document.getElementById('pad-def-inset-left'); if (el) el.value = padGetEffectiveDefault('pad_inset_left_px');
     padInitLayoutDiagram();
     padUpdateLayoutDiagram();
     padButtonShadowTypeChanged();
@@ -111,6 +142,12 @@ function padCollectButtonDefaults() {
     if (fgc) d.fg_color = fgc;
     if (bdc) d.border_color = bdc;
     var el;
+    el = document.getElementById('pad-def-default-font'); if (el) d.default_font = el.value;
+    el = document.getElementById('pad-def-base-text-size');
+    if (el) {
+        if (!el.checkValidity()) throw new Error('Base text size must be Automatic or an integer from 1 to 65535');
+        d.base_text_size = el.value === '' ? 0 : Number(el.value);
+    }
     el = document.getElementById('pad-def-border-width'); if (el && el.value.trim()) d.border_width = el.value.trim();
     el = document.getElementById('pad-def-corner-radius'); if (el && el.value.trim()) d.corner_radius = el.value.trim();
     el = document.getElementById('pad-def-content-pad'); if (el && el.value.trim()) d.content_pad = el.value.trim();
@@ -134,6 +171,11 @@ function padCollectButtonDefaults() {
     el = document.getElementById('pad-def-inset-bottom'); if (el) d.pad_inset_bottom_px = Number(el.value) || 0;
     el = document.getElementById('pad-def-inset-left'); if (el) d.pad_inset_left_px = Number(el.value) || 0;
 
+    Object.keys(d).forEach(function(field) {
+        if (!(field in padState.buttonDefaults) && String(d[field]).toLowerCase() === String(PAD_FIRMWARE_DEFAULTS[field]).toLowerCase()) {
+            delete d[field];
+        }
+    });
     return d;
 }
 
@@ -196,8 +238,8 @@ function padUpdateLayoutDiagram() {
     diagram.style.setProperty('--layout-bottom', (bottom * scale) + 'px');
     diagram.style.setProperty('--layout-left', (left * scale) + 'px');
     diagram.style.setProperty('--layout-gap', Math.max(1, gap * scale) + 'px');
-    diagram.style.setProperty('--layout-pad-bg', padLayoutHexColor('pad-def-pad-bg-color', '#000000'));
-    diagram.style.setProperty('--layout-button-bg', padLayoutHexColor('pad-def-bg-color', '#333333'));
+    diagram.style.setProperty('--layout-pad-bg', padLayoutHexColor('pad-def-pad-bg-color', padGetEffectiveDefault('default_pad_bg_color')));
+    diagram.style.setProperty('--layout-button-bg', padLayoutHexColor('pad-def-bg-color', padGetEffectiveDefault('bg_color')));
 
     var values = {
         'pad-layout-shift-value': shift,
@@ -215,8 +257,8 @@ function padUpdateLayoutDiagram() {
 
 // Save device-level button defaults to /api/button-defaults
 async function padSaveButtonDefaults() {
-    var d = padCollectButtonDefaults();
     try {
+    var d = padCollectButtonDefaults();
         var resp = await fetch('/api/component/button-defaults/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -227,7 +269,12 @@ async function padSaveButtonDefaults() {
             throw new Error(err.error || 'HTTP ' + resp.status);
         }
         padState.buttonDefaults = d;
-        showMessage('Pad and button defaults saved', 'success');
+        await padLoadButtonDefaultsFromDevice();
+        if (PAD_TYPOGRAPHY_STATUS.reboot_required) {
+            setPendingReboot();
+        } else {
+            showMessage('Pad and button defaults saved', 'success');
+        }
         // Re-render current pad grid to reflect updated defaults
         padRenderGrid();
     } catch (err) {
@@ -239,8 +286,8 @@ async function padSaveButtonDefaults() {
 // Get the effective default for a button appearance field (pad default → firmware default)
 function padGetEffectiveDefault(field) {
     var d = padState.buttonDefaults || {};
-    if (d[field]) return d[field];
-    return PAD_FIRMWARE_DEFAULTS[field] || '';
+    if (d[field] !== undefined && d[field] !== '') return d[field];
+    return PAD_FIRMWARE_DEFAULTS[field] ?? '';
 }
 
 // Reset a button appearance field to the effective default and update the reset hint

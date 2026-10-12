@@ -97,6 +97,18 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_cycle_pad.js',
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_mqtt.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_key.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_sound_alert.js', 'utf8'), context);
+const soundEditor = context._actionEditorExtensions.find(extension => extension.type === 'sound_alert');
+assert(!soundEditor.groups('beep-only', {has_sound_player: false}).includes('value="mp3"'));
+assert(soundEditor.groups('mp3-capable', {has_sound_player: true}).includes('value="mp3"'));
+for (const kind of ['stop', 'stop_all']) {
+    soundEditor.load('sound-test', {sound_alert_kind: kind});
+    context.actionEditorSoundAlertChanged('sound-test');
+    assert.strictEqual(document.getElementById('sound-test-sound-alert-tone-group').style.display, 'none');
+    const action = soundEditor.build('sound-test', 'sound_alert');
+    assert.strictEqual(action.sound_alert_kind, kind);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'sound_alert_pattern'), false);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(action, 'sound_alert_file'), false);
+}
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_timer.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_notify.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_visual_alert.js', 'utf8'), context);

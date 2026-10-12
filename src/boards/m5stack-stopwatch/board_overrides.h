@@ -1,0 +1,113 @@
+#ifndef BOARD_OVERRIDES_M5STACK_STOPWATCH_H
+#define BOARD_OVERRIDES_M5STACK_STOPWATCH_H
+
+// M5Stack StopWatch: ESP32-S3R8, 16 MiB flash, 8 MiB OPI PSRAM.
+// Reference: https://docs.m5stack.com/en/core/StopWatch
+// Power/reset pins are M5IOE1 outputs, not ESP32 GPIO numbers.
+// Board-local shared hardware compiled through the sketch-root aggregator.
+#define BOARD_HARDWARE_SOURCE "stopwatch_hardware.cpp"
+// Board-local declarations used only by compilation and factory wiring.
+#define BOARD_HARDWARE_HEADER "stopwatch_hardware.h"
+// Board-owned deferred shutdown and motor safety deadlines.
+#define BOARD_HARDWARE_LOOP m5stack_stopwatch_loop
+// Board-owned codec rail and amplifier controls for the selected audio driver.
+#define BOARD_AUDIO_CONTROL_FACTORY stopwatch_audio_control
+// Board-local sensor provider compiled and registered by the sensor aggregator.
+#define BOARD_SENSOR_SOURCE "stopwatch_battery_sensor.cpp"
+// Board-local action module compiled through the action aggregator.
+#define BOARD_ACTION_SOURCE "stopwatch_actions.cpp"
+// Room for the built-in catalog and four board-local actions.
+#define ACTION_TYPE_REGISTRY_MAX_TYPES 28
+#ifndef STOPWATCH_CHARGING_MODE
+// StopWatch boot charging: 0 off, 1 low (185 mA), 2 high (425 mA).
+#define STOPWATCH_CHARGING_MODE 1
+#endif
+#define HAS_DISPLAY true
+#define HAS_TOUCH true
+#define HAS_BACKLIGHT true
+#define HAS_BUILTIN_LED false
+
+// Preserve internal/DMA RAM for display, Wi-Fi, the portal, and OTA.
+#define HAS_BLE false
+#define HAS_BLE_HID false
+#define HAS_USB_HID false
+#define HAS_NATIVE_EXTENSIONS false
+#define HAS_MCP false
+#define HAS_IMAGE_FETCH true
+#define HAS_IMAGE_LIBRARY false
+#define HAS_HA_HISTORY true
+#define HAS_MUSIC_ANALYSIS false
+#define HAS_AUDIO_INPUT false
+#define HAS_ES7210_MIC false
+#define HAS_REMOTE_LOG true
+
+// Driver Selection (HAL)
+#define DISPLAY_DRIVER DISPLAY_DRIVER_ARDUINO_GFX_CO5300
+#define DISPLAY_PANEL "CO5300"
+#define TOUCH_DRIVER TOUCH_DRIVER_CST820B_WIRE
+#define DISPLAY_SHAPE DISPLAY_SHAPE_ROUND
+#define UI_SCALE_TIER UI_SCALE_MEDIUM
+#define DISPLAY_WIDTH 466
+#define DISPLAY_HEIGHT 466
+#define DISPLAY_ROTATION 0
+#define LV_USE_PERF_MONITOR_POS LV_ALIGN_BOTTOM_MID
+#define LVGL_BUFFER_PREFER_INTERNAL false
+#define LVGL_BUFFER_SIZE (DISPLAY_WIDTH * 16)
+#define MAX_PAD_BUTTONS 25
+#define MAX_GRID_COLS 5
+#define MAX_GRID_ROWS 5
+#define SCREEN_HISTORY_MAX 3
+#define MAX_MQTT_TRIGGERS 3
+#define ACTION_CONTINUATION_SLOTS 1
+
+// AMOLED brightness is a panel command. There is no backlight PWM GPIO.
+#define LCD_BL_PIN -1
+#define LCD_QSPI_RST -1
+#define LCD_QSPI_CS 39
+#define LCD_QSPI_PCLK 40
+#define LCD_QSPI_D0 41
+#define LCD_QSPI_D1 42
+#define LCD_QSPI_D2 46
+#define LCD_QSPI_D3 45
+#define TFT_SPI_FREQ_HZ (80 * 1000 * 1000)
+
+// One shared internal bus, initialized by the board hardware module.
+#define TOUCH_I2C_SDA 47
+#define TOUCH_I2C_SCL 48
+#define TOUCH_INT 13
+#define TOUCH_RST -1
+#define SENSOR_I2C_SDA 47
+#define SENSOR_I2C_SCL 48
+#define SENSOR_I2C_FREQUENCY 100000
+
+// Both programmable buttons use the existing tap/hold action dispatcher.
+// Hold yellow during startup for configuration-mode recovery.
+#define HAS_BUTTON true
+#define HAS_CONFIG_MODE_BUTTON true
+#define BUTTON_PIN 2
+#define BUTTON_ACTIVE_LOW true
+#define NUM_HW_BUTTONS 2
+#ifdef __cplusplus
+static constexpr HwButtonDef HW_BUTTON_DEFS[NUM_HW_BUTTONS] = {
+    { .pin = 2, .active_low = true, .label = "Yellow" },
+    { .pin = 1, .active_low = true, .label = "Blue" },
+};
+#endif
+
+// Speaker/MP3 enabled for hardware validation; installer capabilities remain pending.
+#ifndef HAS_AUDIO
+#define HAS_AUDIO true
+#endif
+#define AUDIO_OUTPUT_DRIVER AUDIO_OUTPUT_DRIVER_ES8311
+#define AUDIO_CODEC_ADDR 0x18
+#define AUDIO_I2S_MCLK 18
+#define AUDIO_I2S_BCLK 17
+#define AUDIO_I2S_LRCK 15
+#define AUDIO_I2S_DOUT 21
+#define AUDIO_I2S_DIN -1
+#define AUDIO_PA_PIN -1
+#define AUDIO_SAMPLE_RATE 48000
+#define AUDIO_MP3_SCRATCH_PSRAM true
+#define AUDIO_DEFAULT_VOLUME 30
+
+#endif // BOARD_OVERRIDES_M5STACK_STOPWATCH_H

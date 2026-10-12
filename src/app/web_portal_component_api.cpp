@@ -1,11 +1,15 @@
 #include "web_portal_component_api.h"
 #include "board_config.h"
 #include "component_registry.h"
+#if HAS_TTF_FONTS
+#include "font_store.h"
+#endif
 #include "web_portal_auth.h"
 #include "web_portal_cors.h"
 #include "web_portal_json.h"
 #include "web_portal_state.h"
 #include "web_portal_logs.h"
+#include "web_portal_path.h"
 #include "log_manager.h"
 
 #include <algorithm>
@@ -110,6 +114,9 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         uint8_t item_count = 0;
         for (uint8_t i = 0; i < component_registry_count(); i++) {
             ComponentDef* comp = component_registry_get(i);
+#if HAS_TTF_FONTS
+            if (strcmp(comp->id, "fonts") == 0 && !font_store_available()) continue;
+#endif
             if (strcmp(comp->category, PORTAL_PRIMARY_CATEGORY) == 0) {
                 const char* nav_id = (comp->fragment_id && comp->fragment_id[0]) ? comp->fragment_id : comp->id;
                 items[item_count++] = {nav_id, comp->display_name, comp->nav_order,
@@ -183,6 +190,9 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
         uint8_t item_count = 0;
         for (uint8_t i = 0; i < component_registry_count(); i++) {
             ComponentDef* comp = component_registry_get(i);
+#if HAS_TTF_FONTS
+            if (strcmp(comp->id, "fonts") == 0 && !font_store_available()) continue;
+#endif
             if (strcmp(comp->category, cat.id) != 0) continue;
             #if HAS_REMOTE_LOG
             if (strcmp(comp->id, "logs") == 0 && !portal_logs_full_mode_enabled()) continue;
@@ -231,7 +241,7 @@ static void handlePortalNav(AsyncWebServerRequest* request) {
 
 static void handleComponentGetConfig(AsyncWebServerRequest* request) {
     if (!portal_auth_gate(request)) return;
-    String compId = request->pathArg(0);
+    String compId = portal_path_arg(request->url(), "/api/component/", 0);
     ComponentDef* comp = component_registry_find(compId.c_str());
     if (!comp || !comp->get_config) {
         request->send(404, "application/json", "{\"error\":\"not found\"}");
@@ -245,7 +255,7 @@ static void handleComponentGetConfig(AsyncWebServerRequest* request) {
 // ============================================================================
 
 static void handleComponentSaveConfigRequest(AsyncWebServerRequest* request) {
-    String compId = request->pathArg(0);
+    String compId = portal_path_arg(request->url(), "/api/component/", 0);
     ComponentDef* comp = component_registry_find(compId.c_str());
     if (!comp) {
         request->send(404, "application/json", "{\"error\":\"not found\"}");
@@ -266,7 +276,7 @@ static void handleComponentSaveConfigRequest(AsyncWebServerRequest* request) {
 static void handleComponentSaveConfigBody(AsyncWebServerRequest* request,
     uint8_t* data, size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
-    String compId = request->pathArg(0);
+    String compId = portal_path_arg(request->url(), "/api/component/", 0);
     ComponentDef* comp = component_registry_find(compId.c_str());
     if (!comp || !comp->save_config_body) return;
     comp->save_config_body(request, data, len, index, total);
@@ -277,7 +287,7 @@ static void handleComponentSaveConfigBody(AsyncWebServerRequest* request,
 // ============================================================================
 
 static void handleComponentDeleteConfig(AsyncWebServerRequest* request) {
-    String compId = request->pathArg(0);
+    String compId = portal_path_arg(request->url(), "/api/component/", 0);
     ComponentDef* comp = component_registry_find(compId.c_str());
     if (!comp || !comp->delete_config) {
         request->send(404, "application/json", "{\"error\":\"not found\"}");
@@ -292,8 +302,8 @@ static void handleComponentDeleteConfig(AsyncWebServerRequest* request) {
 // ============================================================================
 
 static void handleComponentActionRequest(AsyncWebServerRequest* request) {
-    String compId = request->pathArg(0);
-    String actionName = request->pathArg(1);
+    String compId = portal_path_arg(request->url(), "/api/component/", 0);
+    String actionName = portal_path_arg(request->url(), "/api/component/", 1);
 
     ComponentDef* comp = component_registry_find(compId.c_str());
     if (!comp) {
@@ -325,8 +335,8 @@ static void handleComponentActionRequest(AsyncWebServerRequest* request) {
 static void handleComponentActionBody(AsyncWebServerRequest* request,
     uint8_t* data, size_t len, size_t index, size_t total) {
     if (!portal_auth_gate(request)) return;
-    String compId = request->pathArg(0);
-    String actionName = request->pathArg(1);
+    String compId = portal_path_arg(request->url(), "/api/component/", 0);
+    String actionName = portal_path_arg(request->url(), "/api/component/", 1);
 
     ComponentDef* comp = component_registry_find(compId.c_str());
     if (!comp) return;
@@ -355,35 +365,41 @@ void web_portal_register_component_routes(AsyncWebServer* server) {
     server->on("/api/portal/nav", HTTP_GET, handlePortalNav);
     server->on("/api/portal/nav", HTTP_OPTIONS, handleCorsPreflightGeneric);
 
-    // Config CRUD — regex routes (registered before action routes for first-match)
-    server->on(
-        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/config$"),
-        HTTP_GET, handleComponentGetConfig);
+    auto action_filter = [](AsyncWebServerRequest* request) {
+        return portal_path_matches(request->url().c_str(), "/api/component/", 2, true);
+    };
+    auto config_filter = [action_filter](AsyncWebServerRequest* request) {
+        return action_filter(request) &&
+               portal_path_arg(request->url(), "/api/component/", 1) == "config";
+    };
 
     server->on(
-        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/config$"),
-        HTTP_POST, handleComponentSaveConfigRequest, nullptr, handleComponentSaveConfigBody);
+        AsyncURIMatcher::prefix("/api/component/"),
+        HTTP_GET, handleComponentGetConfig).setFilter(config_filter);
 
     server->on(
-        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/config$"),
-        HTTP_DELETE, handleComponentDeleteConfig);
-
-    // Custom action routes — regex with two capture groups
-    server->on(
-        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/([a-z0-9-]+)$"),
-        HTTP_GET, handleComponentActionRequest);
+        AsyncURIMatcher::prefix("/api/component/"),
+        HTTP_POST, handleComponentSaveConfigRequest, nullptr, handleComponentSaveConfigBody).setFilter(config_filter);
 
     server->on(
-        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/([a-z0-9-]+)$"),
-        HTTP_POST, handleComponentActionRequest, nullptr, handleComponentActionBody);
+        AsyncURIMatcher::prefix("/api/component/"),
+        HTTP_DELETE, handleComponentDeleteConfig).setFilter(config_filter);
 
     server->on(
-        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/([a-z0-9-]+)$"),
-        HTTP_PUT, handleComponentActionRequest, nullptr, handleComponentActionBody);
+        AsyncURIMatcher::prefix("/api/component/"),
+        HTTP_GET, handleComponentActionRequest).setFilter(action_filter);
 
     server->on(
-        AsyncURIMatcher::regex("^/api/component/([a-z0-9-]+)/([a-z0-9-]+)$"),
-        HTTP_DELETE, handleComponentActionRequest);
+        AsyncURIMatcher::prefix("/api/component/"),
+        HTTP_POST, handleComponentActionRequest, nullptr, handleComponentActionBody).setFilter(action_filter);
+
+    server->on(
+        AsyncURIMatcher::prefix("/api/component/"),
+        HTTP_PUT, handleComponentActionRequest, nullptr, handleComponentActionBody).setFilter(action_filter);
+
+    server->on(
+        AsyncURIMatcher::prefix("/api/component/"),
+        HTTP_DELETE, handleComponentActionRequest).setFilter(action_filter);
 
     // CORS preflight for all component and portal routes
     server->on("/api/component/*", HTTP_OPTIONS, handleCorsPreflightGeneric);

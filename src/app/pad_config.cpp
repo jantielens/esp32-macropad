@@ -155,12 +155,12 @@ static void init_button_defaults(ScreenButtonConfig* btn) {
     memset(btn, 0, sizeof(ScreenButtonConfig));
     btn->col_span = 1;
     btn->row_span = 1;
-    strlcpy(btn->bg_color, "#333333", CONFIG_COLOR_MAX_LEN);
-    strlcpy(btn->fg_color, "#FFFFFF", CONFIG_COLOR_MAX_LEN);
-    strlcpy(btn->border_color, "#000000", CONFIG_COLOR_MAX_LEN);
-    strlcpy(btn->border_width, "0", CONFIG_BINDABLE_SHORT_LEN);
-    strlcpy(btn->corner_radius, "8", CONFIG_BINDABLE_SHORT_LEN);
-    strlcpy(btn->content_pad, "4", CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(btn->bg_color, DEFAULT_BUTTON_BG_COLOR, CONFIG_COLOR_MAX_LEN);
+    strlcpy(btn->fg_color, DEFAULT_BUTTON_FG_COLOR, CONFIG_COLOR_MAX_LEN);
+    strlcpy(btn->border_color, DEFAULT_BUTTON_BORDER_COLOR, CONFIG_COLOR_MAX_LEN);
+    strlcpy(btn->border_width, DEFAULT_BUTTON_BORDER_WIDTH, CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(btn->corner_radius, DEFAULT_BUTTON_CORNER_RADIUS, CONFIG_BINDABLE_SHORT_LEN);
+    strlcpy(btn->content_pad, DEFAULT_BUTTON_CONTENT_PAD, CONFIG_BINDABLE_SHORT_LEN);
 }
 
 static void parse_ui_offset_field(JsonVariant v, int16_t* out_x, int16_t* out_y) {
@@ -300,17 +300,17 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
 
     // Appearance fields: button JSON → device button_defaults → hardcoded default
     parse_bindable_field(obj["bg_color"], btn->bg_color, CONFIG_COLOR_MAX_LEN,
-                         btn_default(defs ? defs->bg_color : nullptr, "#333333"));
+                         btn_default(defs ? defs->bg_color : nullptr, DEFAULT_BUTTON_BG_COLOR));
     parse_bindable_field(obj["fg_color"], btn->fg_color, CONFIG_COLOR_MAX_LEN,
-                         btn_default(defs ? defs->fg_color : nullptr, "#FFFFFF"));
+                         btn_default(defs ? defs->fg_color : nullptr, DEFAULT_BUTTON_FG_COLOR));
     parse_bindable_field(obj["border_color"], btn->border_color, CONFIG_COLOR_MAX_LEN,
-                         btn_default(defs ? defs->border_color : nullptr, "#000000"));
+                         btn_default(defs ? defs->border_color : nullptr, DEFAULT_BUTTON_BORDER_COLOR));
     parse_bindable_field(obj["border_width"], btn->border_width, CONFIG_BINDABLE_SHORT_LEN,
-                         btn_default(defs ? defs->border_width : nullptr, "0"), false);
+                         btn_default(defs ? defs->border_width : nullptr, DEFAULT_BUTTON_BORDER_WIDTH), false);
     parse_bindable_field(obj["corner_radius"], btn->corner_radius, CONFIG_BINDABLE_SHORT_LEN,
-                         btn_default(defs ? defs->corner_radius : nullptr, "8"), false);
+                         btn_default(defs ? defs->corner_radius : nullptr, DEFAULT_BUTTON_CORNER_RADIUS), false);
     parse_bindable_field(obj["content_pad"], btn->content_pad, CONFIG_BINDABLE_SHORT_LEN,
-                         btn_default(defs ? defs->content_pad : nullptr, "4"), false);
+                         btn_default(defs ? defs->content_pad : nullptr, DEFAULT_BUTTON_CONTENT_PAD), false);
     btn->button_shadow = parse_button_shadow_mode(obj["button_shadow"]);
 
     // Typed actions — array of up to MAX_BUTTON_ACTIONS sequential actions per gesture.
@@ -591,7 +591,7 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
     out->rows = doc["rows"] | (uint8_t)3;
     strlcpy(out->wake_screen, doc["wake_screen"] | "", CONFIG_SCREEN_ID_MAX_LEN);
     parse_bindable_field(doc["bg_color"], out->bg_color, CONFIG_COLOR_MAX_LEN,
-                         btn_default(button_defaults_get()->default_pad_bg_color, "#000000"));
+                         btn_default(button_defaults_get()->default_pad_bg_color, DEFAULT_PAD_BG_COLOR));
     out->button_shadow = parse_button_shadow_mode(doc["button_shadow"]);
     out->template_pad = doc["template_pad"] | (int8_t)-1;
     if (out->template_pad >= MAX_PADS) out->template_pad = -1;

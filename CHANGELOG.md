@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-09
+ms.date: 2026-10-12
 ms.topic: reference
 ---
 
@@ -13,6 +13,192 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.40.0] - 2026-10-12
+
+### Added
+
+* Customize pad button labels and widget text with uploaded TrueType fonts on
+  supported display boards with storage and PSRAM. Manage trusted, static
+  `.ttf` files through **Pads > Fonts** or the authenticated font API, then use
+  styles such as `font:my-font;font_size:40`. Adjust line spacing and baseline
+  without changing glyph size using `font_metrics:bounds` or a multiplier such
+  as `font_metrics:1.5`. Missing or unloadable fonts fall back to bitmap text;
+  native extension canvas text remains bitmap-only. Fonts are validated before
+  rendering, including checks for cyclic or excessively nested composites.
+  Loading a font leaves unrelated font-store operations available; deleting
+  that font during loading returns a retryable conflict. Instances are cached
+  per pad and released when it rebuilds or is destroyed. Very large sizes or
+  many simultaneous instances can exhaust memory; stock LVGL/STB rendering
+  can hang or reboot on allocation failure. See the
+  [font memory limitations](docs/dev/display-touch-architecture.md#accepted-backend-oom-limitation).
+  `HAS_TTF_FONTS` can disable uploaded fonts for bitmap-only builds.
+* Set a device-wide font and base text size in **Button Defaults** to give
+  labels, widget annotations, dialogs, notifications, and system text a
+  consistent appearance. Changes apply after reboot, with pending status in
+  the portal, and are also available through the defaults API and MCP component
+  configuration. Font family and size inherit independently; explicit sizes
+  remain absolute, and icons and geometry do not scale. `font:@builtin` selects
+  Montserrat, bitmap fallback uses the nearest compiled size, and missing font
+  selections remain saved.
+* Use the CrowPanel 4.2 as an interactive e-paper Macropad with a B/W SSD1683
+  display and six configurable hardware contacts. Default bindings provide
+  button and rocker focus, Tap/Tap & Hold, confirmation, and full refresh.
+  Pads open without a selection; Previous/Next selects the last/first
+  actionable target, and custom pads provide screen selection. The
+  `crowpanel-4.2-interactive` profile follows Elecrow's reference wiring and
+  refresh sequence, with 8 MB flash, OPI PSRAM, OTA, and LittleFS. SPI-SD and
+  electrical Reset are not software inputs/features.
+* Use the M5Stack StopWatch as a touch-screen Macropad with a round AMOLED
+  display, two programmable buttons, and battery telemetry. The
+  `m5stack-stopwatch` profile includes the full 466 x 466 canvas, internal
+  storage, Wi-Fi/portal, OTA, Home Assistant history, and remote image fetching;
+  the local image library is disabled. Board-local hardware modules configure
+  the CO5300 display, CST820B touch, and expander-controlled power/reset.
+  Presentation rules keep splash, info, and notification text within the
+  display. USB logging skips blocked writes to keep the device responsive
+  without a serial reader, and coordinated brightness fades and panel
+  sleep/wake restore the retained image. Touch, partial updates, USB reconnect,
+  repeated touch-wake, MP3 playback, and volume checks passed on hardware.
+  ES8311 speaker support remains enabled for validation but unadvertised in
+  installer capabilities. All rotations, cold USB/battery boot, broader
+  sleep/wake acceptance, and worst-case memory/load checks remain pending;
+  deferred peripherals are not advertised.
+* Control M5Stack StopWatch vibration, status LED, power, and charging from
+  button actions in the **M5Stack StopWatch** category. **Vibrate** accepts
+  nonblocking vibrate/pause patterns such as `20,100,20` (default `200`; `0`
+  stops it; up to 15 steps, odd count, positive whole milliseconds, at most
+  5 seconds including pauses). **Status LED** changes last until reboot.
+  **Shutdown** stops audio and vibration before PMIC power-off, excludes OTA,
+  and does not resume later actions. **Set charging mode** selects off,
+  nominal 185 mA, or nominal 425 mA; runtime changes reset on reboot.
+  `STOPWATCH_CHARGING_MODE` sets the boot policy (0 off, 1 low/default, 2 high).
+  Charging is disabled before current changes, and failed I2C operations do
+  not trigger a later enable. These actions and hardware loops are excluded
+  from other boards and need no board-specific portal assets.
+* Choose crisp black-and-white output or dithered shading for interactive
+  e-paper in **E-paper Presentation**. CrowPanel, Inkplate, and reTerminal
+  default to a luminance threshold of 128; controls offer a threshold from
+  1 to 255, 4x4 Bayer dithering, and fixed 64x64 blue-noise dithering. Changes
+  apply after restart. Conversion is screen-anchored and needs no extra
+  framebuffers; grayscale, E-Paper Frame images, monochrome uploaded-font
+  rendering, and refresh waveforms are unaffected. B/W-only panels disable
+  grayscale in the portal and reject it in API writes, advertised through
+  `epaper_supported_render_modes`. Settings and assets are excluded from
+  builds without `HAS_LVGL_EPAPER`.
+* Read sharper uploaded-font text on eligible B/W interactive e-paper builds
+  with automatic font hinting. The default-enabled `HAS_FREETYPE_FONTS` uses
+  bundled minimal FreeType 2.13.2 with license notices and checked heap
+  workspaces, preserving the 16 KB rendering stack and recovering glyph
+  rendering after allocation failures without invalidating pinned bitmaps.
+  Grayscale retains STB; disabling the flag restores STB for both modes.
+  Disabled display, TTF, or FreeType features exclude unused dependencies and
+  cache state. Hardware rendering/navigation and focused recovery, OTA, and
+  feature-isolation checks passed.
+* Start with appearance defaults suited to your display. Interactive e-paper
+  boards use high-contrast colors, a light theme, square bordered buttons,
+  and no pixel shifting; LCD boards retain their existing defaults. Boards can
+  override pad/button appearance, shared widget palettes, shadows, spacing,
+  insets, and pixel shifting. The portal inherits firmware defaults without
+  saving them as device overrides; explicit device, pad, and button settings
+  and device-class widget palettes remain unchanged.
+* Navigate buttons and rockers with **Previous**, **Next**, **Tap**, and
+  **Tap & Hold** actions on every display board, without requiring e-paper or
+  hardware inputs. CrowPanel ships with preassigned bindings; other boards'
+  defaults remain unchanged. Bindings use generic board-default action JSON
+  without a navigation-specific feature flag.
+* Show local sensor readings in pads without an MQTT broker using
+  `[sensor:key;format|fallback]` bindings, with board-aware field metadata,
+  numeric formatting, and expression support. API, MQTT, and bindings share
+  cached readings and retain last-good values after failures. Sensor adapters
+  declare a sampling callback, field catalog, and optional interval (two
+  seconds by default); event sensors refresh on changes, and MQTT/BLE
+  duty-cycle wakes sample once before publishing.
+* Adjust the Mousepad **Back** button size in the pad editor to suit your
+  layout. `widget_mousepad_back_size` accepts 1-512 device pixels (default 44);
+  the button and touch target shrink to fit the widget, and the arrow scales
+  around its center. Visibility remains opt-in, and navigation does not send
+  mouse movement or clicks. Addresses
+  [#119](https://github.com/jantielens/esp32-macropad/issues/119).
+* Install fonts required by recipes automatically from direct HTTPS links to
+  static TTF files before saving the pad, reusing installed font names. Recipes
+  requiring fonts are unavailable on devices without TTF support. The Alarm
+  Clock sample uses downloadable DSEG7 Classic text, and the recipe **Target
+  Pad** list shows available pad names alongside their numbers.
+* Capture the image actually displayed on CrowPanel as a PNG through
+  `GET /api/screenshot?format=png`. Screenshots use the last completed physical
+  presentation, not pending drawing-buffer changes. The default screenshot
+  format is unchanged; requests return 503 before a frame is available.
+* Inspect task stack headroom on demand through authenticated health reports
+  using `?task=<name>` for `audio`, `async_tcp`, `img_local`, `img_fetch`,
+  `ha_stats`, `LVGL`, and `loopTask`. Arbitrary task lookup is not supported;
+  the older AsyncTCP query remains available. Sampling leaves audio
+  capabilities and stack sizes unchanged, uses the shutdown-aware display-job
+  bridge for LVGL, and waits for local image worker creation.
+
+### Changed
+
+* Alarms take priority over ordinary alerts and Music, while tap and
+  confirmation sounds play over any source without cancelling or ducking it.
+  Priority applies consistently to tones and MP3. Scheduled alarms retain
+  ownership through one-shot silence until dismissal, snooze, or timeout;
+  failed MP3 alarms attempt bounded tone fallback. No-audio, beep-only, and MP3
+  capability boundaries remain intact.
+* Music resumes from the beginning of its remembered track after an
+  interruption only if it is still meant to be playing. **Play/Pause** controls
+  that intent; **Next/Previous** during interruption changes selection without
+  forcing playback. Missing tracks fail rather than substituting another song,
+  and Music bindings expose `interrupted`.
+* Stop alerts, stop Music, or stop all audio independently. **Stop alerts**
+  (`sound_alert_kind: "stop"`) preserves Music intent and scheduled ringing
+  ownership; **Stop all audio** (`sound_alert_kind: "stop_all"`) also clears
+  Music intent and feedback. Firmware updates stop all playback without
+  automatic Music restart. Master volume changes made during an alert survive
+  its volume override.
+* Existing pads using decorative bitmap fonts must switch to uploaded TTF
+  fonts. Bebas, Doto, DSEG, the 48 px Montserrat bitmap, former decorative
+  family aliases, and numeric `font` size shorthand are removed. Montserrat
+  bitmap sizes 12, 14, 18, 24, 32, and 36 px remain; use `font_size` for sizes.
+  The Label Style Reference shares the Binding reference dialog's theme and
+  styling.
+* More internal RAM remains available for active features on supported boards.
+  The local image worker uses an 8 KB stack instead of 12 KB, with image buffers
+  still in PSRAM. ESP32/S3 audio workers default to 8 KB for tone-only builds
+  or MP3 with PSRAM decoder scratch, retaining 24 KB for on-stack scratch and
+  other chip families. AsyncTCP defaults to 8 KB on classic ESP32 and ESP32-S3,
+  including separately compiled libraries; explicit board overrides remain
+  respected. Persistent alarm/session actions, timer state, MQTT binding
+  scratch, button defaults, the pad-list cache, and confirmation actions prefer
+  PSRAM with internal-RAM fallback. Allocation failures leave affected features
+  unavailable or use immutable default styling; DMA buffers and the action ABI
+  are unchanged. On StopWatch, static internal RAM is 74,808 bytes, audio and
+  AsyncTCP stacks are 8 KB each, and HA statistics and remote image stacks
+  remain 16 KB. Consolidated, feature-gated CORS preflight handling preserves
+  existing responses and reduces portal startup heap use to 30,740 bytes.
+  Automatic portal startup stack scans are removed; authenticated
+  `/api/health?async_tcp_stack=1` reports lifetime minimum free stack on demand.
+* Smaller firmware leaves more room for features and OTA updates. URL routing
+  uses validated path segments instead of general-purpose regex, unused portal
+  assets are excluded, and JavaScript is minified with pinned Terser while
+  preserving HTML callback names. The filesystem-less C3 OTA target excludes
+  LittleFS; factory reset clears NVS without formatting a nonexistent
+  partition, while filesystem-backed boards retain their reset behavior.
+* Audio drivers report availability, mute, volume, and teardown results
+  explicitly and share startup allocation and failure cleanup. Codec
+  programming, silence priming, and clock settling stay inside the ES8311 or
+  PCM510xA driver; board-owned power/mute controls remain separate from codec
+  logic.
+* Coding-agent test guidance prioritizes existing checks and meaningful
+  regression coverage. New test files and harnesses need justification;
+  implementation-detail assertions are discouraged. KISS reviews follow the
+  same policy and distinguish focused local verification from the full CI suite.
+
+### Fixed
+
+* An active MQTT siren keeps sounding until its original deadline when a
+  replacement is rejected for an invalid tone or full audio queue. Replacement
+  ownership is published only after successful admission, synchronized with
+  audio-worker guard checks.
 
 ## [1.39.0] - 2026-10-09
 

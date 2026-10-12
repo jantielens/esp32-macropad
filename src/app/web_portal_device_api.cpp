@@ -5,6 +5,21 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#if HAS_HA_HISTORY
+#include "ha_stats.h"
+#endif
+#if HAS_IMAGE_FETCH
+#include "image_fetch.h"
+#endif
+#if HAS_IMAGE_LIBRARY
+#include "local_image_loader.h"
+#endif
+#if HAS_AUDIO
+#include "audio.h"
+#endif
+#if HAS_TTF_FONTS
+#include "font_store.h"
+#endif
 #include "binding_schema.h"
 #include "config_manager.h"
 #include "device_telemetry.h"
@@ -22,8 +37,11 @@
 
 #include <ArduinoJson.h>
 #include <WiFi.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 extern DeviceConfig device_config;
+extern TaskHandle_t loopTaskHandle;
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -189,6 +207,12 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(ALARM_ENABLED ? "true" : "false");
 		response->print(",\"has_native_extensions\":");
 		response->print(HAS_NATIVE_EXTENSIONS ? "true" : "false");
+	response->print(",\"has_ttf_fonts\":");
+#if HAS_TTF_FONTS
+	response->print(font_store_available() ? "true" : "false");
+#else
+	response->print("false");
+#endif
 		response->print(",\"has_camera\":");
 		response->print(HAS_CAMERA ? "true" : "false");
 		response->print(",\"has_usb_hid\":");
@@ -343,6 +367,99 @@ void handleGetBindings(AsyncWebServerRequest *request) {
 		web_portal_send_json_chunked(request, doc, 200, &timing);
 }
 
+static bool fill_requested_task_stack(AsyncWebServerRequest* request, JsonDocument& doc) {
+		const bool named_task = request->hasParam("task");
+		const bool legacy_query = request->hasParam("async_tcp_stack") &&
+				request->getParam("async_tcp_stack")->value() == "1";
+		if (!named_task && !legacy_query) return true;
+
+		const String task = named_task ? request->getParam("task")->value() : String("async_tcp");
+		const char* task_name = nullptr;
+		uint32_t minimum_free_bytes = 0;
+		uint32_t configured_bytes = 0;
+		if (task == "async_tcp") {
+				task_name = pcTaskGetName(nullptr);
+				minimum_free_bytes = uxTaskGetStackHighWaterMark(nullptr);
+				#ifdef CONFIG_ASYNC_TCP_STACK_SIZE
+				configured_bytes = CONFIG_ASYNC_TCP_STACK_SIZE;
+				#endif
+		} else if (task == "audio") {
+				#if HAS_AUDIO
+				if (!audio_get_stack_watermark(&minimum_free_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"audio task unavailable\"}");
+						return false;
+				}
+				task_name = "audio";
+				configured_bytes = AUDIO_TASK_STACK_SIZE;
+				#else
+				request->send(503, "application/json", "{\"error\":\"audio task unavailable\"}");
+				return false;
+				#endif
+		} else if (task == "img_local") {
+				#if HAS_IMAGE_LIBRARY
+				if (!local_image_loader_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"local image task unavailable\"}");
+						return false;
+				}
+				task_name = "img_local";
+				#else
+				request->send(503, "application/json", "{\"error\":\"local image task unavailable\"}");
+				return false;
+				#endif
+		} else if (task == "img_fetch") {
+				#if HAS_IMAGE_FETCH
+				if (!image_fetch_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"image fetch task unavailable\"}");
+						return false;
+				}
+				task_name = "img_fetch";
+				#else
+				request->send(503, "application/json", "{\"error\":\"image fetch task unavailable\"}");
+				return false;
+				#endif
+		} else if (task == "ha_stats") {
+				#if HAS_HA_HISTORY
+				if (!ha_stats_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"HA statistics task unavailable\"}");
+						return false;
+				}
+				task_name = "ha_stats";
+				#else
+				request->send(503, "application/json", "{\"error\":\"HA statistics task unavailable\"}");
+				return false;
+				#endif
+		} else if (task == "LVGL") {
+				#if HAS_DISPLAY
+				if (!display_manager_get_stack_watermark(&minimum_free_bytes, &configured_bytes)) {
+						request->send(503, "application/json", "{\"error\":\"LVGL task unavailable or busy\"}");
+						return false;
+				}
+				task_name = "LVGL";
+				#else
+				request->send(503, "application/json", "{\"error\":\"LVGL task unavailable\"}");
+				return false;
+				#endif
+		} else if (task == "loopTask") {
+				if (!loopTaskHandle) {
+						request->send(503, "application/json", "{\"error\":\"loop task unavailable\"}");
+						return false;
+				}
+				task_name = "loopTask";
+				minimum_free_bytes = uxTaskGetStackHighWaterMark(loopTaskHandle);
+				configured_bytes = getArduinoLoopTaskStackSize();
+		} else {
+				request->send(task.length() == 0 ? 400 : 404, "application/json",
+						"{\"error\":\"supported tasks: audio, async_tcp, img_local, img_fetch, ha_stats, LVGL, loopTask\"}");
+				return false;
+		}
+
+		JsonObject stack = doc[named_task ? "task_stack" : "async_tcp_stack"].to<JsonObject>();
+		stack["task"] = task_name;
+		stack["minimum_free_bytes"] = minimum_free_bytes;
+		if (configured_bytes) stack["configured_bytes"] = configured_bytes;
+		return true;
+}
+
 // GET /api/health - Get device health statistics
 void handleGetHealth(AsyncWebServerRequest *request) {
 		WebPortalTiming timing;
@@ -352,6 +469,7 @@ void handleGetHealth(AsyncWebServerRequest *request) {
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(4096);
 		if (doc && doc->capacity() > 0) {
 				device_telemetry_fill_api(*doc);
+				if (!fill_requested_task_stack(request, *doc)) return;
 				if (doc->overflowed()) {
 						LOGE("Portal", "/api/health JSON overflow");
 				}

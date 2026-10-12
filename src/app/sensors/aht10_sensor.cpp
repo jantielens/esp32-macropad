@@ -75,18 +75,22 @@ void Aht10Sensor::publishHaDiscovery(MqttManager &mqtt) {
 #endif
 
 static void aht10_init() { g_aht10_adapter.begin(); }
-static void aht10_append_api(JsonObject &doc) { g_aht10_adapter.appendJson(doc); }
-static void aht10_append_mqtt(JsonObject &doc) { g_aht10_adapter.appendJson(doc); }
+static void aht10_sample(JsonObject &doc) { g_aht10_adapter.appendJson(doc); }
 #if HAS_MQTT
 static void aht10_publish_ha(MqttManager &mqtt) { g_aht10_adapter.publishHaDiscovery(mqtt); }
 #endif
 
 void register_aht10_sensor(SensorRegistry &registry) {
+	static const SensorField fields[] = {
+		{"temperature", "Temperature in degrees Celsius."},
+		{"humidity", "Relative humidity in percent."},
+	};
 	SensorCallbacks callbacks = {};
 	callbacks.name = "AHT10";
 	callbacks.init = aht10_init;
-	callbacks.append_api = aht10_append_api;
-	callbacks.append_mqtt = aht10_append_mqtt;
+	callbacks.sample = aht10_sample;
+	callbacks.fields = fields;
+	callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
 #if HAS_MQTT
 	callbacks.publish_ha = aht10_publish_ha;
 #endif

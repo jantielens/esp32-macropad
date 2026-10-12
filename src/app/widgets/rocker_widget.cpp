@@ -29,7 +29,7 @@
 
 struct RockerConfig {
     bool horizontal;          // false = up/down (default), true = left/right
-    char indicator_color[CONFIG_COLOR_MAX_LEN]; // Chevron color (default "#FFFFFF")
+    char indicator_color[CONFIG_COLOR_MAX_LEN]; // Chevron color (default DEFAULT_WIDGET_INDICATOR_COLOR)
     uint8_t indicator_opa;    // Chevron opacity 0-255 (default 80 = ~31%)
 };
 
@@ -56,7 +56,7 @@ static void rocker_parse(const JsonObject& btn, uint8_t* data) {
     cfg->horizontal = (axis[0] == 'h' || axis[0] == 'H');
 
     widget_parse_field(btn["widget_rocker_color"], cfg->indicator_color,
-                       sizeof(cfg->indicator_color), "#FFFFFF");
+                       sizeof(cfg->indicator_color), DEFAULT_WIDGET_INDICATOR_COLOR);
 
     int opa = btn["widget_rocker_opacity"] | 80;
     cfg->indicator_opa = (uint8_t)clamp_val(opa, 0, 255);
@@ -73,7 +73,7 @@ static void rocker_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     memset(st, 0, sizeof(RockerState));
 
     // Resolve indicator color
-    uint32_t rgb = 0xFFFFFF;
+    uint32_t rgb = widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR);
     parse_hex_color(cfg->indicator_color, &rgb);
     lv_color_t color = lv_color_make((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
 

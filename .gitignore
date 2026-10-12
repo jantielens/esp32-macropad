@@ -12,6 +12,7 @@ src/app/png_assets.h
 
 # Auto-generated web assets
 src/app/web_assets.h
+tools/node_modules/
 src/app/project_branding.h
 src/app/github_release_config.h
 src/app/repo_slug_config.h

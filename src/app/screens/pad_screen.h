@@ -148,6 +148,17 @@ private:
     // --- Lazily allocated arrays (heavy, freed on LRU eviction) ---
     ButtonTile* tiles;
     uint8_t tileCount;
+#if HAS_DISPLAY
+    static const int16_t NAVIGATION_PAD_ACTION = -2;
+    int16_t navigationTile = -1;
+    uint8_t navigationZone = 0;
+    lv_obj_t* navigationFocus = nullptr;
+    void refreshNavigationFocus();
+    uint8_t navigationZoneCount(const ButtonTile& tile) const;
+    bool navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) const;
+    lv_area_t navigationArea(const ButtonTile& tile, uint8_t zone) const;
+#endif
+    PadFontCache fontCache;
 
     static const int MAX_BINDINGS = MAX_PAD_BUTTONS * 3;
     RuntimeLabelBinding* bindings;
@@ -230,6 +241,8 @@ private:
     static void onWidgetPressFeedback(lv_event_t* e);
     static void onTap(lv_event_t* e);
     static void onLongPress(lv_event_t* e);
+    static void tapAt(ButtonTile* tile, const lv_point_t& point);
+    static void longPressAt(ButtonTile* tile, const lv_point_t& point);
     static void onPadActionTap(lv_event_t* e);
     static void padActionFlashTimerCb(lv_timer_t* timer);
     void showPadActionFlash();
@@ -251,6 +264,9 @@ public:
     bool isEvicted() const { return !arraysAllocated; }
 
     uint8_t getPageIndex() const { return pageIndex; }
+#if HAS_DISPLAY
+    bool navigateButtons(const char* command);
+#endif
 };
 
 #endif // PAD_SCREEN_H

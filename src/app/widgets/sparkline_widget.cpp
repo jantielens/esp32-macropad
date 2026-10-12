@@ -45,7 +45,7 @@ struct SparklineConfig {
     char     min_val[CONFIG_BINDABLE_SHORT_LEN];  // Y-axis minimum (empty = auto-scale, or binding)
     char     max_val[CONFIG_BINDABLE_SHORT_LEN];  // Y-axis maximum (empty = auto-scale, or binding)
     float    ref_line_y[MAX_REF_LINES];   // Reference line Y-values (NAN = disabled)
-    char     line_color[CONFIG_COLOR_MAX_LEN];            // Main line color (bindable, default "#4CAF50")
+    char     line_color[CONFIG_COLOR_MAX_LEN];            // Main line color (bindable, default DEFAULT_WIDGET_SERIES_COLOR)
     char     line_color_2[CONFIG_COLOR_MAX_LEN];          // Extra line 2 color
     char     line_color_3[CONFIG_COLOR_MAX_LEN];          // Extra line 3 color
     char     min_label_color[CONFIG_BINDABLE_SHORT_LEN];  // Empty = follow line color
@@ -161,9 +161,9 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
     uint8_t lo = btn["widget_sparkline_line_offset"] | (uint8_t)0;
     cfg->line_offset = (lo > 6) ? 6 : lo;
 
-    widget_parse_field(btn["widget_sparkline_line_color"], cfg->line_color, sizeof(cfg->line_color), "#4CAF50");
-    widget_parse_field(btn["widget_sparkline_line_color_2"], cfg->line_color_2, sizeof(cfg->line_color_2), "#2196F3");
-    widget_parse_field(btn["widget_sparkline_line_color_3"], cfg->line_color_3, sizeof(cfg->line_color_3), "#9C27B0");
+    widget_parse_field(btn["widget_sparkline_line_color"], cfg->line_color, sizeof(cfg->line_color), DEFAULT_WIDGET_SERIES_COLOR);
+    widget_parse_field(btn["widget_sparkline_line_color_2"], cfg->line_color_2, sizeof(cfg->line_color_2), DEFAULT_WIDGET_SERIES_COLOR_2);
+    widget_parse_field(btn["widget_sparkline_line_color_3"], cfg->line_color_3, sizeof(cfg->line_color_3), DEFAULT_WIDGET_SERIES_COLOR_3);
     cfg->unified_autoscale = btn["widget_sparkline_unified_scale"] | true;  // default on
 
 #if HAS_HA_HISTORY
@@ -234,7 +234,7 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
         snprintf(key_p, sizeof(key_p), "widget_sparkline_ref_%d_pattern", i + 1);
         JsonVariant vy = btn[key_y];
         cfg->ref_line_y[i] = vy.isNull() ? NAN : vy.as<float>();
-        widget_parse_field(btn[key_c], cfg->ref_line_color[i], sizeof(cfg->ref_line_color[i]), "#888888");
+        widget_parse_field(btn[key_c], cfg->ref_line_color[i], sizeof(cfg->ref_line_color[i]), DEFAULT_WIDGET_REFERENCE_COLOR);
         cfg->ref_line_pattern[i] = btn[key_p] | (uint8_t)0;
         if (cfg->ref_line_pattern[i] > 2) cfg->ref_line_pattern[i] = 0;
     }
@@ -257,9 +257,9 @@ static void sparkline_parse(const JsonObject& btn, uint8_t* data) {
 // Helper: populate line color array from config (used by create and redraw)
 static inline void sparkline_get_line_colors(const SparklineConfig* cfg,
                                              uint32_t out[MAX_SPARKLINE_LINES]) {
-    out[0] = resolve_color(cfg->line_color, 0x4CAF50);
-    out[1] = resolve_color(cfg->line_color_2, 0x2196F3);
-    out[2] = resolve_color(cfg->line_color_3, 0x9C27B0);
+    out[0] = resolve_color(cfg->line_color, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR));
+    out[1] = resolve_color(cfg->line_color_2, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_2));
+    out[2] = resolve_color(cfg->line_color_3, widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3));
 }
 
 static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
@@ -317,9 +317,10 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Compute layout — same pattern as bar chart
     bool has_top = btn->label_top[0];
     bool has_bot = btn->label_bottom[0];
-    int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
-    int16_t top_h = has_top ? label_h : 0;
-    int16_t bot_h = has_bot ? label_h : 0;
+    const lv_font_t* annotation_font = pad_typography_font(scale->font_small);
+    int32_t label_h = lv_font_get_line_height(annotation_font) + 2;
+    int32_t top_h = has_top ? lv_font_get_line_height(pad_resolve_font(btn->style_top, scale->font_small, state->font_owner)) + 2 : 0;
+    int32_t bot_h = has_bot ? lv_font_get_line_height(pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner)) + 2 : 0;
     const int16_t ui_ofs_x = btn->ui_offset_x;
     const int16_t ui_ofs_y = btn->ui_offset_y;
 
@@ -329,12 +330,12 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         icon_h = (int16_t)lv_obj_get_height(icon_img);
         if (icon_h <= 0) icon_h = rect->h / 4;
     }
-    int16_t center_label_h = 0;
+    int32_t center_label_h = 0;
     if (center_label) {
         lv_obj_update_layout(center_label);
-        center_label_h = (int16_t)lv_obj_get_height(center_label);
+        center_label_h = lv_obj_get_height(center_label);
     }
-    int16_t header_h = icon_h;
+    int32_t header_h = icon_h;
     if (center_label_h > 0) {
         if (icon_h > 0) header_h += 4 + center_label_h;
         else             header_h = center_label_h;
@@ -353,17 +354,18 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     // Reserve margin for min/max labels above and below chart
-    int16_t mm_margin = 0;
+    int32_t mm_margin = 0;
     if (cfg->marker_size_min > 0 || cfg->marker_size_max > 0) {
         mm_margin = label_h + 3;  // label height + dot radius + gap
     }
 
-    int16_t chart_top = top_h + header_h + gap + mm_margin;
-    int16_t bot_margin = bot_h + 4 + mm_margin;
+    int32_t chart_top = top_h + header_h + gap + mm_margin;
+    int32_t bot_margin = bot_h + 4 + mm_margin;
     lv_obj_update_layout(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
-    int16_t chart_h = content_h - chart_top - bot_margin;
+    if (chart_top > content_h) chart_top = content_h;
+    int32_t chart_h = content_h - chart_top - bot_margin;
     if (chart_h < 8) chart_h = 8;
     int16_t chart_w = content_w;
     chart_top += ui_ofs_y;
@@ -432,7 +434,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (!st->ref_pts) { st->ref_line_objs[r] = nullptr; continue; }
         if (!isfinite(cfg->ref_line_y[r])) { st->ref_line_objs[r] = nullptr; continue; }
         lv_obj_t* rl = lv_line_create(chart_area);
-        lv_obj_set_style_line_color(rl, resolve_lv_color(cfg->ref_line_color[r], 0x888888), 0);
+        lv_obj_set_style_line_color(rl, resolve_lv_color(cfg->ref_line_color[r], widget_default_rgb(DEFAULT_WIDGET_REFERENCE_COLOR)), 0);
         lv_obj_set_style_line_width(rl, 1, 0);
         lv_obj_set_style_line_opa(rl, LV_OPA_70, 0);
         if (cfg->ref_line_pattern[r] == REF_LINE_DOTTED) {
@@ -461,7 +463,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         *out_dot = dot;
 
         lv_obj_t* lbl = lv_label_create(tile);
-        lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+        lv_obj_set_style_text_font(lbl, annotation_font, 0);
         lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_clear_flag(lbl, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
         lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
@@ -491,7 +493,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         for (uint8_t i = 0; i < st->line_count; i++) {
             if (!cur_labels[i][0]) { st->lbl_current[i] = nullptr; continue; }
             lv_obj_t* lbl = lv_label_create(tile);
-            lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+            lv_obj_set_style_text_font(lbl, annotation_font, 0);
             lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
             lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
             lv_obj_set_width(lbl, st->label_margin_r);
@@ -787,7 +789,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         st->ref_pts[r * 2 + 0] = { 0, (lv_value_precise_t)ry };
         st->ref_pts[r * 2 + 1] = { (lv_value_precise_t)chart_w, (lv_value_precise_t)ry };
         lv_line_set_points(st->ref_line_objs[r], &st->ref_pts[r * 2], 2);
-        lv_obj_set_style_line_color(st->ref_line_objs[r], resolve_lv_color(cfg->ref_line_color[r], 0x888888), 0);
+        lv_obj_set_style_line_color(st->ref_line_objs[r], resolve_lv_color(cfg->ref_line_color[r], widget_default_rgb(DEFAULT_WIDGET_REFERENCE_COLOR)), 0);
         lv_obj_clear_flag(st->ref_line_objs[r], LV_OBJ_FLAG_HIDDEN);
     }
 

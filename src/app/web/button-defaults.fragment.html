@@ -2,6 +2,26 @@
     <h2><span class="portal-icon" aria-hidden="true">palette</span>Pad and Button Defaults</h2>
     <p>Set device-wide pad and button defaults. Pads and buttons can override the applicable values.</p>
 </div>
+<section class="card mb-3" aria-labelledby="device-typography-heading">
+    <div class="card-header"><h5 id="device-typography-heading" class="mb-0">Device Typography</h5></div>
+    <div class="card-body">
+    <p class="form-text">Applies to pads, widgets, system screens, and notifications after reboot.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:180px;">
+            <label for="pad-def-default-font">Default Font</label>
+            <select id="pad-def-default-font" name="default_font" class="form-select">
+                <option value="@builtin">Montserrat (built-in)</option>
+            </select>
+        </div>
+        <div class="form-group" style="flex:1;min-width:180px;">
+            <label for="pad-def-base-text-size">Base Text Size (px)</label>
+            <input id="pad-def-base-text-size" name="base_text_size" type="number" class="form-control" min="1" max="65535" step="1" placeholder="Automatic">
+            <small id="pad-def-base-text-size-hint" class="form-text"></small>
+        </div>
+    </div>
+    <p id="pad-def-typography-status" class="form-text" role="status"></p>
+    </div>
+</section>
 <div class="card mb-3">
     <div class="card-header"><h5 class="mb-0">Button Appearance</h5></div>
     <div class="card-body">

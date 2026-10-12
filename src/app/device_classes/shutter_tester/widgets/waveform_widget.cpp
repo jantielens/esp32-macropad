@@ -120,19 +120,19 @@ static void waveform_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Compute chart area layout
     bool has_top = btn->label_top[0];
     bool has_bot = btn->label_bottom[0];
-    int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
-    int16_t top_h = has_top ? label_h : 0;
-    int16_t bot_h = has_bot ? label_h : 0;
+    int32_t top_h = has_top ? lv_font_get_line_height(pad_resolve_font(btn->style_top, scale->font_small, state->font_owner)) + 2 : 0;
+    int32_t bot_h = has_bot ? lv_font_get_line_height(pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner)) + 2 : 0;
 
     lv_obj_update_layout(tile);
     int16_t content_w = (int16_t)lv_obj_get_content_width(tile);
     int16_t content_h = (int16_t)lv_obj_get_content_height(tile);
 
     st->chart_x = 0;
+    if (top_h > content_h) top_h = content_h;
     st->chart_y = top_h;
     st->chart_w = content_w;
-    st->chart_h = content_h - top_h - bot_h;
-    if (st->chart_h < 8) st->chart_h = 8;
+    const int32_t chart_height = content_h - top_h - bot_h;
+    st->chart_h = chart_height < 8 ? 8 : chart_height;
     if (st->chart_w < 8) st->chart_w = 8;
 
     // Query capture caps to know how many sensors are active

@@ -29,6 +29,62 @@ both themes. Views with multiple sections give each section a descriptive title;
 single-section views do not repeat the fragment title. Standard content and
 controls use the navigation's compact text scale, with larger fragment titles.
 
+## Fonts
+
+On eligible LVGL display devices with storage and working PSRAM, open
+**Pads > Fonts**. Other builds retain only the standard Montserrat bitmap fonts
+and do not expose font upload controls.
+
+The **TTF Fonts** view explains supported formats and button/widget text styles.
+Its catalog and responsive file-input/Upload row follow the Music Library layout,
+with an additional font ID field and upload progress indicator.
+
+1. Choose a trusted static TrueType-outline `.ttf` file.
+2. Set a font ID using 1-31 lowercase letters, digits, `_`, or `-`, without `.ttf`.
+3. Upload and wait for completion. Progress shows bytes sent; the success message
+	confirms storage validation and publication.
+4. Apply the font through a label's **Aa** raw style input, for example
+	`font:my-font;font_size:96`. Omit `font_size` for the automatic label height.
+
+The list shows font IDs and file sizes. Refresh reloads it; delete asks for
+confirmation. Referenced fonts can be deleted, and cached pads rebuild with
+their automatic bitmap defaults. Delete an existing ID before replacing it;
+re-uploading that ID lets missing references resolve again. Fonts persist across
+reboot on the selected storage backend and are removed by factory reset.
+
+In **Button Defaults > Device Typography**, select Montserrat or an uploaded
+font and leave Base Text Size blank for Automatic, or enter 1-65535 px. Saving
+shows pending typography changes until reboot. Unavailable selections remain
+visible and saved, including on bitmap-only builds. Reboot retries missing
+fonts and applies replacements to the device default; existing device-default
+font instances stay alive until then. Explicit pad font instances can reload
+after their pad cache rebuilds.
+
+Family and size inherit independently. Automatic roles scale proportionally
+from the board's medium role; explicit `font_size` stays absolute.
+`font:@builtin` selects Montserrat without opting out of automatic sizing.
+Bitmap text and failed TTF requests select the nearest of 12/14/18/24/32/36
+(ties upward, endpoint clamp). This does not resize icons or grid geometry,
+automatically fit overflowing text, or change portal/extension/E-Paper Frame text.
+
+Variable fonts, collections, CFF/OpenType, WOFF, and WOFF2 are unsupported.
+For TTF text clipped by incorrect vertical metrics, add `font_metrics:bounds`
+to calculate line height and baseline from the whole-font bounds, or use a
+multiplier such as `font_metrics:2`. Glyph size stays unchanged. Different
+sizes and metrics settings use separate cached instances and consume more
+memory; reuse settings where possible. The Label Style Reference includes
+these options. This does not fix text that exceeds its button.
+There is no preview, conversion service, replacement command, or per-label picker.
+The upload progress and error message remain available for retry after failure.
+
+> [!WARNING]
+> Only upload trusted fonts. Basic format checks are not a hardened font sandbox.
+> Stock LVGL/STB allocation failure can hang or crash the device, even for valid
+> fonts; a watchdog reboot is not guaranteed. Large text and multiple cached pads
+> can increase memory pressure. A reproducible backend allocation-error patch is
+> [potential future work](dev/display-touch-architecture.md#accepted-backend-oom-limitation),
+> subject to device stability results.
+
 ## Device Logs
 
 On builds with `HAS_REMOTE_LOG`, open **Device > Logs** in Full Mode. This
@@ -227,8 +283,8 @@ rather than only its filename. Duration is read from Xing/Info, VBRI, or a CBR
 bitrate estimate without decoding the complete track; estimated durations are
 marked as such.
 
-Upload and delete are unavailable while Music or an MP3 Alert is active. Tone
-Alerts do not block library management. After a successful upload or delete,
+Upload and delete are unavailable while Music is playing, paused, or interrupted,
+or an MP3 Alert is active. Tone Alerts alone do not block library management. After a successful upload or delete,
 the list refreshes automatically. The portal validates the destination path and
 publishes the uploaded bytes without decoding the entire MP3 first.
 
@@ -549,9 +605,46 @@ apply it to both the screen and touch input.
 
 *Shown only on boards with configurable e-paper presentation support.*
 
-Use this section to select **Grayscale** or **Black & white** panel mode. The
-choice applies after restart. Both modes share one passive binding interval
+In **Rendering**, select **Grayscale** or **Black & white** panel mode. The
+choice applies after restart. **Refresh Settings** groups the shared passive binding interval
 (100 to 60,000 ms) and minimum presentation interval (250 to 60,000 ms).
+Unavailable modes are disabled. CrowPanel 4.2 Interactive supports only
+**Black & white**.
+
+**B/W conversion** selects Threshold, Ordered dithering (4x4 Bayer), or Blue
+noise. Threshold is the default: luminance below the selected level becomes
+black, and luminance at or above it becomes white. Adjust **Threshold level**
+from 1 to 255 with the slider or numeric input; the default is 128. Higher levels
+make more pixels black. The level is shown only for Threshold.
+
+Bayer produces a repeating pattern; Blue noise produces less structured
+stippling. Both simulate intermediate tones without changing the panel mode.
+Conversion settings apply after restart, affect the complete rendered frame
+including images, and are disabled when Grayscale is selected. Grayscale and
+E-Paper Frame image rendering are unchanged. Auto-hinted monochrome uploaded
+fonts retain their crisp glyph rendering with every conversion option.
+
+All display boards offer Navigate buttons actions: Previous, Next, Tap, and
+Tap & Hold. Assign them through the normal action editor when needed; physical
+buttons are not required. These actions navigate pad buttons and confirmation
+choices, not arbitrary controls on other screens. Other boards' hardware action
+defaults are unchanged.
+
+CrowPanel's six readable contacts are preassigned in the hardware action editor:
+Menu and Back taps are unassigned, rotary Up/Down selects focus, rotary
+OK uses Tap, and holding OK uses Tap & Hold on the focused button. Boot
+requests a full refresh. Reset is electrical reset, not a configurable input.
+Holding Menu retains the configuration-entry gesture. An empty saved action list
+disables a default. Each pad visit starts without a selection: Next selects the
+first actionable button or rocker zone, Previous selects the last, and Tap or
+Tap & Hold does nothing until a selection is made. Use a custom pad with screen
+actions for screen selection. Selection follows the button's border color and
+corner radius, doubles its border width with a minimum of 2 pixels, and uses
+text color for borderless buttons. Saved appearance settings are unchanged.
+Confirmation dialogs initially select Cancel, with the outline shown only when
+navigation is used;
+Previous or Next switches between Cancel and Confirm, and Tap chooses the
+highlighted option. Tap & Hold does nothing in a confirmation dialog.
 
 Enable **Refresh clock values on minute boundary** to update pads containing
 time bindings at the minute edge. When disabled, those values update through
@@ -629,6 +722,9 @@ off; enabling it on any one widget disables all swipe actions across that pad,
 regardless of touch location or USB connection. Mousepad's optional
 **Show Back button** adds a top-left arrow that uses screen history without
 sending mouse input. It defaults off and does nothing when history is empty.
+**Back button size (px)** defaults to 44 and accepts integers from 1 to 512.
+For high-resolution displays, try 88. The button and touch target shrink to
+fit the mousepad, and the arrow remains centered and scales with the button.
 
 ### Boot Actions
 
@@ -667,9 +763,15 @@ local time. City selection previews device time without applying the change;
 Each ring and stop list holds up to three synchronous actions. Actions that
 pause execution, such as Delay and key sequences, are excluded. To sound an
 alarm, select **Loop Tone** or **Loop MP3** under **Alarm**; use **Sound alert >
-Stop Audio** in the stop list. MP3 repeats after successful playback, with no
-gapless guarantee, and stops on cancellation, firmware updates, or playback
-failure. Stop Audio is shared with other audio playback on the device.
+Stop alerts** in the stop list. MP3 repeats after successful playback, with no
+gapless guarantee; failed MP3 alarms attempt a bounded fallback tone. Alarm
+ownership continues through one-shot silence until Cancel, Snooze, or timeout.
+Ordinary alerts cannot replace an alarm, but short tap feedback can overlay it.
+Interrupted Music restarts its remembered track from the beginning only when its
+desired state remains Playing. Stop alerts does not stop Music or dismiss the
+ringing session. **Stop all audio** additionally clears Music intent and feedback,
+without disabling future scheduled alarms. Firmware updates stop playback without
+automatic Music restart.
 
 Use an **Alarm Control** button or MCP for Snooze and Cancel; the settings form
 does not offer live controls or Ringing/Snoozed indicators. Readiness and failure
@@ -813,7 +915,7 @@ next diagnostic run because earlier rows use the previous column layout.
 
 **Pads > Recipes** installs scenarios from the device-saved **Recipe Catalog**.
 The [sample catalog](samples/recipe-catalog.json) includes an Alarm Clock for
-boards with alarm and audio support. Choose a target pad and a free 5x5 area;
+boards with alarm, audio, and TTF font support. Choose a target pad and a free 5x5 area;
 smaller empty pads offer a grid increase. Confirm replacement of Alarm 1's
 ringing and stop actions. The alarm stays disabled, and its existing schedule
 and durations are retained. The completed-installation panel links to
@@ -823,6 +925,16 @@ When ringing, the repeated tone plays and the chosen pad appears with Snooze
 and confirmed Dismiss alarm controls. A failed pad save leaves alarm settings
 untouched; a later component failure reports incomplete setup with the pad
 already saved.
+
+The Alarm Clock downloads the DSEG7 Classic segment TrueType font in your
+browser and uploads it before saving the pad. The first installation needs
+internet access; later installations reuse the font already on the device.
+Font download or upload failures leave the pad and alarm settings unchanged.
+Uploaded fonts remain available if a later step fails. Manage them in
+**Pads > Fonts**. Recipe authors must use unique, stable font names and direct
+HTTPS URLs for static TTF files; ZIP downloads and variable fonts are not
+supported. DSEG is distributed under the
+[SIL Open Font License](https://github.com/keshikan/DSEG/blob/master/DSEG-LICENSE.txt).
 
 The Pads page is the heart of ESP32 Macropad — this is where you design your touch screen layouts. It supports up to 16 independent pads, each with a configurable grid of buttons that can display live data, trigger MQTT actions, and change color dynamically.
 
@@ -847,6 +959,28 @@ saves retain the draft for retry.
 Pad labels retain the `Pad X: Name` format whether selected or not. The button
 **Actions** and **Appearance** tabs expose their controls without an additional
 same-named accordion; individual action slots remain expandable.
+
+On StopWatch, the action picker includes the **M5Stack StopWatch** category:
+
+* **Set charging mode**: Off, Low (185 mA), or High (425 mA). These are nominal
+	currents, not measured battery current. Reboot restores the compiled boot
+	setting (low by default).
+* **Status LED**: On or Off for the current session. Reboot restores the boot
+	LED level, not your last selection. PMIC status/download signalling may
+	override the visible state.
+* **Vibrate**: Enter a pattern such as `20,100,20` (20 ms vibrate, 100 ms pause,
+	20 ms vibrate), or `200` for one 200 ms pulse (the default).
+	Patterns accept whitespace
+	around commas and require 1-15 positive durations, an odd count, and at most
+	5000 ms total including pauses. Standalone `0` stops vibration; another request
+	replaces the active sequence. It does not block other actions. Timing depends
+	on main-loop and I2C availability.
+* **Shutdown**: Stop audio/vibration and power off. Later actions do not run.
+	Active OTA rejects shutdown. Finish saves and uploads before using it;
+	unsaved portal edits are not saved automatically. Use the power button to
+	start again; physical power-off/recovery and LED behavior still need testing.
+
+Other boards do not offer these actions.
 
 Numeric fields consistently omit spinner buttons. Mouse-wheel scrolling over
 them scrolls the inspector without changing their values or focus; typing and
@@ -878,6 +1012,13 @@ The separate **Button Defaults** navigation item sets device-wide pad background
 and layout defaults alongside button colors, borders, and label styles, with
 its own save control. Pads and buttons inherit applicable settings; explicit
 overrides still take precedence.
+
+The initial appearance is selected by the board firmware. Interactive e-paper
+boards start with white backgrounds, dark text and widget indicators, and no
+burn-in pixel shift or reserved shift margin. E1003 uses grayscale widget series;
+CrowPanel and Inkplate use monochrome colors. Other boards retain the LCD defaults.
+Saving untouched device defaults keeps them inherited; existing explicit colors
+and layout values remain overrides until you change or clear them.
 
 Label fields in the button editor support explicit line breaks with `\n` (for example, `Line 1\nLine 2`). This applies to button labels (Top/Center/Bottom) and gauge start labels.
 
@@ -930,6 +1071,13 @@ Switching between pads or navigating away with unsaved changes shows a confirmat
 For the complete guide — including binding template syntax, widget configuration (bar charts, gauges, sparklines, tables, rockers), label styling, dynamic colors, pad bindings (named data sources), building blocks, and real-world examples (including a dual-binding gauge power-balance setup) — see the **[Pad Editor Guide](pad-editor-guide.md)**.
 
 All binding fields validate syntax in real time as you type — bracket balance, scheme names, parameter counts, format strings, expression syntax, and known health, timer, and Music keys (including `table`, `extended_table`, and `status`) are checked with inline error messages. See [Binding Validation](pad-editor-guide.md#binding-validation) for details.
+
+Local sensor fields appear in the binding reference on supported display
+boards. Use `[sensor:temperature;%.1f|N/A]` or a field listed for your board
+to display readings without MQTT. Sensor Data, MQTT telemetry, and bindings
+read cached samples; the sensor defines its interval, defaulting to two seconds.
+Failures retain the last good value until reboot. See
+[Local Sensor Binding](pad-editor-guide.md#local-sensor-binding).
 
 ---
 
@@ -1016,6 +1164,9 @@ Upload a compiled `.bin` firmware file directly from your computer. A progress b
 ### Factory Reset
 
 Erases all configuration and restarts the device in AP mode. You'll need to go through the [first-time setup](first-time-setup.md) again.
+
+On boards without a filesystem, including the OTA-only C3 sensor target, reset
+clears NVS settings without attempting to format a nonexistent filesystem.
 
 > **Warning**: This cannot be undone. Everything stored on the device is wiped: all settings (WiFi, MQTT, BLE, display), all pad layouts, pad and button defaults, timers, swipe and boot actions, stored icons, stored sounds, indexed-store data (e.g. shutter / scale sessions), and any BLE pairings.
 

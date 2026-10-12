@@ -7,6 +7,7 @@
 #include "../display_manager.h"
 #include "../swipe_actions.h"
 #include "../touch_manager.h"
+#include "../pad_layout.h"
 
 #include <stdlib.h>  // abs()
 
@@ -45,7 +46,12 @@ void TouchTestScreen::create() {
 		snprintf(header, sizeof(header), "Touch Test  %dx%d", canvasWidth, canvasHeight);
 		lv_label_set_text(headerLabel, header);
 		lv_obj_set_style_text_color(headerLabel, lv_color_make(80, 80, 80), 0);
-		lv_obj_set_style_text_font(headerLabel, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_font(headerLabel, pad_typography_font(&lv_font_montserrat_14), 0);
+		lv_obj_set_width(headerLabel, canvasWidth - 16);
+		lv_obj_set_style_text_align(headerLabel, LV_TEXT_ALIGN_CENTER, 0);
+		lv_label_set_long_mode(headerLabel, LV_LABEL_LONG_DOT);
+		const int header_height = lv_font_get_line_height(lv_obj_get_style_text_font(headerLabel, LV_PART_MAIN));
+		lv_obj_set_height(headerLabel, header_height < canvasHeight / 4 ? header_height : canvasHeight / 4);
 		lv_obj_align(headerLabel, LV_ALIGN_TOP_MID, 0, 4);
 		lv_obj_clear_flag(headerLabel, LV_OBJ_FLAG_CLICKABLE);
 
@@ -62,10 +68,31 @@ void TouchTestScreen::create() {
 		lv_obj_add_flag(backBtn, LV_OBJ_FLAG_CLICKABLE);
 		lv_obj_add_event_cb(backBtn, backBtnCallback, LV_EVENT_CLICKED, this);
 
+		lv_obj_t* backIcon = lv_label_create(backBtn);
+		lv_label_set_text(backIcon, LV_SYMBOL_LEFT);
+		lv_obj_set_style_text_font(backIcon, &lv_font_montserrat_14, 0);
+		lv_obj_set_style_text_color(backIcon, lv_color_white(), 0);
 		lv_obj_t* backLabel = lv_label_create(backBtn);
-		lv_label_set_text(backLabel, LV_SYMBOL_LEFT " Back");
+		lv_label_set_text(backLabel, "Back");
 		lv_obj_set_style_text_color(backLabel, lv_color_white(), 0);
 		lv_obj_center(backLabel);
+		lv_obj_update_layout(backLabel);
+		int back_width = lv_obj_get_width(backLabel) + 40;
+		if (back_width < 80) back_width = 80;
+		if (back_width > canvasWidth - 16) back_width = canvasWidth - 16;
+		lv_obj_set_width(backBtn, back_width);
+		lv_obj_set_style_min_width(backBtn, 80, 0);
+		lv_obj_set_style_pad_left(backBtn, 8, 0);
+		lv_obj_set_style_pad_right(backBtn, 8, 0);
+		lv_obj_set_style_max_width(backBtn, canvasWidth - 16, 0);
+		lv_obj_set_width(backLabel, back_width - 40);
+		lv_obj_set_style_text_align(backLabel, LV_TEXT_ALIGN_CENTER, 0);
+		lv_label_set_long_mode(backLabel, LV_LABEL_LONG_DOT);
+		const int back_height = lv_obj_get_height(backLabel) + 12;
+		lv_obj_set_height(backLabel, back_height - 12 < canvasHeight / 3 - 12 ? back_height - 12 : canvasHeight / 3 - 12);
+		lv_obj_set_height(backBtn, back_height > canvasHeight / 3 ? canvasHeight / 3 : back_height > 36 ? back_height : 36);
+		lv_obj_align(backIcon, LV_ALIGN_LEFT_MID, 0, 0);
+		lv_obj_align(backLabel, LV_ALIGN_RIGHT_MID, 0, 0);
 
 		// Canvas is NOT allocated here — deferred to show() to save PSRAM.
 

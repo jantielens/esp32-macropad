@@ -59,11 +59,7 @@ static void dummy_init() {
 		g_dummy_sensor.begin();
 }
 
-static void dummy_append_api(JsonObject &doc) {
-		g_dummy_sensor.appendJson(doc);
-}
-
-static void dummy_append_mqtt(JsonObject &doc) {
+static void dummy_sample(JsonObject &doc) {
 		g_dummy_sensor.appendJson(doc);
 }
 
@@ -74,11 +70,13 @@ static void dummy_publish_ha(MqttManager &mqtt) {
 #endif
 
 void register_dummy_sensor(SensorRegistry &registry) {
+		static const SensorField fields[] = {{"dummy_value", "Synthetic value from 0 to 99.99."}};
 		SensorCallbacks callbacks = {};
 		callbacks.name = "DUMMY";
 		callbacks.init = dummy_init;
-		callbacks.append_api = dummy_append_api;
-		callbacks.append_mqtt = dummy_append_mqtt;
+		callbacks.sample = dummy_sample;
+		callbacks.fields = fields;
+		callbacks.field_count = sizeof(fields) / sizeof(fields[0]);
 #if HAS_MQTT
 		callbacks.publish_ha = dummy_publish_ha;
 #endif

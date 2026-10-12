@@ -30,7 +30,7 @@ PROTO_DIR = SCRIPT_DIR / "portal-prototype"
 MOCK_DIR = SCRIPT_DIR / "mock-data"
 APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
-PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame")
+PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
 MOCK_NOW_EPOCH = 1791370589
 SCREENSAVER_DEFAULTS = {
@@ -38,6 +38,12 @@ SCREENSAVER_DEFAULTS = {
     "screen_saver_fade_out_ms": 800, "screen_saver_fade_in_ms": 400,
     "screen_saver_wake_on_touch": True, "screen_saver_wake_binding": "",
     "idle_screen_enabled": False, "idle_screen_timeout_seconds": 60, "idle_screen_pad": "",
+}
+EPAPER_PRESENTATION_DEFAULTS = {
+    "epaper_render_mode": "bw", "epaper_supported_render_modes": ["bw"],
+    "epaper_bw_conversion": "threshold", "epaper_bw_threshold": 128,
+    "epaper_binding_refresh_interval_ms": 1000, "epaper_min_refresh_interval_ms": 500,
+    "epaper_refresh_clock_on_minute_boundary": True, "epaper_full_refresh_threshold": 10,
 }
 
 
@@ -57,6 +63,7 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.pad_fixture = fixture
     server.mock_pads = fixture["pads"]
     server.mock_defaults = fixture["button_defaults"]
+    server.mock_typography = {"default_font": "@builtin", "base_text_size": 0}
     server.scenario = scenario
     server.mock_screen = "pad_0"
     server.mock_icons = {}
@@ -127,6 +134,19 @@ class PortalHandler(SimpleHTTPRequestHandler):
         profile = selected.value if selected else self.server.profile
         return profile if profile in PROFILES else self.server.profile
 
+    def _fonts_available(self):
+        return self._profile() in ("esp32-p4-lcd4b", "jc3248w535")
+
+    def _firmware_defaults(self):
+        defaults = dict(self.server.pad_fixture["firmware_defaults"])
+        if self._profile() == "crowpanel-4.2-interactive":
+            defaults.update(self.server.pad_fixture["epaper_firmware_defaults"])
+        return defaults
+
+    @staticmethod
+    def _valid_font_name(name):
+        return re.fullmatch(r"[a-z0-9_-]{1,31}", name) is not None
+
     def _page(self, query):
         value = query.get("page", [""])[0]
         if not value.isascii() or not value.isdecimal() or not 0 <= int(value) < 16:
@@ -152,6 +172,16 @@ class PortalHandler(SimpleHTTPRequestHandler):
             self._serve_file(EPAPER_WEB_DIR / "epaper_init.js")
         elif path == "/portal-logs.js":
             self._serve_file(APP_WEB_DIR / "portal_logs.js")
+        elif path == "/portal-epaper-refresh.js":
+            if self._profile() == "crowpanel-4.2-interactive":
+                self._serve_file(APP_WEB_DIR / "portal_epaper_refresh.js")
+            else:
+                self.send_error(404, "E-paper presentation unavailable")
+        elif path == "/portal_fonts.js":
+            if self._fonts_available():
+                self._serve_file(APP_WEB_DIR / "portal_fonts.js")
+            else:
+                self.send_error(404, "Fonts unavailable")
         elif path == "/portal_alarms.js":
             if self._profile() == "reterminal-e1003-frame":
                 self.send_error(404, "Alarm unavailable")
@@ -173,6 +203,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 config["caps"].update(ble=False, ble_hid=False, display=True, touch=True, ha_history=True)
             elif self._profile() == "jc3248w535":
                 config["caps"].update(ble=False, ble_hid=False, usb_hid=True, display=True, touch=True, ha_history=True)
+            if self._profile() == "crowpanel-4.2-interactive":
+                config["caps"].update(display=True, touch=False)
+                for key, value in EPAPER_PRESENTATION_DEFAULTS.items():
+                    config.setdefault(key, value)
+            else:
+                for key in EPAPER_PRESENTATION_DEFAULTS:
+                    config.pop(key, None)
             config["screen_saver_backlight_only"] = False
             config.setdefault("timezone", "Europe/Brussels")
             config["screen_saver_keeps_panel_awake"] = self._profile() == "jc3248w535"
@@ -205,7 +242,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 else:
                     self._serve_json({"error": "Pad not found"}, 404)
         elif path == "/api/component/button-defaults/config":
-            self._serve_json(self.server.mock_defaults)
+            active = getattr(self.server, "mock_typography", {"default_font": "@builtin", "base_text_size": 0})
+            saved = self.server.mock_defaults
+            self._serve_json({**saved, "firmware_defaults": {**self._firmware_defaults(), "default_font": "@builtin", "base_text_size": 0},
+                              "typography_status": {"active_font": active["default_font"], "active_base_text_size": active["base_text_size"],
+                                                    "board_medium_size": 24, "ttf_supported": self._fonts_available(),
+                                                    "reboot_required": active["default_font"] != saved.get("default_font", "@builtin") or
+                                                    active["base_text_size"] != saved.get("base_text_size", 0)}})
         elif path in ("/api/component/alarms/config", "/api/component/alarms/status"):
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
                 self._serve_json({"error": "Alarm unavailable"}, 404)
@@ -233,7 +276,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 return
             defaults = self.server.mock_defaults
             gap = int(defaults.get("button_spacing_px", 6))
-            margin = int(defaults.get("pixel_shift_distance_px", 4))
+            margin = int(defaults.get("pixel_shift_distance_px", self._firmware_defaults()["pixel_shift_distance_px"]))
             width = 720 - 2 * margin - int(defaults.get("pad_inset_left_px", 0)) - int(defaults.get("pad_inset_right_px", 0))
             height = 720 - 2 * margin - int(defaults.get("pad_inset_top_px", 0)) - int(defaults.get("pad_inset_bottom_px", 0))
             self._serve_json({"display_w": 720, "display_h": 720,
@@ -242,6 +285,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                               "padding": 4, "gap": gap, "pixel_shift_margin": margin, "font_small_h": 18})
         elif path == "/api/sounds/list":
             self._serve_json(self.server.pad_fixture["sounds"])
+        elif path == "/api/fonts/list":
+            if not self._fonts_available():
+                self._serve_json({"message": "Fonts unavailable"}, 404)
+            else:
+                self._serve_json([{"name": name, "size_bytes": len(data)} for name, data in getattr(self.server, "mock_fonts", {}).items()])
         elif path == "/api/extensions":
             self._serve_json(self.server.pad_fixture["extensions"])
         elif path == "/api/images":
@@ -271,6 +319,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Fragment API — production fragments take precedence.
         elif path.startswith("/api/section/"):
             fragment = path[len("/api/section/"):]
+            if fragment == "fonts" and not self._fonts_available():
+                self.send_error(404, "Fonts unavailable")
+                return
             if fragment in ("alarm-schedule", "alarm-behavior") and self._profile() == "reterminal-e1003-frame":
                 self.send_error(404, "Alarm unavailable")
                 return
@@ -299,6 +350,40 @@ class PortalHandler(SimpleHTTPRequestHandler):
         query = parse_qs(parsed.query)
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
+
+        if path == "/api/fonts/upload":
+            name = query.get("name", [""])[0]
+            if not self._fonts_available():
+                self._serve_json({"message": "Fonts unavailable"}, 404)
+                return
+            if not self._valid_font_name(name):
+                self._serve_json({"message": "Invalid font ID"}, 400)
+                return
+            fonts = getattr(self.server, "mock_fonts", {})
+            if name in fonts:
+                self._serve_json({"message": "Font ID already exists; delete it before replacing"}, 409)
+                return
+            valid = len(body) >= 12 and body[:4] == b"\0\1\0\0"
+            table_count = int.from_bytes(body[4:6], "big") if valid else 0
+            valid = valid and 0 < table_count <= (len(body) - 12) // 16
+            tables = set()
+            for index in range(table_count if valid else 0):
+                table = body[12 + index * 16:28 + index * 16]
+                offset, size = int.from_bytes(table[8:12], "big"), int.from_bytes(table[12:16], "big")
+                valid = valid and offset <= len(body) and size <= len(body) - offset
+                tables.add(table[:4])
+            valid = valid and {b"head", b"hhea", b"hmtx", b"maxp", b"cmap", b"loca", b"glyf"} <= tables
+            valid = valid and not ({b"fvar", b"CFF ", b"CFF2"} & tables)
+            if not valid:
+                self._serve_json({"message": "Unsupported static TrueType file"}, 400)
+                return
+            if self.server.scenario == "save-error":
+                self._serve_json({"message": "Mock font storage failure"}, 507)
+                return
+            fonts[name] = body
+            self.server.mock_fonts = fonts
+            self._serve_json({"success": True})
+            return
 
         if path.startswith("/api/component/alarms/") or path == "/__mock/alarm":
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535"):
@@ -408,7 +493,13 @@ class PortalHandler(SimpleHTTPRequestHandler):
                     return
                 self.server.mock_pads[page] = data
             elif path == "/api/component/button-defaults/config":
-                self.server.mock_defaults.update(data)
+                font = data.get("default_font", "@builtin")
+                size = data.get("base_text_size", 0)
+                if not isinstance(font, str) or (font != "@builtin" and not re.fullmatch(r"[a-z0-9_-]{1,31}", font)) or \
+                        type(size) is not int or not 0 <= size <= 65535:
+                    self._serve_json({"error": "Invalid typography settings"}, 400)
+                    return
+                self.server.mock_defaults = data
             elif path == "/api/component/display/screen":
                 target = data.get("screen")
                 if target not in {screen["id"] for screen in self._device_info()["available_screens"]}:
@@ -451,6 +542,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 return
             self._serve_json({"success": True, "message": "Saved to local mock"})
         elif path == "/api/reboot":
+            self.server.mock_typography = {"default_font": self.server.mock_defaults.get("default_font", "@builtin"),
+                                          "base_text_size": self.server.mock_defaults.get("base_text_size", 0)}
             self.server.mock_config["keyboard_active_transport"] = self.server.mock_config["keyboard_transport"]
             self.server.mock_config["keyboard_status"] = "disabled" if self.server.mock_config["keyboard_transport"] == "none" else "ready"
             self._serve_json({"success": True, "message": "Mock reboot complete"})
@@ -488,6 +581,19 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/fonts":
+            name = parse_qs(parsed.query).get("name", [""])[0]
+            fonts = getattr(self.server, "mock_fonts", {})
+            if not self._fonts_available():
+                self._serve_json({"message": "Fonts unavailable"}, 404)
+            elif not self._valid_font_name(name):
+                self._serve_json({"message": "Invalid font ID"}, 400)
+            elif name not in fonts:
+                self._serve_json({"message": "Font not found"}, 404)
+            else:
+                del fonts[name]
+                self._serve_json({"success": True})
+            return
         if parsed.path not in ("/api/pad", "/api/icons/page"):
             self.send_error(404, "Not found")
             return
@@ -551,7 +657,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_production_bundle(self):
         files = []
         enabled = True
-        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
+        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
+        if self._profile() == "crowpanel-4.2-interactive":
+            flags = {"HAS_DISPLAY"}
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
         for line in (APP_WEB_DIR / "portal.js.bundle").read_text(encoding="utf-8").splitlines():
@@ -615,10 +723,14 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
+            if category["id"] == "display" and profile == "crowpanel-4.2-interactive":
+                category["items"].append({"id": "epaper-refresh", "display_name": "E-paper Presentation",
+                                          "portal_script": "/portal-epaper-refresh.js"})
             if category["id"] == "pads" and profile in ("esp32-p4-lcd4b", "jc3248w535"):
                 category["items"].extend([
                     {"id": "recipes", "display_name": "Recipes"},
                     {"id": "recipe-catalog", "display_name": "Recipe Catalog"},
+                    {"id": "fonts", "display_name": "Fonts", "portal_script": "/portal_fonts.js"},
                 ])
             if category["id"] == "device":
                 category["items"].append({"id": "timezone", "display_name": "Timezone"})
@@ -627,7 +739,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 if item["id"] == "ble":
                     item["id"] = "hid"
                     item["display_name"] = "Keyboard, Mouse & Gamepad"
-        if profile in ("esp32-p4-lcd4b", "jc3248w535"):
+        if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
             nav["primary"] = {"fragment": "pad-editor", "label": "Pad Editor", "icon": ""}
             nav["categories"] = [category for category in nav["categories"] if category["id"] != "sensors"]
             return nav
@@ -653,8 +765,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "cpu_freq": 360, "flash_chip_size": 16 * 1024 * 1024,
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
             "ap_active": False, "has_mqtt": True, "has_alarm": False,
-            "has_touch": True, "has_usb_hid": True}
-        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535"):
+            "has_touch": True, "has_usb_hid": True, "has_ttf_fonts": self._fonts_available()}
+        if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
             info.update(device_class="Macropad", board=self._profile(), has_display=True,
                         has_backlight=True, has_audio=True, has_sound_player=True, has_alarm=True,
                         has_native_extensions=True, has_camera=False, has_image_fetch=True,
@@ -667,6 +779,11 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 info.update(chip_model="ESP32-S3", has_audio=False, has_sound_player=False,
                             has_image_fetch=False, has_image_library=False,
                             display_coord_width=480, display_coord_height=320)
+            if self._profile() == "crowpanel-4.2-interactive":
+                info.update(chip_model="ESP32-S3", has_touch=False, has_audio=False, has_sound_player=False,
+                            has_backlight=False, has_alarm=False, has_native_extensions=False,
+                            has_image_fetch=False, has_image_library=False,
+                            display_coord_width=400, display_coord_height=300)
             if include_catalog:
                 info["catalog"] = self.server.pad_fixture["catalog"]
                 info["widget_catalog"] = self.server.pad_fixture["widget_catalog"]

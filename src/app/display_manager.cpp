@@ -4,6 +4,7 @@
 
 #include "data_stream.h"
 #include "display_manager.h"
+#include "pad_layout.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "pad_config.h"
@@ -23,6 +24,8 @@
 #include "drivers/arduino_gfx_st77916_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_ARDUINO_GFX_NV3041A
 #include "drivers/arduino_gfx_nv3041a_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ARDUINO_GFX_CO5300
+#include "drivers/arduino_gfx_co5300_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_RGB
 #include "drivers/st7701_rgb_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7703_DSI
@@ -35,6 +38,8 @@
 #include "drivers/inkplate6flick_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
 #include "drivers/reterminal_e1003_epaper_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+#include "drivers/crowpanel42_epaper_driver.h"
 #endif
 
 #include <SPI.h>
@@ -74,6 +79,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new Arduino_GFX_ST77916_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ARDUINO_GFX_NV3041A
 		driver = new Arduino_GFX_NV3041A_Driver();
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ARDUINO_GFX_CO5300
+		driver = new Arduino_GFX_CO5300_Driver(board_co5300_config());
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7701_RGB
 		driver = new ST7701_RGB_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_ST7703_DSI
@@ -86,6 +93,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new Inkplate6FlickEpaperDriver(config);
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
 		driver = new ReTerminalE1003EpaperDriver(config);
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+		driver = new CrowPanel42EpaperDriver();
 		#else
 		#error "No display driver selected or unknown driver type"
 		#endif
@@ -428,6 +437,21 @@ void DisplayManager::initLVGL() {
 		LOGT("Display", "LVGL v9 init complete");
 }
 
+void DisplayManager::initTypography(const char* font_name, uint16_t base_size) {
+		lock();
+		device_typography_init(font_name, base_size);
+		lv_theme_t* theme = lv_theme_default_init(display, lv_color_hex(0x3399FF),
+			lv_color_hex(0x303030), LVGL_THEME_DARK_MODE, pad_typography_font(LV_FONT_DEFAULT));
+		lv_display_set_theme(display, theme);
+		infoScreen.create();
+		testScreen.create();
+		fpsScreen.create();
+		#if HAS_TOUCH && LV_USE_CANVAS
+		touchTestScreen.create();
+		#endif
+		unlock();
+}
+
 void DisplayManager::init() {
 		// Initialize hardware (TFT + gamma fix)
 		initHardware();
@@ -443,12 +467,6 @@ void DisplayManager::init() {
 		
 		// Create all screens
 		splashScreen.create();
-		infoScreen.create();
-	testScreen.create();
-		fpsScreen.create();
-		#if HAS_TOUCH && LV_USE_CANVAS
-		touchTestScreen.create();
-		#endif
 		for (uint8_t i = 0; i < MAX_PADS; i++) {
 				padScreens[i]->create();
 		}
@@ -463,10 +481,9 @@ void DisplayManager::init() {
 		// On single-core: runs on Core 0 (time-sliced with Arduino loop)
 		// Stack location is selected per board. Classic ESP32 targets must keep
 		// static task stacks in internal RAM.
-		static constexpr uint32_t kLvglStackBytes = 16384;
 		lvglTaskStopped = false;
 		#if CONFIG_FREERTOS_UNICORE
-		#if LVGL_TASK_USE_PSRAM_STACK
+		#if LVGL_TASK_USE_PSRAM_STACK && !(HAS_TTF_FONTS && !USE_SD_STORAGE)
 		const bool lvglTaskCreated = rtos_create_task_psram_stack(
 				lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY,
 				&lvglTaskHandle, &lvglTaskAlloc);
@@ -484,7 +501,7 @@ void DisplayManager::init() {
 				LOGT("Display", "Rendering task created (single-core, %s stack)", lvglStackLocation);
 		}
 		#else
-		#if LVGL_TASK_USE_PSRAM_STACK
+		#if LVGL_TASK_USE_PSRAM_STACK && !(HAS_TTF_FONTS && !USE_SD_STORAGE)
 		const bool lvglTaskCreated = rtos_create_task_psram_stack_pinned(
 				lvglTask, "LVGL", kLvglStackBytes, this, LVGL_TASK_PRIORITY,
 				&lvglTaskHandle, &lvglTaskAlloc, LVGL_TASK_CORE);

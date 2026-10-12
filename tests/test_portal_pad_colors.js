@@ -119,4 +119,79 @@ for (const identifier of ['min-label', 'max-label', 'ref-1', 'ref-2', 'ref-3']) 
 const barChart = fs.readFileSync('src/app/web/_widget_bar_chart.html', 'utf8');
 assert.match(barChart, /id="pad-edit-widget-bar-bg-color"[^>]*maxlength="63"/);
 
-console.log('portal_pad_colors: PASS');
+const defaultsFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
+const defaultInputs = new Map();
+context.padState = { buttonDefaults: {} };
+context.document = { getElementById: id => defaultInputs.get(id) || null, addEventListener() {} };
+context.window = {};
+context.Event = class {};
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_defaults.js', 'utf8'), context);
+context.padInitLayoutDiagram = () => {};
+context.padUpdateLayoutDiagram = () => {};
+for (const id of ['pad-def-pad-bg-color', 'pad-def-bg-color', 'pad-def-fg-color', 'pad-def-border-color',
+    'pad-def-pixel-shift-distance', 'pad-def-button-shadow-enabled']) {
+    defaultInputs.set(id, { value: '', checked: false, dispatchEvent() {} });
+}
+const monoDefaults = { ...defaultsFixture.firmware_defaults, ...defaultsFixture.epaper_firmware_defaults };
+context.padLoadButtonDefaults({ firmware_defaults: monoDefaults });
+assert.strictEqual(defaultInputs.get('pad-def-bg-color').value, '#FFFFFF');
+assert.strictEqual(defaultInputs.get('pad-def-fg-color').value, '#000000');
+assert.strictEqual(defaultInputs.get('pad-def-pixel-shift-distance').value, 0);
+assert.strictEqual(context.padGetEffectiveDefault('widget_series_color'), '#000000');
+assert.strictEqual(context.padGetEffectiveDefault('pixel_shift_distance_px'), 0);
+defaultInputs.get('pad-def-pixel-shift-distance').value = '0';
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padCollectButtonDefaults())), {});
+context.padLoadButtonDefaults({ firmware_defaults: defaultsFixture.firmware_defaults,
+    pixel_shift_distance_px: 0, button_shadow_enabled: false, bg_color: '#ABCDEF' });
+assert.strictEqual(context.padGetEffectiveDefault('pixel_shift_distance_px'), 0);
+assert.strictEqual(context.padGetEffectiveDefault('button_shadow_enabled'), false);
+assert.strictEqual(context.padGetEffectiveDefault('bg_color'), '#ABCDEF');
+assert.strictEqual(context.padState.buttonDefaults.firmware_defaults, undefined);
+const saved = JSON.parse(JSON.stringify(context.padCollectButtonDefaults()));
+assert.strictEqual(saved.bg_color, '#ABCDEF');
+assert.strictEqual(saved.pixel_shift_distance_px, 0);
+assert.strictEqual(saved.button_shadow_enabled, false);
+assert.strictEqual(saved.firmware_defaults, undefined);
+
+for (const id of ['pad-def-border-width', 'pad-def-corner-radius', 'pad-def-content-pad']) {
+    defaultInputs.set(id, { value: '', checked: false, dispatchEvent() {} });
+}
+context.padLoadButtonDefaults({ firmware_defaults: monoDefaults, border_width: 0, corner_radius: 0, content_pad: 0 });
+for (const id of ['pad-def-border-width', 'pad-def-corner-radius', 'pad-def-content-pad']) {
+    assert.strictEqual(defaultInputs.get(id).value, 0);
+    defaultInputs.get(id).value = '0';
+}
+const zeroAppearance = JSON.parse(JSON.stringify(context.padCollectButtonDefaults()));
+assert.strictEqual(zeroAppearance.border_width, '0');
+assert.strictEqual(zeroAppearance.corner_radius, '0');
+assert.strictEqual(zeroAppearance.content_pad, '0');
+
+(async function testDefaultsSaveRebootWarning() {
+    let pendingCalls = 0;
+    const messages = [];
+    context.padCollectButtonDefaults = () => ({ base_text_size: 30 });
+    context.padRenderGrid = () => {};
+    context.setPendingReboot = () => { ++pendingCalls; };
+    context.showMessage = (message, type) => messages.push({ message, type });
+    context.fetch = async () => ({ ok: true });
+    context.padLoadButtonDefaultsFromDevice = async () => context.padLoadButtonDefaults({
+        typography_status: { reboot_required: false }
+    });
+    await context.padSaveButtonDefaults();
+    assert.strictEqual(pendingCalls, 0);
+    assert.strictEqual(messages.pop().type, 'success');
+
+    context.padLoadButtonDefaultsFromDevice = async () => context.padLoadButtonDefaults({
+        typography_status: { reboot_required: true }
+    });
+    await context.padSaveButtonDefaults();
+    assert.strictEqual(pendingCalls, 1);
+    assert.strictEqual(messages.length, 0);
+
+    context.fetch = async () => ({ ok: false, status: 500, json: async () => ({ error: 'Save failed' }) });
+    context.console = { error() {} };
+    await context.padSaveButtonDefaults();
+    assert.strictEqual(pendingCalls, 1);
+    assert.strictEqual(messages.pop().type, 'error');
+    console.log('portal_pad_colors: PASS');
+})().catch(error => { console.error(error); process.exitCode = 1; });

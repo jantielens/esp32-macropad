@@ -9,6 +9,9 @@
 #include "storage.h"
 #include "time_service.h"
 #include "ota_activity.h"
+#if defined(ARDUINO) && HAS_AUDIO
+#include "audio.h"
+#endif
 #include "log_manager.h"
 #include <memory>
 #include <algorithm>
@@ -16,6 +19,7 @@
 #include <mutex>
 #include <string>
 #include <string.h>
+#include <new>
 #if defined(ARDUINO)
 #include "display_manager.h"
 #include <esp_timer.h>
@@ -25,8 +29,12 @@ static constexpr size_t ALARM_JSON_MAX = 8192;
 static constexpr size_t ALARM_SNAPSHOT_MAX = 16384;
 static const char* const snapshot_paths[] = {"/config/alarm_a.json", "/config/alarm_b.json"};
 static std::mutex alarm_mutex;
-static AlarmDefinition definition;
-static AlarmDefinition session;
+struct AlarmStorage {
+    AlarmDefinition definition;
+    AlarmDefinition session;
+    ButtonAction pending_stop[MAX_BUTTON_ACTIONS];
+};
+static AlarmStorage* alarm_state = nullptr;
 static AlarmClockCore clock_core;
 static uint64_t generation = 0;
 static time_t once_epoch = 0;
@@ -49,7 +57,6 @@ static bool settings_save_failed = false;
 static uint64_t settings_save_due_ms = 0;
 static time_t next_epoch = 0;
 static time_t forecast_minute = -1;
-static ButtonAction pending_stop[MAX_BUTTON_ACTIONS] = {};
 static uint8_t stop_count = 0;
 static uint8_t stop_index = 0;
 static uint8_t ring_index = 0;
@@ -79,10 +86,10 @@ static const char* state_name(AlarmState state) {
 
 static void log_definition(const char* reason) {
     LOGI("Alarm", "%s: slot=1 enabled=%u time=%02u:%02u weekdays=0x%02x ring_hooks=%u stop_hooks=%u snooze=%umin dismiss=%umin",
-        reason, unsigned(definition.enabled), unsigned(definition.hour), unsigned(definition.minute),
-        unsigned(definition.weekdays), unsigned(definition.ring_count), unsigned(definition.stop_count),
-        unsigned(definition.snooze_minutes), unsigned(definition.dismiss_minutes));
-    LOGI("Alarm", "Armed: mode=%s ready=%u from=%lld handled=%lld once=%lld", definition.weekdays ? "weekly" : "once", unsigned(clock_core.time_ready),
+        reason, unsigned(alarm_state->definition.enabled), unsigned(alarm_state->definition.hour), unsigned(alarm_state->definition.minute),
+        unsigned(alarm_state->definition.weekdays), unsigned(alarm_state->definition.ring_count), unsigned(alarm_state->definition.stop_count),
+        unsigned(alarm_state->definition.snooze_minutes), unsigned(alarm_state->definition.dismiss_minutes));
+    LOGI("Alarm", "Armed: mode=%s ready=%u from=%lld handled=%lld once=%lld", alarm_state->definition.weekdays ? "weekly" : "once", unsigned(clock_core.time_ready),
         static_cast<long long>(clock_core.armed_from), static_cast<long long>(clock_core.handled_epoch), static_cast<long long>(once_epoch));
 }
 
@@ -90,15 +97,15 @@ static void log_schedule(time_t now, time_t candidate, bool ready, bool ota, boo
     struct tm local = {};
     char local_time[32] = "unavailable";
     if (time_service_localtime(now, &local)) strftime(local_time, sizeof(local_time), "%Y-%m-%d %H:%M:%S", &local);
-    const char* blocked = !definition.enabled ? "disabled"
+    const char* blocked = !alarm_state->definition.enabled ? "disabled"
         : !ready ? "waiting-ntp" : !clock_core.time_ready ? "arming-after-sync" : ota ? "ota"
         : rearmed ? "rearmed" : stop_index < stop_count ? "cleanup-pending" : !candidate ? "not-due"
         : candidate < clock_core.armed_from ? "before-armed-minute"
         : candidate <= clock_core.handled_epoch ? "already-handled"
         : candidate > now ? "not-due" : now - candidate > clock_core.lateness_seconds ? "outside-grace" : "none";
     LOGD("Alarm", "Schedule: local=%s day=%u set=%02u:%02u weekdays=0x%02x ready=%u ota=%u state=%s candidate=%lld armed=%lld handled=%lld blocked=%s",
-        local_time, unsigned(local.tm_wday), unsigned(definition.hour), unsigned(definition.minute),
-        unsigned(definition.weekdays), unsigned(ready), unsigned(ota), state_name(clock_core.state),
+        local_time, unsigned(local.tm_wday), unsigned(alarm_state->definition.hour), unsigned(alarm_state->definition.minute),
+        unsigned(alarm_state->definition.weekdays), unsigned(ready), unsigned(ota), state_name(clock_core.state),
         static_cast<long long>(candidate), static_cast<long long>(clock_core.armed_from),
         static_cast<long long>(clock_core.handled_epoch), blocked);
 }
@@ -246,11 +253,12 @@ static bool persist(const AlarmDefinition& candidate, time_t handled, time_t onc
     return true;
 }
 
-static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const char* label, uint8_t index) {
+static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const char* label, uint8_t index,
+                              bool alarm_audio = false) {
     for (; index < count; ++index) {
         if (ota_activity_is_active()) break;
         LOGI("Alarm", "%s hook %u/%u: dispatch type=%s", label, unsigned(index + 1), unsigned(count), actions[index].type);
-        const ActionResult result = action_dispatch_synchronous(actions[index], label, session_work_valid, session_generation.load());
+        const ActionResult result = action_dispatch_synchronous(actions[index], label, session_work_valid, session_generation.load(), alarm_audio);
         if (result != ACTION_COMPLETE) {
             hook_error = true;
             LOGW("Alarm", "%s hook %u/%u: failed result=%u", label, unsigned(index + 1), unsigned(count), unsigned(result));
@@ -264,8 +272,8 @@ static uint8_t dispatch_hooks(const ButtonAction* actions, uint8_t count, const 
 static void stop_session() {
     session_generation.fetch_add(1);
     if (session_started) {
-        memcpy(pending_stop, session.on_stop, sizeof(pending_stop));
-        stop_count = session.stop_count;
+        memcpy(alarm_state->pending_stop, alarm_state->session.on_stop, sizeof(alarm_state->pending_stop));
+        stop_count = alarm_state->session.stop_count;
         stop_index = 0;
     }
     session_started = false;
@@ -273,17 +281,20 @@ static void stop_session() {
 }
 
 static void flush_hooks() {
-    const uint8_t stopped = dispatch_hooks(pending_stop, stop_count, "Alarm stop", stop_index);
+    const uint8_t stopped = dispatch_hooks(alarm_state->pending_stop, stop_count, "Alarm stop", stop_index);
     {
         std::lock_guard<std::mutex> lock(alarm_mutex);
         stop_index = stopped;
     }
     if (stopped < stop_count || !ring_pending || ota_activity_is_active()) return;
-    const uint8_t next = dispatch_hooks(session.on_ring, session.ring_count, "Alarm ring", ring_index);
+#if defined(ARDUINO) && HAS_AUDIO
+    if (!ring_index && !audio_alarm_session(session_work_valid, session_generation.load())) return;
+#endif
+    const uint8_t next = dispatch_hooks(alarm_state->session.on_ring, alarm_state->session.ring_count, "Alarm ring", ring_index, true);
     std::lock_guard<std::mutex> lock(alarm_mutex);
-    if (next > ring_index || !session.ring_count) session_started = true;
+    if (next > ring_index || !alarm_state->session.ring_count) session_started = true;
     ring_index = next;
-    if (ring_index == session.ring_count) ring_pending = false;
+    if (ring_index == alarm_state->session.ring_count) ring_pending = false;
 }
 
 static uint64_t monotonic_ms() {
@@ -297,20 +308,25 @@ static uint64_t monotonic_ms() {
 static void update_forecast(time_t now) {
     forecast_minute = now / 60;
     next_epoch = 0;
-    if (!definition.enabled || !time_service_ready()) return;
-    if (!definition.weekdays) {
+    if (!alarm_state->definition.enabled || !time_service_ready()) return;
+    if (!alarm_state->definition.weekdays) {
         if (once_epoch >= clock_core.armed_from && once_epoch > clock_core.handled_epoch && once_epoch >= now)
             next_epoch = once_epoch;
         return;
     }
     const time_t floor = std::max(now - 1, std::max(clock_core.armed_from - 1, clock_core.handled_epoch));
-    next_epoch = time_service_alarm_next(floor, definition.hour, definition.minute, definition.weekdays);
+    next_epoch = time_service_alarm_next(floor, alarm_state->definition.hour, alarm_state->definition.minute, alarm_state->definition.weekdays);
 }
 
 void alarm_manager_init() {
     std::lock_guard<std::mutex> lock(alarm_mutex);
-    definition = AlarmDefinition{};
-    session = AlarmDefinition{};
+    initialized = false;
+    if (!alarm_state) {
+        void* memory = config_psram_alloc(sizeof(AlarmStorage), "alarm_state");
+        if (!memory) { storage_error = true; fail("Alarm allocation failed"); return; }
+        alarm_state = static_cast<AlarmStorage*>(memory);
+    }
+    new (alarm_state) AlarmStorage{};
     clock_core = AlarmClockCore{};
     generation = 0;
     once_epoch = 0;
@@ -357,7 +373,7 @@ void alarm_manager_init() {
             || ((!candidate->enabled || candidate->weekdays) && document["data"]["once_epoch"].as<int64_t>() != 0)) { invalid_snapshot = true; continue; }
         const uint64_t stored_generation = document["generation"].as<uint64_t>();
         if (active_snapshot < 0 || stored_generation > generation) {
-            definition = *candidate;
+            alarm_state->definition = *candidate;
             clock_core.handled_epoch = document["data"]["handled_epoch"].as<int64_t>();
             once_epoch = document["data"]["once_epoch"].as<int64_t>();
             clock_core.armed_from = document["data"]["armed_from"].as<int64_t>();
@@ -372,7 +388,7 @@ void alarm_manager_init() {
     }
     timezone_revision = time_service_generation();
     clock_core.time_ready = time_service_ready();
-    clock_core.lateness_seconds = definition.lateness_minutes * 60U;
+    clock_core.lateness_seconds = alarm_state->definition.lateness_minutes * 60U;
     char current_timezone[64];
     time_service_get_timezone(current_timezone, sizeof(current_timezone));
     if (active_snapshot >= 0 && strcmp(saved_timezone, current_timezone)) {
@@ -399,19 +415,19 @@ static bool alarm_config_apply_raw(const uint8_t* data, size_t length, bool defe
     {
         std::lock_guard<std::mutex> lock(alarm_mutex);
         AlarmDocument current(ALARM_JSON_MAX);
-        definition_json(definition, current.to<JsonObject>());
+        definition_json(alarm_state->definition, current.to<JsonObject>());
         std::string before;
         serializeJson(current, before);
         current.clear();
         definition_json(*candidate, current.to<JsonObject>());
         std::string after;
         serializeJson(current, after);
-        current["lateness_minutes"] = definition.lateness_minutes;
+        current["lateness_minutes"] = alarm_state->definition.lateness_minutes;
         std::string schedule;
         serializeJson(current, schedule);
         const bool schedule_changed = before != schedule;
         if (before == after) {
-            if (!deferred_save && settings_dirty && !persist(definition, clock_core.handled_epoch, once_epoch)) {
+            if (!deferred_save && settings_dirty && !persist(alarm_state->definition, clock_core.handled_epoch, once_epoch)) {
                 storage_error = settings_save_failed = true;
                 return false;
             }
@@ -434,9 +450,9 @@ static bool alarm_config_apply_raw(const uint8_t* data, size_t length, bool defe
             stop_session();
             clock_core.rearm(time(nullptr), time_service_ready());
         }
-        definition = *candidate;
+        alarm_state->definition = *candidate;
         once_epoch = next_once;
-        clock_core.lateness_seconds = definition.lateness_minutes * 60U;
+        clock_core.lateness_seconds = alarm_state->definition.lateness_minutes * 60U;
         update_forecast(time(nullptr));
         schedule_log_pending = true;
         if (deferred_save) {
@@ -480,26 +496,31 @@ const char* alarm_last_error() { return last_error; }
 
 void alarm_config_to_json(JsonObject root) {
     std::lock_guard<std::mutex> lock(alarm_mutex);
-    definition_json(definition, root);
+    static const AlarmDefinition empty{};
+    definition_json(alarm_state ? alarm_state->definition : empty, root);
 }
 
 AlarmSnapshot alarm_snapshot() {
     std::lock_guard<std::mutex> lock(alarm_mutex);
     AlarmSnapshot value = {};
-    value.enabled = definition.enabled;
-    value.hour = definition.hour;
-    value.minute = definition.minute;
+    if (!alarm_state) {
+        value.storage_error = storage_error;
+        return value;
+    }
+    value.enabled = alarm_state->definition.enabled;
+    value.hour = alarm_state->definition.hour;
+    value.minute = alarm_state->definition.minute;
     value.state = clock_core.state;
     value.ready = initialized && time_service_ready();
     value.deferred = clock_core.deferred || ring_pending || stop_index < stop_count;
     value.storage_error = storage_error;
     value.hook_error = hook_error.load();
     value.once_epoch = once_epoch;
-    value.weekdays = definition.weekdays;
-    value.lateness_minutes = definition.lateness_minutes;
-    value.snooze_minutes = definition.snooze_minutes;
-    value.dismiss_minutes = definition.dismiss_minutes;
-    value.next_epoch = value.ready && definition.enabled ? next_epoch : 0;
+    value.weekdays = alarm_state->definition.weekdays;
+    value.lateness_minutes = alarm_state->definition.lateness_minutes;
+    value.snooze_minutes = alarm_state->definition.snooze_minutes;
+    value.dismiss_minutes = alarm_state->definition.dismiss_minutes;
+    value.next_epoch = value.ready && alarm_state->definition.enabled ? next_epoch : 0;
     value.next_seconds = value.next_epoch ? std::max<time_t>(0, value.next_epoch - time(nullptr)) : 0;
     const uint64_t now = monotonic_ms();
     const uint32_t remaining = clock_core.deadline_ms > now ? (clock_core.deadline_ms - now + 999) / 1000 : 0;
@@ -665,19 +686,19 @@ void alarm_manager_loop() {
         }
         if (ring_pending && (now > ring_until_epoch || monotonic > ring_until_ms)) {
             LOGW("Alarm", "Pending ring expired; discarding remaining ring hooks (%u/%u dispatched)",
-                unsigned(ring_index), unsigned(session.ring_count));
+                unsigned(ring_index), unsigned(alarm_state->session.ring_count));
             clock_core.cancel();
             stop_session();
         } else if (ring_pending && !ota && !ring_index) {
             clock_core.deadline_ms = monotonic + clock_core.dismiss_ms;
         }
         bool occurrence_record_attempted = false;
-        if (definition.enabled && !definition.weekdays && ready && !ota) {
+        if (alarm_state->definition.enabled && !alarm_state->definition.weekdays && ready && !ota) {
             if (!once_epoch) {
-                const time_t next = time_service_alarm_next(now, definition.hour, definition.minute);
+                const time_t next = time_service_alarm_next(now, alarm_state->definition.hour, alarm_state->definition.minute);
                 if (next) {
                     once_epoch = next;
-                    if (!persist(definition, clock_core.handled_epoch, next)) {
+                    if (!persist(alarm_state->definition, clock_core.handled_epoch, next)) {
                         storage_error = true;
                         settings_dirty = true;
                         settings_save_due_ms = monotonic + SETTINGS_SAVE_DELAY_MS;
@@ -688,9 +709,9 @@ void alarm_manager_loop() {
             } else {
                 const time_t armed = clock_core.armed_from;
                 if (once_epoch < armed || once_epoch <= clock_core.handled_epoch || (once_epoch < now && now - once_epoch > clock_core.lateness_seconds)) {
-                    definition.enabled = false;
+                    alarm_state->definition.enabled = false;
                     once_epoch = 0;
-                    if (persist(definition, clock_core.handled_epoch, 0)) {
+                    if (persist(alarm_state->definition, clock_core.handled_epoch, 0)) {
                         schedule_log_pending = true;
                         log_definition("One-shot expired; disabled");
                     } else {
@@ -701,13 +722,13 @@ void alarm_manager_loop() {
                 }
             }
         }
-        time_t candidate = definition.enabled && !rearmed && stop_index == stop_count
-            ? (definition.weekdays ? time_service_alarm_candidate(now, definition.hour, definition.minute, definition.weekdays) : once_epoch) : 0;
-        if (!definition.weekdays && !ota && clock_core.occurrence_due(now, ready, candidate)) {
+        time_t candidate = alarm_state->definition.enabled && !rearmed && stop_index == stop_count
+            ? (alarm_state->definition.weekdays ? time_service_alarm_candidate(now, alarm_state->definition.hour, alarm_state->definition.minute, alarm_state->definition.weekdays) : once_epoch) : 0;
+        if (!alarm_state->definition.weekdays && !ota && clock_core.occurrence_due(now, ready, candidate)) {
             occurrence_record_attempted = true;
-            definition.enabled = false;
+            alarm_state->definition.enabled = false;
             once_epoch = 0;
-            if (persist(definition, candidate, 0)) {
+            if (persist(alarm_state->definition, candidate, 0)) {
                 schedule_log_pending = true;
                 LOGI("Alarm", "One-shot consumed; future scheduling disabled");
             } else {
@@ -717,14 +738,14 @@ void alarm_manager_loop() {
                 LOGE("Alarm", "One-shot consumption failed; ringing with RAM-only duplicate prevention");
             }
         }
-        if (schedule_log_pending || readiness_changed || (definition.enabled && monotonic - last_schedule_log_ms >= 60000)) {
+        if (schedule_log_pending || readiness_changed || (alarm_state->definition.enabled && monotonic - last_schedule_log_ms >= 60000)) {
             log_schedule(now, candidate, ready, ota, rearmed);
             last_schedule_log_ms = monotonic;
             schedule_log_pending = false;
         }
         const AlarmState previous_state = clock_core.state;
         uint8_t scheduled = clock_core.tick(now, monotonic, ready, ota, candidate,
-            definition.snooze_minutes * 60000U, definition.dismiss_minutes * 60000U);
+            alarm_state->definition.snooze_minutes * 60000U, alarm_state->definition.dismiss_minutes * 60000U);
         if (readiness_changed) {
             LOGI("Alarm", "Time readiness=%u now=%lld armed_from=%lld; %s", unsigned(ready),
                 static_cast<long long>(now), static_cast<long long>(clock_core.armed_from),
@@ -739,21 +760,21 @@ void alarm_manager_loop() {
         }
         effects |= scheduled;
         if (effects & ALARM_EFFECT_HANDLED) {
-            if (!occurrence_record_attempted && !persist(definition, clock_core.handled_epoch, once_epoch)) {
+            if (!occurrence_record_attempted && !persist(alarm_state->definition, clock_core.handled_epoch, once_epoch)) {
                 storage_error = true;
                 settings_dirty = true;
                 settings_save_due_ms = monotonic + SETTINGS_SAVE_DELAY_MS;
                 LOGE("Alarm", "Occurrence recording failed; ringing with RAM-only duplicate prevention");
             }
-            session = definition;
+            alarm_state->session = alarm_state->definition;
             hook_error = false;
         }
         if (effects & ALARM_EFFECT_RING) {
             LOGI("Alarm", "Ring started: reason=%s occurrence=%lld late=%llds hooks=%u stop_hooks=%u deadline_ms=%llu",
                 effects & ALARM_EFFECT_HANDLED ? "schedule" : "snooze", static_cast<long long>(clock_core.handled_epoch),
                 static_cast<long long>(effects & ALARM_EFFECT_HANDLED ? now - clock_core.handled_epoch : 0),
-                unsigned(session.ring_count), unsigned(session.stop_count), static_cast<unsigned long long>(clock_core.deadline_ms));
-            if (!session.ring_count) LOGW("Alarm", "Ring has no actions configured");
+                unsigned(alarm_state->session.ring_count), unsigned(alarm_state->session.stop_count), static_cast<unsigned long long>(clock_core.deadline_ms));
+            if (!alarm_state->session.ring_count) LOGW("Alarm", "Ring has no actions configured");
             ring_pending = true;
             ring_index = 0;
             ring_until_epoch = now + 300;
@@ -770,7 +791,7 @@ void alarm_manager_loop() {
         if (forecast_minute != now / 60 || rearmed || readiness_changed || schedule_log_pending || scheduled)
             update_forecast(now);
         if (settings_dirty && monotonic >= settings_save_due_ms && !ota && !command_count) {
-            if (persist(definition, clock_core.handled_epoch, once_epoch)) {
+            if (persist(alarm_state->definition, clock_core.handled_epoch, once_epoch)) {
                 LOGI("Alarm", "Pending settings saved");
             } else {
                 storage_error = settings_save_failed = true;

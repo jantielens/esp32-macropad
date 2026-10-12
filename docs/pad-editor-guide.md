@@ -103,6 +103,8 @@ The separate **Button Defaults** navigation item sets device-wide defaults for p
 
 | Setting | Description |
 |---------|-------------|
+| **Default font** | Montserrat or an uploaded font ID; activates after reboot |
+| **Base text size** | Automatic or 1-65535 px; scales automatic text roles proportionally after reboot |
 | **Background color** | Default button fill color |
 | **Text color** | Default label/icon color |
 | **Border color** | Default button outline color |
@@ -114,7 +116,15 @@ The separate **Button Defaults** navigation item sets device-wide defaults for p
 
 The button cascade order is: **Button field → Device button defaults → Firmware hardcoded default**. If a button has no explicit color set, the device default is used. If no device default is set either, the firmware default applies (dark gray background, white text, black border, no border, 8px radius, 4px content padding). The pad background cascade is: **Pad background → `default_pad_bg_color` → `#000000`**.
 
-> **Tip**: Set pad and button defaults first, then add buttons. Changing a default immediately updates all inheriting pads or buttons, both in the editor preview and on the device.
+> **Tip**: Set pad and button defaults first, then add buttons. Appearance defaults update inheriting pads and buttons immediately. Default font and base text size activate only after reboot; the portal reports pending typography changes.
+
+Automatic base size retains the board's existing role sizes. With a numeric base,
+each automatic role targets `original_role_px * base_text_size / original_medium_px`.
+TTF targets round to a positive whole pixel without a 36 px ceiling. Bitmap
+targets choose the nearest of 12, 14, 18, 24, 32, and 36 from the unrounded target,
+with ties upward and endpoint clamping. Roles can converge at the bitmap limits.
+Grid geometry, icons, and symbols do not scale. Large text can still clip or wrap;
+this is not automatic fitting.
 
 When editing a button, fields that match the device default show their inherited value normally. If you change a field to a custom value, a small **↩** reset link appears next to the field label — click it to revert to the device default.
 
@@ -336,9 +346,10 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 | Property | Values | What it does |
 |----------|--------|-------------|
-| `font_size` | `12`, `14`, `18`, `24`, `32`, `36`, `48` | Override the automatic font size |
-| `font_family` | `dseg7` / `segment`, `bebas`, `doto` / `pixel` | Use an alternate display font (see below) |
-| `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Scale the current font size at runtime for hero text |
+| `font` | Uploaded font ID or `@builtin` | Omit to inherit the device family; `@builtin` selects Montserrat |
+| `font_size` | Positive whole pixels, up to 65535 | Absolute size, independent of the device base; bitmap resolves to the nearest compiled size |
+| `font_metrics` | `bounds` or a multiplier from 1 to 65535, such as `1.5` or `2` | TTF-only vertical metric correction; adjusts line height and baseline, not glyph size or horizontal spacing. Omitted preserves original metrics. |
+| `font_upscale` | `1.0` to `2.0` (e.g. `1.2`, `1.4`, `2`) | Transform bitmap text only, including TTF fallback; ignored for successful TTF |
 | `align` | `left`, `center`, `right` | Horizontal text alignment |
 | `x` | `-999` to `999` | Shift the label left (negative) or right (positive) in pixels |
 | `y` | `-999` to `999` | Shift the label up (negative) or down (positive) in pixels |
@@ -347,8 +358,8 @@ Click the **Aa** button next to any label to reveal an advanced style input. Thi
 
 Combine them with semicolons:
 
-``` 
-font_size:48;align:left;mode:dot
+```text
+font:my-font;font_size:96;align:left;mode:dot
 ```
 
 This renders a hero-sized left-aligned label that shows "..." when the text is too long.
@@ -357,9 +368,9 @@ A few more examples:
 
 - `font_size:14;color:#FF0` — small yellow text
 - `font_size:36;font_upscale:1.4` — extra-large hero text (combined scale)
-- `font_family:dseg7;font_size:48` — 7-segment LCD style for sensor readings
-- `font_family:bebas;font_size:48` — bold condensed headline
-- `font_family:doto` — dot-matrix / pixel style
+- `font:my-font;font_size:96` - uploaded font at 96 pixels
+- `font:my-font;font_size:300` - uploaded font above 255 pixels
+- `font:my-font` - uploaded font at the automatic label height
 - `x:10;y:-4;align:right` — right-aligned, shifted right 10 px and up 4 px
 - `font_size:24;mode:wrap` — medium text that wraps to multiple lines
 - `color:#4CAF50` — green text (useful for status indicators)
@@ -369,25 +380,42 @@ A few more examples:
 
 > Without style overrides, font size is chosen automatically based on the grid dimensions and display resolution. The default alignment is center, and overflow is clipped.
 
-#### Font Families
+#### Uploaded Fonts
 
-Three additional font families are available alongside the default Montserrat:
+On eligible LVGL display builds with a filesystem and working PSRAM, open
+**Pads > Fonts** to upload a trusted static TrueType-outline `.ttf` file.
+Use its lowercase ID in `font:my-font`, not its filename or a filesystem path.
+Variable fonts, collections, CFF/OpenType, WOFF, and WOFF2 are unsupported.
+See the [Fonts workflow](web-portal-guide.md#fonts) for upload and deletion.
 
-| Family | DSL value | Aliases | Style | Available sizes |
-|--------|-----------|---------|-------|----------------|
-| DSEG7 Classic Bold | `dseg7` | `segment` | 7-segment LCD display | 12, 14, 18, 24, 32, 36, 48 |
-| Bebas Neue | `bebas` | — | Bold condensed display | 12, 14, 18, 24, 32, 36, 48 |
-| Doto | `doto` | `pixel` | Dot-matrix / pixel | 12, 14, 18, 24, 32, 36, 48 |
+The Pomodoro and Alarm Clock sample recipes reference `dseg7`. Upload a trusted
+static TrueType font under that ID for their custom text; otherwise they use
+the automatic bitmap default.
 
-All font families share the same set of sizes as the built-in Montserrat font. You can combine `font_family` with an explicit `font_size`:
+Omitting `font` uses the active device family. Family and size inherit
+independently, after the existing effective label style is selected; style
+strings are not merged. A style containing only a color inherits both, while
+`font_size:60` keeps the device family at an absolute 60 px. `font:my-font`
+keeps proportional automatic sizing. Missing or unloadable uploaded fonts and
+bitmap-only builds use the nearest bitmap font for the resolved target size.
+Negative, fractional, overflowing, and malformed sizes are ignored.
 
-```
-font_family:dseg7;font_size:48
-```
+The former `font_family` property, family aliases, numeric `font` size shorthand,
+and Montserrat 48 are no longer supported. Native extension canvas text remains
+bitmap-only; list/table text can use uploaded fonts through its pad context.
 
-This is ideal for hero values like temperature readings, power measurements, or countdown timers where a specialized display font adds visual impact.
+Interactive e-paper builds use auto-hinted monochrome uploaded fonts for B/W
+presentation when `HAS_FREETYPE_FONTS` is enabled (the default). Grayscale
+keeps the STB renderer. Disabling the build flag restores STB for both modes;
+uploaded font IDs and label styles are unchanged.
 
-> **Note**: Custom fonts include digits 0–9, uppercase A–Z, lowercase a–z, and common symbols (`. , : ; - + / % °`). Characters outside this set fall back to Montserrat.
+> [!WARNING]
+> The grayscale and flag-disabled LVGL/STB paths can hang or crash when font rendering runs out of memory, even
+> with valid fonts. This release intentionally has no font-memory budget or
+> per-pad instance cap. The device-lifetime typography cache is limited to 32
+> instances, but this does not bound glyph memory. Device stability remains a hardware acceptance check. The
+> [accepted limitation and future backend work](dev/display-touch-architecture.md#accepted-backend-oom-limitation)
+> describe this tradeoff.
 
 ### Icons
 
@@ -552,6 +580,10 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | Timer | **Timer** | Command: Toggle, Start, Stop, Pause, Resume, Reset, Set countdown, or Adjust countdown, on one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
 | Timer | **Delay** | Pause the current action list for a whole-number duration from 1 to 55,000 ms, then continue with the next action. By default, up to three pausable actions can be pending device-wide at a time. The duration is not bindable. |
 | Device | **Device command** | Command: Restart device, Reconnect Wi-Fi, or Enable screensaver. |
+| M5Stack StopWatch | **Set charging mode** | StopWatch only: Off, Low (nominal 185 mA), or High (nominal 425 mA). Runtime changes reset to the compiled boot setting on reboot. |
+| M5Stack StopWatch | **Status LED** | StopWatch only: On or Off for the current session. Reboot restores the boot LED level; PMIC status/download signalling may override the visible state. |
+| M5Stack StopWatch | **Vibrate** | StopWatch only: Nonblocking comma-separated pattern such as `20,100,20` (vibrate, pause, vibrate), default `200` for one 200 ms pulse. Patterns need 1-15 positive steps, an odd count, and at most 5000 ms total including pauses. Standalone `0` stops vibration; a new request replaces the active sequence. Timing depends on main-loop and I2C availability. |
+| M5Stack StopWatch | **Shutdown** | StopWatch only: Stop audio/vibration and power off through the PMIC. Terminal: later actions never run. Rejected during OTA; finish saves/uploads first. Unsaved edits are not persisted automatically. |
 | Audio | **Voice Assistant** | On Voice Assistant builds: Start recording, Stop and transcribe, Record until silence, Cancel recording, or Speak text. Record until silence pauses the action list until transcription succeeds; configure its trailing silence and speech-level threshold on the same scale as `[audio:input.rms]`. Speak text resolves binding templates such as `[mqtt:assistant/answer]`, then requests Azure TTS; optional voice and volume overrides take precedence over the device defaults, and newer speech replaces earlier speech. |
 
 **Example setup for a smart light:**
@@ -709,12 +741,22 @@ from the next full minute. Removing all weekdays selects one-shot mode.
 The **Alarm** group also contains **Loop Tone** (`alarm_tone`) and **Loop MP3**
 (`alarm_mp3`). Loop Tone accepts a bindable tone pattern; Loop MP3 selects an
 uploaded sound file. Both allow a volume override. Pair the ring hook with
-**Sound alert > Stop Audio** in the stop list. MP3 repetition is not guaranteed
-to be gapless and stops on cancellation, OTA, or playback failure.
+**Sound alert > Stop alerts** in the stop list. MP3 repetition is not guaranteed
+to be gapless. Failed MP3 alarms attempt a bounded fallback tone.
 
-Regular one-shot tones, MP3 playback, and Stop Audio remain under **Audio**.
-Existing `sound_alert` actions with `tone_loop` remain valid and appear as Loop
-Tone in the editor. Alarm Control keeps its persisted `alarm` type.
+Regular one-shot tones, MP3 playback, **Stop alerts**, and **Stop all audio** remain
+under **Audio**. Stop alerts leaves Music intent and scheduled ringing ownership
+unchanged; Stop all audio additionally clears Music intent and feedback. Neither
+command disables future scheduled alarms. Alarm Control keeps its `alarm` type.
+
+Alarm audio takes priority over ordinary alerts, which take priority over Music.
+Ordinary alerts during alarms are discarded. Tap and confirmation feedback can
+sound over any source without cancelling it. Interrupted Music restarts its
+remembered track from the beginning only if its desired state remains Playing.
+Play/Pause changes that intent; Next/Previous changes the selected track without
+forcing playback. Scheduled alarms retain ownership through silence until
+Cancel, Snooze, or timeout. MP3 options require sound-player support; beep-only
+boards expose tones and the stop commands.
 
 ### Timer Actions
 
@@ -954,17 +996,32 @@ not offer this setting. The JSON field is `widget_disable_pad_swipes` (boolean).
 
 Mousepad also offers **Show Back button**, default off
 (`widget_mousepad_back`, boolean). It adds a top-left arrow with a touch target
-up to 44 pixels square, separate from mouse input. A short stationary tap
+that defaults to 44 pixels square, separate from mouse input. Set **Back button
+size (px)** (`widget_mousepad_back_size`, integer 1-512, default 44) to change
+both the visible button and its touch target. The button shrinks to fit the
+mousepad's content area, and the centered arrow scales with it. The size setting
+does not enable the button by itself. A short stationary tap
 uses existing screen history; moving more than 8 pixels or holding cancels it.
 It works without USB, stops mouse activity, and does nothing when history is
 empty. Provide a separate navigation button if your pad has no history.
+
+For a high-resolution display, use an 88-pixel Back button:
+
+```json
+{
+  "widget_type": "mousepad",
+  "widget_mousepad_back": true,
+  "widget_mousepad_back_size": 88
+}
+```
 
 JSON fields are `widget_mousepad_sensitivity` (0.1-5, default 1),
 `widget_mousepad_acceleration` (0-5, default 0),
 `widget_mousepad_movement_threshold` (0-12, default 3),
 `widget_mousepad_reverse` (boolean, default false),
 `widget_mousepad_inertia` (0-5, default 0),
-`widget_mousepad_buttons` (boolean, default false), and the two navigation
+`widget_mousepad_buttons` (boolean, default false), the Back button size,
+and the two navigation
 toggles described above. Authoring validation rejects
 non-numeric, non-finite, or out-of-range numbers and non-boolean toggle values.
 Gesture timing and axis policy are internal constants, not per-button controls.
@@ -1548,7 +1605,7 @@ The table widget renders multi-column row data from a structured binding payload
 | Setting | Description |
 |---------|-------------|
 | **Data binding** | Must resolve to a table schema payload. Use an exact single-token binding expression such as `[health:table]` or `[health:extended_table]` |
-| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font_family:bebas`) |
+| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font:my-font;font_size:96`) |
 | **Scroll** | Enable or disable table scrolling |
 
 **Important:** Do not wrap the table binding in static text and do not add a format parameter. The table widget expects the resolved structured payload, not formatted text.
@@ -1692,6 +1749,28 @@ Multiple bindings in one label, showing indoor conditions:
 ### Health Binding
 
 **Syntax:** `[health:key;format]`
+
+### Local Sensor Binding
+
+Display firmware with registered local sensors provides
+`[sensor:key;format|fallback]`, without an MQTT broker. The binding reference
+lists the fields available on your board, including board-specific sensors.
+
+```text
+Temperature: [sensor:temperature;%.1f|N/A]
+Battery: [sensor:battery_voltage;%.2f] V
+[expr:[sensor:presence] ? "Occupied" : "Clear"]
+```
+
+The sensor defines its refresh interval (two seconds by default). Bindings
+read the latest cached sample; resolving a label never reads hardware.
+Use float formats such as `%.0f`, `%.1f`, or `%g`. Booleans default to `0`
+or `1`. Before the first successful reading, the binding shows `---` or the
+supplied fallback. Later failures retain the last good value until reboot.
+If sensors share a key, the later registered sensor wins.
+
+This supports current readings in labels, expressions, and numeric widgets.
+It does not remove existing MQTT-related history feature gates.
 
 ### Camera Motion Binding
 
@@ -2087,7 +2166,7 @@ are available on boards with audio and the sound player enabled.
 | `count` | Number of discovered tracks | Returns `-1` while the catalog is unavailable |
 | `elapsed_s` | Whole seconds played in the current track | Returns `0` before playback starts |
 | `total_s` | Whole-track duration in seconds | Returns `-1` when duration is unavailable |
-| `status` | Transport state | `playing`, `paused`, `stopped`, `empty`, `unavailable`, or `error` |
+| `status` | Transport state | `playing`, `interrupted`, `paused`, `stopped`, `empty`, `unavailable`, or `error` |
 
 When enabled by the board firmware, Music analysis bindings expose the current
 track's pre-volume PCM level. They are demand-driven, so playback skips the
@@ -2347,10 +2426,10 @@ These are complete, copy-paste-ready configurations for common use cases. Each e
 
 | Button | Position | Top label | Bottom label | Style | Widget |
 |--------|----------|-----------|--------------|-------|--------|
-| Solar | col 0 | `Solar` | `[mqtt:home/solar;power;%.0f W]` | `font:14` on top | Bar chart, max: 5000, thresholds: 1000/3000/4500 |
-| Grid | col 1 | `Grid` | `[mqtt:home/grid;power;%.0f W]` | `font:14` on top | Bar chart, max: 5000, use absolute value on |
-| Battery | col 2 | `Battery` | `[mqtt:home/battery;soc;%.0f%%]` | `font:14` on top | Bar chart, max: 100, thresholds: 20/50/80 |
-| Net | col 3 | `Net` | `[expr:[mqtt:home/solar;power]-[mqtt:home/grid;power];%.0f W]` | `font:14` on top | Bar chart, max: 5000 |
+| Solar | col 0 | `Solar` | `[mqtt:home/solar;power;%.0f W]` | `font_size:14` on top | Bar chart, max: 5000, thresholds: 1000/3000/4500 |
+| Grid | col 1 | `Grid` | `[mqtt:home/grid;power;%.0f W]` | `font_size:14` on top | Bar chart, max: 5000, use absolute value on |
+| Battery | col 2 | `Battery` | `[mqtt:home/battery;soc;%.0f%%]` | `font_size:14` on top | Bar chart, max: 100, thresholds: 20/50/80 |
+| Net | col 3 | `Net` | `[expr:[mqtt:home/solar;power]-[mqtt:home/grid;power];%.0f W]` | `font_size:14` on top | Bar chart, max: 5000 |
 
 **Bar chart data bindings:**
 - Solar: `[mqtt:home/solar;power]`
@@ -2404,7 +2483,7 @@ Each button uses the **top label** with a small font for the camera name:
 ```
 Front Door
 ```
-Style: `font:14;color:#FFF;align:left`
+Style: `font_size:14;color:#FFF;align:left`
 
 ### World Clock
 
@@ -2412,7 +2491,7 @@ Style: `font:14;color:#FFF;align:left`
 
 **Pad settings**: 1 column × 4 rows, name "Clock", background `#1A1A1A`.
 
-| Button | Top label (style: `font:14;color:#888`) | Center label (style: `font:36`) | Bottom label (style: `font:14;color:#888`) |
+| Button | Top label (style: `font_size:14;color:#888`) | Center label (style: `font_size:36`) | Bottom label (style: `font_size:14;color:#888`) |
 |--------|---------|--------------|--------------|
 | New York | `New York` | `[time:%I:%M %p;America/New_York]` | `[time:%a %d %b;America/New_York]` |
 | London | `London` | `[time:%H:%M;Europe/London]` | `[time:%a %d %b;Europe/London]` |
@@ -2427,11 +2506,11 @@ Style: `font:14;color:#FFF;align:left`
 
 | Button | Center label | Bottom label | Notes |
 |--------|-------------|--------------|-------|
-| CPU | `CPU` | `[health:cpu]%` (style: `font:36`) | Background: `[expr:[health:cpu]>80?"#B71C1C":"#1B5E20"]` |
-| Memory | `Memory` | `[expr:[health:heap_free]/1024;%.0f KB]` (style: `font:24`) | Background: `[expr:[health:heap_free]<50000?"#FF6F00":"#1B5E20"]` |
-| WiFi | `WiFi` | `[health:rssi] dBm` (style: `font:24`) | Background: `[expr:[health:rssi]<-75?"#FF6F00":"#1B5E20"]` |
+| CPU | `CPU` | `[health:cpu]%` (style: `font_size:36`) | Background: `[expr:[health:cpu]>80?"#B71C1C":"#1B5E20"]` |
+| Memory | `Memory` | `[expr:[health:heap_free]/1024;%.0f KB]` (style: `font_size:24`) | Background: `[expr:[health:heap_free]<50000?"#FF6F00":"#1B5E20"]` |
+| WiFi | `WiFi` | `[health:rssi] dBm` (style: `font_size:24`) | Background: `[expr:[health:rssi]<-75?"#FF6F00":"#1B5E20"]` |
 | IP | `[health:ip]` | `[health:hostname]` | Static green background |
-| Uptime | `Uptime` | `[health:uptime;%d]s` (style: `font:24`) | — |
+| Uptime | `Uptime` | `[health:uptime;%d]s` (style: `font_size:24`) | — |
 | Server | `Server` | `[mqtt:server/status;state]` | Button state: `[expr:[mqtt:server/status;state]=="offline"?"disabled":"enabled"]` |
 
 ### Climate Control
@@ -2442,12 +2521,12 @@ Style: `font:14;color:#FFF;align:left`
 
 | Button | Center label | Color binding | Action |
 |--------|-------------|---------------|--------|
-| Living Room | `[mqtt:climate/living;current_temperature;%.1f°C]` (style: `font:32`) | Bg: `[expr:[mqtt:climate/living;current_temperature]>25?"#FF5722":[mqtt:climate/living;current_temperature]<18?"#2196F3":"#4CAF50"]` | — |
-| Thermostat ▲ | `▲` (style: `font:36`) | Static `#1B5E20` | MQTT → `climate/living/set` / `{"temperature_up":1}` |
-| Thermostat ▼ | `▼` (style: `font:36`) | Static `#B71C1C` | MQTT → `climate/living/set` / `{"temperature_down":1}` |
+| Living Room | `[mqtt:climate/living;current_temperature;%.1f°C]` (style: `font_size:32`) | Bg: `[expr:[mqtt:climate/living;current_temperature]>25?"#FF5722":[mqtt:climate/living;current_temperature]<18?"#2196F3":"#4CAF50"]` | — |
+| Thermostat ▲ | `▲` (style: `font_size:36`) | Static `#1B5E20` | MQTT → `climate/living/set` / `{"temperature_up":1}` |
+| Thermostat ▼ | `▼` (style: `font_size:36`) | Static `#B71C1C` | MQTT → `climate/living/set` / `{"temperature_down":1}` |
 | Target | `Target` | — | — |
-| — | `[mqtt:climate/living;temperature;%.1f°C]` (style: `font:32`) | — | — |
-| Mode | `[mqtt:climate/living;mode]` (style: `font:18`) | Bg: `[expr:[mqtt:climate/living;mode]=="heat"?"#FF5722":[mqtt:climate/living;mode]=="cool"?"#2196F3":"#666"]` | MQTT → `climate/living/mode/set` / `auto` |
+| — | `[mqtt:climate/living;temperature;%.1f°C]` (style: `font_size:32`) | — | — |
+| Mode | `[mqtt:climate/living;mode]` (style: `font_size:18`) | Bg: `[expr:[mqtt:climate/living;mode]=="heat"?"#FF5722":[mqtt:climate/living;mode]=="cool"?"#2196F3":"#666"]` | MQTT → `climate/living/mode/set` / `auto` |
 
 ---
 

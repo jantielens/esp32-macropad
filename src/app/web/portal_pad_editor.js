@@ -556,7 +556,7 @@ async function padLoadPage(page, defaultsReady) {
 
         // Cache colors for cross-pad swatches
         padCacheColors(page, padState.buttons,
-                   padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), '#000000'));
+                   padColorToHex(json.bg_color || padGetEffectiveDefault('default_pad_bg_color'), padGetEffectiveDefault('default_pad_bg_color')));
         padRenderGrid();
     } catch (err) {
         if (!current()) return;

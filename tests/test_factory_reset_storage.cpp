@@ -42,6 +42,8 @@ bool log_diagnostics_enabled(const char*) { return false; }
 EspTestDouble ESP;
 FakeStorage SD_MMC;
 static esp_err_t s_nvs_erase_result = ESP_OK;
+static unsigned s_nvs_erase_calls = 0;
+static unsigned s_nvs_init_calls = 0;
 
 struct SerialTestDouble {
     void flush() {}
@@ -51,11 +53,12 @@ SerialTestDouble Serial;
 
 unsigned long millis() { return 0; }
 void delay(unsigned long) {}
-esp_err_t nvs_flash_erase() { return s_nvs_erase_result; }
-esp_err_t nvs_flash_init() { return ESP_OK; }
+esp_err_t nvs_flash_erase() { ++s_nvs_erase_calls; return s_nvs_erase_result; }
+esp_err_t nvs_flash_init() { ++s_nvs_init_calls; return ESP_OK; }
 
 #include "config_manager.cpp"
 
+#if HAS_FILESYSTEM
 static const char* const kOwnedRoots[] = {
     "/camera", "/config", "/icons", "/sounds", "/storage", "/prints", "/brews",
 };
@@ -107,11 +110,20 @@ static void test_rmdir_failure_fails_reset() {
     assert(SD_MMC.exists("/sounds/nested"));
     assert_sentinels_preserved();
 }
+#endif
 
 int main() {
+#if HAS_FILESYSTEM
     test_success_removes_owned_roots_only();
     test_remove_failure_fails_reset();
     test_rmdir_failure_fails_reset();
+#else
+    assert(config_manager_factory_reset());
+    assert(s_nvs_erase_calls == 1 && s_nvs_init_calls == 1);
+    s_nvs_erase_result = -1;
+    assert(!config_manager_factory_reset());
+    assert(s_nvs_erase_calls == 2 && s_nvs_init_calls == 2);
+#endif
     std::puts("factory_reset_storage: PASS");
     return 0;
 }

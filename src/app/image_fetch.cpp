@@ -15,6 +15,7 @@
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <atomic>
 #include <new>
 #include <string.h>
 #include <strings.h>
@@ -65,6 +66,7 @@ struct ImageSlot {
 static ImageSlot* g_slots = nullptr;
 static SemaphoreHandle_t g_mutex = nullptr;
 static TaskHandle_t g_task = nullptr;
+static std::atomic<TaskHandle_t> fetch_sample_task{nullptr};
 static RtosTaskPsramAlloc g_task_alloc;
 static const uint32_t FETCH_TASK_STACK_BYTES = 16384;
 static const UBaseType_t FETCH_TASK_PRIORITY = 2;  // Below LVGL (4), above idle
@@ -730,9 +732,19 @@ void image_fetch_init() {
         LOGE(TAG, "Failed to create fetch task");
         g_task = nullptr;
     } else {
+            fetch_sample_task.store(g_task, std::memory_order_release);
            LOGI(TAG, "Fetch task created (stack=%u bytes, pri=%u)",
                (unsigned)FETCH_TASK_STACK_BYTES, (unsigned)FETCH_TASK_PRIORITY);
     }
+}
+
+bool image_fetch_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes) {
+    if (!minimum_free_bytes || !configured_bytes) return false;
+    const TaskHandle_t task = fetch_sample_task.load(std::memory_order_acquire);
+    if (!task) return false;
+    *minimum_free_bytes = uxTaskGetStackHighWaterMark(task);
+    *configured_bytes = FETCH_TASK_STACK_BYTES;
+    return true;
 }
 
 image_slot_t image_fetch_request(

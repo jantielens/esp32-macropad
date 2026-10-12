@@ -3,7 +3,8 @@
 MusicTransport::MusicTransport()
     : state_(MUSIC_TRANSPORT_STOPPED), track_index_(0) {}
 
-MusicTransportResult MusicTransport::apply(MusicTransportCommand command, uint8_t track_count) {
+MusicTransportResult MusicTransport::apply(MusicTransportCommand command, uint8_t track_count,
+                                           bool interrupted) {
     MusicTransportResult result = {MUSIC_TRANSPORT_NO_EFFECT, track_index_};
 
     if (state_ == MUSIC_TRANSPORT_STOPPED) {
@@ -43,7 +44,7 @@ MusicTransportResult MusicTransport::apply(MusicTransportCommand command, uint8_
         result.effect = MUSIC_TRANSPORT_CLOSE_TRACK;
         if (track_index_ + 1 < track_count) {
             ++track_index_;
-            state_ = MUSIC_TRANSPORT_PLAYING;
+            if (!interrupted) state_ = MUSIC_TRANSPORT_PLAYING;
             result.track_index = track_index_;
         } else {
             state_ = MUSIC_TRANSPORT_STOPPED;
@@ -56,7 +57,7 @@ MusicTransportResult MusicTransport::apply(MusicTransportCommand command, uint8_
     if (command == MUSIC_TRANSPORT_PREVIOUS) {
         result.effect = MUSIC_TRANSPORT_CLOSE_TRACK;
         if (track_index_ > 0) --track_index_;
-        state_ = MUSIC_TRANSPORT_PLAYING;
+        if (!interrupted) state_ = MUSIC_TRANSPORT_PLAYING;
         result.track_index = track_index_;
     }
     return result;

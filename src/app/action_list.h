@@ -15,6 +15,8 @@
 uint8_t action_list_parse(JsonVariant v, ButtonAction* out, uint8_t max,
 						  bool filter_literal_none = false);
 
+bool action_list_has_audio(const ButtonAction* actions, uint8_t count);
+
 // Dispatch a list of actions sequentially with a shared log label.
 // Safe with count == 0 or actions == nullptr (no-op).
 void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char* label,

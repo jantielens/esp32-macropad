@@ -107,7 +107,7 @@ function padCopyPad() {
         rows: padState.rows,
         name: document.getElementById('pad-name').value.trim(),
         wake_screen: document.getElementById('pad-wake-screen').value,
-        bg_color: padGetBindableColor('pad-edit-page-bg-color') || '#000000',
+        bg_color: padGetBindableColor('pad-edit-page-bg-color') || padGetEffectiveDefault('default_pad_bg_color'),
         buttons: padState.buttons.map(b => Object.assign({}, b)),
         bindings: padState.bindings ? padState.bindings.map(b => Object.assign({}, b)) : [],
         padActions: padBuildLevelActions().map(a => Object.assign({}, a)),
@@ -132,7 +132,7 @@ function padPastePad() {
     document.getElementById('pad-name').value = padState.padClipboard.name || '';
     document.getElementById('pad-wake-screen').value = padState.padClipboard.wake_screen || '';
     padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
-    padSetBindableColor('pad-edit-page-bg-color', padState.padClipboard.bg_color, '#000000');
+    padSetBindableColor('pad-edit-page-bg-color', padState.padClipboard.bg_color, padGetEffectiveDefault('default_pad_bg_color'));
     document.getElementById('pad-page-bg-mode').value = padState.padClipboard.bg_color ? 'override' : 'inherit';
     padPageBackgroundModeChanged();
     document.getElementById('pad-button-shadow').value = padState.padClipboard.buttonShadow || 'inherit';
@@ -294,7 +294,10 @@ async function deviceExportConfig() {
         let buttonDefaults = {};
         try {
             const bdResp = await fetch('/api/component/button-defaults/config');
-            if (bdResp.ok) buttonDefaults = await bdResp.json();
+            if (bdResp.ok) {
+                buttonDefaults = await bdResp.json();
+                delete buttonDefaults.firmware_defaults;
+            }
         } catch (e) {}
 
         const exportData = {
@@ -392,7 +395,7 @@ async function deviceImportConfig(evt) {
                 padPopulateTemplateDropdown(i);
                 document.getElementById('pad-template-pad').value = padState.templatePad;
                 padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
-                padSetBindableColor('pad-edit-page-bg-color', padJson.bg_color, '#000000');
+                padSetBindableColor('pad-edit-page-bg-color', padJson.bg_color, padGetEffectiveDefault('default_pad_bg_color'));
                 const backgroundMode = document.getElementById('pad-page-bg-mode');
                 if (backgroundMode) backgroundMode.value = padJson.bg_color !== undefined ? 'override' : 'inherit';
                 document.getElementById('pad-button-shadow').value = padJson.button_shadow || 'inherit';
@@ -430,7 +433,7 @@ async function padDeletePage() {
         document.getElementById('pad-name').value = '';
         document.getElementById('pad-wake-screen').value = '';
         padInitBindableColor(document.getElementById('pad-page-bg-color-wrap'));
-        padSetBindableColor('pad-edit-page-bg-color', '#000000');
+        padSetBindableColor('pad-edit-page-bg-color', padGetEffectiveDefault('default_pad_bg_color'));
         padState.bindings = [];
         padRenderBindings();
         padLoadLevelActions([]);

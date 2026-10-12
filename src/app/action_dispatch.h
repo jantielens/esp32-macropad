@@ -19,10 +19,12 @@ struct ActionDispatchContext {
 	bool synchronous = false;
 	bool (*work_guard)(uint32_t) = nullptr;
 	uint32_t generation = 0;
+	bool alarm_audio = false;
 };
 ActionDispatchContext action_dispatch_context();
 ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* label,
-										 bool (*work_guard)(uint32_t), uint32_t generation);
+										 bool (*work_guard)(uint32_t), uint32_t generation,
+										 bool alarm_audio = false);
 
 // Process deferred action work and loop-owned action continuations — call from loop().
 void action_dispatch_loop();

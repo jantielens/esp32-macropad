@@ -67,6 +67,7 @@ enum DisplayTaskDispatchResult {
 
 class DisplayManager {
 private:
+		static constexpr uint32_t kLvglStackBytes = 16384;
 		// Hardware (display driver abstraction)
 		DisplayDriver* driver;
 		lv_display_t* display;    // v9 display object
@@ -163,11 +164,13 @@ private:
 		static void presentTask(void* pvParameter);
 		
 public:
+		static uint32_t stackSizeBytes() { return kLvglStackBytes; }
 		DisplayManager(DeviceConfig* config);
 		~DisplayManager();
 		
 		// Initialize hardware + LVGL + screens + rendering task (shows splash automatically)
 		void init();
+		void initTypography(const char* font_name, uint16_t base_size);
 		
 		// Navigation API (thread-safe)
 		void showSplash();
@@ -215,6 +218,7 @@ public:
 				const void* ctx, size_t ctxLen,
 				uint32_t timeoutMs, bool* outOk, char* outMsg, size_t outMsgLen);
 		bool requestFullRefresh();
+		bool navigateButtons(const char* command);
 
 		// Active LVGL logical resolution (post driver->configureLVGL()).
 		// Prefer using these instead of calling LVGL APIs from non-LVGL tasks.
@@ -276,5 +280,7 @@ void display_manager_unlock_if_needed(bool did_lock);
 // Best-effort perf stats for diagnostics (/api/health).
 // Returns false until a first stats window has been captured.
 bool display_manager_get_perf_stats(DisplayPerfStats* out);
+
+bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes);
 
 #endif // DISPLAY_MANAGER_H

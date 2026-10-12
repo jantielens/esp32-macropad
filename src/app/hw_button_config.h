@@ -20,8 +20,9 @@ struct HwButtonConfig {
     uint8_t hold_count;
 };
 
-// Load config from LittleFS into the RAM cache. Defaults to empty (no actions)
-// if the file is missing. Call after pad_config_init() / storage mount.
+// Load config from LittleFS into the RAM cache. Missing events use the board's
+// optional HW_BUTTON_DEFAULTS_JSON action lists, otherwise empty lists.
+// Call after pad_config_init() / storage mount.
 void hw_button_config_init();
 
 // Get the cached config for button `index` (bounds-checked, returns nullptr if

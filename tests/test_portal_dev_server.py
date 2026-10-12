@@ -43,10 +43,11 @@ class PortalDevServerTest(unittest.TestCase):
 
     def setUp(self):
         PORTAL.reset_pad_fixtures(self.server)
+        self.server.mock_fonts = {}
 
     def request(self, path, method="GET", body=None, profile="esp32-p4-lcd4b", raw=False):
         headers = {"Cookie": "portal_mock_profile=" + profile}
-        data = json.dumps(body).encode() if body is not None else None
+        data = body if isinstance(body, bytes) else json.dumps(body).encode() if body is not None else None
         request = Request(self.base + path, data=data, headers=headers, method=method)
         try:
             response = urlopen(request, timeout=5)
@@ -67,6 +68,31 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertLess(bundle.index("function actionEditorHTML("), bundle.index("async function padInit()"))
         self.assertNotIn("portal_shutter", bundle)
         self.assertEqual(self.request("/api/bindings")[0], 200)
+
+    def test_epaper_presentation_config(self):
+        profile = "crowpanel-4.2-interactive"
+        status, config = self.request("/api/config", profile=profile)
+        self.assertEqual(status, 200)
+        self.assertEqual(config["epaper_bw_conversion"], "threshold")
+        self.assertEqual(config["epaper_bw_threshold"], 128)
+        self.assertEqual(config["epaper_supported_render_modes"], ["bw"])
+        nav = self.request("/api/portal/nav", profile=profile)[1]
+        items = [item for category in nav["categories"] for item in category["items"]]
+        presentation = next(item for item in items if item["id"] == "epaper-refresh")
+        self.assertEqual(self.request(presentation["portal_script"], profile=profile, raw=True)[0], 200)
+        self.assertEqual(self.request(presentation["portal_script"], raw=True)[0], 404)
+        previous = copy.deepcopy(self.server.mock_config)
+        try:
+            self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
+                body={"epaper_bw_conversion": "blue_noise", "epaper_bw_threshold": "96"}, profile=profile)[0], 200)
+            saved = self.request("/api/config", profile=profile)[1]
+            self.assertEqual(saved["epaper_bw_conversion"], "blue_noise")
+            self.assertEqual(int(saved["epaper_bw_threshold"]), 96)
+            lcd = self.request("/api/config")[1]
+            self.assertNotIn("epaper_bw_conversion", lcd)
+            self.assertNotIn("epaper_bw_threshold", lcd)
+        finally:
+            self.server.mock_config = previous
 
     def test_fragment_presentation(self):
         class FragmentParser(HTMLParser):
@@ -139,6 +165,8 @@ class PortalDevServerTest(unittest.TestCase):
         info = self.request("/api/info")[1]
         self.assertTrue(info["has_alarm"])
         self.assertTrue(info["has_sound_player"])
+        self.assertTrue(info["has_ttf_fonts"])
+        self.assertFalse(self.request("/api/info", profile="reterminal-e1003-frame")[1]["has_ttf_fonts"])
         self.assertFalse(self.request("/api/info", profile="jc3248w535")[1]["has_sound_player"])
         self.assertFalse(self.request("/api/info", profile="reterminal-e1003-frame")[1]["has_alarm"])
         nav = self.request("/api/portal/nav")[1]
@@ -151,6 +179,20 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/recipes/catalog", "POST", empty)[0], 200)
         self.assertEqual(self.request("/api/recipes/catalog")[1], empty)
         self.assertEqual(self.request("/api/recipes/catalog", "POST", {**empty, "padding": "x" * 65536})[0], 413)
+
+    def test_font_storage_workflow(self):
+        source = (ROOT / "tests/fixtures/BebasNeue.inc").read_text()
+        font = bytes(int(value, 16) for value in re.findall(r"0x([0-9a-fA-F]{2})", source))
+        self.assertEqual(self.request("/api/fonts/list"), (200, []))
+        self.assertEqual(self.request("/api/fonts/upload?name=test-font", "POST", font)[0], 200)
+        self.assertEqual(self.request("/api/fonts/list")[1], [{"name": "test-font", "size_bytes": len(font)}])
+        self.assertEqual(self.request("/api/fonts/upload?name=test-font", "POST", font)[0], 409)
+        self.assertEqual(self.request("/api/fonts/upload?name=Bad.ttf", "POST", font)[0], 400)
+        self.assertEqual(self.request("/api/fonts/upload?name=invalid", "POST", b"OTTO")[0], 400)
+        self.assertEqual(self.request("/api/fonts/list", profile="reterminal-e1003-frame")[0], 404)
+        self.assertEqual(self.request("/api/fonts?name=test-font", "DELETE")[0], 200)
+        self.assertEqual(self.request("/api/fonts?name=test-font", "DELETE")[0], 404)
+        self.assertEqual(self.request("/api/fonts/list"), (200, []))
 
     def test_alarms(self):
         status, alarm = self.request("/api/component/alarms/config")
@@ -410,8 +452,44 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/pad/button_sizes?cols=0&rows=3")[0], 400)
         self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {"corner_radius": "4"})[0], 200)
         self.assertEqual(self.request("/api/component/button-defaults/config")[1]["corner_radius"], "4")
+        defaults = self.request("/api/component/button-defaults/config")[1]
+        self.assertEqual(defaults["firmware_defaults"]["bg_color"], "#333333")
+        self.assertEqual(defaults["firmware_defaults"]["pixel_shift_distance_px"], 4)
+        self.assertNotIn("bg_color", defaults)
         for path in ("/api/pad/blocks", "/api/sounds/list", "/api/extensions", "/api/images"):
             self.assertEqual(self.request(path)[0], 200)
+
+    def test_epaper_appearance_defaults(self):
+        profile = "crowpanel-4.2-interactive"
+        self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {}, profile=profile)[0], 200)
+        defaults = self.request("/api/component/button-defaults/config", profile=profile)[1]
+        self.assertEqual(set(defaults), {"firmware_defaults", "typography_status"})
+        self.assertEqual(defaults["firmware_defaults"]["bg_color"], "#FFFFFF")
+        self.assertEqual(defaults["firmware_defaults"]["fg_color"], "#000000")
+        self.assertEqual(defaults["firmware_defaults"]["pixel_shift_distance_px"], 0)
+        self.assertEqual(self.request("/api/pad/button_sizes?cols=4&rows=3", profile=profile)[1]["pixel_shift_margin"], 0)
+        bundle = self.request("/portal.js", profile=profile, raw=True)[1]
+        self.assertIn("function padLoadButtonDefaults(defs)", bundle)
+        self.assertEqual(self.request("/api/info", profile=profile)[1]["display_coord_width"], 400)
+
+    def test_typography_defaults(self):
+        path = "/api/component/button-defaults/config"
+        settings = {"default_font": "missing-font", "base_text_size": 60}
+        self.assertEqual(self.request(path, "POST", settings)[0], 200)
+        saved = self.request(path)[1]
+        self.assertEqual(saved["default_font"], "missing-font")
+        self.assertEqual(saved["base_text_size"], 60)
+        self.assertTrue(saved["typography_status"]["reboot_required"])
+        self.assertEqual(saved["typography_status"]["active_font"], "@builtin")
+        self.assertEqual(self.request("/api/reboot", "POST", {})[0], 200)
+        active = self.request(path)[1]["typography_status"]
+        self.assertEqual(active["active_font"], "missing-font")
+        self.assertEqual(active["active_base_text_size"], 60)
+        self.assertFalse(active["reboot_required"])
+        for settings in ({"base_text_size": -1}, {"base_text_size": 65536}, {"base_text_size": 1.5},
+                         {"base_text_size": True}, {"default_font": "../font"}):
+            self.assertEqual(self.request(path, "POST", settings)[0], 400)
+        self.assertEqual(self.request(path)[1]["default_font"], "missing-font")
 
     def test_failure_scenarios(self):
         self.request("/__mock/reset", "POST", {"scenario": "load-error"})

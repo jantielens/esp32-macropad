@@ -8,6 +8,19 @@
 template<typename T>
 inline T clamp_val(T v, T lo, T hi) { return (v < lo) ? lo : (v > hi) ? hi : v; }
 
+constexpr unsigned widget_default_hex_digit(char digit) {
+    return digit <= '9' ? digit - '0' : (digit >= 'a' ? digit - 'a' : digit - 'A') + 10;
+}
+
+constexpr unsigned widget_default_rgb(const char* color) {
+    return (widget_default_hex_digit(color[1]) << 20)
+         | (widget_default_hex_digit(color[2]) << 16)
+         | (widget_default_hex_digit(color[3]) << 12)
+         | (widget_default_hex_digit(color[4]) << 8)
+         | (widget_default_hex_digit(color[5]) << 4)
+         | widget_default_hex_digit(color[6]);
+}
+
 #if HAS_DISPLAY
 
 #include "../binding_template.h"

@@ -25,6 +25,9 @@
 #if HAS_SOUND_PLAYER
 #include "web_portal_sounds.h"
 #endif
+#if HAS_TTF_FONTS
+#include "web_portal_fonts.h"
+#endif
 
 #if HAS_CAMERA
 #include "web_portal_camera.h"
@@ -52,14 +55,79 @@ void web_portal_routes_register_all(AsyncWebServer* server) {
     }
 }
 
-void web_portal_register_routes(AsyncWebServer* server) {
-		auto handleCorsPreflight = [](AsyncWebServerRequest *request) {
-				web_portal_send_cors_preflight(request);
-		};
+static const char* const core_preflight_paths[] = {
+	"/api/config",
+	"/api/info",
+	"/api/bindings",
+#if HEALTH_HISTORY_ENABLED
+	"/api/health/history",
+#endif
+	"/api/health",
+	"/api/reboot",
+	"/api/firmware/update/status",
+	"/api/firmware/update",
+#if HAS_DISPLAY
+	"/api/recipes/catalog",
+	"/api/pad/button_sizes",
+	"/api/pad/blocks",
+#if HAS_MQTT
+	"/api/pad/resolve",
+#endif
+	"/api/pad",
+	"/api/screenshot",
+#if HAS_TOUCH
+	"/api/screen/tap",
+#endif
+	"/api/icons/install",
+	"/api/icons/page",
+	"/api/icons/installed",
+	"/api/icons/files",
+	"/api/icons/cache",
+	"/api/icons/file",
+#endif
+#if HAS_CAMERA
+	"/api/camera/snapshot.raw",
+	"/api/camera/snapshot.jpg",
+#endif
+	"/api/update",
+#if HAS_BLE_HID
+	"/api/ble/pairing/start",
+#endif
+#if HAS_TTF_FONTS
+	"/api/fonts/list",
+	"/api/fonts/upload",
+	"/api/fonts",
+#endif
+#if HAS_SOUND_PLAYER
+	"/api/sounds/upload",
+	"/api/sounds/list",
+	"/api/sounds",
+	"/api/sounds/play",
+#endif
+};
 
-		auto registerOptions = [server, handleCorsPreflight](const char* path) {
-				server->on(path, HTTP_OPTIONS, handleCorsPreflight);
-		};
+class CorePreflightHandler : public AsyncWebHandler {
+public:
+	bool canHandle(AsyncWebServerRequest* request) const override {
+		if (!request || request->method() != HTTP_OPTIONS) return false;
+		const String& url = request->url();
+		for (const char* path : core_preflight_paths) {
+			const size_t length = strlen(path);
+			if (strncmp(url.c_str(), path, length) == 0 &&
+				(url.c_str()[length] == '\0' || url.c_str()[length] == '/')) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void handleRequest(AsyncWebServerRequest* request) override {
+		web_portal_send_cors_preflight(request);
+	}
+};
+
+void web_portal_register_routes(AsyncWebServer* server) {
+		server->addHandler(new CorePreflightHandler());
 
 		// Page routes
 		server->on("/", HTTP_GET, handleRoot);
@@ -100,7 +168,6 @@ void web_portal_register_routes(AsyncWebServer* server) {
 			 #endif
 		// NOTE: Keep more specific routes registered before more general/prefix routes.
 		// Some AsyncWebServer matchers can behave like prefix matches depending on configuration.
-		registerOptions("/api/config");
 		server->on("/api/config", HTTP_GET, handleGetConfig);
 
 		server->on(
@@ -115,24 +182,16 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		server->on("/api/config", HTTP_DELETE, handleDeleteConfig);
 
-		registerOptions("/api/info");
 		server->on("/api/info", HTTP_GET, handleGetVersion);
-		registerOptions("/api/bindings");
 		server->on("/api/bindings", HTTP_GET, handleGetBindings);
 		#if HEALTH_HISTORY_ENABLED
 		server->on("/api/health/history", HTTP_GET, handleGetHealthHistory);
 		#endif
-		#if HEALTH_HISTORY_ENABLED
-		registerOptions("/api/health/history");
-		#endif
-		registerOptions("/api/health");
 		server->on("/api/health", HTTP_GET, handleGetHealth);
 
-		registerOptions("/api/reboot");
 		server->on("/api/reboot", HTTP_POST, handleReboot);
 
 		// GitHub Pages-based firmware updates (URL-driven)
-		registerOptions("/api/firmware/update/status");
 		server->on("/api/firmware/update/status", HTTP_GET, handleGetFirmwareUpdateStatus);
 		server->on(
 				"/api/firmware/update",
@@ -143,10 +202,8 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				NULL,
 				handlePostFirmwareUpdate
 		);
-		registerOptions("/api/firmware/update");
 
 #if HAS_DISPLAY
-		registerOptions("/api/recipes/catalog");
 		server->on("/api/recipes/catalog", HTTP_GET, handleGetRecipeCatalog);
 		server->on(
 				"/api/recipes/catalog",
@@ -159,16 +216,13 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		);
 
 		// Pad button sizes (registered before /api/pad to avoid prefix match)
-		registerOptions("/api/pad/button_sizes");
 		server->on("/api/pad/button_sizes", HTTP_GET, handleGetButtonSizes);
 
 		// Pad building blocks catalog (registered before /api/pad to avoid prefix match)
-		registerOptions("/api/pad/blocks");
 		server->on("/api/pad/blocks", HTTP_GET, handleGetPadBlocks);
 
 #if HAS_MQTT
 		// Pad binding live-resolve (registered before /api/pad to avoid prefix match)
-		registerOptions("/api/pad/resolve");
 		server->on(
 				"/api/pad/resolve",
 				HTTP_POST,
@@ -179,7 +233,6 @@ void web_portal_register_routes(AsyncWebServer* server) {
 #endif
 
 		// Pad config API
-		registerOptions("/api/pad");
 		server->on("/api/pad", HTTP_GET, handleGetPadConfig);
 		server->on(
 				"/api/pad",
@@ -194,14 +247,11 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 
 
-		registerOptions("/api/screenshot");
 		server->on("/api/screenshot", HTTP_GET, handleGetScreenshot);
 		#if HAS_TOUCH
-		registerOptions("/api/screen/tap");
 		server->on("/api/screen/tap", HTTP_POST, handlePostScreenTap);
 		#endif
 
-		registerOptions("/api/icons/install");
 		server->on(
 				"/api/icons/install",
 				HTTP_POST,
@@ -212,30 +262,23 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				handlePostIconInstall
 		);
 
-		registerOptions("/api/icons/page");
 		server->on("/api/icons/page", HTTP_DELETE, handleDeletePageIcons);
 
-		registerOptions("/api/icons/installed");
 		server->on("/api/icons/installed", HTTP_GET, handleGetInstalledIcons);
 
 		// Icon debug endpoints
-		registerOptions("/api/icons/files");
 		server->on("/api/icons/files", HTTP_GET, handleGetIconFiles);
 
-		registerOptions("/api/icons/cache");
 		server->on("/api/icons/cache", HTTP_GET, handleGetIconCache);
 
-		registerOptions("/api/icons/file");
 		server->on("/api/icons/file", HTTP_GET, handleGetIconFile);
 		server->on("/api/icons/file", HTTP_DELETE, handleDeleteIconFile);
 
 #endif
 
 #if HAS_CAMERA
-		registerOptions("/api/camera/snapshot.raw");
 		server->on("/api/camera/snapshot.raw", HTTP_GET, handleGetCameraRawSnapshot);
 
-		registerOptions("/api/camera/snapshot.jpg");
 		server->on("/api/camera/snapshot.jpg", HTTP_GET, handleGetCameraJpegSnapshot);
 
 		server->on("/api/camera/stream", HTTP_GET, handleGetCameraMjpegStream);
@@ -250,20 +293,23 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				},
 				handleOTAUpload
 		);
-		registerOptions("/api/update");
 
 #if HAS_BLE_HID
 		// BLE pairing endpoint
-		registerOptions("/api/ble/pairing/start");
 		server->on("/api/ble/pairing/start", HTTP_POST, [](AsyncWebServerRequest *request) {
 				if (!portal_auth_gate(request)) return;
 				handlePostBlePairingStart(request);
 		});
 #endif
 
+#if HAS_TTF_FONTS
+	server->on("/portal_fonts.js", HTTP_GET, handlePortalFontsJS);
+	server->on("/api/fonts/list", HTTP_GET, handleGetFonts);
+	server->on("/api/fonts", HTTP_DELETE, handleDeleteFont);
+	server->on("/api/fonts/upload", HTTP_POST, handleFontUploadComplete, nullptr, handleFontUploadBody);
+#endif
 #if HAS_SOUND_PLAYER
 		// Sound file management endpoints
-		registerOptions("/api/sounds/upload");
 		server->on(
 				"/api/sounds/upload",
 				HTTP_POST,
@@ -274,13 +320,10 @@ void web_portal_register_routes(AsyncWebServer* server) {
 				handlePostSoundUpload
 		);
 
-		registerOptions("/api/sounds/list");
 		server->on("/api/sounds/list", HTTP_GET, handleGetSoundList);
 
-		registerOptions("/api/sounds");
 		server->on("/api/sounds", HTTP_DELETE, handleDeleteSound);
 
-		registerOptions("/api/sounds/play");
 		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
 #endif
 

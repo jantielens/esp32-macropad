@@ -204,7 +204,7 @@ Cross Reference Table
             "/build/sketch/objs.a(alarm_binding.cpp.o)": "Alarms (ALARM_ENABLED)",
             "/build/sketch/objs.a(pad_binding.cpp.o)": "Bindings / expressions",
             "/build/sketch/objs.a(pad_config.cpp.o)": "Pads / screens (HAS_DISPLAY)",
-            "/build/sketch/objs.a(custom_fonts.cpp.o)": "Fonts (HAS_CUSTOM_FONTS)",
+            "/build/sketch/objs.a(font_store.cpp.o)": "Fonts (HAS_TTF_FONTS)",
             "/build/sketch/objs.a(native_extension.cpp.o)": "Native extensions (HAS_NATIVE_EXTENSIONS)",
             "/build/sketch/objs.a(ble_hid.cpp.o)": "BLE HID (HAS_BLE_HID)",
             "/build/sketch/objs.a(web_portal_ble.cpp.o)": "BLE HID (HAS_BLE_HID)",
@@ -350,7 +350,7 @@ Cross Reference Table
 
     def test_table_percentage_and_totals(self):
         totals = report.summarize([report.Contribution("LVGL", ".text.draw", "fixture.o", code=1024),
-                                   report.Contribution("Fonts (HAS_CUSTOM_FONTS)", ".rodata.font", "fixture.o", data=1024),
+                                   report.Contribution("Fonts (HAS_TTF_FONTS)", ".rodata.font", "fixture.o", data=1024),
                                    report.Contribution("Alarms (ALARM_ENABLED)", ".bss.state", "fixture.o", static_ram=1024)])
         context = dict(board_directory="fixture", map_timestamp_utc="timestamp", application_binary_bytes=2200,
                        app_partitions=[], warnings=[])

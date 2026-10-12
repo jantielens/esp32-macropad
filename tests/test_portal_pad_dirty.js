@@ -284,6 +284,7 @@ refreshElements.set('pad-grid', { style: {} });
 refreshContext.window = { innerWidth: 900 };
 refreshContext.document.querySelector = () => null;
 refreshContext.getComputedStyle = () => ({ paddingBottom: '24px' });
+refreshContext.padGetEffectiveDefault = field => ({ pixel_shift_distance_px: 4, button_spacing_px: 6 })[field] ?? 0;
 vm.runInContext('padWorkspace.root.querySelector = () => workspaceFrame;', Object.assign(refreshContext, { workspaceFrame }));
 vm.runInContext('padWorkspace.root.style = frameStyle;', Object.assign(refreshContext, { frameStyle: { setProperty(name, value) { frameStyles.set(name, value); } } }));
 fitWorkspace();

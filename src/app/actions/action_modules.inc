@@ -10,6 +10,7 @@
 #include "gamepad_action.cpp"
 #include "ble_pair_action.cpp"
 #include "cycle_pad_action.cpp"
+#include "button_navigation_action.cpp"
 #include "mqtt_action.cpp"
 #include "ha_service_action.cpp"
 #include "sound_alert_action.cpp"

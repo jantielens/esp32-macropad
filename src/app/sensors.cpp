@@ -1,4 +1,5 @@
 #include "board_config.h"
+#include "board_hardware.h"
 #include "sensors/sensor_manager.h"
 
 // Arduino build system only compiles .cpp files in the sketch root directory.
@@ -16,6 +17,10 @@
 #include "sensors/battery_adc_sensor.cpp"
 #endif
 
+#ifdef BOARD_SENSOR_SOURCE
+#include BOARD_SENSOR_SOURCE
+#endif
+
 #if HAS_SENSOR_LD2410_OUT
 #include "sensors/ld2410_out_sensor.cpp"
 #endif
@@ -29,6 +34,9 @@
 #endif
 
 void sensor_manager_register_all(SensorRegistry &registry) {
+	#ifdef BOARD_SENSOR_SOURCE
+	board_register_sensors(registry);
+	#endif
 	#if HAS_SENSOR_BME280
 	register_bme280_sensor(registry);
 	#endif

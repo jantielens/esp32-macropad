@@ -2,6 +2,23 @@
 
 #include "music_transport.h"
 
+TEST(MusicTransport, InterruptedSelectionPreservesDesiredState) {
+  MusicTransport transport;
+  transport.apply(MUSIC_TRANSPORT_PLAY_PAUSE, 3);
+  transport.apply(MUSIC_TRANSPORT_NEXT, 3, true);
+  EXPECT_EQ(transport.track_index(), 1);
+  EXPECT_EQ(transport.state(), MUSIC_TRANSPORT_PLAYING);
+  transport.apply(MUSIC_TRANSPORT_PLAY_PAUSE, 3, true);
+  transport.apply(MUSIC_TRANSPORT_NEXT, 3, true);
+  EXPECT_EQ(transport.track_index(), 2);
+  EXPECT_EQ(transport.state(), MUSIC_TRANSPORT_PAUSED);
+  transport.apply(MUSIC_TRANSPORT_PREVIOUS, 3, true);
+  EXPECT_EQ(transport.track_index(), 1);
+  EXPECT_EQ(transport.state(), MUSIC_TRANSPORT_PAUSED);
+  transport.apply(MUSIC_TRANSPORT_STOP, 3, true);
+  EXPECT_EQ(transport.state(), MUSIC_TRANSPORT_STOPPED);
+}
+
 TEST(MusicTransport, AppliesStateTransitionsAndRecoversFromFailures) {
     MusicTransport transport;
 

@@ -31,7 +31,6 @@
 #define HAS_BLE_HID false
 #define HAS_BLE false
 #define HAS_IMAGE_FETCH false
-#define HAS_CUSTOM_FONTS false
 #define HAS_BUTTON false  // see HAS_EPAPER_FRAME_WAKE_BUTTON below for the e-paper-specific wake handler
 
 // Keep MQTT optional for the user; transport defaults remain available.

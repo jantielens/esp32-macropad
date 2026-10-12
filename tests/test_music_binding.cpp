@@ -22,6 +22,9 @@ static void check_resolves(const char* token, const char* expected) {
 int main() {
     music_binding_init();
 
+    g_music_info.status = AUDIO_MUSIC_INTERRUPTED;
+    check_resolves("[music:status]", "interrupted");
+
     std::strcpy(g_music_info.file, "/media/albums/live/02-track.mp3");
     check_resolves("[music:file]", "/media/albums/live/02-track.mp3");
     check_resolves("[music:file_name]", "02-track.mp3");

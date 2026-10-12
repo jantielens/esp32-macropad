@@ -124,6 +124,36 @@ TEST(type_only) {
     ButtonAction act = parse_from_string("{\"type\":\"back\"}");
     ASSERT_STR(act.type, "back");
     // back carries no payload
+#if HAS_DISPLAY
+    ButtonAction navigation = round_trip("{\"type\":\"button_nav\",\"command\":\"previous\"}");
+    ASSERT_STR(navigation.type, ACTION_TYPE_BUTTON_NAVIGATION);
+    ASSERT_STR(navigation.payload.button_navigation.command, "previous");
+    ASSERT_TRUE(!action_type_find(ACTION_TYPE_BUTTON_NAVIGATION)->display_lock_required);
+    navigation = round_trip("{\"type\":\"button_nav\",\"command\":\"tap\"}");
+    ASSERT_STR(navigation.payload.button_navigation.command, "tap");
+    navigation = round_trip("{\"type\":\"button_nav\",\"command\":\"tap_hold\"}");
+    ASSERT_STR(navigation.payload.button_navigation.command, "tap_hold");
+    StaticJsonDocument<2048> metadata;
+    JsonObject catalog = metadata.to<JsonObject>();
+    action_type_find(ACTION_TYPE_BUTTON_NAVIGATION)->describe(catalog);
+    ASSERT_EQ(catalog["commands"].size(), 4);
+    const char* ids[] = {"previous", "next", "tap", "tap_hold"};
+    const char* labels[] = {"Previous", "Next", "Tap", "Tap & Hold"};
+    for (size_t index = 0; index < 4; ++index) {
+        ASSERT_STR(catalog["commands"][index]["id"].as<const char*>(), ids[index]);
+        ASSERT_STR(catalog["commands"][index]["label"].as<const char*>(), labels[index]);
+    }
+    for (const char* json : {
+            "{\"type\":\"button_nav\",\"command\":\"activate\"}",
+            "{\"type\":\"button_nav\",\"command\":\"hold\"}",
+            "{\"type\":\"button_nav\",\"command\":\"menu\"}",
+            "{\"type\":\"button_nav\",\"command\":\"cancel\"}"}) {
+        navigation = parse_from_string(json);
+        ASSERT_STR(navigation.type, "");
+    }
+    navigation = parse_from_string("{\"type\":\"button_nav\",\"command\":\"unknown\"}");
+    ASSERT_STR(navigation.type, "");
+#endif
 }
 
 TEST(gamepad_round_trip_and_validation) {
@@ -272,6 +302,14 @@ TEST(sound_alert_mp3_round_trip) {
     ASSERT_STR(act.payload.sound_alert.sound_alert_kind, "mp3");
     ASSERT_STR(act.payload.sound_alert.sound_alert_file, "startup");
     ASSERT_EQ(act.payload.sound_alert.sound_alert_volume, 100);
+}
+
+TEST(sound_alert_stop_choices) {
+    ButtonAction stop = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop\"}");
+    ASSERT_STR(stop.payload.sound_alert.sound_alert_kind, "stop");
+    stop = round_trip("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop_all\"}");
+    ASSERT_STR(stop.payload.sound_alert.sound_alert_kind, "stop_all");
+    ASSERT_STR(parse_from_string("{\"type\":\"sound_alert\",\"sound_alert_kind\":\"stop_all\",\"sound_alert_pattern\":\"1000:200\"}").type, "");
 }
 
 TEST(legacy_alert_aliases_are_rejected) {
@@ -872,6 +910,7 @@ int main(int argc, char** argv) {
     printf("\n--- Sound Alert action ---\n");
     RUN(sound_alert_tone_parse);
     RUN(sound_alert_mp3_round_trip);
+    RUN(sound_alert_stop_choices);
     RUN(legacy_alert_aliases_are_rejected);
     RUN(alarm_audio_round_trip);
 

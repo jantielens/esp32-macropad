@@ -443,9 +443,9 @@ void expose_timer_tick() {
         // Play default tap beep as end-of-exposure alert
         DeviceConfig* cfg = web_portal_get_current_config();
         if (cfg && cfg->tap_beep[0]) {
-            audio_beep(cfg->tap_beep, 0);
+            audio_feedback(cfg->tap_beep);
         } else {
-            audio_beep("1000:300", 0);
+            audio_feedback("1000:300");
         }
 #endif
     }

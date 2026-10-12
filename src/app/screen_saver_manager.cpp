@@ -167,6 +167,7 @@ static uint8_t config_brightness() {
 static void apply_brightness(uint8_t brightness) {
 		if (!displayManager || !displayManager->getDriver()) return;
 
+		displayManager->lock();
 		DisplayDriver* driver = displayManager->getDriver();
 
 		if (driver->hasBacklightControl()) {
@@ -175,6 +176,7 @@ static void apply_brightness(uint8_t brightness) {
 				// Fallback: on/off only
 				driver->setBacklight(brightness > 0);
 		}
+		displayManager->unlock();
 }
 
 static void complete_fade_out();

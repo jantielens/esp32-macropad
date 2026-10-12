@@ -14,6 +14,13 @@ std::map<std::string, std::string> storage_test_files;
 bool storage_test_fail_open = false;
 size_t storage_test_write_limit = SIZE_MAX;
 FakeLittleFS LittleFS;
+static bool fail_calloc = false;
+static unsigned calloc_calls = 0;
+extern "C" void* __real_calloc(size_t count, size_t size);
+extern "C" void* __wrap_calloc(size_t count, size_t size) {
+    ++calloc_calls;
+    return fail_calloc ? nullptr : __real_calloc(count, size);
+}
 static time_t wall_clock = 1704094140;
 static unsigned long monotonic_clock = 0;
 static bool ready = false;
@@ -81,7 +88,7 @@ ActionResult action_dispatch(const ButtonAction& action, const char* label, uint
     return ACTION_FAILED;
 }
 ActionResult action_dispatch_synchronous(const ButtonAction& action, const char* label,
-                                         bool (*guard)(uint32_t), uint32_t generation) {
+                                         bool (*guard)(uint32_t), uint32_t generation, bool) {
     last_work_guard = guard;
     last_work_generation = generation;
     return action_dispatch(action, label, 0);
@@ -574,7 +581,35 @@ static void test_settings_debounce() {
     diagnostics.clear();
 }
 
-int main() {
+static void test_state_allocation_failure() {
+    fail_calloc = true;
+    alarm_manager_init();
+    const AlarmSnapshot unavailable = alarm_snapshot();
+    assert(!unavailable.ready && !unavailable.enabled && unavailable.storage_error);
+    JsonDocument document;
+    alarm_config_to_json(document.to<JsonObject>());
+    assert(document["1"]["enabled"] == false);
+    assert(document["1"]["hour"] == 7);
+    assert(!alarm_command_submit("cancel"));
+    assert(!save(config));
+    alarm_manager_loop();
+    fail_calloc = false;
+    ready = true;
+    alarm_manager_init();
+    assert(alarm_snapshot().ready && !alarm_snapshot().storage_error);
+    const unsigned allocated = calloc_calls;
+    alarm_manager_init();
+    assert(calloc_calls == allocated + 1);
+    assert(alarm_snapshot().ready && !alarm_snapshot().storage_error);
+    assert(save(config));
+}
+
+int main(int argc, char** argv) {
+    if (argc > 1 && !strcmp(argv[1], "allocation-failure")) {
+        test_state_allocation_failure();
+        std::puts("alarm manager allocation-failure: PASS");
+        return 0;
+    }
     test_scoped_saves();
     test_recovery();
     test_settings_debounce();

@@ -51,7 +51,11 @@ FEATURES = {
         ("brightness_fragment_html_gz", "rotation_fragment_html_gz", "screen_preview_fragment_html_gz"),
     ),
     "LVGL": (("lvgl*.cpp.o",), ()),
-    "Fonts (HAS_CUSTOM_FONTS)": (("custom_fonts.cpp.o",), ()),
+    "Fonts (HAS_TTF_FONTS)": (
+        ("font_store.cpp.o", "pad_font_cache.cpp.o", "web_portal_fonts.cpp.o", "lv_tiny_ttf.c.o"),
+        ("fonts_fragment_html_gz", "portal_fonts_js_gz"),
+    ),
+    "Monochrome fonts (HAS_FREETYPE_FONTS)": (("freetype_mono_font.cpp.o", "automono_*.c.o"), ()),
     "Image decoding / encoding": (("image_decoder.cpp.o", "jpeg_encoder_service.cpp.o"), ()),
     "Image fetch (HAS_IMAGE_FETCH)": (("image_fetch.cpp.o",), ()),
     "Image library (HAS_IMAGE_LIBRARY)": (
@@ -95,7 +99,7 @@ FEATURES = {
         ("firmware_fragment_html_gz",),
     ),
     "Timers / time": (("timer*.cpp.o", "time_service.cpp.o"), ("timers_fragment_html_gz",)),
-    "Sensors / power": (("sensors.cpp.o", "power*.cpp.o", "hw_button*.cpp.o", "duty_cycle.cpp.o"), ()),
+    "Sensors / power": (("sensors.cpp.o", "power*.cpp.o", "hw_button*.cpp.o", "duty_cycle.cpp.o", "board_hardware.cpp.o"), ()),
     "Configuration": (("config*.cpp.o",), ()),
     "Device classes": (("device_class*.cpp.o", "class_branding.cpp.o"), ()),
     "Built-in image assets": (("png_assets.cpp.o",), ()),
@@ -106,6 +110,7 @@ FEATURES = {
     "Linker-merged strings / constants (shared)": ((), ()),
 }
 LIBRARIES = {
+    "Monochrome fonts (HAS_FREETYPE_FONTS)": ("MacropadFreeType",),
     "LVGL": ("lvgl", "liblvgl.a"),
     "Display / touch (HAS_DISPLAY / HAS_TOUCH)": (
         "TFT_eSPI", "LovyanGFX", "Arduino_GFX*", "libesp_lcd.a", "libesp_driver_ppa.a",
@@ -169,6 +174,7 @@ FLAG_SUBSYSTEMS = {
     "HAS_SENSOR_NAU7802": "Sensors / power",
     "HAS_SENSOR_TSL2591": "Sensors / power",
     "HAS_STORAGE_BROWSER": "Storage",
+    "HAS_FILESYSTEM": "Storage",
     "IS_COFFEE_SCALE": "Device classes",
     "IS_DARKROOM_TIMER": "Device classes",
     "IS_EPAPER_FRAME": "Device classes",
@@ -176,6 +182,7 @@ FLAG_SUBSYSTEMS = {
     "IS_VOICE_ASSISTANT": "Device classes",
 }
 EXCLUDED_FLAGS = {
+    "HAS_EPAPER_GRAYSCALE": "Panel rendering capability; presentation drivers own both monochrome and grayscale paths without an independent flash boundary.",
     "HAS_PSRAM": "Memory capacity and allocation affect many subsystems; there is no distinct flash owner.",
 }
 FEATURE_FLAG_PATTERN = re.compile(r"\b(?:HAS_[A-Z0-9_]+|IS_[A-Z0-9_]+|ALARM_ENABLED)\b")
@@ -380,7 +387,7 @@ def compact_snapshot(totals, context, demo=False):
 def demo_snapshots():
     totals = {
         "LVGL": dict(code=180000, data=250000, assets=0, static_ram=8000),
-        "Fonts (HAS_CUSTOM_FONTS)": dict(code=128, data=230000, assets=0, static_ram=0),
+        "Fonts (HAS_TTF_FONTS)": dict(code=24000, data=512, assets=2048, static_ram=32),
         "MCP (HAS_MCP)": dict(code=47000, data=1500, assets=2000, static_ram=500),
         "Web portal assets (shared)": dict(code=0, data=0, assets=150000, static_ram=0),
         "Bindings / expressions with an exceptionally long subsystem name":

@@ -32,15 +32,15 @@
 struct BarChartConfig {
     char     bar_min[CONFIG_BINDABLE_SHORT_LEN];        // Minimum value (bindable, default "0")
     char     bar_max[CONFIG_BINDABLE_SHORT_LEN];        // Full-scale value (bindable, default "3")
-    char     bar_color[CONFIG_COLOR_MAX_LEN];            // Bar 1 fill color (bindable, default "#4CAF50")
-    char     bar_color_2[CONFIG_COLOR_MAX_LEN];          // Bar 2 fill color (bindable, default "#2196F3")
-    char     bar_color_3[CONFIG_COLOR_MAX_LEN];          // Bar 3 fill color (bindable, default "#9C27B0")
-    char     bar_color_4[CONFIG_COLOR_MAX_LEN];          // Bar 4 fill color (bindable, default "#FF9800")
+    char     bar_color[CONFIG_COLOR_MAX_LEN];            // Bar 1 fill color (bindable, default DEFAULT_WIDGET_SERIES_COLOR)
+    char     bar_color_2[CONFIG_COLOR_MAX_LEN];          // Bar 2 fill color (bindable, default DEFAULT_WIDGET_SERIES_COLOR_2)
+    char     bar_color_3[CONFIG_COLOR_MAX_LEN];          // Bar 3 fill color (bindable, default DEFAULT_WIDGET_SERIES_COLOR_3)
+    char     bar_color_4[CONFIG_COLOR_MAX_LEN];          // Bar 4 fill color (bindable, default DEFAULT_WIDGET_SERIES_COLOR_4)
     char     bar_label[CONFIG_BINDABLE_SHORT_LEN];       // Bar 1 caption (bindable, "" = none)
     char     bar_label_2[CONFIG_BINDABLE_SHORT_LEN];     // Bar 2 caption (bindable, "" = none)
     char     bar_label_3[CONFIG_BINDABLE_SHORT_LEN];     // Bar 3 caption (bindable, "" = none)
     char     bar_label_4[CONFIG_BINDABLE_SHORT_LEN];     // Bar 4 caption (bindable, "" = none)
-    char     bar_bg_color[CONFIG_BINDABLE_SHORT_LEN];    // Bar track background (default "#1A1A1A")
+    char     bar_bg_color[CONFIG_BINDABLE_SHORT_LEN];    // Bar track background (default DEFAULT_WIDGET_TRACK_COLOR)
     uint8_t  bar_width_pct;       // Per-bar thickness as % of its column (1-100, default 100)
     uint8_t  bar_label_size;      // Caption strip size in px: width (horizontal) / height (vertical), 0 = auto
     bool     horizontal;          // true = horizontal bar (grows left→right)
@@ -50,12 +50,12 @@ struct BarChartConfig {
     uint16_t anim_ms;             // Transition duration in ms (0 = instant, default 300)
     // Scale tick gridlines
     uint8_t  tick_count;          // Gridline count (0 = none, default 0)
-    char     tick_color[CONFIG_BINDABLE_SHORT_LEN];     // Gridline color (bindable, default "#808080")
+    char     tick_color[CONFIG_BINDABLE_SHORT_LEN];     // Gridline color (bindable, default DEFAULT_WIDGET_TICK_COLOR)
     uint8_t  tick_width;          // Gridline width in pixels (1–5, default 1)
     // Target marker (disabled when marker_value is empty)
     char     marker_value[CONFIG_BINDABLE_SHORT_LEN];   // Target position on scale (bindable, "" = disabled)
-    char     marker_color[CONFIG_BINDABLE_SHORT_LEN];   // Marker line color (bindable, default "#FFFFFF")
-    char     marker_zone_color[CONFIG_BINDABLE_SHORT_LEN]; // Zone band color (bindable, default "#FF5722")
+    char     marker_color[CONFIG_BINDABLE_SHORT_LEN];   // Marker line color (bindable, default DEFAULT_WIDGET_INDICATOR_COLOR)
+    char     marker_zone_color[CONFIG_BINDABLE_SHORT_LEN]; // Zone band color (bindable, default DEFAULT_WIDGET_ZONE_COLOR)
     uint8_t  marker_width;        // Marker line width in pixels (0 = no line, default 2)
     uint8_t  marker_zone_pct;     // Zone band total size as % of range (0 = no zone, max 100)
 };
@@ -65,7 +65,7 @@ static_assert(sizeof(BarChartConfig) <= WIDGET_CONFIG_MAX_BYTES,
 
 // Default fill colors per bar slot (mirrors the gauge widget's ring defaults).
 static const uint32_t BAR_SLOT_DEFAULT_COLOR[MAX_WIDGET_BINDINGS] = {
-    0x4CAF50, 0x2196F3, 0x9C27B0, 0xFF9800
+    widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR), widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_2), widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_3), widget_default_rgb(DEFAULT_WIDGET_SERIES_COLOR_4)
 };
 
 // ---- Runtime state (packed into WidgetState.data[]) ----
@@ -172,16 +172,16 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
     widget_parse_field(btn["widget_bar_min"],      cfg->bar_min,       sizeof(cfg->bar_min),       "0", false);
     widget_parse_field(btn["widget_bar_max"],      cfg->bar_max,       sizeof(cfg->bar_max),       "3", false);
 
-    widget_parse_field(btn["widget_bar_color"],     cfg->bar_color,     sizeof(cfg->bar_color),     "#4CAF50");
-    widget_parse_field(btn["widget_bar_color_2"],   cfg->bar_color_2,   sizeof(cfg->bar_color_2),   "#2196F3");
-    widget_parse_field(btn["widget_bar_color_3"],   cfg->bar_color_3,   sizeof(cfg->bar_color_3),   "#9C27B0");
-    widget_parse_field(btn["widget_bar_color_4"],   cfg->bar_color_4,   sizeof(cfg->bar_color_4),   "#FF9800");
+    widget_parse_field(btn["widget_bar_color"],     cfg->bar_color,     sizeof(cfg->bar_color),     DEFAULT_WIDGET_SERIES_COLOR);
+    widget_parse_field(btn["widget_bar_color_2"],   cfg->bar_color_2,   sizeof(cfg->bar_color_2),   DEFAULT_WIDGET_SERIES_COLOR_2);
+    widget_parse_field(btn["widget_bar_color_3"],   cfg->bar_color_3,   sizeof(cfg->bar_color_3),   DEFAULT_WIDGET_SERIES_COLOR_3);
+    widget_parse_field(btn["widget_bar_color_4"],   cfg->bar_color_4,   sizeof(cfg->bar_color_4),   DEFAULT_WIDGET_SERIES_COLOR_4);
 
     widget_parse_field(btn["widget_bar_label"],     cfg->bar_label,     sizeof(cfg->bar_label),     "", false);
     widget_parse_field(btn["widget_bar_label_2"],   cfg->bar_label_2,   sizeof(cfg->bar_label_2),   "", false);
     widget_parse_field(btn["widget_bar_label_3"],   cfg->bar_label_3,   sizeof(cfg->bar_label_3),   "", false);
     widget_parse_field(btn["widget_bar_label_4"],   cfg->bar_label_4,   sizeof(cfg->bar_label_4),   "", false);
-    widget_parse_field(btn["widget_bar_bg_color"],  cfg->bar_bg_color,  sizeof(cfg->bar_bg_color),  "#1A1A1A");
+    widget_parse_field(btn["widget_bar_bg_color"],  cfg->bar_bg_color,  sizeof(cfg->bar_bg_color),  DEFAULT_WIDGET_TRACK_COLOR);
     uint8_t wpct = btn["widget_bar_width_pct"] | (uint8_t)100;
     cfg->bar_width_pct = clamp_val<uint8_t>(wpct, 1, 100);
 
@@ -202,14 +202,14 @@ static void bar_chart_parse(const JsonObject& btn, uint8_t* data) {
     // Scale tick gridlines
     uint8_t tc = btn["widget_bar_ticks"] | (uint8_t)0;
     cfg->tick_count = (tc > 20) ? 20 : tc;
-    widget_parse_field(btn["widget_bar_tick_color"], cfg->tick_color, sizeof(cfg->tick_color), "#808080");
+    widget_parse_field(btn["widget_bar_tick_color"], cfg->tick_color, sizeof(cfg->tick_color), DEFAULT_WIDGET_TICK_COLOR);
     uint8_t tw = btn["widget_bar_tick_width"] | (uint8_t)1;
     cfg->tick_width = clamp_val<uint8_t>(tw, 1, 5);
 
     // Target marker (disabled when marker_value is empty)
     widget_parse_field(btn["widget_bar_marker_value"], cfg->marker_value, sizeof(cfg->marker_value), "", false);
-    widget_parse_field(btn["widget_bar_marker_color"], cfg->marker_color, sizeof(cfg->marker_color), "#FFFFFF");
-    widget_parse_field(btn["widget_bar_marker_zone_color"], cfg->marker_zone_color, sizeof(cfg->marker_zone_color), "#FF5722");
+    widget_parse_field(btn["widget_bar_marker_color"], cfg->marker_color, sizeof(cfg->marker_color), DEFAULT_WIDGET_INDICATOR_COLOR);
+    widget_parse_field(btn["widget_bar_marker_zone_color"], cfg->marker_zone_color, sizeof(cfg->marker_zone_color), DEFAULT_WIDGET_ZONE_COLOR);
     uint8_t mw = btn["widget_bar_marker_width"] | (uint8_t)2;
     cfg->marker_width = (mw > 10) ? 10 : mw;
     uint8_t mzp = btn["widget_bar_marker_zone_pct"] | (uint8_t)0;
@@ -308,9 +308,10 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // Only reserve space for labels that are actually used (static text or MQTT binding)
     bool has_top = btn->label_top[0];
     bool has_bot = btn->label_bottom[0];
-    int16_t label_h = lv_font_get_line_height(scale->font_small) + 2;
-    int16_t top_h = has_top ? label_h : 0;
-    int16_t bot_h = has_bot ? label_h : 0;
+    const lv_font_t* annotation_font = pad_typography_font(scale->font_small);
+    int32_t label_h = lv_font_get_line_height(annotation_font) + 2;
+    int32_t top_h = has_top ? lv_font_get_line_height(pad_resolve_font(btn->style_top, scale->font_small, state->font_owner)) + 2 : 0;
+    int32_t bot_h = has_bot ? lv_font_get_line_height(pad_resolve_font(btn->style_bottom, scale->font_small, state->font_owner)) + 2 : 0;
 
     // Per-bar captions reserve a strip beneath each column (vertical) or to the
     // left of each row (horizontal). Only reserved when at least one active bar
@@ -334,12 +335,12 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         icon_h = (int16_t)lv_obj_get_height(icon_img);
         if (icon_h <= 0) icon_h = rect->h / 4;  // fallback: quarter tile
     }
-    int16_t center_label_h = 0;
+    int32_t center_label_h = 0;
     if (center_label) {
         lv_obj_update_layout(center_label);
-        center_label_h = (int16_t)lv_obj_get_height(center_label);
+        center_label_h = lv_obj_get_height(center_label);
     }
-    int16_t header_h = icon_h;
+    int32_t header_h = icon_h;
     if (center_label_h > 0) {
         if (icon_h > 0) header_h += 4 + center_label_h;  // icon + gap + label
         else             header_h = center_label_h;
@@ -379,8 +380,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     // adds a second strip on the far end: right when horizontal, top when vertical.
     int16_t hlabel_w = 0;      // horizontal: left (near) caption strip width
     int16_t hlabel_w_far = 0;  // horizontal: right (far) caption strip width
-    int16_t vlabel_h = 0;      // vertical: bottom (near) caption strip height
-    int16_t vlabel_h_far = 0;  // vertical: top (far) caption strip height
+    int32_t vlabel_h = 0;      // vertical: bottom (near) caption strip height
+    int32_t vlabel_h_far = 0;  // vertical: top (far) caption strip height
     if (has_labels) {
         if (cfg->horizontal) {
             int16_t w = cfg->bar_label_size > 0
@@ -389,23 +390,22 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             if (has_near_labels) hlabel_w = w;
             if (has_far_labels)  hlabel_w_far = w;
         } else {
-            int16_t h = cfg->bar_label_size > 0 ? (int16_t)cfg->bar_label_size
-                                                : (int16_t)(label_h + 4);
+            int32_t h = cfg->bar_label_size > 0 ? cfg->bar_label_size : label_h + 4;
             if (has_near_labels) vlabel_h = h;
             if (has_far_labels)  vlabel_h_far = h;
         }
     }
 
-    int16_t bar_top, bar_bottom_margin;
+    int32_t bar_top, bar_bottom_margin;
     int16_t fill_len;     // track length along the fill direction (shared by all bars)
     int16_t band_full;    // full cross extent available to the column/row group
     int16_t group_start;  // cross-axis start of the group (horizontal rows only)
 
     if (cfg->horizontal) {
         // Horizontal: bars span the width (minus caption strips); rows divide height.
-        int16_t bar_top_start = top_h + header_h + (header_h > 0 ? gap : 0);
+        int32_t bar_top_start = top_h + header_h + (header_h > 0 ? gap : 0);
         bar_bottom_margin = bot_h + 4;
-        int16_t avail_h = content_h - bar_top_start - bar_bottom_margin;
+        int32_t avail_h = content_h - bar_top_start - bar_bottom_margin;
         if (avail_h < 8) avail_h = 8;
         fill_len = content_w - hlabel_w - hlabel_w_far;
         if (fill_len < 8) fill_len = 8;
@@ -417,8 +417,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         // bar_top is pushed down by the far (top) strip so its caption has room.
         bar_top = top_h + header_h + gap + vlabel_h_far;
         bar_bottom_margin = bot_h + 4;
-        fill_len = content_h - bar_top - bar_bottom_margin - vlabel_h;
-        if (fill_len < 8) fill_len = 8;
+        const int32_t available_length = content_h - bar_top - bar_bottom_margin - vlabel_h;
+        fill_len = available_length < 8 ? 8 : available_length;
         band_full = content_w;  // honor content padding (matches horizontal branch + other widgets)
         group_start = 0;
     }
@@ -434,8 +434,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     LOGT(TAG, "Layout: rect=%dx%d content_h=%d bar_top=%d fill_len=%d col_cross=%d track_cross=%d bars=%d horiz=%d",
          rect->w, rect->h, content_h, bar_top, fill_len, col_cross, track_cross, n, cfg->horizontal);
 
-    lv_color_t bg_clr = resolve_lv_color(cfg->bar_bg_color, 0x1A1A1A);
-    lv_color_t tick_clr = resolve_lv_color(cfg->tick_color, 0x808080);
+    lv_color_t bg_clr = resolve_lv_color(cfg->bar_bg_color, widget_default_rgb(DEFAULT_WIDGET_TRACK_COLOR));
+    lv_color_t tick_clr = resolve_lv_color(cfg->tick_color, widget_default_rgb(DEFAULT_WIDGET_TICK_COLOR));
 
     // One flat gridline pointer array, tick_count per bar.
     if (cfg->tick_count > 0) {
@@ -559,7 +559,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             if (cfg->marker_zone_pct > 0) {
                 lv_obj_t* zone = lv_obj_create(bg);
                 lv_obj_set_size(zone, 0, 0);
-                lv_obj_set_style_bg_color(zone, resolve_lv_color(cfg->marker_zone_color, 0xFF5722), 0);
+                lv_obj_set_style_bg_color(zone, resolve_lv_color(cfg->marker_zone_color, widget_default_rgb(DEFAULT_WIDGET_ZONE_COLOR)), 0);
                 lv_obj_set_style_bg_opa(zone, LV_OPA_50, 0);
                 lv_obj_set_style_radius(zone, 0, 0);
                 lv_obj_set_style_border_width(zone, 0, 0);
@@ -570,7 +570,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             if (cfg->marker_width > 0) {
                 lv_obj_t* line = lv_obj_create(bg);
                 lv_obj_set_size(line, 0, 0);
-                lv_obj_set_style_bg_color(line, resolve_lv_color(cfg->marker_color, 0xFFFFFF), 0);
+                lv_obj_set_style_bg_color(line, resolve_lv_color(cfg->marker_color, widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR)), 0);
                 lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
                 lv_obj_set_style_radius(line, 0, 0);
                 lv_obj_set_style_border_width(line, 0, 0);
@@ -586,7 +586,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         const char* lbl_templ = bar_slot_label_cfg(cfg, oi);
         if (has_near_labels && lbl_templ[0]) {
             lv_obj_t* lbl = lv_label_create(tile);
-            lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+            lv_obj_set_style_text_font(lbl, annotation_font, 0);
             lv_obj_set_style_text_color(lbl, resolve_lv_color(bar_slot_color_cfg(cfg, oi), BAR_SLOT_DEFAULT_COLOR[oi]), 0);
             lv_obj_set_style_pad_all(lbl, 0, 0);
             lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
@@ -614,7 +614,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             const char* far_templ = bar_slot_label_cfg(cfg, oi + 1);
             if (far_templ[0]) {
                 lv_obj_t* lbl = lv_label_create(tile);
-                lv_obj_set_style_text_font(lbl, scale->font_small, 0);
+                lv_obj_set_style_text_font(lbl, annotation_font, 0);
                 lv_obj_set_style_text_color(lbl, resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]), 0);
                 lv_obj_set_style_pad_all(lbl, 0, 0);
                 lv_label_set_long_mode(lbl, LV_LABEL_LONG_CLIP);
@@ -851,7 +851,7 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     }
 
     lv_color_t clr;
-    if (resolve_color_changed(cfg->bar_bg_color, 0x1A1A1A, &st->cached_bar_bg_color, &clr))
+    if (resolve_color_changed(cfg->bar_bg_color, widget_default_rgb(DEFAULT_WIDGET_TRACK_COLOR), &st->cached_bar_bg_color, &clr))
         for (uint8_t s = 0; s < st->num_bars; s++)
             if (st->slots[s].bg) lv_obj_set_style_bg_color(st->slots[s].bg, clr, 0);
     for (uint8_t s = 0; s < st->num_bars; s++) {
@@ -874,7 +874,7 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
 
     // Gridline color (uses cached pointers — no child scan)
     if (st->tick_lines && st->tick_line_count > 0) {
-        if (resolve_color_changed(cfg->tick_color, 0x808080, &st->cached_tick_color, &clr)) {
+        if (resolve_color_changed(cfg->tick_color, widget_default_rgb(DEFAULT_WIDGET_TICK_COLOR), &st->cached_tick_color, &clr)) {
             for (uint8_t i = 0; i < st->tick_line_count; i++)
                 lv_obj_set_style_bg_color(st->tick_lines[i], clr, 0);
         }
@@ -889,10 +889,10 @@ static void bar_chart_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
             for (uint8_t s = 0; s < st->num_bars; s++)
                 bar_chart_position_marker(&st->slots[s], cfg, mn, mx, marker_val, st->horizontal);
         }
-        if (resolve_color_changed(cfg->marker_color, 0xFFFFFF, &st->cached_marker_color, &clr))
+        if (resolve_color_changed(cfg->marker_color, widget_default_rgb(DEFAULT_WIDGET_INDICATOR_COLOR), &st->cached_marker_color, &clr))
             for (uint8_t s = 0; s < st->num_bars; s++)
                 if (st->slots[s].marker_line) lv_obj_set_style_bg_color(st->slots[s].marker_line, clr, 0);
-        if (resolve_color_changed(cfg->marker_zone_color, 0xFF5722, &st->cached_marker_zone_color, &clr))
+        if (resolve_color_changed(cfg->marker_zone_color, widget_default_rgb(DEFAULT_WIDGET_ZONE_COLOR), &st->cached_marker_zone_color, &clr))
             for (uint8_t s = 0; s < st->num_bars; s++)
                 if (st->slots[s].marker_zone) lv_obj_set_style_bg_color(st->slots[s].marker_zone, clr, 0);
     }

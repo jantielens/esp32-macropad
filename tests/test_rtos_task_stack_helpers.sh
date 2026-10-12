@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 HEADER="src/app/rtos_task_utils.h"
 SOURCE="src/app/rtos_task_utils.cpp"
 AUDIO="src/app/audio.cpp"
+DISPLAY="src/app/display_manager.cpp"
 
 grep -q 'rtos_create_task_internal_stack(' "$HEADER"
 grep -q 'rtos_create_task_internal_stack_pinned(' "$HEADER"
@@ -21,4 +22,32 @@ if grep -q 'xTaskCreatePinnedToCoreWithCaps(' "$AUDIO"; then
     exit 1
 fi
 
-echo "PASS: explicit task-stack helpers and audio migration are present."
+for unicore in 0 1; do
+    for psram_stack in 0 1; do
+        for ttf in 0 1; do
+            for sd in 0 1; do
+                stack_path=$(awk '
+                    /Create LVGL rendering task/ { capture = 1 }
+                    /Create async present task/ { capture = 0 }
+                    capture
+                ' "$DISPLAY" | c++ -E -P -x c++ \
+                    -DCONFIG_FREERTOS_UNICORE="$unicore" \
+                    -DLVGL_TASK_USE_PSRAM_STACK="$psram_stack" \
+                    -DHAS_TTF_FONTS="$ttf" -DUSE_SD_STORAGE="$sd" -)
+                expected_helper="rtos_create_task_internal_stack"
+                if [[ "$psram_stack" == 1 && ( "$ttf" == 0 || "$sd" == 1 ) ]]; then
+                    expected_helper="rtos_create_task_psram_stack"
+                fi
+                if [[ "$unicore" == 0 ]]; then
+                    expected_helper="${expected_helper}_pinned"
+                fi
+                if ! grep -Fq "${expected_helper}(" <<< "$stack_path"; then
+                    echo "FAIL: LVGL stack selection unicore=$unicore psram=$psram_stack ttf=$ttf sd=$sd" >&2
+                    exit 1
+                fi
+            done
+        done
+    done
+done
+
+echo "PASS: explicit task-stack helpers, audio migration, and cache-safe LVGL font loading."

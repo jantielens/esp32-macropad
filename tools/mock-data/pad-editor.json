@@ -1,9 +1,32 @@
 {
+  "firmware_defaults": {
+    "default_pad_bg_color": "#000000", "bg_color": "#333333", "fg_color": "#FFFFFF",
+    "border_color": "#000000", "border_width": "0", "corner_radius": "8", "content_pad": "4",
+    "button_shadow_enabled": false, "button_shadow_type": "opaque", "button_shadow_color_mode": "fixed",
+    "button_shadow_color": "#101010", "button_shadow_darken_pct": 35,
+    "button_shadow_offset_x_px": 0, "button_shadow_offset_y_px": 5, "button_shadow_drop_blur_px": 4,
+    "button_spacing_px": 6, "pad_inset_top_px": 0, "pad_inset_right_px": 0,
+    "pad_inset_bottom_px": 0, "pad_inset_left_px": 0, "pixel_shift_distance_px": 4,
+    "widget_series_color": "#4CAF50", "widget_series_color_2": "#2196F3",
+    "widget_series_color_3": "#9C27B0", "widget_series_color_4": "#FF9800",
+    "widget_track_color": "#1A1A1A", "widget_indicator_color": "#FFFFFF", "widget_tick_color": "#808080",
+    "widget_zone_color": "#FF5722", "widget_reference_color": "#888888",
+    "widget_table_bg_color": "#12122a", "widget_table_fg_color": "#b0b0d0", "widget_table_header_color": "#404070"
+  },
+  "epaper_firmware_defaults": {
+    "default_pad_bg_color": "#FFFFFF", "bg_color": "#FFFFFF", "fg_color": "#000000",
+    "border_width": "1", "corner_radius": "0", "pixel_shift_distance_px": 0,
+    "widget_series_color": "#000000", "widget_series_color_2": "#000000",
+    "widget_series_color_3": "#000000", "widget_series_color_4": "#000000",
+    "widget_track_color": "#FFFFFF", "widget_indicator_color": "#000000", "widget_tick_color": "#000000",
+    "widget_zone_color": "#000000", "widget_reference_color": "#000000",
+    "widget_table_bg_color": "#FFFFFF", "widget_table_fg_color": "#000000", "widget_table_header_color": "#000000"
+  },
   "button_defaults": {
     "default_pad_bg_color": "#101820", "bg_color": "#273641", "fg_color": "#ffffff",
     "border_color": "#52636e", "border_width": "1", "corner_radius": "8", "content_pad": "6",
-    "button_shadow_enabled": true, "label_top_style": "font:18;align:center",
-    "label_center_style": "font:28;align:center", "label_bottom_style": "font:16;align:center"
+    "button_shadow_enabled": true, "label_top_style": "font_size:18;align:center",
+    "label_center_style": "font_size:24;align:center", "label_bottom_style": "font_size:14;align:center"
   },
   "pads": {
     "0": {
@@ -71,6 +94,7 @@
     {"type": "screen", "group": "Navigation", "label": "Navigate to screen"},
     {"type": "back", "group": "Navigation", "label": "Navigate back"},
     {"type": "cycle_pad", "group": "Navigation", "label": "Navigate pad sequence"},
+    {"type": "button_navigation", "group": "Navigation", "label": "Navigate buttons", "commands": [{"id": "previous", "label": "Previous"}, {"id": "next", "label": "Next"}, {"id": "tap", "label": "Tap"}, {"id": "tap_hold", "label": "Tap & Hold"}], "fields": [{"name": "command", "description": "previous, next, tap, or tap_hold"}], "editor_fields": [{"name": "command", "label": "Command", "type": "select", "command_options": true}]},
     {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message"},
     {"type": "ha_service", "group": "Connectivity", "label": "Call Home Assistant service"},
     {"type": "notify", "group": "Display", "label": "Show notification"},

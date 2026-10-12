@@ -90,6 +90,10 @@
 #endif
 
 #include "i2c_bus.h"
+#include "board_hardware.h"
+#ifdef BOARD_HARDWARE_LOOP
+#include BOARD_HARDWARE_HEADER
+#endif
 #include "sd_probe.h"
 #include "sd_storage.h"
 #include "storage.h"
@@ -270,6 +274,13 @@ void setup()
 	#endif
 	#endif
 
+	#if HAS_TOUCH || HAS_CAMERA || HAS_AUDIO || defined(BOARD_HARDWARE_SOURCE)
+	i2c_bus_init();
+	#endif
+	if (!board_hardware_init()) {
+		LOGE("Board", "Hardware initialization failed; dependent peripherals unavailable");
+	}
+
 	// Initialize board-specific hardware
 	#if HAS_BUILTIN_LED
 	pinMode(LED_PIN, OUTPUT);
@@ -347,11 +358,6 @@ void setup()
 	} else {
 		LOGI("WiFi", "Early init deferred for offline wake");
 	}
-
-	#if HAS_TOUCH || HAS_CAMERA
-	// Initialize Wire bus mutex before touch, audio, and camera SCCB access.
-	i2c_bus_init();
-	#endif
 
 	#if HAS_TOUCH
 	// Initialize touch after display is ready
@@ -515,6 +521,10 @@ void setup()
 
 	// Load device-level pad and button defaults from LittleFS
 	button_defaults_init();
+	if (displayManager) {
+		const ButtonDefaults* defaults = button_defaults_get();
+		displayManager->initTypography(defaults->default_font, defaults->base_text_size);
+	}
 
 	// Load boot actions from LittleFS
 	boot_actions_init();
@@ -725,6 +735,9 @@ void setup()
 
 void loop()
 {
+#ifdef BOARD_HARDWARE_LOOP
+	BOARD_HARDWARE_LOOP();
+#endif
 	time_service_loop();
 	#if ALARM_ENABLED
 	alarm_manager_loop();

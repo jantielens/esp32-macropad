@@ -5,6 +5,9 @@
 #include "portal_idle.h"
 
 #include "board_config.h"
+#if HAS_TTF_FONTS
+#include "font_store.h"
+#endif
 #include "config_manager.h"
 #include "time_service.h"
 #include "keyboard_hid.h"
@@ -161,6 +164,11 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["usb_hid"] = (bool)HAS_USB_HID;
 				caps["mcp"] = (bool)HAS_MCP;
 				caps["ha_history"] = (bool)HAS_HA_HISTORY;
+#if HAS_TTF_FONTS
+				caps["ttf_fonts"] = font_store_available();
+#else
+				caps["ttf_fonts"] = false;
+#endif
 
 				// MQTT scope
 				(*doc)["mqtt_publish_scope"] = current_config->mqtt_publish_scope;
@@ -189,6 +197,12 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["screen_saver_keeps_panel_awake"] = SCREENSAVER_KEEP_PANEL_AWAKE;
 				#if HAS_LVGL_EPAPER
 				(*doc)["epaper_render_mode"] = current_config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale";
+				(*doc)["epaper_bw_conversion"] = current_config->epaper_bw_conversion == MONOCHROME_CONVERSION_BAYER ? "bayer4x4" :
+						current_config->epaper_bw_conversion == MONOCHROME_CONVERSION_BLUE_NOISE ? "blue_noise" : "threshold";
+				(*doc)["epaper_bw_threshold"] = current_config->epaper_bw_threshold;
+				JsonArray render_modes = (*doc)["epaper_supported_render_modes"].to<JsonArray>();
+				render_modes.add("bw");
+				if (HAS_EPAPER_GRAYSCALE) render_modes.add("grayscale");
 				(*doc)["epaper_binding_refresh_interval_ms"] = current_config->epaper_binding_refresh_interval_ms;
 				(*doc)["epaper_min_refresh_interval_ms"] = current_config->epaper_min_refresh_interval_ms;
 				(*doc)["epaper_refresh_clock_on_minute_boundary"] = current_config->epaper_refresh_clock_on_minute_boundary;
@@ -721,6 +735,8 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				current_config->epaper_min_refresh_interval_ms,
 				current_config->epaper_refresh_clock_on_minute_boundary,
 				current_config->epaper_full_refresh_threshold,
+				current_config->epaper_bw_conversion,
+				current_config->epaper_bw_threshold,
 		};
 		if (doc.containsKey("epaper_render_mode")) {
 			const char* mode = doc["epaper_render_mode"] | "";
@@ -731,6 +747,24 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
 				return;
 			}
+		}
+		if (doc.containsKey("epaper_bw_conversion")) {
+			const char* conversion = doc["epaper_bw_conversion"] | "";
+			current_config->epaper_bw_conversion = !strcmp(conversion, "threshold") ? MONOCHROME_CONVERSION_THRESHOLD :
+					!strcmp(conversion, "bayer4x4") ? MONOCHROME_CONVERSION_BAYER :
+					!strcmp(conversion, "blue_noise") ? MONOCHROME_CONVERSION_BLUE_NOISE : UINT8_MAX;
+		}
+		if (doc.containsKey("epaper_bw_threshold")) {
+			uint32_t threshold = 0;
+			const JsonVariantConst field = doc["epaper_bw_threshold"];
+			if (field.is<uint32_t>()) threshold = field.as<uint32_t>();
+			else if (field.is<const char*>()) {
+				const char* text = field.as<const char*>();
+				if (text && *text && strlen(text) <= 3 && strspn(text, "0123456789") == strlen(text)) {
+					threshold = strtoul(text, nullptr, 10);
+				}
+			}
+			current_config->epaper_bw_threshold = threshold > 0 && threshold <= UINT8_MAX ? uint8_t(threshold) : 0;
 		}
 		if (doc.containsKey("epaper_binding_refresh_interval_ms")) current_config->epaper_binding_refresh_interval_ms = parseUintField(doc["epaper_binding_refresh_interval_ms"], 0);
 		if (doc.containsKey("epaper_min_refresh_interval_ms")) current_config->epaper_min_refresh_interval_ms = parseUintField(doc["epaper_min_refresh_interval_ms"], 0);
@@ -745,12 +779,16 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				current_config->epaper_min_refresh_interval_ms,
 				current_config->epaper_refresh_clock_on_minute_boundary,
 				current_config->epaper_full_refresh_threshold,
+				current_config->epaper_bw_conversion,
+				current_config->epaper_bw_threshold,
 		})) {
 			current_config->epaper_render_mode = previous_presentation_settings.epaper_render_mode;
 			current_config->epaper_binding_refresh_interval_ms = previous_presentation_settings.epaper_binding_refresh_interval_ms;
 			current_config->epaper_min_refresh_interval_ms = previous_presentation_settings.epaper_min_refresh_interval_ms;
 			current_config->epaper_refresh_clock_on_minute_boundary = previous_presentation_settings.epaper_refresh_clock_on_minute_boundary;
 			current_config->epaper_full_refresh_threshold = previous_presentation_settings.epaper_full_refresh_threshold;
+			current_config->epaper_bw_conversion = previous_presentation_settings.epaper_bw_conversion;
+			current_config->epaper_bw_threshold = previous_presentation_settings.epaper_bw_threshold;
 			request->send(400, "application/json", "{\"success\":false,\"message\":\"invalid e-paper presentation settings\"}");
 			portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
 			return;

@@ -107,6 +107,8 @@
 #define KEY_EPAPER_MIN "ep_min"
 #define KEY_EPAPER_CLOCK_MINUTE "ep_clock"
 #define KEY_EPAPER_THRESHOLD "ep_thr"
+#define KEY_EPAPER_BW_CONVERSION "ep_bw_conv"
+#define KEY_EPAPER_BW_THRESHOLD "ep_bw_thr"
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
@@ -128,6 +130,8 @@ static EpaperRefreshSettings epaper_refresh_defaults() {
 				EPAPER_MIN_REFRESH_INTERVAL_MS,
 				true,
 				EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD,
+				MONOCHROME_CONVERSION_THRESHOLD,
+				MONOCHROME_THRESHOLD,
 		};
 }
 
@@ -139,6 +143,8 @@ void config_manager_apply_epaper_refresh_defaults(DeviceConfig* config) {
 		config->epaper_min_refresh_interval_ms = defaults.epaper_min_refresh_interval_ms;
 		config->epaper_refresh_clock_on_minute_boundary = defaults.epaper_refresh_clock_on_minute_boundary;
 		config->epaper_full_refresh_threshold = defaults.epaper_full_refresh_threshold;
+		config->epaper_bw_conversion = defaults.epaper_bw_conversion;
+		config->epaper_bw_threshold = defaults.epaper_bw_threshold;
 }
 
 static EpaperRefreshSettings epaper_refresh_from_config(const DeviceConfig* config) {
@@ -148,12 +154,15 @@ static EpaperRefreshSettings epaper_refresh_from_config(const DeviceConfig* conf
 				config->epaper_min_refresh_interval_ms,
 				config->epaper_refresh_clock_on_minute_boundary,
 				config->epaper_full_refresh_threshold,
+				config->epaper_bw_conversion,
+				config->epaper_bw_threshold,
 		};
 }
 
 bool config_manager_validate_epaper_refresh_settings(const EpaperRefreshSettings& settings) {
-		return (settings.epaper_render_mode == EPAPER_RENDER_MODE_BW ||
-						settings.epaper_render_mode == EPAPER_RENDER_MODE_GRAYSCALE) &&
+		return config_manager_epaper_mode_supported(settings.epaper_render_mode) &&
+				settings.epaper_bw_conversion <= MONOCHROME_CONVERSION_BLUE_NOISE &&
+				settings.epaper_bw_threshold > 0 &&
 				settings.epaper_binding_refresh_interval_ms >= EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS &&
 				settings.epaper_binding_refresh_interval_ms <= EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS &&
 				settings.epaper_min_refresh_interval_ms >= EPAPER_REFRESH_INTERVAL_MIN_MS &&
@@ -164,7 +173,7 @@ bool config_manager_normalize_epaper_refresh_settings(DeviceConfig* config) {
 		if (!config) return false;
 		const EpaperRefreshSettings defaults = epaper_refresh_defaults();
 		bool changed = false;
-		if (config->epaper_render_mode != EPAPER_RENDER_MODE_BW && config->epaper_render_mode != EPAPER_RENDER_MODE_GRAYSCALE) {
+		if (!config_manager_epaper_mode_supported(config->epaper_render_mode)) {
 				config->epaper_render_mode = defaults.epaper_render_mode;
 				changed = true;
 		}
@@ -175,6 +184,14 @@ bool config_manager_normalize_epaper_refresh_settings(DeviceConfig* config) {
 						changed = true;
 				}
 		};
+		if (config->epaper_bw_conversion > MONOCHROME_CONVERSION_BLUE_NOISE) {
+				config->epaper_bw_conversion = defaults.epaper_bw_conversion;
+				changed = true;
+		}
+		if (!config->epaper_bw_threshold) {
+				config->epaper_bw_threshold = defaults.epaper_bw_threshold;
+				changed = true;
+		}
 		normalize_interval(config->epaper_binding_refresh_interval_ms,
 				EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS, EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS,
 				defaults.epaper_binding_refresh_interval_ms);
@@ -277,6 +294,11 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_BLE_HID || HAS_USB_HID
 		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
+		#endif
+
+		#if HAS_LVGL_EPAPER
+		config_manager_apply_epaper_refresh_defaults(config);
+		config_manager_publish_epaper_refresh_settings(config);
 		#endif
 
 		LOGT("Config", "Load start");
@@ -487,6 +509,8 @@ bool config_manager_load(DeviceConfig *config) {
 		config->epaper_min_refresh_interval_ms = preferences.getUInt(KEY_EPAPER_MIN, config->epaper_min_refresh_interval_ms);
 		config->epaper_refresh_clock_on_minute_boundary = preferences.getBool(KEY_EPAPER_CLOCK_MINUTE, config->epaper_refresh_clock_on_minute_boundary);
 		config->epaper_full_refresh_threshold = preferences.getUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
+		config->epaper_bw_conversion = preferences.getUChar(KEY_EPAPER_BW_CONVERSION, config->epaper_bw_conversion);
+		config->epaper_bw_threshold = preferences.getUChar(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_threshold);
 		if (config_manager_normalize_epaper_refresh_settings(config)) {
 				LOGW("Config", "Normalized invalid persisted e-paper presentation settings");
 		}
@@ -653,6 +677,8 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUInt(KEY_EPAPER_MIN, config->epaper_min_refresh_interval_ms);
 		preferences.putBool(KEY_EPAPER_CLOCK_MINUTE, config->epaper_refresh_clock_on_minute_boundary);
 		preferences.putUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
+		preferences.putUChar(KEY_EPAPER_BW_CONVERSION, config->epaper_bw_conversion);
+		preferences.putUChar(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_threshold);
 		#endif
 
 		#if HAS_CAMERA
@@ -692,6 +718,7 @@ bool config_manager_save(const DeviceConfig *config) {
 // Recursively remove a directory tree on the active Storage backend.
 // Returns true if `path` no longer exists (or never did) after the call.
 // Individual remove/rmdir failures are logged.
+#if HAS_FILESYSTEM && USE_SD_STORAGE
 static bool factory_reset_rmrf(const char* path) {
 		if (!path || !*path) return true;
 		if (!Storage.exists(path)) return true;
@@ -745,6 +772,7 @@ static bool factory_reset_rmrf(const char* path) {
 		}
 		return ok;
 }
+#endif
 
 // Factory reset: erase the entire NVS partition and wipe user data on the
 // filesystem (pad configs, button defaults, timer/swipe/boot actions, icons,
@@ -760,8 +788,9 @@ bool config_manager_factory_reset() {
 		// (logging, BLE deinit, etc.) does not crash on a closed partition.
 		nvs_flash_init();
 
-		LOGI("Config", "Factory reset: wiping filesystem");
 		bool fs_ok = true;
+#if HAS_FILESYSTEM
+		LOGI("Config", "Factory reset: wiping filesystem");
 #if USE_SD_STORAGE
 		// SD: cannot safely format from firmware. Selectively remove the
 		// directories the firmware owns; leave any user files at root alone.
@@ -770,12 +799,13 @@ bool config_manager_factory_reset() {
 		});
 #else
 		// LittleFS: format wipes everything in the data partition cleanly.
-		if (!LittleFS.format()) {
+		if (!Storage.format()) {
 				LOGE("Config", "LittleFS.format() failed");
 				fs_ok = false;
 		} else {
 				LOGI("Config", "LittleFS formatted");
 		}
+#endif
 #endif
 
 		const bool ok = (err == ESP_OK) && fs_ok;
@@ -960,12 +990,12 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 #endif
 
 #if HAS_LVGL_EPAPER
-		LOGI("Config", "E-paper: mode=%s bind=%lums min=%lums clock_minute=%s full_threshold=%u",
+		LOGI("Config", "E-paper: mode=%s bind=%lums min=%lums clock_minute=%s full_threshold=%u bw_conversion=%u bw_threshold=%u",
 				config->epaper_render_mode == EPAPER_RENDER_MODE_BW ? "bw" : "grayscale",
 				(unsigned long)config->epaper_binding_refresh_interval_ms,
 				(unsigned long)config->epaper_min_refresh_interval_ms,
 				config->epaper_refresh_clock_on_minute_boundary ? "on" : "off",
-				config->epaper_full_refresh_threshold);
+				config->epaper_full_refresh_threshold, config->epaper_bw_conversion, config->epaper_bw_threshold);
 #endif
 
 #if HAS_CAMERA
