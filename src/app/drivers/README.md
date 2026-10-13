@@ -46,6 +46,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | jc4827w543c | ARDUINO_GFX_NV3041A | NV3041A | QSPI | 480×272 | 0 | GT911 | hardware validated by @00lems00 (#81) |
 | jc4880p433 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-darkroom | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| jc4880p433-heart | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-hx711 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-nau7802 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-sd | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |

@@ -133,6 +133,7 @@ bool storage_browser_remove(const String& path, const char*& error) {
         error = "could not delete storage path";
         return false;
     }
+    storage_publish_usage(true);
     return true;
 }
 #endif // HAS_STORAGE_BROWSER

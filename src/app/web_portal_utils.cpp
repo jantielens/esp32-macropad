@@ -34,6 +34,14 @@ void sendFileThrottled(AsyncWebServerRequest *request,
 				}
 		);
 		response->addHeader("X-Content-Type-Options", "nosniff");
+		String filename(path);
+		filename = filename.substring(filename.lastIndexOf('/') + 1);
+		filename.replace("\\", "_");
+		filename.replace("\"", "_");
+		filename.replace("\r", "_");
+		filename.replace("\n", "_");
+		const char* disposition = strcmp(content_type, "application/octet-stream") == 0 ? "attachment" : "inline";
+		response->addHeader("Content-Disposition", String(disposition) + "; filename=\"" + filename + "\"");
 		request->send(response);
 }
 #else

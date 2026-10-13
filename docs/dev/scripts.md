@@ -197,6 +197,132 @@ To view a downloaded report, extract the ZIP into a directory and serve it with
 `python3 -m http.server 8768 --bind 127.0.0.1 --directory <directory>`.
 Opening its HTML directly with a `file:` URL can block the JSON fetch.
 
+## Heart Monitor Notebook
+
+Use [tools/heart-monitor/analysis.ipynb](../../tools/heart-monitor/analysis.ipynb)
+inside VS Code to explore downloaded `heart_capture_v1` recordings. The reusable
+[analysis helper](../../tools/heart-monitor/heart_analysis.py) loads metadata and
+acquisition warnings and uses SciPy for offline filtering, candidate peaks, and
+spectra. No firmware changes, device connection, or separate browser server are
+required. Results are exploratory, not clinical measurements.
+
+The detected-BPM plot shows `60 / interval` for each candidate beat interval in
+red and IR, alongside a separately labelled five-interval rolling median. Gray
+markers identify excluded filter edges; an optional watch reference does not
+affect detection. This plot is separate from the windowed spectral estimates.
+
+Install the VS Code Python (`ms-python.python`) and Jupyter (`ms-toolsai.jupyter`)
+extensions in the environment containing the repository (WSL for a WSL workspace).
+From the repository root, with Python 3.11 or newer:
+
+```bash
+python3 -m venv .venv-heart
+.venv-heart/bin/python -m pip install -r tools/heart-monitor/requirements.txt
+.venv-heart/bin/python -m ipykernel install --user --name esp32-heart-monitor --display-name "Heart Monitor (local)"
+```
+
+Open the notebook, choose **Select Kernel**, select **Heart Monitor (local)**
+(under **Jupyter Kernel** if necessary), and use **Run All**. If that kernel is
+not listed, select the Python environment at `.venv-heart/bin/python` instead.
+Newly installed extensions may require **Developer: Reload Window**.
+
+The recording-selection cell defaults to the most recently modified
+`capture*.csv` in `build/temp`. Change `RECORDING_DIR` or `CAPTURE_PATH` for other
+recordings, and record placement, motion and reference timing in `SESSION_NOTES`.
+`REFERENCE_BPM` is an optional plot reference and never changes the detection
+parameters. The analysis cell exposes startup exclusion, bandpass cutoffs, edge
+exclusion, candidate-peak settings and window duration.
+
+Raw files are read-only. Keep durable recordings outside `build/`, which is
+ignored and may be removed during cleanup. The local environment and notebook
+checkpoints are also ignored. Clear notebook outputs before committing to avoid
+checking in personal recordings or derived plots.
+
+Gray filter edges are excluded from summaries but remain plotted. Short captures
+can have no complete ten-second windows; their raw signals and whole-record
+spectrum remain available. Poll timestamps describe batch reads, not exact sample
+times. An interrupted capture can have unknown lost samples even with contiguous
+stored indices. Candidate intervals are not ECG or validated HRV, and this tool
+does not calculate SpO2 or diagnose rhythm conditions.
+
+### Firmware-Equivalent C++ Replay
+
+The notebook's final replay cell compiles the portable firmware estimator with
+`g++ -std=c++11` and feeds red and IR samples in order. Unlike the offline SciPy analysis,
+this causal estimator has no access to future samples. It plots live BPM gaps,
+periodicity strength, filtered waveform, and the 200 ms pulse. The shared estimator
+uses persistent biquad filters, independent tentative peaks and recent intervals,
+and a ten-second autocorrelation window. Autocorrelation fallback can provide a
+rate but never generates pulse flashes. Multiple-period ambiguity needs stable
+intervals or an already-valid rate to support a credible shorter period;
+unresolved candidates are rejected. Quality scores and tentative peaks are
+exploratory, not calibrated confidence or validated heartbeat annotations.
+
+From the repository root:
+
+```bash
+.venv-heart/bin/python tools/heart-monitor/replay.py path/to/capture.csv --speed 1
+.venv-heart/bin/python tools/heart-monitor/replay.py path/to/capture.csv --speed 0 --output build/temp/replay-results.csv
+```
+
+`--speed 1` uses nominal sample timing for wall-clock playback; `0` runs as fast
+as possible. The CLI prints state/rate updates, estimation method, quality flags,
+latest interval, and pulse transitions. Optional output includes tentative beat
+events, nominal beat timestamps, rejected-interval counts, red-channel rate,
+window support and timing, and host processing time. Host timings do not establish
+ESP32 execution time. Output contains per-sample results, not raw capture data, and cannot overwrite
+the source recording. The input is read-only. Interrupted acquisition is rejected
+because stored nominal times cannot locate unknown sample gaps. The runner is
+rebuilt into ignored `build/temp/heart-replay` when the shared C++ sources change.
+The recorder task and local replay supply both channels to the same estimator
+core, including the optional red-channel cross-check. Live estimates still
+require hardware validation. Raw red/IR CSV
+retention and export are unchanged. PC plots render when replay finishes; use the CLI for
+updates during paced playback. The notebook defaults to accelerated playback.
+
+### On-Device Session Reports
+
+New heart recordings save an unchanged `heart_capture_v1` CSV beside a
+`heart_session_v1` JSON report on SD. Their `capture-XXXXXXXX` basename is the
+session ID. The report has `schema_version: 1` and `export_complete: true` only
+after successful serialization. JSON is published last; a CSV without matching
+completed JSON is not a completed report pair. Existing raw-only recordings
+remain usable with the notebook and replay CLI; these tools do not yet plot the
+new JSON report or provide a recovery dashboard.
+
+| Field | Meaning |
+| --- | --- |
+| `session` | ID, CSV filename/bytes/IEEE CRC32, firmware/board, uptime and optional Unix start time, nominal and host duration, sample count, stop reason, completeness |
+| `acquisition` | Sensor identity/preset, stored-index and FIFO-poll time bases, maximum poll gap, FIFO/ambient overflow diagnostics, warnings; unknown lost samples are `null` |
+| `estimator` | Algorithm version and settings, waveform filter description, named quality-bit definitions, versioned report reliability policy |
+| `summary` | Nominal-duration-weighted usable/reliable coverage, first reading indices, longest reliable segment, mean/median/min/max when sufficient reliable data exists |
+| `readings` | Initial/final observations, estimate updates and immediate invalidations; accepted/candidate/peak/red BPM, state, method, flags, reliability, correlation, dispersion, RMS, support window, beat/rejection counts |
+| `beats` | Every retained detected peak with its nominal sample index, detection index, IBI, interval validity/rejection reason, and report reliability at detection |
+| `events` | Recording start/stop and immediate quality changes at exact stored sample indices |
+| `waveform.filtered_ir_counts` | One exact on-device filtered IR value per raw sample, or `null` when unavailable; `start_sample_index: 0`, `step_samples: 1` |
+
+Join observations to the CSV by `sample_index`, not `read_elapsed_us`. Readings
+describe the estimator state from that index until the next observation; do not
+interpolate BPM through invalid intervals. Supporting windows use
+`[window_start_index, window_end_index_exclusive)`. Beat detection can occur after
+the peak, so `detected_at_sample_index` is distinct from the peak's `sample_index`.
+Rejected too-short detector candidates are represented by the cumulative
+`rejected_intervals` counter, not fabricated beat records.
+
+The `heart_reliable_v1` policy requires a complete capture, usable accepted BPM
+in 30-180, ten-second support, correlation at least 0.65, period distinctness at
+least 0.15, and red-rate agreement within 15%. Peak estimates also require
+interval dispersion at most 0.15. Strong autocorrelation fallback can remain
+reliable despite unstable tentative peak intervals. The policy records its
+excluded quality-bit mask. Aggregate BPM is `null` unless at least ten seconds
+pass this policy; interrupted capture summaries remain unavailable. This is a
+heuristic report classification, not a change to the estimator or calibrated
+medical confidence. No HRV, stress, SpO2, or rhythm diagnosis is produced.
+
+`session.exercise_stop_sample_index` is currently `null` and
+`session.annotations` is empty. They reserve space for future manual exercise
+markers and annotations; the device does not currently record those inputs.
+
 ## tools/portal-dev-server.py
 
 **Purpose:** Run the production portal UI locally without a device or firmware

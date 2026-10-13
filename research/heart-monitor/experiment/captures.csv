@@ -1,0 +1,8 @@
+capture,samples,duration_s,detected_events_after_startup,usable_fraction,states
+capture-0b46e1b2,14781,147.81,58,0.013530884243285298,"{""weak_signal"": 11755, ""measuring"": 2826, ""usable"": 200}"
+capture-657132c2,11107,111.07,86,0.38714324299991,"{""weak_signal"": 5478, ""usable"": 4300, ""measuring"": 1329}"
+capture-924206bf,4304,43.04,33,0.700046468401487,"{""usable"": 3013, ""measuring"": 1287, ""weak_signal"": 4}"
+capture-9dfa25ea,8874,88.74,65,0.5882352941176471,"{""usable"": 5220, ""measuring"": 2592, ""weak_signal"": 1062}"
+capture-bbd2ea9d,5538,55.38,41,0.7668833513903937,"{""usable"": 4247, ""measuring"": 1287, ""weak_signal"": 4}"
+capture-d9f205e7,4168,41.68,21,0.0,"{""weak_signal"": 2881, ""measuring"": 1287}"
+capture-f08e5091,5136,51.36,28,0.0,"{""weak_signal"": 3849, ""measuring"": 1287}"

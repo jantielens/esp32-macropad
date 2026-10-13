@@ -766,6 +766,28 @@ compile none of it.
   (unlike `print_control`, which only stars the most recent print). *(authoring)*
 - `set_relay_config` — create or replace the relay action configuration. *(authoring)*
 
+### Heart Monitor Raw Recording Spike
+
+`jc4880p433-heart` exposes the `heart` action and its start/stop/retry_save/discard
+commands through the shared action catalog for pad authoring. The generated
+binding manifest documents `[heart:state]`, `[heart:elapsed_s]`,
+`[heart:samples]`, `[heart:error]`, `[heart:filename]`, `[heart:unsaved]`,
+`[heart:bpm]`, `[heart:quality]`, `[heart:pulse]`, and `[heart:waveform]`.
+No dedicated Heart Monitor MCP control tool or automatic health-data publishing
+is added. The portal's **Sensors > Heart Sessions** view and authenticated
+HTTP API expose catalog summaries (`GET /api/heart/sessions`), selected JSON
+reports (`GET /api/heart/sessions/{id}`), and paired raw CSVs
+(`GET /api/heart/sessions/{id}/raw.csv`). The generic Storage HTTP component
+remains available, as in the
+[user workflow](web-portal-guide.md#heart-monitor-raw-recordings). This is a
+hobby acquisition and pulse-rate spike, not a medical device. Live rates use
+causal IR processing with a red-channel cross-check; unresolved harmonic
+ambiguity is rejected. Autocorrelation fallback does not produce pulse flashes.
+There are no SpO2 or AFib estimates, and quality is not clinical confidence.
+The experimental pulse-variability plots are not clinical HRV metrics and do
+not infer stress, readiness, or recovery scores. Report notes remain in the
+browser and are not published through MCP.
+
 > **Note:** Feature-rich device classes (Shutter Tester, Coffee Scale, Darkroom
 > Timer) **require PSRAM** — a deliberate policy, enforced at compile time by a
 > `#error` guard in `board_config.h`. Their scratch buffers (here: the print-log

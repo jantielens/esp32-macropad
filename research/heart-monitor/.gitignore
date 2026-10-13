@@ -1,0 +1,8 @@
+!*.log
+experiment/reference-input-*.mat
+experiment/reference-output-*.mat
+experiment/af-native-unit-*.mat
+experiment/af-converted-model-*.txt
+s1/probe
+s1/replay-baseline
+s1/replay-candidate

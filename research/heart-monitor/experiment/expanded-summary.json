@@ -1,0 +1,140 @@
+{
+  "subjects_available": 35,
+  "blocks_requested_per_subject": 10,
+  "possible_blocks": 350,
+  "evaluated_blocks": 314,
+  "block_seconds": 120,
+  "scored_seconds_per_block": 86,
+  "subject_equal_weighted_summary": [
+    {
+      "method": "exact-msptdfast-v2",
+      "label_af": 0,
+      "proxy_f1": 0.9479095659895459,
+      "timing_mae_ms": 26.907047963357563
+    },
+    {
+      "method": "exact-msptdfast-v2",
+      "label_af": 1,
+      "proxy_f1": 0.9388575573139629,
+      "timing_mae_ms": 21.130565700893523
+    },
+    {
+      "method": "exact-qppgfast",
+      "label_af": 0,
+      "proxy_f1": 0.9507327035916066,
+      "timing_mae_ms": 26.24635839853913
+    },
+    {
+      "method": "exact-qppgfast",
+      "label_af": 1,
+      "proxy_f1": 0.9442306556130232,
+      "timing_mae_ms": 21.03785591798816
+    },
+    {
+      "method": "neurokit-msptdfast-v2",
+      "label_af": 0,
+      "proxy_f1": 0.9525809246466626,
+      "timing_mae_ms": 26.6549305819856
+    },
+    {
+      "method": "neurokit-msptdfast-v2",
+      "label_af": 1,
+      "proxy_f1": 0.9418816275790467,
+      "timing_mae_ms": 20.99867397742576
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "label_af": 0,
+      "proxy_f1": 0.9325412693737387,
+      "timing_mae_ms": 26.29662842930737
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "label_af": 1,
+      "proxy_f1": 0.8284132164996999,
+      "timing_mae_ms": 21.47932153951576
+    }
+  ],
+  "beat_totals": [
+    {
+      "method": "exact-msptdfast-v2",
+      "label_af": 0,
+      "reference_beats": 16350,
+      "detected_beats": 16864,
+      "matched_beats": 15972,
+      "missed_beats": 378,
+      "false_extra_beats": 892
+    },
+    {
+      "method": "exact-msptdfast-v2",
+      "label_af": 1,
+      "reference_beats": 23606,
+      "detected_beats": 22193,
+      "matched_beats": 21410,
+      "missed_beats": 2196,
+      "false_extra_beats": 783
+    },
+    {
+      "method": "exact-qppgfast",
+      "label_af": 0,
+      "reference_beats": 16350,
+      "detected_beats": 16906,
+      "matched_beats": 15970,
+      "missed_beats": 380,
+      "false_extra_beats": 936
+    },
+    {
+      "method": "exact-qppgfast",
+      "label_af": 1,
+      "reference_beats": 23606,
+      "detected_beats": 22133,
+      "matched_beats": 21470,
+      "missed_beats": 2136,
+      "false_extra_beats": 663
+    },
+    {
+      "method": "neurokit-msptdfast-v2",
+      "label_af": 0,
+      "reference_beats": 16350,
+      "detected_beats": 16708,
+      "matched_beats": 15975,
+      "missed_beats": 375,
+      "false_extra_beats": 733
+    },
+    {
+      "method": "neurokit-msptdfast-v2",
+      "label_af": 1,
+      "reference_beats": 23606,
+      "detected_beats": 21994,
+      "matched_beats": 21378,
+      "missed_beats": 2228,
+      "false_extra_beats": 616
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "label_af": 0,
+      "reference_beats": 16350,
+      "detected_beats": 15765,
+      "matched_beats": 15315,
+      "missed_beats": 1035,
+      "false_extra_beats": 450
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "label_af": 1,
+      "reference_beats": 23606,
+      "detected_beats": 17082,
+      "matched_beats": 16644,
+      "missed_beats": 6962,
+      "false_extra_beats": 438
+    }
+  ],
+  "interval_input": "milliseconds as sample counts at fs=1000; first up to 60 intervals per 30-second window",
+  "limitations": [
+    "Automatic ECG references; no independent adjudication",
+    "Subject AF labels, not segment-by-segment verified labels",
+    "Production input normalized and duplicated red/IR",
+    "No motion/ectopy-labelled external dataset",
+    "Original qppgfast helper is GPL; AFEv has a patent notice"
+  ]
+}

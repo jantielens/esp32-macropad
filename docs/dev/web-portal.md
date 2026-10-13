@@ -54,6 +54,23 @@ The web portal provides:
 - Optional HTTP Basic Authentication (Full Mode only)
 - Responsive web interface (desktop & mobile)
 
+The experimental `IS_HEART_MONITOR` class uses the existing Pad editor action
+catalog and Binding reference for its `heart` action and scheme. Its
+**Sensors > Heart Sessions** fragment provides a catalog-backed list and
+interactive reports with linked charts, pulse-variability replay, paired
+downloads, browser-local notes, and printing. Chart.js 4.4.8 and the fragment's
+CSS/JavaScript are device-served and gated by `IS_HEART_MONITOR`. Raw CSV and
+JSON exports remain accessible through the generic Storage component on the
+SD storage inherited from `jc4880p433-sd`. See the
+[recording workflow](../web-portal-guide.md#heart-monitor-raw-recordings).
+
+Heart session exports identify the detector as `heart_bpm_v2`. It uses
+dominant downward filtered-IR excursions with adaptive RMS thresholds;
+markers use the detected trough's sample index, not its one-sample-later
+confirmation time. Waveform polarity and the `heart_reliable_v1` policy are
+unchanged. Reports display stored observations without reprocessing older
+sessions, and rate reliability does not establish individual interval validity.
+
 ### Remote Logs
 
 `HAS_REMOTE_LOG` defaults to `false`. Board overrides enable it for all
@@ -2525,10 +2542,51 @@ MJPEG client slot.
 
 ---
 
+### Heart Session API
+
+Available only for `IS_HEART_MONITOR`, with the normal portal authentication
+gate. Session IDs are exactly eight lowercase hexadecimal characters.
+
+| Method | Endpoint | Contract |
+|--------|----------|----------|
+| GET | `/api/heart/sessions` | Cached `entries` plus `import.active`, `scanned`, `added`, and `failed` counters |
+| GET | `/api/heart/sessions/{id}` | Stream the selected `heart_session_v1` JSON report |
+| GET | `/api/heart/sessions/{id}/raw.csv` | Stream its paired `heart_capture_v1` CSV |
+| POST | `/api/heart/sessions/import` | Request an incremental rescan; 202 accepted or 409 busy |
+| DELETE | `/api/heart/sessions/{id}` | Remove JSON, CSV, metadata, and index entry; 200 success or 500 cleanup failure |
+
+`heart_catalog.cpp` reuses `FsIndexedStore` from Shutter Tester. Compact
+top-level metadata records live in `/storage/heart/catalog/{id}.json` with a
+cached `/storage/heart/catalog/_index.json`. List requests do not parse full
+captures. A missing/corrupt manifest rebuild reads only these small records.
+Saving marks the durable import version dirty before publishing a verified
+pair, then adds its catalog record. The recorder's idle worker imports unknown
+legacy pairs one at a time; already indexed reports are skipped. `.part` files,
+incomplete JSON exports, and missing or size-mismatched CSV partners are not
+indexed. Failed imports are counted and can be retried through Rescan captures.
+
+Metadata parsing uses a filtered, yielding reader and stops at OTA checkpoints.
+Imports pause during recording, retained unsaved captures, or OTA. Rescan and
+delete return 409 while capture/OTA is busy; catalog reads return 503 during
+OTA or when unavailable. Partial deletion preserves the catalog entry for
+retry. Do not modify catalog files through generic Storage controls; use the
+session delete route to keep paired files and metadata consistent.
+
+The browser fetches JSON and CSV only for the selected report, validates sample
+alignment, byte count, and CRC32, and never re-estimates the signal. Leaving
+the report aborts requests, stops replay, and destroys its charts. Pulse pairs
+require adjacent, aligned, detector-bounded intervals and continuous recorded
+waveform; rejected intervals never reconnect. These plots do not establish
+clinical HRV, stress, or readiness. Notes use browser local storage, not SD.
+
 ### Storage API
 
 The Storage page and feature-specific file views use the generic component API.
 All endpoints require portal authentication when HTTP Basic Auth is enabled.
+The browser sorts folders before files, then newest modification first by
+default, with a name sort option and alphabetical timestamp fallback. Its
+per-file delete buttons require confirmation and refresh usage and open folders
+after success; errors preserve the file rows.
 
 #### `GET /api/component/storage/status`
 
@@ -2589,6 +2647,9 @@ root (`/`) cannot be deleted. Returns `404` for a missing path and
 `{"success":true}` after a successful deletion. The Camera **Snapshots** view
 uses this endpoint for individual images, a dated camera-roll folder, and the
 latest snapshot copy.
+
+The Storage view also uses this endpoint for confirmed individual-file deletion.
+It does not offer recursive folder deletion.
 
 ---
 

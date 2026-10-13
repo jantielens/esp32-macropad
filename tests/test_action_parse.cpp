@@ -17,6 +17,11 @@
 #include "action_catalog.h"
 #include <string>
 
+#if IS_HEART_MONITOR
+#include "device_classes/heart_monitor/heart_recorder.h"
+bool heart_recorder_command(heart_monitor::Command) { return false; }
+#endif
+
 ActionResult action_dispatch(const ButtonAction&, const char*, uint32_t) {
     return ACTION_COMPLETE;
 }
@@ -867,6 +872,23 @@ TEST(catalog_feature_gates_and_metadata_parity) {
     ASSERT_TRUE(portal_json == mcp_json);
 }
 
+#if IS_HEART_MONITOR
+TEST(heart_action_commands_round_trip) {
+    const ActionTypeDef* type = action_type_find("heart");
+    ASSERT_TRUE(type != nullptr);
+    for (const char* command : {"start", "stop", "retry_save", "discard"}) {
+        char json[100];
+        snprintf(json, sizeof(json), "{\"type\":\"heart\",\"command\":\"%s\"}", command);
+        ButtonAction action = round_trip(json);
+        ASSERT_STR(action.type, "heart");
+        JsonDocument doc;
+        action_to_json(action, doc.to<JsonObject>());
+        ASSERT_STR(doc["command"].as<const char*>(), command);
+        ASSERT_TRUE(action_type_validate(type, doc.as<JsonObjectConst>()) == nullptr);
+    }
+}
+#endif
+
 int main(int argc, char** argv) {
     if (argc == 2 && !strcmp(argv[1], "--catalog")) {
         JsonDocument catalogs;
@@ -882,6 +904,9 @@ int main(int argc, char** argv) {
     printf("--- Empty / minimal ---\n");
     RUN(registered_identifiers_survive_storage);
     RUN(catalog_feature_gates_and_metadata_parity);
+#if IS_HEART_MONITOR
+    RUN(heart_action_commands_round_trip);
+#endif
     RUN(empty_json);
     RUN(empty_to_json_produces_empty_object);
     RUN(action_list_filters_literal_none_for_pad_callers);

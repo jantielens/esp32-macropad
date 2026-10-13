@@ -1,0 +1,44 @@
+p000946 AF 10/10 complete blocks
+p075796 AF 10/10 complete blocks
+p022954 AF 10/10 complete blocks
+p025117 AF 10/10 complete blocks
+p026377 AF 2/10 complete blocks
+p043613 AF 4/10 complete blocks
+p050089 AF 6/10 complete blocks
+p063039 AF 10/10 complete blocks
+p068956 AF 10/10 complete blocks
+p069339 AF 10/10 complete blocks
+p075371 AF 10/10 complete blocks
+p077729 AF 10/10 complete blocks
+p087275 AF 10/10 complete blocks
+p079998 AF 10/10 complete blocks
+p081349 AF 10/10 complete blocks
+p085866 AF 10/10 complete blocks
+p089565 AF 9/10 complete blocks
+p092846 AF 10/10 complete blocks
+p094847 AF 10/10 complete blocks
+p004829 non-AF 10/10 complete blocks
+p013072 non-AF 10/10 complete blocks
+p015852 non-AF 10/10 complete blocks
+p016684 non-AF 10/10 complete blocks
+p019608 non-AF 10/10 complete blocks
+p023824 non-AF 9/10 complete blocks
+p026964 non-AF 10/10 complete blocks
+p029512 non-AF 6/10 complete blocks
+p050384 non-AF 10/10 complete blocks
+p055204 non-AF 10/10 complete blocks
+p058932 non-AF 8/10 complete blocks
+p062160 no complete blocks
+p063628 non-AF 10/10 complete blocks
+p087675 non-AF 10/10 complete blocks
+p092289 non-AF 10/10 complete blocks
+p097547 non-AF 10/10 complete blocks
+               method  label_af  proxy_f1  timing_mae_ms
+   exact-msptdfast-v2         0  0.947910      26.907048
+   exact-msptdfast-v2         1  0.938858      21.130566
+       exact-qppgfast         0  0.950733      26.246358
+       exact-qppgfast         1  0.944231      21.037856
+neurokit-msptdfast-v2         0  0.952581      26.654931
+neurokit-msptdfast-v2         1  0.941882      20.998674
+  v2-normalized-proxy         0  0.932541      26.296628
+  v2-normalized-proxy         1  0.828413      21.479322

@@ -1,0 +1,93 @@
+{
+  "purpose": "experimental, nonclinical; no firmware changes",
+  "neurokit_version": "0.2.13",
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "source_sha256": {
+    "src/app/device_classes/heart_monitor/heart_bpm.cpp": "743ab257ccf4aad4e5921329cadfebb70df0d4466149a9df13458895396c62f7",
+    "research/heart-monitor/experiment/spo2_algorithm.cpp": "4c169fd0f94d4beea2647a57a6647960cc848062ed517af2e9466719de628c65",
+    "research/heart-monitor/experiment/spo2_algorithm.h": "f8bca65d9d65dc83cfe05e752bf43a2608df317d2968cd733dc3fe340e3e08b7",
+    "research/heart-monitor/experiment/algorithm_by_RF.cpp": "72ba4792c2062d7366b611c5ae49a9507dc86b1f0817fc81ecc38090b3a8feb4",
+    "research/heart-monitor/experiment/algorithm_by_RF.h": "f6c80be33ce6569966336ba2ccb681c79224de4cc75fa0615467f4f25c35070b"
+  },
+  "capture_sha256": {
+    "research/heart-monitor/s1/capture-0b46e1b2.csv": "662bc2b373f112421b59ddfba165f8f2e53bc43bf8832f66b6acf34907c22c44",
+    "research/heart-monitor/s1/capture-657132c2.csv": "584851f1a6be6dec69195e8fb2656d330f9c57cef7d96ea8d9b1ed98f206123d",
+    "research/heart-monitor/s1/capture-924206bf.csv": "7fe93fcb1c223e48a28429fbd427704c4269cad8c7b80e6f95e01ad9453f1d8b",
+    "research/heart-monitor/s1/capture-9dfa25ea.csv": "67c7eeb04898d4e2b51c017d7a549f327f3e77a396225f4059cae6be2e645c78",
+    "research/heart-monitor/s1/capture-bbd2ea9d.csv": "6cfacc0a5d82a27c8201606e03a7690ab9eb23ae7b9e8e06ab13f188de20270a",
+    "research/heart-monitor/s1/capture-d9f205e7.csv": "8c79560049ada5c49ad847c55cce5123c3c940a72a068fb320786013a2c6a5a2",
+    "research/heart-monitor/s1/capture-f08e5091.csv": "eabae6976d177701c2da865efba9210a3f8c69e20c5aca989f9172a181ad0056"
+  },
+  "settings": {
+    "startup_excluded_s": 2,
+    "ratio_windows_s": 4,
+    "spo2_resampling": "100 to 25 Hz scipy resample_poly, rounded counts",
+    "msptd": "NeuroKit charlton2025, IR negated, zero-phase 0.67-8 Hz",
+    "msptd_filter_control": "same detector on negated production replay waveform",
+    "rhythm_windows_s": 30,
+    "rhythm_regularization_gate": false
+  },
+  "limitations": [
+    "Unlabelled captures cannot establish sensitivity or beat accuracy",
+    "SpO2 polynomial is uncalibrated for these optics",
+    "Rhythm features are not AF predictions",
+    "NeuroKit differs from original MATLAB refinement timing"
+  ],
+  "source_urls": {
+    "maxim": "https://github.com/sparkfun/SparkFun_MAX3010x_Sensor_Library/tree/master/src",
+    "rf": "https://github.com/aromring/MAX30102_by_RF",
+    "msptd_python": "https://github.com/neuropsychology/NeuroKit/blob/master/neurokit2/ppg/ppg_findpeaks.py",
+    "msptd_matlab": "https://github.com/peterhcharlton/ppg-beats/blob/main/source/msptdfastv2_beat_detector.m",
+    "dataset": "https://zenodo.org/records/6807403",
+    "exact_ppg_references": "https://github.com/peterhcharlton/ppg-beats/tree/main/source",
+    "published_af_features_and_models": "https://github.com/cliffordlab/PhysioNet-Cardiovascular-Signal-Toolbox/tree/master/Tools/ECG_Analysis_Tools"
+  },
+  "installed_msptd_source_sha256": "b23b307c0082ef4b447368927ae2aa256dfab1f29de7a82083571245dfb1f77b",
+  "dataset_md5": {
+    "mimic_perform_af_wfdb.zip": "4bafa5bbb74848e9a9f32028df7e26b1",
+    "mimic_perform_non_af_wfdb.zip": "a80b8869dbd921a40ad445c1bc090e27"
+  },
+  "script_sha256": {
+    "run.py": "99242a935dad157cb76d35f35bb0fce3f1523a67a7129fb906aa3a3deae0d7aa",
+    "public_pilot.py": "1ee22308277cce65d5c8393441e353b2ed7a7fe94afb162564fc3e70dc47a3d6",
+    "report.py": "cac2d1614fbb1b338c0f142bae26ce75cf2d52024b4612a52a9884d314c08d20",
+    "spo2_runner.cpp": "242855057b374dc4f77110c71ab31af5b2cd6aa0c4d0a7bb4f0aee4f6d5b8d83",
+    "Arduino.h": "c2b8f0f2bf7ea871c9cc27d032b580d186be66133736c3ec679617ddb2552db5"
+  },
+  "continuation_sha256": {
+    "ReGet_min_numerator.m": "b7e537192506b587a758bbbe8bfbc2d6e61aada5110cb385a6a5d68039ce5c31",
+    "reference_runner.m": "661ed809007a264de9814ba21c0fde844493b67f564933223678ea3c840c7df9",
+    "ReGet_min_numerator2.m": "fae3823822caeb12dc2c8c042ed23550afcaa339eb174961b3aa0e1804a248fa",
+    "metrics.m": "6f619d169830e5af61cccd4e46067d191796a7e33e6a6738ab4b45deac194963",
+    "pulse_peaks_from_onsets.m": "432865f1777058c235a7d2be8c7ee3e026419ab8fa19843217043bb728d0c165",
+    "tidy_beats.m": "600955a9979ffb50bf48f70030a6e395fafe1d983a2ab74b1a79931848e358b6",
+    "AF_features.m": "2ac6d97aacf9134937f740a0d372d2d5d5fc95342c424fe4734cc9ef18fb2e09",
+    "COSEn.m": "3da7b692e256776394956d05b70a3997fdfa02f99f0ded8a85f1cb78f04be7cd",
+    "BPcount.m": "4cade11b884295f2eb5c3cc51fd4b4204a7b31054173094f1af7332087b34739",
+    "comput_AFEv2.m": "2caf361f13de6a37a756685387fd28fa47f41877d20584e47dda77863ceda3dc",
+    "comput_MAD.m": "871be074c7bcbb14902d294c4944a5307d7470ff76a60964a8dea2b6fa6c4f25",
+    "af_feature_runner.m": "744965435968c5d640817ee641dc6793a85033b660afddbd66e37aefdae18d3d",
+    "msptdfastv2_beat_detector.m": "39f5010f1d485f2dc180bffbbe662dc9bd16e8116bd1ae630761f1e2b58bcabd",
+    "comp_dRR.m": "529feb3d03dff710d4c6451b6889e7c3bc62517f425b4d4af93fceb3f0000ad5",
+    "COFMEn.m": "dcbcc5728dbad86a2c6827e2cb0eaf55e1fb140142f1e2fc25bb83e9f4464477",
+    "qppgfast_beat_detector.m": "73148a852451a7a1b993c7fb69796b74842226b8ebc94fe7e2a1b6763a76471f",
+    "references.py": "f137e1b01dc18d90e388cc849de9a3bfc32fee986fe933263d56a86db4bc4157",
+    "expanded.py": "4b5caf454180b62ee8aa9b5163f50f18c756efa3571700141dba113a86504890",
+    "published_af.py": "f74afc398e5f1a2d4ca58995dbf0feed6a9dbf5c57c29904002b9d10bb8f501f",
+    "prepare_octave.py": "530254544979e3ece96691cbb1f556ce764aaa0f3297bd940fca3d9d3169c03e",
+    "af-models.mat": "095849e98f9c28d3e561ed9488d2d2b1dc8b67d5c73e7554be05716b158d64bd",
+    "af-means.mat": "abb95b55106359b7574b74e93f48b465a8b9a479ed512738b97dea100e00cf47",
+    "af-stds.mat": "bae7d6d9ec7a3cc73deb48cdf17b97c56efc70d9b9181309cfcd5657acd7f910",
+    "af-test_feature.txt": "bb37907f2de54b6dad849c65fc9997f4ace2767b8b51fb6a523a5fb47e983229",
+    "af-test_class.txt": "129e257aa4f8f227f78837c099cc7572a8222fd3d69e87620f8515e79df6fd60"
+  },
+  "reference_runtime": {
+    "octave": "11.1.0, private extracted packages; no system install",
+    "libsvm_official": "3.37.0"
+  },
+  "completed_references": [
+    "Original MSPTDfast v2",
+    "Original qppgfast",
+    "Original PhysioNet pretrained nine-model AF vote"
+  ]
+}

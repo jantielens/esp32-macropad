@@ -1,0 +1,20 @@
+{
+  "name": "Heart Monitor",
+  "layout": "grid",
+  "cols": 2,
+  "rows": 8,
+  "bg_color": "101820",
+  "buttons": [
+    {"col": 0, "row": 0, "col_span": 2, "label_top": "Raw red / IR", "label_center": "[heart:state]", "label_bottom": "[heart:elapsed_s] s | [heart:samples] samples", "label_center_style": "font_size:24;align:center"},
+    {"col": 0, "row": 1, "label_center": "Start", "bg_color": "166b64", "actions": [{"type": "heart", "command": "start"}]},
+    {"col": 1, "row": 1, "label_center": "Stop", "bg_color": "a3333d", "actions": [{"type": "heart", "command": "stop"}]},
+    {"col": 0, "row": 2, "label_center": "Retry Save", "actions": [{"type": "heart", "command": "retry_save"}]},
+    {"col": 1, "row": 2, "label_center": "Discard", "confirm": true, "confirm_text": "Discard the unsaved recording?", "actions": [{"type": "heart", "command": "discard"}]},
+    {"col": 0, "row": 3, "label_top": "BPM", "label_center": "[heart:bpm|--]", "label_bottom": "[heart:quality|idle]", "label_center_style": "font_size:24;align:center"},
+    {"col": 1, "row": 3, "label_bottom": "Pulse", "icon_id": "mi_favorite", "fg_color": "[expr:[heart:pulse] ? '#e5484d' : '#8e9bac']"},
+    {"col": 0, "row": 4, "col_span": 2, "label_top": "IR waveform", "widget_type": "sparkline", "widget_data_binding": "[heart:waveform]", "widget_sparkline_window": 10, "widget_sparkline_slots": 100, "widget_sparkline_smooth": 0, "widget_sparkline_line_color": "#35b8a6", "btn_state": "[expr:'[heart:state]' == 'recording' ? 'enabled' : 'hidden']"},
+    {"col": 0, "row": 5, "col_span": 2, "label_top": "Unsaved in PSRAM", "label_center": "[heart:unsaved]"},
+    {"col": 0, "row": 6, "col_span": 2, "label_top": "Latest error", "label_center": "[heart:error|None]", "label_center_style": "font_size:16;align:center"},
+    {"col": 0, "row": 7, "col_span": 2, "label_top": "Last exported file", "label_center": "[heart:filename|None]", "label_center_style": "font_size:14;align:center"}
+  ]
+}

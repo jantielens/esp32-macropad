@@ -27,6 +27,7 @@ enum class DeviceClass {
     COFFEE_SCALE,
     DARKROOM_TIMER,
     VOICE_ASSISTANT,
+    HEART_MONITOR,
 };
 
 struct DeviceClassDescriptor {

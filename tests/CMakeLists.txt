@@ -127,6 +127,12 @@ add_host_legacy_test(test_remote_log SOURCES test_remote_log.cpp)
 add_host_gtest(test_gamepad test_gamepad.cpp)
 add_host_gtest(test_web_portal_timing test_web_portal_timing.cpp)
 
+add_host_gtest(test_heart_capture test_heart_capture.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/heart_monitor/heart_capture.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/heart_monitor/heart_bpm.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_classes/heart_monitor/heart_report.cpp)
+target_include_directories(test_heart_capture PRIVATE ${HOST_ARDUINOJSON_DIR})
+
 enable_language(C)
 file(GLOB_RECURSE HOST_LVGL_SOURCES CONFIGURE_DEPENDS
     "${HOST_LVGL_DIR}/*.c" "${HOST_LVGL_DIR}/*.cpp")
@@ -440,8 +446,9 @@ set(ACTION_TEST_SOURCES
 
 add_host_legacy_test(test_action_parse
     SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/device_classes/heart_monitor/heart_actions.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
+    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 IS_HEART_MONITOR=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
@@ -639,6 +646,7 @@ add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_D
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)
 add_binding_schema_profile(darkroom "BINDING_SCHEMA_PROFILE_DARKROOM;HAS_FILESYSTEM=1" ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/meter.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/expose_timer.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/test_strip.cpp)
 add_binding_schema_profile(shutter BINDING_SCHEMA_PROFILE_SHUTTER ${PROJECT_SOURCE_DIR}/src/app/device_classes/shutter_tester/shutter_binding.cpp)
+add_binding_schema_profile(heart BINDING_SCHEMA_PROFILE_HEART ${PROJECT_SOURCE_DIR}/src/app/device_classes/heart_monitor/heart_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/heart_monitor/heart_capture.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/heart_monitor/heart_bpm.cpp)
 
 function(add_host_compile_check target source)
     add_library(${target} OBJECT ${source})

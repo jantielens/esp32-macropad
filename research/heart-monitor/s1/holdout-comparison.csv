@@ -1,0 +1,9 @@
+capture,kind,duration_s,detector,first_usable_s,first_reliable_s,usable_s,reliable_s,median_bpm,min_bpm,max_bpm,peak_method_s,stable_agreed_windows,evidence_windows
+d9f205e7,stationary,41.68,baseline,,,0.0,0.0,,,,0.0,0,0
+d9f205e7,stationary,41.68,candidate,,,0.0,0.0,,,,0.0,0,0
+bbd2ea9d,stationary,55.38,baseline,13.91,13.91,41.47,40.47,45.977013,44.630905,50.632912,18.47,20,43
+bbd2ea9d,stationary,55.38,candidate,12.91,12.91,42.47,42.47,45.977013,44.776119,48.0,42.47,43,43
+924206bf,stationary,43.04,baseline,12.91,12.91,30.13,29.13,47.244095,45.977013,48.780487,20.0,20,31
+924206bf,stationary,43.04,candidate,12.91,12.91,30.13,30.13,46.692608,46.153847,48.780487,30.13,31,31
+9dfa25ea,disturbance,88.74,baseline,12.91,20.91,52.2,34.2,48.659611,42.857143,52.173912,28.0,28,53
+9dfa25ea,disturbance,88.74,candidate,13.91,20.91,52.2,34.2,48.397255,45.112782,50.42017,49.2,49,53

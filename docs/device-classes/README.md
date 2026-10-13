@@ -15,6 +15,7 @@ The ESP32 Macropad firmware compiles for multiple hardware classes from a single
 | `shutter_tester` | `ESP32-MP Shutter Tester` | `jc4880p433-shutter`                                      | Specialized capture rig measuring camera shutter speeds via an ADC sensor array. See [shutter-tester/](shutter-tester/README.md). |
 | `coffee_scale`   | `ESP32-MP Coffee Scale`   | `jc4880p433-nau7802`, `jc4880p433-hx711`                  | Connected espresso / pour-over scale with a stage-based brew engine and weight logging. See [coffee-scale/](coffee-scale/README.md). |
 | `darkroom_timer` | `ESP32-MP Darkroom Timer` | `jc4880p433-darkroom`                                     | Enlarger exposure timer with f-stop test strips, light metering, relay control, and a print session log. See [darkroom-timer/](darkroom-timer/README.md). |
+| `heart_monitor` | `ESP32-MP Heart Monitor` | `jc4880p433-heart` | MAX30101 red/IR capture, SD-card CSV/JSON export, catalog-backed interactive session reports, experimental pulse variability and live BPM/quality/pulse/waveform bindings. Inherits `jc4880p433-sd`. No SpO2 or clinical HRV; hardware validation pending. |
 
 ## How class detection works
 
@@ -25,10 +26,11 @@ flowchart TD
     Flags -->|IS_COFFEE_SCALE| Coffee[coffee_scale]
     Flags -->|IS_DARKROOM_TIMER| Darkroom[darkroom_timer]
     Flags -->|IS_VOICE_ASSISTANT| Voice[voice_assistant]
+    Flags -->|IS_HEART_MONITOR| Heart[heart_monitor]
     Flags -->|IS_EPAPER_FRAME| EPaperFrame[epaper_frame]
     Flags -->|!HAS_DISPLAY| Headless[headless]
     Flags -->|else| Macropad[macropad]
-    Shutter & Coffee & Darkroom & Voice & EPaperFrame & Macropad & Headless --> Reg[device_class_registry.cpp DESCRIPTORS]
+    Shutter & Coffee & Darkroom & Voice & Heart & EPaperFrame & Macropad & Headless --> Reg[device_class_registry.cpp DESCRIPTORS]
     Reg --> Brand[Branding, default device name, AP SSID, HA mdl, web portal title]
 ```
 
@@ -36,6 +38,7 @@ The single source of truth is `device_class_detect()` and the `DESCRIPTORS[]` ta
 
 ## Per-class documentation
 
+- [Heart Monitor raw recordings](../web-portal-guide.md#heart-monitor-raw-recordings)
 - [shutter-tester/](shutter-tester/README.md) — Shutter Tester device class
 - [coffee-scale/](coffee-scale/README.md) — Coffee Scale device class
 - [darkroom-timer/](darkroom-timer/README.md) — Darkroom Timer device class

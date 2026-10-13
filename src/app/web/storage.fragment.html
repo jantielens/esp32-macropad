@@ -24,7 +24,16 @@
 </div>
 
 <div class="card storage-browser-card">
-  <div class="card-header"><h5 class="mb-0">Files</h5></div>
+  <div class="card-header d-flex align-items-center justify-content-between gap-2 flex-wrap">
+    <h5 class="mb-0">Files</h5>
+    <div class="d-flex align-items-center gap-2">
+      <label for="storage-sort" class="small text-muted">Sort</label>
+      <select id="storage-sort" class="form-select form-select-sm w-auto" aria-label="Sort files">
+        <option value="modified">Modified (newest first)</option>
+        <option value="name">Name (A-Z)</option>
+      </select>
+    </div>
+  </div>
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover mb-0">

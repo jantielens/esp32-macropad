@@ -18,6 +18,12 @@
 #include <cstdio>
 #include <cstring>
 
+#if IS_HEART_MONITOR
+#include "device_classes/heart_monitor/heart_recorder.h"
+heart_monitor::Snapshot binding_test_heart;
+heart_monitor::Snapshot heart_recorder_snapshot() { return binding_test_heart; }
+#endif
+
 unsigned long millis() { return 10000; }
 
 static const SensorField kFixtureSensorFields[] = {

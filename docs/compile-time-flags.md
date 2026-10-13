@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 357
+Total flags: 361
 
 ### Features (HAS_*)
 
@@ -99,6 +99,8 @@ Total flags: 357
 - **EPAPER_RESET_PIN** default: `(no default)` — E-paper reset GPIO, active LOW.
 - **EPAPER_SPI_MOSI_PIN** default: `(no default)` — E-paper SPI data-output GPIO.
 - **EPAPER_SPI_SCK_PIN** default: `(no default)` — E-paper SPI clock GPIO.
+- **HEART_I2C_SCL** default: `(no default)` — MAX30101 secondary-bus clock pin.
+- **HEART_I2C_SDA** default: `(no default)` — MAX30101 secondary-bus data pin, separate from touch and audio.
 - **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
@@ -164,6 +166,7 @@ Total flags: 357
 - **EPAPER_REFRESH_INTERVAL_MIN_MS** default: `250` — Minimum permitted physical e-paper presentation interval.
 - **HEALTH_HISTORY_PERIOD_MS** default: `5000` — Sampling cadence for the device-side history (ms). Default aligns with UI poll.
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS** default: `200` — higher value to avoid DMA bus contention.
+- **HEART_I2C_FREQUENCY** default: `(no default)` — MAX30101 secondary-bus clock frequency in Hz.
 - **HTTP_STREAM_CHUNK_SIZE** default: `(no default)` — failures (size ~2.3 KB requested vs ~1.6 KB largest free).
 - **ICON_MAX_DIMENSION** default: `(no default)` — Keep decoded ARGB icon buffers modest on the classic ESP32's 8 MB PSRAM.
 - **JD9165_DSI_DPI_CLK_HZ** default: `51200000L` — DPI pixel clock in Hz.
@@ -297,6 +300,7 @@ Total flags: 357
 - **IS_COFFEE_SCALE** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_DARKROOM_TIMER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_EPAPER_FRAME** default: `false` — Select the sleep-first E-Paper Frame product class.
+- **IS_HEART_MONITOR** default: `false` — Heart Monitor product variant with PSRAM-backed optical signal recording.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_VOICE_ASSISTANT** default: `false` — transcription, voice actions, transcript bindings, and portal controls.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
@@ -417,6 +421,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ✅ |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| jc4880p433-heart | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ | ? |  |
 | jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ? | ✅ | ? |  |
@@ -448,6 +453,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | esp32-p4-lcd4b-voice | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-sd | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
+| jc4880p433-heart | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-hx711 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
 | jc4880p433-nau7802 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
@@ -1518,6 +1524,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **HEALTH_WINDOW_SAMPLE_PERIOD_MS**
   - src/app/board_config.h
+- **HEART_I2C_FREQUENCY**
+  - src/app/device_classes/heart_monitor/heart_recorder.cpp
+- **HEART_I2C_SCL**
+  - src/app/device_classes/heart_monitor/heart_recorder.cpp
+- **HEART_I2C_SDA**
+  - src/app/device_classes/heart_monitor/heart_recorder.cpp
 - **HTTP_STREAM_CHUNK_SIZE**
   - src/app/web_portal_utils.h
 - **HW_BUTTON_DEFAULTS_JSON**
@@ -1626,6 +1638,17 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_manager.cpp
   - src/app/portal_components.cpp
   - src/app/time_service.cpp
+- **IS_HEART_MONITOR**
+  - src/app/board_config.h
+  - src/app/device_class_registry.cpp
+  - src/app/device_classes.cpp
+  - src/app/device_classes/heart_monitor/heart_actions.cpp
+  - src/app/device_classes/heart_monitor/heart_binding.cpp
+  - src/app/device_classes/heart_monitor/heart_monitor_device_class.cpp
+  - src/app/device_classes/heart_monitor/heart_recorder.cpp
+  - src/app/device_classes/heart_monitor/heart_recorder.h
+  - src/app/device_classes/heart_monitor/web/portal_heart_sessions.cpp
+  - src/app/route_components.cpp
 - **IS_SHUTTER_TESTER**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

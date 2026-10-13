@@ -39,6 +39,8 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+.venv-heart/
+.ipynb_checkpoints/
 
 # Repo-local sample workspace (not part of the template firmware)
 /sample/

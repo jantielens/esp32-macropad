@@ -1,0 +1,8 @@
+capture,v2_events,neurokit_msptdfast_v2_events,msptd_on_production_waveform_events,v2_near_reference_within_150ms,median_nearest_reference_ms,reference_median_interval_bpm,interpretation
+capture-0b46e1b2,55,134,101,38,50.00000000000426,64.5161290322576,detector agreement only; no labelled beats
+capture-657132c2,84,158,158,64,50.00000000000071,111.11111111111128,detector agreement only; no labelled beats
+capture-924206bf,31,29,31,23,80.00000000000007,46.15384615384619,detector agreement only; no labelled beats
+capture-9dfa25ea,64,67,67,48,49.99999999999716,47.80876494023908,detector agreement only; no labelled beats
+capture-bbd2ea9d,40,38,40,26,70.00000000000028,46.153846153846004,detector agreement only; no labelled beats
+capture-d9f205e7,21,32,38,11,60.000000000002274,50.42016806722684,detector agreement only; no labelled beats
+capture-f08e5091,28,69,38,18,84.99999999999997,98.36065573770415,detector agreement only; no labelled beats

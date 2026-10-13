@@ -1,0 +1,84 @@
+p000946: AF
+p004829: non-AF
+p075796: AF
+p013072: non-AF
+p022954: AF
+p015852: non-AF
+p025117: AF
+p016684: non-AF
+p019608: non-AF
+p026964: non-AF
+p063039: AF
+p068956: AF
+p050384: non-AF
+p069339: AF
+p055204: non-AF
+p075371: AF
+p058932: non-AF
+p077729: AF
+p087275: AF
+p063628: non-AF
+p079998: AF
+p087675: non-AF
+p081349: AF
+p092289: non-AF
+p085866: AF
+p097547: non-AF
+p089565: AF
+p092846: AF
+p094847: AF
+{
+  "subjects": 35,
+  "seconds_per_subject": 120,
+  "ecg_reference": "WFDB XQRS automatically detected; not manually verified",
+  "production_input": "125->100 Hz, inverted PPG scaled to std=1000 plus DC=100000; duplicated red/IR",
+  "classification": "exploratory logistic regression, NOT PhysioNet/Pulsewatch/SiamAF reference",
+  "admission": "finite/nonflat and >=12 detected beats only; not a validated motion SQI",
+  "missing_controls": "no segment-level ectopy/motion labels; no MAX30101 AF validation",
+  "beat_summary": [
+    {
+      "method": "neurokit-msptdfast-v2",
+      "label_af": 0,
+      "proxy_f1": 0.9304658753091011,
+      "timing_mae_ms": 29.01442446038195
+    },
+    {
+      "method": "neurokit-msptdfast-v2",
+      "label_af": 1,
+      "proxy_f1": 0.9415345087701632,
+      "timing_mae_ms": 19.672048841515142
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "label_af": 0,
+      "proxy_f1": 0.9134434596949692,
+      "timing_mae_ms": 25.639768500099006
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "label_af": 1,
+      "proxy_f1": 0.8306967391612375,
+      "timing_mae_ms": 23.06285969900688
+    }
+  ],
+  "neurokit-msptdfast-v2": {
+    "accepted_windows": 87,
+    "possible_windows": 105,
+    "coverage": 0.8285714285714286,
+    "exploratory_auc": 0.9588675213675214,
+    "sensitivity": 1.0,
+    "specificity": 0.9230769230769231,
+    "false_positive_windows": 3,
+    "non_af_positive_windows_per_hour": 9.23076923076923
+  },
+  "v2-normalized-proxy": {
+    "accepted_windows": 87,
+    "possible_windows": 105,
+    "coverage": 0.8285714285714286,
+    "exploratory_auc": 0.9230769230769231,
+    "sensitivity": 1.0,
+    "specificity": 0.8717948717948718,
+    "false_positive_windows": 5,
+    "non_af_positive_windows_per_hour": 15.384615384615383
+  }
+}

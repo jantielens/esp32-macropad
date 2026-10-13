@@ -1,0 +1,50 @@
+Generating LVGL PNG assets from assets/png...
+/home/jan/dev/esp32-macropad/tools/png2lvgl_assets.py:61: DeprecationWarning: Image.Image.getdata is deprecated and will be removed in Pillow 14 (2027-10-15). Use get_flattened_data instead.
+  pixels = list(img.getdata())
+✓ PNG assets: 1 file(s)
+  - logo.png -> img_logo (96x96) : 27648 bytes in firmware
+✓ PNG assets total: 27648 bytes in firmware
+✓ Wrote /home/jan/dev/esp32-macropad/src/app/png_assets.h
+✓ Wrote /home/jan/dev/esp32-macropad/src/app/png_assets.cpp
+
+[0;36m=== Building for jc4880p433-heart ===[0m
+Board:     jc4880p433-heart
+FQBN:      esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=default,CDCOnBoot=default
+Output:    /home/jan/dev/esp32-macropad/build/jc4880p433-heart
+Brand:     ESP32-MP Heart Monitor
+[1;33mConfig:    Using board-specific overrides from src/boards/jc4880p433-heart/[0m
+
+Compile-time flags summary
+Board: jc4880p433-heart
+Active features:
+  - HAS_AUDIO
+  - HAS_BACKLIGHT
+  - HAS_BLE_HID
+  - HAS_BUTTON
+  - HAS_CAMERA
+  - HAS_DISPLAY
+  - HAS_FILESYSTEM
+  - HAS_MCP
+  - HAS_MQTT
+  - HAS_MUSIC_ANALYSIS
+  - HAS_NATIVE_EXTENSIONS
+  - HAS_REMOTE_LOG
+  - HAS_SD_CARD
+  - HAS_TOUCH
+  - HAS_USB_HID
+Key selectors:
+  - DISPLAY_DRIVER: DISPLAY_DRIVER_ST7701_DSI
+  - TOUCH_DRIVER: TOUCH_DRIVER_GT911
+
+Sketch uses 3351414 bytes (51%) of program storage space. Maximum is 6553600 bytes.
+Global variables use 155760 bytes (47%) of dynamic memory, leaving 171920 bytes for local variables. Maximum is 327680 bytes.
+
+[0;32m✓ Build complete for jc4880p433-heart[0m
+-rw-r--r-- 1 jan jan 3.2M Oct 13 11:19 /home/jan/dev/esp32-macropad/build/jc4880p433-heart/app.ino.bin
+-rw-r--r-- 1 jan jan  21K Oct 13 11:19 /home/jan/dev/esp32-macropad/build/jc4880p433-heart/app.ino.bootloader.bin
+-rw-r--r-- 1 jan jan  16M Oct 13 11:19 /home/jan/dev/esp32-macropad/build/jc4880p433-heart/app.ino.merged.bin
+-rw-r--r-- 1 jan jan 3.0K Oct 13 11:19 /home/jan/dev/esp32-macropad/build/jc4880p433-heart/app.ino.partitions.bin
+-rw-r--r-- 1 jan jan 8.0K Oct 13 11:19 /home/jan/dev/esp32-macropad/build/jc4880p433-heart/boot_app0.bin
+
+Checking compile-time flags report...
+[0;32m✓ Compile-time flags report unchanged.[0m

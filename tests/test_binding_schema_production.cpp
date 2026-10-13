@@ -26,6 +26,9 @@
 #if IS_SHUTTER_TESTER
 #include "device_classes/shutter_tester/shutter_binding.h"
 #endif
+#if IS_HEART_MONITOR
+#include "device_classes/heart_monitor/heart_recorder.h"
+#endif
 
 static int g_failures = 0;
 
@@ -235,6 +238,9 @@ int main(int argc, char** argv) {
 #if IS_SHUTTER_TESTER
     shutter_binding_init();
 #endif
+#if IS_HEART_MONITOR
+    heart_binding_init();
+#endif
 
     if (argc > 1 && std::strcmp(argv[1], "--emit-json") == 0) {
         binding_schema_dump_json();
@@ -249,6 +255,45 @@ int main(int argc, char** argv) {
     expect(all_registered_finite_keys_are_recognized(),
            "every production finite key is not unknown to its real resolver");
     expect_structural_resolvers_are_invoked();
+#if IS_HEART_MONITOR
+    extern heart_monitor::Snapshot binding_test_heart;
+    char heart_value[128] = {};
+    auto resolve_heart = [&](const char* key) {
+        return binding_template_resolve_registered("heart", 5, key, heart_value, sizeof(heart_value));
+    };
+    expect(resolve_heart("error") == BINDING_RESOLVER_UNAVAILABLE, "empty heart error is unavailable");
+    expect(resolve_heart("filename") == BINDING_RESOLVER_UNAVAILABLE, "unsaved heart filename is unavailable");
+    expect(resolve_heart("pulse") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "0"), "idle heart pulse is off");
+    expect(resolve_heart("bpm") == BINDING_RESOLVER_UNAVAILABLE, "idle heart rate is unavailable");
+    expect(resolve_heart("quality") == BINDING_RESOLVER_UNAVAILABLE, "idle heart quality is unavailable");
+    expect(resolve_heart("waveform") == BINDING_RESOLVER_UNAVAILABLE, "idle heart waveform is unavailable");
+    binding_test_heart.state = heart_monitor::State::Recording;
+    binding_test_heart.elapsed_ms = 12500;
+    binding_test_heart.samples = 1250;
+    binding_test_heart.retained = true;
+    expect(resolve_heart("state") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "recording"), "heart recording state");
+    expect(resolve_heart("elapsed_s") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "12.5"), "heart elapsed seconds");
+    expect(resolve_heart("samples") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "1250"), "heart stored samples");
+    expect(resolve_heart("unsaved") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "true"), "heart retained data");
+    expect(resolve_heart("quality") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "measuring"), "heart warmup state");
+    expect(resolve_heart("bpm") == BINDING_RESOLVER_UNAVAILABLE, "heart warmup has no rate");
+    binding_test_heart.live.state = heart_monitor::BpmState::Usable;
+    binding_test_heart.live.bpm = 48.0f;
+    binding_test_heart.live.pulse = true;
+    binding_test_heart.live.waveform_valid = true;
+    binding_test_heart.live.waveform = -12.5f;
+    expect(resolve_heart("bpm") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "48"), "heart live rate");
+    expect(resolve_heart("quality") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "usable"), "heart usable signal");
+    expect(resolve_heart("pulse") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "1"), "heart detected peak is on");
+    expect(resolve_heart("waveform") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "-12.500"), "heart filtered waveform");
+    binding_test_heart.state = heart_monitor::State::Saved;
+    expect(resolve_heart("pulse") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "0"), "stopped heart pulse is off even with stale snapshot");
+    expect(resolve_heart("waveform") == BINDING_RESOLVER_UNAVAILABLE, "stopped heart waveform is unavailable");
+    snprintf(binding_test_heart.error, sizeof(binding_test_heart.error), "fifo_overflow");
+    snprintf(binding_test_heart.filename, sizeof(binding_test_heart.filename), "/storage/heart/capture-12345678.csv");
+    expect(resolve_heart("error") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, "fifo_overflow"), "heart error detail");
+    expect(resolve_heart("filename") == BINDING_RESOLVER_RESOLVED && !strcmp(heart_value, binding_test_heart.filename), "heart exported filename");
+#endif
 #if ALARM_ENABLED
     expect(scheme_is_registered("alarm"), "alarm registered when enabled");
     extern AlarmSnapshot binding_test_alarm;

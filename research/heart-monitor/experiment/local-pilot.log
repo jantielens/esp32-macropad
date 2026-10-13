@@ -1,0 +1,22 @@
+captures: 7 rows
+         capture  samples  duration_s  detected_events_after_startup  usable_fraction                                                   states
+capture-0b46e1b2    14781      147.81                             58         0.013531 {"weak_signal": 11755, "measuring": 2826, "usable": 200}
+capture-657132c2    11107      111.07                             86         0.387143 {"weak_signal": 5478, "usable": 4300, "measuring": 1329}
+capture-924206bf     4304       43.04                             33         0.700046    {"usable": 3013, "measuring": 1287, "weak_signal": 4}
+capture-9dfa25ea     8874       88.74                             65         0.588235 {"usable": 5220, "measuring": 2592, "weak_signal": 1062}
+capture-bbd2ea9d     5538       55.38                             41         0.766883    {"usable": 4247, "measuring": 1287, "weak_signal": 4}
+capture-d9f205e7     4168       41.68                             21         0.000000                 {"weak_signal": 2881, "measuring": 1287}
+capture-f08e5091     5136       51.36                             28         0.000000                 {"weak_signal": 3849, "measuring": 1287}
+ratios: 128 rows
+intervals: 325 rows
+rhythm: 13 rows
+spo2-references: 256 rows
+detector-comparison: 7 rows
+         capture  v2_events  neurokit_msptdfast_v2_events  msptd_on_production_waveform_events  v2_near_reference_within_150ms  median_nearest_reference_ms  reference_median_interval_bpm                             interpretation
+capture-0b46e1b2         55                           134                                  101                              38                         50.0                      64.516129 detector agreement only; no labelled beats
+capture-657132c2         84                           158                                  158                              64                         50.0                     111.111111 detector agreement only; no labelled beats
+capture-924206bf         31                            29                                   31                              23                         80.0                      46.153846 detector agreement only; no labelled beats
+capture-9dfa25ea         64                            67                                   67                              48                         50.0                      47.808765 detector agreement only; no labelled beats
+capture-bbd2ea9d         40                            38                                   40                              26                         70.0                      46.153846 detector agreement only; no labelled beats
+capture-d9f205e7         21                            32                                   38                              11                         60.0                      50.420168 detector agreement only; no labelled beats
+capture-f08e5091         28                            69                                   38                              18                         85.0                      98.360656 detector agreement only; no labelled beats

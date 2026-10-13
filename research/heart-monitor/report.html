@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Heart session report</title>
+  <link rel="stylesheet" href="report.css">
+  <script defer src="chart.umd.js"></script>
+  <script defer src="report.js"></script>
+</head>
+<body>
+  <header><a class="brand" href="report.html">Heart Monitor</a><span class="prototype">Local report study</span><button id="print" title="Print report or save as PDF">Print / PDF</button></header>
+  <main>
+    <div id="status" role="status">Loading session...</div>
+    <div id="report" hidden>
+      <section class="heading"><div><p class="eyebrow">SESSION REPORT</p><h1 id="session-title"></h1><p id="session-meta" class="muted"></p></div><div class="downloads"><a id="json-download" download>JSON</a><a id="csv-download" download>Raw CSV</a></div></section>
+      <div class="notice" id="verdict"></div>
+      <section class="metrics" id="metrics" aria-label="Session summary"></section>
+      <div class="session-controls" aria-label="Global chart controls">
+        <div class="section-title"><h2>Session range</h2><span id="range-label" class="mono"></span></div>
+        <div class="range-controls"><label>From <input id="range-start" type="number" min="0" step="0.1" value="0"> s</label><label>To <input id="range-end" type="number" min="0" step="0.1"> s</label><button id="apply-range">Apply range</button><button id="full-range" title="Reset to the entire session">Full session</button><button id="inspect-range">Inspect 10 s</button><label>Y scale <select id="scale-mode"><option value="typical">Typical (5–95%)</option><option value="full">All values</option></select></label></div>
+      </div>
+      <nav class="tabs" aria-label="Report views"><button data-view="overview" aria-selected="true">Overview</button><button data-view="signals" aria-selected="false">Signal Explorer</button><button data-view="variability" aria-selected="false">HRV / Pulse Variability</button><button data-view="quality" aria-selected="false">Quality & Events</button><button data-view="details" aria-selected="false">Capture Details</button></nav>
+      <section class="timeline">
+        <div class="section-title"><h2>Heart rate</h2></div>
+        <div class="legend"><span><i class="swatch reliable"></i>Reliable BPM</span><span><i class="swatch candidate"></i>Other estimates / weak signal</span><span><i class="swatch settling"></i>Measuring</span></div>
+        <div class="chart rate-chart"><canvas id="rate-chart" aria-label="Heart rate and reliability over time" role="img"></canvas></div>
+        <label class="cursor-control">Cursor <input id="cursor" type="range" min="0" step="0.01" value="0"><output id="cursor-time"></output></label>
+        <div id="inspector" class="inspector" aria-live="polite"></div>
+      </section>
+      <div data-panel="overview">
+        <section><div class="section-title"><h2>Reliable periods</h2><span class="muted">Recorded policy, not a clinical assessment</span></div><div id="coverage-strip" class="coverage-strip"></div><div id="segments" class="table-wrap"></div></section>
+        <section class="two-columns"><div><h2>Reading distribution</h2><div class="chart compact"><canvas id="distribution-chart" role="img" aria-label="Duration-weighted reliable BPM distribution"></canvas></div></div><div><h2>Capture at a glance</h2><dl id="glance"></dl><p class="caveat">Optical pulse estimates are not ECG measurements. Detected peaks and in-range intervals are not independently verified heartbeats. No HRV or oxygen-saturation result is inferred.</p></div></section>
+      </div>
+      <div data-panel="signals" hidden>
+        <section><div class="section-title"><h2>Optical signals</h2><label>Signal <select id="signal-mode"><option value="filtered">Filtered IR</option><option value="raw">Raw red & IR</option></select></label></div><div class="legend"><span><i class="swatch reliable"></i>IR / left axis</span><span><i class="swatch red"></i>Red / right axis</span><label><input id="show-beats" type="checkbox" checked> Detected peaks</label></div><div class="chart signal-chart"><canvas id="signal-chart" role="img" aria-label="Optical signal waveform and detected peaks"></canvas></div><p id="scale-status" class="caveat"></p><p class="caveat">Waveform gaps remain gaps. Raw channels are ADC counts; the filtered IR channel is the device's recorded output.</p></section>
+        <section><h2>Detected peak intervals</h2><div class="chart compact"><canvas id="interval-chart" role="img" aria-label="Detected peak intervals in milliseconds"></canvas></div><div id="beat-detail" class="inspector"></div></section>
+      </div>
+      <div data-panel="quality" hidden>
+        <section><h2>Estimator evidence</h2><div class="legend"><span><i class="swatch reliable"></i>Correlation</span><span><i class="swatch red"></i>Period distinctness</span><span><i class="swatch candidate"></i>Peak interval dispersion</span></div><div class="chart compact"><canvas id="quality-chart" role="img" aria-label="Estimator evidence and policy thresholds"></canvas></div><p class="caveat">Peak interval dispersion does not exclude an autocorrelation result by itself. Reliability follows the policy stored in this session.</p></section>
+        <section><div class="section-title"><h2>Session events</h2><label>Filter <select id="event-filter"><option value="all">All events</option><option value="unreliable">Unreliable transitions</option><option value="reliable">Reliable transitions</option></select></label></div><div id="events" class="table-wrap"></div></section>
+      </div>
+      <div data-panel="variability" hidden>
+        <section>
+          <div class="section-title"><h2>Pulse variability <span class="pill warn">Experimental</span></h2><div class="replay-controls"><button id="replay-start" class="icon-button" title="Replay from range start" aria-label="Replay from range start">↺</button><button id="replay-toggle" class="icon-button" title="Play recorded session" aria-label="Play recorded session">▶</button><label>Speed <select id="replay-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="5">5×</option></select></label><label><input id="replay-reveal" type="checkbox"> Progressive reveal</label><output id="replay-time"></output></div></div>
+          <div class="notice">Detected optical pulse intervals, not verified ECG heartbeats. Detector bounds and reliable BPM do not establish interval accuracy. Clinical HRV metrics are unavailable for this capture.</div>
+          <div id="variability-summary" class="inspector"></div>
+        </section>
+        <section class="two-columns variability-columns">
+          <div><h2>Poincaré plot</h2><div class="legend"><span><i class="swatch reliable"></i>Reliable BPM at all three peaks</span><span><i class="swatch candidate"></i>Other detector-bounded pairs</span></div><div class="chart poincare-chart"><canvas id="poincare-chart" role="img" aria-label="Adjacent detected pulse intervals, previous versus next interval"></canvas></div><p id="pair-status" class="caveat"></p><div id="pair-detail" class="inspector" aria-live="polite"></div><button id="pair-inspect" disabled>Inspect pair in waveform</button></div>
+          <div><h2>Interval distribution</h2><div class="legend"><span><i class="swatch reliable"></i>Within detector bounds</span><span><i class="swatch red"></i>Rejected / interrupted</span></div><div class="chart compact"><canvas id="pulse-distribution-chart" role="img" aria-label="Detected pulse interval histogram"></canvas></div><dl id="variability-facts"></dl><p class="caveat">RMSSD, SDNN and pNN50: unavailable. These require validated beat intervals and documented artifact handling. No stress or recovery score is inferred.</p></div>
+        </section>
+        <section><h2>Pulse interval timeline</h2><div class="chart compact"><canvas id="pulse-timeline-chart" role="img" aria-label="Detected pulse intervals over time with rejected intervals marked"></canvas></div><p class="caveat">Intervals retain their recorded order. Rejected intervals and waveform gaps break Poincaré pairs; filtering never reconnects separated beats. Time is nominal sample-index time.</p></section>
+      </div>
+      <div data-panel="details" hidden><section><h2>Acquisition</h2><dl id="acquisition"></dl></section><section><h2>Estimator & reliability policy</h2><dl id="policy"></dl></section><section><h2>Time basis & integrity</h2><dl id="integrity"></dl><p class="caveat">The horizontal axis uses stored sample index / effective sample rate. FIFO read elapsed time is host polling time, not a hardware sample timestamp. The report does not repair or re-estimate the capture.</p></section></div>
+      <section class="notes-section"><div class="section-title"><h2>Session notes</h2><span id="notes-state" class="muted">Stored in this browser only</span></div><label for="notes" class="sr-only">Session notes</label><textarea id="notes" rows="3" placeholder="Session context, sensor placement, observations..."></textarea></section>
+      <footer id="report-footer"></footer>
+    </div>
+  </main>
+</body>
+</html>

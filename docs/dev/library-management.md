@@ -39,6 +39,13 @@ This software is based in part on the work of the FreeType Team.
 
 **`arduino-libraries.txt`** - Contains the list of required Arduino libraries
 
+Heart Monitor pins `SparkFun MAX3010x Pulse and Proximity Sensor Library@1.1.2`
+for sensor setup. Its source notices and installed license files remain
+unchanged. Acquisition bypasses the library's four-entry software sample ring
+and reads checked hardware FIFO bursts directly, so accumulated batches cannot
+silently wrap that ring. No library pulse or SpO2 algorithm is used in the raw
+recording spike.
+
 ### Format
 
 ```

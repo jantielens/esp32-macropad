@@ -1,0 +1,6 @@
+               method  subjects  evaluated_windows  nonfinite_feature_windows  sensitivity  specificity  true_positive  false_negative  false_positive  true_negative
+             ecg-xqrs        34                100                          0     0.982456     1.000000             56               1               0             43
+   exact-msptdfast-v2        34                102                          0     0.912281     0.888889             52               5               5             40
+       exact-qppgfast        34                102                          0     0.982456     0.911111             56               1               4             41
+neurokit-msptdfast-v2        34                102                          0     1.000000     0.911111             57               0               4             41
+  v2-normalized-proxy        34                102                          0     0.912281     1.000000             52               5               0             45

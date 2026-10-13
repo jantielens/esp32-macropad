@@ -1,0 +1,55 @@
+{
+  "subjects": 35,
+  "seconds_per_subject": 120,
+  "ecg_reference": "WFDB XQRS automatically detected; not manually verified",
+  "production_input": "125->100 Hz, inverted PPG scaled to std=1000 plus DC=100000; duplicated red/IR",
+  "classification": "exploratory logistic regression, NOT PhysioNet/Pulsewatch/SiamAF reference",
+  "admission": "finite/nonflat and >=12 detected beats only; not a validated motion SQI",
+  "missing_controls": "no segment-level ectopy/motion labels; no MAX30101 AF validation",
+  "beat_summary": [
+    {
+      "method": "neurokit-msptdfast-v2",
+      "label_af": 0,
+      "proxy_f1": 0.9304658753091011,
+      "timing_mae_ms": 29.01442446038195
+    },
+    {
+      "method": "neurokit-msptdfast-v2",
+      "label_af": 1,
+      "proxy_f1": 0.9415345087701632,
+      "timing_mae_ms": 19.672048841515142
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "label_af": 0,
+      "proxy_f1": 0.9134434596949692,
+      "timing_mae_ms": 25.639768500099006
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "label_af": 1,
+      "proxy_f1": 0.8306967391612375,
+      "timing_mae_ms": 23.06285969900688
+    }
+  ],
+  "neurokit-msptdfast-v2": {
+    "accepted_windows": 87,
+    "possible_windows": 105,
+    "coverage": 0.8285714285714286,
+    "exploratory_auc": 0.9588675213675214,
+    "sensitivity": 1.0,
+    "specificity": 0.9230769230769231,
+    "false_positive_windows": 3,
+    "non_af_positive_windows_per_hour": 9.23076923076923
+  },
+  "v2-normalized-proxy": {
+    "accepted_windows": 87,
+    "possible_windows": 105,
+    "coverage": 0.8285714285714286,
+    "exploratory_auc": 0.9230769230769231,
+    "sensitivity": 1.0,
+    "specificity": 0.8717948717948718,
+    "false_positive_windows": 5,
+    "non_af_positive_windows_per_hour": 15.384615384615383
+  }
+}

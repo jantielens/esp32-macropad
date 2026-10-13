@@ -39,3 +39,7 @@
 #include "device_classes/darkroom_timer/web_portal_relay.cpp"
 #include "device_classes/darkroom_timer/web_portal_prints.cpp"
 #endif
+
+#if IS_HEART_MONITOR
+#include "device_classes/heart_monitor/web/portal_heart_sessions.cpp"
+#endif

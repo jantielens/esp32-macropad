@@ -66,6 +66,7 @@ declare -A FQBN_TARGETS=(
     ["esp32-p4-lcd4b-voice"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext" # ESP32-P4 LCD4B Azure Voice Assistant variant; constrained to 16MB for extension XIP
     ["jc4880p433"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-P4 GUITION JC4880P433 (480x800 MIPI-DSI ST7701 + GT911 touch; 16MB + 32MB PSRAM)
     ["jc4880p433-sd"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-P4 GUITION JC4880P433 SDMMC primary-storage variant
+    ["jc4880p433-heart"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=default,CDCOnBoot=default"
     ["jc4880p433-shutter"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + BPW34 photodiode array (Shutter Tester variant)
     ["jc4880p433-hx711"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + HX711 load cell amplifier (Coffee Scale variant)
     ["jc4880p433-nau7802"]="esp32:esp32:esp32p4:FlashSize=16M,PSRAM=enabled,PartitionScheme=ota_6mb_16MB_ext,USBMode=hwcdc,CDCOnBoot=cdc" # ESP32-P4 GUITION JC4880P433 + NAU7802 I2C load cell ADC (Coffee Scale variant)
@@ -255,6 +256,7 @@ device_class_brand_prefix() {
         coffee_scale)   echo "ESP32-MP Coffee Scale" ;;
         darkroom_timer) echo "ESP32-MP Darkroom Timer" ;;
         voice_assistant) echo "ESP32-MP Voice Assistant" ;;
+        heart_monitor) echo "ESP32-MP Heart Monitor" ;;
         *)              echo "" ;;
     esac
 }
@@ -289,6 +291,10 @@ device_class_for_board() {
         fi
         if grep -qE '^[[:space:]]*#define[[:space:]]+IS_EPAPER_FRAME[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
             echo "epaper_frame"
+            return
+        fi
+        if grep -qE '^[[:space:]]*#define[[:space:]]+IS_HEART_MONITOR[[:space:]]+true[[:space:]]*$' "$overrides_file"; then
+            echo "heart_monitor"
             return
         fi
         if grep -qE '^[[:space:]]*#define[[:space:]]+HAS_DISPLAY[[:space:]]+false[[:space:]]*$' "$overrides_file"; then

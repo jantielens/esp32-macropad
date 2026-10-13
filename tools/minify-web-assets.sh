@@ -1083,6 +1083,8 @@ asset_feature_flag() {
             echo "IS_DARKROOM_TIMER" ;;
         voice|portal_action_editor_voice|portal_voice)
             echo "IS_VOICE_ASSISTANT" ;;
+        heart_sessions|heart_chart|portal_heart_sessions|portal_heart_report)
+            echo "IS_HEART_MONITOR" ;;
         *)
             echo "" ;;
     esac

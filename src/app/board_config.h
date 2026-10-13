@@ -223,6 +223,15 @@ struct HwButtonDef {
 #define IS_VOICE_ASSISTANT false
 #endif
 
+// Heart Monitor product variant with PSRAM-backed optical signal recording.
+#ifndef IS_HEART_MONITOR
+#define IS_HEART_MONITOR false
+#endif
+
+#if IS_HEART_MONITOR && (!HAS_PSRAM || !HAS_FILESYSTEM || !HAS_DISPLAY)
+#error "Heart Monitor requires PSRAM, storage, and display."
+#endif
+
 // Feature-rich device classes (shutter tester, coffee scale, darkroom timer,
 // Voice Assistant) allocate large scratch/history buffers directly in PSRAM
 // with no internal-RAM fallback — a deliberate policy, since these classes are always shipped on

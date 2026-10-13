@@ -284,6 +284,45 @@ external reply workflow are required for that experience.
 
 [Set up the Voice Assistant](docs/web-portal-guide.md#voice-assistant).
 
+### Heart Monitor Raw Recording Spike
+
+The experimental `jc4880p433-heart` variant records MAX30101 red/infrared
+signals and live estimator observations into PSRAM, then exports an unchanged
+raw CSV and a versioned JSON session report to SD storage. It inherits
+`jc4880p433-sd` and requires a mounted SD card. During recording it also
+provides experimental IR BPM, signal-state, detected-pulse, and waveform bindings.
+The causal estimator is shared with local replay, cross-checks red when usable,
+and rejects unresolved multiple-period ambiguity rather than publishing half rates.
+This hobby spike does not estimate SpO2 or diagnose rhythm conditions and is not
+a medical device. Raw acquisition remains independent of signal quality. The
+JSON report includes sample-aligned waveform, BPM, quality, beat, and acquisition
+diagnostics, plus a stricter reliability policy for duration-weighted summaries.
+
+Open **Sensors > Heart Sessions** for the catalog-backed session list and
+interactive reports: linked BPM/waveform charts, quality events, experimental
+pulse variability with recorded-time replay, downloads, and Print / PDF.
+Chart.js is bundled on-device; no CDN is required. Existing paired captures
+are indexed incrementally while the recorder is idle. The list reads compact
+metadata rather than parsing every full report. Clinical HRV metrics remain
+unavailable; session notes stay in your browser.
+
+| Method | Heart Session API | Purpose |
+|--------|-------------------|---------|
+| GET | `/api/heart/sessions` | Catalog summaries and import progress |
+| GET | `/api/heart/sessions/{id}` | Selected JSON report |
+| GET | `/api/heart/sessions/{id}/raw.csv` | Paired raw CSV |
+| POST | `/api/heart/sessions/import` | Rescan existing captures while idle |
+| DELETE | `/api/heart/sessions/{id}` | Delete paired files and catalog metadata |
+
+See [wiring, controls, and downloads](docs/web-portal-guide.md#heart-monitor-raw-recordings)
+and the [starter pad](docs/samples/heart-monitor-pad.json). Hardware validation
+of the live estimator is still pending.
+
+For PC development and testing, use the [analysis notebook](tools/heart-monitor/analysis.ipynb)
+to inspect raw signals, candidate beats, spectra, and windowed estimates.
+This optional tool requires Python 3.11+ and the VS Code Python/Jupyter extensions;
+see [local notebook setup](docs/dev/scripts.md#heart-monitor-notebook).
+
 ## 📱 Supported Hardware
 
 From a compact round display to a 7-inch control panel or a battery-powered
@@ -328,7 +367,8 @@ more room without using the board's internal flash for those files.
 
 Specialized targets include `jc4880p433-nau7802` and `jc4880p433-hx711`
 (Coffee Scale), `jc4880p433-darkroom`, `jc4880p433-shutter`, and
-`esp32-p4-lcd4b-voice`. Sensors and other external hardware must be added as
+`esp32-p4-lcd4b-voice`, plus the experimental `jc4880p433-heart` recorder.
+Sensors and other external hardware must be added as
 described in their setup guides. See [device classes](docs/device-classes/README.md)
 for the build-time selection and branding model.
 

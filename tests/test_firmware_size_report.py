@@ -215,6 +215,7 @@ Cross Reference Table
             "/build/sketch/objs.a(ble_telemetry.cpp.o)": "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)",
             "/build/libraries/BLE/objs.a(BLEDevice.cpp.o)": "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)",
             "/build/libraries/USB/objs.a(USBHIDKeyboard.cpp.o)": "USB HID (HAS_USB_HID)",
+            "/build/libraries/SparkFun_MAX3010x_Pulse_and_Proximity_Sensor_Library/objs.a(MAX30105.cpp.o)": "Device classes",
             "/sdk/libbt.a(bt.c.obj)": "Bluetooth stack / telemetry (HAS_BLE_HID / HAS_BLE)",
             "/sdk/libesp_hid.a(hid.c.obj)": "Shared HID",
             "/sdk/libarduino_tinyusb.a(tinyusb.c.obj)": "USB HID (HAS_USB_HID)",

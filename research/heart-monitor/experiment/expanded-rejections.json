@@ -1,0 +1,306 @@
+[
+  {
+    "subject": "p026377",
+    "label_af": 1,
+    "block": 0,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p026377",
+    "label_af": 1,
+    "block": 1,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p026377",
+    "label_af": 1,
+    "block": 2,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p026377",
+    "label_af": 1,
+    "block": 3,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p026377",
+    "label_af": 1,
+    "block": 4,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p026377",
+    "label_af": 1,
+    "block": 5,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p026377",
+    "label_af": 1,
+    "block": 7,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p026377",
+    "label_af": 1,
+    "block": 8,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p043613",
+    "label_af": 1,
+    "block": 0,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p043613",
+    "label_af": 1,
+    "block": 2,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p043613",
+    "label_af": 1,
+    "block": 3,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p043613",
+    "label_af": 1,
+    "block": 7,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p043613",
+    "label_af": 1,
+    "block": 8,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p043613",
+    "label_af": 1,
+    "block": 9,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p050089",
+    "label_af": 1,
+    "block": 0,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p050089",
+    "label_af": 1,
+    "block": 3,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p050089",
+    "label_af": 1,
+    "block": 7,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p050089",
+    "label_af": 1,
+    "block": 8,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p089565",
+    "label_af": 1,
+    "block": 5,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p023824",
+    "label_af": 0,
+    "block": 0,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p029512",
+    "label_af": 0,
+    "block": 0,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p029512",
+    "label_af": 0,
+    "block": 2,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p029512",
+    "label_af": 0,
+    "block": 3,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p029512",
+    "label_af": 0,
+    "block": 6,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p058932",
+    "label_af": 0,
+    "block": 4,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p058932",
+    "label_af": 0,
+    "block": 8,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 0,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 1,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 2,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 3,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 4,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 5,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 6,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 7,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 8,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p062160",
+    "label_af": 0,
+    "block": 9,
+    "reason": "missing or flat input; neither interpolation nor gap joining"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 0,
+    "method": "ecg-xqrs",
+    "start_s": 60,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 0,
+    "method": "ecg-xqrs",
+    "start_s": 90,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 6,
+    "method": "ecg-xqrs",
+    "start_s": 30,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 6,
+    "method": "ecg-xqrs",
+    "start_s": 60,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 6,
+    "method": "ecg-xqrs",
+    "start_s": 90,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 8,
+    "method": "ecg-xqrs",
+    "start_s": 30,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 8,
+    "method": "ecg-xqrs",
+    "start_s": 60,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 8,
+    "method": "ecg-xqrs",
+    "start_s": 90,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 9,
+    "method": "ecg-xqrs",
+    "start_s": 30,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 9,
+    "method": "ecg-xqrs",
+    "start_s": 60,
+    "reason": "fewer than 12 intervals for published model"
+  },
+  {
+    "subject": "p087675",
+    "label_af": 0,
+    "block": 9,
+    "method": "ecg-xqrs",
+    "start_s": 90,
+    "reason": "fewer than 12 intervals for published model"
+  }
+]

@@ -1,0 +1,75 @@
+{
+  "scope": "first complete two-minute block per admitted subject; three 30-second windows per method",
+  "reference": "original PhysioNet AF_features and pretrained nine-model MIT-AFDB SVM vote, selected columns 2,3,4,5,6,7,12,14",
+  "libsvm": "official libsvm 3.37, probability mode; parameters preserved from original model files",
+  "interval_units": "native ECG sample counts at 125 Hz or PPG sample counts at 100 Hz; sampling rate passed to original entropy code",
+  "no_training_on_evaluation_subjects": true,
+  "limitations": [
+    "ECG-trained model transferred to PPG intervals without recalibration",
+    "Automatic ECG proxies and subject-level AF labels",
+    "No validated motion SQI or separately labelled ectopy controls",
+    "AFEv implementation has patent notice; deployment requires review"
+  ],
+  "results": [
+    {
+      "method": "ecg-xqrs",
+      "subjects": 34,
+      "evaluated_windows": 100,
+      "nonfinite_feature_windows": 0,
+      "sensitivity": 0.9824561403508771,
+      "specificity": 1.0,
+      "true_positive": 56,
+      "false_negative": 1,
+      "false_positive": 0,
+      "true_negative": 43
+    },
+    {
+      "method": "exact-msptdfast-v2",
+      "subjects": 34,
+      "evaluated_windows": 102,
+      "nonfinite_feature_windows": 0,
+      "sensitivity": 0.9122807017543859,
+      "specificity": 0.8888888888888888,
+      "true_positive": 52,
+      "false_negative": 5,
+      "false_positive": 5,
+      "true_negative": 40
+    },
+    {
+      "method": "exact-qppgfast",
+      "subjects": 34,
+      "evaluated_windows": 102,
+      "nonfinite_feature_windows": 0,
+      "sensitivity": 0.9824561403508771,
+      "specificity": 0.9111111111111111,
+      "true_positive": 56,
+      "false_negative": 1,
+      "false_positive": 4,
+      "true_negative": 41
+    },
+    {
+      "method": "neurokit-msptdfast-v2",
+      "subjects": 34,
+      "evaluated_windows": 102,
+      "nonfinite_feature_windows": 0,
+      "sensitivity": 1.0,
+      "specificity": 0.9111111111111111,
+      "true_positive": 57,
+      "false_negative": 0,
+      "false_positive": 4,
+      "true_negative": 41
+    },
+    {
+      "method": "v2-normalized-proxy",
+      "subjects": 34,
+      "evaluated_windows": 102,
+      "nonfinite_feature_windows": 0,
+      "sensitivity": 0.9122807017543859,
+      "specificity": 1.0,
+      "true_positive": 52,
+      "false_negative": 5,
+      "false_positive": 0,
+      "true_negative": 45
+    }
+  ]
+}

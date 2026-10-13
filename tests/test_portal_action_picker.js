@@ -101,6 +101,7 @@ const FIXTURE_CATALOG = [
     },
     { type: 'delay', group: 'Timer', label: 'Delay', max_pending_actions: 3 },
     ...productionCatalogs.portal.filter(entry => ['alarm_tone', 'alarm_mp3'].includes(entry.type)),
+    ...productionCatalogs.portal.filter(entry => entry.type === 'heart'),
     {
         type: 'shutter', group: 'Shutter Tester', label: 'Shutter tester',
         command_families: [
@@ -178,6 +179,20 @@ for (const button of ['Left', 'Right', 'Middle']) {
 }
 assert(optionsHtml.includes('<optgroup label="Shutter Tester">'));
 assert(optionsHtml.includes('<option value="shutter">Shutter tester</option>'));
+
+const heartEntry = productionCatalogs.portal.find(entry => entry.type === 'heart');
+assert(heartEntry, 'Heart Monitor must be present in the production test catalog');
+const heartHtml = context.actionEditorHTML('heart-test', '', {});
+assert(heartHtml.includes('<select class="form-select form-select-sm" id="heart-test-generic-heart-command">'),
+    'Heart Monitor must render a command selector from its production metadata');
+assert.deepStrictEqual(heartEntry.commands.map(command => command.id), ['start', 'stop', 'retry_save', 'discard']);
+for (const command of heartEntry.commands) {
+    assert(heartHtml.includes('value="' + command.id + '"'), 'Missing heart command option: ' + command.id);
+    const action = {type: 'heart', command: command.id};
+    context.actionEditorLoad('heart-test', action);
+    assert.strictEqual(document.getElementById('heart-test-generic-heart-group').style.display, '');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('heart-test'))), action);
+}
 
 // --- Command population for a multi-command type ---
 const volumeCommands = context.actionEditorCommandOptionsHTML('volume');

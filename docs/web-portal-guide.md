@@ -211,16 +211,150 @@ filesystem backend after a successful mount.
 
 The **Storage** page in the **Device** category shows the active backend,
 mount status, card type when applicable, total capacity, and used/free space.
-It also provides a read-only folder browser. Folders appear before files and
-entries are alphabetical within each group. Expand a folder to view its direct
-contents, select **Open** beside a file to view supported media in your browser
-or download other file types, or use **Refresh** to reload the storage summary
-and root folder.
+It also provides a folder browser. Folders appear before files; entries default
+to newest modification first, with alphabetical fallback for missing or equal
+timestamps. Use **Sort** to switch to alphabetical names. Expand a folder to
+view its contents, select the download icon beside a file to open or download
+it, or use **Refresh** to reload the summary and files. Open folders remain open
+when refreshing, sorting, or deleting a file.
 
-The general Storage page does not support file uploads, deletion, or
-formatting. Feature-specific views may offer deletion for their own files; the
+The delete icon beside each file asks for confirmation before permanently
+removing it and refreshing usage. Download recordings you want to retain first.
+The general Storage page does not support uploads, folder deletion, or
+formatting. Feature-specific views may offer folder deletion; the
 Camera **Snapshots** page can remove a saved image, a day's camera-roll folder,
 or the latest snapshot copy.
+
+## Heart Monitor Raw Recordings
+
+The experimental `jc4880p433-heart` firmware inherits `jc4880p433-sd`
+and requires a mounted SD card. It records raw MAX30101 red/IR signals for later
+PC analysis, saves paired CSV/JSON session files, and provides
+experimental live pulse-rate estimates. It does not estimate SpO2 or diagnose
+rhythm conditions and is not a medical device. Signal-state thresholds are
+heuristic; live estimation still requires hardware validation.
+
+SD is the primary filesystem for this variant, not only the recording destination.
+Existing files in internal flash are not automatically migrated to the card.
+Back up files and configuration before switching from the non-SD variant.
+
+For the Pimoroni PIM438 breakout, connect the board's printed **3V3** label to
+the breakout supply, **GND** to GND, **GPIO52** to SDA, and **GPIO51** to SCL.
+Leave INT unconnected. Use the printed labels, not an assumed connector order.
+The breakout accepts this supply and has on-board regulation/level shifting;
+do not connect its supply to 5V when using these ESP32 GPIOs. Acquisition uses
+the separate `Wire1` bus at 400 kHz, not the touch/audio bus on GPIO7/8.
+
+Build with `./build.sh jc4880p433-heart`. In the Pad editor, import
+[heart-monitor-pad.json](samples/heart-monitor-pad.json) into a chosen pad, then
+save the pad. Its buttons use the `heart` action with `command` values
+`start`, `stop`, `retry_save`, and `discard`. Start admits a capture only when
+PSRAM and enough SD storage space are available. Stop ends acquisition
+and starts saving; recordings also stop automatically after five minutes or
+30,000 samples. Retry Save retries a failed export. Discard releases an unsaved
+capture, not previously saved files. Commands run asynchronously; use the
+bindings to observe their outcome.
+
+The `[heart:state]`, `[heart:elapsed_s]`, `[heart:samples]`, `[heart:error]`,
+`[heart:filename]`, and `[heart:unsaved]` bindings provide recorder status.
+Errors and filenames are unavailable until populated. The filename always
+means the last exported file, which may be from an earlier or interrupted
+capture; it is not proof that the current capture succeeded.
+
+During recording, `[heart:bpm]` provides a rate only with usable signal;
+`[heart:quality]` reports `measuring`, `usable`, or `weak_signal`.
+`[heart:waveform]` exposes the filtered IR signal, and `[heart:pulse]` is a
+200 ms indication of a detected peak with usable peak-based estimation.
+Persistent causal filters, recent beat intervals, and a ten-second
+autocorrelation window run on-device; red supplies an optional cross-check.
+Autocorrelation fallback never invents pulse flashes. Unresolved single-beat
+versus multiple-beat periods are rejected rather than published as half rates.
+These outputs are not medical measurements or validated heartbeat annotations.
+
+The `heart_bpm_v2` estimator selects dominant downward excursions of filtered
+IR using adaptive RMS height and prominence thresholds to reject small
+rising-shoulder notches. Its beat markers appear at waveform troughs, confirmed
+one sample later and timestamped at the detected extremum. Filtering, the
+30-180 BPM range, and the `heart_reliable_v1` reliability policy are unchanged.
+Older sessions retain their recorded estimator version and markers. Motion
+rejection can still lag while the rolling window responds; a reliable rate
+does not validate every individual pulse interval.
+
+The fixed initial preset is red/IR mode, 100 samples/s, averaging 1, 411 us
+pulse width, 4096 nA ADC range, and red/IR LED codes `0x1f`. PSRAM retains raw
+samples and the exact per-sample estimator observations. No filesystem writes
+occur during acquisition. After stopping, export writes
+`/storage/heart/capture-XXXXXXXX.csv.part` and `.json.part` files and verifies
+their sizes and CRC32 checksums by rereading them. It publishes the CSV first,
+then the matching JSON. The shared session ID is retained across retries. A save failure retains
+the samples for retry or discard. Reboot loses all unsaved samples. OTA stops
+acquisition and defers saving; a successful OTA reboot also loses those samples.
+
+Open **Sensors > Heart Sessions** to browse saved sessions, then select a
+session ID to open its report. The list uses a compact catalog rather than
+loading every capture. Older paired captures are indexed in the background
+while the recorder is idle; progress appears above the list. **Rescan captures**
+retries discovery after you restore files to the SD card. Recording, unsaved
+captures, and OTA pause indexing. Captures with incomplete exports or missing
+CSV partners are not listed.
+
+Reports include an overview, linked heart-rate cursor and range controls,
+filtered IR or raw red/IR waveforms, quality transitions, capture settings, and
+integrity checks. Typical Y scaling reduces the influence of extremes without
+removing samples; choose **All values** to see the full range. **HRV / Pulse
+Variability** shows experimental adjacent pulse-interval plots, distributions,
+and recorded-time replay. It does not provide clinical RMSSD, SDNN, pNN50,
+stress, or recovery scores. Optical peaks are not verified ECG heartbeats.
+
+Use **JSON** and **CSV** for paired downloads, or **Print / PDF** for a report
+including all views. Charts are served by the device without a CDN. Session
+notes are saved in this browser only, not on the device or in downloaded files.
+
+You can also open **Device > Storage**, expand `storage` and `heart`, and select
+**Open** beside each file to obtain the raw CSV and its matching JSON report. The
+versioned `heart_capture_v1` CSV is unchanged: it has `#`
+metadata/footer lines and numeric sample rows. `sample_index` is a stored index,
+not a hardware sequence number; `nominal_time_us` assumes the preset rate.
+`read_elapsed_us` is a host FIFO-poll observation, not an acquisition timestamp.
+The footer distinguishes complete and interrupted acquisition. A missing
+`# export_complete,true` footer means the export is incomplete. Bad optical
+signals are preserved; known acquisition errors stop and mark the recording
+without inventing a lost-sample count.
+
+The `heart_session_v1` JSON records the CSV filename, byte count, and IEEE CRC32,
+plus firmware, sensor, estimator, and reliability-policy versions/settings.
+Its readings, beats, quality-change events, and exact filtered IR waveform use
+the CSV's stored sample indices. Supporting windows are half-open intervals
+`[window_start_index, window_end_index_exclusive)`. Candidate BPM is separate
+from accepted BPM; unavailable values are `null`, not interpolated across gaps.
+Session summaries weight reliable BPM by nominal sample duration and require
+at least ten seconds of reliable data. This stricter policy does not change
+live estimation. Interrupted recordings retain diagnostics but have no reliable
+BPM summary. Quality is heuristic, not clinical confidence. See the
+[report field reference](dev/scripts.md#on-device-session-reports).
+
+JSON publication is the completion marker for the pair. Two file renames are
+not power-loss atomic: interruption can leave a CSV without a matching JSON.
+Do not treat `.part` files or an unmatched CSV as a completed report pair.
+Both files also contain their own export-completion marker. CRC32 checks
+integrity and identity, not authenticity.
+
+The recorder requires approximately 94 MB (90 MiB) free on SD for five-minute
+admission. This conservative combined CSV/JSON bound allows a reading, beat,
+quality event, and waveform value at every sample, plus 64 KiB of headroom;
+typical reports are much smaller. Saving checks the actual stored sample
+count instead of reserving for five minutes again. It never automatically
+deletes recordings. Failed `.part` files also consume space. After downloading
+files, use the delete icon in **Heart Sessions** to remove both paired files
+and their catalog metadata. If cleanup fails, retry the same deletion. Use the
+Storage page's delete icon or existing storage API for unmatched or partial
+exports only; deleting indexed files there leaves stale catalog entries.
+Do not manually edit the `catalog` folder. For example, replace the hostname and filename below with your device
+and a file you intend to delete, and use your portal authentication if enabled:
+
+```bash
+curl -X DELETE 'http://macropad.local/api/component/storage/delete?path=%2Fstorage%2Fheart%2Fcapture-XXXXXXXX.csv'
+```
 
 ## Camera Snapshots
 

@@ -18,6 +18,10 @@ class String {};
 #define TELEMETRY_ALLOW_PSRAM_POOL_WALK 0
 #define HAS_CAMERA 0
 
+#if defined(BINDING_SCHEMA_PROFILE_HEART)
+#define IS_HEART_MONITOR 1
+#endif
+
 #if defined(BINDING_SCHEMA_PROFILE_FULL)
 #define ALARM_ENABLED 1
 #define HAS_AUDIO 1

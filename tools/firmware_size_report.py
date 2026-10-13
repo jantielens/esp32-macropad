@@ -137,6 +137,7 @@ LIBRARIES = {
     "OTA / firmware updates": ("Update", "libapp_update.a", "libesp_https_ota.a"),
     "Sound player (HAS_SOUND_PLAYER)": ("libchmorgan__esp-libhelix-mp3.a",),
     "Audio (HAS_AUDIO)": ("libesp_driver_i2s.a",),
+    "Device classes": ("SparkFun_MAX3010x_Pulse_and_Proximity_Sensor_Library",),
     "Camera (HAS_CAMERA)": (
         "libesp_driver_cam.a", "libesp_driver_isp.a", "libespressif__esp_cam_sensor.a",
         "libespressif__esp_video.a", "libespressif__esp_sccb_intf.a",
@@ -180,6 +181,7 @@ FLAG_SUBSYSTEMS = {
     "IS_EPAPER_FRAME": "Device classes",
     "IS_SHUTTER_TESTER": "Device classes",
     "IS_VOICE_ASSISTANT": "Device classes",
+    "IS_HEART_MONITOR": "Device classes",
 }
 EXCLUDED_FLAGS = {
     "HAS_EPAPER_GRAYSCALE": "Panel rendering capability; presentation drivers own both monochrome and grayscale paths without an independent flash boundary.",

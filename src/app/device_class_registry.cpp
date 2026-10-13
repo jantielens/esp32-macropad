@@ -22,6 +22,8 @@ DeviceClass device_class_detect() {
     return DeviceClass::DARKROOM_TIMER;
 #elif IS_VOICE_ASSISTANT
     return DeviceClass::VOICE_ASSISTANT;
+#elif IS_HEART_MONITOR
+    return DeviceClass::HEART_MONITOR;
 #elif IS_EPAPER_FRAME
     return DeviceClass::EPAPER_FRAME;
 #elif !HAS_DISPLAY
@@ -43,6 +45,7 @@ static const DeviceClassDescriptor DESCRIPTORS[] = {
     { DeviceClass::COFFEE_SCALE,   "Coffee Scale",   "SCALE",    "ESP32-MP Coffee Scale"   },
     { DeviceClass::DARKROOM_TIMER, "Darkroom Timer", "DARKROOM", "ESP32-MP Darkroom Timer" },
     { DeviceClass::VOICE_ASSISTANT,"Voice Assistant", "VOICE",    "ESP32-MP Voice Assistant" },
+    { DeviceClass::HEART_MONITOR, "Heart Monitor", "HEART", "ESP32-MP Heart Monitor" },
 };
 
 static const size_t DESCRIPTOR_COUNT = sizeof(DESCRIPTORS) / sizeof(DESCRIPTORS[0]);

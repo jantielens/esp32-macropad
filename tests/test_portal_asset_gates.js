@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 execFileSync('bash', ['tools/minify-web-assets.sh', 'esp32-macropad', 'ESP32 Macropad'],
     {cwd: root, stdio: 'pipe'});
 
-for (const [board, target, psram] of [['esp32c3-withsensors', 'ESP32C3', false], ['esp32-p4-lcd4b', 'ESP32P4', true], ['esp32-p4-lcd4b', 'ESP32P4', false]]) {
+for (const [board, target, psram] of [['esp32c3-withsensors', 'ESP32C3', false], ['esp32-p4-lcd4b', 'ESP32P4', true], ['esp32-p4-lcd4b', 'ESP32P4', false], ['jc4880p433-heart', 'ESP32P4', true]]) {
     const source = execFileSync('c++', ['-E', '-P', '-x', 'c++', 'src/app/web_assets.h',
         '-Itests', '-Isrc/boards/' + board, '-DBOARD_HAS_OVERRIDE', '-DCONFIG_IDF_TARGET_' + target,
         ...(psram ? ['-DBOARD_HAS_PSRAM'] : [])],
@@ -31,7 +31,11 @@ for (const [board, target, psram] of [['esp32c3-withsensors', 'ESP32C3', false],
     const js = assets.get('portal_js_gz');
     assert(js.includes('function uploadFirmware('), 'HTML upload callback was removed');
     assert(js.includes('function saveFragmentConfig('), 'Fragment save callback was removed');
-    const display = board === 'esp32-p4-lcd4b';
+    const heart = board === 'jc4880p433-heart';
+    const display = board === 'esp32-p4-lcd4b' || heart;
+    assert.equal(assets.has('heart_sessions_fragment_html_gz'), heart, 'Heart session fragment selection');
+    assert.equal(js.includes('heartSessionReport'), heart, 'Heart report bundle selection');
+    assert.equal(assets.get('portal_all_css_gz').includes('.heart-report'), heart, 'Heart stylesheet selection');
     assert.equal(assets.has('fonts_fragment_html_gz'), display && psram);
     assert.equal(assets.has('portal_fonts_js_gz'), display && psram);
     if (display && psram) {

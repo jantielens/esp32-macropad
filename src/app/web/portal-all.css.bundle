@@ -19,3 +19,6 @@ portal_brews.css
 
 # [chunk:darkroom_timer IS_DARKROOM_TIMER]
 portal_darkroom.css
+
+# [chunk:heart_monitor IS_HEART_MONITOR]
+portal_heart.css

@@ -90,6 +90,11 @@ portal_health.js
 # [chunk:storage HAS_STORAGE_BROWSER]
 portal_storage.js
 
+# [chunk:heart_monitor IS_HEART_MONITOR]
+heart_chart.js
+portal_heart_report.js
+portal_heart_sessions.js
+
 # [chunk:music HAS_SOUND_PLAYER]
 portal_music.js
 
