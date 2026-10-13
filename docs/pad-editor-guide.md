@@ -441,7 +441,7 @@ Browse the full Material Symbols catalog at [fonts.google.com/icons](https://fon
 
 ### Colors and Borders
 
-The **Colors** section (collapsible) controls the button's appearance:
+The **Appearance** tab controls the button's colors and geometry:
 
 - **Background color** — the button fill
 - **Text color** — applies to labels and Material Symbol icons
@@ -467,6 +467,60 @@ backgrounds allow up to 63 characters.
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 
 **Button shadow** chooses whether this button inherits, enables, or disables the pad's shadow setting. Shadow type and sizing remain device-wide to keep button spacing consistent.
+
+### Patterned Fills and Track Outlines
+
+Button backgrounds and bar chart colors offer None (default), Diagonal stripes,
+Reverse diagonal stripes, Crosshatch, Dots, and Checkerboard. None uses only the
+base color, without a pattern. The canonical JSON value is `none`; unknown names
+also load as None. The original color
+remains the base fill. Pattern Color is separate, defaults to black, and accepts
+the same color bindings as its base color. Each of the four bar series has its
+own pattern; Bar Background supplies the shared track pattern. Open a supported
+color badge to edit Base Color or expand the Pattern section to select a pattern
+and its color. Base Color opens by default when no pattern is selected; existing
+patterns open the Pattern section instead. Both sections offer the threshold
+generator. Apply
+commits both colors and the pattern together; closing discards those changes.
+Other color pickers remain color-only.
+
+Pattern Spacing is shared by all patterned surfaces in the button: 2-64 logical
+pixels, default 8. Pattern Stroke is 1-8 pixels, default 1, capped at spacing.
+Both controls remain in Appearance under Patterns. Stroke is disabled
+when every selected pattern is None or Checkerboard. For dots it is the diameter.
+Checkerboard uses spacing as its square size and ignores stroke. Geometry is
+static; colors can update from bindings. Patterns
+stay anchored to the button as bars grow and clip to the surface's rounded corners.
+
+In Content, bar charts and gauges offer Track Outline Width (0-8 pixels, default 0/off)
+and a separate bindable Track Outline Color (default black). Outlines follow the
+whole track at empty and full values, beneath markers and labels. Dual bars have
+one outline around their shared track. Gauge fills remain unpatterned and retain square
+ends in this phase.
+
+Bar charts also offer Track Corner Radius in Content: 0-64 logical pixels, default 4. The
+effective radius is capped at half the smaller track dimension. It shapes the
+track, clips fills, and shapes the outline even when outline width is zero.
+Dual bars retain square joins at the zero baseline. Gauge geometry is unchanged.
+
+Appearance starts with Background/Text, Button Shadow, UI Offset, and Button State,
+followed by Borders & Geometry and Patterns. Borders & Geometry opens by default
+and contains button border color, width, radius, and padding. Patterns initially
+opens only when an applicable pattern is active; routine edits preserve manual
+toggles, and loading another button resets its default. Widget track settings
+stay with their widget in Content.
+Color badges preview the combined fill. Bound colors use
+representative colors and retain a binding indicator; they are not live values.
+Save the pad to inspect complete widgets and outlines on-device. There is no grid
+styling preview or monochrome simulation. Copy/paste, templates, and JSON import/export retain styling;
+older pads remain unpatterned with outlines disabled. Images retain their existing opaque
+RGB565 behavior and cover the pattern, including letterbox bands. PNG transparency
+compositing and patterned gauge fills are deferred.
+
+Background and bar-series pattern colors allow 191 characters; bar-track pattern
+and track-outline colors allow 63. Missing or unknown pattern names mean None.
+Missing or malformed geometry uses its default; numeric geometry is clamped to
+the supported range. Unresolved pattern and outline color bindings fall back to black.
 
 ### Button State (Conditional Visibility)
 

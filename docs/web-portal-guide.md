@@ -960,6 +960,25 @@ Pad labels retain the `Pad X: Name` format whether selected or not. The button
 **Actions** and **Appearance** tabs expose their controls without an additional
 same-named accordion; individual action slots remain expandable.
 
+Button background and bar chart color pickers have Base Color and Pattern
+sections with one Apply operation. None is the default and uses only the base
+color. Base Color opens for unpatterned fills; Pattern opens for existing patterns.
+Color badges preview the combined fill;
+bound colors have a representative preview and binding indicator. Appearance
+starts with Background/Text, Button Shadow, UI Offset, and bindable Button State,
+without section headings. Borders & Geometry opens by default, with border color
+and width together, followed by button radius and padding. Patterns follows it,
+closed when no applicable pattern is active and open when one is active. You can
+toggle it manually; routine field edits preserve that choice. Shared spacing and
+stroke are inside Patterns; stroke is disabled when unused. Bar charts
+and gauges expose track outlines in Content beside their track settings; bars
+also have Track Corner Radius there.
+Geometry is static; colors accept bindings. Complete widgets and outlines are
+shown on-device after saving, not in the grid preview. Images still cover the pattern, including
+letterbox bands; gauge fills remain unpatterned. See
+[Patterned Fills and Track Outlines](pad-editor-guide.md#patterned-fills-and-track-outlines)
+for defaults, geometry, and color limits.
+
 On StopWatch, the action picker includes the **M5Stack StopWatch** category:
 
 * **Set charging mode**: Off, Low (185 mA), or High (425 mA). These are nominal

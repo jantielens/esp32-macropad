@@ -237,7 +237,6 @@ function padDialogOpen(col, row) {
     // Button state
     var btnStateEl = document.getElementById('pad-edit-btn-state');
     btnStateEl.value = btn.btn_state || '';
-    document.getElementById('pad-edit-btn-state-section').open = !!btn.btn_state;
 
     // Initialize bindable color components and set values
     document.querySelectorAll('.pad-edit-modal .bindable-color').forEach(padInitBindableColor);
@@ -331,6 +330,7 @@ function padDialogOpen(col, row) {
 
     // Widget type
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
+    padFillLoad(btn);
     padWidgetTypeChanged();
     document.getElementById('pad-edit-camera-preview-scale').value = btn.widget_camera_scale || 'cover';
 
@@ -623,6 +623,7 @@ function padDialogBuildButton() {
 
     // Tap actions (array)
     const wtype = document.getElementById('pad-edit-widget-type').value;
+    padFillBuild(btn, wtype);
     const isMouseWidget = wtype === 'mousepad' || wtype === 'scrollpad';
     const consumesActions = isMouseWidget || wtype === 'gamepad_stick' || wtype === 'gamepad_button';
     var tapArr = wtype === 'gamepad_button' ? [actionEditorBuildGamepad('pad-edit-gamepad-hold', true)]

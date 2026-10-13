@@ -111,6 +111,47 @@ inline bool resolve_color_changed(const char* s, uint32_t def, uint32_t* cache, 
     return true;
 }
 
+#if HAS_MCP
+inline void widget_describe_fill_fields(JsonArray fields, bool bar_patterns) {
+    if (bar_patterns) {
+        const char* patterns[] = {"widget_bar_pattern", "widget_bar_pattern_2", "widget_bar_pattern_3",
+            "widget_bar_pattern_4", "widget_bar_bg_pattern"};
+        const char* colors[] = {"widget_bar_pattern_color", "widget_bar_pattern_color_2", "widget_bar_pattern_color_3",
+            "widget_bar_pattern_color_4", "widget_bar_bg_pattern_color"};
+        for (unsigned index = 0; index < 5; ++index) {
+            JsonObject pattern = fields.createNestedObject();
+            pattern["name"] = patterns[index];
+            pattern["type"] = "string";
+            pattern["default"] = "none";
+            JsonArray choices = pattern.createNestedArray("enum");
+            for (const char* choice : {"none", "diagonal", "reverse_diagonal", "crosshatch", "dots", "checkerboard"}) choices.add(choice);
+            JsonObject color = fields.createNestedObject();
+            color["name"] = colors[index];
+            color["type"] = "color";
+            color["default"] = "#000000";
+            color["max"] = index < 4 ? 191 : 63;
+        }
+    }
+    const char* names[] = {"pattern_spacing", "pattern_stroke_width", "widget_track_outline_width", "widget_bar_track_radius"};
+    const int minimum[] = {2, 1, 0, 0};
+    const int maximum[] = {64, 8, 8, 64};
+    const int defaults[] = {8, 1, 0, 4};
+    for (unsigned index = 0; index < (bar_patterns ? 4u : 3u); ++index) {
+        JsonObject field = fields.createNestedObject();
+        field["name"] = names[index];
+        field["type"] = "number";
+        field["minimum"] = minimum[index];
+        field["maximum"] = maximum[index];
+        field["default"] = defaults[index];
+    }
+    JsonObject color = fields.createNestedObject();
+    color["name"] = "widget_track_outline_color";
+    color["type"] = "color";
+    color["default"] = "#000000";
+    color["max"] = 63;
+}
+#endif
+
 // ----------------------------------------------------------------------------
 // Widget auto-registration macro.
 // Derives prefix_parse, prefix_create, prefix_update, prefix_destroy,

@@ -2110,6 +2110,33 @@ body {
 .bar-chart-colors .form-group { display: flex; flex-direction: column; flex: 1; min-width: 0; margin-bottom: 0; }
 .bar-chart-colors .bindable-color { margin-top: auto; margin-bottom: 0; }
 
+.pad-fill-controls[hidden] { display: none; }
+.cp-color-section > summary {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+  list-style: none; padding: 10px 0; font-size: 13px; font-weight: 600;
+}
+.cp-color-section > summary::-webkit-details-marker { display: none; }
+.cp-color-section > summary::before { content: '>'; transform: rotate(0); }
+.cp-color-section[open] > summary::before { transform: rotate(90deg); }
+.cp-color-section + .cp-color-section { border-top: 1px solid var(--portal-border); margin-top: 10px; }
+.cp-summary-value { margin-left: auto; min-width: 0; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--portal-text-muted); font-weight: 400; }
+.cp-summary-preview { margin: 0 0 0 auto; flex: 0 0 24px; }
+.cp-summary-preview .bc-swatch { display: block; width: 24px; height: 24px; }
+.cp-pattern-settings { margin: 4px 0 12px; }
+.cp-actions { display: flex; justify-content: flex-end; padding-top: 12px; }
+.cp-actions button { min-height: 34px; }
+#cp-fill-pattern { width: 100%; }
+.bindable-color .bc-swatch.bc-pattern.bc-binding {
+  background: var(--fill-preview) 0 0 / var(--fill-preview-size) var(--fill-base) !important;
+  position: relative;
+}
+.bindable-color .bc-swatch.bc-pattern.bc-binding::after {
+  content: 'fx'; position: absolute; right: -4px; bottom: -4px;
+  background: var(--portal-surface); color: var(--portal-text);
+  border: 1px solid var(--portal-border); border-radius: 3px;
+  font-size: 9px; font-weight: 600; line-height: 12px; padding: 0 2px;
+}
+
 /* Binding input: flex row with ? help button */
 .binding-input-wrap { display: flex; align-items: center; gap: 6px; }
 .binding-input-wrap input[type="text"] {

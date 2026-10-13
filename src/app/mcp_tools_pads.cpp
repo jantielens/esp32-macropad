@@ -118,6 +118,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "label_top", "label_center", "label_bottom",
         "label_top_style", "label_center_style", "label_bottom_style",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
+        "bg_pattern", "bg_pattern_color", "pattern_spacing", "pattern_stroke_width",
         "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions",
         "confirm", "confirm_text"
     };
@@ -125,6 +126,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
     btn["labels_note"] = "Default bitmap fonts cover Latin text, digits, and basic punctuation. Uploaded static TrueType font coverage depends on the font; missing glyphs fall back to the bitmap default. Use icon_id for graphics.";
     btn["button_shadow_note"] = "accepts 'enabled' or 'disabled' to override the pad setting; omit to inherit. Shadow type, color mode, offsets, and blur are device-wide Pad and Button Defaults.";
+    btn["fill_note"] = "Keep existing base colors. bg_pattern and supported bar patterns: none (default), diagonal, reverse_diagonal, crosshatch, dots, checkerboard; unknown names -> none. Pattern color defaults to #000000 and accepts the owning surface's color bindings. pattern_spacing: static logical px 2-64 (default 8), shared across this button. pattern_stroke_width: 1-8 (default 1), capped by spacing; dot diameter, ignored for checkerboard (spacing is square size). Numeric values clamp; malformed values use defaults. Gauge fills remain unpatterned. Track outline fields apply only to bar_chart/gauge; width 0 disables. widget_bar_track_radius: bar_chart only, static logical px 0-64 (default 4), capped at half the smaller track dimension; applies with outline off, dual baseline joins stay square. Portal badges preview fills with representative bound colors, not live widget rendering.";
     btn["limits_note"] = "max field lengths: button labels/colors/btn_state/widget_data_binding = 191 chars, border_width/corner_radius = 63, pad binding name = 31. Widget caption/text fields are shorter (see each field's \"max\" in widgets[].config_fields, typically 63). If a binding expression is too long, declare it once as a pad-level [pad:name] binding and reference [pad:name] instead of inlining it.";
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");

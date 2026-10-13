@@ -29,6 +29,7 @@ const context = {
     padLabelFromInput() { return ''; },
     padGetBindableColor() { return ''; },
     padGetEffectiveDefault() { return ''; },
+    padFillBuild() {},
     actionEditorBuild() { throw new Error('Timer Duration is invalid'); },
     padActionPrefixes(gesture) { return [gesture + '-0', gesture + '-1', gesture + '-2']; },
     actionEditorListBuild(prefixes) {

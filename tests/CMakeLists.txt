@@ -213,6 +213,10 @@ target_compile_options(test_gamepad_widgets PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 target_link_libraries(test_gamepad_widgets PRIVATE host_lvgl)
 
+add_host_gtest(test_fill_draw test_fill_draw.cpp)
+target_include_directories(test_fill_draw BEFORE PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_link_libraries(test_fill_draw PRIVATE host_lvgl m)
+
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
     OPTIONS -pthread

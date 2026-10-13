@@ -7,6 +7,7 @@ const context = {
 	console,
 	MAX_ACTIONS: 3,
 	padIconTypeChanged() {},
+	padFillRefreshVisibility() {},
 	padWorkspaceRefresh() {},
 	actionEditorListSetLabels() {},
 	document: {

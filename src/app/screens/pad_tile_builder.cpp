@@ -4,6 +4,7 @@
 #include "../log_manager.h"
 #include "../device_class.h"
 #include "../button_shadow_color.h"
+#include "../fill_style_runtime.h"
 #if HAS_TOUCH
 #include "../touch_manager.h"
 #endif
@@ -287,6 +288,8 @@ void PadScreen::buildTiles() {
         lv_obj_set_style_border_width(obj, bw_def, 0);
         lv_obj_set_style_radius(obj, cr_def, 0);
         lv_obj_set_style_clip_corner(obj, true, 0);
+        tile.fill_style = fill_style_create(obj, bcfg.fill_style);
+        if (bcfg.fill_style && !tile.fill_style) LOGW(TAG, "Button styling allocation failed");
         if (has_shadow && cfg->shadow.type == BUTTON_SHADOW_TYPE_DROP) {
             lv_obj_set_style_shadow_color(obj, rgb_to_lv(shadow_def), 0);
             lv_obj_set_style_shadow_opa(obj, LV_OPA_70, 0);

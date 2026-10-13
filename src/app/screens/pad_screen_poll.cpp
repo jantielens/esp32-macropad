@@ -1,5 +1,6 @@
 #include "pad_screen.h"
 #include "../button_shadow_color.h"
+#include "../fill_style_runtime.h"
 #include "../display_driver.h"
 #if HAS_IMAGE_FETCH
 #include "../image_fetch.h"
@@ -142,6 +143,7 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
 // ============================================================================
 
 void PadScreen::pollColorBindings() {
+    for (uint8_t index = 0; index < tileCount; ++index) fill_style_poll(tiles[index].fill_style);
 #if HAS_MQTT
     if (colorBindingCount == 0) return;
 

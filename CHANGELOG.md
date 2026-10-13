@@ -14,6 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Style button backgrounds, bar chart series, and bar tracks with diagonal,
+  reverse diagonal, crosshatch, dots, or checkerboard patterns on LCD and
+  interactive e-paper displays. Patterns have separate bindable colors and
+  shared static spacing/stroke controls, preserving the base color. None is
+  the default. Gauge patterned fills and image compositing remain deferred;
+  images and their letterbox bands still cover patterns.
+* Add whole-track outlines to bar charts and gauges with a static width and
+  bindable color. Outlines default to off. Bar tracks also have a static
+  corner radius, defaulting to 4 pixels, that shapes tracks and fills even
+  without an outline; dual-bar baseline joins remain square.
+
+### Changed
+
+* Edit supported fill colors through Base Color and Pattern sections with
+  one shared Apply operation, threshold generators, and combined color badge
+  previews. The button Appearance tab puts Background/Text, Button Shadow,
+  UI Offset, and bindable Button State first, followed by Borders & Geometry
+  and Patterns. Patterns opens when an applicable pattern is active and
+  preserves manual toggles during routine edits. Bar/gauge track settings
+  are grouped in Content. Complete widget styling remains an on-device
+  preview, not a grid preview.
+
 ## [1.40.0] - 2026-10-12
 
 ### Added

@@ -97,7 +97,12 @@ function padColorSwatchButton(val) {
     sw.dataset.value = val;
     if (val.charAt(0) === '#') sw.style.background = val;
     else sw.classList.add('cp-swatch-binding');
-    sw.addEventListener('click', function() { padColorPopoverSubmit(val); });
+    sw.addEventListener('click', function() {
+        if (_cpPopover && _cpPopover.fill) {
+            _cpPopover.pop.querySelector('#cp-input').value = val;
+            padColorPopoverValidate(true);
+        } else padColorPopoverSubmit(val);
+    });
     return sw;
 }
 
@@ -124,6 +129,22 @@ function padColorPopoverCreate() {
     pop.setAttribute('aria-label', 'Choose color');
     pop.innerHTML =
         '<button type="button" class="color-popover-close" id="cp-close" aria-label="Close">&times;</button>' +
+        '<details class="cp-color-section" id="cp-base" open>' +
+            '<summary id="cp-base-summary">Base Color <span id="cp-base-value" class="cp-summary-value"></span></summary>' +
+            '<div id="cp-base-body"></div>' +
+        '</details>' +
+        '<details class="cp-color-section" id="cp-fill" style="display:none;">' +
+            '<summary>Pattern: <span id="cp-pattern-summary">None</span>' +
+                '<span class="bindable-color cp-summary-preview"><span class="bc-swatch" id="cp-fill-badge"></span></span>' +
+            '</summary>' +
+            '<div class="cp-pattern-settings">' +
+            '<label class="cp-gen-label" for="cp-fill-pattern">Pattern</label>' +
+            '<select id="cp-fill-pattern">' + PAD_FILL_PATTERNS.map(function(entry) {
+                return '<option value="' + entry[0] + '">' + entry[1] + '</option>';
+            }).join('') + '</select>' +
+            '</div><div id="cp-pattern-body"></div>' +
+        '</details>' +
+        '<div id="cp-color-editor">' +
         '<div class="color-popover-section" id="cp-recent-heading" style="display:none;">Used in your pads</div>' +
         '<div class="color-popover-grid" id="cp-recent-grid"></div>' +
         '<div class="color-popover-section">Palette</div>' +
@@ -149,9 +170,12 @@ function padColorPopoverCreate() {
                 '<input type="text" id="cp-input" maxlength="191" placeholder="#RRGGBB or [expr:\u2026]" spellcheck="false" aria-describedby="cp-error">' +
             '</div>' +
             '<div class="binding-error-msg" id="cp-error" role="alert" style="display:none;"></div>' +
+        '</div></div>' +
+        '<div class="cp-actions">' +
             '<button type="button" class="btn btn-small btn-primary" id="cp-apply" disabled>Apply</button>' +
         '</div>';
     document.body.appendChild(pop);
+    pop.querySelector('#cp-base-body').appendChild(pop.querySelector('#cp-color-editor'));
     // Build palette grid (static) + custom picker
     var pg = pop.querySelector('#cp-palette-grid');
     PAD_COLOR_PALETTE.forEach(function(hex) { pg.appendChild(padColorSwatchButton(hex)); });
@@ -189,6 +213,21 @@ function padColorPopoverCreate() {
         _cpErrorTimer = setTimeout(function() { _cpErrorTimer = null; padColorPopoverValidate(true); }, 400);
     });
     cpInput.addEventListener('blur', function() { padColorPopoverValidate(true); });
+    ['base', 'color'].forEach(function(layer) {
+        var section = pop.querySelector(layer === 'base' ? '#cp-base' : '#cp-fill');
+        var other = pop.querySelector(layer === 'base' ? '#cp-fill' : '#cp-base');
+        section.addEventListener('toggle', function() {
+            if (!_cpPopover || !_cpPopover.fill || !_cpPopover.target) return;
+            if (section.open) {
+                other.open = false;
+                if (_cpPopover.layer !== layer) padColorPopoverLayer(layer);
+            } else if (!other.open) other.open = true;
+        });
+    });
+    pop.querySelector('#cp-fill-pattern').addEventListener('change', function() {
+        _cpPopover.fill.pattern = padFillPattern(this.value);
+        padColorPopoverValidate(true);
+    });
     pop.querySelector('#cp-fx').addEventListener('click', function() {
         if (typeof showBindingHelp === 'function') showBindingHelp();
     });
@@ -231,8 +270,27 @@ function padColorPopoverValidate(showError) {
     var pop = _cpPopover.pop;
     var target = _cpPopover.target;
     var res = padColorCheck(pop.querySelector('#cp-input').value, target && target.maxLength > 0 ? target.maxLength : 0, !target || target.dataset.allowBindings !== 'false');
+    if (_cpPopover.fill) {
+        _cpPopover.fill[_cpPopover.layer] = pop.querySelector('#cp-input').value;
+        pop.querySelector('#cp-base-value').textContent = padColorNormalizeLiteral(_cpPopover.fill.base) || _cpPopover.fill.base;
+        pop.querySelector('#cp-pattern-summary').textContent = PAD_FILL_PATTERNS.find(function(entry) {
+            return entry[0] === _cpPopover.fill.pattern;
+        })[1];
+        padFillPaintSwatch(pop.querySelector('#cp-fill-badge'), _cpPopover.fill.pattern,
+            _cpPopover.fill.base, _cpPopover.fill.color);
+        for (var layer of ['base', 'color']) {
+            var layerResult = padColorCheck(_cpPopover.fill[layer], target.maxLength, true);
+            if (!layerResult.value || layerResult.error) {
+                res.error = (layer === 'base' ? 'Base Color: ' : 'Pattern Color: ') + (layerResult.error || 'Enter a color');
+                break;
+            }
+        }
+    }
     var preview = pop.querySelector('#cp-preview');
     var ok = !!res.value && !res.error;
+    pop.querySelectorAll('.color-popover-swatch').forEach(function(swatch) {
+        swatch.classList.toggle('active', swatch.dataset.value === res.value);
+    });
     preview.classList.toggle('cp-preview-binding', ok && res.value.charAt(0) !== '#');
     preview.classList.toggle('cp-preview-none', !ok);
     preview.style.background = (ok && res.value.charAt(0) === '#') ? res.value : '';
@@ -266,10 +324,28 @@ function padColorPopoverOpen(swatch, input) {
     cp.target = input;
     cp.anchor = swatch;
     cp.returnFocus = document.activeElement;
+    cp.layer = 'base';
+    var fillControls = input.dataset.fillPattern ? padFillControls().find(function(controls) {
+        return controls.dataset.patternField === input.dataset.fillPattern;
+    }) : null;
+    cp.fill = fillControls ? {
+        controls: fillControls, base: input.value,
+        pattern: fillControls.querySelector('select').value,
+        color: fillControls.querySelector('.bc-input').value,
+        originalColor: fillControls.querySelector('.bc-input').value
+    } : null;
+    cp.pop.querySelector('#cp-fill').style.display = cp.fill ? '' : 'none';
+    cp.pop.querySelector('#cp-base-summary').style.display = cp.fill ? '' : 'none';
+    cp.pop.querySelector('#cp-base').open = true;
+    cp.pop.querySelector('#cp-fill').open = false;
+    cp.pop.querySelector('#cp-base-body').appendChild(cp.pop.querySelector('#cp-color-editor'));
+    if (cp.fill) {
+        cp.pop.querySelector('#cp-fill-pattern').value = cp.fill.pattern;
+    }
     var allowBindings = input.dataset.allowBindings !== 'false';
     cp.pop.querySelector('#cp-gen').style.display = allowBindings ? '' : 'none';
     cp.pop.querySelector('#cp-fx').style.display = allowBindings ? '' : 'none';
-    cp.pop.querySelector('#cp-input-label').textContent = allowBindings ? 'Color or expression' : 'Color';
+    cp.pop.querySelector('#cp-input-label').textContent = cp.fill ? 'Base Color or expression' : allowBindings ? 'Color or expression' : 'Color';
     cp.pop.querySelector('#cp-input').placeholder = allowBindings ? '#RRGGBB or [expr:\u2026]' : '#RRGGBB';
     padThresholdGenLoad(allowBindings ? input.value : '');
     // Show off-screen first so we can measure
@@ -292,13 +368,32 @@ function padColorPopoverOpen(swatch, input) {
         sw.classList.toggle('active', sw.dataset.value.toUpperCase() === cur);
     });
     var cpInput = cp.pop.querySelector('#cp-input');
+    cpInput.maxLength = input.maxLength > 0 ? input.maxLength : 191;
     cpInput.value = input.value.trim();
+    if (cp.fill && cp.fill.pattern !== 'none') {
+        cp.pop.querySelector('#cp-base').open = false;
+        cp.pop.querySelector('#cp-fill').open = true;
+        padColorPopoverLayer('color');
+    }
     if (typeof bindingClearError === 'function') bindingClearError(cp.pop.querySelector('#cp-gen-source'));
     padColorPopoverValidate(true);
     cp.bd.style.display = 'block';
     cp.pop.style.display = 'block';
     padColorPopoverReposition();
     cpInput.focus();
+}
+
+function padColorPopoverLayer(layer) {
+    var cp = _cpPopover;
+    if (!cp || !cp.fill) return;
+    cp.fill[cp.layer] = cp.pop.querySelector('#cp-input').value;
+    cp.layer = layer;
+    cp.pop.querySelector(layer === 'base' ? '#cp-base-body' : '#cp-pattern-body').appendChild(cp.pop.querySelector('#cp-color-editor'));
+    cp.pop.querySelector('#cp-input').value = cp.fill[layer];
+    cp.pop.querySelector('#cp-input-label').textContent = layer === 'base' ? 'Base Color or expression' : 'Pattern Color or expression';
+    padThresholdGenLoad(cp.fill[layer]);
+    padColorPopoverValidate(true);
+    padColorPopoverReposition();
 }
 
 /** Reposition the popover to stay within the viewport. */
@@ -466,6 +561,17 @@ function padThresholdGenerate() {
 /** Apply a value from the popover to the target input. */
 function padColorPopoverApply(val) {
     if (!_cpPopover || !_cpPopover.target) return;
+    if (_cpPopover.fill) {
+        var fill = _cpPopover.fill;
+        var base = padColorCheck(fill.base, _cpPopover.target.maxLength, true);
+        var color = padColorCheck(fill.color, _cpPopover.target.maxLength, true);
+        if (!base.value || base.error || !color.value || color.error) return;
+        fill.controls.querySelector('select').value = fill.pattern;
+        fill.controls.querySelector('.bc-input').value = color.value;
+        if (fill.pattern !== 'none' || color.value !== fill.originalColor) fill.controls.dataset.colorSet = '1';
+        val = base.value;
+        padFillRefreshVisibility();
+    }
     _cpPopover.target.value = val;
     _cpPopover.target.dispatchEvent(new Event('input', { bubbles: true }));
     padColorPopoverClose();
@@ -478,6 +584,7 @@ function padColorPopoverClose() {
     _cpPopover.pop.style.display = 'none';
     _cpPopover.bd.style.display = 'none';
     _cpPopover.target = null;
+    _cpPopover.fill = null;
     var rf = _cpPopover.returnFocus;
     _cpPopover.returnFocus = null;
     if (rf && typeof rf.focus === 'function' && document.body.contains(rf)) rf.focus();
@@ -503,6 +610,7 @@ function padInitBindableColor(container) {
             swatch.style.background = '#e5e5ea';
             swatch.classList.remove('bc-binding');
         }
+        padFillSyncSwatch(input, swatch);
     }
 
     input.addEventListener('input', syncSwatch);
@@ -510,6 +618,7 @@ function padInitBindableColor(container) {
         padColorPopoverOpen(swatch, input);
     });
     syncSwatch();
+    if (input.dataset.fillPattern) padInitFillColor(container, input);
 }
 
 /** Set a bindable color input value and sync its swatch. */
@@ -524,4 +633,167 @@ function padSetBindableColor(id, val, fallback) {
 function padGetBindableColor(id) {
     const el = document.getElementById(id);
     return el ? el.value.trim() : '';
+}
+
+var PAD_FILL_PATTERNS = [
+    ['none', 'None'], ['diagonal', 'Diagonal stripes'], ['reverse_diagonal', 'Reverse diagonal stripes'],
+    ['crosshatch', 'Crosshatch'], ['dots', 'Dots'], ['checkerboard', 'Checkerboard']
+];
+
+function padFillPattern(value) {
+    return PAD_FILL_PATTERNS.some(function(entry) { return entry[0] === value; }) ? value : 'none';
+}
+
+function padFillGeometry(value, fallback, minimum, maximum) {
+    var number = Number(value);
+    if (value === undefined || value === null || value === '' || !Number.isFinite(number)) number = fallback;
+    return Math.max(minimum, Math.min(maximum, Math.trunc(number)));
+}
+
+function padInitFillColor(container, input) {
+    var controls = document.createElement('div');
+    controls.className = 'pad-fill-controls';
+    controls.dataset.patternField = input.dataset.fillPattern;
+    controls.dataset.colorField = input.dataset.fillColor;
+    controls.dataset.baseInput = input.id;
+    controls.hidden = true;
+    controls.innerHTML = '<label for="' + input.id + '-pattern">Pattern</label>' +
+        '<select id="' + input.id + '-pattern">' + PAD_FILL_PATTERNS.map(function(entry) {
+            return '<option value="' + entry[0] + '">' + entry[1] + '</option>';
+        }).join('') + '</select>' +
+        '<div class="pad-fill-pattern-color"><label for="' + input.id + '-pattern-color">Pattern Color</label>' +
+        '<div class="bindable-color"><div class="bc-swatch"></div><input type="text" class="bc-input" id="' +
+        input.id + '-pattern-color" maxlength="' + input.maxLength + '" value="#000000" spellcheck="false"></div></div>';
+    container.insertAdjacentElement('afterend', controls);
+    controls.querySelector('select').addEventListener('change', function() {
+        if (this.value !== 'none') controls.dataset.colorSet = '1';
+        padFillRefreshVisibility();
+    });
+    controls.querySelector('.bc-input').addEventListener('input', function() { controls.dataset.colorSet = '1'; });
+    if (input.dataset.fillPattern === 'bg_pattern') {
+        ['pad-edit-pattern-spacing', 'pad-edit-pattern-stroke'].forEach(function(id) {
+            document.getElementById(id).addEventListener('input', padFillRefreshVisibility);
+        });
+    }
+}
+
+function padFillSyncSwatch(input, swatch) {
+    if (!input.dataset.fillPattern) return;
+    var controls = padFillControls().find(function(control) { return control.dataset.patternField === input.dataset.fillPattern; });
+    if (!controls) return;
+    var pattern = padFillPattern(controls.querySelector('select').value);
+    padFillPaintSwatch(swatch, pattern, input.value, controls.querySelector('.bc-input').value);
+}
+
+function padFillPaintSwatch(swatch, pattern, baseValue, patternValue) {
+    swatch.classList.toggle('bc-pattern', pattern !== 'none');
+    swatch.title = PAD_FILL_PATTERNS.find(function(entry) { return entry[0] === pattern; })[1];
+    swatch.style.background = padColorNormalizeLiteral(baseValue) || (baseValue ? '' : '#e5e5ea');
+    swatch.classList.toggle('bc-binding', !!baseValue && !padColorNormalizeLiteral(baseValue));
+    if (pattern === 'none') return;
+    var base = padColorNormalizeLiteral(baseValue) || '#EEEEEE';
+    var color = padColorNormalizeLiteral(patternValue) || '#111111';
+    var spacing = padFillGeometry(document.getElementById('pad-edit-pattern-spacing').value, 8, 2, 64);
+    var stroke = padFillGeometry(document.getElementById('pad-edit-pattern-stroke').value, 1, 1, Math.min(8, spacing));
+    function stripes(angle) { return 'repeating-linear-gradient(' + angle + 'deg,' + color + ' 0 ' + stroke + 'px,transparent ' + stroke + 'px ' + spacing + 'px)'; }
+    var image = pattern === 'diagonal' ? stripes(135) : pattern === 'reverse_diagonal' ? stripes(45) :
+        pattern === 'crosshatch' ? stripes(135) + ',' + stripes(45) :
+        pattern === 'dots' ? 'radial-gradient(circle at ' + stroke / 2 + 'px ' + stroke / 2 + 'px,' + color + ' 0 ' + stroke / 2 + 'px,transparent ' + stroke / 2 + 'px)' :
+        'conic-gradient(' + color + ' 0 25%,transparent 0 50%,' + color + ' 0 75%,transparent 0)';
+    var size = pattern === 'dots' ? spacing + 'px ' + spacing + 'px' :
+        pattern === 'checkerboard' ? spacing * 2 + 'px ' + spacing * 2 + 'px' : 'auto';
+    swatch.style.backgroundColor = base;
+    swatch.style.backgroundImage = image;
+    swatch.style.backgroundSize = size;
+    swatch.style.setProperty('--fill-base', base);
+    swatch.style.setProperty('--fill-preview', image);
+    swatch.style.setProperty('--fill-preview-size', size);
+    var bound = !padColorNormalizeLiteral(baseValue) || !padColorNormalizeLiteral(patternValue);
+    swatch.classList.toggle('bc-binding', bound);
+    if (bound) swatch.title += ' (bound color; representative preview)';
+}
+
+function padFillControls() {
+    return Array.from(document.querySelectorAll('.pad-edit-modal .pad-fill-controls'));
+}
+
+function padFillRefreshVisibility(resetSections) {
+    var type = document.getElementById('pad-edit-widget-type').value;
+    var stroked = false;
+    var patterned = false;
+    padFillControls().forEach(function(controls) {
+        var supported = controls.dataset.patternField === 'bg_pattern' || type === 'bar_chart';
+        var pattern = padFillPattern(controls.querySelector('select').value);
+        controls.querySelector('.pad-fill-pattern-color').style.display = pattern === 'none' ? 'none' : '';
+        if (supported && pattern !== 'none') {
+            patterned = true;
+            if (pattern !== 'checkerboard') stroked = true;
+        }
+        var baseInput = document.getElementById(controls.dataset.baseInput);
+        if (baseInput) padFillSyncSwatch(baseInput, baseInput.closest('.bindable-color').querySelector('.bc-swatch'));
+    });
+    document.getElementById('pad-edit-pattern-geometry').style.display = '';
+    document.getElementById('pad-edit-pattern-stroke-wrap').style.display = '';
+    document.getElementById('pad-edit-pattern-stroke').disabled = !stroked;
+    var patterns = document.getElementById('pad-edit-patterns-section');
+    if (patterns && (resetSections === true || patterns.dataset.patterned !== String(patterned))) {
+        patterns.open = patterned;
+        patterns.dataset.patterned = String(patterned);
+    }
+    var trackSettings = document.getElementById('pad-edit-track-settings');
+    var trackHost = document.getElementById(type === 'gauge' ? 'pad-edit-gauge-track-settings' : 'pad-edit-bar-track-settings');
+    if (trackSettings && trackHost && trackSettings.parentElement !== trackHost) trackHost.appendChild(trackSettings);
+    document.getElementById('pad-edit-track-outline').style.display = type === 'bar_chart' || type === 'gauge' ? '' : 'none';
+    var radius = document.getElementById('pad-edit-track-radius-wrap');
+    if (radius) radius.style.display = type === 'bar_chart' ? '' : 'none';
+}
+
+function padFillLoad(button) {
+    padFillControls().forEach(function(controls) {
+        controls.querySelector('select').value = padFillPattern(button[controls.dataset.patternField]);
+        var color = controls.querySelector('.bc-input');
+        padSetBindableColor(color.id, button[controls.dataset.colorField], '#000000');
+        controls.dataset.colorSet = Object.prototype.hasOwnProperty.call(button, controls.dataset.colorField) ? '1' : '';
+    });
+    var spacing = padFillGeometry(button.pattern_spacing, 8, 2, 64);
+    document.getElementById('pad-edit-pattern-spacing').value = spacing;
+    document.getElementById('pad-edit-pattern-stroke').value = padFillGeometry(button.pattern_stroke_width, 1, 1, Math.min(8, spacing));
+    document.getElementById('pad-edit-track-outline-width').value = padFillGeometry(button.widget_track_outline_width, 0, 0, 8);
+    padSetBindableColor('pad-edit-track-outline-color', button.widget_track_outline_color, '#000000');
+    document.getElementById('pad-edit-track-radius').value = padFillGeometry(button.widget_bar_track_radius, 4, 0, 64);
+    padFillRefreshVisibility(true);
+}
+
+function padFillBuild(button, type) {
+    var configured = false;
+    padFillControls().forEach(function(controls) {
+        if (controls.dataset.patternField !== 'bg_pattern' && type !== 'bar_chart') return;
+        var pattern = padFillPattern(controls.querySelector('select').value);
+        if (pattern !== 'none') {
+            button[controls.dataset.patternField] = pattern;
+            configured = true;
+        }
+        if (pattern !== 'none' || controls.dataset.colorSet === '1') {
+            button[controls.dataset.colorField] = controls.querySelector('.bc-input').value.trim() || '#000000';
+            configured = true;
+        }
+    });
+    var spacing = padFillGeometry(document.getElementById('pad-edit-pattern-spacing').value, 8, 2, 64);
+    var stroke = padFillGeometry(document.getElementById('pad-edit-pattern-stroke').value, 1, 1, Math.min(8, spacing));
+    if (configured || spacing !== 8 || stroke !== 1) {
+        button.pattern_spacing = spacing;
+        button.pattern_stroke_width = stroke;
+    }
+    if (type === 'bar_chart' || type === 'gauge') {
+        var width = padFillGeometry(document.getElementById('pad-edit-track-outline-width').value, 0, 0, 8);
+        var color = padGetBindableColor('pad-edit-track-outline-color') || '#000000';
+        if (width || color !== '#000000') {
+            button.widget_track_outline_width = width;
+            button.widget_track_outline_color = color;
+        }
+    }
+    if (type === 'bar_chart') {
+        var radius = padFillGeometry(document.getElementById('pad-edit-track-radius').value, 4, 0, 64);
+        if (radius !== 4) button.widget_bar_track_radius = radius;
+    }
 }

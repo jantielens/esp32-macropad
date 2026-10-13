@@ -4,6 +4,7 @@
 
 #include "../binding_template.h"
 #include "../log_manager.h"
+#include "../fill_style_runtime.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -235,12 +236,12 @@ static void bar_chart_align_center_cap(lv_obj_t* cap, bool horizontal, int8_t di
 static lv_obj_t* bar_chart_make_center_cap(lv_obj_t* fill, bool horizontal,
                                            int8_t dual_dir, int16_t track_cross,
                                            lv_color_t color) {
-    const int16_t R = 4;  // matches the fill corner radius
+    const int16_t radius = lv_obj_get_style_radius(fill, LV_PART_MAIN);
     lv_obj_t* cap = lv_obj_create(fill);
     if (horizontal) {
-        lv_obj_set_size(cap, R, track_cross);
+        lv_obj_set_size(cap, radius, track_cross);
     } else {
-        lv_obj_set_size(cap, track_cross, R);
+        lv_obj_set_size(cap, track_cross, radius);
     }
     bar_chart_align_center_cap(cap, horizontal, dual_dir);
     lv_obj_set_style_bg_color(cap, color, 0);
@@ -258,6 +259,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                               lv_obj_t* icon_img, lv_obj_t* center_label,
                               WidgetState* state) {
     auto* cfg = reinterpret_cast<const BarChartConfig*>(wcfg->data);
+    FillStyleRuntime* fill_style = fill_style_find(tile);
     auto* st = reinterpret_cast<BarChartState*>(state->data);
     memset(st, 0, sizeof(BarChartState));
     st->cached_min = NAN;
@@ -446,6 +448,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     for (uint8_t v = 0; v < n; v++) {
         uint8_t oi = vbar_owner[v];     // owner slot index for this visual track
         BarSlot* slot = &st->slots[oi];
+        int16_t track_radius = fill_geometry_clamp(fill_style ? fill_style->style()->track_radius : 4,
+            0, (track_cross < fill_len ? track_cross : fill_len) / 2);
 
         // Per-bar track (background). Vertical: the column group is centered
         // via TOP_MID with a per-column x offset. Horizontal: stacked rows,
@@ -466,10 +470,12 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
         lv_obj_set_style_bg_color(bg, bg_clr, 0);
         lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(bg, 4, 0);
+        lv_obj_set_style_radius(bg, track_radius, 0);
         lv_obj_set_style_border_width(bg, 0, 0);
         lv_obj_set_style_pad_all(bg, 0, 0);
         lv_obj_clear_flag(bg, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+        lv_obj_set_style_clip_corner(bg, true, 0);
+        fill_style_attach_pattern(bg, fill_style, 5);
 
         // Bar fill — fills the track's full cross axis, grows from bottom/left.
         lv_obj_t* fill = lv_obj_create(bg);
@@ -482,10 +488,11 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
         lv_obj_set_style_bg_color(fill, resolve_lv_color(bar_slot_color_cfg(cfg, oi), BAR_SLOT_DEFAULT_COLOR[oi]), 0);
         lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(fill, 4, 0);
+        lv_obj_set_style_radius(fill, track_radius, 0);
         lv_obj_set_style_border_width(fill, 0, 0);
         lv_obj_set_style_pad_all(fill, 0, 0);
         lv_obj_clear_flag(fill, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+        fill_style_attach_pattern(fill, fill_style, oi + 1);
 
         slot->bg = bg;
         slot->fill = fill;
@@ -500,6 +507,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                 fill, cfg->horizontal,
                 slot->dual_dir != 0 ? slot->dual_dir : (int8_t)+1, track_cross,
                 resolve_lv_color(bar_slot_color_cfg(cfg, oi), BAR_SLOT_DEFAULT_COLOR[oi]));
+            fill_style_attach_pattern(slot->cap, fill_style, oi + 1);
         }
 
         // Dual far partner: a second fill hosted inside the same track. Both
@@ -518,10 +526,11 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             }
             lv_obj_set_style_bg_color(pfill, resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]), 0);
             lv_obj_set_style_bg_opa(pfill, LV_OPA_COVER, 0);
-            lv_obj_set_style_radius(pfill, 4, 0);
+            lv_obj_set_style_radius(pfill, track_radius, 0);
             lv_obj_set_style_border_width(pfill, 0, 0);
             lv_obj_set_style_pad_all(pfill, 0, 0);
             lv_obj_clear_flag(pfill, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+            fill_style_attach_pattern(pfill, fill_style, oi + 2);
             partner->fill = pfill;
             partner->bg = nullptr;  // shares the owner's track (no own bg/marker)
             partner->track_total = fill_len;
@@ -529,7 +538,10 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             partner->cap = bar_chart_make_center_cap(
                 pfill, cfg->horizontal, partner->dual_dir, track_cross,
                 resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]));
+            fill_style_attach_pattern(partner->cap, fill_style, oi + 2);
         }
+
+        fill_style_attach_rect_outline(bg, fill_style);
 
         // Per-bar scale gridlines (evenly spaced across the fill direction).
         if (cfg->tick_count > 0 && st->tick_lines) {
@@ -920,6 +932,7 @@ static void bar_chart_destroy(WidgetState* state) {
 #if HAS_MCP
 static void bar_chart_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
+    widget_describe_fill_fields(f, true);
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     auto addmax = [&](const char* n, const char* t, const char* d, int m){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; o["max"]=m; };
     add("widget_bar_min","number","scale minimum (bindable)"); add("widget_bar_max","number","full-scale value (bindable)");
