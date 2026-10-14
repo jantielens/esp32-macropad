@@ -106,26 +106,10 @@
     #define LV_DRAW_SW_SUPPORT_INDEXED_IMAGE 0
 #endif
 
-/* ESP32-P4 PPA (Pixel Processing Accelerator) — hardware-accelerated fills and blits.
- * Requires SOC_PPA_SUPPORTED (ESP32-P4 only) and cache-line-aligned buffers. */
-#if __has_include("soc/soc_caps.h")
-    #include "soc/soc_caps.h"
-#endif
-#if defined(SOC_PPA_SUPPORTED) && SOC_PPA_SUPPORTED
-    #define LV_USE_PPA 1
-#else
-    #define LV_USE_PPA 0
-#endif
-
-/* Bridge for ESP-IDF Kconfig check in PPA driver (lv_draw_ppa_private.h).
- * The PPA code checks CONFIG_LV_DRAW_BUF_ALIGN directly; without lv_conf.h
- * going through Kconfig this symbol would be undefined.
- * Only needed when PPA is actually enabled. */
-#if LV_USE_PPA
-    #ifndef CONFIG_LV_DRAW_BUF_ALIGN
-    #define CONFIG_LV_DRAW_BUF_ALIGN   LV_DRAW_BUF_ALIGN
-    #endif
-#endif
+/* LVGL 9.5.0 PPA rejects unaligned intermediate-buffer sizes, amplified by patterns.
+ * Use software drawing until a released LVGL fix supports the stable ESP32 SDK.
+ * The display driver's independently aligned PPA rotation path is unaffected. */
+#define LV_USE_PPA 0
 
 /*================
  * LOGGING

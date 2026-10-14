@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Temporarily use LVGL software drawing on ESP32-P4 to avoid PPA buffer-size
+  alignment errors amplified by patterned fills into rendering stalls.
+  Keep LVGL at 9.5.0 for compatibility with the stable Arduino-ESP32 SDK.
+  Display-driver PPA rotation remains enabled; pattern rendering is unchanged.
 * Show pad-editor validation failures in one dismissible inspector overlay
   without shifting settings or duplicating the bottom notification. Invalid
   numeric, binding, and action fields share error highlighting; dismissal
