@@ -29,24 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-* Refine Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview,
-  and Extension Content layouts. Keep all controls inside their collapsible
-  frames, group Mousepad tasks, pair related compact fields, and clarify labels
-  without changing saved configuration, capability gates, validation, or actions.
-* Extract the remaining inline widget editors into build-time HTML partials,
-  preserving identical rendered markup and section order.
-* Clarify List Content controls with a Provider & Filter disclosure title,
-  without changing provider, filter, or item-action behavior.
-* Group Table Content controls in one initially open, collapsible Table
-  Binding & Styling section using shared editor styling. Keep Data Binding,
-  Font Style Override, and Scroll together without changing binding rules,
-  style inheritance, defaults, or saved configuration.
-* Reorganize Sparkline Content into per-line Data sources, Scale, Sampling,
-  Line style, Markers, Current-value annotations, and Reference lines. Keep
-  each line's binding, color, label, and history source together; configured
-  optional lines and enabled markers open initially. Extend shared editor
-  presentation refresh to three Sparkline sources without changing sampling,
-  validation, capability, or persistence behavior.
+* Rework pad-editor widget settings with task-based grouping, related controls
+  kept together, clearer labels, consistent collapsible sections, and compact
+  responsive layouts. Charts reveal optional styling when relevant while
+  retaining saved values. Covers Bar Chart, Gauge, Sparkline, Table, List,
+  Rocker, Numeric Rocker, Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button,
+  Camera Preview, and Extension. Preserve configuration formats, defaults,
+  validation, capability gates, and action behavior.
 * Edit supported fill colors through Base Color and Pattern sections with
   one shared Apply operation, threshold generators, and combined color badge
   previews. The button Appearance tab puts Background/Text, Button Shadow,
@@ -55,20 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserves manual toggles during routine edits. Bar/gauge track settings
   are grouped in Content. Complete widget styling remains an on-device
   preview, not a grid preview.
-* Reorganize bar-chart Content into Data sources, Scale, Layout & style,
-  Gridlines, and Target. Each bar keeps its binding, caption, and color/fill
-  together; configured optional bars open automatically. Pair controls retain
-  their existing minimum/maximum mapping. Disabled gridline and target styling
-  stays saved, and Animation is grouped with layout and style.
 * Refine pad-editor label, binding-reference, reset-icon, and paired-field
   alignment, with clearer collapsible surfaces in light mode. Group local
   and remote background-image controls without changing capability gates.
-* Reorganize Gauge Content into per-ring Data sources, Scale, Arc & track,
-  Needle, Tick marks, and Target. Keep related bindings, labels, colors, and
-  geometry together; configured optional rings open automatically. Disabled
-  feature styling stays saved, pair directions remain unchanged, and target
-  zones retain their angular units. Bar Chart and Gauge share metadata-driven
-  editor visibility and disclosure updates.
 
 ### Fixed
 
