@@ -572,8 +572,9 @@ list contains JPEG and PNG files under `/images`. Use `[image:current]` in
 **Local Image Binding** to render the shared current slideshow image.
 Use `[image:error]` in a label to show the most recent local image upload or
 display failure since boot; it reads `ok` until a failure occurs.
-**Background Image Scale** applies to uploaded local images and Camera Feed or
-Remote Image backgrounds. It selects **Cover** to fill and crop or
+The **Background image** frame contains collapsible **Local Image** and
+**Camera Feed or Remote Image** subsections. Its shared **Scale** control
+applies to both sources. It selects **Cover** to fill and crop or
 **Letterbox** to preserve the whole image with bars matching the button
 background. The Camera Preview widget has its own scale setting. URL settings remain
 available for remote JPEG, PNG, and MJPEG sources.
@@ -1478,9 +1479,9 @@ The bar chart widget draws one or more vertical or horizontal bars that fill bas
 | **Bar 1 data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
 | **Bar 2 / 3 / 4 data binding** | Optional. Each non-empty binding adds another bar to the widget (up to 4 total). Each bar gets its **own track** (background, gridlines, and target marker stay scoped to that bar — they no longer span the whole widget). The bars are spread evenly across the full width as columns (vertical) or stacked as rows (horizontal) with a fixed 6 px gap. All bars share the same min/max scale and zero-centered behavior |
 | **Bar 1 / 2 / 3 / 4 caption** | Optional per-bar label, colored to match its bar and hidden when empty. Fully bindable, so it can mix static text with live data — e.g. `Solar [mqtt:home/solar;power;%.0f]W`. Use `\n` for a line break (multi-line captions). Shown **beneath** each bar (vertical, centered) or in a strip to the **left** of each row (horizontal, right-aligned). The strip is only reserved when at least one caption is set, so caption-less charts keep their full bar size. Captions use the small font and clip if too long — keep them short |
-| **Caption size (px)** | Fixes the caption strip to an exact pixel size (1–200): **width** in horizontal mode, **height** in vertical mode. Leave at `0` for automatic sizing (horizontal ≈28% of the button width clamped 30–120 px; vertical one line tall). Increase the vertical size to fit multi-line (`\n`) captions |
+| **Caption area size (px)** | Fixes the caption strip to an exact pixel size (1–200): **width** in horizontal mode, **height** in vertical mode. Leave at `0` for automatic sizing (horizontal ≈28% of the button width clamped 30–120 px; vertical one line tall). Increase the vertical size to fit multi-line (`\n`) captions |
 | **Min / Max** | The value range. The bar is empty at min and full at max. Accepts a number or a binding expression (e.g. `[health:psram_total]`) for dynamic scaling |
-| **Bar width %** | Each bar's thickness within its own column (1–100%), centered in the column. With a single bar this is the bar's width relative to the button, exactly as before; with multiple bars, lowering it thins each bar while keeping them spread across the full width. In horizontal mode it controls bar height instead |
+| **Bar thickness (%)** | Each bar's thickness within its own column (1–100%), centered in the column. With a single bar this is the bar's width relative to the button, exactly as before; with multiple bars, lowering it thins each bar while keeping them spread across the full width. In horizontal mode it controls bar height instead |
 | **Bar 1 color** | The fill color of the first bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Bar 2 / 3 / 4 color** | Fill colors for the additional bars. Defaults: blue (`#2196F3`), purple (`#9C27B0`), orange (`#FF9800`). Each is bindable |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
@@ -1492,6 +1493,13 @@ The bar chart widget draws one or more vertical or horizontal bars that fill bas
 | **Gridlines** | Number of evenly spaced scale lines drawn across the bar (0–20, 0 = none), with configurable width and bindable color |
 | **Target Value** | A bindable value on the scale drawn as a marker line across the bar (e.g. a setpoint). Empty = no target |
 | **Target Zone %** | A shaded band centered on the target, sized as a percentage of the min–max range (0 = no band). The marker line width and the marker/zone colors are configurable and bindable |
+
+The Content tab groups each bar's binding, caption, and color/fill under
+**Data sources**, followed by **Scale**, **Layout & style**, **Gridlines**, and
+**Target**. **Animation** is inside **Layout & style**. Bar 1 starts expanded; optional
+bars open when configured or paired. Collapsing a bar preserves its settings.
+Gridline and target styling appear only when a nonzero count or target value
+is present; hiding those controls preserves their values.
 
 **Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: enter a data source, pick zone colors, set ascending breakpoints, and add or remove stops as needed. The expression updates as you type. Opening the picker on an existing `threshold()` expression loads it back into the helper for editing. For a solar panel with a 5 kW max:
 

@@ -438,6 +438,11 @@ function _bhFlash(button, label) {
     }, 1200);
 }
 
+document.addEventListener('pointerover', event => {
+    const trigger = event.target.closest && event.target.closest('.fx-hint');
+    if (trigger) trigger.title = 'Bindable field. Show binding reference.';
+});
+
 document.addEventListener('pointerdown', event => {
     if (!event.target.closest || !event.target.closest('.fx-hint, .binding-help-btn, #cp-fx')) return;
     const active = document.activeElement;

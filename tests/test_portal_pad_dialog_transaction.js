@@ -3,18 +3,29 @@ const fs = require('fs');
 const vm = require('vm');
 
 class Element {
-    constructor() {
+    constructor(id) {
+        this.id = id;
         this.value = '';
         this.checked = false;
         this.textContent = '';
         this.style = { display: 'none' };
+        this.dataset = {};
+        this.attributes = {};
+        const classes = new Set();
+        this.classList = {
+            contains: name => classes.has(name),
+            remove: name => classes.delete(name),
+            toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); }
+        };
     }
+    setAttribute(name, value) { this.attributes[name] = value; }
+    removeAttribute(name) { delete this.attributes[name]; }
 }
 
 const elements = new Map();
 const document = {
     getElementById(id) {
-        if (!elements.has(id)) elements.set(id, new Element());
+        if (!elements.has(id)) elements.set(id, new Element(id));
         return elements.get(id);
     }
 };
@@ -49,9 +60,21 @@ context.padMarkDirty = function() {};
 context.padRenderGrid = function() {};
 
 context.padWorkspaceEdit();
-assert.match(document.getElementById('pad-edit-validation-error').textContent, /Timer Duration/);
+assert.match(document.getElementById('pad-edit-validation-message').textContent, /Timer Duration/);
 assert.strictEqual(context.padState.buttons, originalButtons);
 assert.strictEqual(context.padState.buttons.length, 1);
+assert.strictEqual(context.padState.buttons[0], originalButton);
+
+const validationErrors = vm.runInContext('padWorkspace.errors', context);
+const errorCount = validationErrors.size;
+assert.strictEqual(document.getElementById('pad-action-controls').inert, true);
+context.padDialogDismissValidationError();
+assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
+assert.strictEqual(document.getElementById('pad-action-controls').inert, false);
+assert.strictEqual(validationErrors.size, errorCount);
+assert.match(document.getElementById('pad-edit-validation-message').textContent, /Timer Duration/);
+context.padWorkspaceEdit();
+assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, '');
 assert.strictEqual(context.padState.buttons[0], originalButton);
 
 context.actionEditorBuild = function() { return {}; };
@@ -66,7 +89,7 @@ assert.strictEqual(context.padState.buttons, originalButtons);
 assert.strictEqual(context.padState.buttons.length, 1);
 assert.strictEqual(context.padState.buttons[0], originalButton);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, '');
-assert.match(document.getElementById('pad-edit-validation-error').textContent, /1 binding error/);
+assert.match(document.getElementById('pad-edit-validation-message').textContent, /1 binding error/);
 
 context.bindingValidateDialog = function() { return { valid: true, count: 0 }; };
 context.padWorkspaceEdit();
@@ -75,6 +98,29 @@ assert.notStrictEqual(context.padState.buttons[0], originalButton);
 assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
+
+const numericInput = document.getElementById('pad-edit-icon-scale');
+numericInput.style.display = '';
+numericInput.value = '251';
+numericInput.validity = { valid: false };
+numericInput.validationMessage = 'Maximum is 250';
+const editorOverlay = document.getElementById('pad-edit-overlay');
+editorOverlay.querySelectorAll = () => [numericInput];
+editorOverlay.querySelector = () => ({ textContent: 'Icon scale' });
+context.padWorkspaceEdit();
+assert.strictEqual(numericInput.classList.contains('pad-field-error'), true);
+assert.strictEqual(numericInput.attributes['aria-invalid'], 'true');
+assert.match(document.getElementById('pad-edit-validation-message').textContent, /Icon scale/);
+context.padDialogDismissValidationError();
+assert.strictEqual(numericInput.classList.contains('pad-field-error'), true, 'Dismissing the overlay must retain field highlighting');
+numericInput.value = '100';
+numericInput.validity.valid = true;
+context.padWorkspaceEdit();
+assert.strictEqual(numericInput.classList.contains('pad-field-error'), false);
+assert.strictEqual(numericInput.attributes['aria-invalid'], undefined);
+assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
+delete editorOverlay.querySelectorAll;
+delete editorOverlay.querySelector;
 
 document.getElementById('pad-edit-label-center-style').value = 'font:my-font;font_size:300;align:right';
 context.padWorkspaceEdit();
@@ -251,5 +297,19 @@ for (const [input, expected] of [['3', 3], ['10', 5], ['-1', 0], ['Infinity', 0]
     context.padWorkspaceEdit();
     assert.strictEqual(context.padState.buttons[0].widget_scrollpad_inertia, expected);
 }
+
+context.window = { __padMaxlenHintWired: true };
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_defaults.js', 'utf8'), context);
+const bindingName = document.getElementById('pad-binding-name-0');
+bindingName.value = '123bad';
+assert.strictEqual(context.padValidateBindingNameInput(bindingName), false);
+assert.strictEqual(bindingName.classList.contains('binding-error'), true);
+assert.strictEqual(bindingName.attributes['aria-invalid'], 'true');
+bindingName.classList.toggle('pad-field-error', true);
+bindingName.value = 'temperature';
+assert.strictEqual(context.padValidateBindingNameInput(bindingName), true);
+assert.strictEqual(bindingName.classList.contains('binding-error'), false);
+assert.strictEqual(bindingName.classList.contains('pad-field-error'), false);
+assert.strictEqual(bindingName.attributes['aria-invalid'], undefined);
 
 console.log('portal_pad_dialog_transaction: PASS');

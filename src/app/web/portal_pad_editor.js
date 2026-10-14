@@ -66,6 +66,8 @@ function padSetImageCapabilityVisibility(info, hideForWidget) {
     const imageLibrary = !hideForWidget && info && info.has_image_library === true;
     document.getElementById('pad-edit-camera-feed-section').style.display = imageFetch ? '' : 'none';
     document.getElementById('pad-edit-image-section').style.display = imageLibrary ? '' : 'none';
+    document.getElementById('pad-edit-background-image-section').style.display =
+        imageFetch || imageLibrary ? '' : 'none';
     document.getElementById('pad-edit-bg-image-scale-group').style.display =
         imageFetch || imageLibrary ? '' : 'none';
 }
@@ -404,9 +406,43 @@ function padPopulateSoundDropdown() {
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'];
 
+function padRefreshBarChartEditor(resetSections) {
+    const section = document.getElementById('pad-edit-bar-chart-section');
+    if (!section || document.getElementById('pad-edit-widget-type').value !== 'bar_chart') return;
+    const gridlines = Number(document.getElementById('pad-edit-widget-bar-ticks').value) > 0;
+    const target = document.getElementById('pad-edit-widget-bar-marker-value').value.trim() !== '';
+    document.getElementById('pad-edit-bar-gridline-style').hidden = !gridlines;
+    document.getElementById('pad-edit-bar-target-style').hidden = !target;
+    if (resetSections) {
+        ['sources', 'scale', 'layout'].forEach(name => {
+            document.getElementById('pad-edit-bar-' + name).open = true;
+        });
+        document.getElementById('pad-edit-bar-gridlines').open = gridlines;
+        document.getElementById('pad-edit-bar-target').open = target;
+        for (let bar = 1; bar <= 4; bar++) {
+            const suffix = bar === 1 ? '' : '-' + bar;
+            const binding = document.getElementById(bar === 1 ? 'pad-edit-widget-data-binding' : 'pad-edit-widget-bar-data-binding' + suffix);
+            const caption = document.getElementById('pad-edit-widget-bar-label' + suffix);
+            const color = document.getElementById('pad-edit-widget-bar-color' + suffix);
+            const pattern = document.getElementById(color.id + '-pattern');
+            const defaultColor = PAD_FIRMWARE_DEFAULTS['widget_series_color' + (bar === 1 ? '' : '_' + bar)] || '';
+            const customColor = color.value.trim() && color.value.trim().toLowerCase() !== defaultColor.toLowerCase();
+            document.getElementById('pad-edit-bar-source-' + bar).open = bar === 1 ||
+                !!(binding.value.trim() || caption.value.trim() || customColor || (pattern && pattern.value !== 'none'));
+        }
+        for (let pair = 1; pair <= 2; pair++) {
+            if (document.getElementById('pad-edit-widget-bar-dual-binding-pair-' + pair).checked) {
+                document.getElementById('pad-edit-bar-source-' + (pair * 2 - 1)).open = true;
+                document.getElementById('pad-edit-bar-source-' + (pair * 2)).open = true;
+            }
+        }
+    }
+}
+
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
     padFillRefreshVisibility();
+    padRefreshBarChartEditor(true);
     WIDGET_SECTIONS.forEach(s => {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
         if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
@@ -620,7 +656,8 @@ function padBuildSaveContext() {
     if (snapshot.bindings.length > 0) {
         var badNames = snapshot.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
         if (badNames.length > 0) {
-            throw new Error('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.');
+            const fieldIds = snapshot.bindings.map((binding, index) => binding.name && !padIsValidBindingName(binding.name) ? 'pad-binding-name-' + index : null).filter(Boolean);
+            throw Object.assign(new Error('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.'), { fieldIds });
         }
         var bd = padBindingsToDict(snapshot.bindings);
         if (bd) payload.bindings = bd;
@@ -748,7 +785,14 @@ async function padSavePage(options) {
     const bulk = Boolean(options && options.bulk);
     try {
         const section = document.getElementById('pad-config-section');
-        const context = padBuildSaveContext();
+        let context;
+        try {
+            context = padBuildSaveContext();
+        } catch (error) {
+            if (bulk) throw error;
+            padDialogShowValidationError(error);
+            return null;
+        }
         const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;
         const revision = workspace ? workspace.revision : 0;
         await padQueuePersistence(context);

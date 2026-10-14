@@ -92,6 +92,9 @@ function padWorkspaceFit() {
     }
     const content = document.getElementById('content-pane');
     const workspace = padWorkspace.root.querySelector('.pad-workspace');
+    const toolbar = padWorkspace.root.querySelector('.pad-workspace-toolbar');
+    const inspector = document.getElementById('pad-workspace-inspector');
+    padWorkspace.root.style.setProperty('--pad-inspector-left', (inspector.getBoundingClientRect().left - toolbar.getBoundingClientRect().left) + 'px');
     const offset = workspace.getBoundingClientRect().top - content.getBoundingClientRect().top + content.scrollTop;
     const height = content.clientHeight - offset - parseFloat(getComputedStyle(content).paddingBottom);
     padWorkspace.root.style.setProperty('--pad-workspace-height', Math.max(0, height) + 'px');
@@ -212,8 +215,8 @@ function padWorkspaceEdit() {
         padDialogClearValidationError();
         padRenderGrid();
     } catch (error) {
-        padWorkspace.errors.set(padWorkspaceKey(), error.message);
-        padDialogShowValidationError(error.message);
+        padWorkspace.errors.set(padWorkspaceKey(), error);
+        padDialogShowValidationError(error);
     }
     padWorkspaceSummaries();
     padWorkspaceRefresh();
@@ -244,7 +247,7 @@ function padWorkspaceValidate() {
         const [key, message] = padWorkspace.errors.entries().next().value;
         const position = key.split(',').map(Number);
         padDialogOpen(position[0], position[1]);
-        throw new Error('Button [' + key + ']: ' + message);
+        throw Object.assign(new Error('Button [' + key + ']: ' + (message.message || message)), { fieldIds: message.fieldIds || [] });
     }
     const occupied = new Set();
     padState.buttons.forEach(button => {

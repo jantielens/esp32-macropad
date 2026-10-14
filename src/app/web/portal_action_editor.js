@@ -307,7 +307,7 @@ function actionEditorBuild(prefix) {
     if (!type) return {};
     var entry = actionEditorCatalogEntry(type);
     if (typeEl.getAttribute('data-alarm-hook') === 'true' && (!entry || entry.alarm_hook_allowed !== true)) {
-        throw new Error('Action "' + type + '" is not allowed for alarm hooks. Replace or remove it.');
+        throw Object.assign(new Error('Action "' + type + '" is not allowed for alarm hooks. Replace or remove it.'), { fieldIds: [prefix + '-type'] });
     }
     // Round-trip a persisted action whose type this build's catalog does not
     // contain — its fields have no editor, so save it back exactly as loaded.

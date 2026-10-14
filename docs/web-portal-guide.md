@@ -304,8 +304,10 @@ selected local image remains fixed.
 
 In the pad editor, **Local Image** is available only when the board includes
 the image library. **Camera Feed or Remote Image** requires remote image fetching,
-which is separate from support for an attached camera. Background Image Scale is
-available when either type of button background is supported.
+which is separate from support for an attached camera. Both are collapsible
+subsections of **Background image**, with a shared **Scale** control outside
+the source subsections. The frame is available when either source is supported
+and opens when an image source or letterbox setting is configured.
 
 ---
 
@@ -956,9 +958,25 @@ step; only **Save Pad** persists the current pad. Switching buttons or tabs
 retains incomplete inputs. Correct validation errors before saving; failed
 saves retain the draft for retry.
 
+Validation messages cover the action row without moving or hiding the settings.
+Use the close icon to reveal the actions temporarily; dismissal does not clear
+the error or its field outline. The next failed validation shows the message again.
+Saving with a validation error reopens this message without a second notification.
+Invalid numeric, binding, and action fields use the same red outline, which clears
+when corrected. Network and device save failures still appear as notifications.
+
 Pad labels retain the `Pad X: Name` format whether selected or not. The button
 **Actions** and **Appearance** tabs expose their controls without an additional
 same-named accordion; individual action slots remain expandable.
+
+Bar-chart **Content** starts with **Data sources**, keeping each bar's binding,
+caption, and color/fill together. Unused optional bars start collapsed; collapsing
+a bar does not disable it. **Scale** and **Layout & style** follow, then
+**Gridlines** and **Target**. **Animation** is inside **Layout & style**.
+Configured optional groups open
+when selecting the button. Gridline count 0 and an empty target hide their
+styling controls without clearing values. **Caption area size (px)** sizes the
+caption strip, not the font; **Bar thickness (%)** controls the bar thickness.
 
 Button background and bar chart color pickers have Base Color and Pattern
 sections with one Apply operation. None is the default and uses only the base

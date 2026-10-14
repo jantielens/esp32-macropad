@@ -537,6 +537,7 @@ function _bvErrorTarget(input) {
 function bindingShowError(input, message) {
     bindingClearError(input);
     input.classList.add('binding-error');
+    input.setAttribute('aria-invalid', 'true');
     var span = document.createElement('span');
     span.className = 'binding-error-msg';
     span.textContent = message;
@@ -557,6 +558,7 @@ function bindingShowError(input, message) {
  */
 function bindingClearError(input) {
     input.classList.remove('binding-error');
+    if (!input.classList.contains('pad-field-error')) input.removeAttribute('aria-invalid');
     var t = _bvErrorTarget(input);
     var uid = input.id || input.name || '';
     var msg = uid

@@ -118,9 +118,12 @@ _actionEditorExtensions.push({
                 var duration = document.getElementById(prefix + '-timer-duration');
                 act.timer_mode = mode ? mode.value : '';
                 if (act.timer_mode !== 'up' && act.timer_mode !== 'down') {
-                    if (mode) { mode.setCustomValidity('Select a Timer mode.'); mode.reportValidity(); mode.focus(); }
-                    if (typeof showMessage === 'function') showMessage('Timer Mode is required for Start and Toggle.', 'error');
-                    throw new Error('Timer Mode is required for Start and Toggle');
+                    if (mode) mode.setCustomValidity('Select a Timer mode.');
+                    if (typeof padWorkspace === 'undefined' || !padWorkspace) {
+                        if (mode) { mode.reportValidity(); mode.focus(); }
+                        if (typeof showMessage === 'function') showMessage('Timer Mode is required for Start and Toggle.', 'error');
+                    }
+                    throw Object.assign(new Error('Timer Mode is required for Start and Toggle'), { fieldIds: [prefix + '-timer-mode'] });
                 }
                 if (mode) mode.setCustomValidity('');
                 if (act.timer_mode === 'down') {
@@ -138,9 +141,12 @@ _actionEditorExtensions.push({
                     var isSeconds = /^[1-9][0-9]*$/.test(durationValue)
                         && Number(durationValue) <= 4294967;
                     if (!durationValue || (!isBinding && !isSeconds)) {
-                        if (duration) { duration.setCustomValidity('Enter 1-4294967 whole seconds or a binding.'); duration.reportValidity(); duration.focus(); }
-                        if (typeof showMessage === 'function') showMessage('Timer Duration must be 1-4294967 whole seconds or a binding.', 'error');
-                        throw new Error('Timer Duration must be 1-4294967 whole seconds or a binding');
+                        if (duration) duration.setCustomValidity('Enter 1-4294967 whole seconds or a binding.');
+                        if (typeof padWorkspace === 'undefined' || !padWorkspace) {
+                            if (duration) { duration.reportValidity(); duration.focus(); }
+                            if (typeof showMessage === 'function') showMessage('Timer Duration must be 1-4294967 whole seconds or a binding.', 'error');
+                        }
+                        throw Object.assign(new Error('Timer Duration must be 1-4294967 whole seconds or a binding'), { fieldIds: [prefix + '-timer-duration'] });
                     }
                     if (duration) duration.setCustomValidity('');
                     act.timer_value = durationValue;

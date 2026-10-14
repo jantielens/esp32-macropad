@@ -18,6 +18,7 @@ const context = {
 const elements = new Map([
 	['pad-edit-camera-feed-section', { style: {} }],
 	['pad-edit-image-section', { style: {} }],
+	['pad-edit-background-image-section', { style: {} }],
 	['pad-edit-bg-image-scale-group', { style: {} }],
 	['pad-edit-widget-type', { value: '' }]
 ]);
@@ -73,6 +74,8 @@ for (const imageFetch of [false, true]) {
 		context.padWidgetTypeChanged();
 		assert.strictEqual(elements.get('pad-edit-camera-feed-section').style.display, imageFetch ? '' : 'none');
 		assert.strictEqual(elements.get('pad-edit-image-section').style.display, imageLibrary ? '' : 'none');
+		assert.strictEqual(elements.get('pad-edit-background-image-section').style.display,
+			imageFetch || imageLibrary ? '' : 'none');
 		assert.strictEqual(elements.get('pad-edit-bg-image-scale-group').style.display,
 			imageFetch || imageLibrary ? '' : 'none');
 	}
@@ -118,6 +121,60 @@ assert.strictEqual(elements.get('pad-edit-scrollpad-section').style.display, 'no
 assert.strictEqual(elements.get('pad-edit-tap-actions').style.display, '');
 assert.strictEqual(elements.get('pad-edit-lp-actions').style.display, '');
 
+context.PAD_FIRMWARE_DEFAULTS = {
+	widget_series_color: '#4CAF50', widget_series_color_2: '#2196F3',
+	widget_series_color_3: '#9C27B0', widget_series_color_4: '#FF9800'
+};
+for (const name of ['sources', 'scale', 'layout', 'gridlines', 'target']) {
+	elements.set('pad-edit-bar-' + name, { open: false });
+}
+elements.set('pad-edit-bar-chart-section', { style: {} });
+elements.set('pad-edit-bar-gridline-style', { hidden: false });
+elements.set('pad-edit-bar-target-style', { hidden: false });
+elements.set('pad-edit-widget-bar-ticks', { value: '0' });
+elements.set('pad-edit-widget-bar-marker-value', { value: '' });
+for (let bar = 1; bar <= 4; bar++) {
+	const suffix = bar === 1 ? '' : '-' + bar;
+	elements.set('pad-edit-bar-source-' + bar, { open: true });
+	elements.set(bar === 1 ? 'pad-edit-widget-data-binding' : 'pad-edit-widget-bar-data-binding' + suffix, { value: '' });
+	elements.set('pad-edit-widget-bar-label' + suffix, { value: '' });
+	elements.set('pad-edit-widget-bar-color' + suffix, {
+		id: 'pad-edit-widget-bar-color' + suffix,
+		value: context.PAD_FIRMWARE_DEFAULTS['widget_series_color' + (bar === 1 ? '' : '_' + bar)].toLowerCase()
+	});
+	elements.set('pad-edit-widget-bar-color' + suffix + '-pattern', { value: 'none' });
+}
+for (const pair of [1, 2]) elements.set('pad-edit-widget-bar-dual-binding-pair-' + pair, { checked: false });
+elements.get('pad-edit-widget-type').value = 'bar_chart';
+context.padRefreshBarChartEditor(true);
+assert.deepStrictEqual([1, 2, 3, 4].map(bar => elements.get('pad-edit-bar-source-' + bar).open), [true, false, false, false]);
+assert.strictEqual(elements.get('pad-edit-bar-gridline-style').hidden, true);
+assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, true);
+elements.get('pad-edit-widget-bar-label-2').value = 'Grid';
+elements.get('pad-edit-widget-bar-color-3').value = '#123456';
+elements.get('pad-edit-widget-bar-color-4-pattern').value = 'dots';
+elements.get('pad-edit-widget-bar-ticks').value = '4';
+elements.get('pad-edit-widget-bar-marker-value').value = '0';
+context.padRefreshBarChartEditor(true);
+assert.deepStrictEqual([1, 2, 3, 4].map(bar => elements.get('pad-edit-bar-source-' + bar).open), [true, true, true, true]);
+assert.strictEqual(elements.get('pad-edit-bar-gridlines').open, true);
+assert.strictEqual(elements.get('pad-edit-bar-target').open, true);
+assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, false, 'Zero is a valid target');
+elements.get('pad-edit-widget-bar-dual-binding-pair-1').checked = true;
+elements.get('pad-edit-bar-source-2').open = false;
+elements.get('pad-edit-widget-bar-ticks').value = '0';
+elements.get('pad-edit-widget-bar-marker-value').value = '';
+context.padRefreshBarChartEditor();
+assert.strictEqual(elements.get('pad-edit-bar-source-2').open, false, 'Routine refresh preserves manual disclosure');
+assert.strictEqual(elements.get('pad-edit-widget-bar-label-2').value, 'Grid');
+assert.strictEqual(elements.get('pad-edit-widget-bar-color-3').value, '#123456');
+assert.strictEqual(elements.get('pad-edit-widget-bar-color-4-pattern').value, 'dots');
+assert.strictEqual(elements.get('pad-edit-bar-gridline-style').hidden, true);
+assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, true);
+context.padRefreshBarChartEditor(true);
+assert.strictEqual(elements.get('pad-edit-bar-source-2').open, true, 'Paired sources open on load');
+elements.get('pad-edit-widget-type').value = '';
+
 const devInfo = JSON.parse(execFileSync('python3', ['-c',
 	"import json, runpy, sys; from types import SimpleNamespace; sys.path.insert(0, 'tools'); module = runpy.run_path('tools/portal-dev-server.py'); handler = object.__new__(module['PortalHandler']); handler.headers = {}; handler.server = SimpleNamespace(profile='esp32-p4-lcd4b'); module['reset_pad_fixtures'](handler.server); print(json.dumps(handler._device_info()))"
 ], { encoding: 'utf8' }));
@@ -148,7 +205,7 @@ const workspaceContext = {
 	padRenderGrid() {},
 	padDialogBuildButton() { return { col: 0, row: 0, label_center: draftInput.value }; },
 	padDialogValidateButton() { if (draftInput.value === '[unfinished') throw new Error('Incomplete binding'); },
-	padDialogShowValidationError(message) { workspaceContext.error = message; },
+	padDialogShowValidationError(message) { workspaceContext.error = message.message || message; },
 	padDialogClearValidationError() { workspaceContext.error = ''; }
 };
 vm.createContext(workspaceContext);
@@ -278,8 +335,9 @@ assert.strictEqual(wheelPrevented, false, 'Browser zoom gestures must remain nat
 
 const frameStyles = new Map();
 const contentPane = { clientHeight: 700, scrollTop: 10, getBoundingClientRect() { return { top: 30 }; } };
-const workspaceFrame = { getBoundingClientRect() { return { top: 70 }; } };
+const workspaceFrame = { getBoundingClientRect() { return { top: 70, left: 0 }; } };
 refreshElements.set('content-pane', contentPane);
+refreshElements.set('pad-workspace-inspector', { getBoundingClientRect() { return { left: 600 }; } });
 refreshElements.set('pad-workspace-canvas', { clientWidth: 600, clientHeight: 600 });
 refreshElements.set('pad-grid', { style: {} });
 refreshContext.window = { innerWidth: 900 };
@@ -289,9 +347,10 @@ refreshContext.padGetEffectiveDefault = field => ({ pixel_shift_distance_px: 4, 
 vm.runInContext('padWorkspace.root.querySelector = () => workspaceFrame;', Object.assign(refreshContext, { workspaceFrame }));
 vm.runInContext('padWorkspace.root.style = frameStyle;', Object.assign(refreshContext, { frameStyle: { setProperty(name, value) { frameStyles.set(name, value); } } }));
 fitWorkspace();
+assert.strictEqual(frameStyles.get('--pad-inspector-left'), '600px', 'Error overlay must follow the inspector position');
 assert.strictEqual(frameStyles.get('--pad-workspace-height'), '626px', 'Workspace must use available content height minus its offset and bottom padding');
 contentPane.scrollTop = 30;
-workspaceFrame.getBoundingClientRect = () => ({ top: 50 });
+workspaceFrame.getBoundingClientRect = () => ({ top: 50, left: 0 });
 fitWorkspace();
 assert.strictEqual(frameStyles.get('--pad-workspace-height'), '626px', 'Scrolling must not alter workspace height');
 contentPane.clientHeight = 800;
@@ -344,6 +403,20 @@ async function checkSaveRaces() {
 	await saveContext.padSavePage();
 	assert.strictEqual(saveContext.padDirty, true, 'Newer edits must remain dirty after an older save');
 	assert.strictEqual(reloads, 1, 'An older save must not reload over newer edits');
+	const notifications = [];
+	const validationMessages = [];
+	saveContext.showMessage = (message, type) => notifications.push({ message, type });
+	saveContext.padDialogShowValidationError = error => validationMessages.push(error.message);
+	saveContext.padBuildSaveContext = () => { throw new Error('Invalid button span'); };
+	saveContext.padQueuePersistence = async () => { throw new Error('Validation must block persistence'); };
+	assert.strictEqual(await saveContext.padSavePage(), null);
+	assert.deepStrictEqual(validationMessages, ['Invalid button span']);
+	assert.deepStrictEqual(notifications, [], 'Validation must use the overlay without a duplicate toast');
+	await assert.rejects(saveContext.padSavePage({ bulk: true }), /Invalid button span/);
+	saveContext.padBuildSaveContext = () => ({ page: 0 });
+	saveContext.padQueuePersistence = async () => { throw new Error('Device unavailable'); };
+	assert.strictEqual(await saveContext.padSavePage(), null);
+	assert.deepStrictEqual(notifications, [{ message: 'Save failed: Device unavailable', type: 'error' }], 'Persistence failures must retain their toast');
 }
 
 checkWorkspaceSwitch().then(checkSaveRaces).then(() => console.log('portal_pad_dirty: PASS')).catch(error => { console.error(error); process.exitCode = 1; });

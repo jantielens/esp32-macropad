@@ -1,189 +1,232 @@
-                <!-- Bar Chart Settings (conditional, shown only for bar_chart widget type) -->
-                <details class="editor-group" id="pad-edit-bar-chart-section" style="display:none;">
-                    <summary>Bar Chart Settings</summary>
-                    <div class="editor-group-body">
+                <div class="bar-chart-editor" id="pad-edit-bar-chart-section" style="display:none;">
+                    <details class="editor-group" id="pad-edit-bar-sources" open>
+                        <summary>Data sources</summary>
+                        <div class="editor-group-body">
+                            <details class="bar-chart-source" id="pad-edit-bar-source-1" open>
+                                <summary>Bar 1</summary>
+                                <div class="bar-chart-source-body">
                         <div class="form-group">
-                            <label for="pad-edit-widget-data-binding">Bar 1 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-widget-data-binding">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-widget-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/energy/solar_power;power]">
-                                
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-data-binding-2">Bar 2 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-data-binding-2" maxlength="191" placeholder="Optional — adds a second bar">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-data-binding-3">Bar 3 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-data-binding-3" maxlength="191" placeholder="Optional — adds a third bar">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-data-binding-4">Bar 4 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-data-binding-4" maxlength="191" placeholder="Optional — adds a fourth bar">
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-label">Bar 1 caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <input type="text" class="binding-mono" id="pad-edit-widget-bar-label" maxlength="63" placeholder="Optional — text or [binding], e.g. Solar [mqtt:home/solar]W">
-                            <small>Shown beneath the bar (vertical) or left of it (horizontal), colored to match</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-label-2">Bar 2 caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-2" maxlength="63" placeholder="Optional — text or [binding]">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-label-3">Bar 3 caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-3" maxlength="63" placeholder="Optional — text or [binding]">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-label-4">Bar 4 caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-4" maxlength="63" placeholder="Optional — text or [binding]">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-label-size">Caption Size (px)</label>
-                            <input type="number" id="pad-edit-widget-bar-label-size" min="0" max="200" value="0" placeholder="0 = auto">
-                            <small>Caption strip width (horizontal) or height (vertical). 0 = auto. Captions support <code>\n</code> for line breaks</small>
-                        </div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-min">Min Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <input type="text" id="pad-edit-widget-bar-min" maxlength="63" value="0" placeholder="0 or [binding]">
-                                <small>Number or binding e.g. <code>[health:heap_total]</code></small>
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-max">Max Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <input type="text" id="pad-edit-widget-bar-max" maxlength="63" value="3" placeholder="3 or [binding]">
-                                <small>Number or binding e.g. <code>[health:psram_total]</code></small>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-widget-bar-color">Bar 1 Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-color" class="bc-input" data-fill-pattern="widget_bar_pattern" data-fill-color="widget_bar_pattern_color" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
-                            <small>Use an <code>[expr:threshold(…)]</code> binding for color-by-value</small>
-                        </div>
-                        <div class="bar-chart-colors">
+                        <div class="bar-chart-row bar-chart-caption-row">
                             <div class="form-group">
-                                <label for="pad-edit-widget-bar-color-2">Bar 2 Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label for="pad-edit-widget-bar-label">Caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-label" maxlength="63" placeholder="Optional text or [binding]">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-color">Color / fill <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-color" class="bc-input" data-fill-pattern="widget_bar_pattern" data-fill-color="widget_bar_pattern_color" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                            </div>
+                        </div>
+                                </div>
+                            </details>
+                            <details class="bar-chart-source" id="pad-edit-bar-source-2">
+                                <summary>Bar 2</summary>
+                                <div class="bar-chart-source-body">
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-data-binding-2">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-data-binding-2" maxlength="191" placeholder="Optional second bar">
+                            </div>
+                        </div>
+                        <div class="bar-chart-row bar-chart-caption-row">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-label-2">Caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-2" maxlength="63" placeholder="Optional text or [binding]">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-color-2">Color / fill <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-color-2" class="bc-input" data-fill-pattern="widget_bar_pattern_2" data-fill-color="widget_bar_pattern_color_2" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
                             </div>
+                        </div>
+                                </div>
+                            </details>
+                            <details class="bar-chart-source" id="pad-edit-bar-source-3">
+                                <summary>Bar 3</summary>
+                                <div class="bar-chart-source-body">
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-data-binding-3">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-data-binding-3" maxlength="191" placeholder="Optional third bar">
+                            </div>
+                        </div>
+                        <div class="bar-chart-row bar-chart-caption-row">
                             <div class="form-group">
-                                <label for="pad-edit-widget-bar-color-3">Bar 3 Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-color-3" class="bc-input" data-fill-pattern="widget_bar_pattern_3" data-fill-color="widget_bar_pattern_color_3" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
+                                <label for="pad-edit-widget-bar-label-3">Caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-3" maxlength="63" placeholder="Optional text or [binding]">
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-widget-bar-color-4">Bar 4 Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label for="pad-edit-widget-bar-color-3">Color / fill <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-color-3" class="bc-input" data-fill-pattern="widget_bar_pattern_3" data-fill-color="widget_bar_pattern_color_3" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
+                            </div>
+                        </div>
+                                </div>
+                            </details>
+                            <details class="bar-chart-source" id="pad-edit-bar-source-4">
+                                <summary>Bar 4</summary>
+                                <div class="bar-chart-source-body">
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-data-binding-4">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="binding-input-wrap">
+                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-data-binding-4" maxlength="191" placeholder="Optional fourth bar">
+                            </div>
+                        </div>
+                        <div class="bar-chart-row bar-chart-caption-row">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-label-4">Caption <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-label-4" maxlength="63" placeholder="Optional text or [binding]">
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-color-4">Color / fill <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-color-4" class="bc-input" data-fill-pattern="widget_bar_pattern_4" data-fill-color="widget_bar_pattern_color_4" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
                             </div>
                         </div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-bg-color">Bar Background <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-bg-color" class="bc-input" data-fill-pattern="widget_bar_bg_pattern" data-fill-color="widget_bar_bg_pattern_color" maxlength="63" placeholder="#hex or [binding]" value="#1A1A1A"></div>
+                                </div>
+                            </details>
+                            <div class="bar-chart-pairs">
+                                <div class="form-group">
+                                    <label><input type="checkbox" id="pad-edit-widget-bar-dual-binding-pair-1"> Pair bars 1 and 2</label>
+                                    <small>One center-anchored bar: bar 1 toward minimum, bar 2 toward maximum. Set a negative minimum.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label><input type="checkbox" id="pad-edit-widget-bar-dual-binding-pair-2"> Pair bars 3 and 4</label>
+                                    <small>One center-anchored bar: bar 3 toward minimum, bar 4 toward maximum. Set a negative minimum.</small>
+                                </div>
                             </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-width-pct">Bar Width %</label>
-                                <input type="number" id="pad-edit-widget-bar-width-pct" min="1" max="100" value="100" placeholder="100">
-                                <small>Thickness within each bar's column</small>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-bar-scale" open>
+                        <summary>Scale</summary>
+                        <div class="editor-group-body">
+                        <div class="bar-chart-row">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-min">Minimum <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" id="pad-edit-widget-bar-min" maxlength="63" value="0" placeholder="0 or [binding]">
                             </div>
-                            <div class="form-group" style="flex:1;">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-max">Maximum <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" id="pad-edit-widget-bar-max" maxlength="63" value="3" placeholder="3 or [binding]">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-widget-bar-zero-centered"> Zero-centered fill</label>
+                            <small>Negative values grow down/left; positive values grow up/right.</small>
+                        </div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-bar-layout" open>
+                        <summary>Layout &amp; style</summary>
+                        <div class="editor-group-body">
+                        <h4 class="widget-sub-heading">Geometry</h4>
+                        <div class="bar-chart-row">
+                            <div class="form-group">
                                 <label for="pad-edit-widget-orientation">Orientation</label>
                                 <select id="pad-edit-widget-orientation">
                                     <option value="vertical">Vertical</option>
                                     <option value="horizontal">Horizontal</option>
                                 </select>
                             </div>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-width-pct">Bar thickness (%)</label>
+                                <input type="number" id="pad-edit-widget-bar-width-pct" min="1" max="100" value="100" placeholder="100">
+                                <small>Thickness within each bar's column</small>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-label-size">Caption area size (px)</label>
+                            <input type="number" id="pad-edit-widget-bar-label-size" min="0" max="200" value="0" placeholder="0 = auto">
+                            <small>Caption area: width for horizontal bars, height for vertical bars. 0 = auto. Captions accept <code>\n</code>.</small>
+                        </div>
+                        <h4 class="widget-sub-heading">Track</h4>
+                        <div class="form-group">
+                            <label for="pad-edit-widget-bar-bg-color">Track color / fill <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-bg-color" class="bc-input" data-fill-pattern="widget_bar_bg_pattern" data-fill-color="widget_bar_bg_pattern_color" maxlength="63" placeholder="#hex or [binding]" value="#1A1A1A"></div>
                         </div>
                         <div id="pad-edit-bar-track-settings">
                             <div id="pad-edit-track-settings">
                                 <div class="pad-appearance-row" id="pad-edit-track-outline">
                                     <div class="form-group" style="flex:1;">
-                                        <label for="pad-edit-track-outline-width">Track Outline Width</label>
+                                        <label for="pad-edit-track-outline-width">Track outline width (px)</label>
                                         <input type="number" id="pad-edit-track-outline-width" min="0" max="8" value="0">
                                     </div>
                                     <div class="form-group" style="flex:1;">
-                                        <label for="pad-edit-track-outline-color">Track Outline Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                        <label for="pad-edit-track-outline-color">Track outline color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                         <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-track-outline-color" class="bc-input" maxlength="63" value="#000000"></div>
                                     </div>
                                 </div>
                                 <div class="form-group" id="pad-edit-track-radius-wrap">
-                                    <label for="pad-edit-track-radius">Track Corner Radius</label>
+                                    <label for="pad-edit-track-radius">Track corner radius (px)</label>
                                     <input type="number" id="pad-edit-track-radius" min="0" max="64" value="4">
                                 </div>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-widget-bar-zero-centered"> Zero-Centered</label>
-                            <small>Fill grows from the zero point — negative values grow down/left, positive grow up/right.</small>
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-widget-bar-dual-binding-pair-1"> Dual Binding Bar 1 and 2</label>
-                            <small>Combines bar 1 and 2 into one center-anchored bar. Bar 1 grows toward the minimum, bar 2 toward the maximum, so set a negative minimum value accordingly.</small>
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-widget-bar-dual-binding-pair-2"> Dual Binding Bar 3 and 4</label>
-                            <small>Combines bar 3 and 4 into one center-anchored bar. Bar 3 grows toward the minimum, bar 4 toward the maximum, so set a negative minimum value accordingly.</small>
-                        </div>
+                        <h4 class="widget-sub-heading">Motion</h4>
                         <div class="form-group">
                             <label for="pad-edit-widget-bar-anim-ms">Animation (ms)</label>
                             <input type="number" id="pad-edit-widget-bar-anim-ms" min="0" max="5000" value="300" placeholder="300">
-                            <small>Transition duration in ms. 0 = instant (no animation)</small>
+                            <small>0 = instant</small>
                         </div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-ticks">Gridlines</label>
-                                <input type="number" id="pad-edit-widget-bar-ticks" min="0" max="20" value="0" placeholder="0">
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-bar-gridlines">
+                        <summary>Gridlines</summary>
+                        <div class="editor-group-body">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-ticks">Count</label>
+                                <input type="number" id="pad-edit-widget-bar-ticks" min="0" max="20" value="0" placeholder="0" oninput="padRefreshBarChartEditor()">
                                 <small>Evenly spaced scale lines. 0 = none</small>
                             </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-tick-width">Gridline Width</label>
+                        <div class="bar-chart-row" id="pad-edit-bar-gridline-style">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-tick-width">Line width (px)</label>
                                 <input type="number" id="pad-edit-widget-bar-tick-width" min="1" max="5" value="1" placeholder="1">
                                 <small>Line width (px)</small>
                             </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-tick-color">Gridline Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-tick-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-tick-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#808080"></div>
                             </div>
                         </div>
 
-                        <hr style="border:none;border-top:1px solid #444;margin:12px 0;">
-                        <div style="font-weight:600;margin-bottom:6px;">Target Zone &amp; Marker</div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-bar-target">
+                        <summary>Target</summary>
+                        <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-widget-bar-marker-value">Target Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-widget-bar-marker-value">Target value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
-                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-marker-value" maxlength="63" placeholder="e.g. [mqtt:hvac/setpoint;temperature]">
+                                <input type="text" class="binding-mono" id="pad-edit-widget-bar-marker-value" maxlength="63" placeholder="Number or [binding]" oninput="padRefreshBarChartEditor()">
                             </div>
                             <small>Bindable value on the scale. Empty = no target.</small>
                         </div>
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-marker-zone-pct">Target Zone %</label>
-                                <input type="number" id="pad-edit-widget-bar-marker-zone-pct" min="0" max="100" value="0" placeholder="0">
-                                <small>Band size as % of range (0 = no band)</small>
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-marker-width">Target Line Width</label>
+                        <div id="pad-edit-bar-target-style">
+                        <div class="bar-chart-row">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-marker-width">Marker width (px)</label>
                                 <input type="number" id="pad-edit-widget-bar-marker-width" min="0" max="10" value="2" placeholder="2">
                                 <small>0 = no line</small>
                             </div>
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-marker-color">Target Marker Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-marker-color">Marker color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-marker-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-widget-bar-marker-zone-color">Target Zone Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        </div>
+                        <div class="bar-chart-row">
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-marker-zone-pct">Zone size (%)</label>
+                                <input type="number" id="pad-edit-widget-bar-marker-zone-pct" min="0" max="100" value="0" placeholder="0">
+                                <small>Band size as % of range (0 = no band)</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-widget-bar-marker-zone-color">Zone color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-widget-bar-marker-zone-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FF5722"></div>
                             </div>
                         </div>
-                    </div>
-                </details>
+                        </div>
+                        </div>
+                    </details>
+                </div>

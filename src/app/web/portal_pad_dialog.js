@@ -317,6 +317,8 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-bg-image-scale').value = btn.bg_image_letterbox ? 'letterbox' : 'cover';
     document.getElementById('pad-edit-image-section').open = !!btn.bg_image_path;
     document.getElementById('pad-edit-camera-feed-section').open = !!btn.bg_image_url;
+    document.getElementById('pad-edit-background-image-section').open =
+        !!(btn.bg_image_path || btn.bg_image_url || btn.bg_image_letterbox);
 
     // Icon
     const iconParsed = padIconIdToType(btn.icon_id || '');
@@ -518,6 +520,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-extension-tick-interval').value = btn.extension_tick_interval_ms || '';
     document.getElementById('pad-edit-extension-upscale').value = btn.extension_upscale || 1;
 
+    padRefreshBarChartEditor(true);
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     if (typeof padWorkspaceAfterSelect === 'function') padWorkspaceAfterSelect();
 
@@ -558,18 +561,49 @@ function padPopulateExtensionDropdown(value) {
     select.disabled = padExtensionCatalogLoading;
 }
 
+function padDialogRefreshFieldErrors(error) {
+    const root = document.getElementById('pad-editor-root');
+    const overlay = root && root.querySelectorAll ? root : document.getElementById('pad-edit-overlay');
+    if (!overlay || !overlay.querySelectorAll) return;
+    const fieldIds = error && error.fieldIds || [];
+    overlay.querySelectorAll('input, select, textarea').forEach(input => {
+        let relevant = !input.disabled;
+        for (let parent = input; parent && parent !== overlay; parent = parent.parentElement) {
+            if (parent.style && parent.style.display === 'none' && !(parent.dataset && (parent.dataset.buttonTab || parent.dataset.padTab))) relevant = false;
+        }
+        const invalid = relevant && (fieldIds.includes(input.id) || input.validity && !input.validity.valid);
+        input.classList.toggle('pad-field-error', Boolean(invalid));
+        if (invalid || input.classList.contains('binding-error')) input.setAttribute('aria-invalid', 'true');
+        else input.removeAttribute('aria-invalid');
+    });
+}
+
 function padDialogShowValidationError(message) {
     const alert = document.getElementById('pad-edit-validation-error');
     if (!alert) return;
-    alert.textContent = message;
+    padDialogRefreshFieldErrors(message);
+    document.getElementById('pad-edit-validation-message').textContent = message.message || message;
     alert.style.display = '';
+    ['pad-action-controls', 'pad-workspace-mobile-save', 'pad-workspace-back'].forEach(function(id) {
+        const control = document.getElementById(id);
+        if (control) control.inert = true;
+    });
+}
+
+function padDialogDismissValidationError() {
+    const alert = document.getElementById('pad-edit-validation-error');
+    if (alert) alert.style.display = 'none';
+    ['pad-action-controls', 'pad-workspace-mobile-save', 'pad-workspace-back'].forEach(function(id) {
+        const control = document.getElementById(id);
+        if (control) control.inert = false;
+    });
 }
 
 function padDialogClearValidationError() {
-    const alert = document.getElementById('pad-edit-validation-error');
-    if (!alert) return;
-    alert.textContent = '';
-    alert.style.display = 'none';
+    const message = document.getElementById('pad-edit-validation-message');
+    if (message) message.textContent = '';
+    padDialogRefreshFieldErrors();
+    padDialogDismissValidationError();
 }
 
 function padDialogBuildButton() {
@@ -913,7 +947,7 @@ function padDialogBuildButton() {
         }
         if (wtype === 'external') {
             const extensionId = document.getElementById('pad-edit-extension-id').value;
-            if (!extensionId) throw new Error('Select an installed extension');
+            if (!extensionId) throw Object.assign(new Error('Select an installed extension'), { fieldIds: ['pad-edit-extension-id'] });
             btn.extension_id = extensionId;
             const extensionConfig = document.getElementById('pad-edit-extension-config').value.trim();
             if (extensionConfig) btn.extension_config = extensionConfig;
@@ -938,17 +972,17 @@ function padDialogValidateButton(btn) {
         let parent = input;
         let relevant = !input.disabled;
         while (parent && parent !== overlay) {
-            if (parent.style && parent.style.display === 'none') relevant = false;
+            if (parent.style && parent.style.display === 'none' && !(parent.dataset && parent.dataset.buttonTab)) relevant = false;
             parent = parent.parentElement;
         }
         if (relevant && input.validity && !input.validity.valid) {
             const label = overlay.querySelector('label[for="' + input.id + '"]');
-            throw new Error((label ? label.textContent.trim() : input.id) + ': ' + input.validationMessage);
+            throw Object.assign(new Error((label ? label.textContent.trim() : input.id) + ': ' + input.validationMessage), { fieldIds: [input.id] });
         }
     });
     const others = padState.buttons.filter(function(button) { return button.col !== btn.col || button.row !== btn.row; });
     if (typeof padCanSpanFit === 'function' && !padCanSpanFit(btn.col, btn.row, btn.col_span || 1, btn.row_span || 1, others)) {
-        throw new Error('Button span exceeds the pad or overlaps another button');
+        throw Object.assign(new Error('Button span exceeds the pad or overlaps another button'), { fieldIds: ['pad-edit-col-span', 'pad-edit-row-span'] });
     }
 
     // Validate all binding fields before accepting

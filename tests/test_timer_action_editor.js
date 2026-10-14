@@ -108,6 +108,14 @@ assert.deepStrictEqual(
 setTimer('start', '', '');
 buildFails('Mode');
 assert(element('-timer-mode').focused);
+context.padWorkspace = {};
+element('-timer-mode').focused = false;
+let validationToasts = 0;
+context.showMessage = () => { validationToasts++; };
+assert.throws(() => context.actionEditorBuild(prefix), error => error.fieldIds[0] === prefix + '-timer-mode');
+assert.strictEqual(element('-timer-mode').focused, false, 'Pad workspace validation must not trigger native focus/popups');
+assert.strictEqual(validationToasts, 0, 'Pad workspace validation must not emit a duplicate action toast');
+delete context.padWorkspace;
 setTimer('start', 'down', '');
 buildFails('Duration');
 setTimer('start', 'down', '0');

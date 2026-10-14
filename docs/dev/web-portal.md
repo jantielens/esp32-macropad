@@ -603,6 +603,8 @@ every component in that custom section to the same category ID.
   - Pad selection and naming: Left rail for up to 16 pads with optional custom names (max 31 chars). Labels retain the `Pad X: Name` format whether selected or not; no legacy selection dropdown is needed.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
   - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading.
+  - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Unused optional bars start collapsed; configured bars and paired sources open on load. Disabled gridlines and empty targets hide subordinate styling without clearing values. Routine edits preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
+  - Background image: One collapsible frame contains unframed Local Image and Camera Feed or Remote Image disclosures plus their shared Scale control. Source visibility follows image-library and remote-fetch capabilities; the frame opens when an image source or letterbox setting is configured.
   - Patterned fills: Button backgrounds, four independent bar-series slots, and the shared bar track support five patterns plus None (`none`, default; unknown names normalize to None), with separate bindable colors and shared static spacing/stroke.
     Supported color pickers use Base Color and Pattern sections, staging both colors and the pattern until Apply. Base Color opens for unpatterned fills; Pattern opens for existing patterns. Both sections retain the threshold generator. Badges preview the combined fill using representative bound colors and a binding indicator.
     Appearance starts with always-visible Background/Text, Button Shadow, UI Offset, and bindable Button State. Borders & Geometry opens by default, with border color/width together and button radius/padding next. Patterns follows, initially open only when an applicable pattern is active; active-pattern transitions update it, routine refreshes preserve manual toggles, and loading another button resets its default.
@@ -639,6 +641,16 @@ listeners. Valid button edits immediately replace the draft model; invalid
 inputs retain the last valid model and their raw form values. Save blocks on
 pending errors or overlapping/out-of-bounds buttons. Copy and inherited-button
 selection do not mutate the draft. Only an actual edit creates an override.
+
+Validation alerts overlay the action row (the inspector's top button row on
+mobile), leaving field layout unchanged. Dismissal hides only the alert and
+restores access to the covered controls; pending errors still block saving.
+Each failed validation shows the alert again, with no persisted dismissal state.
+Pre-save validation uses this alert only; persistence failures retain their toast.
+Field-specific failures carry `fieldIds` through the workspace error map so
+reopening a button restores its highlights. Numeric validity and binding errors
+share the same error color and `aria-invalid` state. Dismissal leaves field
+highlights intact; successful validation clears them.
 
 Save uses the existing serialized persistence queue and icon-upload path.
 Revision and root guards prevent completed saves or asynchronous catalogs and

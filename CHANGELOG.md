@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-12
+ms.date: 2026-10-14
 ms.topic: reference
 ---
 
@@ -37,6 +37,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserves manual toggles during routine edits. Bar/gauge track settings
   are grouped in Content. Complete widget styling remains an on-device
   preview, not a grid preview.
+* Reorganize bar-chart Content into Data sources, Scale, Layout & style,
+  Gridlines, and Target. Each bar keeps its binding, caption, and color/fill
+  together; configured optional bars open automatically. Pair controls retain
+  their existing minimum/maximum mapping. Disabled gridline and target styling
+  stays saved, and Animation is grouped with layout and style.
+* Refine pad-editor label, binding-reference, reset-icon, and paired-field
+  alignment, with clearer collapsible surfaces in light mode. Group local
+  and remote background-image controls without changing capability gates.
+
+### Fixed
+
+* Show pad-editor validation failures in one dismissible inspector overlay
+  without shifting settings or duplicating the bottom notification. Invalid
+  numeric, binding, and action fields share error highlighting; dismissal
+  retains pending errors and Save reopens the message. Device and network
+  save failures still use notifications.
 
 ## [1.40.0] - 2026-10-12
 

@@ -36,11 +36,13 @@ _actionEditorExtensions.push({
         var delayValue = delayDuration ? Number(delayDuration.value) : 0;
         if (!Number.isInteger(delayValue) || delayValue < 1 || delayValue > ACTION_DELAY_MAX_DURATION_MS) {
             if (delayDuration) {
-            delayDuration.setCustomValidity('Enter a whole number from 1 to ' + ACTION_DELAY_MAX_DURATION_MS + '.');
-                delayDuration.reportValidity();
-                delayDuration.focus();
+                delayDuration.setCustomValidity('Enter a whole number from 1 to ' + ACTION_DELAY_MAX_DURATION_MS + '.');
+                if (typeof padWorkspace === 'undefined' || !padWorkspace) {
+                    delayDuration.reportValidity();
+                    delayDuration.focus();
+                }
             }
-            throw new Error('Delay duration must be 1-' + ACTION_DELAY_MAX_DURATION_MS + ' milliseconds');
+            throw Object.assign(new Error('Delay duration must be 1-' + ACTION_DELAY_MAX_DURATION_MS + ' milliseconds'), { fieldIds: [prefix + '-delay-duration'] });
         }
         if (delayDuration) delayDuration.setCustomValidity('');
         act.duration_ms = delayValue;

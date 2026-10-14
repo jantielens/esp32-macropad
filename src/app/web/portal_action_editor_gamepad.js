@@ -50,16 +50,16 @@ function actionEditorBuildGamepad(prefix, held) {
     if (action.control === 'button') {
         action.button = Number(value('button', '1'));
         var buttonCount = actionEditorGamepadButtonCount();
-        if (!buttonCount) throw new Error('Gamepad button controls are unavailable');
-        if (!Number.isInteger(action.button) || action.button < 1 || action.button > buttonCount) throw new Error('Gamepad button must be 1-' + buttonCount);
+        if (!buttonCount) throw Object.assign(new Error('Gamepad button controls are unavailable'), { fieldIds: [prefix + '-gamepad-control'] });
+        if (!Number.isInteger(action.button) || action.button < 1 || action.button > buttonCount) throw Object.assign(new Error('Gamepad button must be 1-' + buttonCount), { fieldIds: [prefix + '-gamepad-button'] });
     } else if (action.control === 'hat') {
         action.direction = value('direction', 'up');
-        if (['up', 'down', 'left', 'right'].indexOf(action.direction) < 0) throw new Error('Invalid Gamepad hat direction');
+        if (['up', 'down', 'left', 'right'].indexOf(action.direction) < 0) throw Object.assign(new Error('Invalid Gamepad hat direction'), { fieldIds: [prefix + '-gamepad-direction'] });
     } else if (action.control === 'trigger') {
         action.trigger = value('trigger', 'left');
-        if (['left', 'right'].indexOf(action.trigger) < 0) throw new Error('Invalid Gamepad trigger');
-    } else throw new Error('Invalid Gamepad control');
-    if (['tap', 'down', 'up'].indexOf(action.operation) < 0) throw new Error('Invalid Gamepad operation');
+        if (['left', 'right'].indexOf(action.trigger) < 0) throw Object.assign(new Error('Invalid Gamepad trigger'), { fieldIds: [prefix + '-gamepad-trigger'] });
+    } else throw Object.assign(new Error('Invalid Gamepad control'), { fieldIds: [prefix + '-gamepad-control'] });
+    if (['tap', 'down', 'up'].indexOf(action.operation) < 0) throw Object.assign(new Error('Invalid Gamepad operation'), { fieldIds: [prefix + '-gamepad-operation'] });
     return action;
 }
 
