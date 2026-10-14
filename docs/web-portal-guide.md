@@ -999,6 +999,18 @@ Turning backfill off retains draft inputs but omits that history source when
 saving, unlike marker styling. See [Sparkline](pad-editor-guide.md#sparkline)
 for sampling limits and history requirements.
 
+Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview, and
+Extension each keep their Content controls in one collapsible frame. Mousepad
+groups Pointer, Scrolling, and Buttons & navigation; Back button size remains
+available when Show Back button is off. Scrollpad pairs Axis with Sensitivity.
+Gamepad Joystick pairs Stick with Center mode and keeps Invert X/Y together.
+Gamepad Button pairs Control with the relevant Button, Direction, or Trigger
+selector; release remains automatic, with no Operation selector. Camera Preview
+has its own Image scale, separate from background-image scaling. Extension
+keeps Installed extension and Configuration full width, with Tick interval (ms)
+and Upscale together. An empty interval uses the package default. Collapsing a
+frame preserves its values; device capabilities still determine availability.
+
 Button background and bar chart color pickers have Base Color and Pattern
 sections with one Apply operation. None is the default and uses only the base
 color. Base Color opens for unpatterned fills; Pattern opens for existing patterns.

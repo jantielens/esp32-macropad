@@ -205,116 +205,15 @@
                     </div>
                 </details>
 
-                <details class="editor-group" id="pad-edit-gamepad-stick-section" style="display:none;">
-                    <summary>Gamepad Joystick</summary>
-                    <div class="editor-group-body">
-                        <div class="form-group">
-                            <label for="pad-edit-gamepad-stick">Stick</label>
-                            <select id="pad-edit-gamepad-stick"><option value="left">Left</option><option value="right">Right</option></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-gamepad-center">Center</label>
-                            <select id="pad-edit-gamepad-center"><option value="fixed">Fixed</option><option value="floating">Floating</option></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-gamepad-dead-zone">Dead zone (%)</label>
-                            <input type="number" id="pad-edit-gamepad-dead-zone" min="0" max="90" step="1" value="10">
-                        </div>
-                        <div class="form-group"><label><input type="checkbox" id="pad-edit-gamepad-invert-x"> Invert X</label></div>
-                        <div class="form-group"><label><input type="checkbox" id="pad-edit-gamepad-invert-y"> Invert Y</label></div>
-                    </div>
-                </details>
+                {{WIDGET_GAMEPAD_STICK}}
 
-                <details class="editor-group" id="pad-edit-gamepad-button-section" style="display:none;">
-                    <summary>Gamepad Button</summary>
-                    <div class="editor-group-body" id="pad-edit-gamepad-button-fields"></div>
-                </details>
+                {{WIDGET_GAMEPAD_BUTTON}}
 
-                <details class="editor-group" id="pad-edit-mousepad-section" style="display:none;">
-                    <summary>Mousepad</summary>
-                    <div class="editor-group-body">
-                        <div class="form-group">
-                            <label for="pad-edit-mousepad-sensitivity">Sensitivity</label>
-                            <input type="number" id="pad-edit-mousepad-sensitivity" min="0.1" max="5" step="0.1" value="1">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-mousepad-acceleration">Acceleration</label>
-                            <input type="number" id="pad-edit-mousepad-acceleration" min="0" max="5" step="1" value="0" title="0 = off">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-mousepad-movement-threshold">Movement threshold (px)</label>
-                            <input type="number" id="pad-edit-mousepad-movement-threshold" min="0" max="12" step="1" value="3">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-mousepad-inertia">Scroll inertia</label>
-                            <input type="number" id="pad-edit-mousepad-inertia" min="0" max="5" step="1" value="0" title="0 = off">
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-mousepad-reverse"> Reverse scroll direction</label>
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-mousepad-buttons"> Mouse buttons</label>
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-mousepad-back"> Show Back button</label>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-mousepad-back-size">Back button size (px)</label>
-                            <input type="number" id="pad-edit-mousepad-back-size" min="1" max="512" step="1" value="44">
-                        </div>
-                    </div>
-                </details>
+                {{WIDGET_MOUSEPAD}}
 
-                <details class="editor-group" id="pad-edit-scrollpad-section" style="display:none;">
-                    <summary>Scrollpad</summary>
-                    <div class="editor-group-body">
-                        <div class="form-group">
-                            <label for="pad-edit-scrollpad-axis">Axis</label>
-                            <select id="pad-edit-scrollpad-axis">
-                                <option value="vertical">Vertical</option>
-                                <option value="horizontal">Horizontal</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-scrollpad-sensitivity">Sensitivity</label>
-                            <input type="number" id="pad-edit-scrollpad-sensitivity" min="0.1" max="5" step="0.1" value="1">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-scrollpad-inertia">Inertia</label>
-                            <input type="number" id="pad-edit-scrollpad-inertia" min="0" max="5" step="1" value="0" title="0 = off">
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-scrollpad-reverse"> Reverse direction</label>
-                        </div>
-                    </div>
-                </details>
+                {{WIDGET_SCROLLPAD}}
 
-                <details class="editor-group" id="pad-edit-extension-section" style="display:none;">
-                    <summary>Extension</summary>
-                    <div class="editor-group-body">
-                        <div class="form-group">
-                            <label for="pad-edit-extension-id">Installed Extension</label>
-                            <select id="pad-edit-extension-id"></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-extension-config">Configuration</label>
-                            <textarea id="pad-edit-extension-config" rows="5" maxlength="511" spellcheck="false" placeholder="Optional JSON or text passed to the extension"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-extension-tick-interval">Tick Interval (ms)</label>
-                            <input type="number" id="pad-edit-extension-tick-interval" min="33" max="1000" step="1" placeholder="Package default">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-extension-upscale">Upscale</label>
-                            <select id="pad-edit-extension-upscale">
-                                <option value="1">1x</option>
-                                <option value="2">2x</option>
-                                <option value="3">3x</option>
-                                <option value="4">4x</option>
-                            </select>
-                        </div>
-                    </div>
-                </details>
+                {{WIDGET_EXTENSION}}
 
                 <!-- Labels group (open by default) -->
                 <details class="editor-group" id="pad-edit-text-labels-section" open>

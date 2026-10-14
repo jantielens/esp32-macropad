@@ -464,6 +464,30 @@ extensions load afterward. Sound and extension selectors remain disabled while
 their catalogs load, preserving saved filenames and extension IDs when options
 arrive. Building blocks show a loading state until their catalog is available.
 
+Every widget-specific editor in `pad-editor.fragment.html` uses a
+`{{WIDGET_*}}` build-time include from a matching `_widget_*.html` partial.
+Register each placeholder in `TEMPLATES` in `tools/_render_html_template.py`;
+the firmware asset pipeline and local mock server use this same renderer.
+Keep inclusion positions stable because workspace disclosure restoration follows
+DOM order. Gamepad Button's partial retains the host for generated controls;
+capability checks and runtime handlers remain in JavaScript. Restart the mock
+server after changing the renderer mapping, then reload the browser; HTML-only
+partial edits need only a browser reload.
+
+Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview, and
+Extension retain one native `editor-group` disclosure each in Content. Mousepad
+uses Pointer, Scrolling, and Buttons & navigation headings inside its frame.
+Scrollpad pairs Axis/Sensitivity; Joystick pairs Stick/Center mode and axis
+inversion; Extension keeps selection/configuration full width and pairs Tick
+interval/Upscale. Gamepad Button's inspector-scoped grid styles the existing
+held-control builder, including its conditional selector, without changing the
+ordinary Gamepad action editor. Camera Preview retains its separate Image scale
+control. All controls stay inside their section bodies, and Back button size
+remains visible when Back is off to preserve existing validation. Input navigation
+remains in Layout; input-widget action suppression and Extension's shared
+label/icon/image hiding are unchanged. These compact editors need no new refresh
+rules, value mutation, handlers, or load/build paths.
+
 `padRefreshWidgetEditor(resetSections)` in `portal_pad_editor.js` owns the
 shared presentation refresh for Bar Chart, Gauge, and Sparkline. `PAD_WIDGET_EDITOR_RULES`
 declares their existing field IDs, feature conditions (checked, positive count,

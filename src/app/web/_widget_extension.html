@@ -1,0 +1,28 @@
+                <details class="editor-group" id="pad-edit-extension-section" style="display:none;">
+                    <summary>Extension</summary>
+                    <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-extension-id">Installed extension</label>
+                            <select id="pad-edit-extension-id"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-extension-config">Configuration</label>
+                            <textarea id="pad-edit-extension-config" rows="5" maxlength="511" spellcheck="false" placeholder="Optional JSON or text passed to the extension"></textarea>
+                        </div>
+                        <div class="pad-appearance-row">
+                        <div class="form-group">
+                            <label for="pad-edit-extension-tick-interval">Tick interval (ms)</label>
+                            <input type="number" id="pad-edit-extension-tick-interval" min="33" max="1000" step="1" placeholder="Package default">
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-extension-upscale">Upscale</label>
+                            <select id="pad-edit-extension-upscale">
+                                <option value="1">1x</option>
+                                <option value="2">2x</option>
+                                <option value="3">3x</option>
+                                <option value="4">4x</option>
+                            </select>
+                        </div>
+                        </div>
+                    </div>
+                </details>

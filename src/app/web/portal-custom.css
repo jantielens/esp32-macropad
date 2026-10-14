@@ -2084,6 +2084,12 @@ body {
   margin-bottom: 4px; min-height: 20px;
 }
 
+#pad-workspace-inspector #pad-edit-gamepad-hold-gamepad-group {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start;
+}
+#pad-workspace-inspector #pad-edit-gamepad-hold-gamepad-group > .form-group { min-width: 0; }
+#pad-workspace-inspector #pad-edit-gamepad-hold-gamepad-group label { min-height: 20px; }
+
 .sparkline-source { margin-top: 12px; }
 .sparkline-source-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
 .sparkline-source-heading .bindable-color { display: flex; align-items: center; gap: 6px; }

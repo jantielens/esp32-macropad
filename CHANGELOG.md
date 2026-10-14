@@ -29,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Refine Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview,
+  and Extension Content layouts. Keep all controls inside their collapsible
+  frames, group Mousepad tasks, pair related compact fields, and clarify labels
+  without changing saved configuration, capability gates, validation, or actions.
+* Extract the remaining inline widget editors into build-time HTML partials,
+  preserving identical rendered markup and section order.
 * Clarify List Content controls with a Provider & Filter disclosure title,
   without changing provider, filter, or item-action behavior.
 * Group Table Content controls in one initially open, collapsible Table

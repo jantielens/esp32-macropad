@@ -576,7 +576,9 @@ The **Background image** frame contains collapsible **Local Image** and
 **Camera Feed or Remote Image** subsections. Its shared **Scale** control
 applies to both sources. It selects **Cover** to fill and crop or
 **Letterbox** to preserve the whole image with bars matching the button
-background. The Camera Preview widget has its own scale setting. URL settings remain
+background. The Camera Preview widget has a separate **Image scale** control
+inside its **Camera Preview** frame: Cover, Letterbox, or Center crop.
+URL settings remain
 available for remote JPEG, PNG, and MJPEG sources.
 
 **MJPEG streaming (recommended for cameras):**
@@ -974,6 +976,11 @@ button into a relative USB mouse surface. Select **USB** in
 USB device port to your computer using a data cable. No companion application
 is required; keyboard and mouse share the connection.
 
+In Content, the **Mousepad** frame groups **Pointer**, **Scrolling**, and
+**Buttons & navigation**. Sensitivity and Acceleration share a row; Movement
+threshold follows. Back button size remains available even when Show Back
+button is off. Collapsing the frame does not disable or clear its settings.
+
 Slide one finger to move the computer's pointer. Lift and touch elsewhere to
 continue moving without jumping to an absolute position. A stationary tap
 lasting at most 250 ms sends a left-button press and release. Movement beyond
@@ -1090,6 +1097,9 @@ narrow strip beside your Mousepad, or a wide strip underneath it. Labels,
 icons, and colors remain customizable; this is not a scrollbar displaying the
 computer's scroll position.
 
+The **Scrollpad** Content frame pairs **Axis** with **Sensitivity**, followed
+by **Inertia** and **Reverse direction**. All four controls stay inside the frame.
+
 Choose **Axis**: **Vertical** (default) or **Horizontal**. Sliding up scrolls
 upward; sliding right scrolls rightward. Perpendicular movement is ignored.
 Enable **Reverse direction** to flip this behavior; it is off by default.
@@ -1185,6 +1195,13 @@ to shift the maximized ring.
 
 The JSON widget type is `gamepad_stick`. Earlier development pads using
 `gamepad_joystick` must reselect **Gamepad Joystick** in the editor and save.
+
+The **Gamepad Joystick** Content frame pairs **Stick** with **Center mode**,
+then shows **Dead zone (%)** and paired **Invert X/Y** controls. The **Gamepad
+Button** frame pairs **Control** with its relevant **Button**, **Direction**, or
+**Trigger** selector. Button choices come from the device action catalog. This
+held-control editor has no Operation selector; ordinary Gamepad actions still
+offer Tap, Down, and Up.
 
 Choose **Gamepad Button** for one held control: button 1-16, a hat direction,
 or a binary left/right trigger. Release is automatic; there is no separate
@@ -1283,15 +1300,21 @@ target indexes; button index 0 corresponds to button 1.
 
 On ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive, the
 **Extension** widget runs an enabled native Extension installed from the Device
-portal. Choose the package
+portal. Choose the package under **Installed extension**
 and optionally enter up to 511 bytes of configuration text for that button. An
 Extension can appear on multiple buttons; each placement has its own instance
-and configuration. Set **Extension tick interval** when an Extension needs a
+and configuration. Set **Tick interval (ms)** when an Extension needs a
 specific animation or refresh cadence; it accepts 33 to 1000 milliseconds and
 otherwise uses the package default. The button action lists remain available
 when the Extension returns pass-through from tap or long press. See the
 [Extension developer guide](dev/extensions.md) for package and lifecycle
 details.
+
+The **Extension** Content frame keeps package selection and Configuration full
+width, with Tick interval and Upscale together below. Configuration remains
+opaque text or JSON. Leave Tick interval empty for the package default; 0 is not
+a valid interval. Loading or unavailable catalog entries retain a saved package
+ID and configuration. Shared labels, icons, and images stay hidden for this widget.
 
 For a canvas-based Extension that cannot allocate its full-size canvas, set
 **Upscale** to 2x, 3x, or 4x. This reduces the canvas dimensions and scales the
