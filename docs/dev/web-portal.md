@@ -465,11 +465,14 @@ their catalogs load, preserving saved filenames and extension IDs when options
 arrive. Building blocks show a loading state until their catalog is available.
 
 `padRefreshWidgetEditor(resetSections)` in `portal_pad_editor.js` owns the
-shared presentation refresh for Bar Chart and Gauge. `PAD_WIDGET_EDITOR_RULES`
+shared presentation refresh for Bar Chart, Gauge, and Sparkline. `PAD_WIDGET_EDITOR_RULES`
 declares their existing field IDs, feature conditions (checked, positive count,
-or nonempty value), group/style suffixes, and source fields. The current
-four-source rules retain optional Bar Chart patterns, custom colors relative to
-firmware defaults, and paired-source expansion. Add a rules entry only when a
+or nonempty value), group/style suffixes, and source fields. Source count defaults
+to four for Bar Chart/Gauge; Sparkline specifies three and has no pair controls.
+The rules retain optional Bar Chart patterns, custom colors relative to
+firmware defaults, and paired-source expansion. Sparkline uses positive marker
+size to disclose marker format/color and groups each line's current-value label
+with its live binding, color, and history source. Add a rules entry only when a
 widget needs this behavior; do not add a refresh function for every widget.
 
 Call with `true` after dialog values load or the widget type changes to set
@@ -481,6 +484,16 @@ markup/controls, and is a no-op for widgets without rules. Existing capability
 checks and firmware flags remain the owners of widget availability; the rules
 table does not duplicate them. Shared track-node movement stays in
 `padFillRefreshVisibility()`.
+
+Sparkline sampling, derived slots, history dependencies, and warnings remain in
+`padUpdateSparklineEditor()` in `portal_pad_dialog.js`. Marker size 0 hides styling
+but preserves its saved format/color. Disabling backfill retains draft entity/stat
+inputs, but existing serialization omits that history source; reloading after
+save clears its entity and restores the default statistic. The saved entity,
+not a separate boolean, determines initial backfill state. Capability-hidden
+values retain the existing serialization behavior. With `ha_history=false` and
+a saved enabled source, the current handler hides the toggle but subsequently
+shows its dependent history fields again, an existing capability-gating edge case.
 
 Device information reads friendly pad names from the immutable RAM config cache,
 not from pad files. Names retain their full stored length. Successful saves and
@@ -631,6 +644,7 @@ every component in that custom section to the same category ID.
     Bar/gauge track outlines have static width and bindable color in Content beside their track settings, reusing one outline input group when the widget type changes. Bars also have static `widget_bar_track_radius` there (0-64, default 4), clamped to half the smaller track dimension, with square dual baseline joins.
     Controls preserve base colors. Save to inspect complete widgets and outlines on-device; no grid styling preview or monochrome simulation is provided. Gauge patterns and image compositing are deferred.
   - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
+    Data sources, Scale, Sampling, Line style, Markers, Current-value annotations, and Reference lines each use the shared `editor-group` frame, initially open, matching Bar Chart. Per-line disclosures remain inside Data sources.
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)
   - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`

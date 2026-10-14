@@ -987,6 +987,18 @@ or clearing the target hides styling without clearing saved values. Collapsing
 a group never disables it. Pair controls retain rings 2/4 as the negative side;
 target zone size remains an angle in degrees, not a percentage of the range.
 
+Sparkline **Content** starts with per-line **Data sources**, keeping live binding,
+color, current-value label, and optional Home Assistant backfill together.
+Configured optional lines open initially; collapsing a line never disables it.
+**Scale**, **Sampling**, **Line style**, **Markers**, **Current-value annotations**,
+and **Reference lines** follow. Each section has its own collapsible frame,
+initially open, matching Bar Chart. Marker size 0 hides format/color without clearing
+saved styling. Current-value labels stay with their line; dot size and label
+area width are together below the markers. Reference Y values remain numeric.
+Turning backfill off retains draft inputs but omits that history source when
+saving, unlike marker styling. See [Sparkline](pad-editor-guide.md#sparkline)
+for sampling limits and history requirements.
+
 Button background and bar chart color pickers have Base Color and Pattern
 sections with one Apply operation. None is the default and uses only the base
 color. Base Color opens for unpatterned fills; Pattern opens for existing patterns.

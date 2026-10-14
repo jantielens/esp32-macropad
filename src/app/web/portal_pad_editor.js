@@ -432,6 +432,18 @@ const PAD_WIDGET_EDITOR_RULES = {
             binding: 'pad-edit-gauge-data-binding', label: 'pad-edit-gauge-start-label',
             color: 'pad-edit-gauge-arc-color', pair: 'pad-edit-gauge-dual-binding-pair-'
         }
+    },
+    sparkline: {
+        section: 'pad-edit-sparkline-section',
+        prefix: 'pad-edit-sparkline-',
+        features: [
+            { field: 'pad-edit-sparkline-marker-size-min', mode: 'positive', group: 'minimum-marker', style: 'minimum-marker' },
+            { field: 'pad-edit-sparkline-marker-size-max', mode: 'positive', group: 'maximum-marker', style: 'maximum-marker' }
+        ],
+        sources: {
+            count: 3, binding: 'pad-edit-sparkline-data-binding',
+            label: 'pad-edit-sparkline-current-label', color: 'pad-edit-sparkline-line-color'
+        }
     }
 };
 
@@ -455,7 +467,7 @@ function padRefreshWidgetEditor(resetSections) {
         if (group) group.open = true;
     });
     const sources = rules.sources;
-    for (let source = 1; source <= 4; source++) {
+    for (let source = 1; source <= (sources.count || 4); source++) {
         const group = document.getElementById(rules.prefix + 'source-' + source);
         if (!group) continue;
         const suffix = source === 1 ? '' : '-' + source;
@@ -465,7 +477,7 @@ function padRefreshWidgetEditor(resetSections) {
         const pattern = sources.patterns && document.getElementById(sources.color + suffix + '-pattern');
         const defaultColor = PAD_FIRMWARE_DEFAULTS['widget_series_color' + (source === 1 ? '' : '_' + source)] || '';
         const customColor = color && color.value.trim() && color.value.trim().toLowerCase() !== defaultColor.toLowerCase();
-        const pair = document.getElementById(sources.pair + Math.ceil(source / 2));
+        const pair = sources.pair && document.getElementById(sources.pair + Math.ceil(source / 2));
         group.open = source === 1 || !!((binding && binding.value.trim()) || (label && label.value.trim()) ||
             customColor || (pattern && pattern.value !== 'none') || (pair && pair.checked));
     }

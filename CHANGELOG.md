@@ -29,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Reorganize Sparkline Content into per-line Data sources, Scale, Sampling,
+  Line style, Markers, Current-value annotations, and Reference lines. Keep
+  each line's binding, color, label, and history source together; configured
+  optional lines and enabled markers open initially. Extend shared editor
+  presentation refresh to three Sparkline sources without changing sampling,
+  validation, capability, or persistence behavior.
 * Edit supported fill colors through Base Color and Pattern sections with
   one shared Apply operation, threshold generators, and combined color badge
   previews. The button Appearance tab puts Background/Text, Button Shadow,

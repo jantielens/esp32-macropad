@@ -238,6 +238,49 @@ const gaugeTicks = elements.get('pad-edit-gauge-ticks');
 elements.delete('pad-edit-gauge-ticks');
 assert.doesNotThrow(() => context.padRefreshWidgetEditor(true), 'Missing optional controls are skipped');
 elements.set('pad-edit-gauge-ticks', gaugeTicks);
+elements.set('pad-edit-sparkline-section', { style: {} });
+for (const name of ['minimum', 'maximum']) {
+	elements.set('pad-edit-sparkline-' + name + '-marker', { open: true });
+	elements.set('pad-edit-sparkline-' + name + '-marker-style', { hidden: false });
+}
+elements.set('pad-edit-sparkline-marker-size-min', { value: '0' });
+elements.set('pad-edit-sparkline-marker-size-max', { value: '5' });
+elements.set('pad-edit-sparkline-min-fmt', { value: 'lo %.1f' });
+elements.set('pad-edit-sparkline-min-label-color', { value: '[pad:accent]' });
+for (let line = 1; line <= 3; line++) {
+	const suffix = line === 1 ? '' : '-' + line;
+	elements.set('pad-edit-sparkline-source-' + line, { open: true });
+	elements.set('pad-edit-sparkline-data-binding' + suffix, { value: '' });
+	elements.set('pad-edit-sparkline-current-label' + suffix, { value: '' });
+	elements.set('pad-edit-sparkline-line-color' + suffix, {
+		value: context.PAD_FIRMWARE_DEFAULTS['widget_series_color' + (line === 1 ? '' : '_' + line)]
+	});
+}
+elements.set('pad-edit-sparkline-source-4', { open: true });
+elements.get('pad-edit-widget-type').value = 'sparkline';
+context.padRefreshWidgetEditor(true);
+assert.deepStrictEqual([1, 2, 3].map(line => elements.get('pad-edit-sparkline-source-' + line).open), [true, false, false]);
+assert.strictEqual(elements.get('pad-edit-sparkline-minimum-marker').open, false);
+assert.strictEqual(elements.get('pad-edit-sparkline-minimum-marker-style').hidden, true);
+assert.strictEqual(elements.get('pad-edit-sparkline-maximum-marker').open, true);
+elements.get('pad-edit-sparkline-data-binding-2').value = '[pad:power]';
+elements.get('pad-edit-sparkline-current-label-3').value = 'Outdoor';
+context.padRefreshWidgetEditor(true);
+assert.deepStrictEqual([1, 2, 3].map(line => elements.get('pad-edit-sparkline-source-' + line).open), [true, true, true]);
+elements.get('pad-edit-sparkline-current-label-3').value = '';
+elements.get('pad-edit-sparkline-line-color-3').value = '#123456';
+context.padRefreshWidgetEditor(true);
+assert.strictEqual(elements.get('pad-edit-sparkline-source-3').open, true, 'Custom colors reveal optional lines');
+assert.strictEqual(elements.get('pad-edit-sparkline-source-4').open, true, 'Sparkline refresh must stop at three sources');
+elements.get('pad-edit-sparkline-source-2').open = false;
+elements.get('pad-edit-sparkline-marker-size-max').value = '0';
+context.padRefreshWidgetEditor();
+assert.strictEqual(elements.get('pad-edit-sparkline-source-2').open, false, 'Routine refresh preserves Sparkline disclosure');
+assert.strictEqual(elements.get('pad-edit-sparkline-maximum-marker-style').hidden, true);
+assert.strictEqual(elements.get('pad-edit-sparkline-min-fmt').value, 'lo %.1f');
+assert.strictEqual(elements.get('pad-edit-sparkline-min-label-color').value, '[pad:accent]');
+assert.strictEqual(elements.get('pad-edit-bar-source-2').open, false, 'Sparkline refresh leaves the inactive Bar Chart editor unchanged');
+assert.strictEqual(elements.get('pad-edit-gauge-source-4').open, true, 'Sparkline refresh leaves the inactive Gauge editor unchanged');
 elements.get('pad-edit-widget-type').value = 'camera_preview';
 assert.doesNotThrow(() => context.padRefreshWidgetEditor(true), 'Widgets without refresh rules are a no-op');
 elements.get('pad-edit-widget-type').value = '';

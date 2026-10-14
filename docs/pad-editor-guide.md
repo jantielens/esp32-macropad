@@ -1606,6 +1606,16 @@ This visualization shows system balance at a glance: the outer combined ring con
 
 The sparkline widget draws a mini trend line showing how a value changes over time — perfect for temperature history, power consumption trends, network latency, or any metric you want to watch evolve.
 
+**Content workflow:** **Data sources** keeps each line's live binding, color,
+current-value label, and optional Home Assistant backfill together. Line 1 opens
+initially; optional lines open when their binding, label, or non-default color
+is configured. Collapsing a line does not disable it. **Scale**, **Sampling**,
+**Line style**, **Markers**, **Current-value annotations**, and **Reference lines**
+follow. Line width, smoothing, and separation are together; dot size and label
+area width are together. Enabled minimum/maximum markers open initially. Size 0
+hides their format/color without clearing saved styling. Reference Y values
+remain numeric, including 0 and negative values; colors support bindings.
+
 **Configuration:**
 
 | Setting | Description |
@@ -1629,7 +1639,7 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Min label color** | Override color for the min label text. White = auto |
 | **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Uses the line’s resolved color |
 | **Label width (px)** | Width of the right-side label area in pixels (0 = 50px default, 1–200). Only takes effect when at least one current-value label is configured. The chart area shrinks to make room |
-| **Line 1/2/3 Label** | Binding expression or static text for a per-line current-value label displayed in the right margin (e.g., `[mqtt:sensor/temp;temperature;%.1f] °C`). Labels track the Y position of the rightmost data point and inherit the line’s color. Collision avoidance pushes overlapping labels apart. Leave empty to disable |
+| **Current value label (line 1/2/3)** | Binding expression or static text for a per-line current-value label displayed in the right margin (e.g., `[mqtt:sensor/temp;temperature;%.1f] °C`). Labels track the Y position of the rightmost data point and inherit the line’s color. Collision avoidance pushes overlapping labels apart. Leave empty to disable |
 | **Reference line 1/2/3** | Up to 3 horizontal reference lines at fixed Y values. Each has a Y value (numeric), a color, and a line pattern (Solid, Dotted, or Dashed). Drawn behind the data lines. Only lines with a valid Y value are rendered |
 | **Keep reference lines in view** | When enabled, auto-scale expands the Y range to include all configured reference line values, so they are always visible. Data that exceeds the reference lines still expands the range normally. Only affects auto-scaled axes (explicit min/max take priority) |
 | **Smoothing** | Gaussian kernel smoothing radius (0 = off, 1–8). Smooths the trend line by averaging neighboring data points — higher values produce a smoother curve. A value of 3–4 gives a pleasant smoothing effect; 8 gives heavy averaging. Min/max markers and current-value dot are positioned on the smoothed line. Set to 0 for raw data rendering |
@@ -1644,6 +1654,7 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 
 Requirements and limits:
 
+- Turning backfill off retains its entity/statistic in the current draft, but saving omits that history source. After reload, its entity is empty and its statistic returns to the default; this differs from disabled marker styling, which remains saved.
 - The Home Assistant URL and a long-lived access token must be configured on the portal's Integrations page.
 - Home Assistant records statistics on 5-minute boundaries. On a line whose point interval is under 5 minutes, consecutive historical values are visually interpolated while locally collected data still uses the finer interval.
 - Windows over 24 hours use Home Assistant's hourly statistics. Consecutive hourly values are also visually interpolated on finer chart grids.

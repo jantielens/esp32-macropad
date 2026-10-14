@@ -111,7 +111,9 @@ for (const widget of ['gauge', 'bar_chart', 'sparkline', 'waveform']) {
     }
 }
 const sparkline = fs.readFileSync('src/app/web/_widget_sparkline.html', 'utf8');
-assert.strictEqual((sparkline.match(/class="sparkline-color-row"/g) || []).length, 5);
+for (let reference = 1; reference <= 3; reference++) {
+    assert.match(sparkline, new RegExp('<input type="number" id="pad-edit-sparkline-ref-' + reference + '-y" step="any"'));
+}
 for (const identifier of ['min-label', 'max-label', 'ref-1', 'ref-2', 'ref-3']) {
     assert.match(sparkline, new RegExp('id="pad-edit-sparkline-' + identifier + '-color"[^>]*maxlength="63"'));
     assert.match(sparkline, new RegExp('<label for="pad-edit-sparkline-' + identifier + '-color">Color '));
