@@ -489,7 +489,10 @@ function padWidgetTypeChanged() {
     padRefreshWidgetEditor(true);
     WIDGET_SECTIONS.forEach(s => {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
-        if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
+        if (el) {
+            el.style.display = (wtype === s) ? '' : 'none';
+            if (wtype === s && el.tagName === 'DETAILS') el.open = true;
+        }
     });
     var extensionSection = document.getElementById('pad-edit-extension-section');
     if (extensionSection) {

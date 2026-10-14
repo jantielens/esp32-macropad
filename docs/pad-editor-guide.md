@@ -1682,16 +1682,23 @@ Labels, icons, and colors still work alongside the widget. A typical sparkline b
 ### Table
 
 The table widget renders multi-column row data from a structured binding payload.
+In button Content, Data Binding, Font Style Override, and Scroll share an
+initially open **Table Binding & Styling** disclosure. There is no outer
+Settings disclosure.
 
 **Configuration:**
 
 | Setting | Description |
 |---------|-------------|
 | **Data binding** | Must resolve to a table schema payload. Use an exact single-token binding expression such as `[health:table]` or `[health:extended_table]` |
-| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font:my-font;font_size:96`) |
-| **Scroll** | Enable or disable table scrolling |
+| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font:my-font;font_size:96`). Empty inherits the button label size |
+| **Scroll** | Enable or disable table scrolling; On is the default |
 
 **Important:** Do not wrap the table binding in static text and do not add a format parameter. The table widget expects the resolved structured payload, not formatted text.
+
+The generic inline binding validator checks token syntax and widget parameter
+limits, but it does not reject a valid token surrounded by static text. The
+Table widget still requires the entire field value to be one exact token.
 
 **Examples:**
 

@@ -1088,7 +1088,7 @@ when it completes, the next action runs. By default, up to three pausable action
 can be pending device-wide at a time; starting another pausable action when all
 slots are occupied stops its action list.
 
-The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
+The Table widget's **Content** controls are **Data Binding**, **Font Style Override**, and **Scroll**. All three share an initially open **Table Binding & Styling** disclosure. The binding accepts structured table payloads such as `[health:table]` and `[health:extended_table]`; use one exact token with no static prefix/suffix text or format parameter. The generic inline validator does not reject a valid token surrounded by static text, but the Table widget requires the entire field value to be that token. An empty Font Style Override inherits the button label size, and Scroll defaults to On.
 
 On camera-enabled boards, select **Camera Preview** as a button's widget to display the shared camera feed. Choose Cover to fill the button, Letterbox to show the complete image without stretching, or Center crop to clip an unscaled centered image.
 

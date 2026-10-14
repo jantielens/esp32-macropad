@@ -104,7 +104,7 @@ context.padSetHidWidgetCapabilityVisibility(null);
 assert.strictEqual(mousepadOption.disabled, true);
 assert.strictEqual(scrollpadOption.disabled, true);
 for (const id of ['pad-edit-mousepad-section', 'pad-edit-scrollpad-section', 'pad-edit-tap-heading', 'pad-edit-tap-actions',
-	'pad-edit-lp-heading', 'pad-edit-lp-actions']) elements.set(id, { style: {} });
+	'pad-edit-lp-heading', 'pad-edit-lp-actions']) elements.set(id, { tagName: 'DETAILS', style: {} });
 for (const type of ['mousepad', 'scrollpad']) {
 	elements.get('pad-edit-widget-type').value = type;
 	context.padWidgetTypeChanged();
@@ -114,6 +114,12 @@ for (const type of ['mousepad', 'scrollpad']) {
 		assert.strictEqual(elements.get(id).style.display, 'none');
 	}
 }
+const tableSection = { tagName: 'DIV', style: {} };
+elements.set('pad-edit-table-section', tableSection);
+elements.get('pad-edit-widget-type').value = 'table';
+context.padWidgetTypeChanged();
+assert.strictEqual(tableSection.style.display, '');
+assert.strictEqual(Object.prototype.hasOwnProperty.call(tableSection, 'open'), false);
 elements.get('pad-edit-widget-type').value = '';
 context.padWidgetTypeChanged();
 assert.strictEqual(elements.get('pad-edit-mousepad-section').style.display, 'none');

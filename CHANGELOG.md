@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Group Table Content controls in one initially open, collapsible Table
+  Binding & Styling section using shared editor styling. Keep Data Binding,
+  Font Style Override, and Scroll together without changing binding rules,
+  style inheritance, defaults, or saved configuration.
 * Reorganize Sparkline Content into per-line Data sources, Scale, Sampling,
   Line style, Markers, Current-value annotations, and Reference lines. Keep
   each line's binding, color, label, and history source together; configured
