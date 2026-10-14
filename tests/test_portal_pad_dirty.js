@@ -146,7 +146,7 @@ for (let bar = 1; bar <= 4; bar++) {
 }
 for (const pair of [1, 2]) elements.set('pad-edit-widget-bar-dual-binding-pair-' + pair, { checked: false });
 elements.get('pad-edit-widget-type').value = 'bar_chart';
-context.padRefreshBarChartEditor(true);
+context.padRefreshWidgetEditor(true);
 assert.deepStrictEqual([1, 2, 3, 4].map(bar => elements.get('pad-edit-bar-source-' + bar).open), [true, false, false, false]);
 assert.strictEqual(elements.get('pad-edit-bar-gridline-style').hidden, true);
 assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, true);
@@ -155,7 +155,7 @@ elements.get('pad-edit-widget-bar-color-3').value = '#123456';
 elements.get('pad-edit-widget-bar-color-4-pattern').value = 'dots';
 elements.get('pad-edit-widget-bar-ticks').value = '4';
 elements.get('pad-edit-widget-bar-marker-value').value = '0';
-context.padRefreshBarChartEditor(true);
+context.padRefreshWidgetEditor(true);
 assert.deepStrictEqual([1, 2, 3, 4].map(bar => elements.get('pad-edit-bar-source-' + bar).open), [true, true, true, true]);
 assert.strictEqual(elements.get('pad-edit-bar-gridlines').open, true);
 assert.strictEqual(elements.get('pad-edit-bar-target').open, true);
@@ -164,16 +164,84 @@ elements.get('pad-edit-widget-bar-dual-binding-pair-1').checked = true;
 elements.get('pad-edit-bar-source-2').open = false;
 elements.get('pad-edit-widget-bar-ticks').value = '0';
 elements.get('pad-edit-widget-bar-marker-value').value = '';
-context.padRefreshBarChartEditor();
+context.padRefreshWidgetEditor();
 assert.strictEqual(elements.get('pad-edit-bar-source-2').open, false, 'Routine refresh preserves manual disclosure');
 assert.strictEqual(elements.get('pad-edit-widget-bar-label-2').value, 'Grid');
 assert.strictEqual(elements.get('pad-edit-widget-bar-color-3').value, '#123456');
 assert.strictEqual(elements.get('pad-edit-widget-bar-color-4-pattern').value, 'dots');
 assert.strictEqual(elements.get('pad-edit-bar-gridline-style').hidden, true);
 assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, true);
-context.padRefreshBarChartEditor(true);
+context.padRefreshWidgetEditor(true);
 assert.strictEqual(elements.get('pad-edit-bar-source-2').open, true, 'Paired sources open on load');
 elements.get('pad-edit-widget-type').value = '';
+elements.get('pad-edit-bar-source-2').open = false;
+
+for (const name of ['sources', 'scale', 'layout', 'needle', 'tick-marks', 'target']) {
+	elements.set('pad-edit-gauge-' + name, { open: false });
+}
+elements.set('pad-edit-gauge-section', { style: {} });
+for (const name of ['needle', 'tick', 'target']) elements.set('pad-edit-gauge-' + name + '-style', { hidden: false });
+elements.set('pad-edit-gauge-show-needle', { checked: true });
+elements.set('pad-edit-gauge-ticks', { value: '5' });
+elements.set('pad-edit-gauge-marker-value', { value: '' });
+for (let ring = 1; ring <= 4; ring++) {
+	const suffix = ring === 1 ? '' : '-' + ring;
+	elements.set('pad-edit-gauge-source-' + ring, { open: true });
+	elements.set('pad-edit-gauge-data-binding' + suffix, { value: '' });
+	elements.set('pad-edit-gauge-start-label' + suffix, { value: '' });
+	elements.set('pad-edit-gauge-arc-color' + suffix, {
+		value: context.PAD_FIRMWARE_DEFAULTS['widget_series_color' + (ring === 1 ? '' : '_' + ring)].toLowerCase()
+	});
+}
+for (const pair of [1, 2]) elements.set('pad-edit-gauge-dual-binding-pair-' + pair, { checked: false });
+elements.get('pad-edit-widget-type').value = 'gauge';
+context.padRefreshWidgetEditor(true);
+assert.deepStrictEqual([1, 2, 3, 4].map(ring => elements.get('pad-edit-gauge-source-' + ring).open), [true, false, false, false]);
+assert.strictEqual(elements.get('pad-edit-gauge-needle').open, true);
+assert.strictEqual(elements.get('pad-edit-gauge-tick-marks').open, true);
+assert.strictEqual(elements.get('pad-edit-gauge-target').open, false);
+assert.strictEqual(elements.get('pad-edit-gauge-target-style').hidden, true);
+elements.get('pad-edit-gauge-data-binding-2').value = '[pad:power]';
+elements.get('pad-edit-gauge-start-label-3').value = 'Grid';
+elements.get('pad-edit-gauge-arc-color-4').value = '#123456';
+elements.get('pad-edit-gauge-marker-value').value = '0';
+context.padRefreshWidgetEditor(true);
+assert.deepStrictEqual([1, 2, 3, 4].map(ring => elements.get('pad-edit-gauge-source-' + ring).open), [true, true, true, true]);
+assert.strictEqual(elements.get('pad-edit-gauge-target').open, true, 'Zero is a configured Gauge target');
+elements.get('pad-edit-gauge-source-3').open = false;
+elements.get('pad-edit-gauge-show-needle').checked = false;
+elements.get('pad-edit-gauge-ticks').value = '0';
+elements.get('pad-edit-gauge-marker-value').value = '';
+elements.set('pad-edit-gauge-needle-width', { value: '7' });
+elements.set('pad-edit-gauge-tick-width', { value: '3' });
+elements.set('pad-edit-gauge-marker-zone-deg', { value: '19' });
+context.padRefreshWidgetEditor();
+assert.strictEqual(elements.get('pad-edit-gauge-source-3').open, false, 'Routine refresh preserves manual disclosure');
+for (const name of ['needle', 'tick', 'target']) assert.strictEqual(elements.get('pad-edit-gauge-' + name + '-style').hidden, true);
+assert.strictEqual(elements.get('pad-edit-gauge-needle-width').value, '7');
+assert.strictEqual(elements.get('pad-edit-gauge-tick-width').value, '3');
+assert.strictEqual(elements.get('pad-edit-gauge-marker-zone-deg').value, '19');
+for (let ring = 2; ring <= 4; ring++) {
+	elements.get('pad-edit-gauge-data-binding-' + ring).value = '';
+	elements.get('pad-edit-gauge-start-label-' + ring).value = '';
+	elements.get('pad-edit-gauge-arc-color-' + ring).value = context.PAD_FIRMWARE_DEFAULTS['widget_series_color_' + ring];
+}
+for (const pair of [1, 2]) elements.get('pad-edit-gauge-dual-binding-pair-' + pair).checked = true;
+context.padRefreshWidgetEditor(true);
+assert.deepStrictEqual([1, 2, 3, 4].map(ring => elements.get('pad-edit-gauge-source-' + ring).open), [true, true, true, true], 'Both Gauge pairs open their empty sources');
+assert.strictEqual(elements.get('pad-edit-bar-source-2').open, false, 'Refreshing Gauge leaves the inactive Bar Chart editor unchanged');
+const gaugeSection = elements.get('pad-edit-gauge-section');
+elements.delete('pad-edit-gauge-section');
+assert.doesNotThrow(() => context.padRefreshWidgetEditor(true), 'Missing widget markup is a no-op');
+elements.set('pad-edit-gauge-section', gaugeSection);
+const gaugeTicks = elements.get('pad-edit-gauge-ticks');
+elements.delete('pad-edit-gauge-ticks');
+assert.doesNotThrow(() => context.padRefreshWidgetEditor(true), 'Missing optional controls are skipped');
+elements.set('pad-edit-gauge-ticks', gaugeTicks);
+elements.get('pad-edit-widget-type').value = 'camera_preview';
+assert.doesNotThrow(() => context.padRefreshWidgetEditor(true), 'Widgets without refresh rules are a no-op');
+elements.get('pad-edit-widget-type').value = '';
+assert.doesNotThrow(() => context.padRefreshWidgetEditor(true), 'A normal button needs no widget refresh');
 
 const devInfo = JSON.parse(execFileSync('python3', ['-c',
 	"import json, runpy, sys; from types import SimpleNamespace; sys.path.insert(0, 'tools'); module = runpy.run_path('tools/portal-dev-server.py'); handler = object.__new__(module['PortalHandler']); handler.headers = {}; handler.server = SimpleNamespace(profile='esp32-p4-lcd4b'); module['reset_pad_fixtures'](handler.server); print(json.dumps(handler._device_info()))"

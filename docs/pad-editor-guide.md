@@ -1517,6 +1517,16 @@ Labels, icons, and colors still work alongside the widget. A typical bar chart b
 
 The gauge widget draws an arc that fills based on a numeric value — ideal for clocks, speedometers, temperature dials, or any circular meter.
 
+In **Content**, **Data sources** groups each ring's binding, label, and color.
+Ring 1 starts expanded; optional rings expand for a binding, label, custom color,
+or enabled pair. Pair controls follow the rings and identify rings 2/4 as the
+negative side. **Scale** and **Arc & track** start expanded, with arc geometry,
+track color/outline, and animation together. **Needle**, **Tick marks**, and
+**Target** open when enabled/configured. Their geometry and colors stay adjacent;
+turning off the needle, setting tick count to 0, or leaving Target value empty
+hides subordinate styling without clearing it. Target value `0` is configured,
+not empty. Collapsing any group preserves its feature and saved values.
+
 **Configuration:**
 
 | Setting | Description |
@@ -1529,14 +1539,14 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Start Label (slot 2)** | Optional text or binding for slot 2. In dual mode, slot 2 still has its own color but shares the same physical ring as slot 1 |
 | **Start Label (slot 3)** | Optional text or binding for slot 3 |
 | **Start Label (slot 4)** | Optional text or binding for slot 4 when it renders as its own ring |
-| **Min / Max** | The value range. The arc is empty at min and full at max. Accepts a number or a binding expression for dynamic scaling |
-| **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
-| **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
-| **Zero-Centered** | Arc fills from the zero point — negative values grow left, positive grow right. Only applicable to single mode rings. |
-| **Dual Binding Pair 1** | Combines slots 1 and 2 into one ring: slot 1 fills the positive direction, slot 2 fills the negative direction |
-| **Dual Binding Pair 2** | Combines slots 3 and 4 into one ring using the same positive/negative split |
+| **Minimum / Maximum** | The value range. The arc is empty at min and full at max. Accepts a number or a binding expression for dynamic scaling |
+| **Arc span (degrees)** | Total sweep of the arc (10-360 degrees). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
+| **Start angle (degrees)** | Where the arc begins in LVGL degrees (0 = 3 o'clock, 90 = 6 o'clock, 180 = 9 o'clock, 270 = 12 o'clock) |
+| **Zero-centered fill** | Arc fills from the zero point: negative values grow left, positive grow right. Applies only to unpaired rings. |
+| **Pair rings 1 and 2** | Combines slots 1 and 2 into one ring: slot 1 fills the positive direction, slot 2 fills the negative direction |
+| **Pair rings 3 and 4** | Combines slots 3 and 4 into one ring using the same positive/negative split |
 | **Show needle** | Display a line from the center to the current value position on the arc |
-| **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
+| **Arc thickness (%)** | Arc thickness as a percentage of the radius (5-50%) |
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
 | **Needle Cutoff** | Percentage of the needle length to remove from the center (0–99%). Use this to prevent the needle from overlapping a center label or icon. Default: 0 (full-length needle) |
@@ -1561,13 +1571,13 @@ The icon and center label are positioned inside the arc at the pivot point. A ty
 
 **Multi-ring gauges** — fill in slots 2, 3, and 4 to add up to four concentric rings (Apple Health ring style). All active rings share the same min/max, arc degrees, and start angle, but each slot has its own arc color and optional start label. The needle is shown on the outermost active gauge ring only; tick marks and target markers are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
 
-**Dual binding gauges** — enable Dual Binding Pair 1 and/or Pair 2 to collapse slot pairs into shared rings. In a dual pair, the first slot fills from zero toward the positive direction and the second slot fills from zero toward the negative direction. If the partner binding is empty or invalid, it is treated as `0`. Pair 1 also drives the needle using the signed difference `slot1 - slot2`.
+**Dual binding gauges**: enable **Pair rings 1 and 2** and/or **Pair rings 3 and 4** to combine slots into shared rings. In a dual pair, the first slot fills from zero toward the positive direction and the second slot fills from zero toward the negative direction. If the partner binding is empty or invalid, it is treated as `0`. Pair 1 also drives the needle using the signed difference `slot1 - slot2`.
 
 **Power balance example** (house vs solar vs grid, in kW):
 - Ring 1 data binding: house consumption (for example `[mqtt:home/house;power_kw]`)
 - Ring 2 data binding: solar production (for example `[mqtt:home/solar;power_kw]`)
 - Ring 3 data binding: grid power (for example `[mqtt:home/grid;power_kw]`) where positive = import, negative = injection
-- Dual Binding Ring 1 and 2: enabled
+- Pair rings 1 and 2: enabled
 - Min / Max: `-3` / `3`
 - Zero-Centered: enabled
 - Show needle: disabled

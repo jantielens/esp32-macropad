@@ -45,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Refine pad-editor label, binding-reference, reset-icon, and paired-field
   alignment, with clearer collapsible surfaces in light mode. Group local
   and remote background-image controls without changing capability gates.
+* Reorganize Gauge Content into per-ring Data sources, Scale, Arc & track,
+  Needle, Tick marks, and Target. Keep related bindings, labels, colors, and
+  geometry together; configured optional rings open automatically. Disabled
+  feature styling stays saved, pair directions remain unchanged, and target
+  zones retain their angular units. Bar Chart and Gauge share metadata-driven
+  editor visibility and disclosure updates.
 
 ### Fixed
 

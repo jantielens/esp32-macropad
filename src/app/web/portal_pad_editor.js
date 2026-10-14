@@ -406,43 +406,75 @@ function padPopulateSoundDropdown() {
 
 const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'];
 
-function padRefreshBarChartEditor(resetSections) {
-    const section = document.getElementById('pad-edit-bar-chart-section');
-    if (!section || document.getElementById('pad-edit-widget-type').value !== 'bar_chart') return;
-    const gridlines = Number(document.getElementById('pad-edit-widget-bar-ticks').value) > 0;
-    const target = document.getElementById('pad-edit-widget-bar-marker-value').value.trim() !== '';
-    document.getElementById('pad-edit-bar-gridline-style').hidden = !gridlines;
-    document.getElementById('pad-edit-bar-target-style').hidden = !target;
-    if (resetSections) {
-        ['sources', 'scale', 'layout'].forEach(name => {
-            document.getElementById('pad-edit-bar-' + name).open = true;
-        });
-        document.getElementById('pad-edit-bar-gridlines').open = gridlines;
-        document.getElementById('pad-edit-bar-target').open = target;
-        for (let bar = 1; bar <= 4; bar++) {
-            const suffix = bar === 1 ? '' : '-' + bar;
-            const binding = document.getElementById(bar === 1 ? 'pad-edit-widget-data-binding' : 'pad-edit-widget-bar-data-binding' + suffix);
-            const caption = document.getElementById('pad-edit-widget-bar-label' + suffix);
-            const color = document.getElementById('pad-edit-widget-bar-color' + suffix);
-            const pattern = document.getElementById(color.id + '-pattern');
-            const defaultColor = PAD_FIRMWARE_DEFAULTS['widget_series_color' + (bar === 1 ? '' : '_' + bar)] || '';
-            const customColor = color.value.trim() && color.value.trim().toLowerCase() !== defaultColor.toLowerCase();
-            document.getElementById('pad-edit-bar-source-' + bar).open = bar === 1 ||
-                !!(binding.value.trim() || caption.value.trim() || customColor || (pattern && pattern.value !== 'none'));
+const PAD_WIDGET_EDITOR_RULES = {
+    bar_chart: {
+        section: 'pad-edit-bar-chart-section',
+        prefix: 'pad-edit-bar-',
+        features: [
+            { field: 'pad-edit-widget-bar-ticks', mode: 'positive', group: 'gridlines', style: 'gridline' },
+            { field: 'pad-edit-widget-bar-marker-value', mode: 'nonempty', group: 'target', style: 'target' }
+        ],
+        sources: {
+            binding: 'pad-edit-widget-bar-data-binding', firstBinding: 'pad-edit-widget-data-binding',
+            label: 'pad-edit-widget-bar-label', color: 'pad-edit-widget-bar-color',
+            pair: 'pad-edit-widget-bar-dual-binding-pair-', patterns: true
         }
-        for (let pair = 1; pair <= 2; pair++) {
-            if (document.getElementById('pad-edit-widget-bar-dual-binding-pair-' + pair).checked) {
-                document.getElementById('pad-edit-bar-source-' + (pair * 2 - 1)).open = true;
-                document.getElementById('pad-edit-bar-source-' + (pair * 2)).open = true;
-            }
+    },
+    gauge: {
+        section: 'pad-edit-gauge-section',
+        prefix: 'pad-edit-gauge-',
+        features: [
+            { field: 'pad-edit-gauge-show-needle', mode: 'checked', group: 'needle', style: 'needle' },
+            { field: 'pad-edit-gauge-ticks', mode: 'positive', group: 'tick-marks', style: 'tick' },
+            { field: 'pad-edit-gauge-marker-value', mode: 'nonempty', group: 'target', style: 'target' }
+        ],
+        sources: {
+            binding: 'pad-edit-gauge-data-binding', label: 'pad-edit-gauge-start-label',
+            color: 'pad-edit-gauge-arc-color', pair: 'pad-edit-gauge-dual-binding-pair-'
         }
+    }
+};
+
+function padRefreshWidgetEditor(resetSections) {
+    const widget = document.getElementById('pad-edit-widget-type');
+    const rules = widget && PAD_WIDGET_EDITOR_RULES[widget.value];
+    if (!rules || !document.getElementById(rules.section)) return;
+    rules.features.forEach(feature => {
+        const field = document.getElementById(feature.field);
+        if (!field) return;
+        const enabled = feature.mode === 'checked' ? field.checked :
+            feature.mode === 'positive' ? Number(field.value) > 0 : field.value.trim() !== '';
+        const style = document.getElementById(rules.prefix + feature.style + '-style');
+        const group = document.getElementById(rules.prefix + feature.group);
+        if (style) style.hidden = !enabled;
+        if (resetSections && group) group.open = enabled;
+    });
+    if (!resetSections) return;
+    ['sources', 'scale', 'layout'].forEach(name => {
+        const group = document.getElementById(rules.prefix + name);
+        if (group) group.open = true;
+    });
+    const sources = rules.sources;
+    for (let source = 1; source <= 4; source++) {
+        const group = document.getElementById(rules.prefix + 'source-' + source);
+        if (!group) continue;
+        const suffix = source === 1 ? '' : '-' + source;
+        const binding = document.getElementById(source === 1 && sources.firstBinding ? sources.firstBinding : sources.binding + suffix);
+        const label = document.getElementById(sources.label + suffix);
+        const color = document.getElementById(sources.color + suffix);
+        const pattern = sources.patterns && document.getElementById(sources.color + suffix + '-pattern');
+        const defaultColor = PAD_FIRMWARE_DEFAULTS['widget_series_color' + (source === 1 ? '' : '_' + source)] || '';
+        const customColor = color && color.value.trim() && color.value.trim().toLowerCase() !== defaultColor.toLowerCase();
+        const pair = document.getElementById(sources.pair + Math.ceil(source / 2));
+        group.open = source === 1 || !!((binding && binding.value.trim()) || (label && label.value.trim()) ||
+            customColor || (pattern && pattern.value !== 'none') || (pair && pair.checked));
     }
 }
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
     padFillRefreshVisibility();
-    padRefreshBarChartEditor(true);
+    padRefreshWidgetEditor(true);
     WIDGET_SECTIONS.forEach(s => {
         const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
         if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }

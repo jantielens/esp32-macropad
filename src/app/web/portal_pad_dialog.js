@@ -520,7 +520,7 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-extension-tick-interval').value = btn.extension_tick_interval_ms || '';
     document.getElementById('pad-edit-extension-upscale').value = btn.extension_upscale || 1;
 
-    padRefreshBarChartEditor(true);
+    padRefreshWidgetEditor(true);
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     if (typeof padWorkspaceAfterSelect === 'function') padWorkspaceAfterSelect();
 
