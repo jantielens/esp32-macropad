@@ -14,7 +14,7 @@ word-clock format, while using original letter layouts and phrase maps.
 
 The extension uses the owning button's resolved background color for its face.
 Inactive letters use the dimmed color and active words use the button's text
-color. It measures the selected bundled font before rendering so the complete
+color. It measures the selected device or uploaded font before rendering so the complete
 matrix remains centered and unstretched in square, portrait, landscape, and
 compact button layouts.
 
@@ -72,7 +72,7 @@ uses `to` the next hour.
   "mode": "accurate",
   "accurate_past_threshold_minutes": 35,
   "phrase_animation_ms": 100,
-  "font_family": "bebas",
+  "font_family": "default",
   "dimmed_color": "#383631",
   "burn_in_shift_minutes": 15,
   "burn_in_shift_pixels": 0
@@ -85,8 +85,8 @@ uses `to` the next hour.
 | `mode` | `rounded` | `rounded` uses the nearest five-minute phrase. `minute-dots` uses the preceding five-minute phrase and lights one to four filled corner dots for the remaining minutes. `accurate` spells every minute in words. |
 | `accurate_past_threshold_minutes` | `35` | Accurate mode only. Counts through this minute as `past` the current hour, then uses `to` the next hour. Values are clamped to 30 through 44 so `quarter to` remains consistent. |
 | `phrase_animation_ms` | `0` | Milliseconds per character during a phrase change. `0` changes immediately. Otherwise, removed characters dim from right to left, then added characters highlight from left to right. Unchanged characters remain highlighted. |
-| `font_family` | `bebas` | `default`, `bebas`, `doto`, or `dseg7`. `bebas` best matches the compact, uppercase clock face. |
-| `font_size` | `0` | `0` chooses the largest fitting bundled font. Otherwise use 12, 14, 18, 24, 32, 36, or 48. Large values reduce automatically when the button is too small. |
+| `font_family` | `default` | Empty or `default` inherits Device Typography. `@builtin` selects bundled Montserrat. Any other name selects an uploaded TTF, falling back to Montserrat if unavailable. |
+| `font_size` | `0` | `0` chooses the largest fitting candidate size. Otherwise use 12, 14, 18, 24, 32, 36, or 48. TTFs use the requested pixel size; Montserrat uses the nearest bundled size. Large values reduce automatically when the button is too small. |
 | Button text color | Button setting | Words that describe the current time use the owning button's resolved text color. |
 | `dimmed_color` | `#383631` | Six-digit RGB color for inactive letters. |
 | `burn_in_shift_minutes` | `60` | Moves the complete matrix through a nine-position grid at this interval. Set to `0` to disable it. |

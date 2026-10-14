@@ -7,6 +7,7 @@
 #include "ota_activity.h"
 #include "pad_config.h"
 #include "pad_layout.h"
+#include "native_extension_text.h"
 #include "storage.h"
 #if HAS_MQTT
 #include "binding_template.h"
@@ -666,68 +667,14 @@ void host_canvas_draw_circle(void* canvas, int32_t x, int32_t y, int32_t radius,
 }
 int32_t host_canvas_measure_text(const char* text, const char* font_name, uint8_t size) {
     if (!text || !*text) return 0;
-    LabelStyle style{};
-    (void)font_name;
-    style.font_size = size;
-    const lv_font_t* font = pad_resolve_font(style, &lv_font_montserrat_14);
-    if (!font) return 0;
-
-    int32_t width = 0;
-    for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor; ++cursor) {
-        lv_font_glyph_dsc_t glyph{};
-        if (lv_font_get_glyph_dsc(font, &glyph, *cursor, 0)) width += glyph.adv_w;
-    }
-    return width;
+    return native_extension_text_measure(text, native_extension_text_font(font_name, size));
 }
 void host_canvas_draw_text(void* canvas, int32_t x, int32_t y, const char* text,
                            const char* font_name, uint8_t size, uint32_t rgb) {
     CanvasBuffer* entry = find_canvas_buffer(canvas);
     if (!entry || !entry->pixels || !text || !*text) return;
-
-    LabelStyle style{};
-    (void)font_name;
-    style.font_size = size;
-    const lv_font_t* font = pad_resolve_font(style, &lv_font_montserrat_14);
-    if (!font) return;
-
-    const lv_color_t color = host_color(rgb);
-    constexpr uint8_t bpp = 4;
-    if (!font->get_glyph_bitmap) return;
-    int32_t cursor_x = x;
-    for (const uint8_t* cursor = reinterpret_cast<const uint8_t*>(text); *cursor; ++cursor) {
-        const uint32_t codepoint = *cursor;
-        lv_font_glyph_dsc_t glyph{};
-        if (!lv_font_get_glyph_dsc(font, &glyph, codepoint, 0)) continue;
-        glyph.req_raw_bitmap = 1;
-        const uint8_t* bitmap = static_cast<const uint8_t*>(font->get_glyph_bitmap(&glyph, nullptr));
-        if (!bitmap) {
-            cursor_x += glyph.adv_w;
-            lv_font_glyph_release_draw_data(&glyph);
-            continue;
-        }
-        for (uint16_t gy = 0; gy < glyph.box_h; ++gy) {
-            for (uint16_t gx = 0; gx < glyph.box_w; ++gx) {
-                const uint32_t bit_index = (static_cast<uint32_t>(gy) * glyph.box_w + gx) * bpp;
-                const uint8_t packed = bitmap[bit_index / 8];
-                const uint8_t coverage = bpp == 4
-                    ? (((bit_index & 4u) == 0 ? packed >> 4 : packed) & 0x0Fu) * 17u
-                    : 0;
-                if (!coverage) continue;
-                const int32_t px = cursor_x + glyph.ofs_x + gx;
-                const int32_t py = y + glyph.ofs_y + gy;
-                if (px < 0 || py < 0 || px >= static_cast<int32_t>(entry->width) || py >= static_cast<int32_t>(entry->height)) continue;
-                const uint16_t existing = entry->pixels[static_cast<uint32_t>(py) * entry->width + px];
-                const lv_color_t existing_color = lv_color_make(
-                    static_cast<uint8_t>(((existing >> 11) & 0x1Fu) * 255u / 31u),
-                    static_cast<uint8_t>(((existing >> 5) & 0x3Fu) * 255u / 63u),
-                    static_cast<uint8_t>((existing & 0x1Fu) * 255u / 31u));
-                const lv_color_t blended = lv_color_mix(color, existing_color, coverage);
-                entry->pixels[static_cast<uint32_t>(py) * entry->width + px] = lv_color_to_u16(blended);
-            }
-        }
-        cursor_x += glyph.adv_w;
-        lv_font_glyph_release_draw_data(&glyph);
-    }
+    native_extension_text_draw(entry->pixels, entry->width, entry->height, x, y, text,
+        native_extension_text_font(font_name, size), host_color(rgb));
 }
 
 const NativeExtensionCoreApi CORE_API = {

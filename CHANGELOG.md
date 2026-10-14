@@ -53,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fix native Extension canvas text corruption when Device Typography uses an
+  uploaded TTF. Respect glyph formats, stride, baseline placement, and explicit
+  uploaded font names, with Montserrat fallback. Word Clock now inherits the
+  device font when no font family is configured.
 * Eliminate idle speaker hiss by keeping the output amplifier muted after boot
   and between playback sessions. Allow 120 ms for output settling before the
   first sound after idle so short tap beeps remain audible. Keep the amplifier
