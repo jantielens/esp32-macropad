@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Clarify List Content controls with a Provider & Filter disclosure title,
+  without changing provider, filter, or item-action behavior.
 * Group Table Content controls in one initially open, collapsible Table
   Binding & Styling section using shared editor styling. Keep Data Binding,
   Font Style Override, and Scroll together without changing binding rules,
