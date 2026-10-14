@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Increase the shared tap and long-press audio feedback limit from 250 ms to
+  1 second, including silence gaps, so longer multi-beep patterns play in full
+  within that limit.
 * Rework pad-editor widget settings with task-based grouping, related controls
   kept together, clearer labels, consistent collapsible sections, and compact
   responsive layouts. Charts reveal optional styling when relevant while
@@ -50,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Eliminate idle speaker hiss by keeping the output amplifier muted after boot
+  and between playback sessions. Allow 120 ms for output settling before the
+  first sound after idle so short tap beeps remain audible. Keep the amplifier
+  enabled through tone-pattern pauses and a brief playback drain/grace period.
 * Temporarily use LVGL software drawing on ESP32-P4 to avoid PPA buffer-size
   alignment errors amplified by patterned fills into rendering stalls.
   Keep LVGL at 9.5.0 for compatibility with the stable Arduino-ESP32 SDK.

@@ -479,6 +479,9 @@ alert-sound files, and the Music Library.
 
 **Tone pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
 
+Tap and long-press feedback patterns are limited to 1 second in total, including
+silence gaps. Longer patterns are truncated at that limit.
+
 Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Sound Alert action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
 When MQTT is connected, the device also registers audio entities in Home Assistant (siren, volume, beep buttons, and a custom tone text entity). See the [Home Assistant Integration Guide](ha-integration-guide.md) for details and automation examples.

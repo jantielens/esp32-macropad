@@ -176,11 +176,31 @@ static void music_info_update_timing(const SoundPlayer* player) {
 
 static constexpr int64_t kOutputBufferedUs =
     (int64_t)AUDIO_DMA_DESC_NUM * AUDIO_DMA_FRAME_NUM * 1000000 / AUDIO_SAMPLE_RATE;
+static constexpr int64_t kOutputIdleGraceUs = 100000;
+static constexpr uint32_t kAmplifierWakeMs = 120;
+static bool output_muted = true;
+static int64_t output_last_write_us = 0;
+
+static void audio_output_mute_idle(bool immediate = false) {
+    if (output_muted) return;
+    if (!immediate && esp_timer_get_time() - output_last_write_us <
+            kOutputBufferedUs + kOutputIdleGraceUs) return;
+    if (output_driver->setMuted(true)) output_muted = true;
+    else LOGW(TAG, "Idle amplifier mute failed");
+}
 
 bool audio_write_with_stats(AudioOutputDriver* driver, const int16_t* frames,
                             size_t frame_count, AudioStarvationStats* stats) {
     if (ota_activity_is_active() || (g_playing && g_playback_guard && !g_playback_guard(g_playback_generation))) {
         return false;
+    }
+    if (output_muted && frame_count) {
+        if (!driver->setMuted(false)) return false;
+        output_muted = false;
+        output_last_write_us = esp_timer_get_time();
+        vTaskDelay(pdMS_TO_TICKS(kAmplifierWakeMs));
+        if (ota_activity_is_active() ||
+            (g_playing && g_playback_guard && !g_playback_guard(g_playback_generation))) return false;
     }
     const int64_t before_write_us = esp_timer_get_time();
     if (stats->previous_write_complete_us != 0) {
@@ -199,6 +219,7 @@ bool audio_write_with_stats(AudioOutputDriver* driver, const int16_t* frames,
         tone_alert_overlay_mix(&g_feedback, mixed, count, AUDIO_SAMPLE_RATE);
         if (ota_activity_is_active()) return false;
         ok = driver->write(mixed, count);
+        output_last_write_us = esp_timer_get_time();
     }
     stats->previous_write_complete_us = esp_timer_get_time();
     return ok;
@@ -377,6 +398,7 @@ static void audio_task(void* param) {
         }
 #endif
         if (ota_activity_is_active()) {
+            audio_output_mute_idle(true);
             close_alert();
             session_guard = nullptr;
             tone_alert_overlay_stop(&g_feedback);
@@ -402,6 +424,11 @@ static void audio_task(void* param) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
+            if (!g_playing.load() && !g_feedback.active
+        #if HAS_SOUND_PLAYER
+                && (!music_player || music_transport.state() != MUSIC_TRANSPORT_PLAYING || session_guard)
+        #endif
+            ) audio_output_mute_idle();
         portENTER_CRITICAL(&g_feedback_mux);
         if (g_feedback_pending) {
             g_feedback = g_pending_feedback;
@@ -673,10 +700,8 @@ void audio_init(uint8_t initial_volume) {
     }
 #endif
 
-    if (!output_driver->setMuted(false)) {
-        audio_init_abort();
-        return;
-    }
+    output_muted = true;
+    output_last_write_us = 0;
 
     TaskHandle_t created_task = nullptr;
     if (!rtos_create_task_internal_stack_pinned(
@@ -690,7 +715,7 @@ void audio_init(uint8_t initial_volume) {
     audio_task_handle.store(created_task, std::memory_order_release);
     audio_initialized = true;
     device_telemetry_log_memory_snapshot("audio");
-    LOGI(TAG, "Audio ready (volume=%u%%, PA always-on)", current_volume.load());
+    LOGI(TAG, "Audio ready (volume=%u%%, amplifier muted until playback)", current_volume.load());
 }
 
 bool audio_get_stack_watermark(uint32_t* minimum_free_bytes) {
@@ -750,7 +775,7 @@ void audio_feedback(const char* pattern) {
     if (!audio_initialized || ota_activity_is_active() || !pattern || !pattern[0] || !strcmp(pattern, "none")) return;
     ToneAlertOverlay feedback = {};
     if (!tone_alert_overlay_start(&feedback, pattern, false, AUDIO_SAMPLE_RATE, 0.15f)) return;
-    uint32_t remaining = AUDIO_SAMPLE_RATE / 4;
+    uint32_t remaining = AUDIO_SAMPLE_RATE;
     for (uint8_t index = 0; index < feedback.segment_count; ++index) {
         if (feedback.segments[index].frame_count >= remaining) {
             feedback.segments[index].frame_count = remaining;

@@ -955,6 +955,9 @@ The action sends `POST <ha_url>/api/services/<domain>/<service>` with the access
 Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Play sound alert** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
 
 **Behavior notes:**
+- Tap and long-press feedback patterns are limited to 1 second in total,
+  including silence gaps. Longer patterns are truncated; explicit tone alerts
+  are not subject to this feedback limit.
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
 - A configured full-screen action list takes precedence over normal button and widget taps.
   Clearing the list restores their normal interaction.
