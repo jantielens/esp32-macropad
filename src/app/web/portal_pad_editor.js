@@ -86,10 +86,6 @@ async function padInit() {
     padSoundListLoading = deviceInfoCache.has_sound_player === true;
     padWidgetEditorsInit(deviceInfoCache, padWorkspaceWidgetSettled);
     padSetImageCapabilityVisibility(deviceInfoCache);
-    // Generate action editor HTML from shared module — three fixed action
-    // slots per gesture. An unused slot collapses as its own "Add ..."
-    // placeholder; labels are set here for the non-widget default and
-    // re-applied by padWidgetTypeChanged() for rocker/list widgets.
     const aeContainer = document.getElementById('pad-action-editors');
     if (aeContainer) {
         var aeOpts = { showBleHint: true, showKeyHelp: true };
@@ -375,7 +371,7 @@ function padWidgetTypeChanged() {
     const editor = padWidgetEditor(wtype);
     padWidgetEditorsRefresh(wtype);
     padFillRefreshVisibility();
-    padRefreshWidgetEditor(true);
+    padRefreshWidgetEditor();
     ['pad-edit-text-labels-section', 'pad-edit-icon-section'].forEach(function (id) {
         var section = document.getElementById(id);
         if (section) section.style.display = editor && editor.replacesContent ? 'none' : '';
@@ -717,6 +713,9 @@ async function padSavePage(options) {
             if (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
                 (workspace && workspace.revision !== revision)) return context;
             const selected = workspace && workspace.selected ? [padState.editCol, padState.editRow, workspace.scope, workspace.tab] : null;
+            const body = selected ? workspace.root.querySelector('.pad-edit-body') : null;
+            const scroll = body ? body.scrollTop : 0;
+            const groups = body ? Array.from(body.querySelectorAll('details'), group => group.open) : [];
             // Reload to get canonical version from device.
             await padLoadPage(context.page);
             if (selected && workspace === padWorkspace && padState.page === context.page) {
@@ -724,6 +723,8 @@ async function padSavePage(options) {
                 padWorkspaceSetScope(selected[2]);
                 padWorkspace.tab = selected[3];
                 padWorkspaceRenderTabs();
+                body.querySelectorAll('details').forEach((group, index) => { group.open = groups[index]; });
+                body.scrollTop = scroll;
             }
         }
         return context;

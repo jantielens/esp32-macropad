@@ -487,7 +487,7 @@ remains visible when Back is off to preserve existing validation. Input navigati
 remains in Layout; input-widget action suppression is declared by each owner.
 Extension declares that it replaces shared labels, icons, and images.
 
-All 13 active widget editors register explicitly through
+All 14 active widget editors register explicitly through
 `portal_widget_editor.js`. Their `portal_widget_*.js` modules precede the dialog
 through the bundle's `@widgets` marker; markup remains in the existing partials. Mousepad,
 Scrollpad, and Gamepad Joystick share the input-family owner module.
@@ -553,7 +553,10 @@ hides ordinary tap/long-press lists, and keeps the held-control section in
 Content. The firmware still owns release behavior.
 
 The workspace owns raw drafts, dirty tracking, tab/error presentation, and
-fragment disposal. An owner's `init(onSettled)` may notify the host when its
+fragment disposal. A successful save reloads canonical configuration while
+restoring the selected button's tab, disclosure states, and inspector scroll
+position, without replaying pre-save field values.
+An owner's `init(onSettled)` may notify the host when its
 asynchronous state changes. Extension uses this callback after catalog success
 or failure, retaining its stale-mount guards. It does not inspect workspace
 selection, errors, or dirty revisions; the host decides whether to revalidate
@@ -576,6 +579,20 @@ to open containing groups, mark and focus the field, and show the message before
 any write. Unstructured network errors retain each host's existing handling.
 
 This interface is a limited ownership contract, not a general widget framework.
+Widgets using existing capabilities need owned implementations/assets, local
+registrations, and one manifest entry. Shared firmware still has widget-specific
+layout, event, and swipe routing in `pad_tile_builder.cpp`, `pad_screen_events.cpp`,
+and `widget_registry.h`; new runtime capabilities need separate design review.
+Portal ownership does not imply firmware interaction independence or complete
+MCP field discovery. Waveform's firmware registration currently lacks detailed
+`describeSchema` metadata.
+
+Keep one current editor contract, without legacy aliases, dual readers/writers,
+or migration machinery. Flat keys and persisted type strings remain unchanged,
+but existing device configurations are not guaranteed to round-trip and may need
+manual reconfiguration. Save the supported editor's configuration; unavailable
+widget settings may be omitted on edit, not proactively deleted on load.
+
 Rocker owns directional action labels. Numeric Rocker declares its adjustment
 section in Actions, preserves signed `{step}` payloads, and serializes tap plus
 optional adjustment, without long-press actions. Input editors declare their
@@ -1406,7 +1423,7 @@ Unsupported actions retain their loaded payloads unchanged. This portal refactor
 does not alter firmware rejection of retired audio aliases or invalid loop kinds.
 
 Run the action picker, action-list, cycle, timer, and startup host regressions after
-each migration, followed by asset minification and desktop/mobile checks. The
+action editor changes, followed by asset minification and desktop/mobile checks. The
 picker guards the ownership boundary and exercises payload round-trips against
 the production catalog.
 

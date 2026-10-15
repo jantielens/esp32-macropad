@@ -544,7 +544,9 @@ async function checkWorkspaceSwitch() {
 
 async function checkSaveRaces() {
 	const root = {};
-	const workspace = { revision: 1, selected: true, scope: 'button', tab: 'Content' };
+	const groups = [{ open: true }, { open: false }];
+	const body = { scrollTop: 420, querySelectorAll() { return groups; } };
+	const workspace = { revision: 1, selected: true, scope: 'button', tab: 'Content', root: { querySelector() { return body; } } };
 	const saveContext = { console, MAX_ACTIONS: 3, padWorkspace: workspace, document: { getElementById() { return root; } } };
 	vm.createContext(saveContext);
 	vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), saveContext);
@@ -558,6 +560,9 @@ async function checkSaveRaces() {
 		reloads++;
 		vm.runInContext('padState.editCol = 0; padState.editRow = 0;', saveContext);
 		workspace.tab = 'Layout';
+		body.scrollTop = 0;
+		groups[0].open = false;
+		groups[1].open = true;
 	};
 	saveContext.padDialogOpen = (col, row) => {
 		saveContext.position = [col, row];
@@ -568,10 +573,13 @@ async function checkSaveRaces() {
 	saveContext.padQueuePersistence = async () => {
 		vm.runInContext('padState.editCol = 1; padState.editRow = 0;', saveContext);
 		workspace.tab = 'Actions';
+		body.scrollTop = 640;
 	};
 	await saveContext.padSavePage();
 	assert.deepStrictEqual(saveContext.position, [1, 0], 'Save reload must retain the latest selection');
 	assert.strictEqual(workspace.tab, 'Actions');
+	assert.strictEqual(body.scrollTop, 640, 'Save reload must restore the latest inspector scroll position');
+	assert.deepStrictEqual(groups.map(group => group.open), [true, false], 'Save reload must restore disclosure states');
 	assert.strictEqual(reloads, 1);
 	saveContext.padQueuePersistence = async () => { workspace.revision++; saveContext.padDirty = true; };
 	await saveContext.padSavePage();

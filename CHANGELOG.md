@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-14
+ms.date: 2026-10-15
 ms.topic: reference
 ---
 
@@ -32,13 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Increase the shared tap and long-press audio feedback limit from 250 ms to
   1 second, including silence gaps, so longer multi-beep patterns play in full
   within that limit.
-* Rework pad-editor widget settings with task-based grouping, related controls
-  kept together, clearer labels, consistent collapsible sections, and compact
-  responsive layouts. Charts reveal optional styling when relevant while
-  retaining saved values. Covers Bar Chart, Gauge, Sparkline, Table, List,
-  Rocker, Numeric Rocker, Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button,
-  Camera Preview, and Extension. Preserve configuration formats, defaults,
-  validation, capability gates, and action behavior.
+* Refactor widget development around widget-owned editors and one shared
+  manifest for firmware and portal packaging. Shared editor code handles
+  reusable field, action, validation, and draft mechanics, while specialized
+  behavior stays with each widget. This enables cleaner widget additions
+  without widget-specific changes to generic editor orchestration.
 * Edit supported fill colors through Base Color and Pattern sections with
   one shared Apply operation, threshold generators, and combined color badge
   previews. The button Appearance tab puts Background/Text, Button Shadow,

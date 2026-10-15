@@ -968,7 +968,8 @@ Select the **Pad** inspector scope for pad **Layout**,
 deselects it without discarding edits. Edits update the current draft directly, without an Apply/Cancel
 step; only **Save Pad** persists the current pad. Switching buttons or tabs
 retains incomplete inputs. Correct validation errors before saving; failed
-saves retain the draft for retry.
+saves retain the draft for retry. A successful save keeps the selected button's
+tab, open settings groups, and inspector scroll position.
 
 Validation messages cover the action row without moving or hiding the settings.
 Use the close icon to reveal the actions temporarily; dismissal does not clear

@@ -194,7 +194,7 @@ function padDialogOpen(col, row) {
 
     document.getElementById('pad-edit-disable-pad-swipes').checked = btn.widget_disable_pad_swipes === true;
 
-    padRefreshWidgetEditor(true);
+    padRefreshWidgetEditor();
     document.getElementById('pad-edit-overlay').style.display = 'flex';
     if (typeof padWorkspaceAfterSelect === 'function') padWorkspaceAfterSelect();
 
