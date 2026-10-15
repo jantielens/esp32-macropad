@@ -16,6 +16,11 @@ In AP mode, the portal opens device setup. In Full mode, the sidebar groups
 settings by category, with additional categories and controls for supported
 hardware and device classes.
 
+Categories start collapsed unless you open a direct link to a section. Opening
+one category closes the previous one; clicking the open category collapses it
+without changing the displayed content. Browser back and forward reveal the
+selected section's category.
+
 ## Portal Appearance
 
 Navigation categories and fragment titles use Google-hosted Material icons.

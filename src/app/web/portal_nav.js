@@ -87,10 +87,11 @@
     navEl.appendChild(welcomeLink);
     itemMap['welcome'] = { cat: null, item: { id: 'welcome', display_name: 'Home' } };
 
-    cats.forEach(function (cat, catIdx) {
+    cats.forEach(function (cat) {
       // Category header
       var header = document.createElement('div');
-      header.className = 'nav-category-header' + (catIdx === 0 ? ' expanded' : '');
+      header.className = 'nav-category-header';
+      header.setAttribute('data-category', cat.id);
       header.innerHTML =
         portalCategoryIcon(cat.id) +
         '<span class="nav-category-label">' + escapeHtml(cat.display_name) + '</span>' +
@@ -98,7 +99,7 @@
 
       // Items container
       var itemsDiv = document.createElement('div');
-      itemsDiv.className = 'nav-category-items' + (catIdx === 0 ? ' expanded' : '');
+      itemsDiv.className = 'nav-category-items';
 
       cat.items.forEach(function (item) {
         itemMap[item.id] = { cat: cat, item: item };
@@ -118,8 +119,7 @@
 
       // Toggle expand/collapse
       header.addEventListener('click', function () {
-        header.classList.toggle('expanded');
-        itemsDiv.classList.toggle('expanded');
+        setExpandedCategory(header.classList.contains('expanded') ? null : cat.id);
       });
 
       navEl.appendChild(header);
@@ -140,26 +140,24 @@
     }
   }
 
-  function expandCategoryFor(itemId) {
-    var info = itemMap[itemId];
-    if (!info || !info.cat) return;
-    var catId = info.cat.id;
-    // Find and expand the matching category
+  function setExpandedCategory(catId) {
     var headers = navEl.querySelectorAll('.nav-category-header');
     var items = navEl.querySelectorAll('.nav-category-items');
     for (var i = 0; i < headers.length; i++) {
-      var label = headers[i].querySelector('.nav-category-label');
-      if (label && label.textContent === info.cat.display_name) {
-        headers[i].classList.add('expanded');
-        items[i].classList.add('expanded');
-        break;
-      }
+      var expanded = headers[i].getAttribute('data-category') === catId;
+      headers[i].classList.toggle('expanded', expanded);
+      items[i].classList.toggle('expanded', expanded);
     }
+  }
+
+  function expandCategoryFor(itemId) {
+    var info = itemMap[itemId];
+    setExpandedCategory(info && info.cat ? info.cat.id : null);
   }
 
   // ---------- Fragment loading ----------
 
-  async function loadFragment(itemId) {
+  async function loadFragment(itemId, revealCategory) {
     if (currentItem === itemId) return;
     if (currentItem === 'pad-editor' && typeof padWorkspace !== 'undefined' && padWorkspace) {
       if (padDirty && !await padWorkspaceConfirm('Discard pad edits and leave the editor?')) {
@@ -172,7 +170,7 @@
     currentItem = itemId;
     var loadGeneration = ++fragmentLoadGeneration;
     setActive(itemId);
-    expandCategoryFor(itemId);
+    if (revealCategory !== false) expandCategoryFor(itemId);
 
     // Cancel any in-flight fetch
     if (activeFetchController) activeFetchController.abort();
@@ -249,8 +247,8 @@
 
   // ---------- Navigation ----------
 
-  async function navigateTo(itemId) {
-    if (await loadFragment(itemId) !== false) {
+  async function navigateTo(itemId, revealCategory) {
+    if (await loadFragment(itemId, revealCategory) !== false) {
       window.location.hash = '#' + itemId;
       closeNav();
     }
@@ -405,7 +403,7 @@
           itemId = primary.fragment;
         }
         if (!itemId) itemId = 'welcome';
-        navigateTo(itemId);
+        navigateTo(itemId, getItemFromHash() === itemId);
 
         // Populate header badges + start health polling once per page load.
         // These functions live in portal_config.js / portal_health.js

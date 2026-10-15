@@ -396,6 +396,11 @@ Legacy Home, Network, and Firmware URLs redirect into the shell. AP mode selects
 the setup fragment and exposes only the Device category. Mobile navigation
 collapses behind the header's navigation control.
 
+Navigation categories start collapsed unless the URL selects a visible fragment.
+Only one category can be expanded at a time; clicking it again collapses it
+without changing the content. Fragment navigation, including browser back and
+forward, reveals only the selected fragment's category.
+
 Each fragment title contains a decorative Material Symbol with `aria-hidden="true"`.
 Navigation category icons are mapped by category ID in `portalCategoryIcon()`;
 the API's legacy emoji metadata remains unchanged. Child navigation links stay

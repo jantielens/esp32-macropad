@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reusable field, action, validation, and draft mechanics, while specialized
   behavior stays with each widget. This enables cleaner widget additions
   without widget-specific changes to generic editor orchestration.
+* Keep web portal navigation categories collapsed on initial load unless
+  opening a direct section link, and allow only one category open at a time.
 
 ### Fixed
 
