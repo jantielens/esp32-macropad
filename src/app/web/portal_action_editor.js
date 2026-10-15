@@ -307,7 +307,7 @@ function actionEditorBuild(prefix) {
     if (!type) return {};
     var entry = actionEditorCatalogEntry(type);
     if (typeEl.getAttribute('data-alarm-hook') === 'true' && (!entry || entry.alarm_hook_allowed !== true)) {
-        throw new Error('Action "' + type + '" is not allowed for alarm hooks. Replace or remove it.');
+        throw Object.assign(new Error('Action "' + type + '" is not allowed for alarm hooks. Replace or remove it.'), { fieldIds: [prefix + '-type'] });
     }
     // Round-trip a persisted action whose type this build's catalog does not
     // contain — its fields have no editor, so save it back exactly as loaded.
@@ -324,6 +324,20 @@ function actionEditorBuild(prefix) {
         }
     });
     return act;
+}
+
+function actionEditorHandleError(error) {
+    if (!error.fieldIds || !error.fieldIds.length) return false;
+    var input = document.getElementById(error.fieldIds[0]);
+    if (input) {
+        for (var parent = input.parentElement; parent; parent = parent.parentElement) {
+            if (parent.tagName === 'DETAILS') parent.open = true;
+        }
+        if (typeof bindingShowError === 'function') bindingShowError(input, error.message);
+        input.focus();
+    }
+    showMessage(error.message, 'error');
+    return true;
 }
 
 // ============================================================================

@@ -66,18 +66,10 @@ function padSetImageCapabilityVisibility(info, hideForWidget) {
     const imageLibrary = !hideForWidget && info && info.has_image_library === true;
     document.getElementById('pad-edit-camera-feed-section').style.display = imageFetch ? '' : 'none';
     document.getElementById('pad-edit-image-section').style.display = imageLibrary ? '' : 'none';
+    document.getElementById('pad-edit-background-image-section').style.display =
+        imageFetch || imageLibrary ? '' : 'none';
     document.getElementById('pad-edit-bg-image-scale-group').style.display =
         imageFetch || imageLibrary ? '' : 'none';
-}
-
-function padSetHidWidgetCapabilityVisibility(info) {
-    const supported = !!(info && info.has_touch === true && info.has_usb_hid === true);
-    ['mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'].forEach(function(type) {
-        const option = document.getElementById('pad-edit-' + type + '-widget-option');
-        if (!option) return;
-        option.hidden = !supported;
-        option.disabled = !supported;
-    });
 }
 
 async function padInit() {
@@ -91,21 +83,9 @@ async function padInit() {
     await getDeviceInfo();
     if (document.getElementById('pad-config-section') !== section) return;
 
-    const nativeExtensions = deviceInfoCache && deviceInfoCache.has_native_extensions === true;
-    padExtensionCatalogLoading = nativeExtensions;
     padSoundListLoading = deviceInfoCache.has_sound_player === true;
-    const externalWidgetOption = document.getElementById('pad-edit-external-widget-option');
-    if (externalWidgetOption) externalWidgetOption.style.display = nativeExtensions ? '' : 'none';
-    const cameraPreviewOption = document.getElementById('pad-edit-camera-preview-widget-option');
-    if (cameraPreviewOption) cameraPreviewOption.style.display =
-        deviceInfoCache && deviceInfoCache.has_camera === true ? '' : 'none';
-    padSetHidWidgetCapabilityVisibility(deviceInfoCache);
-    document.getElementById('pad-edit-gamepad-button-fields').innerHTML = actionEditorGamepadHTML('pad-edit-gamepad-hold', true);
+    padWidgetEditorsInit(deviceInfoCache, padWorkspaceWidgetSettled);
     padSetImageCapabilityVisibility(deviceInfoCache);
-    // Generate action editor HTML from shared module — three fixed action
-    // slots per gesture. An unused slot collapses as its own "Add ..."
-    // placeholder; labels are set here for the non-widget default and
-    // re-applied by padWidgetTypeChanged() for rocker/list widgets.
     const aeContainer = document.getElementById('pad-action-editors');
     if (aeContainer) {
         var aeOpts = { showBleHint: true, showKeyHelp: true };
@@ -122,12 +102,6 @@ async function padInit() {
     if (padActionContainer) {
         actionEditorListRender('pad-level-action-editors', padLevelActionPrefixes(), padDefaultActionLabels('Tap action'),
             { actionOptions: { showBleHint: true, showKeyHelp: true } });
-    }
-
-    // Generate numeric rocker adjustment action editor
-    var nrAdjContainer = document.getElementById('pad-edit-nr-adjust-container');
-    if (nrAdjContainer) {
-        nrAdjContainer.innerHTML = actionEditorHTML('pad-edit-nr-adjust', 'Adjustment Action', { showBleHint: true, showKeyHelp: true });
     }
 
     document.getElementById('pad-cols').addEventListener('change', (e) => {
@@ -235,13 +209,6 @@ async function padLoadInitialPage(page) {
     if (document.getElementById('pad-config-section') !== section) return;
     if (deviceInfoCache.has_sound_player === true) padFetchSoundList();
     padLoadBlockCatalog();
-    if (deviceInfoCache.has_native_extensions === true && typeof extensionFetchSlots === 'function') {
-        try { await extensionFetchSlots(); } catch (error) { window.extensionCatalog = []; }
-        padExtensionCatalogLoading = false;
-        if (document.getElementById('pad-config-section') === section) padPopulateExtensionDropdown();
-    } else {
-        padExtensionCatalogLoading = false;
-    }
 }
 
 // Prefix lists for the fixed action slots. Order is execution order.
@@ -344,18 +311,11 @@ async function padLoadTemplateButtons() {
 
 function padPopulateScreenDropdown() {
     var prefixes = padActionPrefixes('tap').concat(padActionPrefixes('lp'), padLevelActionPrefixes());
-    prefixes.push('pad-edit-nr-adjust');
-    prefixes.push('pad-edit-list-select');
-    const selected = new Map();
-    prefixes.forEach(function(prefix) {
-        const select = document.getElementById(prefix + '-target');
-        if (select) selected.set(select, select.value);
-    });
+    prefixes.push(...padWidgetActionPrefixes());
     actionEditorPopulateScreens(
         prefixes,
         deviceInfoCache ? deviceInfoCache.available_screens : null
     );
-    selected.forEach(function(value, select) { select.value = value; });
     // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
     const wakeSel = document.getElementById('pad-wake-screen');
     if (wakeSel && deviceInfoCache && deviceInfoCache.available_screens) {
@@ -374,7 +334,6 @@ function padPopulateScreenDropdown() {
 // Cached sound file list (populated at init, used synchronously on dialog open)
 var padSoundListCache = [];
 let padSoundListLoading = false;
-let padExtensionCatalogLoading = false;
 
 // Fetch sound list from device and update cache
 function padFetchSoundList() {
@@ -393,8 +352,7 @@ function padFetchSoundList() {
 // Populate sound file dropdowns in action editors (synchronous, uses cache)
 function padPopulateSoundDropdown() {
     var prefixes = padActionPrefixes('tap').concat(padActionPrefixes('lp'), padLevelActionPrefixes());
-    prefixes.push('pad-edit-nr-adjust');
-    prefixes.push('pad-edit-list-select');
+    prefixes.push(...padWidgetActionPrefixes());
     actionEditorPopulateSounds(prefixes, padSoundListCache);
     prefixes.forEach(function(prefix) {
         var select = document.getElementById(prefix + '-sound-alert-file');
@@ -402,24 +360,23 @@ function padPopulateSoundDropdown() {
     });
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'];
+function padRefreshWidgetEditor() {
+    const widget = document.getElementById('pad-edit-widget-type');
+    const editor = widget && padWidgetEditor(widget.value);
+    if (editor && editor.refresh) editor.refresh();
+}
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
-    WIDGET_SECTIONS.forEach(s => {
-        const el = document.getElementById('pad-edit-' + s.replace('_', '-') + '-section');
-        if (el) { el.style.display = (wtype === s) ? '' : 'none'; if (wtype === s) el.open = true; }
-    });
-    var extensionSection = document.getElementById('pad-edit-extension-section');
-    if (extensionSection) {
-        extensionSection.style.display = wtype === 'external' ? '' : 'none';
-        if (wtype === 'external') extensionSection.open = true;
-    }
+    const editor = padWidgetEditor(wtype);
+    padWidgetEditorsRefresh(wtype);
+    padFillRefreshVisibility();
+    padRefreshWidgetEditor();
     ['pad-edit-text-labels-section', 'pad-edit-icon-section'].forEach(function (id) {
         var section = document.getElementById(id);
-        if (section) section.style.display = wtype === 'external' ? 'none' : '';
+        if (section) section.style.display = editor && editor.replacesContent ? 'none' : '';
     });
-    padSetImageCapabilityVisibility(deviceInfoCache, wtype === 'external');
+    padSetImageCapabilityVisibility(deviceInfoCache, !!(editor && editor.replacesContent));
     var confirmGroup = document.getElementById('pad-edit-confirm-group');
     var confirmInput = document.getElementById('pad-edit-confirm');
     if (confirmGroup) confirmGroup.style.display = wtype ? 'none' : '';
@@ -430,45 +387,28 @@ function padWidgetTypeChanged() {
     // Refresh icon position visibility (widgets may override layout)
     padIconTypeChanged();
 
-    // Rocker/list widgets: relabel Tap/LP action slots contextually. The
-    // slot label is set here rather than mutating a <label> element — the
-    // slot's own label now lives on its <details> wrapper (see
-    // actionEditorListSetLabels), since summary text doubles as the
-    // collapsed "Add action" placeholder.
-    var isRocker = (wtype === 'rocker');
-    var isNumericRocker = (wtype === 'numericrocker');
-    var isMouseWidget = (wtype === 'mousepad' || wtype === 'scrollpad');
-    var isGamepadWidget = (wtype === 'gamepad_stick' || wtype === 'gamepad_button');
-    var consumesActions = isMouseWidget || isGamepadWidget;
+    const actionPolicy = editor ? editor.actions : { tap: true, longPress: true };
     var navigationGroup = document.getElementById('pad-edit-input-navigation');
-    if (navigationGroup) navigationGroup.style.display = consumesActions ? '' : 'none';
-    var axis = 'vertical';
-    if (isRocker) {
-        var axSel = document.getElementById('pad-edit-rocker-axis');
-        if (axSel) axis = axSel.value;
-    }
-    var isList = (wtype === 'list');
-    var tapBase = isRocker ? ((axis === 'horizontal') ? 'Left action' : 'Up action')
-        : isList ? 'Select action' : 'Tap action';
-    var lpBase = isRocker ? ((axis === 'horizontal') ? 'Right action' : 'Down action') : 'Long-press action';
+    if (navigationGroup) navigationGroup.style.display = editor && editor.supported !== false && editor.inputNavigation ? '' : 'none';
+    const labels = actionPolicy.labels ? actionPolicy.labels() : ['Tap action', 'Long-press action'];
+    var tapBase = labels[0];
+    var lpBase = labels[1];
+    ['tap', 'lp'].forEach(function(gesture, index) {
+        var heading = document.getElementById('pad-edit-' + gesture + '-heading');
+        if (heading) heading.textContent = labels[index] + 's';
+    });
     actionEditorListSetLabels(padActionPrefixes('tap'), padDefaultActionLabels(tapBase));
     actionEditorListSetLabels(padActionPrefixes('lp'), padDefaultActionLabels(lpBase));
 
-    // Numeric rocker uses a dedicated adjustment action instead of long-press actions.
     var lpActionsContainer = document.getElementById('pad-edit-lp-actions');
-    if (lpActionsContainer) lpActionsContainer.style.display = isNumericRocker || consumesActions ? 'none' : '';
+    if (lpActionsContainer) lpActionsContainer.style.display = actionPolicy.longPress ? '' : 'none';
     var lpHeading = document.getElementById('pad-edit-lp-heading');
-    if (lpHeading) lpHeading.style.display = isNumericRocker || consumesActions ? 'none' : '';
+    if (lpHeading) lpHeading.style.display = actionPolicy.longPress ? '' : 'none';
     ['pad-edit-tap-heading', 'pad-edit-tap-actions'].forEach(function(id) {
         var element = document.getElementById(id);
-        if (element) element.style.display = consumesActions ? 'none' : '';
+        if (element) element.style.display = actionPolicy.tap ? '' : 'none';
     });
 
-    // Numeric rocker: show adjustment action editor in widget settings
-    var adjSection = document.getElementById('pad-edit-numericrocker-adjust-section');
-    if (adjSection) adjSection.style.display = isNumericRocker ? '' : 'none';
-    // List widget: inject/remove synthetic [list:provider.selected] option in tap/lp dropdowns
-    if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 }
 
 async function padLoadPage(page, defaultsReady) {
@@ -619,7 +559,8 @@ function padBuildSaveContext() {
     if (snapshot.bindings.length > 0) {
         var badNames = snapshot.bindings.filter(function(b) { return b.name && !padIsValidBindingName(b.name); });
         if (badNames.length > 0) {
-            throw new Error('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.');
+            const fieldIds = snapshot.bindings.map((binding, index) => binding.name && !padIsValidBindingName(binding.name) ? 'pad-binding-name-' + index : null).filter(Boolean);
+            throw Object.assign(new Error('Invalid binding name(s): ' + badNames.map(function(b) { return '"' + b.name + '"'; }).join(', ') + '\nNames must start with a letter and contain only letters, digits, or underscores.'), { fieldIds });
         }
         var bd = padBindingsToDict(snapshot.bindings);
         if (bd) payload.bindings = bd;
@@ -747,7 +688,14 @@ async function padSavePage(options) {
     const bulk = Boolean(options && options.bulk);
     try {
         const section = document.getElementById('pad-config-section');
-        const context = padBuildSaveContext();
+        let context;
+        try {
+            context = padBuildSaveContext();
+        } catch (error) {
+            if (bulk) throw error;
+            padDialogShowValidationError(error);
+            return null;
+        }
         const workspace = typeof padWorkspace !== 'undefined' ? padWorkspace : null;
         const revision = workspace ? workspace.revision : 0;
         await padQueuePersistence(context);
@@ -765,6 +713,9 @@ async function padSavePage(options) {
             if (document.getElementById('pad-config-section') !== section || padState.page !== context.page ||
                 (workspace && workspace.revision !== revision)) return context;
             const selected = workspace && workspace.selected ? [padState.editCol, padState.editRow, workspace.scope, workspace.tab] : null;
+            const body = selected ? workspace.root.querySelector('.pad-edit-body') : null;
+            const scroll = body ? body.scrollTop : 0;
+            const groups = body ? Array.from(body.querySelectorAll('details'), group => group.open) : [];
             // Reload to get canonical version from device.
             await padLoadPage(context.page);
             if (selected && workspace === padWorkspace && padState.page === context.page) {
@@ -772,6 +723,8 @@ async function padSavePage(options) {
                 padWorkspaceSetScope(selected[2]);
                 padWorkspace.tab = selected[3];
                 padWorkspaceRenderTabs();
+                body.querySelectorAll('details').forEach((group, index) => { group.open = groups[index]; });
+                body.scrollTop = scroll;
             }
         }
         return context;

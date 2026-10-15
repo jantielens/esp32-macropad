@@ -107,6 +107,14 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
     if (!color_ok(b["bg_color"] | "")) return "bad bg_color";
     if (!color_ok(b["fg_color"] | "")) return "bad fg_color";
     if (!color_ok(b["border_color"] | "")) return "bad border_color";
+    const char* fill_colors[] = {"bg_pattern_color", "widget_bar_pattern_color", "widget_bar_pattern_color_2",
+        "widget_bar_pattern_color_3", "widget_bar_pattern_color_4", "widget_bar_bg_pattern_color", "widget_track_outline_color"};
+    for (unsigned index = 0; index < 7; ++index) {
+        const char* color = b[fill_colors[index]] | "";
+        const size_t capacity = index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN;
+        if (strlen(color) >= capacity) return index < 5 ? LEN_MSG_LABEL : LEN_MSG_SHORT;
+        if (!color_ok(color)) return "pattern/outline color must be hex or a binding";
+    }
     const char* shadow = b["button_shadow"] | "";
     if (shadow[0] && strcmp(shadow, "enabled") != 0 && strcmp(shadow, "disabled") != 0)
         return "bad button_shadow";

@@ -1,24 +1,26 @@
-                <!-- Sparkline Settings (conditional, shown only for sparkline widget type) -->
-                <details class="editor-group" id="pad-edit-sparkline-section" style="display:none;">
-                    <summary>Sparkline Settings</summary>
+                <div class="sparkline-editor" id="pad-edit-sparkline-section" style="display:none;">
+                    <details class="editor-group" id="pad-edit-sparkline-sources" open>
+                    <summary>Data sources</summary>
                     <div class="editor-group-body">
-                        <div class="widget-sub-heading">Data Sources</div>
 
-                        <div class="sparkline-source">
+                        <details class="pad-content-source sparkline-source" id="pad-edit-sparkline-source-1" open>
+                            <summary>Line 1</summary>
+                            <div class="pad-content-source-body">
                             <div class="sparkline-source-heading">
-                                <span>Line 1</span>
+                                <span>Line color</span>
                                 <div class="bindable-color" title="Line color"><label for="pad-edit-sparkline-line-color"><span class="fx-hint" onclick="showBindingHelp()" title="Line color supports bindings">fx</span></label><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color" class="bc-input" aria-label="Line 1 color" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
                             </div>
                             <div class="form-group">
                             <label for="pad-edit-sparkline-data-binding">Live Data Binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <div class="sparkline-binding-color-row">
-                                <div class="binding-input-wrap" style="flex:1;min-width:0;">
+                                <div class="binding-input-wrap">
                                     <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]" oninput="padUpdateSparklineEditor()">
                                 </div>
-                            </div>
                             <small>Each line needs a live data binding. Home Assistant history can optionally fill that same line after a restart.</small>
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
+                            <div class="form-group">
+                                <label for="pad-edit-sparkline-current-label">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label" maxlength="63" placeholder="e.g. [mqtt:topic;path;%.1f] °C">
+                            </div>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields">
                                 <div class="sparkline-history-row">
@@ -26,7 +28,7 @@
                                         <label for="pad-edit-sparkline-ha-entity">History Entity</label>
                                         <input type="text" id="pad-edit-sparkline-ha-entity" maxlength="63" placeholder="e.g. sensor.living_room_temperature">
                                     </div>
-                                    <div class="form-group sparkline-stat-field">
+                                    <div class="form-group">
                                         <label for="pad-edit-sparkline-ha-stat">Historical Value</label>
                                         <select id="pad-edit-sparkline-ha-stat" onchange="padUpdateSparklineEditor()">
                                             <option value="mean">Average reading</option>
@@ -38,11 +40,14 @@
                                 <small id="pad-edit-sparkline-ha-stat-help"></small>
                                 <small>Uses the Home Assistant URL and token configured on the Integrations page.</small>
                             </div>
-                        </div>
+                            </div>
+                        </details>
 
-                        <div class="sparkline-source">
+                        <details class="pad-content-source sparkline-source" id="pad-edit-sparkline-source-2">
+                            <summary>Line 2 (optional)</summary>
+                            <div class="pad-content-source-body">
                             <div class="sparkline-source-heading">
-                                <span>Line 2 <small>(optional)</small></span>
+                                <span>Line color</span>
                                 <div class="bindable-color" title="Line color"><label for="pad-edit-sparkline-line-color-2"><span class="fx-hint" onclick="showBindingHelp()" title="Line color supports bindings">fx</span></label><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-2" class="bc-input" aria-label="Line 2 color" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
                             </div>
                             <div class="form-group">
@@ -51,20 +56,26 @@
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-2" maxlength="191" placeholder="Leave empty for a single line" oninput="padUpdateSparklineEditor()">
                             </div>
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled-2" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
+                            <div class="form-group">
+                                <label for="pad-edit-sparkline-current-label-2">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-2" maxlength="63" placeholder="Optional — leave empty if unused">
+                            </div>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency-2"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-2">
                                 <div class="sparkline-history-row">
                                     <div class="form-group"><label for="pad-edit-sparkline-ha-entity-2">History Entity</label><input type="text" id="pad-edit-sparkline-ha-entity-2" maxlength="63" placeholder="e.g. sensor.living_room_humidity"></div>
-                                    <div class="form-group sparkline-stat-field"><label for="pad-edit-sparkline-ha-stat-2">Historical Value</label><select id="pad-edit-sparkline-ha-stat-2" onchange="padUpdateSparklineEditor()"><option value="mean">Average reading</option><option value="state">Latest state</option><option value="sum">Accumulated total</option></select></div>
+                                    <div class="form-group"><label for="pad-edit-sparkline-ha-stat-2">Historical Value</label><select id="pad-edit-sparkline-ha-stat-2" onchange="padUpdateSparklineEditor()"><option value="mean">Average reading</option><option value="state">Latest state</option><option value="sum">Accumulated total</option></select></div>
                                 </div>
                                 <small id="pad-edit-sparkline-ha-stat-help-2"></small>
                             </div>
-                        </div>
+                            </div>
+                        </details>
 
-                        <div class="sparkline-source">
+                        <details class="pad-content-source sparkline-source" id="pad-edit-sparkline-source-3">
+                            <summary>Line 3 (optional)</summary>
+                            <div class="pad-content-source-body">
                             <div class="sparkline-source-heading">
-                                <span>Line 3 <small>(optional)</small></span>
+                                <span>Line color</span>
                                 <div class="bindable-color" title="Line color"><label for="pad-edit-sparkline-line-color-3"><span class="fx-hint" onclick="showBindingHelp()" title="Line color supports bindings">fx</span></label><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-line-color-3" class="bc-input" aria-label="Line 3 color" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
                             </div>
                             <div class="form-group">
@@ -73,26 +84,34 @@
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-data-binding-3" maxlength="191" placeholder="Leave empty for one or two lines" oninput="padUpdateSparklineEditor()">
                             </div>
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled-3" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
+                            <div class="form-group">
+                                <label for="pad-edit-sparkline-current-label-3">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-3" maxlength="63" placeholder="Optional — leave empty if unused">
+                            </div>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency-3"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-3">
                                 <div class="sparkline-history-row">
                                     <div class="form-group"><label for="pad-edit-sparkline-ha-entity-3">History Entity</label><input type="text" id="pad-edit-sparkline-ha-entity-3" maxlength="63" placeholder="e.g. sensor.outdoor_temperature"></div>
-                                    <div class="form-group sparkline-stat-field"><label for="pad-edit-sparkline-ha-stat-3">Historical Value</label><select id="pad-edit-sparkline-ha-stat-3" onchange="padUpdateSparklineEditor()"><option value="mean">Average reading</option><option value="state">Latest state</option><option value="sum">Accumulated total</option></select></div>
+                                    <div class="form-group"><label for="pad-edit-sparkline-ha-stat-3">Historical Value</label><select id="pad-edit-sparkline-ha-stat-3" onchange="padUpdateSparklineEditor()"><option value="mean">Average reading</option><option value="state">Latest state</option><option value="sum">Accumulated total</option></select></div>
                                 </div>
                                 <small id="pad-edit-sparkline-ha-stat-help-3"></small>
                             </div>
+                            </div>
+                        </details>
+
                         </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-sparkline-scale">
+                        <summary>Scale</summary>
+                        <div class="editor-group-body">
 
-                        <div class="widget-sub-heading">Scale</div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
+                        <div class="widget-row">
+                            <div class="form-group">
                                 <label for="pad-edit-sparkline-min">Y-Axis Min <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" id="pad-edit-sparkline-min" maxlength="63" placeholder="auto or [binding]">
                                 <small>Empty = auto-scale, or number/binding</small>
                             </div>
-                            <div class="form-group" style="flex:1;">
+                            <div class="form-group">
                                 <label for="pad-edit-sparkline-max">Y-Axis Max <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" id="pad-edit-sparkline-max" maxlength="63" placeholder="auto or [binding]">
                                 <small>Empty = auto-scale, or number/binding</small>
@@ -104,10 +123,14 @@
                             <small>When using auto-scale with multiple lines, share the same Y-axis range. Disable for independent per-line scaling.</small>
                         </div>
 
-                        <div class="widget-sub-heading">Sampling</div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-sparkline-sampling">
+                        <summary>Sampling</summary>
+                        <div class="editor-group-body">
 
-                        <div class="sparkline-sampling-row">
-                            <div class="form-group" style="flex:1;">
+                        <div class="widget-row sparkline-sampling-row">
+                            <div class="form-group">
                                 <label for="pad-edit-sparkline-window">Time Range</label>
                                 <div class="sparkline-time-range">
                                     <input type="number" id="pad-edit-sparkline-window" min="1" value="5" step="any" oninput="padUpdateSparklineEditor()">
@@ -120,7 +143,7 @@
                                 </div>
                                 <small>How much history the chart displays.</small>
                             </div>
-                            <div class="form-group" style="flex:1;">
+                            <div class="form-group">
                                 <label for="pad-edit-sparkline-interval">One Point Every</label>
                                 <div class="sparkline-time-range">
                                     <input type="number" id="pad-edit-sparkline-interval" min="0.001" value="5" step="any" oninput="padUpdateSparklineEditor()">
@@ -135,79 +158,115 @@
                             </div>
                         </div>
                         <small class="sparkline-resolution-summary" id="pad-edit-sparkline-resolution"></small>
-                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 7 days. The saved value will be limited to 7 days.</small>
+                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 7 days.</small>
                         <small class="editor-warn" id="pad-edit-sparkline-points-warn" style="display:none;"></small>
                         <small class="editor-warn" id="pad-edit-sparkline-ha-warn" style="display:none;">Home Assistant history is stored in 5-minute periods. Historical values are visually interpolated; live data uses the finer interval.</small>
 
-                        <div class="widget-sub-heading">Minimum Marker</div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-sparkline-line-style">
+                        <summary>Line style</summary>
+                        <div class="editor-group-body">
 
-                        <div class="sparkline-color-row">
-                            <div class="form-group" style="flex:0 0 60px;">
-                                <label for="pad-edit-sparkline-marker-size-min">Size</label>
-                                <input type="number" id="pad-edit-sparkline-marker-size-min" min="0" max="20" value="0" placeholder="0">
+                        <div class="widget-row">
+                            <div class="form-group">
+                                <label for="pad-edit-sparkline-line-width">Line width (px)</label>
+                                <input type="number" id="pad-edit-sparkline-line-width" min="1" max="10" value="2" placeholder="2">
                             </div>
-                            <div class="form-group" style="flex:1;min-width:100px;">
+                            <div class="form-group">
+                                <label for="pad-edit-sparkline-smooth">Smoothing</label>
+                                <input type="number" id="pad-edit-sparkline-smooth" min="0" max="8" value="0" placeholder="0">
+                                <small>0 = off, 3-4 = smooth</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-sparkline-line-offset">Line separation (px)</label>
+                                <input type="number" id="pad-edit-sparkline-line-offset" min="0" max="6" value="0" placeholder="0">
+                                <small>0 = off. Px offset to separate overlapping lines.</small>
+                            </div>
+                        </div>
+
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-sparkline-markers">
+                        <summary>Markers</summary>
+                        <div class="editor-group-body">
+
+                        <details class="pad-content-source sparkline-marker" id="pad-edit-sparkline-minimum-marker">
+                        <summary>Minimum marker</summary>
+                        <div class="pad-content-source-body">
+                        <div class="sparkline-color-row">
+                            <div class="form-group sparkline-marker-size">
+                                <label for="pad-edit-sparkline-marker-size-min">Size (px)</label>
+                                <input type="number" id="pad-edit-sparkline-marker-size-min" min="0" max="20" value="0" placeholder="0" oninput="padRefreshWidgetEditor()">
+                                <small>0 = off</small>
+                            </div>
+                            <div class="sparkline-marker-style" id="pad-edit-sparkline-minimum-marker-style">
+                            <div class="form-group sparkline-marker-format">
                                 <label for="pad-edit-sparkline-min-fmt">Format</label>
                                 <input type="text" id="pad-edit-sparkline-min-fmt" maxlength="15" placeholder="%.0f">
                             </div>
-                            <div class="form-group" style="flex:0 0 auto;">
+                            <div class="form-group">
                                 <label for="pad-edit-sparkline-min-label-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-min-label-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
-                        </div>
-
-                        <div class="widget-sub-heading">Maximum Marker</div>
-
-                        <div class="sparkline-color-row">
-                            <div class="form-group" style="flex:0 0 60px;">
-                                <label for="pad-edit-sparkline-marker-size-max">Size</label>
-                                <input type="number" id="pad-edit-sparkline-marker-size-max" min="0" max="20" value="0" placeholder="0">
                             </div>
-                            <div class="form-group" style="flex:1;min-width:100px;">
+                        </div>
+                        </div>
+                        </details>
+
+                        <details class="pad-content-source sparkline-marker" id="pad-edit-sparkline-maximum-marker">
+                        <summary>Maximum marker</summary>
+                        <div class="pad-content-source-body">
+                        <div class="sparkline-color-row">
+                            <div class="form-group sparkline-marker-size">
+                                <label for="pad-edit-sparkline-marker-size-max">Size (px)</label>
+                                <input type="number" id="pad-edit-sparkline-marker-size-max" min="0" max="20" value="0" placeholder="0" oninput="padRefreshWidgetEditor()">
+                                <small>0 = off</small>
+                            </div>
+                            <div class="sparkline-marker-style" id="pad-edit-sparkline-maximum-marker-style">
+                            <div class="form-group sparkline-marker-format">
                                 <label for="pad-edit-sparkline-max-fmt">Format</label>
                                 <input type="text" id="pad-edit-sparkline-max-fmt" maxlength="15" placeholder="%.0f">
                             </div>
-                            <div class="form-group" style="flex:0 0 auto;">
+                            <div class="form-group">
                                 <label for="pad-edit-sparkline-max-label-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-sparkline-max-label-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
+                            </div>
                         </div>
+                        </div>
+                        </details>
                         <small>Size 0 = off. Format: e.g. hi %.1f kW. Color white = auto (follows line color).</small>
 
-                        <div class="widget-sub-heading">Current Value Dot</div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-sparkline-annotations">
+                        <summary>Current-value annotations</summary>
+                        <div class="editor-group-body">
 
-                        <div class="form-group" style="max-width:120px;">
+                        <div class="widget-row">
+                        <div class="form-group">
                             <label for="pad-edit-sparkline-current-dot">Dot Size (px)</label>
                             <input type="number" id="pad-edit-sparkline-current-dot" min="0" max="20" value="0" placeholder="0">
                             <small>0 = off. Dot at rightmost data point.</small>
                         </div>
 
-                        <div class="widget-sub-heading">Current Value Labels</div>
-
-                        <div class="form-group" style="max-width:120px;">
+                        <div class="form-group">
                             <label for="pad-edit-sparkline-label-width">Label Width (px)</label>
                             <input type="number" id="pad-edit-sparkline-label-width" min="0" max="200" value="0" placeholder="0 = 50px default">
                             <small>0 = 50px default. Fixed width (px) for the right-side label area.</small>
                         </div>
-                        <div class="form-group">
-                            <label for="pad-edit-sparkline-current-label">Line 1 Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label" maxlength="63" placeholder="e.g. [mqtt:topic;path;%.1f] °C">
                         </div>
-                        <div class="form-group">
-                            <label for="pad-edit-sparkline-current-label-2">Line 2 Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-2" maxlength="63" placeholder="Optional — leave empty if unused">
-                        </div>
-                        <div class="form-group">
-                            <label for="pad-edit-sparkline-current-label-3">Line 3 Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                            <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-3" maxlength="63" placeholder="Optional — leave empty if unused">
-                        </div>
-                        <small>Binding or static text shown at right edge. Labels track the current data point position. Color follows the line color.</small>
+                        <small>Current value labels are set per line above. Labels track the current data point position and follow the line color.</small>
 
-                        <div class="widget-sub-heading">Reference Lines</div>
-
+                        </div>
+                    </details>
+                        <details class="editor-group sparkline-references" id="pad-edit-sparkline-references">
+                        <summary>Reference lines</summary>
+                        <div class="editor-group-body">
                         <div class="sparkline-color-row" id="pad-edit-sparkline-ref-1-row">
                             <div class="form-group" style="flex:1;min-width:70px;">
-                                <label for="pad-edit-sparkline-ref-1-y">Line 1 Y</label>
+                                <label for="pad-edit-sparkline-ref-1-y">Reference 1 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-1-y" step="any" placeholder="off">
                             </div>
                             <div class="form-group" style="flex:0 0 auto;">
@@ -225,7 +284,7 @@
                         </div>
                         <div class="sparkline-color-row" id="pad-edit-sparkline-ref-2-row">
                             <div class="form-group" style="flex:1;min-width:70px;">
-                                <label for="pad-edit-sparkline-ref-2-y">Line 2 Y</label>
+                                <label for="pad-edit-sparkline-ref-2-y">Reference 2 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-2-y" step="any" placeholder="off">
                             </div>
                             <div class="form-group" style="flex:0 0 auto;">
@@ -243,7 +302,7 @@
                         </div>
                         <div class="sparkline-color-row" id="pad-edit-sparkline-ref-3-row">
                             <div class="form-group" style="flex:1;min-width:70px;">
-                                <label for="pad-edit-sparkline-ref-3-y">Line 3 Y</label>
+                                <label for="pad-edit-sparkline-ref-3-y">Reference 3 Y</label>
                                 <input type="number" id="pad-edit-sparkline-ref-3-y" step="any" placeholder="off">
                             </div>
                             <div class="form-group" style="flex:0 0 auto;">
@@ -267,25 +326,6 @@
                             <small>Auto-expand Y range so reference lines are always visible.</small>
                         </div>
 
-                        <div class="widget-sub-heading">Line Style</div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:0 0 100px;">
-                                <label for="pad-edit-sparkline-line-width">Line Width (px)</label>
-                                <input type="number" id="pad-edit-sparkline-line-width" min="1" max="10" value="2" placeholder="2">
-                            </div>
-                            <div class="form-group" style="flex:0 0 100px;">
-                                <label for="pad-edit-sparkline-smooth">Smoothing</label>
-                                <input type="number" id="pad-edit-sparkline-smooth" min="0" max="8" value="0" placeholder="0">
-                                <small>0 = off, 3-4 = smooth</small>
-                            </div>
-                            <div class="form-group" style="flex:0 0 110px;">
-                                <label for="pad-edit-sparkline-line-offset">Line Separation</label>
-                                <input type="number" id="pad-edit-sparkline-line-offset" min="0" max="6" value="0" placeholder="0">
-                                <small>0 = off. Px offset to separate overlapping lines.</small>
-                            </div>
                         </div>
-
-
-                    </div>
-                </details>
+                        </details>
+                </div>

@@ -93,6 +93,18 @@ function updateOnlineUpdateSection(info) {
 
 }
 
+function updateAmplifierSettings() {
+    var section = document.getElementById('amplifier-section');
+    var idleMute = document.getElementById('audio_idle_mute');
+    var delay = document.getElementById('audio_wake_delay_ms');
+    if (!section || !idleMute || !delay) return;
+    var config = window.deviceConfig || {};
+    var supported = !!(config.caps && config.caps.audio_amplifier_mute);
+    section.style.display = supported ? '' : 'none';
+    idleMute.disabled = !supported;
+    delay.disabled = !supported || !idleMute.checked;
+}
+
 function updateWriteOnlySecretField(fieldId, statusId, isSet, emptyMessage, valueName) {
     const name = valueName || 'value';
     const field = document.getElementById(fieldId);
@@ -309,6 +321,9 @@ async function loadConfig() {
             const audioSection = document.getElementById('audio-section');
             if (audioSection) audioSection.style.display = 'block';
         }
+        setCheckedIfExists('audio_idle_mute', config.audio_idle_mute !== false);
+        setValueIfExists('audio_wake_delay_ms', config.audio_wake_delay_ms === undefined ? 120 : config.audio_wake_delay_ms);
+        updateAmplifierSettings();
 
         setValueIfExists('basic_auth_username', config.basic_auth_username);
         updateWriteOnlySecretField('basic_auth_password', 'basic_auth_password_status',
@@ -469,6 +484,15 @@ function validateConfig(config) {
             String(value).trim() === '' || !Number.isInteger(power) ||
             power < -12 || power > 9 || power % 3 !== 0) {
             return { valid: false, message: 'BLE TX power must be -12 to +9 dBm in 3 dB steps' };
+        }
+    }
+
+    if (config.audio_wake_delay_ms !== undefined) {
+        const value = config.audio_wake_delay_ms;
+        const delay = Number(value);
+        if ((typeof value !== 'string' && typeof value !== 'number') ||
+            !/^\d+$/.test(String(value)) || !Number.isInteger(delay) || delay < 0 || delay > 1000) {
+            return { valid: false, message: 'Amplifier wake delay must be an integer from 0 to 1000 ms' };
         }
     }
 

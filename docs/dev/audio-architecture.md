@@ -36,8 +36,39 @@ The driver owns codec programming, clock settling, and any silence priming;
 the manager must not impose an ES8311 sequence on a PCM510xA DAC.
 
 The manager sets initial volume, checks availability, allocates its queues and
-semaphore, then unmutes and creates the worker. Startup failure calls `end()`
-and releases those manager resources. Volume and mute report control errors;
+semaphore, then creates the worker with the amplifier still muted. The worker
+unmutes before the first PCM write and allows `audio_wake_delay_ms` for output
+settling (default 120 ms, range 0-1000 ms).
+This conservative wake allowance preserves short tap tones on hardware that
+suppresses the initial output after amplifier enable. It adds latency only
+when waking from a muted state, including startup and recovery after OTA.
+After alerts, music, and feedback are inactive, it waits the configured DMA
+buffer duration plus a 100 ms idle grace period before muting. Paused music is
+idle; silence gaps within an active tone pattern are not. Rapid feedback can
+reuse the enabled amplifier during the grace period. OTA entry mutes immediately.
+Codec power and I2S clocks remain active while idle, including the PCM510xA
+clock configuration. This policy applies to both output drivers.
+
+The Volume fragment's Amplifier section persists `audio_idle_mute` (default
+true) and `audio_wake_delay_ms` in NVS. Disabling idle muting keeps the
+amplifier enabled between sounds, reducing repeated wake latency but allowing
+idle hiss. The worker also enables it while idle after startup or OTA recovery,
+honoring the saved wake delay. Forced OTA muting and driver failure handling
+remain active regardless of this preference. The 100 ms idle grace period is
+not configurable. Reducing the wake delay can clip the beginning of short tones;
+zero skips the wait.
+
+`audio_set_amplifier_policy()` publishes both settings as one atomic snapshot;
+only the audio worker performs runtime hardware transitions. Config saves apply
+without reboot and do not interrupt an in-progress settling wait. The section
+is visible only when `AudioOutputDriver::supportsMute()` reports a board mute
+callback, including board-specific control factories. The portal uses
+`GET /api/config`'s `caps.audio_amplifier_mute`; `GET /api/info` also advertises
+`has_audio_amplifier_mute`. The delay input is disabled while idle muting is
+off, and partial saves retain its stored value.
+
+Startup failure calls `end()` and releases those manager resources.
+Volume and mute report control errors;
 availability reflects actual initialized hardware rather than a default `true`.
 `end()` attempts mute, releases owned I2S channels, and removes a controllable
 rail. It reports failure, retains handles that could not be deleted for a
@@ -53,8 +84,9 @@ requires mute control. StopWatch selects its board-local factory through
 `BOARD_AUDIO_CONTROL_FACTORY` and supplies declarations through
 `BOARD_HARDWARE_HEADER`; neither driver knows which board supplied them.
 
-Lifecycle operations are startup/cleanup operations, not a concurrent runtime
-shutdown API. Callers must stop workers and capture owners before teardown.
+Transport lifecycle operations are startup/cleanup operations, not a concurrent
+runtime shutdown API. Runtime amplifier mute changes belong to the audio worker.
+Callers must stop workers and capture owners before teardown.
 The manager currently tears down only during startup failure, before a worker
 exists. The microphone driver tracks capture activation separately from TX
 and makes repeated capture start/stop calls safe.
@@ -166,9 +198,11 @@ substituting another track. The binding status is `interrupted` while Playing
 intent is blocked. Music files cannot be managed through the portal while Music
 is playing, paused, or interrupted, or while an MP3 Alert is active.
 
-Tap and confirmation feedback uses `audio_feedback()` independently of the primary
-source. It lasts at most 250 ms and never stops or ducks an alarm. The common PCM
-writer reserves fixed headroom (primary gain 0.75, feedback gain 0.15) before the
+Tap, long-press, and confirmation feedback uses `audio_feedback()` independently
+of the primary source. It lasts at most 1 second, including silence gaps, and
+never stops or ducks an alarm. Longer patterns are truncated at that limit.
+The common PCM writer reserves fixed headroom (primary gain 0.75, feedback gain
+0.15) before the
 sole driver write. Alert volume overrides affect only that primary; master volume
 changes made during an alert are retained afterward.
 
@@ -247,7 +281,8 @@ the ES8311 hardware path owns enabling and muting them through the shared I2C
 bus. The unused microphone input stays disabled.
 
 StopWatch startup keeps the amplifier muted through codec initialization,
-initial volume programming, and a short silence write, then unmutes it.
+initial volume programming, and a short silence write. Playback unmutes it;
+idle muting leaves the audio rail and transport running.
 Transport/control errors and audio queue/task allocation failures tear down
 the output and attempt to leave the amplifier and audio rail off. The same
 manager lifecycle applies to all audio boards; transport-specific sequencing

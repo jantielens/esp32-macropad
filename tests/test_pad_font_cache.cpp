@@ -1,4 +1,5 @@
 #include "pad_layout.h"
+#include "native_extension_text.h"
 #include "font_store.h"
 #include <cstdio>
 #include <cstring>
@@ -127,6 +128,66 @@ int main(int argument_count, char** arguments) {
         if (external_font.empty()) return 1;
     }
     lv_init();
+    {
+        device_typography_init("test-font", 0);
+        const lv_font_t* font = native_extension_text_font("default", 24);
+        CHECK(font != &lv_font_montserrat_24);
+        CHECK(native_extension_text_font(nullptr, 24) == font);
+        CHECK(native_extension_text_font("@builtin", 24) == &lv_font_montserrat_24);
+        const lv_font_t* explicit_font = native_extension_text_font("test-font", 18);
+        CHECK(explicit_font != font && explicit_font != &lv_font_montserrat_18);
+        CHECK(native_extension_text_font("missing", 24) == &lv_font_montserrat_24);
+        constexpr uint32_t width = 64, height = 64;
+        std::vector<uint16_t> actual(width * height + 2, 0);
+        actual.front() = actual.back() = 0x1234;
+        const lv_color_t white = lv_color_white();
+        lv_font_t fallback_only{};
+        fallback_only.line_height = font->line_height;
+        fallback_only.base_line = font->base_line;
+        fallback_only.fallback = &lv_font_montserrat_24;
+        fallback_only.get_glyph_dsc = [](const lv_font_t*, lv_font_glyph_dsc_t*, uint32_t, uint32_t) { return false; };
+        const lv_font_t* render_fonts[] = {font, &lv_font_montserrat_24, &fallback_only};
+        for (const lv_font_t* render_font : render_fonts) {
+            lv_font_glyph_dsc_t glyph{};
+            CHECK(lv_font_get_glyph_dsc(render_font, &glyph, 'W', 0));
+            CHECK(native_extension_text_measure("W", render_font) == glyph.adv_w);
+            lv_draw_buf_t* scratch = lv_draw_buf_create(glyph.box_w, glyph.box_h, LV_COLOR_FORMAT_A8, LV_STRIDE_AUTO);
+            CHECK(scratch != nullptr);
+            const auto* bitmap = static_cast<const lv_draw_buf_t*>(lv_font_get_glyph_bitmap(&glyph, scratch));
+            CHECK(bitmap != nullptr);
+            std::fill(actual.begin() + 1, actual.end() - 1, 0);
+            native_extension_text_draw(actual.data() + 1, width, height, 3, 4, "W", render_font, white);
+            unsigned visible = 0;
+            for (uint32_t row = 0; row < height; ++row) {
+                for (uint32_t column = 0; column < width; ++column) {
+                    const int glyph_x = static_cast<int>(column) - 3 - glyph.ofs_x;
+                    const int glyph_y = static_cast<int>(row) - 4 - render_font->line_height + render_font->base_line + glyph.box_h + glyph.ofs_y;
+                    const uint8_t coverage = bitmap && glyph_x >= 0 && glyph_y >= 0 && glyph_x < glyph.box_w && glyph_y < glyph.box_h
+                        ? bitmap->data[glyph_y * bitmap->header.stride + glyph_x] : 0;
+                    const uint16_t expected = lv_color_to_u16(lv_color_mix(white, lv_color_black(), coverage));
+                    CHECK(actual[1 + row * width + column] == expected);
+                    if (expected) ++visible;
+                }
+            }
+            CHECK(visible > 0);
+            lv_font_glyph_release_draw_data(&glyph);
+            lv_draw_buf_destroy(scratch);
+        }
+        for (unsigned iteration = 0; iteration < 64; ++iteration) {
+            native_extension_text_draw(actual.data() + 1, width, height, -8, -8, "W ", font, white);
+            native_extension_text_draw(actual.data() + 1, width, height, 60, 60, "W", font, white);
+            native_extension_text_draw(actual.data() + 1, width, height, 0, 0, "W", &lv_font_montserrat_24, white);
+        }
+        native_extension_text_draw(actual.data() + 1, width, height, 0, 0, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", font, white);
+        lv_font_glyph_dsc_t reused{};
+        CHECK(lv_font_get_glyph_dsc(font, &reused, 'W', 0));
+        CHECK(reused.resolved_font == font);
+        CHECK(actual.front() == 0x1234 && actual.back() == 0x1234);
+        device_typography_fonts().clear();
+        device_typography_init("", 0);
+        loads = 0;
+        log_lines.clear();
+    }
     {
         PadFontCache first;
         PadFontCache second;

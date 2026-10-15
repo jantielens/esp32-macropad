@@ -2,6 +2,12 @@ include(FetchContent)
 include(GoogleTest)
 include(CMakeParseArguments)
 
+add_custom_target(widget_manifest ALL
+    COMMAND python3 ${PROJECT_SOURCE_DIR}/tools/widget_manifest.py
+        --firmware ${CMAKE_CURRENT_BINARY_DIR}/widget_modules.h
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/widget_modules.h
+    VERBATIM)
+
 add_test(NAME test_log_manager COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager.py)
 add_test(NAME test_portal_preflight COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_preflight.py)
 add_test(NAME test_stopwatch_hal COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_stopwatch_hal.py)
@@ -212,6 +218,10 @@ target_compile_options(test_gamepad_widgets PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 target_link_libraries(test_gamepad_widgets PRIVATE host_lvgl)
+
+add_host_gtest(test_fill_draw test_fill_draw.cpp)
+target_include_directories(test_fill_draw BEFORE PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_link_libraries(test_fill_draw PRIVATE host_lvgl m)
 
 add_host_legacy_test(test_ota_activity
     SOURCES test_ota_activity.cpp ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
@@ -496,7 +506,7 @@ add_host_legacy_test(test_timer_binding_target
     SOURCES test_timer_binding_target.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/timer_engine.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp
     INCLUDES ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides ${HOST_ARDUINOJSON_DIR} ${HOST_LVGL_DIR}
     DEFINITIONS DEFAULT_PIXEL_SHIFT_DISTANCE=4
-    OPTIONS -ffunction-sections -fdata-sections
+    OPTIONS -ffunction-sections -fdata-sections -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/timer_test_overrides/board_config.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES m pthread -Wl,--gc-sections
 )
@@ -686,7 +696,7 @@ foreach(script
     test_timer_action_editor.js test_portal_action_editor_cycle.js test_portal_action_picker.js
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
-    test_portal_ble_config.js test_portal_pad_preview.js test_portal_startup.js
+    test_portal_ble_config.js test_portal_audio_config.js test_portal_pad_preview.js test_portal_startup.js
     test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js
     test_portal_binding_help.js test_portal_asset_gates.js
 )

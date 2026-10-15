@@ -378,6 +378,8 @@ struct WidgetConfig {
 };
 
 // Per-button config (grid placement, labels, colors, typed actions)
+struct ButtonFillStyle;
+
 struct ScreenButtonConfig {
     // Grid placement
     uint8_t col;
@@ -419,6 +421,7 @@ struct ScreenButtonConfig {
     char corner_radius[CONFIG_BINDABLE_SHORT_LEN]; // default "8" — static or binding
     char content_pad[CONFIG_BINDABLE_SHORT_LEN];  // default "4" — plain px inset for labels/icon/widget (0-50)
     uint8_t button_shadow;                         // ButtonShadowMode override
+    ButtonFillStyle* fill_style;
 
     // Typed actions (up to MAX_BUTTON_ACTIONS sequential actions per gesture)
     ButtonAction actions[MAX_BUTTON_ACTIONS];      // tap actions (executed sequentially)

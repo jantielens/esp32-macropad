@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-12
+ms.date: 2026-10-15
 ms.topic: reference
 ---
 
@@ -13,6 +13,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.41.0] - 2026-10-15
+
+### Added
+
+* Style button backgrounds, bar chart series, and bar tracks with diagonal,
+  reverse diagonal, crosshatch, dots, or checkerboard patterns on LCD and
+  interactive e-paper displays. Patterns have separate bindable colors and
+  shared static spacing/stroke controls, preserving the base color. None is
+  the default. Edit fills through Base Color and Pattern sections with one
+  shared Apply operation, threshold generators, and combined color badge
+  previews. Pattern controls open when an applicable pattern is active and
+  preserve manual toggles during routine edits. Gauge patterned fills are not
+  supported; images and their letterbox bands still cover patterns. Complete
+  widget styling is previewed on the device, not in the editor grid.
+* Add whole-track outlines to bar charts and gauges with a static width and
+  bindable color. Outlines default to off. Bar tracks also have a static
+  corner radius, defaulting to 4 pixels, that shapes tracks and fills even
+  without an outline; dual-bar baseline joins remain square. Bar and gauge
+  track settings are grouped in Content.
+
+### Changed
+
+* Reorganize the button Appearance tab with Background/Text, Button Shadow,
+  UI Offset, and bindable Button State first, followed by Borders & Geometry
+  and Patterns. Refine pad-editor labels, binding-reference controls, reset
+  icons, and paired-field alignment, with clearer collapsible surfaces in
+  light mode. Group local and remote background-image controls without
+  changing capability gates.
+* Increase the shared tap and long-press audio feedback limit from 250 ms to
+  1 second, including silence gaps, so longer multi-beep patterns play in full
+  within that limit.
+* Refactor widget development around widget-owned editors and one shared
+  manifest for firmware and portal packaging. Shared editor code handles
+  reusable field, action, validation, and draft mechanics, while specialized
+  behavior stays with each widget. This enables cleaner widget additions
+  without widget-specific changes to generic editor orchestration.
+* Keep web portal navigation categories collapsed on initial load unless
+  opening a direct section link, and allow only one category open at a time.
+
+### Fixed
+
+* Eliminate idle speaker hiss by keeping the output amplifier muted after boot
+  and between playback sessions by default. Allow 120 ms for output settling before the
+  first sound after idle so short tap beeps remain audible. Keep the amplifier
+  enabled through tone-pattern pauses and a brief playback drain/grace period.
+  Add a separate Amplifier settings section in Audio > Volume on supported
+  boards to toggle idle muting and configure the wake delay (0-1000 ms, default
+  120 ms). Settings persist and apply without reboot. Disabling idle muting
+  keeps the amplifier enabled for faster feedback, but idle hiss may return.
+* Fix native Extension canvas text corruption when Device Typography uses an
+  uploaded TTF. Respect glyph formats, stride, baseline placement, and explicit
+  uploaded font names, with Montserrat fallback. Word Clock now inherits the
+  device font when no font family is configured.
+* Show pad-editor validation failures in one dismissible inspector overlay
+  without shifting settings or duplicating the bottom notification. Invalid
+  numeric, binding, and action fields share error highlighting; dismissal
+  retains pending errors and Save reopens the message. Device and network
+  save failures still use notifications.
+* Avoid ESP32-P4 rendering stalls by using LVGL software drawing instead of
+  PPA drawing, which can encounter buffer-size alignment errors. Keep LVGL at
+  9.5.0 for compatibility with the stable Arduino-ESP32 SDK. Display-driver
+  PPA rotation remains enabled.
 
 ## [1.40.0] - 2026-10-12
 

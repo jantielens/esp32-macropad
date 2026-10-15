@@ -3,6 +3,7 @@
 #include "../icon_store.h"
 #include "../log_manager.h"
 #include "../pad_config.h"
+#include "../fill_style_runtime.h"
 #include "../swipe_actions.h"
 #include "../pad_layout.h"
 #include "../timer_engine.h"
@@ -352,9 +353,11 @@ bool PadScreen::containsTimeBinding() const {
         if (strstr(numberBindings[i].templ, TIME_SCHEME)) return true;
     for (uint16_t i = 0; i < btnStateBindingCount; i++)
         if (strstr(btnStateBindings[i].templ, TIME_SCHEME)) return true;
-    for (uint8_t i = 0; i < tileCount; i++)
+    for (uint8_t i = 0; i < tileCount; i++) {
+        if (fill_style_has_scheme(tiles[i].fill_style, TIME_SCHEME)) return true;
         for (uint8_t binding = 0; binding < MAX_WIDGET_BINDINGS; binding++)
             if (strstr(tiles[i].widget_binding[binding], TIME_SCHEME)) return true;
+    }
     for (uint8_t i = 0; i < pageBindingCount; i++)
         if (strstr(pageBindings[i].value, TIME_SCHEME)) return true;
     return false;
@@ -368,6 +371,7 @@ bool PadScreen::padHasScheme(const char* scheme) const {
     if (!scheme || !scheme[0]) return false;
     for (uint8_t i = 0; i < tileCount; i++) {
         const ButtonTile& t = tiles[i];
+        if (fill_style_has_scheme(t.fill_style, scheme)) return true;
         for (uint8_t w = 0; w < MAX_WIDGET_BINDINGS; w++) {
             if (strstr(t.widget_binding[w], scheme)) return true;
         }

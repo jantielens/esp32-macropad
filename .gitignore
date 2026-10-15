@@ -16,6 +16,7 @@ tools/node_modules/
 src/app/project_branding.h
 src/app/github_release_config.h
 src/app/repo_slug_config.h
+src/app/widget_modules.h
 
 # Arduino CLI configuration
 .arduino15/

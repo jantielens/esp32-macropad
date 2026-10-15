@@ -328,6 +328,19 @@ function padUpdateResetHints() {
 
 // --- Pad Bindings helpers ---
 
+function padValidateBindingNameInput(input) {
+    const value = input.value.trim();
+    const valid = value === '' || padIsValidBindingName(value);
+    input.classList.toggle('binding-error', !valid);
+    input.title = valid ? '' : 'Must start with a letter; only letters, digits, and underscores allowed';
+    if (!valid) input.setAttribute('aria-invalid', 'true');
+    else {
+        input.classList.remove('pad-field-error');
+        input.removeAttribute('aria-invalid');
+    }
+    return valid;
+}
+
 function padRenderBindings() {
     const list = document.getElementById('pad-bindings-list');
     if (!list) return;
@@ -339,17 +352,16 @@ function padRenderBindings() {
         row.innerHTML =
             '<label for="pad-binding-name-' + idx + '">Name' +
             '<input id="pad-binding-name-' + idx + '" type="text" class="pad-binding-name" value="' + escAttr(b.name) + '" placeholder="e.g. temperature" maxlength="31" spellcheck="false"></label>' +
-            '<button type="button" class="btn btn-outline-danger btn-sm pad-binding-del" aria-label="Delete binding ' + (idx + 1) + '" title="Delete binding">✕</button>' +
+            '<button type="button" class="btn btn-outline-danger btn-sm pad-binding-del" aria-label="Delete binding ' + (idx + 1) + '" title="Delete binding"><span class="portal-icon" aria-hidden="true">delete</span><span class="portal-icon-fallback">Delete</span></button>' +
             '<label class="pad-binding-expression" for="pad-binding-value-' + idx + '">Binding' +
             '<input id="pad-binding-value-' + idx + '" type="text" class="pad-binding-value" value="' + escAttr(b.value) + '" placeholder="[mqtt:topic;path]" maxlength="191" spellcheck="false"></label>';
         row.querySelector('.pad-binding-name').addEventListener('input', function() {
             var v = this.value.trim();
             padState.bindings[idx].name = v;
-            var ok = v === '' || padIsValidBindingName(v);
-            this.style.borderColor = ok ? '' : '#ff3b30';
-            this.title = ok ? '' : 'Must start with a letter; only letters, digits, and underscores allowed';
+            padValidateBindingNameInput(this);
             padMarkDirty();
         });
+        padValidateBindingNameInput(row.querySelector('.pad-binding-name'));
         var valueInput = row.querySelector('.pad-binding-value');
         var preview = document.createElement('span');
         preview.className = 'pad-pv-val pad-binding-preview';

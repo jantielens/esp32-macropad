@@ -36,7 +36,7 @@ async function saveFragmentConfig(requiresReboot) {
         'basic_auth_enabled', 'basic_auth_username', 'basic_auth_password',
         'mcp_enabled', 'mcp_control_enabled', 'mcp_authoring_enabled',
         'keyboard_transport',
-        'audio_volume', 'tap_beep', 'lp_beep',
+        'audio_volume', 'audio_idle_mute', 'audio_wake_delay_ms', 'tap_beep', 'lp_beep',
         'backlight_brightness', 'display_rotation',
         'screen_saver_enabled', 'screen_saver_timeout_seconds',
         'screen_saver_fade_out_ms', 'screen_saver_fade_in_ms',
@@ -842,6 +842,8 @@ window.init_ha_discovery_fragment = function () {
 // ============================================================================
 
 window.init_volume_fragment = function () {
+    var idleMute = document.getElementById('audio_idle_mute');
+    if (idleMute) idleMute.addEventListener('change', updateAmplifierSettings);
     initConfigFragment('volume-save-btn', false);
 };
 

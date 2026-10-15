@@ -441,7 +441,7 @@ Browse the full Material Symbols catalog at [fonts.google.com/icons](https://fon
 
 ### Colors and Borders
 
-The **Colors** section (collapsible) controls the button's appearance:
+The **Appearance** tab controls the button's colors and geometry:
 
 - **Background color** — the button fill
 - **Text color** — applies to labels and Material Symbol icons
@@ -467,6 +467,60 @@ backgrounds allow up to 63 characters.
 **UI offset** nudges all button visuals using `x;y` pixels (for example `20;-10`). `+x` moves right, `-x` moves left, `+y` moves down, and `-y` moves up. This is optional and defaults to `0;0` when omitted.
 
 **Button shadow** chooses whether this button inherits, enables, or disables the pad's shadow setting. Shadow type and sizing remain device-wide to keep button spacing consistent.
+
+### Patterned Fills and Track Outlines
+
+Button backgrounds and bar chart colors offer None (default), Diagonal stripes,
+Reverse diagonal stripes, Crosshatch, Dots, and Checkerboard. None uses only the
+base color, without a pattern. The canonical JSON value is `none`; unknown names
+also load as None. The original color
+remains the base fill. Pattern Color is separate, defaults to black, and accepts
+the same color bindings as its base color. Each of the four bar series has its
+own pattern; Bar Background supplies the shared track pattern. Open a supported
+color badge to edit Base Color or expand the Pattern section to select a pattern
+and its color. Base Color opens by default when no pattern is selected; existing
+patterns open the Pattern section instead. Both sections offer the threshold
+generator. Apply
+commits both colors and the pattern together; closing discards those changes.
+Other color pickers remain color-only.
+
+Pattern Spacing is shared by all patterned surfaces in the button: 2-64 logical
+pixels, default 8. Pattern Stroke is 1-8 pixels, default 1, capped at spacing.
+Both controls remain in Appearance under Patterns. Stroke is disabled
+when every selected pattern is None or Checkerboard. For dots it is the diameter.
+Checkerboard uses spacing as its square size and ignores stroke. Geometry is
+static; colors can update from bindings. Patterns
+stay anchored to the button as bars grow and clip to the surface's rounded corners.
+
+In Content, bar charts and gauges offer Track Outline Width (0-8 pixels, default 0/off)
+and a separate bindable Track Outline Color (default black). Outlines follow the
+whole track at empty and full values, beneath markers and labels. Dual bars have
+one outline around their shared track. Gauge fills remain unpatterned and retain square
+ends in this phase.
+
+Bar charts also offer Track Corner Radius in Content: 0-64 logical pixels, default 4. The
+effective radius is capped at half the smaller track dimension. It shapes the
+track, clips fills, and shapes the outline even when outline width is zero.
+Dual bars retain square joins at the zero baseline. Gauge geometry is unchanged.
+
+Appearance starts with Background/Text, Button Shadow, UI Offset, and Button State,
+followed by Borders & Geometry and Patterns. Borders & Geometry opens by default
+and contains button border color, width, radius, and padding. Patterns initially
+opens only when an applicable pattern is active; routine edits preserve manual
+toggles, and loading another button resets its default. Widget track settings
+stay with their widget in Content.
+Color badges preview the combined fill. Bound colors use
+representative colors and retain a binding indicator; they are not live values.
+Save the pad to inspect complete widgets and outlines on-device. There is no grid
+styling preview or monochrome simulation. Copy/paste, templates, and JSON import/export retain styling;
+older pads remain unpatterned with outlines disabled. Images retain their existing opaque
+RGB565 behavior and cover the pattern, including letterbox bands. PNG transparency
+compositing and patterned gauge fills are deferred.
+
+Background and bar-series pattern colors allow 191 characters; bar-track pattern
+and track-outline colors allow 63. Missing or unknown pattern names mean None.
+Missing or malformed geometry uses its default; numeric geometry is clamped to
+the supported range. Unresolved pattern and outline color bindings fall back to black.
 
 ### Button State (Conditional Visibility)
 
@@ -518,10 +572,13 @@ list contains JPEG and PNG files under `/images`. Use `[image:current]` in
 **Local Image Binding** to render the shared current slideshow image.
 Use `[image:error]` in a label to show the most recent local image upload or
 display failure since boot; it reads `ok` until a failure occurs.
-**Background Image Scale** applies to uploaded local images and Camera Feed or
-Remote Image backgrounds. It selects **Cover** to fill and crop or
+The **Background image** frame contains collapsible **Local Image** and
+**Camera Feed or Remote Image** subsections. Its shared **Scale** control
+applies to both sources. It selects **Cover** to fill and crop or
 **Letterbox** to preserve the whole image with bars matching the button
-background. The Camera Preview widget has its own scale setting. URL settings remain
+background. The Camera Preview widget has a separate **Image scale** control
+inside its **Camera Preview** frame: Cover, Letterbox, or Center crop.
+URL settings remain
 available for remote JPEG, PNG, and MJPEG sources.
 
 **MJPEG streaming (recommended for cameras):**
@@ -594,6 +651,15 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 **Example setup for navigation:**
 - **Tap action 1**: Navigate to screen → `pad_2` (cameras pad)
 - Button label: "Cameras" with a `videocam` Material Symbol icon
+
+For **Navigate to screen**, **Target Screen** lists currently available screens.
+Choose **Binding value** to enter a dynamic target such as
+`[list:pads.selected]` for a List selection action. The expression, not the
+dropdown mode, is saved. Invalid binding syntax and targets longer than 31 UTF-8
+bytes block saving without truncating your input. Switching back to a literal
+screen leaves the binding draft available but does not validate or save it.
+Bindings still need a suitable runtime context; syntax validation does not
+guarantee a target resolves in every action host.
 
 Successful **Navigate to screen**, **Navigate back**, and **Navigate pad sequence**
 actions wake the display and reset the inactivity timer without disabling the
@@ -898,6 +964,9 @@ The action sends `POST <ha_url>/api/services/<domain>/<service>` with the access
 Buttons use the device-level beep patterns configured on the Home page. To play a custom sound on a specific button, add a **Play sound alert** action — this automatically suppresses the device-level feedback beep to avoid overlapping audio.
 
 **Behavior notes:**
+- Tap and long-press feedback patterns are limited to 1 second in total,
+  including silence gaps. Longer patterns are truncated; explicit tone alerts
+  are not subject to this feedback limit.
 - Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. A button with no tap actions won't flash or beep on tap; a button with no long-press actions won't flash or beep on long-press.
 - A configured full-screen action list takes precedence over normal button and widget taps.
   Clearing the list restores their normal interaction.
@@ -918,6 +987,11 @@ button into a relative USB mouse surface. Select **USB** in
 **Connectivity > Keyboard, Mouse & Gamepad**, save, and reboot. Connect the device's native
 USB device port to your computer using a data cable. No companion application
 is required; keyboard and mouse share the connection.
+
+In Content, the **Mousepad** frame groups **Pointer**, **Scrolling**, and
+**Buttons & navigation**. Sensitivity and Acceleration share a row; Movement
+threshold follows. Back button size remains available even when Show Back
+button is off. Collapsing the frame does not disable or clear its settings.
 
 Slide one finger to move the computer's pointer. Lift and touch elsewhere to
 continue moving without jumping to an absolute position. A stationary tap
@@ -1035,6 +1109,9 @@ narrow strip beside your Mousepad, or a wide strip underneath it. Labels,
 icons, and colors remain customizable; this is not a scrollbar displaying the
 computer's scroll position.
 
+The **Scrollpad** Content frame pairs **Axis** with **Sensitivity**, followed
+by **Inertia** and **Reverse direction**. All four controls stay inside the frame.
+
 Choose **Axis**: **Vertical** (default) or **Horizontal**. Sliding up scrolls
 upward; sliding right scrolls rightward. Perpendicular movement is ignored.
 Enable **Reverse direction** to flip this behavior; it is off by default.
@@ -1130,6 +1207,13 @@ to shift the maximized ring.
 
 The JSON widget type is `gamepad_stick`. Earlier development pads using
 `gamepad_joystick` must reselect **Gamepad Joystick** in the editor and save.
+
+The **Gamepad Joystick** Content frame pairs **Stick** with **Center mode**,
+then shows **Dead zone (%)** and paired **Invert X/Y** controls. The **Gamepad
+Button** frame pairs **Control** with its relevant **Button**, **Direction**, or
+**Trigger** selector. Button choices come from the device action catalog. This
+held-control editor has no Operation selector; ordinary Gamepad actions still
+offer Tap, Down, and Up.
 
 Choose **Gamepad Button** for one held control: button 1-16, a hat direction,
 or a binary left/right trigger. Release is automatic; there is no separate
@@ -1228,15 +1312,26 @@ target indexes; button index 0 corresponds to button 1.
 
 On ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive, the
 **Extension** widget runs an enabled native Extension installed from the Device
-portal. Choose the package
-and optionally enter up to 511 bytes of configuration text for that button. An
+portal. Choose the package under **Installed extension**
+and optionally enter up to 511 characters of configuration text in the portal. An
 Extension can appear on multiple buttons; each placement has its own instance
-and configuration. Set **Extension tick interval** when an Extension needs a
+and configuration. Set **Tick interval (ms)** when an Extension needs a
 specific animation or refresh cadence; it accepts 33 to 1000 milliseconds and
 otherwise uses the package default. The button action lists remain available
 when the Extension returns pass-through from tap or long press. See the
 [Extension developer guide](dev/extensions.md) for package and lifecycle
 details.
+
+The **Extension** Content frame opens by default and keeps package selection and
+Configuration full width, with Tick interval and Upscale together below. Configuration remains
+opaque text or JSON. Leave Tick interval empty for the package default; 0 is not
+a valid interval; explicit intervals must be whole milliseconds. Loading keeps a
+pending selection. A successful catalog offers only installed, enabled packages,
+without placeholder entries for missing IDs. Loading or failure blocks saving
+an edited Extension, not untouched Extension buttons or unrelated edits. Late
+responses preserve newer configuration drafts and cannot update a remounted
+editor. Configuration is trimmed, not parsed as JSON. Shared labels, icons, and
+images stay hidden for this widget.
 
 For a canvas-based Extension that cannot allocate its full-size canvas, set
 **Upscale** to 2x, 3x, or 4x. This reduces the canvas dimensions and scales the
@@ -1294,7 +1389,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 - **Vertical mode**: bottom = decrement, top = increment (up = more).
 - **Outer decrement** (far left / bottom) → `{step}` = `-large_step`
 - **Inner decrement** → `{step}` = `-small_step`
-- **Center zone** → works as a normal button (tap and long-press actions)
+- **Center zone** → uses the button's tap actions in the editor
 - **Inner increment** → `{step}` = `+small_step`
 - **Outer increment** (far right / top) → `{step}` = `+large_step`
 - At the default 100% tap-area scale, zone widths target 12% (outer) and 15% (inner) of the button span, with a 40px minimum. Wide buttons keep scaling beyond 80px; the center zone remains at least 10% of the span.
@@ -1302,7 +1397,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 - Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
 - The tap flash covers only the tapped zone.
 - Inner zones (small step) use the device's **Tap Beep** pattern; outer zones (large step) use the **Long-Press Beep** pattern for a distinct audio cue. Suppressed when the adjustment action itself produces audio.
-- The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
+- The editor saves up to three center tap actions and omits long-press actions for Numeric Rocker. Firmware support for previously stored long-press actions is unchanged. Outer and inner zones use the dedicated **Adjustment Action**, which may be left empty.
 - The `{step}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value` fields.
 
 **Disabling zones:** Set a step value to **0** to disable that zone pair. The center action area receives the freed space. Setting both steps to 0 makes the entire button a center zone.
@@ -1360,7 +1455,7 @@ Tapping a list item dispatches the button's configured **Tap Actions** with `[li
 |---------|-------------|
 | **Data Binding** | The provider ID string (e.g., `shutter_tests`). Not an MQTT topic |
 | **Filter** | Optional comma-separated rules that include or exclude items returned by the provider. Plain text — binding tokens like `[mqtt:...]` are **not** resolved here. Empty = all items. See syntax below |
-| **Select action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Use `[list:provider_id.selected]` as the screen target to navigate to the selected item |
+| **Select action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Choose **Navigate to screen**, then **Target Screen > Binding value**, and enter `[list:provider_id.selected]` to navigate to the selected item |
 | **Long-press action** | Optional long-press action(s), dispatched on item long-press |
 
 **Filter syntax:**
@@ -1424,9 +1519,9 @@ The bar chart widget draws one or more vertical or horizontal bars that fill bas
 | **Bar 1 data binding** | A binding template that resolves to a number (e.g., `[mqtt:solar/power;watts]`) |
 | **Bar 2 / 3 / 4 data binding** | Optional. Each non-empty binding adds another bar to the widget (up to 4 total). Each bar gets its **own track** (background, gridlines, and target marker stay scoped to that bar — they no longer span the whole widget). The bars are spread evenly across the full width as columns (vertical) or stacked as rows (horizontal) with a fixed 6 px gap. All bars share the same min/max scale and zero-centered behavior |
 | **Bar 1 / 2 / 3 / 4 caption** | Optional per-bar label, colored to match its bar and hidden when empty. Fully bindable, so it can mix static text with live data — e.g. `Solar [mqtt:home/solar;power;%.0f]W`. Use `\n` for a line break (multi-line captions). Shown **beneath** each bar (vertical, centered) or in a strip to the **left** of each row (horizontal, right-aligned). The strip is only reserved when at least one caption is set, so caption-less charts keep their full bar size. Captions use the small font and clip if too long — keep them short |
-| **Caption size (px)** | Fixes the caption strip to an exact pixel size (1–200): **width** in horizontal mode, **height** in vertical mode. Leave at `0` for automatic sizing (horizontal ≈28% of the button width clamped 30–120 px; vertical one line tall). Increase the vertical size to fit multi-line (`\n`) captions |
+| **Caption area size (px)** | Fixes the caption strip to an exact pixel size (1–200): **width** in horizontal mode, **height** in vertical mode. Leave at `0` for automatic sizing (horizontal ≈28% of the button width clamped 30–120 px; vertical one line tall). Increase the vertical size to fit multi-line (`\n`) captions |
 | **Min / Max** | The value range. The bar is empty at min and full at max. Accepts a number or a binding expression (e.g. `[health:psram_total]`) for dynamic scaling |
-| **Bar width %** | Each bar's thickness within its own column (1–100%), centered in the column. With a single bar this is the bar's width relative to the button, exactly as before; with multiple bars, lowering it thins each bar while keeping them spread across the full width. In horizontal mode it controls bar height instead |
+| **Bar thickness (%)** | Each bar's thickness within its own column (1–100%), centered in the column. With a single bar this is the bar's width relative to the button, exactly as before; with multiple bars, lowering it thins each bar while keeping them spread across the full width. In horizontal mode it controls bar height instead |
 | **Bar 1 color** | The fill color of the first bar. Supports binding expressions — use `[expr:threshold(...)]` for multi-zone coloring (see [Dynamic Colors](#dynamic-colors-with-bindings)). Default: green (`#4CAF50`) |
 | **Bar 2 / 3 / 4 color** | Fill colors for the additional bars. Defaults: blue (`#2196F3`), purple (`#9C27B0`), orange (`#FF9800`). Each is bindable |
 | **Bar background** | The color of the empty bar track. Supports binding expressions for dynamic color |
@@ -1438,6 +1533,14 @@ The bar chart widget draws one or more vertical or horizontal bars that fill bas
 | **Gridlines** | Number of evenly spaced scale lines drawn across the bar (0–20, 0 = none), with configurable width and bindable color |
 | **Target Value** | A bindable value on the scale drawn as a marker line across the bar (e.g. a setpoint). Empty = no target |
 | **Target Zone %** | A shaded band centered on the target, sized as a percentage of the min–max range (0 = no band). The marker line width and the marker/zone colors are configurable and bindable |
+
+The Content tab groups each bar's binding, caption, and color/fill under
+**Data sources**, followed by **Scale**, **Layout & style**, **Gridlines**, and
+**Target**. **Animation** is inside **Layout & style**. Bar 1 starts expanded; optional
+bars start collapsed regardless of configuration or pairing. Collapsing a bar
+preserves its settings. Gridline and target styling stay editable and saved when
+the count is zero or the target is empty. Invalid values still block saving;
+Save Pad opens and focuses the offending field without enabling its feature.
 
 **Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: enter a data source, pick zone colors, set ascending breakpoints, and add or remove stops as needed. The expression updates as you type. Opening the picker on an existing `threshold()` expression loads it back into the helper for editing. For a solar panel with a 5 kW max:
 
@@ -1455,6 +1558,18 @@ Labels, icons, and colors still work alongside the widget. A typical bar chart b
 
 The gauge widget draws an arc that fills based on a numeric value — ideal for clocks, speedometers, temperature dials, or any circular meter.
 
+In **Content**, **Data sources** groups each ring's binding, label, and color.
+Ring 1 starts expanded; optional rings start collapsed. Pair controls follow
+the rings and identify rings 2/4 as the
+negative side. **Scale** and **Arc & track** start expanded, with arc geometry,
+track color/outline, and animation together. **Needle**, **Tick marks**, and
+**Target** start collapsed. Their geometry and colors remain editable and saved
+even when the feature is off. Target value `0` is configured, not empty.
+Collapsing a group preserves its feature and values; button switches retain
+manual collapse choices. Invalid explicit numbers are rejected rather than
+clamped. Save Pad opens the relevant tab and groups and focuses the invalid
+field, including disabled-feature settings, without enabling the feature.
+
 **Configuration:**
 
 | Setting | Description |
@@ -1467,14 +1582,14 @@ The gauge widget draws an arc that fills based on a numeric value — ideal for 
 | **Start Label (slot 2)** | Optional text or binding for slot 2. In dual mode, slot 2 still has its own color but shares the same physical ring as slot 1 |
 | **Start Label (slot 3)** | Optional text or binding for slot 3 |
 | **Start Label (slot 4)** | Optional text or binding for slot 4 when it renders as its own ring |
-| **Min / Max** | The value range. The arc is empty at min and full at max. Accepts a number or a binding expression for dynamic scaling |
-| **Arc Degrees** | Total sweep of the arc (10–360°). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
-| **Start Angle** | Where the arc begins in LVGL degrees (0° = 3 o'clock, 90° = 6 o'clock, 180° = 9 o'clock, 270° = 12 o'clock) |
-| **Zero-Centered** | Arc fills from the zero point — negative values grow left, positive grow right. Only applicable to single mode rings. |
-| **Dual Binding Pair 1** | Combines slots 1 and 2 into one ring: slot 1 fills the positive direction, slot 2 fills the negative direction |
-| **Dual Binding Pair 2** | Combines slots 3 and 4 into one ring using the same positive/negative split |
+| **Minimum / Maximum** | The value range. The arc is empty at min and full at max. Accepts a number or a binding expression for dynamic scaling |
+| **Arc span (degrees)** | Total sweep of the arc (10-360 degrees). 180 = half circle, 270 = three-quarter, 359 = near-full circle |
+| **Start angle (degrees)** | Where the arc begins in LVGL degrees (0 = 3 o'clock, 90 = 6 o'clock, 180 = 9 o'clock, 270 = 12 o'clock) |
+| **Zero-centered fill** | Arc fills from the zero point: negative values grow left, positive grow right. Applies only to unpaired rings. |
+| **Pair rings 1 and 2** | Combines slots 1 and 2 into one ring: slot 1 fills the positive direction, slot 2 fills the negative direction |
+| **Pair rings 3 and 4** | Combines slots 3 and 4 into one ring using the same positive/negative split |
 | **Show needle** | Display a line from the center to the current value position on the arc |
-| **Arc Width %** | Arc thickness as a percentage of the radius (5–50%) |
+| **Arc thickness (%)** | Arc thickness as a percentage of the radius (5-50%) |
 | **Tick Marks** | Number of interior tick marks (0 = none). N ticks divide the arc into N+1 equal segments |
 | **Needle Width** | Line width in pixels (0 = hidden, max 10) |
 | **Needle Cutoff** | Percentage of the needle length to remove from the center (0–99%). Use this to prevent the needle from overlapping a center label or icon. Default: 0 (full-length needle) |
@@ -1499,13 +1614,13 @@ The icon and center label are positioned inside the arc at the pivot point. A ty
 
 **Multi-ring gauges** — fill in slots 2, 3, and 4 to add up to four concentric rings (Apple Health ring style). All active rings share the same min/max, arc degrees, and start angle, but each slot has its own arc color and optional start label. The needle is shown on the outermost active gauge ring only; tick marks and target markers are rendered on all active rings. The arc width percentage applies to each ring equally, with automatic gaps between them.
 
-**Dual binding gauges** — enable Dual Binding Pair 1 and/or Pair 2 to collapse slot pairs into shared rings. In a dual pair, the first slot fills from zero toward the positive direction and the second slot fills from zero toward the negative direction. If the partner binding is empty or invalid, it is treated as `0`. Pair 1 also drives the needle using the signed difference `slot1 - slot2`.
+**Dual binding gauges**: enable **Pair rings 1 and 2** and/or **Pair rings 3 and 4** to combine slots into shared rings. In a dual pair, the first slot fills from zero toward the positive direction and the second slot fills from zero toward the negative direction. If the partner binding is empty or invalid, it is treated as `0`. Pair 1 also drives the needle using the signed difference `slot1 - slot2`.
 
 **Power balance example** (house vs solar vs grid, in kW):
 - Ring 1 data binding: house consumption (for example `[mqtt:home/house;power_kw]`)
 - Ring 2 data binding: solar production (for example `[mqtt:home/solar;power_kw]`)
 - Ring 3 data binding: grid power (for example `[mqtt:home/grid;power_kw]`) where positive = import, negative = injection
-- Dual Binding Ring 1 and 2: enabled
+- Pair rings 1 and 2: enabled
 - Min / Max: `-3` / `3`
 - Zero-Centered: enabled
 - Show needle: disabled
@@ -1534,6 +1649,16 @@ This visualization shows system balance at a glance: the outer combined ring con
 
 The sparkline widget draws a mini trend line showing how a value changes over time — perfect for temperature history, power consumption trends, network latency, or any metric you want to watch evolve.
 
+**Content workflow:** **Data sources** keeps each line's live binding, color,
+current-value label, and optional Home Assistant backfill together. Line 1 opens
+initially; optional lines start collapsed regardless of configuration.
+Collapsing a line does not disable it. **Scale**, **Sampling**,
+**Line style**, **Markers**, **Current-value annotations**, and **Reference lines**
+follow. Line width, smoothing, and separation are together; dot size and label
+area width are together. Minimum/maximum marker groups start collapsed. Size 0
+leaves their format/color editable and saved. Reference Y values
+remain numeric, including 0 and negative values; colors support bindings.
+
 **Configuration:**
 
 | Setting | Description |
@@ -1542,10 +1667,9 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Live data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream, color, and optional history source. Leave empty for a single line |
 | **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data. Accepts a number or a binding expression (e.g. `[health:heap_total]`) for dynamic scaling |
 | **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
-| **Time range** | How much history to display, entered in seconds, minutes, hours, or days (default: 5 minutes, maximum: 7 days) |
-| **One point every** | Desired time represented by each point, entered in seconds, minutes, or hours. The editor calculates the required point count and stores it within the 2–1024 point limit |
-| **Backfill from Home Assistant** | Fills the line from long-term statistics after a restart. A live data binding is required because history fills that same stream; it does not create a separate line |
-| **History entity (line 1/2/3)** | Home Assistant entity ID (e.g. `sensor.living_room_temperature`) used when backfill is enabled |
+| **Time range** | History to display, entered in seconds, minutes, hours, or days (default: 5 minutes, minimum: 10 seconds, maximum: 7 days). Stored as whole seconds |
+| **One point every** | Requested interval in seconds, minutes, or hours, at least 100 ms. The editor derives 2–1024 points and displays the actual interval; invalid inputs are rejected, not corrected |
+| **History entity (line 1/2/3)** | A nonempty Home Assistant entity ID (e.g. `sensor.living_room_temperature`) enables backfill. Clear it to disable backfill. Its line must also have a live binding |
 | **Historical value (line 1/2/3)** | **Average reading** (mean) for measurements, **Latest state** for the most recently recorded value in each period, or **Accumulated total** (sum) for energy, water, and other total sensors |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
 | **Line separation** | Per-line vertical offset in pixels (0 = off, 1–6). When non-zero and the widget has more than one line, each line is nudged by a small symmetric offset (e.g. two lines fan out by ±offset, three lines by −offset / 0 / +offset) so lines with near-identical values stay visually distinct instead of drawing on top of each other. The current-value dot and min/max markers move with their line. Note: this shifts lines a couple of pixels off their exact value, so leave it at 0 when precise pixel-accurate readout matters |
@@ -1557,7 +1681,7 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 | **Min label color** | Override color for the min label text. White = auto |
 | **Current value dot** | Dot radius at the right edge of the chart showing the most recent value (0 = off, 1–20 px). Uses the line’s resolved color |
 | **Label width (px)** | Width of the right-side label area in pixels (0 = 50px default, 1–200). Only takes effect when at least one current-value label is configured. The chart area shrinks to make room |
-| **Line 1/2/3 Label** | Binding expression or static text for a per-line current-value label displayed in the right margin (e.g., `[mqtt:sensor/temp;temperature;%.1f] °C`). Labels track the Y position of the rightmost data point and inherit the line’s color. Collision avoidance pushes overlapping labels apart. Leave empty to disable |
+| **Current value label (line 1/2/3)** | Binding expression or static text for a per-line current-value label displayed in the right margin (e.g., `[mqtt:sensor/temp;temperature;%.1f] °C`). Labels track the Y position of the rightmost data point and inherit the line’s color. Collision avoidance pushes overlapping labels apart. Leave empty to disable |
 | **Reference line 1/2/3** | Up to 3 horizontal reference lines at fixed Y values. Each has a Y value (numeric), a color, and a line pattern (Solid, Dotted, or Dashed). Drawn behind the data lines. Only lines with a valid Y value are rendered |
 | **Keep reference lines in view** | When enabled, auto-scale expands the Y range to include all configured reference line values, so they are always visible. Data that exceeds the reference lines still expands the range normally. Only affects auto-scaled axes (explicit min/max take priority) |
 | **Smoothing** | Gaussian kernel smoothing radius (0 = off, 1–8). Smooths the trend line by averaging neighboring data points — higher values produce a smoother curve. A value of 3–4 gives a pleasant smoothing effect; 8 gives heavy averaging. Min/max markers and current-value dot are positioned on the smoothed line. Set to 0 for raw data rendering |
@@ -1568,10 +1692,18 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 
 **Data gaps** — if data stops arriving (e.g., MQTT sensor goes offline), the sparkline uses Last Observation Carried Forward (LOCF) to fill gaps, keeping the graph smooth instead of showing holes.
 
-**History backfill from Home Assistant** — a freshly booted device has no history, so a 24-hour sparkline would take a full day to fill up. Enable **Backfill from Home Assistant** beside a line's live binding and set its **History entity**. The device fetches that entity's long-term statistics once the clock is synchronized, then fills the empty part of the chart. On a finer chart grid, consecutive coarse historical readings are visually interpolated; missing periods retain the previous value. Newer locally collected samples retain the configured resolution. Live data always wins: backfilled values are only written to slots the device has not sampled itself.
+**History backfill from Home Assistant**: a freshly booted device has no history,
+so a 24-hour sparkline would take a full day to fill up. Set a **History entity**
+beside a line's live binding to enable backfill. The device fetches that entity's
+long-term statistics once the clock is synchronized, then fills the empty part
+of the chart. On a finer chart grid, consecutive coarse historical readings are
+visually interpolated; missing periods retain the previous value. Newer locally
+collected samples retain the configured resolution. Live data always wins:
+backfilled values are only written to slots the device has not sampled itself.
 
 Requirements and limits:
 
+- Clearing a history entity disables backfill and omits that entity/statistic on save. After reload, its entity is empty and its statistic returns to the default. Marker styling, in contrast, remains saved even when marker size is 0.
 - The Home Assistant URL and a long-lived access token must be configured on the portal's Integrations page.
 - Home Assistant records statistics on 5-minute boundaries. On a line whose point interval is under 5 minutes, consecutive historical values are visually interpolated while locally collected data still uses the finer interval.
 - Windows over 24 hours use Home Assistant's hourly statistics. Consecutive hourly values are also visually interpolated on finer chart grids.
@@ -1599,16 +1731,23 @@ Labels, icons, and colors still work alongside the widget. A typical sparkline b
 ### Table
 
 The table widget renders multi-column row data from a structured binding payload.
+In button Content, Data Binding, Font Style Override, and Scroll share an
+initially open **Table Binding & Styling** disclosure. There is no outer
+Settings disclosure.
 
 **Configuration:**
 
 | Setting | Description |
 |---------|-------------|
 | **Data binding** | Must resolve to a table schema payload. Use an exact single-token binding expression such as `[health:table]` or `[health:extended_table]` |
-| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font:my-font;font_size:96`) |
-| **Scroll** | Enable or disable table scrolling |
+| **Font style override** | Optional label-style DSL for table text (for example `font_size:14` or `font:my-font;font_size:96`). Empty inherits the button label size |
+| **Scroll** | Enable or disable table scrolling; On is the default |
 
 **Important:** Do not wrap the table binding in static text and do not add a format parameter. The table widget expects the resolved structured payload, not formatted text.
+
+The generic inline binding validator checks token syntax and widget parameter
+limits, but it does not reject a valid token surrounded by static text. The
+Table widget still requires the entire field value to be one exact token.
 
 **Examples:**
 

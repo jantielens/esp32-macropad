@@ -218,6 +218,9 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 
 				#if HAS_AUDIO
 				(*doc)["audio_volume"] = current_config->audio_volume;
+				(*doc)["audio_idle_mute"] = current_config->audio_idle_mute;
+				(*doc)["audio_wake_delay_ms"] = current_config->audio_wake_delay_ms;
+				caps["audio_amplifier_mute"] = audio_has_amplifier_control();
 				(*doc)["tap_beep"] = current_config->tap_beep;
 				(*doc)["lp_beep"] = current_config->lp_beep;
 				#endif
@@ -423,6 +426,31 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 				if (!valid || ble_tx_power_dbm < -12 || ble_tx_power_dbm > 9 || ble_tx_power_dbm % 3 != 0) {
 						request->send(400, "application/json", "{\"success\":false,\"message\":\"BLE TX power must be -12 to +9 dBm in 3 dB steps\"}");
+						portENTER_CRITICAL(&g_config_post_mux);
+						config_post_reset();
+						portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+		}
+		#endif
+
+		#if HAS_AUDIO
+		int audio_wake_delay_ms = current_config->audio_wake_delay_ms;
+		if (doc.containsKey("audio_wake_delay_ms")) {
+				JsonVariant value = doc["audio_wake_delay_ms"];
+				bool valid = false;
+				if (value.is<int>()) {
+						audio_wake_delay_ms = value.as<int>();
+						valid = true;
+				} else if (value.is<const char*>()) {
+						const char* text = value.as<const char*>();
+						char* end = nullptr;
+						const long parsed = strtol(text, &end, 10);
+						valid = end != text && *end == '\0' && parsed >= 0 && parsed <= AUDIO_WAKE_DELAY_MAX_MS;
+						if (valid) audio_wake_delay_ms = static_cast<int>(parsed);
+				}
+				if (!valid || audio_wake_delay_ms < 0 || audio_wake_delay_ms > AUDIO_WAKE_DELAY_MAX_MS) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"Amplifier wake delay must be an integer from 0 to 1000 ms\"}");
 						portENTER_CRITICAL(&g_config_post_mux);
 						config_post_reset();
 						portEXIT_CRITICAL(&g_config_post_mux);
@@ -646,6 +674,15 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#endif
 
 		#if HAS_AUDIO
+		if (doc.containsKey("audio_idle_mute")) {
+				current_config->audio_idle_mute = parseBoolField(doc, "audio_idle_mute");
+		}
+		if (doc.containsKey("audio_wake_delay_ms")) {
+				current_config->audio_wake_delay_ms = static_cast<uint16_t>(audio_wake_delay_ms);
+		}
+		if (doc.containsKey("audio_idle_mute") || doc.containsKey("audio_wake_delay_ms")) {
+				audio_set_amplifier_policy(current_config->audio_idle_mute, current_config->audio_wake_delay_ms);
+		}
 		if (doc.containsKey("audio_volume")) {
 				uint8_t vol;
 				if (doc["audio_volume"].is<const char*>()) {

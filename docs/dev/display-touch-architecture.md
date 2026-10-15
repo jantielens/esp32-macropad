@@ -34,6 +34,23 @@ The display and touch subsystem is built on four main pillars:
 - **XPT2046_Touchscreen** - Resistive touch support
 - **FreeRTOS** - Task-based continuous rendering
 
+LVGL drawing currently uses the software renderer on ESP32-P4 as well as other
+targets (`LV_USE_PPA=0`). LVGL 9.5.0 aligns intermediate-buffer addresses but
+not their sizes to PPA cache-line requirements. Pattern fills amplify rejected
+PPA operations into a serial error storm and severe rendering stalls. This
+temporary mitigation leaves pattern rendering unchanged and may reduce P4
+drawing performance. The MIPI-DSI driver's separate PPA rotation path retains
+its aligned buffers and remains enabled.
+
+Keep LVGL pinned to 9.5.0 until a released upgrade supports the stable
+Arduino-ESP32 SDK: 9.6.0 fixes buffer-size alignment but its PPA cache code uses
+an API absent from Arduino-ESP32 3.3.12's ESP-IDF 5.5.5. Re-enabling LVGL PPA
+requires patterned-button and bar-track checks, rounded clipping, partial
+redraws, repeated pad navigation, and a hardware soak test. The software-rendering
+mitigation builds for `jc1060p470c-sd` and passed an initial user hardware check.
+The LVGL allocator includes its SoC capability header directly so disabling PPA
+does not disable PSRAM-first allocation or exhaust internal DMA-capable memory.
+
 ## Architecture Layers
 
 ```mermaid

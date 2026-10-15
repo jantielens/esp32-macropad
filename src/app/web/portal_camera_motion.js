@@ -12,7 +12,7 @@ window.init_camera_motion_fragment = function () {
     var saveButton = document.getElementById('camera-motion-save-btn');
     var actionPrefixes = actionEditorSlotPrefixes('camera-motion-action-');
 
-    function saveSettings() {
+    async function saveSettings() {
         var payload = {
             motion_enabled: enabled.checked,
             motion_analyze_every_nth_frame: Number(analyzeEvery.value),
@@ -84,7 +84,7 @@ window.init_camera_motion_fragment = function () {
         saveSettings().then(function () {
             saveButton.textContent = 'Motion settings saved';
         }).catch(function (error) {
-            alert(error.message);
+            if (!actionEditorHandleError(error)) alert(error.message);
         }).finally(function () {
             saveButton.disabled = false;
             setTimeout(function () {

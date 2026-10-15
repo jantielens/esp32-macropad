@@ -15,6 +15,7 @@
 
 #include <lvgl.h>          // lv_mem_monitor_t, lv_mem_pool_t, lv_result_t, LV_UNUSED
 #include <esp_heap_caps.h>
+#include <soc/soc_caps.h>
 #include <string.h>        // memset
 
 static inline bool psram_available() {

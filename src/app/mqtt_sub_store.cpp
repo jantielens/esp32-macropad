@@ -8,6 +8,7 @@
 #include "mqtt_manager.h"
 #include "pad_binding.h"
 #include "pad_config.h"
+#include "fill_pattern.h"
 #include "action_dispatch.h"
 #if HAS_CAMERA
 #include "camera_motion_actions.h"
@@ -145,6 +146,10 @@ void mqtt_sub_store_subscribe_all() {
             binding_template_collect_topics(btn.bg_color, &ctx);
             binding_template_collect_topics(btn.fg_color, &ctx);
             binding_template_collect_topics(btn.border_color, &ctx);
+            if (btn.fill_style) {
+                for (unsigned index = 0; index < 7; ++index)
+                    binding_template_collect_topics(btn.fill_style->color(index), &ctx);
+            }
             // Scan per-label style colors (color: sub-field bindings)
             binding_template_collect_topics(btn.label_top_color_bind, &ctx);
             binding_template_collect_topics(btn.label_center_color_bind, &ctx);

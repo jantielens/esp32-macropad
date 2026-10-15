@@ -1,5 +1,6 @@
 #include "pad_config.h"
 #include "board_config.h"
+#include "fill_pattern.h"
 
 #if HAS_DISPLAY
 
@@ -89,6 +90,9 @@ static PadConfig* pad_config_create(uint8_t button_capacity, const char* name = 
 }
 
 static void pad_config_destroy(PadConfig* config) {
+    for (uint8_t index = 0; index < config->button_count; ++index) {
+        free(config->buttons[index].fill_style);
+    }
     free(config);
 }
 
@@ -110,6 +114,7 @@ static bool pad_config_resize(PadConfig** config_ptr, uint8_t button_capacity) {
     replacement->name = replacement_name;
     memcpy(replacement->buttons, config->buttons,
            (size_t)config->button_count * sizeof(ScreenButtonConfig));
+    config->button_count = 0;
     pad_config_destroy(config);
     *config_ptr = replacement;
     return true;
@@ -258,7 +263,47 @@ static ButtonShadowMode parse_button_shadow_mode(JsonVariant v) {
     return BUTTON_SHADOW_INHERIT;
 }
 
-static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDefaults* defs) {
+static bool parse_button_fill_style(JsonObject obj, ScreenButtonConfig* btn) {
+    const char* pattern_fields[] = {"bg_pattern", "widget_bar_pattern", "widget_bar_pattern_2",
+        "widget_bar_pattern_3", "widget_bar_pattern_4", "widget_bar_bg_pattern"};
+    const char* color_fields[] = {"bg_pattern_color", "widget_bar_pattern_color", "widget_bar_pattern_color_2",
+        "widget_bar_pattern_color_3", "widget_bar_pattern_color_4", "widget_bar_bg_pattern_color",
+        "widget_track_outline_color"};
+    bool configured = obj.containsKey("pattern_spacing") || obj.containsKey("pattern_stroke_width") ||
+                      obj.containsKey("widget_track_outline_width") || obj.containsKey("widget_bar_track_radius");
+    for (unsigned index = 0; index < 7; ++index) configured |= obj.containsKey(color_fields[index]);
+    for (unsigned index = 0; index < 6; ++index) configured |= obj.containsKey(pattern_fields[index]);
+    if (!configured) return true;
+
+    ButtonFillStyle header{};
+    header.spacing = fill_geometry_clamp(obj["pattern_spacing"] | 8, 2, 64);
+    header.stroke = fill_geometry_clamp(obj["pattern_stroke_width"] | 1, 1,
+                                       header.spacing < 8 ? header.spacing : 8);
+    header.outline_width = fill_geometry_clamp(obj["widget_track_outline_width"] | 0, 0, 8);
+    header.track_radius = fill_geometry_clamp(obj["widget_bar_track_radius"] | 4, 0, 64);
+    char colors[7][CONFIG_COLOR_MAX_LEN];
+    size_t bytes = sizeof(header);
+    for (unsigned index = 0; index < 7; ++index) {
+        if (index < 6) header.patterns[index] = fill_pattern_parse(obj[pattern_fields[index]] | "none");
+        parse_bindable_field(obj[color_fields[index]], colors[index],
+                             index < 5 ? CONFIG_COLOR_MAX_LEN : CONFIG_BINDABLE_SHORT_LEN, "#000000");
+        header.color_offsets[index] = bytes;
+        bytes += strlen(colors[index]) + 1;
+    }
+    header.bytes = bytes;
+    ButtonFillStyle* style = nullptr;
+    if (psramFound()) style = static_cast<ButtonFillStyle*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!style) style = static_cast<ButtonFillStyle*>(malloc(bytes));
+    if (!style) return false;
+    memcpy(style, &header, sizeof(header));
+    for (unsigned index = 0; index < 7; ++index) {
+        memcpy(reinterpret_cast<char*>(style) + header.color_offsets[index], colors[index], strlen(colors[index]) + 1);
+    }
+    btn->fill_style = style;
+    return true;
+}
+
+static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDefaults* defs) {
     init_button_defaults(btn);
 
     btn->col = obj["col"] | (uint8_t)0;
@@ -384,6 +429,7 @@ static void parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
 
     // Button state (tri-state: "enabled", "disabled", "hidden"; empty = enabled)
     strlcpy(btn->btn_state, obj["btn_state"] | "", CONFIG_BTN_STATE_MAX_LEN);
+    return parse_button_fill_style(obj, btn);
 }
 
 // ============================================================================
@@ -486,8 +532,20 @@ static void merge_template_buttons(uint8_t page, PadConfig** out_ptr) {
             }
         }
         if (conflict) continue;
+        ButtonFillStyle* style_copy = nullptr;
+        if (tb.fill_style) {
+            const size_t bytes = tb.fill_style->bytes;
+            if (psramFound()) style_copy = static_cast<ButtonFillStyle*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+            if (!style_copy) style_copy = static_cast<ButtonFillStyle*>(malloc(bytes));
+            if (!style_copy) {
+                LOGW(TAG, "Pad %u: OOM copying template button styling", page);
+                continue;
+            }
+            memcpy(style_copy, tb.fill_style, bytes);
+        }
         // Copy template button and mark cells occupied
         memcpy(&out->buttons[out->button_count], &tb, sizeof(ScreenButtonConfig));
+        out->buttons[out->button_count].fill_style = style_copy;
         out->button_count++;
         merged++;
         for (uint8_t dc = 0; dc < cs; dc++) {
@@ -642,7 +700,11 @@ static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template) {
     out->button_count = 0;
     for (JsonObject btn_obj : buttons) {
         if (out->button_count >= MAX_PAD_BUTTONS) break;
-        parse_button(btn_obj, &out->buttons[out->button_count], defs);
+        if (!parse_button(btn_obj, &out->buttons[out->button_count], defs)) {
+            LOGE(TAG, "Pad %u: OOM loading button styling", page);
+            pad_config_destroy(out);
+            return nullptr;
+        }
         out->button_count++;
     }
 

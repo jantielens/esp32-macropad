@@ -44,6 +44,7 @@ async function main() {
     const nodes = new Map();
     const errors = [];
     const context = {
+        TextEncoder,
         console: { ...console, error: (...args) => errors.push(args) },
         fetch(url) {
             return new Promise(resolve => requests.push({ url, resolve }));
@@ -127,7 +128,6 @@ async function main() {
     vm.runInContext('deviceInfoCache = { has_sound_player: true, has_native_extensions: true };', context);
     const order = [];
     let resolveDefaults;
-    let resolveExtensions;
     context.padLoadButtonDefaultsFromDevice = () => {
         order.push('defaults');
         return new Promise(resolve => { resolveDefaults = resolve; });
@@ -140,31 +140,36 @@ async function main() {
     };
     context.padFetchSoundList = () => order.push('sounds');
     context.padLoadBlockCatalog = () => order.push('blocks');
-    context.extensionFetchSlots = () => {
-        order.push('extensions');
-        return new Promise(resolve => { resolveExtensions = resolve; });
-    };
-    context.padPopulateExtensionDropdown = () => order.push('extension controls');
     const initialPad = context.padLoadInitialPage(0);
     assert.deepStrictEqual(order, ['defaults', 'pad']);
     resolveDefaults();
     await new Promise(resolve => setImmediate(resolve));
-    assert.deepStrictEqual(order, ['defaults', 'pad', 'grid', 'sounds', 'blocks', 'extensions']);
-    resolveExtensions();
+    assert.deepStrictEqual(order, ['defaults', 'pad', 'grid', 'sounds', 'blocks']);
     await initialPad;
-    assert.strictEqual(order.at(-1), 'extension controls');
 
     function selectNode() {
         return {
-            value: '', disabled: false, options: [{ value: '', textContent: '(none)' }],
+            _value: '', disabled: false, options: [{ value: '', textContent: '(none)' }],
+            get value() { return this._value; },
+            set value(value) { this._value = !this.strict || this.options.some(option => option.value === value) ? value : ''; },
             replaceChildren() { this.options = []; },
             appendChild(option) { this.options.push(option); },
             remove(index) { this.options.splice(index, 1); }
         };
     }
     const extensionSelect = selectNode();
+    extensionSelect.strict = true;
+    const extensionInputs = {
+        'pad-edit-extension-config': { value: '', maxLength: 511 },
+        'pad-edit-extension-tick-interval': { value: '' },
+        'pad-edit-extension-upscale': { value: '1' }
+    };
     const soundSelect = selectNode();
     const screenSelect = selectNode();
+    screenSelect.strict = true;
+    screenSelect.id = 'test-target';
+    const screenBinding = { id: 'test-target-binding', value: '', focus() {} };
+    const screenBindingGroup = { style: {} };
     screenSelect.attributes = {};
     screenSelect.getAttribute = name => screenSelect.attributes[name];
     screenSelect.hasAttribute = name => Object.hasOwn(screenSelect.attributes, name);
@@ -176,21 +181,68 @@ async function main() {
     };
     context.document.createElement = () => ({ value: '', textContent: '' });
     context.document.getElementById = id => id === 'pad-edit-extension-id' ? extensionSelect :
-        id === 'test-sound-alert-file' ? soundSelect : id === 'test-target' ? screenSelect : null;
+        id === 'test-sound-alert-file' ? soundSelect : id === 'test-target' ? screenSelect :
+        id === 'test-target-binding' ? screenBinding : id === 'test-target-binding-group' ? screenBindingGroup : extensionInputs[id] || null;
     for (const module of ['portal_pad_dialog', 'portal_action_editor', 'portal_action_editor_screen', 'portal_action_editor_sound_alert']) {
         vm.runInContext(fs.readFileSync('src/app/web/' + module + '.js', 'utf8'), context);
     }
-    vm.runInContext('padExtensionCatalogLoading = true;', context);
-    context.extensionCatalog = [];
-    context.padPopulateExtensionDropdown('clock');
+    vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_widget_extension.js', 'utf8'), context);
+    const extensionEditor = context.padWidgetEditor('external');
+    extensionEditor.supported = true;
+    let resolveCatalog;
+    context.fetch = () => new Promise(resolve => { resolveCatalog = resolve; });
+    let settlements = 0;
+    const onSettled = () => { settlements++; };
+    const catalogLoad = extensionEditor.init(onSettled);
+    extensionEditor.load({ extension_id: 'clock' });
     assert.strictEqual(extensionSelect.value, 'clock');
     assert(extensionSelect.disabled);
-    context.extensionCatalog = [{ id: 'clock', installed: true, enabled: true, version: '1' }];
-    vm.runInContext('padExtensionCatalogLoading = false;', context);
-    context.padPopulateExtensionDropdown();
-    assert.strictEqual(extensionSelect.value, 'clock');
+    assert.throws(() => extensionEditor.build({}), /still loading/);
+    extensionEditor.load({ extension_id: 'weather' });
+    extensionInputs['pad-edit-extension-config'].value = ' opaque {not JSON} ';
+    resolveCatalog({ ok: true, json: async () => ({ slots: [
+        { id: 'clock', installed: true, enabled: true, version: '1' },
+        { id: 'weather', installed: true, enabled: true, version: '2' },
+        { id: 'disabled', installed: true, enabled: false, version: '1' }
+    ] }) });
+    await catalogLoad;
+    assert.strictEqual(settlements, 1, 'Catalog success notifies its host without requiring workspace state');
+    assert.strictEqual(extensionSelect.value, 'weather', 'Late catalog keeps the newer selected button');
     assert(!extensionSelect.disabled);
     assert.strictEqual(extensionSelect.options.filter(option => option.value === 'clock').length, 1);
+    assert(!extensionSelect.options.some(option => option.value === 'disabled'));
+    const extensionButton = {};
+    context.padWidgetEditorBuild(extensionButton, extensionEditor);
+    assert.strictEqual(extensionButton.extension_id, 'weather');
+    assert.strictEqual(extensionButton.extension_config, 'opaque {not JSON}');
+    assert.strictEqual(extensionButton.extension_tick_interval_ms, undefined);
+    extensionInputs['pad-edit-extension-config'].value = 'x'.repeat(512);
+    assert.throws(() => context.padWidgetEditorBuild({}, extensionEditor), /511/);
+    assert.strictEqual(extensionInputs['pad-edit-extension-config'].value.length, 512);
+    extensionInputs['pad-edit-extension-config'].value = 'retained';
+    const oldLoad = extensionEditor.init(onSettled);
+    const settleOld = resolveCatalog;
+    extensionEditor.dispose();
+    const newLoad = extensionEditor.init(onSettled);
+    extensionEditor.load({ extension_id: 'clock' });
+    settleOld({ ok: true, json: async () => ({ slots: [{ id: 'stale', installed: true, enabled: true }] }) });
+    await oldLoad;
+    assert.strictEqual(settlements, 1, 'Disposed catalog must not notify the current host');
+    assert.strictEqual(extensionSelect.value, 'clock', 'Disposed catalog cannot mutate the current mount');
+    resolveCatalog({ ok: false });
+    await newLoad;
+    assert.strictEqual(settlements, 2, 'Catalog failure also notifies its host');
+    assert.match(extensionSelect.options[0].textContent, /unavailable/);
+    assert.throws(() => extensionEditor.build({}), /unavailable/);
+    assert.strictEqual(extensionInputs['pad-edit-extension-config'].value, 'retained');
+    context.fetch = async () => ({ ok: true, json: async () => ({ slots: [] }) });
+    await extensionEditor.init();
+    extensionEditor.load({ extension_id: 'missing' });
+    assert.match(extensionSelect.options[0].textContent, /No enabled extensions/);
+    assert.strictEqual(extensionSelect.value, '');
+    assert(!extensionSelect.options.some(option => option.value === 'missing'));
+    assert.throws(() => extensionEditor.build({}), /installed enabled/);
 
     soundSelect.value = 'saved.mp3';
     context.actionEditorPopulateSounds(['test'], ['other.mp3']);
@@ -199,8 +251,15 @@ async function main() {
     context.actionEditorPopulateSounds(['test'], ['saved.mp3']);
     assert.strictEqual(soundSelect.value, 'saved.mp3');
     assert.strictEqual(soundSelect.options.filter(option => option.value === 'saved.mp3').length, 1);
-    const screens = [{id:'pad_1', name:'Pad 2'}, {id:'pad_2', name:'Pad 3'}];
+    const screens = [
+        {id:'info', name:'Device Info'}, {id:'pad_2', name:'Pad 3'},
+        {id:'pad_0', name:'Living Room'}, {id:'pad_1', name:'Pad 2'}
+    ];
     context.actionEditorPopulateScreens(['test'], screens);
+    assert.deepStrictEqual(Array.from(screenSelect.options, option => [option.value, option.textContent]), [
+        ['', '(none)'], ['pad_0', 'Pad 1: Living Room'], ['pad_1', 'Pad 2'],
+        ['pad_2', 'Pad 3'], ['__binding__', 'Binding value'], ['info', 'Device Info']
+    ]);
     screenSelect.value = 'pad_2';
     context.actionEditorPopulateScreens(['test'], screens);
     assert.strictEqual(screenSelect.value, 'pad_2', 'refresh must retain a selected screen');
@@ -208,6 +267,91 @@ async function main() {
     context.actionEditorPopulateScreens(['test'], screens);
     assert.strictEqual(screenSelect.value, 'pad_1', 'refresh must restore a deferred target');
     assert(!screenSelect.hasAttribute('data-pending-value'));
+    const screenEditor = context._actionEditorExtensions.find(extension => extension.type === 'screen');
+    vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
+    context.bindingClearError = () => {};
+    context.bindingShowError = () => {};
+    const actionMessages = [];
+    let actionFocused = false;
+    const actionGroup = { tagName: 'DETAILS', open: false, parentElement: null };
+    screenBinding.parentElement = actionGroup;
+    screenBinding.focus = () => { actionFocused = true; };
+    context.showMessage = (message, type) => actionMessages.push({ message, type });
+    screenEditor.load('test', { target: '[list:pads.selected]' });
+    assert.strictEqual(screenSelect.value, '__binding__');
+    assert.strictEqual(screenBindingGroup.style.display, '');
+    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]');
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]');
+    screenBinding.value = '[list:pads.selected';
+    assert.throws(() => screenEditor.build('test', 'screen'), error => error.fieldIds[0] === screenBinding.id);
+    screenBinding.value = 'pad_1';
+    assert.throws(() => screenEditor.build('test', 'screen'), /binding/);
+    screenBinding.value = '[bad]';
+    assert.throws(() => screenEditor.build('test', 'screen'), /binding/);
+    screenBinding.value = '[pad:' + 'a'.repeat(25) + ']';
+    assert.strictEqual(screenEditor.build('test', 'screen').target.length, 31);
+    screenBinding.value = '[pad:' + 'a'.repeat(26) + ']';
+    assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
+    screenBinding.value = '[pad:' + 'é'.repeat(13) + ']';
+    assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
+    context.padWorkspace = {};
+    assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
+    delete context.padWorkspace;
+    assert.strictEqual(actionMessages.length, 0, 'building reports errors without presenting host messages');
+    assert.strictEqual(actionFocused, false, 'building must not steal focus, with or without a pad workspace');
+    screenEditor.load('test', { target: 'missing_screen' });
+    assert.strictEqual(screenEditor.build('test', 'screen').target, '');
+    screenSelect.removeAttribute('data-screens-loaded');
+    screenEditor.load('test', { target: 'pad_2' });
+    screenSelect.setAttribute('data-pending-value', 'pad_2');
+    screenSelect.value = '__binding__';
+    screenBinding.value = '[list:pads.selected]';
+    context.actionEditorScreenTargetChanged('test');
+    context.actionEditorPopulateScreens(['test'], screens);
+    assert.strictEqual(screenEditor.build('test', 'screen').target, '[list:pads.selected]', 'catalog loading must not overwrite a newer mode');
+    const screenLookup = context.document.getElementById;
+    context.document.getElementById = id => id === 'pad-edit-action-0-type' ? { value: 'screen' } :
+        screenLookup(id.replace(/^pad-edit-action-0/, 'test'));
+    screenBinding.value = '[list:pads.selected';
+    assert.strictEqual(context.bindingValidateDialog().valid, false);
+    screenSelect.value = 'pad_1';
+    context.actionEditorScreenTargetChanged('test');
+    assert.strictEqual(context.bindingValidateDialog().valid, true, 'inactive binding drafts must not block literal targets');
+    screenSelect.value = '__binding__';
+    context.actionEditorScreenTargetChanged('test');
+    assert.strictEqual(context.bindingValidateDialog().valid, false, 'switching back must validate the retained binding draft');
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), context);
+    context.document.getElementById = id => {
+        if (['hw-button-editors', 'mqtt-trigger-editors'].includes(id)) return { querySelectorAll: () => [{}] };
+        if (id === 'mqtttrig-1-topic') return { value: 'test/topic' };
+        if (id.endsWith('-type')) return { value: 'screen', getAttribute: () => null };
+        if (id.endsWith('-target-binding')) return screenBinding;
+        if (id.endsWith('-target-binding-group')) return screenBindingGroup;
+        if (id.endsWith('-target')) return screenSelect;
+        return screenLookup(id);
+    };
+    const actionWrites = [];
+    context.fetch = async (url, options) => {
+        actionWrites.push({ url, payload: JSON.parse(options.body) });
+        return { ok: true };
+    };
+    screenBinding.value = '[pad:' + 'a'.repeat(26) + ']';
+    for (const save of ['saveBootActions', 'saveSwipeActions', 'saveHwButtons', 'saveMqttTriggers', 'saveTimerConfig']) {
+        actionFocused = false;
+        actionGroup.open = false;
+        actionMessages.length = 0;
+        await context[save]();
+        assert(actionFocused && actionGroup.open, save + ' must reveal and focus the invalid action');
+        assert.match(actionMessages[0].message, /31 UTF-8 bytes/);
+        assert.strictEqual(actionMessages[0].type, 'error');
+        assert.strictEqual(actionWrites.length, 0, save + ' must not write invalid actions');
+    }
+    screenBinding.value = '[list:pads.selected]';
+    await context.saveBootActions();
+    assert.strictEqual(actionWrites.length, 1);
+    assert.strictEqual(actionWrites[0].payload.actions[0].target, screenBinding.value);
+    context.document.getElementById = screenLookup;
     let soundRequests = 0;
     context.getDeviceInfo = async () => ({ has_sound_player:false });
     context.fetch = async url => {

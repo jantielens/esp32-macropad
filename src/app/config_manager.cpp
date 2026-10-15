@@ -14,6 +14,9 @@
 #include "storage.h"
 #include "time_service.h"
 #include "ota_activity.h"
+#if HAS_AUDIO
+#include "audio.h"
+#endif
 #if HAS_CAMERA
 #include "camera_motion.h"
 #endif
@@ -112,6 +115,8 @@
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
+#define KEY_AUDIO_IDLE_MUTE "audio_idle_mute"
+#define KEY_AUDIO_WAKE_DELAY "audio_wake_ms"
 #define KEY_TAP_BEEP       "tap_beep"
 #define KEY_LP_BEEP        "lp_beep"
 #endif
@@ -296,6 +301,11 @@ bool config_manager_load(DeviceConfig *config) {
 		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
 		#endif
 
+		#if HAS_AUDIO
+		config->audio_idle_mute = true;
+		config->audio_wake_delay_ms = AUDIO_WAKE_DELAY_DEFAULT_MS;
+		#endif
+
 		#if HAS_LVGL_EPAPER
 		config_manager_apply_epaper_refresh_defaults(config);
 		config_manager_publish_epaper_refresh_settings(config);
@@ -471,6 +481,9 @@ bool config_manager_load(DeviceConfig *config) {
 
 		#if HAS_AUDIO
 		config->audio_volume = preferences.getUChar(KEY_AUDIO_VOLUME, AUDIO_DEFAULT_VOLUME);
+		config->audio_idle_mute = preferences.getBool(KEY_AUDIO_IDLE_MUTE, true);
+		config->audio_wake_delay_ms = preferences.getUShort(KEY_AUDIO_WAKE_DELAY, AUDIO_WAKE_DELAY_DEFAULT_MS);
+		if (config->audio_wake_delay_ms > AUDIO_WAKE_DELAY_MAX_MS) config->audio_wake_delay_ms = AUDIO_WAKE_DELAY_MAX_MS;
 		{
 			size_t n = preferences.getString(KEY_TAP_BEEP, config->tap_beep, CONFIG_BEEP_PATTERN_MAX_LEN);
 			if (n == 0) strlcpy(config->tap_beep, "500:40", CONFIG_BEEP_PATTERN_MAX_LEN);
@@ -654,6 +667,8 @@ bool config_manager_save(const DeviceConfig *config) {
 
 		#if HAS_AUDIO
 		preferences.putUChar(KEY_AUDIO_VOLUME, config->audio_volume);
+		preferences.putBool(KEY_AUDIO_IDLE_MUTE, config->audio_idle_mute);
+		preferences.putUShort(KEY_AUDIO_WAKE_DELAY, config->audio_wake_delay_ms);
 		preferences.putString(KEY_TAP_BEEP, config->tap_beep);
 		preferences.putString(KEY_LP_BEEP, config->lp_beep);
 		#endif
@@ -956,6 +971,7 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 
 #if HAS_AUDIO
 		LOGI("Config", "Audio volume: %u%%", config->audio_volume);
+		LOGI("Config", "Audio idle mute: %s, wake delay: %u ms", config->audio_idle_mute ? "on" : "off", config->audio_wake_delay_ms);
 		if (config->tap_beep[0]) LOGI("Config", "Tap beep: %s", config->tap_beep);
 		if (config->lp_beep[0]) LOGI("Config", "LP beep: %s", config->lp_beep);
 #endif

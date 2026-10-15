@@ -1,204 +1,253 @@
-                <!-- Gauge Settings (conditional, shown only for gauge widget type) -->
-                <details class="editor-group" id="pad-edit-gauge-section" style="display:none;">
-                    <summary>Gauge Settings</summary>
-                    <div class="editor-group-body">
+                <div class="gauge-editor" id="pad-edit-gauge-section" style="display:none;">
+                    <details class="editor-group" id="pad-edit-gauge-sources" open>
+                        <summary>Data sources</summary>
+                        <div class="editor-group-body">
+                            <details class="pad-content-source" id="pad-edit-gauge-source-1" open>
+                                <summary>Ring 1</summary>
+                                <div class="pad-content-source-body">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding">Ring 1 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-data-binding">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding" maxlength="191" placeholder="e.g. [mqtt:home/sensor/temperature;temp]">
                                 
                             </div>
                         </div>
+                        <div class="widget-row widget-caption-row">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-start-label">Ring 1 label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-start-label">Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-start-label" maxlength="63" placeholder="Optional text or [binding]">
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding-2">Ring 2 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-arc-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
+                        </div>
+                        </div>
+                                </div>
+                            </details>
+                            <details class="pad-content-source" id="pad-edit-gauge-source-2">
+                                <summary>Ring 2</summary>
+                                <div class="pad-content-source-body">
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-data-binding-2">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-2" maxlength="191" placeholder="Optional — used as negative side when dual pair 1 is enabled">
                                 
                             </div>
                         </div>
+                        <div class="widget-row widget-caption-row">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-start-label-2">Ring 2 label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-start-label-2">Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-start-label-2" maxlength="63" placeholder="Optional text or [binding]">
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding-3">Ring 3 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-arc-color-2">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-2" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
+                        </div>
+                        </div>
+                                </div>
+                            </details>
+                            <details class="pad-content-source" id="pad-edit-gauge-source-3">
+                                <summary>Ring 3</summary>
+                                <div class="pad-content-source-body">
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-data-binding-3">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-3" maxlength="191" placeholder="Optional — primary for pair 2 when enabled">
                                 
                             </div>
                         </div>
+                        <div class="widget-row widget-caption-row">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-start-label-3">Ring 3 label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-start-label-3">Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-start-label-3" maxlength="63" placeholder="Optional text or [binding]">
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="pad-edit-gauge-data-binding-4">Ring 4 data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-arc-color-3">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-3" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
+                        </div>
+                        </div>
+                                </div>
+                            </details>
+                            <details class="pad-content-source" id="pad-edit-gauge-source-4">
+                                <summary>Ring 4</summary>
+                                <div class="pad-content-source-body">
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-data-binding-4">Data binding <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-data-binding-4" maxlength="191" placeholder="Optional — used as negative side when dual pair 2 is enabled">
 
                             </div>
                         </div>
+                        <div class="widget-row widget-caption-row">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-start-label-4">Ring 4 label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-start-label-4">Label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-start-label-4" maxlength="63" placeholder="Optional text or [binding]">
                             </div>
                         </div>
 
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-min">Min Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-arc-color-4">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-4" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
+                        </div>
+                        </div>
+                                </div>
+                            </details>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-dual-binding-pair-1"> Pair rings 1 and 2</label>
+                            <small>One ring: ring 1 toward positive values, ring 2 toward negative values. Set a negative minimum.</small>
+                        </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-dual-binding-pair-2"> Pair rings 3 and 4</label>
+                            <small>One ring: ring 3 toward positive values, ring 4 toward negative values. Set a negative minimum.</small>
+                        </div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-gauge-scale">
+                        <summary>Scale</summary>
+                        <div class="editor-group-body">
+                        <div class="widget-row">
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-min">Minimum <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" id="pad-edit-gauge-min" maxlength="63" value="0" placeholder="0 or [binding]">
                                 <small>Number or binding</small>
                             </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-max">Max Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-max">Maximum <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" id="pad-edit-gauge-max" maxlength="63" value="100" placeholder="100 or [binding]">
                                 <small>Number or binding</small>
                             </div>
                         </div>
 
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-degrees">Arc Degrees</label>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-zero-centered"> Zero-centered fill</label>
+                            <small>Negative values grow left, positive values grow right. Applies only to unpaired rings.</small>
+                        </div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-gauge-layout">
+                        <summary>Arc &amp; track</summary>
+                        <div class="editor-group-body">
+                        <div class="widget-row">
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-degrees">Arc span (degrees)</label>
                                 <input type="number" id="pad-edit-gauge-degrees" min="10" max="360" value="180" placeholder="180">
                                 <small>10–360. Use 180 for half-circle, 270 for ¾ circle</small>
                             </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-start-angle">Start Angle</label>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-start-angle">Start angle (degrees)</label>
                                 <input type="number" id="pad-edit-gauge-start-angle" min="0" max="359" value="180" placeholder="180">
                                 <small>0=right, 90=bottom, 180=left, 270=top</small>
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-gauge-zero-centered"> Zero-Centered</label>
-                            <small>Arc fills from the zero point — negative values grow left, positive grow right. Only applicable to single mode rings.</small>
+                        <div class="widget-row">
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-arc-width-pct">Arc thickness (%)</label>
+                                <input type="number" id="pad-edit-gauge-arc-width-pct" min="5" max="50" value="15" placeholder="15">
+                                <small>Thickness as % of radius</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-track-color">Track color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-track-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#1A1A1A"></div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-gauge-dual-binding-pair-1"> Dual Binding Ring 1 and 2</label>
-                            <small>Combines ring 1 and 2 into one ring. Ring 2 maps to negative values, so set a negative minimum value accordingly.</small>
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-gauge-dual-binding-pair-2"> Dual Binding Ring 3 and 4</label>
-                            <small>Combines ring 3 and 4 into one ring. Ring 4 maps to negative values, so set a negative minimum value accordingly.</small>
-                        </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" id="pad-edit-gauge-show-needle" checked> Show needle</label>
-                        </div>
+                        <div id="pad-edit-gauge-track-settings"></div>
                         <div class="form-group">
                             <label for="pad-edit-gauge-anim-ms">Animation (ms)</label>
                             <input type="number" id="pad-edit-gauge-anim-ms" min="0" max="5000" value="300" placeholder="300">
                             <small>Transition duration in ms. 0 = instant (no animation)</small>
                         </div>
 
-                        <div class="bar-chart-colors">
-                            <div class="form-group">
-                                <label for="pad-edit-gauge-arc-color">Arc Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#4CAF50"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-gauge-arc-color-2">Arc Color 2 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-2" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#2196F3"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-gauge-arc-color-3">Arc Color 3 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-3" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#9C27B0"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="pad-edit-gauge-arc-color-4">Arc Color 4 <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-arc-color-4" class="bc-input" maxlength="191" placeholder="#hex or [binding]" value="#FF9800"></div>
-                            </div>
                         </div>
-                        <small>Use an <code>[expr:threshold(…)]</code> binding for color-by-value</small>
-
-                        <div class="bar-chart-colors">
+                    </details>
+                    <details class="editor-group" id="pad-edit-gauge-needle">
+                        <summary>Needle</summary>
+                        <div class="editor-group-body">
+                        <div class="form-group">
+                            <label><input type="checkbox" id="pad-edit-gauge-show-needle" checked> Show needle</label>
+                        </div>
+                        <div id="pad-edit-gauge-needle-style">
+                        <div class="widget-row">
                             <div class="form-group">
-                                <label for="pad-edit-gauge-track-color">Track Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-track-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#1A1A1A"></div>
+                                <label for="pad-edit-gauge-needle-width">Width (px)</label>
+                                <input type="number" id="pad-edit-gauge-needle-width" min="0" max="10" value="2" placeholder="2">
+                                <small>0 = hidden</small>
                             </div>
                             <div class="form-group">
-                                <label for="pad-edit-gauge-needle-color">Needle Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label for="pad-edit-gauge-needle-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-needle-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-needle-cutoff">Inner cutoff (%)</label>
+                            <input type="number" id="pad-edit-gauge-needle-cutoff" min="0" max="99" value="0" placeholder="0">
+                        </div>
+                        </div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-gauge-tick-marks">
+                        <summary>Tick marks</summary>
+                        <div class="editor-group-body">
+                        <div class="form-group">
+                            <label for="pad-edit-gauge-ticks">Count</label>
+                            <input type="number" id="pad-edit-gauge-ticks" min="0" max="20" value="5" placeholder="5">
+                            <small>0 = no ticks</small>
+                        </div>
+                        <div class="widget-row" id="pad-edit-gauge-tick-style">
                             <div class="form-group">
-                                <label for="pad-edit-gauge-tick-color">Tick Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
-                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-tick-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#808080"></div>
-                            </div>
-                        </div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-arc-width-pct">Arc Width %</label>
-                                <input type="number" id="pad-edit-gauge-arc-width-pct" min="5" max="50" value="15" placeholder="15">
-                                <small>Thickness as % of radius</small>
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-ticks">Tick Marks</label>
-                                <input type="number" id="pad-edit-gauge-ticks" min="0" max="20" value="5" placeholder="5">
-                                <small>0 = no ticks</small>
-                            </div>
-                        </div>
-
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-needle-width">Needle Width</label>
-                                <input type="number" id="pad-edit-gauge-needle-width" min="0" max="10" value="2" placeholder="2">
-                                <small>Line width (px)</small>
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-needle-cutoff">Needle Cutoff</label>
-                                <input type="number" id="pad-edit-gauge-needle-cutoff" min="0" max="99" value="0" placeholder="0">
-                                <small>Inner cut % (0–99)</small>
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-tick-width">Tick Width</label>
+                                <label for="pad-edit-gauge-tick-width">Width (px)</label>
                                 <input type="number" id="pad-edit-gauge-tick-width" min="1" max="5" value="1" placeholder="1">
                                 <small>Line width (px)</small>
                             </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-tick-color">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-tick-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#808080"></div>
+                            </div>
                         </div>
-
-                        <hr style="border:none;border-top:1px solid #444;margin:12px 0;">
-                        <div style="font-weight:600;margin-bottom:6px;">Target Zone &amp; Markers</div>
+                        </div>
+                    </details>
+                    <details class="editor-group" id="pad-edit-gauge-target">
+                        <summary>Target</summary>
+                        <div class="editor-group-body">
                         <div class="form-group">
-                            <label for="pad-edit-gauge-marker-value">Target Value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                            <label for="pad-edit-gauge-marker-value">Target value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                             <div class="binding-input-wrap">
                                 <input type="text" class="binding-mono" id="pad-edit-gauge-marker-value" maxlength="63" placeholder="e.g. [mqtt:hvac/setpoint;temperature]">
                             </div>
                             <small>Bindable value on the scale. Empty = no target.</small>
                         </div>
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-marker-zone-deg">Target Zone Angle</label>
-                                <input type="number" id="pad-edit-gauge-marker-zone-deg" min="0" max="90" value="0" placeholder="0">
-                                <small>Degrees, total (0 = no zone)</small>
-                            </div>
-                            <div class="form-group" style="flex:1;">
-                                <label for="pad-edit-gauge-marker-tick-width">Target Tick Width</label>
+                        <div id="pad-edit-gauge-target-style">
+                        <div class="widget-row">
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-marker-tick-width">Marker width (px)</label>
                                 <input type="number" id="pad-edit-gauge-marker-tick-width" min="0" max="5" value="2" placeholder="2">
                                 <small>0 = no tick line</small>
                             </div>
-                        </div>
-                        <div class="bar-chart-colors">
                             <div class="form-group">
-                                <label for="pad-edit-gauge-marker-tick-color">Target Marker Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label for="pad-edit-gauge-marker-tick-color">Marker color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-marker-tick-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FFFFFF"></div>
                             </div>
+                        </div>
+                        <div class="widget-row">
                             <div class="form-group">
-                                <label for="pad-edit-gauge-marker-zone-color">Target Zone Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
+                                <label for="pad-edit-gauge-marker-zone-deg">Zone angle (degrees)</label>
+                                <input type="number" id="pad-edit-gauge-marker-zone-deg" min="0" max="90" value="0" placeholder="0">
+                                <small>Total angle; 0 = no zone</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pad-edit-gauge-marker-zone-color">Zone color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-gauge-marker-zone-color" class="bc-input" maxlength="63" placeholder="#hex or [binding]" value="#FF5722"></div>
                             </div>
                         </div>
                         <small>Target zone rendered as a semi-transparent overlay</small>
+                        </div>
                     </div>
                 </details>
+                </div>

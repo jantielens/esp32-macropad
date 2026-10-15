@@ -16,6 +16,11 @@ In AP mode, the portal opens device setup. In Full mode, the sidebar groups
 settings by category, with additional categories and controls for supported
 hardware and device classes.
 
+Categories start collapsed unless you open a direct link to a section. Opening
+one category closes the previous one; clicking the open category collapses it
+without changing the displayed content. Browser back and forward reveal the
+selected section's category.
+
 ## Portal Appearance
 
 Navigation categories and fragment titles use Google-hosted Material icons.
@@ -304,8 +309,10 @@ selected local image remains fixed.
 
 In the pad editor, **Local Image** is available only when the board includes
 the image library. **Camera Feed or Remote Image** requires remote image fetching,
-which is separate from support for an attached camera. Background Image Scale is
-available when either type of button background is supported.
+which is separate from support for an attached camera. Both are collapsible
+subsections of **Background image**, with a shared **Scale** control outside
+the source subsections. The frame is available when either source is supported
+and opens when an image source or letterbox setting is configured.
 
 ---
 
@@ -468,6 +475,19 @@ alert-sound files, and the Music Library.
 |---------|-------------|
 | **Volume** | Slider (0–100%) controlling the device audio volume. It applies to alerts, Music, and button feedback. Persisted in NVS and controllable from Home Assistant. |
 
+The Amplifier section appears on boards with amplifier mute control:
+
+| Setting | Description |
+|---------|-------------|
+| Mute amplifier when idle | On by default to prevent idle hiss. Off keeps the amplifier enabled between sounds for faster feedback, but hiss may return. Audio playback remains enabled in either mode. |
+| Amplifier wake delay (ms) | Default 120 ms; accepts 0-1000 ms. Waits after enabling the amplifier so the beginning of a sound is not clipped. Lower values reduce latency but may cut off short tones; 0 skips the wait. |
+
+The delay is editable only when idle muting is on. Its saved value is retained
+when off and still applies if the amplifier needs to wake at startup or after
+a firmware update. Sounds played while the amplifier is already enabled have
+no additional wake delay. Firmware updates and hardware failures can still
+force muting. Both settings are saved in NVS and apply on Save without reboot.
+
 #### Button Feedback
 
 | Element | Description |
@@ -476,6 +496,9 @@ alert-sound files, and the Music Library.
 | **Long-Press Feedback** | Tone pattern played after a button long-press that has a long-press action configured. Leave empty for no sound. |
 
 **Tone pattern DSL:** Space-separated `freq:dur` pairs (Hz and milliseconds). A bare number is a silent gap. Examples: `800:80` (single click), `600:40 40 600:40` (double chirp), `1000:30 30 1200:30` (rising two-tone).
+
+Tap and long-press feedback patterns are limited to 1 second in total, including
+silence gaps. Longer patterns are truncated at that limit.
 
 Buttons with no actions configured are completely inert — no visual tap flash and no audio cue. If any action in a button's sequence produces its own audio (a Sound Alert action), the device-level feedback beep is automatically suppressed to avoid overlapping audio. Swipe gestures also use the device-level tap beep with the same suppression logic.
 
@@ -734,6 +757,15 @@ Configure up to 3 sequential actions to run automatically when the device boots 
 
 Actions are dispatched once after the first screen is shown during boot. Changes take effect on next reboot.
 
+For **Navigate to screen**, choose an available screen or **Binding value** in
+**Target Screen**. After `(none)`, the dropdown lists pads in index order,
+then **Binding value**, then built-in screens. Named pads include their index,
+for example **Pad 1: Living Room**. Binding mode accepts a target expression such as
+`[mqtt:screen]`; the stored expression must fit within 31 UTF-8 bytes. The same
+control is available in other action editors. A binding's runtime context still
+matters: List selection bindings require a List selection event, not a boot
+event. See [button actions](pad-editor-guide.md#actions-tap-and-long-press).
+
 ### MQTT Triggers
 
 *Shown on boards with MQTT and either a display or a physical button.*
@@ -954,11 +986,137 @@ Select the **Pad** inspector scope for pad **Layout**,
 deselects it without discarding edits. Edits update the current draft directly, without an Apply/Cancel
 step; only **Save Pad** persists the current pad. Switching buttons or tabs
 retains incomplete inputs. Correct validation errors before saving; failed
-saves retain the draft for retry.
+saves retain the draft for retry. A successful save keeps the selected button's
+tab, open settings groups, and inspector scroll position.
+
+Validation messages cover the action row without moving or hiding the settings.
+Use the close icon to reveal the actions temporarily; dismissal does not clear
+the error or its field outline. The next failed validation shows the message again.
+Saving with a validation error reopens this message without a second notification.
+Invalid numeric, binding, and action fields use the same red outline, which clears
+when corrected. Network and device save failures still appear as notifications.
 
 Pad labels retain the `Pad X: Name` format whether selected or not. The button
 **Actions** and **Appearance** tabs expose their controls without an additional
 same-named accordion; individual action slots remain expandable.
+
+The Pad **Bindings** tab keeps each binding's name, expression, live preview,
+and delete control together in a bordered group. Expressions stay full width,
+with their resolved values directly underneath.
+
+Essential widget sections open initially, even with default settings. Other
+sections open when they contain non-default configuration, including bindings,
+disabled default-on options, or customized styling. Nested groups also open their
+containing sections. Explicit default values do not expand optional sections.
+These are initial choices only: manual collapse remains available and survives
+button switches and saves; typing does not change disclosure.
+
+Gauge Ring 1-4, Bar Chart Bar 1-4, and Sparkline Line 1-3 have left borders
+matching their source colors, including when collapsed. Color edits update the border immediately;
+bound colors use the resolved preview color, or the source's default palette
+color while unresolved or invalid. Patterned bars use their base color rather
+than the pattern color.
+
+Bar-chart **Content** starts with **Data sources**, keeping each bar's binding,
+caption, and color/fill together. Unused optional bars start collapsed; collapsing
+a bar does not disable it. **Scale** and **Layout & style** follow, then
+**Gridlines** and **Target**. **Animation** is inside **Layout & style**.
+Data sources and Bar 1 open initially. Optional bars open on load when their
+binding, caption, color, or fill pattern differs from the defaults. Scale,
+Layout & style, Gridlines, and Target open for non-default settings; a target
+value of zero also opens Target. Track outline and fill settings count too.
+Gridline count 0 and an empty target leave styling editable and saved.
+**Caption area size (px)** sizes the
+caption strip, not the font; **Bar thickness (%)** controls the bar thickness.
+
+Gauge **Content** keeps each ring's binding, label, and color in **Data sources**.
+Ring 1 opens initially; optional rings open when their binding, label, or color
+differs from the defaults.
+**Scale** and **Arc & track** follow, with animation and the shared track outline
+beside arc geometry; both open for non-default settings. **Needle**, **Tick marks**, and **Target** keep each feature's
+dimensions and colors together and open on load for non-default settings or a
+target value. Otherwise they start collapsed. Turning off the needle,
+setting tick count to 0, or clearing the target leaves their settings editable
+and saved. Manual collapse choices survive button switches; collapsing a group
+never disables it. Invalid values block saving even inside collapsed groups;
+Save Pad opens and focuses the offending field without enabling its feature.
+Pair controls retain rings 2/4 as the negative side; target zone size remains an
+angle in degrees, not a percentage of the range. Gamepad Button's held control
+remains in Content, with no ordinary tap or long-press action lists.
+
+Sparkline **Content** starts with per-line **Data sources**, keeping live binding,
+color, current-value label, and optional Home Assistant backfill together.
+Data sources and Line 1 open initially; optional lines open when their binding,
+label, color, or history settings differ from the defaults.
+Minimum/Maximum marker groups open for a nonzero
+size or customized format/color. These initial choices never override manual
+choices restored from a draft, and typing does not change disclosure.
+Collapsing a line never disables it.
+**Scale**, **Sampling**, **Line style**, **Markers**, **Current-value annotations**,
+and **Reference lines** follow. Each section opens for its non-default settings;
+configured minimum/maximum markers also open their containing Markers section.
+Marker size 0 leaves format/color editable and
+saved. Current-value labels stay with their line; dot size and label
+area width are together below the markers. Reference Y values remain numeric.
+Enter a History entity to enable backfill; clear it to omit that history source
+when saving. No separate enable checkbox exists. Each history entity requires
+its line's live binding. Time range accepts 10 seconds through 7 days; requested
+intervals must be at least 100 ms. The editor shows the actual interval after
+deriving 2..1024 points, without correcting invalid inputs.
+See [Sparkline](pad-editor-guide.md#sparkline)
+for sampling limits and history requirements.
+
+Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview, and
+Extension each keep their Content controls in one collapsible frame. Mousepad
+groups Pointer, Scrolling, and Buttons & navigation; Back button size remains
+available when Show Back button is off. Scrollpad pairs Axis with Sensitivity.
+Gamepad Joystick pairs Stick with Center mode and keeps Invert X/Y together.
+Gamepad Button pairs Control with the relevant Button, Direction, or Trigger
+selector; release remains automatic, with no Operation selector. Camera Preview
+has its own Image scale, separate from background-image scaling. Extension
+keeps Installed extension and Configuration full width, with Tick interval (ms)
+and Upscale together. An empty interval uses the package default. Collapsing a
+frame preserves its values; device capabilities still determine availability.
+Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, and Extension start open.
+Rocker, Numeric Rocker, List's Provider & Filter, and Table's binding section
+also start open. Camera Preview and Waveform start collapsed with default
+settings and open for non-default configuration.
+An edited Extension requires a successfully loaded catalog and an installed,
+enabled package. Loading and failure are distinct from an empty catalog, and
+do not block untouched Extension buttons or unrelated edits. Configuration is
+trimmed opaque text, up to 511 characters; explicit tick intervals must be whole
+milliseconds from 33 through 1000. Late catalog responses retain newer drafts.
+Numeric Rocker keeps center tap actions and its optional Adjustment Action in
+Actions, with Adjustment Action initially open; the editor omits long-press
+actions when saving that widget.
+
+On shutter tester builds advertising Waveform, its **Content** controls include
+four sensor colors, threshold and trigger colors, line width (1..5), and sensor
+selection (All or Sensor 1..4). Toggles control threshold, trigger, and target
+visibility, plus inverted Y; their values survive collapsing the settings frame.
+Colors accept bindings within the existing 11-character field limit, resolved
+when the firmware creates the widget. Ordinary
+tap and long-press actions remain available. Other devices do not offer Waveform
+in the widget selector.
+
+Button background and bar chart color pickers have Base Color and Pattern
+sections with one Apply operation. None is the default and uses only the base
+color. Base Color opens for unpatterned fills; Pattern opens for existing patterns.
+Color badges preview the combined fill;
+bound colors have a representative preview and binding indicator. Appearance
+starts with Background/Text, Button Shadow, UI Offset, and bindable Button State,
+without section headings. Borders & Geometry opens by default, with border color
+and width together, followed by button radius and padding. Patterns follows it,
+closed when no applicable pattern is active and open when one is active. You can
+toggle it manually; routine field edits preserve that choice. Shared spacing and
+stroke are inside Patterns; stroke is disabled when unused. Bar charts
+and gauges expose track outlines in Content beside their track settings; bars
+also have Track Corner Radius there.
+Geometry is static; colors accept bindings. Complete widgets and outlines are
+shown on-device after saving, not in the grid preview. Images still cover the pattern, including
+letterbox bands; gauge fills remain unpatterned. See
+[Patterned Fills and Track Outlines](pad-editor-guide.md#patterned-fills-and-track-outlines)
+for defaults, geometry, and color limits.
 
 On StopWatch, the action picker includes the **M5Stack StopWatch** category:
 
@@ -1030,7 +1188,7 @@ when it completes, the next action runs. By default, up to three pausable action
 can be pending device-wide at a time; starting another pausable action when all
 slots are occupied stops its action list.
 
-The Table widget's **Data Binding** field accepts structured table payload bindings such as `[health:table]` and `[health:extended_table]`. Use an exact single-token expression (no static prefix/suffix text and no format parameter) so the widget receives the full schema payload.
+The Table widget's **Content** controls are **Data Binding**, **Font Style Override**, and **Scroll**. All three share an initially open **Table Binding & Styling** disclosure. The binding accepts structured table payloads such as `[health:table]` and `[health:extended_table]`; use one exact token with no static prefix/suffix text or format parameter. The generic inline validator does not reject a valid token surrounded by static text, but the Table widget requires the entire field value to be that token. An empty Font Style Override inherits the button label size, and Scroll defaults to On.
 
 On camera-enabled boards, select **Camera Preview** as a button's widget to display the shared camera feed. Choose Cover to fill the button, Letterbox to show the complete image without stretching, or Center crop to clip an unscaled centered image.
 

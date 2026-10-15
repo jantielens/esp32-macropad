@@ -11,6 +11,9 @@ bootstrap.min.css
 portal-custom.css
 portal-all.css
 
+# [chunk:pad HAS_DISPLAY]
+@widgets
+
 # [chunk:shutter IS_SHUTTER_TESTER]
 portal_shutter.css
 

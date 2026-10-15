@@ -10,6 +10,9 @@ const context = {
     }
 };
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gauge.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_bar_chart.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
 
 const norm = context.padColorNormalizeLiteral;
@@ -69,7 +72,7 @@ assert.strictEqual(context.padThresholdSourceValidate(), false);
 assert.strictEqual(sourceError.style.display, '');
 
 const elements = {};
-for (const selector of ['#cp-gen', '#cp-fx', '#cp-input-label', '#cp-input', '#cp-recent-grid', '#cp-recent-heading', '#cp-gen-source']) {
+for (const selector of ['#cp-base', '#cp-base-summary', '#cp-base-body', '#cp-color-editor', '#cp-fill', '#cp-gen', '#cp-fx', '#cp-input-label', '#cp-input', '#cp-recent-grid', '#cp-recent-heading', '#cp-gen-source']) {
     elements[selector] = { style: {}, children: [], value: '', focus() {}, appendChild(child) { this.children.push(child); } };
 }
 Object.defineProperty(elements['#cp-recent-grid'], 'innerHTML', { set() { this.children = []; } });
@@ -111,13 +114,109 @@ for (const widget of ['gauge', 'bar_chart', 'sparkline', 'waveform']) {
     }
 }
 const sparkline = fs.readFileSync('src/app/web/_widget_sparkline.html', 'utf8');
-assert.strictEqual((sparkline.match(/class="sparkline-color-row"/g) || []).length, 5);
+for (let reference = 1; reference <= 3; reference++) {
+    assert.match(sparkline, new RegExp('<input type="number" id="pad-edit-sparkline-ref-' + reference + '-y" step="any"'));
+}
 for (const identifier of ['min-label', 'max-label', 'ref-1', 'ref-2', 'ref-3']) {
     assert.match(sparkline, new RegExp('id="pad-edit-sparkline-' + identifier + '-color"[^>]*maxlength="63"'));
     assert.match(sparkline, new RegExp('<label for="pad-edit-sparkline-' + identifier + '-color">Color '));
 }
 const barChart = fs.readFileSync('src/app/web/_widget_bar_chart.html', 'utf8');
 assert.match(barChart, /id="pad-edit-widget-bar-bg-color"[^>]*maxlength="63"/);
+
+assert.strictEqual(context.padFillPattern('unknown'), 'none');
+assert.strictEqual(context.padFillPattern('none'), 'none');
+assert.strictEqual(context.padFillPattern('checkerboard'), 'checkerboard');
+assert.strictEqual(context.padFillGeometry(-1, 8, 2, 64), 2);
+assert.strictEqual(context.padFillGeometry(1000, 8, 2, 64), 64);
+assert.strictEqual(context.padFillGeometry('bad', 8, 2, 64), 8);
+const fillInputs = new Map();
+for (const [id, value] of Object.entries({
+    'pad-edit-widget-type': 'bar_chart', 'pad-edit-pattern-spacing': '8', 'pad-edit-pattern-stroke': '1',
+    'pad-edit-track-outline-width': '0', 'pad-edit-track-outline-color': '#000000', 'pad-edit-track-radius': '4'
+})) fillInputs.set(id, { value, style: {}, dispatchEvent() {} });
+for (const id of ['pad-edit-pattern-geometry', 'pad-edit-pattern-stroke-wrap', 'pad-edit-track-outline'])
+    fillInputs.set(id, { style: {} });
+const patternsSection = { dataset: {}, open: false };
+fillInputs.set('pad-edit-patterns-section', patternsSection);
+const fillControls = ['bg', 'widget_bar', 'widget_bar_2'].map((prefix, index) => {
+    const selection = { value: 'none' };
+    const color = { id: 'pattern-color-' + index, value: '#000000', dispatchEvent() {} };
+    const colorWrap = { style: {} };
+    fillInputs.set(color.id, color);
+    return {
+        dataset: { patternField: index === 2 ? 'widget_bar_pattern_2' : prefix + '_pattern',
+            colorField: index === 2 ? 'widget_bar_pattern_color_2' : prefix + '_pattern_color' },
+        querySelector(selector) { return selector === 'select' ? selection : selector === '.bc-input' ? color : colorWrap; }
+    };
+});
+context.document = { querySelectorAll() { return fillControls; }, getElementById(id) { return fillInputs.get(id); } };
+context.Event = class {};
+context.padFillLoad({});
+const oldFill = {};
+context.padFillBuild(oldFill, 'bar_chart');
+assert.deepStrictEqual(oldFill, {});
+assert.strictEqual(fillInputs.get('pad-edit-pattern-geometry').style.display, '');
+assert.strictEqual(fillInputs.get('pad-edit-pattern-stroke').disabled, true);
+assert.strictEqual(patternsSection.open, false);
+const patternButton = { bg_color: '#FFFFFF', bg_pattern: 'dots', bg_pattern_color: '#FFFFFF',
+    widget_bar_pattern: 'diagonal', widget_bar_pattern_color: '[pad:color]',
+    widget_bar_pattern_2: 'checkerboard', widget_bar_pattern_color_2: '#123456',
+    pattern_spacing: 4, pattern_stroke_width: 8, widget_track_outline_width: 3, widget_track_outline_color: '[pad:outline]' };
+context.padFillLoad(patternButton);
+assert.strictEqual(patternsSection.open, true);
+patternsSection.open = false;
+context.padFillRefreshVisibility();
+assert.strictEqual(patternsSection.open, false);
+context.padFillLoad(patternButton);
+assert.strictEqual(patternsSection.open, true);
+const savedFill = { bg_color: patternButton.bg_color };
+context.padFillBuild(savedFill, 'bar_chart');
+assert.strictEqual(savedFill.bg_pattern_color, '#FFFFFF');
+assert.strictEqual(savedFill.bg_color, '#FFFFFF');
+assert.strictEqual(savedFill.widget_bar_pattern_color, '[pad:color]');
+assert.strictEqual(savedFill.widget_bar_pattern_2, 'checkerboard');
+assert.strictEqual(savedFill.pattern_stroke_width, 4);
+assert.strictEqual(savedFill.widget_track_outline_color, '[pad:outline]');
+fillControls[0].querySelector('select').value = 'none';
+const plainFill = {};
+context.padFillBuild(plainFill, 'gauge');
+assert.strictEqual(plainFill.bg_pattern, undefined);
+assert.strictEqual(plainFill.bg_pattern_color, '#FFFFFF');
+assert.strictEqual(plainFill.widget_bar_pattern, undefined);
+const gaugeFill = {};
+context.padFillBuild(gaugeFill, 'gauge');
+assert.strictEqual(gaugeFill.widget_bar_track_radius, undefined);
+
+const pickerContext = { Event: class {}, clearTimeout() {}, document: { body: { contains() { return false; } } } };
+vm.createContext(pickerContext);
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), pickerContext);
+pickerContext.padFillRefreshVisibility = () => {};
+const selection = { value: 'none' };
+const patternColor = { value: '#000000' };
+const controls = { dataset: {}, querySelector(selector) { return selector === 'select' ? selection : patternColor; } };
+let applyEvents = 0;
+const target = { value: '#FFFFFF', maxLength: 191, dispatchEvent() {
+    applyEvents++;
+    assert.strictEqual(selection.value, 'dots');
+    assert.strictEqual(patternColor.value, '#123456');
+    assert.strictEqual(this.value, '#AABBCC');
+} };
+function draft() {
+    return { target, fill: { controls, base: '#abc', color: '#123456', pattern: 'dots', originalColor: '#000000' },
+        pop: { style: {} }, bd: { style: {} } };
+}
+pickerContext._cpPopover = draft();
+pickerContext.padColorPopoverClose();
+assert.strictEqual(target.value, '#FFFFFF');
+assert.strictEqual(selection.value, 'none');
+assert.strictEqual(patternColor.value, '#000000');
+assert.strictEqual(applyEvents, 0);
+pickerContext._cpPopover = draft();
+pickerContext.padColorPopoverApply('#123456');
+assert.strictEqual(applyEvents, 1);
+assert.strictEqual(controls.dataset.colorSet, '1');
+assert.strictEqual(pickerContext._cpPopover.fill, null);
 
 const defaultsFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
 const defaultInputs = new Map();

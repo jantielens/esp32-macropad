@@ -324,9 +324,11 @@ firmware, and rebuild all installed Extensions.
 Canvas buffers are owned by the Extension and must use RGB565. Allocate them
 with `host->core->alloc(host->canvas->canvas_buffer_size(width, height))`, then
 release them with `host->core->free`. Use
-`host->canvas->canvas_draw_text()` to rasterize a firmware font directly into a
-canvas. Font names are `default`, `dseg7`, `bebas`, and `doto`; unknown names
-fall back to `default`.
+`host->canvas->canvas_draw_text()` to rasterize a font directly into a canvas.
+Empty font names and `default` inherit Device Typography; `@builtin` selects
+bundled Montserrat. All other names select uploaded TTF assets, with Montserrat
+fallback if unavailable. Former bundled names such as `bebas`, `doto`, and
+`dseg7` now require an uploaded font with that name.
 
 `canvas_fill_rect` fills an axis-aligned RGB rectangle efficiently and is the
 preferred primitive for block-based animations. Use `canvas_set_pixel` only for
@@ -341,9 +343,15 @@ only changed scene regions, and call `canvas_invalidate_rect` for the old and
 new bounds of every moving object.
 
 `canvas_measure_text(text, font_name, size)` returns the rendered advance width
-in pixels for a bundled font. Use it with `canvas_draw_text()` when a layout
-must fit proportional text into a defined region. The two functions resolve the
-same font family and nearest compiled font size.
+in pixels. Use it with `canvas_draw_text()` when a layout must fit proportional
+text into a defined region. The two functions resolve the same font and size:
+TTFs use the requested pixel size; Montserrat uses the nearest compiled size.
+Size zero uses the device's automatic sizing. Candidate measurements reuse the
+bounded typography cache; Tiny TTF rasterizes glyphs only when drawn, while the
+monochrome FreeType backend also rasterizes during measurement. Drawing uses
+the glyph's resolved font, bitmap format, row stride, and baseline metrics,
+clips to the canvas, and releases cached glyph data after use. The existing
+TTF allocation-failure limitations still apply.
 
 ### Animation Performance Lessons
 

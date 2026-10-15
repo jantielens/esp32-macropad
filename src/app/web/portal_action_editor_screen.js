@@ -1,124 +1,107 @@
-function listInjectSyntheticScreenOption(prefix) {
-    var sel = document.getElementById(prefix + '-target');
-    if (!sel || sel.tagName !== 'SELECT') return;
-    // Capture the current value so we can restore it after removing the old
-    // synthetic option (which may itself be the currently selected option,
-    // since removing a selected <option> resets the dropdown to the first item).
-    var prevValue = sel.value;
-    // Helper: restore the previous value if it still maps to an existing option.
-    var restorePrev = function() {
-        if (prevValue && sel.value !== prevValue) sel.value = prevValue;
-    };
-    // Remove any previously injected synthetic option
-    var existing = sel.querySelector('option[data-synthetic]');
-    if (existing) existing.remove();
-    // Only inject for list widget with a provider ID
-    var wtEl = document.getElementById('pad-edit-widget-type');
-    var provInput = document.getElementById('pad-edit-list-provider-id');
-    var provId = provInput ? provInput.value.trim() : '';
-    if (!wtEl || wtEl.value !== 'list' || !provId) {
-        restorePrev();
-        return;
-    }
-    var title = provId.charAt(0).toUpperCase() + provId.slice(1);
-    var opt = document.createElement('option');
-    opt.value = '[list:' + provId + '.selected]';
-    opt.textContent = 'Selected ' + title + ' Item';
-    opt.setAttribute('data-synthetic', '1');
-    // Insert after "(none)" option
-    if (sel.options.length > 1) {
-        sel.insertBefore(opt, sel.options[1]);
-    } else {
-        sel.appendChild(opt);
-    }
-    // Re-apply pending value if it matches the newly injected synthetic option
-    if (sel.hasAttribute('data-pending-value') &&
-        sel.getAttribute('data-pending-value') === opt.value) {
-        sel.value = opt.value;
-        sel.removeAttribute('data-pending-value');
-    } else {
-        // Restore the previous selection (may be the just-injected synthetic option)
-        restorePrev();
-    }
+function actionEditorScreenTargetChanged(prefix) {
+    var select = document.getElementById(prefix + '-target');
+    if (select) select.removeAttribute('data-pending-value');
+    actionEditorScreenRefresh(prefix);
 }
 
-// Refresh synthetic options in all tap and long-press action screen dropdowns.
-// Called when widget type changes to/from "list" or when provider ID changes.
-function listRefreshSyntheticOptions() {
-    for (var i = 0; i < (typeof MAX_ACTIONS !== 'undefined' ? MAX_ACTIONS : 3); i++) {
-        listInjectSyntheticScreenOption('pad-edit-action-' + i);
-        listInjectSyntheticScreenOption('pad-edit-lp-action-' + i);
-    }
+function actionEditorScreenRefresh(prefix) {
+    var select = document.getElementById(prefix + '-target');
+    var group = document.getElementById(prefix + '-target-binding-group');
+    var bindingMode = select && select.value === '__binding__';
+    if (group) group.style.display = bindingMode ? '' : 'none';
+    var input = document.getElementById(prefix + '-target-binding');
+    if (input) input.disabled = !bindingMode;
+    if (!bindingMode && input && typeof bindingClearError === 'function') bindingClearError(input);
 }
 
-// Populate the screen target dropdown(s) for one or more action editor prefixes.
-// screens: array of { id, name } from deviceInfoCache.available_screens
-// prefixes: array of prefix strings
 function actionEditorPopulateScreens(prefixes, screens) {
     if (!screens) return;
+    var pads = screens.filter(function(screen) { return /^pad_\d+$/.test(screen.id); });
+    var builtins = screens.filter(function(screen) { return !/^pad_\d+$/.test(screen.id); });
+    pads.sort(function(first, second) { return Number(first.id.slice(4)) - Number(second.id.slice(4)); });
     prefixes.forEach(function(prefix) {
         var sel = document.getElementById(prefix + '-target');
         if (!sel) return;
         var selected = sel.getAttribute('data-pending-value') || sel.value;
         while (sel.options.length > 1) sel.remove(1);
-        screens.forEach(function(s) {
+        pads.forEach(function(screen) {
+            var opt = document.createElement('option');
+            var label = 'Pad ' + (Number(screen.id.slice(4)) + 1);
+            opt.value = screen.id;
+            opt.textContent = !screen.name || screen.name === label ? label :
+                screen.name.indexOf(label + ': ') === 0 ? screen.name : label + ': ' + screen.name;
+            sel.appendChild(opt);
+        });
+        var binding = document.createElement('option');
+        binding.value = '__binding__';
+        binding.textContent = 'Binding value';
+        sel.appendChild(binding);
+        builtins.forEach(function(s) {
             var opt = document.createElement('option');
             opt.value = s.id;
             opt.textContent = s.name;
             sel.appendChild(opt);
         });
-        listInjectSyntheticScreenOption(prefix);
         sel.value = selected;
-        if (sel.value === selected) sel.removeAttribute('data-pending-value');
-        else if (selected) sel.setAttribute('data-pending-value', selected);
+        sel.removeAttribute('data-pending-value');
+        sel.setAttribute('data-screens-loaded', '1');
+        actionEditorScreenRefresh(prefix);
     });
 }
 
 _actionEditorExtensions.push({
     type: 'screen',
+    bindingSuffixes: ['-target-binding'],
     groups: function(prefix, opts) {
         var h = '';
-        // Screen target
         h += '<div id="' + prefix + '-screen-group" style="display:none;">';
         h += '<div class="form-group">';
         h += '<label class="form-label" for="' + prefix + '-target">Target Screen</label>';
-        h += '<select class="form-select form-select-sm" id="' + prefix + '-target"><option value="">(none)</option></select>';
+        h += '<select class="form-select form-select-sm" id="' + prefix + '-target" oninput="actionEditorScreenTargetChanged(\'' + prefix + '\')" onchange="actionEditorScreenTargetChanged(\'' + prefix + '\')"><option value="">(none)</option><option value="__binding__">Binding value</option></select>';
+        h += '</div><div class="form-group" id="' + prefix + '-target-binding-group" style="display:none;">';
+        h += '<label class="form-label" for="' + prefix + '-target-binding">Binding value <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+        h += '<input type="text" class="form-control form-control-sm binding-mono" id="' + prefix + '-target-binding" placeholder="[list:pads.selected]">';
         h += '</div></div>';
         return h;
     },
     typeChanged: function(prefix, type) {
         var screenGrp = document.getElementById(prefix + '-screen-group');
         if (screenGrp) screenGrp.style.display = (type === 'screen') ? '' : 'none';
-        if (type === 'screen') {
-            listInjectSyntheticScreenOption(prefix);
-            var tgt = document.getElementById(prefix + '-target');
-            if (tgt && tgt.hasAttribute('data-pending-value')) {
-                var pv = tgt.getAttribute('data-pending-value');
-                tgt.value = pv;
-                if (tgt.value === pv) tgt.removeAttribute('data-pending-value');
-            }
-        }
+        actionEditorScreenRefresh(prefix);
     },
     load: function(prefix, action) {
-        var el;
-        el = document.getElementById(prefix + '-target');
+        var el = document.getElementById(prefix + '-target');
+        var input = document.getElementById(prefix + '-target-binding');
+        var target = action.target || '';
+        var bindingMode = target.indexOf('[') !== -1;
+        if (input) input.value = bindingMode ? target : '';
         if (el) {
             el.removeAttribute('data-pending-value');
-            el.value = action.target || '';
-            // If the option doesn't exist (e.g., synthetic [list:…] not yet injected),
-            // defer the value until the option is added.
-            if (action.target && el.value !== action.target) {
-                el.setAttribute('data-pending-value', action.target);
-                el.value = '';
+            el.value = bindingMode ? '__binding__' : target;
+            if (!bindingMode && target && el.value !== target && !el.hasAttribute('data-screens-loaded')) {
+                el.setAttribute('data-pending-value', target);
             }
         }
+        actionEditorScreenRefresh(prefix);
     },
     build: function(prefix, type) {
         if (type !== 'screen') return null;
-        var act = {};
-        var t = document.getElementById(prefix + '-target');
-        if (t) act.target = t.value;
-        return act;
+        var select = document.getElementById(prefix + '-target');
+        var bindingMode = select && select.value === '__binding__';
+        var input = bindingMode ? document.getElementById(prefix + '-target-binding') : select;
+        var target = input ? input.value.trim() : '';
+        var error = '';
+        if (bindingMode) {
+            var result = validateBinding(target);
+            if (!result.valid) error = result.errors[0].message;
+            else if (!bindingTokenize(target).length) error = 'Enter a screen target binding.';
+        }
+        if (new TextEncoder().encode(target).length > 31) error = 'Screen target must be at most 31 UTF-8 bytes.';
+        if (error) {
+            throw Object.assign(new Error(error), { fieldIds: [input.id] });
+        }
+        if (input && typeof bindingClearError === 'function') bindingClearError(input);
+        return { target: target };
     },
     wireFragment: function(prefixes, info) {
         actionEditorPopulateScreens(prefixes, info && info.available_screens);

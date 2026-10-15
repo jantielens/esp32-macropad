@@ -128,7 +128,7 @@ struct InstanceState {
     int16_t shift_x;
     int16_t shift_y;
     uint8_t font_size;
-    char font_name[16];
+    char font_name[32];
     char time_template[TIME_TEMPLATE_CAPACITY];
     char last_time[5];
     char previous_time[5];
@@ -394,7 +394,7 @@ bool build_layout(const NativeExtensionHostApi* host, InstanceState* instance, u
         const uint8_t candidate = FONT_SIZES[index];
         if (candidate > maximum_size) continue;
         const int32_t widest = host->canvas->canvas_measure_text("W", instance->font_name, candidate);
-        const uint8_t required_height = candidate == 12 && text_equals(instance->font_name, "bebas") ? 11 : candidate;
+        const uint8_t required_height = candidate;
         if (widest > 0 && widest <= cell_width && required_height <= cell_height) {
             instance->font_size = candidate;
             instance->cell_width = cell_width;
@@ -597,7 +597,7 @@ extern "C" bool native_extension_create_instance(const NativeExtensionHostApi* h
     instance->background_rgb = 0x000000;
     instance->foreground_rgb = DEFAULT_FOREGROUND_RGB;
     instance->dimmed_rgb = DEFAULT_DIMMED_RGB;
-    copy_text(instance->font_name, sizeof(instance->font_name), "bebas");
+    copy_text(instance->font_name, sizeof(instance->font_name), "default");
     copy_text(instance->time_template, sizeof(instance->time_template), "[time:%H%M]");
     find_string(config_json, "font_family", instance->font_name, sizeof(instance->font_name));
     find_string(config_json, "time", instance->time_template, sizeof(instance->time_template));

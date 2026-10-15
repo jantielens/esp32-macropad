@@ -396,6 +396,11 @@ Legacy Home, Network, and Firmware URLs redirect into the shell. AP mode selects
 the setup fragment and exposes only the Device category. Mobile navigation
 collapses behind the header's navigation control.
 
+Navigation categories start collapsed unless the URL selects a visible fragment.
+Only one category can be expanded at a time; clicking it again collapses it
+without changing the content. Fragment navigation, including browser back and
+forward, reveals only the selected fragment's category.
+
 Each fragment title contains a decorative Material Symbol with `aria-hidden="true"`.
 Navigation category icons are mapped by category ID in `portalCategoryIcon()`;
 the API's legacy emoji metadata remains unchanged. Child navigation links stay
@@ -463,6 +468,192 @@ defaults before rendering the grid. Sound files, building blocks, and native
 extensions load afterward. Sound and extension selectors remain disabled while
 their catalogs load, preserving saved filenames and extension IDs when options
 arrive. Building blocks show a loading state until their catalog is available.
+
+The widget manifest, `src/app/widgets/manifest.json`, owns explicit firmware and
+portal asset paths, firmware compile gates, selector labels, and order.
+`{{WIDGET_OPTIONS}}` and `{{WIDGET_EDITORS}}` in `pad-editor.fragment.html`
+expand through `tools/_render_html_template.py`. The firmware asset pipeline and
+local mock server use the same manifest loader and renderer. Keep manifest order
+stable because workspace disclosure restoration follows DOM order. Gamepad
+Button's partial retains the host for generated controls; capability checks and
+runtime handlers remain in JavaScript. Restart the mock server after changing
+Python tools, then reload the browser; manifest or partial edits need only reload.
+
+Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview, and
+Extension retain one native `editor-group` disclosure each in Content. Mousepad
+uses Pointer, Scrolling, and Buttons & navigation headings inside its frame.
+Scrollpad pairs Axis/Sensitivity; Joystick pairs Stick/Center mode and axis
+inversion; Extension keeps selection/configuration full width and pairs Tick
+interval/Upscale. Gamepad Button's inspector-scoped grid styles the existing
+held-control builder, including its conditional selector, without changing the
+ordinary Gamepad action editor. Camera Preview retains its separate Image scale
+control. All controls stay inside their section bodies, and Back button size
+remains visible when Back is off to preserve existing validation. Input navigation
+remains in Layout; input-widget action suppression is declared by each owner.
+Extension declares that it replaces shared labels, icons, and images.
+
+All 14 active widget editors register explicitly through
+`portal_widget_editor.js`. Their `portal_widget_*.js` modules precede the dialog
+through the bundle's `@widgets` marker; markup remains in the existing partials. Mousepad,
+Scrollpad, and Gamepad Joystick share the input-family owner module.
+
+To add a widget:
+
+1. Create its firmware implementation and local `REGISTER_WIDGET_*` registration.
+2. Create its editor JS with `padRegisterWidgetEditor()` and an HTML partial;
+   add owned CSS only when needed. Keep specialized behavior with the owner.
+3. Add one manifest entry, using the same type as both local registrations:
+
+```json
+{
+  "type": "example",
+  "source": "widgets/example_widget.cpp",
+  "gates": ["HAS_DISPLAY"],
+  "portal": {
+    "label": "Example",
+    "html": "_widget_example.html",
+    "js": "portal_widget_example.js"
+  }
+}
+```
+
+`source` is relative to `src/app`; portal paths are relative to `src/app/web`.
+`portal.css` is optional, and firmware-only widgets omit `portal` entirely.
+Shared assets are included once, at their first manifest position. Put dependencies
+before consumers. Both bundles expand `@widgets` in their existing `HAS_DISPLAY`
+chunk; additional capability checks stay in owner `available()` callbacks.
+The selector ID is `pad-edit-<type>-widget-option`, not an owner descriptor field.
+Do not edit bundle lists, template mappings, selector markup, or generic
+orchestration to add a widget.
+
+`build.sh` generates ignored `src/app/widget_modules.h` before compilation;
+`widgets.cpp` consumes its guarded includes. Host CMake generates the same include
+in its binary directory, without requiring a prior firmware build. Run
+`python3 tools/widget_manifest.py --firmware <output-path>` for direct compilation
+workflows outside `build.sh`. Invalid types, duplicate entries, missing files,
+and unknown gates fail generation. Compiled symbol checks verify C++ registration
+prefixes; asset generation executes JS owners to verify exact manifest parity.
+Waveform's owned portal editor is included through the manifest and available
+only when the device's `widget_catalog` contains `waveform`. Its firmware
+implementation remains gated by `HAS_DISPLAY` and `IS_SHUTTER_TESTER`. Portal
+owners are packaged in the existing display bundle; availability is not a
+per-widget JavaScript size gate. No persisted JSON, firmware interaction, or
+native ABI changes are part of this wiring.
+
+Shared layout and ordinary field helpers stay shared. Use `.widget-row` for
+two-column controls and `.widget-caption-row` for a flexible caption plus a
+compact color picker. Specialized source, history, pattern, and held-control
+styling stays widget-owned. Gauge needs no separate stylesheet. Do not add
+widget-name branches to orchestration or introduce filename auto-discovery.
+
+Each registration declares its persisted type, section roles, fields, and
+action policy. Fields identify an input, flat JSON key, default, and conversion
+kind. Shared mechanics reuse native numeric bounds and existing binding, color,
+and label helpers. Gauge and Bar Chart own their repeated sources, palette
+defaults, track hosts, and icon-export scales. Owners declare pattern and preview
+contributions where needed. Specialized `init` and `load` callbacks are used
+only where needed: Gamepad Button generates and loads its existing held-control
+editor. Its action policy builds the first tap action with operation `down`,
+hides ordinary tap/long-press lists, and keeps the held-control section in
+Content. The firmware still owns release behavior.
+
+The workspace owns raw drafts, dirty tracking, tab/error presentation, and
+fragment disposal. A successful save reloads canonical configuration while
+restoring the selected button's tab, disclosure states, and inspector scroll
+position, without replaying pre-save field values.
+An owner's `init(onSettled)` may notify the host when its
+asynchronous state changes. Extension uses this callback after catalog success
+or failure, retaining its stale-mount guards. It does not inspect workspace
+selection, errors, or dirty revisions; the host decides whether to revalidate
+the selected editor without marking another edit.
+Disclosure policy stays widget-owned. Mark essential groups `open` in their
+HTML; other groups initially open only for non-default settings. Shared code
+associates registered field descriptors with their containing groups using the
+declared input IDs, rather than scanning arbitrary controls or duplicating
+field-key lists. Owners declare `disclosureSettings` for custom or moved controls:
+each entry provides `group` (the group ID), `key`, `kind`, and `default` using the
+same comparison contract as ordinary fields. These descriptors affect disclosure
+only, not loading, validation, or serialization. Bar Chart declares its patterns
+and moved track settings; Gauge declares its shared track outline; Sparkline
+declares history and sampling settings. Keep those keys and defaults in owners,
+never in widget-specific branches in shared code.
+On load, shared code opens a group if a relevant value is nonempty and differs
+from its field default, including dynamic firmware defaults.
+Numeric defaults compare numerically and literal color case is ignored. Explicit
+default values do not open a group; zero or false still count when they differ
+from the default. Essential groups and ancestors of open groups start open.
+Draft and post-save disclosure
+restoration override these initial choices; refresh never reapplies the rule.
+Gauge, Bar Chart, and Sparkline source color fields declare optional `preview(resolved)`
+callbacks. Shared loading and live binding previews invoke these callbacks;
+owners choose the source group and use `padWidgetSetGroupColor()` to set
+`--pad-source-color`. Literal edits update immediately. Binding colors reuse
+the guarded preview results, with the source's firmware palette default while
+unresolved or invalid. Bar Chart uses its base color, not its pattern color.
+The accent remains visible when collapsed and does not change disclosure state.
+Gauge does not hide dependent fields or
+reset settings when a feature is off. Only the selected supported editor builds
+and validates its fields, including collapsed groups and inactive tabs.
+Invalid explicit numbers block saving rather than being clamped; optional
+blanks may use defaults. Saving reveals and focuses the invalid field without
+enabling its feature. Registry-held DOM references are cleared on disposal.
+Capability-unavailable Gamepad Button settings are omitted on save, not deleted
+from configuration on load. The flat firmware JSON contract is unchanged.
+
+Action builders report validation failures through an error with `fieldIds`;
+the Screen action does not inspect pad workspace state or present error messages.
+The pad workspace owns its tab/group/focus handling. Non-pad action hosts catch
+build failures inside their save boundary and call `actionEditorHandleError()`
+to open containing groups, mark and focus the field, and show the message before
+any write. Unstructured network errors retain each host's existing handling.
+
+This interface is a limited ownership contract, not a general widget framework.
+Widgets using existing capabilities need owned implementations/assets, local
+registrations, and one manifest entry. Shared firmware still has widget-specific
+layout, event, and swipe routing in `pad_tile_builder.cpp`, `pad_screen_events.cpp`,
+and `widget_registry.h`; new runtime capabilities need separate design review.
+Portal ownership does not imply firmware interaction independence or complete
+MCP field discovery. Waveform's firmware registration currently lacks detailed
+`describeSchema` metadata.
+
+Keep one current editor contract, without legacy aliases, dual readers/writers,
+or migration machinery. Flat keys and persisted type strings remain unchanged,
+but existing device configurations are not guaranteed to round-trip and may need
+manual reconfiguration. Save the supported editor's configuration; unavailable
+widget settings may be omitted on edit, not proactively deleted on load.
+
+Rocker owns directional action labels. Numeric Rocker declares its adjustment
+section in Actions, preserves signed `{step}` payloads, and serializes tap plus
+optional adjustment, without long-press actions. Input editors declare their
+action suppression and navigation policy. List labels its tap actions Select;
+Camera Preview owns its capability gate and image scale.
+
+`padRefreshWidgetEditor()` delegates only to the selected owner's optional
+`refresh()` callback. Chart groups remain manually collapsible; configured-value
+disclosure runs only on load, not while typing. Turning off a feature retains
+editable styling, including validation. Shared track-node movement follows the
+owner's declared host in `padFillRefreshVisibility()`.
+
+Sparkline owns duration conversion, derived sampling, history validation, and
+warnings in `portal_widget_sparkline.js`. Time range accepts 10 seconds through
+7 days and converts to whole seconds. Requested intervals must be at least
+100 ms; the owner derives 2..1024 points and displays the actual interval without
+correcting the inputs. Blank bounds remain automatic and blank label colors
+follow the line. A nonempty history entity enables backfill and requires that
+line's live binding; clearing it omits the entity/statistic on save. No separate
+enable checkbox or persisted boolean exists. Unsupported history settings are
+hidden and omitted from edited serialization, not deleted on load.
+
+Extension owns its mounted asynchronous catalog in `portal_widget_extension.js`.
+Loading and failure block an edited Extension draft, but not untouched buttons
+or unrelated edits. A successful catalog offers only installed, enabled packages;
+missing IDs have no synthetic option. Pending selections survive until success,
+and late responses cannot overwrite newer configuration or a disposed mount.
+The workspace revalidates errored drafts on reopening after dependencies settle
+without marking another edit. Configuration is trimmed opaque text, limited to
+511 characters by the portal. Blank tick interval omits the override; explicit
+values must be whole milliseconds from 33 through 1000. `dispose()` clears owner
+state before remounting. Prefer this explicit owner code over descriptor workflows.
 
 Device information reads friendly pad names from the immutable RAM config cache,
 not from pad files. Names retain their full stored length. Successful saves and
@@ -602,11 +793,21 @@ every component in that custom section to the same category ID.
 - **🎛️ Pad Editor** (only shown when firmware has display): Visual grid editor for pad pages
   - Pad selection and naming: Left rail for up to 16 pads with optional custom names (max 31 chars). Labels retain the `Pad X: Name` format whether selected or not; no legacy selection dropdown is needed.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
-  - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading.
+  - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading; each binding groups its name, expression, live preview, and delete control inside one bordered row.
+  - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Optional bars use fixed collapsed defaults, including when configured or paired. Disabled gridlines and empty targets retain editable styling and validation. Drafts preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
+  - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings and feature groups start collapsed regardless of configured values. Needle off, tick count 0, and an empty target retain editable styling and validation. Drafts preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
+  - Background image: One collapsible frame contains unframed Local Image and Camera Feed or Remote Image disclosures plus their shared Scale control. Source visibility follows image-library and remote-fetch capabilities; the frame opens when an image source or letterbox setting is configured.
+  - Patterned fills: Button backgrounds, four independent bar-series slots, and the shared bar track support five patterns plus None (`none`, default; unknown names normalize to None), with separate bindable colors and shared static spacing/stroke.
+    Supported color pickers use Base Color and Pattern sections, staging both colors and the pattern until Apply. Base Color opens for unpatterned fills; Pattern opens for existing patterns. Both sections retain the threshold generator. Badges preview the combined fill using representative bound colors and a binding indicator.
+    Appearance starts with always-visible Background/Text, Button Shadow, UI Offset, and bindable Button State. Borders & Geometry opens by default, with border color/width together and button radius/padding next. Patterns follows, initially open only when an applicable pattern is active; active-pattern transitions update it, routine refreshes preserve manual toggles, and loading another button resets its default.
+    Spacing and stroke stay inside Patterns, with unused stroke disabled. The Patterns note explains shared spacing, stroke thickness/dot diameter, and the disabled state for None and Checkerboard.
+    Bar/gauge track outlines have static width and bindable color in Content beside their track settings, reusing one outline input group when the widget type changes. Bars also have static `widget_bar_track_radius` there (0-64, default 4), clamped to half the smaller track dimension, with square dual baseline joins.
+    Controls preserve base colors. Save to inspect complete widgets and outlines on-device; no grid styling preview or monochrome simulation is provided. Gauge patterns and image compositing are deferred.
   - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
+    Data sources, Scale, Sampling, Line style, Markers, Current-value annotations, and Reference lines each use the shared `editor-group` frame, initially open, matching Bar Chart. Per-line disclosures remain inside Data sources.
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)
-  - **Table bindings**: Table widget data binding supports structured payloads from exact single-token bindings such as `[health:table]` and `[health:extended_table]`
+  - **Table Content controls**: Data Binding, Font Style Override, and Scroll share an initially open **Table Binding & Styling** disclosure, using the standard `editor-group` framing without an outer Settings disclosure. The table-schema binding remains an exact single token; the generic client validator does not reject valid tokens surrounded by static text, but the Table renderer does
   - **Camera Preview widget**: Available only on camera-enabled boards. It displays the shared camera feed with Cover, Letterbox, or Center crop scaling.
   - **Numeric rocker tap areas**: The numeric rocker settings include a per-button Tap Area Scale control from 50% to 150%. It scales both fine and coarse zones while the firmware reserves a center action area.
   - **Pad and Button Defaults**: Separate Button Appearance, Pad Appearance and Layout, Button Labels and Icon, and Button Shadow sections on the Pads page. Pad Appearance and Layout provides device-wide button spacing, `default_pad_bg_color`, Burn-in Pixel Shift Distance (`pixel_shift_distance_px`, 0-8 px), and extra top, right, bottom, and left edge insets inside that distance. A live 2×2 diagram updates with those controls and labels their current pixel values. A value of 0 disables pixel shifting and its layout reserve. A pad without an explicit background inherits the device default. Shadows can be opaque backing plates or LVGL drop shadows, with free-form offsets and blur that may overlap or clip. Shadow color can use either a specific color or a darker tint of each button's background, including dynamic background bindings. Pads and buttons can enable or disable the device shadow setting. Stored as a separate JSON file on LittleFS (`/config/button_defaults.json`) with a dedicated REST API (`GET/POST /api/component/button-defaults/config`)
@@ -633,6 +834,16 @@ listeners. Valid button edits immediately replace the draft model; invalid
 inputs retain the last valid model and their raw form values. Save blocks on
 pending errors or overlapping/out-of-bounds buttons. Copy and inherited-button
 selection do not mutate the draft. Only an actual edit creates an override.
+
+Validation alerts overlay the action row (the inspector's top button row on
+mobile), leaving field layout unchanged. Dismissal hides only the alert and
+restores access to the covered controls; pending errors still block saving.
+Each failed validation shows the alert again, with no persisted dismissal state.
+Pre-save validation uses this alert only; persistence failures retain their toast.
+Field-specific failures carry `fieldIds` through the workspace error map so
+reopening a button restores its highlights. Numeric validity and binding errors
+share the same error color and `aria-invalid` state. Dismissal leaves field
+highlights intact; successful validation clears them.
 
 Save uses the existing serialized persistence queue and icon-upload path.
 Revision and root guards prevent completed saves or asynchronous catalogs and
@@ -1223,8 +1434,17 @@ these declarations and catalog bindable fields for the selected action only.
 An optional `wireFragment(prefixes, info)` hook supplies asynchronous options;
 shared wiring awaits all hooks after fetching device info once.
 
-The Screen extension owns dynamic screen targets and list-widget synthetic
-options. Sound Alert owns sound-list population, including catalog-backed sound
+The Screen extension owns available-screen selection and an explicit **Binding
+value** mode. It stores the actual target string, never the mode sentinel, and
+uses shared binding validation/tokenization. Targets exceeding 31 UTF-8 bytes
+are rejected without truncation. Catalog loading preserves pending literal
+selections and active binding drafts; unavailable literal IDs are not added to
+the dropdown. After `(none)`, options appear as numerically ordered pads,
+**Binding value**, then built-in screens. Custom pad names include their
+one-based index, for example `Pad 1: Living Room`.
+The editor does not inspect List widget fields or action-host IDs.
+Inactive binding inputs are disabled and excluded from dialog validation.
+Sound Alert owns sound-list population, including catalog-backed sound
 selectors. Gamepad owns the helpers also consumed by the held-control widget;
 widget markup remains in the pad editor. Register extensions after the shared
 editor and before consumers in the existing feature-gated bundle chunks.
@@ -1232,7 +1452,7 @@ Unsupported actions retain their loaded payloads unchanged. This portal refactor
 does not alter firmware rejection of retired audio aliases or invalid loop kinds.
 
 Run the action picker, action-list, cycle, timer, and startup host regressions after
-each migration, followed by asset minification and desktop/mobile checks. The
+action editor changes, followed by asset minification and desktop/mobile checks. The
 picker guards the ownership boundary and exercises payload round-trips against
 the production catalog.
 
@@ -1772,6 +1992,8 @@ timezone and alarm session.
   "screen_saver_wake_binding": "",
 
   "audio_volume": 50,
+  "audio_idle_mute": true,
+  "audio_wake_delay_ms": 120,
   "tap_beep": "",
   "lp_beep": "",
 
@@ -1813,7 +2035,12 @@ timezone and alarm session.
     legacy policy: Screen Saver retains its enable checkbox, configured
     Fade In/Fade Out durations, idle pad, and wake controls. The portal changes
     only the display-sleep wording to backlight-off wording.
-  - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
+  - Audio-related fields (`audio_volume`, `audio_idle_mute`,
+    `audio_wake_delay_ms`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO`
+    is enabled. `caps.audio_amplifier_mute` reports whether the selected driver
+    has a board mute callback, including expander-based controls. The Volume
+    fragment shows its Amplifier section only when this capability is true.
+    `GET /api/info` exposes the same support as `has_audio_amplifier_mute`.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
   - Every credential represented in `GET /api/config` is returned as an empty
@@ -2083,6 +2310,8 @@ Save new configuration. Device reboots after successful save.
   "screen_saver_wake_binding": "[mqtt:devices/node/presence/state]",
 
   "audio_volume": 50,
+  "audio_idle_mute": true,
+  "audio_wake_delay_ms": 120,
   "tap_beep": "800:80",
   "lp_beep": "600:40 40 600:40",
 
@@ -2112,6 +2341,17 @@ Save new configuration. Device reboots after successful save.
 
 **Notes:**
 - Only fields present in request are updated
+- `audio_idle_mute` defaults to true and keeps the amplifier quiet between
+  sounds. False keeps it enabled for lower feedback latency, but idle hiss may
+  return. `audio_wake_delay_ms` accepts an integer or integer string from 0 to
+  1000 (default 120); invalid values return HTTP 400 before configuration is
+  changed. Both settings persist in NVS and apply live through the audio worker.
+  The Volume fragment uses its existing Save button with `?no_reboot=1` and
+  disables the delay input while idle muting is off, preserving its saved value.
+  The delay applies on actual wake transitions, including startup and recovery
+  after OTA, not to every sound. Zero skips the wait and can clip short tones.
+  Forced muting for OTA and hardware failures is unaffected. The buffer-drain
+  and 100 ms idle grace timing remain internal.
 - `ble_tx_power_dbm` accepts an integer or integer string: `-12`, `-9`, `-6`,
   `-3`, `0`, `3`, `6`, or `9`. Unsupported values return HTTP 400 before any
   configuration fields are updated. Omission leaves the setting unchanged.

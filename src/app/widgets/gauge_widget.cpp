@@ -4,6 +4,7 @@
 
 #include "../binding_template.h"
 #include "../log_manager.h"
+#include "../fill_style_runtime.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -472,6 +473,7 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
                           lv_obj_t* icon_img, lv_obj_t* center_label,
                           WidgetState* state) {
     auto* cfg = reinterpret_cast<const GaugeConfig*>(wcfg->data);
+    FillStyleRuntime* fill_style = fill_style_find(tile);
     auto* st = reinterpret_cast<GaugeState*>(state->data);
     memset(st, 0, sizeof(GaugeState));
     st->last_value = NAN;
@@ -668,6 +670,12 @@ static void gauge_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             }
         }
     }
+
+    fill_style_attach_arc_outline(st->arc_dual_1_neg ? st->arc_dual_1_neg : st->arc_bg, fill_style);
+    if (!(st->dual_pair_1_active && st->dual_pair_2_active)) fill_style_attach_arc_outline(st->arc_ring2, fill_style);
+    if (!(!st->dual_pair_1_active && st->dual_pair_2_active)) fill_style_attach_arc_outline(st->arc_ring3, fill_style);
+    fill_style_attach_arc_outline(st->arc_ring4, fill_style);
+    fill_style_attach_arc_outline(st->arc_dual_2_neg, fill_style);
 
     // ---- Tick marks (repeat across all active rings) ----
     if (cfg->tick_count > 0) {
@@ -1266,6 +1274,7 @@ static void gauge_destroy(WidgetState* state) {
 #if HAS_MCP
 static void gauge_describe(JsonObject& out) {
     JsonArray f = out.createNestedArray("config_fields");
+    widget_describe_fill_fields(f, false);
     auto add = [&](const char* n, const char* t, const char* d){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; };
     auto addmax = [&](const char* n, const char* t, const char* d, int m){ JsonObject o=f.createNestedObject(); o["name"]=n; o["type"]=t; o["desc"]=d; o["max"]=m; };
     add("widget_gauge_min","number","scale min"); add("widget_gauge_max","number","scale max");

@@ -452,6 +452,25 @@ Active records are never evicted. When all four records are active or retained,
   `GET /api/bindings?docs=1` for the portal, so the manifest reflects the current
   board and device class without a separate MCP catalog. Health key descriptions
   are in the `health` scheme's `key_docs`.
+  Button fields include `bg_pattern`, `bg_pattern_color`, `pattern_spacing`, and
+  `pattern_stroke_width`. Bar chart metadata advertises `widget_bar_pattern` and
+  `widget_bar_pattern_color`, with `_2`, `_3`, and `_4` suffixes for other series,
+  plus `widget_bar_bg_pattern` and `widget_bar_bg_pattern_color`. Bar/gauge metadata
+  includes `widget_track_outline_width` and `widget_track_outline_color`.
+  Bar chart metadata also includes `widget_bar_track_radius`: static logical
+  pixels 0-64, default 4, effectively capped at half the smaller track dimension.
+  It shapes and clips the track even with outlines off; dual baseline joins stay
+  square. Gauge geometry is unchanged.
+  Pattern selector values are `none` (default), `diagonal`, `reverse_diagonal`,
+  `crosshatch`, `dots`, or `checkerboard`. None adds no pattern to the base color;
+  unknown names become `none`. Pattern colors default to black.
+  Shared spacing is 2-64 (default 8), stroke 1-8 (default 1, capped by spacing),
+  and outline width 0-8 (default 0/off). Geometry is static. Color bindings use
+  the owning field's limit: 191 characters for backgrounds/series, 63 for tracks
+  and outlines. The manifest's `fill_note` describes these contracts. Gauge fills
+  remain unpatterned; existing opaque image compositing covers background patterns.
+  Portal color badges show fill previews with representative bound colors, not
+  live device rendering; complete widgets and outlines require on-device checks.
   USB HID builds include `[health:usb_status]` with values `disabled`, `ready`,
   `connected`, `suspended`, and `error`. A connected status requires host
   enumeration and an awake USB session, not merely USB power.

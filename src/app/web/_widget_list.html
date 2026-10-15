@@ -1,10 +1,10 @@
                 <!-- List Widget Settings (conditional, shown only for list widget type) -->
-                <details class="editor-group" id="pad-edit-list-section" style="display:none;">
-                    <summary>List Settings</summary>
+                <details class="editor-group" id="pad-edit-list-section" style="display:none;" open>
+                    <summary>Provider &amp; Filter</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
                             <label for="pad-edit-list-provider-id">Data Provider</label>
-                            <input type="text" id="pad-edit-list-provider-id" maxlength="63" placeholder="e.g. pads" oninput="if(typeof listRefreshSyntheticOptions==='function')listRefreshSyntheticOptions()">
+                            <input type="text" id="pad-edit-list-provider-id" maxlength="63" placeholder="e.g. pads">
                             <small>The registered provider ID, not an MQTT topic. Items run the button's tap and long-press actions. Use <code>[list:provider_id.selected]</code> in action fields to reference the selected item's ID.</small>
                         </div>
                         <div class="form-group">

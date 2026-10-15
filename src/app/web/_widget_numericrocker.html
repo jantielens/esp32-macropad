@@ -1,6 +1,6 @@
-                <!-- Numeric Rocker Settings (conditional, shown only for numericrocker widget type) -->
-                <details class="editor-group" id="pad-edit-numericrocker-section" style="display:none;">
-                    <summary>Numeric Rocker Settings</summary>
+                <!-- Numeric Rocker Content controls (conditional on numericrocker widget type) -->
+                <details class="editor-group" id="pad-edit-numericrocker-section" style="display:none;" open>
+                    <summary>Numeric Rocker</summary>
                     <div class="editor-group-body">
                         <div class="form-group">
                             <label for="pad-edit-numericrocker-axis">Direction</label>
@@ -8,15 +8,15 @@
                                 <option value="horizontal">Left / Right</option>
                                 <option value="vertical">Up / Down</option>
                             </select>
-                            <small>Four tap zones provide fine and coarse adjustment. The center retains the button's tap and long-press actions.</small>
+                            <small>Four tap zones provide fine and coarse adjustment. The center retains the button's tap actions.</small>
                         </div>
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
+                        <div class="widget-row">
+                            <div class="form-group">
                                 <label for="pad-edit-numericrocker-small-step">Small Step</label>
                                 <input type="number" id="pad-edit-numericrocker-small-step" min="0" step="any" value="1" placeholder="1">
                                 <small>Inner zone adjustment (±). 0 = disable inner zones.</small>
                             </div>
-                            <div class="form-group" style="flex:1;">
+                            <div class="form-group">
                                 <label for="pad-edit-numericrocker-large-step">Large Step</label>
                                 <input type="number" id="pad-edit-numericrocker-large-step" min="0" step="any" value="10" placeholder="10">
                                 <small>Outer zone adjustment (±). 0 = disable outer zones.</small>
@@ -27,21 +27,23 @@
                             <input type="number" id="pad-edit-numericrocker-zone-scale" min="50" max="150" step="1" value="100">
                             <small>Scales both small and large tap areas. 100% is the default.</small>
                         </div>
-                        <div style="display:flex; gap:8px;">
-                            <div class="form-group" style="flex:1;">
+                        <div class="widget-row">
+                            <div class="form-group">
                                 <label for="pad-edit-numericrocker-color">Indicator Color</label>
                                 <div class="bindable-color"><div class="bc-swatch"></div><input type="text" id="pad-edit-numericrocker-color" class="bc-input" data-allow-bindings="false" maxlength="191" value="#FFFFFF" placeholder="#FFFFFF"></div>
                             </div>
-                            <div class="form-group" style="flex:1;">
+                            <div class="form-group">
                                 <label for="pad-edit-numericrocker-opacity">Opacity (0-255)</label>
                                 <input type="number" id="pad-edit-numericrocker-opacity" min="0" max="255" value="80" placeholder="80">
                                 <small>0 = invisible, 255 = fully opaque</small>
                             </div>
                         </div>
-                        <hr style="border:none; border-top:1px solid #e5e5ea; margin:12px 0;">
-                        <div id="pad-edit-numericrocker-adjust-section">
-                            <div id="pad-edit-nr-adjust-container"></div>
-                            <small>Use <code>{step}</code> in the adjustment action for the signed step value.</small>
-                        </div>
                     </div>
                 </details>
+                        <details class="editor-group" id="pad-edit-numericrocker-adjust-section" style="display:none;" open>
+                            <summary>Adjustment Action</summary>
+                            <div class="editor-group-body">
+                                <div id="pad-edit-nr-adjust-container"></div>
+                                <small>Use <code>{step}</code> in the adjustment action for the signed step value.</small>
+                            </div>
+                        </details>

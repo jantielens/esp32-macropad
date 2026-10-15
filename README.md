@@ -420,6 +420,9 @@ Building from source, contributing, or adding new board support? See the [develo
 For a feature-size attribution report from an existing build, use the
 [standalone firmware size reporting spike](docs/dev/scripts.md#toolsfirmware_size_reportpy).
 For portal-only UI work, use the [device-free portal development server](docs/dev/web-portal.md#local-device-free-development) to work against production assets without flashing a board. Its default P4 profile includes memory-backed pad editor fixtures and failure scenarios.
+Widget firmware and portal packaging share one explicit manifest; see the
+[widget manifest generator](docs/dev/scripts.md#toolswidget_manifestpy) and
+[editor extension contract](docs/dev/web-portal.md).
 
 ### Running Tests
 
