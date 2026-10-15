@@ -1,6 +1,8 @@
 (() => {
     const maxWindow = 7 * 86400;
     const maxPoints = 1024;
+    const defaultWindow = 300;
+    const defaultSlots = 60;
     const fields = [];
     const input = name => document.getElementById('pad-edit-sparkline-' + name);
     function field(name, key, kind, defaultValue, binding) {
@@ -57,10 +59,20 @@
         type: 'sparkline', fields,
         sections: [{ id: 'pad-edit-sparkline-section', tab: 'Content' }],
         actions: { tap: true, longPress: true },
+        disclosureSettings: [
+            ...[1, 2, 3].flatMap(source => {
+                const suffix = source === 1 ? '' : '_' + source;
+                const group = 'pad-edit-sparkline-source-' + source;
+                return [{ group, key: 'widget_sparkline_ha_entity' + suffix, kind: 'text', default: '' },
+                    { group, key: 'widget_sparkline_ha_stat' + suffix, kind: 'text', default: 'mean' }];
+            }),
+            { group: 'pad-edit-sparkline-sampling', key: 'widget_sparkline_window', kind: 'number', default: defaultWindow },
+            { group: 'pad-edit-sparkline-sampling', key: 'widget_sparkline_slots', kind: 'number', default: defaultSlots }
+        ],
         icon: { fixedPosition: true, width: 1, height: 1 },
         load(button) {
-            const range = button.widget_sparkline_window === undefined ? 300 : button.widget_sparkline_window;
-            const slots = button.widget_sparkline_slots === undefined ? 60 : button.widget_sparkline_slots;
+            const range = button.widget_sparkline_window === undefined ? defaultWindow : button.widget_sparkline_window;
+            const slots = button.widget_sparkline_slots === undefined ? defaultSlots : button.widget_sparkline_slots;
             setDuration('window', range, [86400, 3600, 60, 1]);
             setDuration('interval', range / slots, [3600, 60, 1]);
             for (const suffix of ['', '-2', '-3']) {

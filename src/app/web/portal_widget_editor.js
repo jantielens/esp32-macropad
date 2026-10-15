@@ -25,7 +25,24 @@ function padWidgetEditorsLoad(button) {
             else if (field.kind === 'color') padSetBindableColor(field.id, value, fallback);
             else input.value = field.kind === 'label' ? padLabelToInput(value) : String(value);
         });
-        (editor.groups || []).forEach(group => { group.element.open = group.open; });
+        (editor.groups || []).forEach(group => {
+            const settings = editor.fields.filter(field => group.element.contains(document.getElementById(field.id)))
+                .concat((editor.disclosureSettings || []).filter(setting => setting.group === group.element.id));
+            group.element.open = group.open || settings.some(field => {
+                const value = config[field.key];
+                if (value === undefined || value === null || String(value).trim() === '') return false;
+                const fallback = typeof field.default === 'function' ? field.default() : field.default;
+                if (typeof fallback === 'number') return Number(value) !== fallback;
+                const normalize = value => field.kind === 'color' ? String(value).trim().toLowerCase() : String(value).trim();
+                return normalize(value) !== normalize(fallback);
+            });
+        });
+        (editor.groups || []).forEach(group => {
+            if (!group.element.open) return;
+            (editor.groups || []).forEach(parent => {
+                if (parent.element.contains(group.element)) parent.element.open = true;
+            });
+        });
     });
 }
 

@@ -328,6 +328,39 @@ vm.runInContext('PAD_FIRMWARE_DEFAULTS = globalThis.PAD_FIRMWARE_DEFAULTS;', con
 context.padSetBindableColor = (id, value) => { document.getElementById(id).value = value; };
 context.padGetBindableColor = id => document.getElementById(id).value;
 context.actionEditorBuild = () => ({});
+const gaugeEditor = context.padWidgetEditor('gauge');
+function disclosureGroup(editor, id, keys, open = false) {
+    const inputs = editor.fields.filter(field => keys.includes(field.key)).map(field => document.getElementById(field.id));
+    return { element: { id, contains: element => inputs.includes(element) }, open };
+}
+gaugeEditor.groups = [
+    disclosureGroup(gaugeEditor, 'pad-edit-gauge-source-1', [], true),
+    disclosureGroup(gaugeEditor, 'pad-edit-gauge-source-2', ['widget_data_binding_2', 'widget_arc_color_2']),
+    disclosureGroup(gaugeEditor, 'pad-edit-gauge-source-3', ['widget_data_binding_3']),
+    disclosureGroup(gaugeEditor, 'pad-edit-gauge-needle', ['widget_gauge_show_needle']),
+    disclosureGroup(gaugeEditor, 'pad-edit-gauge-tick-marks', ['widget_gauge_ticks']),
+    disclosureGroup(gaugeEditor, 'pad-edit-gauge-target', ['widget_gauge_marker_value'])
+];
+context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color_2: '#234567', widget_gauge_ticks: '5' });
+assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, false, false, false, false, false], 'Explicit defaults must not expand optional groups');
+context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_data_binding_2: ' [pad:source] ', widget_gauge_marker_value: 0,
+    widget_gauge_show_needle: false, widget_gauge_ticks: 0 });
+assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, true, false, true, true, true], 'Data, zero targets, and changed false/zero defaults expand their groups');
+gaugeEditor.groups[1].element.open = false;
+context.padWidgetEditorsRefresh('gauge');
+assert.strictEqual(gaugeEditor.groups[1].element.open, false, 'Refresh must not override a manual disclosure choice');
+context.padWidgetEditorsLoad({ widget_type: 'table' });
+assert.deepStrictEqual(gaugeEditor.groups.map(group => group.element.open), [true, false, false, false, false, false], 'Another button must not inherit configured disclosure');
+const gaugeScale = disclosureGroup(gaugeEditor, 'pad-edit-gauge-scale', ['widget_gauge_min', 'widget_gauge_max']);
+const gaugeLayout = disclosureGroup(gaugeEditor, 'pad-edit-gauge-layout', ['widget_gauge_degrees']);
+gaugeEditor.groups.push(gaugeScale, gaugeLayout);
+context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_gauge_min: '0', widget_gauge_max: 100,
+    widget_track_outline_width: 0, widget_track_outline_color: '#000000' });
+assert.strictEqual(gaugeScale.element.open, false);
+assert.strictEqual(gaugeLayout.element.open, false);
+context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_gauge_min: '[pad:minimum]', widget_track_outline_width: 2 });
+assert.strictEqual(gaugeScale.element.open, true, 'A bound scale opens without a widget-specific shared-code branch');
+assert.strictEqual(gaugeLayout.element.open, true, 'Moved track controls use owner-declared section membership');
 context.padWidgetEditorsLoad({
     widget_type: 'gauge', widget_gauge_show_needle: false, widget_gauge_needle_width: 7,
     widget_gauge_ticks: 0, widget_gauge_tick_width: 3, widget_gauge_marker_zone_deg: 19,
@@ -411,8 +444,16 @@ assert.strictEqual(rocker.actions.length, 3);
 assert.strictEqual(rocker.lp_actions.length, 3);
 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_bar_chart.js', 'utf8'), context);
+const barEditor = context.padWidgetEditor('bar_chart');
+barEditor.groups = [
+    disclosureGroup(barEditor, 'pad-edit-bar-source-2', ['widget_bar_label_2']),
+    disclosureGroup(barEditor, 'pad-edit-bar-source-3', ['widget_data_binding_3']),
+    disclosureGroup(barEditor, 'pad-edit-bar-gridlines', ['widget_bar_tick_width']),
+    disclosureGroup(barEditor, 'pad-edit-bar-target', ['widget_bar_marker_value'])
+];
 context.padWidgetEditorsLoad({ widget_type: 'bar_chart', widget_bar_ticks: 0, widget_bar_tick_width: 4,
     widget_bar_marker_value: '0', widget_bar_label_2: 'Grid', widget_bar_track_radius: 0 });
+assert.deepStrictEqual(barEditor.groups.map(group => group.element.open), [true, false, true, true], 'Bar labels, customized gridlines, and zero targets open their groups');
 document.getElementById('pad-edit-widget-type').value = 'bar_chart';
 const barChart = context.padDialogBuildButton();
 assert.strictEqual(barChart.widget_bar_ticks, 0);
@@ -422,8 +463,41 @@ assert.strictEqual(barChart.widget_bar_label_2, 'Grid');
 assert.strictEqual(barChart.widget_bar_track_radius, 0);
 assert.strictEqual(barChart.widget_bar_min, 0);
 assert.strictEqual(barChart.widget_bar_max, 3);
+const barLayout = disclosureGroup(barEditor, 'pad-edit-bar-layout', ['widget_orientation']);
+barEditor.groups.push(barLayout);
+context.padWidgetEditorsLoad({ widget_type: 'bar_chart', widget_bar_pattern_3: 'none', widget_bar_bg_pattern_color: '#000000',
+    widget_bar_track_radius: '4', widget_orientation: 'vertical' });
+assert.strictEqual(barEditor.groups[1].element.open, false);
+assert.strictEqual(barLayout.element.open, false, 'Explicit custom-control defaults must not open layout');
+context.padWidgetEditorsLoad({ widget_type: 'bar_chart', widget_bar_pattern_3: 'dots', widget_bar_bg_pattern_color: '#123456' });
+assert.strictEqual(barEditor.groups[1].element.open, true, 'Pattern-only configuration opens an optional source');
+assert.strictEqual(barLayout.element.open, true, 'Pattern color alone opens its owning section');
 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_sparkline.js', 'utf8'), context);
+const sparklineEditor = context.padWidgetEditor('sparkline');
+sparklineEditor.groups = [
+    disclosureGroup(sparklineEditor, 'pad-edit-sparkline-source-2', ['widget_data_binding_2']),
+    disclosureGroup(sparklineEditor, 'pad-edit-sparkline-source-3', ['widget_data_binding_3']),
+    disclosureGroup(sparklineEditor, 'pad-edit-sparkline-minimum-marker', ['widget_sparkline_marker_size_min']),
+    disclosureGroup(sparklineEditor, 'pad-edit-sparkline-maximum-marker', ['widget_sparkline_max_fmt'])
+];
+context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_data_binding_2: '[pad:second]',
+    widget_sparkline_marker_size_min: 4, widget_sparkline_max_fmt: 'High %.1f' });
+assert.deepStrictEqual(sparklineEditor.groups.map(group => group.element.open), [true, false, true, true], 'Sparkline sources and customized markers open on load');
+context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_sparkline_ref_1_color: '#123456' });
+assert.deepStrictEqual(sparklineEditor.groups.map(group => group.element.open), [false, false, false, false], 'Unrelated reference styling must not open source or marker groups');
+const samplingGroup = disclosureGroup(sparklineEditor, 'pad-edit-sparkline-sampling', []);
+const markerParent = disclosureGroup(sparklineEditor, 'pad-edit-sparkline-markers', []);
+markerParent.element.contains = element => sparklineEditor.groups.slice(2, 4).some(group => group.element === element || group.element.contains(element));
+sparklineEditor.groups.push(samplingGroup, markerParent);
+context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_sparkline_ha_stat_2: 'mean',
+    widget_sparkline_window: '300', widget_sparkline_slots: 60, widget_data_binding_3: '  ' });
+assert.ok(sparklineEditor.groups.every(group => !group.element.open), 'Blank sources and explicit custom defaults leave optional sections closed');
+context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_sparkline_ha_entity_2: 'sensor.temperature',
+    widget_sparkline_slots: 120, widget_sparkline_marker_size_min: 4 });
+assert.strictEqual(sparklineEditor.groups[0].element.open, true, 'Owner-declared history settings participate in disclosure');
+assert.strictEqual(samplingGroup.element.open, true, 'Changed sampling opens its section');
+assert.strictEqual(markerParent.element.open, true, 'A configured child opens its containing group');
 context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_sparkline_ref_1_color: '#123456' });
 document.getElementById('pad-edit-sparkline-window').value = '7';
 document.getElementById('pad-edit-sparkline-window-unit').value = '86400';
@@ -457,6 +531,17 @@ assert.throws(() => context.padDialogBuildButton(), /10 seconds and 7 days/);
 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_waveform.js', 'utf8'), context);
 const waveformEditor = context.padWidgetEditor('waveform');
+waveformEditor.groups = [disclosureGroup(waveformEditor, 'pad-edit-waveform-section', waveformEditor.fields.map(field => field.key))];
+context.padWidgetEditorsLoad({ widget_type: 'waveform', widget_waveform_color_1: '#4caf50' });
+assert.strictEqual(waveformEditor.groups[0].element.open, false, 'Literal color case alone does not count as customization');
+context.padWidgetEditorsLoad({ widget_type: 'waveform', widget_waveform_show_threshold: false });
+assert.strictEqual(waveformEditor.groups[0].element.open, true, 'A disabled default-on feature still counts as customization');
+const cameraEditor = context.padWidgetEditor('camera_preview');
+cameraEditor.groups = [disclosureGroup(cameraEditor, 'pad-edit-camera-preview-section', ['widget_camera_scale'])];
+context.padWidgetEditorsLoad({ widget_type: 'camera_preview', widget_camera_scale: 'cover' });
+assert.strictEqual(cameraEditor.groups[0].element.open, false);
+context.padWidgetEditorsLoad({ widget_type: 'camera_preview', widget_camera_scale: 'letterbox' });
+assert.strictEqual(cameraEditor.groups[0].element.open, true);
 assert.strictEqual(waveformEditor.available({ widget_catalog: [{ type: 'waveform' }] }), true);
 assert.strictEqual(waveformEditor.available({ widget_catalog: [{ type: 'gauge' }] }), false);
 assert.strictEqual(waveformEditor.available(null), false);

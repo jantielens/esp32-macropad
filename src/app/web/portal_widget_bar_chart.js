@@ -1,5 +1,6 @@
 (() => {
     const fields = [];
+    const patterns = ['widget_bar_pattern', 'widget_bar_pattern_2', 'widget_bar_pattern_3', 'widget_bar_pattern_4', 'widget_bar_bg_pattern'];
     function field(id, key, kind, defaultValue, binding) {
         fields.push({ id: 'pad-edit-' + id, key, kind, default: defaultValue, binding });
     }
@@ -36,13 +37,23 @@
         sections: [{ id: 'pad-edit-bar-chart-section', tab: 'Content' }],
         actions: { tap: true, longPress: true },
         fields,
+        disclosureSettings: [
+            ...patterns.flatMap((key, index) => {
+                const group = index < 4 ? 'pad-edit-bar-source-' + (index + 1) : 'pad-edit-bar-layout';
+                return [{ group, key, kind: 'text', default: 'none' },
+                    { group, key: key + '_color', kind: 'color', default: '#000000' }];
+            }),
+            { group: 'pad-edit-bar-layout', key: 'widget_track_outline_width', kind: 'number', default: 0 },
+            { group: 'pad-edit-bar-layout', key: 'widget_track_outline_color', kind: 'color', default: '#000000' },
+            { group: 'pad-edit-bar-layout', key: 'widget_bar_track_radius', kind: 'number', default: 4 }
+        ],
         previewFields: fields.filter(field => field.kind === 'color' && field.id !== 'pad-edit-widget-bar-tick-color' &&
             field.id !== 'pad-edit-widget-bar-marker-color' && field.id !== 'pad-edit-widget-bar-marker-zone-color').map(field => ({
             id: field.id + '-pattern-color',
             field: field.key.replace('_color', '_pattern_color'),
             kind: 'color'
         })),
-        patterns: ['widget_bar_pattern', 'widget_bar_pattern_2', 'widget_bar_pattern_3', 'widget_bar_pattern_4', 'widget_bar_bg_pattern'],
+        patterns,
         track: { host: 'pad-edit-bar-track-settings', outline: true, radius: true },
         icon: { fixedPosition: true, width: 1, height: 0.5 }
     });

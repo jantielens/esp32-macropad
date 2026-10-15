@@ -561,8 +561,25 @@ asynchronous state changes. Extension uses this callback after catalog success
 or failure, retaining its stale-mount guards. It does not inspect workspace
 selection, errors, or dirty revisions; the host decides whether to revalidate
 the selected editor without marking another edit.
-Registered groups start with their markup's fixed disclosure
-states; drafts restore manual choices. Gauge does not hide dependent fields or
+Disclosure policy stays widget-owned. Mark essential groups `open` in their
+HTML; other groups initially open only for non-default settings. Shared code
+associates registered field descriptors with their containing groups using the
+declared input IDs, rather than scanning arbitrary controls or duplicating
+field-key lists. Owners declare `disclosureSettings` for custom or moved controls:
+each entry provides `group` (the group ID), `key`, `kind`, and `default` using the
+same comparison contract as ordinary fields. These descriptors affect disclosure
+only, not loading, validation, or serialization. Bar Chart declares its patterns
+and moved track settings; Gauge declares its shared track outline; Sparkline
+declares history and sampling settings. Keep those keys and defaults in owners,
+never in widget-specific branches in shared code.
+On load, shared code opens a group if a relevant value is nonempty and differs
+from its field default, including dynamic firmware defaults.
+Numeric defaults compare numerically and literal color case is ignored. Explicit
+default values do not open a group; zero or false still count when they differ
+from the default. Essential groups and ancestors of open groups start open.
+Draft and post-save disclosure
+restoration override these initial choices; refresh never reapplies the rule.
+Gauge does not hide dependent fields or
 reset settings when a feature is off. Only the selected supported editor builds
 and validates its fields, including collapsed groups and inactive tabs.
 Invalid explicit numbers block saving rather than being clamped; optional
@@ -600,8 +617,8 @@ action suppression and navigation policy. List labels its tap actions Select;
 Camera Preview owns its capability gate and image scale.
 
 `padRefreshWidgetEditor()` delegates only to the selected owner's optional
-`refresh()` callback. Bar Chart and Sparkline use fixed, manually collapsible
-groups, not value-dependent disclosure rules. Turning off a feature retains
+`refresh()` callback. Chart groups remain manually collapsible; configured-value
+disclosure runs only on load, not while typing. Turning off a feature retains
 editable styling, including validation. Shared track-node movement follows the
 owner's declared host in `padFillRefreshVisibility()`.
 

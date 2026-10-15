@@ -40,6 +40,10 @@
         sections: [{ id: 'pad-edit-gauge-section', tab: 'Content' }],
         actions: { tap: true, longPress: true },
         fields,
+        disclosureSettings: [
+            { group: 'pad-edit-gauge-layout', key: 'widget_track_outline_width', kind: 'number', default: 0 },
+            { group: 'pad-edit-gauge-layout', key: 'widget_track_outline_color', kind: 'color', default: '#000000' }
+        ],
         track: { host: 'pad-edit-gauge-track-settings', outline: true },
         icon: { fixedPosition: true, width: 0.4, height: 0.4 }
     });

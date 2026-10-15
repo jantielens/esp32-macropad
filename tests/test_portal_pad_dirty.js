@@ -326,9 +326,10 @@ for (const type of ['mousepad', 'scrollpad']) {
 }
 
 const draftInput = { id: 'pad-edit-label-center', value: 'Original', checked: false };
+const draftGroup = { open: false };
 const draftRoot = {
 	isConnected: true,
-	querySelectorAll(selector) { return selector.includes('input') ? [draftInput] : []; },
+	querySelectorAll(selector) { return selector.includes('input') ? [draftInput] : selector === '#pad-edit-overlay details' ? [draftGroup] : []; },
 	querySelector() { return { scrollTop: 42 }; },
 	classList: { add() {}, remove() {} }
 };
@@ -390,9 +391,13 @@ workspaceContext.actionEditorTypeChanged = () => {};
 workspaceContext.padWidgetTypeChanged = () => {};
 workspaceContext.padIconTypeChanged = () => {};
 workspaceContext.padConfirmChanged = () => {};
-workspaceContext.padDialogOpen = () => workspaceContext.padWorkspaceAfterSelect();
+workspaceContext.padDialogOpen = () => {
+	draftGroup.open = true;
+	workspaceContext.padWorkspaceAfterSelect();
+};
 catalogReady = true;
 assert.doesNotThrow(() => workspaceContext.padWorkspaceValidate(), 'Reopened drafts revalidate after async dependencies settle');
+assert.strictEqual(draftGroup.open, false, 'Manual draft collapse overrides initial configured disclosure on reopening');
 assert.strictEqual(vm.runInContext('padWorkspace.errors.size', workspaceContext), 0);
 assert.strictEqual(draftInput.value, 'Corrected');
 assert.strictEqual(workspaceContext.revisions, catalogRevision, 'Catalog settlement does not mark a new edit');
