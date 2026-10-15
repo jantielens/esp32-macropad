@@ -20,7 +20,7 @@
         select.disabled = mount.status !== 'ready';
     }
     padRegisterWidgetEditor({
-        type: 'external', optionId: 'pad-edit-external-widget-option',
+        type: 'external',
         available: info => !!(info && info.has_native_extensions === true),
         replacesContent: true,
         sections: [{ id: 'pad-edit-extension-section', tab: 'Content' }],

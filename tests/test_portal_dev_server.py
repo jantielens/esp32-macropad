@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import re
 import sys
+import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
@@ -17,6 +18,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 SPEC = importlib.util.spec_from_file_location("portal_dev_server", ROOT / "tools/portal-dev-server.py")
 PORTAL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PORTAL)
+
+from widget_manifest import load_widgets, firmware_includes, portal_assets, validate_editors
 
 
 class PortalDevServerTest(unittest.TestCase):
@@ -75,6 +78,70 @@ class PortalDevServerTest(unittest.TestCase):
             widget_styles = (ROOT / "src/app/web" / filename).read_text().strip()
             self.assertIn(widget_styles, styles)
             self.assertNotIn(widget_styles, headless_styles)
+
+    def test_widget_manifest(self):
+        widgets = load_widgets()
+        self.assertEqual(portal_assets(widgets, "js").count("portal_widget_inputs.js"), 1)
+        self.assertNotIn("waveform", [widget["type"] for widget in widgets if "portal" in widget])
+        validate_editors(widgets)
+        with self.assertRaisesRegex(ValueError, "registration mismatch"):
+            validate_editors([{**widgets[0], "type": "mismatched_type"}])
+        includes = firmware_includes(widgets)
+        for kind, gates in {
+            "mousepad": ["HAS_DISPLAY", "HAS_TOUCH", "HAS_USB_HID"],
+            "camera_preview": ["HAS_DISPLAY", "HAS_CAMERA"],
+            "external": ["HAS_DISPLAY", "HAS_NATIVE_EXTENSIONS"],
+            "waveform": ["HAS_DISPLAY", "IS_SHUTTER_TESTER"],
+        }.items():
+            widget = next(widget for widget in widgets if widget["type"] == kind)
+            self.assertEqual(widget["gates"], gates)
+            self.assertIn(f"#if {' && '.join(gates)}\n#include \"{widget['source']}\"", includes)
+        invalid = [
+            widgets + [widgets[0]],
+            [{**widgets[0], "gates": ["HAS_MISSPELLED_FLAG"]}],
+            [{**widgets[0], "source": "widgets/missing_widget.cpp"}],
+            [{**widgets[0], "portal": {**widgets[0]["portal"], "html": "_missing.html"}}],
+            [{**widgets[0], "portal": {"label": "Missing", "js": "portal_widget_table.js"}}],
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "manifest.json"
+            for entries in invalid:
+                with self.subTest(entries=entries):
+                    manifest.write_text(json.dumps(entries))
+                    with self.assertRaises(ValueError):
+                        load_widgets(manifest)
+
+    def test_manifest_selector_and_partials(self):
+        class WidgetParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.ids = []
+                self.types = []
+                self.in_selector = False
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if "id" in attrs:
+                    self.ids.append(attrs["id"])
+                if tag == "select":
+                    self.in_selector = attrs.get("id") == "pad-edit-widget-type"
+                if tag == "option" and self.in_selector and attrs.get("value"):
+                    self.types.append(attrs["value"])
+
+            def handle_endtag(self, tag):
+                if tag == "select":
+                    self.in_selector = False
+
+        parser = WidgetParser()
+        parser.feed(self.request("/api/section/pad-editor", raw=True)[1])
+        widgets = [widget for widget in load_widgets() if "portal" in widget]
+        self.assertEqual(parser.types, [widget["type"] for widget in widgets])
+        self.assertEqual(len(parser.ids), len(set(parser.ids)), "Duplicate mounted control IDs")
+        for widget in widgets:
+            partial = WidgetParser()
+            partial.feed((ROOT / "src/app/web" / widget["portal"]["html"]).read_text())
+            for identifier in partial.ids:
+                self.assertIn(identifier, parser.ids)
 
     def test_epaper_presentation_config(self):
         profile = "crowpanel-4.2-interactive"

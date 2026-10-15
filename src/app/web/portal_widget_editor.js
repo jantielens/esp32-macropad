@@ -66,8 +66,8 @@ function padWidgetValidateField(input, field) {
 function padWidgetEditorsInit(info) {
     padWidgetEditors.forEach(editor => {
         editor.supported = !editor.available || editor.available(info);
-        if (editor.optionId) {
-            const option = document.getElementById(editor.optionId);
+        const option = document.getElementById('pad-edit-' + editor.type + '-widget-option');
+        if (option) {
             option.hidden = !editor.supported;
             option.disabled = !editor.supported;
         }

@@ -18,9 +18,10 @@ are approved through the decision interview (2026-10-15). The user requested
 implementation on a subsequent request, including continuation after interruption.
 Phase 4 is now implemented and verified (2026-10-15), with the family checkpoints
 below. Phases 5 and 6 remain unauthorized; final acceptance is not yet claimed.
-Phase 4b's single-manifest design and scope are approved (2026-10-15), with
-integration and verification checkpoints recorded below. Implementation has
-not started; the build integration proposal is recorded for confirmation first.
+Phase 4 is committed as `1f8ded9`. Phase 4b's single-manifest design and
+implementation are approved (2026-10-15). Phase 4b is implemented and verified.
+The user confirmed it works without errors and authorized its commit.
+Integration and verification evidence is below.
 Use this document as the shared decision canvas; distinguish
 observed behavior, proposed decisions, and approved scope. Update checkboxes and the
 execution log as each phase is executed and verified.
@@ -595,8 +596,8 @@ bundle entries hand-maintained. Both
 [portal-dev-server.py](tools/portal-dev-server.py) reuse the same loader/rendering
 path. Integrate generation with [build.sh](build.sh) before compilation and with
 relevant host CMake targets using declared manifest/source dependencies, without
-relying on outputs left by a prior firmware build. Final output locations and
-expansion hooks must be confirmed before production edits.
+relying on outputs left by a prior firmware build. The user authorized these
+routine integration decisions together with implementation.
 
 Expected changes: one manifest and a small loader/generator; firmware aggregator,
 build hook, relevant CMake/test integration, HTML renderer, mock server, bundle
@@ -608,24 +609,57 @@ missing registration, and stale generated outputs in clean checkouts.
 #### Implementation And Verification
 
 * [x] Approve and record the manifest scope and ownership boundaries
-* [ ] Confirm generated-output locations and integration hooks
-* [ ] Add the manifest and loader with focused validation in the existing suite
-* [ ] Replace firmware include wiring and verify registration/gate parity
-* [ ] Replace widget bundles, partial mappings, and selector wiring
-* [ ] Integrate the mock server and relevant clean-checkout host checks
-* [ ] Verify duplicates, missing assets, invalid gates, shared-asset ordering,
+* [x] Confirm generated-output locations and integration hooks
+* [x] Add the manifest and loader with focused validation in the existing suite
+* [x] Replace firmware include wiring and verify registration/gate parity
+* [x] Replace widget bundles, partial mappings, and selector wiring
+* [x] Integrate the mock server and relevant clean-checkout host checks
+* [x] Verify duplicates, missing assets, invalid gates, shared-asset ordering,
   firmware-only entries, and mismatched registration types
-* [ ] Run existing portal behavior checks and all three asset-gate profiles
-* [ ] Check mock-browser selector availability and representative custom UI
-* [ ] Build only the preferred verification board, `jc1060p470c-sd`, because
+* [x] Run existing portal behavior checks and all three asset-gate profiles
+* [x] Check mock-browser selector availability and representative custom UI
+* [x] Build only the preferred verification board, `jc1060p470c-sd`, because
   firmware compilation wiring changes; no flashing or all-board build
-* [ ] Update existing extension-path guidance and record remaining limitations
+* [x] Update existing extension-path guidance and record remaining limitations
 
 Exit gate: a normal new widget requires owned files, local C++/JS behavior
 registrations, and one manifest entry. No widget-specific edits to generic
 orchestration, bundle lists, template mappings, or selector markup are required.
 Existing types, capabilities, shared-asset ordering, and custom UI remain intact.
 Phases 5 and 6 remain unauthorized.
+
+#### Execution Evidence
+
+One explicit manifest now drives guarded firmware includes, deduplicated JS/CSS
+bundle entries, partial mounting, selector labels/order, and mock-server assets.
+Local registrations and runtime availability remain owner-controlled. The
+generated header is ignored and recreated by `build.sh`; host CMake writes its
+copy to the binary directory. Source-only snapshot configuration, generation,
+and the registered mock-server suite passed without prior generated assets.
+
+All 13 focused portal CTest entries passed, including three asset-gate profiles
+(headless C3, P4 with PSRAM, P4 without PSRAM). Existing tests cover invalid
+manifest entries, shared paths, firmware-only Waveform, capability gates,
+mounted IDs, selector order, and actual JS registration mismatch failures.
+The existing Camera Preview wiring guard also passed. Python syntax checks and
+editor diagnostics found no errors in the touched slice.
+
+The initial firmware build exposed Arduino's failure to stage `.inc` files,
+mixing original and copied headers. Changing the generated include to `.h`
+fixed that build-path issue without altering firmware headers or behavior.
+`./build.sh jc1060p470c-sd` then passed: 3,199,184 bytes, no compiler warnings.
+The generated flag reference only removes aggregator references whose guards
+now live in the manifest. No flag values, dependencies, persisted JSON, or
+native ABI changed. No flashing or other board build was performed.
+
+Independent headless browser checks and screenshots at 1440x1000 and 390x844
+verified selector parity, representative chart/input/Extension sections,
+Numeric Rocker's Actions placement, Extension's initial disclosure, editable
+opaque configuration, and real custom-dropdown pointer selection. No page errors or
+horizontal overflow occurred. Integrated-browser screenshots were blank, so
+visual evidence uses the independent browser. Hardware interaction and
+firmware-only Waveform compilation were not verified on another board.
+Phase 5 cleanup and Phase 6 final project acceptance remain outside this phase.
 
 ### Phase 5 Ownership Cleanup and Waveform Retirement
 

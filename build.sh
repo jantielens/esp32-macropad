@@ -219,6 +219,7 @@ build_board() {
     local board_display_name
     board_display_name="$(project_display_name_for_board "$board_name")"
     echo "Brand:     $board_display_name"
+    python3 "$SCRIPT_DIR/tools/widget_manifest.py" --firmware "$SCRIPT_DIR/src/app/widget_modules.h"
     "$SCRIPT_DIR/tools/minify-web-assets.sh" "$PROJECT_NAME" "$board_display_name" >/dev/null
     
     # Check for board-specific configuration overrides

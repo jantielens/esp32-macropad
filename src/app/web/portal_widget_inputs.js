@@ -7,7 +7,7 @@
         }));
     }
     padRegisterWidgetEditor({
-        type: 'mousepad', optionId: 'pad-edit-mousepad-widget-option', available,
+        type: 'mousepad', available,
         sections: [{ id: 'pad-edit-mousepad-section', tab: 'Content' }],
         inputNavigation: true, actions: { tap: false, longPress: false },
         fields: fields('mousepad', 'mousepad', [
@@ -18,7 +18,7 @@
         ])
     });
     padRegisterWidgetEditor({
-        type: 'scrollpad', optionId: 'pad-edit-scrollpad-widget-option', available,
+        type: 'scrollpad', available,
         sections: [{ id: 'pad-edit-scrollpad-section', tab: 'Content' }],
         inputNavigation: true, actions: { tap: false, longPress: false },
         fields: fields('scrollpad', 'scrollpad', [
@@ -27,7 +27,7 @@
         ])
     });
     padRegisterWidgetEditor({
-        type: 'gamepad_stick', optionId: 'pad-edit-gamepad_stick-widget-option', available,
+        type: 'gamepad_stick', available,
         sections: [{ id: 'pad-edit-gamepad-stick-section', tab: 'Content' }],
         inputNavigation: true, actions: { tap: false, longPress: false },
         fields: fields('gamepad', 'gamepad', [

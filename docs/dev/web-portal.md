@@ -464,15 +464,15 @@ extensions load afterward. Sound and extension selectors remain disabled while
 their catalogs load, preserving saved filenames and extension IDs when options
 arrive. Building blocks show a loading state until their catalog is available.
 
-Every widget-specific editor in `pad-editor.fragment.html` uses a
-`{{WIDGET_*}}` build-time include from a matching `_widget_*.html` partial.
-Register each placeholder in `TEMPLATES` in `tools/_render_html_template.py`;
-the firmware asset pipeline and local mock server use this same renderer.
-Keep inclusion positions stable because workspace disclosure restoration follows
-DOM order. Gamepad Button's partial retains the host for generated controls;
-capability checks and runtime handlers remain in JavaScript. Restart the mock
-server after changing the renderer mapping, then reload the browser; HTML-only
-partial edits need only a browser reload.
+The widget manifest, `src/app/widgets/manifest.json`, owns explicit firmware and
+portal asset paths, firmware compile gates, selector labels, and order.
+`{{WIDGET_OPTIONS}}` and `{{WIDGET_EDITORS}}` in `pad-editor.fragment.html`
+expand through `tools/_render_html_template.py`. The firmware asset pipeline and
+local mock server use the same manifest loader and renderer. Keep manifest order
+stable because workspace disclosure restoration follows DOM order. Gamepad
+Button's partial retains the host for generated controls; capability checks and
+runtime handlers remain in JavaScript. Restart the mock server after changing
+Python tools, then reload the browser; manifest or partial edits need only reload.
 
 Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview, and
 Extension retain one native `editor-group` disclosure each in Content. Mousepad
@@ -489,18 +489,51 @@ Extension declares that it replaces shared labels, icons, and images.
 
 All 13 active widget editors register explicitly through
 `portal_widget_editor.js`. Their `portal_widget_*.js` modules precede the dialog
-in `portal.js.bundle`; markup remains in the existing partials. Mousepad,
+through the bundle's `@widgets` marker; markup remains in the existing partials. Mousepad,
 Scrollpad, and Gamepad Joystick share the input-family owner module.
 
-For a migrated editor, keep field metadata and specialized behavior in its
-`portal_widget_<type>.js` module and controls/bounds in its `_widget_<type>.html`
-partial. Register the module before the dialog in `portal.js.bundle` and wire
-the partial and widget option explicitly. Keep widget-only styles in owned CSS
-assets: Gauge, Gamepad Button, Bar Chart, and Sparkline have dedicated
-`portal_widget_*.css` entries in the `HAS_DISPLAY` chunk of
-`portal-all.css.bundle`. Other editors reuse shared layout utilities. Shared layout and
-ordinary field helpers stay shared; do not add widget-name branches to generic
-orchestration or require automatic asset discovery.
+To add a widget:
+
+1. Create its firmware implementation and local `REGISTER_WIDGET_*` registration.
+2. Create its editor JS with `padRegisterWidgetEditor()` and an HTML partial;
+   add owned CSS only when needed. Keep specialized behavior with the owner.
+3. Add one manifest entry, using the same type as both local registrations:
+
+```json
+{
+  "type": "example",
+  "source": "widgets/example_widget.cpp",
+  "gates": ["HAS_DISPLAY"],
+  "portal": {
+    "label": "Example",
+    "html": "_widget_example.html",
+    "js": "portal_widget_example.js"
+  }
+}
+```
+
+`source` is relative to `src/app`; portal paths are relative to `src/app/web`.
+`portal.css` is optional, and firmware-only widgets omit `portal` entirely.
+Shared assets are included once, at their first manifest position. Put dependencies
+before consumers. Both bundles expand `@widgets` in their existing `HAS_DISPLAY`
+chunk; additional capability checks stay in owner `available()` callbacks.
+The selector ID is `pad-edit-<type>-widget-option`, not an owner descriptor field.
+Do not edit bundle lists, template mappings, selector markup, or generic
+orchestration to add a widget.
+
+`build.sh` generates ignored `src/app/widget_modules.h` before compilation;
+`widgets.cpp` consumes its guarded includes. Host CMake generates the same include
+in its binary directory, without requiring a prior firmware build. Run
+`python3 tools/widget_manifest.py --firmware <output-path>` for direct compilation
+workflows outside `build.sh`. Invalid types, duplicate entries, missing files,
+and unknown gates fail generation. Compiled symbol checks verify C++ registration
+prefixes; asset generation executes JS owners to verify exact manifest parity.
+Waveform remains firmware-only under `IS_SHUTTER_TESTER`; its unused portal
+partial is not included. No persisted JSON, firmware interaction, or native ABI
+changes are part of this wiring.
+
+Shared layout and ordinary field helpers stay shared. Do not add widget-name
+branches to orchestration or introduce filename auto-discovery.
 
 Each registration declares its persisted type, section roles, fields, and
 action policy. Fields identify an input, flat JSON key, default, and conversion

@@ -5,6 +5,13 @@ const vm = require('node:vm');
 const zlib = require('node:zlib');
 
 const root = path.resolve(__dirname, '..');
+const fs = require('node:fs');
+const widgets = JSON.parse(fs.readFileSync(path.join(root, 'src/app/widgets/manifest.json'), 'utf8'));
+const expanded = execFileSync('python3', ['tools/widget_manifest.py', '--bundle', 'src/app/web/portal.js.bundle'],
+    {cwd: root, encoding: 'utf8'});
+const modules = expanded.split('\n').filter(line => /^portal_widget_/.test(line) && line !== 'portal_widget_editor.js');
+assert.equal(modules.length, new Set(modules).size, 'Shared widget modules must execute once');
+assert.equal(modules.length, new Set(widgets.filter(widget => widget.portal).map(widget => widget.portal.js)).size);
 execFileSync('bash', ['tools/minify-web-assets.sh', 'esp32-macropad', 'ESP32 Macropad'],
     {cwd: root, stdio: 'pipe'});
 

@@ -19,6 +19,7 @@ import re
 import sys
 import subprocess
 from _render_html_template import render
+from widget_manifest import expand_bundle
 from urllib.parse import parse_qs, urlparse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
@@ -665,7 +666,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags = {"HAS_DISPLAY"}
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
-        for line in (APP_WEB_DIR / manifest).read_text(encoding="utf-8").splitlines():
+        for line in expand_bundle(APP_WEB_DIR / manifest).splitlines():
             line = line.strip()
             if line.startswith("# [chunk:"):
                 chunk = line.removeprefix("# [chunk:").removesuffix("]").split()
