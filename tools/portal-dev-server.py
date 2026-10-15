@@ -19,6 +19,7 @@ import re
 import sys
 import subprocess
 from _render_html_template import render
+from widget_manifest import expand_bundle
 from urllib.parse import parse_qs, urlparse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
@@ -655,6 +656,9 @@ class PortalHandler(SimpleHTTPRequestHandler):
         self._serve_bytes(shell.encode("utf-8"), "text/html; charset=utf-8")
 
     def _serve_production_bundle(self):
+        self._serve_bundle("portal.js.bundle", "application/javascript; charset=utf-8")
+
+    def _serve_bundle(self, manifest, content_type):
         files = []
         enabled = True
         flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
@@ -662,7 +666,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             flags = {"HAS_DISPLAY"}
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
-        for line in (APP_WEB_DIR / "portal.js.bundle").read_text(encoding="utf-8").splitlines():
+        for line in expand_bundle(APP_WEB_DIR / manifest).splitlines():
             line = line.strip()
             if line.startswith("# [chunk:"):
                 chunk = line.removeprefix("# [chunk:").removesuffix("]").split()
@@ -671,18 +675,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 source = APP_WEB_DIR / line
                 files.append(source if source.is_file() else EPAPER_WEB_DIR / line)
         bundle = "\n\n".join(path.read_text(encoding="utf-8") for path in files)
-        self._serve_bytes(bundle.encode("utf-8"), "application/javascript; charset=utf-8")
+        self._serve_bytes(bundle.encode("utf-8"), content_type)
 
     def _serve_production_styles(self):
-        # portal-all.css is a build manifest in the source tree. Firmware
-        # serves the generated bundle, so assemble the same core sources for
-        # the local browser instead of returning the empty manifest marker.
-        files = [
-            APP_WEB_DIR / "bootstrap.min.css",
-            APP_WEB_DIR / "portal-custom.css",
-        ]
-        styles = "\n\n".join(path.read_text(encoding="utf-8") for path in files)
-        self._serve_bytes(styles.encode("utf-8"), "text/css; charset=utf-8")
+        self._serve_bundle("portal-all.css.bundle", "text/css; charset=utf-8")
 
     def _serve_logs(self, query):
         source = query.get("source", ["recent"])[0]

@@ -1,0 +1,25 @@
+.sparkline-source-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
+.sparkline-source-heading .bindable-color { display: flex; align-items: center; gap: 6px; }
+.sparkline-source-heading .bindable-color label { margin: 0; }
+.sparkline-source-heading .bindable-color .bc-input { display: none; }
+.sparkline-color-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-bottom: 12px; }
+.sparkline-color-row > .form-group,
+.sparkline-color-row .bindable-color { margin-bottom: 0; }
+.sparkline-history-fields { margin-top: 6px; }
+.sparkline-history-row { display: block; }
+.sparkline-history-row > .form-group { width: 100%; }
+.sparkline-time-range { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 6px; }
+.portal-form .sparkline-time-range input,
+.portal-form .sparkline-time-range select { width: 100%; min-width: 0; }
+.sparkline-resolution-summary { display: block; font-weight: 600; }
+.sparkline-editor .form-group { min-width: 0; }
+.sparkline-editor .form-group > label { min-height: 20px; }
+.sparkline-marker { margin-top: 8px; }
+.sparkline-marker-size { flex: 0 0 80px; }
+.sparkline-marker-style { display: flex; flex: 1; align-items: flex-start; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.sparkline-marker-format { flex: 1; min-width: 100px !important; }
+.sparkline-marker .sparkline-color-row,
+.sparkline-references .sparkline-color-row { align-items: flex-start; }
+@media (max-width: 520px) {
+  .sparkline-sampling-row { display: block; }
+}

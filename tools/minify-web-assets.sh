@@ -19,6 +19,8 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 PROJECT_NAME="${1:-esp32-template}"
 PROJECT_DISPLAY_NAME="${2:-ESP32 Template}"
 
+python3 "$SCRIPT_DIR/widget_manifest.py" --validate-editors
+
 # Escape strings for safe use in C string literals
 escape_c_string() {
     local s="$1"
@@ -267,6 +269,8 @@ discover_bundle_manifests() {    local ext="$1"
         local primary_name
         primary_name=$(basename "$bundle_manifest" .bundle)  # e.g. portal.js
         local bundle_missing=0
+        local expanded_manifest
+        expanded_manifest=$(python3 "$SCRIPT_DIR/widget_manifest.py" --bundle "$bundle_manifest") || return 1
         while IFS= read -r bline || [[ -n "$bline" ]]; do
             bline="${bline%%#*}"                     # strip comments
             bline="$(echo "$bline" | xargs)"         # trim whitespace
@@ -281,7 +285,7 @@ discover_bundle_manifests() {    local ext="$1"
             fi
             [[ "$bline" = "$primary_name" ]] && continue  # don't skip the primary
             _skip_map["$resolved"]=1
-        done < "$bundle_manifest"
+        done <<< "$expanded_manifest"
         if [[ $bundle_missing -gt 0 ]]; then
             echo "Error: $bundle_missing missing file(s) in bundle manifest $(basename "$bundle_manifest")"
             exit 1
@@ -311,6 +315,8 @@ concatenate_bundle() {
     local -n _out_path="$2"
     [[ -f "$manifest" ]] || return 1
     _out_path=$(mktemp /tmp/bundle_XXXXXX)
+    local expanded_manifest
+    expanded_manifest=$(python3 "$SCRIPT_DIR/widget_manifest.py" --bundle "$manifest") || return 1
     while IFS= read -r bline || [[ -n "$bline" ]]; do
         bline="${bline%%#*}"
         bline="$(echo "$bline" | xargs)"
@@ -323,7 +329,7 @@ concatenate_bundle() {
         fi
         cat "$resolved" >> "$_out_path"
         echo >> "$_out_path"
-    done < "$manifest"
+    done <<< "$expanded_manifest"
 }
 
 # concatenate_bundle_chunked <manifest> <chunks_array> <flags_array> <names_array>
@@ -349,6 +355,8 @@ concatenate_bundle_chunked() {
     local current_tmp=""
     local has_content=0
     local seen_marker=0
+    local expanded_manifest
+    expanded_manifest=$(python3 "$SCRIPT_DIR/widget_manifest.py" --bundle "$manifest") || return 1
 
     while IFS= read -r bline || [[ -n "$bline" ]]; do
         # Detect [chunk:NAME] or [chunk:NAME HAS_FLAG] markers BEFORE stripping.
@@ -393,7 +401,7 @@ concatenate_bundle_chunked() {
         cat "$resolved" >> "$current_tmp"
         echo >> "$current_tmp"
         has_content=1
-    done < "$manifest"
+    done <<< "$expanded_manifest"
 
     # Flush trailing chunk
     if [[ $seen_marker -eq 1 ]]; then

@@ -352,7 +352,7 @@ function padRenderBindings() {
         row.innerHTML =
             '<label for="pad-binding-name-' + idx + '">Name' +
             '<input id="pad-binding-name-' + idx + '" type="text" class="pad-binding-name" value="' + escAttr(b.name) + '" placeholder="e.g. temperature" maxlength="31" spellcheck="false"></label>' +
-            '<button type="button" class="btn btn-outline-danger btn-sm pad-binding-del" aria-label="Delete binding ' + (idx + 1) + '" title="Delete binding">✕</button>' +
+            '<button type="button" class="btn btn-outline-danger btn-sm pad-binding-del" aria-label="Delete binding ' + (idx + 1) + '" title="Delete binding"><span class="portal-icon" aria-hidden="true">delete</span><span class="portal-icon-fallback">Delete</span></button>' +
             '<label class="pad-binding-expression" for="pad-binding-value-' + idx + '">Binding' +
             '<input id="pad-binding-value-' + idx + '" type="text" class="pad-binding-value" value="' + escAttr(b.value) + '" placeholder="[mqtt:topic;path]" maxlength="191" spellcheck="false"></label>';
         row.querySelector('.pad-binding-name').addEventListener('input', function() {

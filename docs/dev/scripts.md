@@ -197,11 +197,32 @@ To view a downloaded report, extract the ZIP into a directory and serve it with
 `python3 -m http.server 8768 --bind 127.0.0.1 --directory <directory>`.
 Opening its HTML directly with a `file:` URL can block the JSON fetch.
 
+## tools/widget_manifest.py
+
+Generate guarded firmware includes and expand widget assets from
+`src/app/widgets/manifest.json`. The manifest owns paths, compile gates, selector
+labels, and order; local C++/JS registrations still own behavior.
+
+```bash
+python3 tools/widget_manifest.py --firmware src/app/widget_modules.h
+python3 tools/widget_manifest.py --bundle src/app/web/portal.js.bundle
+python3 tools/widget_manifest.py --validate-editors
+```
+
+`build.sh` generates the ignored `.h` before Arduino compilation. Use a header,
+not `.inc`, so Arduino stages nested implementation includes consistently.
+Host CMake generates it in the binary directory. Asset generation and the mock
+server share bundle/template expansion; shared assets appear once. Validation
+rejects duplicate types, missing assets, unknown gates, and mismatched JS
+registrations. No packages beyond the existing Python/Node toolchain are needed.
+
 ## tools/portal-dev-server.py
 
 **Purpose:** Run the production portal UI locally without a device or firmware
 build. The server serves the production shell, feature-selected JavaScript
 bundle, styles, and rendered fragments with deterministic in-memory API fixtures.
+JavaScript and CSS both follow their production bundle manifests and profile
+feature gates, including widget-owned stylesheets.
 
 **Usage:**
 
@@ -231,7 +252,7 @@ http://localhost:8765/?profile=jc3248w535&fragment=screensaver
 **Notes:**
 
 * Reload the browser after changing a served HTML, CSS, or JavaScript source.
-* Restart the server after changing `tools/portal-dev-server.py`.
+* Manifest edits need only reload; restart after changing Python tools.
 * The server binds to `127.0.0.1`. Mock writes are process-local and never contact a device.
 * Pad edits, defaults, icon uploads, brightness, and screen commands are retained in memory.
 * Fixtures include populated, empty, widget, template, inherited, dense 8x8, and input-control pads.
@@ -326,7 +347,8 @@ BOARD_PROFILE=psram ./build.sh esp32-nodisplay  # Optional build profile (if def
 
 **What it does:**
 - Optionally generates LVGL PNG assets from `assets/png/*.png` into `src/app/png_assets.cpp` + `src/app/png_assets.h` (only when building for at least one display-enabled board)
-- Generates minified web assets (once for all builds)
+- Generates guarded widget implementation includes from the widget manifest
+- Generates minified web assets per board
   - Also generates `src/app/repo_slug_config.h` when `git remote origin` points at a GitHub repo (used to construct GitHub Pages links)
 - Prints a per-board "Compile-time flags summary" (active `HAS_*` features + key selectors) to make it clear what the build will include
 - Compiles `src/app/app.ino` for specified board(s)

@@ -70,6 +70,7 @@ const document = {
 const context = {
     console,
     document,
+    TextEncoder,
     deviceInfoCache: {
         catalog: [
             { type: 'mqtt', group: 'Connectivity', label: 'Publish MQTT message' },
@@ -85,7 +86,6 @@ const context = {
               ] }
         ]
     },
-    listInjectSyntheticScreenOption() {},
     padInitBindableColor() {},
     padSetBindableColor() {},
     padGetBindableColor() { return ''; }

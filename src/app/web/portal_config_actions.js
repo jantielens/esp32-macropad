@@ -141,13 +141,13 @@ async function deleteSound(name) {
 }
 
 async function saveSwipeActions() {
-    const payload = {
-        swipe_left: actionEditorBuild('swipe-left'),
-        swipe_right: actionEditorBuild('swipe-right'),
-        swipe_up: actionEditorBuild('swipe-up'),
-        swipe_down: actionEditorBuild('swipe-down')
-    };
     try {
+        const payload = {
+            swipe_left: actionEditorBuild('swipe-left'),
+            swipe_right: actionEditorBuild('swipe-right'),
+            swipe_up: actionEditorBuild('swipe-up'),
+            swipe_down: actionEditorBuild('swipe-down')
+        };
         const response = await fetch('/api/component/swipe-actions/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -159,6 +159,7 @@ async function saveSwipeActions() {
             showMessage('Failed to save swipe actions', 'error');
         }
     } catch (err) {
+        if (actionEditorHandleError(err)) return;
         console.error('Error saving swipe actions:', err);
         showMessage('Error saving swipe actions: ' + err.message, 'error');
     }
@@ -187,8 +188,8 @@ async function loadBootActions() {
 }
 
 async function saveBootActions() {
-    var actions = actionEditorListBuild(BOOT_ACTION_PREFIXES);
     try {
+        var actions = actionEditorListBuild(BOOT_ACTION_PREFIXES);
         const response = await fetch('/api/component/boot-actions/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -200,6 +201,7 @@ async function saveBootActions() {
             showMessage('Failed to save boot actions', 'error');
         }
     } catch (err) {
+        if (actionEditorHandleError(err)) return;
         console.error('Error saving boot actions:', err);
         showMessage('Error saving boot actions: ' + err.message, 'error');
     }
@@ -289,14 +291,14 @@ async function saveHwButtons() {
     var container = document.getElementById('hw-button-editors');
     if (!container) return;
     var groupCount = container.querySelectorAll('details.editor-group').length;
-    var buttons = [];
-    for (var n = 1; n <= groupCount; n++) {
-        buttons.push({
-            tap_actions: actionEditorListBuild(hwButtonTapPrefixes(n)),
-            hold_actions: actionEditorListBuild(hwButtonHoldPrefixes(n))
-        });
-    }
     try {
+        var buttons = [];
+        for (var n = 1; n <= groupCount; n++) {
+            buttons.push({
+                tap_actions: actionEditorListBuild(hwButtonTapPrefixes(n)),
+                hold_actions: actionEditorListBuild(hwButtonHoldPrefixes(n))
+            });
+        }
         const response = await fetch('/api/component/hw-buttons/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -308,6 +310,7 @@ async function saveHwButtons() {
             showMessage('Failed to save hardware button actions', 'error');
         }
     } catch (err) {
+        if (actionEditorHandleError(err)) return;
         console.error('Error saving hardware button actions:', err);
         showMessage('Error saving hardware button actions: ' + err.message, 'error');
     }
@@ -388,23 +391,23 @@ async function saveMqttTriggers() {
     var container = document.getElementById('mqtt-trigger-editors');
     if (!container) return;
     var groupCount = container.querySelectorAll('details.editor-group').length;
-    var triggers = [];
-    for (var n = 1; n <= groupCount; n++) {
-        var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
-        var valueEl = document.getElementById('mqtttrig-' + n + '-value');
-        var topic = topicEl ? topicEl.value.trim() : '';
-        if (!topic) continue;  // skip empty slots
-        if (topic.indexOf('#') !== -1 || topic.indexOf('+') !== -1) {
-            showMessage('Wildcard topics are not supported. Use exact topic names.', 'error');
-            return;
-        }
-        triggers.push({
-            topic: topic,
-            value: valueEl ? valueEl.value : '',
-            actions: actionEditorListBuild(mqttTriggerPrefixes(n))
-        });
-    }
     try {
+        var triggers = [];
+        for (var n = 1; n <= groupCount; n++) {
+            var topicEl = document.getElementById('mqtttrig-' + n + '-topic');
+            var valueEl = document.getElementById('mqtttrig-' + n + '-value');
+            var topic = topicEl ? topicEl.value.trim() : '';
+            if (!topic) continue;  // skip empty slots
+            if (topic.indexOf('#') !== -1 || topic.indexOf('+') !== -1) {
+                showMessage('Wildcard topics are not supported. Use exact topic names.', 'error');
+                return;
+            }
+            triggers.push({
+                topic: topic,
+                value: valueEl ? valueEl.value : '',
+                actions: actionEditorListBuild(mqttTriggerPrefixes(n))
+            });
+        }
         const response = await fetch('/api/component/mqtt-triggers/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -418,6 +421,7 @@ async function saveMqttTriggers() {
             showMessage(msg, 'error');
         }
     } catch (err) {
+        if (actionEditorHandleError(err)) return;
         console.error('Error saving MQTT triggers:', err);
         showMessage('Error saving MQTT triggers: ' + err.message, 'error');
     }
@@ -474,11 +478,11 @@ async function loadTimerConfig() {
 }
 
 async function saveTimerConfig() {
-    var payload = {};
-    TIMER_IDS.forEach(function(tid) {
-        payload[String(tid)] = { expire_actions: actionEditorListBuild(timerExpirePrefixes(tid)) };
-    });
     try {
+        var payload = {};
+        TIMER_IDS.forEach(function(tid) {
+            payload[String(tid)] = { expire_actions: actionEditorListBuild(timerExpirePrefixes(tid)) };
+        });
         const response = await fetch('/api/component/timers/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -490,6 +494,7 @@ async function saveTimerConfig() {
             showMessage('Failed to save timer config', 'error');
         }
     } catch (err) {
+        if (actionEditorHandleError(err)) return;
         console.error('Error saving timer config:', err);
         showMessage('Error saving timer config: ' + err.message, 'error');
     }

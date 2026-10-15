@@ -30,6 +30,12 @@ Same aggregation pattern applies to `widgets.cpp`, `screens.cpp`, `display_drive
 * `portal.js.bundle` lists JavaScript modules in dependency order, grouped by `# [chunk:NAME]` or feature-gated `# [chunk:NAME HAS_FLAG]` markers. The build emits compile-time-selected, pre-gzipped variants; `handlePortalJS` serves the matching combined `/portal.js` in one response. Keep dependencies before their consumers, and keep `portal.js` last in the shell chunk.
 * `shell.html` loads `/portal-all.css` and `/portal.js` once. `portal-all.css.bundle` assembles the shared styles. Components may advertise `portal_script` and `portal_style` assets through the nav API; `portal_nav.js` loads those separately. Do not assume every script or stylesheet belongs in the shared bundle.
 * For a shared JS module, add it to `portal.js.bundle` in the appropriate chunk. For a device-class module, place it in that class's `web/` directory and reference it from the manifest. The minifier checks missing manifest entries and JavaScript syntax. Run focused asset checks after edits; a firmware build follows the build verification policy.
+* Widget packaging is the exception to manual bundle entries: add one entry to
+	`src/app/widgets/manifest.json` with explicit firmware/portal paths, compile
+	gates, and selector label. The bundles expand `@widgets` in `HAS_DISPLAY`;
+	the renderer expands `WIDGET_OPTIONS` and `WIDGET_EDITORS`. Keep C++ and JS
+	behavior registration local. Do not add widget-specific bundle entries,
+	template mappings, selector options, or orchestration branches.
 
 ## Portal Modes
 

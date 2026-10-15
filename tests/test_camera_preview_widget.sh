@@ -19,11 +19,12 @@ grep -q 'static void camera_preview_hide' "$WIDGET"
 grep -q 'Hidden: released RGB565 feed demand' "$WIDGET"
 grep -q 'widget_type->onShow' src/app/screens/pad_screen.cpp
 grep -q 'widget_type->onHide' src/app/screens/pad_screen.cpp
-grep -A2 '#if HAS_CAMERA' src/app/widgets.cpp | grep -q 'camera_preview_widget.cpp'
-grep -q 'value="camera_preview"' src/app/web/pad-editor.fragment.html
-grep -q 'WIDGET_CAMERA_PREVIEW' src/app/web/pad-editor.fragment.html
-grep -q 'widget_camera_scale' src/app/web/portal_pad_dialog.js
-grep -q 'has_camera === true' src/app/web/portal_pad_editor.js
+python3 tools/widget_manifest.py --firmware build/host-tests/tests/widget_modules.h
+grep -A2 '#if HAS_DISPLAY && HAS_CAMERA' build/host-tests/tests/widget_modules.h | grep -q 'camera_preview_widget.cpp'
+grep -q 'WIDGET_OPTIONS' src/app/web/pad-editor.fragment.html
+grep -q 'WIDGET_EDITORS' src/app/web/pad-editor.fragment.html
+grep -q 'widget_camera_scale' src/app/web/portal_widget_camera.js
+grep -q 'has_camera === true' src/app/web/portal_widget_camera.js
 
 CAMERA_API="src/app/web_portal_camera.cpp"
 CAMERA_DRIVER="src/app/drivers/ov02c10_p4_driver.cpp"

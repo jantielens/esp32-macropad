@@ -21,7 +21,6 @@
                                 <label for="pad-edit-sparkline-current-label">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label" maxlength="63" placeholder="e.g. [mqtt:topic;path;%.1f] °C">
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields">
                                 <div class="sparkline-history-row">
@@ -61,7 +60,6 @@
                                 <label for="pad-edit-sparkline-current-label-2">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-2" maxlength="63" placeholder="Optional — leave empty if unused">
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled-2" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency-2"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-2">
                                 <div class="sparkline-history-row">
@@ -90,7 +88,6 @@
                                 <label for="pad-edit-sparkline-current-label-3">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-3" maxlength="63" placeholder="Optional — leave empty if unused">
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled-3" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency-3"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-3">
                                 <div class="sparkline-history-row">
@@ -104,11 +101,11 @@
 
                         </div>
                     </details>
-                    <details class="editor-group" id="pad-edit-sparkline-scale" open>
+                    <details class="editor-group" id="pad-edit-sparkline-scale">
                         <summary>Scale</summary>
                         <div class="editor-group-body">
 
-                        <div class="sparkline-scale-row">
+                        <div class="widget-row">
                             <div class="form-group">
                                 <label for="pad-edit-sparkline-min">Y-Axis Min <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" id="pad-edit-sparkline-min" maxlength="63" placeholder="auto or [binding]">
@@ -128,11 +125,11 @@
 
                         </div>
                     </details>
-                    <details class="editor-group" id="pad-edit-sparkline-sampling" open>
+                    <details class="editor-group" id="pad-edit-sparkline-sampling">
                         <summary>Sampling</summary>
                         <div class="editor-group-body">
 
-                        <div class="sparkline-sampling-row">
+                        <div class="widget-row sparkline-sampling-row">
                             <div class="form-group">
                                 <label for="pad-edit-sparkline-window">Time Range</label>
                                 <div class="sparkline-time-range">
@@ -161,17 +158,17 @@
                             </div>
                         </div>
                         <small class="sparkline-resolution-summary" id="pad-edit-sparkline-resolution"></small>
-                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 7 days. The saved value will be limited to 7 days.</small>
+                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 7 days.</small>
                         <small class="editor-warn" id="pad-edit-sparkline-points-warn" style="display:none;"></small>
                         <small class="editor-warn" id="pad-edit-sparkline-ha-warn" style="display:none;">Home Assistant history is stored in 5-minute periods. Historical values are visually interpolated; live data uses the finer interval.</small>
 
                         </div>
                     </details>
-                    <details class="editor-group" id="pad-edit-sparkline-line-style" open>
+                    <details class="editor-group" id="pad-edit-sparkline-line-style">
                         <summary>Line style</summary>
                         <div class="editor-group-body">
 
-                        <div class="sparkline-line-style-row">
+                        <div class="widget-row">
                             <div class="form-group">
                                 <label for="pad-edit-sparkline-line-width">Line width (px)</label>
                                 <input type="number" id="pad-edit-sparkline-line-width" min="1" max="10" value="2" placeholder="2">
@@ -190,7 +187,7 @@
 
                         </div>
                     </details>
-                    <details class="editor-group" id="pad-edit-sparkline-markers" open>
+                    <details class="editor-group" id="pad-edit-sparkline-markers">
                         <summary>Markers</summary>
                         <div class="editor-group-body">
 
@@ -243,11 +240,11 @@
 
                         </div>
                     </details>
-                    <details class="editor-group" id="pad-edit-sparkline-annotations" open>
+                    <details class="editor-group" id="pad-edit-sparkline-annotations">
                         <summary>Current-value annotations</summary>
                         <div class="editor-group-body">
 
-                        <div class="sparkline-annotation-row">
+                        <div class="widget-row">
                         <div class="form-group">
                             <label for="pad-edit-sparkline-current-dot">Dot Size (px)</label>
                             <input type="number" id="pad-edit-sparkline-current-dot" min="0" max="20" value="0" placeholder="0">
@@ -264,7 +261,7 @@
 
                         </div>
                     </details>
-                        <details class="editor-group sparkline-references" id="pad-edit-sparkline-references" open>
+                        <details class="editor-group sparkline-references" id="pad-edit-sparkline-references">
                         <summary>Reference lines</summary>
                         <div class="editor-group-body">
                         <div class="sparkline-color-row" id="pad-edit-sparkline-ref-1-row">

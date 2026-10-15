@@ -636,7 +636,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_pages.cpp
   - src/app/web_portal_pages.h
   - src/app/web_portal_routes.cpp
-  - src/app/widgets.cpp
   - src/app/widgets/camera_preview_widget.cpp
 - **HAS_CONFIG_MODE_BUTTON**
   - src/app/app.ino
@@ -1054,7 +1053,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
   - src/app/screens/pad_screen_events.cpp
-  - src/app/widgets.cpp
   - src/app/widgets/external_widget.cpp
   - src/app/widgets/external_widget.h
 - **HAS_REMOTE_LOG**
@@ -1191,7 +1189,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_routes.cpp
   - src/app/web_portal_screenshot.cpp
   - src/app/web_portal_screenshot.h
-  - src/app/widgets.cpp
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
@@ -1238,7 +1235,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/usb_hid.cpp
   - src/app/usb_hid.h
   - src/app/web_portal_config.cpp
-  - src/app/widgets.cpp
   - src/app/widgets/gamepad_button_widget.cpp
   - src/app/widgets/gamepad_joystick_widget.cpp
   - src/app/widgets/mousepad_widget.cpp
@@ -1660,7 +1656,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_components.cpp
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
-  - src/app/widgets.cpp
 - **IS_VOICE_ASSISTANT**
   - src/app/board_config.h
   - src/app/device_class_registry.cpp

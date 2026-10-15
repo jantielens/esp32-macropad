@@ -2,6 +2,12 @@ include(FetchContent)
 include(GoogleTest)
 include(CMakeParseArguments)
 
+add_custom_target(widget_manifest ALL
+    COMMAND python3 ${PROJECT_SOURCE_DIR}/tools/widget_manifest.py
+        --firmware ${CMAKE_CURRENT_BINARY_DIR}/widget_modules.h
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/widget_modules.h
+    VERBATIM)
+
 add_test(NAME test_log_manager COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_log_manager.py)
 add_test(NAME test_portal_preflight COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_preflight.py)
 add_test(NAME test_stopwatch_hal COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/test_stopwatch_hal.py)

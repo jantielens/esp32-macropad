@@ -10,6 +10,9 @@ const context = {
     }
 };
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gauge.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_bar_chart.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
 
 const norm = context.padColorNormalizeLiteral;
@@ -181,16 +184,9 @@ context.padFillBuild(plainFill, 'gauge');
 assert.strictEqual(plainFill.bg_pattern, undefined);
 assert.strictEqual(plainFill.bg_pattern_color, '#FFFFFF');
 assert.strictEqual(plainFill.widget_bar_pattern, undefined);
-fillInputs.get('pad-edit-track-radius').value = '12';
-const roundedFill = {};
-context.padFillBuild(roundedFill, 'bar_chart');
-assert.strictEqual(roundedFill.widget_bar_track_radius, 12);
 const gaugeFill = {};
 context.padFillBuild(gaugeFill, 'gauge');
 assert.strictEqual(gaugeFill.widget_bar_track_radius, undefined);
-context.padFillLoad({ widget_bar_track_radius: 999 });
-assert.strictEqual(patternsSection.open, false);
-assert.strictEqual(fillInputs.get('pad-edit-track-radius').value, 64);
 
 const pickerContext = { Event: class {}, clearTimeout() {}, document: { body: { contains() { return false; } } } };
 vm.createContext(pickerContext);

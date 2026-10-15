@@ -107,7 +107,9 @@ async function alarmInitFragment() {
                 form.dataset.dirty = JSON.stringify(alarmConfigBuild()) === submitted ? 'false' : 'true';
                 showMessage(schedule ? 'Schedule saved' : 'Behavior saved', 'success');
                 await alarmStatusRefresh();
-            } catch (error) { showMessage(error.message, 'error'); }
+            } catch (error) {
+                if (!actionEditorHandleError(error)) showMessage(error.message, 'error');
+            }
             finally { button.disabled = false; }
         });
         await alarmStatusRefresh();

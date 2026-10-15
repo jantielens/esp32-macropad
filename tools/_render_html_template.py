@@ -21,27 +21,16 @@ Minification:
 from __future__ import annotations
 
 import argparse
+from html import escape
 import re
 import sys
 from pathlib import Path
 
+from widget_manifest import load_widgets, portal_assets
+
 # Placeholder key -> source filename under --web-dir.
 TEMPLATES = [
     ("BINDING_HELP", "_binding_help.html"),
-    ("WIDGET_BAR_CHART", "_widget_bar_chart.html"),
-    ("WIDGET_GAUGE", "_widget_gauge.html"),
-    ("WIDGET_SPARKLINE", "_widget_sparkline.html"),
-    ("WIDGET_TABLE", "_widget_table.html"),
-    ("WIDGET_ROCKER", "_widget_rocker.html"),
-    ("WIDGET_NUMERICROCKER", "_widget_numericrocker.html"),
-    ("WIDGET_WAVEFORM", "_widget_waveform.html"),
-    ("WIDGET_LIST", "_widget_list.html"),
-    ("WIDGET_CAMERA_PREVIEW", "_widget_camera_preview.html"),
-    ("WIDGET_GAMEPAD_STICK", "_widget_gamepad_stick.html"),
-    ("WIDGET_GAMEPAD_BUTTON", "_widget_gamepad_button.html"),
-    ("WIDGET_MOUSEPAD", "_widget_mousepad.html"),
-    ("WIDGET_SCROLLPAD", "_widget_scrollpad.html"),
-    ("WIDGET_EXTENSION", "_widget_extension.html"),
     ("STYLE_HELP", "_style_help.html"),
     ("HEALTH_WIDGET", "_health_widget.html"),
     ("REBOOT_OVERLAY", "_reboot_overlay.html"),
@@ -60,6 +49,14 @@ def render(input_path: Path, web_dir: Path,
            project_name: str, project_display_name: str,
            firmware_version: str, has_ble_hid: bool = True) -> str:
     html = input_path.read_text()
+
+    if "{{WIDGET_OPTIONS}}" in html or "{{WIDGET_EDITORS}}" in html:
+        widgets = [widget for widget in load_widgets() if "portal" in widget]
+        html = html.replace("{{WIDGET_OPTIONS}}", "".join(
+            f'<option value="{widget["type"]}" id="pad-edit-{widget["type"]}-widget-option">'
+            f'{escape(widget["portal"]["label"])}</option>' for widget in widgets))
+        html = html.replace("{{WIDGET_EDITORS}}", "".join(
+            (web_dir / asset).read_text() for asset in portal_assets(widgets, "html")))
 
     for key, filename in TEMPLATES:
         template = "" if key == "HID_BLE" and not has_ble_hid else load_template(web_dir, filename)

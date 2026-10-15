@@ -739,6 +739,15 @@ Configure up to 3 sequential actions to run automatically when the device boots 
 
 Actions are dispatched once after the first screen is shown during boot. Changes take effect on next reboot.
 
+For **Navigate to screen**, choose an available screen or **Binding value** in
+**Target Screen**. After `(none)`, the dropdown lists pads in index order,
+then **Binding value**, then built-in screens. Named pads include their index,
+for example **Pad 1: Living Room**. Binding mode accepts a target expression such as
+`[mqtt:screen]`; the stored expression must fit within 31 UTF-8 bytes. The same
+control is available in other action editors. A binding's runtime context still
+matters: List selection bindings require a List selection event, not a boot
+event. See [button actions](pad-editor-guide.md#actions-tap-and-long-press).
+
 ### MQTT Triggers
 
 *Shown on boards with MQTT and either a display or a physical button.*
@@ -959,7 +968,8 @@ Select the **Pad** inspector scope for pad **Layout**,
 deselects it without discarding edits. Edits update the current draft directly, without an Apply/Cancel
 step; only **Save Pad** persists the current pad. Switching buttons or tabs
 retains incomplete inputs. Correct validation errors before saving; failed
-saves retain the draft for retry.
+saves retain the draft for retry. A successful save keeps the selected button's
+tab, open settings groups, and inspector scroll position.
 
 Validation messages cover the action row without moving or hiding the settings.
 Use the close icon to reveal the actions temporarily; dismissal does not clear
@@ -972,34 +982,70 @@ Pad labels retain the `Pad X: Name` format whether selected or not. The button
 **Actions** and **Appearance** tabs expose their controls without an additional
 same-named accordion; individual action slots remain expandable.
 
+The Pad **Bindings** tab keeps each binding's name, expression, live preview,
+and delete control together in a bordered group. Expressions stay full width,
+with their resolved values directly underneath.
+
+Essential widget sections open initially, even with default settings. Other
+sections open when they contain non-default configuration, including bindings,
+disabled default-on options, or customized styling. Nested groups also open their
+containing sections. Explicit default values do not expand optional sections.
+These are initial choices only: manual collapse remains available and survives
+button switches and saves; typing does not change disclosure.
+
+Gauge Ring 1-4, Bar Chart Bar 1-4, and Sparkline Line 1-3 have left borders
+matching their source colors, including when collapsed. Color edits update the border immediately;
+bound colors use the resolved preview color, or the source's default palette
+color while unresolved or invalid. Patterned bars use their base color rather
+than the pattern color.
+
 Bar-chart **Content** starts with **Data sources**, keeping each bar's binding,
 caption, and color/fill together. Unused optional bars start collapsed; collapsing
 a bar does not disable it. **Scale** and **Layout & style** follow, then
 **Gridlines** and **Target**. **Animation** is inside **Layout & style**.
-Configured optional groups open
-when selecting the button. Gridline count 0 and an empty target hide their
-styling controls without clearing values. **Caption area size (px)** sizes the
+Data sources and Bar 1 open initially. Optional bars open on load when their
+binding, caption, color, or fill pattern differs from the defaults. Scale,
+Layout & style, Gridlines, and Target open for non-default settings; a target
+value of zero also opens Target. Track outline and fill settings count too.
+Gridline count 0 and an empty target leave styling editable and saved.
+**Caption area size (px)** sizes the
 caption strip, not the font; **Bar thickness (%)** controls the bar thickness.
 
 Gauge **Content** keeps each ring's binding, label, and color in **Data sources**.
-Ring 1 opens initially; configured optional rings and enabled pairs also open.
+Ring 1 opens initially; optional rings open when their binding, label, or color
+differs from the defaults.
 **Scale** and **Arc & track** follow, with animation and the shared track outline
-beside arc geometry. **Needle**, **Tick marks**, and **Target** keep each feature's
-dimensions and colors together. Turning off the needle, setting tick count to 0,
-or clearing the target hides styling without clearing saved values. Collapsing
-a group never disables it. Pair controls retain rings 2/4 as the negative side;
-target zone size remains an angle in degrees, not a percentage of the range.
+beside arc geometry; both open for non-default settings. **Needle**, **Tick marks**, and **Target** keep each feature's
+dimensions and colors together and open on load for non-default settings or a
+target value. Otherwise they start collapsed. Turning off the needle,
+setting tick count to 0, or clearing the target leaves their settings editable
+and saved. Manual collapse choices survive button switches; collapsing a group
+never disables it. Invalid values block saving even inside collapsed groups;
+Save Pad opens and focuses the offending field without enabling its feature.
+Pair controls retain rings 2/4 as the negative side; target zone size remains an
+angle in degrees, not a percentage of the range. Gamepad Button's held control
+remains in Content, with no ordinary tap or long-press action lists.
 
 Sparkline **Content** starts with per-line **Data sources**, keeping live binding,
 color, current-value label, and optional Home Assistant backfill together.
-Configured optional lines open initially; collapsing a line never disables it.
+Data sources and Line 1 open initially; optional lines open when their binding,
+label, color, or history settings differ from the defaults.
+Minimum/Maximum marker groups open for a nonzero
+size or customized format/color. These initial choices never override manual
+choices restored from a draft, and typing does not change disclosure.
+Collapsing a line never disables it.
 **Scale**, **Sampling**, **Line style**, **Markers**, **Current-value annotations**,
-and **Reference lines** follow. Each section has its own collapsible frame,
-initially open, matching Bar Chart. Marker size 0 hides format/color without clearing
-saved styling. Current-value labels stay with their line; dot size and label
+and **Reference lines** follow. Each section opens for its non-default settings;
+configured minimum/maximum markers also open their containing Markers section.
+Marker size 0 leaves format/color editable and
+saved. Current-value labels stay with their line; dot size and label
 area width are together below the markers. Reference Y values remain numeric.
-Turning backfill off retains draft inputs but omits that history source when
-saving, unlike marker styling. See [Sparkline](pad-editor-guide.md#sparkline)
+Enter a History entity to enable backfill; clear it to omit that history source
+when saving. No separate enable checkbox exists. Each history entity requires
+its line's live binding. Time range accepts 10 seconds through 7 days; requested
+intervals must be at least 100 ms. The editor shows the actual interval after
+deriving 2..1024 points, without correcting invalid inputs.
+See [Sparkline](pad-editor-guide.md#sparkline)
 for sampling limits and history requirements.
 
 Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview, and
@@ -1013,6 +1059,27 @@ has its own Image scale, separate from background-image scaling. Extension
 keeps Installed extension and Configuration full width, with Tick interval (ms)
 and Upscale together. An empty interval uses the package default. Collapsing a
 frame preserves its values; device capabilities still determine availability.
+Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, and Extension start open.
+Rocker, Numeric Rocker, List's Provider & Filter, and Table's binding section
+also start open. Camera Preview and Waveform start collapsed with default
+settings and open for non-default configuration.
+An edited Extension requires a successfully loaded catalog and an installed,
+enabled package. Loading and failure are distinct from an empty catalog, and
+do not block untouched Extension buttons or unrelated edits. Configuration is
+trimmed opaque text, up to 511 characters; explicit tick intervals must be whole
+milliseconds from 33 through 1000. Late catalog responses retain newer drafts.
+Numeric Rocker keeps center tap actions and its optional Adjustment Action in
+Actions, with Adjustment Action initially open; the editor omits long-press
+actions when saving that widget.
+
+On shutter tester builds advertising Waveform, its **Content** controls include
+four sensor colors, threshold and trigger colors, line width (1..5), and sensor
+selection (All or Sensor 1..4). Toggles control threshold, trigger, and target
+visibility, plus inverted Y; their values survive collapsing the settings frame.
+Colors accept bindings within the existing 11-character field limit, resolved
+when the firmware creates the widget. Ordinary
+tap and long-press actions remain available. Other devices do not offer Waveform
+in the widget selector.
 
 Button background and bar chart color pickers have Base Color and Pattern
 sections with one Apply operation. None is the default and uses only the base

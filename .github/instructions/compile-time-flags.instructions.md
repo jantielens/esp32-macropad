@@ -57,7 +57,11 @@ Arduino does not auto-compile `.cpp` files in subdirectories. The project uses s
 - `screens.cpp` — includes all screen `.cpp` files
 - `custom_fonts.cpp` — includes all generated font `.c` files
 
-When adding a new driver or widget, add its `#include` to the corresponding compilation unit — do not place it in a manager file.
+When adding a driver, add its `#include` to the corresponding compilation unit,
+not a manager file. For a widget, add one entry to
+`src/app/widgets/manifest.json`; `build.sh` generates the guarded includes in
+ignored `src/app/widget_modules.h`, consumed by `widgets.cpp`. Keep local
+registration in the implementation; do not maintain another widget include list.
 
 ## Adding a New Feature Flag
 

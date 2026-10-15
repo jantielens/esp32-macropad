@@ -102,7 +102,7 @@
             <div class="card-body">
             <div id="pad-bindings-section">
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-                    <button type="button" class="btn btn-small" id="pad-binding-add" style="padding:2px 10px; font-size:12px;">+ Add</button>
+                    <button type="button" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" id="pad-binding-add"><span class="portal-icon" aria-hidden="true">add</span>Add binding</button>
                 </div>
                 <div id="pad-bindings-list"></div>
                 <small class="form-text">Define named bindings to reuse across buttons via <code>[pad:name]</code>. Names must start with a letter and contain only letters, digits, or underscores.</small>
@@ -174,19 +174,7 @@
                             <label for="pad-edit-widget-type">Widget</label>
                             <select id="pad-edit-widget-type" onchange="padWidgetTypeChanged()">
                                 <option value="">None</option>
-                                <option value="bar_chart">Bar Chart</option>
-                                <option value="gauge">Gauge</option>
-                                <option value="sparkline">Sparkline</option>
-                                <option value="table">Table</option>
-                                <option value="rocker">Rocker</option>
-                                <option value="numericrocker">Numeric Rocker</option>
-                                <option value="list">List</option>
-                                <option value="mousepad" id="pad-edit-mousepad-widget-option" hidden disabled>Mousepad</option>
-                                <option value="scrollpad" id="pad-edit-scrollpad-widget-option" hidden disabled>Scrollpad</option>
-                                <option value="gamepad_stick" id="pad-edit-gamepad_stick-widget-option" hidden disabled>Gamepad Joystick</option>
-                                <option value="gamepad_button" id="pad-edit-gamepad_button-widget-option" hidden disabled>Gamepad Button</option>
-                                <option value="camera_preview" id="pad-edit-camera-preview-widget-option" style="display:none;">Camera Preview</option>
-                                <option value="external" id="pad-edit-external-widget-option" style="display:none;">Extension</option>
+                                {{WIDGET_OPTIONS}}
                             </select>
                         </div>
                         <div class="form-group" id="pad-edit-input-navigation" style="display:none;">
@@ -204,16 +192,6 @@
                         </div>
                     </div>
                 </details>
-
-                {{WIDGET_GAMEPAD_STICK}}
-
-                {{WIDGET_GAMEPAD_BUTTON}}
-
-                {{WIDGET_MOUSEPAD}}
-
-                {{WIDGET_SCROLLPAD}}
-
-                {{WIDGET_EXTENSION}}
 
                 <!-- Labels group (open by default) -->
                 <details class="editor-group" id="pad-edit-text-labels-section" open>
@@ -258,21 +236,7 @@
                     </div>
                 </details>
 
-                {{WIDGET_BAR_CHART}}
-
-                {{WIDGET_GAUGE}}
-
-                {{WIDGET_SPARKLINE}}
-
-                {{WIDGET_TABLE}}
-
-                {{WIDGET_ROCKER}}
-
-                {{WIDGET_NUMERICROCKER}}
-
-                {{WIDGET_LIST}}
-
-                {{WIDGET_CAMERA_PREVIEW}}
+                {{WIDGET_EDITORS}}
 
                 <div id="pad-edit-actions-section">
                     <div class="editor-group-body">

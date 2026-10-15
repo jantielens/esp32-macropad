@@ -215,7 +215,8 @@ function padIconTypeChanged() {
     var posGroup = document.getElementById('pad-edit-icon-position-group');
     if (posGroup) {
         var wt = document.getElementById('pad-edit-widget-type');
-        var widgetOverrides = wt && (wt.value === 'gauge' || wt.value === 'bar_chart' || wt.value === 'sparkline');
+        const editor = wt && padWidgetEditor(wt.value);
+        var widgetOverrides = wt && editor && editor.icon && editor.icon.fixedPosition;
         posGroup.style.display = (type && !widgetOverrides) ? '' : 'none';
     }
     if (type === 'mi') padEnsureMaterialSymbols();
@@ -363,15 +364,10 @@ async function padUploadPageIcons(context) {
         var iconW = fullW;
         var iconH = fullH - topReserve - bottomReserve;
 
-        // For bar chart widgets, icon only occupies the top half
-        if (btn.widget_type === 'bar_chart') {
-            iconH = Math.floor((fullH - topReserve - bottomReserve) / 2);
-        }
-
-        // For gauge widgets, icon sits inside the arc — scale down
-        if (btn.widget_type === 'gauge') {
-            iconW = Math.floor(iconW * 0.4);
-            iconH = Math.floor(iconH * 0.4);
+        const editor = padWidgetEditor(btn.widget_type);
+        if (editor && editor.icon) {
+            iconW = Math.floor(iconW * editor.icon.width);
+            iconH = Math.floor(iconH * editor.icon.height);
         }
 
         // Apply explicit icon_scale_pct if set (1-250%)
