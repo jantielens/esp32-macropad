@@ -11,6 +11,7 @@ class Element {
         this.attributes = {};
         this.validationMessage = '';
         this.focused = false;
+        this.parentNode = { querySelector() { return null; } };
         var classes = new Set();
         this.classList = {
             add: function(c) { classes.add(c); },
@@ -22,6 +23,7 @@ class Element {
     reportValidity() { return !this.validationMessage; }
     focus() { this.focused = true; }
     addEventListener() {}
+    closest() { return null; }
     hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name); }
     getAttribute(name) { return this.attributes[name]; }
     setAttribute(name, value) { this.attributes[name] = value; }

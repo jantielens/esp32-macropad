@@ -422,6 +422,8 @@ LIFECYCLE_DOUBLES = r'''
 static AudioOutputDriver* output_driver = nullptr;
 static uint8_t current_volume = 0;
 static bool audio_initialized = false;
+static bool output_muted = true;
+static int64_t output_last_write_us = 0;
 static int* audio_queue = nullptr;
 static int* music_work_queue = nullptr;
 using TaskHandle_t = int*;
@@ -868,19 +870,24 @@ int main() {
         if (failure == 6) Wire.failAmpEnable = true;
         if (failure == 7) channelWriteFails = true;
         audio_init(30);
-        if (failure == -1) {
+        if (failure == -1 || failure == 6) {
             assert(audio_initialized && liveChannels == 1 && liveQueues == 2);
-            assert((Wire.regs[0x4f][5] & 4) && (Wire.regs[0x4f][6] & 2));
+            assert((Wire.regs[0x4f][5] & 4) && !(Wire.regs[0x4f][6] & 2));
+            assert(output_muted && output_last_write_us == 0);
             int volumeIndex = -1, ampIndex = -1;
             for (size_t i = 0; i < Wire.writes.size(); ++i) {
                 const auto [address, reg, value] = Wire.writes[i];
                 if (address == 0x18 && reg == 0x32) volumeIndex = i;
                 if (address == 0x4f && reg == 6 && (value & 2)) ampIndex = i;
             }
-            assert(volumeIndex >= 0 && ampIndex > volumeIndex);
+            assert(volumeIndex >= 0 && ampIndex == -1);
             const int afterInit = Wire.transactions;
             audio_init(30);
             assert(Wire.transactions == afterInit && liveChannels == 1);
+            if (failure == 6) {
+                assert(!output_driver->setMuted(false));
+                assert(!(Wire.regs[0x4f][5] & 4) && !(Wire.regs[0x4f][6] & 2));
+            }
             vQueueDelete(audio_queue); audio_queue = nullptr;
             audio_init_abort();
         } else {

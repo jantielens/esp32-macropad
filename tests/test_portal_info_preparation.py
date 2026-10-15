@@ -100,7 +100,7 @@ static bool is_valid_binding_name(const char*) { return true; }
 static uint8_t action_list_parse(JsonVariantConst, ButtonAction*, size_t, bool) {
     return 0;
 }
-static void parse_button(JsonObject, ScreenButtonConfig*, const ButtonDefaults*) {}
+static bool parse_button(JsonObject, ScreenButtonConfig*, const ButtonDefaults*) { return true; }
 static void merge_template_buttons(uint8_t, PadConfig**) {}
 '''
 harness += section("static bool g_fs_mounted", "// ============================================================================")

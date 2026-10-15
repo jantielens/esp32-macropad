@@ -23,7 +23,7 @@ jq -er '.usage | contains("\"time\"") and (contains("\"clock\"") | not)' extensi
 
 require 'btn["extension_upscale"] | 1' src/app/widgets/external_widget.cpp
 require 'extension_upscale must be an integer from 1 to 4' src/app/pad_validate.cpp
-require "btn.extension_upscale = Number(document.getElementById('pad-edit-extension-upscale').value)" src/app/web/portal_pad_dialog.js
+require "{ id: 'pad-edit-extension-upscale', key: 'extension_upscale', kind: 'number', default: 1 }" src/app/web/portal_widget_extension.js
 require 'lv_image_set_scale_x(as_obj(canvas)' src/app/native_extension.cpp
 require 'LV_OBJ_FLAG_OVERFLOW_VISIBLE' src/app/widgets/external_widget.cpp
 require 'lv_event_set_ext_draw_size(event, extra_width > extra_height ? extra_width : extra_height)' src/app/widgets/external_widget.cpp
