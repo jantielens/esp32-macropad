@@ -1,17 +1,20 @@
 (() => {
     const fields = [];
     function field(name, key, kind, defaultValue, binding) {
-        fields.push({ id: 'pad-edit-gauge-' + name, key, kind, default: defaultValue, binding });
+        const descriptor = { id: 'pad-edit-gauge-' + name, key, kind, default: defaultValue, binding };
+        fields.push(descriptor);
+        return descriptor;
     }
     function color(name, key, defaultKey) {
-        field(name, key, 'color', () => PAD_FIRMWARE_DEFAULTS[defaultKey], {});
+        return field(name, key, 'color', () => PAD_FIRMWARE_DEFAULTS[defaultKey], {});
     }
     for (let source = 1; source <= 4; source++) {
         const suffix = source === 1 ? '' : '-' + source;
         const keySuffix = source === 1 ? '' : '_' + source;
         field('data-binding' + suffix, 'widget_data_binding' + keySuffix, 'text', '', { isWidgetBinding: true });
         field('start-label' + suffix, 'widget_gauge_start_label' + keySuffix, 'label', '', {});
-        color('arc-color' + suffix, 'widget_arc_color' + keySuffix, 'widget_series_color' + keySuffix);
+        const sourceColor = color('arc-color' + suffix, 'widget_arc_color' + keySuffix, 'widget_series_color' + keySuffix);
+        sourceColor.preview = resolved => padWidgetSetGroupColor('pad-edit-gauge-source-' + source, sourceColor, resolved);
     }
     field('min', 'widget_gauge_min', 'bindable-number', 0, { isWidgetBinding: true });
     field('max', 'widget_gauge_max', 'bindable-number', 100, { isWidgetBinding: true });

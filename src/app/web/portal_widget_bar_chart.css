@@ -1,4 +1,4 @@
-.bar-chart-source { border-left: 2px solid var(--portal-border-light); padding-left: 10px; }
+.bar-chart-source { border-left: 2px solid var(--pad-source-color, var(--portal-border-light)); padding-left: 10px; }
 .bar-chart-source > summary { cursor: pointer; padding: 6px 0; font-size: 13px; font-weight: 600; }
 .bar-chart-source-body { padding-bottom: 4px; }
 .bar-chart-pairs { margin-top: 8px; }

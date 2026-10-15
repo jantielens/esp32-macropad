@@ -2107,7 +2107,7 @@ body {
 .widget-caption-row { grid-template-columns: minmax(0, 1fr) auto; }
 .widget-caption-row .bindable-color { width: auto; }
 
-.pad-content-source { border-left: 2px solid var(--portal-border-light); padding-left: 10px; }
+.pad-content-source { border-left: 2px solid var(--pad-source-color, var(--portal-border-light)); padding-left: 10px; }
 .pad-content-source > summary { cursor: pointer; padding: 6px 0; font-size: 13px; font-weight: 600; }
 .pad-content-source-body { padding: 4px 0 8px; }
 

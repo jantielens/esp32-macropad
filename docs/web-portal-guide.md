@@ -993,6 +993,12 @@ containing sections. Explicit default values do not expand optional sections.
 These are initial choices only: manual collapse remains available and survives
 button switches and saves; typing does not change disclosure.
 
+Gauge Ring 1-4, Bar Chart Bar 1-4, and Sparkline Line 1-3 have left borders
+matching their source colors, including when collapsed. Color edits update the border immediately;
+bound colors use the resolved preview color, or the source's default palette
+color while unresolved or invalid. Patterned bars use their base color rather
+than the pattern color.
+
 Bar-chart **Content** starts with **Data sources**, keeping each bar's binding,
 caption, and color/fill together. Unused optional bars start collapsed; collapsing
 a bar does not disable it. **Scale** and **Layout & style** follow, then

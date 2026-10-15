@@ -8,7 +8,7 @@ class Element {
         this.value = '';
         this.checked = false;
         this.textContent = '';
-        this.style = { display: 'none' };
+        this.style = { display: 'none', setProperty(name, value) { this[name] = value; } };
         this.dataset = {};
         this.attributes = {};
         const classes = new Set();
@@ -317,6 +317,9 @@ assert.strictEqual(bindingName.classList.contains('pad-field-error'), false);
 assert.strictEqual(bindingName.attributes['aria-invalid'], undefined);
 
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
+const buildFill = context.padFillBuild;
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
+context.padFillBuild = buildFill;
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gauge.js', 'utf8'), context);
 context.PAD_FIRMWARE_DEFAULTS = {
     widget_series_color: '#123456', widget_series_color_2: '#234567',
@@ -574,4 +577,90 @@ context.padWidgetEditorsLoad({ widget_type: 'waveform' });
 assert.strictEqual(context.padDialogBuildButton().widget_waveform_show_threshold, true);
 assert.strictEqual(context.padDialogBuildButton().widget_waveform_sensor, 0);
 
-console.log('portal_pad_dialog_transaction: PASS');
+async function checkSourceColors() {
+    document.querySelector = () => null;
+    const border = id => document.getElementById(id).style['--pad-source-color'];
+    for (const [type, colorKey, groupPrefix, sourceCount] of [
+        ['gauge', 'widget_arc_color', 'pad-edit-gauge-source-', 4],
+        ['bar_chart', 'widget_bar_color', 'pad-edit-bar-source-', 4],
+        ['sparkline', 'widget_sparkline_line_color', 'pad-edit-sparkline-source-', 3]
+    ]) {
+        document.getElementById('pad-edit-widget-type').value = type;
+        context.padWidgetEditorsLoad({ widget_type: type });
+        for (let source = 1; source <= sourceCount; source++) {
+            const suffix = source === 1 ? '' : '_' + source;
+            const field = context.padWidgetEditor(type).fields.find(field => field.key === colorKey + suffix);
+            const group = document.getElementById(groupPrefix + source);
+            group.open = false;
+            const fallback = context.PAD_FIRMWARE_DEFAULTS['widget_series_color' + suffix];
+            assert.strictEqual(border(group.id), fallback.toUpperCase());
+            const input = document.getElementById(field.id);
+            input.value = '#aBc';
+            context.padPvSetChip(field.id);
+            assert.strictEqual(border(group.id), '#AABBCC', 'Literal edits normalize without needing a preview chip');
+            input.value = '[pad:color]';
+            context.padPvSetChip(field.id, '#fedcba');
+            assert.strictEqual(border(group.id), '#FEDCBA', 'Resolved binding colors reach their owning source');
+            for (const result of ['', '---', 'not a color']) {
+                context.padPvSetChip(field.id, result);
+                assert.strictEqual(border(group.id), fallback.toUpperCase());
+            }
+            context.padPvSetChip(field.id, '#fedcba', 'loading');
+            assert.strictEqual(border(group.id), fallback.toUpperCase());
+            input.value = '';
+            context.padPvSetChip(field.id);
+            assert.strictEqual(border(group.id), fallback.toUpperCase());
+            assert.strictEqual(group.open, false, 'Color updates preserve collapsed sections');
+        }
+    }
+    context.padWidgetEditorsLoad({ widget_type: 'bar_chart', widget_bar_color: '#123abc',
+        widget_bar_pattern: 'dots', widget_bar_pattern_color: '#ffffff' });
+    document.getElementById('pad-edit-widget-bar-color-pattern-color').value = '#000000';
+    context.padPvSetChip('pad-edit-widget-bar-color-pattern-color', '#ffffff');
+    assert.strictEqual(border('pad-edit-bar-source-1'), '#123ABC', 'Pattern color must not replace the base-color accent');
+
+    const pending = [];
+    context.padPvMount = () => {};
+    context.fetch = (url, options) => new Promise((resolve, reject) => {
+        assert.strictEqual(url, '/api/pad/resolve');
+        pending.push({ resolve, reject, body: JSON.parse(options.body) });
+    });
+    const settle = () => new Promise(resolve => setImmediate(resolve));
+    document.getElementById('pad-edit-widget-type').value = 'gauge';
+    context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color: '[pad:first]' });
+    const input = document.getElementById('pad-edit-gauge-arc-color');
+    context.padPvRefreshAll(0);
+    assert.strictEqual(pending.length, 1, 'Accents reuse the existing batch request');
+    input.value = '[pad:second]';
+    context.padPvRefreshAll(0);
+    pending[0].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#ff0000' } }) });
+    await settle();
+    assert.strictEqual(border('pad-edit-gauge-source-1'), '#123456', 'Changed expressions reject old results');
+    pending[1].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#00ff00' } }) });
+    await settle();
+    assert.strictEqual(border('pad-edit-gauge-source-1'), '#00FF00');
+    input.value = '[pad:first]';
+    context.padPvRefreshAll(0);
+    input.value = '[pad:second]';
+    context.padPvRefreshAll(0);
+    pending[3].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#00ff00' } }) });
+    await settle();
+    pending[2].reject(new Error('Old request failed'));
+    await settle();
+    assert.strictEqual(border('pad-edit-gauge-source-1'), '#00FF00', 'Stale failures cannot reset newer results');
+    context.padPvRefreshField(input.id, 0);
+    pending[4].resolve({ ok: true, json: () => ({ resolved: [{ value: '#abcdef' }] }) });
+    await settle();
+    assert.strictEqual(border('pad-edit-gauge-source-1'), '#ABCDEF', 'Click-to-refresh also updates the accent');
+    context.padPvRefreshAll(0);
+    context.padState.editCol++;
+    context.padWidgetEditorsLoad({ widget_type: 'gauge', widget_arc_color: '[pad:second]' });
+    pending[5].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#ff0000' } }) });
+    await settle();
+    assert.strictEqual(border('pad-edit-gauge-source-1'), '#123456', 'Switching buttons rejects old results');
+}
+
+checkSourceColors().then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

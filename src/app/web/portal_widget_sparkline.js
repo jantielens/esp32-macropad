@@ -6,7 +6,9 @@
     const fields = [];
     const input = name => document.getElementById('pad-edit-sparkline-' + name);
     function field(name, key, kind, defaultValue, binding) {
-        fields.push({ id: 'pad-edit-sparkline-' + name, key, kind, default: defaultValue, binding });
+        const descriptor = { id: 'pad-edit-sparkline-' + name, key, kind, default: defaultValue, binding };
+        fields.push(descriptor);
+        return descriptor;
     }
     function fail(name, message) {
         throw Object.assign(new Error(message), { fieldIds: ['pad-edit-sparkline-' + name] });
@@ -36,8 +38,9 @@
         const suffix = source === 1 ? '' : '-' + source;
         const keySuffix = source === 1 ? '' : '_' + source;
         field('data-binding' + suffix, 'widget_data_binding' + keySuffix, 'text', '', { isWidgetBinding: true });
-        field('line-color' + suffix, 'widget_sparkline_line_color' + keySuffix, 'color',
+        const sourceColor = field('line-color' + suffix, 'widget_sparkline_line_color' + keySuffix, 'color',
             () => PAD_FIRMWARE_DEFAULTS['widget_series_color' + keySuffix], {});
+        sourceColor.preview = resolved => padWidgetSetGroupColor('pad-edit-sparkline-source-' + source, sourceColor, resolved);
         field('current-label' + suffix, 'widget_sparkline_current_label' + keySuffix, 'text', '', {});
         field('ref-' + source + '-y', 'widget_sparkline_ref_' + source + '_y', 'number', '');
         field('ref-' + source + '-color', 'widget_sparkline_ref_' + source + '_color', 'color',

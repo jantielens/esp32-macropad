@@ -2,10 +2,12 @@
     const fields = [];
     const patterns = ['widget_bar_pattern', 'widget_bar_pattern_2', 'widget_bar_pattern_3', 'widget_bar_pattern_4', 'widget_bar_bg_pattern'];
     function field(id, key, kind, defaultValue, binding) {
-        fields.push({ id: 'pad-edit-' + id, key, kind, default: defaultValue, binding });
+        const descriptor = { id: 'pad-edit-' + id, key, kind, default: defaultValue, binding };
+        fields.push(descriptor);
+        return descriptor;
     }
     function color(name, key, defaultKey) {
-        field('widget-bar-' + name, key, 'color', () => PAD_FIRMWARE_DEFAULTS[defaultKey], {});
+        return field('widget-bar-' + name, key, 'color', () => PAD_FIRMWARE_DEFAULTS[defaultKey], {});
     }
     for (let source = 1; source <= 4; source++) {
         const suffix = source === 1 ? '' : '-' + source;
@@ -13,7 +15,8 @@
         field(source === 1 ? 'widget-data-binding' : 'widget-bar-data-binding' + suffix,
             'widget_data_binding' + keySuffix, 'text', '', { isWidgetBinding: true });
         field('widget-bar-label' + suffix, 'widget_bar_label' + keySuffix, 'text', '', {});
-        color('color' + suffix, 'widget_bar_color' + keySuffix, 'widget_series_color' + keySuffix);
+        const sourceColor = color('color' + suffix, 'widget_bar_color' + keySuffix, 'widget_series_color' + keySuffix);
+        sourceColor.preview = resolved => padWidgetSetGroupColor('pad-edit-bar-source-' + source, sourceColor, resolved);
     }
     field('widget-bar-min', 'widget_bar_min', 'bindable-number', 0, { isWidgetBinding: true });
     field('widget-bar-max', 'widget_bar_max', 'bindable-number', 3, { isWidgetBinding: true });

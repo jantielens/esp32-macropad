@@ -1,4 +1,3 @@
-.sparkline-source { margin-top: 12px; }
 .sparkline-source-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
 .sparkline-source-heading .bindable-color { display: flex; align-items: center; gap: 6px; }
 .sparkline-source-heading .bindable-color label { margin: 0; }

@@ -579,6 +579,13 @@ default values do not open a group; zero or false still count when they differ
 from the default. Essential groups and ancestors of open groups start open.
 Draft and post-save disclosure
 restoration override these initial choices; refresh never reapplies the rule.
+Gauge, Bar Chart, and Sparkline source color fields declare optional `preview(resolved)`
+callbacks. Shared loading and live binding previews invoke these callbacks;
+owners choose the source group and use `padWidgetSetGroupColor()` to set
+`--pad-source-color`. Literal edits update immediately. Binding colors reuse
+the guarded preview results, with the source's firmware palette default while
+unresolved or invalid. Bar Chart uses its base color, not its pattern color.
+The accent remains visible when collapsed and does not change disclosure state.
 Gauge does not hide dependent fields or
 reset settings when a feature is off. Only the selected supported editor builds
 and validates its fields, including collapsed groups and inactive tabs.

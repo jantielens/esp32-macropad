@@ -9,6 +9,14 @@ function padWidgetEditor(type) {
     return padWidgetEditors.get(type);
 }
 
+function padWidgetSetGroupColor(groupId, field, resolved) {
+    const raw = document.getElementById(field.id).value;
+    const fallback = typeof field.default === 'function' ? field.default() : field.default;
+    const color = padColorNormalizeLiteral(raw) || (raw.includes('[') && padColorNormalizeLiteral(resolved)) ||
+        padColorNormalizeLiteral(fallback);
+    document.getElementById(groupId).style.setProperty('--pad-source-color', color || 'var(--portal-border-light)');
+}
+
 function padWidgetActionPrefixes() {
     return Array.from(padWidgetEditors.values()).flatMap(editor => editor.actions.prefixes || []);
 }
@@ -24,6 +32,7 @@ function padWidgetEditorsLoad(button) {
             if (field.kind === 'checkbox') input.checked = value;
             else if (field.kind === 'color') padSetBindableColor(field.id, value, fallback);
             else input.value = field.kind === 'label' ? padLabelToInput(value) : String(value);
+            if (field.preview) field.preview();
         });
         (editor.groups || []).forEach(group => {
             const settings = editor.fields.filter(field => group.element.contains(document.getElementById(field.id)))

@@ -475,7 +475,7 @@ function padPvFieldDef(id) {
 function padPvFields() {
     const editor = padWidgetEditor(document.getElementById('pad-edit-widget-type').value);
     return PAD_PV_FIELDS.concat(editor ? editor.fields.filter(field => field.binding).map(field => ({
-        id: field.id, field: field.key, kind: field.kind === 'color' ? 'color' : 'text'
+        id: field.id, field: field.key, kind: field.kind === 'color' ? 'color' : 'text', preview: field.preview
     })).concat(editor.previewFields || [], editor.track && editor.track.outline ? [{
         id: 'pad-edit-track-outline-color', field: 'widget_track_outline_color', kind: 'color'
     }] : []) : []);
@@ -533,7 +533,9 @@ function padPvMount() {
     var overlay = document.getElementById('pad-edit-overlay');
     if (overlay && !overlay._pvHooked) {
         overlay._pvHooked = true;
-        var refresh = function () {
+        var refresh = function (event) {
+            const field = padPvFieldDef(event.target.id);
+            if (field && field.preview) field.preview();
             if (padPvTimer) clearTimeout(padPvTimer);
             padPvTimer = setTimeout(padPvRefreshAll, 350);
         };
@@ -545,6 +547,8 @@ function padPvMount() {
 // Render one chip. state 'loading' shows a spinner-ish ellipsis; hidden when the
 // field holds no binding.
 function padPvSetChip(id, value, state) {
+    const field = padPvFieldDef(id);
+    if (field && field.preview) field.preview(state === 'loading' ? undefined : value);
     var chip = document.querySelector('.pad-pv-val[data-pv="' + id + '"]');
     if (!chip) return;
     if (!padPvIsBinding(padPvFieldValue(id))) { chip.style.display = 'none'; chip.title = ''; return; }
@@ -618,7 +622,9 @@ function padPvRefreshAll(retriesLeft) {
       })
       .catch(function () {
           if (!current()) return;
-          padPvFields().forEach(function (f) { if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, '---'); });
+          padPvFields().forEach(function (f) {
+              if (padPvIsBinding(padPvFieldValue(f.id)) && padPvFieldValue(f.id) === btn[f.field]) padPvSetChip(f.id, '---');
+          });
       });
 }
 
