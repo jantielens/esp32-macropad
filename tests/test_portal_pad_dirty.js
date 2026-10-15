@@ -60,10 +60,19 @@ assert.deepStrictEqual(loadingNames, ['Destination pad'], 'Load-time refresh mus
 loadingContext.padLoadPage(2);
 assert.strictEqual(loadingName.value, '', 'A destination without a catalog name must not inherit the previous name');
 
-const target = { value: 'pad_4' };
+const target = {
+	value: 'pad_4', options: [{ value: '' }, { value: 'pad_4' }], attributes: {},
+	getAttribute(name) { return this.attributes[name]; },
+	setAttribute(name, value) { this.attributes[name] = value; },
+	removeAttribute(name) { delete this.attributes[name]; },
+	remove(index) { this.options.splice(index, 1); this.value = ''; },
+	appendChild(option) { this.options.push(option); }
+};
 elements.set('pad-level-action-0-target', target);
 context.deviceInfoCache = { available_screens: [{ id: 'pad_4', name: 'Pad 5' }] };
-context.actionEditorPopulateScreens = function() { target.value = ''; };
+context.document.createElement = () => ({ value: '', textContent: '' });
+context._actionEditorExtensions = [];
+vm.runInContext(fs.readFileSync('src/app/web/portal_action_editor_screen.js', 'utf8'), context);
 context.padPopulateScreenDropdown();
 assert.strictEqual(target.value, 'pad_4', 'Selecting a button must preserve pad-level screen targets');
 

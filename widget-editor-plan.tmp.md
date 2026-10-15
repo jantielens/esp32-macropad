@@ -1,0 +1,536 @@
+---
+title: Widget Editor Ownership Implementation Plan
+description: Temporary phased plan and execution tracker for issue 124.
+ms.date: 2026-10-15
+---
+
+## Status
+
+Phase 1 complete; D1..D5 approved through the decision interview (2026-10-15).
+Phase 2 authorized and implemented (2026-10-15); focused checks and mock-portal
+browser validation passed. Phase 3 is not yet authorized.
+Use this document as the shared decision canvas; distinguish
+observed behavior, proposed decisions, and approved scope. Later phases are not
+authorized by the instruction to start Phase 2. Update checkboxes and the
+execution log as each phase is executed and verified.
+
+Related: [issue 124](https://github.com/jantielens/esp32-macropad/issues/124).
+This agreed scope supersedes the issue's original compatibility requirements.
+This is a temporary tracking document, not permanent developer documentation.
+
+## Goal
+
+Adding a widget should require its own implementation, markup, and explicit
+registration or manifest wiring, without modifying generic editor orchestration.
+Common field mechanics should work out of the box. Specialized behavior must
+remain owned by the widget, not accumulate in a generic widget-exceptions file.
+
+Clean ownership does not require identical implementations. The approximate
+80 percent shared fields and 20 percent specialized code is a direction, not a
+coverage target.
+
+## Agreed Decisions
+
+* Cover all active widget editors, migrating and validating incrementally.
+* Introduce a small registry and a limited declarative field layer.
+* Keep field declarations, defaults, bounds, and special behavior widget-owned.
+* Reuse shared binding, color, action-list, and ordinary input helpers.
+* Retain all currently editable settings; plan no JSON-only settings or new
+  advanced JSON editing mechanism.
+* Retain unsaved-change warnings, per-button drafts, focused validation errors,
+  capability gates, and Content / Actions / Appearance tabs.
+* Prefer predictable static groups over automatic disclosure or dynamic labels
+  when those conveniences complicate the implementation.
+* Allow stable shared capability or family concepts where useful. An individual
+  widget exception in generic code requires a concrete justification and the
+  user's explicit approval.
+* Keep one Navigate to Screen action. Add a Binding value dropdown choice that
+  reveals a binding input, replacing List-specific synthetic target options.
+* Remove unused Waveform portal artifacts without removing firmware behavior.
+* Treat this work as greenfield: existing device configurations may break or
+  lose settings and may require manual reconfiguration. Backward compatibility
+  is not a requirement. Add no legacy readers, migrations, compatibility
+  branches, or old-configuration preservation machinery.
+* Group widget settings under a widget-owned object only if that materially
+  reduces complexity. A new persisted format is not mandatory.
+* Phase 1 decision: retain flat widget JSON and existing persisted type strings;
+  introduce only portal ownership abstractions. No firmware format rollout is
+  planned. Reopening the format decision requires a concrete problem and review.
+* Unavailable widget settings may be dropped during edits; no preservation
+  machinery or guarantee is required for unsupported widgets or missing
+  Extension packages. This permits loss, not proactive deletion on load.
+* Focus on supported editing workflows: save the configuration produced by the
+  available editor, without retaining unused fields for features that might be
+  re-enabled. Preserve current user edits and drafts, not obsolete configuration.
+* Literal screen targets must come from the available screen catalog; dynamic
+  targets use explicit Binding value mode. Do not synthesize options to retain
+  missing screen IDs. Reject targets over 31 UTF-8 bytes rather than truncate
+  them or expand firmware storage.
+* Numeric Rocker saves tap and adjustment actions only. Saving removes existing
+  long-press entries; this configuration change is explicitly approved. Do not
+  change firmware interaction behavior or expose long-press controls.
+* Adopt the lifecycle safeguards, representative-by-representative browser
+  checks, and immediate removal of each migrated slice's superseded logic.
+* Propose device runtime behavior or native Extension ABI changes separately
+  and obtain approval before implementing them.
+
+## Design Boundaries
+
+### Greenfield Compatibility Policy
+
+Implement one current configuration/editor contract, not old and new contracts
+side by side. Do not retain aliases, dual readers/writers, fallback parsing,
+version-based behavior, or tests solely to support superseded configurations.
+Existing device configurations and imports need not round-trip or keep working;
+manual reconfiguration is acceptable. Retaining flat JSON is a simplicity
+decision, not a compatibility promise. Retain current editing capabilities and
+draft safety, not historical configuration behavior. This policy does not waive
+the separate approval gates for firmware runtime or native Extension ABI changes.
+
+### Shared Field Mechanics
+
+Support the field kinds already needed: text, number, checkbox, select, binding,
+and color. Descriptors may identify a field, its configuration key, its default,
+and straightforward bounds or conversion rules. Reuse native input validation
+and existing helpers rather than recreate them.
+
+Begin with existing markup and widget-owned descriptors for load/build behavior.
+Do not make generated forms a prerequisite. Add shared rendering only if the
+representative widgets demonstrate a concrete reduction in duplication.
+
+Do not introduce a conditional expression language, schema compiler, automatic
+discovery, cross-language schema generation, or speculative hook surface.
+When a descriptor becomes a small program, use explicit widget-owned code.
+
+### Widget Ownership
+
+Each widget owns its field declarations, section roles, and optional specialized
+initialization, refresh, load/build, validation, and action integration behavior.
+These are candidate responsibilities, not a requirement to implement every
+hook for every widget. Keep closely related widget families together only when
+that improves ownership; do not collect all special cases in one shared module.
+
+Shared orchestration owns lifecycle sequencing, draft capture/restoration,
+dirty tracking, error presentation, and applying declared section/action policy.
+It must not inspect private widget fields or branch on individual widget names.
+
+The actual interface is established by representative migrations, not frozen
+before those migrations. Reuse existing disclosure/source rules only where
+they remain useful; do not preserve them at the cost of a complex abstraction.
+
+### Action Ownership
+
+Widgets declare supported action slots and special integration requirements.
+Generic code owns reusable action editor mechanics and consumes that policy
+for both visibility and serialization. Do not maintain duplicate widget lists.
+
+Preserve Rocker's directional actions, Numeric Rocker's adjustment action and
+step substitution, Gamepad Button's held action and release semantics, and input
+widgets' consumed actions. Simplifying labels must not make direction or action
+meaning ambiguous. Device behavior changes need separate approval.
+
+Navigate to Screen owns its screen-versus-binding UI. Persist the actual target
+string, never the Binding value UI sentinel. Restore binding mode on load and
+validate it using existing binding facilities. No List DOM access, provider
+inspection, or pad-specific action prefixes belong in the Screen action editor.
+
+### Firmware Ownership
+
+The firmware already calls widget-owned `parseConfig` through `widget_find` in
+[src/app/pad_config.cpp](src/app/pad_config.cpp). Reuse this boundary; do not
+introduce a parallel firmware registration or parsing framework.
+
+A nested persisted widget object is a candidate simplification, not an approved
+shape. Compare its benefit with the existing flat fields, including portal,
+firmware, defaults/catalogs, MCP authoring, samples, imports, and extensions.
+Keep runtime config storage bounded and avoid increasing per-button memory
+without a demonstrated need. Retain opaque Extension configuration semantics.
+
+## Phase Tracker
+
+| Phase | Deliverable | Status |
+| --- | --- | --- |
+| 0 | Scope and implementation plan | Phases 1 and 2 approved; later phases pending |
+| 1 | Contract baseline and format decision | Complete; D1..D5 approved |
+| 2 | Generic screen binding target | Complete; focused and mock-browser checks passed |
+| 3 | Shared fields and representative editors | Not started |
+| 4 | Remaining editor migrations | Not started |
+| 5 | Ownership cleanup and Waveform retirement | Not started |
+| 6 | Documentation and final verification | Not started |
+
+### Phase 0 Scope Approval
+
+* [x] Interview and record architectural preferences and tradeoffs
+* [x] Inspect representative portal paths and firmware parsing boundary
+* [x] Create temporary execution tracker
+* [x] Obtain approval to start Phase 1
+* [x] Obtain approval to proceed beyond Phase 1 (Phase 2 only)
+
+### Phase 1 Contract Baseline and Format Decision
+
+Primary surfaces: widget registry/parser interfaces, widget modules, pad dialog,
+editor, workspace, firmware defaults/catalogs, and existing test fixtures.
+
+* [x] Inventory active editors and their current fields, defaults, bounds,
+  sentinel behavior, action policy, capability gates, and specialized behavior
+* [x] Read applicable subsystem instructions for the investigation
+* [x] Run existing focused portal tests to establish a baseline
+* [x] Compare existing and nested widget configuration shapes against actual
+  ownership problems; record the recommendation and affected consumers below
+* [x] Assess firmware scope and identify conditional verification requirements
+* [x] Agree the format decision and resolve the contract decisions below
+
+Exit gate: a bounded contract sketch, field-coverage inventory, explicit format
+decision, and baseline results. If a breaking format is chosen, propose its
+concrete shape and scope for approval before implementing it. Do not expand
+this phase into a whole-repository redesign.
+
+### Phase 2 Generic Screen Binding Target
+
+Primary surfaces: Screen action editor and existing action-editor tests.
+
+* [x] Add Binding value mode and a binding input to Navigate to Screen
+* [x] Load/build the existing action's actual target consistently in all hosts
+* [x] Remove List-specific option injection and its refresh call sites
+* [x] Check literal screen selection, binding selection, validation, draft
+  restoration, and asynchronous screen catalog population
+* [x] Enforce the existing 31-byte stored target limit without truncating an
+  expression or increasing firmware storage; check the boundary in UTF-8 bytes
+* [x] Agree available-screen-only literal targets, without missing-ID retention
+  (revised D3)
+
+Exit gate: List selected-item navigation works through an ordinary binding
+target; other action hosts do not depend on the pad editor or List DOM. Retain
+one action type unless concrete evidence requires a separately approved change.
+
+Verification: extended existing startup checks for binding round-trips, catalog
+refreshes, mode switches with invalid drafts, and ASCII/multibyte length limits.
+The pad-level target check now uses the production Screen population function.
+Existing action-list, pad transaction, dirty-state, Timer binding, binding help,
+and action-picker checks passed. Production asset gates passed headless and P4
+profiles (with and without PSRAM); no firmware or ABI changed, so no firmware
+build ran. No new test harness or dependencies were added.
+
+Follow-up: pad target labels include their one-based index (for example
+`Pad 1: Living Room`). After `(none)`, options are numerically ordered pads,
+Binding value, then built-in screens. Startup, pad dirty-state, and production
+asset checks passed after this change. Missing diagnostic screens in the mock
+catalog are a fixture limitation; firmware already registers them where
+supported. The mock catalog is unchanged, as agreed with the user.
+
+Mock portal: `http://localhost:8766/?profile=esp32-p4-lcd4b&fragment=pad-editor`.
+Verified invalid draft restoration across button switches, correction and save
+to the mock API (HTTP 200, actual binding target, no sentinel), literal/binding
+mode changes, and blocked overlength save with zero pad POST requests. Boot
+Actions built `[mqtt:screen]` with no pad DOM and focused its own overlength
+field. Inspected control screenshots at 390px and 1440px widths. Some pad
+interactions required DOM event dispatch because integrated-browser pointer
+automation was inconsistent; a normal pointer click selected **Binding value**
+in Boot Actions. Hardware navigation remains untested; no flashing requested.
+
+### Phase 3 Shared Fields and Representative Editors
+
+Primary surfaces: widget-owned web modules/partials, small shared field/registry
+helpers, pad dialog/editor/workspace, and asset manifests.
+
+* [ ] Establish minimal shared field load/build and validation mechanics
+* [ ] Register section roles and action policy without private-ID routing
+* [ ] Migrate Table as a straightforward field editor
+* [ ] Migrate Gauge to exercise repeated sources, bindings, colors, and bounds
+* [ ] Migrate Gamepad Button to exercise specialized action ownership
+* [ ] Validate each migration before proceeding to the next representative
+* [ ] Check each representative in the browser, including draft restoration,
+  inactive Actions/Appearance tabs, validation focus, and repeated mounting
+* [ ] Remove the migrated slice's superseded logic immediately; reserve Phase 5
+  for cross-cutting cleanup rather than keeping duplicate ownership until then
+* [ ] Apply any approved firmware format change only to migrated slices, using
+  existing widget parsers and updating consumers without legacy fallbacks
+* [ ] Review the resulting interface for unnecessary hooks or descriptor logic
+
+Exit gate: representative editors retain setting coverage and workflows, while
+their specific code stays widget-owned. Temporary old/new implementation paths
+may coexist during migration, but no compatibility layer may survive completion.
+Any firmware-format rollout must clearly identify intermediate limitations;
+do not claim a partially migrated mixed format as a finished deliverable.
+
+### Phase 4 Remaining Editor Migrations
+
+Use the proven interface. Validate each family before opening the next slice.
+
+* [ ] Migrate Mousepad, Scrollpad, and Gamepad Joystick
+* [ ] Migrate Rocker and Numeric Rocker
+* [ ] Migrate List and Camera Preview
+* [ ] Migrate Bar Chart and Sparkline
+* [ ] Migrate Extension, including catalog loading and opaque configuration
+* [ ] Confirm the Phase 1 inventory contains no additional unmigrated editor
+* [ ] Complete approved format changes and update affected authoring surfaces,
+  defaults, fixtures, samples, and consumers alongside each migration
+
+Exit gate: all active editors use the ownership contract. Tests cover actual
+serialization, lifecycle, action policy, and capability behavior, not source
+spelling. Runtime interaction semantics remain unchanged unless approved.
+
+### Phase 5 Ownership Cleanup and Waveform Retirement
+
+* [ ] Remove superseded shared field ladders, widget lists, and temporary paths
+* [ ] Remove Numeric Rocker private-ID reparenting from generic workspace code
+* [ ] Consolidate genuinely repeated layout utilities without redesigning UI
+* [ ] Keep necessary widget styles scoped to their owning editor
+* [ ] Remove unused Waveform portal partial/template registration and references
+  after confirming they are not consumed; retain firmware registration/runtime
+* [ ] Check asset ordering, feature gates, and stale references
+* [ ] Record and obtain approval for any proposed individual-widget exception
+
+Exit gate: generic code handles mechanics and declared policies; widget-specific
+behavior is owned locally. No unused framework, compatibility code, or dead
+portal artifacts remain from the migration.
+
+### Phase 6 Documentation and Final Verification
+
+* [ ] Update existing developer documentation with the editor extension contract
+* [ ] Update existing user guidance for screen binding targets and any changed
+  editor behavior or approved configuration format
+* [ ] Check affected MCP authoring documentation/contracts where relevant
+* [ ] Run focused suites for migrated behavior and required asset checks
+* [ ] Verify desktop/mobile editing, action modes, validation, drafts, switching,
+  capability handling, and Extension configuration in the browser
+* [ ] Run required firmware host checks and a single-board build if firmware
+  changed; read the current board preference before building
+* [ ] Record build warnings, test failures, and hardware-only paths not verified
+* [ ] Review the diff for scope creep and mark each acceptance criterion
+
+Exit gate: documented extension path, completed validation evidence, and explicit
+remaining limitations. No flashing, commits, or all-board build is authorized.
+
+## Phase 1 Findings And Decision Canvas
+
+### Evidence And Scope
+
+The selector in [pad-editor.fragment.html](src/app/web/pad-editor.fragment.html)
+contains 13 active widget types plus None. All 13 are listed below. Waveform has
+no selector entry and no included editor partial; its portal artifact remains a
+retirement task, not a fourteenth editor migration.
+
+Reviewed the project, web portal, action-type, binding-system, terminology, and
+Markdown instructions. Only this tracker changed. No runtime, ABI, dependency,
+board flag, or firmware changes are required by the proposed direction.
+
+Primary load/build evidence is
+[portal_pad_dialog.js](src/app/web/portal_pad_dialog.js). Section/action routing
+and capability checks are in
+[portal_pad_editor.js](src/app/web/portal_pad_editor.js); draft capture and
+restoration are in [portal_pad_workspace.js](src/app/web/portal_pad_workspace.js).
+The widget partials retain their HTML bounds and field lengths. The inventory
+records existing portal normalization, not a claim that firmware and browser
+validation are identical. Preserve that distinction during extraction.
+
+### Active Editor Coverage
+
+Unless noted, widgets keep the ordinary tap and long-press lists, share button
+appearance, and have no additional portal capability gate beyond display.
+Color defaults come from `PAD_FIRMWARE_DEFAULTS` where the current loader uses
+it; do not replace those device-provided values with a new hard-coded palette.
+The three chart editors currently have conditional feature/source disclosure;
+static grouping may replace it only without losing editable fields or values.
+
+| Editor / Persisted Type | Editable settings and current normalization | Specialized ownership / gate |
+| --- | --- | --- |
+| Table / `table` | Data binding; style string; scrollable. Empty binding/style omitted; scrolling defaults true and is serialized explicitly. Binding max 191 characters; style max 127. | Straightforward descriptor candidate; retain style string semantics. |
+| Gauge / `gauge` | Four bindings, captions and arc colors; min/max default 0/100 and allow bindings; degrees default 180, range 10..360; start angle default 180, modulo 360 on build; zero-centered and two dual pairs default false; needle defaults enabled. Arc width default 15, range 5..50; track color; animation default 300, range 0..5000 ms. Needle width 2 (0..10), cutoff 0 (0..99); ticks 5 (0..20), tick width 1 (1..5); target value, width 2 (0..5), zone 0 (0..90 degrees), target/zone colors. Shared track outline. | Caption conversion uses label helpers; repeated sources, source disclosure, binding/color helpers and track control placement. Current invalid-value fallbacks are not always equivalent to clamping. |
+| Bar Chart / `bar_chart` | Four bindings, captions, colors and fill patterns; min/max default 0/3 and allow bindings; vertical default orientation; zero-centered and two dual pairs false; thickness 100 (1..100); caption area 0 means automatic, positive values capped at 200. Track color/pattern; animation 300 (0..5000 ms); ticks 0 means none (0..20), width 1 (1..5), color; target blank means none, marker width 2 (0..10), zone 0 (0..100 percent), marker/zone colors. Track outline and radius 4 (0..64). | Repeated sources and pattern persistence currently cross into shared color code; icon export also reserves half the content height. |
+| Sparkline / `sparkline` | Three bindings, colors and current captions; blank min/max means automatic scale; unified scale defaults true. Window default 300 seconds, build fallback below 10, maximum seven days; 60 default slots, computed from window/interval inputs, bounded 2..1024 and minimum 0.1-second interval. Three HA backfill entity/stat choices, default mean; line width 2 (1..10), offset 0 (0..6), smoothing 0 (0..8). Min/max marker sizes 0 (0..20), formats and label colors; current dot 0 (0..20); caption area 0 means default, capped at 200; three reference values/colors/patterns and include-in-scale toggle. | Unit conversion and slot rounding stay explicit; HA fields require a live binding and enabled/entity values to serialize. `ha_history` gates history UI. Empty reference values omit the line; format max 15, captions/entities max 63, streams max 191. |
+| Rocker / `rocker` | Axis defaults vertical; indicator color; opacity defaults 80 (0..255), default opacity omitted. | Tap/long-press become Up/Down or Left/Right action lists; color disallows bindings in markup. |
+| Numeric Rocker / `numericrocker` | Axis defaults horizontal; small/large steps 1/10, nonnegative; zone scale 100 (50..150); color; opacity 80 (0..255); nested adjustment action. Default numeric values omitted. | Tap plus adjustment; adjustment preserves `{step}` handling. Long-press UI is currently hidden but serialized; approved D4 removes that serialization on save. Color disallows bindings. Workspace currently reparents its private adjustment section into Actions. |
+| List / `list` | Provider ID in `widget_data_binding`, filter in `widget_data_binding_2`; both trimmed and omitted when empty; maxima 63/191. | Tap list labeled Select action; ordinary long-press retained. Provider currently injects synthetic screen targets; Phase 2 replaces this coupling with ordinary binding mode. |
+| Mousepad / `mousepad` | Sensitivity 1 (0.1..5); acceleration 0 (0..5); movement threshold 3 (0..12); inertia 0 (0..5); reverse, mouse buttons and Back false; Back size 44 (1..512), rounded; shared disable-pad-swipes false. | Requires touch plus USB HID; consumes ordinary action lists. Back controls are Mousepad-only; shared swipe toggle affects the whole pad at runtime. |
+| Scrollpad / `scrollpad` | Axis vertical; sensitivity 1 (0.1..5); inertia 0 (0..5); reverse false; shared disable-pad-swipes false. | Requires touch plus USB HID; consumes ordinary action lists. |
+| Gamepad Joystick / `gamepad_stick` | Stick left; center fixed; dead zone defaults 10 percent (0..90), persisted as fraction; invert X/Y false; shared disable-pad-swipes false. | Requires touch plus USB HID; consumes ordinary action lists. Retain fixed/floating and left/right choices. |
+| Gamepad Button / `gamepad_button` | One held Gamepad action using the existing Gamepad editor; shared disable-pad-swipes false. | Requires touch plus USB HID; serializes held action as first tap action, no ordinary tap/long-press lists. Runtime owns automatic release; no device behavior changes. |
+| Camera Preview / `camera_preview` | Scale defaults cover; cover/letterbox selection serialized. | Requires `has_camera`; no change to runtime preview behavior. |
+| Extension / `external` | Enabled installed package selector; opaque text configuration max 511, trimmed by current build; optional tick interval 33..1000 ms, blank means package default; upscale 1..4, default 1. | Requires native extensions. Currently retains saved unavailable IDs as options; D2 does not require retaining this behavior or adding replacement machinery. Selector disabled during catalog loading. Empty ID causes a focused error. Text labels, icons and image controls are hidden, not new configuration semantics. |
+
+### Shared Fields And Ownership Boundaries
+
+* Keep button labels, state, images, confirmation, general appearance, pad
+  selection, dirty tracking and draft storage shared. Confirmation is currently
+  disabled for widgets. Do not relocate all button fields into widget modules.
+* Shared background patterns use spacing 8 (2..64) and stroke 1 (1..8, also
+  bounded by spacing), with pattern None and color black defaults. Bar Chart
+  adds four series patterns plus a track pattern; Gauge/Bar Chart share outline
+  width 0 (0..8) and outline color black. Preserve explicitly set pattern colors
+  even when the pattern is None. Shared color helpers must consume declared
+  support rather than branch on widget type or private widget hosts.
+* Existing shared boundaries also include icon-export sizing for Bar Chart and
+  Gauge in [portal_pad_icons.js](src/app/web/portal_pad_icons.js), and the primary
+  widget binding entry in `PAD_PV_FIELDS`. Account for these in their migrations;
+  moving only dialog branches would leave ownership incomplete. Keep generic
+  export/preview mechanics shared and put widget contributions with the owner.
+* A portal registration identifies persisted type, owned section roles,
+  availability, ordinary field descriptors, and action policy. Shared mechanics
+  handle ordinary conversions; explicit widget code handles repeated groups,
+  units, catalogs, nested adjustment actions, and opaque Extension text.
+* Descriptors need to distinguish missing, blank, zero and false; default-on-load
+  is not permission to omit-on-build. Support the existing output type and
+  omission rules, including bindable numbers, without a schema language.
+  Use existing textarea mechanics for Extension text, not a new JSON parser.
+* Action policy drives both rendering and serialization: ordinary lists,
+  directional lists, tap plus adjustment, consumed lists, or a single held
+  action. Labels may depend on widget-owned state. Do not add a separate shared
+  widget list to determine either behavior.
+
+### Lifecycle Contract Sketch
+
+Approved sequencing under D5, to be proven by Table, Gauge and Gamepad Button
+rather than frozen as a large hook interface:
+
+1. Initialize shared controls and available widget-owned controls once per
+   mounted editor. Repeated mounting must not duplicate listeners.
+2. Capture the previous button draft and suppress dirty tracking while loading
+   the next button's shared and widget-owned persisted fields.
+3. Restore that button's raw draft values, then recompute visibility, action
+   policy and derived presentation without resetting those values. Restore
+   disclosure/scroll state after refresh. Refresh must not mark a draft dirty.
+4. On a user edit, capture raw input before build/validation. Only publish a
+   valid built button; preserve invalid raw input and focused field errors in
+   the draft. An inactive workspace tab is not an inactive widget field.
+5. Guard asynchronous catalog/image/binding work by mounted editor and current
+   selection generation. Catalog updates must retain edited/pending values;
+   selection guards alone do not prevent overwriting newer edits on the same
+   button. Reuse current generation/AbortController patterns, not a new task
+   framework. Disposal invalidates callbacks and removes owned listeners.
+
+### Format Comparison And Decisions
+
+| ID | Status | Recommendation / Decision | Evidence / Impact |
+| --- | --- | --- | --- |
+| D1 | Approved 2026-10-15 | Keep the existing flat widget JSON and persisted type strings. Add only portal ownership abstractions. No firmware format rollout in Phases 3/4. | `widget_find` already calls widget-owned `parseConfig` with the button object. Widget modules can own flat keys without changing storage. Nesting would change common bindings, every parser, MCP schemas/help, defaults/catalogs, samples, import/export, fixtures and Extension fields without removing the portal lifecycle work. |
+| D2 | Approved 2026-10-15; preservation waived | Save the configuration produced by the supported editor. Allow unavailable widget settings to be dropped during edits, including settings for unsupported capabilities and missing Extension packages. Do not retain unused fields for possible future re-enablement, add preservation machinery, or block unrelated edits solely to preserve those settings. | User prioritizes the happy path and clean abstractions over rare capability transitions. Existing missing-Extension retention is not a required contract; avoid special preservation paths. Proactive deletion on load is not required. Capability gates still apply. This explicitly supersedes the original issue's unsupported-configuration round-trip requirement. |
+| D3 | Approved 2026-10-15; revised for KISS | Literal screen targets use the available catalog; dynamic targets use explicit Binding value mode. Do not retain missing IDs through synthetic options or fallback state; require an available screen or explicit binding before saving a nonempty target. Keep the existing empty choice. Reject targets above 31 UTF-8 bytes with a field error. | Supersedes the interview's missing-ID preservation choice. `CONFIG_SCREEN_ID_MAX_LEN` is 32 including terminator; do not truncate expressions or expand storage. Binding mode stores the actual expression, validates syntax, and does not promise resolution in every host. Ordinary asynchronous catalog loading must still work; do not confuse a pending catalog with an unavailable screen. |
+| D4 | Approved 2026-10-15; configuration change | Numeric Rocker saves tap plus adjustment actions only; omit `lp_actions` when saving that widget. Keep long-press controls hidden. | User explicitly accepted removing existing long-press entries on save. Other widgets' ordinary long-press policy is unchanged. Preserve `{step}` substitution and firmware interaction behavior; no runtime or native ABI change is authorized. |
+| D5 | Approved 2026-10-15 | Use the lifecycle sequence above, browser-check each representative, and delete superseded code within each migrated slice. | Draft restoration reruns action/widget refresh; color helpers reparent shared track controls; catalog loading can race edits. Reuse existing helpers and guards rather than introducing a larger lifecycle framework. |
+
+No nested shape is planned. D1 is a deliberate scope reduction,
+not a new compatibility requirement. Revisit it only if a representative exposes
+a concrete problem that flat keys cannot solve. The registry's exact JavaScript
+API remains a Phase 3 outcome, not a Phase 1 framework deliverable.
+
+KISS principle: preserve active edits, invalid drafts and correct asynchronous
+ordering because these protect normal use. Do not introduce recovery stores,
+merge-on-save preservation of unsupported fields, missing-ID compatibility
+branches, or a generalized lifecycle framework for hypothetical future needs.
+
+Firmware evidence:
+[pad_config.cpp](src/app/pad_config.cpp),
+[widget_registry.h](src/app/widgets/widget_registry.h),
+[table_widget.cpp](src/app/widgets/table_widget.cpp),
+[external_widget.cpp](src/app/widgets/external_widget.cpp), and
+[mcp_tools_pads.cpp](src/app/mcp_tools_pads.cpp). MCP currently explicitly
+advertises flat widget fields; retaining them avoids changing that authoring
+contract. Existing schemas and device defaults remain authoritative where used.
+
+### Baseline And Verification Commands
+
+2026-10-15: all nine behavior suites below passed against unchanged production
+code. These are a baseline, not proof of future migration correctness.
+
+```bash
+node tests/test_portal_pad_dialog_transaction.js
+node tests/test_portal_pad_dirty.js
+node tests/test_portal_startup.js
+node tests/test_portal_action_list.js
+node tests/test_portal_pad_import.js
+node tests/test_portal_pad_colors.js
+node tests/test_portal_pad_preview.js
+node tests/test_portal_action_editor_cycle.js
+node tests/test_portal_action_picker.js
+node tests/test_portal_asset_gates.js
+```
+
+The asset-gates suite also passed. It invokes
+`bash tools/minify-web-assets.sh esp32-macropad 'ESP32 Macropad'`, which checks
+JavaScript syntax and bundle entries, renders partials, minifies assets and
+regenerates the ignored asset header. The suite then preprocesses/selects assets
+for headless C3, display P4 with PSRAM, and display P4 without PSRAM, checking
+decompressed JavaScript syntax. These are asset profiles, not firmware builds.
+The P4 profile's two success lines share the same board name in existing output.
+
+No new tests or dependencies were added. Existing transaction tests exercise
+input-widget consumption, held actions, numeric normalization and invalid drafts;
+startup tests exercise pending catalogs and selection restoration. They do not
+replace real-browser testing of refresh order, hidden tabs, DOM reparenting,
+stale responses or unavailable configurations. Extend existing suites for those
+specific contracts during migration. Phase 1 did not start a portal server or
+claim browser/hardware verification.
+
+Under D1, firmware host checks and a firmware build are not needed. If firmware
+scope is later justified and approved, select checks for the actual changed
+contract: existing `test_action_bindings`, `test_widget_common`,
+`test_gamepad_widgets` targets and
+[test_extension_config_contracts.sh](tests/test_extension_config_contracts.sh)
+are nearby candidates, not complete coverage of every parser. Read the current
+board preference at that time and build only `./build.sh <preferred-board>`.
+
+## Verification Rules
+
+Start with the cheapest existing behavior-scoped check after each substantive
+edit. Repair and rerun that check before expanding the migration. Extend
+existing suites for concrete regression risks; do not add a custom harness or
+source-spelling checks merely to prove extraction.
+
+Existing portal entry points include:
+
+* [tests/test_portal_pad_dialog_transaction.js](tests/test_portal_pad_dialog_transaction.js)
+* [tests/test_portal_pad_dirty.js](tests/test_portal_pad_dirty.js)
+* [tests/test_portal_startup.js](tests/test_portal_startup.js)
+* [tests/test_portal_action_list.js](tests/test_portal_action_list.js)
+* [tests/test_portal_pad_import.js](tests/test_portal_pad_import.js)
+* [tests/test_portal_pad_colors.js](tests/test_portal_pad_colors.js)
+* [tests/test_portal_asset_gates.js](tests/test_portal_asset_gates.js)
+
+Run applicable JavaScript suites with `node tests/<suite>.js`, following their
+setup requirements. Identify the existing asset syntax/manifest/minification
+commands in Phase 1 rather than invent a parallel checker. Use the device-free
+portal server for browser checks. Start and provide its URL when executing UI
+work, not for this plan-only change.
+
+Firmware changes require focused host checks and `./build.sh <preferred-board>`
+under repository build policy. Portal-only phases do not require a firmware
+build. Additional board coverage requires approval. Do not add dependencies
+unless separately justified and approved.
+
+## Final Acceptance Criteria
+
+* [ ] A new widget needs owned code/markup and registration, not shared ladders
+* [ ] Shared fields eliminate ordinary plumbing without a schema language
+* [ ] Every current setting remains visually editable
+* [ ] Specialized code stays with its widget
+* [ ] Action visibility and serialization use one declared policy
+* [x] Screen binding targets work without List-specific action-editor code
+* [ ] Drafts, dirty state, validation focus, tabs, and capability gates work
+* [ ] Firmware parsing reuses existing widget ownership
+* [ ] Only the current contract is supported: no backward-compatibility or
+  migration machinery, and no requirement for existing device configs to work
+* [ ] Any new format has a recorded benefit and no legacy compatibility paths
+* [ ] No unapproved device behavior, Extension ABI, or dependency changes exist
+* [ ] D2 permits unavailable widget settings to be lost without preservation
+  machinery; D3 uses available literal screens or explicit bindings without
+  missing-ID retention
+* [ ] Numeric Rocker saves only tap and adjustment actions, with no firmware
+  interaction changes (D4)
+* [ ] Waveform's unused portal artifacts are retired without runtime changes
+* [ ] Required tests, asset checks, browser checks, and builds are recorded
+
+## Execution Log
+
+| Date | Phase | Changes and decisions | Verification | Remaining work |
+| --- | --- | --- | --- | --- |
+| 2026-10-15 | 0 | Interview decisions and phased plan captured | Plan-only checks recorded on completion | User approval; Phase 1 |
+| 2026-10-15 | 1 | User authorized Phase 1 and shared canvas. Inventoried 13 editors, shared fill/export/preview decisions, lifecycle and action ownership; recommended retaining flat JSON with no firmware changes. | Nine focused behavior suites passed; asset-gates suite passed all three profiles including minification, syntax and manifest checks. Tracker link/whitespace checks passed. | Decision interview completed in the next entry; no production implementation, browser checks, firmware build or flashing performed |
+| 2026-10-15 | 1 | User approved D1..D5 through interview: flat JSON; unavailable widget settings may be dropped; missing screen IDs retained and 31-byte targets enforced; Numeric Rocker saves tap plus adjustment only; incremental lifecycle/browser checks adopted. Phase 1 complete. | Decisions grounded in Phase 1 evidence and Numeric Rocker's widget-owned adjustment behavior; production baseline unchanged | Phase 2 awaits authorization; no firmware interaction or ABI changes authorized |
+| 2026-10-15 | 1 | User confirmed happy-path/KISS priority. Clarified D2: no preservation of unused fields for future capability re-enablement. Revised D3 to available literal screens or explicit bindings, superseding missing-ID retention in the preceding entry. Retained length validation, draft safety and lifecycle safeguards. | Plan-only consistency, link and whitespace checks; no production changes | Phase 2 awaits authorization; no implementation or firmware changes authorized |
+| 2026-10-15 | 2 | User authorized implementation with mock-server-first validation and proportionate tests. Added Screen-owned Binding value mode; removed List injection and refresh hooks. Shared validation skips disabled binding drafts; mode refresh handles input before change. Summaries show dropdown labels, not internal values. | Eight existing suites passed: startup, action-list, pad transaction, dirty-state, Timer binding, binding help, action picker, and asset gates. Mock-browser checks recorded above. | Phase 3 awaits approval. Device runtime navigation not exercised; no firmware changes, build or flashing. |
+
+During execution, record each completed slice, exact checks and outcomes,
+approved deviations, format decisions, and unresolved blockers here. Keep the
+phase tracker synchronized. Remove this temporary file after completion when
+the user agrees; preserve the lasting contract in existing developer docs.

@@ -739,6 +739,15 @@ Configure up to 3 sequential actions to run automatically when the device boots 
 
 Actions are dispatched once after the first screen is shown during boot. Changes take effect on next reboot.
 
+For **Navigate to screen**, choose an available screen or **Binding value** in
+**Target Screen**. After `(none)`, the dropdown lists pads in index order,
+then **Binding value**, then built-in screens. Named pads include their index,
+for example **Pad 1: Living Room**. Binding mode accepts a target expression such as
+`[mqtt:screen]`; the stored expression must fit within 31 UTF-8 bytes. The same
+control is available in other action editors. A binding's runtime context still
+matters: List selection bindings require a List selection event, not a boot
+event. See [button actions](pad-editor-guide.md#actions-tap-and-long-press).
+
 ### MQTT Triggers
 
 *Shown on boards with MQTT and either a display or a physical button.*

@@ -1298,8 +1298,17 @@ these declarations and catalog bindable fields for the selected action only.
 An optional `wireFragment(prefixes, info)` hook supplies asynchronous options;
 shared wiring awaits all hooks after fetching device info once.
 
-The Screen extension owns dynamic screen targets and list-widget synthetic
-options. Sound Alert owns sound-list population, including catalog-backed sound
+The Screen extension owns available-screen selection and an explicit **Binding
+value** mode. It stores the actual target string, never the mode sentinel, and
+uses shared binding validation/tokenization. Targets exceeding 31 UTF-8 bytes
+are rejected without truncation. Catalog loading preserves pending literal
+selections and active binding drafts; unavailable literal IDs are not added to
+the dropdown. After `(none)`, options appear as numerically ordered pads,
+**Binding value**, then built-in screens. Custom pad names include their
+one-based index, for example `Pad 1: Living Room`.
+The editor does not inspect List widget fields or action-host IDs.
+Inactive binding inputs are disabled and excluded from dialog validation.
+Sound Alert owns sound-list population, including catalog-backed sound
 selectors. Gamepad owns the helpers also consumed by the held-control widget;
 widget markup remains in the pad editor. Register extensions after the shared
 editor and before consumers in the existing feature-gated bundle chunks.

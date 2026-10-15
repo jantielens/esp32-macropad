@@ -237,7 +237,8 @@ function padWorkspaceSummaries() {
             }
             return true;
         });
-        if (summary) summary.textContent = group.dataset.slotLabel + ': ' + (option ? option.textContent : type.value) + (detail ? ' · ' + detail.value : '');
+        const detailText = detail && detail.tagName === 'SELECT' ? detail.options[detail.selectedIndex].textContent : detail && detail.value;
+        if (summary) summary.textContent = group.dataset.slotLabel + ': ' + (option ? option.textContent : type.value) + (detailText ? ' · ' + detailText : '');
     });
 }
 

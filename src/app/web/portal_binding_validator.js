@@ -736,7 +736,7 @@ function bindingValidateDialog() {
             ? actionEditorBindingSuffixes(typeInput ? typeInput.value : '') : [];
         for (var si = 0; si < actionSuffixes.length; si++) {
             var el = document.getElementById(actionPrefixes[ai] + actionSuffixes[si]);
-            if (el && el.value.trim() && !bindingValidateInput(el)) count++;
+            if (el && !el.disabled && el.value.trim() && !bindingValidateInput(el)) count++;
         }
     }
 

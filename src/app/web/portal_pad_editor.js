@@ -348,16 +348,10 @@ function padPopulateScreenDropdown() {
     var prefixes = padActionPrefixes('tap').concat(padActionPrefixes('lp'), padLevelActionPrefixes());
     prefixes.push('pad-edit-nr-adjust');
     prefixes.push('pad-edit-list-select');
-    const selected = new Map();
-    prefixes.forEach(function(prefix) {
-        const select = document.getElementById(prefix + '-target');
-        if (select) selected.set(select, select.value);
-    });
     actionEditorPopulateScreens(
         prefixes,
         deviceInfoCache ? deviceInfoCache.available_screens : null
     );
-    selected.forEach(function(value, select) { select.value = value; });
     // Populate wake-screen dropdown (keep first "(stay on this screen)" option)
     const wakeSel = document.getElementById('pad-wake-screen');
     if (wakeSel && deviceInfoCache && deviceInfoCache.available_screens) {
@@ -551,8 +545,6 @@ function padWidgetTypeChanged() {
     // Numeric rocker: show adjustment action editor in widget settings
     var adjSection = document.getElementById('pad-edit-numericrocker-adjust-section');
     if (adjSection) adjSection.style.display = isNumericRocker ? '' : 'none';
-    // List widget: inject/remove synthetic [list:provider.selected] option in tap/lp dropdowns
-    if (typeof listRefreshSyntheticOptions === 'function') listRefreshSyntheticOptions();
 }
 
 async function padLoadPage(page, defaultsReady) {

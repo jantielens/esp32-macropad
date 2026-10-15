@@ -652,6 +652,15 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 - **Tap action 1**: Navigate to screen → `pad_2` (cameras pad)
 - Button label: "Cameras" with a `videocam` Material Symbol icon
 
+For **Navigate to screen**, **Target Screen** lists currently available screens.
+Choose **Binding value** to enter a dynamic target such as
+`[list:pads.selected]` for a List selection action. The expression, not the
+dropdown mode, is saved. Invalid binding syntax and targets longer than 31 UTF-8
+bytes block saving without truncating your input. Switching back to a literal
+screen leaves the binding draft available but does not validate or save it.
+Bindings still need a suitable runtime context; syntax validation does not
+guarantee a target resolves in every action host.
+
 Successful **Navigate to screen**, **Navigate back**, and **Navigate pad sequence**
 actions wake the display and reset the inactivity timer without disabling the
 screensaver. Leaving an idle pad keeps the requested destination and preserves
@@ -1441,7 +1450,7 @@ Tapping a list item dispatches the button's configured **Tap Actions** with `[li
 |---------|-------------|
 | **Data Binding** | The provider ID string (e.g., `shutter_tests`). Not an MQTT topic |
 | **Filter** | Optional comma-separated rules that include or exclude items returned by the provider. Plain text — binding tokens like `[mqtt:...]` are **not** resolved here. Empty = all items. See syntax below |
-| **Select action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Use `[list:provider_id.selected]` as the screen target to navigate to the selected item |
+| **Select action** (tap) | The button's normal tap action(s), dispatched when a list item is tapped. Choose **Navigate to screen**, then **Target Screen > Binding value**, and enter `[list:provider_id.selected]` to navigate to the selected item |
 | **Long-press action** | Optional long-press action(s), dispatched on item long-press |
 
 **Filter syntax:**
