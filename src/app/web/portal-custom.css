@@ -1905,14 +1905,8 @@ body {
 .editor-group > summary {
   cursor: pointer;
   color: var(--portal-text); padding: 10px 14px;
-  list-style: none; display: flex; align-items: center; user-select: none;
+  display: list-item; user-select: none;
 }
-.editor-group > summary::-webkit-details-marker { display: none; }
-.editor-group > summary::before {
-  content: '▸'; display: inline-block; margin-right: 8px;
-  transition: transform 0.15s; font-size: 12px; color: var(--portal-text-muted);
-}
-.editor-group[open] > summary::before { transform: rotate(90deg); }
 .editor-group-body { padding: 0 14px 14px; }
 
 /* Small sub-heading separating action groups within a host (e.g. Tap vs
