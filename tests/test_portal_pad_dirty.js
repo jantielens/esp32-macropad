@@ -396,6 +396,14 @@ assert.doesNotThrow(() => workspaceContext.padWorkspaceValidate(), 'Reopened dra
 assert.strictEqual(vm.runInContext('padWorkspace.errors.size', workspaceContext), 0);
 assert.strictEqual(draftInput.value, 'Corrected');
 assert.strictEqual(workspaceContext.revisions, catalogRevision, 'Catalog settlement does not mark a new edit');
+catalogReady = false;
+workspaceContext.padWorkspaceEdit(true);
+catalogReady = true;
+workspaceContext.padWorkspaceWidgetSettled('unrelated');
+assert.strictEqual(vm.runInContext('padWorkspace.errors.size', workspaceContext), 1, 'Unrelated widgets do not revalidate this draft');
+workspaceContext.padWorkspaceWidgetSettled('0');
+assert.strictEqual(vm.runInContext('padWorkspace.errors.size', workspaceContext), 0, 'The active widget settlement revalidates the draft');
+assert.strictEqual(workspaceContext.revisions, catalogRevision, 'Host revalidation must not create a dirty revision');
 workspaceContext.padDialogValidateButton = validateDraft;
 workspaceContext.padDialogOpen = () => {};
 workspaceContext.document.getElementById = draftLookup;

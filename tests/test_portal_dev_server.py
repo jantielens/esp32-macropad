@@ -74,7 +74,7 @@ class PortalDevServerTest(unittest.TestCase):
         status, styles = self.request("/portal-all.css", raw=True)
         self.assertEqual(status, 200)
         headless_styles = self.request("/portal-all.css", profile="reterminal-e1003-frame", raw=True)[1]
-        for filename in ("portal_widget_gauge.css", "portal_widget_gamepad_button.css"):
+        for filename in ("portal_widget_bar_chart.css", "portal_widget_gamepad_button.css"):
             widget_styles = (ROOT / "src/app/web" / filename).read_text().strip()
             self.assertIn(widget_styles, styles)
             self.assertNotIn(widget_styles, headless_styles)
@@ -82,7 +82,10 @@ class PortalDevServerTest(unittest.TestCase):
     def test_widget_manifest(self):
         widgets = load_widgets()
         self.assertEqual(portal_assets(widgets, "js").count("portal_widget_inputs.js"), 1)
-        self.assertNotIn("waveform", [widget["type"] for widget in widgets if "portal" in widget])
+        waveform = next(widget for widget in widgets if widget["type"] == "waveform")
+        self.assertEqual(waveform["portal"]["js"], "portal_widget_waveform.js")
+        firmware_only = [{key: value for key, value in waveform.items() if key != "portal"}]
+        self.assertEqual(portal_assets(firmware_only, "js"), [])
         validate_editors(widgets)
         with self.assertRaisesRegex(ValueError, "registration mismatch"):
             validate_editors([{**widgets[0], "type": "mismatched_type"}])

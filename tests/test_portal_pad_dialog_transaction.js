@@ -455,4 +455,38 @@ document.getElementById('pad-edit-sparkline-window').value = '9';
 document.getElementById('pad-edit-sparkline-window-unit').value = '1';
 assert.throws(() => context.padDialogBuildButton(), /10 seconds and 7 days/);
 
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_waveform.js', 'utf8'), context);
+const waveformEditor = context.padWidgetEditor('waveform');
+assert.strictEqual(waveformEditor.available({ widget_catalog: [{ type: 'waveform' }] }), true);
+assert.strictEqual(waveformEditor.available({ widget_catalog: [{ type: 'gauge' }] }), false);
+assert.strictEqual(waveformEditor.available(null), false);
+context.padWidgetEditorsLoad({ widget_type: 'waveform', widget_waveform_color_1: '[pad:color]',
+    widget_waveform_color_4: '#123456', widget_waveform_line_width: 5, widget_waveform_sensor: 4,
+    widget_waveform_show_threshold: false, widget_waveform_show_trigger: false,
+    widget_waveform_show_target: false, widget_waveform_invert_y: true });
+document.getElementById('pad-edit-widget-type').value = 'waveform';
+const waveform = context.padDialogBuildButton();
+assert.strictEqual(waveform.widget_waveform_color_1, '[pad:color]');
+assert.strictEqual(waveform.widget_waveform_color_4, '#123456');
+assert.strictEqual(waveform.widget_waveform_threshold_color, '#FF9800');
+assert.strictEqual(waveform.widget_waveform_trigger_color, '#FFFFFF');
+assert.strictEqual(waveform.widget_waveform_line_width, 5);
+assert.strictEqual(waveform.widget_waveform_sensor, 4);
+assert.strictEqual(waveform.widget_waveform_show_threshold, false);
+assert.strictEqual(waveform.widget_waveform_show_trigger, false);
+assert.strictEqual(waveform.widget_waveform_show_target, false);
+assert.strictEqual(waveform.widget_waveform_invert_y, true);
+const waveformWidth = document.getElementById('pad-edit-waveform-line-width');
+waveformWidth.value = '2.5';
+waveformWidth.validity = { valid: false };
+waveformWidth.validationMessage = 'Enter a whole number';
+assert.throws(() => context.padDialogBuildButton(), /whole number/);
+assert.strictEqual(waveformWidth.value, '2.5');
+waveformWidth.validity.valid = true;
+waveformWidth.value = '';
+assert.strictEqual(context.padDialogBuildButton().widget_waveform_line_width, 2);
+context.padWidgetEditorsLoad({ widget_type: 'waveform' });
+assert.strictEqual(context.padDialogBuildButton().widget_waveform_show_threshold, true);
+assert.strictEqual(context.padDialogBuildButton().widget_waveform_sensor, 0);
+
 console.log('portal_pad_dialog_transaction: PASS');

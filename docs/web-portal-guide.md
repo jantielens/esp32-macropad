@@ -1039,6 +1039,15 @@ milliseconds from 33 through 1000. Late catalog responses retain newer drafts.
 Numeric Rocker keeps center tap actions and its optional Adjustment Action in
 Actions; the editor omits long-press actions when saving that widget.
 
+On shutter tester builds advertising Waveform, its **Content** controls include
+four sensor colors, threshold and trigger colors, line width (1..5), and sensor
+selection (All or Sensor 1..4). Toggles control threshold, trigger, and target
+visibility, plus inverted Y; their values survive collapsing the settings frame.
+Colors accept bindings within the existing 11-character field limit, resolved
+when the firmware creates the widget. Ordinary
+tap and long-press actions remain available. Other devices do not offer Waveform
+in the widget selector.
+
 Button background and bar chart color pickers have Base Color and Pattern
 sections with one Apply operation. None is the default and uses only the base
 color. Base Color opens for unpatterned fills; Pattern opens for existing patterns.

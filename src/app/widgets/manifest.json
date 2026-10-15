@@ -1,6 +1,6 @@
 [
   {"type":"bar_chart","source":"widgets/bar_chart_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Bar Chart","html":"_widget_bar_chart.html","js":"portal_widget_bar_chart.js","css":"portal_widget_bar_chart.css"}},
-  {"type":"gauge","source":"widgets/gauge_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Gauge","html":"_widget_gauge.html","js":"portal_widget_gauge.js","css":"portal_widget_gauge.css"}},
+  {"type":"gauge","source":"widgets/gauge_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Gauge","html":"_widget_gauge.html","js":"portal_widget_gauge.js"}},
   {"type":"sparkline","source":"widgets/sparkline_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Sparkline","html":"_widget_sparkline.html","js":"portal_widget_sparkline.js","css":"portal_widget_sparkline.css"}},
   {"type":"table","source":"widgets/table_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Table","html":"_widget_table.html","js":"portal_widget_table.js"}},
   {"type":"rocker","source":"widgets/rocker_widget.cpp","gates":["HAS_DISPLAY"],"portal":{"label":"Rocker","html":"_widget_rocker.html","js":"portal_widget_rocker.js"}},
@@ -12,5 +12,5 @@
   {"type":"gamepad_stick","source":"widgets/gamepad_joystick_widget.cpp","gates":["HAS_DISPLAY","HAS_TOUCH","HAS_USB_HID"],"portal":{"label":"Gamepad Joystick","html":"_widget_gamepad_stick.html","js":"portal_widget_inputs.js"}},
   {"type":"camera_preview","source":"widgets/camera_preview_widget.cpp","gates":["HAS_DISPLAY","HAS_CAMERA"],"portal":{"label":"Camera Preview","html":"_widget_camera_preview.html","js":"portal_widget_camera.js"}},
   {"type":"external","source":"widgets/external_widget.cpp","gates":["HAS_DISPLAY","HAS_NATIVE_EXTENSIONS"],"portal":{"label":"Extension","html":"_widget_extension.html","js":"portal_widget_extension.js"}},
-  {"type":"waveform","source":"device_classes/shutter_tester/widgets/waveform_widget.cpp","gates":["HAS_DISPLAY","IS_SHUTTER_TESTER"]}
+  {"type":"waveform","source":"device_classes/shutter_tester/widgets/waveform_widget.cpp","gates":["HAS_DISPLAY","IS_SHUTTER_TESTER"],"portal":{"label":"Waveform","html":"_widget_waveform.html","js":"portal_widget_waveform.js"}}
 ]

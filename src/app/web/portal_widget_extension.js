@@ -30,7 +30,7 @@
             { id: 'pad-edit-extension-tick-interval', key: 'extension_tick_interval_ms', kind: 'number', default: '' },
             { id: 'pad-edit-extension-upscale', key: 'extension_upscale', kind: 'number', default: 1 }
         ],
-        init() {
+        init(onSettled = () => {}) {
             const current = { select: document.getElementById('pad-edit-extension-id'), status: 'loading', slots: [] };
             mount = current;
             populate('');
@@ -44,14 +44,12 @@
                 current.slots = (Array.isArray(catalog.slots) ? catalog.slots : []).filter(slot => slot.installed && slot.enabled);
                 current.status = 'ready';
                 populate(selected);
-                if (typeof padWorkspace !== 'undefined' && padWorkspace && padWorkspace.selected &&
-                    document.getElementById('pad-edit-widget-type').value === 'external' && padWorkspace.errors.has(padWorkspaceKey())) {
-                    padWorkspaceEdit(true);
-                }
+                onSettled();
             }).catch(() => {
                 if (mount !== current || document.getElementById('pad-edit-extension-id') !== current.select) return;
                 current.status = 'failed';
                 populate('');
+                onSettled();
             });
         },
         load(button) { populate(button.extension_id || ''); },

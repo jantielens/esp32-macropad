@@ -192,7 +192,9 @@ async function main() {
     extensionEditor.supported = true;
     let resolveCatalog;
     context.fetch = () => new Promise(resolve => { resolveCatalog = resolve; });
-    const catalogLoad = extensionEditor.init();
+    let settlements = 0;
+    const onSettled = () => { settlements++; };
+    const catalogLoad = extensionEditor.init(onSettled);
     extensionEditor.load({ extension_id: 'clock' });
     assert.strictEqual(extensionSelect.value, 'clock');
     assert(extensionSelect.disabled);
@@ -205,6 +207,7 @@ async function main() {
         { id: 'disabled', installed: true, enabled: false, version: '1' }
     ] }) });
     await catalogLoad;
+    assert.strictEqual(settlements, 1, 'Catalog success notifies its host without requiring workspace state');
     assert.strictEqual(extensionSelect.value, 'weather', 'Late catalog keeps the newer selected button');
     assert(!extensionSelect.disabled);
     assert.strictEqual(extensionSelect.options.filter(option => option.value === 'clock').length, 1);
@@ -218,16 +221,18 @@ async function main() {
     assert.throws(() => context.padWidgetEditorBuild({}, extensionEditor), /511/);
     assert.strictEqual(extensionInputs['pad-edit-extension-config'].value.length, 512);
     extensionInputs['pad-edit-extension-config'].value = 'retained';
-    const oldLoad = extensionEditor.init();
+    const oldLoad = extensionEditor.init(onSettled);
     const settleOld = resolveCatalog;
     extensionEditor.dispose();
-    const newLoad = extensionEditor.init();
+    const newLoad = extensionEditor.init(onSettled);
     extensionEditor.load({ extension_id: 'clock' });
     settleOld({ ok: true, json: async () => ({ slots: [{ id: 'stale', installed: true, enabled: true }] }) });
     await oldLoad;
+    assert.strictEqual(settlements, 1, 'Disposed catalog must not notify the current host');
     assert.strictEqual(extensionSelect.value, 'clock', 'Disposed catalog cannot mutate the current mount');
     resolveCatalog({ ok: false });
     await newLoad;
+    assert.strictEqual(settlements, 2, 'Catalog failure also notifies its host');
     assert.match(extensionSelect.options[0].textContent, /unavailable/);
     assert.throws(() => extensionEditor.build({}), /unavailable/);
     assert.strictEqual(extensionInputs['pad-edit-extension-config'].value, 'retained');

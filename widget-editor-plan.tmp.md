@@ -17,10 +17,18 @@ verified and committed as `7d25267`. Phase 4 decisions D10..D18 and implementati
 are approved through the decision interview (2026-10-15). The user requested
 implementation on a subsequent request, including continuation after interruption.
 Phase 4 is now implemented and verified (2026-10-15), with the family checkpoints
-below. Phases 5 and 6 remain unauthorized; final acceptance is not yet claimed.
+below. Final portal acceptance is recorded under Phase 6.
 Phase 4 is committed as `1f8ded9`. Phase 4b's single-manifest design and
 implementation are approved (2026-10-15). Phase 4b is implemented and verified.
 The user confirmed it works without errors and authorized its commit.
+Phase 4b is committed as `fbd5d0f`. The Phase 5 decision interview is recorded
+below (2026-10-15). After the initial record-and-stop interview, the user
+approved Phase 5 implementation, including previous recommendations and restoring
+Waveform's configurable controls through an owned editor rather than retiring
+the partial. Phase 5 is implemented and verified; its firmware remains unchanged.
+The user subsequently authorized committing the code and a bounded Phase 6
+acceptance update. Phase 6 is complete for the agreed portal ownership scope,
+with explicit limitations below. No flashing or runtime refactor is authorized.
 Integration and verification evidence is below.
 Use this document as the shared decision canvas; distinguish
 observed behavior, proposed decisions, and approved scope. Update checkboxes and the
@@ -59,7 +67,8 @@ coverage target.
   user's explicit approval.
 * Keep one Navigate to Screen action. Add a Binding value dropdown choice that
   reveals a binding input, replacing List-specific synthetic target options.
-* Remove unused Waveform portal artifacts without removing firmware behavior.
+* Restore Waveform's owned portal editor and existing configurable controls;
+  retain its active firmware without changing runtime behavior.
 * Treat this work as greenfield: existing device configurations may break or
   lose settings and may require manual reconfiguration. Backward compatibility
   is not a requirement. Add no legacy readers, migrations, compatibility
@@ -163,14 +172,15 @@ without a demonstrated need. Retain opaque Extension configuration semantics.
 
 | Phase | Deliverable | Status |
 | --- | --- | --- |
-| 0 | Scope and implementation plan | Phases 1 through 4 approved; later phases pending |
+| 0 | Scope and implementation plan | Complete through Phase 6 for the agreed portal scope |
 | 1 | Contract baseline and format decision | Complete; D1..D5 approved |
 | 2 | Generic screen binding target | Complete; focused and mock-browser checks passed |
 | 3 | Shared fields and representative editors | Complete; focused and mock-browser checks passed, with one baseline test failure noted |
 | 3a | Representative ownership boundaries | Complete; 13 focused checks and mock-browser checks passed |
-| 4 | Remaining editor migrations | Authorized; D10..D18 approved; implementation not started |
-| 5 | Ownership cleanup and Waveform retirement | Not started |
-| 6 | Documentation and final verification | Not started |
+| 4 | Remaining editor migrations | Complete and committed as `1f8ded9` |
+| 4b | Single-manifest widget wiring | Complete and committed as `fbd5d0f` |
+| 5 | Ownership cleanup and Waveform editor restoration | Complete; focused checks and desktop/mobile browser verification passed |
+| 6 | Documentation and final verification | Complete; existing evidence reconciled and final criteria checked |
 
 ### Phase 0 Scope Approval
 
@@ -461,9 +471,9 @@ guardrails (2026-10-15):
   sizing, preview fields, capability checks, styles, and lifecycle callbacks.
   Inspect applicable surfaces, not unrelated modules. Remove superseded branches
   within that family; do not defer incomplete ownership to Phase 5.
-* Phase 4 completion does not establish final acceptance. Cross-cutting cleanup,
-  Waveform retirement, and final documentation/verification remain in Phases 5
-  and 6 and still require authorization.
+* Phase 4 completion does not establish final acceptance. At that boundary,
+  cross-cutting cleanup, proposed Waveform retirement, and final verification
+  still required authorization. Phase 5 later approved restoration instead.
 
 Implementation hypothesis for the first family: widget-owned descriptors,
 declared action labels, and an Actions-role adjustment section can replace the
@@ -545,8 +555,8 @@ show readable controls and no horizontal overflow. Async browser probes used
 controlled fetches and DOM selection, not device input or camera/runtime proof.
 Existing developer/user guides now reflect the approved Phase 4 behavior.
 No firmware build, flashing, dependency change, ABI change, commit, or branch
-change was performed. Phase 5 cleanup/Waveform retirement and Phase 6 final
-acceptance still require authorization.
+change was performed. At the Phase 4 boundary, Phase 5 cleanup and Phase 6 final
+acceptance still required authorization; D32 subsequently approved Phase 5.
 
 ### Phase 4b Single-Manifest Widget Wiring
 
@@ -576,8 +586,9 @@ inclusion lists; behavior remains in the owning C++ and JavaScript modules.
   registration types. Verify compiled/runtime registration where applicable;
   do not build a parser for arbitrary C++ or JavaScript behavior.
 
-Waveform retains its gated firmware entry and has no portal editor entry.
-Removing its unused portal artifact remains Phase 5. This phase does not alter
+At the Phase 4b boundary, Waveform retained its gated firmware entry without a
+portal editor entry. Phase 5 subsequently restored that editor under D32.
+Phase 4b does not alter
 firmware interaction, persisted JSON, the native Extension ABI, or dependencies.
 The retrospective's Extension/workspace boundary is not implicitly added here.
 
@@ -661,47 +672,208 @@ visual evidence uses the independent browser. Hardware interaction and
 firmware-only Waveform compilation were not verified on another board.
 Phase 5 cleanup and Phase 6 final project acceptance remain outside this phase.
 
-### Phase 5 Ownership Cleanup and Waveform Retirement
+### Phase 5 Ownership Cleanup and Waveform Editor Restoration
 
-* [ ] Remove superseded shared field ladders, widget lists, and temporary paths
+#### Decision Interview
+
+The user initially requested a progress assessment and interview, followed by
+recording decisions and stopping. Subsequent approval authorized implementation
+and resolved Waveform in favor of editor restoration.
+
+* D27: Evaluate extensibility for widgets using existing runtime/editor
+  capabilities. Such a widget should need owned files and one shared manifest
+  entry, without widget-specific changes to generic editor orchestration.
+  Shared firmware runtime refactors remain outside Phase 5. A genuinely new
+  interaction capability requires a separate proposal rather than a universal
+  promise of zero infrastructure changes.
+* D28: Remove Extension's direct workspace access through a small host
+  notification. The widget owns asynchronous catalog state and mount guards;
+  the host owns deciding whether to revalidate and how to present errors.
+  Preserve raw drafts, unrelated saves, newer edits, and dirty revision
+  behavior. Do not add a general event framework or speculative hook surface.
+* D29: Normalize widget presentation using small shared layout utilities for
+  spacing, rows, and responsive behavior. Preserve controls, field order,
+  groups, tabs, and specialized interactions. Keep widget-specific styles
+  scoped to their owners. No generated forms or functional redesign.
+* D30: No demonstration widget, temporary end-to-end probe, or permanent
+  example is required to establish extensibility. The user accepts a confident
+  architectural assessment. Existing focused regression and asset checks
+  remain required for subsequent implementation changes.
+* D31: Record decisions in this tracker and stop. Phase 5 implementation,
+  Phase 6 acceptance, firmware/runtime changes, flashing, and commits are not
+  authorized by the initial interview alone.
+* D32: The subsequent approval authorizes Phase 5 and previous recommendations,
+  including Waveform editor restoration. Retain the existing flat fields,
+  firmware defaults, HTML bounds, ordinary actions, and catalog availability.
+  Do not expand firmware behavior, native ABI, or Phase 6 acceptance.
+
+#### Extensibility Assessment
+
+The ordinary widget authoring path already meets the structural goal: three
+registration points, but only one shared registration file:
+
+1. Owned C++ implementation with local `REGISTER_WIDGET_*` registration,
+   parsing, bounded configuration, runtime behavior, and preview metadata.
+2. Owned editor JavaScript with local `padRegisterWidgetEditor()` registration,
+   field declarations and specialized behavior; owned HTML and optional CSS.
+3. One entry in [manifest.json](src/app/widgets/manifest.json), the only shared
+   packaging/selector registration file.
+
+The manifest drives firmware inclusion, JS/CSS packaging, partial mounting,
+selector labels/order, and the mock portal. Ordinary additions do not require
+editing bundles, template mappings, selector markup, or generic load/build
+orchestration. Firmware parsing already delegates through `widget_find()` in
+[pad_config.cpp](src/app/pad_config.cpp). This assessment is based on inspected
+code and the recorded Phase 4b verification, not a newly implemented example
+or newly rerun suite. Widget tests and relevant documentation remain normal
+authoring responsibilities, not additional production registration points.
+
+Two boundaries qualify that assessment. First, D28's remaining portal ownership
+gap is now closed: [portal_widget_extension.js](src/app/web/portal_widget_extension.js)
+notifies its host after asynchronous catalog settlement without inspecting
+workspace state. Second, shared firmware still
+names particular widgets in screen layout, event routing, and swipe policy,
+including [pad_tile_builder.cpp](src/app/screens/pad_tile_builder.cpp),
+[pad_screen_events.cpp](src/app/screens/pad_screen_events.cpp), and
+[widget_registry.h](src/app/widgets/widget_registry.h). Therefore complete
+firmware interaction independence is not claimed. D27 leaves these runtime
+boundaries outside this phase rather than silently expanding its scope.
+
+#### Waveform Clarification And Approved Restoration
+
+Waveform is active firmware, registered locally in the shutter tester's
+[waveform_widget.cpp](src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp)
+and included by the manifest under `HAS_DISPLAY` and `IS_SHUTTER_TESTER`.
+Keep its firmware implementation, registration, parsing, and runtime unchanged.
+It does not need a firmware update to remain included through this cleanup.
+
+The previously unmounted [_widget_waveform.html](src/app/web/_widget_waveform.html)
+partial now mounts through the manifest with its owned JavaScript registration.
+The editor restores six colors, line width, sensor choice, four toggles, and
+ordinary tap/long-press actions. Colors participate in shared binding validation
+and preview hooks. Existing limits remain: colors 11 characters, width 1..5,
+and All or Sensor 1..4. No expansion to the firmware's maximum sensor count is
+included. Availability follows the actual firmware catalog, not a board name.
+
+The inspected history did not establish a prior fully wired editor or a precise
+regression date. The restoration exposes settings consumed by active firmware;
+the earlier proposed partial retirement is superseded by D32.
+
+#### Implementation Checklist
+
+* [x] Check for superseded shared field ladders, widget lists, and temporary paths
 * [x] Remove Numeric Rocker private-ID reparenting from generic workspace code
   (completed within its Phase 4 ownership slice)
-* [ ] Consolidate genuinely repeated layout utilities without redesigning UI
-* [ ] Keep necessary widget styles scoped to their owning editor
-* [ ] Remove unused Waveform portal partial/template registration and references
-  after confirming they are not consumed; retain firmware registration/runtime
-* [ ] Check asset ordering, feature gates, and stale references
-* [ ] Record and obtain approval for any proposed individual-widget exception
+* [x] Remove Extension's workspace dependency using the D28 host notification
+* [x] Normalize layout presentation under D29 without changing editing behavior
+* [x] Keep necessary widget styles scoped to their owning editor
+* [x] Resolve Waveform in favor of an owned editor; retain active firmware
+* [x] Mount the existing Waveform partial and add its owner registration
+* [x] Check asset ordering, feature gates, and stale references
+* [x] Confirm no new individual-widget exception in generic code is necessary
+* [x] Run existing focused lifecycle, draft, validation, and asset checks;
+  verify normalized layouts on desktop/mobile without a demonstration widget
+* [x] Obtain subsequent authorization before implementing Phase 5
 
 Exit gate: generic code handles mechanics and declared policies; widget-specific
 behavior is owned locally. No unused framework, compatibility code, or dead
-portal artifacts remain from the migration.
+portal artifacts remain from the migration. The ordinary-widget path needs owned
+files plus one shared manifest
+entry; existing firmware runtime coupling is explicitly outside this gate.
+
+#### Phase 5 Execution Evidence
+
+Extension now receives a narrow settlement callback. Existing startup and dirty
+tests cover success, failure, disposed stale responses, unrelated selection,
+selected-error revalidation, and unchanged dirty revisions. Waveform's existing
+transaction test covers catalog availability, defaults, explicit values, false
+toggles, color bindings, blank numeric defaults, and invalid fractional width.
+No new test harness or demonstration widget was added.
+
+Shared row/caption utilities replace repeated chart grids and generic inline
+flex rows. Gauge's redundant stylesheet is removed; Bar Chart, Sparkline, and
+Gamepad retain specialized styling. Field IDs, bounds, order, groups, tabs,
+and custom interactions remain intact.
+
+All 13 focused portal CTest entries passed, including 24 mock-server tests and
+the existing three production asset profiles. Color, transaction, and preview
+checks also passed after adding Waveform's binding metadata. JavaScript editor
+diagnostics are clean; the Python test retains its existing unresolved-import
+editor warning for the runtime-added tools path, while its suite passes.
+
+Independent headless Chromium checked 11 affected editors at both 1440x1000 and
+390x844: no page or control overflow and no page errors. It verified normal-P4
+Waveform omission, then used a page-local catalog override to exercise Waveform
+with real inputs, fractional-width errors, raw draft restoration, correction,
+sensor/toggle edits, and mock save/read-back. Screenshots were captured for
+Gauge, Sparkline, and Waveform. A final browser check verified catalog-driven
+initialization, real custom-dropdown pointer selection, malformed color-binding
+rejection, and correction. The normal mock profiles do not emulate shutter
+hardware; firmware rendering and physical interactions remain unverified.
+
+Existing developer and user guides now describe restoration, availability,
+shared layouts, and host-owned settlement. No firmware source, native ABI,
+persisted format, build workflow, dependencies, commits, or flashing changed.
+Portal-only checks suffice; no firmware build was run. Subsequent Phase 6
+authorization and acceptance are recorded below.
 
 ### Phase 6 Documentation and Final Verification
 
-* [ ] Update existing developer documentation with the editor extension contract
-* [ ] Update existing user guidance for screen binding targets and any changed
-  editor behavior or approved configuration format
-* [ ] Check affected MCP authoring documentation/contracts where relevant
-* [ ] Run focused suites for migrated behavior and required asset checks
-* [ ] Verify desktop/mobile editing, action modes, validation, drafts, switching,
-  capability handling, and Extension configuration in the browser
-* [ ] Run required firmware host checks and a single-board build if firmware
-  changed; read the current board preference before building
-* [ ] Record build warnings, test failures, and hardware-only paths not verified
-* [ ] Review the diff for scope creep and mark each acceptance criterion
+The user authorized committing the completed work and updating this phase and
+the final criteria. This is a bounded acceptance pass, not another migration or
+redesign. Reuse the recorded evidence; do not repeat completed checks merely to
+close this tracker, review its entire history, or add a demonstration widget.
 
-Exit gate: documented extension path, completed validation evidence, and explicit
-remaining limitations. No flashing, commits, or all-board build is authorized.
+* [x] Confirm existing developer guidance describes owned C++/JS registration,
+  HTML, optional CSS, one shared manifest entry, lifecycle, and shared mechanics
+* [x] Confirm existing user guidance covers Screen binding targets, retained
+  settings, approved action policies, Extension behavior, and Waveform restoration
+* [x] Check MCP's existing flat-field contract; no API or persisted-format change
+  requires MCP code or guide changes
+* [x] Reuse Phase 5's 13 passing focused portal checks, including the 24-test
+  mock-server suite and all three production asset profiles
+* [x] Reuse the recorded family-specific browser checks for actions, drafts,
+  validation focus, capabilities, asynchronous Extension behavior, and saves
+* [x] Record the subsequent spacing fix: button settings match the pad's 14px
+  top gap at 1440px and 390px; browser measurements/screenshots and CSS diagnostics pass
+* [x] Reuse Phase 4b's clean-source host/generation checks and successful
+  `jc1060p470c-sd` build; later portal-only changes require no new firmware build
+* [x] Check the pending diff and whitespace, and mark the scoped final criteria
+
+Acceptance: the agreed portal ownership and KISS goals are met. Ordinary widgets
+using existing contracts need owned implementation/assets, local behavior
+registrations, and one shared manifest entry. Shared orchestration handles
+mechanics rather than individual widget exceptions. Keep explicit specialized
+code and modest HTML/JS coordination; do not introduce a schema framework.
+
+Remaining limitations are accepted scope boundaries, not verified behavior:
+
+* Shared firmware still contains widget-specific layout, interaction, and swipe
+  routing. New runtime capabilities require a separate proposal.
+* Waveform's firmware registration has no detailed `describeSchema` metadata for
+  MCP. This predates the restored portal editor; complete MCP field discovery
+  is not claimed or added here.
+* Physical shutter rendering, hardware navigation, camera behavior, and native
+  Extension runtime interactions are not established by mock-browser tests.
+* The earlier unrelated Timer editor test-double failure remains recorded.
+  The focused suite passes; full-suite health is not claimed.
+* The Python mock-server test retains an editor import-resolution warning for
+  its runtime tools path; its tests pass. Phase 4b's board build had no compiler
+  warnings; the portal-only follow-up did not rebuild firmware.
+
+Exit gate met for portal ownership, with the limitations above. Commit is
+authorized; no tracker deletion, flashing, all-board build, dependency change,
+firmware runtime refactor, or native ABI change is part of this closeout.
 
 ## Phase 1 Findings And Decision Canvas
 
 ### Evidence And Scope
 
-The selector in [pad-editor.fragment.html](src/app/web/pad-editor.fragment.html)
-contains 13 active widget types plus None. All 13 are listed below. Waveform has
-no selector entry and no included editor partial; its portal artifact remains a
-retirement task, not a fourteenth editor migration.
+The initial selector inventory in
+[pad-editor.fragment.html](src/app/web/pad-editor.fragment.html) contained 13
+active widget types plus None. All 13 are listed below. Waveform then had no
+selector entry or included editor partial. D32 subsequently approved its
+restoration as a fourteenth editor rather than retiring the artifact.
 
 Reviewed the project, web portal, action-type, binding-system, terminology, and
 Markdown instructions. Only this tracker changed. No runtime, ABI, dependency,
@@ -892,25 +1064,35 @@ unless separately justified and approved.
 
 ## Final Acceptance Criteria
 
-* [ ] A new widget needs owned code/markup/styles and registration, not shared ladders
-* [ ] Shared fields eliminate ordinary plumbing without a schema language
-* [ ] Every current setting remains visually editable
-* [ ] Specialized code stays with its widget
-* [ ] Action visibility and serialization use one declared policy
+These criteria cover the approved portal/editor contract, not complete firmware
+interaction independence or hardware acceptance. Evidence and limitations are
+summarized in Phase 6; the historical phase checkpoints remain unchanged.
+
+* [x] A widget using existing capabilities needs owned code/markup, optional
+  styles, local C++/JS registrations, and one manifest entry, not shared ladders
+* [x] Shared fields eliminate ordinary plumbing without a schema language
+* [x] Retained settings remain visually editable, including restored Waveform
+  controls; approved D2/D4/D14 omissions and simplifications still apply
+* [x] Specialized portal code stays with its widget; firmware runtime coupling
+  remains explicitly outside this acceptance scope
+* [x] Action visibility and serialization use one declared policy
 * [x] Screen binding targets work without List-specific action-editor code
-* [ ] Drafts, dirty state, validation focus, tabs, and capability gates work
-* [ ] Firmware parsing reuses existing widget ownership
-* [ ] Only the current contract is supported: no backward-compatibility or
+* [x] Drafts, dirty state, validation focus, tabs, and capability gates pass the
+  recorded focused tests and representative browser workflows
+* [x] Firmware parsing reuses existing widget ownership
+* [x] Only the current contract is supported: no backward-compatibility or
   migration machinery, and no requirement for existing device configs to work
-* [ ] Any new format has a recorded benefit and no legacy compatibility paths
-* [ ] No unapproved device behavior, Extension ABI, or dependency changes exist
-* [ ] D2 permits unavailable widget settings to be lost without preservation
+* [x] No new persisted format is introduced; flat keys and type strings remain
+* [x] No unapproved device behavior, Extension ABI, or dependency changes exist
+* [x] D2 permits unavailable widget settings to be lost without preservation
   machinery; D3 uses available literal screens or explicit bindings without
   missing-ID retention
-* [ ] Numeric Rocker saves only tap and adjustment actions, with no firmware
+* [x] Numeric Rocker saves only tap and adjustment actions, with no firmware
   interaction changes (D4)
-* [ ] Waveform's unused portal artifacts are retired without runtime changes
-* [ ] Required tests, asset checks, browser checks, and builds are recorded
+* [x] Waveform's portal editor is restored with existing bounds and catalog
+  availability, without runtime changes, superseding proposed retirement (D32)
+* [x] Required focused tests, asset checks, browser checks, and the applicable
+  single-board build are recorded; hardware and full-suite limitations are explicit
 
 ## Execution Log
 

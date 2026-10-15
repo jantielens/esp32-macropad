@@ -9,15 +9,10 @@
 .sparkline-history-fields { margin-top: 6px; }
 .sparkline-history-row { display: block; }
 .sparkline-history-row > .form-group { width: 100%; }
-.sparkline-sampling-row { display: flex; gap: 8px; }
-.sparkline-sampling-row > .form-group { flex: 1; min-width: 0; }
 .sparkline-time-range { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 6px; }
 .portal-form .sparkline-time-range input,
 .portal-form .sparkline-time-range select { width: 100%; min-width: 0; }
 .sparkline-resolution-summary { display: block; font-weight: 600; }
-.sparkline-scale-row,
-.sparkline-annotation-row,
-.sparkline-line-style-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .sparkline-editor .form-group { min-width: 0; }
 .sparkline-editor .form-group > label { min-height: 20px; }
 .sparkline-marker { margin-top: 8px; }

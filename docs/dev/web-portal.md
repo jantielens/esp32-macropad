@@ -528,12 +528,18 @@ in its binary directory, without requiring a prior firmware build. Run
 workflows outside `build.sh`. Invalid types, duplicate entries, missing files,
 and unknown gates fail generation. Compiled symbol checks verify C++ registration
 prefixes; asset generation executes JS owners to verify exact manifest parity.
-Waveform remains firmware-only under `IS_SHUTTER_TESTER`; its unused portal
-partial is not included. No persisted JSON, firmware interaction, or native ABI
-changes are part of this wiring.
+Waveform's owned portal editor is included through the manifest and available
+only when the device's `widget_catalog` contains `waveform`. Its firmware
+implementation remains gated by `HAS_DISPLAY` and `IS_SHUTTER_TESTER`. Portal
+owners are packaged in the existing display bundle; availability is not a
+per-widget JavaScript size gate. No persisted JSON, firmware interaction, or
+native ABI changes are part of this wiring.
 
-Shared layout and ordinary field helpers stay shared. Do not add widget-name
-branches to orchestration or introduce filename auto-discovery.
+Shared layout and ordinary field helpers stay shared. Use `.widget-row` for
+two-column controls and `.widget-caption-row` for a flexible caption plus a
+compact color picker. Specialized source, history, pattern, and held-control
+styling stays widget-owned. Gauge needs no separate stylesheet. Do not add
+widget-name branches to orchestration or introduce filename auto-discovery.
 
 Each registration declares its persisted type, section roles, fields, and
 action policy. Fields identify an input, flat JSON key, default, and conversion
@@ -547,7 +553,12 @@ hides ordinary tap/long-press lists, and keeps the held-control section in
 Content. The firmware still owns release behavior.
 
 The workspace owns raw drafts, dirty tracking, tab/error presentation, and
-fragment disposal. Registered groups start with their markup's fixed disclosure
+fragment disposal. An owner's `init(onSettled)` may notify the host when its
+asynchronous state changes. Extension uses this callback after catalog success
+or failure, retaining its stale-mount guards. It does not inspect workspace
+selection, errors, or dirty revisions; the host decides whether to revalidate
+the selected editor without marking another edit.
+Registered groups start with their markup's fixed disclosure
 states; drafts restore manual choices. Gauge does not hide dependent fields or
 reset settings when a feature is off. Only the selected supported editor builds
 and validates its fields, including collapsed groups and inactive tabs.

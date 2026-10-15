@@ -63,7 +63,7 @@ function padWidgetValidateField(input, field) {
     }
 }
 
-function padWidgetEditorsInit(info) {
+function padWidgetEditorsInit(info, onSettled = () => {}) {
     padWidgetEditors.forEach(editor => {
         editor.supported = !editor.available || editor.available(info);
         const option = document.getElementById('pad-edit-' + editor.type + '-widget-option');
@@ -71,7 +71,7 @@ function padWidgetEditorsInit(info) {
             option.hidden = !editor.supported;
             option.disabled = !editor.supported;
         }
-        if (editor.init) editor.init();
+        if (editor.init) editor.init(() => onSettled(editor.type));
         editor.groups = editor.sections.flatMap(section => {
             const root = document.getElementById(section.id);
             const groups = Array.from(root.querySelectorAll('details'));

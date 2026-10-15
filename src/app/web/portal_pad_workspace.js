@@ -199,6 +199,13 @@ function padWorkspaceAfterSelect() {
     if (error) padWorkspaceEdit(true);
 }
 
+function padWorkspaceWidgetSettled(type) {
+    if (padWorkspace && padWorkspace.selected &&
+        document.getElementById('pad-edit-widget-type').value === type && padWorkspace.errors.has(padWorkspaceKey())) {
+        padWorkspaceEdit(true);
+    }
+}
+
 function padWorkspaceEdit(revalidate) {
     if (!padWorkspace || padWorkspace.loading || !padWorkspace.selected) return;
     const before = padWorkspace.forms.get(padWorkspaceKey());

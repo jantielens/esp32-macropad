@@ -84,7 +84,7 @@ async function padInit() {
     if (document.getElementById('pad-config-section') !== section) return;
 
     padSoundListLoading = deviceInfoCache.has_sound_player === true;
-    padWidgetEditorsInit(deviceInfoCache);
+    padWidgetEditorsInit(deviceInfoCache, padWorkspaceWidgetSettled);
     padSetImageCapabilityVisibility(deviceInfoCache);
     // Generate action editor HTML from shared module — three fixed action
     // slots per gesture. An unused slot collapses as its own "Add ..."
