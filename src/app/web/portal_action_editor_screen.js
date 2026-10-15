@@ -98,11 +98,6 @@ _actionEditorExtensions.push({
         }
         if (new TextEncoder().encode(target).length > 31) error = 'Screen target must be at most 31 UTF-8 bytes.';
         if (error) {
-            if (input && typeof bindingShowError === 'function') bindingShowError(input, error);
-            if (typeof padWorkspace === 'undefined' || !padWorkspace) {
-                if (input) input.focus();
-                if (typeof showMessage === 'function') showMessage(error, 'error');
-            }
             throw Object.assign(new Error(error), { fieldIds: [input.id] });
         }
         if (input && typeof bindingClearError === 'function') bindingClearError(input);

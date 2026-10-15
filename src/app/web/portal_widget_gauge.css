@@ -1,0 +1,7 @@
+.gauge-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.gauge-row > .form-group { min-width: 0; }
+.gauge-row label { min-height: 20px; }
+.gauge-label-row { grid-template-columns: minmax(0, 1fr) auto; }
+.gauge-label-row .bindable-color { width: auto; }
+#pad-workspace-inspector .gauge-editor .pad-appearance-row { flex-wrap: wrap; align-items: start; margin-top: 12px; }
+#pad-workspace-inspector .gauge-editor .pad-appearance-row > div { flex: 1 1 120px; }

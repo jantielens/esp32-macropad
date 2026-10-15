@@ -68,6 +68,13 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertLess(bundle.index("function actionEditorHTML("), bundle.index("async function padInit()"))
         self.assertNotIn("portal_shutter", bundle)
         self.assertEqual(self.request("/api/bindings")[0], 200)
+        status, styles = self.request("/portal-all.css", raw=True)
+        self.assertEqual(status, 200)
+        headless_styles = self.request("/portal-all.css", profile="reterminal-e1003-frame", raw=True)[1]
+        for filename in ("portal_widget_gauge.css", "portal_widget_gamepad_button.css"):
+            widget_styles = (ROOT / "src/app/web" / filename).read_text().strip()
+            self.assertIn(widget_styles, styles)
+            self.assertNotIn(widget_styles, headless_styles)
 
     def test_epaper_presentation_config(self):
         profile = "crowpanel-4.2-interactive"

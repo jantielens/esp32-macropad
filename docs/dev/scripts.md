@@ -202,6 +202,8 @@ Opening its HTML directly with a `file:` URL can block the JSON fetch.
 **Purpose:** Run the production portal UI locally without a device or firmware
 build. The server serves the production shell, feature-selected JavaScript
 bundle, styles, and rendered fragments with deterministic in-memory API fixtures.
+JavaScript and CSS both follow their production bundle manifests and profile
+feature gates, including widget-owned stylesheets.
 
 **Usage:**
 

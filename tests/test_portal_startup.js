@@ -227,6 +227,12 @@ async function main() {
     vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
     context.bindingClearError = () => {};
     context.bindingShowError = () => {};
+    const actionMessages = [];
+    let actionFocused = false;
+    const actionGroup = { tagName: 'DETAILS', open: false, parentElement: null };
+    screenBinding.parentElement = actionGroup;
+    screenBinding.focus = () => { actionFocused = true; };
+    context.showMessage = (message, type) => actionMessages.push({ message, type });
     screenEditor.load('test', { target: '[list:pads.selected]' });
     assert.strictEqual(screenSelect.value, '__binding__');
     assert.strictEqual(screenBindingGroup.style.display, '');
@@ -245,6 +251,11 @@ async function main() {
     assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
     screenBinding.value = '[pad:' + 'é'.repeat(13) + ']';
     assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
+    context.padWorkspace = {};
+    assert.throws(() => screenEditor.build('test', 'screen'), /31 UTF-8 bytes/);
+    delete context.padWorkspace;
+    assert.strictEqual(actionMessages.length, 0, 'building reports errors without presenting host messages');
+    assert.strictEqual(actionFocused, false, 'building must not steal focus, with or without a pad workspace');
     screenEditor.load('test', { target: 'missing_screen' });
     assert.strictEqual(screenEditor.build('test', 'screen').target, '');
     screenSelect.removeAttribute('data-screens-loaded');
@@ -266,6 +277,36 @@ async function main() {
     screenSelect.value = '__binding__';
     context.actionEditorScreenTargetChanged('test');
     assert.strictEqual(context.bindingValidateDialog().valid, false, 'switching back must validate the retained binding draft');
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), context);
+    context.document.getElementById = id => {
+        if (['hw-button-editors', 'mqtt-trigger-editors'].includes(id)) return { querySelectorAll: () => [{}] };
+        if (id === 'mqtttrig-1-topic') return { value: 'test/topic' };
+        if (id.endsWith('-type')) return { value: 'screen', getAttribute: () => null };
+        if (id.endsWith('-target-binding')) return screenBinding;
+        if (id.endsWith('-target-binding-group')) return screenBindingGroup;
+        if (id.endsWith('-target')) return screenSelect;
+        return screenLookup(id);
+    };
+    const actionWrites = [];
+    context.fetch = async (url, options) => {
+        actionWrites.push({ url, payload: JSON.parse(options.body) });
+        return { ok: true };
+    };
+    screenBinding.value = '[pad:' + 'a'.repeat(26) + ']';
+    for (const save of ['saveBootActions', 'saveSwipeActions', 'saveHwButtons', 'saveMqttTriggers', 'saveTimerConfig']) {
+        actionFocused = false;
+        actionGroup.open = false;
+        actionMessages.length = 0;
+        await context[save]();
+        assert(actionFocused && actionGroup.open, save + ' must reveal and focus the invalid action');
+        assert.match(actionMessages[0].message, /31 UTF-8 bytes/);
+        assert.strictEqual(actionMessages[0].type, 'error');
+        assert.strictEqual(actionWrites.length, 0, save + ' must not write invalid actions');
+    }
+    screenBinding.value = '[list:pads.selected]';
+    await context.saveBootActions();
+    assert.strictEqual(actionWrites.length, 1);
+    assert.strictEqual(actionWrites[0].payload.actions[0].target, screenBinding.value);
     context.document.getElementById = screenLookup;
     let soundRequests = 0;
     context.getDeviceInfo = async () => ({ has_sound_player:false });

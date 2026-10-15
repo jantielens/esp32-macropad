@@ -326,6 +326,20 @@ function actionEditorBuild(prefix) {
     return act;
 }
 
+function actionEditorHandleError(error) {
+    if (!error.fieldIds || !error.fieldIds.length) return false;
+    var input = document.getElementById(error.fieldIds[0]);
+    if (input) {
+        for (var parent = input.parentElement; parent; parent = parent.parentElement) {
+            if (parent.tagName === 'DETAILS') parent.open = true;
+        }
+        if (typeof bindingShowError === 'function') bindingShowError(input, error.message);
+        input.focus();
+    }
+    showMessage(error.message, 'error');
+    return true;
+}
+
 // ============================================================================
 // Action list helpers — DRY plumbing for fragments that host N action editors
 // ============================================================================

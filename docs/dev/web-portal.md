@@ -493,6 +493,16 @@ Table, Gauge, and Gamepad Button register explicitly through
 in `portal.js.bundle`; markup remains in the existing partials. Other editors
 still use their existing paths during the incremental migration.
 
+For a migrated editor, keep field metadata and specialized behavior in its
+`portal_widget_<type>.js` module and controls/bounds in its `_widget_<type>.html`
+partial. Register the module before the dialog in `portal.js.bundle` and wire
+the partial and widget option explicitly. Keep widget-only styles in owned CSS
+assets: Gauge and Gamepad Button use `portal_widget_gauge.css` and
+`portal_widget_gamepad_button.css` in the `HAS_DISPLAY` chunk of
+`portal-all.css.bundle`. Table needs no dedicated stylesheet. Shared layout and
+ordinary field helpers stay shared; do not add widget-name branches to generic
+orchestration or require automatic asset discovery.
+
 Each registration declares its persisted type, section roles, fields, and
 action policy. Fields identify an input, flat JSON key, default, and conversion
 kind. Shared mechanics reuse native numeric bounds and existing binding, color,
@@ -513,6 +523,19 @@ blanks may use defaults. Saving reveals and focuses the invalid field without
 enabling its feature. Registry-held DOM references are cleared on disposal.
 Capability-unavailable Gamepad Button settings are omitted on save, not deleted
 from configuration on load. The flat firmware JSON contract is unchanged.
+
+Action builders report validation failures through an error with `fieldIds`;
+the Screen action does not inspect pad workspace state or present error messages.
+The pad workspace owns its tab/group/focus handling. Non-pad action hosts catch
+build failures inside their save boundary and call `actionEditorHandleError()`
+to open containing groups, mark and focus the field, and show the message before
+any write. Unstructured network errors retain each host's existing handling.
+
+This interface is provisional, not a general widget framework. Rocker and
+Numeric Rocker still need to exercise specialized action/serialization ownership;
+Extension's asynchronous catalog and configuration lifecycle are a separate
+checkpoint. Add only interfaces those migrations actually need. Prefer explicit
+widget-owned behavior over descriptors that encode workflows or conditions.
 
 `padRefreshWidgetEditor(resetSections)` in `portal_pad_editor.js` still owns the
 legacy presentation refresh for Bar Chart and Sparkline. `PAD_WIDGET_EDITOR_RULES`

@@ -12,7 +12,8 @@ browser validation passed. Phase 3 decisions D6..D9 were approved through the
 decision interview; the user subsequently authorized Phase 3 implementation,
 now complete (2026-10-15), with verification recorded below.
 The user approved a Phase 3 commit followed by the bounded Phase 3a ownership
-follow-up below. Phase 4 and later implementation remain unauthorized.
+follow-up below. Phase 3 is committed as `889698b`; Phase 3a is complete and
+verified. Phase 4 and later implementation remain unauthorized.
 Use this document as the shared decision canvas; distinguish
 observed behavior, proposed decisions, and approved scope. Update checkboxes and the
 execution log as each phase is executed and verified.
@@ -23,8 +24,9 @@ This is a temporary tracking document, not permanent developer documentation.
 
 ## Goal
 
-Adding a widget should require its own implementation, markup, and explicit
-registration or manifest wiring, without modifying generic editor orchestration.
+Adding a widget should require its own implementation, markup, any widget-only
+styles, and explicit registration or manifest wiring, without modifying generic
+editor orchestration.
 Common field mechanics should work out of the box. Specialized behavior must
 remain owned by the widget, not accumulate in a generic widget-exceptions file.
 
@@ -157,7 +159,7 @@ without a demonstrated need. Retain opaque Extension configuration semantics.
 | 1 | Contract baseline and format decision | Complete; D1..D5 approved |
 | 2 | Generic screen binding target | Complete; focused and mock-browser checks passed |
 | 3 | Shared fields and representative editors | Complete; focused and mock-browser checks passed, with one baseline test failure noted |
-| 3a | Representative ownership boundaries | Approved; pending Phase 3 checkpoint commit |
+| 3a | Representative ownership boundaries | Complete; 13 focused checks and mock-browser checks passed |
 | 4 | Remaining editor migrations | Not started |
 | 5 | Ownership cleanup and Waveform retirement | Not started |
 | 6 | Documentation and final verification | Not started |
@@ -329,14 +331,39 @@ against the loaded fixture. No firmware build, flashing, or commit was performed
 Approved after the Phase 3 retrospective (2026-10-15). Commit the verified
 Phase 3 checkpoint first; implement and commit this follow-up separately.
 
-* [ ] Remove the Screen action's dependency on `padWorkspace`; report validation
+* [x] Remove the Screen action's dependency on `padWorkspace`; report validation
   errors to the host, which owns error messages, focus, and tab selection
-* [ ] Move Gauge and Gamepad Button-specific CSS into explicitly bundled,
+* [x] Move Gauge and Gamepad Button-specific CSS into explicitly bundled,
   widget-owned stylesheets; retain genuinely reusable layout utilities
-* [ ] Document the minimal ownership contract and its unproven boundaries
-* [ ] Run existing focused action/portal checks and production asset gates
-* [ ] Check error presentation and unchanged desktop/mobile layout with the
+* [x] Document the minimal ownership contract and its unproven boundaries
+* [x] Run existing focused action/portal checks and production asset gates
+* [x] Check error presentation and unchanged desktop/mobile layout with the
   mock portal; no firmware build or flashing is needed
+
+Phase 3 checkpoint: `889698b`. Screen validation now reports structured errors
+without host-dependent presentation. Non-pad hosts catch build failures within
+their save boundary and use the ordinary shared action error presenter; pad
+workspace error navigation is unchanged. Gauge/Gamepad-only styles are owned
+assets with explicit display-gated CSS bundle entries.
+
+The browser caught a mock-only gap: CSS serving had hardcoded core files rather
+than reading the production manifest. The mock now reuses its existing
+feature-aware bundle loader for both JS and CSS, with coverage in its existing
+HTTP asset test. Restarted the mock on port 8766; in-memory fixtures reset.
+
+Existing startup coverage checks quiet Screen builds, invalid-save focus and
+zero writes across Boot/Swipe/Hardware Button/MQTT Trigger/Timer hosts, and a
+corrected Boot save. Browser checks confirmed Boot error feedback and corrected
+serialization, plus pad Actions-tab/group/focus navigation, zero invalid writes,
+and corrected mock save/read-back. Boot persistence is not browser-verified:
+the mock Boot config endpoint returns 404. Gauge and Gamepad layouts remained
+grids without page/field overflow at 1440px and 390px; desktop Gauge and mobile
+Gamepad screenshots were inspected after selecting Content and foregrounding
+the integrated browser. Probes used DOM events, not physical pointer testing.
+Final verification: all 13 focused CTest entries passed, including the extended
+startup and dev-server tests and the three production asset profiles. No firmware
+build, flashing, dependency, or native ABI change was needed. The previously
+recorded baseline Timer editor fixture failure is outside this suite and unchanged.
 
 Exit gate: reusable actions do not inspect pad workspace state, representative
 widget styles are locally owned, and existing editing behavior is retained.
@@ -352,8 +379,8 @@ the approved sequence, not authorization to implement Phase 4.
 
 Use the proven interface. Validate each family before opening the next slice.
 
-* [ ] Migrate Mousepad, Scrollpad, and Gamepad Joystick
 * [ ] Migrate Rocker and Numeric Rocker
+* [ ] Migrate Mousepad, Scrollpad, and Gamepad Joystick
 * [ ] Migrate List and Camera Preview
 * [ ] Migrate Bar Chart and Sparkline
 * [ ] Migrate Extension, including catalog loading and opaque configuration
@@ -595,7 +622,7 @@ unless separately justified and approved.
 
 ## Final Acceptance Criteria
 
-* [ ] A new widget needs owned code/markup and registration, not shared ladders
+* [ ] A new widget needs owned code/markup/styles and registration, not shared ladders
 * [ ] Shared fields eliminate ordinary plumbing without a schema language
 * [ ] Every current setting remains visually editable
 * [ ] Specialized code stays with its widget
@@ -627,6 +654,7 @@ unless separately justified and approved.
 | 2026-10-15 | 3 planning | Interview recorded D6..D9: reject invalid numbers; retain conditional disclosure through bounded helpers and widget-owned rules; keep Gamepad Button held action in Content; validate retained feature-disabled values and reveal errors. User explicitly selected decisions only for now. | Confirmed clean worktree at Phase 2 commit `7cd3a84`; inspected shared dialog field/action branches, disclosure rules, workspace drafts, and representative markup. Prior production verification remains as recorded, not rerun in this interview. | Phase 3 implementation awaits separate authorization. Only this tracker changed; no production changes, browser checks, firmware build, or flashing. |
 | 2026-10-15 | 3 planning | User approved the KISS revision to D7/D9: stable manually collapsible groups, no feature-dependent hiding or automatic disclosure, no reset on disable, and ordinary validation of shared and selected supported widget settings. This supersedes the conditional-disclosure decision in the preceding entry. | Plan-only link, whitespace, and decision consistency checks; no production verification required. | Phase 3 implementation remains unauthorized. No new reset command, production changes, firmware build, or flashing. |
 | 2026-10-15 | 3 | User separately authorized implementation. Extracted Table, Gauge, and Gamepad Button into explicit modules with minimal shared mechanics; removed their superseded shared branches and documented the contract. | Focused host and production asset checks passed; mock-browser draft, validation, save/read-back, remount, and responsive checks recorded above. Timer editor fixture failure also reproduces at HEAD. | Phase 4 awaits authorization. No firmware, ABI, dependency, build, flashing, or commit changes. |
+| 2026-10-15 | 3a | User approved the retrospective follow-up. Committed Phase 3 as `889698b`; removed Screen's pad-state dependency, moved validation presentation to hosts, extracted representative CSS, and reused mock bundle serving for CSS manifests. Documented the minimal, provisional contract. | All 13 focused CTest entries passed. Mock-browser host error navigation, blocked invalid writes, corrected pad persistence, and desktop/mobile layout checks passed; Boot mock persistence remains unavailable (404). | Commit Phase 3a separately. Phase 4 remains unauthorized; begin with Rocker/Numeric Rocker after approval. No firmware build or flashing. |
 
 During execution, record each completed slice, exact checks and outcomes,
 approved deviations, format decisions, and unresolved blockers here. Keep the
