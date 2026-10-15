@@ -1987,6 +1987,8 @@ timezone and alarm session.
   "screen_saver_wake_binding": "",
 
   "audio_volume": 50,
+  "audio_idle_mute": true,
+  "audio_wake_delay_ms": 120,
   "tap_beep": "",
   "lp_beep": "",
 
@@ -2028,7 +2030,12 @@ timezone and alarm session.
     legacy policy: Screen Saver retains its enable checkbox, configured
     Fade In/Fade Out durations, idle pad, and wake controls. The portal changes
     only the display-sleep wording to backlight-off wording.
-  - Audio-related fields (`audio_volume`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO` is enabled.
+  - Audio-related fields (`audio_volume`, `audio_idle_mute`,
+    `audio_wake_delay_ms`, `tap_beep`, `lp_beep`) are present when `HAS_AUDIO`
+    is enabled. `caps.audio_amplifier_mute` reports whether the selected driver
+    has a board mute callback, including expander-based controls. The Volume
+    fragment shows its Amplifier section only when this capability is true.
+    `GET /api/info` exposes the same support as `has_audio_amplifier_mute`.
   - Other feature-specific fields may be present depending on firmware configuration.
   - Voice Assistant fields are present only on Voice Assistant builds. `voice_azure_api_key` and `voice_tts_api_key` are always empty in responses; `voice_api_key_configured` and `voice_tts_api_key_configured` report whether each write-only key is stored. The language fields accept optional two-letter ISO 639-1 codes. `voice_tts_instructions` is passed verbatim to Azure speech generation.
   - Every credential represented in `GET /api/config` is returned as an empty
@@ -2298,6 +2305,8 @@ Save new configuration. Device reboots after successful save.
   "screen_saver_wake_binding": "[mqtt:devices/node/presence/state]",
 
   "audio_volume": 50,
+  "audio_idle_mute": true,
+  "audio_wake_delay_ms": 120,
   "tap_beep": "800:80",
   "lp_beep": "600:40 40 600:40",
 
@@ -2327,6 +2336,17 @@ Save new configuration. Device reboots after successful save.
 
 **Notes:**
 - Only fields present in request are updated
+- `audio_idle_mute` defaults to true and keeps the amplifier quiet between
+  sounds. False keeps it enabled for lower feedback latency, but idle hiss may
+  return. `audio_wake_delay_ms` accepts an integer or integer string from 0 to
+  1000 (default 120); invalid values return HTTP 400 before configuration is
+  changed. Both settings persist in NVS and apply live through the audio worker.
+  The Volume fragment uses its existing Save button with `?no_reboot=1` and
+  disables the delay input while idle muting is off, preserving its saved value.
+  The delay applies on actual wake transitions, including startup and recovery
+  after OTA, not to every sound. Zero skips the wait and can clip short tones.
+  Forced muting for OTA and hardware failures is unaffected. The buffer-drain
+  and 100 ms idle grace timing remain internal.
 - `ble_tx_power_dbm` accepts an integer or integer string: `-12`, `-9`, `-6`,
   `-3`, `0`, `3`, `6`, or `9`. Unsupported values return HTTP 400 before any
   configuration fields are updated. Omission leaves the setting unchanged.

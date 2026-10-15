@@ -27,7 +27,7 @@ UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return 16384; }
 void vTaskDelay(TickType_t ticks) {
     now_us += ticks * 1000;
     if (amplifier_wake_pending) {
-        assert(ticks == pdMS_TO_TICKS(kAmplifierWakeMs));
+        assert(ticks == pdMS_TO_TICKS(amplifier_policy.load() >> 1));
         amplifier_wake_pending = false;
         return;
     }
@@ -83,6 +83,7 @@ public:
     bool end() override { return true; }
     bool write(const int16_t* frames, size_t count) override {
         assert(!muted);
+        amplifier_wake_pending = false;
         for (size_t frame = 0; frame < count; ++frame) {
             const bool ready = now_us + static_cast<int64_t>(frame) * 1000000 /
                 AUDIO_SAMPLE_RATE >= amplifier_ready_us;
@@ -183,6 +184,7 @@ static void reset() {
     ++owner_generation;
     finished_generation = 0;
     audio_set_volume(70);
+    audio_set_amplifier_policy(true, AUDIO_WAKE_DELAY_DEFAULT_MS);
 #if HAS_SOUND_PLAYER
     assert(decoder_count == 0);
     opened.clear();
@@ -195,6 +197,31 @@ int main() {
     assert(output.muted && output.mute_changes.empty());
     run_worker();
     assert(output.writes == 0 && output.muted);
+    reset();
+    audio_set_amplifier_policy(false, 35);
+    run_worker();
+    assert(!output.muted && output.writes == 0);
+    assert(now_us >= 35001 && now_us < 120000);
+    now_us += 1000000;
+    run_worker();
+    assert(!output.muted);
+    audio_set_amplifier_policy(true, 35);
+    run_worker();
+    assert(output.muted);
+    audio_set_amplifier_policy(false, 35);
+    run_worker();
+    assert(!output.muted);
+    ota = true;
+    run_worker();
+    assert(output.muted);
+    ota = false;
+    run_worker();
+    assert(!output.muted);
+    reset();
+    audio_set_amplifier_policy(true, 0);
+    audio_feedback("500:20");
+    run_worker();
+    assert(output.writes > 0 && now_us < 120000);
     reset();
     audio_set_volume(30);
     audio_feedback("500:40");

@@ -200,6 +200,14 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Device API fixtures. POSTs are accepted in do_POST below.
         elif path == "/api/config":
             config = copy.deepcopy(self.server.mock_config)
+            amplifier_control = self._profile() == "esp32-p4-lcd4b"
+            config["caps"]["audio_amplifier_mute"] = amplifier_control
+            if amplifier_control:
+                for key, value in {"audio_volume": 70, "audio_idle_mute": True, "audio_wake_delay_ms": 120}.items():
+                    config.setdefault(key, value)
+            else:
+                for key in ("audio_volume", "audio_idle_mute", "audio_wake_delay_ms"):
+                    config.pop(key, None)
             if self._profile() == "esp32-p4-lcd4b":
                 config["caps"].update(ble=False, ble_hid=False, display=True, touch=True, ha_history=True)
             elif self._profile() == "jc3248w535":
@@ -761,6 +769,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "cpu_freq": 360, "flash_chip_size": 16 * 1024 * 1024,
             "psram_size": 32 * 1024 * 1024, "device_class": "E-paper Frame",
             "ap_active": False, "has_mqtt": True, "has_alarm": False,
+            "has_audio_amplifier_mute": self._profile() == "esp32-p4-lcd4b",
             "has_touch": True, "has_usb_hid": True, "has_ttf_fonts": self._fonts_available()}
         if self._profile() in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
             info.update(device_class="Macropad", board=self._profile(), has_display=True,

@@ -20,6 +20,7 @@ public:
     virtual bool setVolume(uint8_t vol_0_100) = 0;
 
     virtual bool setMuted(bool muted) = 0;
+    virtual bool supportsMute() const { return false; }
     virtual bool isAvailable() const = 0;
     virtual bool end() = 0;
     virtual void flush() {}

@@ -10,6 +10,7 @@ public:
     bool write(const int16_t* frames, size_t frame_count) override;
     bool setVolume(uint8_t vol_0_100) override;
     bool setMuted(bool muted) override;
+    bool supportsMute() const override { return control.mute != nullptr; }
     bool isAvailable() const override { return initialized; }
     bool end() override;
 

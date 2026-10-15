@@ -470,6 +470,19 @@ alert-sound files, and the Music Library.
 |---------|-------------|
 | **Volume** | Slider (0–100%) controlling the device audio volume. It applies to alerts, Music, and button feedback. Persisted in NVS and controllable from Home Assistant. |
 
+The Amplifier section appears on boards with amplifier mute control:
+
+| Setting | Description |
+|---------|-------------|
+| Mute amplifier when idle | On by default to prevent idle hiss. Off keeps the amplifier enabled between sounds for faster feedback, but hiss may return. Audio playback remains enabled in either mode. |
+| Amplifier wake delay (ms) | Default 120 ms; accepts 0-1000 ms. Waits after enabling the amplifier so the beginning of a sound is not clipped. Lower values reduce latency but may cut off short tones; 0 skips the wait. |
+
+The delay is editable only when idle muting is on. Its saved value is retained
+when off and still applies if the amplifier needs to wake at startup or after
+a firmware update. Sounds played while the amplifier is already enabled have
+no additional wake delay. Firmware updates and hardware failures can still
+force muting. Both settings are saved in NVS and apply on Save without reboot.
+
 #### Button Feedback
 
 | Element | Description |

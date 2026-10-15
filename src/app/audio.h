@@ -14,6 +14,11 @@ typedef void (*AudioPlaybackFinished)(uint32_t generation);
 // initial_volume: 0-100 (from NVS config)
 void audio_init(uint8_t initial_volume);
 
+static constexpr uint16_t AUDIO_WAKE_DELAY_DEFAULT_MS = 120;
+static constexpr uint16_t AUDIO_WAKE_DELAY_MAX_MS = 1000;
+void audio_set_amplifier_policy(bool idle_mute, uint16_t wake_delay_ms);
+bool audio_has_amplifier_control();
+
 bool audio_get_stack_watermark(uint32_t* minimum_free_bytes);
 
 // Set device-level volume (0-100). Takes effect immediately.

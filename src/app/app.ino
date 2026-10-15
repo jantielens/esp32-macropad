@@ -448,6 +448,7 @@ void setup()
 	// share the I2C bus — Wire must already be started, and after config load
 	// so device_config.audio_volume is available).
 	#if HAS_AUDIO
+	audio_set_amplifier_policy(device_config.audio_idle_mute, device_config.audio_wake_delay_ms);
 	audio_init(device_config.audio_volume);
 	#if HAS_AUDIO_INPUT
 	audio_input_meter_init();

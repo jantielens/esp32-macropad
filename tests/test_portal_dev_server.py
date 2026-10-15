@@ -146,6 +146,27 @@ class PortalDevServerTest(unittest.TestCase):
             for identifier in partial.ids:
                 self.assertIn(identifier, parser.ids)
 
+    def test_audio_amplifier_config(self):
+        previous = copy.deepcopy(self.server.mock_config)
+        try:
+            config = self.request("/api/config")[1]
+            self.assertTrue(config["caps"]["audio_amplifier_mute"])
+            self.assertTrue(config["audio_idle_mute"])
+            self.assertEqual(config["audio_wake_delay_ms"], 120)
+            self.assertTrue(self.request("/api/info")[1]["has_audio_amplifier_mute"])
+            self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
+                body={"audio_idle_mute": False, "audio_wake_delay_ms": "35"})[0], 200)
+            saved = self.request("/api/config")[1]
+            self.assertFalse(saved["audio_idle_mute"])
+            self.assertEqual(int(saved["audio_wake_delay_ms"]), 35)
+            for profile in ("jc3248w535", "crowpanel-4.2-interactive"):
+                unsupported = self.request("/api/config", profile=profile)[1]
+                self.assertFalse(unsupported["caps"]["audio_amplifier_mute"])
+                self.assertNotIn("audio_idle_mute", unsupported)
+                self.assertFalse(self.request("/api/info", profile=profile)[1]["has_audio_amplifier_mute"])
+        finally:
+            self.server.mock_config = previous
+
     def test_epaper_presentation_config(self):
         profile = "crowpanel-4.2-interactive"
         status, config = self.request("/api/config", profile=profile)

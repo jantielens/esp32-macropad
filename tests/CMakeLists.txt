@@ -696,7 +696,7 @@ foreach(script
     test_timer_action_editor.js test_portal_action_editor_cycle.js test_portal_action_picker.js
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
-    test_portal_ble_config.js test_portal_pad_preview.js test_portal_startup.js
+    test_portal_ble_config.js test_portal_audio_config.js test_portal_pad_preview.js test_portal_startup.js
     test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js
     test_portal_binding_help.js test_portal_asset_gates.js
 )

@@ -37,16 +37,35 @@ the manager must not impose an ES8311 sequence on a PCM510xA DAC.
 
 The manager sets initial volume, checks availability, allocates its queues and
 semaphore, then creates the worker with the amplifier still muted. The worker
-unmutes before the first PCM write and allows 120 ms for output settling.
+unmutes before the first PCM write and allows `audio_wake_delay_ms` for output
+settling (default 120 ms, range 0-1000 ms).
 This conservative wake allowance preserves short tap tones on hardware that
 suppresses the initial output after amplifier enable. It adds latency only
-when waking from the muted idle state.
+when waking from a muted state, including startup and recovery after OTA.
 After alerts, music, and feedback are inactive, it waits the configured DMA
 buffer duration plus a 100 ms idle grace period before muting. Paused music is
 idle; silence gaps within an active tone pattern are not. Rapid feedback can
 reuse the enabled amplifier during the grace period. OTA entry mutes immediately.
 Codec power and I2S clocks remain active while idle, including the PCM510xA
 clock configuration. This policy applies to both output drivers.
+
+The Volume fragment's Amplifier section persists `audio_idle_mute` (default
+true) and `audio_wake_delay_ms` in NVS. Disabling idle muting keeps the
+amplifier enabled between sounds, reducing repeated wake latency but allowing
+idle hiss. The worker also enables it while idle after startup or OTA recovery,
+honoring the saved wake delay. Forced OTA muting and driver failure handling
+remain active regardless of this preference. The 100 ms idle grace period is
+not configurable. Reducing the wake delay can clip the beginning of short tones;
+zero skips the wait.
+
+`audio_set_amplifier_policy()` publishes both settings as one atomic snapshot;
+only the audio worker performs runtime hardware transitions. Config saves apply
+without reboot and do not interrupt an in-progress settling wait. The section
+is visible only when `AudioOutputDriver::supportsMute()` reports a board mute
+callback, including board-specific control factories. The portal uses
+`GET /api/config`'s `caps.audio_amplifier_mute`; `GET /api/info` also advertises
+`has_audio_amplifier_mute`. The delay input is disabled while idle muting is
+off, and partial saves retain its stored value.
 
 Startup failure calls `end()` and releases those manager resources.
 Volume and mute report control errors;

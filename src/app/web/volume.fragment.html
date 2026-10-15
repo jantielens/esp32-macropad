@@ -1,16 +1,33 @@
 <div class="section-header">
   <h2><span class="portal-icon" aria-hidden="true">volume_up</span>Volume</h2>
-  <p>Set the device audio output level.</p>
+  <p>Set the device audio output level and amplifier behavior.</p>
 </div>
 <div class="card mb-3" id="audio-section">
+  <div class="card-header"><h5 class="mb-0">Volume</h5></div>
   <div class="card-body">
     <div class="mb-3">
       <label class="form-label" for="audio_volume">Volume: <strong id="audio_volume_value">50</strong>%</label>
       <input type="range" class="form-range" id="audio_volume" name="audio_volume" min="0" max="100" step="5" value="50" oninput="document.getElementById('audio_volume_value').textContent=this.value">
       <div class="form-text">Device audio volume (0–100%). Applies to alerts, Music, and button feedback.</div>
     </div>
-    <div class="save-bar">
-      <button type="button" class="btn btn-primary btn-sm" id="volume-save-btn">Save</button>
-    </div>
   </div>
+</div>
+<section id="amplifier-section" class="card mb-3" aria-labelledby="amplifier-heading" style="display:none">
+  <div class="card-header"><h5 id="amplifier-heading" class="mb-0">Amplifier</h5></div>
+  <div class="card-body">
+      <p class="text-muted">Some amplifiers hiss while powered on, even when no sound is playing. Idle muting keeps them quiet between sounds, at the cost of a short wake-up delay.</p>
+      <div class="form-check form-switch mb-3">
+        <input type="checkbox" class="form-check-input" role="switch" id="audio_idle_mute" name="audio_idle_mute" aria-describedby="audio-idle-mute-help" checked disabled>
+        <label class="form-check-label" for="audio_idle_mute">Mute amplifier when idle</label>
+        <div id="audio-idle-mute-help" class="form-text">On (default): mute after playback finishes and buffered audio drains. Off: keep the amplifier enabled between sounds for faster button feedback; idle hiss may return. This does not disable audio playback.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="audio_wake_delay_ms">Amplifier wake delay (ms)</label>
+        <input type="number" class="form-control" id="audio_wake_delay_ms" name="audio_wake_delay_ms" min="0" max="1000" step="1" value="120" aria-describedby="audio-wake-delay-help" disabled>
+        <div id="audio-wake-delay-help" class="form-text">Default: 120 ms. Waits after enabling the amplifier before sending audio so the beginning of a sound is not clipped. Lower values reduce latency but may cut off short tones; 0 removes the wait. Range: 0-1000 ms.</div>
+      </div>
+  </div>
+</section>
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="volume-save-btn">Save</button>
 </div>

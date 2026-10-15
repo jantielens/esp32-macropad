@@ -54,9 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * Eliminate idle speaker hiss by keeping the output amplifier muted after boot
-  and between playback sessions. Allow 120 ms for output settling before the
+  and between playback sessions by default. Allow 120 ms for output settling before the
   first sound after idle so short tap beeps remain audible. Keep the amplifier
   enabled through tone-pattern pauses and a brief playback drain/grace period.
+  Add a separate Amplifier settings section in Audio > Volume on supported
+  boards to toggle idle muting and configure the wake delay (0-1000 ms, default
+  120 ms). Settings persist and apply without reboot. Disabling idle muting
+  keeps the amplifier enabled for faster feedback, but idle hiss may return.
 * Fix native Extension canvas text corruption when Device Typography uses an
   uploaded TTF. Respect glyph formats, stride, baseline placement, and explicit
   uploaded font names, with Montserrat fallback. Word Clock now inherits the

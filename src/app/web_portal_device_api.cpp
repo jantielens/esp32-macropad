@@ -201,6 +201,12 @@ void handleGetVersion(AsyncWebServerRequest *request) {
 		response->print(DISPLAY_BLANK_ON_SAVE ? "true" : "false");
 		response->print(",\"has_audio\":");
 		response->print(HAS_AUDIO ? "true" : "false");
+		response->print(",\"has_audio_amplifier_mute\":");
+#if HAS_AUDIO
+		response->print(audio_has_amplifier_control() ? "true" : "false");
+#else
+		response->print("false");
+#endif
 		response->print(",\"has_sound_player\":");
 		response->print(HAS_SOUND_PLAYER ? "true" : "false");
 		response->print(",\"has_alarm\":");
