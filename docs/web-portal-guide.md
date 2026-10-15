@@ -982,6 +982,10 @@ Pad labels retain the `Pad X: Name` format whether selected or not. The button
 **Actions** and **Appearance** tabs expose their controls without an additional
 same-named accordion; individual action slots remain expandable.
 
+The Pad **Bindings** tab keeps each binding's name, expression, live preview,
+and delete control together in a bordered group. Expressions stay full width,
+with their resolved values directly underneath.
+
 Essential widget sections open initially, even with default settings. Other
 sections open when they contain non-default configuration, including bindings,
 disabled default-on options, or customized styling. Nested groups also open their
