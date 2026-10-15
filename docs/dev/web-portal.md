@@ -488,11 +488,37 @@ remains in Layout; input-widget action suppression and Extension's shared
 label/icon/image hiding are unchanged. These compact editors need no new refresh
 rules, value mutation, handlers, or load/build paths.
 
-`padRefreshWidgetEditor(resetSections)` in `portal_pad_editor.js` owns the
-shared presentation refresh for Bar Chart, Gauge, and Sparkline. `PAD_WIDGET_EDITOR_RULES`
+Table, Gauge, and Gamepad Button register explicitly through
+`portal_widget_editor.js`. Their `portal_widget_*.js` modules precede the dialog
+in `portal.js.bundle`; markup remains in the existing partials. Other editors
+still use their existing paths during the incremental migration.
+
+Each registration declares its persisted type, section roles, fields, and
+action policy. Fields identify an input, flat JSON key, default, and conversion
+kind. Shared mechanics reuse native numeric bounds and existing binding, color,
+and label helpers. Gauge owns its repeated sources, palette defaults, track
+host, and icon-export scale. Specialized `init` and `load` callbacks are used
+only where needed: Gamepad Button generates and loads its existing held-control
+editor. Its action policy builds the first tap action with operation `down`,
+hides ordinary tap/long-press lists, and keeps the held-control section in
+Content. The firmware still owns release behavior.
+
+The workspace owns raw drafts, dirty tracking, tab/error presentation, and
+fragment disposal. Registered groups start with their markup's fixed disclosure
+states; drafts restore manual choices. Gauge does not hide dependent fields or
+reset settings when a feature is off. Only the selected supported editor builds
+and validates its fields, including collapsed groups and inactive tabs.
+Invalid explicit numbers block saving rather than being clamped; optional
+blanks may use defaults. Saving reveals and focuses the invalid field without
+enabling its feature. Registry-held DOM references are cleared on disposal.
+Capability-unavailable Gamepad Button settings are omitted on save, not deleted
+from configuration on load. The flat firmware JSON contract is unchanged.
+
+`padRefreshWidgetEditor(resetSections)` in `portal_pad_editor.js` still owns the
+legacy presentation refresh for Bar Chart and Sparkline. `PAD_WIDGET_EDITOR_RULES`
 declares their existing field IDs, feature conditions (checked, positive count,
 or nonempty value), group/style suffixes, and source fields. Source count defaults
-to four for Bar Chart/Gauge; Sparkline specifies three and has no pair controls.
+to four for Bar Chart; Sparkline specifies three and has no pair controls.
 The rules retain optional Bar Chart patterns, custom colors relative to
 firmware defaults, and paired-source expansion. Sparkline uses positive marker
 size to disclose marker format/color and groups each line's current-value label

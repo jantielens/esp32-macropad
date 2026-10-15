@@ -106,6 +106,10 @@ portal_recipes.js
 portal_pad_icons.js
 portal_pad_defaults.js
 portal_pad_grid.js
+portal_widget_editor.js
+portal_widget_table.js
+portal_widget_gauge.js
+portal_widget_gamepad_button.js
 portal_pad_dialog.js
 portal_pad_editor.js
 portal_pad_workspace.js

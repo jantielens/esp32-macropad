@@ -612,17 +612,6 @@ var _BV_DEF = [
     'pad-def-bg-color', 'pad-def-fg-color', 'pad-def-border-color',
     'pad-def-border-width', 'pad-def-corner-radius'
 ];
-var _BV_GAUGE_DATA = [
-    'pad-edit-gauge-data-binding', 'pad-edit-gauge-data-binding-2',
-    'pad-edit-gauge-data-binding-3', 'pad-edit-gauge-data-binding-4'
-];
-var _BV_GAUGE_COLOR = [
-    'pad-edit-gauge-arc-color', 'pad-edit-gauge-arc-color-2',
-    'pad-edit-gauge-arc-color-3', 'pad-edit-gauge-arc-color-4',
-    'pad-edit-gauge-track-color', 'pad-edit-gauge-needle-color', 'pad-edit-gauge-tick-color',
-    'pad-edit-gauge-marker-tick-color', 'pad-edit-gauge-marker-zone-color'
-];
-var _BV_GAUGE_NUM = ['pad-edit-gauge-min', 'pad-edit-gauge-max', 'pad-edit-gauge-marker-value'];
 var _BV_SPARK_DATA = [
     'pad-edit-sparkline-data-binding', 'pad-edit-sparkline-data-binding-2',
     'pad-edit-sparkline-data-binding-3'
@@ -636,11 +625,6 @@ var _BV_SPARK_COLOR = [
 var _BV_SPARK_NUM = ['pad-edit-sparkline-min', 'pad-edit-sparkline-max'];
 var _BV_BAR_COLOR = ['pad-edit-widget-bar-color', 'pad-edit-widget-bar-bg-color'];
 var _BV_BAR_NUM = ['pad-edit-widget-bar-min', 'pad-edit-widget-bar-max'];
-var _BV_GAUGE_LABEL = [
-    'pad-edit-gauge-start-label', 'pad-edit-gauge-start-label-2',
-    'pad-edit-gauge-start-label-3', 'pad-edit-gauge-start-label-4'
-];
-var _BV_TABLE_DATA = ['pad-edit-table-data-binding'];
 
 function _bvAttach(ids, opts) {
     for (var i = 0; i < ids.length; i++) {
@@ -649,13 +633,16 @@ function _bvAttach(ids, opts) {
     }
 }
 
-function _bvCount(ids, opts, skipEmpty) {
+function _bvCount(ids, opts, skipEmpty, fieldIds) {
     var c = 0;
     for (var i = 0; i < ids.length; i++) {
         var el = document.getElementById(ids[i]);
         if (!el) continue;
         if (skipEmpty && !el.value.trim()) continue;
-        if (!bindingValidateInput(el, opts)) c++;
+        if (!bindingValidateInput(el, opts)) {
+            c++;
+            if (fieldIds) fieldIds.push(el.id);
+        }
     }
     return c;
 }
@@ -675,16 +662,11 @@ function bindingInitStaticInputs() {
     var wdb = document.getElementById('pad-edit-widget-data-binding');
     if (wdb) bindingAttachValidation(wdb, { isWidgetBinding: true });
 
-    _bvAttach(_BV_GAUGE_DATA, { isWidgetBinding: true });
-    _bvAttach(_BV_GAUGE_COLOR);
-    _bvAttach(_BV_GAUGE_NUM, { isWidgetBinding: true });
     _bvAttach(_BV_SPARK_DATA, { isWidgetBinding: true });
     _bvAttach(_BV_SPARK_COLOR);
     _bvAttach(_BV_SPARK_NUM, { isWidgetBinding: true });
     _bvAttach(_BV_BAR_COLOR);
     _bvAttach(_BV_BAR_NUM, { isWidgetBinding: true });
-    _bvAttach(_BV_GAUGE_LABEL);
-    _bvAttach(_BV_TABLE_DATA, { isWidgetBinding: true });
 
     var wakeEl = document.getElementById('screen_saver_wake_binding');
     if (wakeEl) bindingAttachValidation(wakeEl);
@@ -695,33 +677,28 @@ function bindingInitStaticInputs() {
  * Returns { valid, count } where count is the number of errors found.
  */
 function bindingValidateDialog() {
-    var count = _bvCount(_BV_STD);
+    var fieldIds = [];
+    var count = _bvCount(_BV_STD, null, false, fieldIds);
 
     var wtype = document.getElementById('pad-edit-widget-type');
     var activeType = wtype ? wtype.value : '';
 
     if (activeType === 'bar_chart') {
         var wdb = document.getElementById('pad-edit-widget-data-binding');
-        if (wdb && wdb.value.trim() && !bindingValidateInput(wdb, { isWidgetBinding: true })) count++;
+        if (wdb && wdb.value.trim() && !bindingValidateInput(wdb, { isWidgetBinding: true })) {
+            count++;
+            fieldIds.push(wdb.id);
+        }
     }
 
-    if (activeType === 'gauge') {
-        count += _bvCount(_BV_GAUGE_DATA, { isWidgetBinding: true }, true);
-        count += _bvCount(_BV_GAUGE_COLOR, null, true);
-        count += _bvCount(_BV_GAUGE_NUM, { isWidgetBinding: true }, true);
-        count += _bvCount(_BV_GAUGE_LABEL, null, true);
-    }
     if (activeType === 'sparkline') {
-        count += _bvCount(_BV_SPARK_DATA, { isWidgetBinding: true }, true);
-        count += _bvCount(_BV_SPARK_COLOR, null, true);
-        count += _bvCount(_BV_SPARK_NUM, { isWidgetBinding: true }, true);
+        count += _bvCount(_BV_SPARK_DATA, { isWidgetBinding: true }, true, fieldIds);
+        count += _bvCount(_BV_SPARK_COLOR, null, true, fieldIds);
+        count += _bvCount(_BV_SPARK_NUM, { isWidgetBinding: true }, true, fieldIds);
     }
     if (activeType === 'bar_chart') {
-        count += _bvCount(_BV_BAR_COLOR, null, true);
-        count += _bvCount(_BV_BAR_NUM, { isWidgetBinding: true }, true);
-    }
-    if (activeType === 'table') {
-        count += _bvCount(_BV_TABLE_DATA, { isWidgetBinding: true }, true);
+        count += _bvCount(_BV_BAR_COLOR, null, true, fieldIds);
+        count += _bvCount(_BV_BAR_NUM, { isWidgetBinding: true }, true, fieldIds);
     }
 
     // Validate binding-capable action fields (tap, long-press, numeric rocker adjustment)
@@ -730,17 +707,26 @@ function bindingValidateDialog() {
         'pad-edit-lp-action-0', 'pad-edit-lp-action-1', 'pad-edit-lp-action-2',
         'pad-edit-nr-adjust'
     ];
+    var editor = typeof padWidgetEditor === 'function' && padWidgetEditor(activeType);
+    if (editor) actionPrefixes = actionPrefixes.filter(function(prefix) {
+        if (prefix.startsWith('pad-edit-action-')) return editor.actions.tap;
+        if (prefix.startsWith('pad-edit-lp-action-')) return editor.actions.longPress;
+        return false;
+    });
     for (var ai = 0; ai < actionPrefixes.length; ai++) {
         var typeInput = document.getElementById(actionPrefixes[ai] + '-type');
         var actionSuffixes = typeof actionEditorBindingSuffixes === 'function'
             ? actionEditorBindingSuffixes(typeInput ? typeInput.value : '') : [];
         for (var si = 0; si < actionSuffixes.length; si++) {
             var el = document.getElementById(actionPrefixes[ai] + actionSuffixes[si]);
-            if (el && !el.disabled && el.value.trim() && !bindingValidateInput(el)) count++;
+            if (el && !el.disabled && el.value.trim() && !bindingValidateInput(el)) {
+                count++;
+                fieldIds.push(el.id);
+            }
         }
     }
 
-    return { valid: count === 0, count: count };
+    return { valid: count === 0, count: count, fieldIds: fieldIds };
 }
 
 /**

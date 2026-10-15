@@ -8,10 +8,13 @@ ms.date: 2026-10-15
 
 Phase 1 complete; D1..D5 approved through the decision interview (2026-10-15).
 Phase 2 authorized and implemented (2026-10-15); focused checks and mock-portal
-browser validation passed. Phase 3 is not yet authorized.
+browser validation passed. Phase 3 decisions D6..D9 were approved through the
+decision interview; the user subsequently authorized Phase 3 implementation,
+now complete (2026-10-15), with verification recorded below.
+The user approved a Phase 3 commit followed by the bounded Phase 3a ownership
+follow-up below. Phase 4 and later implementation remain unauthorized.
 Use this document as the shared decision canvas; distinguish
-observed behavior, proposed decisions, and approved scope. Later phases are not
-authorized by the instruction to start Phase 2. Update checkboxes and the
+observed behavior, proposed decisions, and approved scope. Update checkboxes and the
 execution log as each phase is executed and verified.
 
 Related: [issue 124](https://github.com/jantielens/esp32-macropad/issues/124).
@@ -150,10 +153,11 @@ without a demonstrated need. Retain opaque Extension configuration semantics.
 
 | Phase | Deliverable | Status |
 | --- | --- | --- |
-| 0 | Scope and implementation plan | Phases 1 and 2 approved; later phases pending |
+| 0 | Scope and implementation plan | Phases 1 through 3a approved; later phases pending |
 | 1 | Contract baseline and format decision | Complete; D1..D5 approved |
 | 2 | Generic screen binding target | Complete; focused and mock-browser checks passed |
-| 3 | Shared fields and representative editors | Not started |
+| 3 | Shared fields and representative editors | Complete; focused and mock-browser checks passed, with one baseline test failure noted |
+| 3a | Representative ownership boundaries | Approved; pending Phase 3 checkpoint commit |
 | 4 | Remaining editor migrations | Not started |
 | 5 | Ownership cleanup and Waveform retirement | Not started |
 | 6 | Documentation and final verification | Not started |
@@ -233,25 +237,116 @@ in Boot Actions. Hardware navigation remains untested; no flashing requested.
 Primary surfaces: widget-owned web modules/partials, small shared field/registry
 helpers, pad dialog/editor/workspace, and asset manifests.
 
-* [ ] Establish minimal shared field load/build and validation mechanics
-* [ ] Register section roles and action policy without private-ID routing
-* [ ] Migrate Table as a straightforward field editor
-* [ ] Migrate Gauge to exercise repeated sources, bindings, colors, and bounds
-* [ ] Migrate Gamepad Button to exercise specialized action ownership
-* [ ] Validate each migration before proceeding to the next representative
-* [ ] Check each representative in the browser, including draft restoration,
+#### Phase 3 Interview Decisions
+
+These decisions supplement D1..D5. The user initially selected decisions only,
+then separately authorized Phase 3 implementation.
+
+* D6: Reject explicit invalid or out-of-range numeric input rather than silently
+  clamp it or replace it with a default. Preserve the raw draft, block save,
+  and focus the offending field. Blank optional fields may use declared
+  defaults; bindable fields continue to use existing binding validation.
+  Apply this contract to migrated fields, not unrelated editors in advance.
+* D7 (revised and approved): Use stable, manually collapsible groups rather
+  than feature-dependent field hiding or automatic disclosure. Feature toggles
+  and controlling values stay inside their groups; dependent settings remain
+  editable even when the feature is off. Use fixed initial open/closed states
+  and preserve manual collapse choices in drafts. Refresh must not reset values
+  or collapse choices. Do not add a conditional disclosure framework. Apply
+  this simplification incrementally as editors migrate, retaining every field.
+* D8: Keep Gamepad Button's existing held-action section in Content. Its
+  specialized action policy still owns serialization and suppression of the
+  ordinary tap/long-press lists. Keep the existing Gamepad editor, first-tap
+  action storage, and firmware-owned automatic release semantics.
+* D9 (clarified and approved): Preserve and serialize retained settings even
+  when their feature is off; disabling a feature does not reset its settings.
+  Validate shared fields and the selected, supported widget's retained fields,
+  including fields in collapsed groups or inactive Actions/Appearance tabs.
+  Do not validate unrelated mounted widget editors. On failure, select the
+  relevant workspace tab, open the containing groups, and focus the invalid
+  field without enabling its feature. Use the ordinary validation path, not
+  separate disabled-feature rules or disclosure overrides. Do not silently
+  normalize or discard settings. This does not add preservation requirements
+  for unavailable widgets or capabilities under D2.
+
+Implementation order remains Table, Gauge, then Gamepad Button, with focused
+checks and a browser check before opening the next representative. Existing
+markup and explicit manifest registration remain the starting point; generated
+forms are not a prerequisite. No firmware, native ABI, dependency, or persisted
+format change is authorized by these decisions.
+
+* [x] Establish minimal shared field load/build and validation mechanics
+* [x] Register section roles and action policy without private-ID routing
+* [x] Migrate Table as a straightforward field editor
+* [x] Migrate Gauge to exercise repeated sources, bindings, colors, and bounds
+* [x] Migrate Gamepad Button to exercise specialized action ownership
+* [x] Validate each migration before proceeding to the next representative
+* [x] Check each representative in the browser, including draft restoration,
   inactive Actions/Appearance tabs, validation focus, and repeated mounting
-* [ ] Remove the migrated slice's superseded logic immediately; reserve Phase 5
+* [x] Remove the migrated slice's superseded logic immediately; reserve Phase 5
   for cross-cutting cleanup rather than keeping duplicate ownership until then
-* [ ] Apply any approved firmware format change only to migrated slices, using
-  existing widget parsers and updating consumers without legacy fallbacks
-* [ ] Review the resulting interface for unnecessary hooks or descriptor logic
+* [x] Retain flat JSON and existing type strings under D1; no firmware format
+  change, native ABI change, dependency, or firmware build was needed
+* [x] Review the resulting interface for unnecessary hooks or descriptor logic
 
 Exit gate: representative editors retain setting coverage and workflows, while
 their specific code stays widget-owned. Temporary old/new implementation paths
 may coexist during migration, but no compatibility layer may survive completion.
-Any firmware-format rollout must clearly identify intermediate limitations;
-do not claim a partially migrated mixed format as a finished deliverable.
+No firmware-format rollout is planned under D1. Reopening that decision needs
+separate evidence, review, and approval.
+
+Implemented modules: `portal_widget_editor.js`, `portal_widget_table.js`,
+`portal_widget_gauge.js`, and `portal_widget_gamepad_button.js`. Shared code
+applies declared field, section, action, track, and icon policies. Gauge's
+automatic disclosure and shared field ladders were removed; other widgets keep
+their existing paths until Phase 4. Existing guides describe this partial
+migration and the changed Gauge behavior.
+
+Verification: existing transaction coverage now checks Table round-trips,
+Gauge retained disabled settings, raw invalid numbers, text target serialization, blank defaults,
+inactive-widget isolation, and unavailable Gamepad Button omission. Existing
+dirty-state, appearance, preview, import, startup, action, binding-help, and
+production asset checks passed. The final focused CTest run passed all 13 checks.
+The asset gate covers the headless C3 profile
+and P4 with and without PSRAM. `test_timer_action_editor` fails because its
+input double lacks `closest()`; the identical failure reproduces from an
+untouched HEAD archive. It was not changed as part of Phase 3.
+
+Mock browser checks used port 8766: Table binding/false-scroll round-trip and
+draft restore; Gauge static defaults, disabled needle rejection without raw
+value loss, save-time Content/group/focus navigation, shared-binding error focus, retained disabled styles,
+and manual disclosure across button switches; Gamepad Button held-trigger
+draft restore, Content role, hidden ordinary actions, mock save/read-back, and
+fragment remount with released old DOM references. Gauge layout screenshots
+were inspected at 1440px and 390px widths, with no page overflow. Field probes
+used DOM events because integrated-browser pointer automation is unreliable;
+physical device behavior was not exercised. An initial Gamepad probe ran before
+the pad finished loading; its transient span error disappeared when repeated
+against the loaded fixture. No firmware build, flashing, or commit was performed.
+
+### Phase 3a Representative Ownership Boundaries
+
+Approved after the Phase 3 retrospective (2026-10-15). Commit the verified
+Phase 3 checkpoint first; implement and commit this follow-up separately.
+
+* [ ] Remove the Screen action's dependency on `padWorkspace`; report validation
+  errors to the host, which owns error messages, focus, and tab selection
+* [ ] Move Gauge and Gamepad Button-specific CSS into explicitly bundled,
+  widget-owned stylesheets; retain genuinely reusable layout utilities
+* [ ] Document the minimal ownership contract and its unproven boundaries
+* [ ] Run existing focused action/portal checks and production asset gates
+* [ ] Check error presentation and unchanged desktop/mobile layout with the
+  mock portal; no firmware build or flashing is needed
+
+Exit gate: reusable actions do not inspect pad workspace state, representative
+widget styles are locally owned, and existing editing behavior is retained.
+No visual redesign, automatic asset discovery, speculative descriptor options,
+or additional widget migration belongs in this phase.
+
+The interface remains provisional until behavior-heavy widgets exercise it.
+Begin Phase 4 with Rocker and Numeric Rocker before batching simpler editors;
+treat asynchronous Extension integration as a separate checkpoint. This records
+the approved sequence, not authorization to implement Phase 4.
 
 ### Phase 4 Remaining Editor Migrations
 
@@ -529,6 +624,9 @@ unless separately justified and approved.
 | 2026-10-15 | 1 | User approved D1..D5 through interview: flat JSON; unavailable widget settings may be dropped; missing screen IDs retained and 31-byte targets enforced; Numeric Rocker saves tap plus adjustment only; incremental lifecycle/browser checks adopted. Phase 1 complete. | Decisions grounded in Phase 1 evidence and Numeric Rocker's widget-owned adjustment behavior; production baseline unchanged | Phase 2 awaits authorization; no firmware interaction or ABI changes authorized |
 | 2026-10-15 | 1 | User confirmed happy-path/KISS priority. Clarified D2: no preservation of unused fields for future capability re-enablement. Revised D3 to available literal screens or explicit bindings, superseding missing-ID retention in the preceding entry. Retained length validation, draft safety and lifecycle safeguards. | Plan-only consistency, link and whitespace checks; no production changes | Phase 2 awaits authorization; no implementation or firmware changes authorized |
 | 2026-10-15 | 2 | User authorized implementation with mock-server-first validation and proportionate tests. Added Screen-owned Binding value mode; removed List injection and refresh hooks. Shared validation skips disabled binding drafts; mode refresh handles input before change. Summaries show dropdown labels, not internal values. | Eight existing suites passed: startup, action-list, pad transaction, dirty-state, Timer binding, binding help, action picker, and asset gates. Mock-browser checks recorded above. | Phase 3 awaits approval. Device runtime navigation not exercised; no firmware changes, build or flashing. |
+| 2026-10-15 | 3 planning | Interview recorded D6..D9: reject invalid numbers; retain conditional disclosure through bounded helpers and widget-owned rules; keep Gamepad Button held action in Content; validate retained feature-disabled values and reveal errors. User explicitly selected decisions only for now. | Confirmed clean worktree at Phase 2 commit `7cd3a84`; inspected shared dialog field/action branches, disclosure rules, workspace drafts, and representative markup. Prior production verification remains as recorded, not rerun in this interview. | Phase 3 implementation awaits separate authorization. Only this tracker changed; no production changes, browser checks, firmware build, or flashing. |
+| 2026-10-15 | 3 planning | User approved the KISS revision to D7/D9: stable manually collapsible groups, no feature-dependent hiding or automatic disclosure, no reset on disable, and ordinary validation of shared and selected supported widget settings. This supersedes the conditional-disclosure decision in the preceding entry. | Plan-only link, whitespace, and decision consistency checks; no production verification required. | Phase 3 implementation remains unauthorized. No new reset command, production changes, firmware build, or flashing. |
+| 2026-10-15 | 3 | User separately authorized implementation. Extracted Table, Gauge, and Gamepad Button into explicit modules with minimal shared mechanics; removed their superseded shared branches and documented the contract. | Focused host and production asset checks passed; mock-browser draft, validation, save/read-back, remount, and responsive checks recorded above. Timer editor fixture failure also reproduces at HEAD. | Phase 4 awaits authorization. No firmware, ABI, dependency, build, flashing, or commit changes. |
 
 During execution, record each completed slice, exact checks and outcomes,
 approved deviations, format decisions, and unresolved blockers here. Keep the

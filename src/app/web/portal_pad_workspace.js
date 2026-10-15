@@ -137,6 +137,7 @@ function padWorkspaceDispose() {
     if (padWorkspace.resizeObserver) padWorkspace.resizeObserver.disconnect();
     if (padWorkspace.confirmResolve) padWorkspace.confirmResolve(false);
     if (typeof padPvHide === 'function') padPvHide();
+    if (typeof padWidgetEditorsDispose === 'function') padWidgetEditorsDispose();
     padWorkspace = null;
     padDirty = false;
 }
@@ -248,6 +249,7 @@ function padWorkspaceValidate() {
         const [key, message] = padWorkspace.errors.entries().next().value;
         const position = key.split(',').map(Number);
         padDialogOpen(position[0], position[1]);
+        padDialogFocusValidationError(message);
         throw Object.assign(new Error('Button [' + key + ']: ' + (message.message || message)), { fieldIds: message.fieldIds || [] });
     }
     const occupied = new Set();

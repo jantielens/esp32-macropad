@@ -23,6 +23,7 @@ const elements = new Map([
 	['pad-edit-widget-type', { value: '' }]
 ]);
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
 const source = fs.readFileSync('src/app/web/portal_pad_editor.js', 'utf8');
 vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), context);
 
@@ -123,8 +124,9 @@ for (const type of ['mousepad', 'scrollpad']) {
 		assert.strictEqual(elements.get(id).style.display, 'none');
 	}
 }
-const tableSection = { tagName: 'DIV', style: {} };
+const tableSection = { tagName: 'DIV', style: {}, dataset: {} };
 elements.set('pad-edit-table-section', tableSection);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_table.js', 'utf8'), context);
 elements.get('pad-edit-widget-type').value = 'table';
 context.padWidgetTypeChanged();
 assert.strictEqual(tableSection.style.display, '');
@@ -211,18 +213,18 @@ for (let ring = 1; ring <= 4; ring++) {
 for (const pair of [1, 2]) elements.set('pad-edit-gauge-dual-binding-pair-' + pair, { checked: false });
 elements.get('pad-edit-widget-type').value = 'gauge';
 context.padRefreshWidgetEditor(true);
-assert.deepStrictEqual([1, 2, 3, 4].map(ring => elements.get('pad-edit-gauge-source-' + ring).open), [true, false, false, false]);
-assert.strictEqual(elements.get('pad-edit-gauge-needle').open, true);
-assert.strictEqual(elements.get('pad-edit-gauge-tick-marks').open, true);
+assert.deepStrictEqual([1, 2, 3, 4].map(ring => elements.get('pad-edit-gauge-source-' + ring).open), [true, true, true, true]);
+assert.strictEqual(elements.get('pad-edit-gauge-needle').open, false);
+assert.strictEqual(elements.get('pad-edit-gauge-tick-marks').open, false);
 assert.strictEqual(elements.get('pad-edit-gauge-target').open, false);
-assert.strictEqual(elements.get('pad-edit-gauge-target-style').hidden, true);
+assert.strictEqual(elements.get('pad-edit-gauge-target-style').hidden, false);
 elements.get('pad-edit-gauge-data-binding-2').value = '[pad:power]';
 elements.get('pad-edit-gauge-start-label-3').value = 'Grid';
 elements.get('pad-edit-gauge-arc-color-4').value = '#123456';
 elements.get('pad-edit-gauge-marker-value').value = '0';
 context.padRefreshWidgetEditor(true);
 assert.deepStrictEqual([1, 2, 3, 4].map(ring => elements.get('pad-edit-gauge-source-' + ring).open), [true, true, true, true]);
-assert.strictEqual(elements.get('pad-edit-gauge-target').open, true, 'Zero is a configured Gauge target');
+assert.strictEqual(elements.get('pad-edit-gauge-target').open, false, 'Configuring a target does not change manual disclosure');
 elements.get('pad-edit-gauge-source-3').open = false;
 elements.get('pad-edit-gauge-show-needle').checked = false;
 elements.get('pad-edit-gauge-ticks').value = '0';
@@ -232,7 +234,7 @@ elements.set('pad-edit-gauge-tick-width', { value: '3' });
 elements.set('pad-edit-gauge-marker-zone-deg', { value: '19' });
 context.padRefreshWidgetEditor();
 assert.strictEqual(elements.get('pad-edit-gauge-source-3').open, false, 'Routine refresh preserves manual disclosure');
-for (const name of ['needle', 'tick', 'target']) assert.strictEqual(elements.get('pad-edit-gauge-' + name + '-style').hidden, true);
+for (const name of ['needle', 'tick', 'target']) assert.strictEqual(elements.get('pad-edit-gauge-' + name + '-style').hidden, false);
 assert.strictEqual(elements.get('pad-edit-gauge-needle-width').value, '7');
 assert.strictEqual(elements.get('pad-edit-gauge-tick-width').value, '3');
 assert.strictEqual(elements.get('pad-edit-gauge-marker-zone-deg').value, '19');
@@ -243,7 +245,7 @@ for (let ring = 2; ring <= 4; ring++) {
 }
 for (const pair of [1, 2]) elements.get('pad-edit-gauge-dual-binding-pair-' + pair).checked = true;
 context.padRefreshWidgetEditor(true);
-assert.deepStrictEqual([1, 2, 3, 4].map(ring => elements.get('pad-edit-gauge-source-' + ring).open), [true, true, true, true], 'Both Gauge pairs open their empty sources');
+assert.deepStrictEqual([1, 2, 3, 4].map(ring => elements.get('pad-edit-gauge-source-' + ring).open), [true, true, false, true], 'Pairing does not reopen manually collapsed sources');
 assert.strictEqual(elements.get('pad-edit-bar-source-2').open, false, 'Refreshing Gauge leaves the inactive Bar Chart editor unchanged');
 const gaugeSection = elements.get('pad-edit-gauge-section');
 elements.delete('pad-edit-gauge-section');
@@ -350,6 +352,7 @@ assert.strictEqual(workspaceContext.padDirty, true);
 assert.strictEqual(workspaceContext.error, 'Incomplete binding');
 assert.strictEqual(vm.runInContext("padWorkspace.forms.get('0,0').values[0].value", workspaceContext), '[unfinished');
 workspaceContext.padDialogOpen = () => {};
+workspaceContext.padDialogFocusValidationError = () => {};
 assert.throws(() => workspaceContext.padWorkspaceValidate(), /Incomplete binding/);
 const revisions = workspaceContext.revisions;
 workspaceContext.padWorkspaceEdit();

@@ -10,6 +10,8 @@ const context = {
     }
 };
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gauge.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), context);
 
 const norm = context.padColorNormalizeLiteral;

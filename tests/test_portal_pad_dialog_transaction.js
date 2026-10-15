@@ -50,6 +50,9 @@ const context = {
 };
 
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_table.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gamepad_button.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_workspace.js', 'utf8'), context);
 vm.runInContext('padWorkspace = { selected: true, loading: false, forms: new Map(), errors: new Map() };', context);
@@ -98,6 +101,24 @@ assert.notStrictEqual(context.padState.buttons[0], originalButton);
 assert.strictEqual(context.padState.buttons[0].col, 1);
 assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
+
+context.actionEditorLoadGamepad = function() {};
+context.padWidgetEditorsLoad({ widget_type: 'table', widget_table_scrollable: false });
+assert.strictEqual(document.getElementById('pad-edit-table-scrollable').value, 'false');
+document.getElementById('pad-edit-widget-type').value = 'table';
+document.getElementById('pad-edit-table-scrollable').value = 'false';
+document.getElementById('pad-edit-table-data-binding').value = ' [health:table] ';
+document.getElementById('pad-edit-table-style').value = ' font_size:14 ';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].widget_data_binding, '[health:table]');
+assert.strictEqual(context.padState.buttons[0].widget_table_style, 'font_size:14');
+assert.strictEqual(context.padState.buttons[0].widget_table_scrollable, false);
+document.getElementById('pad-edit-table-data-binding').value = '';
+document.getElementById('pad-edit-table-style').value = '';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].widget_data_binding, undefined);
+assert.strictEqual(context.padState.buttons[0].widget_table_style, undefined);
+document.getElementById('pad-edit-widget-type').value = '';
 
 const numericInput = document.getElementById('pad-edit-icon-scale');
 numericInput.style.display = '';
@@ -311,5 +332,71 @@ assert.strictEqual(context.padValidateBindingNameInput(bindingName), true);
 assert.strictEqual(bindingName.classList.contains('binding-error'), false);
 assert.strictEqual(bindingName.classList.contains('pad-field-error'), false);
 assert.strictEqual(bindingName.attributes['aria-invalid'], undefined);
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gauge.js', 'utf8'), context);
+context.PAD_FIRMWARE_DEFAULTS = {
+    widget_series_color: '#123456', widget_series_color_2: '#234567',
+    widget_series_color_3: '#345678', widget_series_color_4: '#456789',
+    widget_track_color: '#111111', widget_indicator_color: '#ffffff',
+    widget_tick_color: '#808080', widget_zone_color: '#ff5722'
+};
+vm.runInContext('PAD_FIRMWARE_DEFAULTS = globalThis.PAD_FIRMWARE_DEFAULTS;', context);
+context.padSetBindableColor = (id, value) => { document.getElementById(id).value = value; };
+context.padGetBindableColor = id => document.getElementById(id).value;
+context.actionEditorBuild = () => ({});
+context.padWidgetEditorsLoad({
+    widget_type: 'gauge', widget_gauge_show_needle: false, widget_gauge_needle_width: 7,
+    widget_gauge_ticks: 0, widget_gauge_tick_width: 3, widget_gauge_marker_zone_deg: 19,
+    widget_gauge_marker_value: 0, widget_gauge_min: '[pad:minimum]',
+    widget_data_binding_3: '[pad:source]', widget_gauge_start_label_3: 'Third\nring'
+});
+document.getElementById('pad-edit-widget-type').value = 'gauge';
+context.padWorkspaceEdit();
+let gauge = context.padState.buttons[0];
+assert.strictEqual(gauge.widget_gauge_show_needle, false);
+assert.strictEqual(gauge.widget_gauge_needle_width, 7);
+assert.strictEqual(gauge.widget_gauge_ticks, 0);
+assert.strictEqual(gauge.widget_gauge_tick_width, 3);
+assert.strictEqual(gauge.widget_gauge_marker_zone_deg, 19);
+assert.strictEqual(gauge.widget_gauge_marker_value, '0');
+assert.strictEqual(gauge.widget_gauge_min, '[pad:minimum]');
+assert.strictEqual(gauge.widget_data_binding_3, '[pad:source]');
+assert.strictEqual(gauge.widget_gauge_start_label_3, 'Third\nring');
+assert.strictEqual(gauge.widget_arc_color_4, '#456789');
+const needleWidth = document.getElementById('pad-edit-gauge-needle-width');
+needleWidth.value = '11';
+needleWidth.validity = { valid: false };
+needleWidth.validationMessage = 'Maximum is 10';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0], gauge, 'Invalid disabled styles must not replace the last valid button');
+assert.strictEqual(needleWidth.value, '11', 'Keep explicit invalid input raw');
+assert.match(validationErrors.get('1,2').message, /Maximum is 10/);
+needleWidth.value = '7';
+needleWidth.validity.valid = true;
+document.getElementById('pad-edit-gauge-min').value = '12oops';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0], gauge, 'Reject partially numeric text instead of accepting a parsed prefix');
+document.getElementById('pad-edit-gauge-min').value = '0x10';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0], gauge, 'Reject text whose whole-number and prefix parsers disagree');
+document.getElementById('pad-edit-gauge-min').value = '';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].widget_gauge_min, 0);
+assert.strictEqual(validationErrors.size, 0);
+document.getElementById('pad-edit-widget-type').value = 'table';
+document.getElementById('pad-edit-gauge-min').value = 'unrelated invalid draft';
+context.padWorkspaceEdit();
+assert.strictEqual(context.padState.buttons[0].widget_type, 'table', 'Inactive Gauge fields must not block Table');
+
+const gamepadEditor = context.padWidgetEditor('gamepad_button');
+assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: true }), true);
+assert.strictEqual(gamepadEditor.available({ has_touch: true, has_usb_hid: false }), false);
+document.getElementById('pad-edit-widget-type').value = 'gamepad_button';
+gamepadEditor.supported = false;
+const unsupported = context.padDialogBuildButton();
+assert.strictEqual(unsupported.widget_type, undefined);
+assert.strictEqual(unsupported.actions, undefined);
+assert.strictEqual(unsupported.lp_actions, undefined);
 
 console.log('portal_pad_dialog_transaction: PASS');

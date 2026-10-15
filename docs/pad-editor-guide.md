@@ -1553,14 +1553,16 @@ Labels, icons, and colors still work alongside the widget. A typical bar chart b
 The gauge widget draws an arc that fills based on a numeric value — ideal for clocks, speedometers, temperature dials, or any circular meter.
 
 In **Content**, **Data sources** groups each ring's binding, label, and color.
-Ring 1 starts expanded; optional rings expand for a binding, label, custom color,
-or enabled pair. Pair controls follow the rings and identify rings 2/4 as the
+Ring 1 starts expanded; optional rings start collapsed. Pair controls follow
+the rings and identify rings 2/4 as the
 negative side. **Scale** and **Arc & track** start expanded, with arc geometry,
 track color/outline, and animation together. **Needle**, **Tick marks**, and
-**Target** open when enabled/configured. Their geometry and colors stay adjacent;
-turning off the needle, setting tick count to 0, or leaving Target value empty
-hides subordinate styling without clearing it. Target value `0` is configured,
-not empty. Collapsing any group preserves its feature and saved values.
+**Target** start collapsed. Their geometry and colors remain editable and saved
+even when the feature is off. Target value `0` is configured, not empty.
+Collapsing a group preserves its feature and values; button switches retain
+manual collapse choices. Invalid explicit numbers are rejected rather than
+clamped. Save Pad opens the relevant tab and groups and focuses the invalid
+field, including disabled-feature settings, without enabling the feature.
 
 **Configuration:**
 

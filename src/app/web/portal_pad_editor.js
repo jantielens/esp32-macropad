@@ -74,7 +74,7 @@ function padSetImageCapabilityVisibility(info, hideForWidget) {
 
 function padSetHidWidgetCapabilityVisibility(info) {
     const supported = !!(info && info.has_touch === true && info.has_usb_hid === true);
-    ['mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'].forEach(function(type) {
+    ['mousepad', 'scrollpad', 'gamepad_stick'].forEach(function(type) {
         const option = document.getElementById('pad-edit-' + type + '-widget-option');
         if (!option) return;
         option.hidden = !supported;
@@ -102,7 +102,7 @@ async function padInit() {
     if (cameraPreviewOption) cameraPreviewOption.style.display =
         deviceInfoCache && deviceInfoCache.has_camera === true ? '' : 'none';
     padSetHidWidgetCapabilityVisibility(deviceInfoCache);
-    document.getElementById('pad-edit-gamepad-button-fields').innerHTML = actionEditorGamepadHTML('pad-edit-gamepad-hold', true);
+    padWidgetEditorsInit(deviceInfoCache);
     padSetImageCapabilityVisibility(deviceInfoCache);
     // Generate action editor HTML from shared module — three fixed action
     // slots per gesture. An unused slot collapses as its own "Add ..."
@@ -398,7 +398,7 @@ function padPopulateSoundDropdown() {
     });
 }
 
-const WIDGET_SECTIONS = ['bar_chart', 'gauge', 'sparkline', 'table', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'];
+const WIDGET_SECTIONS = ['bar_chart', 'sparkline', 'rocker', 'numericrocker', 'list', 'camera_preview', 'mousepad', 'scrollpad', 'gamepad_stick'];
 
 const PAD_WIDGET_EDITOR_RULES = {
     bar_chart: {
@@ -412,19 +412,6 @@ const PAD_WIDGET_EDITOR_RULES = {
             binding: 'pad-edit-widget-bar-data-binding', firstBinding: 'pad-edit-widget-data-binding',
             label: 'pad-edit-widget-bar-label', color: 'pad-edit-widget-bar-color',
             pair: 'pad-edit-widget-bar-dual-binding-pair-', patterns: true
-        }
-    },
-    gauge: {
-        section: 'pad-edit-gauge-section',
-        prefix: 'pad-edit-gauge-',
-        features: [
-            { field: 'pad-edit-gauge-show-needle', mode: 'checked', group: 'needle', style: 'needle' },
-            { field: 'pad-edit-gauge-ticks', mode: 'positive', group: 'tick-marks', style: 'tick' },
-            { field: 'pad-edit-gauge-marker-value', mode: 'nonempty', group: 'target', style: 'target' }
-        ],
-        sources: {
-            binding: 'pad-edit-gauge-data-binding', label: 'pad-edit-gauge-start-label',
-            color: 'pad-edit-gauge-arc-color', pair: 'pad-edit-gauge-dual-binding-pair-'
         }
     },
     sparkline: {
@@ -479,6 +466,7 @@ function padRefreshWidgetEditor(resetSections) {
 
 function padWidgetTypeChanged() {
     const wtype = document.getElementById('pad-edit-widget-type').value;
+    padWidgetEditorsRefresh(wtype);
     padFillRefreshVisibility();
     padRefreshWidgetEditor(true);
     WIDGET_SECTIONS.forEach(s => {
@@ -516,10 +504,12 @@ function padWidgetTypeChanged() {
     var isRocker = (wtype === 'rocker');
     var isNumericRocker = (wtype === 'numericrocker');
     var isMouseWidget = (wtype === 'mousepad' || wtype === 'scrollpad');
-    var isGamepadWidget = (wtype === 'gamepad_stick' || wtype === 'gamepad_button');
+    var isGamepadWidget = wtype === 'gamepad_stick';
     var consumesActions = isMouseWidget || isGamepadWidget;
+    const editor = padWidgetEditor(wtype);
+    const actionPolicy = editor ? editor.actions : { tap: !consumesActions, longPress: !isNumericRocker && !consumesActions };
     var navigationGroup = document.getElementById('pad-edit-input-navigation');
-    if (navigationGroup) navigationGroup.style.display = consumesActions ? '' : 'none';
+    if (navigationGroup) navigationGroup.style.display = consumesActions || editor && editor.supported !== false && editor.inputNavigation ? '' : 'none';
     var axis = 'vertical';
     if (isRocker) {
         var axSel = document.getElementById('pad-edit-rocker-axis');
@@ -534,12 +524,12 @@ function padWidgetTypeChanged() {
 
     // Numeric rocker uses a dedicated adjustment action instead of long-press actions.
     var lpActionsContainer = document.getElementById('pad-edit-lp-actions');
-    if (lpActionsContainer) lpActionsContainer.style.display = isNumericRocker || consumesActions ? 'none' : '';
+    if (lpActionsContainer) lpActionsContainer.style.display = actionPolicy.longPress ? '' : 'none';
     var lpHeading = document.getElementById('pad-edit-lp-heading');
-    if (lpHeading) lpHeading.style.display = isNumericRocker || consumesActions ? 'none' : '';
+    if (lpHeading) lpHeading.style.display = actionPolicy.longPress ? '' : 'none';
     ['pad-edit-tap-heading', 'pad-edit-tap-actions'].forEach(function(id) {
         var element = document.getElementById(id);
-        if (element) element.style.display = consumesActions ? 'none' : '';
+        if (element) element.style.display = actionPolicy.tap ? '' : 'none';
     });
 
     // Numeric rocker: show adjustment action editor in widget settings

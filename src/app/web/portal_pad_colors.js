@@ -740,10 +740,11 @@ function padFillRefreshVisibility(resetSections) {
         patterns.open = patterned;
         patterns.dataset.patterned = String(patterned);
     }
+    const editor = typeof padWidgetEditor === 'function' && padWidgetEditor(type);
     var trackSettings = document.getElementById('pad-edit-track-settings');
-    var trackHost = document.getElementById(type === 'gauge' ? 'pad-edit-gauge-track-settings' : 'pad-edit-bar-track-settings');
+    var trackHost = document.getElementById(editor && editor.track ? editor.track.host : 'pad-edit-bar-track-settings');
     if (trackSettings && trackHost && trackSettings.parentElement !== trackHost) trackHost.appendChild(trackSettings);
-    document.getElementById('pad-edit-track-outline').style.display = type === 'bar_chart' || type === 'gauge' ? '' : 'none';
+    document.getElementById('pad-edit-track-outline').style.display = type === 'bar_chart' || editor && editor.track && editor.track.outline ? '' : 'none';
     var radius = document.getElementById('pad-edit-track-radius-wrap');
     if (radius) radius.style.display = type === 'bar_chart' ? '' : 'none';
 }
@@ -758,7 +759,7 @@ function padFillLoad(button) {
     var spacing = padFillGeometry(button.pattern_spacing, 8, 2, 64);
     document.getElementById('pad-edit-pattern-spacing').value = spacing;
     document.getElementById('pad-edit-pattern-stroke').value = padFillGeometry(button.pattern_stroke_width, 1, 1, Math.min(8, spacing));
-    document.getElementById('pad-edit-track-outline-width').value = padFillGeometry(button.widget_track_outline_width, 0, 0, 8);
+    document.getElementById('pad-edit-track-outline-width').value = button.widget_track_outline_width === undefined ? 0 : button.widget_track_outline_width;
     padSetBindableColor('pad-edit-track-outline-color', button.widget_track_outline_color, '#000000');
     document.getElementById('pad-edit-track-radius').value = padFillGeometry(button.widget_bar_track_radius, 4, 0, 64);
     padFillRefreshVisibility(true);
@@ -784,7 +785,9 @@ function padFillBuild(button, type) {
         button.pattern_spacing = spacing;
         button.pattern_stroke_width = stroke;
     }
-    if (type === 'bar_chart' || type === 'gauge') {
+    const editor = typeof padWidgetEditor === 'function' && padWidgetEditor(type);
+    if (type === 'bar_chart' || editor && editor.track && editor.track.outline) {
+        if (editor) padWidgetValidateField(document.getElementById('pad-edit-track-outline-width'), { kind: 'number' });
         var width = padFillGeometry(document.getElementById('pad-edit-track-outline-width').value, 0, 0, 8);
         var color = padGetBindableColor('pad-edit-track-outline-color') || '#000000';
         if (width || color !== '#000000') {

@@ -991,13 +991,17 @@ styling controls without clearing values. **Caption area size (px)** sizes the
 caption strip, not the font; **Bar thickness (%)** controls the bar thickness.
 
 Gauge **Content** keeps each ring's binding, label, and color in **Data sources**.
-Ring 1 opens initially; configured optional rings and enabled pairs also open.
+Ring 1 opens initially; optional rings start collapsed regardless of configuration.
 **Scale** and **Arc & track** follow, with animation and the shared track outline
 beside arc geometry. **Needle**, **Tick marks**, and **Target** keep each feature's
-dimensions and colors together. Turning off the needle, setting tick count to 0,
-or clearing the target hides styling without clearing saved values. Collapsing
-a group never disables it. Pair controls retain rings 2/4 as the negative side;
-target zone size remains an angle in degrees, not a percentage of the range.
+dimensions and colors together and start collapsed. Turning off the needle,
+setting tick count to 0, or clearing the target leaves their settings editable
+and saved. Manual collapse choices survive button switches; collapsing a group
+never disables it. Invalid values block saving even inside collapsed groups;
+Save Pad opens and focuses the offending field without enabling its feature.
+Pair controls retain rings 2/4 as the negative side; target zone size remains an
+angle in degrees, not a percentage of the range. Gamepad Button's held control
+remains in Content, with no ordinary tap or long-press action lists.
 
 Sparkline **Content** starts with per-line **Data sources**, keeping live binding,
 color, current-value label, and optional Home Assistant backfill together.

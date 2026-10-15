@@ -368,42 +368,6 @@ function padDialogOpen(col, row) {
     padSetBindableColor('pad-edit-widget-bar-marker-color', btn.widget_bar_marker_color, PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
     padSetBindableColor('pad-edit-widget-bar-marker-zone-color', btn.widget_bar_marker_zone_color, PAD_FIRMWARE_DEFAULTS.widget_zone_color);
 
-    // Gauge widget fields
-    document.getElementById('pad-edit-gauge-data-binding').value = btn.widget_data_binding || '';
-    document.getElementById('pad-edit-gauge-data-binding-2').value = btn.widget_data_binding_2 || '';
-    document.getElementById('pad-edit-gauge-data-binding-3').value = btn.widget_data_binding_3 || '';
-    document.getElementById('pad-edit-gauge-data-binding-4').value = btn.widget_data_binding_4 || '';
-    document.getElementById('pad-edit-gauge-start-label').value = padLabelToInput(btn.widget_gauge_start_label);
-    document.getElementById('pad-edit-gauge-start-label-2').value = padLabelToInput(btn.widget_gauge_start_label_2);
-    document.getElementById('pad-edit-gauge-start-label-3').value = padLabelToInput(btn.widget_gauge_start_label_3);
-    document.getElementById('pad-edit-gauge-start-label-4').value = padLabelToInput(btn.widget_gauge_start_label_4);
-    document.getElementById('pad-edit-gauge-min').value = (btn.widget_gauge_min !== undefined) ? btn.widget_gauge_min : '0';
-    document.getElementById('pad-edit-gauge-max').value = (btn.widget_gauge_max !== undefined) ? btn.widget_gauge_max : '100';
-    document.getElementById('pad-edit-gauge-degrees').value = (btn.widget_gauge_degrees !== undefined) ? btn.widget_gauge_degrees : 180;
-    document.getElementById('pad-edit-gauge-start-angle').value = (btn.widget_gauge_start_angle !== undefined) ? btn.widget_gauge_start_angle : 180;
-    document.getElementById('pad-edit-gauge-zero-centered').checked = (btn.widget_gauge_zero_centered !== undefined) ? btn.widget_gauge_zero_centered : false;
-    document.getElementById('pad-edit-gauge-dual-binding-pair-1').checked = (btn.widget_gauge_dual_binding_pair_1 !== undefined) ? btn.widget_gauge_dual_binding_pair_1 : false;
-    document.getElementById('pad-edit-gauge-dual-binding-pair-2').checked = (btn.widget_gauge_dual_binding_pair_2 !== undefined) ? btn.widget_gauge_dual_binding_pair_2 : false;
-    document.getElementById('pad-edit-gauge-show-needle').checked = (btn.widget_gauge_show_needle !== undefined) ? btn.widget_gauge_show_needle : true;
-    document.getElementById('pad-edit-gauge-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
-    padSetBindableColor('pad-edit-gauge-arc-color', btn.widget_arc_color, PAD_FIRMWARE_DEFAULTS.widget_series_color);
-    padSetBindableColor('pad-edit-gauge-arc-color-2', btn.widget_arc_color_2, PAD_FIRMWARE_DEFAULTS.widget_series_color_2);
-    padSetBindableColor('pad-edit-gauge-arc-color-3', btn.widget_arc_color_3, PAD_FIRMWARE_DEFAULTS.widget_series_color_3);
-    padSetBindableColor('pad-edit-gauge-arc-color-4', btn.widget_arc_color_4, PAD_FIRMWARE_DEFAULTS.widget_series_color_4);
-    padSetBindableColor('pad-edit-gauge-track-color', btn.widget_gauge_track_color, PAD_FIRMWARE_DEFAULTS.widget_track_color);
-    padSetBindableColor('pad-edit-gauge-needle-color', btn.widget_gauge_needle_color, PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
-    padSetBindableColor('pad-edit-gauge-tick-color', btn.widget_gauge_tick_color, PAD_FIRMWARE_DEFAULTS.widget_tick_color);
-    document.getElementById('pad-edit-gauge-arc-width-pct').value = (btn.widget_gauge_arc_width_pct !== undefined) ? btn.widget_gauge_arc_width_pct : 15;
-    document.getElementById('pad-edit-gauge-ticks').value = (btn.widget_gauge_ticks !== undefined) ? btn.widget_gauge_ticks : 5;
-    document.getElementById('pad-edit-gauge-needle-width').value = (btn.widget_gauge_needle_width !== undefined) ? btn.widget_gauge_needle_width : 2;
-    document.getElementById('pad-edit-gauge-needle-cutoff').value = (btn.widget_gauge_needle_cutoff_pct !== undefined) ? btn.widget_gauge_needle_cutoff_pct : 0;
-    document.getElementById('pad-edit-gauge-tick-width').value = (btn.widget_gauge_tick_width !== undefined) ? btn.widget_gauge_tick_width : 1;
-    document.getElementById('pad-edit-gauge-marker-value').value = btn.widget_gauge_marker_value || '';
-    document.getElementById('pad-edit-gauge-marker-zone-deg').value = (btn.widget_gauge_marker_zone_deg !== undefined) ? btn.widget_gauge_marker_zone_deg : 0;
-    document.getElementById('pad-edit-gauge-marker-tick-width').value = (btn.widget_gauge_marker_tick_width !== undefined) ? btn.widget_gauge_marker_tick_width : 2;
-    padSetBindableColor('pad-edit-gauge-marker-tick-color', btn.widget_gauge_marker_tick_color, PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
-    padSetBindableColor('pad-edit-gauge-marker-zone-color', btn.widget_gauge_marker_zone_color, PAD_FIRMWARE_DEFAULTS.widget_zone_color);
-
     // Sparkline widget fields
     document.getElementById('pad-edit-sparkline-data-binding').value = btn.widget_data_binding || '';
     document.getElementById('pad-edit-sparkline-data-binding-2').value = btn.widget_data_binding_2 || '';
@@ -458,10 +422,7 @@ function padDialogOpen(col, row) {
     }
     document.getElementById('pad-edit-sparkline-ref-in-view').checked = btn.widget_sparkline_ref_in_view || false;
 
-    // Table widget fields
-    document.getElementById('pad-edit-table-data-binding').value = btn.widget_data_binding || '';
-    document.getElementById('pad-edit-table-style').value = btn.widget_table_style || '';
-    document.getElementById('pad-edit-table-scrollable').value = (btn.widget_table_scrollable === false) ? 'false' : 'true';
+    padWidgetEditorsLoad(btn);
 
     // Rocker widget fields
     document.getElementById('pad-edit-rocker-axis').value = btn.widget_rocker_axis || 'vertical';
@@ -495,7 +456,6 @@ function padDialogOpen(col, row) {
         btn.widget_gamepad_dead_zone === undefined ? 10 : btn.widget_gamepad_dead_zone * 100;
     document.getElementById('pad-edit-gamepad-invert-x').checked = btn.widget_gamepad_invert_x === true;
     document.getElementById('pad-edit-gamepad-invert-y').checked = btn.widget_gamepad_invert_y === true;
-    actionEditorLoadGamepad('pad-edit-gamepad-hold', btn.widget_type === 'gamepad_button' && tapActions.length ? tapActions[0] : {});
 
     // Numeric Rocker widget fields
     document.getElementById('pad-edit-numericrocker-axis').value = btn.widget_numericrocker_axis || 'horizontal';
@@ -587,6 +547,19 @@ function padDialogShowValidationError(message) {
     });
 }
 
+function padDialogFocusValidationError(error) {
+    const input = document.getElementById((error.fieldIds || [])[0]);
+    if (!input) return;
+    for (let parent = input.parentElement; parent; parent = parent.parentElement) {
+        if (parent.tagName === 'DETAILS') parent.open = true;
+        if (parent.dataset && parent.dataset.buttonTab && typeof padWorkspace !== 'undefined' && padWorkspace) {
+            padWorkspace.tab = parent.dataset.buttonTab;
+            padWorkspaceRenderTabs();
+        }
+    }
+    if (input.focus) input.focus();
+}
+
 function padDialogDismissValidationError() {
     const alert = document.getElementById('pad-edit-validation-error');
     if (alert) alert.style.display = 'none';
@@ -653,16 +626,19 @@ function padDialogBuildButton() {
     if (buttonShadow !== 'inherit') btn.button_shadow = buttonShadow;
 
     // Tap actions (array)
-    const wtype = document.getElementById('pad-edit-widget-type').value;
+    const selectedType = document.getElementById('pad-edit-widget-type').value;
+    const widgetEditor = padWidgetEditor(selectedType);
+    const wtype = widgetEditor && widgetEditor.supported === false ? '' : selectedType;
     padFillBuild(btn, wtype);
     const isMouseWidget = wtype === 'mousepad' || wtype === 'scrollpad';
-    const consumesActions = isMouseWidget || wtype === 'gamepad_stick' || wtype === 'gamepad_button';
-    var tapArr = wtype === 'gamepad_button' ? [actionEditorBuildGamepad('pad-edit-gamepad-hold', true)]
-        : consumesActions ? [] : actionEditorListBuild(padActionPrefixes('tap'));
+    const consumesActions = isMouseWidget || wtype === 'gamepad_stick';
+    const actionPolicy = widgetEditor ? widgetEditor.actions : { tap: !consumesActions, longPress: !consumesActions };
+    var tapArr = wtype && actionPolicy.buildTap ? actionPolicy.buildTap()
+        : actionPolicy.tap ? actionEditorListBuild(padActionPrefixes('tap')) : [];
     if (tapArr.length) btn.actions = tapArr;
 
     // Long-press actions (array)
-    var lpArr = consumesActions ? [] : actionEditorListBuild(padActionPrefixes('lp'));
+    var lpArr = actionPolicy.longPress ? actionEditorListBuild(padActionPrefixes('lp')) : [];
     if (lpArr.length) btn.lp_actions = lpArr;
 
     if (document.getElementById('pad-edit-confirm').checked) {
@@ -709,7 +685,9 @@ function padDialogBuildButton() {
     // Widget type
     if (wtype) {
         btn.widget_type = wtype;
-        if (['mousepad', 'scrollpad', 'gamepad_stick', 'gamepad_button'].includes(wtype)) {
+        const editor = padWidgetEditor(wtype);
+        if (editor) padWidgetEditorBuild(btn, editor);
+        if (['mousepad', 'scrollpad', 'gamepad_stick'].includes(wtype) || editor && editor.inputNavigation) {
             btn.widget_disable_pad_swipes = document.getElementById('pad-edit-disable-pad-swipes').checked;
         }
         if (wtype === 'gamepad_stick') {
@@ -776,57 +754,6 @@ function padDialogBuildButton() {
             btn.widget_bar_marker_width = (isNaN(barMarkerW) || barMarkerW < 0) ? 2 : (barMarkerW > 10) ? 10 : barMarkerW;
             btn.widget_bar_marker_color = padGetBindableColor('pad-edit-widget-bar-marker-color');
             btn.widget_bar_marker_zone_color = padGetBindableColor('pad-edit-widget-bar-marker-zone-color');
-        }
-        if (wtype === 'gauge') {
-            const gDataBinding = document.getElementById('pad-edit-gauge-data-binding').value.trim();
-            if (gDataBinding) btn.widget_data_binding = gDataBinding;
-            btn.widget_data_binding_2 = document.getElementById('pad-edit-gauge-data-binding-2').value.trim();
-            btn.widget_data_binding_3 = document.getElementById('pad-edit-gauge-data-binding-3').value.trim();
-            btn.widget_data_binding_4 = document.getElementById('pad-edit-gauge-data-binding-4').value.trim();
-            const gStartLabel = padLabelFromInput('pad-edit-gauge-start-label');
-            const gStartLabel2 = padLabelFromInput('pad-edit-gauge-start-label-2');
-            const gStartLabel3 = padLabelFromInput('pad-edit-gauge-start-label-3');
-            const gStartLabel4 = padLabelFromInput('pad-edit-gauge-start-label-4');
-            btn.widget_gauge_start_label = gStartLabel;
-            btn.widget_gauge_start_label_2 = gStartLabel2;
-            btn.widget_gauge_start_label_3 = gStartLabel3;
-            btn.widget_gauge_start_label_4 = gStartLabel4;
-            btn.widget_gauge_min = padGetBindableNumber('pad-edit-gauge-min', 0);
-            btn.widget_gauge_max = padGetBindableNumber('pad-edit-gauge-max', 100);
-            const gDeg = parseInt(document.getElementById('pad-edit-gauge-degrees').value);
-            btn.widget_gauge_degrees = (isNaN(gDeg) || gDeg < 10) ? 180 : (gDeg > 360) ? 360 : gDeg;
-            const gSa = parseInt(document.getElementById('pad-edit-gauge-start-angle').value);
-            btn.widget_gauge_start_angle = (isNaN(gSa)) ? 180 : gSa % 360;
-            btn.widget_gauge_zero_centered = document.getElementById('pad-edit-gauge-zero-centered').checked;
-            btn.widget_gauge_dual_binding_pair_1 = document.getElementById('pad-edit-gauge-dual-binding-pair-1').checked;
-            btn.widget_gauge_dual_binding_pair_2 = document.getElementById('pad-edit-gauge-dual-binding-pair-2').checked;
-            btn.widget_gauge_show_needle = document.getElementById('pad-edit-gauge-show-needle').checked;
-            btn.widget_arc_color = padGetBindableColor('pad-edit-gauge-arc-color');
-            btn.widget_arc_color_2 = padGetBindableColor('pad-edit-gauge-arc-color-2');
-            btn.widget_arc_color_3 = padGetBindableColor('pad-edit-gauge-arc-color-3');
-            btn.widget_arc_color_4 = padGetBindableColor('pad-edit-gauge-arc-color-4');
-            btn.widget_gauge_track_color = padGetBindableColor('pad-edit-gauge-track-color');
-            btn.widget_gauge_needle_color = padGetBindableColor('pad-edit-gauge-needle-color');
-            btn.widget_gauge_tick_color = padGetBindableColor('pad-edit-gauge-tick-color');
-            const awPct = parseInt(document.getElementById('pad-edit-gauge-arc-width-pct').value);
-            btn.widget_gauge_arc_width_pct = (isNaN(awPct) || awPct > 50) ? 15 : (awPct < 5) ? 5 : awPct;
-            const gTicks = parseInt(document.getElementById('pad-edit-gauge-ticks').value);
-            btn.widget_gauge_ticks = (isNaN(gTicks) || gTicks < 0) ? 5 : (gTicks > 20) ? 20 : gTicks;
-            const gNeedleW = parseInt(document.getElementById('pad-edit-gauge-needle-width').value);
-            btn.widget_gauge_needle_width = (isNaN(gNeedleW) || gNeedleW < 0) ? 2 : (gNeedleW > 10) ? 10 : gNeedleW;
-            const gNeedleCut = parseInt(document.getElementById('pad-edit-gauge-needle-cutoff').value);
-            btn.widget_gauge_needle_cutoff_pct = (isNaN(gNeedleCut) || gNeedleCut < 0) ? 0 : (gNeedleCut > 99) ? 99 : gNeedleCut;
-            const gTickW = parseInt(document.getElementById('pad-edit-gauge-tick-width').value);
-            btn.widget_gauge_tick_width = (isNaN(gTickW) || gTickW < 1) ? 1 : (gTickW > 5) ? 5 : gTickW;
-            btn.widget_gauge_marker_value = document.getElementById('pad-edit-gauge-marker-value').value.trim();
-            const gMZoneDeg = parseInt(document.getElementById('pad-edit-gauge-marker-zone-deg').value);
-            btn.widget_gauge_marker_zone_deg = (isNaN(gMZoneDeg) || gMZoneDeg < 0) ? 0 : (gMZoneDeg > 90) ? 90 : gMZoneDeg;
-            const gMTickW = parseInt(document.getElementById('pad-edit-gauge-marker-tick-width').value);
-            btn.widget_gauge_marker_tick_width = (isNaN(gMTickW) || gMTickW < 0) ? 2 : (gMTickW > 5) ? 5 : gMTickW;
-            btn.widget_gauge_marker_tick_color = padGetBindableColor('pad-edit-gauge-marker-tick-color');
-            btn.widget_gauge_marker_zone_color = padGetBindableColor('pad-edit-gauge-marker-zone-color');
-            const gaugeAnimMs = parseInt(document.getElementById('pad-edit-gauge-anim-ms').value);
-            btn.widget_anim_ms = (isNaN(gaugeAnimMs) || gaugeAnimMs < 0) ? 300 : (gaugeAnimMs > 5000) ? 5000 : gaugeAnimMs;
         }
         if (wtype === 'sparkline') {
             const sDataBinding = document.getElementById('pad-edit-sparkline-data-binding').value.trim();
@@ -900,13 +827,6 @@ function padDialogBuildButton() {
                 }
             }
             if (document.getElementById('pad-edit-sparkline-ref-in-view').checked) btn.widget_sparkline_ref_in_view = true;
-        }
-        if (wtype === 'table') {
-            const tDataBinding = document.getElementById('pad-edit-table-data-binding').value.trim();
-            if (tDataBinding) btn.widget_data_binding = tDataBinding;
-            const tStyle = document.getElementById('pad-edit-table-style').value.trim();
-            if (tStyle) btn.widget_table_style = tStyle;
-            btn.widget_table_scrollable = document.getElementById('pad-edit-table-scrollable').value === 'true';
         }
         if (wtype === 'rocker') {
             const rAxis = document.getElementById('pad-edit-rocker-axis').value;
@@ -986,8 +906,8 @@ function padDialogValidateButton(btn) {
     if (typeof bindingValidateDialog === 'function') {
         var bvResult = bindingValidateDialog();
         if (!bvResult.valid) {
-            throw new Error(bvResult.count + ' binding error' +
-                (bvResult.count > 1 ? 's' : '') + ' - check highlighted fields');
+            throw Object.assign(new Error(bvResult.count + ' binding error' +
+                (bvResult.count > 1 ? 's' : '') + ' - check highlighted fields'), { fieldIds: bvResult.fieldIds || [] });
         }
     }
 }
@@ -1041,8 +961,14 @@ function padPreviewEsc(s) {
 }
 
 function padPvFieldDef(id) {
-    for (var i = 0; i < PAD_PV_FIELDS.length; i++) if (PAD_PV_FIELDS[i].id === id) return PAD_PV_FIELDS[i];
-    return null;
+    return padPvFields().find(field => field.id === id) || null;
+}
+
+function padPvFields() {
+    const editor = padWidgetEditor(document.getElementById('pad-edit-widget-type').value);
+    return PAD_PV_FIELDS.filter(field => !editor || field.field !== 'widget_data_binding').concat(editor ? editor.fields.filter(field => field.binding).map(field => ({
+        id: field.id, field: field.key, kind: field.kind === 'color' ? 'color' : 'text'
+    })) : []);
 }
 
 function padPvFieldValue(id) {
@@ -1084,7 +1010,7 @@ function padPvAnchor(id) {
 // Create the inline value chip for each field once (idempotent), and hook a
 // debounced refresh so values track edits.
 function padPvMount() {
-    PAD_PV_FIELDS.forEach(function (f) {
+    padPvFields().forEach(function (f) {
         var anchor = padPvAnchor(f.id);
         if (!anchor || anchor.parentNode.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
         var chip = document.createElement('span');
@@ -1157,7 +1083,7 @@ function padPvRefreshAll(retriesLeft) {
     padPvMount();
     var rl = (retriesLeft === undefined) ? 2 : retriesLeft;
     var btn = {}, any = false;
-    PAD_PV_FIELDS.forEach(function (f) {
+    padPvFields().forEach(function (f) {
         var v = padPvFieldValue(f.id);
         if (padPvIsBinding(v)) { btn[f.field] = v; any = true; padPvSetChip(f.id, null, 'loading'); }
         else padPvSetChip(f.id);
@@ -1171,7 +1097,7 @@ function padPvRefreshAll(retriesLeft) {
           if (!current()) return;
           var fields = (j && j.button) || {};
           var anyUnresolved = false;
-          PAD_PV_FIELDS.forEach(function (f) {
+          padPvFields().forEach(function (f) {
               if (padPvIsBinding(padPvFieldValue(f.id)) && padPvFieldValue(f.id) === btn[f.field]) {
                   var v = fields[f.field] !== undefined ? fields[f.field] : '---';
                   padPvSetChip(f.id, v);
@@ -1182,7 +1108,7 @@ function padPvRefreshAll(retriesLeft) {
       })
       .catch(function () {
           if (!current()) return;
-          PAD_PV_FIELDS.forEach(function (f) { if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, '---'); });
+          padPvFields().forEach(function (f) { if (padPvIsBinding(padPvFieldValue(f.id))) padPvSetChip(f.id, '---'); });
       });
 }
 
