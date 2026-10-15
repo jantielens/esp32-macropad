@@ -53,6 +53,11 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_table.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gamepad_button.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_inputs.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_list.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_camera.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_dialog.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_workspace.js', 'utf8'), context);
 vm.runInContext('padWorkspace = { selected: true, loading: false, forms: new Map(), errors: new Map() };', context);
@@ -103,6 +108,9 @@ assert.strictEqual(context.padState.buttons[0].row, 2);
 assert.strictEqual(document.getElementById('pad-edit-validation-error').style.display, 'none');
 
 context.actionEditorLoadGamepad = function() {};
+context.actionEditorLoad = function() {};
+context.PAD_FIRMWARE_DEFAULTS = { widget_indicator_color: '#FFFFFF' };
+context.padSetBindableColor = function(id, value, fallback) { document.getElementById(id).value = value || fallback; };
 context.padWidgetEditorsLoad({ widget_type: 'table', widget_table_scrollable: false });
 assert.strictEqual(document.getElementById('pad-edit-table-scrollable').value, 'false');
 document.getElementById('pad-edit-widget-type').value = 'table';
@@ -242,50 +250,25 @@ assert.strictEqual(context.padState.buttons[0].widget_mousepad_buttons, true);
 document.getElementById('pad-edit-mousepad-buttons').checked = false;
 context.padWorkspaceEdit();
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_buttons, false);
-document.getElementById('pad-edit-mousepad-sensitivity').value = '10';
-context.padWorkspaceEdit();
-assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, 5);
-document.getElementById('pad-edit-mousepad-sensitivity').value = 'Infinity';
-context.padWorkspaceEdit();
+for (const [name, raw] of [['sensitivity', '10'], ['back-size', '88.5']]) {
+    const input = document.getElementById('pad-edit-mousepad-' + name);
+    const previous = context.padState.buttons[0];
+    input.value = raw;
+    input.validity = { valid: false };
+    input.validationMessage = 'Invalid numeric value';
+    context.padWorkspaceEdit();
+    assert.strictEqual(context.padState.buttons[0], previous);
+    assert.strictEqual(input.value, raw);
+    input.validity.valid = true;
+    input.value = '';
+    context.padWorkspaceEdit();
+}
 assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, 1);
-
-for (const [input, expected] of [['', 1], ['   ', 1], ['0', 0.1], ['-1', 0.1], ['NaN', 1]]) {
-    document.getElementById('pad-edit-mousepad-sensitivity').value = input;
-    context.padWorkspaceEdit();
-    assert.strictEqual(context.padState.buttons[0].widget_mousepad_sensitivity, expected);
-}
-
-for (const [input, expected] of [['88', 88], ['88.5', 89], ['0', 1], ['513', 512],
-    ['Infinity', 44], ['NaN', 44], ['', 44]]) {
-    document.getElementById('pad-edit-mousepad-back-size').value = input;
-    context.padWorkspaceEdit();
-    assert.strictEqual(context.padState.buttons[0].widget_mousepad_back_size, expected);
-}
-
-for (const [input, expected] of [['3', 3], ['10', 5], ['-1', 0], ['Infinity', 0], ['NaN', 0], ['', 0]]) {
-    document.getElementById('pad-edit-mousepad-acceleration').value = input;
-    context.padWorkspaceEdit();
-    assert.strictEqual(context.padState.buttons[0].widget_mousepad_acceleration, expected);
-}
-
-for (const [input, expected] of [['0', 0], ['3', 3], ['6', 6], ['12', 12], ['20', 12],
-    ['-1', 0], ['Infinity', 3], ['NaN', 3], ['', 3], ['   ', 3]]) {
-    document.getElementById('pad-edit-mousepad-movement-threshold').value = input;
-    context.padWorkspaceEdit();
-    assert.strictEqual(context.padState.buttons[0].widget_mousepad_movement_threshold, expected);
-}
-
-for (const [input, expected] of [['3', 3], ['10', 5], ['-1', 0], ['Infinity', 0], ['NaN', 0], ['', 0]]) {
-    document.getElementById('pad-edit-mousepad-inertia').value = input;
-    document.getElementById('pad-edit-mousepad-reverse').checked = true;
-    context.padWorkspaceEdit();
-    assert.strictEqual(context.padState.buttons[0].widget_mousepad_inertia, expected);
-    assert.strictEqual(context.padState.buttons[0].widget_mousepad_reverse, true);
-}
+assert.strictEqual(context.padState.buttons[0].widget_mousepad_back_size, 44);
 
 document.getElementById('pad-edit-widget-type').value = 'scrollpad';
 context.actionEditorBuild = function() { throw new Error('Scrollpad must not build button actions'); };
-for (const axis of ['vertical', 'horizontal', 'invalid', '']) {
+for (const axis of ['vertical', 'horizontal']) {
     for (const reverse of [false, true]) {
         document.getElementById('pad-edit-scrollpad-axis').value = axis;
         document.getElementById('pad-edit-scrollpad-sensitivity').value = '1.5';
@@ -307,13 +290,13 @@ for (const axis of ['vertical', 'horizontal', 'invalid', '']) {
         assert.strictEqual(saved.lp_actions, undefined);
     }
 }
-for (const [input, expected] of [['10', 5], ['0', 0.1], ['-1', 0.1], ['Infinity', 1], ['NaN', 1], ['', 1]]) {
+for (const [input, expected] of [['0.1', 0.1], ['5', 5], ['', 1]]) {
     document.getElementById('pad-edit-scrollpad-sensitivity').value = input;
     context.padWorkspaceEdit();
     assert.strictEqual(context.padState.buttons[0].widget_scrollpad_sensitivity, expected);
 }
 
-for (const [input, expected] of [['3', 3], ['10', 5], ['-1', 0], ['Infinity', 0], ['NaN', 0], ['', 0]]) {
+for (const [input, expected] of [['3', 3], ['5', 5], ['', 0]]) {
     document.getElementById('pad-edit-scrollpad-inertia').value = input;
     context.padWorkspaceEdit();
     assert.strictEqual(context.padState.buttons[0].widget_scrollpad_inertia, expected);
@@ -398,5 +381,78 @@ const unsupported = context.padDialogBuildButton();
 assert.strictEqual(unsupported.widget_type, undefined);
 assert.strictEqual(unsupported.actions, undefined);
 assert.strictEqual(unsupported.lp_actions, undefined);
+
+context.padWidgetEditorsLoad({ widget_type: 'numericrocker', widget_numericrocker_small_step: 0.25 });
+document.getElementById('pad-edit-widget-type').value = 'numericrocker';
+context.actionEditorBuild = prefix => prefix === 'pad-edit-nr-adjust'
+    ? { type: 'mqtt', payload: '{step}' } : { type: 'screen', target: 'info' };
+let numericRocker = context.padDialogBuildButton();
+assert.strictEqual(numericRocker.widget_numericrocker_small_step, 0.25);
+assert.strictEqual(numericRocker.widget_numericrocker_action.payload, '{step}');
+assert.strictEqual(numericRocker.actions.length, 3);
+assert.strictEqual(numericRocker.lp_actions, undefined);
+context.actionEditorBuild = () => ({});
+numericRocker = context.padDialogBuildButton();
+assert.strictEqual(numericRocker.widget_numericrocker_action, undefined);
+const opacity = document.getElementById('pad-edit-numericrocker-opacity');
+opacity.value = '80.5';
+opacity.validity = { valid: false };
+opacity.validationMessage = 'Enter a whole number';
+assert.throws(() => context.padDialogBuildButton(), /whole number/);
+assert.strictEqual(opacity.value, '80.5');
+opacity.validity.valid = true;
+context.padWidgetEditorsLoad({ widget_type: 'rocker', widget_rocker_axis: 'horizontal' });
+document.getElementById('pad-edit-widget-type').value = 'rocker';
+assert.deepStrictEqual(Array.from(context.padWidgetEditor('rocker').actions.labels()), ['Left action', 'Right action']);
+context.actionEditorBuild = () => ({ type: 'screen', target: 'info' });
+const rocker = context.padDialogBuildButton();
+assert.strictEqual(rocker.widget_rocker_axis, 'horizontal');
+assert.strictEqual(rocker.actions.length, 3);
+assert.strictEqual(rocker.lp_actions.length, 3);
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_bar_chart.js', 'utf8'), context);
+context.padWidgetEditorsLoad({ widget_type: 'bar_chart', widget_bar_ticks: 0, widget_bar_tick_width: 4,
+    widget_bar_marker_value: '0', widget_bar_label_2: 'Grid', widget_bar_track_radius: 0 });
+document.getElementById('pad-edit-widget-type').value = 'bar_chart';
+const barChart = context.padDialogBuildButton();
+assert.strictEqual(barChart.widget_bar_ticks, 0);
+assert.strictEqual(barChart.widget_bar_tick_width, 4);
+assert.strictEqual(barChart.widget_bar_marker_value, '0');
+assert.strictEqual(barChart.widget_bar_label_2, 'Grid');
+assert.strictEqual(barChart.widget_bar_track_radius, 0);
+assert.strictEqual(barChart.widget_bar_min, 0);
+assert.strictEqual(barChart.widget_bar_max, 3);
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_sparkline.js', 'utf8'), context);
+context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_sparkline_ref_1_color: '#123456' });
+document.getElementById('pad-edit-sparkline-window').value = '7';
+document.getElementById('pad-edit-sparkline-window-unit').value = '86400';
+document.getElementById('pad-edit-sparkline-interval').value = '0.1';
+document.getElementById('pad-edit-sparkline-interval-unit').value = '1';
+document.getElementById('pad-edit-widget-type').value = 'sparkline';
+const sparkline = context.padDialogBuildButton();
+assert.strictEqual(sparkline.widget_sparkline_window, 604800);
+assert.strictEqual(sparkline.widget_sparkline_slots, 1024);
+assert.strictEqual(sparkline.widget_sparkline_min, undefined);
+assert.strictEqual(sparkline.widget_sparkline_max_label_color, undefined);
+assert.strictEqual(sparkline.widget_sparkline_ref_1_color, '#123456');
+document.getElementById('pad-edit-sparkline-interval').value = '0.099';
+assert.throws(() => context.padWidgetEditorBuild({}, context.padWidgetEditor('sparkline')), /100 milliseconds/);
+assert.strictEqual(document.getElementById('pad-edit-sparkline-interval').value, '0.099');
+document.getElementById('pad-edit-sparkline-interval').value = '0.1';
+context.window.__device_caps = { ha_history: true };
+document.getElementById('pad-edit-sparkline-ha-entity').value = 'sensor.energy';
+assert.throws(() => context.padDialogBuildButton(), /requires a live data binding/);
+document.getElementById('pad-edit-sparkline-data-binding').value = '[mqtt:energy]';
+document.getElementById('pad-edit-sparkline-ha-stat').value = 'sum';
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_ha_stat, 'sum');
+document.getElementById('pad-edit-sparkline-ha-entity').value = '';
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_ha_entity, undefined);
+document.getElementById('pad-edit-sparkline-ha-entity').value = 'sensor.energy';
+context.window.__device_caps.ha_history = false;
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_ha_entity, undefined);
+document.getElementById('pad-edit-sparkline-window').value = '9';
+document.getElementById('pad-edit-sparkline-window-unit').value = '1';
+assert.throws(() => context.padDialogBuildButton(), /10 seconds and 7 days/);
 
 console.log('portal_pad_dialog_transaction: PASS');

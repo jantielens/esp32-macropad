@@ -1,0 +1,9 @@
+.bar-chart-source { border-left: 2px solid var(--portal-border-light); padding-left: 10px; }
+.bar-chart-source > summary { cursor: pointer; padding: 6px 0; font-size: 13px; font-weight: 600; }
+.bar-chart-source-body { padding-bottom: 4px; }
+.bar-chart-pairs { margin-top: 8px; }
+.bar-chart-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.bar-chart-caption-row { grid-template-columns: minmax(0, 1fr) auto; }
+.bar-chart-caption-row .bindable-color { width: auto; }
+#pad-workspace-inspector .bar-chart-editor .pad-appearance-row { flex-wrap: wrap; align-items: start; margin-top: 12px; }
+#pad-workspace-inspector .bar-chart-editor .pad-appearance-row > div { flex: 1 1 120px; }

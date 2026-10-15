@@ -985,9 +985,9 @@ Bar-chart **Content** starts with **Data sources**, keeping each bar's binding,
 caption, and color/fill together. Unused optional bars start collapsed; collapsing
 a bar does not disable it. **Scale** and **Layout & style** follow, then
 **Gridlines** and **Target**. **Animation** is inside **Layout & style**.
-Configured optional groups open
-when selecting the button. Gridline count 0 and an empty target hide their
-styling controls without clearing values. **Caption area size (px)** sizes the
+Optional groups use fixed initial disclosure states, not configured-value rules.
+Gridline count 0 and an empty target leave styling editable and saved.
+**Caption area size (px)** sizes the
 caption strip, not the font; **Bar thickness (%)** controls the bar thickness.
 
 Gauge **Content** keeps each ring's binding, label, and color in **Data sources**.
@@ -1005,14 +1005,19 @@ remains in Content, with no ordinary tap or long-press action lists.
 
 Sparkline **Content** starts with per-line **Data sources**, keeping live binding,
 color, current-value label, and optional Home Assistant backfill together.
-Configured optional lines open initially; collapsing a line never disables it.
+Line 1 opens initially; optional lines start collapsed regardless of configuration.
+Collapsing a line never disables it.
 **Scale**, **Sampling**, **Line style**, **Markers**, **Current-value annotations**,
 and **Reference lines** follow. Each section has its own collapsible frame,
-initially open, matching Bar Chart. Marker size 0 hides format/color without clearing
-saved styling. Current-value labels stay with their line; dot size and label
+initially open, matching Bar Chart. Marker size 0 leaves format/color editable and
+saved. Current-value labels stay with their line; dot size and label
 area width are together below the markers. Reference Y values remain numeric.
-Turning backfill off retains draft inputs but omits that history source when
-saving, unlike marker styling. See [Sparkline](pad-editor-guide.md#sparkline)
+Enter a History entity to enable backfill; clear it to omit that history source
+when saving. No separate enable checkbox exists. Each history entity requires
+its line's live binding. Time range accepts 10 seconds through 7 days; requested
+intervals must be at least 100 ms. The editor shows the actual interval after
+deriving 2..1024 points, without correcting invalid inputs.
+See [Sparkline](pad-editor-guide.md#sparkline)
 for sampling limits and history requirements.
 
 Mousepad, Scrollpad, Gamepad Joystick, Gamepad Button, Camera Preview, and
@@ -1026,6 +1031,13 @@ has its own Image scale, separate from background-image scaling. Extension
 keeps Installed extension and Configuration full width, with Tick interval (ms)
 and Upscale together. An empty interval uses the package default. Collapsing a
 frame preserves its values; device capabilities still determine availability.
+An edited Extension requires a successfully loaded catalog and an installed,
+enabled package. Loading and failure are distinct from an empty catalog, and
+do not block untouched Extension buttons or unrelated edits. Configuration is
+trimmed opaque text, up to 511 characters; explicit tick intervals must be whole
+milliseconds from 33 through 1000. Late catalog responses retain newer drafts.
+Numeric Rocker keeps center tap actions and its optional Adjustment Action in
+Actions; the editor omits long-press actions when saving that widget.
 
 Button background and bar chart color pickers have Base Color and Pattern
 sections with one Apply operation. None is the default and uses only the base

@@ -110,6 +110,14 @@ portal_widget_editor.js
 portal_widget_table.js
 portal_widget_gauge.js
 portal_widget_gamepad_button.js
+portal_widget_rocker.js
+portal_widget_numericrocker.js
+portal_widget_inputs.js
+portal_widget_list.js
+portal_widget_camera.js
+portal_widget_bar_chart.js
+portal_widget_sparkline.js
+portal_widget_extension.js
 portal_pad_dialog.js
 portal_pad_editor.js
 portal_pad_workspace.js

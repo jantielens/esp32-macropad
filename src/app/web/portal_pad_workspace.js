@@ -17,10 +17,8 @@ function padWorkspaceInit() {
     root.querySelectorAll('[data-pad-tab]').forEach(node => fields.appendChild(node));
     element('pad-workspace-button-fields').appendChild(element('pad-edit-overlay'));
     const body = root.querySelector('.pad-edit-body');
-    const adjustment = element('pad-edit-numericrocker-adjust-section');
-    if (adjustment) body.appendChild(adjustment);
     Array.from(body.children).forEach(node => {
-        const actions = node.querySelector('#pad-action-editors') || node.id === 'pad-edit-numericrocker-adjust-section';
+        const actions = node.querySelector('#pad-action-editors');
         const appearance = ['pad-edit-colors-section', 'pad-edit-btn-state-section'].includes(node.id);
         node.dataset.buttonTab = actions ? 'Actions' : appearance ? 'Appearance' : 'Content';
     });
@@ -178,7 +176,7 @@ function padWorkspaceAfterSelect() {
             const input = document.getElementById(field.id);
             if (input) { input.value = field.value; input.checked = field.checked; }
         });
-        padActionPrefixes('tap').concat(padActionPrefixes('lp'), ['pad-edit-nr-adjust']).forEach(actionEditorTypeChanged);
+        padActionPrefixes('tap').concat(padActionPrefixes('lp'), padWidgetActionPrefixes()).forEach(actionEditorTypeChanged);
         padWidgetTypeChanged();
         padIconTypeChanged();
         padConfirmChanged();
@@ -198,15 +196,16 @@ function padWorkspaceAfterSelect() {
     padWorkspaceCapture();
     padWorkspaceSummaries();
     padRenderGrid();
+    if (error) padWorkspaceEdit(true);
 }
 
-function padWorkspaceEdit() {
+function padWorkspaceEdit(revalidate) {
     if (!padWorkspace || padWorkspace.loading || !padWorkspace.selected) return;
     const before = padWorkspace.forms.get(padWorkspaceKey());
     padWorkspaceCapture();
     const after = padWorkspace.forms.get(padWorkspaceKey());
-    if (before && JSON.stringify(before.values) === JSON.stringify(after.values)) return;
-    padMarkDirty();
+    if (revalidate !== true && before && JSON.stringify(before.values) === JSON.stringify(after.values)) return;
+    if (revalidate !== true) padMarkDirty();
     try {
         const button = padDialogBuildButton();
         padDialogValidateButton(button);
@@ -245,10 +244,12 @@ function padWorkspaceSummaries() {
 
 function padWorkspaceValidate() {
     if (!padWorkspace) return;
-    if (padWorkspace.errors.size) {
-        const [key, message] = padWorkspace.errors.entries().next().value;
+    while (padWorkspace.errors.size) {
+        const [key] = padWorkspace.errors.entries().next().value;
         const position = key.split(',').map(Number);
         padDialogOpen(position[0], position[1]);
+        const message = padWorkspace.errors.get(key);
+        if (!message) continue;
         padDialogFocusValidationError(message);
         throw Object.assign(new Error('Button [' + key + ']: ' + (message.message || message)), { fieldIds: message.fieldIds || [] });
     }

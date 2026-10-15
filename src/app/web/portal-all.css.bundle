@@ -14,6 +14,8 @@ portal-all.css
 # [chunk:pad HAS_DISPLAY]
 portal_widget_gauge.css
 portal_widget_gamepad_button.css
+portal_widget_bar_chart.css
+portal_widget_sparkline.css
 
 # [chunk:shutter IS_SHUTTER_TESTER]
 portal_shutter.css

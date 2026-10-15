@@ -2,17 +2,8 @@
 // Part of the ESP32 Macropad configuration portal.
 // Bundled into portal_pad_editor.js during minification.
 
-var PAD_SPARKLINE_MAX_WINDOW_SECONDS = 7 * 86400;
-var PAD_SPARKLINE_MAX_POINTS = 1024;
-var PAD_SPARKLINE_MIN_INTERVAL_SECONDS = 0.1;
 var padImageLibraryFiles = [];
 let padDialogSelectionGeneration = 0;
-
-function padGetBoundedWidgetNumber(id, fallback, minimum, maximum) {
-    const raw = document.getElementById(id).value;
-    const number = raw.trim() === '' ? fallback : Number(raw);
-    return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
-}
 
 function padPopulateLocalImageOptions(selected) {
     var select = document.getElementById('pad-edit-bg-image-path');
@@ -60,142 +51,6 @@ function padLoadLocalImageOptions(selected) {
 function padConfirmChanged() {
     var enabled = document.getElementById('pad-edit-confirm').checked;
     document.getElementById('pad-edit-confirm-text-group').style.display = enabled ? '' : 'none';
-}
-
-function padGetSparklineWindowSeconds() {
-    var value = parseFloat(document.getElementById('pad-edit-sparkline-window').value);
-    var unit = parseInt(document.getElementById('pad-edit-sparkline-window-unit').value);
-    if (!isFinite(value) || value <= 0) value = 5;
-    if (!isFinite(unit) || unit <= 0) unit = 60;
-    return Math.round(value * unit);
-}
-
-function padSetSparklineWindowSeconds(seconds) {
-    var units = [86400, 3600, 60, 1];
-    var unit = 1;
-    for (var i = 0; i < units.length; i++) {
-        if (seconds >= units[i] && seconds % units[i] === 0) {
-            unit = units[i];
-            break;
-        }
-    }
-    document.getElementById('pad-edit-sparkline-window').value = seconds / unit;
-    document.getElementById('pad-edit-sparkline-window-unit').value = String(unit);
-}
-
-function padGetSparklineIntervalSeconds() {
-    var value = parseFloat(document.getElementById('pad-edit-sparkline-interval').value);
-    var unit = parseInt(document.getElementById('pad-edit-sparkline-interval-unit').value);
-    if (!isFinite(value) || value <= 0) value = 5;
-    if (!isFinite(unit) || unit <= 0) unit = 60;
-    return value * unit;
-}
-
-function padSetSparklineIntervalSeconds(seconds) {
-    var units = [3600, 60, 1];
-    var unit = 1;
-    for (var i = 0; i < units.length; i++) {
-        if (seconds >= units[i]) {
-            unit = units[i];
-            break;
-        }
-    }
-    var value = Math.ceil((seconds / unit) * 1000) / 1000;
-    document.getElementById('pad-edit-sparkline-interval').value = value;
-    document.getElementById('pad-edit-sparkline-interval-unit').value = String(unit);
-}
-
-function padGetSparklineSlotCount() {
-    var requested = Math.ceil(padGetSparklineWindowSeconds() / padGetSparklineIntervalSeconds());
-    if (!isFinite(requested)) requested = 60;
-    var intervalLimit = Math.floor(padGetSparklineWindowSeconds() / PAD_SPARKLINE_MIN_INTERVAL_SECONDS);
-    return Math.max(2, Math.min(PAD_SPARKLINE_MAX_POINTS, intervalLimit, requested));
-}
-
-function padFormatSparklineDuration(seconds) {
-    if (seconds < 1) return Math.round(seconds * 1000) + ' milliseconds';
-    if (seconds >= 86400 && seconds % 86400 === 0) return (seconds / 86400) + ' day' + (seconds === 86400 ? '' : 's');
-    if (seconds >= 3600 && seconds % 3600 === 0) return (seconds / 3600) + ' hour' + (seconds === 3600 ? '' : 's');
-    if (seconds >= 60 && seconds % 60 === 0) return (seconds / 60) + ' minute' + (seconds === 60 ? '' : 's');
-    return seconds + ' second' + (seconds === 1 ? '' : 's');
-}
-
-function padSparklineStatHelp(stat) {
-    if (stat === 'state') return 'Most recently recorded value for each Home Assistant statistics period.';
-    if (stat === 'sum') return 'Home Assistant\'s accumulated total, intended for energy, water, and other total sensors.';
-    return 'Average value during each Home Assistant statistics period. Usually right for measurements.';
-}
-
-function padUpdateSparklineEditor() {
-    var historyAvailable = (window.__device_caps || {}).ha_history === true;
-    document.querySelectorAll('.sparkline-ha-source').forEach(function (el) {
-        el.style.display = historyAvailable ? '' : 'none';
-    });
-
-    var lines = [
-        { suffix: '', binding: 'pad-edit-sparkline-data-binding' },
-        { suffix: '-2', binding: 'pad-edit-sparkline-data-binding-2' },
-        { suffix: '-3', binding: 'pad-edit-sparkline-data-binding-3' }
-    ];
-    var anyHistoryEnabled = false;
-    lines.forEach(function (line) {
-        var hasBinding = document.getElementById(line.binding).value.trim() !== '';
-        var enabled = document.getElementById('pad-edit-sparkline-ha-enabled' + line.suffix);
-        var fields = document.getElementById('pad-edit-sparkline-ha-fields' + line.suffix);
-        var dependency = document.getElementById('pad-edit-sparkline-ha-dependency' + line.suffix);
-        var entity = document.getElementById('pad-edit-sparkline-ha-entity' + line.suffix);
-        var stat = document.getElementById('pad-edit-sparkline-ha-stat' + line.suffix);
-
-        enabled.disabled = !hasBinding;
-        dependency.textContent = hasBinding ? '' : 'Set a live data binding first; history fills that stream after a restart.';
-        fields.style.display = (hasBinding && enabled.checked) ? '' : 'none';
-        entity.disabled = !hasBinding || !enabled.checked;
-        stat.disabled = !hasBinding || !enabled.checked;
-        document.getElementById('pad-edit-sparkline-ha-stat-help' + line.suffix).textContent = padSparklineStatHelp(stat.value);
-        if (hasBinding && enabled.checked) anyHistoryEnabled = true;
-    });
-
-    var windowSeconds = padGetSparklineWindowSeconds();
-    var windowUnit = parseInt(document.getElementById('pad-edit-sparkline-window-unit').value);
-    document.getElementById('pad-edit-sparkline-window').max = String(PAD_SPARKLINE_MAX_WINDOW_SECONDS / windowUnit);
-    document.getElementById('pad-edit-sparkline-window-warn').style.display = windowSeconds > PAD_SPARKLINE_MAX_WINDOW_SECONDS ? '' : 'none';
-    var requestedSlots = Math.ceil(windowSeconds / padGetSparklineIntervalSeconds());
-    if (!isFinite(requestedSlots)) requestedSlots = 60;
-    var slots = padGetSparklineSlotCount();
-    document.getElementById('pad-edit-sparkline-slots').value = slots;
-    var intervalSeconds = windowSeconds / slots;
-    document.getElementById('pad-edit-sparkline-resolution').textContent =
-        slots + ' data points, actual interval ' + padFormatSparklineDuration(Math.round(intervalSeconds)) + '.';
-
-    var pointsWarn = document.getElementById('pad-edit-sparkline-points-warn');
-    var intervalLimit = Math.floor(windowSeconds / PAD_SPARKLINE_MIN_INTERVAL_SECONDS);
-    if (requestedSlots > intervalLimit && intervalLimit < PAD_SPARKLINE_MAX_POINTS) {
-        pointsWarn.textContent = 'The minimum interval is 100 milliseconds. This range is limited to ' +
-            intervalLimit + ' data points.';
-        pointsWarn.style.display = '';
-    } else if (requestedSlots > PAD_SPARKLINE_MAX_POINTS) {
-        pointsWarn.textContent = 'This interval needs ' + requestedSlots + ' points. Maximum is ' + PAD_SPARKLINE_MAX_POINTS + '; use at least ' +
-            padFormatSparklineDuration(Math.ceil(windowSeconds / PAD_SPARKLINE_MAX_POINTS)) + ' per point.';
-        pointsWarn.style.display = '';
-    } else if (requestedSlots < 2) {
-        pointsWarn.textContent = 'A chart needs at least 2 points; use at most ' +
-            padFormatSparklineDuration(Math.floor(windowSeconds / 2)) + ' per point.';
-        pointsWarn.style.display = '';
-    } else {
-        pointsWarn.style.display = 'none';
-    }
-
-    var warn = document.getElementById('pad-edit-sparkline-ha-warn');
-    var needsHourlyHistory = windowSeconds > 86400 && intervalSeconds < 3600;
-    if (anyHistoryEnabled && needsHourlyHistory) {
-        warn.textContent = 'Home Assistant uses hourly history beyond 24 hours. Historical values are visually interpolated; live data uses the finer interval.';
-        warn.style.display = '';
-    } else if (anyHistoryEnabled && intervalSeconds < 300) {
-        warn.textContent = 'Home Assistant history is stored in 5-minute periods. Historical values are held between periods; live data uses the finer interval.';
-        warn.style.display = '';
-    } else {
-        warn.style.display = 'none';
-    }
 }
 
 function padDialogOpen(col, row) {
@@ -334,148 +189,10 @@ function padDialogOpen(col, row) {
     document.getElementById('pad-edit-widget-type').value = btn.widget_type || '';
     padFillLoad(btn);
     padWidgetTypeChanged();
-    document.getElementById('pad-edit-camera-preview-scale').value = btn.widget_camera_scale || 'cover';
-
-    // Bar chart widget fields
-    document.getElementById('pad-edit-widget-bar-min').value = (btn.widget_bar_min !== undefined) ? btn.widget_bar_min : '0';
-    document.getElementById('pad-edit-widget-bar-max').value = (btn.widget_bar_max !== undefined) ? btn.widget_bar_max : '3';
-    document.getElementById('pad-edit-widget-data-binding').value = btn.widget_data_binding || '';
-    document.getElementById('pad-edit-widget-bar-data-binding-2').value = btn.widget_data_binding_2 || '';
-    document.getElementById('pad-edit-widget-bar-data-binding-3').value = btn.widget_data_binding_3 || '';
-    document.getElementById('pad-edit-widget-bar-data-binding-4').value = btn.widget_data_binding_4 || '';
-    document.getElementById('pad-edit-widget-bar-label').value = btn.widget_bar_label || '';
-    document.getElementById('pad-edit-widget-bar-label-2').value = btn.widget_bar_label_2 || '';
-    document.getElementById('pad-edit-widget-bar-label-3').value = btn.widget_bar_label_3 || '';
-    document.getElementById('pad-edit-widget-bar-label-4').value = btn.widget_bar_label_4 || '';
-    document.getElementById('pad-edit-widget-bar-label-size').value = (btn.widget_bar_label_size !== undefined) ? btn.widget_bar_label_size : 0;
-    padSetBindableColor('pad-edit-widget-bar-color', btn.widget_bar_color, PAD_FIRMWARE_DEFAULTS.widget_series_color);
-    padSetBindableColor('pad-edit-widget-bar-color-2', btn.widget_bar_color_2, PAD_FIRMWARE_DEFAULTS.widget_series_color_2);
-    padSetBindableColor('pad-edit-widget-bar-color-3', btn.widget_bar_color_3, PAD_FIRMWARE_DEFAULTS.widget_series_color_3);
-    padSetBindableColor('pad-edit-widget-bar-color-4', btn.widget_bar_color_4, PAD_FIRMWARE_DEFAULTS.widget_series_color_4);
-    padSetBindableColor('pad-edit-widget-bar-bg-color', btn.widget_bar_bg_color, PAD_FIRMWARE_DEFAULTS.widget_track_color);
-    document.getElementById('pad-edit-widget-bar-width-pct').value = (btn.widget_bar_width_pct !== undefined) ? btn.widget_bar_width_pct : 100;
-    document.getElementById('pad-edit-widget-orientation').value = btn.widget_orientation || 'vertical';
-    document.getElementById('pad-edit-widget-bar-zero-centered').checked = (btn.widget_bar_zero_centered !== undefined) ? btn.widget_bar_zero_centered : false;
-    document.getElementById('pad-edit-widget-bar-dual-binding-pair-1').checked = (btn.widget_bar_dual_binding_pair_1 !== undefined) ? btn.widget_bar_dual_binding_pair_1 : false;
-    document.getElementById('pad-edit-widget-bar-dual-binding-pair-2').checked = (btn.widget_bar_dual_binding_pair_2 !== undefined) ? btn.widget_bar_dual_binding_pair_2 : false;
-    document.getElementById('pad-edit-widget-bar-anim-ms').value = (btn.widget_anim_ms !== undefined) ? btn.widget_anim_ms : 300;
-    document.getElementById('pad-edit-widget-bar-ticks').value = (btn.widget_bar_ticks !== undefined) ? btn.widget_bar_ticks : 0;
-    document.getElementById('pad-edit-widget-bar-tick-width').value = (btn.widget_bar_tick_width !== undefined) ? btn.widget_bar_tick_width : 1;
-    padSetBindableColor('pad-edit-widget-bar-tick-color', btn.widget_bar_tick_color, PAD_FIRMWARE_DEFAULTS.widget_tick_color);
-    document.getElementById('pad-edit-widget-bar-marker-value').value = btn.widget_bar_marker_value || '';
-    document.getElementById('pad-edit-widget-bar-marker-zone-pct').value = (btn.widget_bar_marker_zone_pct !== undefined) ? btn.widget_bar_marker_zone_pct : 0;
-    document.getElementById('pad-edit-widget-bar-marker-width').value = (btn.widget_bar_marker_width !== undefined) ? btn.widget_bar_marker_width : 2;
-    padSetBindableColor('pad-edit-widget-bar-marker-color', btn.widget_bar_marker_color, PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
-    padSetBindableColor('pad-edit-widget-bar-marker-zone-color', btn.widget_bar_marker_zone_color, PAD_FIRMWARE_DEFAULTS.widget_zone_color);
-
-    // Sparkline widget fields
-    document.getElementById('pad-edit-sparkline-data-binding').value = btn.widget_data_binding || '';
-    document.getElementById('pad-edit-sparkline-data-binding-2').value = btn.widget_data_binding_2 || '';
-    document.getElementById('pad-edit-sparkline-data-binding-3').value = btn.widget_data_binding_3 || '';
-    document.getElementById('pad-edit-sparkline-min').value = (btn.widget_sparkline_min !== undefined && btn.widget_sparkline_min !== null) ? btn.widget_sparkline_min : '';
-    document.getElementById('pad-edit-sparkline-max').value = (btn.widget_sparkline_max !== undefined && btn.widget_sparkline_max !== null) ? btn.widget_sparkline_max : '';
-    const sparklineWindow = (btn.widget_sparkline_window !== undefined) ? btn.widget_sparkline_window : 300;
-    const sparklineSlots = (btn.widget_sparkline_slots !== undefined) ? btn.widget_sparkline_slots : 60;
-    padSetSparklineWindowSeconds(sparklineWindow);
-    padSetSparklineIntervalSeconds(sparklineWindow / sparklineSlots);
-    document.getElementById('pad-edit-sparkline-slots').value = sparklineSlots;
-    document.getElementById('pad-edit-sparkline-ha-entity').value = btn.widget_sparkline_ha_entity || '';
-    document.getElementById('pad-edit-sparkline-ha-entity-2').value = btn.widget_sparkline_ha_entity_2 || '';
-    document.getElementById('pad-edit-sparkline-ha-entity-3').value = btn.widget_sparkline_ha_entity_3 || '';
-    document.getElementById('pad-edit-sparkline-ha-stat').value = btn.widget_sparkline_ha_stat || 'mean';
-    document.getElementById('pad-edit-sparkline-ha-stat-2').value = btn.widget_sparkline_ha_stat_2 || 'mean';
-    document.getElementById('pad-edit-sparkline-ha-stat-3').value = btn.widget_sparkline_ha_stat_3 || 'mean';
-    document.getElementById('pad-edit-sparkline-ha-enabled').checked = !!btn.widget_sparkline_ha_entity;
-    document.getElementById('pad-edit-sparkline-ha-enabled-2').checked = !!btn.widget_sparkline_ha_entity_2;
-    document.getElementById('pad-edit-sparkline-ha-enabled-3').checked = !!btn.widget_sparkline_ha_entity_3;
-    padUpdateSparklineEditor();
-    padSetBindableColor('pad-edit-sparkline-line-color', btn.widget_sparkline_line_color, PAD_FIRMWARE_DEFAULTS.widget_series_color);
-    padSetBindableColor('pad-edit-sparkline-line-color-2', btn.widget_sparkline_line_color_2, PAD_FIRMWARE_DEFAULTS.widget_series_color_2);
-    padSetBindableColor('pad-edit-sparkline-line-color-3', btn.widget_sparkline_line_color_3, PAD_FIRMWARE_DEFAULTS.widget_series_color_3);
-    document.getElementById('pad-edit-sparkline-line-width').value = (btn.widget_sparkline_line_width !== undefined) ? btn.widget_sparkline_line_width : 2;
-    document.getElementById('pad-edit-sparkline-line-offset').value = (btn.widget_sparkline_line_offset !== undefined) ? btn.widget_sparkline_line_offset : 0;
-    document.getElementById('pad-edit-sparkline-smooth').value = (btn.widget_sparkline_smooth !== undefined) ? btn.widget_sparkline_smooth : 0;
-    document.getElementById('pad-edit-sparkline-unified-scale').checked = (btn.widget_sparkline_unified_scale !== undefined) ? btn.widget_sparkline_unified_scale : true;
-
-    // Min/max markers
-    document.getElementById('pad-edit-sparkline-marker-size-max').value = (btn.widget_sparkline_marker_size_max !== undefined) ? btn.widget_sparkline_marker_size_max : 0;
-    document.getElementById('pad-edit-sparkline-max-fmt').value = btn.widget_sparkline_max_fmt || '';
-    padSetBindableColor('pad-edit-sparkline-max-label-color', btn.widget_sparkline_max_label_color);
-    document.getElementById('pad-edit-sparkline-marker-size-min').value = (btn.widget_sparkline_marker_size_min !== undefined) ? btn.widget_sparkline_marker_size_min : 0;
-    document.getElementById('pad-edit-sparkline-min-fmt').value = btn.widget_sparkline_min_fmt || '';
-    padSetBindableColor('pad-edit-sparkline-min-label-color', btn.widget_sparkline_min_label_color);
-
-    // Current value dot
-    document.getElementById('pad-edit-sparkline-current-dot').value = (btn.widget_sparkline_current_dot !== undefined) ? btn.widget_sparkline_current_dot : 0;
-
-    // Current value labels
-    document.getElementById('pad-edit-sparkline-label-width').value = (btn.widget_sparkline_label_width !== undefined) ? btn.widget_sparkline_label_width : 0;
-    document.getElementById('pad-edit-sparkline-current-label').value = btn.widget_sparkline_current_label || '';
-    document.getElementById('pad-edit-sparkline-current-label-2').value = btn.widget_sparkline_current_label_2 || '';
-    document.getElementById('pad-edit-sparkline-current-label-3').value = btn.widget_sparkline_current_label_3 || '';
-
-    // Reference lines
-    for (let r = 1; r <= 3; r++) {
-        document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value = (btn['widget_sparkline_ref_' + r + '_y'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_y'] : '';
-        padSetBindableColor('pad-edit-sparkline-ref-' + r + '-color', btn['widget_sparkline_ref_' + r + '_color'], PAD_FIRMWARE_DEFAULTS.widget_reference_color);
-        document.getElementById('pad-edit-sparkline-ref-' + r + '-pattern').value = (btn['widget_sparkline_ref_' + r + '_pattern'] !== undefined) ? btn['widget_sparkline_ref_' + r + '_pattern'] : 0;
-    }
-    document.getElementById('pad-edit-sparkline-ref-in-view').checked = btn.widget_sparkline_ref_in_view || false;
 
     padWidgetEditorsLoad(btn);
 
-    // Rocker widget fields
-    document.getElementById('pad-edit-rocker-axis').value = btn.widget_rocker_axis || 'vertical';
-    padSetBindableColor('pad-edit-rocker-color', btn.widget_rocker_color, PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
-    document.getElementById('pad-edit-rocker-opacity').value = (btn.widget_rocker_opacity !== undefined) ? btn.widget_rocker_opacity : 80;
-
-    document.getElementById('pad-edit-mousepad-sensitivity').value =
-        (btn.widget_mousepad_sensitivity !== undefined) ? btn.widget_mousepad_sensitivity : 1;
-    document.getElementById('pad-edit-mousepad-acceleration').value =
-        (btn.widget_mousepad_acceleration !== undefined) ? btn.widget_mousepad_acceleration : 0;
-    document.getElementById('pad-edit-mousepad-movement-threshold').value =
-        (btn.widget_mousepad_movement_threshold !== undefined) ? btn.widget_mousepad_movement_threshold : 3;
-    document.getElementById('pad-edit-mousepad-inertia').value =
-        (btn.widget_mousepad_inertia !== undefined) ? btn.widget_mousepad_inertia : 0;
-    document.getElementById('pad-edit-mousepad-reverse').checked = btn.widget_mousepad_reverse === true;
-    document.getElementById('pad-edit-mousepad-buttons').checked = btn.widget_mousepad_buttons === true;
-    document.getElementById('pad-edit-mousepad-back').checked = btn.widget_mousepad_back === true;
-    document.getElementById('pad-edit-mousepad-back-size').value =
-        (btn.widget_mousepad_back_size !== undefined) ? btn.widget_mousepad_back_size : 44;
     document.getElementById('pad-edit-disable-pad-swipes').checked = btn.widget_disable_pad_swipes === true;
-    document.getElementById('pad-edit-scrollpad-axis').value =
-        btn.widget_scrollpad_axis === 'horizontal' ? 'horizontal' : 'vertical';
-    document.getElementById('pad-edit-scrollpad-sensitivity').value =
-        (btn.widget_scrollpad_sensitivity !== undefined) ? btn.widget_scrollpad_sensitivity : 1;
-    document.getElementById('pad-edit-scrollpad-reverse').checked = btn.widget_scrollpad_reverse === true;
-    document.getElementById('pad-edit-scrollpad-inertia').value =
-        (btn.widget_scrollpad_inertia !== undefined) ? btn.widget_scrollpad_inertia : 0;
-    document.getElementById('pad-edit-gamepad-stick').value = btn.widget_gamepad_stick || 'left';
-    document.getElementById('pad-edit-gamepad-center').value = btn.widget_gamepad_center || 'fixed';
-    document.getElementById('pad-edit-gamepad-dead-zone').value =
-        btn.widget_gamepad_dead_zone === undefined ? 10 : btn.widget_gamepad_dead_zone * 100;
-    document.getElementById('pad-edit-gamepad-invert-x').checked = btn.widget_gamepad_invert_x === true;
-    document.getElementById('pad-edit-gamepad-invert-y').checked = btn.widget_gamepad_invert_y === true;
-
-    // Numeric Rocker widget fields
-    document.getElementById('pad-edit-numericrocker-axis').value = btn.widget_numericrocker_axis || 'horizontal';
-    document.getElementById('pad-edit-numericrocker-small-step').value = (btn.widget_numericrocker_small_step !== undefined) ? btn.widget_numericrocker_small_step : 1;
-    document.getElementById('pad-edit-numericrocker-large-step').value = (btn.widget_numericrocker_large_step !== undefined) ? btn.widget_numericrocker_large_step : 10;
-    document.getElementById('pad-edit-numericrocker-zone-scale').value = (btn.widget_numericrocker_zone_scale_pct !== undefined) ? btn.widget_numericrocker_zone_scale_pct : 100;
-    padSetBindableColor('pad-edit-numericrocker-color', btn.widget_numericrocker_color, PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
-    document.getElementById('pad-edit-numericrocker-opacity').value = (btn.widget_numericrocker_opacity !== undefined) ? btn.widget_numericrocker_opacity : 80;
-
-    // Numeric Rocker adjustment action
-    actionEditorLoad('pad-edit-nr-adjust', btn.widget_numericrocker_action || null);
-
-    // List widget fields
-    document.getElementById('pad-edit-list-provider-id').value = btn.widget_data_binding || '';
-    document.getElementById('pad-edit-list-filter').value = btn.widget_data_binding_2 || '';
-
-    padPopulateExtensionDropdown(btn.extension_id || '');
-    document.getElementById('pad-edit-extension-config').value = btn.extension_config || '';
-    document.getElementById('pad-edit-extension-tick-interval').value = btn.extension_tick_interval_ms || '';
-    document.getElementById('pad-edit-extension-upscale').value = btn.extension_upscale || 1;
 
     padRefreshWidgetEditor(true);
     document.getElementById('pad-edit-overlay').style.display = 'flex';
@@ -489,33 +206,6 @@ function padDialogOpen(col, row) {
 
     // Mount + prefetch the in-context live-value preview affordances.
     if (typeof padPvOnOpen === 'function') padPvOnOpen();
-}
-
-function padPopulateExtensionDropdown(value) {
-    const select = document.getElementById('pad-edit-extension-id');
-    if (!select) return;
-    const selected = value === undefined ? select.value : value;
-    select.replaceChildren();
-    const installed = (window.extensionCatalog || []).filter(function(slot) { return slot.installed && slot.enabled; });
-    const empty = document.createElement('option');
-    empty.value = '';
-    empty.textContent = padExtensionCatalogLoading ? 'Loading extensions...' :
-        installed.length ? '(none)' : 'No enabled extensions installed';
-    select.appendChild(empty);
-    installed.forEach(function(slot) {
-        const option = document.createElement('option');
-        option.value = slot.id;
-        option.textContent = slot.id + ' @ ' + slot.version;
-        select.appendChild(option);
-    });
-    if (selected && !installed.some(function(slot) { return slot.id === selected; })) {
-        const saved = document.createElement('option');
-        saved.value = selected;
-        saved.textContent = selected;
-        select.appendChild(saved);
-    }
-    select.value = selected || '';
-    select.disabled = padExtensionCatalogLoading;
 }
 
 function padDialogRefreshFieldErrors(error) {
@@ -630,9 +320,7 @@ function padDialogBuildButton() {
     const widgetEditor = padWidgetEditor(selectedType);
     const wtype = widgetEditor && widgetEditor.supported === false ? '' : selectedType;
     padFillBuild(btn, wtype);
-    const isMouseWidget = wtype === 'mousepad' || wtype === 'scrollpad';
-    const consumesActions = isMouseWidget || wtype === 'gamepad_stick';
-    const actionPolicy = widgetEditor ? widgetEditor.actions : { tap: !consumesActions, longPress: !consumesActions };
+    const actionPolicy = widgetEditor ? widgetEditor.actions : { tap: true, longPress: true };
     var tapArr = wtype && actionPolicy.buildTap ? actionPolicy.buildTap()
         : actionPolicy.tap ? actionEditorListBuild(padActionPrefixes('tap')) : [];
     if (tapArr.length) btn.actions = tapArr;
@@ -687,192 +375,8 @@ function padDialogBuildButton() {
         btn.widget_type = wtype;
         const editor = padWidgetEditor(wtype);
         if (editor) padWidgetEditorBuild(btn, editor);
-        if (['mousepad', 'scrollpad', 'gamepad_stick'].includes(wtype) || editor && editor.inputNavigation) {
+        if (editor && editor.inputNavigation) {
             btn.widget_disable_pad_swipes = document.getElementById('pad-edit-disable-pad-swipes').checked;
-        }
-        if (wtype === 'gamepad_stick') {
-            btn.widget_gamepad_stick = document.getElementById('pad-edit-gamepad-stick').value === 'right' ? 'right' : 'left';
-            btn.widget_gamepad_center = document.getElementById('pad-edit-gamepad-center').value === 'floating' ? 'floating' : 'fixed';
-            btn.widget_gamepad_dead_zone = padGetBoundedWidgetNumber('pad-edit-gamepad-dead-zone', 10, 0, 90) / 100;
-            btn.widget_gamepad_invert_x = document.getElementById('pad-edit-gamepad-invert-x').checked;
-            btn.widget_gamepad_invert_y = document.getElementById('pad-edit-gamepad-invert-y').checked;
-        }
-        if (wtype === 'scrollpad') {
-            btn.widget_scrollpad_axis = document.getElementById('pad-edit-scrollpad-axis').value === 'horizontal'
-                ? 'horizontal' : 'vertical';
-            btn.widget_scrollpad_sensitivity = padGetBoundedWidgetNumber('pad-edit-scrollpad-sensitivity', 1, 0.1, 5);
-            btn.widget_scrollpad_reverse = document.getElementById('pad-edit-scrollpad-reverse').checked;
-            btn.widget_scrollpad_inertia = padGetBoundedWidgetNumber('pad-edit-scrollpad-inertia', 0, 0, 5);
-        }
-        if (wtype === 'mousepad') {
-            btn.widget_mousepad_sensitivity = padGetBoundedWidgetNumber('pad-edit-mousepad-sensitivity', 1, 0.1, 5);
-            btn.widget_mousepad_acceleration = padGetBoundedWidgetNumber('pad-edit-mousepad-acceleration', 0, 0, 5);
-            btn.widget_mousepad_movement_threshold = padGetBoundedWidgetNumber('pad-edit-mousepad-movement-threshold', 3, 0, 12);
-            btn.widget_mousepad_inertia = padGetBoundedWidgetNumber('pad-edit-mousepad-inertia', 0, 0, 5);
-            btn.widget_mousepad_reverse = document.getElementById('pad-edit-mousepad-reverse').checked;
-            btn.widget_mousepad_buttons = document.getElementById('pad-edit-mousepad-buttons').checked;
-            btn.widget_mousepad_back = document.getElementById('pad-edit-mousepad-back').checked;
-            btn.widget_mousepad_back_size = Math.round(padGetBoundedWidgetNumber('pad-edit-mousepad-back-size', 44, 1, 512));
-        }
-        if (wtype === 'bar_chart') {
-            const wDataBinding = document.getElementById('pad-edit-widget-data-binding').value.trim();
-            if (wDataBinding) btn.widget_data_binding = wDataBinding;
-            btn.widget_data_binding_2 = document.getElementById('pad-edit-widget-bar-data-binding-2').value.trim();
-            btn.widget_data_binding_3 = document.getElementById('pad-edit-widget-bar-data-binding-3').value.trim();
-            btn.widget_data_binding_4 = document.getElementById('pad-edit-widget-bar-data-binding-4').value.trim();
-            btn.widget_bar_label = document.getElementById('pad-edit-widget-bar-label').value.trim();
-            btn.widget_bar_label_2 = document.getElementById('pad-edit-widget-bar-label-2').value.trim();
-            btn.widget_bar_label_3 = document.getElementById('pad-edit-widget-bar-label-3').value.trim();
-            btn.widget_bar_label_4 = document.getElementById('pad-edit-widget-bar-label-4').value.trim();
-            const barLblSz = parseInt(document.getElementById('pad-edit-widget-bar-label-size').value);
-            if (!isNaN(barLblSz) && barLblSz > 0) btn.widget_bar_label_size = (barLblSz > 200) ? 200 : barLblSz;
-            btn.widget_bar_min = padGetBindableNumber('pad-edit-widget-bar-min', 0);
-            btn.widget_bar_max = padGetBindableNumber('pad-edit-widget-bar-max', 3);
-            btn.widget_bar_color = padGetBindableColor('pad-edit-widget-bar-color');
-            btn.widget_bar_color_2 = padGetBindableColor('pad-edit-widget-bar-color-2');
-            btn.widget_bar_color_3 = padGetBindableColor('pad-edit-widget-bar-color-3');
-            btn.widget_bar_color_4 = padGetBindableColor('pad-edit-widget-bar-color-4');
-            btn.widget_bar_bg_color = padGetBindableColor('pad-edit-widget-bar-bg-color');
-            const bwPct = parseInt(document.getElementById('pad-edit-widget-bar-width-pct').value);
-            btn.widget_bar_width_pct = (isNaN(bwPct) || bwPct > 100) ? 100 : (bwPct < 1) ? 1 : bwPct;
-            const orient = document.getElementById('pad-edit-widget-orientation').value;
-            if (orient === 'horizontal') btn.widget_orientation = 'horizontal';
-            btn.widget_bar_zero_centered = document.getElementById('pad-edit-widget-bar-zero-centered').checked;
-            btn.widget_bar_dual_binding_pair_1 = document.getElementById('pad-edit-widget-bar-dual-binding-pair-1').checked;
-            btn.widget_bar_dual_binding_pair_2 = document.getElementById('pad-edit-widget-bar-dual-binding-pair-2').checked;
-            const barAnimMs = parseInt(document.getElementById('pad-edit-widget-bar-anim-ms').value);
-            btn.widget_anim_ms = (isNaN(barAnimMs) || barAnimMs < 0) ? 300 : (barAnimMs > 5000) ? 5000 : barAnimMs;
-            const barTicks = parseInt(document.getElementById('pad-edit-widget-bar-ticks').value);
-            btn.widget_bar_ticks = (isNaN(barTicks) || barTicks < 0) ? 0 : (barTicks > 20) ? 20 : barTicks;
-            const barTickW = parseInt(document.getElementById('pad-edit-widget-bar-tick-width').value);
-            btn.widget_bar_tick_width = (isNaN(barTickW) || barTickW < 1) ? 1 : (barTickW > 5) ? 5 : barTickW;
-            btn.widget_bar_tick_color = padGetBindableColor('pad-edit-widget-bar-tick-color');
-            btn.widget_bar_marker_value = document.getElementById('pad-edit-widget-bar-marker-value').value.trim();
-            const barZonePct = parseInt(document.getElementById('pad-edit-widget-bar-marker-zone-pct').value);
-            btn.widget_bar_marker_zone_pct = (isNaN(barZonePct) || barZonePct < 0) ? 0 : (barZonePct > 100) ? 100 : barZonePct;
-            const barMarkerW = parseInt(document.getElementById('pad-edit-widget-bar-marker-width').value);
-            btn.widget_bar_marker_width = (isNaN(barMarkerW) || barMarkerW < 0) ? 2 : (barMarkerW > 10) ? 10 : barMarkerW;
-            btn.widget_bar_marker_color = padGetBindableColor('pad-edit-widget-bar-marker-color');
-            btn.widget_bar_marker_zone_color = padGetBindableColor('pad-edit-widget-bar-marker-zone-color');
-        }
-        if (wtype === 'sparkline') {
-            const sDataBinding = document.getElementById('pad-edit-sparkline-data-binding').value.trim();
-            if (sDataBinding) btn.widget_data_binding = sDataBinding;
-            btn.widget_data_binding_2 = document.getElementById('pad-edit-sparkline-data-binding-2').value.trim();
-            btn.widget_data_binding_3 = document.getElementById('pad-edit-sparkline-data-binding-3').value.trim();
-            const sMin = padGetBindableNumber('pad-edit-sparkline-min', undefined);
-            const sMax = padGetBindableNumber('pad-edit-sparkline-max', undefined);
-            if (sMin !== undefined) btn.widget_sparkline_min = sMin;
-            if (sMax !== undefined) btn.widget_sparkline_max = sMax;
-            const sWindow = padGetSparklineWindowSeconds();
-            btn.widget_sparkline_window = (isNaN(sWindow) || sWindow < 10) ? 300 : Math.min(PAD_SPARKLINE_MAX_WINDOW_SECONDS, sWindow);
-            btn.widget_sparkline_slots = padGetSparklineSlotCount();
-            for (const suffix of ['', '_2', '_3']) {
-                const dom = suffix.replace('_', '-');
-                const entity = document.getElementById('pad-edit-sparkline-ha-entity' + dom).value.trim();
-                const enabled = document.getElementById('pad-edit-sparkline-ha-enabled' + dom).checked;
-                const binding = document.getElementById('pad-edit-sparkline-data-binding' + dom).value.trim();
-                if (enabled && binding && entity) {
-                    btn['widget_sparkline_ha_entity' + suffix] = entity;
-                    btn['widget_sparkline_ha_stat' + suffix] = document.getElementById('pad-edit-sparkline-ha-stat' + dom).value;
-                }
-            }
-            btn.widget_sparkline_line_color = padGetBindableColor('pad-edit-sparkline-line-color');
-            btn.widget_sparkline_line_color_2 = padGetBindableColor('pad-edit-sparkline-line-color-2');
-            btn.widget_sparkline_line_color_3 = padGetBindableColor('pad-edit-sparkline-line-color-3');
-            const sLw = parseInt(document.getElementById('pad-edit-sparkline-line-width').value);
-            btn.widget_sparkline_line_width = (isNaN(sLw) || sLw < 1) ? 2 : (sLw > 10) ? 10 : sLw;
-            const sLoff = parseInt(document.getElementById('pad-edit-sparkline-line-offset').value);
-            btn.widget_sparkline_line_offset = (isNaN(sLoff) || sLoff < 0) ? 0 : (sLoff > 6) ? 6 : sLoff;
-            const sSmooth = parseInt(document.getElementById('pad-edit-sparkline-smooth').value);
-            btn.widget_sparkline_smooth = (isNaN(sSmooth) || sSmooth < 0) ? 0 : (sSmooth > 8) ? 8 : sSmooth;
-            btn.widget_sparkline_unified_scale = document.getElementById('pad-edit-sparkline-unified-scale').checked;
-
-            // Min/max markers
-            const maxSz = parseInt(document.getElementById('pad-edit-sparkline-marker-size-max').value);
-            btn.widget_sparkline_marker_size_max = (isNaN(maxSz) || maxSz < 0) ? 0 : (maxSz > 20) ? 20 : maxSz;
-            const maxFmt = document.getElementById('pad-edit-sparkline-max-fmt').value.trim();
-            if (maxFmt) btn.widget_sparkline_max_fmt = maxFmt;
-            const maxLblClr = padGetBindableColor('pad-edit-sparkline-max-label-color');
-            if (maxLblClr) btn.widget_sparkline_max_label_color = maxLblClr;
-
-            const minSz = parseInt(document.getElementById('pad-edit-sparkline-marker-size-min').value);
-            btn.widget_sparkline_marker_size_min = (isNaN(minSz) || minSz < 0) ? 0 : (minSz > 20) ? 20 : minSz;
-            const minFmt = document.getElementById('pad-edit-sparkline-min-fmt').value.trim();
-            if (minFmt) btn.widget_sparkline_min_fmt = minFmt;
-            const minLblClr = padGetBindableColor('pad-edit-sparkline-min-label-color');
-            if (minLblClr) btn.widget_sparkline_min_label_color = minLblClr;
-
-            // Current value dot
-            const cdSz = parseInt(document.getElementById('pad-edit-sparkline-current-dot').value);
-            btn.widget_sparkline_current_dot = (isNaN(cdSz) || cdSz < 0) ? 0 : (cdSz > 20) ? 20 : cdSz;
-
-            // Current value labels
-            const lblW = parseInt(document.getElementById('pad-edit-sparkline-label-width').value);
-            if (!isNaN(lblW) && lblW > 0) btn.widget_sparkline_label_width = (lblW > 200) ? 200 : lblW;
-            const cl1 = document.getElementById('pad-edit-sparkline-current-label').value.trim();
-            if (cl1) btn.widget_sparkline_current_label = cl1;
-            const cl2 = document.getElementById('pad-edit-sparkline-current-label-2').value.trim();
-            if (cl2) btn.widget_sparkline_current_label_2 = cl2;
-            const cl3 = document.getElementById('pad-edit-sparkline-current-label-3').value.trim();
-            if (cl3) btn.widget_sparkline_current_label_3 = cl3;
-
-            // Reference lines
-            for (let r = 1; r <= 3; r++) {
-                const ry = parseFloat(document.getElementById('pad-edit-sparkline-ref-' + r + '-y').value);
-                if (!isNaN(ry)) {
-                    btn['widget_sparkline_ref_' + r + '_y'] = ry;
-                    btn['widget_sparkline_ref_' + r + '_color'] = padGetBindableColor('pad-edit-sparkline-ref-' + r + '-color');
-                    btn['widget_sparkline_ref_' + r + '_pattern'] = parseInt(document.getElementById('pad-edit-sparkline-ref-' + r + '-pattern').value) || 0;
-                }
-            }
-            if (document.getElementById('pad-edit-sparkline-ref-in-view').checked) btn.widget_sparkline_ref_in_view = true;
-        }
-        if (wtype === 'rocker') {
-            const rAxis = document.getElementById('pad-edit-rocker-axis').value;
-            if (rAxis === 'horizontal') btn.widget_rocker_axis = 'horizontal';
-            const rColor = document.getElementById('pad-edit-rocker-color').value.trim();
-            if (rColor) btn.widget_rocker_color = rColor;
-            const rOpa = parseInt(document.getElementById('pad-edit-rocker-opacity').value);
-            if (!isNaN(rOpa) && rOpa !== 80) btn.widget_rocker_opacity = Math.max(0, Math.min(255, rOpa));
-        }
-        if (wtype === 'numericrocker') {
-            const nrAxis = document.getElementById('pad-edit-numericrocker-axis').value;
-            if (nrAxis === 'vertical') btn.widget_numericrocker_axis = 'vertical';
-            const nrSmall = parseFloat(document.getElementById('pad-edit-numericrocker-small-step').value);
-            if (!isNaN(nrSmall) && nrSmall !== 1) btn.widget_numericrocker_small_step = Math.max(0, nrSmall);
-            const nrLarge = parseFloat(document.getElementById('pad-edit-numericrocker-large-step').value);
-            if (!isNaN(nrLarge) && nrLarge !== 10) btn.widget_numericrocker_large_step = Math.max(0, nrLarge);
-            const nrZoneScale = parseInt(document.getElementById('pad-edit-numericrocker-zone-scale').value);
-            if (!isNaN(nrZoneScale) && nrZoneScale !== 100) btn.widget_numericrocker_zone_scale_pct = Math.max(50, Math.min(150, nrZoneScale));
-            const nrColor = document.getElementById('pad-edit-numericrocker-color').value.trim();
-            if (nrColor) btn.widget_numericrocker_color = nrColor;
-            const nrOpa = parseInt(document.getElementById('pad-edit-numericrocker-opacity').value);
-            if (!isNaN(nrOpa) && nrOpa !== 80) btn.widget_numericrocker_opacity = Math.max(0, Math.min(255, nrOpa));
-            // Adjustment action (stored as nested object)
-            var adjAction = actionEditorBuild('pad-edit-nr-adjust');
-            if (adjAction.type) btn.widget_numericrocker_action = adjAction;
-        }
-        if (wtype === 'list') {
-            const listProvider = document.getElementById('pad-edit-list-provider-id').value.trim();
-            if (listProvider) btn.widget_data_binding = listProvider;
-            const listFilter = document.getElementById('pad-edit-list-filter').value.trim();
-            if (listFilter) btn.widget_data_binding_2 = listFilter;
-        }
-        if (wtype === 'camera_preview') {
-            btn.widget_camera_scale = document.getElementById('pad-edit-camera-preview-scale').value;
-        }
-        if (wtype === 'external') {
-            const extensionId = document.getElementById('pad-edit-extension-id').value;
-            if (!extensionId) throw Object.assign(new Error('Select an installed extension'), { fieldIds: ['pad-edit-extension-id'] });
-            btn.extension_id = extensionId;
-            const extensionConfig = document.getElementById('pad-edit-extension-config').value.trim();
-            if (extensionConfig) btn.extension_config = extensionConfig;
-            const extensionTickInterval = parseInt(document.getElementById('pad-edit-extension-tick-interval').value);
-            if (!isNaN(extensionTickInterval)) {
-                btn.extension_tick_interval_ms = Math.max(33, Math.min(1000, extensionTickInterval));
-            }
-            btn.extension_upscale = Number(document.getElementById('pad-edit-extension-upscale').value);
         }
     }
 
@@ -885,10 +389,15 @@ function padDialogBuildButton() {
 
 function padDialogValidateButton(btn) {
     const overlay = document.getElementById('pad-edit-overlay');
+    const activeType = document.getElementById('pad-edit-widget-type').value;
+    const sectionOwners = new Map();
+    padWidgetEditors.forEach(editor => editor.sections.forEach(section => { sectionOwners.set(section.id, editor); }));
     if (overlay && overlay.querySelectorAll) overlay.querySelectorAll('input[type="number"]').forEach(input => {
         let parent = input;
         let relevant = !input.disabled;
         while (parent && parent !== overlay) {
+            const owner = sectionOwners.get(parent.id);
+            if (owner && (owner.type !== activeType || owner.supported === false)) relevant = false;
             if (parent.style && parent.style.display === 'none' && !(parent.dataset && parent.dataset.buttonTab)) relevant = false;
             parent = parent.parentElement;
         }
@@ -939,8 +448,7 @@ var PAD_PV_FIELDS = [
     { id: 'pad-edit-border-color',        kind: 'color', field: 'border_color' },
     { id: 'pad-edit-border-width',        kind: 'text',  field: 'border_width' },
     { id: 'pad-edit-corner-radius',       kind: 'text',  field: 'corner_radius' },
-    { id: 'pad-edit-btn-state',           kind: 'text',  field: 'btn_state' },
-    { id: 'pad-edit-widget-data-binding', kind: 'text',  field: 'widget_data_binding' }
+    { id: 'pad-edit-btn-state',           kind: 'text',  field: 'btn_state' }
 ];
 var padPvTimer = null;  // debounce for edit-triggered refresh
 let padPvGeneration = 0;
@@ -966,9 +474,11 @@ function padPvFieldDef(id) {
 
 function padPvFields() {
     const editor = padWidgetEditor(document.getElementById('pad-edit-widget-type').value);
-    return PAD_PV_FIELDS.filter(field => !editor || field.field !== 'widget_data_binding').concat(editor ? editor.fields.filter(field => field.binding).map(field => ({
+    return PAD_PV_FIELDS.concat(editor ? editor.fields.filter(field => field.binding).map(field => ({
         id: field.id, field: field.key, kind: field.kind === 'color' ? 'color' : 'text'
-    })) : []);
+    })).concat(editor.previewFields || [], editor.track && editor.track.outline ? [{
+        id: 'pad-edit-track-outline-color', field: 'widget_track_outline_color', kind: 'color'
+    }] : []) : []);
 }
 
 function padPvFieldValue(id) {

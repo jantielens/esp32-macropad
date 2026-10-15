@@ -21,7 +21,6 @@
                                 <label for="pad-edit-sparkline-current-label">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label" maxlength="63" placeholder="e.g. [mqtt:topic;path;%.1f] °C">
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields">
                                 <div class="sparkline-history-row">
@@ -61,7 +60,6 @@
                                 <label for="pad-edit-sparkline-current-label-2">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-2" maxlength="63" placeholder="Optional — leave empty if unused">
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled-2" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency-2"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-2">
                                 <div class="sparkline-history-row">
@@ -90,7 +88,6 @@
                                 <label for="pad-edit-sparkline-current-label-3">Current value label <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                                 <input type="text" class="binding-mono" id="pad-edit-sparkline-current-label-3" maxlength="63" placeholder="Optional — leave empty if unused">
                             </div>
-                            <label class="sparkline-history-toggle sparkline-ha-source"><input type="checkbox" id="pad-edit-sparkline-ha-enabled-3" onchange="padUpdateSparklineEditor()"> Backfill from Home Assistant</label>
                             <small class="sparkline-history-dependency sparkline-ha-source" id="pad-edit-sparkline-ha-dependency-3"></small>
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-3">
                                 <div class="sparkline-history-row">
@@ -161,7 +158,7 @@
                             </div>
                         </div>
                         <small class="sparkline-resolution-summary" id="pad-edit-sparkline-resolution"></small>
-                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 7 days. The saved value will be limited to 7 days.</small>
+                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 7 days.</small>
                         <small class="editor-warn" id="pad-edit-sparkline-points-warn" style="display:none;"></small>
                         <small class="editor-warn" id="pad-edit-sparkline-ha-warn" style="display:none;">Home Assistant history is stored in 5-minute periods. Historical values are visually interpolated; live data uses the finer interval.</small>
 

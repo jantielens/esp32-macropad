@@ -91,6 +91,10 @@ for (const imageFetch of [false, true]) {
 	}
 }
 context.deviceInfoCache = { has_image_fetch: true, has_image_library: true };
+elements.set('pad-edit-external-widget-option', {});
+elements.set('pad-edit-extension-section', { tagName: 'DETAILS', dataset: {}, style: {}, querySelectorAll: () => [] });
+elements.set('pad-edit-extension-id', { value: '', replaceChildren() {}, appendChild() {} });
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_extension.js', 'utf8'), context);
 elements.get('pad-edit-widget-type').value = 'external';
 context.padWidgetTypeChanged();
 assert.strictEqual(elements.get('pad-edit-camera-feed-section').style.display, 'none');
@@ -101,25 +105,31 @@ const mousepadOption = { hidden: true, disabled: true };
 elements.set('pad-edit-mousepad-widget-option', mousepadOption);
 const scrollpadOption = { hidden: true, disabled: true };
 elements.set('pad-edit-scrollpad-widget-option', scrollpadOption);
+elements.set('pad-edit-gamepad_stick-widget-option', {});
+for (const type of ['mousepad', 'scrollpad', 'gamepad-stick']) {
+	elements.set('pad-edit-' + type + '-section', { tagName: 'DETAILS', style: {}, dataset: {}, open: false, querySelectorAll: () => [] });
+}
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_inputs.js', 'utf8'), context);
 for (const touch of [false, true]) {
 	for (const usb of [false, true]) {
-		context.padSetHidWidgetCapabilityVisibility({ has_touch: touch, has_usb_hid: usb });
+		context.padWidgetEditorsInit({ has_touch: touch, has_usb_hid: usb });
 		assert.strictEqual(mousepadOption.hidden, !(touch && usb));
 		assert.strictEqual(mousepadOption.disabled, !(touch && usb));
 		assert.strictEqual(scrollpadOption.hidden, !(touch && usb));
 		assert.strictEqual(scrollpadOption.disabled, !(touch && usb));
 	}
 }
-context.padSetHidWidgetCapabilityVisibility(null);
+context.padWidgetEditorsInit(null);
 assert.strictEqual(mousepadOption.disabled, true);
 assert.strictEqual(scrollpadOption.disabled, true);
-for (const id of ['pad-edit-mousepad-section', 'pad-edit-scrollpad-section', 'pad-edit-tap-heading', 'pad-edit-tap-actions',
+context.padWidgetEditorsInit({ has_touch: true, has_usb_hid: true });
+for (const id of ['pad-edit-tap-heading', 'pad-edit-tap-actions',
 	'pad-edit-lp-heading', 'pad-edit-lp-actions']) elements.set(id, { tagName: 'DETAILS', style: {} });
 for (const type of ['mousepad', 'scrollpad']) {
 	elements.get('pad-edit-widget-type').value = type;
 	context.padWidgetTypeChanged();
 	assert.strictEqual(elements.get('pad-edit-' + type + '-section').style.display, '');
-	assert.strictEqual(elements.get('pad-edit-' + type + '-section').open, true);
+	assert.strictEqual(elements.get('pad-edit-' + type + '-section').open, false);
 	for (const id of ['pad-edit-tap-heading', 'pad-edit-tap-actions', 'pad-edit-lp-heading', 'pad-edit-lp-actions']) {
 		assert.strictEqual(elements.get(id).style.display, 'none');
 	}
@@ -164,9 +174,9 @@ for (let bar = 1; bar <= 4; bar++) {
 for (const pair of [1, 2]) elements.set('pad-edit-widget-bar-dual-binding-pair-' + pair, { checked: false });
 elements.get('pad-edit-widget-type').value = 'bar_chart';
 context.padRefreshWidgetEditor(true);
-assert.deepStrictEqual([1, 2, 3, 4].map(bar => elements.get('pad-edit-bar-source-' + bar).open), [true, false, false, false]);
-assert.strictEqual(elements.get('pad-edit-bar-gridline-style').hidden, true);
-assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, true);
+assert.deepStrictEqual([1, 2, 3, 4].map(bar => elements.get('pad-edit-bar-source-' + bar).open), [true, true, true, true]);
+assert.strictEqual(elements.get('pad-edit-bar-gridline-style').hidden, false);
+assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, false);
 elements.get('pad-edit-widget-bar-label-2').value = 'Grid';
 elements.get('pad-edit-widget-bar-color-3').value = '#123456';
 elements.get('pad-edit-widget-bar-color-4-pattern').value = 'dots';
@@ -174,8 +184,8 @@ elements.get('pad-edit-widget-bar-ticks').value = '4';
 elements.get('pad-edit-widget-bar-marker-value').value = '0';
 context.padRefreshWidgetEditor(true);
 assert.deepStrictEqual([1, 2, 3, 4].map(bar => elements.get('pad-edit-bar-source-' + bar).open), [true, true, true, true]);
-assert.strictEqual(elements.get('pad-edit-bar-gridlines').open, true);
-assert.strictEqual(elements.get('pad-edit-bar-target').open, true);
+assert.strictEqual(elements.get('pad-edit-bar-gridlines').open, false);
+assert.strictEqual(elements.get('pad-edit-bar-target').open, false);
 assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, false, 'Zero is a valid target');
 elements.get('pad-edit-widget-bar-dual-binding-pair-1').checked = true;
 elements.get('pad-edit-bar-source-2').open = false;
@@ -186,10 +196,10 @@ assert.strictEqual(elements.get('pad-edit-bar-source-2').open, false, 'Routine r
 assert.strictEqual(elements.get('pad-edit-widget-bar-label-2').value, 'Grid');
 assert.strictEqual(elements.get('pad-edit-widget-bar-color-3').value, '#123456');
 assert.strictEqual(elements.get('pad-edit-widget-bar-color-4-pattern').value, 'dots');
-assert.strictEqual(elements.get('pad-edit-bar-gridline-style').hidden, true);
-assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, true);
+assert.strictEqual(elements.get('pad-edit-bar-gridline-style').hidden, false);
+assert.strictEqual(elements.get('pad-edit-bar-target-style').hidden, false);
 context.padRefreshWidgetEditor(true);
-assert.strictEqual(elements.get('pad-edit-bar-source-2').open, true, 'Paired sources open on load');
+assert.strictEqual(elements.get('pad-edit-bar-source-2').open, false, 'Pairing preserves manual disclosure');
 elements.get('pad-edit-widget-type').value = '';
 elements.get('pad-edit-bar-source-2').open = false;
 
@@ -276,9 +286,9 @@ for (let line = 1; line <= 3; line++) {
 elements.set('pad-edit-sparkline-source-4', { open: true });
 elements.get('pad-edit-widget-type').value = 'sparkline';
 context.padRefreshWidgetEditor(true);
-assert.deepStrictEqual([1, 2, 3].map(line => elements.get('pad-edit-sparkline-source-' + line).open), [true, false, false]);
-assert.strictEqual(elements.get('pad-edit-sparkline-minimum-marker').open, false);
-assert.strictEqual(elements.get('pad-edit-sparkline-minimum-marker-style').hidden, true);
+assert.deepStrictEqual([1, 2, 3].map(line => elements.get('pad-edit-sparkline-source-' + line).open), [true, true, true]);
+assert.strictEqual(elements.get('pad-edit-sparkline-minimum-marker').open, true);
+assert.strictEqual(elements.get('pad-edit-sparkline-minimum-marker-style').hidden, false);
 assert.strictEqual(elements.get('pad-edit-sparkline-maximum-marker').open, true);
 elements.get('pad-edit-sparkline-data-binding-2').value = '[pad:power]';
 elements.get('pad-edit-sparkline-current-label-3').value = 'Outdoor';
@@ -287,13 +297,13 @@ assert.deepStrictEqual([1, 2, 3].map(line => elements.get('pad-edit-sparkline-so
 elements.get('pad-edit-sparkline-current-label-3').value = '';
 elements.get('pad-edit-sparkline-line-color-3').value = '#123456';
 context.padRefreshWidgetEditor(true);
-assert.strictEqual(elements.get('pad-edit-sparkline-source-3').open, true, 'Custom colors reveal optional lines');
+assert.strictEqual(elements.get('pad-edit-sparkline-source-3').open, true, 'Custom colors preserve manual disclosure');
 assert.strictEqual(elements.get('pad-edit-sparkline-source-4').open, true, 'Sparkline refresh must stop at three sources');
 elements.get('pad-edit-sparkline-source-2').open = false;
 elements.get('pad-edit-sparkline-marker-size-max').value = '0';
 context.padRefreshWidgetEditor();
 assert.strictEqual(elements.get('pad-edit-sparkline-source-2').open, false, 'Routine refresh preserves Sparkline disclosure');
-assert.strictEqual(elements.get('pad-edit-sparkline-maximum-marker-style').hidden, true);
+assert.strictEqual(elements.get('pad-edit-sparkline-maximum-marker-style').hidden, false);
 assert.strictEqual(elements.get('pad-edit-sparkline-min-fmt').value, 'lo %.1f');
 assert.strictEqual(elements.get('pad-edit-sparkline-min-label-color').value, '[pad:accent]');
 assert.strictEqual(elements.get('pad-edit-bar-source-2').open, false, 'Sparkline refresh leaves the inactive Bar Chart editor unchanged');
@@ -306,7 +316,9 @@ assert.doesNotThrow(() => context.padRefreshWidgetEditor(true), 'A normal button
 const devInfo = JSON.parse(execFileSync('python3', ['-c',
 	"import json, runpy, sys; from types import SimpleNamespace; sys.path.insert(0, 'tools'); module = runpy.run_path('tools/portal-dev-server.py'); handler = object.__new__(module['PortalHandler']); handler.headers = {}; handler.server = SimpleNamespace(profile='esp32-p4-lcd4b'); module['reset_pad_fixtures'](handler.server); print(json.dumps(handler._device_info()))"
 ], { encoding: 'utf8' }));
-context.padSetHidWidgetCapabilityVisibility(devInfo);
+for (const type of ['mousepad', 'scrollpad', 'gamepad_stick']) {
+	assert.strictEqual(context.padWidgetEditor(type).available(devInfo), true);
+}
 for (const type of ['mousepad', 'scrollpad']) {
 	const option = elements.get('pad-edit-' + type + '-widget-option');
 	assert.strictEqual(option.hidden, false);
@@ -362,6 +374,31 @@ workspaceContext.padWorkspaceEdit();
 assert.strictEqual(workspaceContext.padState.buttons[0].label_center, 'Corrected');
 workspaceContext.padWorkspaceValidate();
 assert.strictEqual(vm.runInContext('padWorkspace.errors.size', workspaceContext), 0);
+let catalogReady = false;
+const validateDraft = workspaceContext.padDialogValidateButton;
+workspaceContext.padDialogValidateButton = () => {
+	if (!catalogReady) throw new Error('Extension catalog is still loading');
+};
+workspaceContext.padWorkspaceEdit(true);
+assert.match(workspaceContext.error, /still loading/);
+const catalogRevision = workspaceContext.revisions;
+const draftLookup = workspaceContext.document.getElementById;
+workspaceContext.document.getElementById = id => id === draftInput.id ? draftInput : { value: '0' };
+workspaceContext.padActionPrefixes = () => [];
+workspaceContext.padWidgetActionPrefixes = () => [];
+workspaceContext.actionEditorTypeChanged = () => {};
+workspaceContext.padWidgetTypeChanged = () => {};
+workspaceContext.padIconTypeChanged = () => {};
+workspaceContext.padConfirmChanged = () => {};
+workspaceContext.padDialogOpen = () => workspaceContext.padWorkspaceAfterSelect();
+catalogReady = true;
+assert.doesNotThrow(() => workspaceContext.padWorkspaceValidate(), 'Reopened drafts revalidate after async dependencies settle');
+assert.strictEqual(vm.runInContext('padWorkspace.errors.size', workspaceContext), 0);
+assert.strictEqual(draftInput.value, 'Corrected');
+assert.strictEqual(workspaceContext.revisions, catalogRevision, 'Catalog settlement does not mark a new edit');
+workspaceContext.padDialogValidateButton = validateDraft;
+workspaceContext.padDialogOpen = () => {};
+workspaceContext.document.getElementById = draftLookup;
 workspaceContext.padWorkspaceReset();
 assert.strictEqual(vm.runInContext('padWorkspace.forms.size', workspaceContext), 0);
 assert.strictEqual(vm.runInContext('padWorkspace.selected', workspaceContext), false);

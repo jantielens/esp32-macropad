@@ -128,7 +128,6 @@ async function main() {
     vm.runInContext('deviceInfoCache = { has_sound_player: true, has_native_extensions: true };', context);
     const order = [];
     let resolveDefaults;
-    let resolveExtensions;
     context.padLoadButtonDefaultsFromDevice = () => {
         order.push('defaults');
         return new Promise(resolve => { resolveDefaults = resolve; });
@@ -141,19 +140,12 @@ async function main() {
     };
     context.padFetchSoundList = () => order.push('sounds');
     context.padLoadBlockCatalog = () => order.push('blocks');
-    context.extensionFetchSlots = () => {
-        order.push('extensions');
-        return new Promise(resolve => { resolveExtensions = resolve; });
-    };
-    context.padPopulateExtensionDropdown = () => order.push('extension controls');
     const initialPad = context.padLoadInitialPage(0);
     assert.deepStrictEqual(order, ['defaults', 'pad']);
     resolveDefaults();
     await new Promise(resolve => setImmediate(resolve));
-    assert.deepStrictEqual(order, ['defaults', 'pad', 'grid', 'sounds', 'blocks', 'extensions']);
-    resolveExtensions();
+    assert.deepStrictEqual(order, ['defaults', 'pad', 'grid', 'sounds', 'blocks']);
     await initialPad;
-    assert.strictEqual(order.at(-1), 'extension controls');
 
     function selectNode() {
         return {
@@ -166,6 +158,12 @@ async function main() {
         };
     }
     const extensionSelect = selectNode();
+    extensionSelect.strict = true;
+    const extensionInputs = {
+        'pad-edit-extension-config': { value: '', maxLength: 511 },
+        'pad-edit-extension-tick-interval': { value: '' },
+        'pad-edit-extension-upscale': { value: '1' }
+    };
     const soundSelect = selectNode();
     const screenSelect = selectNode();
     screenSelect.strict = true;
@@ -184,21 +182,62 @@ async function main() {
     context.document.createElement = () => ({ value: '', textContent: '' });
     context.document.getElementById = id => id === 'pad-edit-extension-id' ? extensionSelect :
         id === 'test-sound-alert-file' ? soundSelect : id === 'test-target' ? screenSelect :
-        id === 'test-target-binding' ? screenBinding : id === 'test-target-binding-group' ? screenBindingGroup : null;
+        id === 'test-target-binding' ? screenBinding : id === 'test-target-binding-group' ? screenBindingGroup : extensionInputs[id] || null;
     for (const module of ['portal_pad_dialog', 'portal_action_editor', 'portal_action_editor_screen', 'portal_action_editor_sound_alert']) {
         vm.runInContext(fs.readFileSync('src/app/web/' + module + '.js', 'utf8'), context);
     }
-    vm.runInContext('padExtensionCatalogLoading = true;', context);
-    context.extensionCatalog = [];
-    context.padPopulateExtensionDropdown('clock');
+    vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_widget_extension.js', 'utf8'), context);
+    const extensionEditor = context.padWidgetEditor('external');
+    extensionEditor.supported = true;
+    let resolveCatalog;
+    context.fetch = () => new Promise(resolve => { resolveCatalog = resolve; });
+    const catalogLoad = extensionEditor.init();
+    extensionEditor.load({ extension_id: 'clock' });
     assert.strictEqual(extensionSelect.value, 'clock');
     assert(extensionSelect.disabled);
-    context.extensionCatalog = [{ id: 'clock', installed: true, enabled: true, version: '1' }];
-    vm.runInContext('padExtensionCatalogLoading = false;', context);
-    context.padPopulateExtensionDropdown();
-    assert.strictEqual(extensionSelect.value, 'clock');
+    assert.throws(() => extensionEditor.build({}), /still loading/);
+    extensionEditor.load({ extension_id: 'weather' });
+    extensionInputs['pad-edit-extension-config'].value = ' opaque {not JSON} ';
+    resolveCatalog({ ok: true, json: async () => ({ slots: [
+        { id: 'clock', installed: true, enabled: true, version: '1' },
+        { id: 'weather', installed: true, enabled: true, version: '2' },
+        { id: 'disabled', installed: true, enabled: false, version: '1' }
+    ] }) });
+    await catalogLoad;
+    assert.strictEqual(extensionSelect.value, 'weather', 'Late catalog keeps the newer selected button');
     assert(!extensionSelect.disabled);
     assert.strictEqual(extensionSelect.options.filter(option => option.value === 'clock').length, 1);
+    assert(!extensionSelect.options.some(option => option.value === 'disabled'));
+    const extensionButton = {};
+    context.padWidgetEditorBuild(extensionButton, extensionEditor);
+    assert.strictEqual(extensionButton.extension_id, 'weather');
+    assert.strictEqual(extensionButton.extension_config, 'opaque {not JSON}');
+    assert.strictEqual(extensionButton.extension_tick_interval_ms, undefined);
+    extensionInputs['pad-edit-extension-config'].value = 'x'.repeat(512);
+    assert.throws(() => context.padWidgetEditorBuild({}, extensionEditor), /511/);
+    assert.strictEqual(extensionInputs['pad-edit-extension-config'].value.length, 512);
+    extensionInputs['pad-edit-extension-config'].value = 'retained';
+    const oldLoad = extensionEditor.init();
+    const settleOld = resolveCatalog;
+    extensionEditor.dispose();
+    const newLoad = extensionEditor.init();
+    extensionEditor.load({ extension_id: 'clock' });
+    settleOld({ ok: true, json: async () => ({ slots: [{ id: 'stale', installed: true, enabled: true }] }) });
+    await oldLoad;
+    assert.strictEqual(extensionSelect.value, 'clock', 'Disposed catalog cannot mutate the current mount');
+    resolveCatalog({ ok: false });
+    await newLoad;
+    assert.match(extensionSelect.options[0].textContent, /unavailable/);
+    assert.throws(() => extensionEditor.build({}), /unavailable/);
+    assert.strictEqual(extensionInputs['pad-edit-extension-config'].value, 'retained');
+    context.fetch = async () => ({ ok: true, json: async () => ({ slots: [] }) });
+    await extensionEditor.init();
+    extensionEditor.load({ extension_id: 'missing' });
+    assert.match(extensionSelect.options[0].textContent, /No enabled extensions/);
+    assert.strictEqual(extensionSelect.value, '');
+    assert(!extensionSelect.options.some(option => option.value === 'missing'));
+    assert.throws(() => extensionEditor.build({}), /installed enabled/);
 
     soundSelect.value = 'saved.mp3';
     context.actionEditorPopulateSounds(['test'], ['other.mp3']);

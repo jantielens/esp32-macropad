@@ -1313,7 +1313,7 @@ target indexes; button index 0 corresponds to button 1.
 On ESP32-P4, supported ESP32-S3 boards, and Inkplate 6FLICK Interactive, the
 **Extension** widget runs an enabled native Extension installed from the Device
 portal. Choose the package under **Installed extension**
-and optionally enter up to 511 bytes of configuration text for that button. An
+and optionally enter up to 511 characters of configuration text in the portal. An
 Extension can appear on multiple buttons; each placement has its own instance
 and configuration. Set **Tick interval (ms)** when an Extension needs a
 specific animation or refresh cadence; it accepts 33 to 1000 milliseconds and
@@ -1322,11 +1322,16 @@ when the Extension returns pass-through from tap or long press. See the
 [Extension developer guide](dev/extensions.md) for package and lifecycle
 details.
 
-The **Extension** Content frame keeps package selection and Configuration full
-width, with Tick interval and Upscale together below. Configuration remains
+The **Extension** Content frame opens by default and keeps package selection and
+Configuration full width, with Tick interval and Upscale together below. Configuration remains
 opaque text or JSON. Leave Tick interval empty for the package default; 0 is not
-a valid interval. Loading or unavailable catalog entries retain a saved package
-ID and configuration. Shared labels, icons, and images stay hidden for this widget.
+a valid interval; explicit intervals must be whole milliseconds. Loading keeps a
+pending selection. A successful catalog offers only installed, enabled packages,
+without placeholder entries for missing IDs. Loading or failure blocks saving
+an edited Extension, not untouched Extension buttons or unrelated edits. Late
+responses preserve newer configuration drafts and cannot update a remounted
+editor. Configuration is trimmed, not parsed as JSON. Shared labels, icons, and
+images stay hidden for this widget.
 
 For a canvas-based Extension that cannot allocate its full-size canvas, set
 **Upscale** to 2x, 3x, or 4x. This reduces the canvas dimensions and scales the
@@ -1384,7 +1389,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 - **Vertical mode**: bottom = decrement, top = increment (up = more).
 - **Outer decrement** (far left / bottom) → `{step}` = `-large_step`
 - **Inner decrement** → `{step}` = `-small_step`
-- **Center zone** → works as a normal button (tap and long-press actions)
+- **Center zone** → uses the button's tap actions in the editor
 - **Inner increment** → `{step}` = `+small_step`
 - **Outer increment** (far right / top) → `{step}` = `+large_step`
 - At the default 100% tap-area scale, zone widths target 12% (outer) and 15% (inner) of the button span, with a 40px minimum. Wide buttons keep scaling beyond 80px; the center zone remains at least 10% of the span.
@@ -1392,7 +1397,7 @@ Unlike the regular rocker (which maps two zones to two separate action sets), th
 - Double chevron indicators (`<<`/`>>` or `▲▲`/`▼▼`) mark the outer zones; single chevrons (`<`/`>` or `▲`/`▼`) mark the inner zones.
 - The tap flash covers only the tapped zone.
 - Inner zones (small step) use the device's **Tap Beep** pattern; outer zones (large step) use the **Long-Press Beep** pattern for a distinct audio cue. Suppressed when the adjustment action itself produces audio.
-- The center zone supports full tap and long-press actions (all 3+3 action slots). Outer and inner zones use the dedicated **Adjustment Action**.
+- The editor saves up to three center tap actions and omits long-press actions for Numeric Rocker. Firmware support for previously stored long-press actions is unchanged. Outer and inner zones use the dedicated **Adjustment Action**, which may be left empty.
 - The `{step}` placeholder is replaced in `mqtt_payload`, `key_sequence`, `volume_value`, `brightness_value`, and `timer_value` fields.
 
 **Disabling zones:** Set a step value to **0** to disable that zone pair. The center action area receives the freed space. Setting both steps to 0 makes the entire button a center zone.
@@ -1532,9 +1537,10 @@ The bar chart widget draws one or more vertical or horizontal bars that fill bas
 The Content tab groups each bar's binding, caption, and color/fill under
 **Data sources**, followed by **Scale**, **Layout & style**, **Gridlines**, and
 **Target**. **Animation** is inside **Layout & style**. Bar 1 starts expanded; optional
-bars open when configured or paired. Collapsing a bar preserves its settings.
-Gridline and target styling appear only when a nonzero count or target value
-is present; hiding those controls preserves their values.
+bars start collapsed regardless of configuration or pairing. Collapsing a bar
+preserves its settings. Gridline and target styling stay editable and saved when
+the count is zero or the target is empty. Invalid values still block saving;
+Save Pad opens and focuses the offending field without enabling its feature.
 
 **Color by value** — to color the bar based on its current value, use a `threshold()` expression in the Bar color field. The color picker's built-in **Generate Color by Threshold** helper builds these expressions for you: enter a data source, pick zone colors, set ascending breakpoints, and add or remove stops as needed. The expression updates as you type. Opening the picker on an existing `threshold()` expression loads it back into the helper for editing. For a solar panel with a 5 kW max:
 
@@ -1645,12 +1651,12 @@ The sparkline widget draws a mini trend line showing how a value changes over ti
 
 **Content workflow:** **Data sources** keeps each line's live binding, color,
 current-value label, and optional Home Assistant backfill together. Line 1 opens
-initially; optional lines open when their binding, label, or non-default color
-is configured. Collapsing a line does not disable it. **Scale**, **Sampling**,
+initially; optional lines start collapsed regardless of configuration.
+Collapsing a line does not disable it. **Scale**, **Sampling**,
 **Line style**, **Markers**, **Current-value annotations**, and **Reference lines**
 follow. Line width, smoothing, and separation are together; dot size and label
-area width are together. Enabled minimum/maximum markers open initially. Size 0
-hides their format/color without clearing saved styling. Reference Y values
+area width are together. Minimum/maximum marker groups start collapsed. Size 0
+leaves their format/color editable and saved. Reference Y values
 remain numeric, including 0 and negative values; colors support bindings.
 
 **Configuration:**
@@ -1661,10 +1667,9 @@ remain numeric, including 0 and negative values; colors support bindings.
 | **Live data binding (line 2/3)** | Optional extra bindings for overlaid lines. Each gets its own data stream, color, and optional history source. Leave empty for a single line |
 | **Y-Axis Min / Max** | The Y-axis range. Leave empty for auto-scaling based on observed data. Accepts a number or a binding expression (e.g. `[health:heap_total]`) for dynamic scaling |
 | **Same scale for all lines** | When enabled (default), all lines in a multi-line sparkline share the same auto-scaled Y-axis range, so values are visually comparable. Disable to let each line auto-scale independently — useful when lines have very different magnitudes and you want to compare trends/shapes rather than absolute values. Has no effect when explicit min/max are configured or with single-line sparklines |
-| **Time range** | How much history to display, entered in seconds, minutes, hours, or days (default: 5 minutes, maximum: 7 days) |
-| **One point every** | Desired time represented by each point, entered in seconds, minutes, or hours. The editor calculates the required point count and stores it within the 2–1024 point limit |
-| **Backfill from Home Assistant** | Fills the line from long-term statistics after a restart. A live data binding is required because history fills that same stream; it does not create a separate line |
-| **History entity (line 1/2/3)** | Home Assistant entity ID (e.g. `sensor.living_room_temperature`) used when backfill is enabled |
+| **Time range** | History to display, entered in seconds, minutes, hours, or days (default: 5 minutes, minimum: 10 seconds, maximum: 7 days). Stored as whole seconds |
+| **One point every** | Requested interval in seconds, minutes, or hours, at least 100 ms. The editor derives 2–1024 points and displays the actual interval; invalid inputs are rejected, not corrected |
+| **History entity (line 1/2/3)** | A nonempty Home Assistant entity ID (e.g. `sensor.living_room_temperature`) enables backfill. Clear it to disable backfill. Its line must also have a live binding |
 | **Historical value (line 1/2/3)** | **Average reading** (mean) for measurements, **Latest state** for the most recently recorded value in each period, or **Accumulated total** (sum) for energy, water, and other total sensors |
 | **Line width** | Thickness of the trend line in pixels (1–10, default: 2) |
 | **Line separation** | Per-line vertical offset in pixels (0 = off, 1–6). When non-zero and the widget has more than one line, each line is nudged by a small symmetric offset (e.g. two lines fan out by ±offset, three lines by −offset / 0 / +offset) so lines with near-identical values stay visually distinct instead of drawing on top of each other. The current-value dot and min/max markers move with their line. Note: this shifts lines a couple of pixels off their exact value, so leave it at 0 when precise pixel-accurate readout matters |
@@ -1687,11 +1692,18 @@ remain numeric, including 0 and negative values; colors support bindings.
 
 **Data gaps** — if data stops arriving (e.g., MQTT sensor goes offline), the sparkline uses Last Observation Carried Forward (LOCF) to fill gaps, keeping the graph smooth instead of showing holes.
 
-**History backfill from Home Assistant** — a freshly booted device has no history, so a 24-hour sparkline would take a full day to fill up. Enable **Backfill from Home Assistant** beside a line's live binding and set its **History entity**. The device fetches that entity's long-term statistics once the clock is synchronized, then fills the empty part of the chart. On a finer chart grid, consecutive coarse historical readings are visually interpolated; missing periods retain the previous value. Newer locally collected samples retain the configured resolution. Live data always wins: backfilled values are only written to slots the device has not sampled itself.
+**History backfill from Home Assistant**: a freshly booted device has no history,
+so a 24-hour sparkline would take a full day to fill up. Set a **History entity**
+beside a line's live binding to enable backfill. The device fetches that entity's
+long-term statistics once the clock is synchronized, then fills the empty part
+of the chart. On a finer chart grid, consecutive coarse historical readings are
+visually interpolated; missing periods retain the previous value. Newer locally
+collected samples retain the configured resolution. Live data always wins:
+backfilled values are only written to slots the device has not sampled itself.
 
 Requirements and limits:
 
-- Turning backfill off retains its entity/statistic in the current draft, but saving omits that history source. After reload, its entity is empty and its statistic returns to the default; this differs from disabled marker styling, which remains saved.
+- Clearing a history entity disables backfill and omits that entity/statistic on save. After reload, its entity is empty and its statistic returns to the default. Marker styling, in contrast, remains saved even when marker size is 0.
 - The Home Assistant URL and a long-lived access token must be configured on the portal's Integrations page.
 - Home Assistant records statistics on 5-minute boundaries. On a line whose point interval is under 5 minutes, consecutive historical values are visually interpolated while locally collected data still uses the finer interval.
 - Windows over 24 hours use Home Assistant's hourly statistics. Consecutive hourly values are also visually interpolated on finer chart grids.

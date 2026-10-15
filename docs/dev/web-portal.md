@@ -484,30 +484,30 @@ held-control builder, including its conditional selector, without changing the
 ordinary Gamepad action editor. Camera Preview retains its separate Image scale
 control. All controls stay inside their section bodies, and Back button size
 remains visible when Back is off to preserve existing validation. Input navigation
-remains in Layout; input-widget action suppression and Extension's shared
-label/icon/image hiding are unchanged. These compact editors need no new refresh
-rules, value mutation, handlers, or load/build paths.
+remains in Layout; input-widget action suppression is declared by each owner.
+Extension declares that it replaces shared labels, icons, and images.
 
-Table, Gauge, and Gamepad Button register explicitly through
+All 13 active widget editors register explicitly through
 `portal_widget_editor.js`. Their `portal_widget_*.js` modules precede the dialog
-in `portal.js.bundle`; markup remains in the existing partials. Other editors
-still use their existing paths during the incremental migration.
+in `portal.js.bundle`; markup remains in the existing partials. Mousepad,
+Scrollpad, and Gamepad Joystick share the input-family owner module.
 
 For a migrated editor, keep field metadata and specialized behavior in its
 `portal_widget_<type>.js` module and controls/bounds in its `_widget_<type>.html`
 partial. Register the module before the dialog in `portal.js.bundle` and wire
 the partial and widget option explicitly. Keep widget-only styles in owned CSS
-assets: Gauge and Gamepad Button use `portal_widget_gauge.css` and
-`portal_widget_gamepad_button.css` in the `HAS_DISPLAY` chunk of
-`portal-all.css.bundle`. Table needs no dedicated stylesheet. Shared layout and
+assets: Gauge, Gamepad Button, Bar Chart, and Sparkline have dedicated
+`portal_widget_*.css` entries in the `HAS_DISPLAY` chunk of
+`portal-all.css.bundle`. Other editors reuse shared layout utilities. Shared layout and
 ordinary field helpers stay shared; do not add widget-name branches to generic
 orchestration or require automatic asset discovery.
 
 Each registration declares its persisted type, section roles, fields, and
 action policy. Fields identify an input, flat JSON key, default, and conversion
 kind. Shared mechanics reuse native numeric bounds and existing binding, color,
-and label helpers. Gauge owns its repeated sources, palette defaults, track
-host, and icon-export scale. Specialized `init` and `load` callbacks are used
+and label helpers. Gauge and Bar Chart own their repeated sources, palette
+defaults, track hosts, and icon-export scales. Owners declare pattern and preview
+contributions where needed. Specialized `init` and `load` callbacks are used
 only where needed: Gamepad Button generates and loads its existing held-control
 editor. Its action policy builds the first tap action with operation `down`,
 hides ordinary tap/long-press lists, and keeps the held-control section in
@@ -531,42 +531,39 @@ build failures inside their save boundary and call `actionEditorHandleError()`
 to open containing groups, mark and focus the field, and show the message before
 any write. Unstructured network errors retain each host's existing handling.
 
-This interface is provisional, not a general widget framework. Rocker and
-Numeric Rocker still need to exercise specialized action/serialization ownership;
-Extension's asynchronous catalog and configuration lifecycle are a separate
-checkpoint. Add only interfaces those migrations actually need. Prefer explicit
-widget-owned behavior over descriptors that encode workflows or conditions.
+This interface is a limited ownership contract, not a general widget framework.
+Rocker owns directional action labels. Numeric Rocker declares its adjustment
+section in Actions, preserves signed `{step}` payloads, and serializes tap plus
+optional adjustment, without long-press actions. Input editors declare their
+action suppression and navigation policy. List labels its tap actions Select;
+Camera Preview owns its capability gate and image scale.
 
-`padRefreshWidgetEditor(resetSections)` in `portal_pad_editor.js` still owns the
-legacy presentation refresh for Bar Chart and Sparkline. `PAD_WIDGET_EDITOR_RULES`
-declares their existing field IDs, feature conditions (checked, positive count,
-or nonempty value), group/style suffixes, and source fields. Source count defaults
-to four for Bar Chart; Sparkline specifies three and has no pair controls.
-The rules retain optional Bar Chart patterns, custom colors relative to
-firmware defaults, and paired-source expansion. Sparkline uses positive marker
-size to disclose marker format/color and groups each line's current-value label
-with its live binding, color, and history source. Add a rules entry only when a
-widget needs this behavior; do not add a refresh function for every widget.
+`padRefreshWidgetEditor()` delegates only to the selected owner's optional
+`refresh()` callback. Bar Chart and Sparkline use fixed, manually collapsible
+groups, not value-dependent disclosure rules. Turning off a feature retains
+editable styling, including validation. Shared track-node movement follows the
+owner's declared host in `padFillRefreshVisibility()`.
 
-Call with `true` after dialog values load or the widget type changes to set
-initial disclosure. Routine input/change handlers omit the argument to update
-dependent styling without resetting manual disclosure. Refresh changes only
-visibility and disclosure, never input values, availability, validation, or
-serialization. It operates on the selected registered editor, skips missing
-markup/controls, and is a no-op for widgets without rules. Existing capability
-checks and firmware flags remain the owners of widget availability; the rules
-table does not duplicate them. Shared track-node movement stays in
-`padFillRefreshVisibility()`.
+Sparkline owns duration conversion, derived sampling, history validation, and
+warnings in `portal_widget_sparkline.js`. Time range accepts 10 seconds through
+7 days and converts to whole seconds. Requested intervals must be at least
+100 ms; the owner derives 2..1024 points and displays the actual interval without
+correcting the inputs. Blank bounds remain automatic and blank label colors
+follow the line. A nonempty history entity enables backfill and requires that
+line's live binding; clearing it omits the entity/statistic on save. No separate
+enable checkbox or persisted boolean exists. Unsupported history settings are
+hidden and omitted from edited serialization, not deleted on load.
 
-Sparkline sampling, derived slots, history dependencies, and warnings remain in
-`padUpdateSparklineEditor()` in `portal_pad_dialog.js`. Marker size 0 hides styling
-but preserves its saved format/color. Disabling backfill retains draft entity/stat
-inputs, but existing serialization omits that history source; reloading after
-save clears its entity and restores the default statistic. The saved entity,
-not a separate boolean, determines initial backfill state. Capability-hidden
-values retain the existing serialization behavior. With `ha_history=false` and
-a saved enabled source, the current handler hides the toggle but subsequently
-shows its dependent history fields again, an existing capability-gating edge case.
+Extension owns its mounted asynchronous catalog in `portal_widget_extension.js`.
+Loading and failure block an edited Extension draft, but not untouched buttons
+or unrelated edits. A successful catalog offers only installed, enabled packages;
+missing IDs have no synthetic option. Pending selections survive until success,
+and late responses cannot overwrite newer configuration or a disposed mount.
+The workspace revalidates errored drafts on reopening after dependencies settle
+without marking another edit. Configuration is trimmed opaque text, limited to
+511 characters by the portal. Blank tick interval omits the override; explicit
+values must be whole milliseconds from 33 through 1000. `dispose()` clears owner
+state before remounting. Prefer this explicit owner code over descriptor workflows.
 
 Device information reads friendly pad names from the immutable RAM config cache,
 not from pad files. Names retain their full stored length. Successful saves and
@@ -707,8 +704,8 @@ every component in that custom section to the same category ID.
   - Pad selection and naming: Left rail for up to 16 pads with optional custom names (max 31 chars). Labels retain the `Pad X: Name` format whether selected or not; no legacy selection dropdown is needed.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
   - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading.
-  - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Unused optional bars start collapsed; configured bars and paired sources open on load. Disabled gridlines and empty targets hide subordinate styling without clearing values. Routine edits preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
-  - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings open for bindings, labels, custom colors, or enabled pairs. Feature groups open when enabled/configured. Needle off, tick count 0, and an empty target hide styling without clearing values; routine refreshes preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
+  - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Optional bars use fixed collapsed defaults, including when configured or paired. Disabled gridlines and empty targets retain editable styling and validation. Drafts preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
+  - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings and feature groups start collapsed regardless of configured values. Needle off, tick count 0, and an empty target retain editable styling and validation. Drafts preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
   - Background image: One collapsible frame contains unframed Local Image and Camera Feed or Remote Image disclosures plus their shared Scale control. Source visibility follows image-library and remote-fetch capabilities; the frame opens when an image source or letterbox setting is configured.
   - Patterned fills: Button backgrounds, four independent bar-series slots, and the shared bar track support five patterns plus None (`none`, default; unknown names normalize to None), with separate bindable colors and shared static spacing/stroke.
     Supported color pickers use Base Color and Pattern sections, staging both colors and the pattern until Apply. Base Color opens for unpatterned fills; Pattern opens for existing patterns. Both sections retain the threshold generator. Badges preview the combined fill using representative bound colors and a binding indicator.

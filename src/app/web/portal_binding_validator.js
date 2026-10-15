@@ -612,19 +612,6 @@ var _BV_DEF = [
     'pad-def-bg-color', 'pad-def-fg-color', 'pad-def-border-color',
     'pad-def-border-width', 'pad-def-corner-radius'
 ];
-var _BV_SPARK_DATA = [
-    'pad-edit-sparkline-data-binding', 'pad-edit-sparkline-data-binding-2',
-    'pad-edit-sparkline-data-binding-3'
-];
-var _BV_SPARK_COLOR = [
-    'pad-edit-sparkline-line-color', 'pad-edit-sparkline-line-color-2',
-    'pad-edit-sparkline-line-color-3',
-    'pad-edit-sparkline-max-label-color', 'pad-edit-sparkline-min-label-color',
-    'pad-edit-sparkline-ref-1-color', 'pad-edit-sparkline-ref-2-color', 'pad-edit-sparkline-ref-3-color'
-];
-var _BV_SPARK_NUM = ['pad-edit-sparkline-min', 'pad-edit-sparkline-max'];
-var _BV_BAR_COLOR = ['pad-edit-widget-bar-color', 'pad-edit-widget-bar-bg-color'];
-var _BV_BAR_NUM = ['pad-edit-widget-bar-min', 'pad-edit-widget-bar-max'];
 
 function _bvAttach(ids, opts) {
     for (var i = 0; i < ids.length; i++) {
@@ -659,15 +646,6 @@ function bindingInitStaticInputs() {
     var pageBg = document.getElementById('pad-edit-page-bg-color');
     if (pageBg) bindingAttachValidation(pageBg);
 
-    var wdb = document.getElementById('pad-edit-widget-data-binding');
-    if (wdb) bindingAttachValidation(wdb, { isWidgetBinding: true });
-
-    _bvAttach(_BV_SPARK_DATA, { isWidgetBinding: true });
-    _bvAttach(_BV_SPARK_COLOR);
-    _bvAttach(_BV_SPARK_NUM, { isWidgetBinding: true });
-    _bvAttach(_BV_BAR_COLOR);
-    _bvAttach(_BV_BAR_NUM, { isWidgetBinding: true });
-
     var wakeEl = document.getElementById('screen_saver_wake_binding');
     if (wakeEl) bindingAttachValidation(wakeEl);
 }
@@ -683,29 +661,9 @@ function bindingValidateDialog() {
     var wtype = document.getElementById('pad-edit-widget-type');
     var activeType = wtype ? wtype.value : '';
 
-    if (activeType === 'bar_chart') {
-        var wdb = document.getElementById('pad-edit-widget-data-binding');
-        if (wdb && wdb.value.trim() && !bindingValidateInput(wdb, { isWidgetBinding: true })) {
-            count++;
-            fieldIds.push(wdb.id);
-        }
-    }
-
-    if (activeType === 'sparkline') {
-        count += _bvCount(_BV_SPARK_DATA, { isWidgetBinding: true }, true, fieldIds);
-        count += _bvCount(_BV_SPARK_COLOR, null, true, fieldIds);
-        count += _bvCount(_BV_SPARK_NUM, { isWidgetBinding: true }, true, fieldIds);
-    }
-    if (activeType === 'bar_chart') {
-        count += _bvCount(_BV_BAR_COLOR, null, true, fieldIds);
-        count += _bvCount(_BV_BAR_NUM, { isWidgetBinding: true }, true, fieldIds);
-    }
-
-    // Validate binding-capable action fields (tap, long-press, numeric rocker adjustment)
     var actionPrefixes = [
         'pad-edit-action-0', 'pad-edit-action-1', 'pad-edit-action-2',
-        'pad-edit-lp-action-0', 'pad-edit-lp-action-1', 'pad-edit-lp-action-2',
-        'pad-edit-nr-adjust'
+        'pad-edit-lp-action-0', 'pad-edit-lp-action-1', 'pad-edit-lp-action-2'
     ];
     var editor = typeof padWidgetEditor === 'function' && padWidgetEditor(activeType);
     if (editor) actionPrefixes = actionPrefixes.filter(function(prefix) {
@@ -713,6 +671,7 @@ function bindingValidateDialog() {
         if (prefix.startsWith('pad-edit-lp-action-')) return editor.actions.longPress;
         return false;
     });
+    if (editor) actionPrefixes.push(...(editor.actions.prefixes || []));
     for (var ai = 0; ai < actionPrefixes.length; ai++) {
         var typeInput = document.getElementById(actionPrefixes[ai] + '-type');
         var actionSuffixes = typeof actionEditorBindingSuffixes === 'function'

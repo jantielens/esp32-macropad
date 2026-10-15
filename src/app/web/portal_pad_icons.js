@@ -216,7 +216,7 @@ function padIconTypeChanged() {
     if (posGroup) {
         var wt = document.getElementById('pad-edit-widget-type');
         const editor = wt && padWidgetEditor(wt.value);
-        var widgetOverrides = wt && (editor && editor.icon && editor.icon.fixedPosition || wt.value === 'bar_chart' || wt.value === 'sparkline');
+        var widgetOverrides = wt && editor && editor.icon && editor.icon.fixedPosition;
         posGroup.style.display = (type && !widgetOverrides) ? '' : 'none';
     }
     if (type === 'mi') padEnsureMaterialSymbols();
@@ -363,11 +363,6 @@ async function padUploadPageIcons(context) {
         const bottomReserve = btn.label_bottom ? labelH : 0;
         var iconW = fullW;
         var iconH = fullH - topReserve - bottomReserve;
-
-        // For bar chart widgets, icon only occupies the top half
-        if (btn.widget_type === 'bar_chart') {
-            iconH = Math.floor((fullH - topReserve - bottomReserve) / 2);
-        }
 
         const editor = padWidgetEditor(btn.widget_type);
         if (editor && editor.icon) {

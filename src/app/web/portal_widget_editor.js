@@ -9,6 +9,10 @@ function padWidgetEditor(type) {
     return padWidgetEditors.get(type);
 }
 
+function padWidgetActionPrefixes() {
+    return Array.from(padWidgetEditors.values()).flatMap(editor => editor.actions.prefixes || []);
+}
+
 function padWidgetEditorsLoad(button) {
     padWidgetEditors.forEach(editor => {
         const config = button.widget_type === editor.type ? button : {};
@@ -39,6 +43,7 @@ function padWidgetEditorBuild(button, editor) {
         else value = input.value.trim();
         if (value !== '') button[field.key] = value;
     });
+    if (editor.build) editor.build(button);
 }
 
 function padWidgetValidateField(input, field) {
@@ -80,7 +85,10 @@ function padWidgetEditorsInit(info) {
 }
 
 function padWidgetEditorsDispose() {
-    padWidgetEditors.forEach(editor => { editor.groups = []; });
+    padWidgetEditors.forEach(editor => {
+        if (editor.dispose) editor.dispose();
+        editor.groups = [];
+    });
 }
 
 function padWidgetEditorsRefresh(type) {
