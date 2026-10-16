@@ -94,19 +94,22 @@ Monochrome panels override it to `false`. `GET /api/config` advertises
 `epaper_supported_render_modes`; unsupported persisted modes normalize to the
 board default, and API writes reject unsupported modes.
 
-## FeatherS3D with Waveshare 7.8 HAT
+## Waveshare 7.8 Interactive
 
-The [board reference](../../src/boards/feathers3d-interactive/README.md)
+The [board reference](../../src/boards/waveshare-7.8-interactive/README.md)
 covers physical connections, button recovery, and flashing.
 
-Build `feathers3d-interactive` for the Unexpected Maker FeatherS3[D], with
+Build `waveshare-7.8-interactive` for the Unexpected Maker FeatherS3[D], with
 16 MB flash, 8 MB QSPI PSRAM, native USB CDC, and the Waveshare 7.8" IT8951
 HAT. This is an always-on, non-touch Macropad profile using normal pads and
 widgets, not the sleep-first E-Paper Frame lifecycle.
 
+The display-based target name does not change the FeatherS3[D] board
+definition or reference wiring; other ESP32 carriers need matching board settings.
+
 ```bash
 ./tools/install-custom-partitions.sh
-./build.sh feathers3d-interactive
+./build.sh waveshare-7.8-interactive
 ```
 
 The `ota_4mb_16MB_ext` layout provides two 4 MiB OTA application slots,

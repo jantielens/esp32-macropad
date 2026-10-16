@@ -15,12 +15,12 @@ appearance_macros = {
     "pixel_shift_distance_px": "DEFAULT_PIXEL_SHIFT_DISTANCE",
 }
 for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interactive", "ESP32S3"),
-                      ("feathers3d-interactive", "ESP32S3"),
+                      ("waveshare-7.8-interactive", "ESP32S3"),
                       ("inkplate6flick-interactive", "ESP32"), ("reterminal-e1003-interactive", "ESP32S3")):
     expected = dict(fixture["firmware_defaults"])
     if board != "m5stack-stopwatch":
         expected.update(fixture["epaper_firmware_defaults"])
-    if board in ("reterminal-e1003-interactive", "feathers3d-interactive"):
+    if board in ("reterminal-e1003-interactive", "waveshare-7.8-interactive"):
         expected.update(widget_series_color_2="#555555", widget_series_color_3="#888888",
                         widget_series_color_4="#AAAAAA", widget_track_color="#DDDDDD",
                         widget_tick_color="#555555", widget_zone_color="#888888", widget_reference_color="#555555")
@@ -73,7 +73,7 @@ subprocess.run(
     ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
      "-x", "c++", "-", "-I", str(root),
      "-I", str(root / "tests"),
-     "-I", str(root / "src/boards/feathers3d-interactive"),
+     "-I", str(root / "src/boards/waveshare-7.8-interactive"),
      "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
     input='''#include "src/app/board_config.h"
 #include "src/app/native_extension.h"
@@ -90,11 +90,11 @@ static_assert(EPAPER_CS_PIN == 10 && EPAPER_RESET_PIN == 38 && EPAPER_BUSY_PIN =
 static_assert(EPAPER_DEFAULT_VCOM_MV == 1530 && !IT8951_E1003_PROTOCOL, "Panel-specific standard HAT protocol");
 static_assert(IT8951_PANEL_POWER_PIN == -1 && IT8951_CONTROLLER_POWER_PIN == -1, "Externally powered HAT");
 #ifdef HW_BUTTON_DEFAULTS_JSON
-#error Feather button must have no default actions
+#error Waveshare HAT button must have no default actions
 #endif
 ''', text=True, check=True,
 )
-print("PASS: feathers3d-interactive")
+print("PASS: waveshare-7.8-interactive")
 with tempfile.TemporaryDirectory() as directory:
     executable = pathlib.Path(directory) / "button-defaults"
     subprocess.run(

@@ -34,7 +34,6 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | esp32-p4-lcd4b | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
 | esp32-p4-lcd4b-voice | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
 | esp32c3-withsensors | ? | ? | ? | ?×? | ? | none |  |
-| feathers3d-interactive | IT8951 | IT8951 | SPI | 1872×1404 | 2 | none |  |
 | firebeetle2-esp32c6-aht10 | ? | ? | ? | ?×? | ? | none |  |
 | inkplate5v2-frame | ? | ? | ? | ?×? | ? | none |  |
 | inkplate6flick-frame | ? | ? | ? | ?×? | ? | none |  |
@@ -54,6 +53,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | m5stack-stopwatch | ARDUINO_GFX_CO5300 | CO5300 | QSPI | 466×466 | 0 | CST820B |  |
 | reterminal-e1003-frame | ? | ? | ? | ?×? | ? | none |  |
 | reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | SPI | 1872×1404 | 1 | GT911 |  |
+| waveshare-7.8-interactive | IT8951 | IT8951 | SPI | 1872×1404 | 2 | none |  |
 
 <!-- BOARD_DRIVER_TABLE_END -->
 

@@ -412,7 +412,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 | board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_DISPLAY | HAS_DISPLAY_DIAGNOSTICS | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_GRAYSCALE | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_FILESYSTEM | HAS_FREETYPE_FONTS | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_TTF_FONTS | HAS_USB_HID |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| feathers3d-interactive |  |  |  |  |  | ✅ | ✅ |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ✅ | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
+| waveshare-7.8-interactive |  |  |  |  |  | ✅ | ✅ |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ✅ | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
 | crowpanel-4.2-interactive |  |  |  |  |  |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ |  |  | ✅ | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
 | esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
@@ -444,7 +444,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 | board-name | AUDIO_OUTPUT_DRIVER | CAMERA_DRIVER | DISPLAY_DRIVER | TOUCH_DRIVER |
 | --- | --- | --- | --- | --- |
-| feathers3d-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_IT8951 | — |
+| waveshare-7.8-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_IT8951 | — |
 | crowpanel-4.2-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_CROWPANEL_42 | — |
 | esp32-4848S040 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
 | jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |

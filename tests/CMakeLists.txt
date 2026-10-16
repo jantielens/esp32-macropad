@@ -77,7 +77,7 @@ add_host_legacy_test(test_crowpanel_epaper_driver
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
-foreach(board feathers3d-interactive reterminal-e1003-interactive)
+foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
   foreach(diagnostics 0 1)
     set(diagnostic_suffix "")
     if(diagnostics)

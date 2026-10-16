@@ -301,14 +301,14 @@ controller reads so a one-shot report cannot be consumed by another observer.
 
 ### IT8951 Interactive E-Paper
 
-`feathers3d-interactive` and `reterminal-e1003-interactive` share
+`waveshare-7.8-interactive` and `reterminal-e1003-interactive` share
 `drivers/it8951_epaper_driver.cpp`, selected by `DISPLAY_DRIVER_IT8951`.
 `DISPLAY_DRIVER_RETERMINAL_E1003` remains an alias for compatibility.
-The Feather uses the standard Waveshare HAT protocol, externally supplied
+The Waveshare profile uses FeatherS3[D] reference wiring, the standard HAT protocol, externally supplied
 5 V, SPI GPIO36/35/37, CS10, RESET38, HRDY5, and default VCOM -1.53 V. It has no touch.
 Its single GPIO14 button has configurable tap/hold actions without defaults.
 The board uses landscape rotation 2. See the
-[Feather profile](interactive-epaper.md#feathers3d-with-waveshare-78-hat)
+[Waveshare profile](interactive-epaper.md#waveshare-78-interactive)
 for wiring, startup provenance, and hardware acceptance checks.
 
 The E1003 override sets `IT8951_E1003_PROTOCOL=true` and retains its original

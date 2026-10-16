@@ -45,7 +45,7 @@ buttons. Physical touch hardware is not necessarily enabled in Frame firmware.
 | reTerminal E1003, Frame           | [`reterminal-e1003-frame`](../../src/boards/reterminal-e1003-frame/README.md)               |
 | reTerminal E1003, Interactive     | [`reterminal-e1003-interactive`](../../src/boards/reterminal-e1003-interactive/README.md)   |
 | CrowPanel 4.2-inch, Interactive   | [`crowpanel-4.2-interactive`](../../src/boards/crowpanel-4.2-interactive/README.md)         |
-| FeatherS3[D] + Waveshare 7.8-inch HAT, Interactive | [`feathers3d-interactive`](../../src/boards/feathers3d-interactive/README.md) |
+| Waveshare 7.8-inch HAT, Interactive (FeatherS3[D] wiring) | [`waveshare-7.8-interactive`](../../src/boards/waveshare-7.8-interactive/README.md) |
 
 ## Specialized devices
 

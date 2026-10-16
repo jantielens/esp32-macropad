@@ -1,12 +1,16 @@
 ---
-title: FeatherS3[D] Interactive E-Paper
-description: Wiring, power, button configuration, render modes, and flashing requirements for FeatherS3[D] with the Waveshare 7.8-inch IT8951 HAT.
+title: Waveshare 7.8-inch Interactive E-Paper
+description: Wiring, power, button configuration, render modes, and flashing requirements for the Waveshare 7.8-inch IT8951 HAT with FeatherS3[D] reference wiring.
 ---
 
-Target `feathers3d-interactive` pairs an Unexpected Maker FeatherS3[D]
+Target `waveshare-7.8-interactive` pairs an Unexpected Maker FeatherS3[D]
 (ESP32-S3, 16 MB flash, 8 MB QSPI PSRAM) with the Waveshare 7.8-inch
 1872 x 1404 IT8951 e-paper HAT. It runs existing pads and widgets in
 landscape, with no touch or frontlight.
+
+The target is named for the display assembly, but its firmware still uses
+the FeatherS3[D] board definition and GPIO mapping below. It is not a generic
+binary for arbitrary ESP32 boards.
 
 This is always-on interactive Macropad firmware, not the sleep-first
 E-Paper Frame. Use the HAT with its IT8951 controller, not a raw panel
@@ -88,7 +92,7 @@ Build from the repository root:
 
 ```bash
 ./tools/install-custom-partitions.sh
-./build.sh feathers3d-interactive
+./build.sh waveshare-7.8-interactive
 ```
 
 The target uses the native `esp32:esp32:um_feathers3` board definition,
@@ -125,7 +129,7 @@ A firmware-only OTA does not replace the partition table.
 * [Waveshare 7.8-inch e-Paper HAT guide](https://www.waveshare.com/wiki/7.8inch_e-Paper_HAT)
 * [Firmware assignments](board_overrides.h)
 * [Build and partition selections](../../../config.sh)
-* [Interactive e-paper implementation and bring-up](../../../docs/dev/interactive-epaper.md#feathers3d-with-waveshare-78-hat)
+* [Interactive e-paper implementation and bring-up](../../../docs/dev/interactive-epaper.md#waveshare-78-interactive)
 * [Shared IT8951 display driver](../../app/drivers/it8951_epaper_driver.cpp)
 * [Native Extensions](../../../docs/dev/extensions.md)
 * [Hardware index](../../../docs/user/hardware.md)

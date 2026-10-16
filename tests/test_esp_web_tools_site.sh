@@ -55,11 +55,12 @@ BUILD_DIR="$TMP_DIR/build" \
 
 test -f "$TMP_DIR/site/manifests/esp32-p4-lcd4b-voice.json"
 test -f "$TMP_DIR/site/manifests/m5stack-stopwatch.json"
-test -f "$TMP_DIR/site/manifests/feathers3d-interactive.json"
+test -f "$TMP_DIR/site/manifests/waveshare-7.8-interactive.json"
 jq -e '.capabilities | index("extensions") != null' \
-    "$PROJECT_DIR/src/boards/feathers3d-interactive/metadata.json" >/dev/null
+    "$PROJECT_DIR/src/boards/waveshare-7.8-interactive/metadata.json" >/dev/null
 jq -e '.builds[0].chipFamily == "ESP32-S3" and .builds[0].parts[0].offset == 0' \
-    "$TMP_DIR/site/manifests/feathers3d-interactive.json" >/dev/null
+    "$TMP_DIR/site/manifests/waveshare-7.8-interactive.json" >/dev/null
+grep -Fq 'Waveshare 7.8-inch Interactive E-Paper' "$TMP_DIR/site/devices/macropad.html"
 jq -e '.builds[0].chipFamily == "ESP32-S3"' \
     "$TMP_DIR/site/manifests/m5stack-stopwatch.json" >/dev/null
 grep -q 'M5Stack StopWatch' "$TMP_DIR/site/devices/macropad.html"
@@ -131,8 +132,8 @@ grep -q 'data-board="inkplate6flick-frame".*data-class="epaper_frame"' "$TMP_DIR
 grep -q 'data-board="inkplate6flick-interactive".*data-class="macropad"' "$TMP_DIR/site/flash.html"
 grep -q 'data-board="reterminal-e1003-frame".*data-class="epaper_frame"' "$TMP_DIR/site/flash.html"
 grep -q 'data-board="reterminal-e1003-interactive".*data-class="macropad"' "$TMP_DIR/site/flash.html"
-grep -q 'data-board="feathers3d-interactive".*data-class="macropad"' "$TMP_DIR/site/flash.html"
-grep -q '../flash.html?board=feathers3d-interactive' "$TMP_DIR/site/devices/macropad.html"
+grep -q 'data-board="waveshare-7.8-interactive".*data-class="macropad"' "$TMP_DIR/site/flash.html"
+grep -q '../flash.html?board=waveshare-7.8-interactive' "$TMP_DIR/site/devices/macropad.html"
 grep -q 'ESP32-MP E-Paper Frame Inkplate6Flick Frame' "$TMP_DIR/site/devices/epaper_frame.html"
 grep -q '../flash.html?board=inkplate6flick-interactive' "$TMP_DIR/site/devices/macropad.html"
 grep -q '../flash.html?board=jc4880p433-hx711' "$TMP_DIR/site/devices/coffee_scale.html"

@@ -87,7 +87,7 @@ After adding or changing partition schemes, run:
 
 After changing the partition table, the **first flash should be done over serial (USB)**. OTA updates will work normally afterwards once the correct partition table is on the device.
 
-ESP32-4848S040, JC3248W535, and FeatherS3[D] Interactive use
+ESP32-4848S040, JC3248W535, and Waveshare 7.8-inch Interactive E-Paper use
 `ota_4mb_16MB_ext`: two 4 MiB OTA app slots,
 256 KiB for native Extensions, and 7.625 MiB of filesystem storage within
 their 16 MiB flash.
@@ -98,7 +98,7 @@ Extension packages before a full serial flash. The storage and Extensions
 offsets change, so their contents must be reinitialized and restored; a
 firmware-only OTA update cannot install the new partition table.
 
-FeatherS3[D] Interactive enables the three native Extension slots with this
+Waveshare 7.8-inch Interactive E-Paper enables the three native Extension slots with this
 layout (56 KiB, 56 KiB, and 120 KiB usable ELF capacity). Its earlier
 `default_16MB` layout had two 6.25 MiB app slots and no Extensions partition.
 Back up settings and files before a full USB flash, then initialize the new

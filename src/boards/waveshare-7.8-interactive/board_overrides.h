@@ -1,6 +1,6 @@
 #pragma once
 
-// Unexpected Maker FeatherS3[D] with externally powered Waveshare 7.8" IT8951 HAT.
+// Waveshare 7.8" IT8951 HAT, externally powered, with FeatherS3[D] reference wiring.
 #define HAS_DISPLAY true
 #define HAS_TOUCH false
 #define HAS_EPAPER_PANEL true

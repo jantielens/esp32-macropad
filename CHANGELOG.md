@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Add the FeatherS3[D] interactive board with an externally powered Waveshare
-  7.8-inch IT8951 e-paper HAT, grayscale and black/white rendering, partial
+* Add the Waveshare 7.8-inch Interactive E-Paper board with an externally powered
+  IT8951 e-paper HAT, FeatherS3[D] reference wiring, grayscale and black/white rendering, partial
   updates, a physical button, and three native Extension slots.
 * Configure panel VCOM in Interactive E-Paper's advanced settings using
   negative volts, with changes applied after restart by supporting drivers.
@@ -41,8 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Rename the interactive Waveshare 7.8-inch board target to
+  `waveshare-7.8-interactive`. Build commands and installer links use the new
+  name; FeatherS3[D] hardware settings and wiring are unchanged.
 * Speed up IT8951 framebuffer conversion with exact RGB565 lookup tables and
-  packed-row writes. Increase the FeatherS3[D] LVGL draw buffer from 4 to 32
+  packed-row writes. Increase the Waveshare 7.8-inch profile's LVGL draw buffer from 4 to 32
   lines to reduce flush overhead.
 * Avoid sparkline redraws when generated points, colors, reference lines, and
   marker labels are unchanged, including duplicate label refreshes in one poll.
