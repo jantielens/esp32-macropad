@@ -36,7 +36,7 @@
       "buttons": [
         {"col": 0, "row": 0, "col_span": 2, "label_top": "Living Room", "label_center": "[pad:temperature]", "label_bottom": "Temperature", "bg_color": "#166b64"},
         {"col": 2, "row": 0, "label_center": "Lights", "icon_id": "mi_lightbulb", "bg_color": "#bd8b21", "actions": [{"type": "mqtt", "topic": "home/living/light/set", "payload": "TOGGLE"}], "lp_actions": [{"type": "screen", "target": "pad_2"}]},
-        {"col": 3, "row": 0, "label_top": "Evening", "label_center": "Scene", "confirm": true, "confirm_text": "Activate the evening scene?", "actions": [{"type": "mqtt", "topic": "home/scene/set", "payload": "evening"}, {"type": "delay", "duration_ms": "500"}, {"type": "notify", "text": "Evening scene activated"}]},
+        {"col": 3, "row": 0, "label_top": "Evening", "label_center": "Scene", "actions": [{"type": "confirm", "message": "Activate the evening scene?", "approve_text": "Activate", "cancel_text": "Cancel", "timeout_ms": 10000}, {"type": "mqtt", "topic": "home/scene/set", "payload": "evening"}, {"type": "notify", "message": "Evening scene activated", "duration_ms": 3000}]},
         {"col": 0, "row": 1, "col_span": 2, "row_span": 2, "widget_type": "gauge", "label_top": "Humidity", "widget_gauge_min": "0", "widget_gauge_max": "100", "widget_data_binding": "[mqtt:home/living/humidity]", "bg_color": "#273641"},
         {"col": 2, "row": 1, "label_center": "Music", "icon_id": "mi_music_note", "actions": [{"type": "screen", "target": "pad_2"}]},
         {"col": 3, "row": 2, "label_center": "Next", "icon_id": "mi_arrow_forward", "actions": [{"type": "screen", "target": "pad_1"}]}
@@ -98,6 +98,7 @@
     {"type": "mqtt", "group": "Connectivity", "label": "Publish MQTT message"},
     {"type": "ha_service", "group": "Connectivity", "label": "Call Home Assistant service"},
     {"type": "notify", "group": "Display", "label": "Show notification"},
+    {"type": "confirm", "group": "Display", "label": "Ask for confirmation", "pausable": true},
     {"type": "brightness", "group": "Display", "label": "Brightness", "commands": [{"id": "set", "label": "Set brightness"}, {"id": "adjust", "label": "Adjust brightness"}], "editor_fields": [{"name": "brightness_mode", "label": "Command", "type": "select", "command_options": true}, {"name": "brightness_value", "label": "Value (%)", "type": "text", "bindable": true}]},
     {"type": "visual_alert", "group": "Display", "label": "Visual alert", "commands": [{"id": "start", "label": "Start alert"}, {"id": "stop", "label": "Stop alert"}]},
     {"type": "timer", "group": "Timer", "label": "Timer", "commands": [{"id": "toggle", "label": "Toggle"}, {"id": "start", "label": "Start"}, {"id": "stop", "label": "Stop"}, {"id": "pause", "label": "Pause"}, {"id": "resume", "label": "Resume"}, {"id": "reset", "label": "Reset"}, {"id": "set", "label": "Set countdown"}, {"id": "adjust", "label": "Adjust countdown"}]},

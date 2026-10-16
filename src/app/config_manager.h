@@ -25,6 +25,9 @@
 #include "camera_motion.h"
 #endif
 #include "camera.h"
+#if HAS_DISPLAY
+#include "dialog_appearance.h"
+#endif
 
 // Maximum string lengths
 #define CONFIG_SSID_MAX_LEN 32
@@ -85,6 +88,9 @@ struct EpaperRefreshSettings {
 #endif
 
 struct DeviceConfig {
+#if HAS_DISPLAY
+		DialogTemplates dialog_appearance;
+#endif
 		// WiFi credentials
 		char wifi_ssid[CONFIG_SSID_MAX_LEN];
 		char wifi_password[CONFIG_PASSWORD_MAX_LEN];

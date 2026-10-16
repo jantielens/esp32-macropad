@@ -10,6 +10,8 @@ static bool display_locked = false;
 static unsigned lock_count = 0;
 static unsigned resolved_count = 0;
 static bool has_binding = false;
+static bool resolution_ok = true;
+static unsigned network_calls = 0;
 void display_manager_lock_if_needed(bool* locked) {
     *locked = !display_locked;
     if (*locked) { display_locked = true; ++lock_count; }
@@ -23,6 +25,7 @@ static ActionResult ui_dispatch(const ButtonAction&, const char*, uint32_t) {
 static ActionResult network_dispatch(const ButtonAction&, const char*, uint32_t) {
     assert(!display_locked);
     assert(action_dispatch_context().synchronous);
+    ++network_calls;
     return ACTION_COMPLETE;
 }
 static const ActionTypeDef ui_type{"screen", nullptr, nullptr, ui_dispatch, nullptr, nullptr,
@@ -36,7 +39,7 @@ bool action_type_has_binding(const ActionTypeDef*, const ButtonAction&) { return
 bool action_type_resolve_bindings(const ActionTypeDef*, ButtonAction&) {
     assert(display_locked);
     ++resolved_count;
-    return true;
+    return resolution_ok;
 }
 void action_type_collect_topics(const ActionTypeDef*, const ButtonAction&, void*) {}
 void ha_service_execute() {}
@@ -60,5 +63,9 @@ int main() {
     assert(action_dispatch_synchronous(action, "Alarm", nullptr, 0) == ACTION_COMPLETE);
     assert(resolved_count == 1 && lock_count == 2 && !display_locked);
     assert(!action_dispatch_context().synchronous);
+    resolution_ok = false;
+    const unsigned dispatched = network_calls;
+    assert(action_dispatch_synchronous(action, "Failed binding", nullptr, 0) == ACTION_FAILED);
+    assert(network_calls == dispatched && !display_locked);
     std::puts("alarm dispatch locks: PASS");
 }

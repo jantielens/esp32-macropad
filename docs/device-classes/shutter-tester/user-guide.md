@@ -506,7 +506,7 @@ Payload schema:
 ```json
 {
   "save_start_actions": [
-    {"type": "notify", "notify_text": "Saving session…", "notify_duration_ms": 1500}
+    {"type": "notify", "message": "Saving session…", "duration_ms": 1500}
   ],
   "save_complete_actions": [
     {"type": "sound_alert", "sound_alert_kind": "tone", "sound_alert_pattern": "100", "sound_alert_volume": 50},

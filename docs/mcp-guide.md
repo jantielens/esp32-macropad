@@ -252,7 +252,13 @@ graph LR
   coordinates. Inspect a fresh screenshot in a browser first. Success means the
   tap was queued, not delivered; it can wait for physical touch release or
   screen-saver wake.
-- `notify` — show a message bubble on the screen (empty text dismisses it).
+- `notify` — show a modal notification using the device-wide notification template. `text` fits 191 UTF-8 bytes; empty text dismisses a notification. `duration_ms` is 1000–300000 or 0 for persistent (default 3000). No styling overrides. Successfully replacing a confirmation permanently cancels its waiting sequence.
+
+`press_button` does not bypass `confirm` actions. Approval resumes the remaining
+actions once on their originating task; cancel, timeout, replacement, or failure
+stops the waiting list. Its response means dispatch started, not that a dialog
+was approved or the sequence completed. Lists containing confirmation use normal
+continuations and do not provide tracked Home Assistant execution results.
 - `visual_alert` — raise (`op:start`) or clear (`op:stop`) a full-screen pulsing
   color overlay as an ambient alarm: bindable `color` (default red), `pattern`
   (`breathe`/`blink`/`solid`), `period_ms`, `intensity` (1-100), and `duration_ms`

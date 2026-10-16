@@ -1,11 +1,27 @@
 const assert = require('node:assert/strict');
 const {execFileSync} = require('node:child_process');
 const path = require('node:path');
+const os = require('node:os');
 const vm = require('node:vm');
 const zlib = require('node:zlib');
 
 const root = path.resolve(__dirname, '..');
 const fs = require('node:fs');
+const nativeDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dialog-gates-'));
+try {
+    for (const buttons of [0, 1]) {
+        for (const module of ['device_dialog.cpp', 'dialog_appearance.cpp', 'actions/notify_action.cpp', 'actions/confirm_action.cpp']) {
+            const object = path.join(nativeDirectory, 'module.o');
+            execFileSync('c++', ['-std=c++17', '-c', 'src/app/' + module, '-o', object,
+                '-DBOARD_CONFIG_H', '-DHAS_DISPLAY=0', '-DHAS_BUTTON=' + buttons,
+                '-Itests', '-Isrc/app'], {cwd: root, stdio: 'pipe'});
+            assert.equal(execFileSync('nm', ['--defined-only', object], {encoding: 'utf8'}).trim(), '',
+                module + ' must emit no code or data without a display (HAS_BUTTON=' + buttons + ')');
+        }
+    }
+} finally {
+    fs.rmSync(nativeDirectory, {recursive: true, force: true});
+}
 const widgets = JSON.parse(fs.readFileSync(path.join(root, 'src/app/widgets/manifest.json'), 'utf8'));
 const expanded = execFileSync('python3', ['tools/widget_manifest.py', '--bundle', 'src/app/web/portal.js.bundle'],
     {cwd: root, encoding: 'utf8'});
@@ -39,6 +55,11 @@ for (const [board, target, psram] of [['esp32c3-withsensors', 'ESP32C3', false],
     assert(js.includes('function uploadFirmware('), 'HTML upload callback was removed');
     assert(js.includes('function saveFragmentConfig('), 'Fragment save callback was removed');
     const display = board === 'esp32-p4-lcd4b';
+    assert.equal(assets.has('dialog_appearance_fragment_html_gz'), display);
+    assert.equal(js.includes('init_dialog_appearance_fragment'), display);
+    const css = assets.get('portal_all_css_gz');
+    assert(css, 'Main stylesheet must be selected');
+    assert.equal(css.includes('.dialog-appearance-layout'), display);
     assert.equal(assets.has('fonts_fragment_html_gz'), display && psram);
     assert.equal(assets.has('portal_fonts_js_gz'), display && psram);
     if (display && psram) {

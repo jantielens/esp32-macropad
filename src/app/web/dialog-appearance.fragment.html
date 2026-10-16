@@ -1,0 +1,24 @@
+<div class="section-header">
+    <h2><span class="portal-icon" aria-hidden="true">chat</span>Dialog appearance</h2>
+</div>
+<div id="dialog-appearance-section">
+    <p class="text-muted">These settings control the look of the Notification and Confirmation actions on your pads.
+        For example, show "Scene activated" after changing the lights, or ask "Restart the device?" before continuing with a restart action.
+        Each appearance is shared by all actions of that type. Set the message, timing, and confirmation button captions in the action editor.</p>
+    <p id="dialog-appearance-status" role="status"></p>
+    <form id="dialog-appearance-form">
+        <div id="dialog-appearance-editors">
+            <section class="card mb-3 dialog-appearance-editor" data-dialog-editor="notification" aria-labelledby="dialog-notification-heading">
+                <div class="card-header"><h5 class="mb-0" id="dialog-notification-heading">Notification appearance</h5></div>
+                <div class="card-body"></div>
+            </section>
+            <section class="card mb-3 dialog-appearance-editor" data-dialog-editor="confirmation" aria-labelledby="dialog-confirmation-heading">
+                <div class="card-header"><h5 class="mb-0" id="dialog-confirmation-heading">Confirmation appearance</h5></div>
+                <div class="card-body"></div>
+            </section>
+        </div>
+        <div class="save-bar">
+            <button type="submit" class="btn btn-primary btn-sm" id="dialog-appearance-save" disabled>Save dialog appearance</button>
+        </div>
+    </form>
+</div>

@@ -42,7 +42,7 @@ assert.strictEqual(catalog.recipes[0].layout.buttons[0].actions[0].timer_command
 assert.strictEqual(catalog.recipes[0].layout.buttons[0].lp_actions[0].timer_command, 'reset');
 assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].type, 'sound_alert');
 assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[0].sound_alert_pattern, '880:200;0:100;880:200');
-assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[1].notify_text, 'Focus session complete');
+assert.strictEqual(catalog.recipes[0].provision.components.timers['1'].expire_actions[1].message, 'Focus session complete');
 
 const energyRecipe = catalog.recipes.find(recipe => recipe.id === 'home-energy');
 const energy = context.recipeExpand(energyRecipe, {
@@ -59,7 +59,8 @@ assert.strictEqual(energyRecipe.parameters[0].description, 'MQTT value for impor
 assert.strictEqual(context.recipeImpactSummary(energyRecipe), 'Adds 5 buttons | needs a 3x4 free area | adds 3 named bindings');
 const clockRecipe = catalog.recipes.find(recipe => recipe.id === 'alarm-clock');
 assert.strictEqual(clockRecipe.layout.buttons[0].fg_color, '333333');
-assert.strictEqual(clockRecipe.layout.buttons[2].confirm, true);
+assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].type, 'confirm');
+assert.strictEqual(clockRecipe.layout.buttons[2].actions[0].message, 'Dismiss the alarm?');
 assert.strictEqual(clockRecipe.layout.buttons[2].label_bottom, 'Dismiss alarm');
 assert.strictEqual(clockRecipe.provision.components.alarms['1'].enabled, false);
 assert.strictEqual(clockRecipe.provision.components.alarms['1'].hour, undefined);

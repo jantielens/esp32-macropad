@@ -24,10 +24,16 @@ inline int fill_geometry_clamp(int value, int minimum, int maximum) {
     return value < minimum ? minimum : value > maximum ? maximum : value;
 }
 
-inline FillPattern fill_pattern_parse(const char* name) {
+inline const char* fill_pattern_name(FillPattern pattern) {
     const char* names[] = {"none", "diagonal", "reverse_diagonal", "crosshatch", "dots", "checkerboard"};
+    const unsigned index = static_cast<unsigned>(pattern);
+    return index < 6 ? names[index] : names[0];
+}
+
+inline FillPattern fill_pattern_parse(const char* name) {
     for (unsigned index = 0; index < 6; ++index) {
-        if (name && strcmp(name, names[index]) == 0) return static_cast<FillPattern>(index);
+        if (name && strcmp(name, fill_pattern_name(static_cast<FillPattern>(index))) == 0)
+            return static_cast<FillPattern>(index);
     }
     return FillPattern::None;
 }

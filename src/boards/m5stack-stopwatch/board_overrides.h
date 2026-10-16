@@ -17,7 +17,7 @@
 // Board-local action module compiled through the action aggregator.
 #define BOARD_ACTION_SOURCE "stopwatch_actions.cpp"
 // Room for the built-in catalog and four board-local actions.
-#define ACTION_TYPE_REGISTRY_MAX_TYPES 28
+#define ACTION_TYPE_REGISTRY_MAX_TYPES 29
 #ifndef STOPWATCH_CHARGING_MODE
 // StopWatch boot charging: 0 off, 1 low (185 mA), 2 high (425 mA).
 #define STOPWATCH_CHARGING_MODE 1

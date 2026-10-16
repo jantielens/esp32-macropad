@@ -611,11 +611,9 @@ Each gesture always shows three fixed action slots. An unused slot is collapsed 
 
 The action-type dropdown groups every available action by category (**Navigation**, **Connectivity**, **BLE**, **Audio**, **Display**, **Timer**, **Device**, and any enabled device class). A short breadcrumb above the fields confirms the selected group and type, such as `Audio / Music`. A type with more than one operation shows a **Command** selector below it; Shutter Tester additionally shows a **Command family** selector before its **Command** selector. Only action types the current firmware build actually supports appear in the list.
 
-Under **Action Safety**, enable **Confirm before tap or long-press actions** to show a modal prompt before either action list runs. You can provide a custom confirmation message or leave it empty to generate one from the button label. **Confirm** runs the complete action list in order; **Cancel** or 10 seconds without a response runs none of the actions.
+Insert a **Confirmation** action before work that needs approval. Earlier actions run immediately; approval resumes only the remaining actions, once, on the originating task. Cancel, timeout, replacement, or a failed action stops that list. The three-action limit includes the confirmation itself. MCP `press_button` uses the same continuation path and does not bypass confirmation.
 
-Confirmation applies to normal buttons only. Widget-owned interactions, including list items, rocker zones, and numeric rocker adjustments, dispatch without this prompt.
-
-Programmatic activation through the MCP `press_button` tool also bypasses the on-device prompt. MCP clients should inspect a confirmation-protected button before activating it.
+Confirmation has a message, literal approve/cancel captions, and a timeout of **1–300 seconds** or **No timeout**. Messages allow line breaks and bindings resolved once when executed. A failed or overflowing binding stops the sequence. Messages hold up to 191 UTF-8 bytes; each caption holds up to 27 UTF-8 bytes. A confirmation without usable touch or configured physical navigation is rejected.
 
 **Action types:**
 
@@ -632,7 +630,8 @@ Programmatic activation through the MCP `press_button` tool also bypasses the on
 | Audio | **Play sound alert** | Play a **Tone Alert** from a beep pattern (for example, `1000:200 100 1000:200`) or an **MP3 Alert** from an uploaded sound file. Both accept an optional volume override; the tone pattern supports binding templates. ESP32-P4 boards only. |
 | Audio | **Volume** | Command: Set volume to an absolute value (0–100), or Adjust volume by a signed delta (e.g. `10`, `-10`, or `{step}` for numeric rocker). The value field supports binding templates. ESP32-P4 boards only. |
 | Display | **Brightness** | Command: Set brightness to an absolute value (5–100), or Adjust brightness by a signed delta (e.g. `10`, `-10`, or `{step}`). The value field supports binding templates. Session-only, resets on reboot. |
-| Display | **Show notification** | Display a floating message bubble on the screen. Configure text, duration, colors, opacity, font size, and location. All text and color fields support bindings. See [Notification Action](#notification-action) below. |
+| Display | **Show notification** | Show a modal message for 1–300 seconds or persistently, using the device-wide notification appearance. Does not pause the list. See [Notification Action](#notification-action). |
+| Display | **Ask for confirmation** | Pause remaining actions until approval. Message, timeout, and literal captions only; styling comes from the confirmation appearance. |
 | Display | **Visual alert** | Command: Start or Stop a full-screen pulsing color overlay used as an ambient alarm. Configure the color (bindable), pattern (breathe/blink/solid), period, intensity, and duration. ESP32-P4 boards only. See [Visual Alert Action](#visual-alert-action) below. |
 | Timer | **Timer** | Command: Toggle, Start, Stop, Pause, Resume, Reset, Set countdown, or Adjust countdown, on one of 3 independent timers. Start and Toggle select stopwatch or countdown mode; countdown duration, Set, and Adjust values support binding templates. See [Timer Actions](#timer-actions) below. |
 | Timer | **Delay** | Pause the current action list for a whole-number duration from 1 to 55,000 ms, then continue with the next action. By default, up to three pausable actions can be pending device-wide at a time. The duration is not bindable. |
@@ -881,29 +880,40 @@ On the **Timers** page, configure up to three expiry actions for each timer slot
 
 ### Notification Action
 
-The **Show notification** action displays a floating message bubble on the device screen — useful for confirmations, alerts, or status messages triggered by button presses or automations.
+The **Show notification** action displays a modal notification without pausing its action list. Both dialog types block underlying pad input, even with a transparent backdrop.
 
 **Fields:**
 
 | Field | Description |
 |-------|-------------|
-| **Message** | The notification text. Supports binding templates (e.g., `Power: [mqtt:home/solar/power;$.power;%.0f]W`). Empty message dismisses the active notification. |
-| **Duration (ms)** | How long the bubble stays visible. Default `3000` (3 seconds). Set to `0` for a persistent notification that stays until tapped. Supports bindings. |
-| **Text Color** | Hex color for the message text (default `#ffffff`). Supports bindings. |
-| **Background Color** | Hex color for the bubble background (default `#333333`). Supports bindings. |
-| **Border Color** | Hex color for the bubble border. Leave empty for no border. Supports bindings. |
-| **Opacity (%)** | Background opacity, 0–100 (default 85). |
-| **Font Size** | Explicit font size (12/14/18/24/32/36/48). Leave at 0 for auto — uses the same scale-tier font as button center labels. |
-| **Location** | Where the bubble appears: **Bottom** (default), **Center**, or **Top**. |
+| **Message** | Required text, up to 191 UTF-8 bytes, including line breaks and bindings resolved once at execution. |
+| **Duration** | 1–300 seconds, default 3 seconds, or Persistent. Stored as `duration_ms`; `0` means persistent. Timing is literal, not a binding. |
 
-The bubble fades in over 200 ms, displays for the configured duration, then fades out. Tap anywhere on the bubble to dismiss it immediately. A new notification replaces the active one.
+Tap a notification or use physical Tap to dismiss it without activating the pad underneath. The newest successfully displayed dialog replaces any previous notification or confirmation; replacing a confirmation permanently cancels its waiting sequence. A failed replacement preserves the existing dialog. Screen transitions, display teardown, and OTA dismiss dialogs and cancel waiting confirmations.
 
-**Example: confirmation bubble on MQTT publish**
+Under **Pads → Dialog appearance**, edit the single notification template and the single confirmation template in their own sections. All font, color, opacity, border, spacing, alignment, size, position, and confirmation button styling belongs there—not in actions. Changes apply to the next dialog. Browser previews update immediately using fixed sample messages and captions.
+
+Each section's **Test now** displays its fixed sample on the device for up to
+10 seconds using your current, unsaved appearance. It does not save settings or
+run follow-up actions, even when the sample confirmation is approved. A
+successfully displayed test replaces the current dialog and cancels any waiting
+confirmation; a failed test preserves it. **Save dialog appearance** persists
+both templates.
+
+The background color picker includes optional patterns, a literal pattern
+color, spacing (2-64 px), and thickness (1-8 px, no larger than spacing).
+Background opacity applies to the base color and pattern together, including
+fully transparent backgrounds at 0%. Pattern styling is captured when the dialog
+opens and is shared by all actions of that dialog type. TTF font sizes accept
+any whole number from 8 to 96 px; an empty size uses Automatic. Built-in fonts
+use the compiled-size dropdown.
+
+**Example: notification after MQTT publish**
 - **Tap action 1**: Publish MQTT message → topic: `home/lights/toggle`, payload: `ON`
 - **Tap action 2**: Show notification → message: `Lights toggled!`, duration: `2000`
 
 **Example: persistent alert from binding**
-- **Tap action 1**: Show notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, duration: `0`, bg_color: `#1a3a1a`, location: `center`
+- **Tap action 1**: Show notification → message: `Power: [mqtt:home/solar/power;$.power;%.0f]W`, Persistent enabled
 
 > **Home Assistant integration**: Notifications can also be triggered remotely via the **Notify** text entity. See the [Home Assistant Integration Guide](ha-integration-guide.md#notifications) for details and automation examples.
 

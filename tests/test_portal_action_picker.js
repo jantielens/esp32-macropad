@@ -123,6 +123,7 @@ const FIXTURE_CATALOG = [
 
 const context = {
     console,
+    TextEncoder,
     document,
     deviceInfoCache: { catalog: FIXTURE_CATALOG },
     listInjectSyntheticScreenOption() {},
@@ -401,7 +402,9 @@ const roundTrips = [
     {type:'sound_alert', sound_alert_kind:'tone', sound_alert_pattern:'1000:200 100', sound_alert_volume:50},
     {type:'sound_alert', sound_alert_kind:'mp3', sound_alert_file:'missing-sound', sound_alert_volume:60},
     {type:'sound_alert', sound_alert_kind:'stop'},
-    {type:'notify', notify_text:'[mqtt:message]', notify_duration_ms:'0', notify_location:'center', notify_opacity:75, notify_font_size:20},
+    {type:'notify', message:'[mqtt:message]\nSecond line', duration_ms:0},
+    {type:'confirm', message:'Continue?', approve_text:'Yes', cancel_text:'No', timeout_ms:300000},
+    {type:'confirm', message:'No deadline', approve_text:'Continue', cancel_text:'Cancel', timeout_ms:0},
     {type:'visual_alert', op:'stop', pattern:'blink', period_ms:900, intensity:75, duration_ms:5000},
     {type:'timer', timer_id:2, timer_command:'adjust', timer_value:'{step}'},
     {type:'delay', duration_ms:55000}
@@ -412,8 +415,8 @@ for (const action of roundTrips) {
 }
 context.actionEditorLoad('round-trip', {type:'sound_alert'});
 assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'sound_alert', sound_alert_kind:'tone', sound_alert_pattern:''});
-context.actionEditorLoad('round-trip', {type:'notify'});
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'notify', notify_text:'', notify_duration_ms:'3000', notify_location:'bottom'});
+context.actionEditorLoad('round-trip', {type:'notify', message:'Notification'});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'notify', message:'Notification', duration_ms:3000});
 context.actionEditorLoad('round-trip', {type:'delay'});
 assert.strictEqual(context.actionEditorBuild('round-trip').duration_ms, 1000);
 context.actionEditorLoad('round-trip', {type:'visual_alert', op:'stop'});

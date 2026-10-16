@@ -389,8 +389,7 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
         return;
     }
 
-    // Programmatic activation intentionally bypasses the on-device confirmation
-    // dialog; MCP clients must inspect protected buttons before dispatch.
+    // Confirmation actions keep their on-device approval requirement.
     uint32_t execution_id = 0;
     const McpPressDispatchResult dispatch = mcp_press_button_dispatch(
         btn.actions, btn.action_count, PRESS_DISPATCH_OPS, nullptr,
@@ -726,7 +725,7 @@ REGISTER_MCP_TOOL(s_tool_get_pad);
 
 static const McpTool s_tool_press_button = {
     "press_button",
-    "Activate a pad button programmatically, running its tap action(s) without the on-device confirmation dialog. The action is REAL and may have side effects (publish MQTT, call Home Assistant, send BLE keystrokes, navigate screens, or run a system command like reboot) — always inspect an unfamiliar or confirmation-protected button with get_pad first. Discover buttons via list_pads/get_pad; 'position' is the 0-based index in the pad's button array, NOT a grid cell. Args: screen (pad id like 'pad_0') plus either position or label (case-insensitive).",
+    "Activate a pad button programmatically. Confirmation actions still require on-device approval and pause remaining actions; cancellation, timeout, replacement, or failure stops them. A successful press response means dispatch started, not approval or completion. HA result tracking is not available for lists containing confirmation. Actions are REAL and may have side effects; inspect unfamiliar buttons with get_pad first. Discover buttons via list_pads/get_pad; 'position' is the 0-based index in the pad's button array, NOT a grid position. Args: screen (pad id like 'pad_0') plus either position or label (case-insensitive).",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_press_button, false, false, true
 };

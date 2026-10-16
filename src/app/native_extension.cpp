@@ -3,7 +3,7 @@
 #if HAS_NATIVE_EXTENSIONS
 
 #include "log_manager.h"
-#include "message_bubble.h"
+#include "device_dialog.h"
 #include "ota_activity.h"
 #include "pad_config.h"
 #include "pad_layout.h"
@@ -327,9 +327,7 @@ void host_obj_center(void* obj) { if (obj) lv_obj_center(as_obj(obj)); }
 void host_log_info(const char* message) { host_log(NATIVE_EXTENSION_LOG_INFO, message); }
 void host_notify(const char* message) {
     if (!message || !message[0]) return;
-    MessageBubbleParams params = {"", 1500, 0xFFFFFF, 0x00695C, 0, false, 100, 0, NOTIFY_LOC_CENTER};
-    strlcpy(params.text, message, sizeof(params.text));
-    message_bubble_show(&params);
+    if (!device_dialog_notify(message, 1500)) LOGW(TAG, "Extension notification could not be displayed");
 }
 
 void extension_worker_entry(void* raw_slot) {

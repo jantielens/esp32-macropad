@@ -1707,20 +1707,40 @@ Each board compiles with its own display driver and settings.
 - **Total:** ~50-60 KB for display subsystem
 
 Alarm configuration and session actions, timer instances, MQTT binding scratch,
-device-level button defaults, the pad-list cache, and saved confirmation actions
+device-level button defaults, and the pad-list cache
 use `config_psram_alloc()`. Each block is allocated once when its subsystem
-initializes, except confirmation actions, which allocate on first use. Button
+initializes. Button
 defaults also allocate on an early getter call. Reinitialization and cache
 rebuilds reuse the blocks. The allocator prefers PSRAM and falls back to internal
 RAM on boards without PSRAM or when PSRAM allocation fails.
 
 If both allocations fail, timers and alarms stay unavailable, MQTT bindings
-resolve as unavailable, the pad list stays empty, and confirmation returns false
-without dispatching actions. The defaults getter remains non-null by returning
+resolve as unavailable, and the pad list stays empty. The defaults getter remains non-null by returning
 immutable built-in styling from flash; saving defaults fails before writing.
 Failed allocations can be retried by initialization or the next relevant call.
 Task stacks, synchronization state, and DMA buffers remain in their existing
 memory regions.
+
+`device_dialog.cpp` owns one active notification or confirmation. It builds a
+hidden replacement completely before retiring the previous dialog, snapshots
+the applicable device-wide appearance, and owns a font cache until its LVGL
+objects are deleted. Replacement, screen changes, display teardown, and OTA
+release waiting confirmation tokens without resuming their suffix. Approval
+completes a token once; the continuation manager resumes on its originating task.
+Timeouts are checked before accepting input, including queued physical navigation.
+Input generation changes and LVGL release suppression prevent stale gestures
+from approving a replacement or activating the underlying pad. A fully
+transparent overlay remains modal.
+
+Dialog background patterns reuse `fill_draw.h` and the shared pattern names.
+An optional non-interactive background child captures the pattern color and
+geometry in dialog-owned state. LVGL layered opacity blends the solid base and
+pattern together, leaving the parent border, message, and buttons unaffected.
+At 0% background opacity no pattern child is created. Background objects and
+their draw callbacks are deleted with the overlay before dialog-owned state
+and fonts are released. Runtime templates occupy 84 bytes each (168 bytes for
+both, previously 76/152); action payloads remain 256 bytes and `ButtonAction`
+remains 272 bytes.
 
 The `m5stack-stopwatch` static-state migration measures as follows in the ELF:
 

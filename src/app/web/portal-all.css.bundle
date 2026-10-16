@@ -12,6 +12,7 @@ portal-custom.css
 portal-all.css
 
 # [chunk:pad HAS_DISPLAY]
+portal_dialog_appearance.css
 @widgets
 
 # [chunk:shutter IS_SHUTTER_TESTER]

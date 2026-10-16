@@ -171,6 +171,8 @@ bool binding_template_has_bindings(const char* label);
 // Returns true if any token was resolved. out is always null-terminated.
 // Errors produce "ERR:message" in place of the token (never crashes).
 bool binding_template_resolve(const char* templ, char* out, size_t out_len);
+// Dialog/action safety path: reject resolver failures and truncated output.
+bool binding_template_resolve_checked(const char* templ, char* out, size_t out_len);
 
 // Resolve all tokens and report the aggregate resolver outcome. Output uses the
 // same fallback rules as binding_template_resolve().

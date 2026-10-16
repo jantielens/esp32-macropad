@@ -54,7 +54,7 @@
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
-#include "message_bubble.h"
+#include "device_dialog.h"
 #include "visual_alert.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
@@ -768,7 +768,6 @@ void loop()
 
 	#if HAS_DISPLAY
 	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_DISPLAY_EFFECTS);
-	message_bubble_loop();
 	visual_alert_loop();
 	#endif
 

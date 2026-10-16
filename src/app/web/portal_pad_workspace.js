@@ -179,7 +179,6 @@ function padWorkspaceAfterSelect() {
         padActionPrefixes('tap').concat(padActionPrefixes('lp'), padWidgetActionPrefixes()).forEach(actionEditorTypeChanged);
         padWidgetTypeChanged();
         padIconTypeChanged();
-        padConfirmChanged();
         saved.details.forEach(field => {
             const node = padWorkspace.root.querySelectorAll('#pad-edit-overlay details')[field.index];
             if (node) node.open = field.open;

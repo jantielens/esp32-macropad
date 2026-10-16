@@ -104,8 +104,9 @@ Start a focus timer, lower the brightness, and show a confirmation with one tap.
 When time is up, play a sound and pulse the screen. **Three independent timers**
 support countdowns, stopwatches, and expiry actions.
 
-Chain up to three actions per tap or long-press, with delays and optional button
-confirmations. Swipes, full-screen taps, physical buttons, boot, MQTT messages,
+Chain up to three actions per tap or long-press, including delays and pausable
+confirmation actions. Notifications and confirmations share two device-wide
+appearance templates, edited under **Pads → Dialog appearance**. Swipes, full-screen taps, physical buttons, boot, MQTT messages,
 and camera motion can trigger actions where supported. Notifications, pulsing
 alerts, beep patterns, and MP3 sounds provide the feedback.
 

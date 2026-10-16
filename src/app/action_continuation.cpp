@@ -25,6 +25,7 @@ struct ActionContinuation {
     uint32_t token;
     uint32_t deadline_ms;
     uint32_t success_due_ms;
+    uint32_t timeout_ms;
     ButtonAction remaining[MAX_REMAINING_ACTIONS];
     uint8_t remaining_count;
     char label[ACTION_CONTINUATION_LABEL_MAX_LEN];
@@ -92,6 +93,7 @@ bool action_continuation_begin(const ButtonAction* remaining, uint8_t remaining_
     strlcpy(continuation->label, label ? label : "Action",
             sizeof(continuation->label));
     continuation->owner = owner;
+    continuation->timeout_ms = ACTION_CONTINUATION_TIMEOUT_MS;
     continuation->active = true;
     *token = continuation->token;
     ACTION_CONTINUATION_UNLOCK();
@@ -110,15 +112,24 @@ void action_continuation_mark_pending(uint32_t token) {
     ActionContinuation* continuation = find_by_token(token);
     if (continuation) {
         continuation->pending = true;
-        continuation->deadline_ms = millis() + ACTION_CONTINUATION_TIMEOUT_MS;
+        continuation->deadline_ms = millis() + continuation->timeout_ms;
     }
     ACTION_CONTINUATION_UNLOCK();
+}
+
+bool action_continuation_set_timeout(uint32_t token, uint32_t timeout_ms) {
+    ACTION_CONTINUATION_LOCK();
+    ActionContinuation* continuation = find_by_token(token);
+    const bool valid = continuation && !continuation->pending && !continuation->completed;
+    if (valid) continuation->timeout_ms = timeout_ms;
+    ACTION_CONTINUATION_UNLOCK();
+    return valid;
 }
 
 bool action_continuation_complete(uint32_t token, bool success) {
     ACTION_CONTINUATION_LOCK();
     ActionContinuation* continuation = find_by_token(token);
-    if (!continuation) {
+    if (!continuation || continuation->completed) {
         ACTION_CONTINUATION_UNLOCK();
         return false;
     }
@@ -175,7 +186,8 @@ ActionContinuationTakeResult action_continuation_take(
         } else if (continuation->success_scheduled &&
                    (int32_t)(millis() - continuation->success_due_ms) >= 0) {
             result = ACTION_CONTINUATION_SUCCESS;
-        } else if ((int32_t)(millis() - continuation->deadline_ms) >= 0) {
+        } else if (continuation->timeout_ms &&
+                   (int32_t)(millis() - continuation->deadline_ms) >= 0) {
             result = ACTION_CONTINUATION_TIMED_OUT;
         }
         if (result == ACTION_CONTINUATION_NONE) continue;

@@ -143,7 +143,7 @@ bool PadScreen::navigateButtons(const char* command) {
 #endif
 #include "pad_screen.h"
 #include "../action_list.h"
-#include "../button_confirmation.h"
+#include "../device_dialog.h"
 #include "../display_manager.h"
 #include "../log_manager.h"
 #include "../swipe_actions.h"
@@ -183,23 +183,6 @@ static bool has_any_action(const ButtonAction* acts, uint8_t count) {
 // Returns true if any action in the list produces its own audio (beep or sound).
 static bool has_audio_action(const ButtonAction* acts, uint8_t count) {
     return action_list_has_audio(acts, count);
-}
-
-static const char* button_display_label(const ButtonTile* tile) {
-    const char* label = tile->label_center ? lv_label_get_text(tile->label_center) : nullptr;
-    if ((!label || !label[0]) && tile->label_top) label = lv_label_get_text(tile->label_top);
-    if ((!label || !label[0]) && tile->label_bottom) label = lv_label_get_text(tile->label_bottom);
-    return label ? label : "";
-}
-
-static bool confirm_or_dispatch(const ButtonTile* tile, const ButtonAction* actions,
-                                uint8_t count, const char* event_label) {
-    if (tile->confirm) {
-        return button_confirmation_show(actions, count, event_label,
-                                        tile->confirm_text, button_display_label(tile));
-    }
-    action_list_dispatch(actions, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
-    return true;
 }
 
 // ============================================================================
@@ -376,6 +359,7 @@ void PadScreen::onTap(lv_event_t* e) {
 void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     if (!tile || !tile->obj) return;
     tile->touch_start_valid = false;
+    if (device_dialog_active()) return;
 
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
@@ -523,7 +507,8 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     if (tile->widget_type) {
         action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
     } else {
-        confirm_or_dispatch(tile, local, count, event_label);
+        if (!device_dialog_active())
+            action_list_dispatch(local, count, event_label, ACTION_CONTINUATION_OWNER_LVGL);
     }
 
 #if HAS_MQTT
@@ -541,6 +526,7 @@ void PadScreen::onLongPress(lv_event_t* e) {
 
 void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     if (!tile || !tile->obj) return;
+    if (device_dialog_active()) return;
     (void)point;
 
 #if HAS_NATIVE_EXTENSIONS
@@ -594,7 +580,8 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     if (tile->widget_type) {
         action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL);
     } else {
-        confirm_or_dispatch(tile, local, count, "LP");
+        if (!device_dialog_active())
+            action_list_dispatch(local, count, "LP", ACTION_CONTINUATION_OWNER_LVGL);
     }
 
 #if HAS_MQTT
@@ -645,6 +632,7 @@ void PadScreen::showPadActionFlash() {
 }
 
 void PadScreen::onPadActionTap(lv_event_t* e) {
+    if (device_dialog_active()) return;
     auto* pad = (PadScreen*)lv_event_get_user_data(e);
     if (!pad || !pad->padActions || pad->padActionCount == 0) return;
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
@@ -664,4 +652,3 @@ void PadScreen::onPadActionTap(lv_event_t* e) {
 #endif
     action_list_dispatch(local, count, "PadTap", ACTION_CONTINUATION_OWNER_LVGL);
 }
-

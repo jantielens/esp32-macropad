@@ -377,13 +377,6 @@ function padWidgetTypeChanged() {
         if (section) section.style.display = editor && editor.replacesContent ? 'none' : '';
     });
     padSetImageCapabilityVisibility(deviceInfoCache, !!(editor && editor.replacesContent));
-    var confirmGroup = document.getElementById('pad-edit-confirm-group');
-    var confirmInput = document.getElementById('pad-edit-confirm');
-    if (confirmGroup) confirmGroup.style.display = wtype ? 'none' : '';
-    if (wtype && confirmInput) {
-        confirmInput.checked = false;
-        padConfirmChanged();
-    }
     // Refresh icon position visibility (widgets may override layout)
     padIconTypeChanged();
 

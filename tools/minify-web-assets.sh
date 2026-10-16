@@ -1049,7 +1049,7 @@ asset_feature_flag() {
     case "$stem" in
         alarm_schedule|alarm_behavior|portal_alarms)
             echo "ALARM_ENABLED" ;;
-        pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|rotation|screen_preview|screensaver|image_library|portal_image_library)
+        pad_editor|swipe_actions|boot_actions|button_defaults|dialog_appearance|portal_dialog_appearance|timers|brightness|rotation|screen_preview|screensaver|image_library|portal_image_library)
             echo "HAS_DISPLAY" ;;
         mqtt|ha_discovery)
             echo "HAS_MQTT" ;;

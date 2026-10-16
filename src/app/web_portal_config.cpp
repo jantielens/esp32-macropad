@@ -12,6 +12,9 @@
 #include "time_service.h"
 #include "keyboard_hid.h"
 #include "device_class.h"
+#if HAS_DISPLAY
+#include "dialog_appearance.h"
+#endif
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
@@ -109,7 +112,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 		}
 
 		// Create JSON response (don't include passwords)
-		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(2560);
+		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(HAS_DISPLAY ? 6144 : 2560);
 		if (doc && doc->capacity() > 0) {
 				(*doc)["wifi_ssid"] = current_config->wifi_ssid;
 				(*doc)["wifi_password"] = ""; // Don't send password
@@ -226,6 +229,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				#endif
 
 				#if HAS_DISPLAY
+				dialog_appearance_write((*doc)["dialog_appearance"].to<JsonObject>(), current_config->dialog_appearance);
 				// Screen saver settings
 				(*doc)["screen_saver_enabled"] = current_config->screen_saver_enabled;
 				(*doc)["screen_saver_timeout_seconds"] = current_config->screen_saver_timeout_seconds;
@@ -357,7 +361,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (body) body[body_len] = 0;
 		portEXIT_CRITICAL(&g_config_post_mux);
 
-		BasicJsonDocument<PsramJsonAllocator> doc(2560);
+		BasicJsonDocument<PsramJsonAllocator> doc(HAS_DISPLAY ? 6144 : 2560);
 		DeserializationError error = deserializeJson(doc, body, body_len);
 
 		if (error) {
@@ -391,10 +395,20 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		#if HAS_DISPLAY
+		DialogTemplates dialog_candidate = current_config->dialog_appearance;
+		#endif
 		{
 				JsonObject body_object = doc.as<JsonObject>();
 				const char *validation_error =
 						device_class_dispatch_config_api_validate(current_config, body_object);
+#if HAS_DISPLAY
+				if (!validation_error && doc.containsKey("dialog_appearance")) {
+						validation_error = !doc["dialog_appearance"].is<JsonObjectConst>() ?
+							"dialog_appearance must be an object" :
+							dialog_appearance_read(doc["dialog_appearance"].as<JsonObjectConst>(), dialog_candidate);
+				}
+#endif
 				if (validation_error) {
 						StaticJsonDocument<192> response;
 						response["success"] = false;
@@ -929,6 +943,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 		// Save to NVS
+		#if HAS_DISPLAY
+		const DialogTemplates previous_dialog_appearance = current_config->dialog_appearance;
+		current_config->dialog_appearance = dialog_candidate;
+		#endif
 		if (config_manager_save(current_config)) {
 				LOGI("Portal", "Config saved");
 #if HAS_MCP
@@ -957,6 +975,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+				#if HAS_DISPLAY
+				current_config->dialog_appearance = previous_dialog_appearance;
+				#endif
 				strlcpy(current_config->timezone, previous_timezone, sizeof(current_config->timezone));
 				request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save\"}");
 

@@ -390,7 +390,6 @@ workspaceContext.padWidgetActionPrefixes = () => [];
 workspaceContext.actionEditorTypeChanged = () => {};
 workspaceContext.padWidgetTypeChanged = () => {};
 workspaceContext.padIconTypeChanged = () => {};
-workspaceContext.padConfirmChanged = () => {};
 workspaceContext.padDialogOpen = () => {
 	draftGroup.open = true;
 	workspaceContext.padWorkspaceAfterSelect();

@@ -1,102 +1,71 @@
-
-_actionEditorExtensions.push({
-    type: 'notify',
-    bindingSuffixes: ["-notify-text","-notify-duration"],
-    colorSuffixes: ["-notify-text-color-wrap","-notify-bg-color-wrap","-notify-border-color-wrap"],
-    groups: function(prefix, opts) {
-        var h = '';
-        // Notify
-        h += '<div id="' + prefix + '-notify-group" style="display:none;">';
-        h += '<div class="form-group">';
-        h += '<label class="form-label" for="' + prefix + '-notify-text">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-        h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-notify-text" maxlength="127" placeholder="e.g. Brightness is at 100%">';
-        h += '<small>Supports binding templates. Empty = dismiss current notification.</small>';
-        h += '</div>';
-        h += '<div class="form-group">';
-        h += '<label class="form-label" for="' + prefix + '-notify-duration">Duration (ms) <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-        h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-notify-duration" value="3000" placeholder="3000">';
-        h += '<small>0 = persistent (tap to dismiss). Supports bindings.</small>';
-        h += '</div>';
-        h += '<div class="grid-2col">';
-        h += '<div class="form-group">';
-        h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-        h += '<div class="bindable-color" id="' + prefix + '-notify-text-color-wrap"><div class="bc-swatch"></div>';
-        h += '<input type="text" id="' + prefix + '-notify-text-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#ffffff or [binding]"></div>';
-        h += '</div>';
-        h += '<div class="form-group">';
-        h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-        h += '<div class="bindable-color" id="' + prefix + '-notify-bg-color-wrap"><div class="bc-swatch"></div>';
-        h += '<input type="text" id="' + prefix + '-notify-bg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#333333 or [binding]"></div>';
-        h += '</div>';
-        h += '</div>';
-        h += '<div class="grid-2col">';
-        h += '<div class="form-group">';
-        h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Border Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-        h += '<div class="bindable-color" id="' + prefix + '-notify-border-color-wrap"><div class="bc-swatch"></div>';
-        h += '<input type="text" id="' + prefix + '-notify-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="Empty = no border"></div>';
-        h += '</div>';
-        h += '<div class="form-group">';
-        h += '<label class="form-label" for="' + prefix + '-notify-opacity">Opacity (%)</label>';
-        h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-notify-opacity" min="0" max="100" placeholder="85">';
-        h += '</div>';
-        h += '</div>';
-        h += '<div class="grid-2col">';
-        h += '<div class="form-group">';
-        h += '<label class="form-label" for="' + prefix + '-notify-font-size">Font Size</label>';
-        h += '<input type="number" class="form-control form-control-sm" id="' + prefix + '-notify-font-size" min="0" max="48" placeholder="0 = auto">';
-        h += '</div>';
-        h += '<div class="form-group">';
-        h += '<label class="form-label" for="' + prefix + '-notify-location">Location</label>';
-        h += '<select class="form-select form-select-sm" id="' + prefix + '-notify-location">';
-        h += '<option value="bottom" selected>Bottom</option>';
-        h += '<option value="center">Center</option>';
-        h += '<option value="top">Top</option>';
-        h += '</select>';
-        h += '</div>';
-        h += '</div>';
-        h += '</div>';
-        return h;
-    },
-    typeChanged: function(prefix, type) {
-        var group = document.getElementById(prefix + '-notify-group');
-        if (group) group.style.display = type === 'notify' ? '' : 'none';
-    },
-    load: function(prefix, action) {
-        var el;
-        // Notify fields
-        el = document.getElementById(prefix + '-notify-text');
-        if (el) { el.value = action.notify_text || ''; }
-        el = document.getElementById(prefix + '-notify-duration');
-        if (el) { el.value = action.notify_duration_ms || '3000'; }
-        padSetBindableColor(prefix + '-notify-text-color', action.notify_text_color || '', '#ffffff');
-        padSetBindableColor(prefix + '-notify-bg-color', action.notify_bg_color || '', '#333333');
-        padSetBindableColor(prefix + '-notify-border-color', action.notify_border_color || '', '');
-        el = document.getElementById(prefix + '-notify-opacity');
-        if (el) el.value = (action.notify_opacity > 0) ? action.notify_opacity : '';
-        el = document.getElementById(prefix + '-notify-font-size');
-        if (el) el.value = (action.notify_font_size > 0) ? action.notify_font_size : '';
-        el = document.getElementById(prefix + '-notify-location');
-        if (el) el.value = action.notify_location || 'bottom';
-    },
-    build: function(prefix, type) {
-        if (type !== 'notify') return null;
-        var act = {};
-        var nt = document.getElementById(prefix + '-notify-text');
-        if (nt) act.notify_text = (nt.value || '').trim();
-        var nd = document.getElementById(prefix + '-notify-duration');
-        if (nd && nd.value !== '') act.notify_duration_ms = (nd.value || '').trim();
-        var ntc = padGetBindableColor(prefix + '-notify-text-color');
-        if (ntc) act.notify_text_color = ntc;
-        var nbc = padGetBindableColor(prefix + '-notify-bg-color');
-        if (nbc) act.notify_bg_color = nbc;
-        var nbrc = padGetBindableColor(prefix + '-notify-border-color');
-        if (nbrc) act.notify_border_color = nbrc;
-        var nop = document.getElementById(prefix + '-notify-opacity');
-        if (nop && nop.value !== '') act.notify_opacity = parseInt(nop.value, 10);
-        var nfs = document.getElementById(prefix + '-notify-font-size');
-        if (nfs && nfs.value !== '') act.notify_font_size = parseInt(nfs.value, 10);
-        var nloc = document.getElementById(prefix + '-notify-location');
-        if (nloc) act.notify_location = nloc.value;
-        return act;
-    }
+['notify', 'confirm'].forEach(function(type) {
+    var confirmation = type === 'confirm';
+    _actionEditorExtensions.push({
+        type: type,
+        bindingSuffixes: ['-' + type + '-message'],
+        groups: function(prefix) {
+            var id = prefix + '-' + type;
+            var html = '<div id="' + id + '-group" style="display:none;">';
+            html += '<div class="form-group"><label for="' + id + '-message">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+            html += '<textarea class="form-control form-control-sm" id="' + id + '-message" maxlength="191" rows="3"></textarea>';
+            html += '<small>Up to 191 UTF-8 bytes. Line breaks and bindings supported; resolved once when this action runs.</small></div>';
+            if (confirmation) {
+                ['approve', 'cancel'].forEach(function(button) {
+                    html += '<div class="form-group"><label for="' + id + '-' + button + '">' + (button === 'approve' ? 'Approve' : 'Cancel') + ' text</label>';
+                    html += '<input class="form-control form-control-sm" id="' + id + '-' + button + '" maxlength="27" value="' + (button === 'approve' ? 'Continue' : 'Cancel') + '">';
+                    html += '<small>Literal caption, up to 27 UTF-8 bytes.</small></div>';
+                });
+            }
+            html += '<div class="form-group"><label for="' + id + '-seconds">' + (confirmation ? 'Timeout' : 'Display duration') + ' (seconds)</label>';
+            html += '<input type="number" class="form-control form-control-sm" id="' + id + '-seconds" min="1" max="300" step="1" value="' + (confirmation ? '10' : '3') + '">';
+            html += '<label><input type="checkbox" id="' + id + '-persistent" onchange="document.getElementById(\'' + id + '-seconds\').disabled=this.checked"> ' + (confirmation ? 'No timeout' : 'Until dismissed') + '</label></div>';
+            html += '<small>Appearance comes from <a href="#dialog-appearance">Dialog appearance</a>. ' +
+                (confirmation ? 'Approval resumes the remaining actions. Cancel, timeout, replacement, or failure stops them. Later actions resolve their own bindings.' : 'Blocks pad input until dismissed, but does not pause the action sequence.') + '</small></div>';
+            return html;
+        },
+        typeChanged: function(prefix, selected) {
+            var group = document.getElementById(prefix + '-' + type + '-group');
+            if (group) group.style.display = selected === type ? '' : 'none';
+        },
+        load: function(prefix, action) {
+            var id = prefix + '-' + type;
+            var message = document.getElementById(id + '-message');
+            if (message) message.value = action.message || '';
+            var timing = action[confirmation ? 'timeout_ms' : 'duration_ms'];
+            var seconds = document.getElementById(id + '-seconds');
+            var persistent = document.getElementById(id + '-persistent');
+            if (seconds) {
+                seconds.value = timing ? timing / 1000 : confirmation ? 10 : 3;
+                seconds.disabled = timing === 0;
+            }
+            if (persistent) persistent.checked = timing === 0;
+            if (confirmation) {
+                ['approve', 'cancel'].forEach(function(button) {
+                    var field = document.getElementById(id + '-' + button);
+                    if (field) field.value = action[button + '_text'] || (button === 'approve' ? 'Continue' : 'Cancel');
+                });
+            }
+        },
+        build: function(prefix, selected) {
+            if (selected !== type) return null;
+            var id = prefix + '-' + type;
+            var action = {message: document.getElementById(id + '-message').value};
+            if (!action.message.trim() || new TextEncoder().encode(action.message).length > 191)
+                throw Object.assign(new Error('Dialog message is required and must fit 191 UTF-8 bytes.'), {fieldIds: [id + '-message']});
+            var seconds = Number(document.getElementById(id + '-seconds').value);
+            var persistent = document.getElementById(id + '-persistent').checked;
+            if (!persistent && (!Number.isInteger(seconds) || seconds < 1 || seconds > 300))
+                throw Object.assign(new Error('Dialog timing must be 1-300 whole seconds.'), {fieldIds: [id + '-seconds']});
+            action[confirmation ? 'timeout_ms' : 'duration_ms'] = persistent ? 0 : seconds * 1000;
+            if (confirmation) {
+                ['approve', 'cancel'].forEach(function(button) {
+                    var text = document.getElementById(id + '-' + button).value;
+                    if (!text.trim() || new TextEncoder().encode(text).length > 27)
+                        throw Object.assign(new Error('Confirmation captions are required and must fit 27 UTF-8 bytes.'), {fieldIds: [id + '-' + button]});
+                    action[button + '_text'] = text;
+                });
+            }
+            return action;
+        }
+    });
 });

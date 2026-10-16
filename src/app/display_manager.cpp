@@ -4,6 +4,7 @@
 
 #include "data_stream.h"
 #include "display_manager.h"
+#include "device_dialog.h"
 #include "pad_layout.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
@@ -139,6 +140,7 @@ DisplayManager::~DisplayManager() {
 		displayJobSlot().beginShutdown();
 		lvglStopRequested = true;
 		if (!lvglTaskHandle) {
+			device_dialog_close();
 			lvglTaskStopped = true;
 		}
 		while (!displayJobSlot().shutdown() || !lvglTaskStopped) {

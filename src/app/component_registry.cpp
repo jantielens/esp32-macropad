@@ -83,7 +83,7 @@ void component_registry_reset() {
 
 void component_handle_save_body(AsyncWebServerRequest* request,
     uint8_t* data, size_t len, size_t index, size_t total,
-    ComponentSaveRawFn save_fn, size_t max_size) {
+    ComponentSaveRawFn save_fn, size_t max_size, const char* failure_response) {
     if (total > max_size) {
         component_body_cleanup(request);
         request->send(413, "application/json", "{\"error\":\"payload too large\"}");
@@ -132,6 +132,6 @@ void component_handle_save_body(AsyncWebServerRequest* request,
     if (ok) {
         request->send(200, "application/json", "{\"success\":true}");
     } else {
-        request->send(500, "application/json", "{\"success\":false,\"error\":\"save failed\"}");
+        request->send(500, "application/json", failure_response);
     }
 }

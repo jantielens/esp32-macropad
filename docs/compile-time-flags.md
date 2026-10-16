@@ -573,6 +573,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
+  - src/app/actions/confirm_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/display_refresh_action.cpp
@@ -582,7 +583,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
-  - src/app/actions/notify_action.cpp
   - src/app/actions/screen_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/system_action.cpp
@@ -592,6 +592,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/components/hw_buttons_component.cpp
+  - src/app/device_dialog.cpp
   - src/app/gamepad_hid.cpp
   - src/app/ha_service.cpp
   - src/app/ha_service.h
@@ -661,6 +662,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
   - src/app/actions/button_navigation_action.cpp
+  - src/app/actions/confirm_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/display_refresh_action.cpp
@@ -683,8 +685,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
-  - src/app/button_confirmation.cpp
-  - src/app/button_confirmation.h
   - src/app/button_defaults.cpp
   - src/app/button_defaults.h
   - src/app/camera_binding.cpp
@@ -714,7 +714,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/device_classes/shutter_tester_device_class.cpp
+  - src/app/device_dialog.cpp
+  - src/app/device_dialog.h
   - src/app/device_telemetry.cpp
+  - src/app/dialog_appearance.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
   - src/app/display_manager_api.cpp
@@ -730,6 +733,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_service.h
   - src/app/health_binding.cpp
   - src/app/health_table_builder.cpp
+  - src/app/hw_buttons.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/keyboard_hid.cpp
@@ -745,8 +749,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
-  - src/app/message_bubble.cpp
-  - src/app/message_bubble.h
   - src/app/mqtt_binding.cpp
   - src/app/mqtt_notify.cpp
   - src/app/mqtt_notify.h
@@ -1168,9 +1170,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/storage_browser.cpp
 - **HAS_TOUCH**
+  - src/app/actions/confirm_action.cpp
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
+  - src/app/device_dialog.cpp
   - src/app/display_manager.cpp
   - src/app/display_manager.h
   - src/app/display_task.cpp

@@ -14,9 +14,9 @@
 #include <cassert>
 #include <cstdio>
 
-// Tightened post-union: 420 B = 394 B notify arm + 16 B type + 8 B alignment.
+// Compact dialogs leave the 256-byte MQTT/key payloads as the union floor.
 #ifndef ACTION_SIZEOF_BUDGET
-#define ACTION_SIZEOF_BUDGET 420
+#define ACTION_SIZEOF_BUDGET 272
 #endif
 
 int main() {

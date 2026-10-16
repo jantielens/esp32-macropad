@@ -11,7 +11,7 @@
 
 #include "data_stream.h"
 #include "action_list.h"
-#include "button_confirmation.h"
+#include "device_dialog.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #if HAS_TOUCH
@@ -123,12 +123,14 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				uint32_t screen_update_us = 0;
 				bool updated_after_screen_switch = false;
 				if (mgr->lvglStopRequested) {
+						device_dialog_close();
 						mgr->unlock();
 						mgr->lvglTaskStopped = true;
 						vTaskSuspend(nullptr);
 						continue;
 				}
 					if (ota_activity_is_active()) {
+						device_dialog_close();
 						#if HAS_TOUCH
 						touch_manager_cancel_physical_input();
 						#endif
@@ -149,6 +151,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 					}
 #endif
 					mgr->processDisplayJob();
+					device_dialog_loop();
 					action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
 
 				// Apply any deferred splash status update.
@@ -171,7 +174,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				if (mgr->pendingScreen) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_SWITCH);
 						Screen* target = mgr->pendingScreen;
-						button_confirmation_cancel();
+						device_dialog_close();
 						#if HAS_TOUCH
 						touch_manager_cancel_physical_input();
 						#endif

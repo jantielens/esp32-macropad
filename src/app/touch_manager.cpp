@@ -3,6 +3,9 @@
 #if HAS_TOUCH
 
 #include "touch_manager.h"
+#if HAS_DISPLAY
+#include "device_dialog.h"
+#endif
 #include "log_manager.h"
 
 #include <atomic>
@@ -226,6 +229,11 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		#if HAS_DISPLAY && HAS_USB_HID
 		const uint32_t gamepad_generation = gamepad_hid_generation();
 		const uint32_t mouse_generation = mouse_hid_generation();
+		if (device_dialog_active()) {
+			navigation.pressed = snapshot.count != 0;
+			navigation.horizontal = snapshot.contacts[0].horizontal;
+			navigation.vertical = snapshot.contacts[0].vertical;
+		} else {
 		navigation = g_gamepad_touch_router.update(snapshot, false, gamepad_generation, mouse_generation);
 		if (contact_edge || g_gamepad_touch_router.reset_navigation) {
 				LOGT("Touch", "Route: contacts=%u navigation=%u reset=%u gamepad_generation=%lu mouse_generation=%lu",
@@ -235,6 +243,7 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 		if (g_gamepad_touch_router.reset_navigation) {
 				lv_indev_reset(indev, nullptr);
 				g_prev_lvgl_pressed = false;
+		}
 		}
 		#else
 		navigation.pressed = snapshot.count != 0;

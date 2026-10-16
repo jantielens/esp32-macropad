@@ -14,6 +14,10 @@
 #include "storage.h"
 #include "time_service.h"
 #include "ota_activity.h"
+#if HAS_DISPLAY
+#include "device_dialog.h"
+#include "psram_json_allocator.h"
+#endif
 #if HAS_AUDIO
 #include "audio.h"
 #endif
@@ -354,6 +358,8 @@ bool config_manager_load(DeviceConfig *config) {
 				#endif
 
 				#if HAS_DISPLAY
+				config->dialog_appearance = DialogTemplates{};
+				device_dialog_set_templates(config->dialog_appearance);
 				// Screen saver defaults
 				config->screen_saver_enabled = true;
 				config->screen_saver_timeout_seconds = SCREENSAVER_DEFAULT_TIMEOUT_SECONDS;
@@ -495,6 +501,18 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_DISPLAY
+		config->dialog_appearance = DialogTemplates{};
+		{
+				BasicJsonDocument<PsramJsonAllocator> dialog_doc(4096);
+				const String stored = preferences.getString("dialogs", "");
+				if (stored.length()) {
+						const auto error = deserializeJson(dialog_doc, stored);
+						const char* validation = error ? "invalid stored JSON" :
+							dialog_appearance_read(dialog_doc.as<JsonObjectConst>(), config->dialog_appearance);
+						if (validation) LOGW("Config", "Dialog appearance: %s; using defaults", validation);
+				}
+				device_dialog_set_templates(config->dialog_appearance);
+		}
 		// Load screen saver settings
 		#if SCREENSAVER_BACKLIGHT_ONLY
 		config->screen_saver_enabled = true;
@@ -603,6 +621,19 @@ bool config_manager_save(const DeviceConfig *config) {
 		delay(1);
 		
 		preferences.begin(CONFIG_NAMESPACE, false); // Read-write mode
+#if HAS_DISPLAY
+		{
+				BasicJsonDocument<PsramJsonAllocator> dialog_doc(4096);
+				dialog_appearance_write(dialog_doc.to<JsonObject>(), config->dialog_appearance);
+				String stored;
+				if (dialog_doc.overflowed() || !serializeJson(dialog_doc, stored) ||
+					preferences.putString("dialogs", stored) != stored.length()) {
+						LOGE("Config", "Failed to persist dialog appearance");
+						preferences.end();
+						return false;
+				}
+		}
+#endif
 		
 		// Save WiFi settings
 		preferences.putString(KEY_WIFI_SSID, config->wifi_ssid);
@@ -724,6 +755,9 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.end();
 		if (!timezone_saved) return false;
 		time_service_set_timezone(timezone);
+		#if HAS_DISPLAY
+		device_dialog_set_templates(config->dialog_appearance);
+		#endif
 		
 		config_manager_print(config);
 		LOGI("Config", "Save complete");

@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-15
+ms.date: 2026-10-16
 ms.topic: reference
 ---
 
@@ -13,6 +13,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+* Add an Ask for confirmation action that pauses its sequence without blocking
+  a task. Approval resumes the remaining actions once; cancellation, timeout,
+  replacement, or failure discards them. Choose a timeout of 1-300 seconds or
+  No timeout.
+* Add Pads > Dialog appearance with one notification template and one
+  confirmation template. Configure fonts, colors, patterned backgrounds,
+  opacity, layout, and confirmation buttons, with immediate approximate
+  previews and Test now controls for unsaved appearance. Uploaded TTF fonts
+  accept any whole-pixel size from 8 to 96.
+
+### Changed
+
+* **Breaking:** Replace button-level `confirm`/`confirm_text` settings with the
+  confirmation action. Notification actions now contain only `message` and
+  `duration_ms`; remove their old `notify_*` content and styling fields.
+  Confirmation actions contain `message`, `timeout_ms`, `approve_text`, and
+  `cancel_text`. There is no migration or compatibility layer; reconfigure
+  existing buttons and notification actions using the new fields.
+* Make notifications modal to pad input, with durations up to 300 seconds or
+  Until dismissed. The newest successfully displayed dialog replaces either
+  dialog type; failed replacement preserves the existing dialog. Appearance
+  changes apply to the next dialog, not one already open.
+* Reduce `ButtonAction` from 412 to 272 bytes and its payload union from 396
+  to 256 bytes. Notification and confirmation payloads use 196 and 252 bytes,
+  respectively; the three-action-per-gesture limit is unchanged.
+
+### Fixed
+
+* Stop action sequences when binding resolution fails or exceeds a dialog
+  message's capacity, rather than displaying truncated confirmation text.
+* Cancel pending confirmations on screen transitions, display teardown, and
+  OTA activity. Ignore stale input gestures and callbacks after replacement,
+  and keep the existing watchdog behavior for other pausable actions.
 
 ## [1.41.0] - 2026-10-15
 

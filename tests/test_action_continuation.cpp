@@ -33,6 +33,7 @@ ActionResult action_dispatch(const ButtonAction& action, const char*,
                              uint32_t continuation_token) {
     strlcpy(g_dispatched[g_dispatched_count++], action.type,
             sizeof(g_dispatched[0]));
+    if (!strcmp(action.type, "failed")) return ACTION_FAILED;
     if (strcmp(action.type, "pending") == 0) {
         g_pending_token = continuation_token;
         return continuation_token ? ACTION_PENDING : ACTION_FAILED;
@@ -189,6 +190,36 @@ TEST(failed_pending_action_does_not_resume_suffix) {
     ASSERT_EQ(g_dispatched_count, 1);
 }
 
+TEST(failure_before_confirmation_stops_entire_suffix) {
+    reset_dispatch();
+    ButtonAction actions[3]{};
+    strcpy(actions[0].type, "failed");
+    strcpy(actions[1].type, ACTION_TYPE_CONFIRM);
+    strcpy(actions[2].type, ACTION_TYPE_MQTT);
+    action_list_dispatch(actions, 3, "Failed binding");
+    action_list_dispatch_continuation();
+    ASSERT_EQ(g_dispatched_count, 1);
+    ASSERT_TRUE(!action_continuation_is_full());
+}
+
+TEST(explicit_input_wait_and_completion_are_single_use) {
+    s_millis = 0;
+    uint32_t token = begin_with_suffix(ACTION_TYPE_MQTT);
+    ASSERT_TRUE(action_continuation_set_timeout(token, 0));
+    action_continuation_mark_pending(token);
+    s_millis = 301000;
+    ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0), ACTION_CONTINUATION_NONE);
+    ASSERT_TRUE(action_continuation_complete(token, true));
+    ASSERT_TRUE(!action_continuation_complete(token, false));
+    ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0), ACTION_CONTINUATION_SUCCESS);
+    ASSERT_TRUE(!action_continuation_complete(token, true));
+    token = begin_with_suffix(ACTION_TYPE_MQTT);
+    action_continuation_mark_pending(token);
+    ASSERT_TRUE(!action_continuation_set_timeout(token, 0));
+    s_millis += ACTION_CONTINUATION_TIMEOUT_MS;
+    ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0), ACTION_CONTINUATION_TIMED_OUT);
+}
+
 int main() {
     RUN(success_copies_saved_suffix);
     RUN(failure_discards_suffix);
@@ -199,6 +230,8 @@ int main() {
     RUN(ready_slot_bypasses_earlier_unfinished_slot);
     RUN(pending_action_pauses_and_resumes_copied_suffix);
     RUN(failed_pending_action_does_not_resume_suffix);
+    RUN(failure_before_confirmation_stops_entire_suffix);
+    RUN(explicit_input_wait_and_completion_are_single_use);
     std::printf("action continuation: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

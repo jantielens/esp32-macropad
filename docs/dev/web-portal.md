@@ -1931,6 +1931,43 @@ sound library and retain missing saved file names.
 
 ### Configuration Management
 
+#### `POST /api/component/dialog-appearance/test`
+
+On display boards, show a fixed sample notification or confirmation without
+changing saved appearance. Body: `{"type":"notification","appearance":{...}}`
+or `{"type":"confirmation","appearance":{...}}`, using the corresponding
+`dialog_appearance` template fields from `/api/config`. Requests are bounded
+to 2048 bytes and use the existing component body assembly and authentication.
+The validated appearance is passed directly to the thread-safe dialog API and
+captured under its display lock, without using the bounded display-dispatch
+context slot. Both samples last up to 10 seconds; confirmation
+approval completes an empty continuation and cannot execute a restart or any
+other follow-up action. Successful tests replace either dialog type; failed
+tests preserve the existing dialog. Returns `{"success":true}` on display
+success or a non-2xx JSON error for invalid appearance, unavailable input,
+display availability, or resource failure.
+
+The portal uses two sibling cards with standard headers, fixed browser sample
+messages/captions, and one **Test now** button per card. Testing does not save
+configuration; the separate save button persists both templates.
+Save success, save validation/errors, and test failures use the shared portal
+toast messages rather than inline button status text. Successful tests remain
+silent. Loading status and load failures stay above the form.
+
+Both templates include `background_pattern` (`none`, `diagonal`,
+`reverse_diagonal`, `crosshatch`, `dots`, or `checkerboard`),
+`background_pattern_color` (literal hex color, default `#111111`),
+`pattern_spacing` (2-64 px, default 8), and `pattern_stroke_width` (1-8 px,
+default 1, no larger than spacing). Invalid pattern names, expressions in
+pattern colors, and invalid geometry reject the edit atomically. These fields
+round-trip through the existing `dialog_appearance` configuration and `dialogs`
+NVS value, not action payloads. Background opacity applies to the composed base
+and pattern; text, border, and confirmation button opacity are unchanged.
+The shared pad color picker exposes the pattern settings and previews without
+enabling bindings. TTF font sizes use a numeric input for whole pixels from
+8 to 96; empty input serializes to `0` (Automatic). Built-in sizes remain a
+fixed dropdown.
+
 #### `GET /api/config`
 
 Returns current device configuration (passwords excluded).
@@ -3020,7 +3057,7 @@ All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth whe
 
 Returns the current boot action configuration.
 
-- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, `volume_mode`, `volume_value`, `brightness_mode`, `brightness_value`, `timer_id`, `timer_command`, `timer_mode`, `timer_value`, etc.).
+- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects, using the same schema as button/swipe actions. Dialog actions use `message` with `duration_ms` for notifications, or `timeout_ms`, `approve_text`, and `cancel_text` for confirmations. Appearance comes from the device-wide dialog templates, not action fields.
 - Default (no file saved): `{"actions": []}`.
 
 #### `POST /api/boot-actions`

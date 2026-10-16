@@ -1,6 +1,7 @@
 #include "action_registry.h"
 #if defined(ARDUINO) && HAS_DISPLAY
 #include "display_manager.h"
+#include "device_dialog.h"
 #endif
 
 #if HAS_DISPLAY
@@ -29,12 +30,19 @@ void serialize_button_navigation(const ButtonAction& act, JsonObject action) {
 ActionResult dispatch_button_navigation(const ButtonAction& act, const char*, uint32_t) {
 #if defined(ARDUINO) && HAS_DISPLAY
     if (!displayManager) return ACTION_FAILED;
+    struct NavigationRequest {
+        ButtonNavigationPayload navigation;
+        uint32_t generation;
+    };
+    const NavigationRequest request{act.payload.button_navigation, device_dialog_input_generation()};
     bool ok = false;
     const auto exec = [](const void* context, bool* success, char*, size_t) {
-        *success = displayManager->navigateButtons(static_cast<const ButtonNavigationPayload*>(context)->command);
+        const auto& request = *static_cast<const NavigationRequest*>(context);
+        *success = request.generation == device_dialog_input_generation() &&
+            displayManager->navigateButtons(request.navigation.command);
     };
-    const auto result = display_manager_dispatch(exec, nullptr, &act.payload.button_navigation,
-        sizeof(ButtonNavigationPayload), 1000, &ok, nullptr, 0);
+    const auto result = display_manager_dispatch(exec, nullptr, &request,
+        sizeof(request), 1000, &ok, nullptr, 0);
     return result == DISPLAY_TASK_DISPATCH_OK && ok ? ACTION_COMPLETE : ACTION_FAILED;
 #else
     (void)act;

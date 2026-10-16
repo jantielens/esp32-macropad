@@ -681,6 +681,30 @@ completes it.
 Inkplate grayscale always refreshes the full panel, so the threshold has no
 effect in that mode.
 
+### Dialog appearance
+
+Open **Pads → Dialog appearance** to edit the device-wide notification and
+confirmation templates in separate sections. Each section has appearance
+controls and an immediate approximate preview with fixed sample content.
+
+Click the background color badge to choose a base color and an optional pattern:
+diagonal stripes, reverse diagonal stripes, crosshatch, dots, or checkerboard.
+Pattern color, spacing (2-64 px), and thickness (1-8 px, no larger than spacing)
+are in the same picker. **Apply** commits the picker changes; closing it discards
+them. Background opacity fades the base and pattern together without fading
+text, borders, or confirmation buttons. Patterns do not affect the backdrop or
+button backgrounds.
+
+Uploaded TTF fonts accept any whole-number size from 8 to 96 px; leave the size
+empty for Automatic. Built-in fonts retain the supported-size dropdown.
+
+**Test now** displays that sample on the device using the section's current,
+unsaved appearance. No settings are saved and approval runs no follow-up
+actions. Tests time out after 10 seconds and follow normal dialog replacement
+rules: a successful test replaces the current dialog and cancels any waiting
+confirmation; a failed test leaves it intact. Use **Save dialog appearance** to
+persist both templates.
+
 ### Screen Preview
 
 Select the active screen and capture the current device framebuffer in the

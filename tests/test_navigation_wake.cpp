@@ -18,7 +18,8 @@ static bool input_ready = true;
 static bool confirmation_open = false;
 bool screen_saver_manager_is_asleep() { return asleep; }
 bool screen_saver_manager_input_ready() { return input_ready; }
-bool button_confirmation_navigate(const char*) { return confirmation_open; }
+bool device_dialog_navigate(const char*) { return confirmation_open; }
+void device_dialog_close() { confirmation_open = false; }
 void screen_saver_manager_notify_activity(bool wake) {
     assert(wake);
     ++wake_requests;

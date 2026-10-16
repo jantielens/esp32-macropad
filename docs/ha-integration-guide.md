@@ -304,7 +304,7 @@ actions:
 
 ## Notifications
 
-The notification integration lets you display floating message bubbles on the device screen from Home Assistant. This requires a board with a display (compile-time flag `HAS_DISPLAY`).
+The notification integration displays modal messages on the device screen from Home Assistant using the device-wide notification appearance. This requires a board with a display (compile-time flag `HAS_DISPLAY`).
 
 ### Entity
 
@@ -326,14 +326,14 @@ data:
   value: "Dryer finished!"
 ```
 
-**JSON** — full control over appearance:
+**JSON** — message and timing (appearance comes from the notification template):
 
 ```yaml
 action: text.set_value
 target:
   entity_id: text.esp32_macropad_keuken_notify
 data:
-  value: '{"text": "Power high!", "duration_ms": 5000, "text_color": "#ffa0a0", "bg_color": "#2e1a1a", "location": "top"}'
+  value: '{"text": "Power high!", "duration_ms": 5000}'
 ```
 
 **Dismiss** — send an empty string to dismiss the active notification:
@@ -352,14 +352,13 @@ All fields are optional except `text`.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `text` | string | *(required)* | The notification message |
-| `duration_ms` | number | `3000` | Display duration in milliseconds. `0` = persistent (tap to dismiss) |
-| `text_color` | string | `#ffffff` | Hex color for the text |
-| `bg_color` | string | `#333333` | Hex color for the background |
-| `border_color` | string | *(none)* | Hex color for a border. Omit for no border |
-| `opacity` | number | `85` | Background opacity, 0–100 |
-| `font_size` | number | `0` (auto) | Font pixel size: 12, 14, 18, 24, 32, 36, or 48. `0` uses the scale-tier default |
-| `location` | string | `bottom` | `top`, `center`, or `bottom` |
+| `text` | string | *(required)* | The notification message, up to 191 UTF-8 bytes |
+| `duration_ms` | number | `3000` | 1000–300000 milliseconds. `0` = persistent (tap to dismiss) |
+
+Configure appearance under **Pads → Dialog appearance**. Notifications block
+underlying pad input. A successfully displayed notification replaces either
+dialog type; replacing a confirmation cancels its waiting action list. A failed
+replacement preserves the existing dialog.
 
 ### MQTT Topics
 
@@ -385,7 +384,7 @@ actions:
     target:
       entity_id: text.esp32_macropad_keuken_notify
     data:
-      value: '{"text": "Washer done! 🧺", "duration_ms": 0, "bg_color": "#1a3a1a", "location": "center"}'
+      value: '{"text": "Washer done! 🧺", "duration_ms": 0}'
 ```
 
 #### Temperature Warning
@@ -403,7 +402,7 @@ actions:
     target:
       entity_id: text.esp32_macropad_keuken_notify
     data:
-      value: '{"text": "🔥 Temperature: {{ states(\"sensor.living_room_temperature\") }}°C", "duration_ms": 10000, "text_color": "#ff4444", "bg_color": "#3a1a1a", "border_color": "#5a2a2a", "location": "top"}'
+      value: '{"text": "🔥 Temperature: {{ states(\"sensor.living_room_temperature\") }}°C", "duration_ms": 10000}'
 ```
 
 #### Dismiss After Action
@@ -428,11 +427,11 @@ actions:
 
 ### Behavior Notes
 
-- **Re-trigger**: Sending a new notification while one is active replaces it immediately — the old bubble is destroyed and the new one fades in.
-- **Tap to dismiss**: Users can always tap the bubble to dismiss it, regardless of the configured duration.
-- **Persistent mode**: Set `duration_ms` to `0` for notifications that stay on screen until tapped or replaced. The bubble still responds to tap-to-dismiss.
+- **Re-trigger**: A successfully displayed notification replaces either dialog type. Failed replacements preserve the existing dialog.
+- **Tap to dismiss**: Tap the notification without activating the pad underneath.
+- **Persistent mode**: Set `duration_ms` to `0` to stay until dismissed, replaced, or a screen transition closes the dialog.
 - **Screensaver**: Notifications display on `lv_layer_top()` — they appear above all screens including the screensaver overlay.
-- **State topic**: The device publishes the last notification text (retained) to `~/notify/state`. An empty state means no active notification.
+- **State topic**: `~/notify/state` retains the last accepted notification command text, not live dialog visibility. Sending an empty command publishes an empty state.
 
 ---
 

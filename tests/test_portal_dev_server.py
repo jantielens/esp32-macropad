@@ -557,6 +557,18 @@ class PortalDevServerTest(unittest.TestCase):
         for path in ("/api/pad/blocks", "/api/sounds/list", "/api/extensions", "/api/images"):
             self.assertEqual(self.request(path)[0], 200)
 
+    def test_dialog_appearance_test_is_not_saved(self):
+        before = self.request("/api/config")[1]
+        for kind in ("notification", "confirmation"):
+            payload = {"type": kind, "appearance": {
+                "background_opacity": 0, "background_pattern": "diagonal",
+                "background_pattern_color": "#226D78", "pattern_spacing": 12,
+                "pattern_stroke_width": 2}}
+            self.assertEqual(self.request("/api/component/dialog-appearance/test", "POST", payload)[0], 200)
+            self.assertEqual(self.server.mock_dialog_test, payload)
+            self.assertEqual(self.request("/api/config")[1], before)
+        self.assertEqual(self.request("/api/component/dialog-appearance/test", "POST", {"type": "unknown"})[0], 400)
+
     def test_epaper_appearance_defaults(self):
         profile = "crowpanel-4.2-interactive"
         self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {}, profile=profile)[0], 200)
@@ -608,7 +620,11 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual({action["type"] for action in catalog}, expected)
         for action in catalog:
             source = (actions_dir / (action["type"] + "_action.cpp")).read_text()
-            self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
+            if action["type"] in {"notify", "confirm"}:
+                source += (actions_dir / "dialog_action.h").read_text()
+                self.assertIn(json.dumps(action["label"]), source)
+            else:
+                self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
             self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
         fields = ("name", "icon", "second_icon", "axis_field", "horizontal_icon", "vertical_icon", "default_axis")
         widgets = {widget["type"]: widget for widget in self.server.pad_fixture["widget_catalog"]}

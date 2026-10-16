@@ -45,7 +45,7 @@
                   "sound_alert_kind": "tone",
                   "sound_alert_pattern": "880:200;0:100;880:200"
                 },
-                { "type": "notify", "notify_text": "Focus session complete" }
+                { "type": "notify", "message": "Focus session complete" }
               ]
             }
           }
@@ -88,9 +88,9 @@
           {
             "col_offset": 0, "row_offset": 3, "row_span": 2,
             "label_bottom": "Dismiss alarm", "bg_color": "F44336", "fg_color": "FFFFFF",
-            "icon_id": "mi_alarm_off", "confirm": true, "confirm_text": "Dismiss the alarm?",
+            "icon_id": "mi_alarm_off",
             "btn_state": "[expr:[alarm:1_state]==\"idle\"?\"hidden\":\"\"]",
-            "actions": [{"type": "alarm", "alarm_id": 1, "alarm_command": "cancel"}]
+            "actions": [{"type": "confirm", "message": "Dismiss the alarm?"}, {"type": "alarm", "alarm_id": 1, "alarm_command": "cancel"}]
           },
           {
             "col_offset": 1, "row_offset": 3, "col_span": 4, "row_span": 2,

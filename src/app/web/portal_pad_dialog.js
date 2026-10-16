@@ -48,11 +48,6 @@ function padLoadLocalImageOptions(selected) {
         });
 }
 
-function padConfirmChanged() {
-    var enabled = document.getElementById('pad-edit-confirm').checked;
-    document.getElementById('pad-edit-confirm-text-group').style.display = enabled ? '' : 'none';
-}
-
 function padDialogOpen(col, row) {
     padDialogSelectionGeneration++;
     padPvHide();
@@ -151,10 +146,6 @@ function padDialogOpen(col, row) {
     // Legacy single-action fallback
     if (!lpActions.length && btn.lp_action && btn.lp_action.type) lpActions = [btn.lp_action];
     actionEditorListLoad(padActionPrefixes('lp'), lpActions);
-
-    document.getElementById('pad-edit-confirm').checked = !!btn.confirm && !btn.widget_type;
-    document.getElementById('pad-edit-confirm-text').value = btn.confirm_text || '';
-    padConfirmChanged();
 
     // Image background
     var localImageGroup = document.getElementById('pad-edit-local-image-group');
@@ -328,12 +319,6 @@ function padDialogBuildButton() {
     // Long-press actions (array)
     var lpArr = actionPolicy.longPress ? actionEditorListBuild(padActionPrefixes('lp')) : [];
     if (lpArr.length) btn.lp_actions = lpArr;
-
-    if (document.getElementById('pad-edit-confirm').checked) {
-        btn.confirm = true;
-        const confirmText = document.getElementById('pad-edit-confirm-text').value.trim();
-        if (confirmText) btn.confirm_text = confirmText;
-    }
 
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();

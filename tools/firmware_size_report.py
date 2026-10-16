@@ -73,8 +73,9 @@ FEATURES = {
     "Widgets (HAS_DISPLAY)": (("widgets.cpp.o",), ()),
     "Pads / screens (HAS_DISPLAY)": (
         ("pad*.cpp.o", "screens.cpp.o", "screen_saver*.cpp.o", "button*.cpp.o", "label_style.cpp.o",
-         "visual_alert.cpp.o", "message_bubble.cpp.o", "swipe_config.cpp.o", "web_portal_pad.cpp.o"),
-        ("pad_editor_fragment_html_gz", "button_defaults_fragment_html_gz", "screensaver_fragment_html_gz"),
+         "visual_alert.cpp.o", "device_dialog.cpp.o", "dialog_appearance.cpp.o", "swipe_config.cpp.o", "web_portal_pad.cpp.o"),
+        ("pad_editor_fragment_html_gz", "button_defaults_fragment_html_gz",
+         "dialog_appearance_fragment_html_gz", "screensaver_fragment_html_gz"),
     ),
     "BLE HID (HAS_BLE_HID)": (
         ("ble_hid.cpp.o", "web_portal_ble.cpp.o"), (),

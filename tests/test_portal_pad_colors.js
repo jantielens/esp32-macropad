@@ -72,7 +72,7 @@ assert.strictEqual(context.padThresholdSourceValidate(), false);
 assert.strictEqual(sourceError.style.display, '');
 
 const elements = {};
-for (const selector of ['#cp-base', '#cp-base-summary', '#cp-base-body', '#cp-color-editor', '#cp-fill', '#cp-gen', '#cp-fx', '#cp-input-label', '#cp-input', '#cp-recent-grid', '#cp-recent-heading', '#cp-gen-source']) {
+for (const selector of ['#cp-base', '#cp-base-summary', '#cp-base-body', '#cp-color-editor', '#cp-fill', '#cp-fill-geometry', '#cp-gen', '#cp-fx', '#cp-input-label', '#cp-input', '#cp-recent-grid', '#cp-recent-heading', '#cp-gen-source']) {
     elements[selector] = { style: {}, children: [], value: '', focus() {}, appendChild(child) { this.children.push(child); } };
 }
 Object.defineProperty(elements['#cp-recent-grid'], 'innerHTML', { set() { this.children = []; } });
@@ -217,6 +217,37 @@ pickerContext.padColorPopoverApply('#123456');
 assert.strictEqual(applyEvents, 1);
 assert.strictEqual(controls.dataset.colorSet, '1');
 assert.strictEqual(pickerContext._cpPopover.fill, null);
+
+const spacingInput = { value: '8' };
+const strokeInput = { value: '1' };
+controls.querySelector = selector => ({
+    select: selection, '.bc-input': patternColor,
+    '[data-fill-spacing]': spacingInput, '[data-fill-stroke]': strokeInput
+})[selector];
+target.dataset = { allowBindings: 'false', fillControls: 'dialog-pattern' };
+pickerContext._cpPopover = draft();
+pickerContext._cpPopover.fill.geometry = { spacing: 12, stroke: 2 };
+pickerContext.padColorPopoverClose();
+assert.strictEqual(spacingInput.value, '8');
+assert.strictEqual(strokeInput.value, '1');
+pickerContext._cpPopover = draft();
+pickerContext._cpPopover.fill.geometry = { spacing: 12, stroke: 2 };
+pickerContext.padColorPopoverApply('#123456');
+assert.strictEqual(spacingInput.value, 12);
+assert.strictEqual(strokeInput.value, 2);
+assert.strictEqual(applyEvents, 2);
+pickerContext._cpPopover = draft();
+pickerContext._cpPopover.fill.color = '[expr:1]';
+pickerContext.padColorPopoverApply('#123456');
+assert.strictEqual(applyEvents, 2);
+pickerContext.padColorPopoverClose();
+pickerContext.document.getElementById = id => id === 'dialog-pattern' ? controls : null;
+assert.strictEqual(pickerContext.padColorFillControls(target), controls);
+const background = pickerContext.padFillBackground('diagonal', '#123456', 12, 2);
+assert.match(background.image, /repeating-linear-gradient\(135deg,#123456 0 2px,transparent 2px 12px\)/);
+assert.strictEqual(background.size, 'auto');
+assert.deepStrictEqual({ ...pickerContext.padFillBackground('none', '#123456', 12, 2) },
+    { image: 'none', size: 'auto' });
 
 const defaultsFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
 const defaultInputs = new Map();

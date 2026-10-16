@@ -57,6 +57,7 @@
 #include "components/swipe_actions_component.cpp"
 #include "components/boot_actions_component.cpp"
 #include "components/button_defaults_component.cpp"
+#include "components/dialog_appearance_component.cpp"
 #include "components/timers_component.cpp"
 #if HAS_LVGL_EPAPER
 #include "components/epaper_refresh_component.cpp"

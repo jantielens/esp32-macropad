@@ -74,8 +74,8 @@ ActionResult action_dispatch(const ButtonAction& act_in, const char* label,
         bool resolved = resolve_action_bindings(act);
 #endif
         if (!resolved) {
-            LOGW(TAG, "%s binding result exceeds action field capacity", label);
-            return ACTION_COMPLETE;
+            LOGW(TAG, "%s binding failed or result exceeds action field capacity; remaining actions discarded", label);
+            return ACTION_FAILED;
         }
         return action_dispatch_resolved(act, label, continuation_token);
     }

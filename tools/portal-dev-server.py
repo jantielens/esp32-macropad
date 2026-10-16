@@ -46,6 +46,16 @@ EPAPER_PRESENTATION_DEFAULTS = {
     "epaper_binding_refresh_interval_ms": 1000, "epaper_min_refresh_interval_ms": 500,
     "epaper_refresh_clock_on_minute_boundary": True, "epaper_full_refresh_threshold": 10,
 }
+DIALOG_APPEARANCE_DEFAULTS = {
+    "font": "", "font_size": 0, "text_color": "#FFFFFF",
+    "horizontal_align": 1, "vertical_align": 1,
+    "background_color": "#333333", "background_opacity": 100,
+    "background_pattern": "none", "background_pattern_color": "#111111",
+    "pattern_spacing": 8, "pattern_stroke_width": 1,
+    "backdrop_opacity": 60, "border_color": "#808080", "border_width": 1,
+    "corner_radius": 8, "padding": 16, "margin": 16,
+    "width": 0, "height": 0, "position": 1,
+}
 
 
 def remote_log_response_limit():
@@ -76,7 +86,7 @@ def reset_pad_fixtures(server, scenario="normal"):
                                "ota_deferred": False, "storage_error": False, "hook_error": False,
                                "enabled": False, "once_epoch": 0, "once_local": "", "lateness_minutes": 360}
     for action in fixture["catalog"]:
-        action["alarm_hook_allowed"] = action["type"] not in ("delay", "key", "gamepad", "camera_capture", "voice_assistant")
+        action["alarm_hook_allowed"] = action["type"] not in ("confirm", "delay", "key", "gamepad", "camera_capture", "voice_assistant")
         if action["type"] == "sound_alert":
             action["label"] = "Sound alert"
     fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm Control", "alarm_hook_allowed": True,
@@ -468,6 +478,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             return
 
         if path in ("/api/pad", "/api/pad/resolve", "/api/component/button-defaults/config",
+                    "/api/component/dialog-appearance/test",
                     "/api/component/display/screen", "/api/recipes/catalog", "/__mock/reset"):
             try:
                 data = json.loads(body.decode("utf-8")) if body else {}
@@ -476,7 +487,15 @@ class PortalHandler(SimpleHTTPRequestHandler):
             except (UnicodeDecodeError, ValueError):
                 self._serve_json({"error": "Invalid JSON object"}, 400)
                 return
-            if path == "/api/recipes/catalog":
+            if path == "/api/component/dialog-appearance/test":
+                if data.get("type") not in {"notification", "confirmation"} or not isinstance(data.get("appearance"), dict):
+                    self._serve_json({"error": "Invalid dialog appearance test"}, 400)
+                    return
+                if self.server.scenario == "save-error":
+                    self._serve_json({"error": "Mock display unavailable"}, 503)
+                    return
+                self.server.mock_dialog_test = copy.deepcopy(data)
+            elif path == "/api/recipes/catalog":
                 if len(body) > 64 * 1024:
                     self._serve_json({"error": "Recipe catalog exceeds 64 KiB"}, 413)
                     return
@@ -727,6 +746,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
+            if category["id"] == "pads":
+                category["items"].append({"id": "dialog-appearance", "display_name": "Dialog appearance"})
             if category["id"] == "display" and profile == "crowpanel-4.2-interactive":
                 category["items"].append({"id": "epaper-refresh", "display_name": "E-paper Presentation",
                                           "portal_script": "/portal-epaper-refresh.js"})
@@ -869,6 +890,15 @@ def main():
     server.logs_started = time.monotonic()
     reset_pad_fixtures(server, args.scenario)
     server.mock_config = {
+        "dialog_appearance": {
+            "notification": {**DIALOG_APPEARANCE_DEFAULTS, "position": 2},
+            "confirmation": {
+                **DIALOG_APPEARANCE_DEFAULTS,
+                "button_width": 0, "button_height": 0,
+                "approve_background": "#2563EB", "approve_color": "#FFFFFF",
+                "cancel_background": "#5F6368", "cancel_color": "#FFFFFF",
+            },
+        },
         **SCREENSAVER_DEFAULTS,
         "device_name": "Kitchen Pad",
         "backlight_brightness": 80,

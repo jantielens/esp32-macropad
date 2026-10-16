@@ -255,10 +255,10 @@ add_custom_command(
 )
 
 add_host_legacy_test(test_stopwatch_round_ui
-    SOURCES test_stopwatch_round_ui.cpp ${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
+    SOURCES test_stopwatch_round_ui.cpp ${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp
     DEFINITIONS UI_SCALE_TIER=1 DISPLAY_DISABLE_ANIMATIONS=1
-    OPTIONS -Wno-missing-field-initializers
-    INCLUDES ${CMAKE_CURRENT_BINARY_DIR} ${HOST_LVGL_DIR}
+    OPTIONS -Wno-missing-field-initializers -Wno-deprecated-declarations
+    INCLUDES ${CMAKE_CURRENT_BINARY_DIR} ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
     LIBRARIES host_lvgl
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
@@ -451,7 +451,7 @@ set(ACTION_TEST_SOURCES
 add_host_legacy_test(test_action_parse
     SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
+    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 HAS_TOUCH=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
@@ -459,7 +459,7 @@ add_host_legacy_test(test_action_parse_alarm_disabled
     SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
         ${PROJECT_SOURCE_DIR}/src/app/alarm_manager.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS ALARM_ENABLED=0 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
+    DEFINITIONS ALARM_ENABLED=0 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 HAS_TOUCH=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_action_bindings
@@ -485,6 +485,12 @@ add_host_legacy_test(test_action_sizes
     SOURCES test_action_sizes.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     OPTIONS -Wno-unused
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+add_host_legacy_test(test_pad_confirmation
+    SOURCES test_pad_confirmation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp stubs.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 add_host_legacy_test(test_camera_capture_action
