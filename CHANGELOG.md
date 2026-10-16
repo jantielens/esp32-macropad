@@ -28,6 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Replace the large user manuals with [focused, task-oriented user guides](docs/user/README.md)
+  for setup, device settings, pads, widgets, integrations, and specialized
+  workflows. Each topic introduces its purpose before configuration steps.
+  Move board-specific connections, pinouts, safety, and recovery notes into
+  board READMEs, linked from the [hardware index](docs/user/hardware.md).
+  Retire the old manual paths; use the new guide instead of old bookmarks.
+* Add scoped agent guidance for maintaining short, authoritative documentation
+  topics and reconciling narrative docs against the completed change set before
+  committing or handing work off as ready to commit.
 * **Breaking:** Replace button-level `confirm`/`confirm_text` settings with the
   confirmation action. Notification actions now contain only `message` and
   `duration_ms`; remove their old `notify_*` content and styling fields.
