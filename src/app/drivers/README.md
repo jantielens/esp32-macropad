@@ -34,6 +34,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | esp32-p4-lcd4b | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
 | esp32-p4-lcd4b-voice | ST7703_DSI | ST7703 | DSI | 720×720 | 0 | GT911 |  |
 | esp32c3-withsensors | ? | ? | ? | ?×? | ? | none |  |
+| feathers3d-interactive | IT8951 | IT8951 | SPI | 1872×1404 | 2 | none |  |
 | firebeetle2-esp32c6-aht10 | ? | ? | ? | ?×? | ? | none |  |
 | inkplate5v2-frame | ? | ? | ? | ?×? | ? | none |  |
 | inkplate6flick-frame | ? | ? | ? | ?×? | ? | none |  |
@@ -52,7 +53,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | jc4880p433-shutter | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | m5stack-stopwatch | ARDUINO_GFX_CO5300 | CO5300 | QSPI | 466×466 | 0 | CST820B |  |
 | reterminal-e1003-frame | ? | ? | ? | ?×? | ? | none |  |
-| reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | ? | 1872×1404 | 1 | GT911 |  |
+| reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | SPI | 1872×1404 | 1 | GT911 |  |
 
 <!-- BOARD_DRIVER_TABLE_END -->
 

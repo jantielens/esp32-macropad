@@ -193,7 +193,7 @@
 #define LV_USE_BUTTONMATRIX  0
 #define LV_USE_CALENDAR   0
 #ifndef LV_USE_CANVAS
-    #if HAS_TOUCH
+    #if HAS_TOUCH || HAS_NATIVE_EXTENSIONS
         #define LV_USE_CANVAS 1
     #else
         #define LV_USE_CANVAS 0

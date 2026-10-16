@@ -83,6 +83,69 @@ Monochrome panels override it to `false`. `GET /api/config` advertises
 `epaper_supported_render_modes`; unsupported persisted modes normalize to the
 board default, and API writes reject unsupported modes.
 
+## FeatherS3D with Waveshare 7.8 HAT
+
+The [board reference](../../src/boards/feathers3d-interactive/README.md)
+covers physical connections, button recovery, and flashing.
+
+Build `feathers3d-interactive` for the Unexpected Maker FeatherS3[D], with
+16 MB flash, 8 MB QSPI PSRAM, native USB CDC, and the Waveshare 7.8" IT8951
+HAT. This is an always-on, non-touch Macropad profile using normal pads and
+widgets, not the sleep-first E-Paper Frame lifecycle.
+
+```bash
+./tools/install-custom-partitions.sh
+./build.sh feathers3d-interactive
+```
+
+The `ota_4mb_16MB_ext` layout provides two 4 MiB OTA application slots,
+7.625 MiB LittleFS storage, and a 256 KiB native Extensions partition.
+The three slots hold 56 KiB, 56 KiB, and 120 KiB of usable ELF data.
+Use signed ESP32-S3 (`-s3.ext`) packages and prefer slow-changing widgets.
+SD storage, USB/BLE HID, audio, and battery telemetry remain disabled.
+
+Back up settings and files before migrating from the earlier `default_16MB`
+layout. A full USB flash must install the new partition table; initialize
+the new filesystem and restore the backup afterward. Firmware-only OTA
+does not migrate partition boundaries.
+
+| Signal | Feather GPIO | Connection |
+|---|---|---|
+| HAT SCK / MOSI / MISO | 36 / 35 / 37 | Dedicated SPI bus |
+| HAT CS / RESET / HRDY | 10 / 38 / 5 | HRDY LOW means busy |
+| Button | 14 | Normally-open contact to GND, active LOW |
+| HAT 5V / GND | External 5 V / common GND | Always powered, no GPIO17 boost control |
+
+Do not feed the HAT from the Feather's 3.3 V regulator. Use 3.3 V logic and a
+common ground. The panel-specific VCOM is -1.53 V (`IT8951_VCOM_MV=1530`);
+confirm the panel label before substituting another panel. GPIO17 is unused.
+The default is landscape 1872 x 1404 with rotation 2 for the confirmed mounting.
+The button has no default tap or hold actions; assign these in the portal.
+Existing boot-time configuration-button behavior remains available.
+
+Transport and startup follow the working
+[photoframe implementation](https://github.com/jantielens/esp32-it8951-photoframe/tree/1a70d2cf215310951f6631467387c1c399bf2bd9):
+200 ms reset LOW and HIGH delays, 24 MHz SPI writes, 1 MHz reads, I80 packed
+mode, big-endian 4-bit uploads, and VCOM selector 1 with readback verification.
+No GxEPD2 dependency is added to the interactive driver. The shared
+`IT8951EpaperDriver` retains the E1003's separate packing, power, VCOM selector,
+SPI speed, and temperature behavior through its board configuration.
+
+Grayscale is the default; selecting B/W in the existing e-paper settings takes
+effect after reboot. B/W uses regional DU waveforms; grayscale uses regional
+GC16. Both modes perform full-panel GC16 on first presentation, explicit full
+refresh, and the configured cleanup threshold (default 10 regional updates).
+The initial cadence is a 500 ms minimum presentation interval, 150 ms settling,
+and 1000 ms passive binding interval. These are scheduling intervals, not a
+promise of measured panel latency. Regional grayscale ghosting and response
+time require hardware validation.
+
+For bring-up, check cold boot and USB diagnostics, asymmetric corner labels
+and grayscale bars in landscape, small text/widget updates in both modes,
+repeated pad navigation, a forced full refresh, and saved button tap/hold
+actions. Check cleanup after repeated regional updates and OTA followed by
+reboot. Host transport checks do not establish physical image quality.
+
 ## CrowPanel 4.2 Profile
 
 Build `crowpanel-4.2-interactive` for the ESP32-S3-WROOM-1-N8R8 with 8 MB flash,

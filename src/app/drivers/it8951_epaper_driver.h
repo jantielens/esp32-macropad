@@ -1,5 +1,5 @@
-#ifndef RETERMINAL_E1003_EPAPER_DRIVER_H
-#define RETERMINAL_E1003_EPAPER_DRIVER_H
+#ifndef IT8951_EPAPER_DRIVER_H
+#define IT8951_EPAPER_DRIVER_H
 
 #include "../config_manager.h"
 #include "../display_driver.h"
@@ -7,10 +7,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
-class ReTerminalE1003EpaperDriver : public DisplayDriver {
+class IT8951EpaperDriver : public DisplayDriver {
 public:
-		ReTerminalE1003EpaperDriver(DeviceConfig* config);
-		~ReTerminalE1003EpaperDriver() override;
+		IT8951EpaperDriver(DeviceConfig* config);
+		~IT8951EpaperDriver() override;
 
 		void init() override;
 		void setRotation(uint8_t rotation) override;
@@ -68,4 +68,4 @@ private:
 		bool consumeFullRefreshRequest();
 };
 
-#endif // RETERMINAL_E1003_EPAPER_DRIVER_H
+#endif // IT8951_EPAPER_DRIVER_H

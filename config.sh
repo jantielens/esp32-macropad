@@ -55,6 +55,7 @@ PROJECT_DISPLAY_NAME="ESP32 Macropad"
 #   ["cyd-v2"]="esp32:esp32:esp32"                                                # CYD display v2 (same FQBN as classic ESP32)
 
 declare -A FQBN_TARGETS=(
+    ["feathers3d-interactive"]="esp32:esp32:um_feathers3:USBMode=hwcdc,CDCOnBoot=cdc,UploadMode=cdc,PartitionScheme=ota_4mb_16MB_ext,PSRAM=enabled"
     ["crowpanel-4.2-interactive"]="esp32:esp32:esp32s3:FlashSize=8M,PSRAM=opi,PartitionScheme=ota_3mb_8MB,CDCOnBoot=default"
     ["esp32-4848S040"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_4mb_16MB_ext,CDCOnBoot=default" # ESP32-S3-4848S040 (480x480 ST7701 RGB + GT911 touch; 16MB + OPI PSRAM; hardware UART)
     ["jc3248w535"]="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=ota_4mb_16MB_ext,USBMode=default,CDCOnBoot=default" # ESP32-S3 JC3248W535 (16MB + OPI PSRAM)

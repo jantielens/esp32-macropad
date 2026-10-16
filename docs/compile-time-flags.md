@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 357
+Total flags: 362
 
 ### Features (HAS_*)
 
@@ -72,7 +72,7 @@ Total flags: 357
 
 - **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
-- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_RETERMINAL_E1003, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_IT8951, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_CST820B_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
@@ -97,10 +97,13 @@ Total flags: 357
 - **EPAPER_FRAME_SD_EN_PIN** default: `(no default)` — microSD power-enable gate (drive HIGH ~5 ms before mounting the card).
 - **EPAPER_POWER_PIN** default: `(no default)` — E-paper power-enable GPIO, active HIGH.
 - **EPAPER_RESET_PIN** default: `(no default)` — E-paper reset GPIO, active LOW.
+- **EPAPER_SPI_MISO_PIN** default: `(no default)` — E-paper SPI data-input GPIO for IT8951 responses.
 - **EPAPER_SPI_MOSI_PIN** default: `(no default)` — E-paper SPI data-output GPIO.
 - **EPAPER_SPI_SCK_PIN** default: `(no default)` — E-paper SPI clock GPIO.
 - **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
+- **IT8951_CONTROLLER_POWER_PIN** default: `-1` — Optional active-HIGH controller power enable; -1 means externally powered.
+- **IT8951_PANEL_POWER_PIN** default: `-1` — Optional active-HIGH panel power enable; -1 means externally powered.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
 - **LCD_B1_PIN** default: `(no default)` — RGB Blue 1 pin.
 - **LCD_B2_PIN** default: `(no default)` — RGB Blue 2 pin.
@@ -299,6 +302,8 @@ Total flags: 357
 - **IS_EPAPER_FRAME** default: `false` — Select the sleep-first E-Paper Frame product class.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_VOICE_ASSISTANT** default: `false` — transcription, voice actions, transcript bindings, and portal controls.
+- **IT8951_E1003_PROTOCOL** default: `false` — Use reTerminal E1003's controller firmware and reversed image-packing protocol.
+- **IT8951_VCOM_MV** default: `1530` — Absolute panel-specific VCOM voltage in millivolts (1530 means -1.53 V).
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
 - **JD9165_DSI_HSYNC_PULSE_WIDTH** default: `24` — HSYNC pulse width in pixel clocks.
@@ -406,6 +411,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 | board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_DISPLAY | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_GRAYSCALE | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_FILESYSTEM | HAS_FREETYPE_FONTS | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_TTF_FONTS | HAS_USB_HID |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| feathers3d-interactive |  |  |  |  |  | ✅ | ✅ |  | ? | ✅ |  |  | ? | ✅ |  |  | ✅ | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
 | crowpanel-4.2-interactive |  |  |  |  |  |  | ✅ |  | ? | ✅ |  |  |  | ✅ |  |  | ✅ | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
 | esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
@@ -437,6 +443,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 | board-name | AUDIO_OUTPUT_DRIVER | CAMERA_DRIVER | DISPLAY_DRIVER | TOUCH_DRIVER |
 | --- | --- | --- | --- | --- |
+| feathers3d-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_IT8951 | — |
 | crowpanel-4.2-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_CROWPANEL_42 | — |
 | esp32-4848S040 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
 | jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
@@ -1048,6 +1055,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/components/extensions_component.cpp
   - src/app/components/web_portal_native_extensions.cpp
+  - src/app/lv_conf.h
   - src/app/native_extension.cpp
   - src/app/native_extension.h
   - src/app/native_extension_signature.cpp
@@ -1675,6 +1683,14 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/voice_assistant/voice_payload.h
   - src/app/device_classes/voice_assistant_device_class.cpp
   - src/app/portal_components.cpp
+- **IT8951_CONTROLLER_POWER_PIN**
+  - src/app/board_config.h
+- **IT8951_E1003_PROTOCOL**
+  - src/app/board_config.h
+- **IT8951_PANEL_POWER_PIN**
+  - src/app/board_config.h
+- **IT8951_VCOM_MV**
+  - src/app/board_config.h
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**

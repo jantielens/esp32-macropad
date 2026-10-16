@@ -1,8 +1,9 @@
-#include "reterminal_e1003_epaper_driver.h"
+#include "it8951_epaper_driver.h"
 #include "monochrome_render.h"
 
 #include "../board_config.h"
 #include "../log_manager.h"
+#include "../ota_activity.h"
 
 #include <SPI.h>
 #include <esp_heap_caps.h>
@@ -30,15 +31,14 @@ constexpr int kPanelWidth = 1872;
 constexpr int kPanelHeight = 1404;
 constexpr size_t kFramebufferBytes = (size_t)kPanelWidth * kPanelHeight / 2;
 
-constexpr int kPinSck = 7;
-constexpr int kPinMiso = 8;
-constexpr int kPinMosi = 9;
-constexpr int kPinCs = 10;
-constexpr int kPinBusy = 13;
-constexpr int kPinTftEnable = 11;
-constexpr int kPinIteEnable = 21;
-constexpr int kPinReset = 12;
-constexpr uint16_t kVcomMillivolts = 1400;
+constexpr int kPinSck = EPAPER_SPI_SCK_PIN;
+constexpr int kPinMiso = EPAPER_SPI_MISO_PIN;
+constexpr int kPinMosi = EPAPER_SPI_MOSI_PIN;
+constexpr int kPinCs = EPAPER_CS_PIN;
+constexpr int kPinBusy = EPAPER_BUSY_PIN;
+constexpr int kPinReset = EPAPER_RESET_PIN;
+constexpr uint16_t kVcomMillivolts = IT8951_VCOM_MV;
+constexpr bool kE1003Protocol = IT8951_E1003_PROTOCOL;
 
 struct PanelRegion {
 		uint16_t x;
@@ -48,10 +48,11 @@ struct PanelRegion {
 };
 
 SPIClass s_spi(HSPI);
-SPISettings s_spiSettings(10000000, MSBFIRST, SPI_MODE0);
+SPISettings s_spiSettings(kE1003Protocol ? 10000000 : 24000000, MSBFIRST, SPI_MODE0);
+SPISettings s_spiReadSettings(kE1003Protocol ? 10000000 : 1000000, MSBFIRST, SPI_MODE0);
 uint32_t s_imageBufferAddress = 0;
 
-bool waitHrdy(uint32_t timeoutMs = kHrdyTimeoutMs) {
+bool waitHrdy(uint32_t timeoutMs = kE1003Protocol ? kHrdyTimeoutMs : 10000) {
 		const uint32_t startMs = millis();
 		while (digitalRead(kPinBusy) == LOW) {
 			if (millis() - startMs >= timeoutMs) {
@@ -63,17 +64,23 @@ bool waitHrdy(uint32_t timeoutMs = kHrdyTimeoutMs) {
 		return true;
 }
 
+uint16_t transferWord(uint16_t value) {
+		if (kE1003Protocol) return s_spi.transfer16(value);
+		const uint16_t high = s_spi.transfer(value >> 8);
+		return (high << 8) | s_spi.transfer(value & 0xFF);
+}
+
 bool writeCommand(uint16_t command) {
 		if (!waitHrdy()) return false;
 		s_spi.beginTransaction(s_spiSettings);
 		digitalWrite(kPinCs, LOW);
-		s_spi.transfer16(0x6000);
+		transferWord(0x6000);
 		if (!waitHrdy()) {
 			digitalWrite(kPinCs, HIGH);
 			s_spi.endTransaction();
 			return false;
 		}
-		s_spi.transfer16(command);
+		transferWord(command);
 		digitalWrite(kPinCs, HIGH);
 		s_spi.endTransaction();
 		return true;
@@ -83,13 +90,13 @@ bool writeData(uint16_t data) {
 		if (!waitHrdy()) return false;
 		s_spi.beginTransaction(s_spiSettings);
 		digitalWrite(kPinCs, LOW);
-		s_spi.transfer16(0x0000);
+		transferWord(0x0000);
 		if (!waitHrdy()) {
 			digitalWrite(kPinCs, HIGH);
 			s_spi.endTransaction();
 			return false;
 		}
-		s_spi.transfer16(data);
+		transferWord(data);
 		digitalWrite(kPinCs, HIGH);
 		s_spi.endTransaction();
 		return true;
@@ -102,16 +109,21 @@ bool writeRegister(uint16_t registerAddress, uint16_t value) {
 bool readDeviceInfo() {
 		if (!writeCommand(kCommandGetDeviceInfo) || !waitHrdy()) return false;
 		uint16_t info[20] = {};
-		s_spi.beginTransaction(s_spiSettings);
+		s_spi.beginTransaction(s_spiReadSettings);
 		digitalWrite(kPinCs, LOW);
-		s_spi.transfer16(0x1000);
+		transferWord(0x1000);
 		if (!waitHrdy()) {
 			digitalWrite(kPinCs, HIGH);
 			s_spi.endTransaction();
 			return false;
 		}
-		s_spi.transfer16(0);
-		for (uint8_t index = 0; index < 20; ++index) info[index] = s_spi.transfer16(0);
+		transferWord(0);
+		if (!waitHrdy()) {
+			digitalWrite(kPinCs, HIGH);
+			s_spi.endTransaction();
+			return false;
+		}
+		for (uint8_t index = 0; index < 20; ++index) info[index] = transferWord(0);
 		digitalWrite(kPinCs, HIGH);
 		s_spi.endTransaction();
 
@@ -126,33 +138,60 @@ bool readDeviceInfo() {
 
 bool initializeController() {
 		pinMode(kPinCs, OUTPUT);
-		pinMode(kPinBusy, INPUT_PULLUP);
-		pinMode(kPinTftEnable, OUTPUT);
-		pinMode(kPinIteEnable, OUTPUT);
+		pinMode(kPinBusy, kE1003Protocol ? INPUT_PULLUP : INPUT);
 		pinMode(kPinReset, OUTPUT);
 		digitalWrite(kPinCs, HIGH);
-		digitalWrite(kPinTftEnable, HIGH);
-		digitalWrite(kPinIteEnable, HIGH);
+		for (int pin : {IT8951_PANEL_POWER_PIN, IT8951_CONTROLLER_POWER_PIN}) {
+			if (pin < 0) continue;
+			pinMode(pin, OUTPUT);
+			digitalWrite(pin, HIGH);
+		}
 		digitalWrite(kPinReset, HIGH);
 		delay(10);
 		digitalWrite(kPinReset, LOW);
-		delay(10);
+		delay(kE1003Protocol ? 10 : 200);
 		digitalWrite(kPinReset, HIGH);
-		delay(10);
+		delay(kE1003Protocol ? 10 : 200);
 		s_spi.begin(kPinSck, kPinMiso, kPinMosi, -1);
-		if (!waitHrdy(kStartupTimeoutMs) || !writeCommand(kCommandSystemRun) || !readDeviceInfo()) return false;
-		// E1003 firmware accepts selector 0x0002 for VCOM writes; 0x0001 is read-only.
-		return writeCommand(kCommandSetVcom) && writeData(0x0002) && writeData(kVcomMillivolts);
+		if (!waitHrdy(kE1003Protocol ? kStartupTimeoutMs : 10000) ||
+				!writeCommand(kCommandSystemRun) || !readDeviceInfo()) return false;
+		// The Waveshare HAT requires I80 packed mode; E1003 firmware initializes it itself.
+		if (!kE1003Protocol && !writeRegister(0x0004, 0x0001)) return false;
+		// E1003 firmware uses selector 2; the standard HAT uses selector 1.
+		if (!writeCommand(kCommandSetVcom) || !writeData(kE1003Protocol ? 2 : 1) ||
+				!writeData(kVcomMillivolts)) return false;
+		if (kE1003Protocol) return true;
+		if (!writeCommand(kCommandSetVcom) || !writeData(0) || !waitHrdy()) return false;
+		s_spi.beginTransaction(s_spiReadSettings);
+		digitalWrite(kPinCs, LOW);
+		transferWord(0x1000);
+		bool ready = waitHrdy();
+		uint16_t actualVcom = 0;
+		if (ready) {
+			transferWord(0);
+			ready = waitHrdy();
+			if (ready) actualVcom = transferWord(0);
+		}
+		digitalWrite(kPinCs, HIGH);
+		s_spi.endTransaction();
+		if (!ready) return false;
+		if (actualVcom != kVcomMillivolts) {
+			LOGE("Epaper", "IT8951 VCOM mismatch: requested -%umV, read -%umV", kVcomMillivolts, actualVcom);
+			return false;
+		}
+		LOGI("Epaper", "IT8951 VCOM verified: -%umV", actualVcom);
+		return true;
 }
 
 bool uploadFramebuffer(const uint8_t* framebuffer, const PanelRegion& region) {
 		if (!writeRegister(kRegisterImageBufferAddress, (uint16_t)(s_imageBufferAddress & 0xFFFF)) ||
-				!writeRegister(kRegisterImageBufferAddress + 2, (uint16_t)(s_imageBufferAddress >> 16)) ||
-				!writeCommand(kCommandSetTemperature) || !writeData(0x0001) || !writeData(16)) return false;
+				!writeRegister(kRegisterImageBufferAddress + 2, (uint16_t)(s_imageBufferAddress >> 16))) return false;
+		if (kE1003Protocol && (!writeCommand(kCommandSetTemperature) || !writeData(0x0001) || !writeData(16))) return false;
 
-		const uint16_t controllerX = kPanelWidth - region.x - region.width;
+		const uint16_t controllerX = kE1003Protocol ? kPanelWidth - region.x - region.width : region.x;
 		const uint16_t arguments[] = {
-				(uint16_t)(kImageMode4Bpp << 4), controllerX, region.y, region.width, region.height,
+				(uint16_t)((kE1003Protocol ? 0 : 0x0100) | (kImageMode4Bpp << 4)),
+				controllerX, region.y, region.width, region.height,
 		};
 		if (!writeCommand(kCommandLoadImageArea)) return false;
 		for (uint16_t argument : arguments) {
@@ -169,15 +208,31 @@ bool uploadFramebuffer(const uint8_t* framebuffer, const PanelRegion& region) {
 			s_spi.endTransaction();
 			return false;
 		}
-		s_spi.transfer16(0x0000);
+		transferWord(0x0000);
+		if (!waitHrdy()) {
+			digitalWrite(kPinCs, HIGH);
+			s_spi.endTransaction();
+			return false;
+		}
 		for (uint16_t row = 0; row < region.height; ++row) {
-			const uint8_t* sourceRow = framebuffer + (size_t)(region.y + row) * (kPanelWidth / 2) + region.x / 2;
-			for (uint16_t word = 0; word < wordsPerRow; ++word) {
-				const uint16_t sourceWord = wordsPerRow - 1 - word;
-				rowBuffer[word * 2] = sourceRow[sourceWord * 2];
-				rowBuffer[word * 2 + 1] = sourceRow[sourceWord * 2 + 1];
+			if ((row & 0x3F) == 0 && ota_activity_is_active()) {
+				digitalWrite(kPinCs, HIGH);
+				s_spi.endTransaction();
+				writeCommand(kCommandLoadImageEnd);
+				LOGI("Epaper", "IT8951 upload deferred for OTA");
+				return false;
 			}
-			s_spi.transfer(rowBuffer, rowBytes);
+			const uint8_t* sourceRow = framebuffer + (size_t)(region.y + row) * (kPanelWidth / 2) + region.x / 2;
+			if (kE1003Protocol) {
+				for (uint16_t word = 0; word < wordsPerRow; ++word) {
+					const uint16_t sourceWord = wordsPerRow - 1 - word;
+					rowBuffer[word * 2] = sourceRow[sourceWord * 2];
+					rowBuffer[word * 2 + 1] = sourceRow[sourceWord * 2 + 1];
+				}
+				s_spi.transfer(rowBuffer, rowBytes);
+			} else {
+				s_spi.writeBytes(sourceRow, rowBytes);
+			}
 			if ((row & 0x3F) == 0) yield();
 		}
 		digitalWrite(kPinCs, HIGH);
@@ -186,7 +241,7 @@ bool uploadFramebuffer(const uint8_t* framebuffer, const PanelRegion& region) {
 }
 
 bool refreshPanel(const PanelRegion& region, uint8_t waveform) {
-		const uint16_t controllerX = kPanelWidth - region.x - region.width;
+		const uint16_t controllerX = kE1003Protocol ? kPanelWidth - region.x - region.width : region.x;
 		if (!writeCommand(kCommandDisplayArea) || !writeData(controllerX) || !writeData(region.y) ||
 				!writeData(region.width) || !writeData(region.height) || !writeData(waveform)) return false;
 		const uint32_t startMs = millis();
@@ -202,22 +257,22 @@ bool refreshPanel(const PanelRegion& region, uint8_t waveform) {
 
 } // namespace
 
-ReTerminalE1003EpaperDriver::ReTerminalE1003EpaperDriver(DeviceConfig* cfg)
+IT8951EpaperDriver::IT8951EpaperDriver(DeviceConfig* cfg)
 		: config(cfg), currentX(0), currentY(0), currentW(0), currentH(0), rotation(0),
 				panelMode(cfg ? cfg->epaper_render_mode : EPAPER_DEFAULT_RENDER_MODE),
-				bwConversion(cfg ? cfg->epaper_bw_conversion : MONOCHROME_CONVERSION_THRESHOLD),
+				bwConversion(cfg ? cfg->epaper_bw_conversion : uint8_t(MONOCHROME_CONVERSION_THRESHOLD)),
 				bwThreshold(cfg ? cfg->epaper_bw_threshold : MONOCHROME_THRESHOLD), lastRefreshMs(0), lastChangeMs(0),
 			bwPartialUpdatesSinceFull(0), grayscalePartialUpdatesSinceFull(0), drawingFramebuffer(nullptr), presentedFramebuffer(nullptr), framebufferMutex(nullptr),
 			pendingChanges(false), fullRefreshRequested(false), hasPresentedFrame(false), initialized(false), dirtyRegionValid(false),
 			dirtyX(0), dirtyY(0), dirtyX2(0), dirtyY2(0) {}
 
-ReTerminalE1003EpaperDriver::~ReTerminalE1003EpaperDriver() {
+IT8951EpaperDriver::~IT8951EpaperDriver() {
 		if (framebufferMutex) vSemaphoreDelete(framebufferMutex);
 		if (drawingFramebuffer) heap_caps_free(drawingFramebuffer);
 		if (presentedFramebuffer) heap_caps_free(presentedFramebuffer);
 }
 
-void ReTerminalE1003EpaperDriver::init() {
+void IT8951EpaperDriver::init() {
 		if (panelMode != EPAPER_RENDER_MODE_BW && panelMode != EPAPER_RENDER_MODE_GRAYSCALE) {
 			panelMode = EPAPER_RENDER_MODE_GRAYSCALE;
 		}
@@ -225,42 +280,42 @@ void ReTerminalE1003EpaperDriver::init() {
 		drawingFramebuffer = (uint8_t*)heap_caps_malloc(framebufferBytes(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 		presentedFramebuffer = (uint8_t*)heap_caps_malloc(framebufferBytes(), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 		if (!framebufferMutex || !drawingFramebuffer || !presentedFramebuffer) {
-			LOGE("Epaper", "E1003 framebuffer or mutex allocation failed");
+			LOGE("Epaper", "IT8951 framebuffer or mutex allocation failed");
 			return;
 		}
 		memset(drawingFramebuffer, 0xFF, framebufferBytes());
 		memset(presentedFramebuffer, 0x00, framebufferBytes());
 		if (!initializeController()) {
-			LOGE("Epaper", "E1003 IT8951 initialization failed");
+			LOGE("Epaper", "IT8951 initialization failed");
 			return;
 		}
 		initialized = true;
-		LOGI("Epaper", "E1003 interactive panel initialized (%dx%d, %s)", width(), height(),
+		LOGI("Epaper", "IT8951 interactive panel initialized (%dx%d, %s)", width(), height(),
 				usesBwMode() ? "B/W" : "grayscale");
 }
 
-void ReTerminalE1003EpaperDriver::setRotation(uint8_t value) { rotation = value & 0x03; }
-int ReTerminalE1003EpaperDriver::width() { return (rotation & 1) ? DISPLAY_HEIGHT : DISPLAY_WIDTH; }
-int ReTerminalE1003EpaperDriver::height() { return (rotation & 1) ? DISPLAY_WIDTH : DISPLAY_HEIGHT; }
-void ReTerminalE1003EpaperDriver::setBacklight(bool) {}
-void ReTerminalE1003EpaperDriver::setBacklightBrightness(uint8_t) {}
-uint8_t ReTerminalE1003EpaperDriver::getBacklightBrightness() { return 0; }
-bool ReTerminalE1003EpaperDriver::hasBacklightControl() { return false; }
-void ReTerminalE1003EpaperDriver::applyDisplayFixes() {}
-void ReTerminalE1003EpaperDriver::startWrite() {}
-void ReTerminalE1003EpaperDriver::endWrite() {}
+void IT8951EpaperDriver::setRotation(uint8_t value) { rotation = value & 0x03; }
+int IT8951EpaperDriver::width() { return (rotation & 1) ? DISPLAY_HEIGHT : DISPLAY_WIDTH; }
+int IT8951EpaperDriver::height() { return (rotation & 1) ? DISPLAY_WIDTH : DISPLAY_HEIGHT; }
+void IT8951EpaperDriver::setBacklight(bool) {}
+void IT8951EpaperDriver::setBacklightBrightness(uint8_t) {}
+uint8_t IT8951EpaperDriver::getBacklightBrightness() { return 0; }
+bool IT8951EpaperDriver::hasBacklightControl() { return false; }
+void IT8951EpaperDriver::applyDisplayFixes() {}
+void IT8951EpaperDriver::startWrite() {}
+void IT8951EpaperDriver::endWrite() {}
 
-void ReTerminalE1003EpaperDriver::setAddrWindow(int16_t x, int16_t y, uint16_t w, uint16_t h) {
+void IT8951EpaperDriver::setAddrWindow(int16_t x, int16_t y, uint16_t w, uint16_t h) {
 		currentX = x;
 		currentY = y;
 		currentW = w;
 		currentH = h;
 }
 
-bool ReTerminalE1003EpaperDriver::usesBwMode() const { return panelMode == EPAPER_RENDER_MODE_BW; }
-size_t ReTerminalE1003EpaperDriver::framebufferBytes() const { return kFramebufferBytes; }
+bool IT8951EpaperDriver::usesBwMode() const { return panelMode == EPAPER_RENDER_MODE_BW; }
+size_t IT8951EpaperDriver::framebufferBytes() const { return kFramebufferBytes; }
 
-void ReTerminalE1003EpaperDriver::markDirtyRegion(int16_t x, int16_t y, uint16_t w, uint16_t h) {
+void IT8951EpaperDriver::markDirtyRegion(int16_t x, int16_t y, uint16_t w, uint16_t h) {
 		if (!w || !h) return;
 		int16_t minX = x;
 		int16_t minY = y;
@@ -300,7 +355,7 @@ void ReTerminalE1003EpaperDriver::markDirtyRegion(int16_t x, int16_t y, uint16_t
 		if (maxY > dirtyY2) dirtyY2 = maxY;
 }
 
-void ReTerminalE1003EpaperDriver::writePixel(int16_t x, int16_t y, uint16_t rgb565) {
+void IT8951EpaperDriver::writePixel(int16_t x, int16_t y, uint16_t rgb565) {
 		if (x < 0 || y < 0 || x >= width() || y >= height()) return;
 		int16_t drawX = x;
 		int16_t drawY = y;
@@ -322,14 +377,14 @@ void ReTerminalE1003EpaperDriver::writePixel(int16_t x, int16_t y, uint16_t rgb5
 		else drawingFramebuffer[offset] = (drawingFramebuffer[offset] & 0x0F) | (gray << 4);
 }
 
-bool ReTerminalE1003EpaperDriver::fullRefreshPending() {
+bool IT8951EpaperDriver::fullRefreshPending() {
 		portENTER_CRITICAL(&fullRefreshRequestMux);
 		const bool requested = fullRefreshRequested;
 		portEXIT_CRITICAL(&fullRefreshRequestMux);
 		return requested;
 }
 
-bool ReTerminalE1003EpaperDriver::consumeFullRefreshRequest() {
+bool IT8951EpaperDriver::consumeFullRefreshRequest() {
 		portENTER_CRITICAL(&fullRefreshRequestMux);
 		const bool requested = fullRefreshRequested;
 		fullRefreshRequested = false;
@@ -337,7 +392,7 @@ bool ReTerminalE1003EpaperDriver::consumeFullRefreshRequest() {
 		return requested;
 }
 
-void ReTerminalE1003EpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
+void IT8951EpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
 		if (!initialized || !data || !framebufferMutex) return;
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
 		const uint32_t sourceStride = flushSrcStride ? flushSrcStride / sizeof(uint16_t) : currentW;
@@ -352,9 +407,10 @@ void ReTerminalE1003EpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
 		if ((uint32_t)currentW * currentH >= 1024) vTaskDelay(1);
 }
 
-void ReTerminalE1003EpaperDriver::present() {
-		if (!initialized || !framebufferMutex) return;
+void IT8951EpaperDriver::present() {
+		if (!initialized || !framebufferMutex || ota_activity_is_active()) return;
 		while (true) {
+			if (ota_activity_is_active()) return;
 			xSemaphoreTake(framebufferMutex, portMAX_DELAY);
 			if (!pendingChanges && !fullRefreshPending()) {
 				xSemaphoreGive(framebufferMutex);
@@ -403,9 +459,11 @@ void ReTerminalE1003EpaperDriver::present() {
 		xSemaphoreGive(framebufferMutex);
 
 		const uint32_t startMs = millis();
-		const bool presented = uploadFramebuffer(presentedFramebuffer, region) && refreshPanel(region, fullRefresh || !usesBwMode() ? kWaveformGc16 : kWaveformDu);
+		const bool presented = !ota_activity_is_active() && uploadFramebuffer(presentedFramebuffer, region) &&
+				!ota_activity_is_active() && refreshPanel(region, fullRefresh || !usesBwMode() ? kWaveformGc16 : kWaveformDu);
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
 		if (!presented) {
+			hasPresentedFrame = false;
 			pendingChanges = true;
 			dirtyX = 0;
 			dirtyY = 0;
@@ -426,7 +484,7 @@ void ReTerminalE1003EpaperDriver::present() {
 		static uint32_t last_report_ms = 0;
 		static uint32_t presentations = 0;
 		if (!presented) {
-			LOGE("Epaper", "E1003 presentation failed");
+			LOGE("Epaper", "IT8951 presentation failed");
 		} else {
 			++presentations;
 			if (forceFull || scheduledFull || completed_ms - last_report_ms >= 60000) {
@@ -444,7 +502,7 @@ void ReTerminalE1003EpaperDriver::present() {
 		}
 }
 
-bool ReTerminalE1003EpaperDriver::requestFullRefresh() {
+bool IT8951EpaperDriver::requestFullRefresh() {
 		if (!initialized) return false;
 		portENTER_CRITICAL(&fullRefreshRequestMux);
 		fullRefreshRequested = true;

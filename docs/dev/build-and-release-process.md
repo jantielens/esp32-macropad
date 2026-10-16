@@ -152,6 +152,20 @@ Conventions:
 
 ## Build System
 
+The `feathers3d-interactive` target uses
+`esp32:esp32:um_feathers3` with hardware USB CDC, enabled QSPI PSRAM, and
+the `ota_4mb_16MB_ext` OTA partition scheme. Build it with
+`./build.sh feathers3d-interactive`. Its metadata advertises the non-touch
+1872 x 1404 IT8951 display under Macropad with native Extensions enabled.
+The layout has two 4 MiB application slots, 7.625 MiB LittleFS storage,
+and three Extension slots (56 KiB, 56 KiB, and 120 KiB usable ELF capacity).
+Run `./tools/install-custom-partitions.sh` before building. Migration from
+the earlier `default_16MB` layout requires a data backup, full USB flash,
+storage reinitialization, and restoration, not a firmware-only OTA.
+The web installer maps the native `um_feathers3` board ID to ESP32-S3 and
+places the bootloader at offset 0.
+See the [Feather wiring guide](interactive-epaper.md#feathers3d-with-waveshare-78-hat).
+
 ### Build Configuration
 
 The build system automatically applies project branding during compilation:
@@ -498,8 +512,8 @@ This template automates the installation:
 
 ### ESP32-S3 4 MiB OTA Layout
 
-`esp32-4848S040`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and
-`m5stack-stopwatch` use
+`esp32-4848S040`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`,
+`m5stack-stopwatch`, and `feathers3d-interactive` use
 `ota_4mb_16MB_ext` to provide firmware headroom while retaining two 4 MiB OTA
 slots. The 16 MiB layout also provides 256 KiB for native Extensions and
 7.625 MiB for internal

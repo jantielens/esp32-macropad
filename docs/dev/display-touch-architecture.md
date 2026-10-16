@@ -299,7 +299,24 @@ itself a release: it can also mean that no event is pending. The touch driver
 reads only pending events, retains contact state between them, and serializes
 controller reads so a one-shot report cannot be consumed by another observer.
 
-### reTerminal E1003 LVGL
+### IT8951 Interactive E-Paper
+
+`feathers3d-interactive` and `reterminal-e1003-interactive` share
+`drivers/it8951_epaper_driver.cpp`, selected by `DISPLAY_DRIVER_IT8951`.
+`DISPLAY_DRIVER_RETERMINAL_E1003` remains an alias for compatibility.
+The Feather uses the standard Waveshare HAT protocol, externally supplied
+5 V, SPI GPIO36/35/37, CS10, RESET38, HRDY5, and VCOM -1.53 V. It has no touch.
+Its single GPIO14 button has configurable tap/hold actions without defaults.
+The board uses landscape rotation 2. See the
+[Feather profile](interactive-epaper.md#feathers3d-with-waveshare-78-hat)
+for wiring, startup provenance, and hardware acceptance checks.
+
+The E1003 override sets `IT8951_E1003_PROTOCOL=true` and retains its original
+power GPIO11/21, 10 MHz SPI, short reset, mirrored controller coordinates,
+reversed upload words, temperature command, and VCOM selector 2 at -1.4 V.
+The standard HAT uses a 200 ms reset, 24 MHz writes, 1 MHz reads, explicit
+packed-mode initialization, direct big-endian uploads, and VCOM selector 1
+with readback verification. HAT startup fails explicitly on a VCOM mismatch.
 
 `reterminal-e1003-interactive` is an always-on IT8951 e-paper Macropad target.
 Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
@@ -312,6 +329,9 @@ Initial and forced presentations use full-panel GC16, as do scheduled refreshes
 in both modes. Regional grayscale quality still needs hardware validation.
 Touch uses the existing GT911 driver on the E1003's shared
 GPIO19/GPIO20 I2C lines.
+Both profiles defer uploads at row checkpoints when OTA begins. Failed or
+interrupted presentations invalidate the known panel state and retry with a
+full refresh instead of treating the unsent snapshot as an unchanged frame.
 
 ### CrowPanel 4.2 A-Revision
 

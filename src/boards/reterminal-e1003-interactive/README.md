@@ -51,5 +51,5 @@ layout can use OTA.
 ## References
 
 * [Variant assignments](board_overrides.h)
-* [Interactive display driver](../../app/drivers/reterminal_e1003_epaper_driver.cpp)
+* [Interactive display driver](../../app/drivers/it8951_epaper_driver.cpp)
 * [Hardware index](../../../docs/user/hardware.md)

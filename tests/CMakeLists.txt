@@ -77,6 +77,18 @@ add_host_legacy_test(test_crowpanel_epaper_driver
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
+foreach(board feathers3d-interactive reterminal-e1003-interactive)
+    add_host_legacy_test(test_it8951_${board}
+        SOURCES test_it8951_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/app/drivers/it8951_epaper_driver.cpp
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/it8951_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+            ${PROJECT_SOURCE_DIR}/src/boards/${board}
+        DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
+            TEST_HEAP_CAPS_ALLOCATOR=1 TEST_FREERTOS_MUTEX_LIFECYCLE=1 LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
+        OPTIONS -Wno-unused-parameter
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/freertos/portmacro.h
+    )
+endforeach()
+
 add_host_legacy_test(test_sensor_manager
     SOURCES test_sensor_manager.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}

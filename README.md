@@ -239,6 +239,11 @@ for offline refreshes between network syncs.
 Want buttons instead? **Interactive E-Paper** runs the customizable pad UI with
 black-and-white or grayscale rendering. It is a different firmware experience
 from the sleep-first image frame.
+The **FeatherS3[D] Interactive** profile pairs an Unexpected Maker FeatherS3[D]
+with the Waveshare 7.8" IT8951 HAT in landscape. It supports B/W and 16-level
+grayscale, regional updates, native Extensions, and one configurable hardware
+button without touch.
+See [wiring and setup](src/boards/feathers3d-interactive/README.md).
 The B/W-only **CrowPanel 4.2 Interactive** uses its physical three-way rotary
 switch instead of touch: Up/Down selects buttons, OK taps the selection, holding
 OK uses Tap & Hold, and Boot requests a full refresh. Pads start without a

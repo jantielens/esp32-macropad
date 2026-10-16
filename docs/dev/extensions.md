@@ -17,6 +17,8 @@ zero or more pad buttons through the **Extension** widget.
 The firmware owns storage, flash mapping, LVGL task ownership, package slots,
 and button dispatch. An Extension owns only its UI children and any resources it
 allocates through its own code.
+Enabling `HAS_NATIVE_EXTENSIONS` also enables LVGL canvas support, including
+on boards without touch.
 
 ## Slots
 
@@ -27,6 +29,13 @@ P4 and S3 extension partitions contain three fixed slots:
 | Small 1 | 56 KiB |
 | Small 2 | 56 KiB |
 | Large | 120 KiB |
+
+FeatherS3[D] Interactive uses all three slots with
+`ota_4mb_16MB_ext`: two 4 MiB OTA firmware slots and 7.625 MiB LittleFS
+storage remain available. Install signed `-s3.ext` packages and use
+slow-changing widgets on its e-paper panel. See the
+[board reference](../../src/boards/feathers3d-interactive/README.md)
+for the required full-USB-flash migration from its earlier layout.
 
 Inkplate 6FLICK Interactive has one 32 KiB usable slot in a 40 KiB raw
 partition. It does not support the other two slots.

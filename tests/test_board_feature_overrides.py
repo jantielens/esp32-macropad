@@ -15,11 +15,12 @@ appearance_macros = {
     "pixel_shift_distance_px": "DEFAULT_PIXEL_SHIFT_DISTANCE",
 }
 for board, target in (("m5stack-stopwatch", "ESP32S3"), ("crowpanel-4.2-interactive", "ESP32S3"),
+                      ("feathers3d-interactive", "ESP32S3"),
                       ("inkplate6flick-interactive", "ESP32"), ("reterminal-e1003-interactive", "ESP32S3")):
     expected = dict(fixture["firmware_defaults"])
     if board != "m5stack-stopwatch":
         expected.update(fixture["epaper_firmware_defaults"])
-    if board == "reterminal-e1003-interactive":
+    if board in ("reterminal-e1003-interactive", "feathers3d-interactive"):
         expected.update(widget_series_color_2="#555555", widget_series_color_3="#888888",
                         widget_series_color_4="#AAAAAA", widget_track_color="#DDDDDD",
                         widget_tick_color="#555555", widget_zone_color="#888888", widget_reference_color="#555555")
@@ -54,7 +55,9 @@ subprocess.run(
      "-I", str(root / "src/boards/crowpanel-4.2-interactive"),
      "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
     input='''#include "src/app/board_config.h"
+#include "src/app/lv_conf.h"
 static_assert(HAS_DISPLAY && HAS_LVGL_EPAPER && HAS_EPAPER_PANEL, "Interactive profile required");
+static_assert(!LV_USE_CANVAS, "Non-touch profile without extensions does not need canvas");
 static_assert(!HAS_TOUCH && !IS_EPAPER_FRAME && !HAS_EPAPER_GRAYSCALE, "Monochrome non-touch profile required");
 static_assert(NUM_HW_BUTTONS == 6 && MAX_HW_BUTTONS >= 6, "All six inputs required");
 static_assert(HW_BUTTON_DEFS[0].pin == 2 && HW_BUTTON_DEFS[1].pin == 1, "Menu and Back pins");
@@ -66,6 +69,32 @@ static_assert(EPAPER_RESET_PIN == 47 && EPAPER_BUSY_PIN == 48 && EPAPER_POWER_PI
 ''', text=True, check=True,
 )
 print("PASS: crowpanel-4.2-interactive")
+subprocess.run(
+    ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+     "-x", "c++", "-", "-I", str(root),
+     "-I", str(root / "tests"),
+     "-I", str(root / "src/boards/feathers3d-interactive"),
+     "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32S3=1"],
+    input='''#include "src/app/board_config.h"
+#include "src/app/native_extension.h"
+#include "src/app/lv_conf.h"
+static_assert(HAS_DISPLAY && HAS_LVGL_EPAPER && HAS_EPAPER_PANEL && HAS_EPAPER_GRAYSCALE, "Interactive grayscale profile");
+static_assert(!HAS_TOUCH && !IS_EPAPER_FRAME && !HAS_SD_CARD, "Non-touch profile without SD");
+static_assert(!HAS_USB_HID && !HAS_BLE_HID, "No unadvertised HID transports");
+static_assert(HAS_NATIVE_EXTENSIONS && NATIVE_EXTENSION_SLOT_COUNT == 3, "Three native extension slots required");
+static_assert(LV_USE_CANVAS, "Extensions require canvas even without touch");
+static_assert(NUM_HW_BUTTONS == 1 && HW_BUTTON_DEFS[0].pin == 14 && BUTTON_PIN == 14, "Single GPIO14 input");
+static_assert(DISPLAY_WIDTH == 1872 && DISPLAY_HEIGHT == 1404 && DISPLAY_ROTATION == 2, "Landscape mounting");
+static_assert(EPAPER_SPI_SCK_PIN == 36 && EPAPER_SPI_MOSI_PIN == 35 && EPAPER_SPI_MISO_PIN == 37, "Proven SPI wiring");
+static_assert(EPAPER_CS_PIN == 10 && EPAPER_RESET_PIN == 38 && EPAPER_BUSY_PIN == 5, "Proven control wiring");
+static_assert(IT8951_VCOM_MV == 1530 && !IT8951_E1003_PROTOCOL, "Panel-specific standard HAT protocol");
+static_assert(IT8951_PANEL_POWER_PIN == -1 && IT8951_CONTROLLER_POWER_PIN == -1, "Externally powered HAT");
+#ifdef HW_BUTTON_DEFAULTS_JSON
+#error Feather button must have no default actions
+#endif
+''', text=True, check=True,
+)
+print("PASS: feathers3d-interactive")
 with tempfile.TemporaryDirectory() as directory:
     executable = pathlib.Path(directory) / "button-defaults"
     subprocess.run(

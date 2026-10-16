@@ -26,7 +26,7 @@ fail_if_present '\bEPAPER_(BATTERY|SD|BUTTON|VCOM|FAST_REFRESH|PIN)_[A-Z0-9_]*\b
 unexpected="$(rg -o --glob '!build/**' --glob '!src/app/web_assets.h' '\bEPAPER_[A-Z][A-Z0-9_]*\b' src config.sh *.sh \
     | sed 's/.*://' \
     | sort -u \
-    | rg -v '^(EPAPER_FRAME($|_)|EPAPER_(BINDING|BW|DEFAULT|MIN_REFRESH|REFRESH|RENDER)_|EPAPER_(BUSY|CS|DC|POWER|RESET|SPI_MOSI|SPI_SCK)_PIN$)' || true)"
+    | rg -v '^(EPAPER_FRAME($|_)|EPAPER_(BINDING|BW|DEFAULT|MIN_REFRESH|REFRESH|RENDER)_|EPAPER_(BUSY|CS|DC|POWER|RESET|SPI_MISO|SPI_MOSI|SPI_SCK)_PIN$)' || true)"
 if [[ -n "$unexpected" ]]; then
     echo "FAIL: unexpected unscoped E-Paper macro(s):" >&2
     echo "$unexpected" >&2
