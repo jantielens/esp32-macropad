@@ -27,6 +27,8 @@ struct DialogBackground {
     uint8_t stroke = 1;
 };
 
+enum class DialogSelection : uint8_t { None, Cancel, Approve };
+
 struct Dialog {
     lv_obj_t* overlay = nullptr;
     lv_obj_t* cancel = nullptr;
@@ -37,7 +39,7 @@ struct Dialog {
     uint32_t generation = 0;
     uint32_t deadline = 0;
     bool timed = false;
-    bool selected_approve = false;
+    DialogSelection selection = DialogSelection::None;
     ~Dialog() {
         if (overlay) lv_obj_delete(overlay);
         // fonts are released after all LVGL objects that reference them.
@@ -150,7 +152,7 @@ lv_obj_t* button(Dialog& dialog, lv_obj_t* parent, const char* text,
     lv_obj_set_style_bg_color(result, lv_color_hex(approve ? style.approve_background : style.cancel_background), 0);
     lv_obj_set_style_bg_opa(result, LV_OPA_COVER, 0);
     lv_obj_set_style_outline_color(result, lv_color_hex(style.text_color), 0);
-    lv_obj_set_style_outline_width(result, approve ? 0 : 3, 0);
+    lv_obj_set_style_outline_width(result, 0, 0);
     lv_obj_add_flag(result, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(result, click, LV_EVENT_CLICKED,
         reinterpret_cast<void*>(static_cast<uintptr_t>(dialog.generation)));
@@ -399,12 +401,16 @@ bool device_dialog_navigate(const char* command) {
     if (!current->token) {
         if (!strcmp(command, "tap") || !strcmp(command, "tap_hold"))
             finish(false, "Notification dismissed");
-    } else if (!strcmp(command, "tap")) {
-        finish(current->selected_approve, current->selected_approve ? "Confirmation approved" : "Confirmation cancelled");
-    } else if (!strcmp(command, "next") || !strcmp(command, "previous")) {
-        current->selected_approve = !current->selected_approve;
-        lv_obj_set_style_outline_width(current->cancel, current->selected_approve ? 0 : 3, 0);
-        lv_obj_set_style_outline_width(current->approve, current->selected_approve ? 3 : 0, 0);
+    } else if (!strcmp(command, "tap") && current->selection != DialogSelection::None) {
+        const bool approved = current->selection == DialogSelection::Approve;
+        finish(approved, approved ? "Confirmation approved" : "Confirmation cancelled");
+    } else if (!strcmp(command, "next") || !strcmp(command, "previous") || !strcmp(command, "tap")) {
+        if (current->selection == DialogSelection::None)
+            current->selection = !strcmp(command, "previous") ? DialogSelection::Approve : DialogSelection::Cancel;
+        else
+            current->selection = current->selection == DialogSelection::Cancel ? DialogSelection::Approve : DialogSelection::Cancel;
+        lv_obj_set_style_outline_width(current->cancel, current->selection == DialogSelection::Cancel ? 3 : 0, 0);
+        lv_obj_set_style_outline_width(current->approve, current->selection == DialogSelection::Approve ? 3 : 0, 0);
     }
     return true;
 }

@@ -416,7 +416,32 @@ for (const action of roundTrips) {
 context.actionEditorLoad('round-trip', {type:'sound_alert'});
 assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'sound_alert', sound_alert_kind:'tone', sound_alert_pattern:''});
 context.actionEditorLoad('round-trip', {type:'notify', message:'Notification'});
-assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'notify', message:'Notification', duration_ms:3000});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(context.actionEditorBuild('round-trip'))), {type:'notify', message:'Notification', duration_ms:0});
+for (const type of ['notify', 'confirm']) {
+    for (const initial of [{}, {type:'mqtt', message:'Unrelated content', duration_ms:5000}, {type}]) {
+        context.actionEditorLoad('dialog-defaults', initial);
+        document.getElementById('dialog-defaults-type').value = type;
+        context.actionEditorTypeChanged('dialog-defaults');
+        const action = context.actionEditorBuild('dialog-defaults');
+        assert.strictEqual(action.message, 'Your message to show');
+        assert.strictEqual(action[type === 'confirm' ? 'timeout_ms' : 'duration_ms'], 0);
+        assert.strictEqual(document.getElementById('dialog-defaults-' + type + '-persistent').checked, true);
+        assert.strictEqual(document.getElementById('dialog-defaults-' + type + '-seconds').disabled, true);
+        if (type === 'confirm') {
+            assert.strictEqual(action.approve_text, 'Continue');
+            assert.strictEqual(action.cancel_text, 'Cancel');
+        }
+    }
+    const timingField = type === 'confirm' ? 'timeout_ms' : 'duration_ms';
+    const saved = {type, message:'Keep my message', [timingField]:61000};
+    context.actionEditorLoad('dialog-defaults', saved);
+    assert.strictEqual(context.actionEditorBuild('dialog-defaults')[timingField], 61000);
+    assert.strictEqual(context.actionEditorBuild('dialog-defaults').message, saved.message);
+    assert.strictEqual(document.getElementById('dialog-defaults-' + type + '-persistent').checked, false);
+    assert.strictEqual(document.getElementById('dialog-defaults-' + type + '-seconds').disabled, false);
+    context.actionEditorLoad('dialog-defaults', {...saved, message:''});
+    assert.throws(() => context.actionEditorBuild('dialog-defaults'), /Dialog message is required/);
+}
 context.actionEditorLoad('round-trip', {type:'delay'});
 assert.strictEqual(context.actionEditorBuild('round-trip').duration_ms, 1000);
 context.actionEditorLoad('round-trip', {type:'visual_alert', op:'stop'});

@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Open confirmations without a preselected button. The first physical Next,
+  Previous, or Tap selects an option without activating it; touch still
+  activates either button directly.
 * Stop action sequences when binding resolution fails or exceeds a dialog
   message's capacity, rather than displaying truncated confirmation text.
 * Cancel pending confirmations on screen transitions, display teardown, and

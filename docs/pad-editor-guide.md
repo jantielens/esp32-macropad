@@ -615,6 +615,18 @@ Insert a **Confirmation** action before work that needs approval. Earlier action
 
 Confirmation has a message, literal approve/cancel captions, and a timeout of **1–300 seconds** or **No timeout**. Messages allow line breaks and bindings resolved once when executed. A failed or overflowing binding stops the sequence. Messages hold up to 191 UTF-8 bytes; each caption holds up to 27 UTF-8 bytes. A confirmation without usable touch or configured physical navigation is rejected.
 
+New notification and confirmation actions in the editor start with
+**Your message to show** and no timeout (**Until dismissed** for notifications,
+**No timeout** for confirmations). Replace the sample message before saving.
+Existing messages and explicit durations remain unchanged.
+
+Confirmations open with neither button selected. With physical navigation, the
+first **Next** selects Cancel, the first **Previous** selects Approve, and the
+first **Tap** selects Cancel without activating it. Once selected, Next or
+Previous switches buttons and Tap activates the selected button. Tap & Hold
+does nothing. Touch activates either button directly. Every replacement
+confirmation starts without a selection again.
+
 **Action types:**
 
 | Group | Type | What it does |

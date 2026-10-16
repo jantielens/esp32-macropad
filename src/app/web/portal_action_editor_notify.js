@@ -1,5 +1,6 @@
 ['notify', 'confirm'].forEach(function(type) {
     var confirmation = type === 'confirm';
+    var defaultMessage = 'Your message to show';
     _actionEditorExtensions.push({
         type: type,
         bindingSuffixes: ['-' + type + '-message'],
@@ -7,7 +8,7 @@
             var id = prefix + '-' + type;
             var html = '<div id="' + id + '-group" style="display:none;">';
             html += '<div class="form-group"><label for="' + id + '-message">Message <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
-            html += '<textarea class="form-control form-control-sm" id="' + id + '-message" maxlength="191" rows="3"></textarea>';
+            html += '<textarea class="form-control form-control-sm" id="' + id + '-message" maxlength="191" rows="3">' + defaultMessage + '</textarea>';
             html += '<small>Up to 191 UTF-8 bytes. Line breaks and bindings supported; resolved once when this action runs.</small></div>';
             if (confirmation) {
                 ['approve', 'cancel'].forEach(function(button) {
@@ -17,8 +18,8 @@
                 });
             }
             html += '<div class="form-group"><label for="' + id + '-seconds">' + (confirmation ? 'Timeout' : 'Display duration') + ' (seconds)</label>';
-            html += '<input type="number" class="form-control form-control-sm" id="' + id + '-seconds" min="1" max="300" step="1" value="' + (confirmation ? '10' : '3') + '">';
-            html += '<label><input type="checkbox" id="' + id + '-persistent" onchange="document.getElementById(\'' + id + '-seconds\').disabled=this.checked"> ' + (confirmation ? 'No timeout' : 'Until dismissed') + '</label></div>';
+            html += '<input type="number" class="form-control form-control-sm" id="' + id + '-seconds" min="1" max="300" step="1" value="' + (confirmation ? '10' : '3') + '" disabled>';
+            html += '<label><input type="checkbox" id="' + id + '-persistent" checked onchange="document.getElementById(\'' + id + '-seconds\').disabled=this.checked"> ' + (confirmation ? 'No timeout' : 'Until dismissed') + '</label></div>';
             html += '<small>Appearance comes from <a href="#dialog-appearance">Dialog appearance</a>. ' +
                 (confirmation ? 'Approval resumes the remaining actions. Cancel, timeout, replacement, or failure stops them. Later actions resolve their own bindings.' : 'Blocks pad input until dismissed, but does not pause the action sequence.') + '</small></div>';
             return html;
@@ -30,8 +31,9 @@
         load: function(prefix, action) {
             var id = prefix + '-' + type;
             var message = document.getElementById(id + '-message');
-            if (message) message.value = action.message || '';
-            var timing = action[confirmation ? 'timeout_ms' : 'duration_ms'];
+            if (message) message.value = action.type === type && action.message !== undefined ? action.message : defaultMessage;
+            var timing = action.type === type ? action[confirmation ? 'timeout_ms' : 'duration_ms'] : undefined;
+            if (timing === undefined) timing = 0;
             var seconds = document.getElementById(id + '-seconds');
             var persistent = document.getElementById(id + '-persistent');
             if (seconds) {

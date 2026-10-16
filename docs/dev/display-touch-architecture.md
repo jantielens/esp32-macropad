@@ -1732,6 +1732,11 @@ Input generation changes and LVGL release suppression prevent stale gestures
 from approving a replacement or activating the underlying pad. A fully
 transparent overlay remains modal.
 
+Each confirmation starts with no physical-navigation selection or focus
+outline, including after replacement. The first Next selects Cancel; Previous
+selects Approve; Tap selects Cancel without completing the waiting continuation.
+Only a later Tap activates that selection. Direct touch activation is unchanged.
+
 Dialog background patterns reuse `fill_draw.h` and the shared pattern names.
 An optional non-interactive background child captures the pattern color and
 geometry in dialog-owned state. LVGL layered opacity blends the solid base and

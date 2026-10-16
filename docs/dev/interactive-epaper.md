@@ -1,7 +1,7 @@
 ---
 title: Interactive E-Paper Developer Guide
 description: Add an always-on LVGL e-paper board with correct refresh ownership, configuration, and validation.
-ms.date: 2026-09-24
+ms.date: 2026-10-16
 ms.topic: how-to
 ---
 
@@ -218,11 +218,13 @@ with twice its border width and a minimum of 2 pixels. Borderless buttons use
 a 2-pixel border in their text color. Rocker selection frames the selected zone.
 This temporary highlight does not change saved appearance settings.
 
-Confirmation defaults to Cancel; its focus outline appears when a navigation
-action is used. Previous or Next switches between Cancel
-and Confirm; Tap chooses the highlighted option. Tap & Hold does nothing in the
-dialog. Confirmation cannot be bypassed by physical navigation. The first press
-when asleep only wakes the screen.
+Confirmation starts without a selection or focus outline. The first Next
+selects Cancel, the first Previous selects Approve, and the first Tap selects
+Cancel without activating it. Subsequent Previous or Next switches between
+the buttons; Tap activates the selected option. A replacement confirmation
+starts without a selection again. Tap & Hold does nothing in the dialog.
+Confirmation cannot be bypassed by physical navigation. The first press when
+asleep only wakes the screen.
 
 Hardware acceptance checks remain required:
 

@@ -64,13 +64,19 @@ static uint32_t reserve(ActionContinuationOwner owner = ACTION_CONTINUATION_OWNE
 }
 
 static lv_obj_t* dialog_box() { return lv_obj_get_child(lv_obj_get_child(lv_layer_top(), -1), 0); }
+static lv_obj_t* cancel_button() { return lv_obj_get_child(dialog_box(), 1); }
 static lv_obj_t* approve_button() { return lv_obj_get_child(dialog_box(), 2); }
+static void assert_dialog_selection(bool cancel, bool approve) {
+    assert((lv_obj_get_style_outline_width(cancel_button(), LV_PART_MAIN) > 0) == cancel);
+    assert((lv_obj_get_style_outline_width(approve_button(), LV_PART_MAIN) > 0) == approve);
+}
 static uint32_t pixels[466 * 466];
 
 static void dialog_lifecycle_checks() {
     auto content = confirmation();
     uint32_t token = reserve(ACTION_CONTINUATION_OWNER_LVGL);
     assert(device_dialog_confirm(content, token));
+    assert_dialog_selection(false, false);
     lv_obj_send_event(approve_button(), LV_EVENT_CLICKED, nullptr);
     assert(!device_dialog_active());
     assert(action_continuation_take(nullptr, nullptr, nullptr, 0) == ACTION_CONTINUATION_NONE);
@@ -80,9 +86,34 @@ static void dialog_lifecycle_checks() {
     assert(count == 1 && !strcmp(suffix[0].type, ACTION_TYPE_SYSTEM));
     assert(!action_continuation_complete(token, true));
 
+    for (const char* first : {"tap", "next", "previous"}) {
+        token = reserve();
+        assert(device_dialog_confirm(content, token));
+        assert_dialog_selection(false, false);
+        device_dialog_navigate("tap_hold");
+        assert_dialog_selection(false, false);
+        device_dialog_navigate(first);
+        const bool approve = !strcmp(first, "previous");
+        assert(device_dialog_active());
+        assert_dialog_selection(!approve, approve);
+        assert(action_continuation_take(nullptr, nullptr, nullptr, 0) == ACTION_CONTINUATION_NONE);
+        if (!strcmp(first, "next")) {
+            device_dialog_navigate("next");
+            assert_dialog_selection(false, true);
+            device_dialog_navigate("previous");
+            assert_dialog_selection(true, false);
+        }
+        device_dialog_navigate("tap");
+        assert(!device_dialog_active());
+        assert(action_continuation_take(nullptr, nullptr, nullptr, 0) ==
+            (approve ? ACTION_CONTINUATION_SUCCESS : ACTION_CONTINUATION_NONE));
+        assert(!action_continuation_complete(token, true));
+        assert(action_continuation_take(nullptr, nullptr, nullptr, 0) == ACTION_CONTINUATION_NONE);
+    }
+
     token = reserve();
     assert(device_dialog_confirm(content, token));
-    device_dialog_navigate("tap"); // Cancel initially selected
+    lv_obj_send_event(cancel_button(), LV_EVENT_CLICKED, nullptr);
     assert(!device_dialog_active() && !action_continuation_complete(token, true));
 
     for (uint32_t timeout : {61000U, 300000U, 0U}) {
@@ -109,13 +140,17 @@ static void dialog_lifecycle_checks() {
             uint32_t old_token = old_confirm ? reserve() : 0;
             assert(old_confirm ? device_dialog_confirm(content, old_token) : device_dialog_notify("Old", 1000));
             const uint32_t epoch = device_dialog_input_generation();
-            if (old_confirm) device_dialog_navigate("next");
+            if (old_confirm) device_dialog_navigate("previous");
             uint32_t new_token = new_confirm ? reserve() : 0;
             assert(new_confirm ? device_dialog_confirm(content, new_token) : device_dialog_notify("New", 300000));
             assert(device_dialog_input_generation() != epoch);
             assert(!old_confirm || !action_continuation_complete(old_token, true));
             if (new_confirm) {
-                device_dialog_navigate("tap"); // replacement reset focus to Cancel
+                assert_dialog_selection(false, false);
+                device_dialog_navigate("tap");
+                assert(device_dialog_active());
+                assert_dialog_selection(true, false);
+                device_dialog_navigate("tap");
                 assert(!action_continuation_complete(new_token, true));
             } else {
                 now_ms += 1001;
@@ -130,6 +165,8 @@ static void dialog_lifecycle_checks() {
     // Failed resource/layout replacements preserve both the object and waiting token.
     token = reserve();
     assert(device_dialog_confirm(content, token));
+    device_dialog_navigate("previous");
+    assert_dialog_selection(false, true);
     lv_obj_t* original = dialog_box();
     fail_allocation = true;
     assert(!device_dialog_notify("Allocation failure", 1000));
@@ -147,7 +184,7 @@ static void dialog_lifecycle_checks() {
     action_continuation_release(failed_token);
     assert(dialog_box() == original);
     device_dialog_set_templates(DialogTemplates{});
-    device_dialog_navigate("next");
+    assert_dialog_selection(false, true);
     device_dialog_navigate("tap");
     assert(action_continuation_take(nullptr, nullptr, nullptr, 0) == ACTION_CONTINUATION_SUCCESS);
 
@@ -177,7 +214,7 @@ static void dialog_lifecycle_checks() {
     token = reserve();
     content.timeout_ms = 1000;
     assert(device_dialog_confirm(content, token));
-    device_dialog_navigate("next");
+    device_dialog_navigate("previous");
     now_ms += 1000;
     device_dialog_navigate("tap");
     assert(!device_dialog_active() && !action_continuation_complete(token, true));
@@ -231,7 +268,7 @@ static void dialog_lifecycle_checks() {
     assert(dialog_box() == test_original);
     assert(device_dialog_test(true, test_style));
     assert(lv_obj_get_style_bg_opa(dialog_box(), LV_PART_MAIN) == 0);
-    device_dialog_navigate("next");
+    device_dialog_navigate("previous");
     device_dialog_navigate("tap");
     uint8_t test_count = 99;
     assert(action_continuation_take(nullptr, &test_count, nullptr, 0) == ACTION_CONTINUATION_SUCCESS);
@@ -375,7 +412,7 @@ static void dialog_pattern_checks(lv_display_t* display) {
     assert(lv_obj_get_style_bg_opa(lv_obj_get_child(dialog_box(), -1), LV_PART_MAIN) == LV_OPA_COVER);
     lv_obj_update_layout(lv_layer_top());
     lv_refr_now(display);
-    device_dialog_navigate("next");
+    device_dialog_navigate("previous");
     device_dialog_navigate("tap");
     assert(!device_dialog_active());
     uint8_t count = 99;
