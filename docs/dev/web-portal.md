@@ -1594,8 +1594,22 @@ finalization or a subsequent reboot.
     "present_peak_us": 2000,
     "data_stream_peak_us": 100,
     "screen_update_peak_us": 200,
-    "cycle_peak_us": 900
+    "cycle_peak_us": 900,
+    "rendered_cycles": 0,
+    "navigation_renders": 0,
+    "last_render": null,
+    "slowest_render": null,
+    "last_navigation_render": null,
+    "invalidations": {
+      "other": 0,
+      "deferred": 0,
+      "screen_switch": 0,
+      "timer": 0,
+      "screen_update": 0,
+      "requested_pixels": 0
+    }
   },
+  "display_presentation": null,
 
   "runtime": {
     "main_phase": "portal",
@@ -1664,6 +1678,126 @@ not report a PSRAM largest-block value on those boards.
   must not be added to cycle time. Both display fields are API-only, are `null`
   before stats are available or without a display, and report zeros during
   screen-saver rendering suspension.
+- Detailed fields below, from `display_perf.rendered_cycles` through
+  `display_presentation`, require `HAS_DISPLAY_DIAGNOSTICS`. It defaults off on
+  every board. When disabled, those fields are omitted entirely, not returned as
+  `null`; baseline `display_fps` and window-average/peak `display_perf` fields
+  remain available. The example above includes opt-in diagnostic fields.
+- `display_perf.rendered_cycles`: number of LVGL cycles producing flush callbacks
+  since boot. `last_render` and `slowest_render` retain the latest such cycle and
+  the one with the largest `cycle_us`. They are `null` before the first render,
+  persist across idle windows and screen-saver suspension, and update when a
+  cycle completes. Existing window-average/peak fields retain their behavior.
+- `display_perf.navigation_renders` counts flush-producing cycles that process a
+  queued screen switch, including the initial pad switch. `last_navigation_render`
+  retains the latest such cycle independently of later small updates; it is
+  `null` before one completes. Its `screen_switched` flag is true. This captures
+  render completion, not physical panel presentation or the last follow-up
+  redraw triggered by navigation.
+- Each retained render has `completed_ms` (uptime), `cycle_us`, `lock_wait_us`,
+  `deferred_us`, `screen_switch_us`, `screen_update_us`, `data_stream_us`,
+  `lv_timer_us`, `lv_timer_flush_us`, `lv_timer_other_us`, `flush_calls`,
+  `flush_pixels`, `flush_us`, and `flush_peak_us`. Flush totals cover all
+  callbacks in that cycle, including any outside `lv_timer_handler()`;
+  `lv_timer_flush_us` is only the portion inside the handler and
+  `lv_timer_other_us` is the remaining handler time. Flush durations include
+  synchronous driver work, mutex waits, and deliberate yields, but not later
+  asynchronous DMA completion. `screen_switch_us` excludes the separately
+  measured initial screen update; `deferred_us` covers queued jobs, font-cache
+  invalidation, dialogs, action continuations, and deferred splash status.
+  `lock_wait_us` is outside `cycle_us`. Pixel counts include repeated writes,
+  not unique changed pixels.
+- Each retained render also reports LVGL event-based timing inside
+  `lv_timer_handler()`:
+  - `refresh_calls`, `refresh_us`: refresh start-to-ready events, including layout,
+    area processing, rendering, flushing, and refresh cleanup
+  - `render_calls`, `render_us`: render start-to-ready events; an unchanged
+    refresh may have no render event
+  - `render_flush_us`: synchronous flush-callback time within render events,
+    already included in `render_us`
+  - `render_glyph_miss_us`: monochrome FreeType cache-miss work within render
+    events, already included in rendering time; this is not all text-drawing time
+  - `render_other_us`: render time excluding those flush callbacks; includes
+    draw-task preparation, software drawing, image/text processing, and waits
+  - `refresh_overhead_us`: refresh time outside render events; includes layout,
+    invalidated-area processing, and cleanup, not just layout
+  - `timer_other_us`: handler time outside refresh events; includes other LVGL
+    timers such as Extension callbacks and timer-management overhead
+- `display_perf.invalidations` accumulates invalidation events observed by the
+  LVGL display event callback across all completed display cycles, even cycles
+  without flushes. Each retained render also has an `invalidations` object
+  covering requests since the previous completed cycle. Counters are grouped
+  by the task phase issuing the request: `deferred`, `screen_switch` (including
+  initial pad building/updating), `timer`, `screen_update`, and `other` (including
+  requests made between cycles). `requested_pixels` sums requested rectangle
+  areas after LVGL's initial screen clipping but before deduplication; overlapping
+  requests count repeatedly. LVGL also emits these events for draw-buffer height
+  rounding probes, so `timer` counts include those probes, not just widget
+  invalidations. These counts identify the phase, not the requesting
+  widget or a guaranteed future physical update. Requests late in one cycle can
+  cause rendering in the next. Use differences in cumulative counts to avoid
+  missing requests made in non-rendering cycles.
+- `display_perf.font_cache` accumulates monochrome FreeType glyph-cache activity
+  since boot, including work in non-flushing cycles. Each retained render has
+  its own `font_cache` object covering activity since the previous completed
+  cycle, including screen creation, layout, timers, and drawing. Fields are
+  `hits`, `misses`, `evictions` (successful replacements of valid cached glyphs),
+  `failures` (unsatisfied cache misses), and `miss_us` (microseconds spent handling
+  cache misses, including failures). Miss timing covers face recovery when
+  needed, glyph loading/hinting, rasterization, bitmap allocation/conversion,
+  and cache replacement. Descriptor lookup, next-character kerning lookup, and
+  bitmap retrieval all access the cache, so these are lookup counts, not
+  character counts. Missing character mappings and OTA-skipped callbacks do
+  not reach the cache and are not counted as cache failures. Statistics combine
+  all monochrome FreeType font instances; built-in bitmap fonts, TinyTTF, and
+  Extension-owned renderers are not measured. Fields are zero when this backend
+  is disabled or unused. Cache hits are counted without timing each hit; no
+  per-glyph logs or health-time LVGL access are added.
+- `display_presentation`: API-only IT8951 diagnostics, `null` on unsupported or
+  uninitialized drivers. Counters since boot are `attempts`, `failures`,
+  `unchanged_skips`, `ota_deferrals`, `full_updates`, `partial_updates`,
+  `uploaded_bytes`, `flush_calls`, `flush_pixels`, `conversion_us`, `yield_us`,
+  and `framebuffer_wait_us`. The last three accumulate flush-side conversion
+  work, deliberate post-flush sleeps, and framebuffer-lock waits respectively.
+  Use differences between snapshots to measure a workload. Upload byte counts
+  are image payload, excluding protocol overhead; interrupted attempts count
+  bytes already submitted. Failed attempts can also be OTA deferrals.
+- `display_presentation.last` and `.slowest` retain the latest attempted update
+  and the attempt with the largest `total_us`, including failures. They are
+  `null` before an attempt and survive inactivity. Each includes `completed_ms`,
+  `success`, `full`, `waveform` (DU=1, GC16=2), controller-space `x`, `y`,
+  `width`, `height`, `uploaded_bytes`, and these durations in microseconds:
+  - `total_us`: presentation call from entry through state finalization, excluding
+    telemetry publication and logging
+  - `dirty_to_ready_us`: first flush conversion start in the pending batch to
+    attempt completion; not trigger-to-screen latency, and not proof of visible
+    completion (check `success` and the controller caveat below)
+  - `coalesce_us`: actual sleeps waiting for settling or the minimum refresh
+    interval; these requirements overlap and are not added independently
+  - `framebuffer_wait_us`: lock acquisition time on the presentation task
+  - `compare_us`, `copy_us`: framebuffer comparison/decision and snapshot copying
+  - `upload_us`: image-load commands and SPI image transfer, including HRDY waits
+    and upload-loop yields
+  - `controller_us`: display-area command and the subsequent HRDY polling
+  - `hrdy_wait_us`: command/data readiness polling, already included in upload
+    and controller time; do not add it again
+- HRDY reports controller readiness, not independently verified physical panel
+  waveform completion. No physical waveform timer or exact event-to-photon
+  measurement is claimed. Render and presentation operate concurrently, and
+  counters can include writes queued for the next presentation. The separately
+  synchronized render and driver snapshots are not an atomic paired frame.
+  Forced updates without pending pixels start their dirty-age timer at
+  presentation entry. Last/slowest snapshots reset on reboot; 32-bit durations
+  and uptime use wrap-safe subtraction for operations shorter than about
+  71 minutes and wrap after about 49 days respectively.
+- Routine IT8951 INFO summaries remain limited to one per minute of activity,
+  except explicit forced and scheduled cleanup refreshes. The compact summary
+  uses milliseconds (`dirty`, `wait`, `spi`, `ctrl`; `f`=forced, `s`=scheduled)
+  when diagnostics are enabled. Disabled builds retain the original count,
+  mode, duration, forced, and scheduled summary.
+  Per-refresh DEBUG diagnostics retain their existing opt-in logging behavior;
+  no per-flush logs are added.
+
 - `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
 - `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
 - `ble_name`: configured device name plus ` BLE`; present when the BLE keyboard is initialized
@@ -1700,6 +1834,39 @@ not report a PSRAM largest-block value on those boards.
 - `async_flush_*`: MIPI-DSI asynchronous DMA2D flush state. A growing
   `async_flush_started_age_ms` while `async_flush_in_flight` is `true`
   indicates a completion callback did not arrive.
+
+#### Capturing display performance
+
+For a local developer build, add `#define HAS_DISPLAY_DIAGNOSTICS true` to the
+target board's `board_overrides.h` and rebuild that board. This enables the
+retained render/presentation samples, invalidation counters, and glyph-cache
+measurements described above. It adds code, internal-RAM state, and profiling
+work; ordinary health polling does not enable it. Remove the local override and
+rebuild before shipping. No board enables it by default, and there is no runtime
+setting.
+
+To capture a slow navigation, save a baseline health response, navigate once,
+wait for the screen update, then save another response. Compare cumulative
+conversion/yield counters and inspect the retained render/presentation samples.
+Use `display_perf.last_navigation_render` for the initial navigation render and
+`last_render` for subsequent redraws. Compare `render_other_us`,
+`refresh_overhead_us`, and `timer_other_us` to separate drawing, refresh setup/
+cleanup, and other timers. These are nested timings, not additional delays to
+sum with `lv_timer_us`.
+Compare `last_navigation_render.render_glyph_miss_us` with its
+`render_other_us` to assess glyph-generation cost during drawing. The sample's
+`font_cache.miss_us` also includes work outside rendering and must not be
+subtracted directly from render time. A high miss count alone does not prove
+cache thrashing: initial glyph loads are also misses. Use repeated navigation
+and cumulative counter differences, particularly evictions and miss time, to
+distinguish cold loading from repeated generation.
+Match `completed_ms` to the serial uptime timestamps; samples from the two tasks
+need not describe the same frame. Replace `DEVICE_IP` below and add `-u` with
+your configured username if HTTP authentication is enabled.
+
+```bash
+curl --fail --silent --show-error "http://DEVICE_IP/api/health" > display-health.json
+```
 
 #### `GET /api/health/history`
 

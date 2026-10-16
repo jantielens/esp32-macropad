@@ -191,6 +191,13 @@ Ordinary health polling does not scan stacks. See the
 [health API reference](docs/dev/web-portal.md#health-monitoring) for timing costs
 and unavailable-task responses.
 
+Display builds expose window-average and peak render timings through
+`GET /api/health`. Developer builds can opt into retained render samples,
+LVGL phase and glyph-cache measurements, and IT8951 presentation timings with
+`HAS_DISPLAY_DIAGNOSTICS`. It defaults off on every board, compiling out the
+extra collection, state, and health fields. See the
+[display performance fields and opt-in instructions](docs/dev/web-portal.md#capturing-display-performance).
+
 `POST /api/debug/crash` supports abort, assertion, and invalid-write tests,
 with no web UI. `DEBUG_CRASH_API_ENABLED` defaults off on every board. Enable
 it explicitly only in an isolated dev/test build; never ship it enabled in

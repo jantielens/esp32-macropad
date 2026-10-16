@@ -78,15 +78,21 @@ add_host_legacy_test(test_crowpanel_epaper_driver
 )
 
 foreach(board feathers3d-interactive reterminal-e1003-interactive)
-    add_host_legacy_test(test_it8951_${board}
+  foreach(diagnostics 0 1)
+    set(diagnostic_suffix "")
+    if(diagnostics)
+        set(diagnostic_suffix "_diagnostics")
+    endif()
+    add_host_legacy_test(test_it8951_${board}${diagnostic_suffix}
         SOURCES test_it8951_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/app/drivers/it8951_epaper_driver.cpp
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/it8951_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
             ${PROJECT_SOURCE_DIR}/src/boards/${board}
-        DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
+        DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics} BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
             TEST_HEAP_CAPS_ALLOCATOR=1 TEST_FREERTOS_MUTEX_LIFECYCLE=1 LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
         OPTIONS -Wno-unused-parameter
         PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/freertos/portmacro.h
     )
+  endforeach()
 endforeach()
 
 add_host_legacy_test(test_sensor_manager
@@ -180,18 +186,24 @@ file(GLOB HOST_FREETYPE_SOURCES CONFIGURE_DEPENDS
 add_library(host_freetype STATIC EXCLUDE_FROM_ALL ${HOST_FREETYPE_SOURCES})
 target_include_directories(host_freetype PUBLIC
     "${PROJECT_SOURCE_DIR}/libraries/MacropadFreeType/src")
-add_host_legacy_test(test_pad_font_cache_freetype
+foreach(diagnostics 0 1)
+set(font_cache_target test_pad_font_cache_freetype)
+if(diagnostics)
+    string(APPEND font_cache_target "_diagnostics")
+endif()
+add_host_legacy_test(${font_cache_target}
     SOURCES test_pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
         ${PROJECT_SOURCE_DIR}/src/app/freetype_mono_font.cpp
-    DEFINITIONS HAS_TTF_FONTS=1 HAS_FREETYPE_FONTS=1 HOST_LOG_CAPTURE
+    DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics} HAS_TTF_FONTS=1 HAS_FREETYPE_FONTS=1 HOST_LOG_CAPTURE
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/font_runtime_overrides.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES host_lvgl host_freetype m
 )
-set_tests_properties(test_pad_font_cache_freetype PROPERTIES TIMEOUT 15)
-target_link_options(test_pad_font_cache_freetype PRIVATE
+set_tests_properties(${font_cache_target} PROPERTIES TIMEOUT 15)
+target_link_options(${font_cache_target} PRIVATE
     "-Wl,--wrap=lv_malloc_core" "-Wl,--wrap=lv_realloc_core")
-target_compile_definitions(test_pad_font_cache_freetype PRIVATE
+target_compile_definitions(${font_cache_target} PRIVATE
     TEST_UNICODE_FONT_PATH="${PROJECT_SOURCE_DIR}/tests/fixtures/DevanagariTest.ttf")
+endforeach()
 foreach(disabled_font_feature IN ITEMS HAS_DISPLAY HAS_TTF_FONTS HAS_FREETYPE_FONTS)
     add_test(NAME test_freetype_disabled_${disabled_font_feature}
         COMMAND ${CMAKE_CXX_COMPILER} -DBOARD_CONFIG_H
@@ -230,6 +242,15 @@ target_compile_options(test_gamepad_widgets PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 target_link_libraries(test_gamepad_widgets PRIVATE host_lvgl)
+
+add_host_gtest(test_sparkline_widget test_sparkline_widget.cpp)
+target_sources(test_sparkline_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp)
+target_include_directories(test_sparkline_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_options(test_sparkline_widget PRIVATE
+    -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable -Wno-format-truncation
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+target_link_libraries(test_sparkline_widget PRIVATE host_lvgl m)
 
 add_host_gtest(test_fill_draw test_fill_draw.cpp)
 target_include_directories(test_fill_draw BEFORE PRIVATE ${HOST_ARDUINOJSON_DIR})
@@ -699,7 +720,8 @@ endforeach()
 add_host_command_test(test_portal_component_capacity_matrix python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_component_capacity_matrix.py)
 add_host_command_test(test_widget_schema python3 ${PROJECT_SOURCE_DIR}/tools/lint_widget_schema.py)
 add_host_command_test(test_gauge_caption_cache python3 ${PROJECT_SOURCE_DIR}/tests/test_gauge_caption_cache.py)
-add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp)
+add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=0)
+add_host_legacy_test(test_display_perf_diagnostics SOURCES test_display_perf.cpp DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=1)
 add_host_command_test(test_pad_refresh_schedule python3 ${PROJECT_SOURCE_DIR}/tests/test_pad_refresh_schedule.py)
 add_host_command_test(test_portal_info_preparation python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_info_preparation.py)
 add_host_command_test(test_portal_dev_server python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_dev_server.py)

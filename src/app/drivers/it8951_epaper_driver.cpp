@@ -31,6 +31,29 @@ constexpr int kPanelWidth = 1872;
 constexpr int kPanelHeight = 1404;
 constexpr size_t kFramebufferBytes = (size_t)kPanelWidth * kPanelHeight / 2;
 
+struct LuminanceTables {
+		uint16_t red[32] = {};
+		uint16_t green[64] = {};
+		uint16_t blue[32] = {};
+
+		constexpr LuminanceTables() {
+			for (int i = 0; i < 32; ++i) {
+				red[i] = (i * 255 / 31) * 77;
+				blue[i] = (i * 255 / 31) * 29;
+			}
+			for (int i = 0; i < 64; ++i) green[i] = (i * 255 / 63) * 150;
+		}
+};
+
+constexpr LuminanceTables kLuminance;
+
+uint8_t pixelGray(uint16_t rgb565, int16_t x, int16_t y, bool bwMode, uint8_t conversion, uint8_t threshold) {
+		const uint8_t luminance = (kLuminance.red[rgb565 >> 11] + kLuminance.green[(rgb565 >> 5) & 0x3F] +
+				kLuminance.blue[rgb565 & 0x1F]) >> 8;
+		if (bwMode) return monochrome_is_white(luminance, x, y, conversion, threshold) ? 15 : 0;
+		return (uint16_t(luminance) * 15 + 127) / 255;
+}
+
 constexpr int kPinSck = EPAPER_SPI_SCK_PIN;
 constexpr int kPinMiso = EPAPER_SPI_MISO_PIN;
 constexpr int kPinMosi = EPAPER_SPI_MOSI_PIN;
@@ -51,16 +74,28 @@ SPIClass s_spi(HSPI);
 SPISettings s_spiSettings(kE1003Protocol ? 10000000 : 24000000, MSBFIRST, SPI_MODE0);
 SPISettings s_spiReadSettings(kE1003Protocol ? 10000000 : 1000000, MSBFIRST, SPI_MODE0);
 uint32_t s_imageBufferAddress = 0;
+#if HAS_DISPLAY_DIAGNOSTICS
+uint64_t s_hrdyWaitUs = 0;
+#endif
 
 bool waitHrdy(uint32_t timeoutMs = kE1003Protocol ? kHrdyTimeoutMs : 10000) {
+#if HAS_DISPLAY_DIAGNOSTICS
+		const uint32_t startUs = micros();
+#endif
 		const uint32_t startMs = millis();
 		while (digitalRead(kPinBusy) == LOW) {
 			if (millis() - startMs >= timeoutMs) {
+#if HAS_DISPLAY_DIAGNOSTICS
+				s_hrdyWaitUs += uint32_t(micros() - startUs);
+#endif
 				LOGW("Epaper", "IT8951 HRDY timeout after %lums", (unsigned long)timeoutMs);
 				return false;
 			}
 			delay(1);
 		}
+#if HAS_DISPLAY_DIAGNOSTICS
+		s_hrdyWaitUs += uint32_t(micros() - startUs);
+#endif
 		return true;
 }
 
@@ -183,7 +218,11 @@ bool initializeController() {
 		return true;
 }
 
-bool uploadFramebuffer(const uint8_t* framebuffer, const PanelRegion& region) {
+bool uploadFramebuffer(const uint8_t* framebuffer, const PanelRegion& region
+#if HAS_DISPLAY_DIAGNOSTICS
+		, uint32_t& uploadedBytes
+#endif
+) {
 		if (!writeRegister(kRegisterImageBufferAddress, (uint16_t)(s_imageBufferAddress & 0xFFFF)) ||
 				!writeRegister(kRegisterImageBufferAddress + 2, (uint16_t)(s_imageBufferAddress >> 16))) return false;
 		if (kE1003Protocol && (!writeCommand(kCommandSetTemperature) || !writeData(0x0001) || !writeData(16))) return false;
@@ -233,6 +272,9 @@ bool uploadFramebuffer(const uint8_t* framebuffer, const PanelRegion& region) {
 			} else {
 				s_spi.writeBytes(sourceRow, rowBytes);
 			}
+#if HAS_DISPLAY_DIAGNOSTICS
+			uploadedBytes += rowBytes;
+#endif
 			if ((row & 0x3F) == 0) yield();
 		}
 		digitalWrite(kPinCs, HIGH);
@@ -364,14 +406,7 @@ void IT8951EpaperDriver::writePixel(int16_t x, int16_t y, uint16_t rgb565) {
 			case 2: drawX = kPanelWidth - 1 - drawX; drawY = kPanelHeight - 1 - drawY; break;
 			case 3: { const int16_t oldX = drawX; drawX = drawY; drawY = kPanelHeight - 1 - oldX; break; }
 		}
-		const uint8_t red = ((rgb565 >> 11) & 0x1F) * 255 / 31;
-		const uint8_t green = ((rgb565 >> 5) & 0x3F) * 255 / 63;
-		const uint8_t blue = (rgb565 & 0x1F) * 255 / 31;
-		const uint8_t luminance = ((uint16_t)red * 77 + (uint16_t)green * 150 + (uint16_t)blue * 29) >> 8;
-		uint8_t gray = (uint16_t(luminance) * 15 + 127) / 255;
-		if (usesBwMode()) {
-			gray = monochrome_is_white(luminance, x, y, bwConversion, bwThreshold) ? 15 : 0;
-		}
+		const uint8_t gray = pixelGray(rgb565, x, y, usesBwMode(), bwConversion, bwThreshold);
 		const size_t offset = (size_t)drawY * (kPanelWidth / 2) + drawX / 2;
 		if (drawX & 1) drawingFramebuffer[offset] = (drawingFramebuffer[offset] & 0xF0) | gray;
 		else drawingFramebuffer[offset] = (drawingFramebuffer[offset] & 0x0F) | (gray << 4);
@@ -394,24 +429,107 @@ bool IT8951EpaperDriver::consumeFullRefreshRequest() {
 
 void IT8951EpaperDriver::pushColors(uint16_t* data, uint32_t, bool) {
 		if (!initialized || !data || !framebufferMutex) return;
+#if HAS_DISPLAY_DIAGNOSTICS
+		const uint32_t waitStartUs = micros();
+#endif
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+#if HAS_DISPLAY_DIAGNOSTICS
+		const uint32_t conversionStartUs = micros();
+		const uint32_t waitUs = conversionStartUs - waitStartUs;
+#endif
 		const uint32_t sourceStride = flushSrcStride ? flushSrcStride / sizeof(uint16_t) : currentW;
+		const bool packedRows = !(rotation & 1) && currentX >= 0 && currentY >= 0 &&
+				int32_t(currentX) + currentW <= kPanelWidth && int32_t(currentY) + currentH <= kPanelHeight;
+		const bool reverse = rotation == 2;
+		const int step = reverse ? -1 : 1;
+		const bool bwMode = usesBwMode();
 		for (uint16_t row = 0; row < currentH; ++row) {
 			const uint16_t* source = data + row * sourceStride;
-			for (uint16_t column = 0; column < currentW; ++column) writePixel(currentX + column, currentY + row, source[column]);
+			if (!packedRows) {
+				for (uint16_t column = 0; column < currentW; ++column) writePixel(currentX + column, currentY + row, source[column]);
+				continue;
+			}
+			const int16_t logicalY = currentY + row;
+			const int nativeY = reverse ? kPanelHeight - 1 - logicalY : logicalY;
+			const int nativeX = reverse ? kPanelWidth - currentX - currentW : currentX;
+			uint8_t* destination = drawingFramebuffer + size_t(nativeY) * (kPanelWidth / 2) + nativeX / 2;
+			int column = reverse ? int(currentW) - 1 : 0;
+			uint16_t remaining = currentW;
+			auto gray = [&](int index) {
+				return pixelGray(source[index], currentX + index, logicalY, bwMode, bwConversion, bwThreshold);
+			};
+			// Only boundary pixels need to preserve the adjacent framebuffer nibble.
+			if ((nativeX & 1) && remaining) {
+				*destination = (*destination & 0xF0) | gray(column);
+				++destination;
+				column += step;
+				--remaining;
+			}
+			while (remaining >= 2) {
+				const uint8_t high = gray(column);
+				column += step;
+				const uint8_t low = gray(column);
+				column += step;
+				*destination++ = (high << 4) | low;
+				remaining -= 2;
+			}
+			if (remaining) *destination = (*destination & 0x0F) | (gray(column) << 4);
 		}
 		markDirtyRegion(currentX, currentY, currentW, currentH);
+#if HAS_DISPLAY_DIAGNOSTICS
+		if (!pendingChanges) firstChangeUs = conversionStartUs;
+#endif
 		pendingChanges = true;
 		lastChangeMs = millis();
+#if HAS_DISPLAY_DIAGNOSTICS
+		const uint32_t conversionUs = uint32_t(micros() - conversionStartUs);
+#endif
 		xSemaphoreGive(framebufferMutex);
-		if ((uint32_t)currentW * currentH >= 1024) vTaskDelay(1);
+#if HAS_DISPLAY_DIAGNOSTICS
+		uint32_t yieldUs = 0;
+#endif
+		if ((uint32_t)currentW * currentH >= 1024) {
+#if HAS_DISPLAY_DIAGNOSTICS
+			const uint32_t yieldStartUs = micros();
+#endif
+			vTaskDelay(1);
+#if HAS_DISPLAY_DIAGNOSTICS
+			yieldUs = uint32_t(micros() - yieldStartUs);
+#endif
+		}
+#if HAS_DISPLAY_DIAGNOSTICS
+		portENTER_CRITICAL(&perfMux);
+		++perf.flush_calls;
+		perf.flush_pixels += uint32_t(currentW) * currentH;
+		perf.conversion_us += conversionUs;
+		perf.yield_us += yieldUs;
+		perf.framebuffer_wait_us += waitUs;
+		portEXIT_CRITICAL(&perfMux);
+#endif
 }
 
 void IT8951EpaperDriver::present() {
-		if (!initialized || !framebufferMutex || ota_activity_is_active()) return;
+		if (!initialized || !framebufferMutex) return;
+#if HAS_DISPLAY_DIAGNOSTICS
+		DisplayPresentationSample sample;
+		const uint32_t presentStartUs = micros();
+#endif
 		while (true) {
-			if (ota_activity_is_active()) return;
+			if (ota_activity_is_active()) {
+#if HAS_DISPLAY_DIAGNOSTICS
+				portENTER_CRITICAL(&perfMux);
+				++perf.ota_deferrals;
+				portEXIT_CRITICAL(&perfMux);
+#endif
+				return;
+			}
+#if HAS_DISPLAY_DIAGNOSTICS
+			const uint32_t waitStartUs = micros();
+#endif
 			xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+#if HAS_DISPLAY_DIAGNOSTICS
+			sample.framebuffer_wait_us += uint32_t(micros() - waitStartUs);
+#endif
 			if (!pendingChanges && !fullRefreshPending()) {
 				xSemaphoreGive(framebufferMutex);
 				return;
@@ -424,7 +542,13 @@ void IT8951EpaperDriver::present() {
 			const uint32_t waitMs = refreshWait > settleWait ? refreshWait : settleWait;
 			if (!waitMs) break;
 			xSemaphoreGive(framebufferMutex);
+#if HAS_DISPLAY_DIAGNOSTICS
+			const uint32_t coalesceStartUs = micros();
+#endif
 			vTaskDelay(pdMS_TO_TICKS(waitMs) ?: 1);
+#if HAS_DISPLAY_DIAGNOSTICS
+			sample.coalesce_us += uint32_t(micros() - coalesceStartUs);
+#endif
 		}
 
 		const bool forceFull = consumeFullRefreshRequest();
@@ -432,10 +556,23 @@ void IT8951EpaperDriver::present() {
 			xSemaphoreGive(framebufferMutex);
 			return;
 		}
-		if (!forceFull && hasPresentedFrame && memcmp(drawingFramebuffer, presentedFramebuffer, framebufferBytes()) == 0) {
+#if HAS_DISPLAY_DIAGNOSTICS
+		const uint32_t compareStartUs = micros();
+#endif
+		const bool unchanged = !forceFull && hasPresentedFrame &&
+				memcmp(drawingFramebuffer, presentedFramebuffer, framebufferBytes()) == 0;
+#if HAS_DISPLAY_DIAGNOSTICS
+		sample.compare_us = uint32_t(micros() - compareStartUs);
+#endif
+		if (unchanged) {
 			pendingChanges = false;
 			dirtyRegionValid = false;
 			xSemaphoreGive(framebufferMutex);
+#if HAS_DISPLAY_DIAGNOSTICS
+			portENTER_CRITICAL(&perfMux);
+			++perf.unchanged_skips;
+			portEXIT_CRITICAL(&perfMux);
+#endif
 			return;
 		}
 		const EpaperRefreshSettings settings = config_manager_get_epaper_refresh_settings();
@@ -453,17 +590,51 @@ void IT8951EpaperDriver::present() {
 		const PanelRegion dirtyRegion = region;
 		const uint32_t partialCountBefore = usesBwMode() ? bwPartialUpdatesSinceFull : grayscalePartialUpdatesSinceFull;
 		if (fullRefresh) region = {0, 0, kPanelWidth, kPanelHeight};
+#if HAS_DISPLAY_DIAGNOSTICS
+		const uint32_t firstDirtyUs = pendingChanges ? firstChangeUs : presentStartUs;
+		const uint32_t copyStartUs = micros();
+#endif
 		memcpy(presentedFramebuffer, drawingFramebuffer, framebufferBytes());
+#if HAS_DISPLAY_DIAGNOSTICS
+		sample.copy_us = uint32_t(micros() - copyStartUs);
+#endif
 		pendingChanges = false;
 		dirtyRegionValid = false;
 		xSemaphoreGive(framebufferMutex);
 
 		const uint32_t startMs = millis();
-		const bool presented = !ota_activity_is_active() && uploadFramebuffer(presentedFramebuffer, region) &&
-				!ota_activity_is_active() && refreshPanel(region, fullRefresh || !usesBwMode() ? kWaveformGc16 : kWaveformDu);
+#if HAS_DISPLAY_DIAGNOSTICS
+		const uint64_t hrdyBeforeUs = s_hrdyWaitUs;
+		const uint32_t uploadStartUs = micros();
+#endif
+		const bool uploaded = !ota_activity_is_active() &&
+				uploadFramebuffer(presentedFramebuffer, region
+#if HAS_DISPLAY_DIAGNOSTICS
+						, sample.uploaded_bytes
+#endif
+				);
+		const uint8_t waveform = fullRefresh || !usesBwMode() ? kWaveformGc16 : kWaveformDu;
+#if HAS_DISPLAY_DIAGNOSTICS
+		sample.upload_us = uint32_t(micros() - uploadStartUs);
+		sample.waveform = waveform;
+		const uint32_t controllerStartUs = micros();
+#endif
+		const bool presented = uploaded && !ota_activity_is_active() && refreshPanel(region, waveform);
+#if HAS_DISPLAY_DIAGNOSTICS
+		sample.controller_us = uint32_t(micros() - controllerStartUs);
+		sample.hrdy_wait_us = static_cast<uint32_t>(s_hrdyWaitUs - hrdyBeforeUs);
+		const bool otaDeferred = !presented && ota_activity_is_active();
+		const uint32_t finalWaitStartUs = micros();
+#endif
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+#if HAS_DISPLAY_DIAGNOSTICS
+		sample.framebuffer_wait_us += uint32_t(micros() - finalWaitStartUs);
+#endif
 		if (!presented) {
 			hasPresentedFrame = false;
+#if HAS_DISPLAY_DIAGNOSTICS
+			if (!pendingChanges) firstChangeUs = firstDirtyUs;
+#endif
 			pendingChanges = true;
 			dirtyX = 0;
 			dirtyY = 0;
@@ -481,6 +652,21 @@ void IT8951EpaperDriver::present() {
 		}
 		const uint32_t completed_ms = millis();
 		xSemaphoreGive(framebufferMutex);
+#if HAS_DISPLAY_DIAGNOSTICS
+		sample.completed_ms = completed_ms;
+		sample.total_us = uint32_t(micros() - presentStartUs);
+		sample.dirty_to_ready_us = uint32_t(micros() - firstDirtyUs);
+		sample.x = region.x;
+		sample.y = region.y;
+		sample.width = region.width;
+		sample.height = region.height;
+		sample.full = fullRefresh;
+		sample.success = presented;
+		portENTER_CRITICAL(&perfMux);
+		perf.add(sample);
+		if (otaDeferred) ++perf.ota_deferrals;
+		portEXIT_CRITICAL(&perfMux);
+#endif
 		static uint32_t last_report_ms = 0;
 		static uint32_t presentations = 0;
 		if (!presented) {
@@ -488,9 +674,18 @@ void IT8951EpaperDriver::present() {
 		} else {
 			++presentations;
 			if (forceFull || scheduledFull || completed_ms - last_report_ms >= 60000) {
+#if HAS_DISPLAY_DIAGNOSTICS
+				LOGI("Epaper", "Refresh: n=%lu %s %ux%u total=%lums dirty=%lu wait=%lu spi=%lu ctrl=%lu (ms) f=%u s=%u",
+						(unsigned long)presentations, fullRefresh ? "full" : "partial", region.width, region.height,
+						(unsigned long)(sample.total_us / 1000), (unsigned long)(sample.dirty_to_ready_us / 1000),
+						(unsigned long)(sample.coalesce_us / 1000),
+						(unsigned long)(sample.upload_us / 1000), (unsigned long)(sample.controller_us / 1000),
+						unsigned(forceFull), unsigned(scheduledFull));
+#else
 				LOGI("Epaper", "Refresh: count=%lu mode=%s dur=%lums forced=%u scheduled=%u",
-				     (unsigned long)presentations, fullRefresh ? "full" : "partial",
-				     (unsigned long)(completed_ms - startMs), unsigned(forceFull), unsigned(scheduledFull));
+						(unsigned long)presentations, fullRefresh ? "full" : "partial",
+						(unsigned long)(completed_ms - startMs), unsigned(forceFull), unsigned(scheduledFull));
+#endif
 				last_report_ms = completed_ms;
 			}
 			LOGT("Epaper", "%s refresh %ux%u completed in %lums (dirty=%ux%u@%u,%u %lu%%; forced=%d scheduled=%d; partials=%lu/%u)",
@@ -501,6 +696,16 @@ void IT8951EpaperDriver::present() {
 					settings.epaper_full_refresh_threshold);
 		}
 }
+
+#if HAS_DISPLAY_DIAGNOSTICS
+bool IT8951EpaperDriver::getPresentationStats(DisplayPresentationStats* out) {
+		if (!out || !initialized) return false;
+		portENTER_CRITICAL(&perfMux);
+		*out = perf;
+		portEXIT_CRITICAL(&perfMux);
+		return true;
+}
+#endif
 
 bool IT8951EpaperDriver::requestFullRefresh() {
 		if (!initialized) return false;

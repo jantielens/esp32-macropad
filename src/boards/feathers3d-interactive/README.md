@@ -68,6 +68,9 @@ full-panel GC16. The default cleanup threshold is 10 regional updates.
 
 Updates are coalesced and animations are disabled. Prefer slowly changing
 pads and widgets; regional updates do not guarantee flicker-free operation.
+The single RGB565 LVGL draw buffer holds 32 display lines (119,808 bytes),
+allocated preferentially in PSRAM. At native landscape resolution, a full-screen
+render needs about 44 flushes instead of 351 with a four-line buffer.
 The physical orientation, refresh latency, grayscale ghosting, and button
 behavior still need validation with this firmware on hardware.
 

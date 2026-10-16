@@ -1,8 +1,10 @@
 #include <SPI.h>
 #include "drivers/it8951_epaper_driver.h"
+#include "drivers/monochrome_render.h"
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <utility>
 #include <vector>
 
 struct Transaction { uint32_t hz; std::vector<uint8_t> bytes; bool imageData = false; };
@@ -20,6 +22,7 @@ static EpaperRefreshSettings settings = {EPAPER_RENDER_MODE_GRAYSCALE, 1000, 500
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %d: %s\n", __LINE__, #condition); ++failures; } } while (0)
 
 extern "C" unsigned long millis() { return clockMs; }
+unsigned long micros() { return uint32_t(clockMs * 1000); }
 void delay(unsigned long ms) { clockMs += ms; delays.push_back(ms); }
 void vTaskDelay(TickType_t ticks) { clockMs += ticks; }
 void yield() {}
@@ -75,6 +78,7 @@ void it8951_test_spi_data(const uint8_t* data, size_t length) {
     transactions.back().imageData = true;
     auto& bytes = transactions.back().bytes;
     bytes.insert(bytes.end(), data, data + length);
+    ++clockMs;
     if (uploadHook) uploadHook();
 }
 static std::vector<std::vector<uint16_t>> arguments(uint16_t wanted) {
@@ -103,7 +107,89 @@ static void reset() {
     allocations = failAllocation = 0;
     waveformHook = uploadHook = nullptr;
 }
+
+static void paintReference(std::vector<uint8_t>& expected, const DeviceConfig& config, int rotation,
+                           int x, int y, int width, int height, const std::vector<uint16_t>& source, int stride) {
+    for (int row = 0; row < height; ++row) {
+        for (int column = 0; column < width; ++column) {
+            const int logicalX = x + column, logicalY = y + row;
+            const uint16_t rgb565 = source[row * stride + column];
+            const uint8_t red = ((rgb565 >> 11) & 31) * 255 / 31;
+            const uint8_t green = ((rgb565 >> 5) & 63) * 255 / 63;
+            const uint8_t blue = (rgb565 & 31) * 255 / 31;
+            const uint8_t luminance = (red * 77 + green * 150 + blue * 29) >> 8;
+            const uint8_t gray = config.epaper_render_mode == EPAPER_RENDER_MODE_BW ?
+                (monochrome_is_white(luminance, logicalX, logicalY, config.epaper_bw_conversion,
+                                     config.epaper_bw_threshold) ? 15 : 0) :
+                (uint16_t(luminance) * 15 + 127) / 255;
+            int nativeX = logicalX, nativeY = logicalY;
+            if (rotation == 1) { nativeX = 1871 - logicalY; nativeY = logicalX; }
+            if (rotation == 2) { nativeX = 1871 - logicalX; nativeY = 1403 - logicalY; }
+            if (rotation == 3) { nativeX = logicalY; nativeY = 1403 - logicalX; }
+            uint8_t& value = expected[nativeY * 936 + nativeX / 2];
+            value = nativeX & 1 ? (value & 0xF0) | gray : (value & 0x0F) | (gray << 4);
+        }
+    }
+}
+
+static void checkConversion(int rotation, int mode, int conversion) {
+    reset();
+    DeviceConfig config{};
+    config.epaper_render_mode = mode;
+    config.epaper_bw_conversion = conversion;
+    config.epaper_bw_threshold = 128;
+    IT8951EpaperDriver driver(&config);
+    driver.init();
+    driver.setRotation(rotation);
+    std::vector<uint8_t> expected(1872 * 1404 / 2, 0xFF);
+    auto paint = [&](int x, int y, int width, int height, int stride, uint16_t seed) {
+        std::vector<uint16_t> source(stride * height, 0x07E0);
+        for (int row = 0; row < height; ++row) {
+            for (int column = 0; column < width; ++column) {
+                source[row * stride + column] = uint16_t(seed + row * width + column);
+            }
+        }
+        driver.flushSrcStride = stride * sizeof(uint16_t);
+        driver.setAddrWindow(x, y, width, height);
+        driver.pushColors(source.data(), width * height, false);
+        paintReference(expected, config, rotation, x, y, width, height, source, stride);
+    };
+    // Cover every RGB565 input, then overwrite odd/even nibble boundaries.
+    paint(10, 12, 256, 256, 260, 0);
+    paint(11, 13, 1, 3, 4, 0xFFFF);
+    paint(12, 13, 3, 2, 4, 0x840E);
+    paint(15, 16, 4, 3, 6, 0x7BE0);
+    paint(16, 19, 4, 1, 4, 0);
+    paint(driver.width() - 3, driver.height() - 2, 3, 2, 4, 0xFFFF);
+    driver.present();
+    if (IT8951_E1003_PROTOCOL) {
+        for (int row = 0; row < 1404; ++row) {
+            for (int word = 0; word < 234; ++word) {
+                const int left = row * 936 + word * 2;
+                const int right = row * 936 + (467 - word) * 2;
+                std::swap(expected[left], expected[right]);
+                std::swap(expected[left + 1], expected[right + 1]);
+            }
+        }
+    }
+    expected.insert(expected.begin(), {0, 0});
+    int uploads = 0;
+    for (const auto& transaction : transactions) {
+        if (!transaction.imageData) continue;
+        ++uploads;
+        CHECK(transaction.bytes == expected);
+    }
+    CHECK(uploads == 1);
+}
+
 int main() {
+    for (int rotation : {0, 1, 2, 3}) {
+        checkConversion(rotation, EPAPER_RENDER_MODE_GRAYSCALE, MONOCHROME_CONVERSION_THRESHOLD);
+        for (int conversion : {MONOCHROME_CONVERSION_THRESHOLD, MONOCHROME_CONVERSION_BAYER,
+                               MONOCHROME_CONVERSION_BLUE_NOISE}) {
+            checkConversion(rotation, EPAPER_RENDER_MODE_BW, conversion);
+        }
+    }
     for (int mode : {EPAPER_RENDER_MODE_BW, EPAPER_RENDER_MODE_GRAYSCALE}) {
         reset();
         DeviceConfig config{};
@@ -111,17 +197,37 @@ int main() {
         config.epaper_bw_threshold = 128;
         {
             IT8951EpaperDriver driver(&config);
+#if HAS_DISPLAY_DIAGNOSTICS
+            DisplayPresentationStats telemetry;
+            CHECK(!driver.getPresentationStats(&telemetry));
+#endif
             driver.init();
             CHECK(driver.isAvailable());
             CHECK(driver.presentationMode() == mode);
+#if HAS_DISPLAY_DIAGNOSTICS
+            CHECK(driver.getPresentationStats(&telemetry) && telemetry.attempts == 0);
+#endif
             CHECK(delays.at(1) == (IT8951_E1003_PROTOCOL ? 10u : 200u));
             CHECK(arguments(0x0039).front() == std::vector<uint16_t>({IT8951_E1003_PROTOCOL ? 2u : 1u, IT8951_VCOM_MV}));
             if (!IT8951_E1003_PROTOCOL) CHECK(arguments(0x0011).front() == std::vector<uint16_t>({4, 1}));
             driver.setRotation(2);
             CHECK(driver.width() == 1872 && driver.height() == 1404);
             pixel(driver, 1, 2, 0);
+            waveformHook = [] { clockMs += 25; };
             driver.present();
+            waveformHook = nullptr;
             CHECK(arguments(0x0034).back() == std::vector<uint16_t>({0, 0, 1872, 1404, 2}));
+#if HAS_DISPLAY_DIAGNOSTICS
+            CHECK(driver.getPresentationStats(&telemetry));
+            CHECK(telemetry.attempts == 1 && telemetry.full_updates == 1);
+            CHECK(telemetry.last.success && telemetry.last.full && telemetry.last.waveform == 2);
+            CHECK(telemetry.last.uploaded_bytes == 1872u * 1404 / 2);
+            CHECK(telemetry.last.upload_us == 1404u * 1000);
+            CHECK(telemetry.last.controller_us == 25000);
+            CHECK(telemetry.last.coalesce_us == EPAPER_REFRESH_SETTLE_MS * 1000);
+            CHECK(telemetry.last.total_us == telemetry.last.coalesce_us + telemetry.last.upload_us + 25000);
+            CHECK(telemetry.last.dirty_to_ready_us == telemetry.last.total_us);
+#endif
             transactions.clear();
             pixel(driver, 9, 2, 0);
             pixel(driver, 13, 2, 0x8410);
@@ -139,10 +245,21 @@ int main() {
                 if (tx.imageData && tx.bytes == expectedBytes) foundPixels = true;
             }
             CHECK(foundPixels);
+#if HAS_DISPLAY_DIAGNOSTICS
+            CHECK(driver.getPresentationStats(&telemetry));
+            CHECK(telemetry.partial_updates == 1 && telemetry.last.uploaded_bytes == 4);
+            CHECK(telemetry.last.upload_us == 1000 && telemetry.last.waveform == waveform);
+            CHECK(telemetry.last.width == 8 && telemetry.last.height == 1);
+            const uint32_t completed = telemetry.last.completed_ms;
+#endif
             const size_t unchanged = transactions.size();
             pixel(driver, 9, 2, 0);
             driver.present();
             CHECK(transactions.size() == unchanged);
+#if HAS_DISPLAY_DIAGNOSTICS
+            CHECK(driver.getPresentationStats(&telemetry) && telemetry.unchanged_skips == 1);
+            CHECK(telemetry.attempts == 2 && telemetry.last.completed_ms == completed);
+#endif
             pixel(driver, 17, 2, 0);
             waveformHook = [&] { pixel(driver, 25, 2, 0); };
             driver.present();
@@ -153,6 +270,11 @@ int main() {
             pixel(driver, 33, 2, 0);
             busy = true;
             driver.present();
+#if HAS_DISPLAY_DIAGNOSTICS
+            CHECK(driver.getPresentationStats(&telemetry));
+            CHECK(telemetry.failures == 1 && !telemetry.last.success);
+            CHECK(telemetry.last.hrdy_wait_us >= (IT8951_E1003_PROTOCOL ? 250u : 10000u) * 1000);
+#endif
             busy = false;
             driver.present();
             CHECK(arguments(0x0034).back() == std::vector<uint16_t>({0, 0, 1872, 1404, 2}));
@@ -166,11 +288,34 @@ int main() {
             driver.present();
             CHECK(arguments(0x0034).empty());
             CHECK(!arguments(0x0022).empty());
+#if HAS_DISPLAY_DIAGNOSTICS
+            CHECK(driver.getPresentationStats(&telemetry) && telemetry.ota_deferrals == 2);
+#endif
             ota = false;
             uploadHook = nullptr;
             driver.present();
             CHECK(arguments(0x0034).back() == std::vector<uint16_t>({0, 0, 1872, 1404, 2}));
         }
+    }
+    reset();
+    {
+        IT8951EpaperDriver driver(nullptr);
+        driver.init();
+        clockMs = UINT32_MAX / 1000 - 100;
+        std::vector<uint16_t> data(32 * 32, 0);
+        driver.setAddrWindow(0, 0, 32, 32);
+        driver.pushColors(data.data(), data.size(), false);
+#if HAS_DISPLAY_DIAGNOSTICS
+        DisplayPresentationStats telemetry;
+        CHECK(driver.getPresentationStats(&telemetry));
+        CHECK(telemetry.flush_calls == 1 && telemetry.flush_pixels == 1024);
+        CHECK(telemetry.yield_us == 1000 && telemetry.conversion_us == 0);
+#endif
+        driver.present();
+#if HAS_DISPLAY_DIAGNOSTICS
+        CHECK(driver.getPresentationStats(&telemetry) && telemetry.attempts == 1);
+        CHECK(telemetry.last.dirty_to_ready_us == telemetry.last.total_us + 1000);
+#endif
     }
     for (int failed : {1, 2, 3}) {
         reset();

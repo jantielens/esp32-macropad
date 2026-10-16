@@ -363,6 +363,9 @@ void DisplayManager::initLVGL() {
 		// Set flush callback and user data
 		lv_display_set_flush_cb(display, DisplayManager::flushCallback);
 		lv_display_set_user_data(display, this);
+#if HAS_DISPLAY_DIAGNOSTICS
+		lv_display_add_event_cb(display, DisplayManager::displayEventCallback, LV_EVENT_ALL, this);
+#endif
 		
 		// Allocate LVGL draw buffer(s).
 		// v9 uses raw byte buffers; size = pixels × bytes_per_pixel (2 for RGB565).

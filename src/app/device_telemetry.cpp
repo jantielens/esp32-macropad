@@ -1169,17 +1169,135 @@ static void fill_common(JsonDocument &doc, bool include_ip_and_channel, bool inc
 								perf["data_stream_peak_us"] = stats.data_stream_peak_us;
 								perf["screen_update_peak_us"] = stats.screen_update_peak_us;
 								perf["cycle_peak_us"] = stats.cycle_peak_us;
+#if HAS_DISPLAY_DIAGNOSTICS
+								perf["rendered_cycles"] = stats.render.cycles;
+								perf["navigation_renders"] = stats.render.navigations;
+								auto write_glyphs = [](JsonObject object, const DisplayGlyphStats& glyphs) {
+									object["hits"] = glyphs.hits;
+									object["misses"] = glyphs.misses;
+									object["evictions"] = glyphs.evictions;
+									object["failures"] = glyphs.failures;
+									object["miss_us"] = glyphs.miss_us;
+								};
+								write_glyphs(perf["font_cache"].to<JsonObject>(), stats.render.glyphs);
+								auto write_invalidations = [](JsonObject object, const DisplayInvalidationStats& invalidations) {
+									const char* names[] = {"other", "deferred", "screen_switch", "timer", "screen_update"};
+									static_assert(sizeof(names) / sizeof(names[0]) ==
+											static_cast<unsigned>(DisplayInvalidationSource::Count), "Invalidation source names");
+									for (unsigned i = 0; i < static_cast<unsigned>(DisplayInvalidationSource::Count); ++i)
+										object[names[i]] = invalidations.calls[i];
+									object["requested_pixels"] = invalidations.requested_pixels;
+								};
+								write_invalidations(perf["invalidations"].to<JsonObject>(), stats.render.invalidations);
+								auto write_render = [&write_invalidations, &write_glyphs](JsonObject object, const DisplayRenderSample& sample) {
+									object["completed_ms"] = sample.completed_ms;
+									object["lock_wait_us"] = sample.lock_wait_us;
+									object["deferred_us"] = sample.deferred_us;
+									object["screen_switch_us"] = sample.screen_switch_us;
+									object["lv_timer_us"] = sample.lv_timer_us;
+									object["lv_timer_flush_us"] = sample.lv_timer_flush_us;
+									object["lv_timer_other_us"] = sample.lv_timer_us >= sample.lv_timer_flush_us ?
+											sample.lv_timer_us - sample.lv_timer_flush_us : 0;
+									object["data_stream_us"] = sample.data_stream_us;
+									object["screen_update_us"] = sample.screen_update_us;
+									object["cycle_us"] = sample.cycle_us;
+									object["flush_calls"] = sample.flush.calls;
+									object["flush_pixels"] = sample.flush.pixels;
+									object["flush_us"] = sample.flush.total_us;
+									object["flush_peak_us"] = sample.flush.peak_us;
+									object["screen_switched"] = sample.screen_switched;
+									object["refresh_calls"] = sample.refresh.refresh_calls;
+									object["render_calls"] = sample.refresh.render_calls;
+									object["refresh_us"] = sample.refresh.refresh_us;
+									object["render_us"] = sample.refresh.render_us;
+									object["render_flush_us"] = sample.refresh.render_flush_us;
+									object["render_glyph_miss_us"] = sample.refresh.render_glyph_miss_us;
+									object["render_other_us"] = sample.refresh.render_us >= sample.refresh.render_flush_us ?
+											sample.refresh.render_us - sample.refresh.render_flush_us : 0;
+									object["refresh_overhead_us"] = sample.refresh.refresh_us >= sample.refresh.render_us ?
+											sample.refresh.refresh_us - sample.refresh.render_us : 0;
+									object["timer_other_us"] = sample.lv_timer_us >= sample.refresh.refresh_us ?
+											sample.lv_timer_us - sample.refresh.refresh_us : 0;
+									write_invalidations(object["invalidations"].to<JsonObject>(), sample.refresh.invalidations);
+									write_glyphs(object["font_cache"].to<JsonObject>(), sample.glyphs);
+								};
+								if (stats.render.cycles) {
+									write_render(perf["last_render"].to<JsonObject>(), stats.render.last);
+									write_render(perf["slowest_render"].to<JsonObject>(), stats.render.slowest);
+								} else {
+									perf["last_render"] = nullptr;
+									perf["slowest_render"] = nullptr;
+								}
+								if (stats.render.navigations) {
+									write_render(perf["last_navigation_render"].to<JsonObject>(), stats.render.last_navigation);
+								} else {
+									perf["last_navigation_render"] = nullptr;
+								}
+#endif
 						} else {
 								doc["display_fps"] = nullptr;
 								doc["display_perf"] = nullptr;
 						}
+#if HAS_DISPLAY_DIAGNOSTICS
+						DisplayPresentationStats presentation;
+						if (display_manager_get_presentation_stats(&presentation)) {
+							JsonObject object = doc["display_presentation"].to<JsonObject>();
+							object["attempts"] = presentation.attempts;
+							object["failures"] = presentation.failures;
+							object["unchanged_skips"] = presentation.unchanged_skips;
+							object["ota_deferrals"] = presentation.ota_deferrals;
+							object["full_updates"] = presentation.full_updates;
+							object["partial_updates"] = presentation.partial_updates;
+							object["uploaded_bytes"] = presentation.uploaded_bytes;
+							object["flush_calls"] = presentation.flush_calls;
+							object["flush_pixels"] = presentation.flush_pixels;
+							object["conversion_us"] = presentation.conversion_us;
+							object["yield_us"] = presentation.yield_us;
+							object["framebuffer_wait_us"] = presentation.framebuffer_wait_us;
+							auto write_presentation = [](JsonObject target, const DisplayPresentationSample& sample) {
+								target["completed_ms"] = sample.completed_ms;
+								target["total_us"] = sample.total_us;
+								target["dirty_to_ready_us"] = sample.dirty_to_ready_us;
+								target["coalesce_us"] = sample.coalesce_us;
+								target["framebuffer_wait_us"] = sample.framebuffer_wait_us;
+								target["compare_us"] = sample.compare_us;
+								target["copy_us"] = sample.copy_us;
+								target["upload_us"] = sample.upload_us;
+								target["controller_us"] = sample.controller_us;
+								target["hrdy_wait_us"] = sample.hrdy_wait_us;
+								target["uploaded_bytes"] = sample.uploaded_bytes;
+								target["x"] = sample.x;
+								target["y"] = sample.y;
+								target["width"] = sample.width;
+								target["height"] = sample.height;
+								target["waveform"] = sample.waveform;
+								target["full"] = sample.full;
+								target["success"] = sample.success;
+							};
+							if (presentation.attempts) {
+								write_presentation(object["last"].to<JsonObject>(), presentation.last);
+								write_presentation(object["slowest"].to<JsonObject>(), presentation.slowest);
+							} else {
+								object["last"] = nullptr;
+								object["slowest"] = nullptr;
+							}
+						} else {
+							doc["display_presentation"] = nullptr;
+						}
+#endif
 				} else {
 						doc["display_fps"] = nullptr;
 						doc["display_perf"] = nullptr;
+#if HAS_DISPLAY_DIAGNOSTICS
+						doc["display_presentation"] = nullptr;
+#endif
 				}
 				#else
 				doc["display_fps"] = nullptr;
 				doc["display_perf"] = nullptr;
+#if HAS_DISPLAY_DIAGNOSTICS
+				doc["display_presentation"] = nullptr;
+#endif
 				#endif
 		}
 

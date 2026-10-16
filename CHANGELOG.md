@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add the FeatherS3[D] interactive board with an externally powered Waveshare
+  7.8-inch IT8951 e-paper HAT, grayscale and black/white rendering, partial
+  updates, a physical button, and three native Extension slots.
+* Add opt-in display profiling through `HAS_DISPLAY_DIAGNOSTICS`, disabled by
+  default on every board. Developer builds expose retained navigation/render
+  samples, LVGL phases, glyph-cache activity, and IT8951 presentation timings;
+  production builds compile out this extra collection and state.
 * Add an Ask for confirmation action that pauses its sequence without blocking
   a task. Approval resumes the remaining actions once; cancellation, timeout,
   replacement, or failure discards them. Choose a timeout of 1-300 seconds or
@@ -28,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Speed up IT8951 framebuffer conversion with exact RGB565 lookup tables and
+  packed-row writes. Increase the FeatherS3[D] LVGL draw buffer from 4 to 32
+  lines to reduce flush overhead.
+* Avoid sparkline redraws when generated points, colors, reference lines, and
+  marker labels are unchanged, including duplicate label refreshes in one poll.
 * Replace the large user manuals with [focused, task-oriented user guides](docs/user/README.md)
   for setup, device settings, pads, widgets, integrations, and specialized
   workflows. Each topic introduces its purpose before configuration steps.

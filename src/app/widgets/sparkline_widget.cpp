@@ -615,6 +615,8 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
     // inside the clipped chart area (avoids line/dot disconnect at edge).
     float x_step = (n > 1) ? (float)(chart_w - 1) / (float)(n - 1) : 0.0f;
     uint16_t x_offset = (snap->count < n) ? (n - snap->count) : 0;
+    const uint32_t old_count = line_obj ? lv_line_get_point_count(line_obj) : 0;
+    bool points_changed = old_count != valid;
 
     for (uint16_t vi = 0; vi < valid; vi++) {
         float val = vals[vi];
@@ -634,8 +636,11 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
             if (py < 0) py = 0;
             if (py > chart_h - 1) py = chart_h - 1;
         }
-        points[vi].x = (lv_value_precise_t)px;
-        points[vi].y = (lv_value_precise_t)py;
+        if (vi >= old_count || points[vi].x != px || points[vi].y != py) {
+            points_changed = true;
+            points[vi].x = (lv_value_precise_t)px;
+            points[vi].y = (lv_value_precise_t)py;
+        }
 
         // Track smoothed min/max and their pixel coords for overlay positioning
         if (out_info) {
@@ -657,7 +662,7 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
 
     if (out_info) out_info->valid_count = valid;
 
-    if (line_obj) {
+    if (line_obj && points_changed) {
         lv_line_set_points(line_obj, points, valid);
     }
 }
@@ -747,8 +752,10 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         // Re-resolve line color (binding may have changed)
         {
             uint32_t lc = line_colors_resolved[i];
-            lv_obj_set_style_line_color(st->lines[i],
-                lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF), 0);
+            lv_color_t color = lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF);
+            if (!lv_color_eq(lv_obj_get_style_line_color(st->lines[i], LV_PART_MAIN), color)) {
+                lv_obj_set_style_line_color(st->lines[i], color, 0);
+            }
         }
         if (i == 0) { main_snap = snap; main_snap_valid = true; }
     }
@@ -781,15 +788,25 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
         float ry_val = cfg->ref_line_y[r];
         if (!isfinite(ry_val) || ry_val < eff_y_min || ry_val > eff_y_max) {
             // Outside visible range or disabled — hide
-            lv_line_set_points(st->ref_line_objs[r], &st->ref_pts[r * 2], 0);
+            if (lv_line_get_point_count(st->ref_line_objs[r]) != 0) {
+                lv_line_set_points(st->ref_line_objs[r], &st->ref_pts[r * 2], 0);
+            }
             lv_obj_add_flag(st->ref_line_objs[r], LV_OBJ_FLAG_HIDDEN);
             continue;
         }
         int16_t ry = val_to_y(ry_val);
-        st->ref_pts[r * 2 + 0] = { 0, (lv_value_precise_t)ry };
-        st->ref_pts[r * 2 + 1] = { (lv_value_precise_t)chart_w, (lv_value_precise_t)ry };
-        lv_line_set_points(st->ref_line_objs[r], &st->ref_pts[r * 2], 2);
-        lv_obj_set_style_line_color(st->ref_line_objs[r], resolve_lv_color(cfg->ref_line_color[r], widget_default_rgb(DEFAULT_WIDGET_REFERENCE_COLOR)), 0);
+        auto* points = &st->ref_pts[r * 2];
+        if (lv_line_get_point_count(st->ref_line_objs[r]) != 2 ||
+            points[0].x != 0 || points[0].y != ry ||
+            points[1].x != chart_w || points[1].y != ry) {
+            points[0] = { 0, (lv_value_precise_t)ry };
+            points[1] = { (lv_value_precise_t)chart_w, (lv_value_precise_t)ry };
+            lv_line_set_points(st->ref_line_objs[r], points, 2);
+        }
+        lv_color_t color = resolve_lv_color(cfg->ref_line_color[r], widget_default_rgb(DEFAULT_WIDGET_REFERENCE_COLOR));
+        if (!lv_color_eq(lv_obj_get_style_line_color(st->ref_line_objs[r], LV_PART_MAIN), color)) {
+            lv_obj_set_style_line_color(st->ref_line_objs[r], color, 0);
+        }
         lv_obj_clear_flag(st->ref_line_objs[r], LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -812,7 +829,9 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 uint32_t lc = line_colors_resolved[ci];
                 cd_clr = lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF);
             }
-            lv_obj_set_style_bg_color(st->dot_current[ci], cd_clr, 0);
+            if (!lv_color_eq(lv_obj_get_style_bg_color(st->dot_current[ci], LV_PART_MAIN), cd_clr)) {
+                lv_obj_set_style_bg_color(st->dot_current[ci], cd_clr, 0);
+            }
             lv_obj_set_pos(st->dot_current[ci], ca_x + si.last_px - cr, ca_y + si.last_py - cr);
             lv_obj_clear_flag(st->dot_current[ci], LV_OBJ_FLAG_HIDDEN);
         } else {
@@ -864,13 +883,19 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 int16_t max_cy = max_py;
                 int16_t max_r = cfg->marker_size_max / 2;
                 lv_color_t max_clr = resolve_marker_color(cfg->max_label_color, max_line);
-                lv_obj_set_style_bg_color(st->dot_max, max_clr, 0);
+                if (!lv_color_eq(lv_obj_get_style_bg_color(st->dot_max, LV_PART_MAIN), max_clr)) {
+                    lv_obj_set_style_bg_color(st->dot_max, max_clr, 0);
+                }
                 lv_obj_set_pos(st->dot_max, ca_x + max_cx - max_r, ca_y + max_cy - max_r);
                 lv_obj_clear_flag(st->dot_max, LV_OBJ_FLAG_HIDDEN);
 
                 snprintf(buf, sizeof(buf), cfg->max_fmt, (double)found_max);
-                lv_label_set_text(st->lbl_max, buf);
-                lv_obj_set_style_text_color(st->lbl_max, max_clr, 0);
+                if (strcmp(lv_label_get_text(st->lbl_max), buf) != 0) {
+                    lv_label_set_text(st->lbl_max, buf);
+                }
+                if (!lv_color_eq(lv_obj_get_style_text_color(st->lbl_max, LV_PART_MAIN), max_clr)) {
+                    lv_obj_set_style_text_color(st->lbl_max, max_clr, 0);
+                }
                 lv_obj_update_layout(st->lbl_max);
                 int16_t lw = (int16_t)lv_obj_get_width(st->lbl_max);
                 int16_t lh = (int16_t)lv_obj_get_height(st->lbl_max);
@@ -888,13 +913,19 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 int16_t min_cy = min_py;
                 int16_t min_r = cfg->marker_size_min / 2;
                 lv_color_t min_clr = resolve_marker_color(cfg->min_label_color, min_line);
-                lv_obj_set_style_bg_color(st->dot_min, min_clr, 0);
+                if (!lv_color_eq(lv_obj_get_style_bg_color(st->dot_min, LV_PART_MAIN), min_clr)) {
+                    lv_obj_set_style_bg_color(st->dot_min, min_clr, 0);
+                }
                 lv_obj_set_pos(st->dot_min, ca_x + min_cx - min_r, ca_y + min_cy - min_r);
                 lv_obj_clear_flag(st->dot_min, LV_OBJ_FLAG_HIDDEN);
 
                 snprintf(buf, sizeof(buf), cfg->min_fmt, (double)found_min);
-                lv_label_set_text(st->lbl_min, buf);
-                lv_obj_set_style_text_color(st->lbl_min, min_clr, 0);
+                if (strcmp(lv_label_get_text(st->lbl_min), buf) != 0) {
+                    lv_label_set_text(st->lbl_min, buf);
+                }
+                if (!lv_color_eq(lv_obj_get_style_text_color(st->lbl_min, LV_PART_MAIN), min_clr)) {
+                    lv_obj_set_style_text_color(st->lbl_min, min_clr, 0);
+                }
                 lv_obj_update_layout(st->lbl_min);
                 int16_t lw = (int16_t)lv_obj_get_width(st->lbl_min);
                 int16_t lx = ca_x + min_cx - lw / 2;
@@ -970,8 +1001,10 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
 
             // Set color to line color
             uint32_t lc = line_colors_resolved[ci];
-            lv_obj_set_style_text_color(st->lbl_current[ci],
-                lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF), 0);
+            lv_color_t color = lv_color_make((lc >> 16) & 0xFF, (lc >> 8) & 0xFF, lc & 0xFF);
+            if (!lv_color_eq(lv_obj_get_style_text_color(st->lbl_current[ci], LV_PART_MAIN), color)) {
+                lv_obj_set_style_text_color(st->lbl_current[ci], color, 0);
+            }
 
             active[active_count].line_idx = ci;
             active[active_count].ideal_y = si.last_py;  // chart-area relative
@@ -1065,6 +1098,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
             }
         }
     }
+    st->last_label_ms = millis();
 #endif
 }
 
@@ -1103,7 +1137,6 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
         if (st->label_margin_r == 0) return;  // no labels → nothing else to do
         uint32_t now = millis();
         if (now - st->last_label_ms < 1000) return;  // throttle label-only redraws
-        st->last_label_ms = now;
     }
 #endif
 

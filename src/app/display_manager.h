@@ -150,10 +150,18 @@ private:
 		
 		// LVGL flush callback (static, accesses instance via user_data)
 		static void flushCallback(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map);
+#if HAS_DISPLAY_DIAGNOSTICS
+		static void displayEventCallback(lv_event_t* event);
+#endif
 
 		// Buffered render-mode drivers (e.g., Arduino_GFX canvas) need an explicit
 		// present() step, but only after LVGL has actually rendered something.
 		bool flushPending;
+#if HAS_DISPLAY_DIAGNOSTICS
+		DisplayFlushStats cycleFlush;
+		DisplayRefreshTrace cycleRefresh;
+		DisplayInvalidationSource invalidationSource = DisplayInvalidationSource::Other;
+#endif
 
 		// FreeRTOS task for LVGL rendering
 		static void lvglTask(void* pvParameter);
@@ -218,6 +226,9 @@ public:
 				const void* ctx, size_t ctxLen,
 				uint32_t timeoutMs, bool* outOk, char* outMsg, size_t outMsgLen);
 		bool requestFullRefresh();
+#if HAS_DISPLAY_DIAGNOSTICS
+		bool getPresentationStats(DisplayPresentationStats* out);
+#endif
 		bool navigateButtons(const char* command);
 
 		// Active LVGL logical resolution (post driver->configureLVGL()).
@@ -280,6 +291,9 @@ void display_manager_unlock_if_needed(bool did_lock);
 // Best-effort perf stats for diagnostics (/api/health).
 // Returns false until a first stats window has been captured.
 bool display_manager_get_perf_stats(DisplayPerfStats* out);
+#if HAS_DISPLAY_DIAGNOSTICS
+bool display_manager_get_presentation_stats(DisplayPresentationStats* out);
+#endif
 
 bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes);
 

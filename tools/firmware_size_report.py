@@ -153,6 +153,7 @@ LIBRARIES = {
     ),
 }
 FLAG_SUBSYSTEMS = {
+    "HAS_DISPLAY_DIAGNOSTICS": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_BACKLIGHT": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_BUILTIN_LED": "Sensors / power",
     "HAS_BUTTON": "Sensors / power",

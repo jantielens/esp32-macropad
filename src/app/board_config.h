@@ -87,6 +87,11 @@ struct HwButtonDef {
 #define DEBUG_CRASH_API_ENABLED 0
 #endif
 
+// Developer-only display profiling; compile out detailed collection and health fields by default.
+#ifndef HAS_DISPLAY_DIAGNOSTICS
+#define HAS_DISPLAY_DIAGNOSTICS false
+#endif
+
 // ============================================================================
 // Project Branding
 // Human-friendly project name used in the web UI and device name (can be set by build system).

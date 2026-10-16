@@ -31,6 +31,9 @@ public:
 		bool requestFullRefresh() override;
 		bool isAvailable() const override { return initialized; }
 		int presentationMode() const override { return panelMode; }
+#if HAS_DISPLAY_DIAGNOSTICS
+		bool getPresentationStats(DisplayPresentationStats* out) override;
+#endif
 
 private:
 		DeviceConfig* config;
@@ -44,6 +47,9 @@ private:
 		uint8_t bwThreshold;
 		uint32_t lastRefreshMs;
 		uint32_t lastChangeMs;
+#if HAS_DISPLAY_DIAGNOSTICS
+		uint32_t firstChangeUs = 0;
+#endif
 		uint32_t bwPartialUpdatesSinceFull;
 		uint32_t grayscalePartialUpdatesSinceFull;
 		uint8_t* drawingFramebuffer;
@@ -59,6 +65,10 @@ private:
 		uint16_t dirtyY;
 		uint16_t dirtyX2;
 		uint16_t dirtyY2;
+#if HAS_DISPLAY_DIAGNOSTICS
+		portMUX_TYPE perfMux = portMUX_INITIALIZER_UNLOCKED;
+		DisplayPresentationStats perf;
+#endif
 
 		void writePixel(int16_t x, int16_t y, uint16_t rgb565);
 		void markDirtyRegion(int16_t x, int16_t y, uint16_t w, uint16_t h);

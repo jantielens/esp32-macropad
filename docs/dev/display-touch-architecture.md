@@ -1824,6 +1824,86 @@ total display-mutex-held cycle. Buffered presentation is measured separately.
 The FPS screen shows average Render, Present, and Cycle times; Cycle excludes
 lock wait and task sleep and does not sum concurrent rendering and presentation.
 
+Detailed profiling requires `HAS_DISPLAY_DIAGNOSTICS`, which defaults off on
+every board. Disabled builds retain the baseline FPS and average/peak timing
+window, but compile out the extra event callback, counters, timestamps, retained
+samples, FreeType measurements, IT8951 profiling state, and health serialization.
+The rendering optimizations and existing operational logs do not depend on this
+flag. There is no runtime or NVS setting. For local opt-in and cleanup, see
+[Capturing display performance](web-portal.md#capturing-display-performance).
+
+With diagnostics enabled, active render cycles retain last and
+slowest-since-boot snapshots, including
+flush calls, pixel counts, synchronous flush duration, display-lock wait,
+deferred work, and screen switching. These snapshots survive idle sampling
+windows and screen-saver suspension. They are copied under the performance
+spinlock; the flush callback accumulates locally on the LVGL task, without
+logging or taking the performance spinlock for each flush. Asynchronous drivers
+measure callback submission time, not later DMA completion.
+
+`last_navigation_render` independently retains the most recent active cycle
+that processed a queued screen switch, so later widget redraws cannot overwrite
+the initial navigation measurement. A display event callback timestamps refresh
+and render start/ready events only within `lv_timer_handler()`, separating actual
+render-event work from refresh setup/cleanup and other LVGL timers. Rendering
+still includes synchronous flush time, which is measured separately and
+subtracted for `render_other_us`. These wall times are nested, not additive.
+
+The same callback counts invalidation events by display-task phase, without
+per-request timers or logs. Cumulative counts include non-flushing cycles;
+requests between cycles remain pending until the next completed cycle consumes
+them. Per-cycle counts can precede a redraw in the next cycle, and requested
+areas can overlap. Counts include LVGL's draw-buffer rounding probes during
+rendering, not just widget requests. Phase attribution is not a widget-level call trace.
+All callback state is owned under the existing LVGL mutex and only published
+snapshots cross into the health API; polling adds no LVGL work.
+
+Monochrome FreeType cache diagnostics count hits, misses, successful evictions,
+and failed misses across font instances. Only miss handling is timed, using
+wrap-safe microsecond intervals; cache hits have no timestamp calls. Miss work
+includes loading/hinting, rasterization, expanded bitmap creation, and replacement,
+not all font callback or text blending work. The cache remains 16 glyphs per
+font instance. Counts and time are retained cumulatively and per active cycle,
+with `render_glyph_miss_us` isolating miss work inside render events. Glyph
+activity in non-flushing cycles is included in cumulative totals. Updates and
+snapshot collection use existing LVGL ownership; the health API only reads the
+published performance snapshot. No glyph logs, new allocations, or cache policy
+changes are introduced.
+
+IT8951 implements the optional `getPresentationStats()` HAL snapshot using a
+separate short-held spinlock. The health API reads it without acquiring LVGL or
+framebuffer locks, so polling does not wait for rendering or a panel transfer.
+Conversion and deliberate flush-yield durations are cumulative, while
+presentation phases retain the last and slowest attempts. No per-pixel timers,
+additional tasks, or telemetry buffers are allocated. Routine refresh summaries
+retain the existing once-per-minute cadence; explicitly forced and scheduled
+cleanup refreshes retain their existing summaries.
+
+Sparkline updates compare generated point coordinates and counts before
+invalidating data or reference lines. They also skip unchanged color setters
+and marker-label text updates. Stream revisions still trigger evaluation, and
+label refreshes still resolve bindings, scales, and colors, but identical visual
+output does not request a redraw. Every completed redraw evaluation advances
+the label-refresh timestamp, avoiding a duplicate label refresh when widget
+`update()` and `tick()` run in the same poll. No geometry cache, additional
+allocation, or reduction in data polling is required.
+
+IT8951 RGB565 conversion uses a 256-byte compile-time table of weighted channel
+contributions, preserving the original channel expansion and luminance rounding.
+For in-bounds flush rectangles at rotations 0 and 2, it converts pairs of pixels
+into complete packed framebuffer bytes. Only unpaired boundary pixels require
+read-modify-write operations, preserving neighboring nibbles. Dithering still
+uses logical pixel coordinates; quarter-turn rotations and clipped rectangles
+retain the per-pixel path. This changes neither the draw-buffer size nor refresh
+settling, yielding, controller transport, or waveform selection.
+
+Use `display_perf.last_render` to distinguish flush overhead from other LVGL
+work, and `display_presentation.last` to separate coalescing, framebuffer
+comparison/copying, upload, and controller-ready handling. The two tasks overlap;
+do not sum their elapsed times. Controller HRDY is not a measured physical
+waveform-completion signal. See the
+[health API](web-portal.md#health-monitoring) for field definitions and collection.
+
 On LCD boards, `DISPLAY_BINDING_REFRESH_INTERVAL_MS` throttles passive labels,
 colors, numeric styles, and local-image path templates independently of button
 visibility, widget-value updates, widget ticks, and image-frame handoff. Zero
