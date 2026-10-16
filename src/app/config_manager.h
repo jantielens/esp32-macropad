@@ -73,6 +73,9 @@
 // Configuration structure
 #if HAS_LVGL_EPAPER
 #include "drivers/monochrome_render.h"
+constexpr int EPAPER_VCOM_MAX_MV = 5000;
+static_assert(EPAPER_DEFAULT_VCOM_MV >= 0 && EPAPER_DEFAULT_VCOM_MV <= EPAPER_VCOM_MAX_MV,
+		"E-paper default VCOM must be 0 (unspecified) or a magnitude up to 5000 mV");
 constexpr bool config_manager_epaper_mode_supported(uint8_t mode) {
 	return mode == EPAPER_RENDER_MODE_BW || (HAS_EPAPER_GRAYSCALE && mode == EPAPER_RENDER_MODE_GRAYSCALE);
 }
@@ -174,7 +177,7 @@ struct DeviceConfig {
 #endif
 
 #if HAS_LVGL_EPAPER
-		// E-paper presentation settings. Panel mode is sampled only at boot.
+		// E-paper presentation settings. Panel mode and VCOM are sampled only at boot.
 		uint8_t epaper_render_mode;
 		uint32_t epaper_binding_refresh_interval_ms;
 		uint32_t epaper_min_refresh_interval_ms;
@@ -182,6 +185,7 @@ struct DeviceConfig {
 		uint16_t epaper_full_refresh_threshold;
 		uint8_t epaper_bw_conversion;
 		uint8_t epaper_bw_threshold;
+		uint16_t epaper_vcom_mv; // Boot-only magnitude; 0 selects the current board default.
 #endif
 
 #if HAS_CAMERA

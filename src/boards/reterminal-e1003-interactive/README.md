@@ -22,6 +22,11 @@ Updates are coalesced, animations are disabled, and visible waveforms take
 time. Prefer slowly changing pads/widgets over rapid animation or live video.
 Regional grayscale quality and timing still require physical validation.
 
+The board default VCOM is **-1.40 V** (`EPAPER_DEFAULT_VCOM_MV=1400`).
+The interactive driver consumes the saved
+[VCOM setting](../../../docs/user/specialized/interactive-epaper.md#configure-panel-vcom)
+after restart; leave it at the board default unless the panel specifies otherwise.
+
 There is no frontlight. Audio, remote image fetching, and the image library
 are disabled. Wi-Fi/MQTT, MCP, and native Extensions are configured.
 The CH340 connection is for flashing/serial logs, not USB HID.

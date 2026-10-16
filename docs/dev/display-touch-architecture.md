@@ -305,7 +305,7 @@ controller reads so a one-shot report cannot be consumed by another observer.
 `drivers/it8951_epaper_driver.cpp`, selected by `DISPLAY_DRIVER_IT8951`.
 `DISPLAY_DRIVER_RETERMINAL_E1003` remains an alias for compatibility.
 The Feather uses the standard Waveshare HAT protocol, externally supplied
-5 V, SPI GPIO36/35/37, CS10, RESET38, HRDY5, and VCOM -1.53 V. It has no touch.
+5 V, SPI GPIO36/35/37, CS10, RESET38, HRDY5, and default VCOM -1.53 V. It has no touch.
 Its single GPIO14 button has configurable tap/hold actions without defaults.
 The board uses landscape rotation 2. See the
 [Feather profile](interactive-epaper.md#feathers3d-with-waveshare-78-hat)
@@ -313,10 +313,14 @@ for wiring, startup provenance, and hardware acceptance checks.
 
 The E1003 override sets `IT8951_E1003_PROTOCOL=true` and retains its original
 power GPIO11/21, 10 MHz SPI, short reset, mirrored controller coordinates,
-reversed upload words, temperature command, and VCOM selector 2 at -1.4 V.
+reversed upload words, temperature command, and VCOM selector 2 with a -1.4 V default.
 The standard HAT uses a 200 ms reset, 24 MHz writes, 1 MHz reads, explicit
 packed-mode initialization, direct big-endian uploads, and VCOM selector 1
 with readback verification. HAT startup fails explicitly on a VCOM mismatch.
+Both profiles consume the boot-only `epaper_vcom_mv` setting; zero selects
+their `EPAPER_DEFAULT_VCOM_MV` without replacing the saved zero. Other
+interactive drivers may ignore this generic setting. See the
+[configuration contract](interactive-epaper.md#configuration-contract).
 
 `reterminal-e1003-interactive` is an always-on IT8951 e-paper Macropad target.
 Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.

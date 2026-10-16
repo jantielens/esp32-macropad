@@ -203,6 +203,8 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["epaper_bw_conversion"] = current_config->epaper_bw_conversion == MONOCHROME_CONVERSION_BAYER ? "bayer4x4" :
 						current_config->epaper_bw_conversion == MONOCHROME_CONVERSION_BLUE_NOISE ? "blue_noise" : "threshold";
 				(*doc)["epaper_bw_threshold"] = current_config->epaper_bw_threshold;
+				(*doc)["epaper_vcom_mv"] = current_config->epaper_vcom_mv;
+				(*doc)["epaper_default_vcom_mv"] = EPAPER_DEFAULT_VCOM_MV;
 				JsonArray render_modes = (*doc)["epaper_supported_render_modes"].to<JsonArray>();
 				render_modes.add("bw");
 				if (HAS_EPAPER_GRAYSCALE) render_modes.add("grayscale");
@@ -422,6 +424,27 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						return;
 				}
 		}
+
+		#if HAS_LVGL_EPAPER
+		uint16_t epaper_vcom_mv = current_config->epaper_vcom_mv;
+		if (doc.containsKey("epaper_vcom_mv")) {
+				uint32_t magnitude = UINT32_MAX;
+				const JsonVariantConst field = doc["epaper_vcom_mv"];
+				if (field.is<uint32_t>()) magnitude = field.as<uint32_t>();
+				else if (field.is<const char*>()) {
+						const char* text = field.as<const char*>();
+						if (text && *text && strlen(text) <= 4 && strspn(text, "0123456789") == strlen(text)) {
+								magnitude = strtoul(text, nullptr, 10);
+						}
+				}
+				if (magnitude > EPAPER_VCOM_MAX_MV) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"epaper_vcom_mv must be an integer magnitude from 0 to 5000; 0 uses the board default\"}");
+						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+				epaper_vcom_mv = uint16_t(magnitude);
+		}
+		#endif
 
 		#if HAS_BLE
 		int ble_tx_power_dbm = 0;
@@ -845,6 +868,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 			return;
 		}
 		config_manager_publish_epaper_refresh_settings(current_config);
+		current_config->epaper_vcom_mv = epaper_vcom_mv;
 		#endif
 
 		#if HAS_DISPLAY

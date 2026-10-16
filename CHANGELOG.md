@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Add the FeatherS3[D] interactive board with an externally powered Waveshare
   7.8-inch IT8951 e-paper HAT, grayscale and black/white rendering, partial
   updates, a physical button, and three native Extension slots.
+* Configure panel VCOM in Interactive E-Paper's advanced settings using
+  negative volts, with changes applied after restart by supporting drivers.
+  Both interactive IT8951 profiles use the saved value; other drivers can
+  ignore it. Use board default saves a zero selection that follows the
+  current firmware's panel default, including after changing profiles,
+  while explicit voltage overrides remain saved. Calibration EEPROM is unchanged.
 * Add opt-in display profiling through `HAS_DISPLAY_DIAGNOSTICS`, disabled by
   default on every board. Developer builds expose retained navigation/render
   samples, LVGL phases, glyph-cache activity, and IT8951 presentation timings;

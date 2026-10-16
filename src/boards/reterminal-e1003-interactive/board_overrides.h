@@ -49,7 +49,7 @@
 // --- Driver Selection (HAL) ------------------------------------------------
 #define DISPLAY_DRIVER DISPLAY_DRIVER_RETERMINAL_E1003
 #define IT8951_E1003_PROTOCOL true
-#define IT8951_VCOM_MV 1400
+#define EPAPER_DEFAULT_VCOM_MV 1400
 #define EPAPER_SPI_SCK_PIN 7
 // E-paper SPI data-input GPIO for IT8951 responses.
 #define EPAPER_SPI_MISO_PIN 8

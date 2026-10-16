@@ -69,6 +69,17 @@ with logical screen coordinates, so partial flushes cannot shift a pattern.
 Grayscale, E-Paper Frame rendering, and monochrome uploaded-font rasterization
 are independent of these settings.
 
+`epaper_vcom_mv` is a separate boot-only setting stored for all interactive
+e-paper boards, including those whose drivers ignore it. It is an unsigned
+magnitude from 0 to 5000 mV; `0` selects `EPAPER_DEFAULT_VCOM_MV` in consuming
+drivers rather than applying zero volts. Keep the saved zero unchanged so a
+later firmware/driver profile uses its own board default. Nonzero overrides
+remain explicit panel calibration and must be checked when swapping panels.
+The board default is `0` (unspecified) unless overridden. IT8951 consumes this
+setting during initialization and rejects a missing voltage. No driver
+capability API or live voltage changes are involved. The portal always shows
+VCOM in negative volts; its default button saves the zero selection.
+
 The blue-noise map in `drivers/blue_noise_64.h` is a precomputed, periodic
 64x64 void-and-cluster rank map. Generation uses a 10% seeded initial pattern
 (Python `random.Random(1400).sample(range(4096), 409)`), a toroidal Gaussian
@@ -117,7 +128,7 @@ does not migrate partition boundaries.
 | HAT 5V / GND | External 5 V / common GND | Always powered, no GPIO17 boost control |
 
 Do not feed the HAT from the Feather's 3.3 V regulator. Use 3.3 V logic and a
-common ground. The panel-specific VCOM is -1.53 V (`IT8951_VCOM_MV=1530`);
+common ground. The panel-specific VCOM default is -1.53 V (`EPAPER_DEFAULT_VCOM_MV=1530`);
 confirm the panel label before substituting another panel. GPIO17 is unused.
 The default is landscape 1872 x 1404 with rotation 2 for the confirmed mounting.
 The button has no default tap or hold actions; assign these in the portal.

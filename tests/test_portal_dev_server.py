@@ -173,6 +173,8 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(config["epaper_bw_conversion"], "threshold")
         self.assertEqual(config["epaper_bw_threshold"], 128)
+        self.assertEqual(config["epaper_vcom_mv"], 0)
+        self.assertEqual(config["epaper_default_vcom_mv"], 0)
         self.assertEqual(config["epaper_supported_render_modes"], ["bw"])
         nav = self.request("/api/portal/nav", profile=profile)[1]
         items = [item for category in nav["categories"] for item in category["items"]]
@@ -182,13 +184,17 @@ class PortalDevServerTest(unittest.TestCase):
         previous = copy.deepcopy(self.server.mock_config)
         try:
             self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
-                body={"epaper_bw_conversion": "blue_noise", "epaper_bw_threshold": "96"}, profile=profile)[0], 200)
+                body={"epaper_bw_conversion": "blue_noise", "epaper_bw_threshold": "96",
+                      "epaper_vcom_mv": "1480"}, profile=profile)[0], 200)
             saved = self.request("/api/config", profile=profile)[1]
             self.assertEqual(saved["epaper_bw_conversion"], "blue_noise")
             self.assertEqual(int(saved["epaper_bw_threshold"]), 96)
+            self.assertEqual(int(saved["epaper_vcom_mv"]), 1480)
             lcd = self.request("/api/config")[1]
             self.assertNotIn("epaper_bw_conversion", lcd)
             self.assertNotIn("epaper_bw_threshold", lcd)
+            self.assertNotIn("epaper_vcom_mv", lcd)
+            self.assertNotIn("epaper_default_vcom_mv", lcd)
         finally:
             self.server.mock_config = previous
 

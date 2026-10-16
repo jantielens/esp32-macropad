@@ -2183,6 +2183,8 @@ timezone and alarm session.
   "epaper_render_mode": "grayscale",
   "epaper_bw_conversion": "threshold",
   "epaper_bw_threshold": 128,
+  "epaper_vcom_mv": 0,
+  "epaper_default_vcom_mv": 1530,
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
@@ -2501,6 +2503,7 @@ Save new configuration. Device reboots after successful save.
   "epaper_render_mode": "bw",
   "epaper_bw_conversion": "blue_noise",
   "epaper_bw_threshold": 128,
+  "epaper_vcom_mv": 1480,
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
@@ -2582,6 +2585,17 @@ Save new configuration. Device reboots after successful save.
   hides the level for dithering. These fields do not change the font backend
   or E-Paper Frame image rendering.
 - Device automatically reboots after successful save
+- Interactive E-Paper also stores `epaper_vcom_mv`, an integer magnitude or
+  digit string from 0 to 5000 mV. Invalid values return HTTP 400 before any
+  settings are changed. Omission preserves the saved selection. Zero means
+  use the current firmware's `EPAPER_DEFAULT_VCOM_MV`, not zero volts.
+  `GET /api/config` exposes that default as read-only `epaper_default_vcom_mv`.
+  VCOM is always shown in E-paper Presentation, including on drivers that
+  ignore it. Consuming drivers apply it only at startup; both interactive
+  IT8951 profiles use it. The portal accepts negative volts and converts
+  them to millivolt magnitude. **Use board default** saves zero so future
+  firmware profiles use their own default; explicit nonzero overrides persist.
+  This does not change the Frame TPS65186 EEPROM calibration interface.
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 
 #### `DELETE /api/config`

@@ -912,6 +912,10 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #ifndef EPAPER_DEFAULT_RENDER_MODE
 #define EPAPER_DEFAULT_RENDER_MODE EPAPER_RENDER_MODE_GRAYSCALE
 #endif
+// Default VCOM magnitude in millivolts for consuming e-paper drivers; 0 means unspecified.
+#ifndef EPAPER_DEFAULT_VCOM_MV
+#define EPAPER_DEFAULT_VCOM_MV 0
+#endif
 // Number of regional updates before a full refresh on supporting e-paper drivers.
 #ifndef EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD
 #define EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD 10
@@ -1036,10 +1040,6 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Use reTerminal E1003's controller firmware and reversed image-packing protocol.
 #ifndef IT8951_E1003_PROTOCOL
 #define IT8951_E1003_PROTOCOL false
-#endif
-// Absolute panel-specific VCOM voltage in millivolts (1530 means -1.53 V).
-#ifndef IT8951_VCOM_MV
-#define IT8951_VCOM_MV 1530
 #endif
 // Optional active-HIGH panel power enable; -1 means externally powered.
 #ifndef IT8951_PANEL_POWER_PIN

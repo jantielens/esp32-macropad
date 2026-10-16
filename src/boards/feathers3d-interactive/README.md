@@ -43,9 +43,11 @@ GPIO17 is unused. This profile does not control a boost converter or
 switch the HAT's power rail. Power the Feather through its normal USB-C
 connection and provide the HAT's 5 V supply with a common ground.
 
-The configured panel VCOM is **-1.53 V** (`IT8951_VCOM_MV=1530`), confirmed
+The default panel VCOM is **-1.53 V** (`EPAPER_DEFAULT_VCOM_MV=1530`), confirmed
 for this panel. Check the panel label before substituting another panel;
-do not assume the same VCOM applies. Initialization verifies VCOM readback.
+do not assume the same VCOM applies. Change it through
+[VCOM configuration](../../../docs/user/specialized/interactive-epaper.md#configure-panel-vcom)
+and restart. Initialization verifies VCOM readback.
 Rotation 2 matches the confirmed landscape mounting.
 
 ## Button and recovery

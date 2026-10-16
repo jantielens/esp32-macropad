@@ -87,7 +87,7 @@ static_assert(NUM_HW_BUTTONS == 1 && HW_BUTTON_DEFS[0].pin == 14 && BUTTON_PIN =
 static_assert(DISPLAY_WIDTH == 1872 && DISPLAY_HEIGHT == 1404 && DISPLAY_ROTATION == 2, "Landscape mounting");
 static_assert(EPAPER_SPI_SCK_PIN == 36 && EPAPER_SPI_MOSI_PIN == 35 && EPAPER_SPI_MISO_PIN == 37, "Proven SPI wiring");
 static_assert(EPAPER_CS_PIN == 10 && EPAPER_RESET_PIN == 38 && EPAPER_BUSY_PIN == 5, "Proven control wiring");
-static_assert(IT8951_VCOM_MV == 1530 && !IT8951_E1003_PROTOCOL, "Panel-specific standard HAT protocol");
+static_assert(EPAPER_DEFAULT_VCOM_MV == 1530 && !IT8951_E1003_PROTOCOL, "Panel-specific standard HAT protocol");
 static_assert(IT8951_PANEL_POWER_PIN == -1 && IT8951_CONTROLLER_POWER_PIN == -1, "Externally powered HAT");
 #ifdef HW_BUTTON_DEFAULTS_JSON
 #error Feather button must have no default actions

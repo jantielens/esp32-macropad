@@ -12,6 +12,7 @@ static std::vector<Transaction> transactions;
 static uint32_t clockMs = 1000;
 static bool busy = false, ota = false, badVcom = false;
 static uint16_t command = 0;
+static uint16_t expectedVcom = EPAPER_DEFAULT_VCOM_MV;
 static int allocations = 0, failAllocation = 0, liveAllocations = 0, failures = 0;
 static bool failMutex = false;
 static int liveMutexes = 0;
@@ -67,7 +68,7 @@ uint8_t it8951_test_spi_byte(uint8_t value) {
         CHECK(tx.hz == (IT8951_E1003_PROTOCOL ? 10000000u : 1000000u));
         const uint16_t info[] = {1872, 1404, 0x1234, 0x0001};
         const size_t position = (index - 4) / 2;
-        const uint16_t result = command == 0x0039 ? (badVcom ? 1000 : IT8951_VCOM_MV) :
+        const uint16_t result = command == 0x0039 ? (badVcom ? 1000 : expectedVcom) :
             (position < 4 ? info[position] : 0);
         return index & 1 ? result & 0xff : result >> 8;
     }
@@ -105,6 +106,7 @@ static void reset() {
     clockMs = 1000;
     busy = ota = badVcom = failMutex = false;
     allocations = failAllocation = 0;
+    expectedVcom = EPAPER_DEFAULT_VCOM_MV;
     waveformHook = uploadHook = nullptr;
 }
 
@@ -208,7 +210,7 @@ int main() {
             CHECK(driver.getPresentationStats(&telemetry) && telemetry.attempts == 0);
 #endif
             CHECK(delays.at(1) == (IT8951_E1003_PROTOCOL ? 10u : 200u));
-            CHECK(arguments(0x0039).front() == std::vector<uint16_t>({IT8951_E1003_PROTOCOL ? 2u : 1u, IT8951_VCOM_MV}));
+            CHECK(arguments(0x0039).front() == std::vector<uint16_t>({IT8951_E1003_PROTOCOL ? 2u : 1u, EPAPER_DEFAULT_VCOM_MV}));
             if (!IT8951_E1003_PROTOCOL) CHECK(arguments(0x0011).front() == std::vector<uint16_t>({4, 1}));
             driver.setRotation(2);
             CHECK(driver.width() == 1872 && driver.height() == 1404);
@@ -316,6 +318,26 @@ int main() {
         CHECK(driver.getPresentationStats(&telemetry) && telemetry.attempts == 1);
         CHECK(telemetry.last.dirty_to_ready_us == telemetry.last.total_us + 1000);
 #endif
+    }
+    for (uint16_t configuredVcom : {0, 1480, 5001}) {
+        reset();
+        DeviceConfig config{};
+        config.epaper_vcom_mv = configuredVcom;
+        expectedVcom = configuredVcom ? configuredVcom : EPAPER_DEFAULT_VCOM_MV;
+        IT8951EpaperDriver driver(&config);
+        driver.init();
+        if (configuredVcom > EPAPER_VCOM_MAX_MV) {
+            CHECK(!driver.isAvailable());
+            CHECK(arguments(0x0039).empty());
+        } else {
+            CHECK(driver.isAvailable());
+            CHECK(arguments(0x0039).front() ==
+                std::vector<uint16_t>({IT8951_E1003_PROTOCOL ? 2u : 1u, expectedVcom}));
+            config.epaper_vcom_mv = 1600;
+            const size_t initializedTransactions = transactions.size();
+            driver.present();
+            CHECK(transactions.size() == initializedTransactions);
+        }
     }
     for (int failed : {1, 2, 3}) {
         reset();

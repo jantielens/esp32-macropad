@@ -40,6 +40,24 @@ updates; 0 disables scheduled full refresh. Some grayscale implementations alway
 use full-panel waveforms, so consult [panel notes](../hardware.md).
 These refresh settings apply live after Save.
 
+## Configure panel VCOM
+
+The **VCOM (advanced)** section is always visible in E-paper Presentation.
+Only drivers that consume configured VCOM use it; other drivers ignore the
+saved value. This setting does not program calibration EEPROM.
+
+Use the negative voltage specified on your panel, such as `-1.530` V.
+The input accepts values from `-5` to `0` V in `0.001` V steps.
+An incorrect voltage can degrade image quality; do not copy another panel's value.
+Choose **Save**, then reboot to apply the change.
+
+Leave the value at `0`, or choose **Use board default**, to follow the default
+shown for the current firmware. Zero is a selection, never an applied voltage.
+If you later install firmware for another panel/driver, the same saved zero
+uses that firmware's board default. An explicit nonzero value is preserved,
+so check it when changing panels. If no board default is specified and the
+driver requires VCOM, enter the panel's voltage before restarting.
+
 ## Clear ghosting and verify
 
 Choose **Full refresh now** to request a full update, or add a supported

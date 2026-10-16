@@ -43,6 +43,7 @@ SCREENSAVER_DEFAULTS = {
 EPAPER_PRESENTATION_DEFAULTS = {
     "epaper_render_mode": "bw", "epaper_supported_render_modes": ["bw"],
     "epaper_bw_conversion": "threshold", "epaper_bw_threshold": 128,
+    "epaper_vcom_mv": 0, "epaper_default_vcom_mv": 0,
     "epaper_binding_refresh_interval_ms": 1000, "epaper_min_refresh_interval_ms": 500,
     "epaper_refresh_clock_on_minute_boundary": True, "epaper_full_refresh_threshold": 10,
 }

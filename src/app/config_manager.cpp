@@ -116,6 +116,7 @@
 #define KEY_EPAPER_THRESHOLD "ep_thr"
 #define KEY_EPAPER_BW_CONVERSION "ep_bw_conv"
 #define KEY_EPAPER_BW_THRESHOLD "ep_bw_thr"
+#define KEY_EPAPER_VCOM "ep_vcom"
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
@@ -311,6 +312,7 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_LVGL_EPAPER
+		config->epaper_vcom_mv = 0;
 		config_manager_apply_epaper_refresh_defaults(config);
 		config_manager_publish_epaper_refresh_settings(config);
 		#endif
@@ -542,6 +544,11 @@ bool config_manager_load(DeviceConfig *config) {
 		config->epaper_full_refresh_threshold = preferences.getUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
 		config->epaper_bw_conversion = preferences.getUChar(KEY_EPAPER_BW_CONVERSION, config->epaper_bw_conversion);
 		config->epaper_bw_threshold = preferences.getUChar(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_threshold);
+		config->epaper_vcom_mv = preferences.getUShort(KEY_EPAPER_VCOM, 0);
+		if (config->epaper_vcom_mv > EPAPER_VCOM_MAX_MV) {
+				LOGW("Config", "Invalid persisted VCOM magnitude %u mV; using board default", config->epaper_vcom_mv);
+				config->epaper_vcom_mv = 0;
+		}
 		if (config_manager_normalize_epaper_refresh_settings(config)) {
 				LOGW("Config", "Normalized invalid persisted e-paper presentation settings");
 		}
@@ -725,6 +732,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
 		preferences.putUChar(KEY_EPAPER_BW_CONVERSION, config->epaper_bw_conversion);
 		preferences.putUChar(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_threshold);
+		preferences.putUShort(KEY_EPAPER_VCOM, config->epaper_vcom_mv);
 		#endif
 
 		#if HAS_CAMERA
@@ -1046,6 +1054,8 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 				(unsigned long)config->epaper_min_refresh_interval_ms,
 				config->epaper_refresh_clock_on_minute_boundary ? "on" : "off",
 				config->epaper_full_refresh_threshold, config->epaper_bw_conversion, config->epaper_bw_threshold);
+		LOGI("Config", "E-paper VCOM: magnitude=%u mV (0=board default, default=%u mV)",
+				config->epaper_vcom_mv, EPAPER_DEFAULT_VCOM_MV);
 #endif
 
 #if HAS_CAMERA

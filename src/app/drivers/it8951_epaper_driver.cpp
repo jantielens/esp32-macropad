@@ -60,7 +60,6 @@ constexpr int kPinMosi = EPAPER_SPI_MOSI_PIN;
 constexpr int kPinCs = EPAPER_CS_PIN;
 constexpr int kPinBusy = EPAPER_BUSY_PIN;
 constexpr int kPinReset = EPAPER_RESET_PIN;
-constexpr uint16_t kVcomMillivolts = IT8951_VCOM_MV;
 constexpr bool kE1003Protocol = IT8951_E1003_PROTOCOL;
 
 struct PanelRegion {
@@ -171,7 +170,11 @@ bool readDeviceInfo() {
 		return true;
 }
 
-bool initializeController() {
+bool initializeController(uint16_t vcomMillivolts) {
+		if (!vcomMillivolts || vcomMillivolts > EPAPER_VCOM_MAX_MV) {
+			LOGE("Epaper", "Invalid IT8951 VCOM magnitude %u mV; configure the panel voltage", vcomMillivolts);
+			return false;
+		}
 		pinMode(kPinCs, OUTPUT);
 		pinMode(kPinBusy, kE1003Protocol ? INPUT_PULLUP : INPUT);
 		pinMode(kPinReset, OUTPUT);
@@ -194,7 +197,7 @@ bool initializeController() {
 		if (!kE1003Protocol && !writeRegister(0x0004, 0x0001)) return false;
 		// E1003 firmware uses selector 2; the standard HAT uses selector 1.
 		if (!writeCommand(kCommandSetVcom) || !writeData(kE1003Protocol ? 2 : 1) ||
-				!writeData(kVcomMillivolts)) return false;
+				!writeData(vcomMillivolts)) return false;
 		if (kE1003Protocol) return true;
 		if (!writeCommand(kCommandSetVcom) || !writeData(0) || !waitHrdy()) return false;
 		s_spi.beginTransaction(s_spiReadSettings);
@@ -210,8 +213,8 @@ bool initializeController() {
 		digitalWrite(kPinCs, HIGH);
 		s_spi.endTransaction();
 		if (!ready) return false;
-		if (actualVcom != kVcomMillivolts) {
-			LOGE("Epaper", "IT8951 VCOM mismatch: requested -%umV, read -%umV", kVcomMillivolts, actualVcom);
+		if (actualVcom != vcomMillivolts) {
+			LOGE("Epaper", "IT8951 VCOM mismatch: requested -%umV, read -%umV", vcomMillivolts, actualVcom);
 			return false;
 		}
 		LOGI("Epaper", "IT8951 VCOM verified: -%umV", actualVcom);
@@ -327,7 +330,9 @@ void IT8951EpaperDriver::init() {
 		}
 		memset(drawingFramebuffer, 0xFF, framebufferBytes());
 		memset(presentedFramebuffer, 0x00, framebufferBytes());
-		if (!initializeController()) {
+		const uint16_t vcomMillivolts = config && config->epaper_vcom_mv ?
+				config->epaper_vcom_mv : EPAPER_DEFAULT_VCOM_MV;
+		if (!initializeController(vcomMillivolts)) {
 			LOGE("Epaper", "IT8951 initialization failed");
 			return;
 		}

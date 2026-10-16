@@ -289,6 +289,7 @@ Total flags: 363
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
 - **EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD** default: `10` — Number of regional updates before a full refresh on supporting e-paper drivers.
 - **EPAPER_DEFAULT_RENDER_MODE** default: `EPAPER_RENDER_MODE_GRAYSCALE` — Default panel mode for an interactive LVGL e-paper driver.
+- **EPAPER_DEFAULT_VCOM_MV** default: `0` — Default VCOM magnitude in millivolts for consuming e-paper drivers; 0 means unspecified.
 - **EPAPER_FRAME_BATTERY_DIVIDER** default: `(no default)` — Voltage divider ratio applied to the raw ADC millivolt reading.
 - **EPAPER_FRAME_FAST_REFRESH** default: `false` — button wakes skip straight to the image fetch to avoid the second waveform.
 - **EPAPER_REFRESH_SETTLE_MS** default: `(no default)` — Resettable quiet period that coalesces final layout and binding updates before display().
@@ -304,7 +305,6 @@ Total flags: 363
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_VOICE_ASSISTANT** default: `false` — transcription, voice actions, transcript bindings, and portal controls.
 - **IT8951_E1003_PROTOCOL** default: `false` — Use reTerminal E1003's controller firmware and reversed image-packing protocol.
-- **IT8951_VCOM_MV** default: `1530` — Absolute panel-specific VCOM voltage in millivolts (1530 means -1.53 V).
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
 - **JD9165_DSI_HSYNC_PULSE_WIDTH** default: `24` — HSYNC pulse width in pixel clocks.
@@ -1501,6 +1501,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **EPAPER_DEFAULT_RENDER_MODE**
   - src/app/board_config.h
+- **EPAPER_DEFAULT_VCOM_MV**
+  - src/app/board_config.h
 - **EPAPER_FRAME_BATTERY_ADC_PIN**
   - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
 - **EPAPER_FRAME_BATTERY_DIVIDER**
@@ -1702,8 +1704,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **IT8951_E1003_PROTOCOL**
   - src/app/board_config.h
 - **IT8951_PANEL_POWER_PIN**
-  - src/app/board_config.h
-- **IT8951_VCOM_MV**
   - src/app/board_config.h
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
