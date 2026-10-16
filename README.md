@@ -34,9 +34,9 @@ and 16 buttons. Multicontact drivers support button-zone dragging, simultaneous 
 two-finger Mousepad scrolling.
 
 BLE supports keyboard control only; USB gamepad output is generic HID, not XInput.
-See [keyboard macros](docs/pad-editor-guide.md#key-sequences),
-[mouse controls](docs/pad-editor-guide.md#mousepad), and
-[gamepad controls](docs/pad-editor-guide.md#gamepad-controls).
+See [keyboard macros](docs/user/integrations/keyboard-mouse-gamepad.md),
+[mouse controls](docs/user/widgets/mousepad.md), and
+[gamepad controls](docs/user/widgets/gamepad.md).
 
 ### A Smart Home Panel: Controls That Fit Your Routine
 
@@ -48,7 +48,7 @@ Auto-discovery exposes available sensors and controls without discovery YAML.
 Your automations can switch screens, wake the display, and send sounds or
 notifications back. MQTT works with other systems too; Home Assistant is optional.
 
-[Connect to Home Assistant](docs/ha-integration-guide.md).
+[Connect to Home Assistant](docs/user/integrations/home-assistant.md).
 
 ### A Live Dashboard: Your Data at a Glance
 
@@ -68,7 +68,7 @@ and aligned labels. Try DSEG7 for seven-segment readings, Doto for a pixel look,
 or Bebas for bold labels. Smooth value animations bring readings to life;
 idle pads, display sleep, fading, and pixel shifting handle downtime.
 
-[Design your first pad](docs/pad-editor-guide.md#designing-a-pad).
+[Design your first pad](docs/user/pads/editing.md).
 
 ### Live Bindings: A Dashboard That Reacts to Your Data
 
@@ -83,9 +83,9 @@ bindings keep it reusable. The editor checks syntax and previews live values.
 
 Read enabled local sensors without MQTT using
 `[sensor:temperature;%.1f|N/A]` or a key listed for your board. See
-[local sensor bindings](docs/pad-editor-guide.md#local-sensor-binding).
+[local sensor bindings](docs/user/pads/data-sources.md#read-local-sensors-and-health).
 
-[Explore binding templates](docs/pad-editor-guide.md#binding-templates).
+[Explore binding templates](docs/user/pads/bindings.md).
 
 ### Automation & Timers: One Tap Starts the Routine
 
@@ -98,7 +98,7 @@ Use **Alarm Control** on pad buttons or MCP to Snooze and Cancel. **Loop Tone**
 and **Loop MP3** are available for ring actions. The dedicated **Timezone**
 settings offer grouped cities and a device-time preview; changes apply on Save.
 The device-wide timezone also supplies the default for `[time:format]` bindings.
-See the [alarm guide](docs/web-portal-guide.md#alarm-clock).
+See the [alarm guide](docs/user/device/alarms.md).
 
 Start a focus timer, lower the brightness, and show a confirmation with one tap.
 When time is up, play a sound and pulse the screen. **Three independent timers**
@@ -110,8 +110,8 @@ appearance templates, edited under **Pads → Dialog appearance**. Swipes, full-
 and camera motion can trigger actions where supported. Notifications, pulsing
 alerts, beep patterns, and MP3 sounds provide the feedback.
 
-[Configure actions](docs/pad-editor-guide.md#actions-tap-and-long-press) and
-[timers](docs/pad-editor-guide.md#timer-actions).
+[Configure actions](docs/user/pads/actions.md) and
+[timers](docs/user/device/timers.md).
 
 ### Images, Cameras & Music: More Than a Control Panel
 
@@ -126,9 +126,9 @@ Audio builds can play your **MP3 library** with metadata, progress, and volume
 controls. Supported music-analysis builds add audio-level and frequency-band
 visualizations.
 
-See [images](docs/web-portal-guide.md#image-library),
-[camera workflows](docs/web-portal-guide.md#camera-snapshots), and
-[music](docs/web-portal-guide.md#music-library).
+See [images](docs/user/media/images.md),
+[camera workflows](docs/user/media/camera.md), and
+[music](docs/user/media/audio.md#manage-a-music-library).
 
 ## 🎨 Make It Your Own
 
@@ -142,22 +142,10 @@ Offline widget type icons identify both local and inherited buttons in the pad
 editor. Unlabeled widgets show a larger symbol and their name when space allows;
 the grid remains a configuration overview rather than a live data preview.
 
-Eligible LVGL display builds with storage and working PSRAM expose **Pads > Fonts**
-for uploaded static TrueType fonts. Apply an uploaded ID with
-`font:my-font;font_size:96`; Montserrat 12/14/18/24/32/36 remains the bitmap default.
-Fonts persist on storage, not in firmware. See the
-[Fonts workflow](docs/web-portal-guide.md#fonts),
-[style reference](docs/pad-editor-guide.md#uploaded-fonts), and
-[accepted stock-renderer OOM risk and future work](docs/dev/display-touch-architecture.md#accepted-backend-oom-limitation).
-
-| Method | Font API | Purpose |
-|--------|----------|---------|
-| GET | `/api/fonts/list` | List completed font IDs and byte sizes |
-| POST | `/api/fonts/upload?name=<id>` | Upload raw static TTF bytes |
-| DELETE | `/api/fonts?name=<id>` | Delete a font and invalidate cached pads |
-
-See the [Font API reference](docs/dev/web-portal.md#font-file-api) for gates,
-authentication, format checks, and error responses.
+Supported display builds offer **Pads > Fonts** for uploaded static TrueType
+fonts. Use them for device typography or individual labels. Upload only trusted
+files and check the [font guide](docs/user/media/fonts.md) for supported formats,
+memory risks, and replacement behavior.
 
 Install parameterized recipes from your device-saved catalog, starting with the
 repository's Pomodoro, Alarm Clock, and Home Energy examples. Alarm Clock installs
@@ -168,45 +156,13 @@ The portal also handles settings, media, health diagnostics, and screen previews
 with optional HTTP Basic Auth. Supported builds offer **over-the-air updates**
 with rollback protection.
 
-On CrowPanel 4.2, `GET /api/screenshot?format=png` captures the presented
-black-and-white framebuffer without refreshing the panel. The default BMP
-captures LVGL before monochrome conversion. See the
-[Screenshot API reference](docs/dev/web-portal.md#screenshot-api).
+Supported builds also expose recent logs, retained crash reports, and screen
+captures for troubleshooting. Check the [diagnostics guide](docs/user/device/diagnostics.md)
+for availability, privacy warnings, and how to distinguish saved evidence from
+the device's current state.
 
-Builds with `HAS_REMOTE_LOG` offer **Device > Logs** with Full Mode access:
-all configured ESP32-P4 boards and ESP32-S3 boards with more than 5 MB flash.
-recent application logs, a retained startup snapshot, and browser copy/download.
-Startup records include reset diagnostics and firmware identity. SDK-supported
-flash coredumps appear separately with readable exception diagnostics, saved
-registers, summary copy, and bounded download.
-Access follows the device's authentication settings. Capture uses bounded PSRAM
-storage and leaves serial output independent.
-See the [log viewer guide](docs/web-portal-guide.md#device-logs) and
-[log API reference](docs/dev/web-portal.md#remote-logs).
-
-For stack measurements, authenticated `GET /api/health?task=<name>` adds an
-opt-in watermark report for `audio`, `async_tcp`, `img_local`, `img_fetch`,
-`ha_stats`, `LVGL`, or `loopTask`.
-Ordinary health polling does not scan stacks. See the
-[health API reference](docs/dev/web-portal.md#health-monitoring) for timing costs
-and unavailable-task responses.
-
-Display builds expose window-average and peak render timings through
-`GET /api/health`. Developer builds can opt into retained render samples,
-LVGL phase and glyph-cache measurements, and IT8951 presentation timings with
-`HAS_DISPLAY_DIAGNOSTICS`. It defaults off on every board, compiling out the
-extra collection, state, and health fields. See the
-[display performance fields and opt-in instructions](docs/dev/web-portal.md#capturing-display-performance).
-
-`POST /api/debug/crash` supports abort, assertion, and invalid-write tests,
-with no web UI. `DEBUG_CRASH_API_ENABLED` defaults off on every board. Enable
-it explicitly only in an isolated dev/test build; never ship it enabled in
-production firmware. Remove the opt-in and rebuild after testing. See
-[crash injection](docs/dev/web-portal.md#development-crash-injection) for
-commands, authentication, and dump-overwrite risks.
-
-[Open the pad editor guide](docs/pad-editor-guide.md) or
-[tour the web portal](docs/web-portal-guide.md).
+[Open the pad editor guide](docs/user/pads/README.md) or
+[tour the web portal](docs/user/portal.md).
 
 ### Ask an AI Assistant to Help
 
@@ -219,7 +175,7 @@ It is off by default, requires a token, and separates read, control, and pad
 authoring permissions. Enable it only on a trusted LAN; its HTTP transport is not
 encrypted.
 
-[Connect your assistant](docs/mcp-guide.md).
+[Connect your assistant](docs/user/integrations/ai-assistants.md).
 
 ### Add Something the Built-In Widgets Cannot Do
 
@@ -240,26 +196,18 @@ or [build your own](docs/dev/extensions.md).
 
 An **E-Paper Frame** wakes, fetches an image, refreshes the panel, and returns to
 deep sleep. Rotate images, choose hourly refresh windows, and estimate battery
-life in the portal. Supported reTerminal E1003 service setups can cache a batch
+life in the portal. Supported service setups can cache a batch
 for offline refreshes between network syncs.
 
 Want buttons instead? **Interactive E-Paper** runs the customizable pad UI with
 black-and-white or grayscale rendering. It is a different firmware experience
 from the sleep-first image frame.
-The **FeatherS3[D] Interactive** profile pairs an Unexpected Maker FeatherS3[D]
-with the Waveshare 7.8" IT8951 HAT in landscape. It supports B/W and 16-level
-grayscale, regional updates, native Extensions, and one configurable hardware
-button without touch.
-See [wiring and setup](src/boards/feathers3d-interactive/README.md).
-The B/W-only **CrowPanel 4.2 Interactive** uses its physical three-way rotary
-switch instead of touch: Up/Down selects buttons, OK taps the selection, holding
-OK uses Tap & Hold, and Boot requests a full refresh. Pads start without a
-selection. Menu and Back taps are unassigned; use a custom pad for screen selection.
-Previous, Next, Tap, and Tap & Hold are standard actions on every display board;
-CrowPanel preassigns them, while other boards can assign them as needed.
+Depending on the hardware, navigate with touch or physical buttons.
+Use the [hardware reference](docs/user/hardware.md#e-paper) for panel support,
+wiring, and control assignments.
 
-[Choose an e-paper experience](docs/epaper-architectures.md) or
-[set up an E-Paper Frame](docs/epaper-frame-guide.md).
+[Choose an e-paper experience](docs/user/specialized/epaper.md) or
+[set up an E-Paper Frame](docs/user/specialized/epaper-frame/README.md).
 
 ### A Sensor Node Without a Screen
 
@@ -275,7 +223,7 @@ The **Coffee Scale** firmware combines a load cell with live weight and flow-rat
 readings. Follow stage-based espresso or pour-over templates, then revisit the
 recorded brew history. Calibration, templates, and brew logs live in the web portal.
 
-[Build a Coffee Scale](docs/device-classes/coffee-scale/README.md).
+[Set up a Coffee Scale](docs/user/specialized/coffee-scale/README.md).
 
 ### 🎞️ Tools for the Analog Darkroom
 
@@ -284,8 +232,8 @@ metering, and print logs, with Shelly Wi-Fi relays controlling the enlarger and
 safelight. The **Shutter Tester** measures camera shutter speeds and curtain timing
 with photodiodes, and saves sessions for comparison.
 
-Explore the [Darkroom Timer](docs/device-classes/darkroom-timer/README.md) and
-[Shutter Tester](docs/device-classes/shutter-tester/user-guide.md).
+Explore the [Darkroom Timer](docs/user/specialized/darkroom-timer/README.md) and
+[Shutter Tester](docs/user/specialized/shutter-tester/README.md).
 
 ### 🎙️ Voice as Another Input and Output
 
@@ -295,14 +243,16 @@ text-to-speech for audible replies. It provides the voice pieces for your own
 automation, not a standalone conversational assistant; cloud credentials and an
 external reply workflow are required for that experience.
 
-[Set up the Voice Assistant](docs/web-portal-guide.md#voice-assistant).
+[Set up the Voice Assistant](docs/user/specialized/voice-assistant.md).
 
 ## 📱 Supported Hardware
 
 From a compact round display to a 7-inch control panel or a battery-powered
 e-paper frame, choose the board that fits the job. Features depend on the exact
-board and firmware variant; the [installer](https://jantielens.github.io/esp32-macropad/)
-helps you choose the right combination.
+board and firmware variant. The [hardware index](docs/user/hardware.md) links
+every target to its connections, safety notes, and recovery procedure; use it
+alongside the [installer](https://jantielens.github.io/esp32-macropad/) to choose
+the right combination.
 
 Persistent storage uses internal flash or a MicroSD card, depending on the
 target. It holds pad configurations, images, sounds, and recorded data such as
@@ -331,38 +281,20 @@ more room without using the board's internal flash for those files.
 
 | Capability | What to check |
 |------------|---------------|
-| USB keyboard, mouse, and gamepad | JC3248W535, JC1060P470C, JC4880P433, JC3636W518, their `-sd` variants, and ESP32-P4 LCD 4B Macropad builds |
-| BLE keyboard | Board-dependent; JC3248W535 and both JC3636W518 variants disable BLE HID |
-| Alarms | Display builds by default; JC3248W535 and both JC3636W518 variants disable alarms to preserve internal RAM |
-| Native Extensions | Supported ESP32-P4 and ESP32-S3 builds, plus Inkplate 6FLICK Interactive; slot capacity varies |
+| USB keyboard, mouse, and gamepad | Firmware HID support and a native device/OTG connector, not a USB-UART or host-only port |
+| BLE keyboard | BLE HID support in the exact firmware; mouse and gamepad require USB |
+| Alarms | Alarm support in the installed firmware |
+| Native Extensions | Supported architecture, package ABI, and usable slot capacity |
 | Audio, microphones, and cameras | Hardware and firmware support vary; check the exact installer target |
-| SD primary storage | JC1060P470C, JC3636W518, and JC4880P433 `-sd` builds require a FAT32 card and do not fall back to internal flash |
-| OTA updates | Not available on every target, including FireBeetle 2 AHT10 and Inkplate 6FLICK Interactive |
+| SD primary storage | Required card format and mount behavior; changing backend does not migrate files |
+| OTA updates | A supported OTA partition layout; not available on every target |
 
-Specialized targets include `jc4880p433-nau7802` and `jc4880p433-hx711`
-(Coffee Scale), `jc4880p433-darkroom`, `jc4880p433-shutter`, and
-`esp32-p4-lcd4b-voice`. Sensors and other external hardware must be added as
-described in their setup guides. See [device classes](docs/device-classes/README.md)
-for the build-time selection and branding model.
-
+Specialized firmware can require additional sensors or services. Start with the
+[specialized workflows](docs/user/specialized/README.md), then check the exact
+board reference for wiring, power, storage requirements, and firmware limits.
 
 More boards are welcome. The [modular display and touch drivers](docs/dev/display-touch-architecture.md)
 provide a starting point for adding yours.
-
-### M5Stack StopWatch Bring-Up
-
-`m5stack-stopwatch` is a standard Macropad target, not a stopwatch application.
-It uses the CO5300 QSPI display, CST820B touch, yellow/blue programmable buttons,
-internal flash storage, Wi-Fi, the web portal, and two OTA slots. The initial
-configuration disables BLE, USB HID, MCP, native Extensions, remote image
-fetching to preserve internal/DMA memory. ES8311 speaker and MP3 playback are
-enabled for hardware validation; microphone capture, IMU, hardware RTC, haptics,
-and advanced low-power modes are not implemented.
-
-**Physical acceptance tests remain required.** See the
-[StopWatch setup and verification checklist](docs/first-time-setup.md#m5stack-stopwatch).
-On hardware v1.0, some rear connector pins labeled BAT are actually **5V IN:
-never connect a battery**. Only v1.0.1's `*BAT` is a battery connection.
 
 ## 🚀 Getting Started
 
@@ -403,23 +335,26 @@ On a Macropad build, make your first button do something you can see:
 No Home Assistant connection or HID setup is needed for this first test.
 
 For HID controls, select your transport in **Connectivity > Keyboard, Mouse & Gamepad**,
-save, and reboot. Output defaults to Off. On dual-USB-C P4 boards, use native
-USB/OTG for HID and USB-UART for flashing and logs; see
-[USB connector and power guidance](docs/web-portal-guide.md#keyboard).
+save, and reboot. Output defaults to Off. Check your
+[board's connector and power guidance](docs/user/hardware.md) before connecting
+HID hosts or multiple power sources.
 
-[Follow the first-time setup guide](docs/first-time-setup.md).
+[Follow the first-time setup guide](docs/user/getting-started.md).
 
 ## 📚 Documentation
 
 | Guide | Description |
 |-------|-------------|
-| [First-Time Setup](docs/first-time-setup.md) | Initial configuration after flashing |
-| [Web Portal Guide](docs/web-portal-guide.md) | Complete guide to all portal features |
-| [Pad Editor Guide](docs/pad-editor-guide.md) | Layouts, widgets, actions, bindings, and worked examples |
-| [MCP Server Guide](docs/mcp-guide.md) | AI-assisted inspection, control, configuration, and pad authoring |
-| [E-Paper Frame Guide](docs/epaper-frame-guide.md) | Image sources, scheduling, battery use, and wake behavior |
-| [Home Assistant Integration](docs/ha-integration-guide.md) | HA entity reference, audio control, and automation examples |
-| [Device Classes](docs/device-classes/README.md) | Specialized firmware variants and their guides |
+| [User Guide](docs/user/README.md) | Find focused configuration tasks, examples, and troubleshooting |
+| [First-Time Setup](docs/user/getting-started.md) | Initial configuration after flashing |
+| [Web Portal Guide](docs/user/portal.md) | Navigation, saving settings, and reboot behavior |
+| [Pad Authoring](docs/user/pads/README.md) | Layouts, actions, bindings, and reusable controls |
+| [Widgets](docs/user/widgets/README.md) | Choose and configure visualizations and touch controls |
+| [AI Assistants and MCP](docs/user/integrations/ai-assistants.md) | AI-assisted inspection, control, configuration, and pad authoring |
+| [E-Paper Frame](docs/user/specialized/epaper-frame/README.md) | Image sources, scheduling, battery use, and wake behavior |
+| [Home Assistant Integration](docs/user/integrations/home-assistant.md) | Discovery, service access, controls, and automation examples |
+| [Specialized Workflows](docs/user/specialized/README.md) | Instruments, sensor nodes, voice, and e-paper experiences |
+| [Hardware Reference](docs/user/hardware.md) | Exact targets, connections, power warnings, and recovery |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |
 | [Extension Developer Guide](docs/dev/extensions.md) | Build, install, and author trusted native ESP32-P4, ESP32-S3, and classic ESP32 Extensions |
 
