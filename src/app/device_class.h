@@ -111,6 +111,10 @@ struct DeviceClass {
 		// without starting WiFi. wifi_manager_connect() remains responsible for
 		// lazy initialization if that deferred path later needs an online fallback.
 		bool (*defer_wifi_init)(const DeviceConfig *config, PowerMode boot_mode);
+
+		// Called once by shared normal-runtime startup, including live AP exit.
+		// Setup-only registration remains in on_setup_late.
+		void (*on_normal_runtime)(DeviceConfig *config);
 };
 
 // Registration ----------------------------------------------------------------
@@ -127,6 +131,7 @@ const DeviceClass *device_class_find_by_mode(PowerMode mode);
 // Lifecycle
 void device_class_dispatch_setup_early(DeviceConfig *config, PowerMode boot_mode);
 void device_class_dispatch_setup_late(DeviceConfig *config, PowerMode current_mode);
+void device_class_dispatch_normal_runtime(DeviceConfig *config);
 void device_class_dispatch_loop();
 // Power
 bool device_class_dispatch_wake_classify(bool *force_config);

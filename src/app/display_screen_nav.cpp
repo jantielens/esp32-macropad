@@ -44,8 +44,17 @@ void DisplayManager::showSplash() {
 
 void DisplayManager::showInfo() {
 		// Defer screen switch to lvglTask (non-blocking)
+		if (currentScreen == &wifiSetupScreen) skipHistoryPush = true;
 		pendingScreen = &infoScreen;
 		LOGT("Display", "Queued switch to InfoScreen");
+}
+
+void DisplayManager::showWifiSetup() {
+		bool didLock = false;
+		lockIfNeeded(didLock);
+		skipHistoryPush = true;
+		pendingScreen = &wifiSetupScreen;
+		unlockIfNeeded(didLock);
 }
 
 void DisplayManager::showTest() {
@@ -89,6 +98,7 @@ bool DisplayManager::showScreen(const char* screen_id, bool wake) {
 		for (size_t i = 0; i < screenCount; i++) {
 				if (strcmp(availableScreens[i].id, screen_id) == 0) {
 						// Defer screen switch to lvglTask (non-blocking)
+						if (currentScreen == &wifiSetupScreen) skipHistoryPush = true;
 						pendingScreen = availableScreens[i].instance;
 						if (wake) {
 								skipHistoryPush = false;
@@ -212,6 +222,7 @@ void DisplayManager::handleSleepScreenRedirect() {
 }
 
 const char* DisplayManager::getCurrentScreenId() {
+		if (currentScreen == &wifiSetupScreen) return "wifi_setup";
 		// Return ID of current screen (nullptr if splash or unknown)
 		for (size_t i = 0; i < screenCount; i++) {
 				if (currentScreen == availableScreens[i].instance) {

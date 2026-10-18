@@ -245,6 +245,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 #endif
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_SWITCH);
 						Screen* target = mgr->pendingScreen;
+						if (target == &mgr->wifiSetupScreen && mgr->currentScreen == &mgr->splashScreen) {
+								mgr->wifiSetupScreen.takeLogo(mgr->splashScreen);
+						}
 						device_dialog_close();
 						#if HAS_TOUCH
 						touch_manager_cancel_physical_input();

@@ -14,6 +14,7 @@
 #include "storage.h"
 #include "time_service.h"
 #include "ota_activity.h"
+#include "wifi_manager.h"
 #if HAS_DISPLAY
 #include "device_dialog.h"
 #include "psram_json_allocator.h"
@@ -26,6 +27,7 @@
 #endif
 #include <Preferences.h>
 #include <nvs_flash.h>
+#include <atomic>
 
 // NVS namespace
 #define CONFIG_NAMESPACE "device_cfg"
@@ -33,6 +35,8 @@
 // Preferences keys
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
+#define KEY_WIFI_FAILURE   "wifi_fail"
+#define KEY_AP_PASSWORD    "ap_pass"
 #define KEY_DEVICE_NAME    "device_name"
 #define KEY_TIMEZONE       "timezone"
 #define KEY_FIXED_IP       "fixed_ip"
@@ -136,6 +140,7 @@
 #define KEY_MAGIC          "magic"
 
 static Preferences preferences;
+static std::atomic<bool> g_config_save_in_progress{false};
 
 #if HAS_LVGL_EPAPER
 static portMUX_TYPE epaper_refresh_settings_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -304,6 +309,9 @@ bool config_manager_load(DeviceConfig *config) {
 				return false;
 		}
 
+		strlcpy(config->wifi_failure_mode, "ap", sizeof(config->wifi_failure_mode));
+		config->ap_password[0] = '\0';
+
 		#if HAS_BLE
 		config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
 		config->ble_adv_interval_ms = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
@@ -427,6 +435,8 @@ bool config_manager_load(DeviceConfig *config) {
 		// Load WiFi settings
 		preferences.getString(KEY_WIFI_SSID, config->wifi_ssid, CONFIG_SSID_MAX_LEN);
 		preferences.getString(KEY_WIFI_PASS, config->wifi_password, CONFIG_PASSWORD_MAX_LEN);
+		preferences.getString(KEY_WIFI_FAILURE, config->wifi_failure_mode, CONFIG_WIFI_FAILURE_MODE_MAX_LEN);
+		preferences.getString(KEY_AP_PASSWORD, config->ap_password, CONFIG_AP_PASSWORD_MAX_LEN);
 		
 		// Load device settings
 		String default_name = config_manager_get_default_device_name();
@@ -652,7 +662,6 @@ bool config_manager_load(DeviceConfig *config) {
 
 // Save configuration to NVS
 bool config_manager_save(const DeviceConfig *config) {
-		if (ota_activity_is_active()) return false;
 		if (!config) {
 				LOGE("Config", "Save failed: NULL pointer");
 				return false;
@@ -660,6 +669,24 @@ bool config_manager_save(const DeviceConfig *config) {
 		
 		if (!config_manager_is_valid(config)) {
 				LOGE("Config", "Save failed: Invalid config");
+				return false;
+		}
+
+		bool expected = false;
+		if (!g_config_save_in_progress.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+				LOGW("Config", "Save rejected: another configuration write is active");
+				return false;
+		}
+		struct SaveProgressGuard {
+				bool admitted = false;
+				~SaveProgressGuard() {
+						if (admitted) ota_activity_finish_config_write();
+						g_config_save_in_progress.store(false, std::memory_order_release);
+				}
+		} save_progress_guard;
+		save_progress_guard.admitted = ota_activity_try_begin_config_write();
+		if (!save_progress_guard.admitted) {
+				LOGW("Config", "Save rejected: update or network transition is active");
 				return false;
 		}
 
@@ -691,6 +718,20 @@ bool config_manager_save(const DeviceConfig *config) {
 		// Save WiFi settings
 		preferences.putString(KEY_WIFI_SSID, config->wifi_ssid);
 		preferences.putString(KEY_WIFI_PASS, config->wifi_password);
+		const bool wifi_failure_saved =
+				preferences.putString(KEY_WIFI_FAILURE, config->wifi_failure_mode) == strlen(config->wifi_failure_mode);
+		// putString() returns 0 for a successfully stored empty string, so
+		// verify by read-back. getString() returns 0 on failure.
+		preferences.putString(KEY_AP_PASSWORD, config->ap_password);
+		char stored_ap_password[CONFIG_AP_PASSWORD_MAX_LEN] = {};
+		const bool ap_password_saved =
+				preferences.getString(KEY_AP_PASSWORD, stored_ap_password, sizeof(stored_ap_password)) > 0 &&
+				strcmp(stored_ap_password, config->ap_password) == 0;
+		if (!wifi_failure_saved || !ap_password_saved) {
+				LOGE("Config", "Failed to persist Wi-Fi setup settings");
+				preferences.end();
+				return false;
+		}
 		
 		// Save device settings
 		preferences.putString(KEY_DEVICE_NAME, config->device_name);
@@ -994,6 +1035,9 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 		if (config->magic != CONFIG_MAGIC) return false;
 		if (config->timezone[0] && !time_service_timezone_valid(config->timezone)) return false;
 		if (strlen(config->device_name) == 0) return false;
+		if (strcmp(config->wifi_failure_mode, "ap") != 0 &&
+				strcmp(config->wifi_failure_mode, "offline") != 0) return false;
+		if (!wifi_ap_password_is_valid(config->ap_password)) return false;
 
 		const PowerMode mode = power_config_parse_power_mode(config);
 		const bool needs_wifi = (mode != PowerMode::DutyCycle && mode != PowerMode::DutyCycleBle);

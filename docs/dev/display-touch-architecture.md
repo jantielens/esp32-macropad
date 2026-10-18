@@ -729,6 +729,32 @@ public:
 - Shows: device name, uptime, memory, WiFi, IP, version, chip info
 - Device name as hero element with separator lines
 
+**WifiSetupScreen** (`wifi_setup_screen.h/cpp`)
+- Shown only while the setup AP is active; it is not part of normal screen
+  discovery or navigation
+- Reads the active AP name, password, and URL from the portal after startup,
+  rather than showing pending saved settings
+- Reuses the boot appearance font size, text color, and background color.
+  Content is centered and round-screen aware; the two-line Stop AP and continue
+  offline button uses
+  inverted colors so it stays legible on light, dark, and e-paper themes
+- Gives compact numbered steps to connect, browse to the active AP URL, and
+  configure the device. Reuses
+  the built-in or selected boot logo when it fits without crowding instructions.
+  The logo is capped at one-sixth of the screen height; contain alignment keeps
+  its image object bounds equal to the displayed area, avoiding invisible
+  overflow in the centered stack.
+  The splash transfers ownership of decoded custom pixels before it hides;
+  leaving setup releases them, without loading or decoding the image again
+- Touch builds queue Stop AP and continue offline through the main-loop bridge. That path
+  stops AP/Wi-Fi and enters the shared normal-runtime initialization without
+  dispatching boot actions
+- Pressed styling and a disabled Starting offline button acknowledge the tap
+  while startup runs, without resizing the button or re-centering the instructions.
+  Busy or update/config-write conflicts show a retry message;
+  only the display task changes widgets, with an atomic failure notification
+  from the main loop
+
 **TestScreen** (`test_screen.h/cpp`)
 - Display calibration and color testing
 - RGB and CMY color bars

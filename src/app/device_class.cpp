@@ -50,6 +50,13 @@ void device_class_dispatch_setup_late(DeviceConfig *config, PowerMode current_mo
 		}
 }
 
+void device_class_dispatch_normal_runtime(DeviceConfig *config) {
+		for (unsigned i = 0; i < g_count; ++i) {
+				const DeviceClass *c = g_classes[i];
+				if (c && c->on_normal_runtime) c->on_normal_runtime(config);
+		}
+}
+
 void device_class_dispatch_loop() {
 		for (unsigned i = 0; i < g_count; ++i) {
 				const DeviceClass *c = g_classes[i];

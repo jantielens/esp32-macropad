@@ -15,6 +15,7 @@
 // Include all screen implementations
 #include "screens/splash_screen.cpp"
 #include "screens/info_screen.cpp"
+#include "screens/wifi_setup_screen.cpp"
 #include "screens/test_screen.cpp"
 
 #if HAS_TOUCH && LV_USE_CANVAS

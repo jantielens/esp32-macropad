@@ -320,7 +320,10 @@ and local viewing.
 
 ### First-Time Setup
 
-After flashing, the device creates its own Wi-Fi hotspot for initial configuration:
+After flashing, the device starts a setup Wi-Fi network for initial configuration.
+The device screen shows the active network name, password, and portal URL. The
+network is open by default; see the [setup guide](docs/user/getting-started.md)
+to configure a shareable AP password.
 
 1. Connect to the device's Wi-Fi hotspot. Macropad builds use `ESP32-MACROPAD-XXXXXX`; other device classes use their own prefix.
 2. Configure your Wi-Fi credentials in the captive portal.

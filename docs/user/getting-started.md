@@ -25,11 +25,13 @@ your board's hardware reference.
 ## Join the setup network
 
 1. Power on and wait for the setup access point.
-2. Join the open Wi-Fi network advertised by your device. A Macropad uses
-   `ESP32-MACROPAD-XXXXXX`; other device classes use
+2. Read the device screen for the active Wi-Fi name, password, and portal URL.
+   A Macropad uses `ESP32-MACROPAD-XXXXXX`; other device classes use
    `ESP32-MP-<class>-XXXXXX`. The six-character suffix identifies the unit.
+   The AP is open by default, but a saved AP password may protect it.
 3. Stay connected even if your phone reports no internet access.
-4. If the captive portal does not open, browse to <http://192.168.4.1>.
+4. If the captive portal does not open, browse to the URL shown on the device,
+   usually <http://192.168.4.1>.
 
 If the device has saved Wi-Fi credentials, it may join that network instead.
 Use [network checks](device/network-and-access.md#restore-access) and your
@@ -47,9 +49,11 @@ board's configuration-entry procedure before considering a factory reset.
 6. Rejoin your normal Wi-Fi network on the phone/computer, then open the displayed
    hostname or the device's IP address from your router's client list.
 
-The setup AP has no password. Configure it in a trusted environment.
-Portal login applies on your normal network, not to the setup AP.
-See [network and access](device/network-and-access.md) for credential behavior.
+The setup AP password is shareable configuration shown on the device while the
+AP is active. Keep the device in a trusted environment when displaying it.
+Portal login applies on your normal network, not to the setup AP. See
+[network and access](device/network-and-access.md) for password and offline
+behavior.
 
 ## Make a first Macropad button
 

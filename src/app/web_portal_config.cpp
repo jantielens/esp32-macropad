@@ -3,12 +3,14 @@
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
 #include "portal_idle.h"
+#include "ota_activity.h"
 
 #include "board_config.h"
 #if HAS_TTF_FONTS
 #include "font_store.h"
 #endif
 #include "config_manager.h"
+#include "wifi_manager.h"
 #include "time_service.h"
 #include "keyboard_hid.h"
 #include "device_class.h"
@@ -150,12 +152,15 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				return;
 		}
 
-		// Create JSON response (don't include passwords)
+		// Home Wi-Fi credentials remain write-only. The setup AP password is
+		// intentionally ordinary, shareable configuration.
 		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(HAS_DISPLAY ? 6144 : 2560);
 		if (doc && doc->capacity() > 0) {
 				(*doc)["wifi_ssid"] = current_config->wifi_ssid;
 				(*doc)["wifi_password"] = ""; // Don't send password
 				(*doc)["wifi_password_set"] = (strlen(current_config->wifi_password) > 0);
+				(*doc)["wifi_failure_mode"] = current_config->wifi_failure_mode;
+				(*doc)["ap_password"] = current_config->ap_password;
 				(*doc)["device_name"] = current_config->device_name;
 				(*doc)["timezone"] = current_config->timezone;
 
@@ -403,6 +408,18 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		if (!ota_activity_try_begin_config_write()) {
+				LOGW("Portal", "Config update rejected: update or network transition is active");
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update or network transition in progress\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+		struct ConfigUpdateGuard {
+				~ConfigUpdateGuard() { ota_activity_finish_config_write(); }
+		} config_update_guard;
+
 		// Finalize buffer and parse.
 		uint8_t* body = nullptr;
 		size_t body_len = 0;
@@ -425,6 +442,41 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						return;
 				}
 				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid JSON\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+
+		char wifi_failure_mode_candidate[CONFIG_WIFI_FAILURE_MODE_MAX_LEN];
+		char ap_password_candidate[CONFIG_AP_PASSWORD_MAX_LEN];
+		strlcpy(wifi_failure_mode_candidate, current_config->wifi_failure_mode,
+				sizeof(wifi_failure_mode_candidate));
+		strlcpy(ap_password_candidate, current_config->ap_password, sizeof(ap_password_candidate));
+		bool wifi_setup_fields_valid = true;
+		if (doc.containsKey("wifi_failure_mode")) {
+				const JsonVariantConst value = doc["wifi_failure_mode"];
+				const char* text = value.is<const char*>() ? value.as<const char*>() : nullptr;
+				wifi_setup_fields_valid = text &&
+						(strlen(text) < sizeof(wifi_failure_mode_candidate)) &&
+						(strcmp(text, "ap") == 0 || strcmp(text, "offline") == 0);
+				if (wifi_setup_fields_valid) {
+						strlcpy(wifi_failure_mode_candidate, text, sizeof(wifi_failure_mode_candidate));
+				}
+		}
+		if (wifi_setup_fields_valid && doc.containsKey("ap_password")) {
+				const JsonVariantConst value = doc["ap_password"];
+				const char* text = value.is<const char*>() ? value.as<const char*>() : nullptr;
+				wifi_setup_fields_valid = text &&
+						(strlen(text) < sizeof(ap_password_candidate)) &&
+						wifi_ap_password_is_valid(text);
+				if (wifi_setup_fields_valid) {
+						strlcpy(ap_password_candidate, text, sizeof(ap_password_candidate));
+				}
+		}
+		if (!wifi_setup_fields_valid) {
+				request->send(400, "application/json",
+						"{\"success\":false,\"message\":\"Wi-Fi fallback must be ap or offline; AP password must be empty or 8-63 printable ASCII characters\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();
 				portEXIT_CRITICAL(&g_config_post_mux);
@@ -640,6 +692,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (doc.containsKey("wifi_ssid")) {
 				strlcpy(current_config->wifi_ssid, doc["wifi_ssid"] | "", CONFIG_SSID_MAX_LEN);
 		}
+		strlcpy(current_config->wifi_failure_mode, wifi_failure_mode_candidate,
+				sizeof(current_config->wifi_failure_mode));
+		strlcpy(current_config->ap_password, ap_password_candidate, sizeof(current_config->ap_password));
 
 		// WiFi password - only update if provided and not empty
 		if (doc.containsKey("wifi_password")) {

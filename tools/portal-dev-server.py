@@ -999,6 +999,8 @@ def main():
         },
         **SCREENSAVER_DEFAULTS,
         "device_name": "Kitchen Pad",
+        "wifi_failure_mode": "ap",
+        "ap_password": "",
         "backlight_brightness": 80,
         "operating_mode": "always_on",
         "duty_cycle_wake_seconds": 120,

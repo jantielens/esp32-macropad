@@ -5,7 +5,8 @@
 <div id="setup-notice" class="alert alert-info" style="display:none;">
   <strong>First-Time Setup:</strong> Enter your WiFi credentials to connect the device to your network.
 </div>
-<div class="card mb-3">
+<section class="card mb-3" aria-labelledby="wifi-network-heading">
+  <div class="card-header"><h5 class="mb-0" id="wifi-network-heading">WiFi Network</h5></div>
   <div class="card-body">
     <div class="mb-3">
       <label class="form-label" for="wifi_ssid">WiFi SSID</label>
@@ -16,8 +17,27 @@
       <input type="password" class="form-control" id="wifi_password" name="wifi_password" placeholder="Leave empty to keep current">
       <div class="form-text" id="wifi_password_status"></div>
     </div>
-    <div class="save-bar">
-      <button type="button" class="btn btn-primary btn-sm" id="wifi-save-btn">Save</button>
+  </div>
+</section>
+<section class="card mb-3" aria-labelledby="wifi-setup-ap-heading">
+  <div class="card-header"><h5 class="mb-0" id="wifi-setup-ap-heading">Setup AP &amp; Fallback</h5></div>
+  <div class="card-body">
+    <p>If this device cannot connect to its configured WiFi network during normal boot, it can create its own setup access point (AP). Connect to this network from your phone or computer to restore access, for example after changing your router or WiFi credentials. Set a password below to protect the setup network.</p>
+    <p>Choose <strong>Continue offline</strong> to disable this automatic AP fallback and start local features without network services instead. You can still start the setup AP using <strong>Restart into setup AP</strong> or the device's recovery procedure. First-time setup also remains available. This setting does not change runtime WiFi reconnection or duty-cycle behavior.</p>
+    <div class="mb-3">
+      <label class="form-label" for="wifi_failure_mode">When WiFi connection fails</label>
+      <select class="form-select" id="wifi_failure_mode" name="wifi_failure_mode">
+        <option value="ap">Start setup AP</option>
+        <option value="offline">Continue offline</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="ap_password">Setup AP password</label>
+      <input type="text" class="form-control" id="ap_password" name="ap_password" maxlength="63" autocomplete="off">
+      <div class="form-text">Shown in plain text so it can be shared. Leave empty for an open AP. Use 8-63 printable ASCII characters; changes apply the next time the setup AP starts.</div>
     </div>
   </div>
+</section>
+<div class="save-bar">
+  <button type="button" class="btn btn-primary btn-sm" id="wifi-save-btn">Save</button>
 </div>

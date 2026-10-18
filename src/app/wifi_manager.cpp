@@ -6,6 +6,9 @@
 #include "log_manager.h"
 #include "power_manager.h"
 #include "version.h"
+#if HAS_DISPLAY
+#include "time_binding.h"
+#endif
 
 #include <atomic>
 #include <WiFi.h>
@@ -63,6 +66,8 @@ enum class WifiEventType : uint8_t { None, Disconnected, GotIp };
 // Wi-Fi events are edge notifications; current association state remains authoritative.
 static std::atomic<uint16_t> g_wifi_event{0};
 static std::atomic<bool> g_wifi_reconnect_requested{false};
+static std::atomic<bool> g_intentional_offline{false};
+static constexpr uint32_t WIFI_MANUAL_RECONNECT_TIMEOUT_MS = 10000;
 
 static std::atomic<int16_t> g_diag_rssi{0};
 static std::atomic<uint8_t> g_diag_channel{0};
@@ -307,6 +312,10 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 				// Backward compat: if early_init wasn't called, do full hardware init now.
 				wifi_manager_early_init();
 		}
+		if (WiFi.getMode() == WIFI_OFF && !WiFi.mode(WIFI_STA)) {
+				LOGE("WiFi", "Failed to enable station mode");
+				return false;
+		}
 
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
 		// Wait for ESP-Hosted SDIO link if not yet ready.
@@ -549,6 +558,15 @@ void wifi_manager_request_reconnect() {
 		LOGI("WiFi", "Reconnect requested");
 }
 
+void wifi_manager_enter_offline() {
+		g_intentional_offline.store(true, std::memory_order_release);
+		g_wifi_reconnect_requested.store(false, std::memory_order_release);
+		g_wifi_event.store(0, std::memory_order_release);
+		WiFi.disconnect(true);
+		WiFi.mode(WIFI_OFF);
+		LOGI("WiFi", "Radio disabled by intentional offline mode");
+}
+
 // --- State machine helpers ---
 
 static void enter_outage(unsigned long now) {
@@ -626,7 +644,43 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 }
 
 void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool is_ap_mode) {
-		if (!config || !config_loaded || is_ap_mode) return;
+		if (!config) return;
+		if (is_ap_mode) {
+				g_wifi_reconnect_requested.store(false, std::memory_order_release);
+				return;
+		}
+		if (g_intentional_offline.load(std::memory_order_acquire)) {
+				if (!g_wifi_reconnect_requested.exchange(false, std::memory_order_acquire)) {
+						g_wifi_event.store(0, std::memory_order_release);
+						return;
+				}
+				if (!config_loaded || config->wifi_ssid[0] == '\0') {
+						LOGE("WiFi", "Manual reconnect failed: no saved SSID");
+						wifi_manager_enter_offline();
+						return;
+				}
+				LOGI("WiFi", "Manual reconnect attempt started");
+				const bool connected = wifi_manager_connect(
+						config, false, WIFI_MANUAL_RECONNECT_TIMEOUT_MS);
+				if (!connected) {
+						LOGE("WiFi", "Manual reconnect failed; radio remains off");
+						wifi_manager_enter_offline();
+						return;
+				}
+				g_intentional_offline.store(false, std::memory_order_release);
+				g_wifi_state = WifiState::Connected;
+				g_wifi_event.store(0, std::memory_order_release);
+				wifi_manager_register_events();
+				power_manager_note_wifi_success();
+				wifi_manager_start_mdns(config);
+				device_telemetry_cache_rssi();
+				#if HAS_DISPLAY
+				time_binding_start_ntp();
+				#endif
+				LOGI("WiFi", "Manual reconnect succeeded");
+				return;
+		}
+		if (!config_loaded) return;
 		if (strlen(config->wifi_ssid) == 0) return;
 
 		const unsigned long now = millis();

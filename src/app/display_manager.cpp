@@ -60,7 +60,7 @@ DisplayManager* displayManager = nullptr;
 DisplayManager::DisplayManager(DeviceConfig* cfg) 
 		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), pendingScreen(nullptr),
 		screenHistoryCount(0), skipHistoryPush(false), transientResumeScreen(nullptr), transientScreenActive(false),
-					 infoScreen(cfg, this), testScreen(this), fpsScreen(this),
+					 infoScreen(cfg, this), wifiSetupScreen(cfg), testScreen(this), fpsScreen(this),
 			#if HAS_TOUCH && LV_USE_CANVAS
 			touchTestScreen(this),
 			#endif
@@ -168,6 +168,7 @@ DisplayManager::~DisplayManager() {
 		
 		splashScreen.destroy();
 		infoScreen.destroy();
+		wifiSetupScreen.destroy();
 		testScreen.destroy();
 		fpsScreen.destroy();
 		#if HAS_TOUCH && LV_USE_CANVAS
@@ -483,11 +484,13 @@ void DisplayManager::init() {
 		custom_logo_selected = config &&
 				config->boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE;
 #endif
-		splashScreen.setAppearance(
-				config ? config->boot_appearance_font_size : BOOT_APPEARANCE_DEFAULT_FONT_SIZE,
-				boot_text, boot_background, custom_logo_selected);
+		const uint8_t boot_font_size =
+				config ? config->boot_appearance_font_size : BOOT_APPEARANCE_DEFAULT_FONT_SIZE;
+		splashScreen.setAppearance(boot_font_size, boot_text, boot_background, custom_logo_selected);
+		wifiSetupScreen.setAppearance(boot_font_size, boot_text, boot_background);
 #endif
 		splashScreen.create();
+		wifiSetupScreen.create();
 		for (uint8_t i = 0; i < MAX_PADS; i++) {
 				padScreens[i]->create();
 		}

@@ -336,7 +336,7 @@ Total flags: 365
 - **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
 - **PORTAL_PRIMARY_ICON** default: `""` — Icon (UTF-8) for the primary portal category in the nav sidebar.
 - **PORTAL_PRIMARY_LABEL** default: `""` — Display name for the primary portal category in the nav sidebar.
-- **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
+- **POWERON_CONFIG_BURST_ENABLED** default: `true` — Enable the two-power-on recovery gesture to force setup AP.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
 - **REMOTE_LOG_BOOT_RECORDS** default: `128` — Startup snapshot capacity; defaults to 128 records when remote capture is enabled.
 - **SCREENSAVER_BACKLIGHT_ONLY** default: `false` — Use the legacy timeout-only lighting policy with instant transitions.
@@ -851,6 +851,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
   - src/app/widgets/widget_registry.h
+  - src/app/wifi_manager.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
 - **HAS_DISPLAY_DIAGNOSTICS**
   - src/app/board_config.h
@@ -1228,6 +1229,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_tile_builder.cpp
   - src/app/screens/touch_test_screen.cpp
   - src/app/screens/touch_test_screen.h
+  - src/app/screens/wifi_setup_screen.cpp
   - src/app/touch_drivers.cpp
   - src/app/touch_manager.cpp
   - src/app/touch_manager.h
@@ -1303,6 +1305,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **DISPLAY_SHAPE**
   - src/app/board_config.h
   - src/app/screens/splash_screen.cpp
+  - src/app/screens/wifi_setup_screen.cpp
 - **TOUCH_DRIVER**
   - src/app/board_config.h
   - src/app/board_hardware.cpp
@@ -1629,6 +1632,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
 - **IS_EPAPER_FRAME**
+  - src/app/app.ino
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp

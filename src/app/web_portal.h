@@ -32,7 +32,7 @@
 
 // API Functions
 void web_portal_init(DeviceConfig *config);        // Initialize web server and DNS
-void web_portal_start_ap();                        // Start AP mode with captive portal (core mode)
+bool web_portal_start_ap(const DeviceConfig *config); // Start AP mode with the saved AP password
 void web_portal_stop_ap();                         // Stop AP mode
 void web_portal_handle();                          // Handle web server (call in loop)
 bool web_portal_is_ap_mode();                      // Check if in AP mode

@@ -32,6 +32,8 @@
 // Maximum string lengths
 #define CONFIG_SSID_MAX_LEN 32
 #define CONFIG_PASSWORD_MAX_LEN 64
+#define CONFIG_AP_PASSWORD_MAX_LEN 64
+#define CONFIG_WIFI_FAILURE_MODE_MAX_LEN 9
 #define CONFIG_DEVICE_NAME_MAX_LEN 32
 #define CONFIG_TIMEZONE_MAX_LEN 64
 #define CONFIG_IP_STR_MAX_LEN 16
@@ -99,6 +101,8 @@ struct DeviceConfig {
 		// WiFi credentials
 		char wifi_ssid[CONFIG_SSID_MAX_LEN];
 		char wifi_password[CONFIG_PASSWORD_MAX_LEN];
+		char wifi_failure_mode[CONFIG_WIFI_FAILURE_MODE_MAX_LEN]; // ap | offline
+		char ap_password[CONFIG_AP_PASSWORD_MAX_LEN]; // empty or WPA2 passphrase
 		
 		// Device settings
 		char device_name[CONFIG_DEVICE_NAME_MAX_LEN];

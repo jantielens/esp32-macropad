@@ -38,6 +38,47 @@ int main() {
     check(ota_activity_epoch() == initial_epoch + 2, "concurrent begins increment epoch only once");
     ota_activity_finish();
 
+    check(ota_activity_try_begin_config_write(), "config update admitted");
+    check(ota_activity_try_begin_config_write(), "nested config save admitted");
+    check(!ota_activity_try_begin(), "config update excludes OTA");
+    check(!ota_activity_try_begin_network_transition(), "config update excludes teardown");
+    ota_activity_finish_config_write();
+    check(!ota_activity_try_begin_network_transition(), "outer update still excludes teardown");
+    ota_activity_finish_config_write();
+
+    check(ota_activity_try_begin_network_transition(), "idle network transition admitted");
+    check(!ota_activity_is_active(), "transition does not masquerade as OTA");
+    check(!ota_activity_try_begin(), "transition excludes new OTA");
+    check(!ota_activity_try_begin_config_write(), "transition excludes new config writes");
+    check(!ota_activity_try_begin_network_transition(), "transition has one owner");
+    ota_activity_finish();
+    check(!ota_activity_try_begin(), "finishing OTA cannot release transition ownership");
+    ota_activity_finish_network_transition();
+    check(ota_activity_try_begin(), "OTA resumes after transition");
+    check(!ota_activity_try_begin_config_write(), "OTA excludes config writes");
+    check(!ota_activity_try_begin_network_transition(), "OTA excludes transition");
+    ota_activity_finish();
+
+    for (unsigned attempt = 0; attempt < 100; ++attempt) {
+        std::atomic<bool> start{false};
+        std::atomic<unsigned> winners{0};
+        auto contend = [&](bool (*begin)()) {
+            while (!start.load(std::memory_order_acquire)) std::this_thread::yield();
+            if (begin()) winners.fetch_add(1);
+        };
+        std::thread update(contend, ota_activity_try_begin);
+        std::thread config(contend, ota_activity_try_begin_config_write);
+        std::thread transition(contend, ota_activity_try_begin_network_transition);
+        start.store(true, std::memory_order_release);
+        update.join();
+        config.join();
+        transition.join();
+        check(winners.load() == 1, "OTA/config/teardown race admits exactly one activity");
+        ota_activity_finish();
+        ota_activity_finish_config_write();
+        ota_activity_finish_network_transition();
+    }
+
     if (failures == 0) std::puts("OTA activity tests passed");
     return failures == 0 ? 0 : 1;
 }

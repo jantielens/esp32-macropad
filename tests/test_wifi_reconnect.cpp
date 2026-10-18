@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 
 #include "wifi_manager.h"
 
@@ -212,6 +213,33 @@ TEST(tier_with_large_elapsed) {
               (int)WifiReconnectTier::Tier3);
 }
 
+TEST(ap_password_boundaries) {
+    char password[65];
+    std::memset(password, 'a', sizeof(password) - 1);
+    password[64] = '\0';
+    ASSERT_TRUE(wifi_ap_password_is_valid(""));
+    password[7] = '\0';
+    ASSERT_FALSE(wifi_ap_password_is_valid(password));
+    std::memset(password, 'a', 64);
+    password[64] = '\0';
+    password[8] = '\0';
+    ASSERT_TRUE(wifi_ap_password_is_valid(password));
+    std::memset(password, 'a', 64);
+    password[64] = '\0';
+    password[63] = '\0';
+    ASSERT_TRUE(wifi_ap_password_is_valid(password));
+    std::memset(password, 'a', 64);
+    password[64] = '\0';
+    ASSERT_FALSE(wifi_ap_password_is_valid(password));
+}
+
+TEST(ap_password_rejects_unsupported_characters) {
+    ASSERT_FALSE(wifi_ap_password_is_valid(nullptr));
+    ASSERT_FALSE(wifi_ap_password_is_valid("pass word\n"));
+    const char non_ascii[] = "1234567\xC3\xA9";
+    ASSERT_FALSE(wifi_ap_password_is_valid(non_ascii));
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -256,6 +284,8 @@ int main() {
     printf("\n--- Edge cases ---\n");
     RUN(backoff_with_large_values);
     RUN(tier_with_large_elapsed);
+    RUN(ap_password_boundaries);
+    RUN(ap_password_rejects_unsupported_characters);
 
     printf("\n%d passed, %d failed\n", g_tests_passed, g_tests_failed);
     return g_tests_failed > 0 ? 1 : 0;

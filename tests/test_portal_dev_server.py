@@ -34,6 +34,7 @@ class PortalDevServerTest(unittest.TestCase):
             "caps": {"ble": True, "ble_hid": True, "usb_hid": True, "mqtt": True},
             "backlight_brightness": 80, "keyboard_transport": "none",
             "keyboard_active_transport": "none", "device_name": "Mock",
+            "wifi_failure_mode": "ap", "ap_password": "",
         }
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -79,6 +80,26 @@ class PortalDevServerTest(unittest.TestCase):
             widget_styles = (ROOT / "src/app/web" / filename).read_text().strip()
             self.assertIn(widget_styles, styles)
             self.assertNotIn(widget_styles, headless_styles)
+
+    def test_wifi_setup_config_fixture(self):
+        status, config = self.request("/api/config")
+        self.assertEqual(status, 200)
+        self.assertEqual(config["wifi_failure_mode"], "ap")
+        self.assertEqual(config["ap_password"], "")
+
+        status, _ = self.request("/api/config?no_reboot=1", method="POST",
+            body={"wifi_failure_mode": "offline", "ap_password": "share-me-123"})
+        self.assertEqual(status, 200)
+        saved = self.request("/api/config")[1]
+        self.assertEqual(saved["wifi_failure_mode"], "offline")
+        self.assertEqual(saved["ap_password"], "share-me-123")
+
+        status, _ = self.request("/api/config?no_reboot=1", method="POST",
+            body={"wifi_failure_mode": "ap", "ap_password": ""})
+        self.assertEqual(status, 200)
+        cleared = self.request("/api/config")[1]
+        self.assertEqual(cleared["wifi_failure_mode"], "ap")
+        self.assertEqual(cleared["ap_password"], "")
 
     def test_widget_manifest(self):
         widgets = load_widgets()

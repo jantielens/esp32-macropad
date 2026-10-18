@@ -74,6 +74,20 @@ If the firmware runs but the portal is unavailable:
 Configuration mode does not erase settings. Use it before factory reset.
 If boot fails, use the board's documented serial download recovery.
 
+## Recover setup access with a power cycle
+
+If the device repeatedly fails to start normally, power it on, interrupt power
+during the first ten seconds and before it intentionally sleeps, then power it
+on again. The second qualifying power-on starts the setup AP without changing
+the saved operating mode or AP password. A short startup or duty-cycle sleep
+can end the recovery window earlier; the device does not delay sleep to keep
+the full ten seconds available.
+
+The device cannot measure how long power was disconnected. If power is removed
+while the recovery window is armed and restored later, the next power-on can
+still start the setup AP. This procedure does not bypass the AP password.
+Follow [network and access](network-and-access.md#restore-access) to reconnect.
+
 ## Factory reset
 
 Open **Device > Factory Reset** and confirm only after backing up.

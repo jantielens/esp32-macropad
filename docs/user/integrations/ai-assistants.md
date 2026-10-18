@@ -105,4 +105,9 @@ If tools are missing, check permissions/capabilities. HTTP 401 means token
 failure; 404 can mean disabled/AP mode; 403 can mean an Origin-bearing client.
 Serialize control requests if the device reports busy.
 
+The `system_command` control also accepts `reboot_ap`. It restarts the device
+into the setup AP and drops the current MCP session. Saved Wi-Fi settings and
+the AP password are preserved. The AP credentials are shown on the device
+during setup.
+
 [Integration tasks](README.md) | [User guides](../README.md)

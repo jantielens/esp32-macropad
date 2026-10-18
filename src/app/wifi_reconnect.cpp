@@ -5,6 +5,19 @@
 // These functions have no WiFi or ESP32 dependency.
 
 #include "wifi_manager.h"
+#include <string.h>
+
+bool wifi_ap_password_is_valid(const char* password) {
+if (!password) return false;
+const size_t length = strlen(password);
+if (length == 0) return true;
+if (length < 8 || length > 63) return false;
+for (size_t i = 0; i < length; i++) {
+const unsigned char character = static_cast<unsigned char>(password[i]);
+if (character < 0x20 || character > 0x7E) return false;
+}
+return true;
+}
 
 unsigned long wifi_reconnect_next_backoff(unsigned int attempt, unsigned long base_ms, unsigned long max_ms) {
 unsigned long interval = base_ms;

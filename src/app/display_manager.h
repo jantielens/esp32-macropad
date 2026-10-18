@@ -9,6 +9,7 @@
 #include "screens/screen.h"
 #include "screens/splash_screen.h"
 #include "screens/info_screen.h"
+#include "screens/wifi_setup_screen.h"
 #include "screens/test_screen.h"
 #include "screens/fps_screen.h"
 
@@ -111,6 +112,7 @@ private:
 		// Screen instances (created at init, kept in memory)
 		SplashScreen splashScreen;
 		InfoScreen infoScreen;
+		WifiSetupScreen wifiSetupScreen;
 		TestScreen testScreen;
 		FpsScreen fpsScreen;
 		
@@ -183,6 +185,7 @@ public:
 		// Navigation API (thread-safe)
 		void showSplash();
 		void showInfo();
+		void showWifiSetup();
 		void showTest();
 		
 		// Screen selection by ID (thread-safe, returns true if found)

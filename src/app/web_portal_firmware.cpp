@@ -377,7 +377,7 @@ void handlePostFirmwareUpdate(AsyncWebServerRequest *request, uint8_t *data, siz
 		}
 
 		if (!ota_activity_try_begin()) {
-				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update already in progress\"}");
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update, configuration write, or network transition in progress\"}");
 				portENTER_CRITICAL(&g_fw_post_mux);
 				firmware_post_reset();
 				portEXIT_CRITICAL(&g_fw_post_mux);

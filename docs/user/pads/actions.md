@@ -64,6 +64,13 @@ Full-screen taps use normal tap feedback. An explicit Sound alert suppresses
 the default beep. Touch-owning widgets can also disable pad swipes;
 check both layers before investigating an unreachable control.
 
+## Restart into setup AP
+
+The **Device command** action includes **Restart into setup AP**. It restarts
+the device into its setup network without clearing saved Wi-Fi settings or the
+AP password. The active button action ends when the device restarts. If the
+device is already in setup mode, use its displayed credentials and portal URL.
+
 ## Choose the feature owner
 
 * [Keyboard, mouse, and gamepad actions](../integrations/keyboard-mouse-gamepad.md)

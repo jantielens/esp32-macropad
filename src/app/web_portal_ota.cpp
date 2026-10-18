@@ -50,7 +50,7 @@ void handleOTAUpload(AsyncWebServerRequest *request, String filename, size_t ind
 				}
 
 				if (!allowed) {
-						request->send(409, "application/json", "{\"success\":false,\"message\":\"Update already in progress\"}");
+						request->send(409, "application/json", "{\"success\":false,\"message\":\"Update, configuration write, or network transition in progress\"}");
 						return;
 				}
 

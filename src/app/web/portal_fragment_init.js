@@ -26,7 +26,8 @@ async function saveFragmentConfig(requiresReboot) {
     // Build config from DOM elements that exist in the current fragment
     var config = {};
     var fields = [
-        'wifi_ssid', 'wifi_password', 'device_name', 'timezone', 'fixed_ip',
+        'wifi_ssid', 'wifi_password', 'wifi_failure_mode', 'ap_password',
+        'device_name', 'timezone', 'fixed_ip',
         'subnet_mask', 'gateway', 'dns1', 'dns2',
         'mqtt_host', 'mqtt_port', 'mqtt_username', 'mqtt_password',
         'operating_mode', 'duty_cycle_wake_seconds', 'mqtt_publish_interval_seconds',

@@ -56,6 +56,11 @@ void wifi_manager_register_events();
 // Request a WiFi reconnect cycle from any task context.
 // Sets an atomic flag consumed by the watchdog in loop().
 void wifi_manager_request_reconnect();
+// Keep the radio off until an explicit reconnect request is made.
+void wifi_manager_enter_offline();
+
+// Pure configuration validation helper.
+bool wifi_ap_password_is_valid(const char* password);
 
 // --- Pure helper functions (unit-testable, no WiFi dependency) ---
 

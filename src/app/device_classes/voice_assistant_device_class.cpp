@@ -17,9 +17,11 @@
 #include "voice_assistant/voice_binding.cpp"
 #include "voice_assistant/voice_actions.cpp"
 
-static void on_setup_late_hook(DeviceConfig*, PowerMode current_mode) {
+static void on_setup_late_hook(DeviceConfig*, PowerMode) {
     voice_binding_init();
-    if (current_mode == PowerMode::Ap) return;
+}
+
+static void on_normal_runtime_hook(DeviceConfig*) {
     voice_init();
 }
 
@@ -101,6 +103,12 @@ static const DeviceClass kVoiceAssistantClass = {
     config_api_set_hook,
     nullptr,
     nullptr,
+    nullptr, // pad_hold_scheme
+    nullptr, // pad_hold_acquire
+    nullptr, // pad_hold_release
+    nullptr, // config_api_validate
+    nullptr, // defer_wifi_init
+    on_normal_runtime_hook,
 };
 
 void voice_assistant_device_class_register() {

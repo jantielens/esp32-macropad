@@ -290,6 +290,8 @@ add_custom_command(
 add_host_legacy_test(test_stopwatch_round_ui
     SOURCES test_stopwatch_round_ui.cpp ${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp
     DEFINITIONS UI_SCALE_TIER=1 DISPLAY_DISABLE_ANIMATIONS=1
+        BOOT_APPEARANCE_DEFAULT_FONT_SIZE=0 BOOT_APPEARANCE_DEFAULT_TEXT_RGB=0x646464
+        BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB=0x000000 DISPLAY_SHAPE_ROUND=1 DISPLAY_SHAPE=1
     OPTIONS -Wno-missing-field-initializers -Wno-deprecated-declarations
     INCLUDES ${CMAKE_CURRENT_BINARY_DIR} ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
     LIBRARIES host_lvgl
@@ -818,6 +820,20 @@ add_host_gtest(test_power_config
     test_power_config.cpp
     ${PROJECT_SOURCE_DIR}/src/app/power_config.cpp
 )
+
+add_host_gtest(test_power_manager
+    test_power_manager.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/power_manager.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/power_config.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_class.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
+)
+target_include_directories(test_power_manager BEFORE PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/power_manager_overrides ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_power_manager PRIVATE
+    OTA_ACTIVITY_HOST_TEST HAS_DISPLAY=0 HAS_BUTTON=1 HAS_BUILTIN_LED=0)
+target_compile_options(test_power_manager PRIVATE -Wno-unused-variable -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 
 add_host_gtest(test_epaper_frame_wake_journal
         test_epaper_frame_wake_journal.cpp

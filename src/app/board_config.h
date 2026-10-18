@@ -666,10 +666,9 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #endif
 #endif
 
-// Enable power-on burst detection to force Config Mode (NVS-backed, disabled by default).
-// Intended for boards WITHOUT a reliable user button.
+// Enable the two-power-on recovery gesture to force setup AP.
 #ifndef POWERON_CONFIG_BURST_ENABLED
-#define POWERON_CONFIG_BURST_ENABLED false
+#define POWERON_CONFIG_BURST_ENABLED true
 #endif
 
 // ----------------------------------------------------------------------------

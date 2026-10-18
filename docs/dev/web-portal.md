@@ -47,7 +47,10 @@ only pad-editor fixture target; this mock does not replace hardware verification
 ## Overview
 
 The web portal provides:
-- WiFi configuration via captive portal
+- WiFi configuration via captive portal, with titled WiFi Network and
+  Setup AP & Fallback cards and a shared Save button on the WiFi settings page.
+  The fallback card explains provisioning, router changes, and offline use;
+  its failure preference applies only to normal boot
 - Real-time device health monitoring
 - Over-the-air (OTA) firmware updates
 - REST API for programmatic access
@@ -2137,7 +2140,9 @@ fixed dropdown.
 
 #### `GET /api/config`
 
-Returns current device configuration (passwords excluded).
+Returns current device configuration. Home Wi-Fi, MQTT, portal-authentication,
+and API credentials remain write-only. The setup AP password is shareable
+configuration, so this endpoint returns it as plain text.
 
 Display builds also return `boot_appearance_font_size`,
 `boot_appearance_text_color`, and `boot_appearance_background_color`.
@@ -2161,6 +2166,8 @@ timezone and alarm session.
   "wifi_ssid": "MyNetwork",
   "wifi_password": "",
   "wifi_password_set": true,
+  "wifi_failure_mode": "ap",
+  "ap_password": "",
   "device_name": "esp32-device",
   "device_name_sanitized": "esp32-device",
   "fixed_ip": "",
@@ -2480,12 +2487,20 @@ hardware validation.
 #### `POST /api/config`
 
 Save new configuration. Device reboots after successful save.
+The request is a partial update: omitted Wi-Fi setup fields keep their saved
+values. `wifi_failure_mode` accepts `ap` or `offline`; it applies only to
+normal-boot Wi-Fi failures, not runtime recovery or duty-cycle failures.
+`ap_password` accepts empty for an open AP or 8-63 printable ASCII characters.
+An empty value clears the saved password. A saved change takes effect the next
+time the setup AP starts; it does not change active AP credentials.
 
 **Request Body:**
 ```json
 {
   "wifi_ssid": "NewNetwork",
   "wifi_password": "password123",
+  "wifi_failure_mode": "offline",
+  "ap_password": "shareable-passphrase",
   "device_name": "my-esp32",
   "fixed_ip": "192.168.1.100",
   "subnet_mask": "255.255.255.0",
@@ -2774,6 +2789,14 @@ Get current progress/state of the online update task.
 `POST /api/update` and `POST /api/firmware/update` share one race-safe OTA
 activity lifecycle. Only one path can own the firmware writer at a time; a
 competing update receives `409 Conflict`.
+
+The same admission lock excludes configuration updates and network transitions.
+The config handler holds a writer reservation while applying and saving fields;
+direct config saves also reserve a writer. Live Continue offline reserves the
+transition through radio shutdown and normal-runtime startup, so an asynchronous
+OTA or save cannot begin between its check and teardown. Restart into setup AP
+keeps that reservation through reboot, including the MCP response grace period.
+Conflicting config or OTA requests receive `409 Conflict`.
 
 While the lifecycle is active, the firmware cooperatively defers new
 nonessential work at subsystem-owned safe points:
@@ -4048,6 +4071,8 @@ curl -X DELETE http://192.168.1.100/api/config
 ./upload-erase.sh
 ./upload.sh
 ```
+Join the active AP shown on the device, including its displayed password when
+configured, and use the displayed portal URL.
 
 **Test Full Mode:**
 ```bash
@@ -4059,8 +4084,8 @@ curl http://192.168.1.100/api/info
 
 ### Cannot Access Portal in AP Mode
 
-- Check SSID: Should be `ESP32-XXXXXX`
-- IP address: Always `192.168.4.1`
+- Check the active AP name and password shown on the device
+- Use the displayed URL, usually `http://192.168.4.1`
 - Disable mobile data (can interfere with captive portal)
 
 ### Portal Not Responding After WiFi Config
@@ -4078,6 +4103,8 @@ If WiFi fails to connect after firmware update or reboot:
 - Check serial logs for detailed connection status (SSID not found, wrong password, etc.)
 - If persistent, use physical reset button to fully power-cycle WiFi hardware
 - Auto-reconnect and event handlers ensure recovery from temporary drops
+- For repeated startup failures, use the documented
+  [power-cycle recovery procedure](../user/device/updates-and-recovery.md#recover-setup-access-with-a-power-cycle)
 
 ### OTA Update Fails
 

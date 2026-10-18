@@ -29,7 +29,7 @@ static void getSplashLogoBounds(int screen_w, int screen_h, uint16_t* width, uin
 		*height = static_cast<uint16_t>(max_h);
 }
 
-static const lv_font_t* splashFont(uint8_t size, int screen_w) {
+const lv_font_t* splash_screen_font(uint8_t size, int screen_w) {
 		if (size == 0) {
 				const int tier = getScaleTier(screen_w);
 				size = tier == 2 ? 24 : tier == 1 ? 18 : 14;
@@ -99,6 +99,23 @@ void SplashScreen::releaseCustomLogo() {
 		}
 }
 
+const lv_image_dsc_t* SplashScreen::takeLogo(lv_image_dsc_t* descriptor, uint16_t** pixels) {
+		if (!logoImg || !descriptor || !pixels) return nullptr;
+		*pixels = nullptr;
+		const lv_image_dsc_t* source = nullptr;
+		if (customLogoPixels) {
+				*descriptor = customLogoDescriptor;
+				*pixels = customLogoPixels;
+				source = descriptor;
+				customLogoPixels = nullptr;
+				memset(&customLogoDescriptor, 0, sizeof(customLogoDescriptor));
+		} else if (!customLogoSelected) {
+				source = &img_logo;
+		}
+		lv_image_set_src(logoImg, nullptr);
+		return source;
+}
+
 void SplashScreen::create() {
 		LOGI("Splash", "Create start");
 		if (screen) return;
@@ -141,7 +158,7 @@ void SplashScreen::create() {
 #endif
 		lv_obj_set_width(statusLabel, label_width > 0 ? label_width : 1);
 		lv_obj_set_height(statusLabel, screen_h / 5);
-		lv_obj_set_style_text_font(statusLabel, splashFont(fontSize, screen_w), 0);
+		lv_obj_set_style_text_font(statusLabel, splash_screen_font(fontSize, screen_w), 0);
 		lv_obj_set_style_text_color(statusLabel, lv_color_hex(textColor), 0);
 		lv_obj_set_style_text_align(statusLabel, LV_TEXT_ALIGN_CENTER, 0);
 		lv_obj_align(statusLabel, LV_ALIGN_TOP_MID, 0, screen_h * 57 / 100);

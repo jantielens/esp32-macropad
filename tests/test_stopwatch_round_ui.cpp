@@ -5,6 +5,7 @@
 #include <new>
 #include <cstdio>
 #include <utility>
+#include <algorithm>
 
 #include "log_manager.h"
 
@@ -40,9 +41,159 @@ void display_manager_lock_if_needed(bool* locked) { *locked = false; }
 void display_manager_unlock_if_needed(bool) {}
 
 #include "../src/app/screens/splash_screen.cpp"
+class AsyncWebServer;
+#include "../src/app/screens/wifi_setup_screen.cpp"
 #include "../src/app/device_dialog.cpp"
 #include "../src/app/dialog_appearance.cpp"
 #include "../src/app/components/dialog_appearance_component.cpp"
+
+static LoopBridgeExec offline_job = nullptr;
+static WifiSetupScreen* offline_context = nullptr;
+static bool offline_allowed = false;
+static int offline_requests = 0;
+LoopBridgeResult loop_bridge_enqueue(LoopBridgeExec exec, const void* context, size_t size) {
+    if (offline_job) return LOOP_BRIDGE_BUSY;
+    assert(size == sizeof(offline_context));
+    memcpy(&offline_context, context, size);
+    offline_job = exec;
+    ++offline_requests;
+    return LOOP_BRIDGE_OK;
+}
+bool app_continue_offline_from_setup() { return offline_allowed; }
+bool web_portal_ap_get_setup_info(char* ssid, size_t ssid_size,
+        char* password, size_t password_size, char* ip, size_t ip_size) {
+    snprintf(ssid, ssid_size, "Device-setup");
+    snprintf(password, password_size, "test-password");
+    snprintf(ip, ip_size, "192.168.4.1");
+    return true;
+}
+static void run_offline_job() {
+    bool ok = false;
+    char message[128];
+    assert(offline_job);
+    offline_job(&offline_context, &ok, message, sizeof(message));
+    assert(ok == offline_allowed);
+    offline_job = nullptr;
+}
+
+static lv_obj_t* find_label(lv_obj_t* parent, const char* text) {
+    if (lv_obj_check_type(parent, &lv_label_class) &&
+            strstr(lv_label_get_text(parent), text)) return parent;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(parent); ++i) {
+        if (auto* found = find_label(lv_obj_get_child(parent, i), text)) return found;
+    }
+    return nullptr;
+}
+
+static void wifi_setup_checks(lv_display_t* display) {
+    for (const auto& dimensions : {std::pair<int, bool>{720, false}, {720, true},
+                                  {466, false}, {466, true}}) {
+        const int size = dimensions.first;
+        const bool light = dimensions.second;
+        lv_display_set_resolution(display, size, size);
+        DeviceConfig config{};
+        SplashScreen splash;
+        splash.setAppearance(18, light ? 0 : 0xFFFFFF, light ? 0xFFFFFF : 0, true);
+        splash.create();
+        constexpr int logo_width = 320;
+        constexpr int logo_height = 177;
+        auto* pixels = static_cast<uint16_t*>(malloc(logo_width * logo_height * sizeof(uint16_t)));
+        assert(pixels);
+        std::fill(pixels, pixels + logo_width * logo_height, 0xABCD);
+        assert(splash.setCustomLogo(pixels, logo_width, logo_height));
+        WifiSetupScreen setup(&config);
+        setup.setAppearance(18, light ? 0 : 0xFFFFFF, light ? 0xFFFFFF : 0);
+        setup.create();
+        setup.takeLogo(splash);
+        splash.hide();
+        splash.destroy();
+        setup.show();
+        setup.update();
+        auto* screen = lv_screen_active();
+        lv_obj_update_layout(screen);
+        auto* content = lv_obj_get_child(screen, 0);
+        assert(abs(lv_obj_get_y(content) * 2 + lv_obj_get_height(content) - size) <= 1);
+        assert(lv_obj_get_scroll_bottom(screen) <= 0);
+        auto* logo = lv_obj_get_child(content, -1);
+        assert(!lv_obj_has_flag(logo, LV_OBJ_FLAG_HIDDEN));
+        auto* image = lv_obj_get_child(logo, 0);
+        assert(lv_obj_get_width(image) <= lv_obj_get_width(logo));
+        assert(lv_obj_get_height(image) <= lv_obj_get_height(logo));
+        assert(lv_obj_get_scroll_bottom(logo) == 0);
+        const auto* source = static_cast<const lv_image_dsc_t*>(lv_image_get_src(image));
+        assert(source->data == reinterpret_cast<const uint8_t*>(pixels));
+        assert(pixels[0] == 0xABCD); // The AP screen still owns the decoded image.
+        assert(find_label(screen, "1. "));
+        assert(find_label(screen, "2. Browse to http://192.168.4.1/"));
+        assert(find_label(screen, "3. "));
+        auto* label = find_label(screen, "Stop AP and\ncontinue offline");
+        assert(label);
+        auto* button = lv_obj_get_parent(label);
+        assert(lv_obj_get_height(label) >= lv_font_get_line_height(&lv_font_montserrat_18) * 2);
+        assert(lv_obj_get_height(button) > lv_obj_get_height(label));
+        lv_area_t original_instructions;
+        lv_area_t original_button;
+        lv_obj_get_coords(find_label(screen, "1. "), &original_instructions);
+        assert(original_instructions.y1 < size / 2);
+        lv_obj_get_coords(button, &original_button);
+        lv_obj_add_state(button, LV_STATE_PRESSED);
+        assert((lv_color_to_u32(lv_obj_get_style_bg_color(button, LV_PART_MAIN)) & 0xFFFFFFU) ==
+            (light ? 0xFFFFFFU : 0U));
+        lv_obj_clear_state(button, LV_STATE_PRESSED);
+
+        offline_allowed = false;
+        const int requests = offline_requests;
+        lv_obj_send_event(button, LV_EVENT_CLICKED, nullptr);
+        assert(find_label(screen, "Starting offline"));
+        assert(lv_obj_has_state(button, LV_STATE_DISABLED));
+        lv_obj_update_layout(screen);
+        lv_area_t tapped_instructions;
+        lv_area_t tapped_button;
+        lv_obj_get_coords(find_label(screen, "1. "), &tapped_instructions);
+        lv_obj_get_coords(button, &tapped_button);
+        assert(original_instructions.y1 == tapped_instructions.y1);
+        assert(original_instructions.y2 == tapped_instructions.y2);
+        assert(original_button.y1 == tapped_button.y1);
+        assert(original_button.y2 == tapped_button.y2);
+        lv_obj_send_event(button, LV_EVENT_CLICKED, nullptr);
+        assert(offline_requests == requests + 1);
+        run_offline_job();
+        setup.update();
+        assert(!lv_obj_has_state(button, LV_STATE_DISABLED));
+        assert(find_label(screen, "Stop AP and\ncontinue offline"));
+        assert(find_label(screen, "Finish any update or save"));
+
+        offline_job = [](const void*, bool*, char*, size_t) {};
+        lv_obj_send_event(button, LV_EVENT_CLICKED, nullptr);
+        assert(!lv_obj_has_state(button, LV_STATE_DISABLED));
+        assert(find_label(screen, "Device busy"));
+        offline_job = nullptr;
+        offline_allowed = true;
+        lv_obj_send_event(button, LV_EVENT_CLICKED, nullptr);
+        run_offline_job();
+        assert(lv_obj_has_state(button, LV_STATE_DISABLED));
+        setup.hide();
+        setup.destroy();
+    }
+    lv_display_set_resolution(display, 466, 466);
+    {
+        SplashScreen splash;
+        splash.create();
+        WifiSetupScreen setup(nullptr);
+        setup.setAppearance(36, 0, 0xFFFFFF);
+        setup.create();
+        setup.takeLogo(splash);
+        splash.hide();
+        setup.show();
+        setup.update();
+        lv_obj_update_layout(lv_screen_active());
+        auto* content = lv_obj_get_child(lv_screen_active(), 0);
+        auto* logo = lv_obj_get_child(content, -1);
+        assert(lv_obj_has_flag(logo, LV_OBJ_FLAG_HIDDEN));
+        assert(lv_obj_get_y(content) >= 0);
+        setup.hide();
+    }
+}
 
 static ConfirmPayload confirmation() {
     ConfirmPayload content{};
@@ -70,7 +221,7 @@ static void assert_dialog_selection(bool cancel, bool approve) {
     assert((lv_obj_get_style_outline_width(cancel_button(), LV_PART_MAIN) > 0) == cancel);
     assert((lv_obj_get_style_outline_width(approve_button(), LV_PART_MAIN) > 0) == approve);
 }
-static uint32_t pixels[466 * 466];
+static uint32_t pixels[720 * 720];
 
 static void dialog_lifecycle_checks() {
     auto content = confirmation();
@@ -465,6 +616,7 @@ int main() {
     dialog_lifecycle_checks();
     dialog_test_endpoint_checks();
     dialog_pattern_checks(display);
+    wifi_setup_checks(display);
     printf("DialogAppearance=%zu DialogTemplates=%zu ButtonAction=%zu ActionPayload=%zu\n",
         sizeof(DialogAppearance), sizeof(DialogTemplates), sizeof(ButtonAction), sizeof(ActionPayload));
     puts("Dialog lifecycle, input, replacement, timeout, appearance checks passed");

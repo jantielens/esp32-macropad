@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add configurable normal-boot Wi-Fi failure behavior, a shareable setup AP
+  password, live Continue offline, and a Device command to restart into the
+  setup AP. Show active AP credentials on setup screens and support
+  two-power-on recovery within the startup window.
 * Add configurable startup-splash status font size and text/background colors,
   plus optional PNG/JPEG logo uploads on eligible display builds. The Save
   Boot Settings action saves appearance and logo selection with boot actions;

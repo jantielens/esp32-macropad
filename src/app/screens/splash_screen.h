@@ -11,6 +11,9 @@
 // Simple boot screen shown during initialization.
 // No dependencies - static content only.
 
+// Boot appearance font: 0 selects a size based on screen width.
+const lv_font_t* splash_screen_font(uint8_t size, int screen_w);
+
 class SplashScreen : public Screen {
 private:
 		lv_obj_t* screen;
@@ -41,6 +44,8 @@ public:
 				uint32_t background_color, bool custom_logo_selected);
 		bool setCustomLogo(uint16_t* pixels, uint16_t width, uint16_t height);
 		bool getLogoBounds(uint16_t* width, uint16_t* height) const;
+		// Transfers the decoded buffer to the next startup screen before hide().
+		const lv_image_dsc_t* takeLogo(lv_image_dsc_t* descriptor, uint16_t** pixels);
 };
 
 #endif // SPLASH_SCREEN_H
