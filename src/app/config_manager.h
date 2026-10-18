@@ -49,6 +49,8 @@
 #define CONFIG_OPERATING_MODE_MAX_LEN 32
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
 #define CONFIG_DEFAULT_BLE_TX_POWER_DBM 9
+#define CONFIG_BOOT_COLOR_INHERIT 0xFFFFFFFFUL
+#define CONFIG_BOOT_LOGO_SLOT_NONE 255
 
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
@@ -137,6 +139,15 @@ struct DeviceConfig {
 		// Display settings
 		uint8_t backlight_brightness;  // 0-100%, default 100
 		uint8_t display_rotation;      // Quarter turns relative to the board default, 0-3
+
+#if HAS_DISPLAY
+		uint8_t boot_appearance_font_size; // 0 = device default/Auto
+		uint32_t boot_appearance_text_color; // RGB; CONFIG_BOOT_COLOR_INHERIT selects device default
+		uint32_t boot_appearance_background_color; // RGB; CONFIG_BOOT_COLOR_INHERIT selects device default
+#if HAS_BOOT_LOGO
+		uint8_t boot_logo_slot; // Managed asset slot, or CONFIG_BOOT_LOGO_SLOT_NONE
+#endif
+#endif
 
 		// Web portal Basic Auth (optional; enforced in STA/full mode only)
 		bool basic_auth_enabled;

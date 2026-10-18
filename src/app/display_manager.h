@@ -296,5 +296,10 @@ bool display_manager_get_presentation_stats(DisplayPresentationStats* out);
 #endif
 
 bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes);
+#if HAS_BOOT_LOGO
+bool display_manager_get_splash_logo_bounds(uint16_t* width, uint16_t* height);
+// Takes ownership of pixels on every return path.
+bool display_manager_set_splash_logo(uint16_t* pixels, uint16_t width, uint16_t height);
+#endif
 
 #endif // DISPLAY_MANAGER_H

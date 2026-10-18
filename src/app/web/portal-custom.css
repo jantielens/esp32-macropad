@@ -1992,6 +1992,10 @@ body {
 }
 .bindable-color .bc-input { display: none; }
 
+.boot-appearance-color-row .bindable-color {
+  display: flex; align-items: center; margin-bottom: 0;
+}
+
 .pad-default-color-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 8px; }
 .pad-default-color-row > div { flex: 1 1 auto; }
 .pad-default-color-row label { white-space: nowrap; }
@@ -2571,4 +2575,3 @@ body:has(#pad-editor-root) #toast-container {
   #pad-workspace-commands { width: 100%; }
   #pad-editor-root .pad-workspace-inspector .pad-edit-body { padding: 14px 12px 12px; }
 }
-

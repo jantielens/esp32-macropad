@@ -4,6 +4,10 @@
 #if HAS_DISPLAY
 
 #include "display_manager.h"
+#if HAS_BOOT_LOGO
+#include <esp_heap_caps.h>
+#include <new>
+#endif
 
 // C-style interface for app.ino
 void display_manager_init(DeviceConfig* config) {
@@ -135,6 +139,77 @@ DisplayTaskDispatchResult display_manager_dispatch(
 		return displayManager->dispatch(
 				exec, cleanup, ctx, ctx_len, timeout_ms, out_ok, out_msg, out_msg_len);
 }
+
+#if HAS_BOOT_LOGO
+struct SplashLogoHandoff {
+		uint16_t* pixels;
+		uint16_t width;
+		uint16_t height;
+		bool installed;
+};
+
+static void splash_logo_install_job(const void* context, bool* ok, char*, size_t) {
+		auto* handoff = *static_cast<SplashLogoHandoff* const*>(context);
+		*ok = displayManager && handoff &&
+				displayManager->getSplash()->setCustomLogo(
+						handoff->pixels, handoff->width, handoff->height);
+		if (*ok) handoff->installed = true;
+}
+
+static void splash_logo_handoff_cleanup(const void* context) {
+		auto* handoff = *static_cast<SplashLogoHandoff* const*>(context);
+		if (!handoff) return;
+		if (!handoff->installed && handoff->pixels) heap_caps_free(handoff->pixels);
+		delete handoff;
+}
+
+bool display_manager_get_splash_logo_bounds(uint16_t* width, uint16_t* height) {
+		if (!displayManager || !width || !height) return false;
+		bool did_lock = false;
+		displayManager->lockIfNeeded(did_lock);
+		const bool ok = displayManager->getSplash()->getLogoBounds(width, height);
+		displayManager->unlockIfNeeded(did_lock);
+		return ok;
+}
+
+bool display_manager_set_splash_logo(uint16_t* pixels, uint16_t width, uint16_t height) {
+		if (!pixels) return false;
+		auto* handoff = new (std::nothrow) SplashLogoHandoff{pixels, width, height, false};
+		if (!handoff) {
+				heap_caps_free(pixels);
+				return false;
+		}
+		if (!displayManager) {
+				heap_caps_free(pixels);
+				delete handoff;
+				return false;
+		}
+		if (displayManager->isInLvglTask()) {
+				const bool installed = displayManager->getSplash()->setCustomLogo(pixels, width, height);
+				if (!installed) heap_caps_free(pixels);
+				delete handoff;
+				return installed;
+		}
+
+		bool installed = false;
+		SplashLogoHandoff* context = handoff;
+		const DisplayTaskDispatchResult result = display_manager_dispatch(
+				splash_logo_install_job, splash_logo_handoff_cleanup,
+				&context, sizeof(context), 1500, &installed, nullptr, 0);
+		if (result == DISPLAY_TASK_DISPATCH_TIMEOUT) return false;
+		if (result != DISPLAY_TASK_DISPATCH_OK) {
+				splash_logo_handoff_cleanup(&context);
+				return false;
+		}
+		if (!handoff->installed) {
+				heap_caps_free(pixels);
+				delete handoff;
+				return false;
+		}
+		delete handoff;
+		return true;
+}
+#endif
 
 void display_manager_lock_if_needed(bool* did_lock) {
 		bool d = false;

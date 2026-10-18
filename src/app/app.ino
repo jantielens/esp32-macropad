@@ -21,6 +21,9 @@
 #include "wifi_manager.h"
 #include "device_class.h"
 #include "duty_cycle.h"
+#if HAS_BOOT_LOGO
+#include "boot_logo_store.h"
+#endif
 #include "dma2d_arbiter.h"
 #include "hw_buttons.h"
 #include "hw_button_config.h"
@@ -314,7 +317,7 @@ void setup()
 
 	#if HAS_DISPLAY
 	display_manager_init(&device_config);
-	display_manager_set_splash_status("Loading device...");
+	display_manager_set_splash_status("Initializing device...");
 	#endif
 
 	#if USE_SD_STORAGE
@@ -322,7 +325,7 @@ void setup()
 	// message below is visible to the user. There is no fallback storage.
 	if (storage_boot_should_halt(sd_storage_mount())) {
 		#if HAS_DISPLAY
-		display_manager_set_splash_status("SD card required. Correct or replace it, then reboot.");
+		display_manager_set_splash_status("SD card unavailable. Check or replace it, then restart.");
 		#endif
 		LOGE("SYS", "SD card required; startup cannot continue. Check the card, filesystem, wiring, and power, then reboot.");
 		while (true) {
@@ -510,6 +513,17 @@ void setup()
 	#if HAS_DISPLAY
 	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
 	pad_config_init();
+#if HAS_BOOT_LOGO
+	if (device_config.boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE) {
+		const uint32_t background = device_config.boot_appearance_background_color ==
+				CONFIG_BOOT_COLOR_INHERIT
+				? BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB
+				: device_config.boot_appearance_background_color;
+		if (!boot_logo_store_load(device_config.boot_logo_slot, background)) {
+			LOGW("BootLogo", "Custom boot logo unavailable; continuing startup");
+		}
+	}
+#endif
 
 	#if HAS_NATIVE_EXTENSIONS
 	// The extension package is optional; an absent or invalid package must not
@@ -555,20 +569,25 @@ void setup()
 	#endif
 
 	// Start WiFi BEFORE initializing web server (critical for ESP32-C3)
-	#if HAS_DISPLAY
-	display_manager_set_splash_status("Connecting WiFi...");
-	#endif
-
 		if (boot_mode == PowerMode::Ap) {
 			LOGI("Main", "AP mode selected - starting AP mode");
+			#if HAS_DISPLAY
+			display_manager_set_splash_status("Starting setup network...");
+			#endif
 			web_portal_start_ap();
 		} else if (!config_loaded) {
 			LOGI("Main", "No config - starting AP mode");
 			power_manager_set_current_mode(PowerMode::Ap);
 			power_manager_led_set_mode(PowerMode::Ap);
+			#if HAS_DISPLAY
+			display_manager_set_splash_status("Starting setup network...");
+			#endif
 			web_portal_start_ap();
 		} else {
 			LOGI("Main", "Config loaded - connecting to WiFi");
+			#if HAS_DISPLAY
+			display_manager_set_splash_status("Connecting to Wi-Fi...");
+			#endif
 			if (wifi_manager_connect(&device_config, false)) {
 				power_manager_note_wifi_success();
 				wifi_manager_start_mdns(&device_config);
@@ -581,6 +600,9 @@ void setup()
 				LOGW("Main", "WiFi failed - fallback to AP");
 				power_manager_set_current_mode(PowerMode::Ap);
 				power_manager_led_set_mode(PowerMode::Ap);
+				#if HAS_DISPLAY
+				display_manager_set_splash_status("Starting setup network...");
+				#endif
 				web_portal_start_ap();
 			}
 		}
@@ -688,7 +710,7 @@ void setup()
 	// Non-fatal: if broker is unreachable we simply move on.
 	if (mqtt_manager.enabled() && WiFi.status() == WL_CONNECTED) {
 		#if HAS_DISPLAY
-		display_manager_set_splash_status("MQTT discovery...");
+		display_manager_set_splash_status("Connecting to MQTT...");
 		#endif
 		mqtt_manager.connectAndPublishDiscoveryBlocking(8000);
 	}
@@ -698,11 +720,11 @@ void setup()
 	// Brief status flash so user can see connection result
 	if (WiFi.status() == WL_CONNECTED) {
 		char ip_msg[48];
-		snprintf(ip_msg, sizeof(ip_msg), "Connected - %s", WiFi.localIP().toString().c_str());
+		snprintf(ip_msg, sizeof(ip_msg), "Wi-Fi connected: %s", WiFi.localIP().toString().c_str());
 		display_manager_set_splash_status(ip_msg);
 	} else if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
 		char ip_msg[48];
-		snprintf(ip_msg, sizeof(ip_msg), "AP Mode - %s", WiFi.softAPIP().toString().c_str());
+		snprintf(ip_msg, sizeof(ip_msg), "Setup network: %s", WiFi.softAPIP().toString().c_str());
 		display_manager_set_splash_status(ip_msg);
 	}
 

@@ -960,6 +960,34 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define HAS_IMAGE_LIBRARY HAS_DISPLAY
 #endif
 
+// Enable an optional Storage-backed boot logo on display boards with PSRAM.
+#ifndef HAS_BOOT_LOGO
+#define HAS_BOOT_LOGO (HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM)
+#endif
+
+#if HAS_BOOT_LOGO && (!HAS_DISPLAY || !HAS_FILESYSTEM || !HAS_PSRAM)
+#error "HAS_BOOT_LOGO requires HAS_DISPLAY, HAS_FILESYSTEM, and HAS_PSRAM."
+#endif
+
+// Device-defined boot appearance defaults; boards may override these values.
+#ifndef BOOT_APPEARANCE_DEFAULT_FONT_SIZE
+#define BOOT_APPEARANCE_DEFAULT_FONT_SIZE 0
+#endif
+#ifndef BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB
+#if HAS_LVGL_EPAPER
+#define BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB 0xFFFFFF
+#else
+#define BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB 0x000000
+#endif
+#endif
+#ifndef BOOT_APPEARANCE_DEFAULT_TEXT_RGB
+#if HAS_LVGL_EPAPER
+#define BOOT_APPEARANCE_DEFAULT_TEXT_RGB 0x000000
+#else
+#define BOOT_APPEARANCE_DEFAULT_TEXT_RGB 0x646464
+#endif
+#endif
+
 // Enable onboard camera hardware support.
 #ifndef HAS_CAMERA
 #define HAS_CAMERA false

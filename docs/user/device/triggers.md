@@ -13,7 +13,7 @@ context. An action is not automatically meaningful on every host.
 
 ## Swipe actions
 
-Open **Actions > Swipe Actions**, choose one action for each direction, and
+Open **Actions > Swipes**, choose one action for each direction, and
 select **Save Swipe Actions**. Changes apply without reboot.
 The default right swipe navigates back.
 
@@ -28,9 +28,22 @@ full-screen touch control as your only navigation surface.
 
 ## Boot actions
 
-Open **Actions > Boot Actions** and configure up to three sequential actions.
-Select **Save Boot Actions**; the new list runs on the next boot, once the
-first screen has appeared. Saving does not execute the list now.
+On supported displays, **Actions > Boot Screen & Actions** also configures the boot
+screen. Choose a status font size and text/background colors, or use the
+device defaults. These appearance settings take effect on the next boot.
+
+On builds with startup-logo uploads, select a PNG or JPEG image up to 1 MiB.
+The image is validated before it is stored and is fitted into a fixed logo
+region without cropping or upscaling; transparent PNG pixels use the selected
+background color. Uploading stages the image but does not select it. Choose
+**Use built-in logo** to clear the selection, or select **Save Boot Settings**
+to save the selected logo, appearance, and up to three sequential boot actions.
+The action list runs after the first screen appears; saving does not execute it
+now. Appearance settings take effect on the next boot.
+
+The settings and action list are saved independently. If one save fails, the
+portal reports which part did not save. Select **Save Boot Settings** again to
+retry; the portal submits both settings and actions on each attempt.
 
 For an initial check, use a short notification or other harmless action.
 Avoid a boot action that immediately sleeps, restarts, or shuts down the

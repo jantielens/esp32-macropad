@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH
+#if HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH || HAS_BOOT_LOGO
 
 #include <stdint.h>
 #include <stddef.h>
@@ -59,4 +59,14 @@ bool image_decode_to_rgb565(
     ImageScaleMode scale_mode,
     uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color = 0);
 
-#endif // HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH
+#if HAS_BOOT_LOGO
+// Decode a bounded logo source to RGB565, fitting without cropping or
+// upscaling. PNG transparency is composited against background_color.
+bool image_decode_boot_logo(
+    const uint8_t* data, size_t len,
+    uint16_t max_width, uint16_t max_height, uint16_t background_color,
+    uint16_t** out_pixels, size_t* out_size,
+    uint16_t* out_width, uint16_t* out_height);
+#endif
+
+#endif // HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH || HAS_BOOT_LOGO

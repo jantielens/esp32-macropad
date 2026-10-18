@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add configurable startup-splash status font size and text/background colors,
+  plus optional PNG/JPEG logo uploads on eligible display builds. The Save
+  Boot Settings action saves appearance and logo selection with boot actions;
+  appearance changes take effect on the next boot.
 * Add the Waveshare 7.8-inch Interactive E-Paper board with an externally powered
   IT8951 e-paper HAT, FeatherS3[D] reference wiring, grayscale and black/white rendering, partial
   updates, a physical button, and three native Extension slots.

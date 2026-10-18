@@ -715,9 +715,13 @@ public:
 ### Included Screens
 
 **SplashScreen** (`splash_screen.h/cpp`)
-- Boot screen with animated spinner
-- Status text updates during initialization
-- Optimized layout for 240x240 round displays
+- Boot screen with fixed logo, status, and spinner regions; status updates do
+  not reflow the layout
+- Reads boot font and color preferences before screen creation
+- Optional custom RGB565 logo source is attached and released on the LVGL task
+  when the splash is hidden; the source is decoded before runtime image consumers
+  initialize
+- Round-display logo and text margins are handled locally by the splash screen
 
 **InfoScreen** (`info_screen.h/cpp`)
 - Device information and real-time stats
@@ -842,7 +846,8 @@ assets and loads replacements. This cap is not a glyph-memory budget.
 The snapshot comes from `default_font` and `base_text_size` in
 `/config/button_defaults.json`, activated under the display lock after storage
 initialization. Saving never changes active typography. System screens and the
-LVGL theme are initialized then; the early boot splash keeps built-in fonts.
+LVGL theme are initialized then. The earlier boot splash uses its selected
+boot font size from built-in LVGL fonts rather than uploaded device typography.
 Pad labels, widget text/annotations, dialogs, notifications, and system text
 use the resolver. Per-style metrics remain opt-in, and `font_upscale` only
 transforms actual bitmap fonts. Icons, symbol-only controls, E-Paper Frame GFX

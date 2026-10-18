@@ -1,12 +1,13 @@
 #include "image_decoder.h"
 
-#if HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH
+#if HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH || HAS_BOOT_LOGO
 
 #include "image_rgba_source.h"
 #include "log_manager.h"
 #include <esp_heap_caps.h>
 #include <string.h>
 #include <math.h>
+#include <mutex>
 
 // LVGL's built-in tjpgd (JPEG)
 #include <libs/tjpgd/tjpgd.h>
@@ -18,6 +19,10 @@
 #include <libs/lodepng/lodepng.h>
 
 #define TAG "ImgDec"
+#if HAS_BOOT_LOGO
+static constexpr uint32_t BOOT_LOGO_MAX_SOURCE_PIXELS = 1000000UL;
+#endif
+static std::mutex g_image_decoder_mutex;
 
 // ============================================================================
 // PSRAM allocation helper
@@ -662,7 +667,8 @@ static bool letterbox_scale_rgb888_to_565(
 // Same but for RGBA8888 source (4 bytes/pixel, alpha discarded)
 static bool letterbox_scale_rgba8888_to_565(
     const uint8_t* src, int src_w, int src_h, size_t src_stride,
-    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color)
+    uint16_t* dst, int dst_w, int dst_h, uint16_t letterbox_color,
+    bool composite_alpha = false)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) return false;
 
@@ -708,10 +714,32 @@ static bool letterbox_scale_rgba8888_to_565(
             float w01 = (1.0f - fx) * fy;
             float w11 = fx * fy;
 
-            uint8_t r = (uint8_t)(p00[0] * w00 + p10[0] * w10 + p01[0] * w01 + p11[0] * w11 + 0.5f);
-            uint8_t g = (uint8_t)(p00[1] * w00 + p10[1] * w10 + p01[1] * w01 + p11[1] * w11 + 0.5f);
-            uint8_t b = (uint8_t)(p00[2] * w00 + p10[2] * w10 + p01[2] * w01 + p11[2] * w11 + 0.5f);
-
+            uint8_t r;
+            uint8_t g;
+            uint8_t b;
+            if (composite_alpha) {
+                const float alpha = (p00[3] * w00 + p10[3] * w10 +
+                                     p01[3] * w01 + p11[3] * w11) / 255.0f;
+                const uint8_t bg_r = (uint8_t)(((letterbox_color >> 11) & 0x1F) * 255 / 31);
+                const uint8_t bg_g = (uint8_t)(((letterbox_color >> 5) & 0x3F) * 255 / 63);
+                const uint8_t bg_b = (uint8_t)((letterbox_color & 0x1F) * 255 / 31);
+                const float foreground_r =
+                    (p00[0] * p00[3] * w00 + p10[0] * p10[3] * w10 +
+                     p01[0] * p01[3] * w01 + p11[0] * p11[3] * w11) / 255.0f;
+                const float foreground_g =
+                    (p00[1] * p00[3] * w00 + p10[1] * p10[3] * w10 +
+                     p01[1] * p01[3] * w01 + p11[1] * p11[3] * w11) / 255.0f;
+                const float foreground_b =
+                    (p00[2] * p00[3] * w00 + p10[2] * p10[3] * w10 +
+                     p01[2] * p01[3] * w01 + p11[2] * p11[3] * w11) / 255.0f;
+                r = (uint8_t)(foreground_r + bg_r * (1.0f - alpha) + 0.5f);
+                g = (uint8_t)(foreground_g + bg_g * (1.0f - alpha) + 0.5f);
+                b = (uint8_t)(foreground_b + bg_b * (1.0f - alpha) + 0.5f);
+            } else {
+                r = (uint8_t)(p00[0] * w00 + p10[0] * w10 + p01[0] * w01 + p11[0] * w11 + 0.5f);
+                g = (uint8_t)(p00[1] * w00 + p10[1] * w10 + p01[1] * w01 + p11[1] * w11 + 0.5f);
+                b = (uint8_t)(p00[2] * w00 + p10[2] * w10 + p01[2] * w01 + p11[2] * w11 + 0.5f);
+            }
             row_out[dx] = pack_rgb565(r, g, b);
         }
 
@@ -787,7 +815,8 @@ static int jpeg_output_func(JDEC* jd, void* bitmap, JRECT* rect) {
 }
 
 static bool decode_jpeg(const uint8_t* data, size_t len,
-                        uint8_t** out_rgb888, int* out_w, int* out_h) {
+                        uint8_t** out_rgb888, int* out_w, int* out_h,
+                        uint32_t max_source_pixels) {
     static const size_t kWorkSize = 8192;
     void* work = psram_alloc(kWorkSize);
     if (!work) {
@@ -811,7 +840,8 @@ static bool decode_jpeg(const uint8_t* data, size_t len,
 
     int w = (int)jd.width;
     int h = (int)jd.height;
-    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) {
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096 ||
+        (uint64_t)w * h > max_source_pixels) {
         LOGE(TAG, "JPEG invalid dims %dx%d", w, h);
         heap_caps_free(work);
         return false;
@@ -859,7 +889,8 @@ static bool decode_jpeg(const uint8_t* data, size_t len,
 // ============================================================================
 
 static bool decode_png(const uint8_t* data, size_t len,
-                       lv_draw_buf_t** out_draw_buf, int* out_w, int* out_h) {
+                       lv_draw_buf_t** out_draw_buf, int* out_w, int* out_h,
+                       uint32_t max_source_pixels) {
     unsigned char* decoded = nullptr;
     unsigned pw = 0, ph = 0;
 
@@ -872,9 +903,9 @@ static bool decode_png(const uint8_t* data, size_t len,
         return false;
     }
     if (pw == 0 || ph == 0 || pw > 4096 || ph > 4096 ||
-        (uint64_t)pw * ph > IMAGE_LIBRARY_MAX_PNG_PIXELS) {
+        (uint64_t)pw * ph > max_source_pixels) {
         LOGE(TAG, "PNG source dimensions unsupported: %ux%u (limit %lu pixels)",
-             pw, ph, (unsigned long)IMAGE_LIBRARY_MAX_PNG_PIXELS);
+             pw, ph, (unsigned long)max_source_pixels);
         return false;
     }
 
@@ -929,7 +960,7 @@ static bool decode_png(const uint8_t* data, size_t len,
 // Public API
 // ============================================================================
 
-bool image_decode_to_rgb565(
+static bool image_decode_to_rgb565_impl(
     const uint8_t* data, size_t len,
     uint16_t target_w, uint16_t target_h,
     ImageScaleMode scale_mode,
@@ -979,7 +1010,7 @@ bool image_decode_to_rgb565(
 #endif
         uint8_t* rgb888 = nullptr;
         int src_w = 0, src_h = 0;
-        if (decode_jpeg(data, len, &rgb888, &src_w, &src_h)) {
+        if (decode_jpeg(data, len, &rgb888, &src_w, &src_h, UINT32_MAX)) {
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
                 ok = letterbox_scale_rgb888_to_565(
                     rgb888, src_w, src_h, out, target_w, target_h, letterbox_color);
@@ -991,7 +1022,7 @@ bool image_decode_to_rgb565(
     } else if (fmt == IMAGE_FORMAT_PNG) {
         lv_draw_buf_t* draw_buf = nullptr;
         int src_w = 0, src_h = 0;
-        if (decode_png(data, len, &draw_buf, &src_w, &src_h)) {
+        if (decode_png(data, len, &draw_buf, &src_w, &src_h, IMAGE_LIBRARY_MAX_PNG_PIXELS)) {
             if (scale_mode == IMAGE_SCALE_LETTERBOX) {
                 ok = letterbox_scale_rgba8888_to_565(
                     draw_buf->data, src_w, src_h, draw_buf->header.stride,
@@ -1015,4 +1046,83 @@ bool image_decode_to_rgb565(
     return true;
 }
 
-#endif // HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH
+bool image_decode_to_rgb565(
+    const uint8_t* data, size_t len,
+    uint16_t target_w, uint16_t target_h,
+    ImageScaleMode scale_mode,
+    uint16_t** out_pixels, size_t* out_size, uint16_t letterbox_color)
+{
+    std::lock_guard<std::mutex> lock(g_image_decoder_mutex);
+    return image_decode_to_rgb565_impl(data, len, target_w, target_h, scale_mode,
+                                       out_pixels, out_size, letterbox_color);
+}
+
+#if HAS_BOOT_LOGO
+bool image_decode_boot_logo(
+    const uint8_t* data, size_t len,
+    uint16_t max_width, uint16_t max_height, uint16_t background_color,
+    uint16_t** out_pixels, size_t* out_size,
+    uint16_t* out_width, uint16_t* out_height)
+{
+    if (out_pixels) *out_pixels = nullptr;
+    if (out_size) *out_size = 0;
+    if (out_width) *out_width = 0;
+    if (out_height) *out_height = 0;
+    if (!data || len < 4 || !max_width || !max_height ||
+        !out_pixels || !out_size || !out_width || !out_height) return false;
+
+    std::lock_guard<std::mutex> lock(g_image_decoder_mutex);
+    const ImageFormat format = image_detect_format(data, len);
+    int source_width = 0;
+    int source_height = 0;
+    uint8_t* rgb888 = nullptr;
+    lv_draw_buf_t* png_draw_buf = nullptr;
+    bool decoded = false;
+
+    if (format == IMAGE_FORMAT_JPEG) {
+        decoded = decode_jpeg(data, len, &rgb888, &source_width, &source_height,
+                              BOOT_LOGO_MAX_SOURCE_PIXELS);
+    } else if (format == IMAGE_FORMAT_PNG) {
+        decoded = decode_png(data, len, &png_draw_buf, &source_width, &source_height,
+                             BOOT_LOGO_MAX_SOURCE_PIXELS);
+    }
+    if (!decoded) return false;
+
+    const float scale_x = static_cast<float>(max_width) / source_width;
+    const float scale_y = static_cast<float>(max_height) / source_height;
+    const float scale = fminf(1.0f, fminf(scale_x, scale_y));
+    const uint16_t target_width = static_cast<uint16_t>(fmaxf(1.0f, floorf(source_width * scale + 0.5f)));
+    const uint16_t target_height = static_cast<uint16_t>(fmaxf(1.0f, floorf(source_height * scale + 0.5f)));
+    const size_t output_size = static_cast<size_t>(target_width) * target_height * sizeof(uint16_t);
+    uint16_t* output = static_cast<uint16_t*>(psram_alloc(output_size));
+    if (!output) {
+        LOGE(TAG, "Boot logo: OOM for %ux%u RGB565", target_width, target_height);
+        if (rgb888) heap_caps_free(rgb888);
+        if (png_draw_buf) lv_draw_buf_destroy(png_draw_buf);
+        return false;
+    }
+
+    bool ok = false;
+    if (format == IMAGE_FORMAT_JPEG) {
+        ok = letterbox_scale_rgb888_to_565(
+            rgb888, source_width, source_height, output, target_width, target_height, background_color);
+        heap_caps_free(rgb888);
+    } else {
+        ok = letterbox_scale_rgba8888_to_565(
+            png_draw_buf->data, source_width, source_height, png_draw_buf->header.stride,
+            output, target_width, target_height, background_color, true);
+        lv_draw_buf_destroy(png_draw_buf);
+    }
+    if (!ok) {
+        heap_caps_free(output);
+        return false;
+    }
+    *out_pixels = output;
+    *out_size = output_size;
+    *out_width = target_width;
+    *out_height = target_height;
+    return true;
+}
+#endif
+
+#endif // HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH || HAS_BOOT_LOGO

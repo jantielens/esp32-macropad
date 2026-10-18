@@ -1,3 +1,4 @@
+import base64
 import copy
 import importlib.util
 import json
@@ -475,6 +476,66 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/portal/nav", profile="reterminal-e1003-frame")[1]["primary"]["fragment"], "epaper-image")
         self.assertEqual(self.request("/api/section/epaper-image", profile="reterminal-e1003-frame", raw=True)[0], 200)
         self.assertEqual(self.request("/?profile=unknown", raw=True)[0], 400)
+
+    def test_boot_settings_and_logo_fixtures(self):
+        previous = copy.deepcopy(self.server.mock_config)
+        try:
+            config = self.request("/api/config")[1]
+            self.assertTrue(config["caps"]["boot_appearance"])
+            self.assertTrue(config["caps"]["boot_logo"])
+            self.assertEqual(config["boot_appearance_font_size"], 0)
+            self.assertEqual(config["boot_logo_slot"], 255)
+            fragment = self.request("/api/section/boot-actions", raw=True)[1]
+            self.assertIn('id="boot-appearance-settings"', fragment)
+            self.assertIn('id="boot-logo-settings"', fragment)
+            self.assertIn('<h5 class="mb-0">Boot Screen</h5>', fragment)
+            self.assertIn('<h5 class="mb-0">Boot Actions</h5>', fragment)
+            self.assertIn('Reset to device default', fragment)
+            self.assertIn('onclick="deleteBootLogo()"', fragment)
+            self.assertIn('baseline (non-progressive) JPEG', fragment)
+
+            self.assertEqual(self.request("/api/component/boot-actions/config")[1], {"actions": []})
+            actions = [{"type": "notify", "message": "Local mock"}]
+            self.assertEqual(self.request("/api/component/boot-actions/config", "POST",
+                                          {"actions": actions})[0], 200)
+            self.assertEqual(self.request("/api/component/boot-actions/config")[1], {"actions": actions})
+
+            png = base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p2cAAAAASUVORK5CYII=")
+            status, uploaded = self.request("/api/boot-logo/upload", "POST", png)
+            self.assertEqual(status, 200)
+            self.assertEqual(uploaded, {"success": True, "slot": 0})
+            logo_status = self.request("/api/boot-logo")[1]
+            self.assertEqual(logo_status["active_slot"], 255)
+            self.assertTrue(logo_status["slot0_available"])
+            with urlopen(self.base + "/api/boot-logo/thumbnail?slot=0", timeout=5) as response:
+                self.assertEqual(response.headers["Content-Type"], "image/png")
+                self.assertEqual(response.read(), png)
+
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                          {"boot_logo_slot": 0})[0], 200)
+            self.assertEqual(self.request("/api/boot-logo")[1]["active_slot"], 0)
+            status, second_upload = self.request("/api/boot-logo/upload", "POST", png)
+            self.assertEqual(status, 200)
+            self.assertEqual(second_upload, {"success": True, "slot": 1})
+            invalid_status, invalid_upload = self.request("/api/boot-logo/upload", "POST", b"not an image")
+            self.assertEqual(invalid_status, 400)
+            self.assertIn("baseline (non-progressive) JPEG", invalid_upload["message"])
+            self.assertEqual(self.request("/api/boot-logo", "DELETE")[0], 409)
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                          {"boot_logo_slot": 255})[0], 200)
+            self.assertEqual(self.request("/api/boot-logo", "DELETE"), (200, {"success": True}))
+            deleted_status = self.request("/api/boot-logo")[1]
+            self.assertEqual(deleted_status["active_slot"], 255)
+            self.assertFalse(deleted_status["slot0_available"])
+            self.assertFalse(deleted_status["slot1_available"])
+            self.assertEqual(self.request("/api/boot-logo/thumbnail?slot=0")[0], 404)
+            headless = self.request("/api/config", profile="reterminal-e1003-frame")[1]
+            self.assertFalse(headless["caps"]["boot_appearance"])
+            self.assertFalse(headless["caps"]["boot_logo"])
+            self.assertEqual(self.request("/api/boot-logo", profile="reterminal-e1003-frame")[0], 404)
+        finally:
+            self.server.mock_config = previous
 
     def test_layouts_and_template(self):
         for pad in self.server.mock_pads.values():

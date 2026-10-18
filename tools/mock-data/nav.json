@@ -36,8 +36,8 @@
       "display_name": "Actions",
       "icon": "⚡",
       "items": [
-        { "id": "swipe-actions", "display_name": "Swipe Actions" },
-        { "id": "boot-actions", "display_name": "Boot Actions" },
+        { "id": "swipe-actions", "display_name": "Swipes" },
+        { "id": "boot-actions", "display_name": "Boot Screen & Actions" },
         { "id": "timers", "display_name": "Timers" }
       ]
     },

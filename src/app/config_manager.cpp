@@ -54,6 +54,14 @@
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
 #define KEY_DISPLAY_ROTATION "disp_rot"
+#if HAS_DISPLAY
+#define KEY_BOOT_APPEARANCE_FONT "boot_font"
+#define KEY_BOOT_APPEARANCE_TEXT "boot_text"
+#define KEY_BOOT_APPEARANCE_BG "boot_bg"
+#if HAS_BOOT_LOGO
+#define KEY_BOOT_LOGO_SLOT "boot_logo"
+#endif
+#endif
 #if HAS_CAMERA
 #define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
 #define KEY_CAMERA_FEED_TARGET_FPS "cam_fps"
@@ -302,6 +310,15 @@ bool config_manager_load(DeviceConfig *config) {
 		config->ble_tx_power_dbm = CONFIG_DEFAULT_BLE_TX_POWER_DBM;
 		#endif
 
+#if HAS_DISPLAY
+		config->boot_appearance_font_size = BOOT_APPEARANCE_DEFAULT_FONT_SIZE;
+		config->boot_appearance_text_color = CONFIG_BOOT_COLOR_INHERIT;
+		config->boot_appearance_background_color = CONFIG_BOOT_COLOR_INHERIT;
+#if HAS_BOOT_LOGO
+		config->boot_logo_slot = CONFIG_BOOT_LOGO_SLOT_NONE;
+#endif
+#endif
+
 		#if HAS_BLE_HID || HAS_USB_HID
 		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
 		#endif
@@ -463,6 +480,32 @@ bool config_manager_load(DeviceConfig *config) {
 		config->backlight_brightness = preferences.getUChar(KEY_BACKLIGHT_BRIGHTNESS, 100);
 		config->display_rotation = preferences.getUChar(KEY_DISPLAY_ROTATION, 0);
 		if (config->display_rotation > 3) config->display_rotation = 0;
+#if HAS_DISPLAY
+		config->boot_appearance_font_size = preferences.getUChar(
+				KEY_BOOT_APPEARANCE_FONT, BOOT_APPEARANCE_DEFAULT_FONT_SIZE);
+		switch (config->boot_appearance_font_size) {
+				case 0: case 12: case 14: case 18: case 24: case 32: case 36: break;
+				default: config->boot_appearance_font_size = BOOT_APPEARANCE_DEFAULT_FONT_SIZE; break;
+		}
+		config->boot_appearance_text_color = preferences.getUInt(
+				KEY_BOOT_APPEARANCE_TEXT, CONFIG_BOOT_COLOR_INHERIT);
+		if (config->boot_appearance_text_color != CONFIG_BOOT_COLOR_INHERIT &&
+				config->boot_appearance_text_color > 0xFFFFFFUL) {
+				config->boot_appearance_text_color = CONFIG_BOOT_COLOR_INHERIT;
+		}
+		config->boot_appearance_background_color = preferences.getUInt(
+				KEY_BOOT_APPEARANCE_BG, CONFIG_BOOT_COLOR_INHERIT);
+		if (config->boot_appearance_background_color != CONFIG_BOOT_COLOR_INHERIT &&
+				config->boot_appearance_background_color > 0xFFFFFFUL) {
+				config->boot_appearance_background_color = CONFIG_BOOT_COLOR_INHERIT;
+		}
+#if HAS_BOOT_LOGO
+		config->boot_logo_slot = preferences.getUChar(KEY_BOOT_LOGO_SLOT, CONFIG_BOOT_LOGO_SLOT_NONE);
+		if (config->boot_logo_slot > 1 && config->boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE) {
+				config->boot_logo_slot = CONFIG_BOOT_LOGO_SLOT_NONE;
+		}
+#endif
+#endif
 		LOGT("Config", "Loaded brightness: %d%%", config->backlight_brightness);
 		LOGT("Config", "Display rotation offset: %u quarter turns", config->display_rotation);
 
@@ -627,7 +670,10 @@ bool config_manager_save(const DeviceConfig *config) {
 		Serial.flush();
 		delay(1);
 		
-		preferences.begin(CONFIG_NAMESPACE, false); // Read-write mode
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
+				LOGE("Config", "Save failed: could not open NVS namespace");
+				return false;
+		}
 #if HAS_DISPLAY
 		{
 				BasicJsonDocument<PsramJsonAllocator> dialog_doc(4096);
@@ -685,6 +731,29 @@ bool config_manager_save(const DeviceConfig *config) {
 		LOGI("Config", "Saving brightness: %d%%", config->backlight_brightness);
 		preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness);
 		preferences.putUChar(KEY_DISPLAY_ROTATION, config->display_rotation);
+#if HAS_DISPLAY
+		const bool boot_font_saved = preferences.putUChar(
+				KEY_BOOT_APPEARANCE_FONT, config->boot_appearance_font_size) == sizeof(uint8_t);
+		const bool boot_text_saved = preferences.putUInt(
+				KEY_BOOT_APPEARANCE_TEXT, config->boot_appearance_text_color) == sizeof(uint32_t);
+		const bool boot_background_saved = preferences.putUInt(
+				KEY_BOOT_APPEARANCE_BG, config->boot_appearance_background_color) == sizeof(uint32_t);
+		if (!boot_font_saved) LOGE("Config", "Failed to persist boot appearance font size");
+		if (!boot_text_saved) LOGE("Config", "Failed to persist boot appearance text color");
+		if (!boot_background_saved) LOGE("Config", "Failed to persist boot appearance background color");
+#if HAS_BOOT_LOGO
+		const bool boot_logo_saved = preferences.putUChar(
+				KEY_BOOT_LOGO_SLOT, config->boot_logo_slot) == sizeof(uint8_t);
+		if (!boot_logo_saved) LOGE("Config", "Failed to persist boot logo selection");
+#else
+		const bool boot_logo_saved = true;
+#endif
+#else
+		const bool boot_font_saved = true;
+		const bool boot_text_saved = true;
+		const bool boot_background_saved = true;
+		const bool boot_logo_saved = true;
+#endif
 
 		// Save Basic Auth settings
 		preferences.putBool(KEY_BASIC_AUTH_ENABLED, config->basic_auth_enabled);
@@ -761,7 +830,11 @@ bool config_manager_save(const DeviceConfig *config) {
 		const char* timezone = config->timezone[0] ? config->timezone : "UTC0";
 		const bool timezone_saved = preferences.putString(KEY_TIMEZONE, timezone) == strlen(timezone);
 		preferences.end();
-		if (!timezone_saved) return false;
+		if (!timezone_saved || !boot_font_saved || !boot_text_saved ||
+				!boot_background_saved || !boot_logo_saved) {
+				LOGE("Config", "Save failed: one or more configuration fields were not persisted");
+				return false;
+		}
 		time_service_set_timezone(timezone);
 		#if HAS_DISPLAY
 		device_dialog_set_templates(config->dialog_appearance);
@@ -931,6 +1004,20 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 				if (strlen(config->basic_auth_username) == 0) return false;
 				if (strlen(config->basic_auth_password) == 0) return false;
 		}
+#if HAS_DISPLAY
+		switch (config->boot_appearance_font_size) {
+				case 0: case 12: case 14: case 18: case 24: case 32: case 36: break;
+				default: return false;
+		}
+		if ((config->boot_appearance_text_color != CONFIG_BOOT_COLOR_INHERIT &&
+				 config->boot_appearance_text_color > 0xFFFFFFUL) ||
+				(config->boot_appearance_background_color != CONFIG_BOOT_COLOR_INHERIT &&
+				 config->boot_appearance_background_color > 0xFFFFFFUL)) return false;
+#if HAS_BOOT_LOGO
+		if (config->boot_logo_slot > 1 &&
+				config->boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE) return false;
+#endif
+#endif
 			#if HAS_LVGL_EPAPER
 			if (!config_manager_validate_epaper_refresh_settings(epaper_refresh_from_config(config))) return false;
 			#endif
@@ -944,6 +1031,14 @@ void config_manager_print(const DeviceConfig *config) {
 		LOGI("Config", "Loaded: device='%s' power=%s brightness=%u%% sleep=%us",
 		     config->device_name, config->operating_mode, unsigned(config->backlight_brightness),
 		     unsigned(config->screen_saver_timeout_seconds));
+				LOGI("Config", "Boot appearance: font=%u logo_slot=%u",
+				     unsigned(config->boot_appearance_font_size),
+		#if HAS_BOOT_LOGO
+				     unsigned(config->boot_logo_slot)
+		#else
+				     unsigned(CONFIG_BOOT_LOGO_SLOT_NONE)
+		#endif
+				);
 		#else
 		LOGI("Config", "Loaded: device='%s' power=%s", config->device_name, config->operating_mode);
 		#endif

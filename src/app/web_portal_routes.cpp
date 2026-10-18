@@ -11,6 +11,9 @@
 #include "web_portal_pages.h"
 #include "web_portal_recipes.h"
 #include "web_portal_logs.h"
+#if HAS_BOOT_LOGO
+#include "web_portal_boot_logo.h"
+#endif
 
 #include "board_config.h"
 
@@ -103,6 +106,11 @@ static const char* const core_preflight_paths[] = {
 	"/api/sounds/list",
 	"/api/sounds",
 	"/api/sounds/play",
+#endif
+#if HAS_BOOT_LOGO
+	"/api/boot-logo",
+	"/api/boot-logo/thumbnail",
+	"/api/boot-logo/upload",
 #endif
 };
 
@@ -325,6 +333,14 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/sounds", HTTP_DELETE, handleDeleteSound);
 
 		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
+#endif
+
+#if HAS_BOOT_LOGO
+		server->on("/api/boot-logo/thumbnail", HTTP_GET, handleGetBootLogoThumbnail);
+		server->on("/api/boot-logo", HTTP_GET, handleGetBootLogo);
+		server->on("/api/boot-logo", HTTP_DELETE, handleDeleteBootLogo);
+		server->on("/api/boot-logo/upload", HTTP_POST,
+				handlePostBootLogoUploadComplete, nullptr, handlePostBootLogoUpload);
 #endif
 
 		// Feature- and device-class route initializers self-registered via

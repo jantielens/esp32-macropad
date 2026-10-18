@@ -471,6 +471,22 @@ void DisplayManager::init() {
 #endif
 		
 		// Create all screens
+#if HAS_DISPLAY
+		const uint32_t boot_text = config &&
+				config->boot_appearance_text_color != CONFIG_BOOT_COLOR_INHERIT
+				? config->boot_appearance_text_color : BOOT_APPEARANCE_DEFAULT_TEXT_RGB;
+		const uint32_t boot_background = config &&
+				config->boot_appearance_background_color != CONFIG_BOOT_COLOR_INHERIT
+				? config->boot_appearance_background_color : BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB;
+		bool custom_logo_selected = false;
+#if HAS_BOOT_LOGO
+		custom_logo_selected = config &&
+				config->boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE;
+#endif
+		splashScreen.setAppearance(
+				config ? config->boot_appearance_font_size : BOOT_APPEARANCE_DEFAULT_FONT_SIZE,
+				boot_text, boot_background, custom_logo_selected);
+#endif
 		splashScreen.create();
 		for (uint8_t i = 0; i < MAX_PADS; i++) {
 				padScreens[i]->create();

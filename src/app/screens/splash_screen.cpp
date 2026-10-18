@@ -1,124 +1,168 @@
-
 #include "screens/splash_screen.h"
+
+#include "board_config.h"
 #include "log_manager.h"
 #include "png_assets.h"
-#include "board_config.h"
-#include "display_geometry.h"
 
-// Scale layout and widget sizes based on screen resolution.
-// Returns a scale tier: 0 = small (≤360), 1 = medium (≤480), 2 = large (≥720).
+#include <esp_heap_caps.h>
+#include <math.h>
+#include <string.h>
+
 static int getScaleTier(int screen_w) {
-		if (screen_w >= 600) return 2;  // 720×720, 480×800
-		if (screen_w >= 420) return 1;  // 480×480
-		return 0;                        // 320×480, 360×360
+		if (screen_w >= 600) return 2;
+		if (screen_w >= 420) return 1;
+		return 0;
 }
 
-static void layoutSplashBlock(lv_obj_t* screen, lv_obj_t* logoImg, lv_obj_t* statusLabel, lv_obj_t* spinner) {
-		if (!screen || !logoImg || !statusLabel || !spinner) return;
+static void getSplashLogoBounds(int screen_w, int screen_h, uint16_t* width, uint16_t* height) {
+		if (!width || !height || screen_w <= 0 || screen_h <= 0) return;
+		int max_w = screen_w - 24;
+		int max_h = screen_h / 2 - 24;
+#if DISPLAY_SHAPE == DISPLAY_SHAPE_ROUND
+		const int diameter = screen_w < screen_h ? screen_w : screen_h;
+		max_w = diameter * 70 / 100;
+		max_h = diameter * 38 / 100;
+#endif
+		if (max_w < 1) max_w = 1;
+		if (max_h < 1) max_h = 1;
+		*width = static_cast<uint16_t>(max_w);
+		*height = static_cast<uint16_t>(max_h);
+}
 
-		// Ensure LVGL has calculated object sizes before we query heights
-		lv_obj_update_layout(screen);
-		lv_obj_update_layout(logoImg);
-		lv_obj_update_layout(statusLabel);
-		lv_obj_update_layout(spinner);
-
-		const int tier = getScaleTier((int)lv_obj_get_width(screen));
-		const int top_margin          = (tier == 2) ? 24 : (tier == 1) ? 16 : 12;
-		const int gap_logo_to_status  = (tier == 2) ? 24 : (tier == 1) ? 18 : 14;
-		const int gap_status_to_spinner = (tier == 2) ? 28 : (tier == 1) ? 20 : 16;
-
-		const int screen_h = (int)lv_obj_get_height(screen);
-		const int logo_h = (int)lv_obj_get_height(logoImg);
-		const int label_h = (int)lv_obj_get_height(statusLabel);
-		const int spinner_h = (int)lv_obj_get_height(spinner);
-
-		const int block_h = logo_h + gap_logo_to_status + label_h + gap_status_to_spinner + spinner_h;
-
-		int top = (screen_h - block_h) / 2;
-		if (block_h + top_margin * 2 > screen_h) {
-				top = top_margin;
+static const lv_font_t* splashFont(uint8_t size, int screen_w) {
+		if (size == 0) {
+				const int tier = getScaleTier(screen_w);
+				size = tier == 2 ? 24 : tier == 1 ? 18 : 14;
 		}
-		if (top < 0) top = 0;
-
-		lv_obj_align(logoImg, LV_ALIGN_TOP_MID, 0, top);
-		lv_obj_align_to(statusLabel, logoImg, LV_ALIGN_OUT_BOTTOM_MID, 0, gap_logo_to_status);
-		lv_obj_align_to(spinner, statusLabel, LV_ALIGN_OUT_BOTTOM_MID, 0, gap_status_to_spinner);
+		switch (size) {
+				case 12: return &lv_font_montserrat_12;
+				case 14: return &lv_font_montserrat_14;
+				case 18: return &lv_font_montserrat_18;
+				case 24: return &lv_font_montserrat_24;
+				case 32: return &lv_font_montserrat_32;
+				case 36: return &lv_font_montserrat_36;
+				default: return LV_FONT_DEFAULT;
+		}
 }
 
-SplashScreen::SplashScreen() : screen(nullptr), logoImg(nullptr), statusLabel(nullptr), spinner(nullptr) {}
+SplashScreen::SplashScreen()
+		: screen(nullptr), logoImg(nullptr), statusLabel(nullptr), spinner(nullptr),
+		  customLogoDescriptor{}, customLogoPixels(nullptr),
+		  fontSize(BOOT_APPEARANCE_DEFAULT_FONT_SIZE),
+		  textColor(BOOT_APPEARANCE_DEFAULT_TEXT_RGB),
+		  backgroundColor(BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB),
+		  customLogoSelected(false) {}
 
 SplashScreen::~SplashScreen() {
 		destroy();
 }
 
+void SplashScreen::setAppearance(uint8_t font_size, uint32_t text_color,
+		uint32_t background_color, bool custom_logo_selected) {
+		fontSize = font_size;
+		textColor = text_color;
+		backgroundColor = background_color;
+		customLogoSelected = custom_logo_selected;
+}
+
+bool SplashScreen::getLogoBounds(uint16_t* width, uint16_t* height) const {
+		if (!screen || !width || !height) return false;
+		getSplashLogoBounds(lv_obj_get_width(screen), lv_obj_get_height(screen), width, height);
+		return *width > 0 && *height > 0;
+}
+
+bool SplashScreen::setCustomLogo(uint16_t* pixels, uint16_t width, uint16_t height) {
+		if (!pixels || !width || !height || !logoImg || !screen) return false;
+
+		releaseCustomLogo();
+		memset(&customLogoDescriptor, 0, sizeof(customLogoDescriptor));
+		customLogoDescriptor.header.magic = LV_IMAGE_HEADER_MAGIC;
+		customLogoDescriptor.header.cf = LV_COLOR_FORMAT_RGB565;
+		customLogoDescriptor.header.w = width;
+		customLogoDescriptor.header.h = height;
+		customLogoDescriptor.header.stride = width * sizeof(uint16_t);
+		customLogoDescriptor.data_size = static_cast<uint32_t>(width) * height * sizeof(uint16_t);
+		customLogoDescriptor.data = reinterpret_cast<const uint8_t*>(pixels);
+		customLogoPixels = pixels;
+		lv_image_set_src(logoImg, &customLogoDescriptor);
+		lv_image_set_scale(logoImg, 256);
+		lv_obj_align(logoImg, LV_ALIGN_CENTER, 0, -lv_obj_get_height(screen) / 4);
+		return true;
+}
+
+void SplashScreen::releaseCustomLogo() {
+		if (customLogoPixels) {
+				if (logoImg) 				lv_image_set_src(logoImg, nullptr);
+				heap_caps_free(customLogoPixels);
+				customLogoPixels = nullptr;
+				memset(&customLogoDescriptor, 0, sizeof(customLogoDescriptor));
+		}
+}
+
 void SplashScreen::create() {
 		LOGI("Splash", "Create start");
-		if (screen) {
-				LOGI("Splash", "Already created");
-				return;  // Already created
+		if (screen) return;
+
+		screen = lv_obj_create(nullptr);
+		lv_obj_set_style_bg_color(screen, lv_color_hex(backgroundColor), 0);
+		lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+
+		const int screen_w = lv_obj_get_width(screen);
+		const int screen_h = lv_obj_get_height(screen);
+		const int tier = getScaleTier(screen_w);
+		uint16_t logo_max_w = 0;
+		uint16_t logo_max_h = 0;
+		getSplashLogoBounds(screen_w, screen_h, &logo_max_w, &logo_max_h);
+
+		logoImg = lv_image_create(screen);
+		if (!customLogoSelected) {
+				lv_image_set_src(logoImg, &img_logo);
+				const int source_w = img_logo.header.w;
+				const int source_h = img_logo.header.h;
+				if (source_w > 0 && source_h > 0) {
+						const float scale = fminf(
+								1.0f,
+								fminf(static_cast<float>(logo_max_w) / source_w,
+									  static_cast<float>(logo_max_h) / source_h));
+						lv_image_set_scale(logoImg, static_cast<uint16_t>(scale * 256.0f));
+				}
+		} else {
+				lv_image_set_src(logoImg, nullptr);
 		}
-		
-		// Create screen
-		screen = lv_obj_create(NULL);
-		#if HAS_LVGL_EPAPER
-		lv_obj_set_style_bg_color(screen, lv_color_white(), 0);
-		#else
-		lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
-		#endif
+		lv_obj_align(logoImg, LV_ALIGN_CENTER, 0, -screen_h / 4);
 
-		// Scale tier based on display resolution
-		const int tier = getScaleTier((int)lv_obj_get_width(screen));
-
-		// Logo image
-	logoImg = lv_image_create(screen);
-	lv_image_set_src(logoImg, &img_logo);
-
-		// Status text — scale font to display resolution
 		statusLabel = lv_label_create(screen);
-		lv_label_set_text(statusLabel, "Booting...");
-		lv_label_set_long_mode(statusLabel, LV_LABEL_LONG_WRAP);
-		const DisplayContentRect content = display_safe_content_rect(
-			lv_obj_get_width(screen), lv_obj_get_height(screen));
-		lv_obj_set_width(statusLabel, (lv_coord_t)(content.w - 24));
-		lv_obj_set_style_max_height(statusLabel, content.h / 3, 0);
+		lv_label_set_text(statusLabel, "Starting...");
 		lv_label_set_long_mode(statusLabel, LV_LABEL_LONG_DOT);
+#if DISPLAY_SHAPE == DISPLAY_SHAPE_ROUND
+		const int label_width = (screen_w < screen_h ? screen_w : screen_h) * 68 / 100;
+#else
+		const int label_width = screen_w - 32;
+#endif
+		lv_obj_set_width(statusLabel, label_width > 0 ? label_width : 1);
+		lv_obj_set_height(statusLabel, screen_h / 5);
+		lv_obj_set_style_text_font(statusLabel, splashFont(fontSize, screen_w), 0);
+		lv_obj_set_style_text_color(statusLabel, lv_color_hex(textColor), 0);
 		lv_obj_set_style_text_align(statusLabel, LV_TEXT_ALIGN_CENTER, 0);
-		#if HAS_LVGL_EPAPER
-		lv_obj_set_style_text_color(statusLabel, lv_color_black(), 0);
-		#else
-		lv_obj_set_style_text_color(statusLabel, lv_color_make(100, 100, 100), 0);
-		#endif
-		if (tier == 2) {
-				lv_obj_set_style_text_font(statusLabel, &lv_font_montserrat_24, 0);
-		} else if (tier == 1) {
-				lv_obj_set_style_text_font(statusLabel, &lv_font_montserrat_18, 0);
-		}
-		// tier 0: keep LVGL default (montserrat 14)
+		lv_obj_align(statusLabel, LV_ALIGN_TOP_MID, 0, screen_h * 57 / 100);
 
-		// Spinner — scale size and arc width; use 270° sweep for smooth LVGL 9 animation
-		const int spinner_sz  = (tier == 2) ? 60 : (tier == 1) ? 50 : 40;
-		const int arc_w       = (tier == 2) ? 6  : (tier == 1) ? 5  : 4;
+		const int spinner_size = tier == 2 ? 60 : tier == 1 ? 50 : 40;
+		const int arc_width = tier == 2 ? 6 : tier == 1 ? 5 : 4;
+		spinner = lv_spinner_create(screen);
+		lv_spinner_set_anim_params(spinner, 1000, 270);
+		lv_obj_set_size(spinner, spinner_size, spinner_size);
+		lv_obj_set_style_arc_color(spinner, lv_color_hex(textColor), LV_PART_INDICATOR);
+		lv_obj_set_style_arc_color(spinner,
+				lv_color_mix(lv_color_hex(textColor), lv_color_hex(backgroundColor), 48), LV_PART_MAIN);
+		lv_obj_set_style_arc_width(spinner, arc_width, LV_PART_INDICATOR);
+		lv_obj_set_style_arc_width(spinner, arc_width, LV_PART_MAIN);
+		lv_obj_align(spinner, LV_ALIGN_TOP_MID, 0, screen_h * 88 / 100 - spinner_size / 2);
 
-	spinner = lv_spinner_create(screen);
-	lv_spinner_set_anim_params(spinner, 1000, 270);
-		lv_obj_set_size(spinner, spinner_sz, spinner_sz);
-		#if HAS_LVGL_EPAPER
-		lv_obj_set_style_arc_color(spinner, lv_color_black(), LV_PART_INDICATOR);
-		lv_obj_set_style_arc_color(spinner, lv_color_make(200, 200, 200), LV_PART_MAIN);
-		#else
-		lv_obj_set_style_arc_color(spinner, lv_color_make(0, 150, 255), LV_PART_INDICATOR);
-		lv_obj_set_style_arc_color(spinner, lv_color_make(40, 40, 40), LV_PART_MAIN);
-		#endif
-		lv_obj_set_style_arc_width(spinner, arc_w, LV_PART_INDICATOR);
-		lv_obj_set_style_arc_width(spinner, arc_w, LV_PART_MAIN);
-
-		// Position the whole block.
-		layoutSplashBlock(screen, logoImg, statusLabel, spinner);
-		
 		LOGI("Splash", "Screen created");
 }
 
 void SplashScreen::destroy() {
+		releaseCustomLogo();
 		if (screen) {
 				lv_obj_delete(screen);
 				screen = nullptr;
@@ -129,26 +173,20 @@ void SplashScreen::destroy() {
 }
 
 void SplashScreen::show() {
-		if (screen) {
-				lv_screen_load(screen);
-		}
+		if (screen) lv_screen_load(screen);
 }
 
 void SplashScreen::hide() {
-		// Nothing to do - LVGL handles screen switching
+		releaseCustomLogo();
 }
 
 void SplashScreen::update() {
-		// Static screen - no updates needed
 }
 
 void SplashScreen::setStatus(const char* text) {
 		if (statusLabel) {
 				LOGI("Splash", "Status: %s", text ? text : "(null)");
-				lv_label_set_text(statusLabel, text);
-
-				// Re-layout in case the text height changed (wrapping, font changes, etc.)
-				layoutSplashBlock(screen, logoImg, statusLabel, spinner);
+				lv_label_set_text(statusLabel, text ? text : "");
 		} else {
 				LOGE("Splash", "statusLabel is NULL");
 		}

@@ -57,6 +57,7 @@ FEATURES = {
     ),
     "Monochrome fonts (HAS_FREETYPE_FONTS)": (("freetype_mono_font.cpp.o", "automono_*.c.o"), ()),
     "Image decoding / encoding": (("image_decoder.cpp.o", "jpeg_encoder_service.cpp.o"), ()),
+    "Boot logo (HAS_BOOT_LOGO)": (("boot_logo_store.cpp.o", "web_portal_boot_logo.cpp.o"), ()),
     "Image fetch (HAS_IMAGE_FETCH)": (("image_fetch.cpp.o",), ()),
     "Image library (HAS_IMAGE_LIBRARY)": (
         ("image_library*.cpp.o", "local_image_loader.cpp.o"),

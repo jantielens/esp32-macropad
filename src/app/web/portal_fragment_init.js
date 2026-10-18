@@ -780,7 +780,8 @@ window.init_swipe_actions_fragment = async function () {
 
 window.init_boot_actions_fragment = async function () {
     if (typeof bootActionsInitEditors === 'function') await bootActionsInitEditors();
-    if (typeof loadBootActions === 'function') loadBootActions();
+    if (typeof loadBootActions === 'function') await loadBootActions();
+    if (typeof bootAppearanceInit === 'function') await bootAppearanceInit();
     actionEditorWireFragment(BOOT_ACTION_PREFIXES);
 };
 

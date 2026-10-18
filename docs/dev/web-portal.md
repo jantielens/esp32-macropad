@@ -2139,6 +2139,16 @@ fixed dropdown.
 
 Returns current device configuration (passwords excluded).
 
+Display builds also return `boot_appearance_font_size`,
+`boot_appearance_text_color`, and `boot_appearance_background_color`.
+`CONFIG_BOOT_COLOR_INHERIT` is represented as `4294967295`; read-only
+`boot_appearance_default_text_color` and
+`boot_appearance_default_background_color` provide the device defaults.
+`caps.boot_appearance` reports whether display appearance controls are
+available. With `HAS_BOOT_LOGO`, the response additionally includes
+`boot_logo_slot` (`0`, `1`, or `255` for the built-in logo) and
+`caps.boot_logo`.
+
 The `timezone` field defaults to `UTC0`. `POST /api/config?no_reboot=1` accepts
 supported Olson names or validated POSIX TZ rules, including explicit transition
 rules for DST. Successful changes apply live and dismiss/rearm an active alarm;
@@ -2548,6 +2558,13 @@ Save new configuration. Device reboots after successful save.
 
 **Notes:**
 - Only fields present in request are updated
+- On display builds, `boot_appearance_font_size` accepts `0` (device default)
+  or one of `12`, `14`, `18`, `24`, `32`, and `36`. Text and background colors
+  accept an RGB integer from `0` through `0xFFFFFF`, or `4294967295` to use the
+  device default. With `HAS_BOOT_LOGO`, `boot_logo_slot` accepts `0` or `1` to
+  select a validated uploaded logo, or `255` to use the built-in logo. These
+  settings are applied at startup; use `?no_reboot=1` to save without
+  restarting.
 - `audio_idle_mute` defaults to true and keeps the amplifier quiet between
   sounds. False keeps it enabled for lower feedback latency, but idle hiss may
   return. `audio_wake_delay_ms` accepts an integer or integer string from 0 to
@@ -3248,6 +3265,33 @@ Save boot action configuration to LittleFS.
 - **Body:** JSON object with an `actions` array of `ButtonAction` objects. Trailing empty actions are trimmed by the web UI.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - Changes take effect on next boot.
+
+### Startup Appearance and Logo API
+
+Display builds expose the boot appearance fields above through `/api/config`.
+`HAS_BOOT_LOGO` builds additionally expose these endpoints, subject to the
+portal's Basic Auth policy:
+
+#### `GET /api/boot-logo`
+
+Returns the selected slot and availability of both managed logo slots:
+`{"active_slot":255,"slot0_available":false,"slot1_available":false}`.
+
+#### `GET /api/boot-logo/thumbnail?slot=0|1`
+
+Streams the stored PNG or JPEG source for the requested slot, or returns `404`
+if the slot is unavailable. The portal constrains this image to a small preview.
+
+#### `POST /api/boot-logo/upload`
+
+Accepts a raw PNG or JPEG request body up to 1 MiB. The firmware validates the
+format and decodability, then stores the image in the inactive slot. The
+response contains the staged `slot`; uploading does not change the active
+selection. Select that slot by posting it as `boot_logo_slot` to `/api/config`.
+Invalid images return `400`, oversized images return `413`, and storage,
+configuration, or concurrent-operation failures return an explicit error.
+Uploads are rejected while OTA is active. Factory reset removes managed logo
+files from SD storage and formats them with the LittleFS partition.
 
 ---
 

@@ -34,6 +34,7 @@
 #include <WiFi.h>
 
 #include <esp_heap_caps.h>
+#include <errno.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -54,6 +55,44 @@ static uint32_t parseUintField(const JsonVariantConst& field, uint32_t default_v
 				return v ? (uint32_t)strtoul(v, nullptr, 10) : default_value;
 		}
 		return (uint32_t)(field | default_value);
+}
+
+static bool parseStrictUintField(const JsonVariantConst& field, uint32_t* value) {
+		if (!value) return false;
+		if (field.is<uint32_t>()) {
+				*value = field.as<uint32_t>();
+				return true;
+		}
+		if (!field.is<const char*>()) return false;
+		const char* text = field.as<const char*>();
+		if (!text || !*text || strspn(text, "0123456789") != strlen(text)) return false;
+		char* end = nullptr;
+		errno = 0;
+		const unsigned long long parsed = strtoull(text, &end, 10);
+		if (errno == ERANGE || !end || *end || parsed > UINT32_MAX) return false;
+		*value = static_cast<uint32_t>(parsed);
+		return true;
+}
+
+static bool valid_boot_font_size(uint32_t size) {
+		return size == 0 || size == 12 || size == 14 || size == 18 ||
+				size == 24 || size == 32 || size == 36;
+}
+
+static bool parse_boot_color(const JsonVariantConst& field, uint32_t* value) {
+		if (!value) return false;
+		if (field.is<const char*>()) {
+				const char* text = field.as<const char*>();
+				if (text && strcmp(text, "default") == 0) {
+						*value = CONFIG_BOOT_COLOR_INHERIT;
+						return true;
+				}
+		}
+		uint32_t parsed = 0;
+		if (!parseStrictUintField(field, &parsed) ||
+				(parsed != CONFIG_BOOT_COLOR_INHERIT && parsed > 0xFFFFFFUL)) return false;
+		*value = parsed;
+		return true;
 }
 
 static bool is_idle_pad_id(const char* id) {
@@ -167,6 +206,8 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["usb_hid"] = (bool)HAS_USB_HID;
 				caps["mcp"] = (bool)HAS_MCP;
 				caps["ha_history"] = (bool)HAS_HA_HISTORY;
+				caps["boot_appearance"] = (bool)HAS_DISPLAY;
+				caps["boot_logo"] = (bool)HAS_BOOT_LOGO;
 #if HAS_TTF_FONTS
 				caps["ttf_fonts"] = font_store_available();
 #else
@@ -194,6 +235,14 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
 				#if HAS_DISPLAY
 				(*doc)["display_rotation"] = current_config->display_rotation;
+				(*doc)["boot_appearance_font_size"] = current_config->boot_appearance_font_size;
+				(*doc)["boot_appearance_text_color"] = current_config->boot_appearance_text_color;
+				(*doc)["boot_appearance_background_color"] = current_config->boot_appearance_background_color;
+				(*doc)["boot_appearance_default_text_color"] = BOOT_APPEARANCE_DEFAULT_TEXT_RGB;
+				(*doc)["boot_appearance_default_background_color"] = BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB;
+				#if HAS_BOOT_LOGO
+				(*doc)["boot_logo_slot"] = current_config->boot_logo_slot;
+				#endif
 				#endif
 				(*doc)["backlight_brightness_min"] = MIN_USER_BRIGHTNESS;
 							(*doc)["screen_saver_backlight_only"] = SCREENSAVER_BACKLIGHT_ONLY;
@@ -381,6 +430,48 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				portEXIT_CRITICAL(&g_config_post_mux);
 				return;
 		}
+
+		#if HAS_DISPLAY
+		const uint8_t previous_boot_font_size = current_config->boot_appearance_font_size;
+		const uint32_t previous_boot_text_color = current_config->boot_appearance_text_color;
+		const uint32_t previous_boot_background_color = current_config->boot_appearance_background_color;
+		uint8_t boot_font_size = previous_boot_font_size;
+		uint32_t boot_text_color = previous_boot_text_color;
+		uint32_t boot_background_color = previous_boot_background_color;
+		#if HAS_BOOT_LOGO
+		const uint8_t previous_boot_logo_slot = current_config->boot_logo_slot;
+		uint8_t boot_logo_slot = previous_boot_logo_slot;
+		#endif
+		bool boot_appearance_valid = true;
+		uint32_t parsed_value = 0;
+		if (doc.containsKey("boot_appearance_font_size")) {
+				boot_appearance_valid = parseStrictUintField(
+						doc["boot_appearance_font_size"], &parsed_value) && valid_boot_font_size(parsed_value);
+				if (boot_appearance_valid) boot_font_size = static_cast<uint8_t>(parsed_value);
+		}
+		if (boot_appearance_valid && doc.containsKey("boot_appearance_text_color")) {
+				boot_appearance_valid = parse_boot_color(doc["boot_appearance_text_color"], &boot_text_color);
+		}
+		if (boot_appearance_valid && doc.containsKey("boot_appearance_background_color")) {
+				boot_appearance_valid = parse_boot_color(
+						doc["boot_appearance_background_color"], &boot_background_color);
+		}
+		#if HAS_BOOT_LOGO
+		if (boot_appearance_valid && doc.containsKey("boot_logo_slot")) {
+				boot_appearance_valid = parseStrictUintField(doc["boot_logo_slot"], &parsed_value) &&
+						(parsed_value <= 1 || parsed_value == CONFIG_BOOT_LOGO_SLOT_NONE);
+				if (boot_appearance_valid) boot_logo_slot = static_cast<uint8_t>(parsed_value);
+		}
+		#endif
+		if (!boot_appearance_valid) {
+				request->send(400, "application/json",
+						"{\"success\":false,\"message\":\"Invalid boot appearance settings\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+		#endif
 
 		// Security hardening: never allow changing Basic Auth settings in AP/core
 		// mode AFTER initial setup. Otherwise, an attacker near the device could
@@ -954,11 +1045,27 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#endif
 
 		if (doc.containsKey("timezone")) strlcpy(current_config->timezone, doc["timezone"], sizeof(current_config->timezone));
+#if HAS_DISPLAY
+		current_config->boot_appearance_font_size = boot_font_size;
+		current_config->boot_appearance_text_color = boot_text_color;
+		current_config->boot_appearance_background_color = boot_background_color;
+#if HAS_BOOT_LOGO
+		current_config->boot_logo_slot = boot_logo_slot;
+#endif
+#endif
 		current_config->magic = CONFIG_MAGIC;
 
 		// Validate config
 		if (!config_manager_is_valid(current_config)) {
 				strlcpy(current_config->timezone, previous_timezone, sizeof(current_config->timezone));
+#if HAS_DISPLAY
+				current_config->boot_appearance_font_size = previous_boot_font_size;
+				current_config->boot_appearance_text_color = previous_boot_text_color;
+				current_config->boot_appearance_background_color = previous_boot_background_color;
+#if HAS_BOOT_LOGO
+				current_config->boot_logo_slot = previous_boot_logo_slot;
+#endif
+#endif
 				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid configuration\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();
@@ -1003,6 +1110,14 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				current_config->dialog_appearance = previous_dialog_appearance;
 				#endif
 				strlcpy(current_config->timezone, previous_timezone, sizeof(current_config->timezone));
+#if HAS_DISPLAY
+				current_config->boot_appearance_font_size = previous_boot_font_size;
+				current_config->boot_appearance_text_color = previous_boot_text_color;
+				current_config->boot_appearance_background_color = previous_boot_background_color;
+#if HAS_BOOT_LOGO
+				current_config->boot_logo_slot = previous_boot_logo_slot;
+#endif
+#endif
 				request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save\"}");
 
 				portENTER_CRITICAL(&g_config_post_mux);
