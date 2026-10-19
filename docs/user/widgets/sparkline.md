@@ -39,7 +39,8 @@ Current-value labels/dots appear at the right edge.
 Label width 0 uses the default area; 1-200 px sets it explicitly.
 Up to three fixed numeric reference Y values can have solid/dotted/dashed lines.
 Keep reference lines in view expands automatic scale; explicit limits win.
-Colors can bind where fx is shown; Y reference values are literal numbers.
+Open a color swatch and use fx inside its dialog to bind the color.
+Y reference values are literal numbers.
 
 ## Backfill from Home Assistant
 

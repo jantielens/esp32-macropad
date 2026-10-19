@@ -11,8 +11,9 @@ formatting and fallbacks control its presentation.
 ## Insert and verify a token
 
 A binding is `[scheme:parameters]`. Fields marked **fx** support the schemes
-reported by the running device. Open fx, search its reference, then Copy/Insert.
-Mix tokens and ordinary text in labels:
+reported by the running device. For colors, click the swatch to find fx and
+configured integration shortcuts inside the color dialog. Open fx, search its
+reference, then Copy/Insert. Mix tokens and ordinary text in labels:
 
 ```text
 Solar [mqtt:home/solar;power;%.0f] W
@@ -30,9 +31,16 @@ generic structural checks are not a substitute for device save validation.
 
 ## Preview and save
 
-A bindable field shows an inline resolved value when it contains a token.
-Click that value to request a fresh reading. Colors can show a resolved swatch.
-Preview returns current values, not final rendered pixels.
+In the button editor, a bindable field shows its resolved value below the input
+or color control when it contains a token. Colors can show a resolved swatch.
+Long results are shortened to fit; hover over a result or focus it with the keyboard to read the
+full value. Click a result, or press Enter or Space while it is focused, to
+request a fresh reading. Preview returns current values, not final rendered
+pixels.
+
+For text and numeric fields, fx and configured integration shortcuts stay visible
+together. In narrow fields, these controls move below the field name rather than
+splitting across lines. Color fields keep their shortcuts inside the color dialog.
 
 Pad-local named bindings use device pad context for previews; save changes to
 those definitions first. Then Save Pad and inspect the actual display.

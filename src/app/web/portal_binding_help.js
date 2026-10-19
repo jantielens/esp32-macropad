@@ -32,6 +32,29 @@ function bindingBuilderShortcuts(config) {
 
 let bindingBuilderConfigRequested = false;
 
+function bindingFieldHeader(hint) {
+    const label = hint.closest('label');
+    if (!label || hint.parentElement !== label) return;
+    const header = document.createElement('span');
+    header.className = 'binding-field-header';
+    const title = document.createElement('span');
+    title.className = 'binding-field-title';
+    const controls = document.createElement('span');
+    controls.className = 'binding-field-controls';
+    label.prepend(header);
+    // Some labels also contain their input; leave that below the header.
+    while (header.nextSibling && !(header.nextSibling.nodeType === 1 &&
+        header.nextSibling.matches('input, textarea, select'))) {
+        const node = header.nextSibling;
+        if (node.nodeType === 1 && node.matches('.fx-hint, .binding-builder-shortcuts, .reset-hint')) {
+            controls.appendChild(node);
+        } else {
+            title.appendChild(node);
+        }
+    }
+    header.append(title, controls);
+}
+
 function bindingBuilderRefreshShortcuts(root = document) {
     const builders = bindingBuilderShortcuts(window.deviceConfig || {});
     const hints = [];
@@ -42,6 +65,7 @@ function bindingBuilderRefreshShortcuts(root = document) {
         loadConfig();
     }
     hints.forEach(hint => {
+        bindingFieldHeader(hint);
         hint.setAttribute('role', 'button');
         hint.tabIndex = 0;
         hint.title = 'Binding Reference & Builders';

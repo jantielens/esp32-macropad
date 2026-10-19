@@ -1,7 +1,15 @@
 /* Binding-capable field hint badge */
-#pad-editor-root label:has(> .fx-hint),
 #pad-editor-root label:has(> .reset-hint) {
-  display: flex !important; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 20px;
+  display: flex !important; align-items: center; min-height: 20px;
+}
+.binding-field-header {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+  min-height: 20px; min-width: 0; white-space: normal;
+}
+.binding-field-title { min-width: 0; overflow-wrap: anywhere; }
+.binding-field-title:empty { display: none; }
+.binding-field-controls {
+  display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; white-space: nowrap;
 }
 .fx-hint,
 .binding-builder-shortcut {
@@ -18,7 +26,8 @@
 .fx-hint:focus-visible,
 .binding-builder-shortcut:focus-visible { outline: 2px solid var(--portal-primary); outline-offset: 2px; }
 .binding-builder-shortcuts { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; vertical-align: middle; }
-#pad-editor-root label > .binding-builder-shortcuts { margin-left: 0; }
+.binding-field-controls > .binding-builder-shortcuts,
+.binding-field-controls > .reset-hint { margin-left: 0; }
 .binding-builder-shortcuts[hidden] { display: none; }
 
 /* ================================================================

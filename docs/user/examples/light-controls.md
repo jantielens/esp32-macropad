@@ -22,8 +22,9 @@ Add an ordinary button:
 | Tap action           | Publish MQTT message                                                      |
 | Topic                | `zigbee2mqtt/kitchen_light/set`                                           |
 | Payload              | `{"state":"TOGGLE"}`                                                      |
-| Background color, fx | `[expr:[mqtt:zigbee2mqtt/kitchen_light;state]=="ON"?"#FFB300":"#374151"]` |
+| Background color     | `[expr:[mqtt:zigbee2mqtt/kitchen_light;state]=="ON"?"#FFB300":"#374151"]` |
 
+Open the background color swatch to enter the binding in its color dialog.
 Save Pad. Tap it and check that the external light changes and publishes state.
 The color follows reported state, not optimistic tap state.
 A missing message needs a [fallback](../pads/bindings.md#set-a-fallback),

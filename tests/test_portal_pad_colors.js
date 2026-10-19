@@ -110,21 +110,13 @@ for (const widget of ['rocker', 'numericrocker']) {
     const markup = fs.readFileSync('src/app/web/_widget_' + widget + '.html', 'utf8');
     assert.match(markup, /class="bc-input" data-allow-bindings="false"/);
 }
-for (const widget of ['gauge', 'bar_chart', 'sparkline', 'waveform']) {
-    const markup = fs.readFileSync('src/app/web/_widget_' + widget + '.html', 'utf8');
-    for (const input of markup.matchAll(/<input\b[^>]*class="bc-input"[^>]*>/g)) {
-        const identifier = /id="([^"]+)"/.exec(input[0])[1];
-        const label = markup.match(new RegExp('<label for="' + identifier + '">([\\s\\S]*?)</label>'));
-        assert.ok(label && label[1].includes('class="fx-hint"'), identifier + ' needs a binding hint');
-    }
-}
 const sparkline = fs.readFileSync('src/app/web/_widget_sparkline.html', 'utf8');
 for (let reference = 1; reference <= 3; reference++) {
     assert.match(sparkline, new RegExp('<input type="number" id="pad-edit-sparkline-ref-' + reference + '-y" step="any"'));
 }
 for (const identifier of ['min-label', 'max-label', 'ref-1', 'ref-2', 'ref-3']) {
     assert.match(sparkline, new RegExp('id="pad-edit-sparkline-' + identifier + '-color"[^>]*maxlength="63"'));
-    assert.match(sparkline, new RegExp('<label for="pad-edit-sparkline-' + identifier + '-color">Color '));
+    assert.match(sparkline, new RegExp('<label for="pad-edit-sparkline-' + identifier + '-color">Color</label>'));
 }
 const barChart = fs.readFileSync('src/app/web/_widget_bar_chart.html', 'utf8');
 assert.match(barChart, /id="pad-edit-widget-bar-bg-color"[^>]*maxlength="63"/);

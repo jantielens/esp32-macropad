@@ -74,6 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Keep color-binding fx/HA shortcuts inside the shared color dialog instead of
+  repeating them beside swatches in pad, button, widget, and action editors.
+  Text and numeric fields retain their directly accessible binding shortcuts.
 * Replace info-screen diagnostics with the friendly device name, connected
   Wi-Fi network, and configuration URLs for the IP address and `.local`
   hostname. Reuse the boot/setup appearance and logo, wrap instructions, and
@@ -114,6 +117,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Prevent binding controls and live results from wrapping into broken inspector
+  grids. Keep fx/HA/reset controls together, place resolved values below their
+  inputs, and align neighboring controls and reset icons. Truncate long results
+  to the field width, reveal the full value on keyboard focus or hover, and
+  support Enter/Space to refresh button and widget binding previews.
 * Clarify the Background image refresh interval note: `0` loads snapshots once
   without automatic refresh, but plays MJPEG streams continuously. Positive
   intervals control snapshot refreshes and throttle MJPEG frame reads.

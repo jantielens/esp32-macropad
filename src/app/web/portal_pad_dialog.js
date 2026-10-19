@@ -488,34 +488,32 @@ function padPvUnresolved(v) {
     return s === '' || s.indexOf('---') !== -1;
 }
 
-// Anchor the inline value chip next to each field's visible "fx" hint (uniform
-// across text inputs and the display:none color inputs).
+// Find the visible field control, including hidden color inputs and wrappers.
 function padPvAnchor(id) {
     var el = document.getElementById(id);
     if (!el) return null;
-    var node = el;
-    while (node && node !== document.body) {
-        var fx = node.querySelector ? node.querySelector('.fx-hint') : null;
-        if (fx) return fx;
-        node = node.parentElement;
-    }
-    return null;
+    return el.closest('.sparkline-source-heading') ||
+        el.closest('.bindable-color, .binding-input-wrap') || el;
 }
 
-// Create the inline value chip for each field once (idempotent), and hook a
+// Create the value chip below each field once (idempotent), and hook a
 // debounced refresh so values track edits.
 function padPvMount() {
     padPvFields().forEach(function (f) {
         var anchor = padPvAnchor(f.id);
         if (!anchor || anchor.parentNode.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
-        if (anchor.nextElementSibling && anchor.nextElementSibling.classList.contains('binding-builder-shortcuts')) {
-            anchor = anchor.nextElementSibling;
-        }
         var chip = document.createElement('span');
         chip.className = 'pad-pv-val';
         chip.setAttribute('data-pv', f.id);
         chip.style.display = 'none';
+        chip.tabIndex = 0;
+        chip.setAttribute('role', 'button');
         chip.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); padPvRefreshField(f.id); });
+        chip.addEventListener('keydown', function (ev) {
+            if (ev.key !== 'Enter' && ev.key !== ' ') return;
+            ev.preventDefault();
+            chip.click();
+        });
         anchor.insertAdjacentElement('afterend', chip);
     });
     var overlay = document.getElementById('pad-edit-overlay');
@@ -540,7 +538,7 @@ function padPvSetChip(id, value, state) {
     var chip = document.querySelector('.pad-pv-val[data-pv="' + id + '"]');
     if (!chip) return;
     if (!padPvIsBinding(padPvFieldValue(id))) { chip.style.display = 'none'; chip.title = ''; return; }
-    chip.style.display = 'inline-flex';
+    chip.style.display = 'flex';
     if (state === 'loading') {
         chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">\u2026</span>';
         chip.title = 'Resolving\u2026';

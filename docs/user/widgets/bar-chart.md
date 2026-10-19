@@ -47,7 +47,7 @@ Gridlines 0-20 share the scale but stay within each bar's track.
 
 Target Value adds a bindable marker; empty disables it, numeric zero is a target.
 Target Zone % shades a percentage of the range around it.
-Marker/track/grid colors can bind where fx is shown.
+To bind marker, track, or grid colors, open the swatch and use fx inside its dialog.
 Collapsed/disabled controls retain values and still must validate before Save.
 
 For complete power examples, use [home energy](../examples/home-energy.md).
