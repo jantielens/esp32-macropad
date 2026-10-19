@@ -47,6 +47,10 @@ only pad-editor fixture target; this mock does not replace hardware verification
 ## Overview
 
 The web portal provides:
+- Display > System Screens for the shared boot, Wi-Fi setup, and info screen
+  font size, colors, and logo. Save Appearance persists only these settings;
+  Actions > Boot Actions saves boot actions independently. Appearance changes
+  take effect after reboot.
 - WiFi configuration via captive portal, with titled WiFi Network and
   Setup AP & Fallback cards and a shared Save button on the WiFi settings page.
   The fallback card explains provisioning, router changes, and offline use;
@@ -3289,9 +3293,14 @@ Save boot action configuration to LittleFS.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - Changes take effect on next boot.
 
-### Startup Appearance and Logo API
+### System Screen Appearance and Logo API
 
-Display builds expose the boot appearance fields above through `/api/config`.
+Display builds expose shared system-screen appearance through the existing
+`boot_appearance_*` fields and `boot_logo_slot` in `/api/config`. Field names,
+logo routes, and stored settings are unchanged for compatibility. The
+`system-screens` fragment is registered under Display and saves through
+`POST /api/config?no_reboot=1`; `boot-actions` remains under Actions and saves
+only actions through its component config endpoint.
 `HAS_BOOT_LOGO` builds additionally expose these endpoints, subject to the
 portal's Basic Auth policy:
 

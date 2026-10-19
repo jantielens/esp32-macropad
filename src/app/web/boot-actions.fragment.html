@@ -1,68 +1,13 @@
 <div class="section-header">
-  <h2><span class="portal-icon" aria-hidden="true">power_settings_new</span>Boot Screen &amp; Actions</h2>
-  <p>Customize the boot screen and configure actions to run when the device boots.</p>
-</div>
-<div class="card mb-3" id="boot-appearance-settings" hidden>
-  <div class="card-header"><h5 class="mb-0">Boot Screen</h5></div>
-  <div class="card-body">
-    <p class="form-text">The status label displays boot progress, such as “Starting…”. The status font size and status text color fields style this label, while the background color styles the boot screen. Changes take effect on the next boot; uploaded logos are selected when you save Boot Settings.</p>
-    <p class="form-text">The WiFi access point (AP) setup screen also uses these font and color settings. It shows the selected boot logo when space permits.</p>
-    <div class="mb-3">
-      <label for="boot-appearance-font-size" class="form-label">Status font size</label>
-      <select id="boot-appearance-font-size" class="form-select">
-        <option value="0">Device default</option>
-        <option value="12">12 px</option>
-        <option value="14">14 px</option>
-        <option value="18">18 px</option>
-        <option value="24">24 px</option>
-        <option value="32">32 px</option>
-        <option value="36">36 px</option>
-      </select>
-    </div>
-    <div class="row g-3 mb-3">
-      <div class="col-md-6">
-        <label for="boot-appearance-text-color" class="form-label">Status text color</label>
-        <div class="boot-appearance-color-row d-flex flex-wrap align-items-center gap-2">
-          <div class="bindable-color" id="boot-appearance-text-color-wrap">
-            <button type="button" class="bc-swatch" aria-label="Choose status text color" title="Choose status text color"></button>
-            <input id="boot-appearance-text-color" type="text" class="bc-input" data-allow-bindings="false" maxlength="7" value="#000000">
-          </div>
-          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetBootAppearanceColor('boot-appearance-text-color')">Reset to device default</button>
-        </div>
-      </div>
-      <div class="col-md-6">
-        <label for="boot-appearance-background-color" class="form-label">Background color</label>
-        <div class="boot-appearance-color-row d-flex flex-wrap align-items-center gap-2">
-          <div class="bindable-color" id="boot-appearance-background-color-wrap">
-            <button type="button" class="bc-swatch" aria-label="Choose background color" title="Choose background color"></button>
-            <input id="boot-appearance-background-color" type="text" class="bc-input" data-allow-bindings="false" maxlength="7" value="#000000">
-          </div>
-          <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetBootAppearanceColor('boot-appearance-background-color')">Reset to device default</button>
-        </div>
-      </div>
-    </div>
-    <div id="boot-logo-settings" class="mb-3" hidden>
-      <label for="boot-logo-file" class="form-label">Boot logo</label>
-      <p class="form-text">Use a PNG or baseline (non-progressive) JPEG; progressive JPEGs are not supported. Images must be at most 1 MiB and 1,000,000 pixels. Transparent PNG pixels use the selected background color.</p>
-      <div class="d-flex flex-wrap align-items-center gap-2">
-        <input id="boot-logo-file" type="file" class="form-control" accept="image/png,image/jpeg,.png,.jpg,.jpeg">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="uploadBootLogo()">Upload logo</button>
-        <button type="button" class="btn btn-outline-danger btn-sm" id="boot-logo-delete-btn" onclick="deleteBootLogo()">Delete logo</button>
-      </div>
-      <div id="boot-logo-preview-wrap" class="mt-2" hidden>
-        <img id="boot-logo-preview" alt="Selected boot logo preview" style="max-width:180px;max-height:120px;object-fit:contain;">
-      </div>
-      <small id="boot-logo-status" class="form-text" aria-live="polite"></small>
-    </div>
-  </div>
+  <h2><span class="portal-icon" aria-hidden="true">power_settings_new</span>Boot Actions</h2>
+  <p>Configure actions to run when the device boots.</p>
 </div>
 <div class="card mb-3">
-  <div class="card-header"><h5 class="mb-0">Boot Actions</h5></div>
   <div class="card-body">
-    <p class="form-text">Run up to 3 actions in order each time the device boots. Save Boot Settings to save these actions and any boot-screen changes.</p>
+    <p class="form-text">Run up to 3 actions in order each time the device boots.</p>
     <div id="boot-action-editors"></div>
     <div class="save-bar">
-      <button type="button" class="btn btn-primary btn-sm" onclick="saveBootActions()">Save Boot Settings</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="saveBootActions()">Save Boot Actions</button>
     </div>
   </div>
 </div>

@@ -30,6 +30,8 @@ uint8_t touch_manager_contact_capacity() { return touchManager ? 1 : 0; }
 void touch_manager_cancel_physical_input() {}
 class DisplayManager {
 public:
+    int back_requests = 0;
+    bool goBack() { ++back_requests; return true; }
     int getActiveWidth() { return 466; }
     int getActiveHeight() { return 466; }
     void lock() {}
@@ -41,6 +43,12 @@ void display_manager_lock_if_needed(bool* locked) { *locked = false; }
 void display_manager_unlock_if_needed(bool) {}
 
 #include "../src/app/screens/splash_screen.cpp"
+#include "../src/app/screens/info_screen.cpp"
+static std::string registered_mdns_hostname = "desk-device";
+void wifi_manager_get_mdns_hostname(char* hostname, size_t size) {
+    snprintf(hostname, size, "%s", registered_mdns_hostname.c_str());
+}
+void swipe_actions_register(lv_obj_t*, bool) {}
 class AsyncWebServer;
 #include "../src/app/screens/wifi_setup_screen.cpp"
 #include "../src/app/device_dialog.cpp"
@@ -104,9 +112,8 @@ static void wifi_setup_checks(lv_display_t* display) {
         WifiSetupScreen setup(&config);
         setup.setAppearance(18, light ? 0 : 0xFFFFFF, light ? 0xFFFFFF : 0);
         setup.create();
-        setup.takeLogo(splash);
+        setup.setLogo(splash.getLogo());
         splash.hide();
-        splash.destroy();
         setup.show();
         setup.update();
         auto* screen = lv_screen_active();
@@ -122,7 +129,7 @@ static void wifi_setup_checks(lv_display_t* display) {
         assert(lv_obj_get_scroll_bottom(logo) == 0);
         const auto* source = static_cast<const lv_image_dsc_t*>(lv_image_get_src(image));
         assert(source->data == reinterpret_cast<const uint8_t*>(pixels));
-        assert(pixels[0] == 0xABCD); // The AP screen still owns the decoded image.
+        assert(pixels[0] == 0xABCD);
         assert(find_label(screen, "1. "));
         assert(find_label(screen, "2. Browse to http://192.168.4.1/"));
         assert(find_label(screen, "3. "));
@@ -174,6 +181,7 @@ static void wifi_setup_checks(lv_display_t* display) {
         assert(lv_obj_has_state(button, LV_STATE_DISABLED));
         setup.hide();
         setup.destroy();
+        assert(splash.getLogo()->data == reinterpret_cast<const uint8_t*>(pixels));
     }
     lv_display_set_resolution(display, 466, 466);
     {
@@ -182,7 +190,7 @@ static void wifi_setup_checks(lv_display_t* display) {
         WifiSetupScreen setup(nullptr);
         setup.setAppearance(36, 0, 0xFFFFFF);
         setup.create();
-        setup.takeLogo(splash);
+        setup.setLogo(splash.getLogo());
         splash.hide();
         setup.show();
         setup.update();
@@ -193,6 +201,90 @@ static void wifi_setup_checks(lv_display_t* display) {
         assert(lv_obj_get_y(content) >= 0);
         setup.hide();
     }
+}
+
+static void info_screen_checks(lv_display_t* display) {
+    for (const int size : {240, 466, 720}) {
+        lv_display_set_resolution(display, size, size);
+        for (const bool light : {false, true}) {
+            DeviceConfig config{};
+            strcpy(config.device_name, "Friendly Device");
+            SplashScreen splash;
+            splash.setAppearance(0, 0, 0, true);
+            splash.create();
+            auto* pixels = static_cast<uint16_t*>(malloc(80 * 40 * sizeof(uint16_t)));
+            assert(pixels);
+            pixels[0] = 0xABCD;
+            assert(splash.setCustomLogo(pixels, 80, 40));
+            InfoScreen info(&config, &manager);
+            info.setAppearance(0, light ? 0 : 0xFFFFFF, light ? 0xFFFFFF : 0);
+            info.setLogo(splash.getLogo());
+            splash.hide();
+            info.show();
+            WiFi = SystemScreenWiFi{};
+            registered_mdns_hostname = "desk-device";
+            info.update();
+            auto* screen = lv_screen_active();
+            lv_obj_update_layout(screen);
+            assert(find_label(screen, "Friendly Device"));
+            assert(find_label(screen, "Connected to: Home Wi-Fi"));
+            assert(find_label(screen, "http://192.168.1.42/"));
+            assert(find_label(screen, "or http://desk-device.local/"));
+            strcpy(config.device_name, "Renamed Device");
+            now_ms += 500;
+            info.update();
+            assert(find_label(screen, "or http://desk-device.local/"));
+            registered_mdns_hostname = "renamed-device";
+            now_ms += 500;
+            info.update();
+            assert(find_label(screen, "or http://renamed-device.local/"));
+            assert(!find_label(screen, "or http://desk-device.local/"));
+            registered_mdns_hostname.clear();
+            now_ms += 500;
+            info.update();
+            assert(!find_label(screen, ".local/"));
+            assert(find_label(screen, "http://192.168.1.42/"));
+            registered_mdns_hostname = "desk-device";
+            assert((lv_color_to_u32(lv_obj_get_style_bg_color(screen, LV_PART_MAIN)) & 0xFFFFFFU)
+                == (light ? 0xFFFFFFU : 0U));
+            auto* content = lv_obj_get_child(screen, 0);
+            assert(lv_obj_get_width(content) == size * 70 / 100);
+            assert(lv_obj_get_y(content) >= 0);
+            auto* logo = lv_obj_get_child(content, -1);
+            if (!lv_obj_has_flag(logo, LV_OBJ_FLAG_HIDDEN)) {
+                assert(lv_obj_get_height(logo) <= size / 6);
+                auto* image = lv_obj_get_child(logo, 0);
+                const auto* source = static_cast<const lv_image_dsc_t*>(lv_image_get_src(image));
+                assert(source->data == reinterpret_cast<const uint8_t*>(pixels));
+            }
+            WiFi.connected = false;
+            now_ms += 500;
+            info.update();
+            assert(find_label(screen, "Not connected to Wi-Fi"));
+            assert(!find_label(screen, "http://"));
+            WiFi.mode = WIFI_OFF;
+            now_ms += 500;
+            info.update();
+            assert(find_label(screen, "Connect to Wi-Fi to configure"));
+            WiFi.connected = true;
+            WiFi.ip = IPAddress(0, 0, 0, 0);
+            now_ms += 500;
+            info.update();
+            assert(find_label(screen, "Waiting for an IP address"));
+            assert(!find_label(screen, "http://"));
+            info.hide();
+            WiFi = SystemScreenWiFi{};
+            info.show();
+            info.update();
+            assert(find_label(screen, "http://192.168.1.42/"));
+            const int before = manager.back_requests;
+            lv_obj_send_event(screen, LV_EVENT_CLICKED, nullptr);
+            assert(manager.back_requests == before + 1);
+            assert(pixels[0] == 0xABCD);
+            info.destroy();
+        }
+    }
+    lv_display_set_resolution(display, 466, 466);
 }
 
 static ConfirmPayload confirmation() {
@@ -617,6 +709,7 @@ int main() {
     dialog_test_endpoint_checks();
     dialog_pattern_checks(display);
     wifi_setup_checks(display);
+    info_screen_checks(display);
     printf("DialogAppearance=%zu DialogTemplates=%zu ButtonAction=%zu ActionPayload=%zu\n",
         sizeof(DialogAppearance), sizeof(DialogTemplates), sizeof(ButtonAction), sizeof(ActionPayload));
     puts("Dialog lifecycle, input, replacement, timeout, appearance checks passed");

@@ -48,6 +48,7 @@
 // --- Display-gated components ---
 #if HAS_DISPLAY
 #include "components/display_component.cpp"
+#include "components/system_screens_component.cpp"
 #if !SCREENSAVER_BACKLIGHT_ONLY
 #include "components/screensaver_component.cpp"
 #endif

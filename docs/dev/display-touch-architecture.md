@@ -727,18 +727,29 @@ public:
 - Boot screen with fixed logo, status, and spinner regions; status updates do
   not reflow the layout
 - Reads boot font and color preferences before screen creation
-- Optional custom RGB565 logo source is attached and released on the LVGL task
-  when the splash is hidden. Loading is attempted once after display startup and
+- Optional custom RGB565 logo source is attached on the LVGL task and retained
+  by the splash for reuse on the setup and info screens, including later visits.
+  It is released at display teardown after those screens are destroyed.
+  Loading is attempted once after display startup and
   required SD validation, before peripheral initialization and Wi-Fi connection.
   The loader mounts the selected filesystem on demand. This is best-effort:
   initial frames may have no logo, and a missing or invalid logo does not stop boot
 - Round-display logo and text margins are handled locally by the splash screen
 
 **InfoScreen** (`info_screen.h/cpp`)
-- Device information and real-time stats
-- Round display compatible (all text centered)
-- Shows: device name, uptime, memory, WiFi, IP, version, chip info
-- Device name as hero element with separator lines
+- Connection and configuration guidance, also shown after a fresh device joins Wi-Fi
+- Shows the friendly device name, connected Wi-Fi network, and separate HTTP
+  URLs for the current IP and active `.local` hostname
+- Hides URLs when disconnected or waiting for an IP address
+- Reads a synchronized snapshot of the successfully registered mDNS hostname,
+  not the Wi-Fi station hostname or a pending device-name setting. The `.local`
+  URL is hidden during mDNS restart or if registration fails; the IP URL remains.
+- Uses the same font, colors, and logo as the boot and setup screens, configured
+  under Display > System Screens in the portal
+- Shares centered, wrapping layout and space-dependent logo sizing with setup;
+  round screens use narrower content, and overflowing content scrolls vertically
+- Preserves tap-to-return and swipe actions; updates changed labels at most twice
+  per second rather than continuously invalidating the screen
 
 **WifiSetupScreen** (`wifi_setup_screen.h/cpp`)
 - Shown only while the setup AP is active; it is not part of normal screen
@@ -755,8 +766,8 @@ public:
   The logo is capped at one-sixth of the screen height; contain alignment keeps
   its image object bounds equal to the displayed area, avoiding invisible
   overflow in the centered stack.
-  The splash transfers ownership of decoded custom pixels before it hides;
-  leaving setup releases them, without loading or decoding the image again
+  Setup and info borrow the splash-owned logo without loading, decoding, or
+  copying the image again. Shared layout helpers live in `system_screen_layout.h`
 - Touch builds queue Stop AP and continue offline through the main-loop bridge. That path
   stops AP/Wi-Fi and enters the shared normal-runtime initialization without
   dispatching boot actions

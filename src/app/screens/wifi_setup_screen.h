@@ -6,8 +6,6 @@
 #include <lvgl.h>
 #include <atomic>
 
-class SplashScreen;
-
 class WifiSetupScreen : public Screen {
 private:
 		DeviceConfig* config;
@@ -16,8 +14,6 @@ private:
 		lv_obj_t* title_label;
 		lv_obj_t* logo_container;
 		lv_obj_t* logo_image;
-		lv_image_dsc_t logo_descriptor;
-		uint16_t* logo_pixels;
 		lv_obj_t* ssid_label;
 		lv_obj_t* password_label;
 		lv_obj_t* url_label;
@@ -35,7 +31,6 @@ private:
 		uint32_t background_color;
 
 		void layout();
-		void releaseLogo();
 
 		static void continueOfflineCallback(lv_event_t* event);
 		static void continueOfflineJob(const void* context, bool* ok, char* message, size_t message_len);
@@ -45,7 +40,7 @@ public:
 		~WifiSetupScreen() override;
 		// Reuses the boot screen font size and colors; call before create().
 		void setAppearance(uint8_t font_size, uint32_t text_color, uint32_t background_color);
-		void takeLogo(SplashScreen& splash);
+		void setLogo(const lv_image_dsc_t* source);
 		void create() override;
 		void destroy() override;
 		void show() override;

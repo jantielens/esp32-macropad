@@ -20,10 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   password, live Continue offline, and a Device command to restart into the
   setup AP. Show active AP credentials on setup screens and support
   two-power-on recovery within the startup window.
-* Add configurable startup-splash status font size and text/background colors,
-  plus optional PNG/JPEG logo uploads on eligible display builds. The Save
-  Boot Settings action saves appearance and logo selection with boot actions;
-  appearance changes take effect on the next boot.
+* Add configurable font size and text/background colors for the boot, Wi-Fi
+  setup, and info screens, plus optional PNG/JPEG logo uploads on eligible
+  display builds. Configure them under Display > System Screens and select
+  Save Appearance; changes take effect on the next boot.
 * Add the Waveshare 7.8-inch Interactive E-Paper board with an externally powered
   IT8951 e-paper HAT, FeatherS3[D] reference wiring, grayscale and black/white rendering, partial
   updates, a physical button, and three native Extension slots.
@@ -49,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Replace info-screen diagnostics with the friendly device name, connected
+  Wi-Fi network, and configuration URLs for the IP address and `.local`
+  hostname. Reuse the boot/setup appearance and logo, wrap instructions, and
+  hide stale URLs while disconnected or waiting for an IP address.
+* Rename Actions > Boot Screen & Actions to Boot Actions and move appearance
+  controls to Display > System Screens. Save Boot Actions and Save Appearance
+  operate independently; existing stored settings and API names are unchanged.
 * Rename the interactive Waveshare 7.8-inch board target to
   `waveshare-7.8-interactive`. Build commands and installer links use the new
   name; FeatherS3[D] hardware settings and wiring are unchanged.
@@ -82,6 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Show the successfully registered mDNS hostname on the info screen after
+  renaming and reconnecting, rather than the old Wi-Fi station hostname.
+  Hide the `.local` URL while mDNS restarts or if registration fails.
 * Fix the M5Stack StopWatch display occasionally staying blank and off-white
   after a software reboot. Wait 200 ms after panel reset before sending Sleep
   Out, satisfying the CO5300's active-panel reset timing. Startup takes

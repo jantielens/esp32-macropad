@@ -30,7 +30,7 @@ static void boot_actions_save_config(AsyncWebServerRequest *request, uint8_t *da
 static ComponentDef boot_actions_component = {
     .id = "boot-actions",
     .category = "actions",
-    .display_name = "Boot Screen & Actions",
+    .display_name = "Boot Actions",
     .nav_order = 20,
     .get_config = boot_actions_get_config,
     .save_config = nullptr,

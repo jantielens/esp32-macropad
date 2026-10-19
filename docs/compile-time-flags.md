@@ -1304,6 +1304,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_screenshot.cpp
 - **DISPLAY_SHAPE**
   - src/app/board_config.h
+  - src/app/screens/info_screen.cpp
   - src/app/screens/splash_screen.cpp
   - src/app/screens/wifi_setup_screen.cpp
 - **TOUCH_DRIVER**

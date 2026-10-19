@@ -44,8 +44,8 @@ public:
 				uint32_t background_color, bool custom_logo_selected);
 		bool setCustomLogo(uint16_t* pixels, uint16_t width, uint16_t height);
 		bool getLogoBounds(uint16_t* width, uint16_t* height) const;
-		// Transfers the decoded buffer to the next startup screen before hide().
-		const lv_image_dsc_t* takeLogo(lv_image_dsc_t* descriptor, uint16_t** pixels);
+		// Borrowed by the setup and info screens; valid until destroy().
+		const lv_image_dsc_t* getLogo() const;
 };
 
 #endif // SPLASH_SCREEN_H

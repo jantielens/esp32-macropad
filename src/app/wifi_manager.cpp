@@ -59,6 +59,21 @@ static unsigned long g_last_retry_ms = 0;     // millis() of last Tier 2 reconne
 static unsigned int  g_tier2_attempt = 0;     // Tier 2 backoff attempt counter
 static bool g_events_registered = false;
 static bool g_mdns_started = false;
+static portMUX_TYPE g_mdns_hostname_mux = portMUX_INITIALIZER_UNLOCKED;
+static char g_mdns_hostname[CONFIG_DEVICE_NAME_MAX_LEN] = {};
+
+static void set_mdns_hostname(const char* hostname) {
+		portENTER_CRITICAL(&g_mdns_hostname_mux);
+		strlcpy(g_mdns_hostname, hostname, sizeof(g_mdns_hostname));
+		portEXIT_CRITICAL(&g_mdns_hostname_mux);
+}
+
+void wifi_manager_get_mdns_hostname(char* hostname, size_t size) {
+		if (!hostname || !size) return;
+		portENTER_CRITICAL(&g_mdns_hostname_mux);
+		strlcpy(hostname, g_mdns_hostname, size);
+		portEXIT_CRITICAL(&g_mdns_hostname_mux);
+}
 
 enum class WifiEventType : uint8_t { None, Disconnected, GotIp };
 
@@ -562,6 +577,7 @@ void wifi_manager_enter_offline() {
 		g_intentional_offline.store(true, std::memory_order_release);
 		g_wifi_reconnect_requested.store(false, std::memory_order_release);
 		g_wifi_event.store(0, std::memory_order_release);
+		set_mdns_hostname("");
 		WiFi.disconnect(true);
 		WiFi.mode(WIFI_OFF);
 		LOGI("WiFi", "Radio disabled by intentional offline mode");
@@ -600,6 +616,7 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 		if (!config) return;
 
 		LOGI("mDNS", "Start");
+		set_mdns_hostname("");
 		if (g_mdns_started) {
 			MDNS.end();
 			g_mdns_started = false;
@@ -615,6 +632,7 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 
 		if (MDNS.begin(sanitized)) {
 			g_mdns_started = true;
+			set_mdns_hostname(sanitized);
 				LOGI("mDNS", "Name: %s.local", sanitized);
 
 				MDNS.addService("http", "tcp", 80);
@@ -828,6 +846,7 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 						LOGW("WiFi", "Tier 3: low internal RAM (%u bytes free) before reset", (unsigned)int_free);
 				}
 				LOGW("WiFi", "Tier 3: hard reset (WIFI_OFF cycle)");
+				set_mdns_hostname("");
 				WiFi.disconnect(false);
 				WiFi.mode(WIFI_OFF);
 				g_wifi_state = WifiState::Tier3Off;

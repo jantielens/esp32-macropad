@@ -5,9 +5,9 @@
 #include "../log_manager.h"
 #include "../main_loop_bridge.h"
 #include "splash_screen.h"
+#include "system_screen_layout.h"
 #include "../web_portal_ap.h"
 
-#include <esp_heap_caps.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -17,22 +17,11 @@ namespace {
 
 constexpr const char* kOfflineButtonText = "Stop AP and\ncontinue offline";
 
-lv_obj_t* create_wrapped_label(lv_obj_t* parent, int width, const lv_font_t* font, uint32_t color) {
-		lv_obj_t* label = lv_label_create(parent);
-		lv_obj_set_width(label, width);
-		lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-		lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-		lv_obj_set_style_text_font(label, font, 0);
-		lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
-		lv_label_set_text(label, "");
-		return label;
-}
-
 }
 
 WifiSetupScreen::WifiSetupScreen(DeviceConfig* device_config)
 		: config(device_config), screen(nullptr), content(nullptr), title_label(nullptr),
-		  logo_container(nullptr), logo_image(nullptr), logo_descriptor{}, logo_pixels(nullptr),
+		  logo_container(nullptr), logo_image(nullptr),
 		  ssid_label(nullptr), password_label(nullptr), url_label(nullptr), status_label(nullptr),
 		  timeout_label(nullptr), continue_button(nullptr), button_label(nullptr),
 		  instructions_label(nullptr), feedback_label(nullptr),
@@ -77,15 +66,15 @@ void WifiSetupScreen::create() {
 		lv_obj_set_width(content, width);
 		lv_obj_clear_flag(content, LV_OBJ_FLAG_SCROLLABLE);
 
-		title_label = create_wrapped_label(content, width, font, text_color);
+		title_label = system_screen_label(content, width, font, text_color);
 		lv_label_set_text(title_label, "WiFi Access Point (AP):");
-		status_label = create_wrapped_label(content, width, font, text_color);
-		ssid_label = create_wrapped_label(content, width, font, text_color);
-		password_label = create_wrapped_label(content, width, font, text_color);
-		url_label = create_wrapped_label(content, width, font, text_color);
-		timeout_label = create_wrapped_label(content, width, font, text_color);
-		instructions_label = create_wrapped_label(content, width, font, text_color);
-		feedback_label = create_wrapped_label(content, width, font, text_color);
+		status_label = system_screen_label(content, width, font, text_color);
+		ssid_label = system_screen_label(content, width, font, text_color);
+		password_label = system_screen_label(content, width, font, text_color);
+		url_label = system_screen_label(content, width, font, text_color);
+		timeout_label = system_screen_label(content, width, font, text_color);
+		instructions_label = system_screen_label(content, width, font, text_color);
+		feedback_label = system_screen_label(content, width, font, text_color);
 
 #if HAS_TOUCH
 		// Inverted colors keep the button legible in light and dark themes,
@@ -122,9 +111,10 @@ void WifiSetupScreen::create() {
 }
 
 void WifiSetupScreen::destroy() {
-		releaseLogo();
 		if (screen) lv_obj_delete(screen);
 		screen = nullptr;
+		logo_container = nullptr;
+		logo_image = nullptr;
 		content = nullptr;
 		title_label = nullptr;
 		ssid_label = nullptr;
@@ -138,26 +128,9 @@ void WifiSetupScreen::destroy() {
 		feedback_label = nullptr;
 }
 
-void WifiSetupScreen::takeLogo(SplashScreen& splash) {
+void WifiSetupScreen::setLogo(const lv_image_dsc_t* source) {
 		if (!screen) create();
-		releaseLogo();
-		const lv_image_dsc_t* source = splash.takeLogo(&logo_descriptor, &logo_pixels);
-		if (!source) return;
-		logo_container = lv_obj_create(content);
-		lv_obj_remove_style_all(logo_container);
-		lv_obj_clear_flag(logo_container, LV_OBJ_FLAG_SCROLLABLE);
-		logo_image = lv_image_create(logo_container);
-		lv_image_set_src(logo_image, source);
-		lv_image_set_inner_align(logo_image, LV_IMAGE_ALIGN_CONTAIN);
-}
-
-void WifiSetupScreen::releaseLogo() {
-		if (logo_container) lv_obj_delete(logo_container);
-		logo_container = nullptr;
-		logo_image = nullptr;
-		if (logo_pixels) heap_caps_free(logo_pixels);
-		logo_pixels = nullptr;
-		logo_descriptor = {};
+		system_screen_set_logo(content, source, logo_container, logo_image);
 }
 
 void WifiSetupScreen::show() {
@@ -167,66 +140,13 @@ void WifiSetupScreen::show() {
 }
 
 void WifiSetupScreen::hide() {
-		releaseLogo();
 }
 
 void WifiSetupScreen::layout() {
-		const int gap = lv_font_get_line_height(lv_obj_get_style_text_font(title_label, LV_PART_MAIN)) / 2;
 		lv_obj_t* items[] = {title_label, status_label, ssid_label, password_label, url_label,
 				instructions_label, timeout_label, feedback_label, continue_button};
-		int text_height = 0;
-		for (lv_obj_t* item : items) {
-				if (!item) continue;
-				const bool empty = lv_obj_check_type(item, &lv_label_class) &&
-						lv_label_get_text(item)[0] == '\0';
-				if (empty) {
-						lv_obj_add_flag(item, LV_OBJ_FLAG_HIDDEN);
-				} else {
-						lv_obj_clear_flag(item, LV_OBJ_FLAG_HIDDEN);
-						lv_obj_update_layout(item);
-						if (text_height) text_height += gap;
-						text_height += lv_obj_get_height(item);
-				}
-		}
-		int y = 0;
-		if (logo_container) {
-				const int screen_h = lv_obj_get_height(screen);
-				int height = screen_h - 16 - text_height - gap;
-				if (height > screen_h / 6) height = screen_h / 6;
-				if (height >= gap * 2) {
-						const auto* source = static_cast<const lv_image_dsc_t*>(lv_image_get_src(logo_image));
-						const int width_scale = lv_obj_get_width(content) * 256 / source->header.w;
-						const int height_scale = height * 256 / source->header.h;
-						int scale = width_scale < height_scale ? width_scale : height_scale;
-						if (scale > 256) scale = 256;
-						const int logo_width = source->header.w * scale / 256;
-						const int logo_height = source->header.h * scale / 256;
-						lv_obj_set_size(logo_container, logo_width, logo_height);
-						// Transform scaling alone leaves the original object bounds in the layout.
-						lv_obj_set_size(logo_image, logo_width, logo_height);
-						lv_obj_update_layout(logo_container);
-						lv_obj_clear_flag(logo_container, LV_OBJ_FLAG_HIDDEN);
-						lv_obj_align(logo_container, LV_ALIGN_TOP_MID, 0, 0);
-						lv_obj_center(logo_image);
-						y = lv_obj_get_height(logo_container) + gap;
-				} else {
-						lv_obj_add_flag(logo_container, LV_OBJ_FLAG_HIDDEN);
-				}
-		}
-		for (lv_obj_t* item : items) {
-				if (!item || lv_obj_has_flag(item, LV_OBJ_FLAG_HIDDEN)) continue;
-				lv_obj_align(item, LV_ALIGN_TOP_MID, 0, y);
-				y += lv_obj_get_height(item) + gap;
-		}
-		if (y) y -= gap;
-		lv_obj_set_height(content, y);
-		// Center vertically when it fits; otherwise start at the top and scroll.
-		const int margin = 8;
-		if (y + margin * 2 <= lv_obj_get_height(screen)) {
-				lv_obj_center(content);
-		} else {
-				lv_obj_align(content, LV_ALIGN_TOP_MID, 0, margin);
-		}
+		system_screen_layout(screen, content, logo_container, logo_image,
+				items, sizeof(items) / sizeof(items[0]));
 }
 
 void WifiSetupScreen::update() {

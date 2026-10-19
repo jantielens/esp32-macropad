@@ -99,21 +99,9 @@ void SplashScreen::releaseCustomLogo() {
 		}
 }
 
-const lv_image_dsc_t* SplashScreen::takeLogo(lv_image_dsc_t* descriptor, uint16_t** pixels) {
-		if (!logoImg || !descriptor || !pixels) return nullptr;
-		*pixels = nullptr;
-		const lv_image_dsc_t* source = nullptr;
-		if (customLogoPixels) {
-				*descriptor = customLogoDescriptor;
-				*pixels = customLogoPixels;
-				source = descriptor;
-				customLogoPixels = nullptr;
-				memset(&customLogoDescriptor, 0, sizeof(customLogoDescriptor));
-		} else if (!customLogoSelected) {
-				source = &img_logo;
-		}
-		lv_image_set_src(logoImg, nullptr);
-		return source;
+const lv_image_dsc_t* SplashScreen::getLogo() const {
+		if (customLogoPixels) return &customLogoDescriptor;
+		return customLogoSelected ? nullptr : &img_logo;
 }
 
 void SplashScreen::create() {
@@ -194,7 +182,6 @@ void SplashScreen::show() {
 }
 
 void SplashScreen::hide() {
-		releaseCustomLogo();
 }
 
 void SplashScreen::update() {

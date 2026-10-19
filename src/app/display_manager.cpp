@@ -166,9 +166,9 @@ DisplayManager::~DisplayManager() {
 				currentScreen->hide();
 		}
 		
-		splashScreen.destroy();
 		infoScreen.destroy();
 		wifiSetupScreen.destroy();
+		splashScreen.destroy();
 		testScreen.destroy();
 		fpsScreen.destroy();
 		#if HAS_TOUCH && LV_USE_CANVAS
@@ -488,6 +488,7 @@ void DisplayManager::init() {
 				config ? config->boot_appearance_font_size : BOOT_APPEARANCE_DEFAULT_FONT_SIZE;
 		splashScreen.setAppearance(boot_font_size, boot_text, boot_background, custom_logo_selected);
 		wifiSetupScreen.setAppearance(boot_font_size, boot_text, boot_background);
+		infoScreen.setAppearance(boot_font_size, boot_text, boot_background);
 #endif
 		splashScreen.create();
 		wifiSetupScreen.create();

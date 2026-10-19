@@ -507,10 +507,13 @@ class PortalDevServerTest(unittest.TestCase):
             self.assertEqual(config["boot_appearance_font_size"], 0)
             self.assertEqual(config["boot_logo_slot"], 255)
             fragment = self.request("/api/section/boot-actions", raw=True)[1]
+            self.assertNotIn('id="boot-appearance-settings"', fragment)
+            self.assertIn('onclick="saveBootActions()"', fragment)
+            fragment = self.request("/api/section/system-screens", raw=True)[1]
             self.assertIn('id="boot-appearance-settings"', fragment)
             self.assertIn('id="boot-logo-settings"', fragment)
-            self.assertIn('<h5 class="mb-0">Boot Screen</h5>', fragment)
-            self.assertIn('<h5 class="mb-0">Boot Actions</h5>', fragment)
+            self.assertIn('onclick="saveSystemScreenAppearance()"', fragment)
+            self.assertNotIn('id="boot-action-editors"', fragment)
             self.assertIn('Reset to device default', fragment)
             self.assertIn('onclick="deleteBootLogo()"', fragment)
             self.assertIn('baseline (non-progressive) JPEG', fragment)

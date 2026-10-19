@@ -30,7 +30,8 @@ Common paths include:
 
 * **Device** for Wi-Fi, device name, network/login settings, timezone, storage,
   Extensions, logs, and factory reset
-* **Display** for brightness, rotation, screen saver, preview, and image library
+* **Display** for brightness, rotation, system screens, screen saver, preview,
+  and image library
 * **Pads** for pad editing, defaults, recipes, fonts, and dialog appearance
 * **Actions** for boot/swipe/physical-button/MQTT triggers and timers
 * **Alarm** for Schedule and Behavior
@@ -46,6 +47,22 @@ The header identifies the device and firmware. Select its CPU/health badge
 for [diagnostics](device/diagnostics.md). The theme control changes portal
 appearance, not the device's pad colors. Text navigation remains usable when
 internet-hosted icons are unavailable.
+
+### System screens and boot actions
+
+Open **Display > System Screens** to set the shared font size, text color,
+background color, and logo for the boot, Wi-Fi setup, and info screens.
+The setup and info screens show the logo when space permits.
+Select **Save Appearance**, then reboot to apply your changes. Uploading a logo
+stages it; saving selects it. Deleting uploaded logos selects the device logo
+for the next boot.
+
+The info screen shows your device name, connected Wi-Fi network, and the IP and
+`.local` addresses you can open to configure the device. When disconnected,
+it shows connection guidance instead of stale addresses.
+
+Use **Actions > Boot Actions** to configure actions executed on startup.
+**Save Boot Actions** saves only those actions, independently of screen appearance.
 
 ## Save deliberately
 
