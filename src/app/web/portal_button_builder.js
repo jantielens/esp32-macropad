@@ -109,6 +109,72 @@ const padButtonBuilders = [
         }
     },
     {
+        id: 'history', label: 'Show a value with history',
+        description: 'Show the current numeric value with a sparkline.',
+        note: 'The unit changes display text, not the value. Without Home Assistant history support, the device collects live values while it runs. Fine-tune sampling and styling in the pad editor.',
+        available: detail => !detail.state_truncated && bindingBuilderIsNumeric(detail.state) &&
+            !!deviceInfoCache?.widget_catalog?.some(widget => widget.type === 'sparkline'),
+        fields: () => [
+            { name: 'decimals', label: 'Decimal places', type: 'number', min: 0, max: 6 },
+            { name: 'unit', label: 'Unit', type: 'text', maxlength: 60 },
+            { name: 'window', label: 'Time range', type: 'select',
+                options: [['3600', '1 hour'], ['21600', '6 hours'], ['86400', '24 hours'], ['604800', '7 days']] },
+            { name: 'color', label: 'Line color', type: 'color' }
+        ],
+        defaults: detail => ({ decimals: 1, unit: detail.unit || '', window: '86400', color: '#4CAF50' }),
+        build(detail, options) {
+            const windowSeconds = Number(options.window);
+            if (![3600, 21600, 86400, 604800].includes(windowSeconds)) throw new Error('Choose a valid time range.');
+            if (!/^#[0-9a-f]{6}$/i.test(options.color)) throw new Error('Choose a valid line color.');
+            const format = bindingBuilderFormat('number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit));
+            return {
+                label_center: bindingBuilderToken('ha', detail.entity_id, '', format, ''),
+                widget_type: 'sparkline',
+                widget_data_binding: bindingBuilderToken('ha', detail.entity_id, '', '', ''),
+                widget_sparkline_line_color: options.color,
+                widget_sparkline_line_width: 2,
+                widget_sparkline_current_dot: 5,
+                widget_sparkline_smooth: 0,
+                widget_sparkline_unified_scale: true,
+                widget_sparkline_window: windowSeconds,
+                widget_sparkline_slots: Math.min(1024, Math.max(120, Math.ceil(windowSeconds / 300))),
+                ...((window.__device_caps || {}).ha_history === true ? {
+                    widget_sparkline_ha_entity: detail.entity_id,
+                    widget_sparkline_ha_stat: 'mean'
+                } : {})
+            };
+        },
+        preview(detail, options) {
+            return { widget_type: '', label_center: bindingBuilderIsNumeric(detail.state) ?
+                bindingBuilderSample(detail.state, 'number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit)) : '---' };
+        },
+        previewNote(options) {
+            const hours = Number(options.window) / 3600;
+            const range = hours === 168 ? '7 days' : hours + (hours === 1 ? ' hour' : ' hours');
+            return 'Last ' + range + '. Illustrative trend, not actual history. Preview only. Does not control the entity.';
+        },
+        renderPreview(cell, button) {
+            const chart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            chart.setAttribute('class', 'pad-button-builder-sparkline');
+            chart.setAttribute('viewBox', '0 0 280 70');
+            chart.setAttribute('role', 'img');
+            chart.setAttribute('aria-label', 'Illustrative trend, not actual history');
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+            line.setAttribute('points', '8,54 28,50 48,52 68,30 88,26 108,40 128,44 148,24 168,18 188,22 208,38 228,36 248,20 272,16');
+            line.setAttribute('fill', 'none');
+            line.setAttribute('stroke', button.widget_sparkline_line_color);
+            line.setAttribute('stroke-width', String(button.widget_sparkline_line_width));
+            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', '272');
+            dot.setAttribute('cy', '16');
+            dot.setAttribute('r', String(button.widget_sparkline_current_dot / 2));
+            dot.setAttribute('fill', button.widget_sparkline_line_color);
+            chart.appendChild(line);
+            chart.appendChild(dot);
+            cell.appendChild(chart);
+        }
+    },
+    {
         id: 'toggle', label: 'Toggle an entity',
         description: 'Toggle a light or switch and show whether it is on or off.',
         note: 'Icon color follows the entity state. Unavailable data uses a pink-red icon.',
@@ -254,7 +320,7 @@ function padButtonBuilderOpen() {
                     <section class="pad-button-builder-preview-panel" aria-labelledby="button-builder-preview-title">
                         <h3 id="button-builder-preview-title">Preview</h3><div class="pad-cell pad-button-builder-preview" data-bb-preview></div>
                         <div class="pad-button-builder-states" data-bb-states></div>
-                        <p class="binding-builder-note">Preview only. Does not control the entity.</p></section>
+                        <p class="binding-builder-note" data-bb-preview-note>Preview only. Does not control the entity.</p></section>
                 </div>
             </div>
             <p class="binding-builder-status" data-bb-validation role="alert" data-kind="error" hidden></p>
@@ -537,6 +603,8 @@ function padButtonBuilderUpdatePreview() {
     preview.replaceChildren();
     try {
         const button = padButtonBuilderBuild(session);
+        session.dialog.querySelector('[data-bb-preview-note]').textContent = session.scenario.previewNote ?
+            session.scenario.previewNote(session.options) : 'Preview only. Does not control the entity.';
         const overrides = session.scenario.preview(session.detail, session.options, session.previewState);
         const sample = { ...button, ...overrides };
         padRenderCellContent(preview, sample);

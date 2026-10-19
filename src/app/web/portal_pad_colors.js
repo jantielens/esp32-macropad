@@ -87,7 +87,7 @@ function padColorCheck(raw, maxLen, allowBindings) {
 var _cpPopover = null;
 var _cpErrorTimer = null;
 
-/** Create a swatch button that submits a color or binding value. */
+/** Create a swatch button that stages a color or binding until Apply. */
 function padColorSwatchButton(val) {
     var sw = document.createElement('button');
     sw.type = 'button';
@@ -98,10 +98,10 @@ function padColorSwatchButton(val) {
     if (val.charAt(0) === '#') sw.style.background = val;
     else sw.classList.add('cp-swatch-binding');
     sw.addEventListener('click', function() {
-        if (_cpPopover && _cpPopover.fill) {
+        if (_cpPopover) {
             _cpPopover.pop.querySelector('#cp-input').value = val;
             padColorPopoverValidate(true);
-        } else padColorPopoverSubmit(val);
+        }
     });
     return sw;
 }

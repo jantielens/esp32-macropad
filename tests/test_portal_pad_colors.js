@@ -249,6 +249,41 @@ assert.strictEqual(background.size, 'auto');
 assert.deepStrictEqual({ ...pickerContext.padFillBackground('none', '#123456', 12, 2) },
     { image: 'none', size: 'auto' });
 
+const pickerNodes = {};
+for (const id of ['cp-input', 'cp-preview', 'cp-apply', 'cp-error']) {
+    pickerNodes['#' + id] = { value: '#FFFFFF', style: {},
+        classList: { add() {}, remove() {}, toggle() {} } };
+}
+pickerContext.document.createElement = () => ({
+    style: {}, dataset: {}, classList: { add() {} }, setAttribute() {},
+    addEventListener(type, handler) { this[type] = handler; }
+});
+let plainApplyEvents = 0;
+const plainTarget = { value: '#FFFFFF', dataset: {}, maxLength: 191,
+    dispatchEvent() { plainApplyEvents++; } };
+function plainDraft() {
+    return { target: plainTarget, pop: { style: { display: '' },
+        querySelector: selector => pickerNodes[selector], querySelectorAll: () => [] },
+    bd: { style: { display: '' } } };
+}
+for (const color of ['#2196F3', '[expr:1]']) {
+    pickerContext._cpPopover = plainDraft();
+    pickerContext.padColorSwatchButton(color).click();
+    assert.strictEqual(pickerNodes['#cp-input'].value, color);
+    assert.strictEqual(pickerNodes['#cp-apply'].disabled, false);
+    assert.strictEqual(pickerContext._cpPopover.pop.style.display, '');
+    assert.strictEqual(plainTarget.value, '#FFFFFF');
+    assert.strictEqual(plainApplyEvents, 0);
+    pickerContext.padColorPopoverClose();
+    assert.strictEqual(plainTarget.value, '#FFFFFF', 'Closing discards the staged selection');
+}
+pickerContext._cpPopover = plainDraft();
+pickerContext.padColorSwatchButton('#2196F3').click();
+pickerContext.padColorPopoverSubmit(pickerNodes['#cp-input'].value);
+assert.strictEqual(plainTarget.value, '#2196F3');
+assert.strictEqual(plainApplyEvents, 1);
+assert.strictEqual(pickerContext._cpPopover.pop.style.display, 'none');
+
 const defaultsFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
 const defaultInputs = new Map();
 context.padState = { buttonDefaults: {} };

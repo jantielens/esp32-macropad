@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add **Show a value with history** to the Home Assistant Button builder for
+  numeric entities on devices with sparkline support. Configure title, decimal
+  places, unit, time range, and line color. Default to 24 hours, 288 points,
+  a green line, and a latest-value dot. Load recorded mean statistics where
+  Home Assistant history is supported; otherwise collect live values while
+  the device runs. Preview the current value with a fixed illustrative trend,
+  without fetching history.
 * Add a Home Assistant Button builder for empty pad positions. Choose
   **Build button...** to generate name/value/unit labels, a single-bar widget
   for a numeric entity, or a light/switch toggle button with a Material Symbol
@@ -80,6 +87,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Keep the shared color picker open when selecting palette or recently used
+  colors. Require **Apply** to commit the selection, matching custom colors
+  and patterned fills. Closing without applying leaves the original color
+  unchanged.
 * Keep color-binding fx/HA shortcuts inside the shared color dialog instead of
   repeating them beside swatches in pad, button, widget, and action editors.
   Text and numeric fields retain their directly accessible binding shortcuts.

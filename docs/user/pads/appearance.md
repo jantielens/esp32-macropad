@@ -64,7 +64,9 @@ In **Appearance**, set background, text/icon, and border colors.
 The shared picker accepts literal hex or a binding where supported and can
 generate a [threshold expression](expressions.md#map-thresholds-to-colors).
 Set a neutral fallback/default color for startup or unavailable data.
-Picker Apply updates the draft; still **Save Pad**.
+Selecting a palette or recently used color keeps the picker open. Choose
+**Apply** to update the draft; closing the picker without applying discards its
+selection. Still **Save Pad** to keep your changes.
 
 Border width accepts 0-10 px, radius 0-50 px, and padding 0-50 px.
 UI offset is `x;y` pixels, for example `20;-10`.

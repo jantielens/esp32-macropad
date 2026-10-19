@@ -34,7 +34,7 @@ function createElement() {
 
 const context = {
     deviceInfoCache: { widget_catalog: [] },
-    document: { createElement },
+    document: { createElement, createElementNS: createElement },
     padColorToHex: (color, fallback) => color || fallback,
     padGetEffectiveDefault: key => ({ bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000', border_width: '0', corner_radius: '8', content_pad: '4' })[key]
 };
@@ -178,5 +178,30 @@ for (const orientation of ['vertical', 'horizontal']) {
         assert.strictEqual(fill.style.background, '#4CAF50');
         assert.strictEqual(cell.children.indexOf(bar) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
     }
+}
+const historyBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "history")', context);
+let samplePoints;
+for (const color of ['#4CAF50', '#2196F3']) {
+    const cell = createElement();
+    const detail = { state: '21.37', unit: '\u00b0C' };
+    const options = historyBuilder.defaults(detail);
+    const button = { label_top: 'Living room', widget_sparkline_line_color: color,
+        widget_sparkline_line_width: 2, widget_sparkline_current_dot: 5,
+        ...historyBuilder.preview(detail, options) };
+    context.padRenderCellContent(cell, button);
+    historyBuilder.renderPreview(cell, button);
+    assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, '21.4 \u00b0C');
+    assert.strictEqual(cell.querySelector('.pad-widget-marker'), null);
+    const chart = cell.children.at(-1);
+    assert.strictEqual(chart.attributes.role, 'img');
+    assert.match(chart.attributes['aria-label'], /Illustrative trend, not actual history/);
+    const [line, dot] = chart.children;
+    assert.strictEqual(line.attributes.stroke, color);
+    assert.strictEqual(dot.attributes.fill, color);
+    assert.strictEqual(Number(dot.attributes.r) * 2, 5);
+    const points = line.attributes.points.split(' ').map(point => point.split(',').map(Number));
+    assert.deepStrictEqual(points.at(-1), [Number(dot.attributes.cx), Number(dot.attributes.cy)]);
+    if (samplePoints) assert.strictEqual(line.attributes.points, samplePoints, 'The illustrative curve stays deterministic');
+    samplePoints = line.attributes.points;
 }
 console.log('portal_pad_preview: PASS');

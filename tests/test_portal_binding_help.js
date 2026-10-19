@@ -268,6 +268,7 @@ delete context.testHelpSchemes;
     const valueBuilder = builders.find(builder => builder.id === 'value');
     const toggleBuilder = builders.find(builder => builder.id === 'toggle');
     const barBuilder = builders.find(builder => builder.id === 'bar');
+    const historyBuilder = builders.find(builder => builder.id === 'history');
     const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
     const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
     const buildSession = (detail, builder) => ({
@@ -322,6 +323,57 @@ delete context.testHelpSchemes;
     assert.throws(() => context.padButtonBuilderBuild(buildSession({ ...longLight, entity_id: longLight.entity_id + 'a' }, toggleBuilder)), /48/);
     lightSession.options.icon = 'not an icon';
     assert.throws(() => context.padButtonBuilderBuild(lightSession), /Symbol/);
+
+    context.deviceInfoCache = { widget_catalog: [{ type: 'sparkline' }] };
+    assert.strictEqual(historyBuilder.available(temperature), true);
+    for (const detail of [light, { ...temperature, state: 'unavailable' },
+        { ...temperature, state_truncated: true }]) {
+        assert.strictEqual(historyBuilder.available(detail), false);
+    }
+    context.deviceInfoCache.widget_catalog = [];
+    assert.strictEqual(historyBuilder.available(temperature), false);
+    context.window.__device_caps = { ha_history: true };
+    const historySession = buildSession(temperature, historyBuilder);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padButtonBuilderBuild(historySession))), {
+        col: 2, row: 1, label_top: 'Living room',
+        label_center: '[ha:sensor.living_room_temperature;;%.1f \u00b0C]',
+        widget_type: 'sparkline', widget_data_binding: '[ha:sensor.living_room_temperature]',
+        widget_sparkline_line_color: '#4CAF50', widget_sparkline_line_width: 2,
+        widget_sparkline_current_dot: 5, widget_sparkline_smooth: 0,
+        widget_sparkline_unified_scale: true, widget_sparkline_window: 86400,
+        widget_sparkline_slots: 288, widget_sparkline_ha_entity: temperature.entity_id,
+        widget_sparkline_ha_stat: 'mean'
+    });
+    for (const [window, slots, caption] of [
+        ['3600', 120, 'Last 1 hour.'], ['21600', 120, 'Last 6 hours.'],
+        ['86400', 288, 'Last 24 hours.'], ['604800', 1024, 'Last 7 days.']
+    ]) {
+        historySession.options.window = window;
+        const button = context.padButtonBuilderBuild(historySession);
+        assert.strictEqual(button.widget_sparkline_window, Number(window));
+        assert.strictEqual(button.widget_sparkline_slots, slots);
+        assert.ok(historyBuilder.previewNote(historySession.options).startsWith(caption));
+        assert.match(historyBuilder.previewNote(historySession.options), /Illustrative trend, not actual history/);
+    }
+    historySession.options.window = '0';
+    assert.throws(() => context.padButtonBuilderBuild(historySession), /time range/);
+    historySession.options.window = '86400';
+    historySession.options.color = 'red';
+    assert.throws(() => context.padButtonBuilderBuild(historySession), /line color/);
+    Object.assign(historySession.options, { color: '#2196F3', unit: '%', decimals: 2 });
+    assert.strictEqual(context.padButtonBuilderBuild(historySession).label_center, '[ha:sensor.living_room_temperature;;%.2f %%]');
+    assert.strictEqual(historyBuilder.preview(temperature, historySession.options).label_center, '21.37 %');
+    assert.strictEqual(historyBuilder.preview({ ...temperature, state: 'unavailable' }, historySession.options).label_center, '---');
+    historySession.options.decimals = 7;
+    assert.throws(() => context.padButtonBuilderBuild(historySession), /decimal/);
+    historySession.options.decimals = 1;
+    for (const caps of [undefined, {}, { ha_history: false }]) {
+        context.window.__device_caps = caps;
+        const button = context.padButtonBuilderBuild(historySession);
+        assert.strictEqual(button.widget_sparkline_ha_entity, undefined);
+        assert.strictEqual(button.widget_sparkline_ha_stat, undefined);
+        assert.strictEqual(button.widget_data_binding, '[ha:sensor.living_room_temperature]');
+    }
 
     // Bar inputs stay raw; only the bottom label gets display formatting.
     context.deviceInfoCache = { widget_catalog: [{ type: 'bar_chart' }] };
