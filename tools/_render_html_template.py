@@ -47,7 +47,8 @@ def load_template(web_dir: Path, filename: str) -> str:
 
 def render(input_path: Path, web_dir: Path,
            project_name: str, project_display_name: str,
-           firmware_version: str, has_ble_hid: bool = True) -> str:
+           firmware_version: str, has_ble_hid: bool = True,
+           has_binding_help: bool = True) -> str:
     html = input_path.read_text()
 
     if "{{WIDGET_OPTIONS}}" in html or "{{WIDGET_EDITORS}}" in html:
@@ -59,7 +60,8 @@ def render(input_path: Path, web_dir: Path,
             (web_dir / asset).read_text() for asset in portal_assets(widgets, "html")))
 
     for key, filename in TEMPLATES:
-        template = "" if key == "HID_BLE" and not has_ble_hid else load_template(web_dir, filename)
+        disabled = (key == "HID_BLE" and not has_ble_hid) or (key == "BINDING_HELP" and not has_binding_help)
+        template = "" if disabled else load_template(web_dir, filename)
         html = html.replace("{{" + key + "}}", template)
 
     html = html.replace("{{PROJECT_NAME}}", project_name)
@@ -82,11 +84,13 @@ def main() -> int:
     p.add_argument("--project-display-name", required=True)
     p.add_argument("--firmware-version", required=True)
     p.add_argument("--without-ble-hid", action="store_true")
+    p.add_argument("--without-binding-help", action="store_true")
     args = p.parse_args()
 
     sys.stdout.write(render(args.input, args.web_dir,
                             args.project_name, args.project_display_name,
-                            args.firmware_version, not args.without_ble_hid))
+                            args.firmware_version, not args.without_ble_hid,
+                            not args.without_binding_help))
     return 0
 
 

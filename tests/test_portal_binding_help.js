@@ -3,6 +3,7 @@ const fs = require('fs');
 const vm = require('vm');
 
 const fixture = JSON.parse(fs.readFileSync('tools/mock-data/binding-docs.json', 'utf8'));
+const listeners = [];
 const context = {
     console,
     TextEncoder,
@@ -10,18 +11,29 @@ const context = {
     DOMException,
     setTimeout,
     clearTimeout,
-    document: { addEventListener() {} },
+    window: { deviceConfig: {} },
+    document: {
+        readyState: 'loading',
+        addEventListener(type, handler, capture) { listeners.push({ type, handler, capture }); }
+    },
     fetch() {
         return Promise.resolve({ ok: true, json: () => Promise.resolve(fixture) });
     }
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_binding_help.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_ha.js', 'utf8'), context);
-vm.runInContext(fs.readFileSync('src/app/web/portal_binding_help.js', 'utf8'), context);
 
 const scheme = name => fixture.schemes.find(s => s.name === name);
+const haConfigured = { caps: { ha_live: true }, ha_url: 'http://ha.local:8123', ha_token_set: true };
+assert.strictEqual(context.bindingBuilderShortcuts(haConfigured)[0].label, 'HA');
+assert.strictEqual(context.bindingBuilderShortcuts({ ...haConfigured, connected: false })[0].id, 'ha');
+for (const config of [{}, { ...haConfigured, caps: {} }, { ...haConfigured, ha_url: ' ' },
+    { ...haConfigured, ha_token_set: false }]) {
+    assert.strictEqual(context.bindingBuilderShortcuts(config).length, 0);
+}
 
 assert.ok(context.bindingHelpKeyMatches('#_state', '12_state'));
 assert.ok(!context.bindingHelpKeyMatches('#_state', 'x_state'));
@@ -76,6 +88,51 @@ assert.strictEqual(context.bindingBuilderSample('0', 'number', 0, ' %'), '0 %');
 assert.strictEqual(context.bindingBuilderSample('on', 'number', 1, ' C'), 'on');
 assert.strictEqual(context.bindingBuilderSample('', 'number', 1, ' C'), '');
 assert.strictEqual(context.bindingBuilderSample(null, 'raw', 1, ''), null);
+for (const value of ['0', '-12.5', ' 2e3 ']) assert.ok(context.bindingBuilderIsNumeric(value));
+for (const value of ['', ' ', '23abc', '0x10', 'unknown', 'unavailable', 'Infinity', '1e999']) {
+    assert.ok(!context.bindingBuilderIsNumeric(value));
+}
+function builderState() {
+    return JSON.parse(vm.runInContext('JSON.stringify(_haBuilder)', context));
+}
+function prepareEntity() {
+    context.haBindingBuilderReset();
+    vm.runInContext("_haBuilder.entity = 'sensor.temp'", context);
+}
+for (const value of ['21.37', '0', '-2.5']) {
+    prepareEntity();
+    assert.strictEqual(context._haBuilderSuggestFormat({ state: value, unit: ' C ' }), '');
+    assert.strictEqual(builderState().mode, 'number');
+    assert.strictEqual(builderState().decimals, 1);
+    assert.strictEqual(builderState().unit, 'C');
+}
+for (const detail of [
+    { state: 'on', unit: 'C' }, { state: 'unavailable', unit: 'C' },
+    { state: '123', state_truncated: true, unit: 'C' }
+]) {
+    prepareEntity();
+    context._haBuilderSuggestFormat(detail);
+    assert.strictEqual(builderState().mode, 'raw');
+    assert.strictEqual(builderState().unit, '');
+}
+prepareEntity();
+context._haBuilderSuggestFormat({ state: '12' });
+assert.strictEqual(builderState().mode, 'number');
+assert.strictEqual(builderState().unit, '');
+prepareEntity();
+assert.match(context._haBuilderSuggestFormat({ state: '12', unit: '[invalid]' }), /skipped/);
+assert.strictEqual(builderState().mode, 'raw');
+assert.strictEqual(builderState().unit, '');
+prepareEntity();
+vm.runInContext("_haBuilder.fallback = 'x'.repeat(170)", context);
+assert.match(context._haBuilderSuggestFormat({ state: '12', unit: 'C' }), /skipped/);
+assert.doesNotThrow(() => context.bindingBuilderToken('ha', 'sensor.temp', '', '',
+    builderState().fallback));
+prepareEntity();
+vm.runInContext("_haBuilder.path = 'attributes.battery'", context);
+context._haBuilderSuggestFormat({ state: '12', unit: 'C' });
+assert.strictEqual(builderState().mode, 'raw');
+context.haBindingBuilderReset();
 assert.ok(context.haBindingValidEntity('sensor.temperature'));
 assert.ok(!context.haBindingValidEntity('sensor.temperature;path'));
 assert.ok(!context.haBindingValidEntity('sensor.' + 'x'.repeat(89)));
@@ -124,7 +181,63 @@ assert.ok(!helpElements['binding-docs-body'].innerHTML.includes('binding-docs-si
 const haReference = context._bhRenderScheme(scheme('ha'));
 assert.ok(!haReference.includes('id="ha-binding-builder"'));
 assert.match(haReference, /data-bh-view="builder:ha">Open Home Assistant builder/);
+for (const status of ['idle', '', 'Invalid token']) {
+    const haStatus = { ...scheme('ha'), status };
+    const warning = status === 'Invalid token';
+    assert.strictEqual(context.bindingHelpHasStatusWarning(haStatus), warning);
+    const reference = context._bhRenderScheme(haStatus);
+    assert.strictEqual(reference.includes('until this is resolved'), warning);
+    if (status === 'idle') assert.match(reference, /no entities are currently subscribed/);
+    context.testHelpSchemes = [haStatus];
+    vm.runInContext('_bindingHelp.schemes = testHelpSchemes', context);
+    context._bhRenderNav();
+    assert.strictEqual(helpElements['binding-docs-nav'].innerHTML.includes('binding-docs-dot'), warning);
+}
+assert.strictEqual(context.bindingHelpHasStatusWarning({ name: 'mqtt', status: 'idle' }), true);
+let referenceClicks = 0;
+const referenceTrigger = { click() { referenceClicks++; } };
+const referenceKeydown = listeners.find(listener => listener.type === 'keydown' && !listener.capture).handler;
+for (const key of ['Enter', ' ', 'Tab']) {
+    let prevented = false;
+    referenceKeydown({
+        key, target: { closest() { return referenceTrigger; } },
+        preventDefault() { prevented = true; }
+    });
+    assert.strictEqual(prevented, key !== 'Tab');
+}
+assert.strictEqual(referenceClicks, 2);
+context.testHelpSchemes = fixture.schemes;
+vm.runInContext('_bindingHelp.schemes = testHelpSchemes', context);
 helpElements['binding-docs-search'].value = 'temperature';
+context.showBindingHelp();
+assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
+const shortcutField = Object.assign(field('Before selected after', 7, 15), {
+    tagName: 'INPUT', type: 'text', isConnected: true
+});
+context.window.deviceConfig = haConfigured;
+helpElements['shortcut-field'] = shortcutField;
+context.document.activeElement = shortcutField;
+const shortcut = {
+    dataset: { bindingBuilder: 'ha' },
+    closest(selector) { return selector === 'label' ? { htmlFor: 'shortcut-field' } : this; },
+    matches(selector) { return selector === '.binding-builder-shortcut'; }
+};
+listeners.find(listener => listener.type === 'pointerdown' && listener.capture).handler({ target: shortcut });
+let preventedLabelFocus = false;
+listeners.find(listener => listener.type === 'click' && listener.capture).handler({
+    target: shortcut, preventDefault() { preventedLabelFocus = true; }
+});
+assert.ok(preventedLabelFocus);
+assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'builder:ha');
+assert.strictEqual(vm.runInContext('_bindingHelp.targetFocused', context), true);
+context.bindingHelpInsertText(shortcutField, '[ha:sensor.temperature]', true);
+assert.strictEqual(shortcutField.value, 'Before [ha:sensor.temperature] after');
+vm.runInContext('_bindingHelp.target = null; _bindingHelp.pointer = null', context);
+context.showBindingHelp();
+context.window.deviceConfig = haConfigured;
+context.showBindingBuilder('ha');
+assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'builder:ha');
+assert.match(helpElements['binding-docs-body'].innerHTML, /id="ha-binding-builder"/);
 context.showBindingHelp();
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
 assert.strictEqual(helpElements['binding-docs-search'].value, '');
@@ -217,12 +330,39 @@ delete context.testHelpSchemes;
     assert.ok(closingSignal.aborted);
     assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(_haBuilder)', context)), {
         query: '', entity: '', name: '', manual: false, path: '', customPath: false,
-        mode: 'raw', decimals: 1, unit: '', fallback: '', detail: null,
+        mode: 'raw', decimals: 1, unit: '', fallback: '', formattingEdited: false, detail: null,
         controller: null, timer: null, generation: generation + 1
     });
     pending[2]({ entities: [], more: false });
     await closingLookup;
     assert.match(suggestions.innerHTML, /^$/);
+
+    // Initial details suggest formatting; refreshes and in-flight edits preserve choices.
+    const update = context._haBuilderUpdate;
+    const paths = context._haBuilderPaths;
+    context._haBuilderUpdate = () => {};
+    context._haBuilderPaths = () => {};
+    prepareEntity();
+    const detail = { entity_id: 'sensor.temp', state: '21.37', unit: 'C', paths: [] };
+    context.haBindingLookup = async () => detail;
+    await context._haBuilderLookup(root, true, true);
+    assert.strictEqual(builderState().mode, 'number');
+    vm.runInContext("Object.assign(_haBuilder, { mode: 'text', decimals: 3, unit: '', formattingEdited: true })", context);
+    await context._haBuilderLookup(root, true);
+    assert.strictEqual(builderState().mode, 'text');
+    assert.strictEqual(builderState().decimals, 3);
+    assert.strictEqual(builderState().unit, '');
+    prepareEntity();
+    let resolveDetail;
+    context.haBindingLookup = () => new Promise(resolve => { resolveDetail = resolve; });
+    const initialDetails = context._haBuilderLookup(root, true, true);
+    vm.runInContext("Object.assign(_haBuilder, { mode: 'text', unit: 'custom', formattingEdited: true })", context);
+    resolveDetail(detail);
+    await initialDetails;
+    assert.strictEqual(builderState().mode, 'text');
+    assert.strictEqual(builderState().unit, 'custom');
+    context._haBuilderUpdate = update;
+    context._haBuilderPaths = paths;
     console.log('portal binding help tests passed');
 })().catch(error => {
     console.error(error);

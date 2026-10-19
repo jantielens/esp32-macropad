@@ -104,9 +104,17 @@ history. For historical data, use Sparkline backfill below.
 
 ## Build an HA binding
 
-The Pad Editor's **Binding Reference & Builders** dialog includes a **Home Assistant**
+The portal's **Binding Reference & Builders** dialog includes a **Home Assistant**
 view under **Binding builders**. It generates a token without saving a pad or subscribing
 to additional live entities.
+
+When live HA bindings are supported and the HA URL and token are saved, an
+**HA** shortcut appears beside **fx** on bindable fields. Choose **HA** to open
+a fresh Home Assistant builder directly and insert into that field. The shortcut
+does not depend on an active connection or administrator permissions.
+An **idle** live-binding status is normal when no entities are subscribed.
+Lookup works independently; saved pads and temporary previews subscribe
+automatically when they reference HA entities.
 
 1. Open **Binding Reference & Builders** from the bindable field you want to fill, then
    select **Binding builders > Home Assistant**.
@@ -116,14 +124,19 @@ to additional live entities.
    enter an exact ID, then choose **Use entity** or press Enter.
 3. Under **Format the value**, choose **State**, a suggested attribute, or
    **Custom path** to enter a dotted path. These controls appear after selection.
-   Keep **As received** for numeric widget inputs. For display text, choose
+   Numeric states initially select **Number**, one decimal place, and the
+   entity's `unit_of_measurement` when it fits the binding syntax. These are
+   suggestions: change any field, or choose **As received** for numeric widget
+   inputs. Refreshing details preserves your formatting choices.
+   For display text, choose
    **Number** with 0 to 6 decimal places, or **Text**. Edit **Unit (optional)**;
    spacing is automatic. Expand **When unavailable** to set fallback text.
 4. Under **Insert the binding**, check the generated binding and **Binding result**.
    Use **Insert binding** to fill the originating field, or **Copy binding**
-   when authoring elsewhere. Save the pad using its normal Save control.
+   when authoring elsewhere. Save your changes using the editor's normal Save control.
 
-The dialog opens on **Basics** each time, and the builder starts empty.
+The **fx** entry opens on **Basics** each time; **HA** opens the builder directly.
+Both entries start with an empty builder.
 All three sections stay in the same view. Use **Change entity** to select a
 different source, or **Refresh details** to fetch a newer sample and attributes.
 Selecting an entity fetches its details automatically; a failed fetch does not

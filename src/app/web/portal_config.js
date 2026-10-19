@@ -193,6 +193,7 @@ async function loadConfig() {
         const config = await response.json();
         // Cache for validation logic (e.g., whether passwords are already set)
         window.deviceConfig = config;
+        if (typeof bindingBuilderRefreshShortcuts === 'function') bindingBuilderRefreshShortcuts();
         // Cache compile-time capability map for fragments that gate UI on it.
         window.__device_caps = config.caps || {};
         if (typeof window.padUpdateSparklineEditor === 'function' &&

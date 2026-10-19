@@ -1099,7 +1099,7 @@ not every authentication failure, redirect, or early error response is instrumen
 ### Home Assistant Live Status
 
 Authenticated `GET /api/ha/live` is registered only with `HAS_HA_LIVE`.
-`GET /api/config` advertises this support as `capabilities.ha_live`.
+`GET /api/config` advertises this support as `caps.ha_live`.
 The response contains `enabled` (boolean), `configured` (boolean), `state`
 (string), `entity_count` (integer), `connected` (boolean), `last_error` (string),
 `messages` (integer), and `reconnects` (integer).
@@ -1162,8 +1162,31 @@ No request pointers are retained by the worker.
 **Binding Reference & Builders** has a **Binding builders > Home Assistant** view, available
 when the device advertises the `ha` scheme. The builder and generated `ha`
 reference link to each other; the reference does not embed the builder.
-The dialog opens on Basics with a reset builder; Basics links to available builders.
+The shared dialog belongs to the portal shell so shortcuts work in every editor.
+The asset generator selects shell HTML with the dialog only for `HAS_DISPLAY`.
+Reference and shortcut styles live in `portal_binding_help.css`, also gated by
+`HAS_DISPLAY`. The formatting helpers, HA builder module, and
+`portal_binding_builder.css` use `HAS_HA_LIVE`; the HA module registers its own
+builder entry, so unsupported builds contain neither its UI implementation nor
+its shortcut registration. Bundle generation is capped at 256 variants; only
+one matching JavaScript and CSS variant is compiled into each firmware.
+The generic `fx` entry opens on Basics with a reset builder; Basics links to
+available builders. A shared `BINDING_BUILDERS` list holds registered builder identities,
+shortcut labels and configured predicates, and supplies dialog navigation.
+Configured shortcuts appear beside existing `fx` hints, including dynamically
+created action editors and color popovers. HA requires `caps.ha_live`,
+a saved URL and `ha_token_set`, not connectivity or admin permissions.
+Shortcut entries open a fresh builder while preserving the field and selection
+for insertion. Configuration loads and successful HA saves refresh availability;
+pages with binding hints load configuration on first use if it is not cached.
 The documentation search remains independent of entity search.
+HA's `idle` live-subscription status is informational, without a warning dot:
+no entities are subscribed yet. Lookup works independently of live subscriptions.
+Initial entity details suggest one-decimal numeric formatting and the HA unit
+only for a complete finite numeric state. Suggestions are validated against the
+format/token limits before application; unusable suggestions leave manual
+generation available with an informational explanation. Refreshes and edits
+made while initial details are pending preserve the user's choices.
 The builder uses three numbered sections in one view. Search text is separate
 from the selected entity; formatting controls appear only after selection.
 Selection fetches details automatically, while manual IDs remain usable if
@@ -2363,7 +2386,7 @@ timezone and alarm session.
   Assistant credentials. The e-paper service endpoint follows the same
   write-only pattern with `epaper_service_token_set`.
 - `ha_url` is the Home Assistant base URL shared by live bindings (when
-  `capabilities.ha_live` is true), the **Home Assistant Service** button action,
+  `caps.ha_live` is true), the **Home Assistant Service** button action,
   and history backfill. `ha_token` is write-only: `GET /api/config` returns an
   empty string and `ha_token_set` reports whether a token is stored. A successful
   save safely applies the HA client configuration without reboot.

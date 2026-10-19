@@ -16,10 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Add an HA binding builder to the Pad Editor's Binding Reference & Builders dialog, with
-  server-side entity autocomplete, attribute suggestions, decimal and unit
-  formatting, sample values, and Copy/Insert controls. Autocomplete requires
-  an HA administrator token; manual entry and normal live bindings do not.
+* Add a Home Assistant binding builder in the Binding Reference & Builders
+  dialog, with server-side entity autocomplete, attribute suggestions, decimal
+  and unit formatting, sample values, and Copy/Insert controls. Numeric states
+  initially suggest Number formatting with one decimal place and the entity's
+  unit; suggestions remain optional and preserve user edits and refresh choices.
+  Open the reference with compact fx controls or jump directly to the builder
+  with adjacent HA shortcuts, including in color pickers and Pad Binding fields.
+  HA shortcuts appear once the integration is configured on supported devices.
+  Autocomplete requires an HA administrator token; manual entry and normal live
+  bindings do not. Exclude the builder's assets from firmware without HA support
+  and the binding dialog's assets from firmware without a display.
 * Add live Home Assistant entity bindings through
   `[ha:entity_id;path;format]`, reusing the existing server URL and long-lived
   access token without requiring MQTT. Read states and attributes in labels,

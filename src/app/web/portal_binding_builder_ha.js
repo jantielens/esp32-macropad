@@ -1,6 +1,13 @@
+BINDING_BUILDERS.push({
+    id: 'ha', label: 'HA', name: 'Home Assistant',
+    tooltip: 'Build a Home Assistant binding',
+    configured: config => config.caps?.ha_live === true &&
+        !!config.ha_url?.trim() && config.ha_token_set === true
+});
+
 const _haBuilderDefaults = {
     query: '', entity: '', name: '', manual: false, path: '', customPath: false,
-    mode: 'raw', decimals: 1, unit: '', fallback: '',
+    mode: 'raw', decimals: 1, unit: '', fallback: '', formattingEdited: false,
     detail: null
 };
 const _haBuilder = { ..._haBuilderDefaults, controller: null, timer: null, generation: 0 };
@@ -120,6 +127,13 @@ function _haBuilderPaths(root) {
 
 function _haBuilderUpdate(root) {
     const b = _haBuilder;
+    for (const key of ['mode', 'decimals']) {
+        const select = root.querySelector('#ha-builder-' + key);
+        if (select.value !== String(b[key])) {
+            select.value = String(b[key]);
+            if (typeof dropdownRefresh === 'function') dropdownRefresh(select);
+        }
+    }
     const chosen = !!b.entity;
     root.querySelector('#ha-builder-search-panel').hidden = chosen;
     root.querySelector('#ha-builder-selection').hidden = !chosen;
@@ -178,7 +192,24 @@ function _haBuilderUpdate(root) {
     }
 }
 
-async function _haBuilderLookup(root, entity) {
+function _haBuilderSuggestFormat(detail) {
+    const b = _haBuilder;
+    if (b.formattingEdited || !['', '.', 'state'].includes(b.path) ||
+        detail.state_truncated || !bindingBuilderIsNumeric(detail.state)) return '';
+    const unit = typeof detail.unit === 'string' ? detail.unit.trim() : '';
+    try {
+        const format = bindingBuilderFormat('number', 1, bindingBuilderUnitSuffix(unit));
+        bindingBuilderToken('ha', b.entity, b.path, format, b.fallback);
+        b.mode = 'number';
+        b.decimals = 1;
+        b.unit = unit;
+        return '';
+    } catch (error) {
+        return 'Automatic formatting was skipped: ' + error.message + ' You can choose formatting manually.';
+    }
+}
+
+async function _haBuilderLookup(root, entity, suggestFormat = false) {
     haBindingBuilderStop();
     const generation = _haBuilder.generation;
     const value = entity ? _haBuilder.entity : _haBuilder.query.trim();
@@ -199,11 +230,11 @@ async function _haBuilderLookup(root, entity) {
             _haBuilder.detail = payload;
             const friendlyName = payload.paths.find(item => item.path === 'attributes.friendly_name');
             if (friendlyName) _haBuilder.name = friendlyName.value;
-            if (!_haBuilder.unit && ['', '.', 'state'].includes(_haBuilder.path)) _haBuilder.unit = payload.unit || '';
+            const formatNote = suggestFormat ? _haBuilderSuggestFormat(payload) : '';
             root.querySelector('#ha-builder-unit').value = _haBuilder.unit;
             _haBuilderPaths(root);
-            _haBuilderStatus(root, payload.more
-                ? 'Some attribute suggestions are omitted. Use Custom path for other values.' : '');
+            _haBuilderStatus(root, [formatNote, payload.more
+                ? 'Some attribute suggestions are omitted. Use Custom path for other values.' : ''].filter(Boolean).join(' '));
             _haBuilderUpdate(root);
         } else {
             if (!Array.isArray(payload.entities)) throw new Error('Invalid HA entity suggestions.');
@@ -232,12 +263,15 @@ function _haBuilderChoose(root, entity, name = '') {
         return;
     }
     haBindingBuilderStop();
-    Object.assign(_haBuilder, { entity: entity.trim(), name, detail: null, path: '', customPath: false, unit: '' });
+    Object.assign(_haBuilder, {
+        entity: entity.trim(), name, detail: null, path: '', customPath: false,
+        mode: 'raw', decimals: 1, unit: '', formattingEdited: false
+    });
     root.querySelector('#ha-builder-path').value = '';
     root.querySelector('#ha-builder-unit').value = '';
     _haBuilderPaths(root);
     _haBuilderUpdate(root);
-    _haBuilderLookup(root, true);
+    _haBuilderLookup(root, true, true);
     root.querySelector('#ha-builder-format-title').focus({ preventScroll: true });
 }
 
@@ -266,6 +300,7 @@ function haBindingBuilderMount() {
         } else if (['path', 'mode', 'decimals', 'unit', 'fallback'].includes(key)) {
             b[key] = key === 'decimals' ? Number(event.target.value) : event.target.value;
         } else return;
+        if (['value', 'path', 'mode', 'decimals', 'unit'].includes(key)) b.formattingEdited = true;
         if (key === 'value' || key === 'path') {
             b.unit = b.detail && ['', '.', 'state'].includes(b.path) ? b.detail.unit || '' : '';
             root.querySelector('#ha-builder-unit').value = b.unit;

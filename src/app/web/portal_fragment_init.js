@@ -90,6 +90,11 @@ async function saveFragmentConfig(requiresReboot) {
         if (!response.ok) throw new Error('Failed to save configuration');
         var result = await response.json();
         if (result.success) {
+            if (window.deviceConfig && (config.ha_url !== undefined || config.ha_token !== undefined)) {
+                if (config.ha_url !== undefined) window.deviceConfig.ha_url = config.ha_url;
+                if (config.ha_token && config.ha_token.trim()) window.deviceConfig.ha_token_set = true;
+                if (typeof bindingBuilderRefreshShortcuts === 'function') bindingBuilderRefreshShortcuts();
+            }
             var needsReboot = typeof requiresReboot === 'function' ? requiresReboot(config) : requiresReboot;
             if (config.display_rotation !== undefined && window.deviceConfig) {
                 window.deviceConfig.display_rotation = Number(config.display_rotation);
@@ -901,7 +906,7 @@ window.init_ha_discovery_fragment = function () {
             clearTimeout(configDeadline);
             controller = null;
             if (disposed || !root.isConnected) return;
-            if (!config.capabilities || config.capabilities.ha_live !== true) return;
+            if (!config.caps || config.caps.ha_live !== true) return;
             section.hidden = false;
             section.classList.remove('d-none');
             poll();

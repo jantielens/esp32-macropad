@@ -63,15 +63,34 @@ class PortalDevServerTest(unittest.TestCase):
             return response.status, text if raw else json.loads(text)
 
     def test_production_assets_and_templates(self):
+        status, shell = self.request("/", raw=True)
+        self.assertEqual(status, 200)
+        self.assertNotIn("{{", shell)
+        self.assertEqual(shell.count('id="binding-help-overlay"'), 1)
+        headless_shell = self.request("/?profile=reterminal-e1003-frame", raw=True)[1]
+        self.assertNotIn('id="binding-help-overlay"', headless_shell)
+        self.assertNotIn("{{", headless_shell)
         status, fragment = self.request("/api/section/pad-editor", raw=True)
         self.assertEqual(status, 200)
         self.assertNotIn("{{", fragment)
         self.assertIn('id="pad-edit-gauge-min"', fragment)
+        self.assertNotIn('id="binding-help-overlay"', fragment)
         status, bundle = self.request("/portal.js", raw=True)
         self.assertEqual(status, 200)
         self.assertIn("async function padInit()", bundle)
         self.assertLess(bundle.index("function actionEditorHTML("), bundle.index("async function padInit()"))
         self.assertNotIn("portal_shutter", bundle)
+        self.assertIn("function haBindingBuilderHTML(", bundle)
+        for profile, display in (("jc3248w535", True), ("reterminal-e1003-frame", False)):
+            other_bundle = self.request("/portal.js", profile=profile, raw=True)[1]
+            self.assertEqual("function showBindingHelp(" in other_bundle, display)
+            self.assertNotIn("function haBindingBuilderHTML(", other_bundle)
+            other_styles = self.request("/portal-all.css", profile=profile, raw=True)[1]
+            self.assertEqual(".binding-docs-overlay" in other_styles, display)
+            self.assertNotIn(".binding-builder-step", other_styles)
+            for suffix in ("", "?docs=1"):
+                other_schema = self.request("/api/bindings" + suffix, profile=profile)[1]
+                self.assertNotIn("ha", {scheme["name"] for scheme in other_schema["schemes"]})
         status, schema = self.request("/api/bindings")
         self.assertEqual(status, 200)
         self.assertIn("ha", {scheme["name"] for scheme in schema["schemes"]})
@@ -104,6 +123,11 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(cleared["ap_password"], "")
 
     def test_ha_lookup_jobs(self):
+        config = self.request("/api/config")[1]
+        self.assertTrue(config["caps"]["ha_live"])
+        self.assertNotIn("capabilities", config)
+        headless_config = self.request("/api/config", profile="reterminal-e1003-frame")[1]
+        self.assertFalse(headless_config["caps"]["ha_live"])
         status, started = self.request("/api/ha/lookup?query=living")
         self.assertEqual(status, 202)
         status, matches = self.request("/api/ha/lookup?job=" + str(started["job"]))

@@ -12,7 +12,7 @@
 # compiled out via #if guards in web_assets.h, so they never reach flash.
 #
 # Build-time assembly: the minifier enumerates the unique HAS_* flag set
-# across chunks (capped at 3 -> 8 variants), and for each 2^N combination
+# across chunks (bounded by the generator's variant limit), and for each reachable combination
 # concatenates the chunks whose flag is unset OR matches the combination,
 # then gzips ONCE. Each variant is emitted as an #if-guarded PROGMEM blob
 # under the same symbol name (portal_js_gz), so exactly one variant links.
@@ -29,9 +29,11 @@ portal_dropdown.js
 
 # [chunk:bindings HAS_DISPLAY]
 portal_binding_validator.js
+portal_binding_help.js
+
+# [chunk:ha_bindings HAS_HA_LIVE]
 portal_binding_builder.js
 portal_binding_builder_ha.js
-portal_binding_help.js
 
 # [chunk:actions HAS_DISPLAY]
 # Action editor + config actions UI: only reachable from pad/swipe/boot/timer

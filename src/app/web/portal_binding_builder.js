@@ -29,12 +29,15 @@ function bindingBuilderToken(scheme, source, path, format, fallback) {
     return token;
 }
 
+function bindingBuilderIsNumeric(value) {
+    const text = String(value == null ? '' : value).trim();
+    return /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(text) && Number.isFinite(Number(text));
+}
+
 function bindingBuilderSample(value, mode, decimals, suffix) {
     if (value == null) return null;
     if (mode === 'raw') return String(value);
     if (mode === 'text') return String(value) + suffix;
     // Do not turn an empty string, boolean, or partially numeric text into a number.
-    if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(String(value).trim())) return String(value);
-    const number = Number(value);
-    return Number.isFinite(number) ? number.toFixed(decimals) + suffix : String(value);
+    return bindingBuilderIsNumeric(value) ? Number(value).toFixed(decimals) + suffix : String(value);
 }

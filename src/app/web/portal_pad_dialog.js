@@ -508,6 +508,9 @@ function padPvMount() {
     padPvFields().forEach(function (f) {
         var anchor = padPvAnchor(f.id);
         if (!anchor || anchor.parentNode.querySelector('.pad-pv-val[data-pv="' + f.id + '"]')) return;
+        if (anchor.nextElementSibling && anchor.nextElementSibling.classList.contains('binding-builder-shortcuts')) {
+            anchor = anchor.nextElementSibling;
+        }
         var chip = document.createElement('span');
         chip.className = 'pad-pv-val';
         chip.setAttribute('data-pv', f.id);
