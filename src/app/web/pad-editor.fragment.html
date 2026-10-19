@@ -337,7 +337,7 @@
                         <div class="form-group">
                             <label for="pad-edit-bg-image-interval">Refresh Interval (ms)</label>
                             <input type="number" id="pad-edit-bg-image-interval" min="0" max="86400000" value="0" placeholder="0 = fetch once / stream">
-                            <small>For MJPEG streams: set to <code>0</code> — the stream runs continuously. For snapshots: e.g. <code>5000</code> = refresh every 5 s.</small>
+                            <small>For snapshots: <code>0</code> = load once (no automatic refresh); e.g. <code>5000</code> = refresh every 5 s. For MJPEG streams: <code>0</code> = continuous playback; a higher value limits how often frames are read.</small>
                         </div>
                     </div>
                 </details>

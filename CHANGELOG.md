@@ -89,6 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Clarify the Background image refresh interval note: `0` loads snapshots once
+  without automatic refresh, but plays MJPEG streams continuously. Positive
+  intervals control snapshot refreshes and throttle MJPEG frame reads.
 * Show the successfully registered mDNS hostname on the info screen after
   renaming and reconnecting, rather than the old Wi-Fi station hostname.
   Hide the `.local` URL while mDNS restarts or if registration fails.
