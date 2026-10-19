@@ -605,4 +605,32 @@ async function checkSaveRaces() {
 	assert.deepStrictEqual(notifications, [{ message: 'Save failed: Device unavailable', type: 'error' }], 'Persistence failures must retain their toast');
 }
 
-checkWorkspaceSwitch().then(checkSaveRaces).then(() => console.log('portal_pad_dirty: PASS')).catch(error => { console.error(error); process.exitCode = 1; });
+async function checkSaveErrorMessages() {
+	const notifications = [];
+	const saveContext = {
+		console: { error() {} }, MAX_ACTIONS: 3,
+		document: { getElementById() { return null; } },
+		padUploadPageIcons: async () => {},
+		showMessage: (message, type) => notifications.push({ message, type })
+	};
+	vm.createContext(saveContext);
+	vm.runInContext(source.replace('let padDirty = false;', 'var padDirty = false;'), saveContext);
+	saveContext.padBuildSaveContext = () => ({ page: 0, body: '{}' });
+	for (const [payload, expected] of [
+		[{ success: false, message: 'dialog message must be nonempty text' }, 'dialog message must be nonempty text'],
+		[{ error: 'Invalid JSON' }, 'Invalid JSON'],
+		[{}, 'HTTP 400'],
+		[null, 'HTTP 400']
+	]) {
+		saveContext.fetch = async () => ({
+			ok: false, status: 400,
+			json: async () => { if (payload === null) throw new SyntaxError('Not JSON'); return payload; }
+		});
+		saveContext.padDirty = true;
+		assert.strictEqual(await saveContext.padSavePage(), null);
+		assert.deepStrictEqual(notifications.pop(), { message: 'Save failed: ' + expected, type: 'error' });
+		assert.strictEqual(saveContext.padDirty, true, 'Rejected saves must retain unsaved edits');
+	}
+}
+
+checkWorkspaceSwitch().then(checkSaveRaces).then(checkSaveErrorMessages).then(() => console.log('portal_pad_dirty: PASS')).catch(error => { console.error(error); process.exitCode = 1; });
