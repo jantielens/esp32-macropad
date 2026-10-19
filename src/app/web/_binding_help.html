@@ -1,18 +1,19 @@
 <div id="binding-help-overlay" class="reboot-overlay binding-docs-overlay" style="display:none;" onclick="if(event.target===this)closeBindingHelp()">
     <div class="reboot-modal binding-docs-modal" role="dialog" aria-modal="true" aria-labelledby="binding-docs-title">
         <div class="binding-docs-header">
-            <div class="binding-docs-heading">
-                <h3 id="binding-docs-title">Binding reference</h3>
-                <p class="binding-docs-lead">Bindings available on this device.</p>
-            </div>
-            <button type="button" class="binding-docs-close" onclick="closeBindingHelp()" aria-label="Close binding reference">&times;</button>
+            <h3 id="binding-docs-title">Binding Reference &amp; Builders</h3>
+            <button type="button" class="binding-docs-close" onclick="closeBindingHelp()" aria-label="Close Binding Reference &amp; Builders">
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </button>
         </div>
         <div class="binding-docs-search">
             <input type="search" id="binding-docs-search" class="form-control" placeholder="Search schemes, keys, descriptions, examples (press /)" aria-label="Search bindings" autocomplete="off" spellcheck="false">
             <span class="binding-docs-count" id="binding-docs-count" aria-live="polite"></span>
         </div>
         <div class="binding-docs-main">
-            <nav class="binding-docs-nav" id="binding-docs-nav" aria-label="Binding reference"></nav>
+            <nav class="binding-docs-nav" id="binding-docs-nav" aria-label="Binding Reference &amp; Builders"></nav>
             <div class="binding-docs-body" id="binding-docs-body" tabindex="-1"></div>
         </div>
     </div>

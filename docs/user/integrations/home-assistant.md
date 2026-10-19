@@ -60,7 +60,8 @@ On firmware with live HA support, **Connectivity > Home Assistant** shows a
 the last error. The card is hidden on unsupported firmware. A configured
 connection is not a guarantee that a particular entity exists or is readable.
 
-Use entity IDs directly in Pad Editor bindings; there is no entity picker.
+Use entity IDs directly in Pad Editor bindings, or use the HA binding builder
+described below.
 To display a temperature with a fallback while unavailable:
 
 ```text
@@ -100,6 +101,50 @@ MQTT-specific screensaver wake and camera-trigger sources are not automatically
 extended to HA live bindings.
 REST actions still send commands; live bindings read current state, not Recorder
 history. For historical data, use Sparkline backfill below.
+
+## Build an HA binding
+
+The Pad Editor's **Binding Reference & Builders** dialog includes a **Home Assistant**
+view under **Binding builders**. It generates a token without saving a pad or subscribing
+to additional live entities.
+
+1. Open **Binding Reference & Builders** from the bindable field you want to fill, then
+   select **Binding builders > Home Assistant**.
+2. Under **Choose an entity**, type at least three characters of an entity ID or
+   friendly name and select a match. Search shows up to 20 matches; keep typing
+   to narrow the list. Alternatively, choose **enter an entity ID manually**,
+   enter an exact ID, then choose **Use entity** or press Enter.
+3. Under **Format the value**, choose **State**, a suggested attribute, or
+   **Custom path** to enter a dotted path. These controls appear after selection.
+   Keep **As received** for numeric widget inputs. For display text, choose
+   **Number** with 0 to 6 decimal places, or **Text**. Edit **Unit (optional)**;
+   spacing is automatic. Expand **When unavailable** to set fallback text.
+4. Under **Insert the binding**, check the generated binding and **Binding result**.
+   Use **Insert binding** to fill the originating field, or **Copy binding**
+   when authoring elsewhere. Save the pad using its normal Save control.
+
+The dialog opens on **Basics** each time, and the builder starts empty.
+All three sections stay in the same view. Use **Change entity** to select a
+different source, or **Refresh details** to fetch a newer sample and attributes.
+Selecting an entity fetches its details automatically; a failed fetch does not
+prevent formatting or insertion.
+Use **full syntax and examples** for the `ha` reference, or
+**Open Home Assistant builder** in that reference to return to the builder.
+
+Entity search uses HA's template API and requires an administrator user's
+token. A non-admin token can still load readable entities by exact ID, generate
+bindings, and supply normal live HA values. Search permission failures explain
+this distinction; invalid credentials and connection failures are reported
+separately. Manual binding generation remains available even when lookup fails.
+
+The unit is suggested for the entity's state and cleared when selecting an
+attribute. Units are display text, not conversion: adding `kW` does not divide a
+value in watts. Percent suffixes are escaped automatically. Samples reflect the
+fetched snapshot, not continuous live updates, and may be truncated. Attribute
+suggestions include up to 32 scalar dotted paths, not array indices.
+Large entity responses can exceed the lookup limit; enter the ID and path
+manually in that case. Successful lookup does not waive the live snapshot limits
+above.
 
 ## Add a service action
 

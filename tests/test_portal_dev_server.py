@@ -72,7 +72,9 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertIn("async function padInit()", bundle)
         self.assertLess(bundle.index("function actionEditorHTML("), bundle.index("async function padInit()"))
         self.assertNotIn("portal_shutter", bundle)
-        self.assertEqual(self.request("/api/bindings")[0], 200)
+        status, schema = self.request("/api/bindings")
+        self.assertEqual(status, 200)
+        self.assertIn("ha", {scheme["name"] for scheme in schema["schemes"]})
         status, styles = self.request("/portal-all.css", raw=True)
         self.assertEqual(status, 200)
         headless_styles = self.request("/portal-all.css", profile="reterminal-e1003-frame", raw=True)[1]
@@ -100,6 +102,29 @@ class PortalDevServerTest(unittest.TestCase):
         cleared = self.request("/api/config")[1]
         self.assertEqual(cleared["wifi_failure_mode"], "ap")
         self.assertEqual(cleared["ap_password"], "")
+
+    def test_ha_lookup_jobs(self):
+        status, started = self.request("/api/ha/lookup?query=living")
+        self.assertEqual(status, 202)
+        status, matches = self.request("/api/ha/lookup?job=" + str(started["job"]))
+        self.assertEqual(status, 200)
+        self.assertEqual(len(matches["entities"]), 2)
+        self.assertFalse(matches["more"])
+        started = self.request("/api/ha/lookup?entity=light.kitchen")[1]
+        detail = self.request("/api/ha/lookup?job=" + str(started["job"]))[1]
+        self.assertEqual(detail["state"], "on")
+        self.assertIn({"path": "attributes.brightness", "value": "128"}, detail["paths"])
+        self.assertEqual(self.request("/api/ha/lookup?job=0")[0], 404)
+        started = self.request("/api/ha/lookup?query=nonadmin")[1]
+        status, denied = self.request("/api/ha/lookup?job=" + str(started["job"]))
+        self.assertEqual(status, 403)
+        self.assertIn("administrator", denied["error"])
+        self.assertEqual(self.request("/api/ha/lookup?entity=light.kitchen")[0], 202)
+        self.assertEqual(self.request("/api/ha/lookup?query=ab")[0], 400)
+        self.assertEqual(self.request("/api/ha/lookup?query=living", profile="reterminal-e1003-frame")[0], 404)
+        self.server.scenario = "load-error"
+        started = self.request("/api/ha/lookup?query=living")[1]
+        self.assertEqual(self.request("/api/ha/lookup?job=" + str(started["job"]))[0], 503)
 
     def test_widget_manifest(self):
         widgets = load_widgets()

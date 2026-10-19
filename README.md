@@ -381,6 +381,7 @@ Widget firmware and portal packaging share one explicit manifest; see the
 | --- | --- |
 | `GET /api/config` | HA URL and write-only token status; `capabilities.ha_live` reports live binding support |
 | `GET /api/ha/live` | Authenticated live connection state, entity count, errors, and counters; only with `HAS_HA_LIVE` |
+| `GET /api/ha/lookup` | Authenticated, bounded HA entity search and attribute lookup jobs for the binding builder; only with `HAS_HA_LIVE` |
 
 See the [REST API reference](docs/dev/web-portal.md#home-assistant-live-status).
 Live bindings share HA credentials with REST actions and history; MQTT remains

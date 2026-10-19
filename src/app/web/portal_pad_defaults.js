@@ -516,7 +516,7 @@ function padBindingMaxlenHint(input) {
             hint = document.createElement('div');
             hint.className = 'binding-maxlen-hint';
             hint.innerHTML = 'Reached the maximum length. For a long binding, define a ' +
-                '<a href="#" onclick="showBindingHelp(\'pad\');return false;">named pad binding</a> ' +
+                '<a href="#" onclick="showBindingHelp();return false;">named pad binding</a> ' +
                 'and use the short <code>[pad:name]</code> alias here.';
             // Anchor to the enclosing field block so the hint always lands on its
             // own full-width line below the input, never as a flex sibling that
@@ -550,4 +550,3 @@ if (!window.__padMaxlenHintWired) {
         }
     });
 }
-

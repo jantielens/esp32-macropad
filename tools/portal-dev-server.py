@@ -33,6 +33,22 @@ APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
 PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
+HA_ENTITIES = {
+    "sensor.living_room_temperature": {
+        "name": "Living room temperature", "state": "21.37", "unit": "\u00b0C",
+        "paths": [{"path": "attributes.unit_of_measurement", "value": "\u00b0C"},
+                  {"path": "attributes.friendly_name", "value": "Living room temperature"},
+                  {"path": "attributes.battery", "value": "73"}],
+    },
+    "sensor.living_room_humidity": {
+        "name": "Living room humidity", "state": "54.2", "unit": "%",
+        "paths": [{"path": "attributes.unit_of_measurement", "value": "%"}],
+    },
+    "light.kitchen": {
+        "name": "Kitchen light", "state": "on", "unit": "",
+        "paths": [{"path": "attributes.brightness", "value": "128"}],
+    },
+}
 MOCK_NOW_EPOCH = 1791370589
 SCREENSAVER_DEFAULTS = {
     "screen_saver_enabled": True, "screen_saver_timeout_seconds": 300,
@@ -77,6 +93,8 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_defaults = fixture["button_defaults"]
     server.mock_typography = {"default_font": "@builtin", "base_text_size": 0}
     server.scenario = scenario
+    server.mock_ha_lookup_job = 0
+    server.mock_ha_lookup_result = None
     server.mock_screen = "pad_0"
     server.mock_icons = {}
     server.mock_boot_actions = []
@@ -114,6 +132,8 @@ def reset_pad_fixtures(server, scenario="normal"):
             "alarm_hook_allowed": True, "editor_fields": [field,
                 {"name": "sound_alert_volume", "label": "Volume override (%)", "type": "number",
                  "min": 0, "max": 100, "default": "0", "help": "0 = use device volume; 1-100 overrides it."}]})
+    fixture["binding_schema"]["schemes"].append({"name": "ha", "min_params": 1, "max_params": 3,
+        "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": True, "keys": []})
     fixture["binding_schema"]["schemes"].append({"name": "alarm", "min_params": 1, "max_params": 1,
         "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
         "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id", "1_hour", "1_minute", "1_minutes",
@@ -257,6 +277,40 @@ class PortalHandler(SimpleHTTPRequestHandler):
             config.setdefault("timezone", "Europe/Brussels")
             config["screen_saver_keeps_panel_awake"] = self._profile() == "jc3248w535"
             self._serve_json(config)
+        elif path == "/api/ha/lookup":
+            if self._profile() != "esp32-p4-lcd4b":
+                self._serve_json({"error": "HA lookup unavailable"}, 404)
+                return
+            if "job" in query:
+                if query["job"][0] != str(self.server.mock_ha_lookup_job) or self.server.mock_ha_lookup_result is None:
+                    self._serve_json({"error": "Lookup expired; retry the lookup."}, 404)
+                else:
+                    status, payload = self.server.mock_ha_lookup_result
+                    self._serve_json(payload, status)
+                return
+            entity = query.get("entity", [""])[0]
+            search = query.get("query", [""])[0]
+            if bool(entity) == bool(search):
+                self._serve_json({"error": "Supply either query or entity."}, 400)
+                return
+            if entity and not re.fullmatch(r"[a-z0-9_]+\.[a-z0-9_]+", entity) or not entity and not 3 <= len(search) <= 80:
+                self._serve_json({"error": "Enter a valid entity ID, or a search of 3 to 80 characters."}, 400)
+                return
+            self.server.mock_ha_lookup_job += 1
+            if self.server.scenario == "load-error":
+                result = (503, {"error": "Home Assistant lookup timed out or could not connect."})
+            elif search and search.lower() == "nonadmin":
+                result = (403, {"error": "Entity search requires a Home Assistant administrator token. Enter an entity ID manually; HA bindings and binding generation still work."})
+            elif entity:
+                detail = HA_ENTITIES.get(entity)
+                result = (200, {"entity_id": entity, "state": detail["state"], "unit": detail["unit"],
+                                "paths": detail["paths"], "more": False}) if detail else (404, {"error": "Home Assistant entity not found."})
+            else:
+                matches = [{"entity_id": key, "name": value["name"]} for key, value in HA_ENTITIES.items()
+                           if search.lower() in key.lower() or search.lower() in value["name"].lower()]
+                result = (200, {"entities": matches[:20], "more": len(matches) > 20})
+            self.server.mock_ha_lookup_result = result
+            self._serve_json({"job": self.server.mock_ha_lookup_job}, 202)
         elif path == "/api/ha/live":
             if self._profile() != "esp32-p4-lcd4b":
                 self._serve_json({"error": "HA live unavailable"}, 404)

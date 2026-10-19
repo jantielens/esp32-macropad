@@ -1121,6 +1121,67 @@ only and never
 downgrades HTTPS; REST actions and history are unaffected. See
 [live binding bounds and diagnostics](home-assistant-mqtt.md#direct-ha-live-bindings).
 
+### Home Assistant Binding Lookup
+
+Authenticated `GET /api/ha/lookup` is available only with `HAS_HA_LIVE`.
+Supply either `query` (3 to 80 UTF-8 bytes) for autocomplete or `entity`
+(a valid entity ID shorter than 96 bytes) for exact lookup. Admission returns
+HTTP 202 with `{"job":123}`. Poll `?job=123`: HTTP 202 means pending, HTTP 200
+returns the result. Only one job runs at a time (HTTP 409 on contention);
+a newer job replaces the previous completed result. Expired job IDs return
+HTTP 404. Clients must ignore stale results and use `cache: 'no-store'`.
+
+Search calls HA's `POST /api/template` with an application-owned template and
+the query in `variables`, not interpolated template source. Matching is
+case-insensitive on entity IDs and friendly names across all state domains.
+Results contain `entities` (at most 20 `{entity_id,name}` objects) and `more`.
+Friendly names are limited to 64 characters. No complete catalogue is downloaded.
+Search requires an HA admin token. Because HA can use HTTP 401 for both a
+non-admin token and invalid authentication, a template 401 triggers a probe of
+HA's `GET /api/`: successful authentication maps to an explanatory HTTP 403;
+invalid credentials remain HTTP 401.
+
+Exact lookup calls `GET /api/states/<entity_id>`, so non-admin users can load
+entities they may read. It returns `entity_id`, `state`, `state_truncated`,
+`unit`, `paths` (`{path,value,truncated?}` samples), and `more`. Suggestions
+include up to 32 scalar dotted attribute paths, traversing up to four object
+levels. Array indexing and delimiter-bearing keys are not suggested. Samples
+are limited to 192 UTF-8 bytes, preserving character boundaries; units to 32.
+`more` indicates omitted collections, depth, path-length or count limits.
+
+Lookup uses the saved local HTTP HA credentials, independently of the live
+subscription cache. A lazy worker has an 8 KiB PSRAM stack, a retained 12 KiB
+response buffer, and a shared strict 48 KiB PSRAM JSON budget while processing.
+Responses beyond 12 KiB fail explicitly (HTTP 413); JSON-budget, upstream,
+network and timeout failures return explicit errors. Transport and portal
+response machinery can still allocate internal RAM. Network operations have
+four-second timeouts and cooperative overall, OTA, network and configuration
+checkpoints. Credential changes and OTA epochs invalidate old results.
+No request pointers are retained by the worker.
+
+**Binding Reference & Builders** has a **Binding builders > Home Assistant** view, available
+when the device advertises the `ha` scheme. The builder and generated `ha`
+reference link to each other; the reference does not embed the builder.
+The dialog opens on Basics with a reset builder; Basics links to available builders.
+The documentation search remains independent of entity search.
+The builder uses three numbered sections in one view. Search text is separate
+from the selected entity; formatting controls appear only after selection.
+Selection fetches details automatically, while manual IDs remain usable if
+metadata lookup fails. State, discovered attributes and custom paths share the
+same formatting controls. Unit spacing is automatic, and explicit refreshes
+preserve an edited unit.
+Autocomplete debounces by 350 ms; changing inputs, changing reference views
+and closing the dialog cancel browser requests. Lookup never creates a live
+subscription or changes pads. Formatting and token construction live in
+`portal_binding_builder.js`; HA-specific discovery and UI live in
+`portal_binding_builder_ha.js`. MQTT can reuse the formatting/token helpers
+without adopting HA discovery. See the
+[user workflow](../user/integrations/home-assistant.md#build-an-ha-binding).
+
+The local P4 portal profile supplies deterministic lookup jobs, entity details
+and an administrator-permission failure for the search `nonadmin`. The
+`load-error` scenario exercises lookup availability failures.
+
 ### Development Crash Injection
 
 `POST /api/debug/crash?mode=abort&confirm=crash` intentionally crashes the

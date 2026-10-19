@@ -64,6 +64,7 @@ static const char* const core_preflight_paths[] = {
 	"/api/bindings",
 #if HAS_HA_LIVE
 	"/api/ha/live",
+	"/api/ha/lookup",
 #endif
 #if HEALTH_HISTORY_ENABLED
 	"/api/health/history",
@@ -197,6 +198,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/bindings", HTTP_GET, handleGetBindings);
 #if HAS_HA_LIVE
 		server->on("/api/ha/live", HTTP_GET, handleGetHaLive);
+		server->on("/api/ha/lookup", HTTP_GET, handleGetHaLookup);
 #endif
 		#if HEALTH_HISTORY_ENABLED
 		server->on("/api/health/history", HTTP_GET, handleGetHealthHistory);

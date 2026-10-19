@@ -925,6 +925,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_live.cpp
   - src/app/ha_live.h
   - src/app/ha_live_state.cpp
+  - src/app/ha_lookup.cpp
+  - src/app/ha_lookup.h
+  - src/app/ha_lookup_data.cpp
+  - src/app/ha_lookup_data.h
   - src/app/mcp_tools_pads.cpp
   - src/app/pad_binding.cpp
   - src/app/pad_binding.h
@@ -936,6 +940,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_tile_builder.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
+  - src/app/web_portal_ha_lookup.cpp
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp

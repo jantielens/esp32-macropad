@@ -29,6 +29,8 @@ portal_dropdown.js
 
 # [chunk:bindings HAS_DISPLAY]
 portal_binding_validator.js
+portal_binding_builder.js
+portal_binding_builder_ha.js
 portal_binding_help.js
 
 # [chunk:actions HAS_DISPLAY]

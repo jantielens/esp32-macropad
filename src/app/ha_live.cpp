@@ -2,6 +2,7 @@
 #if HAS_HA_LIVE
 
 #include "ha_live_state.h"
+#include "ha_lookup.h"
 #include "binding_template.h"
 #include "binding_sources.h"
 #include "pad_binding.h"
@@ -10,6 +11,7 @@
 #include "log_manager.h"
 #include "ota_activity.h"
 #include "rtos_task_utils.h"
+#include "bounded_psram_json_allocator.h"
 
 #include <WebSocketsClient.h>
 #include <WiFi.h>
@@ -26,43 +28,6 @@ static constexpr size_t JSON_BYTES = 64 * 1024;
 static constexpr uint32_t STACK_BYTES = 8192;
 static constexpr uint32_t PREVIEW_MS = 60000;
 static_assert(WEBSOCKETS_MAX_DATA_SIZE == MESSAGE_BYTES, "Review WebSockets frame limit");
-
-class HaJsonAllocator : public ArduinoJson::Allocator {
-    struct alignas(max_align_t) Header { size_t size; };
-public:
-    size_t used = 0, peak = 0;
-    void* allocate(size_t size) override {
-        if (!size || size > JSON_BYTES - used || sizeof(Header) > JSON_BYTES - used - size) return nullptr;
-        auto* p = static_cast<Header*>(heap_caps_malloc(size + sizeof(Header),
-                                                       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-        if (!p) return nullptr;
-        p->size = size + sizeof(Header);
-        used += p->size;
-        if (used > peak) peak = used;
-        return p + 1;
-    }
-    void deallocate(void* pointer) override {
-        if (!pointer) return;
-        auto* p = static_cast<Header*>(pointer) - 1;
-        used -= p->size;
-        heap_caps_free(p);
-    }
-    void* reallocate(void* pointer, size_t size) override {
-        if (!pointer) return allocate(size);
-        if (!size) { deallocate(pointer); return nullptr; }
-        auto* p = static_cast<Header*>(pointer) - 1;
-        const size_t previous = p->size;
-        if (size > JSON_BYTES - (used - previous) ||
-            sizeof(Header) > JSON_BYTES - (used - previous) - size) return nullptr;
-        auto* next = static_cast<Header*>(heap_caps_realloc(p, size + sizeof(Header),
-                                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-        if (!next) return nullptr;
-        next->size = size + sizeof(Header);
-        used = used - previous + next->size;
-        if (used > peak) peak = used;
-        return next + 1;
-    }
-};
 
 struct HaEntry {
     char entity[HA_LIVE_ENTITY_BYTES] = {};
@@ -84,7 +49,7 @@ struct HaRuntime {
     uint32_t revision = 0, epoch = 0;
     size_t count = 0, largest_message = 0;
     uint32_t fragment_ms = 0;
-    HaJsonAllocator allocator;
+    BoundedPsramJsonAllocator allocator{JSON_BYTES};
     WebSocketsClient* socket = nullptr;
     const char* failure = nullptr;
     bool terminal = false;
@@ -163,6 +128,7 @@ static const char* parse_url(const char* url, char* host, uint16_t& port) {
 
 void ha_live_configure(const char* url, const char* token) {
     if (!g_ready.load(std::memory_order_acquire)) return;
+    ha_lookup_configure(url, token);
     char host[CONFIG_HA_URL_MAX_LEN] = {};
     uint16_t port = 80;
     const bool configured = url && url[0] && token && token[0];

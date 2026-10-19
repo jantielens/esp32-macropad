@@ -18,8 +18,9 @@ defaults to `(HAS_DISPLAY && HAS_PSRAM)`.
 The existing `ha_url` and write-only `ha_token` settings serve live state,
 REST service actions, and Recorder history. A successful configuration save
 safely applies the HA client's URL/token settings without reboot. There is no
-separate live credential,
-entity picker, or fixed compile-time entity list.
+separate live credential or fixed compile-time entity list. The Binding Reference & Builders
+dialog provides [assisted HA binding authoring](../user/integrations/home-assistant.md#build-an-ha-binding)
+through an independent, on-demand lookup worker.
 
 Bindings use `[ha:entity_id;path;format]`. Empty or `.` paths select `state`;
 explicit `state`, `attributes.brightness`, and other dotted paths select values

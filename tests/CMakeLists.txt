@@ -339,7 +339,8 @@ add_host_legacy_test(test_ha_stats_resample
 )
 
 add_host_gtest(test_ha_live
-    test_ha_live.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_live_state.cpp)
+    test_ha_live.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_live_state.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/ha_lookup_data.cpp)
 target_include_directories(test_ha_live PRIVATE ${HOST_ARDUINOJSON_DIR})
 target_compile_definitions(test_ha_live PRIVATE HAS_HA_LIVE=1)
 target_compile_options(test_ha_live PRIVATE

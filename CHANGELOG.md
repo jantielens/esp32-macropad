@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add an HA binding builder to the Pad Editor's Binding Reference & Builders dialog, with
+  server-side entity autocomplete, attribute suggestions, decimal and unit
+  formatting, sample values, and Copy/Insert controls. Autocomplete requires
+  an HA administrator token; manual entry and normal live bindings do not.
 * Add live Home Assistant entity bindings through
   `[ha:entity_id;path;format]`, reusing the existing server URL and long-lived
   access token without requiring MQTT. Read states and attributes in labels,

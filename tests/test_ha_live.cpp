@@ -1,4 +1,7 @@
 #include "ha_live_state.h"
+#include "ha_lookup_data.h"
+#include "ha_lookup.h"
+#include "bounded_psram_json_allocator.h"
 #include <gtest/gtest.h>
 #include <string>
 
@@ -84,5 +87,76 @@ TEST(HaLive, FragmentedMessagesAreBoundedAndResetBetweenMessages) {
     ASSERT_EQ(frame.append("first", 5, true, true), nullptr);
     EXPECT_NE(frame.append("overlap", 7, true, false), nullptr);
     EXPECT_NE(frame.append(body.data(), body.size(), false, false), nullptr);
+}
+
+TEST(HaLookup, AttributePathsMatchResolverAndExcludeUnsupportedKeys) {
+    JsonDocument state, detail;
+    ASSERT_FALSE(deserializeJson(state, R"({"entity_id":"light.kitchen","state":"on","attributes":{"brightness":128,"nested":{"number":2.5,"enabled":true},"bad.key":1,"bad|key":2,"list":[1,2],"empty":null}})"));
+    ASSERT_EQ(ha_lookup_describe_entity(state.as<JsonObjectConst>(), "light.kitchen", detail), nullptr);
+    EXPECT_STREQ(detail["state"], "on");
+    const auto paths = detail["paths"].as<JsonArrayConst>();
+    ASSERT_EQ(paths.size(), 3U);
+    EXPECT_STREQ(paths[0]["path"], "attributes.brightness");
+    EXPECT_STREQ(paths[0]["value"], "128");
+    EXPECT_STREQ(paths[1]["path"], "attributes.nested.number");
+    EXPECT_STREQ(paths[2]["value"], "true");
+    EXPECT_TRUE(detail["more"].as<bool>());
+    EXPECT_NE(ha_lookup_describe_entity(state.as<JsonObjectConst>(), "sensor.other", detail), nullptr);
+    state.clear();
+    EXPECT_STREQ(paths[1]["path"], "attributes.nested.number");
+    EXPECT_STREQ(paths[1]["value"], "2.5");
+}
+
+TEST(HaLookup, BoundsAttributeCountAndSamples) {
+    JsonDocument state, detail;
+    state["entity_id"] = "sensor.power";
+    state["state"] = std::string(300, 'x');
+    for (unsigned i = 0; i < 40; ++i)
+        state["attributes"][std::string("value_") + std::to_string(i)] = std::string(300, 'y');
+    ASSERT_EQ(ha_lookup_describe_entity(state.as<JsonObjectConst>(), "sensor.power", detail), nullptr);
+    EXPECT_EQ(strlen(detail["state"].as<const char*>()), 192U);
+    EXPECT_TRUE(detail["state_truncated"].as<bool>());
+    ASSERT_EQ(detail["paths"].size(), 32U);
+    EXPECT_EQ(strlen(detail["paths"][0]["value"].as<const char*>()), 192U);
+    EXPECT_TRUE(detail["paths"][0]["truncated"].as<bool>());
+    EXPECT_TRUE(detail["more"].as<bool>());
+    EXPECT_LE(measureJson(detail), 12U * 1024U);
+}
+
+TEST(HaLookup, TruncationPreservesUtf8AndOmitsUnaddressablePaths) {
+    JsonDocument state, detail;
+    state["entity_id"] = "sensor.power";
+    state["state"] = std::string(191, 'x') + "\xc2\xb0";
+    state["attributes"][std::string(120, 'a')] = 1;
+    state["attributes"]["a"]["b"]["c"]["d"]["e"] = 2;
+    ASSERT_EQ(ha_lookup_describe_entity(state.as<JsonObjectConst>(), "sensor.power", detail), nullptr);
+    EXPECT_EQ(strlen(detail["state"].as<const char*>()), 191U);
+    EXPECT_TRUE(detail["paths"].as<JsonArrayConst>().size() == 0);
+    EXPECT_TRUE(detail["more"].as<bool>());
+}
+
+TEST(HaLookup, PsramJsonBudgetSurvivesFailedGrowthAndReleasesMemory) {
+    BoundedPsramJsonAllocator allocator(256);
+    void* first = allocator.allocate(64);
+    ASSERT_NE(first, nullptr);
+    EXPECT_EQ(allocator.allocate(256), nullptr);
+    EXPECT_EQ(allocator.reallocate(first, 256), nullptr);
+    first = allocator.reallocate(first, 32);
+    ASSERT_NE(first, nullptr);
+    allocator.deallocate(first);
+    void* reused = allocator.allocate(192);
+    ASSERT_NE(reused, nullptr);
+    allocator.deallocate(reused);
+    EXPECT_LE(allocator.peak, 256U);
+}
+
+TEST(HaLookup, ConfigurationAndOtaInvalidateRunningAndCompletedLookups) {
+    HaLookupContext context{10, 20};
+    EXPECT_TRUE(context.current(10, 20, false));
+    EXPECT_FALSE(context.current(10, 20, true));
+    EXPECT_FALSE(context.current(10, 21, false)); // OTA finished before the next checkpoint.
+    EXPECT_FALSE(context.current(11, 20, false));
+    context = {11, 21};
+    EXPECT_TRUE(context.current(11, 21, false));
 }
 }
