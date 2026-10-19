@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-16
+ms.date: 2026-10-19
 ms.topic: reference
 ---
 
@@ -82,6 +82,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Fix the M5Stack StopWatch display occasionally staying blank and off-white
+  after a software reboot. Wait 200 ms after panel reset before sending Sleep
+  Out, satisfying the CO5300's active-panel reset timing. Startup takes
+  150 ms longer.
 * Open confirmations without a preselected button. The first physical Next,
   Previous, or Tap selects an option without activating it; touch still
   activates either button directly.

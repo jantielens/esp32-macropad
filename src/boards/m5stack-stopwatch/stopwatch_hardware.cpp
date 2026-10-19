@@ -180,7 +180,8 @@ bool initialize() {
     if (!update(expander, 0x05, 0x18, 0)) return false;
     delay(10);
     if (!update(expander, 0x05, 0x18, 0x18)) return false;
-    delay(50);
+    // CO5300 needs at least 120 ms before Sleep Out after resetting an active panel.
+    delay(200);
     return true;
 }
 } // namespace

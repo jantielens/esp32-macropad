@@ -92,6 +92,15 @@ observed boot discovered the expander after 250 ms, beyond the previous
 Expander IO8 powers the display; IO5
 resets it and IO4 resets touch. They are not ordinary GPIOs.
 
+After releasing reset, board startup waits 200 ms before returning to display
+initialization. The CO5300 datasheet (section 6.6) requires at least 120 ms
+before Sleep Out when resetting an active panel. Software restarts leave the
+panel powered, so this wait must precede Sleep Out rather than rely on the
+150 ms delay after that command. This replaces the previous 50 ms reset wait
+and adds 150 ms to startup. User hardware testing on 2026-10-19 confirmed the
+fix works for the reported software-reboot symptom; a broader repeated-reboot
+and cold-boot matrix remains unverified.
+
 The logical canvas is the documented 466 × 466 round area. The factory
 reference configures 468 × 466 at panel offset (6, 0), while M5GFX has used
 468 × 468. This adapter crops one horizontal pixel per side, giving the
