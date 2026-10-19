@@ -128,6 +128,7 @@ assert.strictEqual(font.length, font.readUInt32BE(8));
 assert(!css.includes('.pad-cell-widget-'));
 
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_button_templates.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
 context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50' };
 const barBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "bar")', context);
@@ -136,6 +137,7 @@ context.testBuilderSession = {
     detail: { state: '42', unit: '%' }, scenario: barBuilder, name: 'Battery',
     dialog: { querySelector: selector => builderElements[selector] }
 };
+context.padButtonBuilderSetScenario(context.testBuilderSession, barBuilder);
 vm.runInContext('padButtonBuilderSession = testBuilderSession', context);
 context.padColorPopoverClose = () => {};
 const updatePreview = context.padButtonBuilderUpdatePreview;
@@ -150,6 +152,15 @@ orientationInput.value = 'horizontal';
 orientationInput.onchange();
 assert.strictEqual(context.testBuilderSession.options.orientation, 'horizontal', 'Custom dropdowns dispatch change, not input');
 assert.strictEqual(previewUpdates, 2);
+const minimumInput = builderInputs.find(input => input.name === 'min');
+minimumInput.value = '';
+minimumInput.oninput();
+assert.strictEqual(context.testBuilderSession.options.min, '', 'Keep incomplete numeric input raw');
+assert.throws(() => context.padButtonBuilderValidateFields(context.testBuilderSession), /minimum and maximum/);
+minimumInput.value = '-0.5';
+minimumInput.oninput();
+assert.strictEqual(context.testBuilderSession.options.min, '-0.5');
+assert.doesNotThrow(() => context.padButtonBuilderValidateFields(context.testBuilderSession));
 context.padButtonBuilderUpdatePreview = updatePreview;
 vm.runInContext('padButtonBuilderSession = null', context);
 for (const orientation of ['vertical', 'horizontal']) {
@@ -184,7 +195,9 @@ let samplePoints;
 for (const color of ['#4CAF50', '#2196F3']) {
     const cell = createElement();
     const detail = { state: '21.37', unit: '\u00b0C' };
-    const options = historyBuilder.defaults(detail);
+    const session = { detail, name: 'Living room' };
+    context.padButtonBuilderSetScenario(session, historyBuilder);
+    const options = session.options;
     const button = { label_top: 'Living room', widget_sparkline_line_color: color,
         widget_sparkline_line_width: 2, widget_sparkline_current_dot: 5,
         ...historyBuilder.preview(detail, options) };

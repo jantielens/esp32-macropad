@@ -34,6 +34,7 @@ portal_binding_help.js
 # [chunk:ha_bindings HAS_HA_LIVE]
 portal_binding_builder.js
 portal_binding_builder_ha.js
+portal_button_templates.js
 portal_button_builder.js
 
 # [chunk:actions HAS_DISPLAY]

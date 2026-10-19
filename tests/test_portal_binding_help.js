@@ -25,6 +25,7 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_help.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_ha.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_button_templates.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
 
 const scheme = name => fixture.schemes.find(s => s.name === name);
@@ -271,10 +272,11 @@ delete context.testHelpSchemes;
     const historyBuilder = builders.find(builder => builder.id === 'history');
     const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
     const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
-    const buildSession = (detail, builder) => ({
-        col: 2, row: 1, page: 0, detail, scenario: builder,
-        options: { ...builder.defaults(detail), title: 'Living room' }
-    });
+    const buildSession = (detail, builder) => {
+        const session = { col: 2, row: 1, page: 0, detail, name: 'Living room' };
+        context.padButtonBuilderSetScenario(session, builder);
+        return session;
+    };
     const valueSession = buildSession(temperature, valueBuilder);
     const generatedValue = context.padButtonBuilderBuild(valueSession);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedValue)), {
@@ -285,6 +287,47 @@ delete context.testHelpSchemes;
     assert.strictEqual(valueBuilder.preview({ ...temperature, state: 'unavailable' }, valueSession.options).label_center, '---');
     const textSession = buildSession({ ...temperature, state: 'Ready', unit: '' }, valueBuilder);
     assert.strictEqual(context.padButtonBuilderBuild(textSession).label_center, '[ha:sensor.living_room_temperature;;%s]');
+    assert.ok(!textSession.fields.some(field => field.name === 'decimals'));
+    for (const decimals of ['', ' ', null, undefined, false, 'NaN', 'Infinity', '-1', '1.5', '7']) {
+        valueSession.options.decimals = decimals;
+        assert.throws(() => context.padButtonBuilderBuild(valueSession), /decimal/);
+    }
+    for (const decimals of ['0', '6']) {
+        valueSession.options.decimals = decimals;
+        assert.ok(context.padButtonBuilderBuild(valueSession).label_center.includes('%.' + decimals + 'f'));
+    }
+    const switchingSession = buildSession(temperature, valueBuilder);
+    switchingSession.options.title = 'My temperature';
+    switchingSession.options.unit = 'custom unit';
+    context.padButtonBuilderSetScenario(switchingSession, historyBuilder, switchingSession.options.title);
+    assert.strictEqual(switchingSession.options.title, 'My temperature');
+    assert.strictEqual(switchingSession.options.unit, temperature.unit);
+    switchingSession.options.color = '#123456';
+    context.padButtonBuilderSetScenario(switchingSession, valueBuilder, switchingSession.options.title);
+    assert.strictEqual(switchingSession.options.title, 'My temperature');
+    assert.ok(!Object.hasOwn(switchingSession.options, 'color'));
+    assert.ok(!Object.hasOwn(switchingSession.options, 'window'));
+
+    // A new numeric knob needs only a descriptor and output mapping.
+    let fieldEvaluations = 0;
+    const steppedBuilder = {
+        fields() {
+            fieldEvaluations++;
+            return [{ name: 'level', label: 'Level', type: 'number', default: 0.3, min: 0.1, max: 0.9, step: 0.2 }];
+        },
+        build: (detail, options) => ({ label_center: String(Number(options.level)) })
+    };
+    const steppedSession = buildSession(temperature, steppedBuilder);
+    assert.strictEqual(context.padButtonBuilderBuild(steppedSession).label_center, '0.3');
+    for (const level of ['0.1', '0.7', '0.9']) {
+        steppedSession.options.level = level;
+        assert.strictEqual(context.padButtonBuilderBuild(steppedSession).label_center, level);
+    }
+    for (const level of ['', '0', '0.2', '1', '1e999']) {
+        steppedSession.options.level = level;
+        assert.throws(() => context.padButtonBuilderBuild(steppedSession), /level/);
+    }
+    assert.strictEqual(fieldEvaluations, 1, 'Defaults, validation, and rendering share one field definition');
     valueSession.options.decimals = 7;
     assert.throws(() => context.padButtonBuilderBuild(valueSession), /decimal/);
     valueSession.options.decimals = 1;
@@ -323,6 +366,20 @@ delete context.testHelpSchemes;
     assert.throws(() => context.padButtonBuilderBuild(buildSession({ ...longLight, entity_id: longLight.entity_id + 'a' }, toggleBuilder)), /48/);
     lightSession.options.icon = 'not an icon';
     assert.throws(() => context.padButtonBuilderBuild(lightSession), /Symbol/);
+    lightSession.options.icon = '';
+    assert.throws(() => context.padButtonBuilderBuild(lightSession), /symbol/i);
+    lightSession.options.icon = 'lightbulb';
+    for (const color of ['red', '#fff', '[ha:light.kitchen]', '']) {
+        lightSession.options.on = color;
+        assert.throws(() => context.padButtonBuilderBuild(lightSession), /colors/);
+    }
+    lightSession.options.on = '#aAbBcC';
+    assert.ok(context.padButtonBuilderBuild(lightSession).fg_color.includes('#aAbBcC'));
+    valueSession.options.unit = 'x'.repeat(61);
+    assert.throws(() => context.padButtonBuilderBuild(valueSession), /unit/);
+    valueSession.options.unit = 'x'.repeat(60);
+    assert.strictEqual(context.padButtonBuilderBuild(valueSession).label_bottom.length, 60);
+    valueSession.options.unit = temperature.unit;
 
     context.deviceInfoCache = { widget_catalog: [{ type: 'sparkline' }] };
     assert.strictEqual(historyBuilder.available(temperature), true);

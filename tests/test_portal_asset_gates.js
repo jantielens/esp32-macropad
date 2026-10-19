@@ -60,6 +60,7 @@ for (const [board, target, psram] of [['esp32c3-withsensors', 'ESP32C3', false],
     assert.equal(shell.includes('id="binding-help-overlay"'), display, 'Binding dialog HTML must follow HAS_DISPLAY');
     assert.equal(js.includes('function haBindingBuilderHTML('), ha, 'HA builder JS must follow HAS_HA_LIVE');
     assert.equal(js.includes('function padButtonBuilderOpen('), ha, 'Button builder must follow HAS_HA_LIVE');
+    assert.equal(js.includes('const padButtonBuilders='), ha, 'Button templates must follow HAS_HA_LIVE');
     assert.equal(js.includes('function bindingBuilderToken('), ha, 'Unused builder helpers must be excluded');
     assert.equal(js.includes("Build a Home Assistant binding"), ha, 'HA shortcut registration must follow HAS_HA_LIVE');
     assert.equal(assets.has('dialog_appearance_fragment_html_gz'), display);

@@ -802,7 +802,40 @@ every component in that custom section to the same category ID.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
   - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading; each binding groups its name, expression, live preview, and delete control inside one bordered row.
   - Button builder: On `HAS_HA_LIVE` builds, selected empty positions offer a separate creation dialog for HA value buttons, single-bar widgets for numeric readings, and entity-toggle buttons supporting the `light` and `switch` domains. The bar scenario requires `bar_chart` in the device widget catalog and uses raw HA state for its data binding, with separate bottom-label formatting. It exposes range, orientation, and value formatting, not styling. It reuses `/api/ha/lookup` and binding-format helpers, requires successful entity lookup, and generates ordinary button fields into the draft without saving or executing actions. On mobile, empty-position selection keeps the canvas visible and offers **Edit manually** for the existing inspector. Configured/inherited buttons are not builder targets. See the [creation workflow](../user/pads/editing.md#create-a-button-from-home-assistant).
-    `portal_button_builder.js` contains the small `padButtonBuilders` scenario list. Each entry supplies `id`, `label`, `description`, `available(detail)`, `fields(detail)`, `defaults(detail)`, `build(detail, options)`, and `preview(detail, options, state)`. Field descriptors use `name`, `label`, `type`, optional native input limits and numeric `step`, select `options` as value/label pairs, and an optional `link` with `label` and `href` for external help. Color fields reuse the shared badges and literal-only color picker, hosted inside the native dialog while open. Optional `renderPreview(cell, button, detail)` adds scenario-owned visuals after the shared cell renderer; the button contains preview label overrides. Optional `note` explains scenario settings; `preferred` selects the first applicable suggested scenario; `previewStates` adds simulated state controls. The dialog owns lookup cancellation, title editing, validation, and draft insertion. Add scenarios through this list rather than branching the dialog by scenario ID; do not persist builder metadata.
+    `portal_button_templates.js` owns the `padButtonBuilders` scenario list.
+    Each entry supplies `id`, `label`, `description`, `available(detail)`,
+    `fields(detail)`, `build(detail, options)`, and `preview(detail, options, state)`.
+    `portal_button_builder.js` owns the dialog, lookup cancellation, shared title
+    control, field rendering and validation, preview orchestration, and draft insertion.
+    Both modules belong to the `HAS_HA_LIVE` bundle chunk, with templates loaded first.
+
+    Field descriptors declare `name`, `label`, `type`, and `default` together.
+    Supported types are `text`, `number`, `select`, and `color`. The dialog
+    evaluates fields once per entity/scenario selection and uses the same
+    descriptors for defaults, rendering, and validation. Switching scenarios
+    preserves the title and resets other options to the new defaults.
+    Reuse `padButtonBuilderDecimalField()` and `padButtonBuilderUnitField(unit)`
+    for the common formatting controls.
+
+    Optional constraints include `required`, `maxlength`, numeric `min`, `max`,
+    and `step` (default `1`; use `'any'` for arbitrary fractions). Numbers must
+    be nonempty and finite. Select `options` are value/label pairs; validation
+    checks membership. Colors must be literal `#RRGGBB` values and reuse the
+    shared color picker hosted inside the native dialog. Text controls allow
+    empty strings unless required. Optional `error` overrides the field's
+    validation message; `link: { label, href }` adds external help.
+    Input stays raw while editing; `build()` converts numeric options as needed.
+    Cross-field rules, firmware limits, and binding validation remain separate
+    from these basic control checks.
+
+    Optional `renderPreview(cell, button, detail)` adds scenario-owned visuals
+    after the shared cell renderer; the button contains preview label overrides.
+    Optional `note` explains settings; `preferred` selects the first applicable
+    suggested scenario; `previewStates` adds simulated state controls, and
+    `previewNote(options)` supplies a dynamic preview caption.
+    Add scenarios through the template list rather than branching the dialog
+    by scenario ID. Keep output generation and specialized previews as JavaScript
+    functions; do not persist builder metadata.
   - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Optional bars use fixed collapsed defaults, including when configured or paired. Disabled gridlines and empty targets retain editable styling and validation. Drafts preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
   - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings and feature groups start collapsed regardless of configured values. Needle off, tick count 0, and an empty target retain editable styling and validation. Drafts preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
   - Background image: One collapsible frame contains unframed Local Image and Camera Feed or Remote Image disclosures plus their shared Scale control. Source visibility follows image-library and remote-fetch capabilities; the frame opens when an image source or letterbox setting is configured.
