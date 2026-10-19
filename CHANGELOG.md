@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add live Home Assistant entity bindings through
+  `[ha:entity_id;path;format]`, reusing the existing server URL and long-lived
+  access token without requiring MQTT. Read states and attributes in labels,
+  widgets, and expressions, with automatic subscriptions and portal connection
+  diagnostics. Gate support behind `HAS_HA_LIVE`; use HTTP/WebSocket on a
+  trusted local network. Existing MQTT integration remains independent and
+  unchanged. See the [Home Assistant guide](docs/user/integrations/home-assistant.md).
 * Add configurable normal-boot Wi-Fi failure behavior, a shareable setup AP
   password, live Continue offline, and a Device command to restart into the
   setup AP. Show active AP credentials on setup screens and support
