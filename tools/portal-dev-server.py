@@ -48,6 +48,10 @@ HA_ENTITIES = {
         "name": "Kitchen light", "state": "on", "unit": "",
         "paths": [{"path": "attributes.brightness", "value": "128"}],
     },
+    "switch.desk_fan": {
+        "name": "Desk fan", "state": "off", "unit": "",
+        "paths": [{"path": "attributes.friendly_name", "value": "Desk fan"}],
+    },
 }
 MOCK_NOW_EPOCH = 1791370589
 SCREENSAVER_DEFAULTS = {

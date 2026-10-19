@@ -18,6 +18,7 @@ portal_dialog_appearance.css
 
 # [chunk:ha_bindings HAS_HA_LIVE]
 portal_binding_builder.css
+portal_button_builder.css
 
 # [chunk:shutter IS_SHUTTER_TESTER]
 portal_shutter.css

@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a Home Assistant Button builder for empty pad positions. Choose
+  **Build button...** to generate name/value/unit labels or a light/switch toggle
+  button with a Material Symbol and state-dependent icon colors. Customize
+  defaults in a fixed-size dialog with the shared color picker and a preview
+  that never controls the entity. Generated buttons remain ordinary, editable
+  drafts until **Save Pad**; existing and inherited buttons are unchanged.
+  See [Create a button from Home Assistant](docs/user/pads/editing.md#create-a-button-from-home-assistant).
 * Add a Home Assistant binding builder in the Binding Reference & Builders
   dialog, with server-side entity autocomplete, attribute suggestions, decimal
   and unit formatting, sample values, and Copy/Insert controls. Numeric states

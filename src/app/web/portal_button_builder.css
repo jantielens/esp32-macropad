@@ -1,0 +1,50 @@
+.pad-button-builder-entry { position: absolute; top: 6px; left: 6px; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 12px); min-height: 44px; padding: 6px; border: 0; outline: none; background: transparent; color: var(--portal-primary); cursor: pointer; font-size: 13px; line-height: 1.2; text-align: left; text-decoration: none; }
+.pad-button-builder-entry .portal-icon { flex-shrink: 0; font-size: 16px; }
+.pad-button-builder-entry:hover > span:last-child { text-decoration: underline; text-underline-offset: 3px; }
+.pad-button-builder-entry:focus-visible { background: rgba(var(--portal-primary-rgb), .15); }
+.pad-button-builder-manual { display: none; position: absolute; bottom: 4px; left: 6px; border: 0; background: transparent; color: var(--portal-text-muted); font-size: 10px; text-decoration: underline; cursor: pointer; }
+.pad-button-builder { width: min(800px, calc(100vw - 24px)); height: min(820px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); padding: 0; border: 1px solid var(--portal-docs-border); border-radius: 12px; background: var(--portal-surface); color: var(--portal-text); }
+.pad-button-builder::backdrop { background: #0009; }
+.pad-button-builder[open] { display: flex; flex-direction: column; }
+.pad-button-builder [hidden] { display: none !important; }
+.pad-button-builder header, .pad-button-builder footer { display: flex; flex: 0 0 auto; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 22px; }
+.pad-button-builder header { border-bottom: 1px solid var(--portal-docs-border); }
+.pad-button-builder h2 { margin: 0 0 6px; font-size: 21px; color: var(--portal-docs-heading); }
+.pad-button-builder header p { margin: 0; color: var(--portal-text-muted); font-size: 13px; }
+.pad-button-builder-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 18px 22px; }
+.pad-button-builder-target { margin: 0 0 16px; color: var(--portal-text-muted); font-size: 12px; }
+.pad-button-builder .binding-builder-selection { margin-top: 12px; }
+.pad-button-builder .binding-builder-source .btn { flex-shrink: 0; }
+.pad-button-builder-choices { margin: 22px 0; padding: 0; border: 0; }
+.pad-button-builder-choices legend, .pad-button-builder h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; color: var(--portal-docs-heading); }
+.pad-button-builder-choices > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.pad-button-builder-choices label { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 12px; border: 1px solid var(--portal-docs-border); border-radius: 8px; cursor: pointer; }
+.pad-button-builder-choices label:has(input:checked) { border-color: var(--portal-primary); background: rgba(var(--portal-primary-rgb), .07); }
+.pad-button-builder-choices input { margin-top: 4px; accent-color: var(--portal-primary); }
+.pad-button-builder-choices strong, .pad-button-builder-choices small { display: block; }
+.pad-button-builder-choices small { margin-top: 4px; color: var(--portal-text-muted); font-size: 12px; }
+.pad-button-builder-design { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 24px; }
+.pad-button-builder .binding-builder-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pad-button-builder .binding-builder-fields > label { grid-column: 1 / -1; min-width: 0; }
+.pad-button-builder .binding-builder-fields > .pad-button-builder-color { grid-column: auto; }
+.pad-button-builder-preview-panel { padding: 14px; border: 1px solid var(--portal-docs-border); border-radius: 8px; }
+.pad-button-builder-preview-panel > p:last-child { margin-bottom: 0; }
+.pad-button-builder-preview { position: relative; width: 100%; height: 190px; gap: 8px; margin: 0 0 12px; cursor: default; }
+.pad-button-builder-preview .pad-cell-label-top, .pad-button-builder-preview .pad-cell-label-bottom { font-size: 15px; }
+.pad-button-builder-preview .pad-cell-label-center { font-size: 36px; }
+.pad-button-builder-preview .pad-cell-icon { font-size: 64px; }
+.pad-button-builder-states { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pad-button-builder-states > span { flex-basis: 100%; }
+.pad-button-builder-states [aria-pressed="true"] { outline: 2px solid var(--portal-primary); outline-offset: 1px; }
+.pad-button-builder footer { align-items: center; border-top: 1px solid var(--portal-docs-border); }
+.pad-button-builder footer > span { font-size: 12px; color: var(--portal-text-muted); }
+.pad-button-builder footer > div { display: flex; gap: 8px; flex-shrink: 0; }
+@media (max-width: 600px) {
+  .pad-button-builder header, .pad-button-builder footer, .pad-button-builder-body { padding: 14px; }
+  .pad-button-builder-design { grid-template-columns: 1fr; gap: 20px; }
+  .pad-button-builder footer { align-items: stretch; flex-direction: column; gap: 10px; }
+  .pad-button-builder footer > div { justify-content: flex-end; }
+}
+@media (max-width: 980px) {
+  .pad-button-builder-manual { display: block; padding: 4px; min-height: 28px; }
+}

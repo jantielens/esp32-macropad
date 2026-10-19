@@ -25,6 +25,7 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_help.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_ha.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
 
 const scheme = name => fixture.schemes.find(s => s.name === name);
 const haConfigured = { caps: { ha_live: true }, ha_url: 'http://ha.local:8123', ha_token_set: true };
@@ -259,6 +260,110 @@ delete context.testHelpSchemes;
 // Every documented example must pass the portal validator too.
 (async function() {
     await context.bindingLoadSchema();
+    // Whole-button generation must produce ordinary, valid bindings and literal service actions.
+    context.actionEditorCatalogEntry = type => type === 'ha_service' ? {} : null;
+    context.padGetEffectiveDefault = () => '#000000';
+    context.padColorNormalizeLiteral = color => color;
+    const [valueBuilder, toggleBuilder] = vm.runInContext('padButtonBuilders', context);
+    const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
+    const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
+    const buildSession = (detail, builder) => ({
+        col: 2, row: 1, page: 0, detail, scenario: builder,
+        options: { ...builder.defaults(detail), title: 'Living room' }
+    });
+    const valueSession = buildSession(temperature, valueBuilder);
+    const generatedValue = context.padButtonBuilderBuild(valueSession);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedValue)), {
+        col: 2, row: 1, label_top: 'Living room',
+        label_center: '[ha:sensor.living_room_temperature;;%.1f]', label_bottom: '\u00b0C'
+    });
+    assert.strictEqual(valueBuilder.preview(temperature, valueSession.options).label_center, '21.4');
+    assert.strictEqual(valueBuilder.preview({ ...temperature, state: 'unavailable' }, valueSession.options).label_center, '---');
+    const textSession = buildSession({ ...temperature, state: 'Ready', unit: '' }, valueBuilder);
+    assert.strictEqual(context.padButtonBuilderBuild(textSession).label_center, '[ha:sensor.living_room_temperature;;%s]');
+    valueSession.options.decimals = 7;
+    assert.throws(() => context.padButtonBuilderBuild(valueSession), /decimal/);
+    valueSession.options.decimals = 1;
+    valueSession.options.title = '\u00b0'.repeat(96);
+    assert.throws(() => context.padButtonBuilderBuild(valueSession), /UTF-8/);
+    valueSession.options.title = 'Living room';
+    const lightSession = buildSession(light, toggleBuilder);
+    const generatedLight = context.padButtonBuilderBuild(lightSession);
+    assert.strictEqual(generatedLight.icon_id, 'mi_lightbulb');
+    assert.strictEqual(generatedLight.label_top_style, 'color:#000000', 'Keep the title legible on light button backgrounds');
+    assert.strictEqual(generatedLight.fg_color, '[expr:[ha:light.kitchen]=="on"?"#FFC857":"#64748B"|#EF6B73]');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedLight.actions)), [
+        { type: 'ha_service', entity_id: 'light.kitchen', service: 'toggle' }
+    ]);
+    assert.strictEqual(toggleBuilder.available(temperature), false);
+    assert.strictEqual(toggleBuilder.available(light), true);
+    assert.strictEqual(toggleBuilder.available({ ...light, entity_id: 'binary_sensor.door' }), false);
+    const switchDetail = { ...light, entity_id: 'switch.desk_fan', state: 'off' };
+    assert.strictEqual(toggleBuilder.available(switchDetail), true);
+    const switchSession = buildSession(switchDetail, toggleBuilder);
+    const generatedSwitch = context.padButtonBuilderBuild(switchSession);
+    assert.strictEqual(generatedSwitch.icon_id, 'mi_toggle_on');
+    assert.strictEqual(generatedSwitch.fg_color, '[expr:[ha:switch.desk_fan]=="on"?"#FFC857":"#64748B"|#EF6B73]');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedSwitch.actions)), [
+        { type: 'ha_service', entity_id: 'switch.desk_fan', service: 'toggle' }
+    ]);
+    const catalogEntry = context.actionEditorCatalogEntry;
+    context.actionEditorCatalogEntry = () => null;
+    assert.strictEqual(toggleBuilder.available(switchDetail), false);
+    assert.strictEqual(toggleBuilder.available(light), false);
+    context.actionEditorCatalogEntry = catalogEntry;
+    const previewColors = ['on', 'off', 'unavailable'].map(state => toggleBuilder.preview(light, lightSession.options, state).fg_color);
+    assert.strictEqual(new Set(previewColors).size, 3);
+    const longLight = { ...light, entity_id: 'light.' + 'a'.repeat(41) };
+    assert.ok(context.padButtonBuilderBuild(buildSession(longLight, toggleBuilder)));
+    assert.throws(() => context.padButtonBuilderBuild(buildSession({ ...longLight, entity_id: longLight.entity_id + 'a' }, toggleBuilder)), /48/);
+    lightSession.options.icon = 'not an icon';
+    assert.throws(() => context.padButtonBuilderBuild(lightSession), /Symbol/);
+
+    // Creation is draft-only and cannot overwrite local or inherited content.
+    context.padState = { cols: 4, rows: 3, page: 0, buttons: [], templateButtons: [] };
+    context.padWorkspace = { errors: new Map() };
+    context.padBuildOccupancySet = () => new Set(context.padState.buttons.flatMap(button =>
+        Array.from({ length: button.col_span || 1 }, (_, col) => (button.col + col) + ',' + button.row)));
+    context.padCanPlaceTemplateButton = () => true;
+    assert.strictEqual(context.padButtonBuilderCanCreate(2, 1), true);
+    context.padState.buttons.push({ col: 1, row: 1, col_span: 2 });
+    assert.strictEqual(context.padButtonBuilderCanCreate(2, 1), false);
+    context.padState.buttons = [];
+    context.padState.templateButtons = [{ col: 1, row: 1, col_span: 2 }];
+    assert.strictEqual(context.padButtonBuilderCanCreate(2, 1), false);
+    context.padState.templateButtons = [];
+    context.padWorkspace.errors.set('2,1', new Error('Unfinished manual edit'));
+    assert.strictEqual(context.padButtonBuilderCanCreate(2, 1), false);
+    context.padWorkspace.errors.clear();
+    const validation = {};
+    valueSession.dialog = { querySelector: () => validation };
+    context.testButtonSession = valueSession;
+    vm.runInContext('padButtonBuilderSession = testButtonSession', context);
+    const originalClose = context.padButtonBuilderClose;
+    let dirty = 0, opened = 0, closed = 0;
+    context.padWorkspaceClearButton = () => {};
+    context.padMarkDirty = () => dirty++;
+    context.padDialogOpen = () => opened++;
+    context.padButtonBuilderClose = () => closed++;
+    context.showMessage = () => {};
+    context.padButtonBuilderCreate();
+    assert.strictEqual(context.padState.buttons.length, 1);
+    assert.strictEqual(dirty, 1);
+    assert.strictEqual(opened, 1);
+    assert.strictEqual(closed, 1);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padState.buttons[0])), JSON.parse(JSON.stringify(generatedValue)));
+    context.padButtonBuilderCreate();
+    assert.strictEqual(context.padState.buttons.length, 1);
+    assert.match(validation.textContent, /no longer empty/);
+    context.padState.buttons = [];
+    valueSession.detail = null;
+    context.padButtonBuilderCreate();
+    assert.strictEqual(context.padState.buttons.length, 0);
+    assert.match(validation.textContent, /load its details/);
+    context.padButtonBuilderClose = originalClose;
+    vm.runInContext('padButtonBuilderSession = null', context);
+
     for (const s of fixture.schemes) {
         const codes = (s.examples || []).map(example => example.code)
             .concat(((s.reference || {}).rows || []).map(row => row.example).filter(Boolean));
@@ -363,6 +468,36 @@ delete context.testHelpSchemes;
     assert.strictEqual(builderState().unit, 'custom');
     context._haBuilderUpdate = update;
     context._haBuilderPaths = paths;
+
+    // Button-builder lookup must ignore superseded responses and failures.
+    const buttonStatus = { dataset: {} };
+    const buttonRetry = {};
+    const buttonSearch = { value: 'older' };
+    const matches = { replaceChildren() {} };
+    const buttonDialog = { querySelector: selector => ({
+        '[data-bb-status]': buttonStatus, '[data-bb-retry]': buttonRetry,
+        '#button-builder-search': buttonSearch, '[data-bb-matches]': matches
+    })[selector] };
+    context.testButtonSession = { dialog: buttonDialog };
+    vm.runInContext('padButtonBuilderSession = testButtonSession', context);
+    const buttonPending = [];
+    context.haBindingLookup = () => new Promise((resolve, reject) => buttonPending.push({ resolve, reject }));
+    const older = context.padButtonBuilderLookup(false);
+    buttonSearch.value = 'newer';
+    const newer = context.padButtonBuilderLookup(false);
+    buttonPending[1].resolve({ entities: [], more: false });
+    await newer;
+    const newerStatus = buttonStatus.textContent;
+    buttonPending[0].reject(new Error('Old failure'));
+    await older;
+    assert.strictEqual(buttonStatus.textContent, newerStatus);
+    assert.strictEqual(buttonRetry.hidden, true);
+    const stopped = context.padButtonBuilderLookup(false);
+    context.padButtonBuilderStopLookup();
+    buttonPending[2].resolve({ entities: [], more: false });
+    await stopped;
+    assert.notStrictEqual(buttonStatus.textContent, 'No matching entities. Try another name or enter an exact entity ID.');
+    vm.runInContext('padButtonBuilderSession = null', context);
     console.log('portal binding help tests passed');
 })().catch(error => {
     console.error(error);

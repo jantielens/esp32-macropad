@@ -131,6 +131,7 @@ function padWorkspaceMoveSelection(col, row, button) {
 
 function padWorkspaceDispose() {
     if (!padWorkspace) return;
+    if (typeof padButtonBuilderClose === 'function') padButtonBuilderClose();
     padWorkspace.controller.abort();
     if (padWorkspace.resizeObserver) padWorkspace.resizeObserver.disconnect();
     if (padWorkspace.confirmResolve) padWorkspace.confirmResolve(false);
@@ -149,6 +150,7 @@ function padWorkspaceSelect(col, row) {
         return;
     }
     padDialogOpen(col, row);
+    if (typeof padButtonBuilderAfterSelect === 'function') padButtonBuilderAfterSelect();
 }
 
 function padWorkspaceCapture() {
@@ -351,7 +353,10 @@ function padWorkspaceRefresh() {
         cell.setAttribute('aria-label', 'Button [' + cell.dataset.col + ', ' + cell.dataset.row + ']');
         cell.setAttribute('aria-pressed', String(selected));
         cell.tabIndex = 0;
-        cell.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); cell.click(); } };
+        cell.onkeydown = event => {
+            if (event.target === cell && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); cell.click(); }
+        };
+        if (typeof padButtonBuilderUpdateEntry === 'function') padButtonBuilderUpdateEntry(cell, selected);
     });
     const list = document.getElementById('pad-workspace-pads');
     const choices = Array.from({ length: (deviceInfoCache && deviceInfoCache.max_pads) || 8 }, (_, page) => {

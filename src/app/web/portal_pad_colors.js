@@ -249,6 +249,7 @@ function padColorPopoverCreate() {
         if (e.key !== 'Escape' || pop.style.display === 'none') return;
         var help = document.getElementById('binding-help-overlay');
         if (help && help.style.display !== 'none' && help.style.display !== '') return;
+        e.preventDefault();
         e.stopPropagation();
         padColorPopoverClose();
     }, true);
@@ -340,6 +341,12 @@ function padColorPopoverSubmit(val) {
 /** Open the color popover anchored to a swatch element, targeting a specific input. */
 function padColorPopoverOpen(swatch, input) {
     var cp = padColorPopoverCreate();
+    // A modal dialog makes body-level controls inert, regardless of z-index.
+    var host = input.closest('dialog[open]') || document.body;
+    if (cp.pop.parentNode !== host) {
+        host.appendChild(cp.bd);
+        host.appendChild(cp.pop);
+    }
     cp.target = input;
     cp.anchor = swatch;
     cp.returnFocus = document.activeElement;
@@ -619,6 +626,10 @@ function padColorPopoverClose() {
     _cpPopover.bd.style.display = 'none';
     _cpPopover.target = null;
     _cpPopover.fill = null;
+    if (_cpPopover.pop.parentNode !== document.body) {
+        document.body.appendChild(_cpPopover.bd);
+        document.body.appendChild(_cpPopover.pop);
+    }
     var rf = _cpPopover.returnFocus;
     _cpPopover.returnFocus = null;
     if (rf && typeof rf.focus === 'function' && document.body.contains(rf)) rf.focus();

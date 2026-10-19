@@ -79,7 +79,8 @@ Object.defineProperty(elements['#cp-recent-grid'], 'innerHTML', { set() { this.c
 const dialog = { pop: {
     style: {}, querySelector(selector) { return elements[selector]; }, querySelectorAll() { return []; }
 }, bd: { style: {} } };
-context.document = { activeElement: null };
+const body = { appendChild(child) { child.parentNode = this; } };
+context.document = { activeElement: null, body };
 context.padState = { editCol: 1, editRow: 1 };
 context.padColorPopoverCreate = () => dialog;
 context.padThresholdGenLoad = () => {};
@@ -87,13 +88,17 @@ context.padColorPopoverValidate = () => {};
 context.padColorPopoverReposition = () => {};
 context.padColorSwatchButton = value => ({ value });
 context.padCollectUsedColors = () => ['#FFFFFF', '[expr:1]'];
-context.padColorPopoverOpen({}, { value: '#FFFFFF', dataset: { allowBindings: 'false' } });
+context.padColorPopoverOpen({}, { value: '#FFFFFF', dataset: { allowBindings: 'false' }, closest() { return null; } });
+assert.strictEqual(dialog.pop.parentNode, body);
 assert.strictEqual(elements['#cp-gen'].style.display, 'none');
 assert.strictEqual(elements['#cp-fx'].style.display, 'none');
 assert.strictEqual(elements['#cp-input-label'].textContent, 'Color');
 assert.strictEqual(elements['#cp-input'].placeholder, '#RRGGBB');
 assert.strictEqual(elements['#cp-recent-grid'].children.length, 1);
-context.padColorPopoverOpen({}, { value: '[expr:1]', dataset: {} });
+const modalHost = { appendChild(child) { child.parentNode = this; } };
+context.padColorPopoverOpen({}, { value: '[expr:1]', dataset: {}, closest() { return modalHost; } });
+assert.strictEqual(dialog.pop.parentNode, modalHost, 'The shared picker must be interactive inside a native modal');
+assert.strictEqual(dialog.bd.parentNode, modalHost);
 assert.strictEqual(elements['#cp-gen'].style.display, '');
 assert.strictEqual(elements['#cp-fx'].style.display, '');
 assert.strictEqual(elements['#cp-input-label'].textContent, 'Color or expression');
@@ -188,7 +193,8 @@ const gaugeFill = {};
 context.padFillBuild(gaugeFill, 'gauge');
 assert.strictEqual(gaugeFill.widget_bar_track_radius, undefined);
 
-const pickerContext = { Event: class {}, clearTimeout() {}, document: { body: { contains() { return false; } } } };
+const pickerBody = { contains() { return false; }, appendChild(child) { child.parentNode = this; } };
+const pickerContext = { Event: class {}, clearTimeout() {}, document: { body: pickerBody } };
 vm.createContext(pickerContext);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), pickerContext);
 pickerContext.padFillRefreshVisibility = () => {};
@@ -208,6 +214,8 @@ function draft() {
 }
 pickerContext._cpPopover = draft();
 pickerContext.padColorPopoverClose();
+assert.strictEqual(pickerContext._cpPopover.pop.parentNode, pickerBody, 'Closing must preserve the singleton when its dialog is removed');
+assert.strictEqual(pickerContext._cpPopover.bd.parentNode, pickerBody);
 assert.strictEqual(target.value, '#FFFFFF');
 assert.strictEqual(selection.value, 'none');
 assert.strictEqual(patternColor.value, '#000000');
