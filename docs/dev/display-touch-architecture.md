@@ -719,8 +719,10 @@ public:
   not reflow the layout
 - Reads boot font and color preferences before screen creation
 - Optional custom RGB565 logo source is attached and released on the LVGL task
-  when the splash is hidden; the source is decoded before runtime image consumers
-  initialize
+  when the splash is hidden. Loading is attempted once after display startup and
+  required SD validation, before peripheral initialization and Wi-Fi connection.
+  The loader mounts the selected filesystem on demand. This is best-effort:
+  initial frames may have no logo, and a missing or invalid logo does not stop boot
 - Round-display logo and text margins are handled locally by the splash screen
 
 **InfoScreen** (`info_screen.h/cpp`)

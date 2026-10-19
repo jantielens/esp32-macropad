@@ -203,7 +203,6 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 	#if HAS_DISPLAY
 	screen_saver_manager_init(&device_config);
 	pad_config_init();
-	if (!g_boot_entered_setup_ap) load_boot_logo();
 	#if HAS_NATIVE_EXTENSIONS
 	native_extension_init();
 	#endif
@@ -498,6 +497,9 @@ void setup()
 	}
 	#endif
 
+	// Load best-effort once the splash and required storage are ready.
+	load_boot_logo();
+
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
 	if (force_config_mode_burst) {
 		LOGI("Power", "Reset burst detected - entering Config Mode");
@@ -728,9 +730,6 @@ void setup()
 
 	g_boot_entered_setup_ap = enter_setup_ap;
 	g_setup_ap_active = enter_setup_ap;
-	#if HAS_DISPLAY && !IS_EPAPER_FRAME
-	if (enter_setup_ap) load_boot_logo();
-	#endif
 	web_portal_init(&device_config);
 	portal_idle_init();
 	portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
