@@ -311,7 +311,7 @@ static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String
     return true;
 }
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 // ============================================================================
 // resolve_bindings (read tool, authoring-gated) — resolve binding tokens
 // against LIVE data on the main loop; no save. Powers debugging/preview of what
@@ -462,7 +462,7 @@ static const McpTool s_tool_validate_pad = {
 };
 REGISTER_MCP_TOOL(s_tool_validate_pad);
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 static const McpTool s_tool_resolve_bindings = {
     "resolve_bindings",
     "Resolve [scheme:params] binding tokens against the device's LIVE data and return the resolved text — to debug/preview what a binding or a proposed button renders to, WITHOUT saving. Args: bindings (array of template strings) and/or button (a proposed button object; its bindable fields label_*/*_color/btn_state/widget_data_binding[_2..4] are resolved), plus optional screen (pad_N or friendly name) to supply that pad's [pad:name] context. Best practice: after adding or editing any binding, call this to confirm it resolves to the intended value — writes only check binding SYNTAX, so a valid binding can still resolve to '---' or the wrong value. Returns resolved VALUES only — it does not render pixels (use GET /api/screenshot for a visual). Read-only; nothing is persisted. Requires pad authoring.",

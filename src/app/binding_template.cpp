@@ -401,3 +401,28 @@ void binding_template_collect_topics(const char* templ, void* user_data) {
         p = token_end;
     }
 }
+
+static void visit_tokens(const char* templ, binding_token_visitor_fn visitor,
+                          void* context, unsigned depth) {
+    if (!templ || !visitor || depth >= 8) return;
+    const char* p = templ;
+    while (*p) {
+        const char *start, *scheme, *params, *end;
+        size_t scheme_len, params_len;
+        if (!find_next_token(p, &start, &scheme, &scheme_len, &params, &params_len, &end)) break;
+        char buffer[BINDING_TEMPLATE_MAX_LEN];
+        if (params_len < sizeof(buffer)) {
+            memcpy(buffer, params, params_len);
+            buffer[params_len] = '\0';
+            split_pipe_fallback(buffer);
+            visitor(scheme, scheme_len, buffer, context);
+            visit_tokens(buffer, visitor, context, depth + 1);
+        }
+        p = end;
+    }
+}
+
+void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
+                                   void* context) {
+    visit_tokens(templ, visitor, context, 0);
+}

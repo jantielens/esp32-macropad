@@ -604,6 +604,53 @@
       ]
     },
     {
+      "name": "ha",
+      "min_params": 1,
+      "max_params": 3,
+      "widget_max_params": 2,
+      "format_param": 2,
+      "validation_mode": 0,
+      "free_form": true,
+      "category": "Data",
+      "summary": "Live Home Assistant states and attributes using the configured HA URL and token.",
+      "note": "Local HTTP only. Unknown/unavailable entities use the fallback. Saved pads and temporary previews subscribe automatically.",
+      "params": [
+        {
+          "name": "entity",
+          "desc": "Home Assistant entity ID, such as sensor.solar_power.",
+          "required": true
+        },
+        {
+          "name": "path",
+          "desc": "Empty or . for state; state or a dotted path such as attributes.brightness.",
+          "required": false
+        },
+        {
+          "name": "format",
+          "desc": "printf format such as %.1f, %d, or %s; units may be included.",
+          "required": false
+        }
+      ],
+      "examples": [
+        {
+          "code": "[ha:sensor.solar_power]",
+          "desc": "Live entity state without MQTT."
+        },
+        {
+          "code": "[ha:sensor.solar_power;;%.2f kW]",
+          "desc": "Format a numeric state."
+        },
+        {
+          "code": "[ha:light.kitchen;attributes.brightness;%d]",
+          "desc": "Read an entity attribute."
+        },
+        {
+          "code": "[ha:sensor.solar_power|Offline]",
+          "desc": "Fallback while disconnected or unavailable."
+        }
+      ]
+    },
+    {
       "name": "pad",
       "min_params": 1,
       "max_params": 2,

@@ -5,6 +5,7 @@
 #include "web_portal_state.h"
 
 #include "board_config.h"
+#include "ha_live.h"
 #if HAS_HA_HISTORY
 #include "ha_stats.h"
 #endif
@@ -42,6 +43,31 @@
 
 extern DeviceConfig device_config;
 extern TaskHandle_t loopTaskHandle;
+
+#if HAS_HA_LIVE
+void handleGetHaLive(AsyncWebServerRequest* request) {
+    if (!portal_auth_gate(request)) return;
+    HaLiveStatus status{};
+    ha_live_status(status);
+    BasicJsonDocument<PsramJsonAllocator> doc(1024);
+    doc["enabled"] = true;
+    doc["configured"] = status.configured;
+    doc["connected"] = status.connected;
+    doc["state"] = status.state;
+    doc["entity_count"] = status.entity_count;
+    doc["last_error"] = status.last_error;
+    doc["messages"] = status.messages;
+    doc["reconnects"] = status.reconnects;
+    if (doc.overflowed()) {
+        LOGE("HALive", "Status JSON allocation failed");
+        request->send(503, "application/json", "{\"error\":\"HA status allocation failed\"}");
+        return;
+    }
+    String body;
+    serializeJson(doc, body);
+    request->send(200, "application/json", body);
+}
+#endif
 
 #if HAS_DISPLAY
 #include "display_manager.h"

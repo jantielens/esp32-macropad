@@ -22,6 +22,7 @@
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
 #include "web_mcp.h"
+#include "ha_live.h"
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -211,6 +212,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["usb_hid"] = (bool)HAS_USB_HID;
 				caps["mcp"] = (bool)HAS_MCP;
 				caps["ha_history"] = (bool)HAS_HA_HISTORY;
+				caps["ha_live"] = (bool)HAS_HA_LIVE;
 				caps["boot_appearance"] = (bool)HAS_DISPLAY;
 				caps["boot_logo"] = (bool)HAS_BOOT_LOGO;
 #if HAS_TTF_FONTS
@@ -1134,6 +1136,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		current_config->dialog_appearance = dialog_candidate;
 		#endif
 		if (config_manager_save(current_config)) {
+#if HAS_HA_LIVE
+				if (doc.containsKey("ha_url") || doc.containsKey("ha_token"))
+						ha_live_configure(current_config->ha_url, current_config->ha_token);
+#endif
 				LOGI("Portal", "Config saved");
 #if HAS_MCP
 				if (mcp_token_minted) {

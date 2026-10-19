@@ -13,10 +13,10 @@
         </thead>
         <tbody>
           <tr>
-            <td><b>Service Actions</b><br>(REST API)</td>
-            <td>device&nbsp;&rarr;&nbsp;HA</td>
+            <td><b>Direct HA access</b><br>(HTTP / WebSocket)</td>
+            <td>device&nbsp;&harr;&nbsp;HA</td>
             <td>HA URL + token<br>(set below)</td>
-            <td>The <b>Home Assistant Service</b> button action — call any HA service (lights, scenes, covers&hellip;).</td>
+            <td>Live <code>[ha:&hellip;]</code> bindings on supported firmware, REST service actions, and Sparkline history.</td>
           </tr>
           <tr>
             <td><b>MQTT</b></td>
@@ -27,17 +27,17 @@
         </tbody>
       </table>
     </div>
-    <p class="text-muted small mb-0">Service Actions use Home Assistant's HTTP API and need no MQTT broker. Everything in the MQTT section below needs only a connected broker — no token.</p>
+    <p class="text-muted small mb-0">Direct HA access needs no MQTT broker. Everything in the MQTT section below needs only a connected broker — no HA token. The MQTT path is unchanged.</p>
   </div>
 </div>
 <div class="card mb-3" id="ha-rest-section">
-  <div class="card-header"><h5 class="mb-0">Service Actions (REST API)</h5></div>
+  <div class="card-header"><h5 class="mb-0">Home Assistant Access</h5></div>
   <div class="card-body">
-    <p class="text-muted small">Configure a Home Assistant URL and long-lived access token to enable the <b>Home Assistant Service</b> button action, which calls any HA service (lights, switches, covers, scenes, etc.). This path is independent of MQTT.</p>
+    <p class="text-muted small">The same URL and token serve three independent uses: live entity state bindings on supported firmware, <b>Home Assistant Service</b> REST actions, and Sparkline history backfill. A successful Save applies HA client URL/token settings safely without reboot; it does not configure MQTT.</p>
     <div class="mb-3">
       <label class="form-label" for="ha_url">Home Assistant URL</label>
       <input type="text" class="form-control" id="ha_url" name="ha_url" maxlength="47" placeholder="http://192.168.1.50:8123">
-      <div class="form-text">Base URL including scheme and port. HTTPS is supported (certificate not verified). Leave empty to disable service actions.</div>
+      <div class="form-text">Base URL including scheme and port. Live bindings require a local HTTP endpoint (plain WebSocket); HTTPS is never downgraded. REST actions and history keep their existing HTTPS behavior. Leave empty to disable direct HA access.</div>
     </div>
     <div class="mb-3">
       <label class="form-label" for="ha_token">Long-Lived Access Token</label>
@@ -48,6 +48,18 @@
     <div class="save-bar">
       <button type="button" class="btn btn-primary btn-sm" id="ha-save-btn">Save</button>
     </div>
+    <p class="text-muted small mt-3 mb-0">Use only a trusted local network and a suitably restricted HA account: HTTP exposes the token and entity data in plaintext. Do not expose this connection to the internet.</p>
+  </div>
+</div>
+<div class="card mb-3 d-none" id="ha-live-section" hidden>
+  <div class="card-header"><h5 class="mb-0">Live Entity State</h5></div>
+  <div class="card-body">
+    <p class="text-muted small">Use entity IDs directly in Pad Editor bindings; no MQTT or entity picker is needed. An empty path or <code>.</code> reads the state; dotted paths read the state document.</p>
+    <pre class="small"><code>[ha:sensor.living_room_temperature;;%.1f C|---]&#10;[ha:light.living_room;state;|---]&#10;[ha:light.living_room;attributes.brightness;%.0f|---]</code></pre>
+    <p class="text-muted small">Formatting and fallbacks follow MQTT binding rules. Unknown, unavailable, removed, or disconnected entities use the fallback; quiet connected values do not expire. Limits: 64 entities across saved pads and previews, a 2048-byte serialized snapshot per entity including its terminating NUL, and 15 KiB per full reassembled message; PSRAM is required.</p>
+    <p class="small mb-1" id="ha-live-status" role="status" aria-live="polite">Loading live connection status...</p>
+    <p class="small text-muted mb-1" id="ha-live-counters"></p>
+    <p class="small text-danger mb-0" id="ha-live-error" role="status" aria-live="polite"></p>
   </div>
 </div>
 <div class="card mb-3">

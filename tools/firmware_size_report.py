@@ -112,6 +112,7 @@ FEATURES = {
     "Linker-merged strings / constants (shared)": ((), ()),
 }
 LIBRARIES = {
+    "Home Assistant": ("WebSockets",),
     "Monochrome fonts (HAS_FREETYPE_FONTS)": ("MacropadFreeType",),
     "LVGL": ("lvgl", "liblvgl.a"),
     "Display / touch (HAS_DISPLAY / HAS_TOUCH)": (
@@ -165,6 +166,7 @@ FLAG_SUBSYSTEMS = {
     "HAS_EPAPER_VCOM": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_ES7210_MIC": "Audio input (HAS_AUDIO_INPUT)",
     "HAS_HA_HISTORY": "Home Assistant",
+    "HAS_HA_LIVE": "Home Assistant",
     "HAS_LVGL_EPAPER": "LVGL",
     "HAS_MUSIC_ANALYSIS": "Music playback / analysis",
     "HAS_SD_CARD": "Storage",

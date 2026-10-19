@@ -62,6 +62,9 @@ static const char* const core_preflight_paths[] = {
 	"/api/config",
 	"/api/info",
 	"/api/bindings",
+#if HAS_HA_LIVE
+	"/api/ha/live",
+#endif
 #if HEALTH_HISTORY_ENABLED
 	"/api/health/history",
 #endif
@@ -73,7 +76,7 @@ static const char* const core_preflight_paths[] = {
 	"/api/recipes/catalog",
 	"/api/pad/button_sizes",
 	"/api/pad/blocks",
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 	"/api/pad/resolve",
 #endif
 	"/api/pad",
@@ -192,6 +195,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		server->on("/api/info", HTTP_GET, handleGetVersion);
 		server->on("/api/bindings", HTTP_GET, handleGetBindings);
+#if HAS_HA_LIVE
+		server->on("/api/ha/live", HTTP_GET, handleGetHaLive);
+#endif
 		#if HEALTH_HISTORY_ENABLED
 		server->on("/api/health/history", HTTP_GET, handleGetHealthHistory);
 		#endif
@@ -229,7 +235,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Pad building blocks catalog (registered before /api/pad to avoid prefix match)
 		server->on("/api/pad/blocks", HTTP_GET, handleGetPadBlocks);
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 		// Pad binding live-resolve (registered before /api/pad to avoid prefix match)
 		server->on(
 				"/api/pad/resolve",

@@ -87,6 +87,11 @@ struct HwButtonDef {
 #define DEBUG_CRASH_API_ENABLED 0
 #endif
 
+// Direct Home Assistant live bindings; independent of MQTT and requires PSRAM.
+#ifndef HAS_HA_LIVE
+#define HAS_HA_LIVE (HAS_DISPLAY && HAS_PSRAM)
+#endif
+
 // Developer-only display profiling; compile out detailed collection and health fields by default.
 #ifndef HAS_DISPLAY_DIAGNOSTICS
 #define HAS_DISPLAY_DIAGNOSTICS false
@@ -1662,7 +1667,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Requires PSRAM for the background fetch task and response buffers.
 // Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
 #ifndef HAS_HA_HISTORY
-#define HAS_HA_HISTORY (HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)
+#define HAS_HA_HISTORY (HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE) && HAS_PSRAM)
 #endif
 
 #endif // BOARD_CONFIG_H

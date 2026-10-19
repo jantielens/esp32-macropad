@@ -4,6 +4,7 @@
 #if HAS_DISPLAY
 
 #include "binding_template.h"
+#include "binding_value.h"
 #include "expr_eval.h"
 #include "log_manager.h"
 
@@ -11,40 +12,6 @@
 #include <stdio.h>
 
 #define TAG "ExprBind"
-
-// ============================================================================
-// Format helper — reuse mqtt_sub_store_format_value if available
-// ============================================================================
-
-#if HAS_MQTT
-extern "C" void mqtt_sub_store_format_value(const char* raw, const char* fmt, char* out, size_t out_len);
-#endif
-
-// Simple numeric format fallback (used when MQTT is not compiled in)
-static void apply_format(const char* raw, const char* fmt, char* out, size_t out_len) {
-#if HAS_MQTT
-    mqtt_sub_store_format_value(raw, fmt, out, out_len);
-#else
-    // Basic format: try as double, fall back to string copy.
-    // Validate that fmt is a simple printf float format (e.g. "%.1f", "%g")
-    // to prevent format-string injection.
-    bool fmt_ok = false;
-    if (fmt[0] == '%') {
-        const char* p = fmt + 1;
-        while (*p == '-' || *p == '+' || *p == ' ' || *p == '0' || *p == '#') p++;
-        while (*p >= '0' && *p <= '9') p++;
-        if (*p == '.') { p++; while (*p >= '0' && *p <= '9') p++; }
-        if ((*p == 'f' || *p == 'e' || *p == 'g' || *p == 'E' || *p == 'G') && *(p + 1) == '\0') fmt_ok = true;
-    }
-    char* end = NULL;
-    double val = strtod(raw, &end);
-    if (fmt_ok && end && end != raw && *end == '\0') {
-        snprintf(out, out_len, fmt, val);
-    } else {
-        snprintf(out, out_len, "%s", raw);
-    }
-#endif
-}
 
 // ============================================================================
 // Find format suffix — last ';' not inside quotes or brackets
@@ -190,7 +157,7 @@ static BindingResolverStatus expr_binding_resolve(const char* params, char* out,
 
     // Step 3: Apply optional format
     if (fmt) {
-        apply_format(eval_result, fmt, out, out_len);
+        binding_value_format(eval_result, fmt, out, out_len);
     } else {
         snprintf(out, out_len, "%s", eval_result);
     }

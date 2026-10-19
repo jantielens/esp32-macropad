@@ -213,6 +213,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Device API fixtures. POSTs are accepted in do_POST below.
         elif path == "/api/config":
             config = copy.deepcopy(self.server.mock_config)
+            config["capabilities"] = {"ha_live": self._profile() == "esp32-p4-lcd4b"}
+            config.setdefault("ha_url", "")
+            config["ha_token"] = ""
+            config.setdefault("ha_token_set", False)
             display_available = self._profile() in (
                 "esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive")
             config["caps"]["boot_appearance"] = display_available
@@ -253,6 +257,23 @@ class PortalHandler(SimpleHTTPRequestHandler):
             config.setdefault("timezone", "Europe/Brussels")
             config["screen_saver_keeps_panel_awake"] = self._profile() == "jc3248w535"
             self._serve_json(config)
+        elif path == "/api/ha/live":
+            if self._profile() != "esp32-p4-lcd4b":
+                self._serve_json({"error": "HA live unavailable"}, 404)
+                return
+            if self.server.scenario == "load-error":
+                self._serve_json({"error": "Mock HA live status failure"}, 503)
+                return
+            config = self.server.mock_config
+            configured = bool(config.get("ha_url") and config.get("ha_token_set"))
+            unsupported = configured and not config["ha_url"].startswith("http://")
+            self._serve_json({
+                "enabled": True, "configured": configured,
+                "state": "error" if unsupported else "idle" if configured else "unconfigured",
+                "entity_count": 0, "connected": False,
+                "last_error": "Live HA requires an HTTP URL; HTTPS is not downgraded." if unsupported else "",
+                "messages": 0, "reconnects": 0,
+            })
         elif path == "/api/info":
             self._serve_json(self._device_info("catalog" in query))
         elif path == "/api/recipes/catalog":
@@ -651,7 +672,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
         if path == "/api/config":
             try:
-                self.server.mock_config.update(json.loads(body.decode("utf-8")))
+                update = json.loads(body.decode("utf-8"))
+                if update.pop("ha_token", ""):
+                    self.server.mock_config["ha_token_set"] = True
+                self.server.mock_config.update(update)
             except (UnicodeDecodeError, json.JSONDecodeError):
                 self.send_error(400, "Invalid JSON")
                 return

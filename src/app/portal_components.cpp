@@ -71,12 +71,15 @@
 // --- MQTT-gated components ---
 #if HAS_MQTT
 #include "components/mqtt_component.cpp"
-#include "components/ha_discovery_component.cpp"
 // MQTT-Triggered Actions. Self-gated on MQTT_TRIGGERS_ENABLED (HAS_MQTT &&
 // (HAS_DISPLAY || HAS_BUTTON)); compiles to nothing on action-less boards
 // (e.g. e-paper) where the action system is unavailable.
 #include "components/mqtt_triggers_component.cpp"
 #endif // HAS_MQTT
+
+#if HAS_MQTT || HAS_HA_LIVE || HAS_DISPLAY || HAS_BUTTON
+#include "components/ha_discovery_component.cpp"
+#endif
 
 // --- Hardware Button Actions (boards with GPIO buttons) ---
 #if HAS_BUTTON

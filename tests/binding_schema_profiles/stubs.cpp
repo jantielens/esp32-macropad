@@ -10,6 +10,8 @@
 #include "alarm_manager.h"
 #include "log_manager.h"
 #include "mqtt_sub_store.h"
+#include "ha_live.h"
+#include "binding_value.h"
 #include "sensors/sensor_manager.h"
 #if HAS_CAMERA
 #include "camera_motion.h"
@@ -19,6 +21,17 @@
 #include <cstring>
 
 unsigned long millis() { return 10000; }
+
+#if HAS_HA_LIVE
+void ha_live_status(HaLiveStatus& status) {
+    status = {true, true, 1, 0, 0, "connected", ""};
+}
+bool ha_live_valid_entity(const char* entity) { return entity && strchr(entity, '.'); }
+bool ha_live_read(const char*, char* snapshot, size_t size) {
+    snprintf(snapshot, size, "{\"state\":\"12.5\",\"attributes\":{\"brightness\":42}}");
+    return true;
+}
+#endif
 
 static const SensorField kFixtureSensorFields[] = {
     {"temperature", "Temperature in degrees Celsius."},
@@ -252,13 +265,6 @@ bool mqtt_sub_store_get(const char*, char* buf, size_t buf_len, bool* changed, b
     if (changed) *changed = false;
     if (truncated) *truncated = false;
     return false;
-}
-bool mqtt_sub_store_extract_json(const char*, const char*, char* out, size_t out_len) {
-    if (out && out_len) out[0] = '\0';
-    return false;
-}
-void mqtt_sub_store_format_value(const char* raw, const char*, char* out, size_t out_len) {
-    if (out && out_len) std::snprintf(out, out_len, "%s", raw ? raw : "");
 }
 void mqtt_sub_store_collect_topic(void*, const char*) {}
 void mqtt_sub_store_ensure_binding_subscribed(const char*) {}

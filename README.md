@@ -355,7 +355,7 @@ HID hosts or multiple power sources.
 | [Widgets](docs/user/widgets/README.md) | Choose and configure visualizations and touch controls |
 | [AI Assistants and MCP](docs/user/integrations/ai-assistants.md) | AI-assisted inspection, control, configuration, and pad authoring |
 | [E-Paper Frame](docs/user/specialized/epaper-frame/README.md) | Image sources, scheduling, battery use, and wake behavior |
-| [Home Assistant Integration](docs/user/integrations/home-assistant.md) | Discovery, service access, controls, and automation examples |
+| [Home Assistant Integration](docs/user/integrations/home-assistant.md) | Live entity bindings, discovery, service access, and controls |
 | [Specialized Workflows](docs/user/specialized/README.md) | Instruments, sensor nodes, voice, and e-paper experiences |
 | [Hardware Reference](docs/user/hardware.md) | Exact targets, connections, power warnings, and recovery |
 | [Home Assistant + MQTT (dev)](docs/dev/home-assistant-mqtt.md) | MQTT topic structure and HA auto-discovery internals |
@@ -374,6 +374,17 @@ For portal-only UI work, use the [device-free portal development server](docs/de
 Widget firmware and portal packaging share one explicit manifest; see the
 [widget manifest generator](docs/dev/scripts.md#toolswidget_manifestpy) and
 [editor extension contract](docs/dev/web-portal.md).
+
+### Home Assistant API
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/config` | HA URL and write-only token status; `capabilities.ha_live` reports live binding support |
+| `GET /api/ha/live` | Authenticated live connection state, entity count, errors, and counters; only with `HAS_HA_LIVE` |
+
+See the [REST API reference](docs/dev/web-portal.md#home-assistant-live-status).
+Live bindings share HA credentials with REST actions and history; MQTT remains
+independent.
 
 ### Running Tests
 

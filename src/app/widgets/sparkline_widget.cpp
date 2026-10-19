@@ -114,7 +114,7 @@ struct SparklineState {
     float*               scratch_smooth;               // Reusable smoothing copy
     uint16_t*            scratch_slot_map;              // Value-to-slot mapping
     uint8_t  line_count;             // 1–3 (auto-detected from bindings)
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     data_stream_handle_t ds_handles[MAX_SPARKLINE_LINES]; // Data stream handles
     uint32_t cached_revs[MAX_SPARKLINE_LINES]; // Change-detection: last drawn stream revision
 #endif
@@ -276,7 +276,7 @@ static void sparkline_create(lv_obj_t* tile, const WidgetConfig* wcfg,
     if (wcfg->data_binding[1][0]) st->line_count = 2;
     if (wcfg->data_binding[2][0]) st->line_count = 3;
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     // Look up data stream handles for each line
     for (uint8_t i = 0; i < st->line_count; i++) {
         st->ds_handles[i] = DATA_STREAM_INVALID;
@@ -551,6 +551,7 @@ static void gaussian_smooth(float* vals, float* tmp, uint16_t n, uint8_t radius)
 
 // ---- Rebuild the LVGL point array from a data stream snapshot ----
 
+#if HAS_MQTT || HAS_HA_LIVE
 static void sparkline_rebuild_points(const SparklineConfig* cfg,
                                      lv_point_precise_t* points,
                                      lv_obj_t* line_obj,
@@ -668,11 +669,12 @@ static void sparkline_rebuild_points(const SparklineConfig* cfg,
 }
 
 // ---- Helper: read data stream snapshots and redraw all lines ----
+#endif
 
 static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
     if (!st->lines[0] || !st->points[0]) return;
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     // Use cached chart dimensions (set once in create; avoids lv_obj_update_layout)
     lv_obj_t* chart_area = lv_obj_get_parent(st->lines[0]);
     int16_t chart_w = st->cached_chart_w;
@@ -1120,7 +1122,7 @@ static void sparkline_tick(lv_obj_t* tile, const WidgetConfig* wcfg,
     auto* st = reinterpret_cast<SparklineState*>(state->data);
     if (!st->lines[0] || !st->points[0]) return;
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     // PERF01: skip full redraw if no data stream has changed. The revision
     // counter covers every ring mutation — new samples, LOCF fills, and history
     // merges that write behind the head without moving it.

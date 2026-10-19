@@ -840,6 +840,77 @@ window.init_ha_discovery_fragment = function () {
         registerConfigFields(['ha_url', 'ha_token']);
     }
     initConfigFragment('ha-save-btn', false);
+    var root = document.getElementById('ha-rest-section');
+    var section = document.getElementById('ha-live-section');
+    var status = document.getElementById('ha-live-status');
+    var counters = document.getElementById('ha-live-counters');
+    var error = document.getElementById('ha-live-error');
+    if (!root || !section || !status || !counters || !error) return;
+    var disposed = false;
+    var timer = 0;
+    var controller = null;
+
+    function dispose() {
+        disposed = true;
+        clearTimeout(timer);
+        if (controller) controller.abort();
+        window.removeEventListener('portal-fragment-leave', dispose);
+    }
+
+    async function poll() {
+        if (disposed || !root.isConnected) return;
+        if (document.hidden) {
+            timer = setTimeout(poll, 5000);
+            return;
+        }
+        controller = new AbortController();
+        var deadline = setTimeout(function () { controller.abort(); }, 8000);
+        try {
+            var response = await fetch('/api/ha/live', { signal: controller.signal, cache: 'no-store' });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            var live = await response.json();
+            if (disposed || !root.isConnected) return;
+            status.textContent = 'State: ' + live.state + ' — ' +
+                (live.connected ? 'connected' : 'not connected') +
+                (live.configured ? '' : '. Configure the HA URL and token above.');
+            counters.textContent = 'Entities: ' + live.entity_count + ' / 64 · Messages: ' +
+                live.messages + ' · Reconnects: ' + live.reconnects;
+            error.textContent = live.last_error || '';
+        } catch (err) {
+            if (disposed || !root.isConnected) return;
+            status.textContent = 'Live connection status unavailable.';
+            counters.textContent = '';
+            error.textContent = 'Could not load live status: ' +
+                (err.name === 'AbortError' ? 'request timed out' : err.message);
+        } finally {
+            clearTimeout(deadline);
+            controller = null;
+            if (!disposed && root.isConnected) timer = setTimeout(poll, 5000);
+        }
+    }
+
+    window.addEventListener('portal-fragment-leave', dispose);
+    controller = new AbortController();
+    var configDeadline = setTimeout(function () { if (controller) controller.abort(); }, 8000);
+    fetch('/api/config', { signal: controller.signal, cache: 'no-store' })
+        .then(function (response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+        })
+        .then(function (config) {
+            clearTimeout(configDeadline);
+            controller = null;
+            if (disposed || !root.isConnected) return;
+            if (!config.capabilities || config.capabilities.ha_live !== true) return;
+            section.hidden = false;
+            section.classList.remove('d-none');
+            poll();
+        })
+        .catch(function (err) {
+            if (!disposed && root.isConnected) showMessage('Could not check live HA support: ' +
+                (err.name === 'AbortError' ? 'request timed out' : err.message), 'error');
+        })
+        .finally(function () { clearTimeout(configDeadline); });
 };
 
 // ============================================================================

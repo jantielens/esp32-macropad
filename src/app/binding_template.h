@@ -191,6 +191,13 @@ bool binding_template_resolve_single_token(const char* templ, char* out, size_t 
 // Used by mqtt_sub_store to discover topics to subscribe.
 void binding_template_collect_topics(const char* templ, void* user_data);
 
+// Visit tokens (including expression children) without invoking transport-owned
+// collectors. Runs on the binding/LVGL task like resolution.
+typedef void (*binding_token_visitor_fn)(const char* scheme, size_t scheme_len,
+                                         const char* params, void* context);
+void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
+                                   void* context);
+
 #ifdef __cplusplus
 }
 #endif

@@ -96,7 +96,7 @@ foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
 endforeach()
 
 add_host_legacy_test(test_sensor_manager
-    SOURCES test_sensor_manager.cpp
+    SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     OPTIONS -Wno-deprecated-declarations
 )
@@ -337,6 +337,19 @@ add_host_legacy_test(test_ha_stats_resample
     SOURCES test_ha_stats_resample.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_stats_resample.cpp
     LIBRARIES m
 )
+
+add_host_gtest(test_ha_live
+    test_ha_live.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_live_state.cpp)
+target_include_directories(test_ha_live PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_ha_live PRIVATE HAS_HA_LIVE=1)
+target_compile_options(test_ha_live PRIVATE
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+
+add_host_legacy_test(test_binding_value
+    SOURCES test_binding_value.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h
+    OPTIONS -Wno-deprecated-declarations)
 
 add_host_legacy_test(test_ha_service_delivery
     SOURCES test_ha_service_delivery.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_service_delivery.cpp
@@ -656,6 +669,12 @@ target_compile_features(binding_schema_json PRIVATE cxx_std_17)
 target_compile_options(binding_schema_json PRIVATE -Wall -Wextra -Werror)
 target_include_directories(binding_schema_json PRIVATE ${HOST_ARDUINOJSON_DIR} ${PROJECT_SOURCE_DIR}/src/app)
 
+add_library(binding_schema_values STATIC ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp)
+target_include_directories(binding_schema_values PRIVATE ${HOST_ARDUINOJSON_DIR}
+    ${PROJECT_SOURCE_DIR}/tests ${PROJECT_SOURCE_DIR}/src/app)
+target_compile_options(binding_schema_values PRIVATE -Wno-deprecated-declarations)
+target_link_libraries(test_pad_binding PRIVATE binding_schema_values)
+
 function(add_binding_schema_profile name definition)
     add_host_legacy_test(test_binding_schema_${name}
         SOURCES test_binding_schema_production.cpp binding_schema_profiles/stubs.cpp
@@ -669,10 +688,12 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/camera_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
             ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
             ${PROJECT_SOURCE_DIR}/src/app/mqtt_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp
             $<TARGET_OBJECTS:binding_schema_json> ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src
         DEFINITIONS ${definition}
         OPTIONS -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+        LIBRARIES binding_schema_values
         PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles/platform_stubs.h
     )
 endfunction()
@@ -687,6 +708,7 @@ add_test(NAME test_binding_docs_fixture
     COMMAND sh -c "$<TARGET_FILE:test_binding_schema_full> --emit-json | diff -u tools/mock-data/binding-docs.json -")
 set_tests_properties(test_binding_docs_fixture PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
+add_binding_schema_profile(ha_only "HAS_HA_LIVE=1;HAS_MQTT=0")
 add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_binding.cpp)
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)
 add_binding_schema_profile(darkroom "BINDING_SCHEMA_PROFILE_DARKROOM;HAS_FILESYSTEM=1" ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/meter.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/expose_timer.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/test_strip.cpp)

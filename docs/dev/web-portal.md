@@ -1096,6 +1096,31 @@ not every authentication failure, redirect, or early error response is instrumen
 
 ## REST API Reference
 
+### Home Assistant Live Status
+
+Authenticated `GET /api/ha/live` is registered only with `HAS_HA_LIVE`.
+`GET /api/config` advertises this support as `capabilities.ha_live`.
+The response contains `enabled` (boolean), `configured` (boolean), `state`
+(string), `entity_count` (integer), `connected` (boolean), `last_error` (string),
+`messages` (integer), and `reconnects` (integer).
+States are `disabled`, `unconfigured`, `idle`, `connecting`, `authenticating`,
+`subscribing`, `connected`, `retrying`, `paused`, and `error`.
+
+The Home Assistant fragment hides its Live Entity State card on unsupported
+firmware. Supported fragments poll every five seconds, with no overlapping
+requests and an eight-second request timeout. Hidden tabs skip polling;
+`portal-fragment-leave` cancels the active request and timer. Failures remain
+visible, and the next poll can recover. The local development server's P4
+profile supplies live status fixtures; other profiles exercise the hidden card.
+Use `load-error` to exercise a status request failure.
+
+The existing HA URL/token settings serve live bindings, REST service actions,
+and history independently of MQTT. A successful save safely applies HA client
+URL/token settings without reboot. Live transport accepts HTTP/plain WebSocket
+only and never
+downgrades HTTPS; REST actions and history are unaffected. See
+[live binding bounds and diagnostics](home-assistant-mqtt.md#direct-ha-live-bindings).
+
 ### Development Crash Injection
 
 `POST /api/debug/crash?mode=abort&confirm=crash` intentionally crashes the
@@ -2276,7 +2301,11 @@ timezone and alarm session.
   secret. This includes WiFi, MQTT, Home Assistant, Basic Auth, and Voice
   Assistant credentials. The e-paper service endpoint follows the same
   write-only pattern with `epaper_service_token_set`.
-- `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config`.
+- `ha_url` is the Home Assistant base URL shared by live bindings (when
+  `capabilities.ha_live` is true), the **Home Assistant Service** button action,
+  and history backfill. `ha_token` is write-only: `GET /api/config` returns an
+  empty string and `ha_token_set` reports whether a token is stored. A successful
+  save safely applies the HA client configuration without reboot.
 - `ble_burst_count`, `ble_adv_interval_ms`, and `ble_tx_power_dbm` are present
   only when `HAS_BLE` is enabled. TX power is a signed dBm value, not an ESP-IDF
   enum index. It is stored in NVS and also exposed by MCP `get_config`.

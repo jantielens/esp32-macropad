@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 #include "binding_template.h"
 #endif
 
@@ -83,7 +83,7 @@ bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& a
     return !field || !field[0] || visitor(field, size, true, context);
 }
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act) {
     bool has_binding = false;
     auto check = [](char* field, size_t, bool, void* context) {

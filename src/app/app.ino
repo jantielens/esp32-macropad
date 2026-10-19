@@ -101,6 +101,7 @@
 #include "sd_storage.h"
 #include "storage.h"
 #include "ota_activity.h"
+#include "ha_live.h"
 
 #if HAS_NATIVE_EXTENSIONS
 #include "native_extension.h"
@@ -280,6 +281,10 @@ static void start_normal_runtime(bool dispatch_boot_actions) {
 
 	esp_ota_mark_app_valid_cancel_rollback();
 	device_telemetry_log_memory_snapshot("setup");
+
+	#if HAS_HA_LIVE
+	ha_live_init(device_config.ha_url, device_config.ha_token);
+	#endif
 
 	#if HAS_MQTT
 	if (mqtt_manager.enabled() && WiFi.status() == WL_CONNECTED) {

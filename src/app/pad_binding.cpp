@@ -1,10 +1,11 @@
 #include "pad_binding.h"
 
-#if HAS_DISPLAY && HAS_MQTT
+#if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
 
 #include "binding_template.h"
 #include "log_manager.h"
 #include "mqtt_sub_store.h"
+#include "binding_value.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -109,16 +110,7 @@ static BindingResolverStatus pad_binding_resolve(const char* params, char* out, 
 
     // Apply per-usage format if provided
     if (fmt && fmt[0]) {
-        // Try numeric format first
-        char* end = nullptr;
-        double val = strtod(resolved, &end);
-        if (end != resolved && *end == '\0') {
-            // Numeric value — apply printf format
-            snprintf(out, out_len, fmt, val);
-        } else {
-            // String value — apply %s format
-            snprintf(out, out_len, fmt, resolved);
-        }
+        binding_value_format(resolved, fmt, out, out_len);
     } else {
         strlcpy(out, resolved, out_len);
     }
@@ -283,7 +275,9 @@ void pad_resolve(const char* const* inputs, size_t count,
         // not yet subscribed to (e.g. a binding the user is typing that isn't
         // saved), subscribe now so it resolves on a subsequent refresh once the
         // (retained) message arrives. Reconciled by the next subscribe_all().
+#if HAS_MQTT
         mqtt_sub_store_ensure_binding_subscribed(in);
+#endif
         binding_template_resolve(in, dst, stride);
     }
     // Clear context: the live pad screen re-sets it every frame, so this avoids
@@ -321,4 +315,4 @@ void pad_binding_init() {
     }
 }
 
-#endif // HAS_DISPLAY && HAS_MQTT
+#endif // HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)

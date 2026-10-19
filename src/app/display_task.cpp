@@ -10,6 +10,7 @@
 #include "rtos_task_utils.h"
 
 #include "data_stream.h"
+#include "ha_live.h"
 #include "action_list.h"
 #include "device_dialog.h"
 #include "pad_config.h"
@@ -330,7 +331,10 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				timer_engine_tick();
 
 				uint32_t data_stream_us = 0;
-#if HAS_MQTT
+#if HAS_HA_LIVE
+				ha_live_tick();
+#endif
+#if HAS_MQTT || HAS_HA_LIVE
 				// Poll data stream registry (background ring buffers for
 				// history-based widgets, independent of active screen).
 				{
@@ -349,7 +353,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				}
 #endif
 
-#if HAS_MUSIC_ANALYSIS && !HAS_MQTT
+#if HAS_MUSIC_ANALYSIS && !HAS_MQTT && !HAS_HA_LIVE
 				{
 						static uint32_t s_music_generation = UINT32_MAX;
 						const uint32_t generation = pad_config_get_generation();

@@ -467,7 +467,7 @@ void DisplayManager::init() {
 		
 		LOGT("Display", "Manager init start");
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 		data_stream_init();
 #endif
 		

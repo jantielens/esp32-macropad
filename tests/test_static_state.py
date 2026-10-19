@@ -29,6 +29,7 @@ PRELUDE = r'''
 #include "action_list.h"
 #include "list_provider.h"
 #include "binding_template.h"
+#include "binding_value.h"
 #include "mqtt_sub_store.h"
 #include "psram_json_allocator.h"
 #include "LittleFS.h"
@@ -73,18 +74,12 @@ bool mqtt_sub_store_active() { return true; }
 void mqtt_sub_store_collect_topic(void*, const char*) {}
 bool mqtt_sub_store_get(const char*, char* output, size_t length, bool*, bool* truncated) {
     assert(length == MQTT_SUB_STORE_MAX_VALUE_LEN);
-    std::string payload(1900, 'x');
+    std::string payload = "{\"value\":42,\"padding\":\"";
+    payload.append(1900 - payload.size() - 2, 'x');
+    payload += "\"}";
     strlcpy(output, payload.c_str(), length);
     *truncated = false;
     return true;
-}
-bool mqtt_sub_store_extract_json(const char* payload, const char*, char* output, size_t length) {
-    assert(strlen(payload) == 1900);
-    strlcpy(output, "42", length);
-    return true;
-}
-void mqtt_sub_store_format_value(const char* value, const char*, char* output, size_t length) {
-    strlcpy(output, value, length);
 }
 
 int pad_font_pixel_size(int) { return 24; }
@@ -214,6 +209,7 @@ def main():
             "-I", str(ROOT / "tests/timer_test_overrides"),
             "-I", str(ROOT / "tests"), "-I", str(ROOT / "src/app"),
             "-I", str(json_headers), str(source), str(ROOT / "tests/stubs.cpp"),
+            str(ROOT / "src/app/binding_value.cpp"),
             "-o", str(executable),
         ], check=True)
         subprocess.run([str(executable)], check=True)

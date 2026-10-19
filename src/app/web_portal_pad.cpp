@@ -377,7 +377,7 @@ void handleGetPadBlocks(AsyncWebServerRequest *request) {
     request->send(response);
 }
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 // ============================================================================
 // POST /api/pad/resolve — resolve binding tokens against LIVE data (no save).
 // Body: { screen?, bindings?[], button? }. Powers the pad editor live preview.

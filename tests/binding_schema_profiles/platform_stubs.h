@@ -10,13 +10,22 @@ class String {};
 
 #define BOARD_CONFIG_H
 #define HAS_DISPLAY 1
+#ifndef HAS_MQTT
 #define HAS_MQTT 1
+#endif
 #define HAS_MCP 0
 #ifndef HAS_PSRAM
 #define HAS_PSRAM 1
 #endif
 #define TELEMETRY_ALLOW_PSRAM_POOL_WALK 0
 #define HAS_CAMERA 0
+#ifndef HAS_HA_LIVE
+#if defined(BINDING_SCHEMA_PROFILE_FULL)
+#define HAS_HA_LIVE HAS_PSRAM
+#else
+#define HAS_HA_LIVE 0
+#endif
+#endif
 
 #if defined(BINDING_SCHEMA_PROFILE_FULL)
 #define ALARM_ENABLED 1

@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_DISPLAY && HAS_MQTT
+#if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
 
 #include <stdint.h>
 #include <stddef.h>
@@ -113,4 +113,4 @@ bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
 bool data_stream_finish_history(data_stream_handle_t handle, uint32_t uid);
 #endif // HAS_HA_HISTORY
 
-#endif // HAS_DISPLAY && HAS_MQTT
+#endif // HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
