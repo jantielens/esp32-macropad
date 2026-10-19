@@ -264,7 +264,10 @@ delete context.testHelpSchemes;
     context.actionEditorCatalogEntry = type => type === 'ha_service' ? {} : null;
     context.padGetEffectiveDefault = () => '#000000';
     context.padColorNormalizeLiteral = color => color;
-    const [valueBuilder, toggleBuilder] = vm.runInContext('padButtonBuilders', context);
+    const builders = vm.runInContext('padButtonBuilders', context);
+    const valueBuilder = builders.find(builder => builder.id === 'value');
+    const toggleBuilder = builders.find(builder => builder.id === 'toggle');
+    const barBuilder = builders.find(builder => builder.id === 'bar');
     const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
     const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
     const buildSession = (detail, builder) => ({
@@ -319,6 +322,71 @@ delete context.testHelpSchemes;
     assert.throws(() => context.padButtonBuilderBuild(buildSession({ ...longLight, entity_id: longLight.entity_id + 'a' }, toggleBuilder)), /48/);
     lightSession.options.icon = 'not an icon';
     assert.throws(() => context.padButtonBuilderBuild(lightSession), /Symbol/);
+
+    // Bar inputs stay raw; only the bottom label gets display formatting.
+    context.deviceInfoCache = { widget_catalog: [{ type: 'bar_chart' }] };
+    assert.strictEqual(barBuilder.available(temperature), true);
+    for (const detail of [light, { ...temperature, state: 'unavailable' },
+        { ...temperature, state_truncated: true }]) {
+        assert.strictEqual(barBuilder.available(detail), false);
+    }
+    context.deviceInfoCache.widget_catalog = [];
+    assert.strictEqual(barBuilder.available(temperature), false);
+    context.deviceInfoCache.widget_catalog = [{ type: 'bar_chart' }];
+    const barSession = buildSession(temperature, barBuilder);
+    assert.strictEqual(barSession.options.min, 0);
+    assert.strictEqual(barSession.options.max, 50);
+    assert.strictEqual(context.padButtonBuilderBuild(barSession).widget_bar_max, 50);
+    for (const [state, min, max] of [
+        ['1200', 0, 5000], ['-12', -50, 50], ['0', 0, 100],
+        ['0.012', 0, 0.05], ['-0.012', -0.05, 0.05], ['25', 0, 50]
+    ]) {
+        const suggested = buildSession({ ...temperature, state }, barBuilder);
+        const button = context.padButtonBuilderBuild(suggested);
+        assert.strictEqual(button.widget_bar_min, min);
+        assert.strictEqual(button.widget_bar_max, max);
+        assert.strictEqual(button.widget_bar_zero_centered, min < 0);
+        assert.ok(Number(state) >= min && Number(state) < max);
+    }
+    Object.assign(barSession.options, { min: '-10.5', max: '40.5', orientation: 'horizontal', decimals: 2 });
+    const generatedBar = context.padButtonBuilderBuild(barSession);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedBar)), {
+        col: 2, row: 1, label_top: 'Living room', widget_type: 'bar_chart',
+        widget_data_binding: '[ha:sensor.living_room_temperature]',
+        widget_bar_min: -10.5, widget_bar_max: 40.5,
+        widget_orientation: 'horizontal', widget_bar_zero_centered: true,
+        label_bottom: '[ha:sensor.living_room_temperature;;%.2f \u00b0C]'
+    });
+    assert.strictEqual(barBuilder.preview(temperature, barSession.options).label_bottom, '21.37 \u00b0C');
+    for (const state of ['unknown', 'unavailable', '']) {
+        assert.strictEqual(barBuilder.preview({ ...temperature, state }, barSession.options).label_bottom, '---');
+    }
+    const percentSession = buildSession({ ...temperature, unit: ' % ' }, barBuilder);
+    const generatedPercentBar = context.padButtonBuilderBuild(percentSession);
+    assert.strictEqual(generatedPercentBar.widget_bar_min, 0);
+    assert.strictEqual(generatedPercentBar.widget_bar_max, 100);
+    assert.strictEqual(generatedPercentBar.widget_orientation, 'vertical');
+    assert.strictEqual(generatedPercentBar.widget_bar_zero_centered, false);
+    assert.strictEqual(generatedPercentBar.label_bottom, '[ha:sensor.living_room_temperature;;%.1f %%]');
+    assert.strictEqual(barBuilder.preview(temperature, percentSession.options).label_bottom, '21.4 %');
+    for (const [min, max] of [['', 100], [0, ' '], ['12abc', 100], [0, 'Infinity']]) {
+        Object.assign(barSession.options, { min, max });
+        assert.throws(() => context.padButtonBuilderBuild(barSession), /minimum and maximum/);
+    }
+    for (const [min, max] of [[1, 1], [2, 1], [0, '1e99'], [1, 1.000000001], ['-3e38', '3e38']]) {
+        Object.assign(barSession.options, { min, max });
+        assert.throws(() => context.padButtonBuilderBuild(barSession), /greater than minimum/);
+    }
+    Object.assign(barSession.options, { min: 0, max: 0.5 });
+    assert.strictEqual(context.padButtonBuilderBuild(barSession).widget_bar_max, 0.5);
+    barSession.options.orientation = 'diagonal';
+    assert.throws(() => context.padButtonBuilderBuild(barSession), /orientation/);
+    barSession.options.orientation = 'vertical';
+    barSession.options.decimals = 7;
+    assert.throws(() => context.padButtonBuilderBuild(barSession), /decimal/);
+    barSession.options.decimals = 1;
+    barSession.options.unit = '[invalid]';
+    assert.throws(() => context.padButtonBuilderBuild(barSession), /delimiters/);
 
     // Creation is draft-only and cannot overwrite local or inherited content.
     context.padState = { cols: 4, rows: 3, page: 0, buttons: [], templateButtons: [] };

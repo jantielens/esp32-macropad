@@ -27,6 +27,88 @@ const padButtonBuilders = [
         }
     },
     {
+        id: 'bar', label: 'Show a bar',
+        description: 'Show a numeric value as a single bar within a fixed range.',
+        note: 'Check the suggested range before creating the button. The unit changes display text, not the value. Fine-tune styling in the pad editor.',
+        available: detail => !detail.state_truncated && bindingBuilderIsNumeric(detail.state) &&
+            !!deviceInfoCache?.widget_catalog?.some(widget => widget.type === 'bar_chart'),
+        fields: () => [
+            { name: 'min', label: 'Minimum', type: 'number', step: 'any' },
+            { name: 'max', label: 'Maximum', type: 'number', step: 'any' },
+            { name: 'orientation', label: 'Orientation', type: 'select',
+                options: [['vertical', 'Vertical'], ['horizontal', 'Horizontal']] },
+            { name: 'decimals', label: 'Decimal places', type: 'number', min: 0, max: 6 },
+            { name: 'unit', label: 'Unit', type: 'text', maxlength: 60 }
+        ],
+        defaults(detail) {
+            const value = Number(detail.state);
+            const percentage = detail.unit?.trim() === '%';
+            let max = 100;
+            if (!percentage && value !== 0) {
+                const target = Math.abs(value) * 2;
+                const scale = 10 ** Math.floor(Math.log10(target));
+                max = [1, 2, 5, 10].find(step => step * scale >= target) * scale;
+            }
+            return { min: !percentage && value < 0 ? -max : 0, max,
+                orientation: 'vertical', decimals: 1, unit: detail.unit || '' };
+        },
+        build(detail, options) {
+            if (!bindingBuilderIsNumeric(options.min) || !bindingBuilderIsNumeric(options.max)) {
+                throw new Error('Enter a numeric minimum and maximum.');
+            }
+            const min = Number(options.min), max = Number(options.max);
+            const range = Math.fround(Math.fround(max) - Math.fround(min));
+            if (!Number.isFinite(range) || range <= 0) {
+                throw new Error('Maximum must be greater than minimum within the supported numeric range.');
+            }
+            if (!['vertical', 'horizontal'].includes(options.orientation)) throw new Error('Choose a valid orientation.');
+            const format = bindingBuilderFormat('number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit));
+            return {
+                widget_type: 'bar_chart',
+                widget_data_binding: bindingBuilderToken('ha', detail.entity_id, '', '', ''),
+                widget_bar_min: min, widget_bar_max: max,
+                widget_orientation: options.orientation,
+                widget_bar_zero_centered: min < 0 && max > 0,
+                label_bottom: bindingBuilderToken('ha', detail.entity_id, '', format, '')
+            };
+        },
+        preview(detail, options) {
+            return { label_bottom: bindingBuilderIsNumeric(detail.state) ?
+                bindingBuilderSample(detail.state, 'number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit)) : '---' };
+        },
+        renderPreview(cell, button, detail) {
+            const bar = document.createElement('div');
+            bar.className = 'pad-button-builder-bar';
+            bar.dataset.orientation = button.widget_orientation;
+            const track = document.createElement('div');
+            track.className = 'pad-button-builder-bar-track';
+            track.style.background = PAD_FIRMWARE_DEFAULTS.widget_track_color;
+            const fill = document.createElement('div');
+            fill.className = 'pad-button-builder-bar-fill';
+            fill.style.background = PAD_FIRMWARE_DEFAULTS.widget_series_color;
+            if (bindingBuilderIsNumeric(detail.state)) {
+                const min = button.widget_bar_min, max = button.widget_bar_max;
+                const value = Math.max(min, Math.min(max, Number(detail.state)));
+                const baseline = button.widget_bar_zero_centered ? 0 : min;
+                bar.setAttribute('role', 'meter');
+                bar.setAttribute('aria-label', button.label_top || 'Entity value');
+                bar.setAttribute('aria-valuemin', String(min));
+                bar.setAttribute('aria-valuemax', String(max));
+                bar.setAttribute('aria-valuenow', String(value));
+                bar.setAttribute('aria-valuetext', button.label_bottom);
+                track.style.setProperty('--bar-start', (Math.min(value, baseline) - min) / (max - min) * 100 + '%');
+                track.style.setProperty('--bar-size', Math.abs(value - baseline) / (max - min) * 100 + '%');
+            } else {
+                bar.setAttribute('role', 'img');
+                bar.setAttribute('aria-label', 'Bar value unavailable');
+                fill.hidden = true;
+            }
+            track.appendChild(fill);
+            bar.appendChild(track);
+            cell.insertBefore(bar, cell.querySelector('.pad-cell-label-bottom'));
+        }
+    },
+    {
         id: 'toggle', label: 'Toggle an entity',
         description: 'Toggle a light or switch and show whether it is on or off.',
         note: 'Icon color follows the entity state. Unavailable data uses a pink-red icon.',
@@ -367,13 +449,21 @@ function padButtonBuilderRenderFields() {
         const label = document.createElement('label');
         label.textContent = field.label;
         if (field.type === 'color') label.className = 'pad-button-builder-color';
-        const input = document.createElement('input');
+        const input = document.createElement(field.type === 'select' ? 'select' : 'input');
         input.className = field.type === 'color' ? 'bc-input' : 'form-control';
-        for (const key of ['type', 'min', 'max', 'maxlength']) if (field[key] !== undefined) input.setAttribute(key, field[key]);
-        if (field.type === 'number') input.step = '1';
+        for (const key of ['type', 'min', 'max', 'maxlength']) {
+            if (field[key] !== undefined && !(key === 'type' && field.type === 'select')) input.setAttribute(key, field[key]);
+        }
+        for (const [value, text] of field.options || []) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            input.appendChild(option);
+        }
+        if (field.type === 'number') input.step = field.step || '1';
         input.name = field.name;
         input.value = session.options[field.name];
-        input.oninput = () => {
+        input[field.type === 'select' ? 'onchange' : 'oninput'] = () => {
             session.options[field.name] = input.value;
             padButtonBuilderUpdatePreview();
         };
@@ -428,7 +518,7 @@ function padButtonBuilderRenderFields() {
 function padButtonBuilderBuild(session) {
     const button = { col: session.col, row: session.row, label_top: session.options.title.trim(),
         ...session.scenario.build(session.detail, session.options) };
-    for (const field of ['label_top', 'label_center', 'label_bottom', 'fg_color']) {
+    for (const field of ['label_top', 'label_center', 'label_bottom', 'fg_color', 'widget_data_binding']) {
         const value = button[field] || '';
         if (new TextEncoder().encode(value).length >= 192) throw new Error('Button text or binding exceeds the 191 UTF-8 byte limit.');
         if (value.includes('[')) {
@@ -448,7 +538,9 @@ function padButtonBuilderUpdatePreview() {
     try {
         const button = padButtonBuilderBuild(session);
         const overrides = session.scenario.preview(session.detail, session.options, session.previewState);
-        padRenderCellContent(preview, { ...button, ...overrides });
+        const sample = { ...button, ...overrides };
+        padRenderCellContent(preview, sample);
+        if (session.scenario.renderPreview) session.scenario.renderPreview(preview, sample, session.detail);
         const title = preview.querySelector('.pad-cell-label-top');
         if (title && button.label_top_style?.startsWith('color:')) title.style.color = button.label_top_style.slice(6);
         session.dialog.querySelectorAll('[data-bb-states] button').forEach(button => {

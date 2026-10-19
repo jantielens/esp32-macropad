@@ -39,22 +39,37 @@ on firmware with live Home Assistant support.
    exact-ID lookup also works with other tokens that can read the entity.
    Entity details must load successfully before you can create the button.
    Retry a failed lookup or correct the ID/settings.
-4. Under **What should this button do?**, choose **Show a value** or, for a
-   light or switch entity, **Toggle an entity**. Adjust the title and available controls.
+4. Under **What should this button do?**, choose **Show a value**,
+   **Show a bar** for a numeric reading, or **Toggle an entity** for a light or
+   switch. Adjust the title and available controls.
    Value buttons show the name, formatted value, and unit in three labels.
+   Bar buttons show the title, a single bar, and the formatted value with its
+   unit below. Set a minimum and maximum, orientation, decimal places, and unit.
+   Percentage entities start with a range of 0 to 100. Other readings get a
+   suggested rounded range with headroom: 21.4 starts at 0 to 50, while -12
+   starts at -50 to 50. A zero reading starts at 0 to 100. Check and adjust
+   these suggestions for your entity; they become fixed limits, not an
+   automatically changing scale. The maximum must exceed the minimum.
+   Ranges crossing zero automatically fill from zero toward the reading.
+   **Show a bar** requires a numeric, non-truncated current state and bar-chart
+   widget support. Colors, targets, additional bars, and other styling belong
+   in the normal pad editor.
    Toggle buttons have a Material Symbol, on/off colors, and a toggle tap action.
    Lights default to a lightbulb icon; switches default to a switch icon.
    Select an on/off color badge to open the shared color picker. Choose a palette
    color, or enter a custom hex color and choose **Apply**.
 5. Check the approximate **Preview**, then choose **Create button**.
-   Preview uses fetched data rather than continuous updates. Toggle preview
-   states are simulated and never send commands.
+   Preview uses fetched data rather than continuous updates. The bar preview
+   reflects the chosen range and orientation. Toggle preview states are
+   simulated and never send commands.
 6. Customize the generated button in the normal inspector if needed, then
    **Save Pad**.
 
 Changing a unit changes display text, not the measurement. Missing HA values
-show `---`; a toggle button's icon uses pink-red for unavailable data, distinct from
-its on/off colors. Its color follows reported HA state, not an assumed result
+show `---`; an unavailable bar reading does not become zero, and the device
+retains its last bar position. A toggle button's icon uses pink-red for
+unavailable data, distinct from its on/off colors.
+Its color follows reported HA state, not an assumed result
 of tapping. Material Symbol assets use the normal icon-generation path on save
 and need its browser font/network resources.
 

@@ -33,6 +33,10 @@
 .pad-button-builder-preview .pad-cell-label-top, .pad-button-builder-preview .pad-cell-label-bottom { font-size: 15px; }
 .pad-button-builder-preview .pad-cell-label-center { font-size: 36px; }
 .pad-button-builder-preview .pad-cell-icon { font-size: 64px; }
+.pad-button-builder-bar { display: flex; flex: 1; min-height: 0; width: 100%; align-items: center; justify-content: center; }
+.pad-button-builder-bar-track { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 4px; }
+.pad-button-builder-bar-fill { position: absolute; left: 0; bottom: var(--bar-start); width: 100%; height: var(--bar-size); }
+.pad-button-builder-bar[data-orientation="horizontal"] .pad-button-builder-bar-fill { left: var(--bar-start); bottom: 0; width: var(--bar-size); height: 100%; }
 .pad-button-builder-states { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pad-button-builder-states > span { flex-basis: 100%; }
 .pad-button-builder-states [aria-pressed="true"] { outline: 2px solid var(--portal-primary); outline-offset: 1px; }

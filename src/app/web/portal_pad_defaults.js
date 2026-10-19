@@ -9,7 +9,7 @@ function showStyleHelp() {
 /** Toggle label style input visibility for a label slot (top/center/bottom). */
 function toggleLabelStyle(slot) {
     var wrap = document.getElementById('pad-edit-label-' + slot + '-style-wrap');
-    var btn = wrap.previousElementSibling.querySelector('.style-toggle-btn');
+    var btn = wrap.parentElement.querySelector('.style-toggle-btn');
     var visible = wrap.style.display !== 'none';
     wrap.style.display = visible ? 'none' : 'flex';
     btn.classList.toggle('active', !visible);
@@ -20,7 +20,7 @@ function toggleLabelStyle(slot) {
 function syncLabelStyleVisibility(slot) {
     var input = document.getElementById('pad-edit-label-' + slot + '-style');
     var wrap = document.getElementById('pad-edit-label-' + slot + '-style-wrap');
-    var btn = wrap.previousElementSibling.querySelector('.style-toggle-btn');
+    var btn = wrap.parentElement.querySelector('.style-toggle-btn');
     var hasValue = input.value.trim().length > 0;
     wrap.style.display = hasValue ? 'flex' : 'none';
     btn.classList.toggle('active', hasValue);

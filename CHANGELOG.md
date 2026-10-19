@@ -17,8 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 * Add a Home Assistant Button builder for empty pad positions. Choose
-  **Build button...** to generate name/value/unit labels or a light/switch toggle
-  button with a Material Symbol and state-dependent icon colors. Customize
+  **Build button...** to generate name/value/unit labels, a single-bar widget
+  for a numeric entity, or a light/switch toggle button with a Material Symbol
+  and state-dependent icon colors. Bar buttons offer title, range, orientation,
+  decimal places, and unit controls, with styling left to the normal pad editor.
+  Suggest 0-100 for percentages, rounded ranges with headroom for other readings,
+  and symmetric ranges for negative readings. Limits remain editable and become
+  fixed on creation; ranges crossing zero fill from zero. Bar previews reflect
+  the range, orientation, and full-size default thickness. Customize
   defaults in a fixed-size dialog with the shared color picker and a preview
   that never controls the entity. Generated buttons remain ordinary, editable
   drafts until **Save Pad**; existing and inherited buttons are unchanged.
@@ -117,6 +123,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Keep label-style controls working when inline binding previews appear between
+  inputs and style fields, preventing an editor error after creating a button
+  or opening its normal inspector.
 * Prevent binding controls and live results from wrapping into broken inspector
   grids. Keep fx/HA/reset controls together, place resolved values below their
   inputs, and align neighboring controls and reset icons. Truncate long results

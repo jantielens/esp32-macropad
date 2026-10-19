@@ -4,9 +4,23 @@ const vm = require('vm');
 
 function element() {
     return {
-        style: {}, dataset: {}, children: [], attributes: {}, classes: new Set(),
+        style: { setProperty(name, value) { this[name] = value; } },
+        dataset: {}, children: [], attributes: {}, classes: new Set(),
         classList: { add(...names) { names.forEach(name => this.owner.classes.add(name)); } },
         appendChild(child) { this.children.push(child); },
+        replaceChildren(...children) { this.children = children; },
+        insertBefore(child, before) {
+            const index = this.children.indexOf(before);
+            this.children.splice(index < 0 ? this.children.length : index, 0, child);
+        },
+        querySelector(selector) {
+            for (const child of this.children) {
+                if ((child.className || '').split(' ').includes(selector.slice(1))) return child;
+                const nested = child.querySelector(selector);
+                if (nested) return nested;
+            }
+            return null;
+        },
         addEventListener() {},
         setAttribute(name, value) { this.attributes[name] = value; }
     };
@@ -112,4 +126,57 @@ const font = Buffer.from(css.match(/data:font\/woff2;base64,([^']+)/)[1], 'base6
 assert.strictEqual(font.toString('ascii', 0, 4), 'wOF2');
 assert.strictEqual(font.length, font.readUInt32BE(8));
 assert(!css.includes('.pad-cell-widget-'));
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
+context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50' };
+const barBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "bar")', context);
+const builderElements = Object.fromEntries(['fields', 'states', 'note'].map(name => ['[data-bb-' + name + ']', createElement()]));
+context.testBuilderSession = {
+    detail: { state: '42', unit: '%' }, scenario: barBuilder, name: 'Battery',
+    dialog: { querySelector: selector => builderElements[selector] }
+};
+vm.runInContext('padButtonBuilderSession = testBuilderSession', context);
+context.padColorPopoverClose = () => {};
+const updatePreview = context.padButtonBuilderUpdatePreview;
+let previewUpdates = 0;
+context.padButtonBuilderUpdatePreview = () => previewUpdates++;
+context.padButtonBuilderRenderFields();
+const builderInputs = builderElements['[data-bb-fields]'].children.map(label => label.children[0]);
+assert.strictEqual(builderInputs.find(input => input.name === 'min').step, 'any');
+assert.strictEqual(builderInputs.find(input => input.name === 'decimals').step, '1');
+const orientationInput = builderInputs.find(input => input.name === 'orientation');
+orientationInput.value = 'horizontal';
+orientationInput.onchange();
+assert.strictEqual(context.testBuilderSession.options.orientation, 'horizontal', 'Custom dropdowns dispatch change, not input');
+assert.strictEqual(previewUpdates, 2);
+context.padButtonBuilderUpdatePreview = updatePreview;
+vm.runInContext('padButtonBuilderSession = null', context);
+for (const orientation of ['vertical', 'horizontal']) {
+    for (const [state, signed, start, size] of [
+        ['0', false, '0%', '0%'], ['50', false, '0%', '50%'], ['100', false, '0%', '100%'],
+        ['200', false, '0%', '100%'], ['-200', false, '0%', '0%'],
+        ['-50', true, '25%', '25%'], ['0', true, '50%', '0%'], ['50', true, '50%', '25%'],
+        ['unavailable', false, undefined, undefined]
+    ]) {
+        const cell = createElement();
+        const detail = { state };
+        const button = { label_top: 'Power', label_bottom: state, widget_type: 'bar_chart',
+            widget_bar_min: signed ? -100 : 0, widget_bar_max: 100,
+            widget_bar_zero_centered: signed, widget_orientation: orientation };
+        context.padRenderCellContent(cell, button);
+        barBuilder.renderPreview(cell, button, detail);
+        const bar = cell.querySelector('.pad-button-builder-bar');
+        const track = cell.querySelector('.pad-button-builder-bar-track');
+        const fill = cell.querySelector('.pad-button-builder-bar-fill');
+        assert.strictEqual(bar.dataset.orientation, orientation);
+        assert.strictEqual(bar.attributes.role, state === 'unavailable' ? 'img' : 'meter');
+        assert.strictEqual(track.style['--bar-start'], start);
+        assert.strictEqual(track.style['--bar-size'], size);
+        assert.strictEqual(!!fill.hidden, state === 'unavailable');
+        assert.strictEqual(track.style.background, '#1A1A1A');
+        assert.strictEqual(fill.style.background, '#4CAF50');
+        assert.strictEqual(cell.children.indexOf(bar) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
+    }
+}
 console.log('portal_pad_preview: PASS');

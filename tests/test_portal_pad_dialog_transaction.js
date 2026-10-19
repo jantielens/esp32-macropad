@@ -304,6 +304,29 @@ for (const [input, expected] of [['3', 3], ['5', 5], ['', 0]]) {
 
 context.window = { __padMaxlenHintWired: true };
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_defaults.js', 'utf8'), context);
+// Inline binding previews may sit between the label input and its style controls.
+const labelStyle = document.getElementById('pad-edit-label-top-style');
+const labelStyleWrap = document.getElementById('pad-edit-label-top-style-wrap');
+const labelStyleToggle = new Element('label-style-toggle');
+labelStyleWrap.previousElementSibling = { querySelector: () => null };
+labelStyleWrap.parentElement = { querySelector: () => labelStyleToggle };
+labelStyleWrap.querySelector = () => labelStyle;
+let labelStyleFocused = false;
+labelStyle.focus = () => { labelStyleFocused = true; };
+labelStyle.value = '';
+context.syncLabelStyleVisibility('top');
+assert.strictEqual(labelStyleWrap.style.display, 'none');
+assert.strictEqual(labelStyleToggle.classList.contains('active'), false);
+labelStyle.value = 'font_size:18';
+context.syncLabelStyleVisibility('top');
+assert.strictEqual(labelStyleWrap.style.display, 'flex');
+assert.strictEqual(labelStyleToggle.classList.contains('active'), true);
+context.toggleLabelStyle('top');
+assert.strictEqual(labelStyleWrap.style.display, 'none');
+context.toggleLabelStyle('top');
+assert.strictEqual(labelStyleFocused, true);
+assert.strictEqual(labelStyleToggle.classList.contains('active'), true);
+labelStyle.value = '';
 const bindingName = document.getElementById('pad-binding-name-0');
 bindingName.value = '123bad';
 assert.strictEqual(context.padValidateBindingNameInput(bindingName), false);
