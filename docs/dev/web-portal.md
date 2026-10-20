@@ -801,19 +801,25 @@ every component in that custom section to the same category ID.
   - Pad selection and naming: Left rail for up to 16 pads with optional custom names (max 31 chars). Labels retain the `Pad X: Name` format whether selected or not; no legacy selection dropdown is needed.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
   - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading; each binding groups its name, expression, live preview, and delete control inside one bordered row.
-  - Button builder: On `HAS_HA_LIVE` builds, selected empty positions offer a separate creation dialog for HA value buttons, single-bar widgets for numeric readings, and entity-toggle buttons supporting the `light` and `switch` domains. The bar scenario requires `bar_chart` in the device widget catalog and uses raw HA state for its data binding, with separate bottom-label formatting. It exposes range, orientation, and value formatting, not styling. It reuses `/api/ha/lookup` and binding-format helpers, requires successful entity lookup, and generates ordinary button fields into the draft without saving or executing actions. On mobile, empty-position selection keeps the canvas visible and offers **Edit manually** for the existing inspector. Configured/inherited buttons are not builder targets. See the [creation workflow](../user/pads/editing.md#create-a-button-from-home-assistant).
+  - Button builder: On `HAS_HA_LIVE` builds, selected empty positions offer a separate creation dialog for HA value buttons, single-bar and gauge widgets for numeric readings, history charts with up to three values, and entity-toggle buttons supporting the `light` and `switch` domains. Widget scenarios require their type in the device widget catalog. The bar scenario uses raw HA state for its data binding, with separate bottom-label formatting. It exposes range, orientation, and value formatting, not styling. The history scenario owns per-source formatting and colors, shared sampling controls, and scale selection. The dialog reuses `/api/ha/lookup` and binding-format helpers, requires successful entity lookup, and generates ordinary button fields into the draft without saving or executing actions. On mobile, empty-position selection keeps the canvas visible and offers **Edit manually** for the existing inspector. Configured/inherited buttons are not builder targets. See the [creation workflow](../user/pads/editing.md#create-a-button-from-home-assistant).
     `portal_button_templates.js` owns the `padButtonBuilders` scenario list.
-    Each entry supplies `id`, `label`, `description`, `available(detail)`,
-    `fields(detail)`, `build(detail, options)`, and `preview(detail, options, state)`.
+    Each entry supplies `id`, `label`, `description`, `available(draft)`,
+    `fields(draft)`, `build(draft)`, and `preview(draft)`.
+    The draft contains `sources`, shared `options`, and `previewState`.
+    Each source contains its HA `detail`, display `name`, and per-source `options`.
+    The source list is authoritative; single-value scenarios read its first entry.
+    Extra sources remain available when switching back to a multi-value scenario.
     `portal_button_builder.js` owns the dialog, lookup cancellation, shared title
-    control, field rendering and validation, preview orchestration, and draft insertion.
+    control, source-list interactions, field rendering and validation, preview
+    orchestration, and draft insertion. Scenarios receive the draft, not dialog or
+    editor-session state.
     Both modules belong to the `HAS_HA_LIVE` bundle chunk, with templates loaded first.
 
     Field descriptors declare `name`, `label`, `type`, and `default` together.
     Supported types are `text`, `number`, `select`, and `color`. The dialog
     evaluates fields once per entity/scenario selection and uses the same
     descriptors for defaults, rendering, and validation. Switching scenarios
-    preserves the title and resets other options to the new defaults.
+    preserves the title and resets other shared options to the new defaults.
     Reuse `padButtonBuilderDecimalField()` and `padButtonBuilderUnitField(unit)`
     for the common formatting controls.
 
@@ -828,11 +834,27 @@ every component in that custom section to the same category ID.
     Cross-field rules, firmware limits, and binding validation remain separate
     from these basic control checks.
 
-    Optional `renderPreview(cell, button, detail)` adds scenario-owned visuals
+    Multi-value scenarios declare `maxSources` and may supply
+    `sourceFields(source, index)` using the same field descriptors. Source options
+    start from those defaults and retain prior edits. Optional
+    `sourceOptions(source, previous)` customizes that merge on scenario selection
+    or entity replacement. The history scenario resets the unit for a different entity while preserving
+    its color and decimal places. The shell does not infer measurement units.
+    Optional `validateSource(source)` throws a scenario-owned error for incompatible
+    entities, both during selection and before generation. Numeric acceptance is
+    a scenario rule, not a picker restriction.
+
+    The shell validates common labels, foreground color, and widget data bindings.
+    Optional `validateOutput(draft, button)` checks scenario-specific output using
+    `padButtonBuilderValidateText(value, byteLimit)` for binding and UTF-8 limits.
+    Keep persisted widget field names and their limits in the scenario. The history
+    scenario also shares one sampling calculation between output and preview text.
+
+    Optional `renderPreview(draft, cell, button)` adds scenario-owned visuals
     after the shared cell renderer; the button contains preview label overrides.
     Optional `note` explains settings; `preferred` selects the first applicable
-    suggested scenario; `previewStates` adds simulated state controls, and
-    `previewNote(options)` supplies a dynamic preview caption.
+    suggested scenario; `previewStates` supplies value/label pairs for simulated
+    state controls, and `previewNote(draft)` supplies a dynamic preview caption.
     Add scenarios through the template list rather than branching the dialog
     by scenario ID. Keep output generation and specialized previews as JavaScript
     functions; do not persist builder metadata.

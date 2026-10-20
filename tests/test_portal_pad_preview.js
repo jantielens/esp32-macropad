@@ -34,6 +34,7 @@ function createElement() {
 
 const context = {
     TextEncoder,
+    window: {},
     deviceInfoCache: { widget_catalog: [] },
     document: { createElement, createElementNS: createElement },
     padColorToHex: (color, fallback) => color || fallback,
@@ -134,9 +135,10 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'),
 context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
     widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
 const barBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "bar")', context);
-const builderElements = Object.fromEntries(['fields', 'states', 'note'].map(name => ['[data-bb-' + name + ']', createElement()]));
+const builderElements = Object.fromEntries(['fields', 'states', 'note', 'sources', 'selection', 'name', 'id', 'state'].map(name => ['[data-bb-' + name + ']', createElement()]));
+const makeDraft = (detail, name) => ({ sources: [{ detail, name, options: {} }], options: {}, previewState: detail.state });
 context.testBuilderSession = {
-    detail: { state: '42', unit: '%' }, scenario: barBuilder, name: 'Battery',
+    draft: makeDraft({ state: '42', unit: '%' }, 'Battery'), scenario: barBuilder,
     dialog: { querySelector: selector => builderElements[selector] }
 };
 context.padButtonBuilderSetScenario(context.testBuilderSession, barBuilder);
@@ -152,16 +154,16 @@ assert.strictEqual(builderInputs.find(input => input.name === 'decimals').step, 
 const orientationInput = builderInputs.find(input => input.name === 'orientation');
 orientationInput.value = 'horizontal';
 orientationInput.onchange();
-assert.strictEqual(context.testBuilderSession.options.orientation, 'horizontal', 'Custom dropdowns dispatch change, not input');
+assert.strictEqual(context.testBuilderSession.draft.options.orientation, 'horizontal', 'Custom dropdowns dispatch change, not input');
 assert.strictEqual(previewUpdates, 2);
 const minimumInput = builderInputs.find(input => input.name === 'min');
 minimumInput.value = '';
 minimumInput.oninput();
-assert.strictEqual(context.testBuilderSession.options.min, '', 'Keep incomplete numeric input raw');
+assert.strictEqual(context.testBuilderSession.draft.options.min, '', 'Keep incomplete numeric input raw');
 assert.throws(() => context.padButtonBuilderValidateFields(context.testBuilderSession), /minimum and maximum/);
 minimumInput.value = '-0.5';
 minimumInput.oninput();
-assert.strictEqual(context.testBuilderSession.options.min, '-0.5');
+assert.strictEqual(context.testBuilderSession.draft.options.min, '-0.5');
 assert.doesNotThrow(() => context.padButtonBuilderValidateFields(context.testBuilderSession));
 context.padButtonBuilderUpdatePreview = updatePreview;
 vm.runInContext('padButtonBuilderSession = null', context);
@@ -178,7 +180,7 @@ for (const orientation of ['vertical', 'horizontal']) {
             widget_bar_min: signed ? -100 : 0, widget_bar_max: 100,
             widget_bar_zero_centered: signed, widget_orientation: orientation };
         context.padRenderCellContent(cell, button);
-        barBuilder.renderPreview(cell, button, detail);
+        barBuilder.renderPreview(makeDraft(detail, 'Power'), cell, button);
         const bar = cell.querySelector('.pad-button-builder-bar');
         const track = cell.querySelector('.pad-button-builder-bar-track');
         const fill = cell.querySelector('.pad-button-builder-bar-fill');
@@ -199,14 +201,14 @@ for (const [state, min, max, percent] of [
     ['unavailable', 0, 100, null]
 ]) {
     const detail = { entity_id: 'sensor.power', state, unit: '%' };
-    const session = { detail, name: 'Power' };
+    const session = { draft: makeDraft(detail, 'Power') };
     context.padButtonBuilderSetScenario(session, gaugeBuilder);
-    Object.assign(session.options, { min, max, color: '#2196F3' });
-    const button = { label_top: session.name, ...gaugeBuilder.build(detail, session.options),
-        ...gaugeBuilder.preview(detail, session.options) };
+    Object.assign(session.draft.options, { min, max, color: '#2196F3' });
+    const button = { label_top: 'Power', ...gaugeBuilder.build(session.draft),
+        ...gaugeBuilder.preview(session.draft) };
     const cell = createElement();
     context.padRenderCellContent(cell, button);
-    gaugeBuilder.renderPreview(cell, button, detail);
+    gaugeBuilder.renderPreview(session.draft, cell, button);
     assert(cell.querySelector('.pad-widget-marker'));
     assert.strictEqual(cell.querySelector('.pad-cell-label-center'), null);
     const gauge = cell.children.find(child => child.attributes.class === 'pad-button-builder-gauge');
@@ -233,27 +235,56 @@ const historyBuilder = vm.runInContext('padButtonBuilders.find(builder => builde
 let samplePoints;
 for (const color of ['#4CAF50', '#2196F3']) {
     const cell = createElement();
-    const detail = { state: '21.37', unit: '\u00b0C' };
-    const session = { detail, name: 'Living room' };
+    const detail = { entity_id: 'sensor.temperature', state: '21.37', unit: '\u00b0C' };
+    const session = { draft: makeDraft(detail, 'Living room') };
     context.padButtonBuilderSetScenario(session, historyBuilder);
-    const options = session.options;
-    const button = { label_top: 'Living room', widget_sparkline_line_color: color,
-        widget_sparkline_line_width: 2, widget_sparkline_current_dot: 5,
-        ...historyBuilder.preview(detail, options) };
+    session.draft.sources[0].options.color = color;
+    const button = { ...historyBuilder.build(session.draft),
+        ...historyBuilder.preview(session.draft) };
     context.padRenderCellContent(cell, button);
-    historyBuilder.renderPreview(cell, button);
-    assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, '21.4 \u00b0C');
+    historyBuilder.renderPreview(session.draft, cell, button);
+    assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, 'Living room');
     assert.strictEqual(cell.querySelector('.pad-widget-marker'), null);
+    assert.strictEqual(cell.children.length, 2, 'Only the title and chart are shown');
     const chart = cell.children.at(-1);
     assert.strictEqual(chart.attributes.role, 'img');
     assert.match(chart.attributes['aria-label'], /Illustrative trend, not actual history/);
-    const [line, dot] = chart.children;
+    assert.match(chart.attributes['aria-label'], /Living room: 21\.4/);
+    const [line, dot, value] = chart.children;
     assert.strictEqual(line.attributes.stroke, color);
     assert.strictEqual(dot.attributes.fill, color);
+    assert.strictEqual(value.textContent, '21.4 \u00b0C');
+    assert.strictEqual(value.attributes.fill, color);
+    assert(Number(value.attributes.x) > Number(dot.attributes.cx), 'Current value is to the right of its line');
+    assert.strictEqual(value.attributes.y, dot.attributes.cy, 'Current value follows the line endpoint');
     assert.strictEqual(Number(dot.attributes.r) * 2, 5);
     const points = line.attributes.points.split(' ').map(point => point.split(',').map(Number));
     assert.deepStrictEqual(points.at(-1), [Number(dot.attributes.cx), Number(dot.attributes.cy)]);
     if (samplePoints) assert.strictEqual(line.attributes.points, samplePoints, 'The illustrative curve stays deterministic');
     samplePoints = line.attributes.points;
+}
+{
+    const detail = { entity_id: 'sensor.temperature', state: '21.37', unit: '\u00b0C' };
+    const session = { draft: makeDraft(detail, 'Living room') };
+    context.padButtonBuilderSetScenario(session, historyBuilder);
+    session.draft.sources.push(context.padButtonBuilderSource(historyBuilder,
+        { entity_id: 'sensor.humidity', state: '54.2', unit: '%' }, 'Humidity', 1));
+    const render = () => {
+        const cell = createElement();
+        const button = { ...historyBuilder.build(session.draft), ...historyBuilder.preview(session.draft) };
+        context.padRenderCellContent(cell, button);
+        historyBuilder.renderPreview(session.draft, cell, button);
+        return cell;
+    };
+    const cell = render();
+    const chart = cell.children.at(-1);
+    assert.strictEqual(chart.children.length, 6, 'Both values have a line, dot, and endpoint label');
+    assert.strictEqual(chart.children[5].textContent, '54.2 %');
+    assert.strictEqual(chart.children[5].attributes.fill, '#2196F3');
+    assert.strictEqual(chart.children[5].attributes.y, chart.children[4].attributes.cy);
+    session.draft.sources[1].detail.state = 'unavailable';
+    const unavailable = render();
+    assert.strictEqual(unavailable.children.at(-1).children[3].textContent, '---');
+    assert.strictEqual(unavailable.children.at(-1).children.length, 4, 'Unavailable values have a label but no zero or fake trend');
 }
 console.log('portal_pad_preview: PASS');

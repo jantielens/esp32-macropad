@@ -273,8 +273,11 @@ delete context.testHelpSchemes;
     const historyBuilder = builders.find(builder => builder.id === 'history');
     const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
     const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
+    const makeDraft = (detail, options = {}) => ({
+        sources: [{ detail, name: 'Living room', options: {} }], options, previewState: detail.state
+    });
     const buildSession = (detail, builder) => {
-        const session = { col: 2, row: 1, page: 0, detail, name: 'Living room' };
+        const session = { col: 2, row: 1, page: 0, draft: makeDraft(detail) };
         context.padButtonBuilderSetScenario(session, builder);
         return session;
     };
@@ -284,30 +287,35 @@ delete context.testHelpSchemes;
         col: 2, row: 1, label_top: 'Living room',
         label_center: '[ha:sensor.living_room_temperature;;%.1f]', label_bottom: '\u00b0C'
     });
-    assert.strictEqual(valueBuilder.preview(temperature, valueSession.options).label_center, '21.4');
-    assert.strictEqual(valueBuilder.preview({ ...temperature, state: 'unavailable' }, valueSession.options).label_center, '---');
+    assert.strictEqual(valueBuilder.preview(valueSession.draft).label_center, '21.4');
+    assert.strictEqual(valueBuilder.preview(makeDraft({ ...temperature, state: 'unavailable' }, valueSession.draft.options)).label_center, '---');
     const textSession = buildSession({ ...temperature, state: 'Ready', unit: '' }, valueBuilder);
     assert.strictEqual(context.padButtonBuilderBuild(textSession).label_center, '[ha:sensor.living_room_temperature;;%s]');
     assert.ok(!textSession.fields.some(field => field.name === 'decimals'));
     for (const decimals of ['', ' ', null, undefined, false, 'NaN', 'Infinity', '-1', '1.5', '7']) {
-        valueSession.options.decimals = decimals;
+        valueSession.draft.options.decimals = decimals;
         assert.throws(() => context.padButtonBuilderBuild(valueSession), /decimal/);
     }
     for (const decimals of ['0', '6']) {
-        valueSession.options.decimals = decimals;
+        valueSession.draft.options.decimals = decimals;
         assert.ok(context.padButtonBuilderBuild(valueSession).label_center.includes('%.' + decimals + 'f'));
     }
     const switchingSession = buildSession(temperature, valueBuilder);
-    switchingSession.options.title = 'My temperature';
-    switchingSession.options.unit = 'custom unit';
-    context.padButtonBuilderSetScenario(switchingSession, historyBuilder, switchingSession.options.title);
-    assert.strictEqual(switchingSession.options.title, 'My temperature');
-    assert.strictEqual(switchingSession.options.unit, temperature.unit);
-    switchingSession.options.color = '#123456';
-    context.padButtonBuilderSetScenario(switchingSession, valueBuilder, switchingSession.options.title);
-    assert.strictEqual(switchingSession.options.title, 'My temperature');
-    assert.ok(!Object.hasOwn(switchingSession.options, 'color'));
-    assert.ok(!Object.hasOwn(switchingSession.options, 'window'));
+    switchingSession.draft.options.title = 'My temperature';
+    switchingSession.draft.options.unit = 'custom unit';
+    context.padButtonBuilderSetScenario(switchingSession, historyBuilder, switchingSession.draft.options.title);
+    assert.strictEqual(switchingSession.draft.options.title, 'My temperature');
+    assert.strictEqual(switchingSession.draft.sources[0].options.unit, temperature.unit);
+    switchingSession.draft.sources[0].options.color = '#123456';
+    switchingSession.draft.sources[0].options.unit = 'degrees';
+    context.padButtonBuilderSetScenario(switchingSession, valueBuilder, switchingSession.draft.options.title);
+    assert.strictEqual(switchingSession.draft.options.title, 'My temperature');
+    assert.ok(!Object.hasOwn(switchingSession.draft.options, 'color'));
+    assert.ok(!Object.hasOwn(switchingSession.draft.options, 'window'));
+    context.padButtonBuilderSetScenario(switchingSession, historyBuilder, switchingSession.draft.options.title);
+    const switchedBack = context.padButtonBuilderBuild(switchingSession);
+    assert.strictEqual(switchedBack.widget_sparkline_current_label, '[ha:sensor.living_room_temperature;;%.1f degrees]');
+    assert.strictEqual(switchedBack.widget_sparkline_line_color, '#123456');
 
     // A new numeric knob needs only a descriptor and output mapping.
     let fieldEvaluations = 0;
@@ -316,25 +324,53 @@ delete context.testHelpSchemes;
             fieldEvaluations++;
             return [{ name: 'level', label: 'Level', type: 'number', default: 0.3, min: 0.1, max: 0.9, step: 0.2 }];
         },
-        build: (detail, options) => ({ label_center: String(Number(options.level)) })
+        build: ({ options }) => ({ label_center: String(Number(options.level)) })
     };
     const steppedSession = buildSession(temperature, steppedBuilder);
     assert.strictEqual(context.padButtonBuilderBuild(steppedSession).label_center, '0.3');
     for (const level of ['0.1', '0.7', '0.9']) {
-        steppedSession.options.level = level;
+        steppedSession.draft.options.level = level;
         assert.strictEqual(context.padButtonBuilderBuild(steppedSession).label_center, level);
     }
     for (const level of ['', '0', '0.2', '1', '1e999']) {
-        steppedSession.options.level = level;
+        steppedSession.draft.options.level = level;
         assert.throws(() => context.padButtonBuilderBuild(steppedSession), /level/);
     }
     assert.strictEqual(fieldEvaluations, 1, 'Defaults, validation, and rendering share one field definition');
-    valueSession.options.decimals = 7;
+
+    // Another multi-value scenario can accept text and own its formatting and output limits.
+    const textPairBuilder = {
+        maxSources: 2,
+        available: () => true,
+        fields: () => [],
+        sourceFields: () => [{ name: 'unit', label: 'Suffix', type: 'text', default: 'state', maxlength: 60 }],
+        validateSource({ detail }) {
+            if (!['on', 'off'].includes(detail.state)) throw new Error('Choose an on/off entity.');
+        },
+        build({ sources }) {
+            return { label_center: sources.map(source => source.detail.state).join(' / '),
+                state_caption: sources[0].options.unit };
+        },
+        validateOutput(draft, button) {
+            context.padButtonBuilderValidateText(button.state_caption, 8);
+        }
+    };
+    const textPairSession = buildSession(light, textPairBuilder);
+    assert.strictEqual(textPairSession.draft.sources[0].options.unit, 'state', 'The shell does not infer units');
+    textPairSession.draft.sources[0].options.unit = 'custom';
+    const replacementText = context.padButtonBuilderSource(textPairBuilder,
+        { ...light, entity_id: 'switch.example', unit: '%' }, 'Example', 0, textPairSession.draft.sources[0]);
+    assert.strictEqual(replacementText.options.unit, 'custom', 'Replacement policy belongs to the scenario');
+    assert.strictEqual(context.padButtonBuilderBuild(textPairSession).label_center, 'on');
+    textPairSession.draft.sources[0].options.unit = 'too long!';
+    assert.throws(() => context.padButtonBuilderBuild(textPairSession), /8 UTF-8 byte/, 'Scenario-only output fields are validated');
+    textPairSession.draft.sources[0].options.unit = 'custom';
+    valueSession.draft.options.decimals = 7;
     assert.throws(() => context.padButtonBuilderBuild(valueSession), /decimal/);
-    valueSession.options.decimals = 1;
-    valueSession.options.title = '\u00b0'.repeat(96);
+    valueSession.draft.options.decimals = 1;
+    valueSession.draft.options.title = '\u00b0'.repeat(96);
     assert.throws(() => context.padButtonBuilderBuild(valueSession), /UTF-8/);
-    valueSession.options.title = 'Living room';
+    valueSession.draft.options.title = 'Living room';
     const lightSession = buildSession(light, toggleBuilder);
     const generatedLight = context.padButtonBuilderBuild(lightSession);
     assert.strictEqual(generatedLight.icon_id, 'mi_lightbulb');
@@ -343,11 +379,11 @@ delete context.testHelpSchemes;
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedLight.actions)), [
         { type: 'ha_service', entity_id: 'light.kitchen', service: 'toggle' }
     ]);
-    assert.strictEqual(toggleBuilder.available(temperature), false);
-    assert.strictEqual(toggleBuilder.available(light), true);
-    assert.strictEqual(toggleBuilder.available({ ...light, entity_id: 'binary_sensor.door' }), false);
+    assert.strictEqual(toggleBuilder.available(makeDraft(temperature)), false);
+    assert.strictEqual(toggleBuilder.available(makeDraft(light)), true);
+    assert.strictEqual(toggleBuilder.available(makeDraft({ ...light, entity_id: 'binary_sensor.door' })), false);
     const switchDetail = { ...light, entity_id: 'switch.desk_fan', state: 'off' };
-    assert.strictEqual(toggleBuilder.available(switchDetail), true);
+    assert.strictEqual(toggleBuilder.available(makeDraft(switchDetail)), true);
     const switchSession = buildSession(switchDetail, toggleBuilder);
     const generatedSwitch = context.padButtonBuilderBuild(switchSession);
     assert.strictEqual(generatedSwitch.icon_id, 'mi_toggle_on');
@@ -357,95 +393,143 @@ delete context.testHelpSchemes;
     ]);
     const catalogEntry = context.actionEditorCatalogEntry;
     context.actionEditorCatalogEntry = () => null;
-    assert.strictEqual(toggleBuilder.available(switchDetail), false);
-    assert.strictEqual(toggleBuilder.available(light), false);
+    assert.strictEqual(toggleBuilder.available(makeDraft(switchDetail)), false);
+    assert.strictEqual(toggleBuilder.available(makeDraft(light)), false);
     context.actionEditorCatalogEntry = catalogEntry;
-    const previewColors = ['on', 'off', 'unavailable'].map(state => toggleBuilder.preview(light, lightSession.options, state).fg_color);
+    const previewColors = ['on', 'off', 'unavailable'].map(previewState =>
+        toggleBuilder.preview({ ...lightSession.draft, previewState }).fg_color);
     assert.strictEqual(new Set(previewColors).size, 3);
     const longLight = { ...light, entity_id: 'light.' + 'a'.repeat(41) };
     assert.ok(context.padButtonBuilderBuild(buildSession(longLight, toggleBuilder)));
     assert.throws(() => context.padButtonBuilderBuild(buildSession({ ...longLight, entity_id: longLight.entity_id + 'a' }, toggleBuilder)), /48/);
-    lightSession.options.icon = 'not an icon';
+    lightSession.draft.options.icon = 'not an icon';
     assert.throws(() => context.padButtonBuilderBuild(lightSession), /Symbol/);
-    lightSession.options.icon = '';
+    lightSession.draft.options.icon = '';
     assert.throws(() => context.padButtonBuilderBuild(lightSession), /symbol/i);
-    lightSession.options.icon = 'lightbulb';
+    lightSession.draft.options.icon = 'lightbulb';
     for (const color of ['red', '#fff', '[ha:light.kitchen]', '']) {
-        lightSession.options.on = color;
+        lightSession.draft.options.on = color;
         assert.throws(() => context.padButtonBuilderBuild(lightSession), /colors/);
     }
-    lightSession.options.on = '#aAbBcC';
+    lightSession.draft.options.on = '#aAbBcC';
     assert.ok(context.padButtonBuilderBuild(lightSession).fg_color.includes('#aAbBcC'));
-    valueSession.options.unit = 'x'.repeat(61);
+    valueSession.draft.options.unit = 'x'.repeat(61);
     assert.throws(() => context.padButtonBuilderBuild(valueSession), /unit/);
-    valueSession.options.unit = 'x'.repeat(60);
+    valueSession.draft.options.unit = 'x'.repeat(60);
     assert.strictEqual(context.padButtonBuilderBuild(valueSession).label_bottom.length, 60);
-    valueSession.options.unit = temperature.unit;
+    valueSession.draft.options.unit = temperature.unit;
 
     context.deviceInfoCache = { widget_catalog: [{ type: 'sparkline' }] };
-    assert.strictEqual(historyBuilder.available(temperature), true);
-    for (const detail of [light, { ...temperature, state: 'unavailable' },
+    assert.strictEqual(historyBuilder.available(makeDraft(temperature)), true);
+    assert.strictEqual(historyBuilder.available(makeDraft({ ...temperature, state: 'unavailable' })), true);
+    for (const detail of [light, { ...temperature, state: 'unavailable', unit: '' },
         { ...temperature, state_truncated: true }]) {
-        assert.strictEqual(historyBuilder.available(detail), false);
+        assert.strictEqual(historyBuilder.available(makeDraft(detail)), false);
     }
     context.deviceInfoCache.widget_catalog = [];
-    assert.strictEqual(historyBuilder.available(temperature), false);
+    assert.strictEqual(historyBuilder.available(makeDraft(temperature)), false);
+    context.deviceInfoCache.widget_catalog = [{ type: 'sparkline' }];
     context.window.__device_caps = { ha_history: true };
     const historySession = buildSession(temperature, historyBuilder);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padButtonBuilderBuild(historySession))), {
-        col: 2, row: 1, label_top: 'Living room',
-        label_center: '[ha:sensor.living_room_temperature;;%.1f \u00b0C]',
+        col: 2, row: 1, label_top: '', label_center: 'Living room', label_center_style: 'align:left',
         widget_type: 'sparkline', widget_data_binding: '[ha:sensor.living_room_temperature]',
+        widget_sparkline_current_label: '[ha:sensor.living_room_temperature;;%.1f \u00b0C]',
         widget_sparkline_line_color: '#4CAF50', widget_sparkline_line_width: 2,
         widget_sparkline_current_dot: 5, widget_sparkline_smooth: 0,
-        widget_sparkline_unified_scale: true, widget_sparkline_window: 86400,
+        widget_sparkline_unified_scale: true, widget_sparkline_window: 86400, widget_sparkline_label_width: 100,
         widget_sparkline_slots: 288, widget_sparkline_ha_entity: temperature.entity_id,
         widget_sparkline_ha_stat: 'mean'
     });
     for (const [window, slots, caption] of [
-        ['3600', 120, 'Last 1 hour.'], ['21600', 120, 'Last 6 hours.'],
+        ['3600', 12, 'Last 1 hour.'], ['18000', 60, 'Last 5 hours.'], ['21600', 72, 'Last 6 hours.'],
         ['86400', 288, 'Last 24 hours.'], ['604800', 1024, 'Last 7 days.']
     ]) {
-        historySession.options.window = window;
+        historySession.draft.options.window = window;
         const button = context.padButtonBuilderBuild(historySession);
         assert.strictEqual(button.widget_sparkline_window, Number(window));
         assert.strictEqual(button.widget_sparkline_slots, slots);
-        assert.ok(historyBuilder.previewNote(historySession.options).startsWith(caption));
-        assert.match(historyBuilder.previewNote(historySession.options), /Illustrative trend, not actual history/);
+        assert.ok(historyBuilder.previewNote(historySession.draft).startsWith(caption));
+        assert.match(historyBuilder.previewNote(historySession.draft), /Illustrative trend, not actual history/);
     }
-    historySession.options.window = '0';
+    historySession.draft.options.window = '0';
     assert.throws(() => context.padButtonBuilderBuild(historySession), /time range/);
-    historySession.options.window = '86400';
-    historySession.options.color = 'red';
+    historySession.draft.options.window = '86400';
+    historySession.draft.sources[0].options.color = 'red';
     assert.throws(() => context.padButtonBuilderBuild(historySession), /line color/);
-    Object.assign(historySession.options, { color: '#2196F3', unit: '%', decimals: 2 });
-    assert.strictEqual(context.padButtonBuilderBuild(historySession).label_center, '[ha:sensor.living_room_temperature;;%.2f %%]');
-    assert.strictEqual(historyBuilder.preview(temperature, historySession.options).label_center, '21.37 %');
-    assert.strictEqual(historyBuilder.preview({ ...temperature, state: 'unavailable' }, historySession.options).label_center, '---');
-    historySession.options.decimals = 7;
+    Object.assign(historySession.draft.sources[0].options, { color: '#2196F3', unit: '%', decimals: 2 });
+    assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_current_label, '[ha:sensor.living_room_temperature;;%.2f %%]');
+    historySession.draft.sources[0].options.decimals = 7;
     assert.throws(() => context.padButtonBuilderBuild(historySession), /decimal/);
-    historySession.options.decimals = 1;
+    historySession.draft.sources[0].options.decimals = 1;
+    const humidity = { entity_id: 'sensor.living_room_humidity', state: '54.2', unit: '%', paths: [] };
+    historySession.draft.sources.push(context.padButtonBuilderSource(historyBuilder, humidity, 'Humidity', 1));
+    Object.assign(historySession.draft.options, { window: '18000', interval: 60 });
+    let multi = context.padButtonBuilderBuild(historySession);
+    assert.strictEqual(multi.widget_sparkline_slots, 300);
+    assert.strictEqual(multi.widget_sparkline_unified_scale, false, 'Automatic scales use entity units, not display overrides');
+    assert.strictEqual(multi.widget_data_binding_2, '[ha:sensor.living_room_humidity]');
+    assert.strictEqual(multi.widget_sparkline_current_label_2, '[ha:sensor.living_room_humidity;;%.1f %%]');
+    assert.strictEqual(multi.widget_sparkline_line_color_2, '#2196F3');
+    assert.strictEqual(multi.widget_sparkline_ha_entity_2, humidity.entity_id);
+    assert.strictEqual(multi.widget_sparkline_ha_stat_2, 'mean');
+    assert.match(historyBuilder.previewNote(historySession.draft), /60 seconds \(300 points per line\)/);
+    historySession.draft.options.scale = 'shared';
+    assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_unified_scale, true);
+    historySession.draft.options.scale = 'independent';
+    assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_unified_scale, false);
+    historySession.draft.options.interval = 0.1;
+    assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_slots, 1024);
+    historySession.draft.options.interval = '';
+    assert.throws(() => context.padButtonBuilderBuild(historySession), /sample interval/);
+    historySession.draft.options.interval = 60;
+    historySession.draft.sources[1].options.unit = '\u00b0'.repeat(30);
+    assert.throws(() => context.padButtonBuilderBuild(historySession), /format|63 UTF-8 byte/);
+    historySession.draft.sources[1].options.unit = '%';
+    historySession.draft.sources[1].detail = { ...humidity, entity_id: 'sensor.' + 'h'.repeat(48) };
+    assert.throws(() => context.padButtonBuilderBuild(historySession), /63 UTF-8 byte/, 'Secondary current-value labels must fit firmware buffers');
+    historySession.draft.sources[1].detail = humidity;
+    historySession.draft.sources.push(context.padButtonBuilderSource(historyBuilder,
+        { ...temperature, entity_id: 'sensor.bedroom_temperature' }, 'Bedroom', 2));
+    multi = context.padButtonBuilderBuild(historySession);
+    assert.strictEqual(multi.widget_data_binding_3, '[ha:sensor.bedroom_temperature]');
+    assert.strictEqual(multi.widget_sparkline_ha_entity_3, 'sensor.bedroom_temperature');
+    historySession.draft.sources.push(historySession.draft.sources[2]);
+    assert.throws(() => context.padButtonBuilderBuild(historySession), /between 1 and 3/);
+    historySession.draft.sources.pop();
+    historySession.draft.sources.splice(1, 1);
+    multi = context.padButtonBuilderBuild(historySession);
+    assert.strictEqual(multi.widget_data_binding_2, '[ha:sensor.bedroom_temperature]', 'Removing a source compacts numbered fields');
+    assert.strictEqual(multi.widget_data_binding_3, undefined);
+    historySession.draft.options.scale = 'auto';
+    assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_unified_scale, true);
+    const replacement = context.padButtonBuilderSource(historyBuilder, humidity, 'Humidity', 0, historySession.draft.sources[0]);
+    assert.strictEqual(replacement.options.color, '#2196F3', 'Changing an entity preserves styling');
+    assert.strictEqual(replacement.options.decimals, 1);
+    assert.strictEqual(replacement.options.unit, '%', 'Changing an entity updates its unit');
     for (const caps of [undefined, {}, { ha_history: false }]) {
         context.window.__device_caps = caps;
         const button = context.padButtonBuilderBuild(historySession);
         assert.strictEqual(button.widget_sparkline_ha_entity, undefined);
         assert.strictEqual(button.widget_sparkline_ha_stat, undefined);
+        assert.strictEqual(button.widget_sparkline_ha_entity_2, undefined);
+        assert.strictEqual(button.widget_sparkline_ha_stat_2, undefined);
         assert.strictEqual(button.widget_data_binding, '[ha:sensor.living_room_temperature]');
     }
 
     // Bar inputs stay raw; only the bottom label gets display formatting.
     context.deviceInfoCache = { widget_catalog: [{ type: 'bar_chart' }] };
-    assert.strictEqual(barBuilder.available(temperature), true);
+    assert.strictEqual(barBuilder.available(makeDraft(temperature)), true);
     for (const detail of [light, { ...temperature, state: 'unavailable' },
         { ...temperature, state_truncated: true }]) {
-        assert.strictEqual(barBuilder.available(detail), false);
+        assert.strictEqual(barBuilder.available(makeDraft(detail)), false);
     }
     context.deviceInfoCache.widget_catalog = [];
-    assert.strictEqual(barBuilder.available(temperature), false);
+    assert.strictEqual(barBuilder.available(makeDraft(temperature)), false);
     context.deviceInfoCache.widget_catalog = [{ type: 'bar_chart' }];
     const barSession = buildSession(temperature, barBuilder);
-    assert.strictEqual(barSession.options.min, 0);
-    assert.strictEqual(barSession.options.max, 50);
+    assert.strictEqual(barSession.draft.options.min, 0);
+    assert.strictEqual(barSession.draft.options.max, 50);
     assert.strictEqual(context.padButtonBuilderBuild(barSession).widget_bar_max, 50);
     for (const [state, min, max] of [
         ['1200', 0, 5000], ['-12', -50, 50], ['0', 0, 100],
@@ -458,7 +542,7 @@ delete context.testHelpSchemes;
         assert.strictEqual(button.widget_bar_zero_centered, min < 0);
         assert.ok(Number(state) >= min && Number(state) < max);
     }
-    Object.assign(barSession.options, { min: '-10.5', max: '40.5', orientation: 'horizontal', decimals: 2 });
+    Object.assign(barSession.draft.options, { min: '-10.5', max: '40.5', orientation: 'horizontal', decimals: 2 });
     const generatedBar = context.padButtonBuilderBuild(barSession);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedBar)), {
         col: 2, row: 1, label_top: 'Living room', widget_type: 'bar_chart',
@@ -467,9 +551,9 @@ delete context.testHelpSchemes;
         widget_orientation: 'horizontal', widget_bar_zero_centered: true,
         label_bottom: '[ha:sensor.living_room_temperature;;%.2f \u00b0C]'
     });
-    assert.strictEqual(barBuilder.preview(temperature, barSession.options).label_bottom, '21.37 \u00b0C');
+    assert.strictEqual(barBuilder.preview(barSession.draft).label_bottom, '21.37 \u00b0C');
     for (const state of ['unknown', 'unavailable', '']) {
-        assert.strictEqual(barBuilder.preview({ ...temperature, state }, barSession.options).label_bottom, '---');
+        assert.strictEqual(barBuilder.preview(makeDraft({ ...temperature, state }, barSession.draft.options)).label_bottom, '---');
     }
     const percentSession = buildSession({ ...temperature, unit: ' % ' }, barBuilder);
     const generatedPercentBar = context.padButtonBuilderBuild(percentSession);
@@ -478,37 +562,37 @@ delete context.testHelpSchemes;
     assert.strictEqual(generatedPercentBar.widget_orientation, 'vertical');
     assert.strictEqual(generatedPercentBar.widget_bar_zero_centered, false);
     assert.strictEqual(generatedPercentBar.label_bottom, '[ha:sensor.living_room_temperature;;%.1f %%]');
-    assert.strictEqual(barBuilder.preview(temperature, percentSession.options).label_bottom, '21.4 %');
+    assert.strictEqual(barBuilder.preview(percentSession.draft).label_bottom, '21.4 %');
     for (const [min, max] of [['', 100], [0, ' '], ['12abc', 100], [0, 'Infinity']]) {
-        Object.assign(barSession.options, { min, max });
+        Object.assign(barSession.draft.options, { min, max });
         assert.throws(() => context.padButtonBuilderBuild(barSession), /minimum and maximum/);
     }
     for (const [min, max] of [[1, 1], [2, 1], [0, '1e99'], [1, 1.000000001], ['-3e38', '3e38']]) {
-        Object.assign(barSession.options, { min, max });
+        Object.assign(barSession.draft.options, { min, max });
         assert.throws(() => context.padButtonBuilderBuild(barSession), /greater than minimum/);
     }
-    Object.assign(barSession.options, { min: 0, max: 0.5 });
+    Object.assign(barSession.draft.options, { min: 0, max: 0.5 });
     assert.strictEqual(context.padButtonBuilderBuild(barSession).widget_bar_max, 0.5);
-    barSession.options.orientation = 'diagonal';
+    barSession.draft.options.orientation = 'diagonal';
     assert.throws(() => context.padButtonBuilderBuild(barSession), /orientation/);
-    barSession.options.orientation = 'vertical';
-    barSession.options.decimals = 7;
+    barSession.draft.options.orientation = 'vertical';
+    barSession.draft.options.decimals = 7;
     assert.throws(() => context.padButtonBuilderBuild(barSession), /decimal/);
-    barSession.options.decimals = 1;
-    barSession.options.unit = '[invalid]';
+    barSession.draft.options.decimals = 1;
+    barSession.draft.options.unit = '[invalid]';
     assert.throws(() => context.padButtonBuilderBuild(barSession), /delimiters/);
 
     context.PAD_FIRMWARE_DEFAULTS = { widget_series_color: '#4CAF50' };
     context.deviceInfoCache = { widget_catalog: [{ type: 'gauge' }] };
-    assert.strictEqual(gaugeBuilder.available(temperature), true);
+    assert.strictEqual(gaugeBuilder.available(makeDraft(temperature)), true);
     for (const detail of [light, { ...temperature, state: 'unavailable' },
         { ...temperature, state: 'unknown' }, { ...temperature, state_truncated: true }]) {
-        assert.strictEqual(gaugeBuilder.available(detail), false);
+        assert.strictEqual(gaugeBuilder.available(makeDraft(detail)), false);
     }
     context.deviceInfoCache = null;
-    assert.strictEqual(gaugeBuilder.available(temperature), false);
+    assert.strictEqual(gaugeBuilder.available(makeDraft(temperature)), false);
     context.deviceInfoCache = { widget_catalog: [{ type: 'bar_chart' }] };
-    assert.strictEqual(gaugeBuilder.available(temperature), false);
+    assert.strictEqual(gaugeBuilder.available(makeDraft(temperature)), false);
     const gaugeSession = buildSession(temperature, gaugeBuilder);
     const generatedGauge = context.padButtonBuilderBuild(gaugeSession);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedGauge)), {
@@ -526,29 +610,29 @@ delete context.testHelpSchemes;
         assert.strictEqual(button.widget_gauge_min, min);
         assert.strictEqual(button.widget_gauge_max, max);
     }
-    Object.assign(gaugeSession.options, { min: '-10.5', max: '40.5', decimals: 2, color: '#2196F3', unit: '%' });
+    Object.assign(gaugeSession.draft.options, { min: '-10.5', max: '40.5', decimals: 2, color: '#2196F3', unit: '%' });
     const customGauge = context.padButtonBuilderBuild(gaugeSession);
     assert.strictEqual(customGauge.widget_gauge_min, -10.5);
     assert.strictEqual(customGauge.widget_gauge_max, 40.5);
     assert.strictEqual(customGauge.widget_arc_color, '#2196F3');
     assert.strictEqual(customGauge.widget_data_binding, '[ha:sensor.living_room_temperature]');
     assert.strictEqual(customGauge.label_bottom, '[ha:sensor.living_room_temperature;;%.2f %%]');
-    assert.strictEqual(gaugeBuilder.preview(temperature, gaugeSession.options).label_bottom, '21.37 %');
+    assert.strictEqual(gaugeBuilder.preview(gaugeSession.draft).label_bottom, '21.37 %');
     for (const state of ['unknown', 'unavailable', '']) {
-        assert.strictEqual(gaugeBuilder.preview({ ...temperature, state }, gaugeSession.options).label_bottom, '---');
+        assert.strictEqual(gaugeBuilder.preview(makeDraft({ ...temperature, state }, gaugeSession.draft.options)).label_bottom, '---');
     }
     for (const [min, max] of [['', 100], ['12abc', 100], [1, 1], [2, 1],
         [0, '1e99'], [1, 1.000000001], ['-3e38', '3e38']]) {
-        Object.assign(gaugeSession.options, { min, max });
+        Object.assign(gaugeSession.draft.options, { min, max });
         assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /minimum/);
     }
-    Object.assign(gaugeSession.options, { min: 0, max: 100, color: 'red' });
+    Object.assign(gaugeSession.draft.options, { min: 0, max: 100, color: 'red' });
     assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /arc color/);
-    gaugeSession.options.color = '#4CAF50';
-    gaugeSession.options.decimals = 7;
+    gaugeSession.draft.options.color = '#4CAF50';
+    gaugeSession.draft.options.decimals = 7;
     assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /decimal/);
-    gaugeSession.options.decimals = 1;
-    gaugeSession.options.unit = '[invalid]';
+    gaugeSession.draft.options.decimals = 1;
+    gaugeSession.draft.options.unit = '[invalid]';
     assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /delimiters/);
 
     // Creation is draft-only and cannot overwrite local or inherited content.
@@ -588,7 +672,7 @@ delete context.testHelpSchemes;
     assert.strictEqual(context.padState.buttons.length, 1);
     assert.match(validation.textContent, /no longer empty/);
     context.padState.buttons = [];
-    valueSession.detail = null;
+    valueSession.draft.sources = [];
     context.padButtonBuilderCreate();
     assert.strictEqual(context.padState.buttons.length, 0);
     assert.match(validation.textContent, /load its details/);
@@ -728,6 +812,84 @@ delete context.testHelpSchemes;
     buttonPending[2].resolve({ entities: [], more: false });
     await stopped;
     assert.notStrictEqual(buttonStatus.textContent, 'No matching entities. Try another name or enter an exact entity ID.');
+
+    // Multi-value selection is transactional, including cancellation during a lookup.
+    context.deviceInfoCache = { widget_catalog: [{ type: 'sparkline' }] };
+    const sourceSession = buildSession(temperature, historyBuilder);
+    sourceSession.draft.options.title = 'Leefruimte';
+    sourceSession.draft.options.window = '18000';
+    sourceSession.draft.sources[0].options.decimals = 2;
+    sourceSession.dialog = buttonDialog;
+    const sourceNodes = Object.fromEntries(['source', 'source-cancel', 'design', 'create', 'name', 'id', 'state']
+        .map(name => ['[data-bb-' + name + ']', {}]));
+    const originalQuery = buttonDialog.querySelector;
+    buttonDialog.querySelector = selector => sourceNodes[selector] || originalQuery(selector);
+    buttonSearch.focus = () => {};
+    context.padColorPopoverClose = () => {};
+    const renderFields = context.padButtonBuilderRenderFields;
+    const renderChoices = context.padButtonBuilderRenderChoices;
+    context.padButtonBuilderRenderFields = () => {};
+    context.padButtonBuilderRenderChoices = () => {};
+    context.testButtonSession = sourceSession;
+    vm.runInContext('padButtonBuilderSession = testButtonSession', context);
+    const beforeSelection = JSON.stringify(context.padButtonBuilderBuild(sourceSession));
+    context.padButtonBuilderPickSource(1);
+    buttonSearch.value = humidity.entity_id;
+    const cancelledSource = context.padButtonBuilderLookup(true);
+    const cancelledSourceSignal = sourceSession.controller.signal;
+    context.padButtonBuilderCancelSource();
+    assert.strictEqual(cancelledSourceSignal.aborted, true);
+    buttonPending[3].resolve(humidity);
+    await cancelledSource;
+    assert.strictEqual(JSON.stringify(context.padButtonBuilderBuild(sourceSession)), beforeSelection);
+    assert.strictEqual(sourceNodes['[data-bb-design]'].hidden, false);
+    assert.strictEqual(sourceNodes['[data-bb-source]'].hidden, true);
+    context.padButtonBuilderPickSource(1);
+    buttonSearch.value = light.entity_id;
+    context.haBindingLookup = async () => light;
+    await context.padButtonBuilderLookup(true);
+    assert.match(buttonStatus.textContent, /numeric/);
+    assert.strictEqual(sourceSession.draft.sources.length, 1);
+    buttonSearch.value = humidity.entity_id;
+    context.haBindingLookup = async () => humidity;
+    await context.padButtonBuilderLookup(true);
+    assert.strictEqual(sourceSession.draft.sources.length, 2);
+    assert.strictEqual(sourceSession.draft.sources[0].options.decimals, 2);
+    assert.strictEqual(sourceSession.draft.options.title, 'Leefruimte');
+    assert.strictEqual(sourceSession.draft.options.window, '18000');
+    assert.strictEqual(sourceSession.sourceIndex, undefined);
+    context.padButtonBuilderPickSource(0);
+    buttonSearch.value = humidity.entity_id;
+    await context.padButtonBuilderLookup(true);
+    assert.match(buttonStatus.textContent, /already included/);
+    assert.strictEqual(sourceSession.draft.sources[0].detail.entity_id, temperature.entity_id);
+    const bedroom = { ...temperature, entity_id: 'sensor.bedroom_temperature' };
+    buttonSearch.value = bedroom.entity_id;
+    context.haBindingLookup = async () => bedroom;
+    await context.padButtonBuilderLookup(true);
+    assert.strictEqual(sourceSession.draft.sources[0].detail.entity_id, bedroom.entity_id);
+    assert.strictEqual(valueBuilder.build({ ...sourceSession.draft, options: { decimals: 1, unit: '' } }).label_center,
+        '[ha:sensor.bedroom_temperature;;%.1f]', 'Other scenarios derive the changed primary entity from the same source');
+    assert.strictEqual(sourceSession.draft.sources[0].options.decimals, 2);
+    textPairSession.dialog = buttonDialog;
+    context.testButtonSession = textPairSession;
+    vm.runInContext('padButtonBuilderSession = testButtonSession', context);
+    context.padButtonBuilderPickSource(1);
+    buttonSearch.value = switchDetail.entity_id;
+    context.haBindingLookup = async () => switchDetail;
+    await context.padButtonBuilderLookup(true);
+    assert.strictEqual(textPairSession.draft.sources.length, 2);
+    assert.strictEqual(context.padButtonBuilderBuild(textPairSession).label_center, 'on / off',
+        'The shared picker and build path support nonnumeric sources');
+    context.padButtonBuilderPickSource(1);
+    buttonSearch.value = temperature.entity_id;
+    context.haBindingLookup = async () => temperature;
+    await context.padButtonBuilderLookup(true);
+    assert.match(buttonStatus.textContent, /on\/off entity/);
+    assert.strictEqual(textPairSession.draft.sources[1].detail.entity_id, switchDetail.entity_id);
+    context.padButtonBuilderCancelSource();
+    context.padButtonBuilderRenderFields = renderFields;
+    context.padButtonBuilderRenderChoices = renderChoices;
     vm.runInContext('padButtonBuilderSession = null', context);
     console.log('portal binding help tests passed');
 })().catch(error => {

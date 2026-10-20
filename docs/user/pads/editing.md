@@ -62,15 +62,28 @@ on firmware with live Home Assistant support.
    It uses the same range suggestions as the bar, but fills from the minimum.
    Additional rings, targets, geometry, and other styling remain available in
    the normal editor; see [Gauge](../widgets/gauge.md).
-   **Show a value with history** requires a numeric, non-truncated current state
-   and sparkline widget support. It shows the title, current value with its unit,
-   and a single automatically scaled sparkline. Choose decimal places, unit,
-   a time range (1 hour, 6 hours, 24 hours, or 7 days), and line color.
-   It starts with 24 hours, a green line, and a latest-value dot.
+   **Show a value with history** requires sparkline widget support and
+   non-truncated readings. It shows a chart title and up to three colored
+   lines, each with its own current-value label. Choose **Add another value**
+   to search for another entity. Each value has its own decimal places, unit,
+   and line color; **Change entity** and **Remove value** affect only that value.
+   Canceling value selection preserves the chart design. An unavailable reading
+   with a reported unit can also be selected; its preview label shows `---`
+   rather than plotting zero.
+   Choose a shared time range (1 hour, 5 hours, 6 hours, 24 hours, or 7 days)
+   and requested sample interval in seconds. The preview caption shows the actual
+   interval after the 1024-point capacity limit is applied.
+   **Automatic (based on entity units)** uses a shared scale for matching units
+   and independent scales for mixed units. You can explicitly choose either
+   scale mode. Independent scales show trends, but line heights are not directly
+   comparable. Changing display units does not convert or normalize readings.
+   The chart starts with 24 hours, a requested five-minute interval, a green
+   first line, and latest-value dots. Additional lines start blue and purple.
    Devices with Home Assistant history support also load recorded history using
    the mean statistic. Otherwise the chart collects live values while the device
-   runs. Sampling, statistics, reference lines, and other styling remain available
-   in the normal editor.
+   runs. Statistics, reference lines, and other styling remain available in the
+   normal editor. Resize the generated button there if the chart needs more space;
+   the builder does not expand into neighboring positions.
    Toggle buttons have a Material Symbol, on/off colors, and a toggle tap action.
    Lights default to a lightbulb icon; switches default to a switch icon.
    Select an on/off color badge to open the shared color picker. Choose a palette
@@ -80,9 +93,11 @@ on firmware with live Home Assistant support.
    reflects the chosen range and orientation. The gauge preview reflects its
    range and arc color; out-of-range readings stop the indicator at the limit
    while the label still shows the actual value. Toggle preview states are
-   simulated and never send commands. The history template shows a fixed,
-   illustrative trend, not actual history; its number uses the fetched current
-   value. Changing the time range updates the caption, not the sample curve.
+   simulated and never send commands. The history template shows fixed,
+   illustrative trends, not actual history, with a left-aligned title and colored
+   current-value labels beside the right-hand line endpoints. Those labels use
+   fetched readings and their configured units. Changing the time range updates
+   the caption, not the sample curves.
 6. Customize the generated button in the normal inspector if needed, then
    **Save Pad**.
 

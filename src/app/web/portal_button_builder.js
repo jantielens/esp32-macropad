@@ -1,17 +1,53 @@
 let padButtonBuilderSession = null;
 
-function padButtonBuilderSetScenario(session, builder, title = session.name) {
+function padButtonBuilderSetScenario(session, builder, title = session.draft.sources[0].name) {
+    const draft = session.draft;
     session.scenario = builder;
     session.fields = [
         { name: 'title', label: 'Title', type: 'text', maxlength: 191, default: title },
-        ...builder.fields(session.detail)
+        ...builder.fields(draft)
     ];
-    session.options = Object.fromEntries(session.fields.map(field => [field.name, field.default]));
+    draft.options = Object.fromEntries(session.fields.map(field => [field.name, field.default]));
+    if (builder.sourceFields) {
+        draft.sources = draft.sources.map((source, index) =>
+            padButtonBuilderSource(builder, source.detail, source.name, index, source));
+    }
+}
+
+function padButtonBuilderSource(builder, detail, name, index, previous) {
+    const source = { detail, name };
+    const fields = builder.sourceFields?.(source, index) || [];
+    source.options = { ...Object.fromEntries(fields.map(field => [field.name, field.default])),
+        ...previous?.options, ...builder.sourceOptions?.(source, previous) };
+    return source;
+}
+
+function padButtonBuilderRenderSelection() {
+    const session = padButtonBuilderSession;
+    const { detail, name } = session.draft.sources[0];
+    session.dialog.querySelector('[data-bb-name]').textContent = name;
+    session.dialog.querySelector('[data-bb-id]').textContent = detail.entity_id;
+    session.dialog.querySelector('[data-bb-state]').textContent = 'Current state: ' + detail.state +
+        (detail.unit ? ' ' + detail.unit : '') + (detail.state_truncated ? ' (truncated sample)' : '');
 }
 
 function padButtonBuilderValidateFields(session) {
-    for (const field of session.fields) {
-        const value = session.options[field.name];
+    const draft = session.draft;
+    padButtonBuilderValidateOptions(session.fields, draft.options);
+    const sources = session.scenario.maxSources ? draft.sources : draft.sources.slice(0, 1);
+    const maxSources = session.scenario.maxSources || 1;
+    if (!sources.length || sources.length > maxSources) {
+        throw new Error('Choose between 1 and ' + maxSources + ' values.');
+    }
+    sources.forEach((source, index) => {
+        session.scenario.validateSource?.(source);
+        padButtonBuilderValidateOptions(session.scenario.sourceFields?.(source, index) || [], source.options);
+    });
+}
+
+function padButtonBuilderValidateOptions(fields, options) {
+    for (const field of fields) {
+        const value = options[field.name];
         const text = String(value ?? '');
         let valid = value !== undefined && value !== null && (!field.required || text.trim() !== '');
         if (field.type === 'number') {
@@ -121,6 +157,7 @@ function padButtonBuilderOpen() {
                 <p id="button-builder-search-help" class="binding-builder-note">Type at least 3 characters to search.
                     An administrator token is required for search; other tokens can look up an exact entity ID.</p>
                 <div class="binding-builder-suggestions" data-bb-matches aria-label="Entity suggestions"></div>
+                <button type="button" class="btn btn-sm btn-secondary" data-bb-source-cancel hidden>Cancel value selection</button>
             </section>
             <div class="binding-builder-status" id="button-builder-status" data-bb-status role="status" aria-live="polite" hidden></div>
             <button type="button" class="btn btn-sm btn-secondary" data-bb-retry hidden>Retry</button>
@@ -133,6 +170,7 @@ function padButtonBuilderOpen() {
                 <fieldset class="pad-button-builder-choices"><legend>What should this button do?</legend><div data-bb-choices></div></fieldset>
                 <div class="pad-button-builder-design">
                     <div><h3>Customize</h3><div class="binding-builder-fields" data-bb-fields></div>
+                        <section data-bb-sources hidden aria-label="Button values"></section>
                         <p class="binding-builder-note" data-bb-note></p></div>
                     <section class="pad-button-builder-preview-panel" aria-labelledby="button-builder-preview-title">
                         <h3 id="button-builder-preview-title">Preview</h3><div class="pad-cell pad-button-builder-preview" data-bb-preview></div>
@@ -147,7 +185,7 @@ function padButtonBuilderOpen() {
             <button type="button" class="btn btn-primary" data-bb-create disabled>Create button</button></div></footer>`;
     padWorkspace.root.appendChild(dialog);
     const session = { dialog, page: padState.page, col: padState.editCol, row: padState.editRow,
-        controller: null, timer: null, detail: null };
+        controller: null, timer: null, draft: { sources: [], options: {}, previewState: null } };
     padButtonBuilderSession = session;
     dialog.querySelector('.pad-button-builder-target').textContent =
         'Pad ' + (session.page + 1) + ' / Row ' + (session.row + 1) + ', column ' + (session.col + 1);
@@ -176,8 +214,9 @@ function padButtonBuilderOpen() {
     };
     dialog.querySelector('[data-bb-use]').onclick = () => padButtonBuilderLookup(true);
     dialog.querySelector('[data-bb-change]').onclick = () => {
+        padButtonBuilderStopLookup();
         padColorPopoverClose();
-        session.detail = null;
+        session.draft.sources = [];
         dialog.querySelector('[data-bb-selection]').hidden = true;
         dialog.querySelector('[data-bb-design]').hidden = true;
         dialog.querySelector('[data-bb-source]').hidden = false;
@@ -186,9 +225,43 @@ function padButtonBuilderOpen() {
         padButtonBuilderStatus('');
         search.focus();
     };
+    dialog.querySelector('[data-bb-source-cancel]').onclick = padButtonBuilderCancelSource;
     dialog.querySelector('[data-bb-create]').onclick = padButtonBuilderCreate;
     dialog.showModal();
     padButtonBuilderLoadConfig();
+}
+
+function padButtonBuilderPickSource(index) {
+    const session = padButtonBuilderSession;
+    padButtonBuilderStopLookup();
+    padColorPopoverClose();
+    session.sourceIndex = index;
+    const dialog = session.dialog;
+    const search = dialog.querySelector('#button-builder-search');
+    search.value = '';
+    dialog.querySelector('[data-bb-matches]').replaceChildren();
+    dialog.querySelector('[data-bb-retry]').hidden = true;
+    dialog.querySelector('[data-bb-source]').hidden = false;
+    dialog.querySelector('[data-bb-source-cancel]').hidden = false;
+    dialog.querySelector('[data-bb-design]').hidden = true;
+    dialog.querySelector('[data-bb-create]').disabled = true;
+    padButtonBuilderStatus('Choose an entity for value ' + (index + 1) + '.');
+    search.focus();
+}
+
+function padButtonBuilderCancelSource() {
+    const session = padButtonBuilderSession;
+    padButtonBuilderStopLookup();
+    delete session.sourceIndex;
+    session.dialog.querySelector('[data-bb-source]').hidden = true;
+    session.dialog.querySelector('[data-bb-source-cancel]').hidden = true;
+    session.dialog.querySelector('[data-bb-matches]').replaceChildren();
+    session.dialog.querySelector('[data-bb-retry]').hidden = true;
+    session.dialog.querySelector('[data-bb-design]').hidden = false;
+    padButtonBuilderStatus('');
+    padButtonBuilderRenderFields();
+    const add = session.dialog.querySelector('[data-bb-add-source]');
+    (add?.disabled ? session.dialog.querySelector('.pad-button-builder-source-actions button') : add)?.focus();
 }
 
 function padButtonBuilderStopLookup() {
@@ -249,20 +322,31 @@ async function padButtonBuilderLookup(entity, selected) {
             if (payload.entity_id !== query || typeof payload.state !== 'string' || !Array.isArray(payload.paths)) {
                 throw new Error('Invalid Home Assistant entity details. Retry to continue.');
             }
-            session.detail = payload;
-            session.name = payload.paths.find(path => path.path === 'attributes.friendly_name' && !path.truncated)?.value ||
+            const name = payload.paths.find(path => path.path === 'attributes.friendly_name' && !path.truncated)?.value ||
                 selected?.name || query;
+            if (session.sourceIndex !== undefined) {
+                session.scenario.validateSource?.({ detail: payload, name });
+                const index = session.sourceIndex;
+                const draft = session.draft;
+                if (draft.sources.some((source, other) => other !== index && source.detail.entity_id === query)) {
+                    throw new Error('This entity is already included. Choose another value.');
+                }
+                draft.sources[index] = padButtonBuilderSource(session.scenario, payload, name, index, draft.sources[index]);
+                if (index === 0) {
+                    draft.previewState = payload.state;
+                    padButtonBuilderRenderChoices();
+                }
+                padButtonBuilderCancelSource();
+                return;
+            }
+            session.draft.sources = [{ detail: payload, name, options: {} }];
+            session.draft.previewState = payload.state;
             padButtonBuilderSetScenario(session,
-                padButtonBuilders.find(builder => builder.preferred && builder.available(payload)) ||
-                padButtonBuilders.find(builder => builder.available(payload)));
-            session.previewState = payload.state;
+                padButtonBuilders.find(builder => builder.preferred && builder.available(session.draft)) ||
+                padButtonBuilders.find(builder => builder.available(session.draft)));
             dialog.querySelector('[data-bb-source]').hidden = true;
             dialog.querySelector('[data-bb-selection]').hidden = false;
             dialog.querySelector('[data-bb-design]').hidden = false;
-            dialog.querySelector('[data-bb-name]').textContent = session.name;
-            dialog.querySelector('[data-bb-id]').textContent = query;
-            dialog.querySelector('[data-bb-state]').textContent = 'Current state: ' + payload.state +
-                (payload.unit ? ' ' + payload.unit : '') + (payload.state_truncated ? ' (truncated sample)' : '');
             padButtonBuilderRenderChoices();
             padButtonBuilderRenderFields();
             dialog.querySelector('[data-bb-choices] input:checked').focus();
@@ -297,7 +381,7 @@ function padButtonBuilderRenderChoices() {
     const session = padButtonBuilderSession;
     const choices = session.dialog.querySelector('[data-bb-choices]');
     choices.replaceChildren();
-    for (const builder of padButtonBuilders.filter(item => item.available(session.detail))) {
+    for (const builder of padButtonBuilders.filter(item => item.available(session.draft))) {
         const label = document.createElement('label');
         const radio = document.createElement('input');
         radio.type = 'radio';
@@ -305,7 +389,7 @@ function padButtonBuilderRenderChoices() {
         radio.value = builder.id;
         radio.checked = builder === session.scenario;
         radio.onchange = () => {
-            padButtonBuilderSetScenario(session, builder, session.options.title);
+            padButtonBuilderSetScenario(session, builder, session.draft.options.title);
             padButtonBuilderRenderFields();
         };
         const text = document.createElement('span');
@@ -322,10 +406,99 @@ function padButtonBuilderRenderChoices() {
 function padButtonBuilderRenderFields() {
     const session = padButtonBuilderSession;
     const builder = session.scenario;
+    const draft = session.draft;
     const fields = session.dialog.querySelector('[data-bb-fields]');
     padColorPopoverClose();
     fields.replaceChildren();
-    for (const field of session.fields) {
+    padButtonBuilderRenderSelection();
+    padButtonBuilderRenderOptions(fields, session.fields, draft.options);
+    padButtonBuilderRenderSources();
+    const states = session.dialog.querySelector('[data-bb-states]');
+    states.replaceChildren();
+    if (builder.previewStates?.length) {
+        const caption = document.createElement('span');
+        caption.className = 'binding-builder-note';
+        caption.textContent = 'Simulate state:';
+        states.appendChild(caption);
+    }
+    for (const [state, label] of builder.previewStates || []) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-sm btn-secondary';
+        button.textContent = label;
+        button.dataset.state = state;
+        button.onclick = () => { draft.previewState = state; padButtonBuilderUpdatePreview(); };
+        states.appendChild(button);
+    }
+    session.dialog.querySelector('[data-bb-note]').textContent = builder.note || '';
+    padButtonBuilderUpdatePreview();
+}
+
+function padButtonBuilderRenderSources() {
+    const session = padButtonBuilderSession;
+    const sources = session.draft.sources;
+    const host = session.dialog.querySelector('[data-bb-sources]');
+    host.hidden = !session.scenario.maxSources;
+    session.dialog.querySelector('[data-bb-selection]').hidden = !!session.scenario.maxSources;
+    host.replaceChildren();
+    if (!session.scenario.maxSources) return;
+    const heading = document.createElement('h3');
+    heading.textContent = 'Values';
+    host.appendChild(heading);
+    sources.forEach((source, index) => {
+        const group = document.createElement('fieldset');
+        group.className = 'pad-button-builder-source';
+        const legend = document.createElement('legend');
+        legend.textContent = 'Value ' + (index + 1) + ': ' + source.name;
+        const entity = document.createElement('code');
+        entity.textContent = source.detail.entity_id;
+        const state = document.createElement('p');
+        state.className = 'binding-builder-note';
+        state.textContent = 'Current state: ' + source.detail.state + bindingBuilderUnitSuffix(source.detail.unit || '');
+        group.appendChild(legend);
+        group.appendChild(entity);
+        group.appendChild(state);
+        const controls = document.createElement('div');
+        controls.className = 'binding-builder-fields';
+        padButtonBuilderRenderOptions(controls, session.scenario.sourceFields?.(source, index) || [], source.options);
+        group.appendChild(controls);
+        const actions = document.createElement('div');
+        actions.className = 'pad-button-builder-source-actions';
+        for (const [text, action] of [
+            ['Change entity', () => padButtonBuilderPickSource(index)],
+            ...(sources.length > 1 ? [['Remove value', () => {
+                padColorPopoverClose();
+                sources.splice(index, 1);
+                if (index === 0) {
+                    session.draft.previewState = sources[0].detail.state;
+                    padButtonBuilderRenderChoices();
+                }
+                padButtonBuilderRenderFields();
+                session.dialog.querySelector('[data-bb-add-source]').focus();
+            }]] : [])
+        ]) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-sm btn-secondary';
+            button.textContent = text;
+            button.onclick = action;
+            actions.appendChild(button);
+        }
+        group.appendChild(actions);
+        host.appendChild(group);
+    });
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'btn btn-sm btn-secondary';
+    add.textContent = 'Add another value';
+    add.dataset.bbAddSource = '';
+    add.disabled = sources.length >= session.scenario.maxSources;
+    add.onclick = () => padButtonBuilderPickSource(sources.length);
+    host.appendChild(add);
+}
+
+function padButtonBuilderRenderOptions(host, fields, options) {
+    for (const field of fields) {
         const label = document.createElement('label');
         label.textContent = field.label;
         if (field.type === 'color') label.className = 'pad-button-builder-color';
@@ -343,9 +516,9 @@ function padButtonBuilderRenderFields() {
         if (field.type === 'number') input.step = field.step || '1';
         input.required = !!field.required;
         input.name = field.name;
-        input.value = session.options[field.name];
+        input.value = options[field.name];
         input[field.type === 'select' ? 'onchange' : 'oninput'] = () => {
-            session.options[field.name] = input.value;
+            options[field.name] = input.value;
             padButtonBuilderUpdatePreview();
         };
         if (field.type === 'color') {
@@ -373,46 +546,36 @@ function padButtonBuilderRenderFields() {
             link.rel = 'noopener noreferrer';
             label.appendChild(link);
         }
-        fields.appendChild(label);
+        host.appendChild(label);
     }
-    const states = session.dialog.querySelector('[data-bb-states]');
-    states.replaceChildren();
-    if (builder.previewStates?.length) {
-        const caption = document.createElement('span');
-        caption.className = 'binding-builder-note';
-        caption.textContent = 'Simulate state:';
-        states.appendChild(caption);
-    }
-    for (const state of builder.previewStates || []) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'btn btn-sm btn-secondary';
-        button.textContent = state === 'unavailable' ? 'Unavailable' : state === 'on' ? 'On' : 'Off';
-        button.dataset.state = state;
-        button.onclick = () => { session.previewState = state; padButtonBuilderUpdatePreview(); };
-        states.appendChild(button);
-    }
-    session.dialog.querySelector('[data-bb-note]').textContent = builder.note || '';
-    padButtonBuilderUpdatePreview();
 }
 
 function padButtonBuilderBuild(session) {
     padButtonBuilderValidateFields(session);
-    const button = { col: session.col, row: session.row, label_top: session.options.title.trim(),
-        ...session.scenario.build(session.detail, session.options) };
-    for (const field of ['label_top', 'label_center', 'label_bottom', 'fg_color', 'widget_data_binding']) {
-        const value = button[field] || '';
-        if (new TextEncoder().encode(value).length >= 192) throw new Error('Button text or binding exceeds the 191 UTF-8 byte limit.');
-        if (value.includes('[')) {
-            const result = validateBinding(value);
-            if (!result.valid) throw new Error(result.errors[0].message);
-        }
+    const draft = session.draft;
+    const button = { col: session.col, row: session.row, label_top: draft.options.title.trim(),
+        ...session.scenario.build(draft) };
+    for (const field of Object.keys(button).filter(key =>
+        ['label_top', 'label_center', 'label_bottom', 'fg_color'].includes(key) ||
+        /^widget_data_binding(?:_\d+)?$/.test(key))) {
+        padButtonBuilderValidateText(button[field], 191);
     }
+    session.scenario.validateOutput?.(draft, button);
     return button;
+}
+
+function padButtonBuilderValidateText(value, limit) {
+    const text = value || '';
+    if (new TextEncoder().encode(text).length > limit) throw new Error('Button text or binding exceeds the ' + limit + ' UTF-8 byte limit.');
+    if (text.includes('[')) {
+        const result = validateBinding(text);
+        if (!result.valid) throw new Error(result.errors[0].message);
+    }
 }
 
 function padButtonBuilderUpdatePreview() {
     const session = padButtonBuilderSession;
+    const draft = session.draft;
     const validation = session.dialog.querySelector('[data-bb-validation]');
     const create = session.dialog.querySelector('[data-bb-create]');
     const preview = session.dialog.querySelector('[data-bb-preview]');
@@ -420,15 +583,15 @@ function padButtonBuilderUpdatePreview() {
     try {
         const button = padButtonBuilderBuild(session);
         session.dialog.querySelector('[data-bb-preview-note]').textContent = session.scenario.previewNote ?
-            session.scenario.previewNote(session.options) : 'Preview only. Does not control the entity.';
-        const overrides = session.scenario.preview(session.detail, session.options, session.previewState);
+            session.scenario.previewNote(draft) : 'Preview only. Does not control the entity.';
+        const overrides = session.scenario.preview(draft);
         const sample = { ...button, ...overrides };
         padRenderCellContent(preview, sample);
-        if (session.scenario.renderPreview) session.scenario.renderPreview(preview, sample, session.detail);
+        if (session.scenario.renderPreview) session.scenario.renderPreview(draft, preview, sample);
         const title = preview.querySelector('.pad-cell-label-top');
         if (title && button.label_top_style?.startsWith('color:')) title.style.color = button.label_top_style.slice(6);
         session.dialog.querySelectorAll('[data-bb-states] button').forEach(button => {
-            button.setAttribute('aria-pressed', String(button.dataset.state === session.previewState));
+            button.setAttribute('aria-pressed', String(button.dataset.state === draft.previewState));
         });
         validation.hidden = true;
         create.disabled = false;
@@ -443,7 +606,8 @@ function padButtonBuilderCreate() {
     const session = padButtonBuilderSession;
     let button;
     try {
-        if (!session.detail) throw new Error('Choose an entity and load its details before creating a button.');
+        if (!session.draft.sources.length) throw new Error('Choose an entity and load its details before creating a button.');
+        if (session.sourceIndex !== undefined) throw new Error('Finish or cancel value selection before creating the button.');
         if (session.page !== padState.page || !padButtonBuilderCanCreate(session.col, session.row)) {
             throw new Error('This position is no longer empty. Cancel and select an empty position.');
         }
