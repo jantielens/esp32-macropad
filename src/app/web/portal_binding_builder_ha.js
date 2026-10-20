@@ -8,7 +8,7 @@ BINDING_BUILDERS.push({
 const _haBuilderDefaults = {
     query: '', entity: '', name: '', manual: false, path: '', customPath: false,
     mode: 'raw', decimals: 1, unit: '', fallback: '', formattingEdited: false,
-    detail: null
+    detail: null, rawOnly: false
 };
 const _haBuilder = { ..._haBuilderDefaults, controller: null, timer: null, generation: 0 };
 
@@ -26,7 +26,9 @@ function haBindingBuilderStop() {
 
 function haBindingBuilderReset() {
     haBindingBuilderStop();
-    Object.assign(_haBuilder, _haBuilderDefaults);
+    Object.assign(_haBuilder, _haBuilderDefaults, {
+        rawOnly: bindingValidationOptions.get(_bindingHelp.target)?.isWidgetBinding === true
+    });
 }
 
 function haBindingBuilderHTML() {
@@ -34,7 +36,8 @@ function haBindingBuilderHTML() {
     const esc = _bhEsc;
     return '<section id="ha-binding-builder" class="binding-builder" aria-labelledby="ha-builder-title">' +
         '<header class="binding-builder-header"><h5 id="ha-builder-title">Build a binding</h5>' +
-        '<p>Choose your data, adjust its appearance, then use it in your pad.</p></header>' +
+        '<p>' + (b.rawOnly ? 'Choose your data, then use its raw value in your pad.' :
+            'Choose your data, adjust its appearance, then use it in your pad.') + '</p></header>' +
         '<div class="binding-builder-step" aria-labelledby="ha-builder-choose-title">' +
         '<div class="binding-builder-step-heading"><span class="binding-builder-number" aria-hidden="true">1</span>' +
         '<h6 id="ha-builder-choose-title">Choose an entity</h6></div>' +
@@ -58,13 +61,13 @@ function haBindingBuilderHTML() {
         '<p id="ha-builder-status" class="binding-builder-status" role="status" aria-live="polite" hidden></p></div>' +
         '<div class="binding-builder-step" data-ha-format-step aria-labelledby="ha-builder-format-title">' +
         '<div class="binding-builder-step-heading"><span class="binding-builder-number" aria-hidden="true">2</span>' +
-        '<h6 id="ha-builder-format-title" tabindex="-1">Format the value</h6></div>' +
+        '<h6 id="ha-builder-format-title" tabindex="-1">' + (b.rawOnly ? 'Choose the value' : 'Format the value') + '</h6></div>' +
         '<p class="binding-builder-note" data-ha-format-pending>Choose an entity to see value and formatting options.</p>' +
         '<div data-ha-format-controls hidden><div class="binding-builder-fields">' +
         '<label for="ha-builder-value">Value<select id="ha-builder-value" class="form-control"></select></label>' +
         '<label for="ha-builder-path" data-ha-custom-path hidden>Custom path<input id="ha-builder-path" class="form-control" ' +
         'type="text" maxlength="127" placeholder="attributes.brightness" value="' + esc(b.path) + '"></label>' +
-        '<label for="ha-builder-mode">Display as<select id="ha-builder-mode" class="form-control">' +
+        '<label for="ha-builder-mode" data-ha-format-choice>Display as<select id="ha-builder-mode" class="form-control">' +
         [['raw', 'As received'], ['number', 'Number'], ['text', 'Text']].map(([value, label]) =>
             '<option value="' + value + '"' + (value === b.mode ? ' selected' : '') + '>' + label + '</option>').join('') +
         '</select></label>' +
@@ -73,7 +76,9 @@ function haBindingBuilderHTML() {
         '</select></label>' +
         '<label for="ha-builder-unit" data-ha-formatted>Unit (optional)<input id="ha-builder-unit" class="form-control" ' +
         'type="text" maxlength="60" placeholder="e.g. \u00b0C or %" value="' + esc(b.unit) + '"></label></div>' +
-        '<p class="binding-builder-note" data-ha-raw-note>Use As received for numeric widget inputs.</p>' +
+        '<p class="binding-builder-note" data-ha-raw-note>' + (b.rawOnly ?
+            'This field uses the raw value; formatting and units are omitted.' :
+            'Use As received for numeric widget inputs.') + '</p>' +
         '<p class="binding-builder-note" data-ha-formatted>Unit spacing is automatic. Adding a unit does not convert the value.</p>' +
         '<details class="binding-builder-options"><summary>When unavailable (optional)</summary>' +
         '<label for="ha-builder-fallback">Show this instead<input id="ha-builder-fallback" class="form-control" type="text" ' +
@@ -127,6 +132,7 @@ function _haBuilderPaths(root) {
 
 function _haBuilderUpdate(root) {
     const b = _haBuilder;
+    const mode = b.rawOnly ? 'raw' : b.mode;
     for (const key of ['mode', 'decimals']) {
         const select = root.querySelector('#ha-builder-' + key);
         if (select.value !== String(b[key])) {
@@ -151,9 +157,10 @@ function _haBuilderUpdate(root) {
     root.querySelector('[data-ha-format-step]').classList.toggle('is-pending', !chosen);
     root.querySelector('[data-ha-result-step]').classList.toggle('is-pending', !chosen);
     root.querySelector('[data-ha-custom-path]').hidden = !b.customPath;
-    root.querySelector('[data-ha-number]').hidden = b.mode !== 'number';
-    root.querySelectorAll('[data-ha-formatted]').forEach(element => { element.hidden = b.mode === 'raw'; });
-    root.querySelector('[data-ha-raw-note]').hidden = b.mode !== 'raw';
+    root.querySelector('[data-ha-format-choice]').hidden = b.rawOnly;
+    root.querySelector('[data-ha-number]').hidden = mode !== 'number';
+    root.querySelectorAll('[data-ha-formatted]').forEach(element => { element.hidden = mode === 'raw'; });
+    root.querySelector('[data-ha-raw-note]').hidden = mode !== 'raw';
     root.querySelector('#ha-builder-selected-name').textContent = b.name || 'Home Assistant entity';
     root.querySelector('#ha-builder-selected-id').textContent = b.entity;
     root.querySelector('#ha-builder-selected-state').textContent = b.detail
@@ -167,15 +174,15 @@ function _haBuilderUpdate(root) {
     try {
         if (b.customPath && !b.path.trim()) throw new Error('Enter a custom path, or choose State.');
         if (new TextEncoder().encode(b.path).length >= 128) throw new Error('The path must be shorter than 128 UTF-8 bytes.');
-        const suffix = bindingBuilderUnitSuffix(b.unit);
-        const format = bindingBuilderFormat(b.mode, b.decimals, suffix);
+        const suffix = b.rawOnly ? '' : bindingBuilderUnitSuffix(b.unit);
+        const format = bindingBuilderFormat(mode, b.decimals, suffix);
         const token = bindingBuilderToken('ha', b.entity, b.path, format, b.fallback);
         const detail = b.detail;
         const path = b.path === '.' || !b.path ? 'state' : b.path;
         const attribute = detail ? detail.paths.find(p => p.path === path) : null;
         const raw = detail ? path === 'state' ? detail.state : attribute ? attribute.value : null : null;
         const unavailable = detail && ['unknown', 'unavailable'].includes(detail.state);
-        const sample = unavailable ? (b.fallback || '---') : bindingBuilderSample(raw, b.mode, b.decimals, suffix);
+        const sample = unavailable ? (b.fallback || '---') : bindingBuilderSample(raw, mode, b.decimals, suffix);
         const truncated = detail && (path === 'state' ? detail.state_truncated : attribute && attribute.truncated);
         output.innerHTML = (sample == null ? '<p class="binding-builder-note">' +
             (detail ? 'No sample for this path; it may be missing or outside lookup limits.' :
@@ -194,7 +201,7 @@ function _haBuilderUpdate(root) {
 
 function _haBuilderSuggestFormat(detail) {
     const b = _haBuilder;
-    if (b.formattingEdited || !['', '.', 'state'].includes(b.path) ||
+    if (b.rawOnly || b.formattingEdited || !['', '.', 'state'].includes(b.path) ||
         detail.state_truncated || !bindingBuilderIsNumeric(detail.state)) return '';
     const unit = typeof detail.unit === 'string' ? detail.unit.trim() : '';
     try {

@@ -124,12 +124,15 @@ automatically when they reference HA entities.
    friendly name and select a match. Search shows up to 20 matches; keep typing
    to narrow the list. Alternatively, choose **enter an entity ID manually**,
    enter an exact ID, then choose **Use entity** or press Enter.
-3. Under **Format the value**, choose **State**, a suggested attribute, or
+3. Under **Format the value** (or **Choose the value** for raw-value fields),
+   choose **State**, a suggested attribute, or
    **Custom path** to enter a dotted path. These controls appear after selection.
-   Numeric states initially select **Number**, one decimal place, and the
+   For labels, numeric states initially select **Number**, one decimal place, and the
    entity's `unit_of_measurement` when it fits the binding syntax. These are
-   suggestions: change any field, or choose **As received** for numeric widget
-   inputs. Refreshing details preserves your formatting choices.
+   suggestions: change any field, or choose **As received** to omit formatting.
+   Widget data bindings and other raw-value widget fields, such as gauge limits,
+   automatically omit formatting and units; their formatting controls are hidden.
+   Refreshing details preserves your formatting choices.
    For display text, choose
    **Number** with 0 to 6 decimal places, or **Text**. Edit **Unit (optional)**;
    spacing is automatic. Expand **When unavailable** to set fallback text.

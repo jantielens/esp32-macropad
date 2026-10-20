@@ -159,6 +159,60 @@ const empty = field('', 0, 0);
 context.bindingHelpInsertText(empty, '[timer:1]', false);
 assert.strictEqual(empty.value, '[timer:1]');
 
+// Use the same field metadata as validation, not input names or widget-specific guesses.
+const rawField = { addEventListener() {} };
+context.bindingAttachValidation(rawField, { isWidgetBinding: true });
+context.testTarget = rawField;
+vm.runInContext('_bindingHelp.target = testTarget', context);
+prepareEntity();
+assert.strictEqual(builderState().rawOnly, true);
+context._haBuilderSuggestFormat({ state: '21.37', unit: 'C' });
+assert.strictEqual(builderState().mode, 'raw');
+assert.strictEqual(builderState().unit, '');
+
+const builderElements = new Map();
+const builderRoot = {
+    querySelector(selector) {
+        if (!builderElements.has(selector)) builderElements.set(selector, {
+            value: '', hidden: false, innerHTML: '', classList: { toggle() {} }
+        });
+        return builderElements.get(selector);
+    },
+    querySelectorAll(selector) { return [this.querySelector(selector)]; }
+};
+vm.runInContext(`Object.assign(_haBuilder, {
+    mode: 'number', unit: 'C', detail: {
+        state: '21.37', paths: [{ path: 'attributes.battery', value: '87.65' }]
+    }
+})`, context);
+context._haBuilderUpdate(builderRoot);
+assert.match(builderRoot.querySelector('#ha-builder-output').innerHTML,
+    /<code>\[ha:sensor.temp\]<\/code>/);
+assert.match(builderRoot.querySelector('#ha-builder-output').innerHTML,
+    /<output aria-live="polite">21\.37<\/output>/);
+assert.strictEqual(builderRoot.querySelector('[data-ha-format-choice]').hidden, true);
+assert.strictEqual(builderRoot.querySelector('[data-ha-number]').hidden, true);
+assert.strictEqual(builderRoot.querySelector('[data-ha-formatted]').hidden, true);
+vm.runInContext("_haBuilder.path = 'attributes.battery'; _haBuilder.fallback = '0'", context);
+context._haBuilderUpdate(builderRoot);
+assert.match(builderRoot.querySelector('#ha-builder-output').innerHTML,
+    /<code>\[ha:sensor.temp;attributes.battery\|0\]<\/code>/);
+assert.match(builderRoot.querySelector('#ha-builder-output').innerHTML,
+    /<output aria-live="polite">87\.65<\/output>/);
+
+context.bindingAttachValidation(rawField);
+prepareEntity();
+assert.strictEqual(builderState().rawOnly, false);
+context._haBuilderSuggestFormat({ state: '21.37', unit: 'C' });
+context._haBuilderUpdate(builderRoot);
+assert.match(builderRoot.querySelector('#ha-builder-output').innerHTML,
+    /<code>\[ha:sensor.temp;;%\.1f C\]<\/code>/);
+assert.strictEqual(builderRoot.querySelector('[data-ha-format-choice]').hidden, false);
+vm.runInContext('_bindingHelp.target = null', context);
+prepareEntity();
+assert.strictEqual(builderState().rawOnly, false);
+delete context.testTarget;
+
 const helpElements = {
     'binding-help-overlay': { style: {} },
     'binding-docs-nav': { innerHTML: '' },
@@ -214,7 +268,7 @@ helpElements['binding-docs-search'].value = 'temperature';
 context.showBindingHelp();
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
 const shortcutField = Object.assign(field('Before selected after', 7, 15), {
-    tagName: 'INPUT', type: 'text', isConnected: true
+    tagName: 'INPUT', type: 'text', isConnected: true, addEventListener() {}
 });
 context.window.deviceConfig = haConfigured;
 helpElements['shortcut-field'] = shortcutField;
@@ -232,6 +286,15 @@ listeners.find(listener => listener.type === 'click' && listener.capture).handle
 assert.ok(preventedLabelFocus);
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'builder:ha');
 assert.strictEqual(vm.runInContext('_bindingHelp.targetFocused', context), true);
+assert.strictEqual(builderState().rawOnly, false);
+context.bindingAttachValidation(shortcutField, { isWidgetBinding: true });
+listeners.find(listener => listener.type === 'click' && listener.capture).handler({
+    target: shortcut, preventDefault() {}
+});
+assert.strictEqual(builderState().rawOnly, true);
+context.showBindingHelp();
+context.showBindingBuilder('ha');
+assert.strictEqual(builderState().rawOnly, true);
 context.bindingHelpInsertText(shortcutField, '[ha:sensor.temperature]', true);
 assert.strictEqual(shortcutField.value, 'Before [ha:sensor.temperature] after');
 vm.runInContext('_bindingHelp.target = null; _bindingHelp.pointer = null', context);
@@ -239,6 +302,7 @@ context.showBindingHelp();
 context.window.deviceConfig = haConfigured;
 context.showBindingBuilder('ha');
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'builder:ha');
+assert.strictEqual(builderState().rawOnly, false);
 assert.match(helpElements['binding-docs-body'].innerHTML, /id="ha-binding-builder"/);
 context.showBindingHelp();
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
@@ -751,7 +815,7 @@ delete context.testHelpSchemes;
     assert.deepStrictEqual(JSON.parse(vm.runInContext('JSON.stringify(_haBuilder)', context)), {
         query: '', entity: '', name: '', manual: false, path: '', customPath: false,
         mode: 'raw', decimals: 1, unit: '', fallback: '', formattingEdited: false, detail: null,
-        controller: null, timer: null, generation: generation + 1
+        rawOnly: false, controller: null, timer: null, generation: generation + 1
     });
     pending[2]({ entities: [], more: false });
     await closingLookup;

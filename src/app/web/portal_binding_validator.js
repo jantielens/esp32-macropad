@@ -582,11 +582,14 @@ function bindingValidateInput(input, opts) {
     return true;
 }
 
+const bindingValidationOptions = new WeakMap();
+
 /**
  * Attach live validation to an input element.
  * Validates on blur immediately, and while typing with a debounce.
  */
 function bindingAttachValidation(input, opts) {
+    bindingValidationOptions.set(input, opts);
     var debounceTimer = null;
     input.addEventListener('blur', function() {
         if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
