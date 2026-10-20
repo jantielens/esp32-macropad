@@ -1346,6 +1346,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_hardware.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
+  - src/app/lv_conf.h
   - src/app/web_portal_screenshot.cpp
 - **DISPLAY_SHAPE**
   - src/app/board_config.h
