@@ -6,6 +6,7 @@ import tempfile
 
 
 root = pathlib.Path(__file__).resolve().parents[1]
+arduinojson = pathlib.Path.home() / "Arduino/libraries/ArduinoJson/src"
 fixture = json.loads((root / "tools/mock-data/pad-editor.json").read_text())
 appearance_macros = {
     "default_pad_bg_color": "DEFAULT_PAD_BG_COLOR",
@@ -121,6 +122,7 @@ for grayscale in (0, 1):
     subprocess.run(
         ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
          "-x", "c++", "-", "-I", str(root), "-I", str(root / "tests"),
+         "-I", str(arduinojson),
          "-DHAS_DISPLAY=1", "-DHAS_EPAPER_PANEL=1", "-DHAS_LVGL_EPAPER=1",
          f"-DHAS_EPAPER_GRAYSCALE={grayscale}"],
         input='''#include "src/app/config_manager.h"
@@ -136,6 +138,7 @@ for board, target in (("esp32c3-withsensors", "ESP32C3"), ("esp32-p4-lcd4b", "ES
         source = subprocess.check_output(
             ["c++", "-E", "-P", "-x", "c++", str(root / "src/app" / header),
              "-I", str(root / "tests"), "-I", str(root / "src/boards" / board),
+             "-I", str(arduinojson),
              "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", f"-DCONFIG_IDF_TARGET_{target}=1"],
             text=True, stderr=subprocess.PIPE,
         )

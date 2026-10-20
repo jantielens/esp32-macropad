@@ -46,7 +46,7 @@ static TaskHandle_t xSemaphoreGetMutexHolder(TestMutex* mutex) { return mutex->o
 
 class DisplayManager {
 public:
-    Screen splashScreen, infoScreen, testScreen, firstPad, secondPad, idlePad;
+    Screen splashScreen, infoScreen, wifiSetupScreen, testScreen, firstPad, secondPad, idlePad;
     Screen* padScreens[MAX_PADS] = {&firstPad, &secondPad, &idlePad};
     ScreenInfo availableScreens[3] = {{"pad_0", &firstPad}, {"pad_1", &secondPad}, {"pad_2", &idlePad}};
     size_t screenCount = 3;
@@ -84,6 +84,7 @@ public:
     void unlockIfNeeded(bool didLock);
     void showSplash();
     void showInfo();
+    void showWifiSetup();
     void showTest();
     void setSplashStatus(const char* text);
     void prepareNavigationWake();

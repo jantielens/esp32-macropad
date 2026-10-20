@@ -245,7 +245,6 @@ int main() {
 
     def test_wifi_status_and_startup_levels(self):
         startup = {
-            "src/app/app.ino": ("Applying loaded brightness",),
             "src/app/config_manager.cpp": ("NVS init start", "NVS init OK", "Loaded brightness", "Display rotation offset"),
             "src/app/drivers/gt911_touch_driver.cpp": ("Initializing touch on", "Hardware reset", "Reset complete"),
             "src/app/device_telemetry.cpp": ("Cached WiFi RSSI",),

@@ -14,28 +14,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.42.0] - 2026-10-20
+
 ### Added
 
-* Add **Show a value with history** to the Home Assistant Button Builder for
-  numeric entities on devices with sparkline support. Configure title, decimal
-  places, unit, time range, and line color. Default to 24 hours, 288 points,
-  a green line, and a latest-value dot. Load recorded mean statistics where
-  Home Assistant history is supported; otherwise collect live values while
-  the device runs. Preview the current value with a fixed illustrative trend,
-  without fetching history.
+* Add live Home Assistant entity bindings through
+  `[ha:entity_id;path;format]`, reusing the existing server URL and long-lived
+  access token without requiring MQTT. Read states and attributes in labels,
+  widgets, and expressions, with automatic subscriptions and portal connection
+  diagnostics. Available on builds with `HAS_HA_LIVE`; use HTTP/WebSocket on a
+  trusted local network. Existing MQTT integration remains unchanged.
+  See the [Home Assistant guide](docs/user/integrations/home-assistant.md).
 * Add a Home Assistant Button Builder for empty pad positions. Select an empty
   position, then choose **HA Build a button with Home Assistant ...** at the top
-  right of the canvas to generate name/value/unit labels, a single-bar widget
-  for a numeric entity, or a light/switch toggle button with a Material Symbol
-  and state-dependent icon colors. Bar buttons offer title, range, orientation,
-  decimal places, and unit controls, with styling left to the normal pad editor.
-  Suggest 0-100 for percentages, rounded ranges with headroom for other readings,
-  and symmetric ranges for negative readings. Limits remain editable and become
-  fixed on creation; ranges crossing zero fill from zero. Bar previews reflect
-  the range, orientation, and full-size default thickness. Customize
-  defaults in a fixed-size dialog with the shared color picker and a preview
-  that never controls the entity. Generated buttons remain ordinary, editable
-  drafts until **Save Pad**; existing and inherited buttons are unchanged.
+  right of the canvas to generate value labels, bar charts, single-ring gauges,
+  history sparklines, or light/switch toggle buttons with state-dependent icons.
+  History charts combine up to three readings with per-value decimal places,
+  units, and colors, shared or independent scales, and recorded mean statistics
+  where supported, otherwise collecting live values while the device runs.
+  Bar charts and gauges suggest editable ranges. Previews never control
+  entities and use illustrative history trends.
+  Generated buttons remain ordinary, editable drafts until **Save Pad**;
+  existing and inherited buttons are unchanged.
   See [Create a button from Home Assistant](docs/user/pads/editing.md#create-a-button-from-home-assistant).
 * Add a Home Assistant binding builder in the Binding Reference & Builders
   dialog, with server-side entity autocomplete, attribute suggestions, decimal
@@ -43,18 +43,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   initially suggest Number formatting with one decimal place and the entity's
   unit; suggestions remain optional and preserve user edits and refresh choices.
   Open the reference with compact fx controls or jump directly to the builder
-  with adjacent HA shortcuts, including in color pickers and Pad Binding fields.
+  with adjacent HA shortcuts, including in Pad Binding fields. Color-binding
+  shortcuts stay inside the shared color dialog rather than beside swatches.
+  Group shortcuts and resolved previews within their fields, with keyboard
+  refresh and full-value inspection for truncated results.
   HA shortcuts appear once the integration is configured on supported devices.
   Autocomplete requires an HA administrator token; manual entry and normal live
   bindings do not. Exclude the builder's assets from firmware without HA support
   and the binding dialog's assets from firmware without a display.
-* Add live Home Assistant entity bindings through
-  `[ha:entity_id;path;format]`, reusing the existing server URL and long-lived
-  access token without requiring MQTT. Read states and attributes in labels,
-  widgets, and expressions, with automatic subscriptions and portal connection
-  diagnostics. Gate support behind `HAS_HA_LIVE`; use HTTP/WebSocket on a
-  trusted local network. Existing MQTT integration remains independent and
-  unchanged. See the [Home Assistant guide](docs/user/integrations/home-assistant.md).
+* Add an Ask for confirmation action that pauses its sequence without blocking
+  a task. Approval resumes the remaining actions once; cancellation, timeout,
+  replacement, screen transitions, or OTA activity discards them. Choose a
+  timeout of 1-300 seconds or No timeout. Physical navigation first selects an
+  option without activating it; touch activates either button directly.
+  Invalid or oversized dialog bindings stop the sequence instead of showing
+  truncated text.
+* Add Pads > Dialog appearance with one notification template and one
+  confirmation template. Configure fonts, colors, patterned backgrounds,
+  opacity, layout, and confirmation buttons, with approximate previews and
+  Test now controls for unsaved appearance. Uploaded TTF fonts accept
+  whole-pixel sizes from 8 to 96.
 * Add configurable normal-boot Wi-Fi failure behavior, a shareable setup AP
   password, live Continue offline, and a Device command to restart into the
   setup AP. Show active AP credentials on setup screens and support
@@ -64,8 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   display builds. Configure them under Display > System Screens and select
   Save Appearance; changes take effect on the next boot.
 * Add the Waveshare 7.8-inch Interactive E-Paper board with an externally powered
-  IT8951 e-paper HAT, FeatherS3[D] reference wiring, grayscale and black/white rendering, partial
-  updates, a physical button, and three native Extension slots.
+  IT8951 e-paper HAT, FeatherS3[D] reference wiring, grayscale and black/white
+  rendering, partial updates, a physical button, and three native Extension slots.
+  Use the `waveshare-7.8-interactive` target in build commands and installer links.
 * Configure panel VCOM in Interactive E-Paper's advanced settings using
   negative volts, with changes applied after restart by supporting drivers.
   Both interactive IT8951 profiles use the saved value; other drivers can
@@ -76,54 +85,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default on every board. Developer builds expose retained navigation/render
   samples, LVGL phases, glyph-cache activity, and IT8951 presentation timings;
   production builds compile out this extra collection and state.
-* Add an Ask for confirmation action that pauses its sequence without blocking
-  a task. Approval resumes the remaining actions once; cancellation, timeout,
-  replacement, or failure discards them. Choose a timeout of 1-300 seconds or
-  No timeout.
-* Add Pads > Dialog appearance with one notification template and one
-  confirmation template. Configure fonts, colors, patterned backgrounds,
-  opacity, layout, and confirmation buttons, with immediate approximate
-  previews and Test now controls for unsaved appearance. Uploaded TTF fonts
-  accept any whole-pixel size from 8 to 96.
 
 ### Changed
 
-* Use flat Bar Chart fill edges when Track Outline Width is greater than zero,
-  while preserving rounded track corners and rounded fills without an outline.
-  Apply the same behavior to horizontal, zero-centered, and paired bars without
-  adding another setting.
-* Keep the shared color picker open when selecting palette or recently used
-  colors. Require **Apply** to commit the selection, matching custom colors
-  and patterned fills. Closing without applying leaves the original color
-  unchanged.
-* Keep color-binding fx/HA shortcuts inside the shared color dialog instead of
-  repeating them beside swatches in pad, button, widget, and action editors.
-  Text and numeric fields retain their directly accessible binding shortcuts.
-* Replace info-screen diagnostics with the friendly device name, connected
-  Wi-Fi network, and configuration URLs for the IP address and `.local`
-  hostname. Reuse the boot/setup appearance and logo, wrap instructions, and
-  hide stale URLs while disconnected or waiting for an IP address.
-* Rename Actions > Boot Screen & Actions to Boot Actions and move appearance
-  controls to Display > System Screens. Save Boot Actions and Save Appearance
-  operate independently; existing stored settings and API names are unchanged.
-* Rename the interactive Waveshare 7.8-inch board target to
-  `waveshare-7.8-interactive`. Build commands and installer links use the new
-  name; FeatherS3[D] hardware settings and wiring are unchanged.
-* Speed up IT8951 framebuffer conversion with exact RGB565 lookup tables and
-  packed-row writes. Increase the Waveshare 7.8-inch profile's LVGL draw buffer from 4 to 32
-  lines to reduce flush overhead.
-* Avoid sparkline redraws when generated points, colors, reference lines, and
-  marker labels are unchanged, including duplicate label refreshes in one poll.
-* Replace the large user manuals with [focused, task-oriented user guides](docs/user/README.md)
-  for setup, device settings, pads, widgets, integrations, and specialized
-  workflows. Each topic introduces its purpose before configuration steps.
-  Move board-specific connections, pinouts, safety, and recovery notes into
-  board READMEs, linked from the [hardware index](docs/user/hardware.md).
-  Retire the old manual paths; use the new guide instead of old bookmarks.
-* Add scoped agent guidance for maintaining short, authoritative documentation
-  topics and reconciling narrative docs against the completed change set before
-  committing or handing work off as ready to commit.
-* **Breaking:** Replace button-level `confirm`/`confirm_text` settings with the
+* Breaking change: replace button-level `confirm`/`confirm_text` settings with the
   confirmation action. Notification actions now contain only `message` and
   `duration_ms`; remove their old `notify_*` content and styling fields.
   Confirmation actions contain `message`, `timeout_ms`, `approve_text`, and
@@ -133,43 +98,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Until dismissed. The newest successfully displayed dialog replaces either
   dialog type; failed replacement preserves the existing dialog. Appearance
   changes apply to the next dialog, not one already open.
-* Reduce `ButtonAction` from 412 to 272 bytes and its payload union from 396
-  to 256 bytes. Notification and confirmation payloads use 196 and 252 bytes,
-  respectively; the three-action-per-gesture limit is unchanged.
+* Replace info-screen diagnostics with the friendly device name, connected
+  Wi-Fi network, and configuration URLs for the IP address and registered mDNS
+  hostname. Reuse the boot/setup appearance and logo, wrap instructions, and
+  hide unavailable URLs while disconnected, waiting for an IP address, or
+  restarting mDNS.
+* Rename Actions > Boot Screen & Actions to Boot Actions and move appearance
+  controls to Display > System Screens. Save Boot Actions and Save Appearance
+  operate independently; existing stored settings and API names are unchanged.
+* Keep the shared color picker open when selecting palette or recently used
+  colors. Require **Apply** to commit the selection, matching custom colors
+  and patterned fills. Closing without applying leaves the original color
+  unchanged.
+* Use flat Bar Chart fill edges when Track Outline Width is greater than zero,
+  while preserving rounded track corners and rounded fills without an outline.
+  Apply the same behavior to horizontal, zero-centered, and paired bars without
+  adding another setting.
+* Replace the large user manuals with [focused, task-oriented user guides](docs/user/README.md)
+  for setup, device settings, pads, widgets, integrations, and specialized
+  workflows. Each topic introduces its purpose before configuration steps.
+  Move board-specific connections, pinouts, safety, and recovery notes into
+  board READMEs, linked from the [hardware index](docs/user/hardware.md).
+  Retire the old manual paths; use the new guide instead of old bookmarks.
+* Speed up IT8951 framebuffer conversion with exact RGB565 lookup tables and
+  packed-row writes. Increase the Waveshare 7.8-inch profile's LVGL draw buffer
+  from 4 to 32 lines to reduce flush overhead.
+* Avoid sparkline redraws when generated points, colors, reference lines, and
+  marker labels are unchanged, including duplicate label refreshes in one poll.
+* Reduce per-action memory use from 412 to 272 bytes; the three-action-per-gesture
+  limit is unchanged.
+* Add scoped agent guidance for maintaining short, authoritative documentation
+  topics and reconciling narrative docs against the completed change set before
+  committing or handing work off as ready to commit.
 
 ### Fixed
 
+* Fix the M5Stack StopWatch display occasionally staying blank and off-white
+  after a software reboot by allowing the panel reset to settle. Startup takes
+  150 ms longer.
+* Show server validation messages when saving a pad fails, rather than a generic
+  error, while preserving the draft for correction.
 * Keep sparkline current-value labels within the chart when series end near
-  opposite edges, preventing bottom labels from extending outside the button.
-* Align sparkline current-value dots with their line endpoints on the first
-  rendered frame, including the initial e-paper refresh. Resolve chart layout
-  before positioning dots and other overlays.
-* Keep label-style controls working when inline binding previews appear between
-  inputs and style fields, preventing an editor error after creating a button
-  or opening its normal inspector.
-* Prevent binding controls and live results from wrapping into broken inspector
-  grids. Keep fx/HA/reset controls together, place resolved values below their
-  inputs, and align neighboring controls and reset icons. Truncate long results
-  to the field width, reveal the full value on keyboard focus or hover, and
-  support Enter/Space to refresh button and widget binding previews.
+  opposite edges, and align their dots with line endpoints on the first frame,
+  including the initial e-paper refresh.
 * Clarify the Background image refresh interval note: `0` loads snapshots once
   without automatic refresh, but plays MJPEG streams continuously. Positive
   intervals control snapshot refreshes and throttle MJPEG frame reads.
-* Show the successfully registered mDNS hostname on the info screen after
-  renaming and reconnecting, rather than the old Wi-Fi station hostname.
-  Hide the `.local` URL while mDNS restarts or if registration fails.
-* Fix the M5Stack StopWatch display occasionally staying blank and off-white
-  after a software reboot. Wait 200 ms after panel reset before sending Sleep
-  Out, satisfying the CO5300's active-panel reset timing. Startup takes
-  150 ms longer.
-* Open confirmations without a preselected button. The first physical Next,
-  Previous, or Tap selects an option without activating it; touch still
-  activates either button directly.
-* Stop action sequences when binding resolution fails or exceeds a dialog
-  message's capacity, rather than displaying truncated confirmation text.
-* Cancel pending confirmations on screen transitions, display teardown, and
-  OTA activity. Ignore stale input gestures and callbacks after replacement,
-  and keep the existing watchdog behavior for other pausable actions.
+* Prevent idle browser connections from stalling the local portal development
+  server.
 
 ## [1.41.0] - 2026-10-15
 
