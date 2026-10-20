@@ -43,6 +43,9 @@ Do not copy Gauge pairing direction: its first slot is the positive side.
 Base/pattern colors use the [shared picker](../pads/appearance.md#add-a-pattern).
 Track Corner Radius is 0-64 px, capped to geometry; paired joins stay square.
 Track Outline Width 0-8 px outlines the whole track even when empty/full.
+With an outline, fills have flat moving edges and follow the rounded track
+corners at its ends. With outline width 0, fill ends stay rounded.
+This also applies to horizontal, zero-centered, and paired bars.
 Gridlines 0-20 share the scale but stay within each bar's track.
 
 Target Value adds a bindable marker; empty disables it, numeric zero is a target.

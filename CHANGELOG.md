@@ -88,6 +88,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Use flat Bar Chart fill edges when Track Outline Width is greater than zero,
+  while preserving rounded track corners and rounded fills without an outline.
+  Apply the same behavior to horizontal, zero-centered, and paired bars without
+  adding another setting.
 * Keep the shared color picker open when selecting palette or recently used
   colors. Require **Apply** to commit the selection, matching custom colors
   and patterned fills. Closing without applying leaves the original color
