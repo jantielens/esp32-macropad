@@ -330,6 +330,11 @@
 #else
 #define LV_USE_TJPGD 1
 #endif
+#if DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
+/* InkplateLibrary exports a different TJpgDec implementation with these names. */
+#define jd_prepare macropad_lvgl_jd_prepare
+#define jd_decomp macropad_lvgl_jd_decomp
+#endif
 #define LV_USE_LIBJPEG_TURBO 0
 #define LV_USE_GIF 0
 

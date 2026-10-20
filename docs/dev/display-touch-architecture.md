@@ -294,6 +294,12 @@ periodic full refreshes; grayscale uses full waveforms. The Cypress touch driver
 continues polling while a presentation is pending. This target uses a no-OTA
 partition and must be updated over USB.
 
+LVGL's JPEG decoder uses project-prefixed entry points on this target to avoid
+colliding with InkplateLibrary's separate TJpgDec implementation. The display
+and touch drivers temporarily remove those aliases around `Inkplate.h`, keeping
+its declarations unchanged. Both decoders remain available, including JPEG boot
+logos; installed library files are not patched.
+
 The driver copies the mode-specific drawing framebuffer into a PSRAM presentation
 snapshot while holding its mutex, then releases the mutex before the blocking
 waveform. That preserves writes made during the waveform for the next

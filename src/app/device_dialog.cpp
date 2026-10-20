@@ -254,7 +254,10 @@ bool create(Dialog& dialog, const char* message, const ConfirmPayload* confirmat
         // Blend the base and pattern together, without fading the border, text, or buttons.
         lv_obj_set_style_opa_layered(background, style.background_opacity * 255 / 100, 0);
         lv_obj_set_style_bg_opa(box, LV_OPA_TRANSP, 0);
-        dialog.background = {style.background_pattern_color, style.background_pattern, style.pattern_spacing, style.pattern_stroke_width};
+        dialog.background.color = style.background_pattern_color;
+        dialog.background.pattern = style.background_pattern;
+        dialog.background.spacing = style.pattern_spacing;
+        dialog.background.stroke = style.pattern_stroke_width;
         lv_obj_add_event_cb(background, draw_background, LV_EVENT_DRAW_MAIN_END, &dialog.background);
     }
 

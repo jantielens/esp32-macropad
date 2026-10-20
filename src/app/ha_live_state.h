@@ -11,6 +11,7 @@ const char* ha_live_apply_state(ArduinoJson::JsonDocument& state,
 bool ha_live_state_available(ArduinoJson::JsonVariantConst state);
 
 struct HaLiveMessage {
+    HaLiveMessage(char* buffer, size_t limit) : data(buffer), capacity(limit) {}
     char* data;
     size_t capacity; // Payload limit; data must provide capacity + 1 bytes for the NUL.
     size_t size = 0;
