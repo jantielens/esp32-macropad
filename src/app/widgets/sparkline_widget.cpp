@@ -813,6 +813,8 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
     }
 
     // ---- Chart area position for tile-child overlays ----
+    // Alignment is deferred until layout; sibling overlays need the final origin.
+    lv_obj_update_layout(chart_area);
     int16_t ca_x = (int16_t)lv_obj_get_x(chart_area);
     int16_t ca_y = (int16_t)lv_obj_get_y(chart_area);
     lv_obj_t* tile = lv_obj_get_parent(chart_area);
@@ -1053,6 +1055,7 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
             for (uint8_t i = 0; i < active_count; i++) {
                 adjusted_y[i] = active[i].ideal_y - lbl_h / 2;  // top edge
             }
+            if (adjusted_y[0] < 0) adjusted_y[0] = 0;
 
             // Push overlapping labels downward
             for (uint8_t i = 1; i < active_count; i++) {
@@ -1062,21 +1065,17 @@ static void sparkline_redraw(const SparklineConfig* cfg, SparklineState* st) {
                 }
             }
 
-            // Fit the stack into the chart. After the push-down pass each
-            // successive label top is lbl_h apart, so the stack spans
-            // (n-1)*lbl_h + box_h.
+            // Minimum height needed; the actual span may include gaps between
+            // distant endpoints, so fitting must adjust individual labels.
             int16_t stack_h = (int16_t)((active_count - 1) * lbl_h + box_h);
             if (stack_h <= chart_h) {
-                // Fits: shift the whole stack as a block so it stays inside
-                // [0, chart_h]. Block-shifting preserves spacing — unlike a
-                // per-label clamp, which would collapse labels onto one row.
-                int16_t shift = 0;
                 if (adjusted_y[active_count - 1] + box_h > chart_h)
-                    shift = chart_h - (adjusted_y[active_count - 1] + box_h);
-                if (adjusted_y[0] + shift < 0)
-                    shift = -adjusted_y[0];
-                if (shift != 0) {
-                    for (uint8_t i = 0; i < active_count; i++) adjusted_y[i] += shift;
+                    adjusted_y[active_count - 1] = chart_h - box_h;
+                // Propagate the bottom constraint upward without moving labels
+                // that are already separated from the overflowing group.
+                for (int8_t i = (int8_t)active_count - 2; i >= 0; i--) {
+                    int16_t max_top = adjusted_y[i + 1] - lbl_h;
+                    if (adjusted_y[i] > max_top) adjusted_y[i] = max_top;
                 }
             } else {
                 // Too tall to fit without overlap: distribute tops evenly across

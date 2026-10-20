@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-19
+ms.date: 2026-10-20
 ms.topic: reference
 ---
 
@@ -135,6 +135,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Keep sparkline current-value labels within the chart when series end near
+  opposite edges, preventing bottom labels from extending outside the button.
+* Align sparkline current-value dots with their line endpoints on the first
+  rendered frame, including the initial e-paper refresh. Resolve chart layout
+  before positioning dots and other overlays.
 * Keep label-style controls working when inline binding previews appear between
   inputs and style fields, preventing an editor error after creating a button
   or opening its normal inspector.

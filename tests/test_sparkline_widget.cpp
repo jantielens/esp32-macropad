@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <map>
 #include <string>
 #include <vector>
@@ -13,8 +14,8 @@ static unsigned long now_ms = 10000;
 extern "C" unsigned long millis() { return now_ms; }
 extern "C" unsigned long micros() { return now_ms * 1000; }
 
-static float samples[2][4];
-static DataStreamSnapshot streams[2];
+static float samples[3][4];
+static DataStreamSnapshot streams[3];
 static std::map<std::string, std::string> bindings;
 static unsigned binding_resolutions;
 
@@ -26,10 +27,11 @@ bool binding_template_resolve(const char* text, char* out, size_t size) {
     return true;
 }
 data_stream_handle_t data_stream_find(const char* binding, uint32_t, uint16_t, const char*, uint8_t) {
+    if (strcmp(binding, "[test:stream3]") == 0) return 2;
     return strcmp(binding, "[test:stream2]") == 0 ? 1 : 0;
 }
 bool data_stream_get(data_stream_handle_t handle, DataStreamSnapshot* out) {
-    if (handle < 0 || handle >= 2) return false;
+    if (handle < 0 || handle >= 3) return false;
     *out = streams[handle];
     return true;
 }
@@ -58,7 +60,7 @@ protected:
                     {"[test:color]", "#123456"}, {"[test:label]", "value"},
                     {"[test:reference]", "#ABCDEF"}};
         binding_resolutions = 0;
-        for (unsigned i = 0; i < 2; ++i) {
+        for (unsigned i = 0; i < 3; ++i) {
             for (unsigned j = 0; j < 4; ++j) samples[i][j] = 20 + i * 10 + j * 10;
             streams[i] = {samples[i], 4, 0, 4, 1, samples[i][0], samples[i][3], samples[i][3]};
         }
@@ -83,7 +85,9 @@ protected:
         fields["widget_sparkline_max"] = "[test:max]";
         fields["widget_sparkline_line_color"] = "[test:color]";
         fields["widget_sparkline_current_label"] = "[test:label]";
-        fields["widget_sparkline_current_dot"] = 6;
+        fields["widget_sparkline_current_label_2"] = "44.3 %";
+        fields["widget_sparkline_current_label_3"] = "1007.1 hPa";
+        fields["widget_sparkline_current_dot"] = 5;
         fields["widget_sparkline_marker_size_min"] = 5;
         fields["widget_sparkline_marker_size_max"] = 5;
         fields["widget_sparkline_ref_1_y"] = 35;
@@ -94,6 +98,7 @@ protected:
         type->parseConfig(fields, config.data);
         strlcpy(config.data_binding[0], "[test:stream]", sizeof(config.data_binding[0]));
         strlcpy(config.data_binding[1], "[test:stream2]", sizeof(config.data_binding[1]));
+        strlcpy(config.data_binding[2], "[test:stream3]", sizeof(config.data_binding[2]));
         ScreenButtonConfig button{};
         PadRect rect{};
         rect.w = 580;
@@ -103,7 +108,7 @@ protected:
         type->createUI(tile, &config, &button, &rect, &scale, nullptr, nullptr, &state);
         ASSERT_NE(chart()->lines[0], nullptr);
         ASSERT_NE(chart()->lines[1], nullptr);
-        lv_obj_update_layout(tile);
+        ASSERT_NE(chart()->lines[2], nullptr);
         update();
         settle();
     }
@@ -120,6 +125,67 @@ protected:
         invalidations = flushes = 0;
     }
 };
+
+TEST_F(SparklineWidget, CurrentDotsAlignWithLineEndpointsOnFirstFrame) {
+    for (uint8_t i = 0; i < chart()->line_count; ++i) {
+        SCOPED_TRACE(testing::Message() << "line " << unsigned(i));
+        lv_obj_t* line = chart()->lines[i];
+        lv_obj_t* dot = chart()->dot_current[i];
+        ASSERT_NE(dot, nullptr);
+        ASSERT_FALSE(lv_obj_has_flag(dot, LV_OBJ_FLAG_HIDDEN));
+        const uint32_t count = lv_line_get_point_count(line);
+        ASSERT_GT(count, 0u);
+        lv_area_t line_bounds;
+        lv_area_t dot_bounds;
+        lv_obj_get_coords(line, &line_bounds);
+        lv_obj_get_coords(dot, &dot_bounds);
+        const lv_point_precise_t& endpoint = chart()->points[i][count - 1];
+        EXPECT_EQ(dot_bounds.x1 + lv_obj_get_width(dot) / 2, line_bounds.x1 + endpoint.x);
+        EXPECT_EQ(dot_bounds.y1 + lv_obj_get_height(dot) / 2, line_bounds.y1 + endpoint.y);
+    }
+}
+
+TEST_F(SparklineWidget, CurrentLabelsStayInsideChartAndSeparatedAtScaleEdges) {
+    const float endpoints[][3] = {
+        {0, 100, 0},
+        {100, 100, 0},
+        {0, 0, 0},
+        {100, 100, 100},
+    };
+    for (const auto& values : endpoints) {
+        SCOPED_TRACE(testing::Message() << values[0] << ", " << values[1] << ", " << values[2]);
+        for (unsigned i = 0; i < 3; ++i) {
+            for (float& sample : samples[i]) sample = values[i];
+            streams[i].auto_min = streams[i].auto_max = streams[i].last_value = values[i];
+            ++streams[i].rev;
+        }
+        update();
+        lv_obj_update_layout(tile);
+
+        lv_area_t chart_bounds;
+        lv_obj_get_coords(lv_obj_get_parent(chart()->lines[0]), &chart_bounds);
+        lv_area_t button_bounds;
+        lv_obj_get_content_coords(tile, &button_bounds);
+        std::vector<lv_area_t> labels;
+        for (lv_obj_t* label : chart()->lbl_current) {
+            ASSERT_NE(label, nullptr);
+            ASSERT_FALSE(lv_obj_has_flag(label, LV_OBJ_FLAG_HIDDEN));
+            lv_area_t bounds;
+            lv_obj_get_coords(label, &bounds);
+            EXPECT_GE(bounds.y1, chart_bounds.y1);
+            EXPECT_LE(bounds.y2, chart_bounds.y2);
+            EXPECT_GE(bounds.y1, button_bounds.y1);
+            EXPECT_LE(bounds.y2, button_bounds.y2);
+            labels.push_back(bounds);
+        }
+        std::sort(labels.begin(), labels.end(), [](const lv_area_t& a, const lv_area_t& b) {
+            return a.y1 < b.y1;
+        });
+        for (size_t i = 1; i < labels.size(); ++i) {
+            EXPECT_GE(labels[i].y1 - labels[i - 1].y2 - 1, 3);
+        }
+    }
+}
 
 TEST_F(SparklineWidget, UnchangedOutputDoesNotInvalidateOrFlush) {
     update();
