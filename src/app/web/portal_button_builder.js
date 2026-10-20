@@ -52,36 +52,28 @@ function padButtonBuilderAfterSelect() {
     }
 }
 
-function padButtonBuilderUpdateEntry(cell, selected) {
-    const show = selected && padButtonBuilderCanCreate(Number(cell.dataset.col), Number(cell.dataset.row));
-    const existing = cell.querySelector('.pad-button-builder-entry');
-    if (!show) {
-        if (existing) cell.textContent = '+';
-        return;
+function padButtonBuilderUpdateEntry() {
+    const canvas = document.getElementById('pad-workspace-canvas');
+    let actions = padWorkspace.root.querySelector('.pad-button-builders');
+    if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'pad-button-builders';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'pad-button-builder-entry';
+        button.innerHTML = '<span class="binding-builder-badge" aria-hidden="true">HA</span> <span>Build a button with Home Assistant ...</span>';
+        button.onclick = padButtonBuilderOpen;
+        actions.appendChild(button);
+        const manual = document.createElement('button');
+        manual.type = 'button';
+        manual.className = 'pad-button-builder-manual';
+        manual.textContent = 'Edit manually';
+        manual.onclick = () => padWorkspaceSetScope('button');
+        actions.appendChild(manual);
+        canvas.parentElement.insertBefore(actions, canvas);
     }
-    cell.setAttribute('role', 'group');
-    cell.removeAttribute('aria-pressed');
-    if (existing) return;
-    cell.textContent = '';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'pad-button-builder-entry';
-    button.title = 'Open the button builder';
-    button.innerHTML = '<span class="portal-icon" aria-hidden="true">touch_app</span><span>Build button...</span>';
-    button.addEventListener('click', event => {
-        event.stopPropagation();
-        padButtonBuilderOpen();
-    });
-    cell.appendChild(button);
-    const manual = document.createElement('button');
-    manual.type = 'button';
-    manual.className = 'pad-button-builder-manual';
-    manual.textContent = 'Edit manually';
-    manual.onclick = event => {
-        event.stopPropagation();
-        padWorkspaceSetScope('button');
-    };
-    cell.appendChild(manual);
+    const show = padWorkspace.selected && padButtonBuilderCanCreate(padState.editCol, padState.editRow);
+    Array.from(actions.children).forEach(button => { button.hidden = !show; });
 }
 
 function padButtonBuilderClose() {
@@ -94,7 +86,8 @@ function padButtonBuilderClose() {
     session.dialog.remove();
     padButtonBuilderSession = null;
     const cell = document.querySelector('#pad-grid .pad-cell-selected');
-    if (cell) (cell.querySelector('.pad-button-builder-entry') || cell).focus();
+    const entry = padWorkspace.root.querySelector('.pad-button-builder-entry:not([hidden])');
+    if (entry || cell) (entry || cell).focus();
 }
 
 function padButtonBuilderStatus(message, error = false) {
@@ -111,9 +104,9 @@ function padButtonBuilderOpen() {
     dialog.className = 'pad-button-builder';
     dialog.setAttribute('aria-labelledby', 'button-builder-title');
     dialog.innerHTML = `
-        <header><div><h2 id="button-builder-title">Button builder</h2>
+        <header><div><h2 id="button-builder-title">Home Assistant Button Builder</h2>
         <p>Create a button from a Home Assistant entity. Fine-tune it in the editor afterward.</p></div>
-        <button type="button" class="btn btn-sm" data-bb-close aria-label="Close button builder">&#215;</button></header>
+        <button type="button" class="btn btn-sm" data-bb-close aria-label="Close Home Assistant Button Builder">&#215;</button></header>
         <div class="pad-button-builder-body">
             <p class="pad-button-builder-target"></p>
             <p data-bb-setup hidden>Set up Home Assistant before creating a button.

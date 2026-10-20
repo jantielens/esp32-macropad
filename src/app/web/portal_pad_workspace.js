@@ -340,6 +340,7 @@ function padWorkspaceRenderTabs() {
 
 function padWorkspaceRefresh() {
     if (!padWorkspace || !padWorkspace.root.isConnected) return;
+    if (typeof padButtonBuilderUpdateEntry === 'function') padButtonBuilderUpdateEntry();
     padWorkspaceFit();
     const name = document.getElementById('pad-name').value;
     document.getElementById('pad-workspace-status').textContent = padSaveInProgress ? 'Saving...' : padDirty ? 'Unsaved edits' : '';
@@ -356,7 +357,6 @@ function padWorkspaceRefresh() {
         cell.onkeydown = event => {
             if (event.target === cell && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); cell.click(); }
         };
-        if (typeof padButtonBuilderUpdateEntry === 'function') padButtonBuilderUpdateEntry(cell, selected);
     });
     const list = document.getElementById('pad-workspace-pads');
     const choices = Array.from({ length: (deviceInfoCache && deviceInfoCache.max_pads) || 8 }, (_, page) => {

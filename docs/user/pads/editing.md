@@ -23,14 +23,15 @@ of fonts, widgets, or live images. Each pad saves independently.
 
 ## Create a button from Home Assistant
 
-The **Button builder** configures several related fields together, so you do
+The **Home Assistant Button Builder** configures several related fields together, so you do
 not need to wire labels, bindings, and actions individually. It is available
 on firmware with live Home Assistant support.
 
-1. Select an empty position on the canvas, then choose **Build button...**.
+1. Select an empty position on the canvas, then choose
+   **HA Build a button with Home Assistant ...** at the top right of the canvas.
    Configured buttons and positions occupied by inherited buttons do not offer
    the builder. On mobile, the empty position stays on the canvas; choose
-   **Edit manually** instead to open its normal inspector.
+   **Edit manually** below the builder link instead to open its normal inspector.
 2. If prompted, open Home Assistant settings and
    [configure the URL and token](../integrations/home-assistant.md#configure-direct-ha-access),
    then return to the editor.

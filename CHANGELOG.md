@@ -16,15 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* Add **Show a value with history** to the Home Assistant Button builder for
+* Add **Show a value with history** to the Home Assistant Button Builder for
   numeric entities on devices with sparkline support. Configure title, decimal
   places, unit, time range, and line color. Default to 24 hours, 288 points,
   a green line, and a latest-value dot. Load recorded mean statistics where
   Home Assistant history is supported; otherwise collect live values while
   the device runs. Preview the current value with a fixed illustrative trend,
   without fetching history.
-* Add a Home Assistant Button builder for empty pad positions. Choose
-  **Build button...** to generate name/value/unit labels, a single-bar widget
+* Add a Home Assistant Button Builder for empty pad positions. Select an empty
+  position, then choose **HA Build a button with Home Assistant ...** at the top
+  right of the canvas to generate name/value/unit labels, a single-bar widget
   for a numeric entity, or a light/switch toggle button with a Material Symbol
   and state-dependent icon colors. Bar buttons offer title, range, orientation,
   decimal places, and unit controls, with styling left to the normal pad editor.

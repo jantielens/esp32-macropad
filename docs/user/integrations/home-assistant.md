@@ -63,7 +63,7 @@ connection is not a guarantee that a particular entity exists or is readable.
 Use entity IDs directly in Pad Editor bindings, or use the HA binding builder
 described below. To create a complete value button or a toggle button for a light
 or switch at an empty position, use the
-[Button builder](../pads/editing.md#create-a-button-from-home-assistant).
+[Home Assistant Button Builder](../pads/editing.md#create-a-button-from-home-assistant).
 To display a temperature with a fallback while unavailable:
 
 ```text
