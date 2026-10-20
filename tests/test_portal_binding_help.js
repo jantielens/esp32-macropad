@@ -269,6 +269,7 @@ delete context.testHelpSchemes;
     const valueBuilder = builders.find(builder => builder.id === 'value');
     const toggleBuilder = builders.find(builder => builder.id === 'toggle');
     const barBuilder = builders.find(builder => builder.id === 'bar');
+    const gaugeBuilder = builders.find(builder => builder.id === 'gauge');
     const historyBuilder = builders.find(builder => builder.id === 'history');
     const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
     const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
@@ -496,6 +497,59 @@ delete context.testHelpSchemes;
     barSession.options.decimals = 1;
     barSession.options.unit = '[invalid]';
     assert.throws(() => context.padButtonBuilderBuild(barSession), /delimiters/);
+
+    context.PAD_FIRMWARE_DEFAULTS = { widget_series_color: '#4CAF50' };
+    context.deviceInfoCache = { widget_catalog: [{ type: 'gauge' }] };
+    assert.strictEqual(gaugeBuilder.available(temperature), true);
+    for (const detail of [light, { ...temperature, state: 'unavailable' },
+        { ...temperature, state: 'unknown' }, { ...temperature, state_truncated: true }]) {
+        assert.strictEqual(gaugeBuilder.available(detail), false);
+    }
+    context.deviceInfoCache = null;
+    assert.strictEqual(gaugeBuilder.available(temperature), false);
+    context.deviceInfoCache = { widget_catalog: [{ type: 'bar_chart' }] };
+    assert.strictEqual(gaugeBuilder.available(temperature), false);
+    const gaugeSession = buildSession(temperature, gaugeBuilder);
+    const generatedGauge = context.padButtonBuilderBuild(gaugeSession);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedGauge)), {
+        col: 2, row: 1, label_top: 'Living room', widget_type: 'gauge',
+        widget_data_binding: '[ha:sensor.living_room_temperature]',
+        widget_gauge_min: 0, widget_gauge_max: 50,
+        widget_gauge_degrees: 180, widget_gauge_start_angle: 180,
+        widget_gauge_show_needle: true, widget_gauge_ticks: 5, widget_arc_color: '#4CAF50',
+        label_bottom: '[ha:sensor.living_room_temperature;;%.1f \u00b0C]'
+    });
+    for (const [state, unit, min, max] of [
+        ['54.2', ' % ', 0, 100], ['-12', 'W', -50, 50], ['0', '', 0, 100], ['0.012', 'A', 0, 0.05]
+    ]) {
+        const button = context.padButtonBuilderBuild(buildSession({ ...temperature, state, unit }, gaugeBuilder));
+        assert.strictEqual(button.widget_gauge_min, min);
+        assert.strictEqual(button.widget_gauge_max, max);
+    }
+    Object.assign(gaugeSession.options, { min: '-10.5', max: '40.5', decimals: 2, color: '#2196F3', unit: '%' });
+    const customGauge = context.padButtonBuilderBuild(gaugeSession);
+    assert.strictEqual(customGauge.widget_gauge_min, -10.5);
+    assert.strictEqual(customGauge.widget_gauge_max, 40.5);
+    assert.strictEqual(customGauge.widget_arc_color, '#2196F3');
+    assert.strictEqual(customGauge.widget_data_binding, '[ha:sensor.living_room_temperature]');
+    assert.strictEqual(customGauge.label_bottom, '[ha:sensor.living_room_temperature;;%.2f %%]');
+    assert.strictEqual(gaugeBuilder.preview(temperature, gaugeSession.options).label_bottom, '21.37 %');
+    for (const state of ['unknown', 'unavailable', '']) {
+        assert.strictEqual(gaugeBuilder.preview({ ...temperature, state }, gaugeSession.options).label_bottom, '---');
+    }
+    for (const [min, max] of [['', 100], ['12abc', 100], [1, 1], [2, 1],
+        [0, '1e99'], [1, 1.000000001], ['-3e38', '3e38']]) {
+        Object.assign(gaugeSession.options, { min, max });
+        assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /minimum/);
+    }
+    Object.assign(gaugeSession.options, { min: 0, max: 100, color: 'red' });
+    assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /arc color/);
+    gaugeSession.options.color = '#4CAF50';
+    gaugeSession.options.decimals = 7;
+    assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /decimal/);
+    gaugeSession.options.decimals = 1;
+    gaugeSession.options.unit = '[invalid]';
+    assert.throws(() => context.padButtonBuilderBuild(gaugeSession), /delimiters/);
 
     // Creation is draft-only and cannot overwrite local or inherited content.
     context.padState = { cols: 4, rows: 3, page: 0, buttons: [], templateButtons: [] };

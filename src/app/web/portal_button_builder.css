@@ -34,6 +34,7 @@
 .pad-button-builder-preview .pad-cell-label-center { font-size: 36px; }
 .pad-button-builder-preview .pad-cell-icon { font-size: 64px; }
 .pad-button-builder-sparkline { display: block; width: 100%; height: 70px; flex: 0 1 70px; min-height: 0; }
+.pad-button-builder-gauge { display: block; width: 100%; height: 125px; flex: 0 1 125px; min-height: 0; }
 .pad-button-builder-bar { display: flex; flex: 1; min-height: 0; width: 100%; align-items: center; justify-content: center; }
 .pad-button-builder-bar-track { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 4px; }
 .pad-button-builder-bar-fill { position: absolute; left: 0; bottom: var(--bar-start); width: 100%; height: var(--bar-size); }

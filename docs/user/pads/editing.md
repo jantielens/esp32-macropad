@@ -40,7 +40,7 @@ on firmware with live Home Assistant support.
    Entity details must load successfully before you can create the button.
    Retry a failed lookup or correct the ID/settings.
 4. Under **What should this button do?**, choose **Show a value**,
-   **Show a bar** or **Show a value with history** for a numeric reading, or
+   **Show a bar**, **Show a gauge**, or **Show a value with history** for a numeric reading, or
    **Toggle an entity** for a light or switch. Adjust the title and available controls.
    Value buttons show the name, formatted value, and unit in three labels.
    Bar buttons show the title, a single bar, and the formatted value with its
@@ -54,6 +54,13 @@ on firmware with live Home Assistant support.
    **Show a bar** requires a numeric, non-truncated current state and bar-chart
    widget support. Colors, targets, additional bars, and other styling belong
    in the normal pad editor.
+   **Show a gauge** requires a numeric, non-truncated current state and gauge
+   widget support. It shows the title, a single semicircular ring with a needle
+   and five interior ticks, and the formatted value with its unit below.
+   Choose minimum, maximum, decimal places, unit, and arc color.
+   It uses the same range suggestions as the bar, but fills from the minimum.
+   Additional rings, targets, geometry, and other styling remain available in
+   the normal editor; see [Gauge](../widgets/gauge.md).
    **Show a value with history** requires a numeric, non-truncated current state
    and sparkline widget support. It shows the title, current value with its unit,
    and a single automatically scaled sparkline. Choose decimal places, unit,
@@ -69,7 +76,9 @@ on firmware with live Home Assistant support.
    color or enter a custom hex color, then choose **Apply**.
 5. Check the approximate **Preview**, then choose **Create button**.
    Preview uses fetched data rather than continuous updates. The bar preview
-   reflects the chosen range and orientation. Toggle preview states are
+   reflects the chosen range and orientation. The gauge preview reflects its
+   range and arc color; out-of-range readings stop the indicator at the limit
+   while the label still shows the actual value. Toggle preview states are
    simulated and never send commands. The history template shows a fixed,
    illustrative trend, not actual history; its number uses the fetched current
    value. Changing the time range updates the caption, not the sample curve.

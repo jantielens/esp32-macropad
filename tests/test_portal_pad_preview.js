@@ -33,6 +33,7 @@ function createElement() {
 }
 
 const context = {
+    TextEncoder,
     deviceInfoCache: { widget_catalog: [] },
     document: { createElement, createElementNS: createElement },
     padColorToHex: (color, fallback) => color || fallback,
@@ -130,7 +131,8 @@ assert(!css.includes('.pad-cell-widget-'));
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_templates.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
-context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50' };
+context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
+    widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
 const barBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "bar")', context);
 const builderElements = Object.fromEntries(['fields', 'states', 'note'].map(name => ['[data-bb-' + name + ']', createElement()]));
 context.testBuilderSession = {
@@ -189,6 +191,43 @@ for (const orientation of ['vertical', 'horizontal']) {
         assert.strictEqual(fill.style.background, '#4CAF50');
         assert.strictEqual(cell.children.indexOf(bar) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
     }
+}
+const gaugeBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "gauge")', context);
+for (const [state, min, max, percent] of [
+    ['0', 0, 100, 0], ['50', 0, 100, 50], ['100', 0, 100, 100],
+    ['200', 0, 100, 100], ['-200', 0, 100, 0], ['-50', -100, 100, 25],
+    ['unavailable', 0, 100, null]
+]) {
+    const detail = { entity_id: 'sensor.power', state, unit: '%' };
+    const session = { detail, name: 'Power' };
+    context.padButtonBuilderSetScenario(session, gaugeBuilder);
+    Object.assign(session.options, { min, max, color: '#2196F3' });
+    const button = { label_top: session.name, ...gaugeBuilder.build(detail, session.options),
+        ...gaugeBuilder.preview(detail, session.options) };
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    gaugeBuilder.renderPreview(cell, button, detail);
+    assert(cell.querySelector('.pad-widget-marker'));
+    assert.strictEqual(cell.querySelector('.pad-cell-label-center'), null);
+    const gauge = cell.children.find(child => child.attributes.class === 'pad-button-builder-gauge');
+    assert.strictEqual(gauge.attributes.role, percent === null ? 'img' : 'meter');
+    assert.strictEqual(gauge.children[0].attributes.stroke, '#1A1A1A');
+    if (percent === null) {
+        assert.match(gauge.attributes['aria-label'], /unavailable/);
+        assert.strictEqual(gauge.children.length, 6, 'Only track and ticks remain when data is unavailable');
+        assert.strictEqual(button.label_bottom, '---');
+    } else {
+        assert.strictEqual(gauge.attributes['aria-valuemin'], String(min));
+        assert.strictEqual(gauge.attributes['aria-valuemax'], String(max));
+        assert.strictEqual(gauge.attributes['aria-valuenow'], String(Math.max(min, Math.min(max, Number(state)))));
+        assert.strictEqual(gauge.attributes['aria-valuetext'], Number(state).toFixed(1) + ' %');
+        assert.strictEqual(gauge.children[1].attributes['stroke-dasharray'], percent + ' 100');
+        assert.strictEqual(gauge.children[1].attributes.stroke, '#2196F3');
+        assert.strictEqual(gauge.children[2].attributes.transform, 'rotate(' + percent * 1.8 + ' 140 130)');
+        assert.strictEqual(gauge.children[2].attributes.stroke, '#FFFFFF');
+        assert.strictEqual(gauge.children.length, 8, 'One track, one ring, one needle, and five ticks');
+    }
+    assert.strictEqual(cell.children.indexOf(gauge) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
 }
 const historyBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "history")', context);
 let samplePoints;

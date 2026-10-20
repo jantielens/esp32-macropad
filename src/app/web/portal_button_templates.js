@@ -7,6 +7,32 @@ function padButtonBuilderUnitField(unit) {
     return { name: 'unit', label: 'Unit', type: 'text', default: unit || '', maxlength: 60 };
 }
 
+function padButtonBuilderRangeFields(detail) {
+    const value = Number(detail.state);
+    const percentage = detail.unit?.trim() === '%';
+    let max = 100;
+    if (!percentage && value !== 0) {
+        const target = Math.abs(value) * 2;
+        const scale = 10 ** Math.floor(Math.log10(target));
+        max = [1, 2, 5, 10].find(step => step * scale >= target) * scale;
+    }
+    return [
+        { name: 'min', label: 'Minimum', type: 'number', step: 'any',
+            default: !percentage && value < 0 ? -max : 0, error: 'Enter a numeric minimum and maximum.' },
+        { name: 'max', label: 'Maximum', type: 'number', step: 'any',
+            default: max, error: 'Enter a numeric minimum and maximum.' }
+    ];
+}
+
+function padButtonBuilderRange(options) {
+    const min = Number(options.min), max = Number(options.max);
+    const range = Math.fround(Math.fround(max) - Math.fround(min));
+    if (!Number.isFinite(range) || range <= 0) {
+        throw new Error('Maximum must be greater than minimum within the supported numeric range.');
+    }
+    return { min, max };
+}
+
 // Templates own their controls, configuration, and preview overrides.
 const padButtonBuilders = [
     {
@@ -39,19 +65,8 @@ const padButtonBuilders = [
         available: detail => !detail.state_truncated && bindingBuilderIsNumeric(detail.state) &&
             !!deviceInfoCache?.widget_catalog?.some(widget => widget.type === 'bar_chart'),
         fields(detail) {
-            const value = Number(detail.state);
-            const percentage = detail.unit?.trim() === '%';
-            let max = 100;
-            if (!percentage && value !== 0) {
-                const target = Math.abs(value) * 2;
-                const scale = 10 ** Math.floor(Math.log10(target));
-                max = [1, 2, 5, 10].find(step => step * scale >= target) * scale;
-            }
             return [
-                { name: 'min', label: 'Minimum', type: 'number', step: 'any',
-                    default: !percentage && value < 0 ? -max : 0, error: 'Enter a numeric minimum and maximum.' },
-                { name: 'max', label: 'Maximum', type: 'number', step: 'any',
-                    default: max, error: 'Enter a numeric minimum and maximum.' },
+                ...padButtonBuilderRangeFields(detail),
                 { name: 'orientation', label: 'Orientation', type: 'select', default: 'vertical',
                     options: [['vertical', 'Vertical'], ['horizontal', 'Horizontal']],
                     error: 'Choose a valid orientation.' },
@@ -60,11 +75,7 @@ const padButtonBuilders = [
             ];
         },
         build(detail, options) {
-            const min = Number(options.min), max = Number(options.max);
-            const range = Math.fround(Math.fround(max) - Math.fround(min));
-            if (!Number.isFinite(range) || range <= 0) {
-                throw new Error('Maximum must be greater than minimum within the supported numeric range.');
-            }
+            const { min, max } = padButtonBuilderRange(options);
             const format = bindingBuilderFormat('number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit));
             return {
                 widget_type: 'bar_chart',
@@ -109,6 +120,92 @@ const padButtonBuilders = [
             track.appendChild(fill);
             bar.appendChild(track);
             cell.insertBefore(bar, cell.querySelector('.pad-cell-label-bottom'));
+        }
+    },
+    {
+        id: 'gauge', label: 'Show a gauge',
+        description: 'Show a numeric value as a single ring with a needle within a fixed range.',
+        note: 'Check the suggested range before creating the button. The unit changes display text, not the value. Fine-tune styling in the pad editor.',
+        available: detail => !detail.state_truncated && bindingBuilderIsNumeric(detail.state) &&
+            !!deviceInfoCache?.widget_catalog?.some(widget => widget.type === 'gauge'),
+        fields: detail => [
+            ...padButtonBuilderRangeFields(detail),
+            padButtonBuilderDecimalField(),
+            padButtonBuilderUnitField(detail.unit),
+            { name: 'color', label: 'Arc color', type: 'color', default: PAD_FIRMWARE_DEFAULTS.widget_series_color,
+                error: 'Choose a valid arc color.' }
+        ],
+        build(detail, options) {
+            const { min, max } = padButtonBuilderRange(options);
+            const format = bindingBuilderFormat('number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit));
+            return {
+                widget_type: 'gauge',
+                widget_data_binding: bindingBuilderToken('ha', detail.entity_id, '', '', ''),
+                widget_gauge_min: min, widget_gauge_max: max,
+                widget_gauge_degrees: 180, widget_gauge_start_angle: 180,
+                widget_gauge_show_needle: true, widget_gauge_ticks: 5,
+                widget_arc_color: options.color,
+                label_bottom: bindingBuilderToken('ha', detail.entity_id, '', format, '')
+            };
+        },
+        preview(detail, options) {
+            return { label_bottom: bindingBuilderIsNumeric(detail.state) ?
+                bindingBuilderSample(detail.state, 'number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit)) : '---' };
+        },
+        previewNote: () => 'Approximate gauge using the fetched value. Preview only. Does not control the entity.',
+        renderPreview(cell, button, detail) {
+            const gauge = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            gauge.setAttribute('class', 'pad-button-builder-gauge');
+            gauge.setAttribute('viewBox', '0 0 280 145');
+            const track = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            track.setAttribute('d', 'M28 130 A112 112 0 0 1 252 130');
+            track.setAttribute('fill', 'none');
+            track.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_track_color);
+            track.setAttribute('stroke-width', '17');
+            gauge.appendChild(track);
+            if (bindingBuilderIsNumeric(detail.state)) {
+                const min = button.widget_gauge_min, max = button.widget_gauge_max;
+                const value = Math.max(min, Math.min(max, Number(detail.state)));
+                const progress = (value - min) / (max - min);
+                gauge.setAttribute('role', 'meter');
+                gauge.setAttribute('aria-label', button.label_top || 'Entity value');
+                gauge.setAttribute('aria-valuemin', String(min));
+                gauge.setAttribute('aria-valuemax', String(max));
+                gauge.setAttribute('aria-valuenow', String(value));
+                gauge.setAttribute('aria-valuetext', button.label_bottom);
+                const fill = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                fill.setAttribute('d', 'M28 130 A112 112 0 0 1 252 130');
+                fill.setAttribute('fill', 'none');
+                fill.setAttribute('stroke', button.widget_arc_color);
+                fill.setAttribute('stroke-width', '17');
+                fill.setAttribute('pathLength', '100');
+                fill.setAttribute('stroke-dasharray', progress * 100 + ' 100');
+                gauge.appendChild(fill);
+                const needle = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                needle.setAttribute('x1', '140');
+                needle.setAttribute('y1', '130');
+                needle.setAttribute('x2', '42');
+                needle.setAttribute('y2', '130');
+                needle.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_indicator_color);
+                needle.setAttribute('stroke-width', '2');
+                needle.setAttribute('transform', 'rotate(' + progress * 180 + ' 140 130)');
+                gauge.appendChild(needle);
+            } else {
+                gauge.setAttribute('role', 'img');
+                gauge.setAttribute('aria-label', 'Gauge value unavailable');
+            }
+            for (let tick = 1; tick <= button.widget_gauge_ticks; tick++) {
+                const angle = Math.PI + tick * Math.PI / (button.widget_gauge_ticks + 1);
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', String(140 + Math.cos(angle) * 95));
+                line.setAttribute('y1', String(130 + Math.sin(angle) * 95));
+                line.setAttribute('x2', String(140 + Math.cos(angle) * 87));
+                line.setAttribute('y2', String(130 + Math.sin(angle) * 87));
+                line.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_tick_color);
+                line.setAttribute('stroke-width', '1');
+                gauge.appendChild(line);
+            }
+            cell.insertBefore(gauge, cell.querySelector('.pad-cell-label-bottom'));
         }
     },
     {
