@@ -5,6 +5,7 @@ import json
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+import socket
 import sys
 import tempfile
 import threading
@@ -26,7 +27,7 @@ from widget_manifest import load_widgets, firmware_includes, portal_assets, vali
 class PortalDevServerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server = PORTAL.HTTPServer(("127.0.0.1", 0), PORTAL.PortalHandler)
+        cls.server = PORTAL.ThreadingHTTPServer(("127.0.0.1", 0), PORTAL.PortalHandler)
         cls.server.profile = "esp32-p4-lcd4b"
         cls.server.logs_started = PORTAL.time.monotonic()
         cls.server.mock_config = {
@@ -101,6 +102,12 @@ class PortalDevServerTest(unittest.TestCase):
             widget_styles = (ROOT / "src/app/web" / filename).read_text().strip()
             self.assertIn(widget_styles, styles)
             self.assertNotIn(widget_styles, headless_styles)
+
+    def test_idle_browser_connection_does_not_block_requests(self):
+        with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=5):
+            status, config = self.request("/api/config")
+            self.assertEqual(status, 200)
+            self.assertEqual(config["device_name"], "Mock")
 
     def test_wifi_setup_config_fixture(self):
         status, config = self.request("/api/config")

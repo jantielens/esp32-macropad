@@ -21,7 +21,7 @@ import subprocess
 from _render_html_template import render
 from widget_manifest import expand_bundle
 from urllib.parse import parse_qs, urlparse
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
 from pathlib import Path
 from datetime import date, timedelta
@@ -1072,7 +1072,7 @@ def main():
         print(f"ERROR: Prototype directory not found: {PROTO_DIR}", file=sys.stderr)
         sys.exit(1)
 
-    server = HTTPServer(("127.0.0.1", args.port), PortalHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), PortalHandler)
     server.profile = args.profile
     server.logs_started = time.monotonic()
     reset_pad_fixtures(server, args.scenario)
