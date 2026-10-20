@@ -377,13 +377,6 @@ function padWidgetTypeChanged() {
         if (section) section.style.display = editor && editor.replacesContent ? 'none' : '';
     });
     padSetImageCapabilityVisibility(deviceInfoCache, !!(editor && editor.replacesContent));
-    var confirmGroup = document.getElementById('pad-edit-confirm-group');
-    var confirmInput = document.getElementById('pad-edit-confirm');
-    if (confirmGroup) confirmGroup.style.display = wtype ? 'none' : '';
-    if (wtype && confirmInput) {
-        confirmInput.checked = false;
-        padConfirmChanged();
-    }
     // Refresh icon position visibility (widgets may override layout)
     padIconTypeChanged();
 
@@ -670,7 +663,7 @@ async function padPersistPage(context) {
         });
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
-            throw new Error(err.error || 'HTTP ' + resp.status);
+            throw new Error(err.message || err.error || 'HTTP ' + resp.status);
         }
 
         if (context.blankOnSave) {

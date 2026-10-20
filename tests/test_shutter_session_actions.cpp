@@ -129,14 +129,14 @@ TEST(empty_actions_round_trip_to_empty) {
 
 TEST(round_trip_preserves_both_actions) {
     const char* json =
-        "{\"save_start_actions\":[{\"type\":\"notify\",\"notify_text\":\"Saving...\"}],"
+        "{\"save_start_actions\":[{\"type\":\"notify\",\"message\":\"Saving...\"}],"
          "\"save_complete_actions\":[{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone\",\"sound_alert_pattern\":\"100\",\"sound_alert_volume\":50}]}";
     TestConfig cfg;
     parse_config(json, cfg);
     ASSERT_TRUE(cfg.save_start_count == 1);
     ASSERT_TRUE(cfg.save_complete_count == 1);
     ASSERT_STR(cfg.save_start_actions[0].type, "notify");
-    ASSERT_STR(cfg.save_start_actions[0].payload.notify.notify_text, "Saving...");
+    ASSERT_STR(cfg.save_start_actions[0].payload.notify.message, "Saving...");
     ASSERT_STR(cfg.save_complete_actions[0].type, "sound_alert");
     ASSERT_STR(cfg.save_complete_actions[0].payload.sound_alert.sound_alert_pattern, "100");
 
@@ -147,7 +147,7 @@ TEST(round_trip_preserves_both_actions) {
     parse_config(buf, back);
     ASSERT_TRUE(back.save_start_count == 1);
     ASSERT_STR(back.save_start_actions[0].type, "notify");
-    ASSERT_STR(back.save_start_actions[0].payload.notify.notify_text, "Saving...");
+    ASSERT_STR(back.save_start_actions[0].payload.notify.message, "Saving...");
     ASSERT_STR(back.save_complete_actions[0].type, "sound_alert");
     ASSERT_STR(back.save_complete_actions[0].payload.sound_alert.sound_alert_pattern, "100");
 }
@@ -171,13 +171,13 @@ TEST(round_trip_screen_action) {
 TEST(round_trip_three_actions_per_event) {
     const char* json =
         "{\"save_start_actions\":["
-            "{\"type\":\"notify\",\"notify_text\":\"A\"},"
+            "{\"type\":\"notify\",\"message\":\"A\"},"
             "{\"type\":\"sound_alert\",\"sound_alert_kind\":\"tone\",\"sound_alert_pattern\":\"50\",\"sound_alert_volume\":30},"
             "{\"type\":\"screen\",\"target\":\"pad_2\"}"
          "],\"save_complete_actions\":["
-            "{\"type\":\"notify\",\"notify_text\":\"X\"},"
-            "{\"type\":\"notify\",\"notify_text\":\"Y\"},"
-            "{\"type\":\"notify\",\"notify_text\":\"Z\"}"
+            "{\"type\":\"notify\",\"message\":\"X\"},"
+            "{\"type\":\"notify\",\"message\":\"Y\"},"
+            "{\"type\":\"notify\",\"message\":\"Z\"}"
          "]}";
     TestConfig cfg;
     parse_config(json, cfg);
@@ -186,7 +186,7 @@ TEST(round_trip_three_actions_per_event) {
     ASSERT_STR(cfg.save_start_actions[0].type, "notify");
     ASSERT_STR(cfg.save_start_actions[1].type, "sound_alert");
     ASSERT_STR(cfg.save_start_actions[2].type, "screen");
-    ASSERT_STR(cfg.save_complete_actions[2].payload.notify.notify_text, "Z");
+    ASSERT_STR(cfg.save_complete_actions[2].payload.notify.message, "Z");
 
     char buf[2048];
     serialize_config(cfg, buf, sizeof(buf));
@@ -195,17 +195,17 @@ TEST(round_trip_three_actions_per_event) {
     ASSERT_TRUE(back.save_start_count == 3);
     ASSERT_TRUE(back.save_complete_count == 3);
     ASSERT_STR(back.save_start_actions[1].payload.sound_alert.sound_alert_pattern, "50");
-    ASSERT_STR(back.save_complete_actions[0].payload.notify.notify_text, "X");
+    ASSERT_STR(back.save_complete_actions[0].payload.notify.message, "X");
 }
 
 TEST(parse_drops_empty_array_entries) {
     const char* json =
-        "{\"save_start_actions\":[{},{\"type\":\"notify\",\"notify_text\":\"A\"},{}]}";
+        "{\"save_start_actions\":[{},{\"type\":\"notify\",\"message\":\"A\"},{}]}";
     TestConfig cfg;
     parse_config(json, cfg);
     ASSERT_TRUE(cfg.save_start_count == 1);
     ASSERT_STR(cfg.save_start_actions[0].type, "notify");
-    ASSERT_STR(cfg.save_start_actions[0].payload.notify.notify_text, "A");
+    ASSERT_STR(cfg.save_start_actions[0].payload.notify.message, "A");
 }
 
 // ============================================================================

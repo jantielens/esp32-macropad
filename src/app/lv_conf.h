@@ -193,7 +193,7 @@
 #define LV_USE_BUTTONMATRIX  0
 #define LV_USE_CALENDAR   0
 #ifndef LV_USE_CANVAS
-    #if HAS_TOUCH
+    #if HAS_TOUCH || HAS_NATIVE_EXTENSIONS
         #define LV_USE_CANVAS 1
     #else
         #define LV_USE_CANVAS 0
@@ -325,10 +325,15 @@
 #define LV_USE_LODEPNG 1
 #define LV_USE_LIBPNG 0
 #define LV_USE_BMP 0
-#if HAS_LVGL_EPAPER
+#if HAS_LVGL_EPAPER && !(HAS_BOOT_LOGO || HAS_IMAGE_LIBRARY || HAS_IMAGE_FETCH)
 #define LV_USE_TJPGD 0
 #else
 #define LV_USE_TJPGD 1
+#endif
+#if DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
+/* InkplateLibrary exports a different TJpgDec implementation with these names. */
+#define jd_prepare macropad_lvgl_jd_prepare
+#define jd_decomp macropad_lvgl_jd_decomp
 #endif
 #define LV_USE_LIBJPEG_TURBO 0
 #define LV_USE_GIF 0

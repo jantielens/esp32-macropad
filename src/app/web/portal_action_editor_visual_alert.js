@@ -23,7 +23,7 @@ _actionEditorExtensions.push({
         // Config fields — only relevant for "start" (hidden for "stop")
         h += '<div id="' + prefix + '-va-config-group">';
         h += '<div class="form-group">';
-        h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>';
+        h += '<label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Color</label>';
         h += '<div class="bindable-color" id="' + prefix + '-va-color-wrap"><div class="bc-swatch"></div>';
         h += '<input type="text" id="' + prefix + '-va-color" class="bc-input" maxlength="63" spellcheck="false" placeholder="#ff0000 or [binding]"></div>';
         h += '<small>Overlay tint. Supports bindings (e.g. red via [expr:...]). Empty = red.</small>';

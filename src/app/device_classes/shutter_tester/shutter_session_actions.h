@@ -38,7 +38,7 @@ void shutter_session_actions_dispatch_start();
 void shutter_session_actions_notify_complete();
 
 // Drain any pending save_complete notification and dispatch the configured actions.
-// Must be called from the LVGL/main loop task (next to message_bubble_loop()).
+// Must be called from the LVGL/main loop task.
 void shutter_session_actions_loop();
 
 // Self-trigger guard helper (exposed for tests, inline so test builds don't

@@ -21,7 +21,7 @@ import subprocess
 from _render_html_template import render
 from widget_manifest import expand_bundle
 from urllib.parse import parse_qs, urlparse
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
 from pathlib import Path
 from datetime import date, timedelta
@@ -33,6 +33,26 @@ APP_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "web"
 EPAPER_WEB_DIR = SCRIPT_DIR.parent / "src" / "app" / "device_classes" / "epaper_frame" / "web"
 PROFILES = ("esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame", "crowpanel-4.2-interactive")
 SCENARIOS = ("normal", "load-error", "save-error", "invalid-bindings")
+HA_ENTITIES = {
+    "sensor.living_room_temperature": {
+        "name": "Living room temperature", "state": "21.37", "unit": "\u00b0C",
+        "paths": [{"path": "attributes.unit_of_measurement", "value": "\u00b0C"},
+                  {"path": "attributes.friendly_name", "value": "Living room temperature"},
+                  {"path": "attributes.battery", "value": "73"}],
+    },
+    "sensor.living_room_humidity": {
+        "name": "Living room humidity", "state": "54.2", "unit": "%",
+        "paths": [{"path": "attributes.unit_of_measurement", "value": "%"}],
+    },
+    "light.kitchen": {
+        "name": "Kitchen light", "state": "on", "unit": "",
+        "paths": [{"path": "attributes.brightness", "value": "128"}],
+    },
+    "switch.desk_fan": {
+        "name": "Desk fan", "state": "off", "unit": "",
+        "paths": [{"path": "attributes.friendly_name", "value": "Desk fan"}],
+    },
+}
 MOCK_NOW_EPOCH = 1791370589
 SCREENSAVER_DEFAULTS = {
     "screen_saver_enabled": True, "screen_saver_timeout_seconds": 300,
@@ -43,8 +63,19 @@ SCREENSAVER_DEFAULTS = {
 EPAPER_PRESENTATION_DEFAULTS = {
     "epaper_render_mode": "bw", "epaper_supported_render_modes": ["bw"],
     "epaper_bw_conversion": "threshold", "epaper_bw_threshold": 128,
+    "epaper_vcom_mv": 0, "epaper_default_vcom_mv": 0,
     "epaper_binding_refresh_interval_ms": 1000, "epaper_min_refresh_interval_ms": 500,
     "epaper_refresh_clock_on_minute_boundary": True, "epaper_full_refresh_threshold": 10,
+}
+DIALOG_APPEARANCE_DEFAULTS = {
+    "font": "", "font_size": 0, "text_color": "#FFFFFF",
+    "horizontal_align": 1, "vertical_align": 1,
+    "background_color": "#333333", "background_opacity": 100,
+    "background_pattern": "none", "background_pattern_color": "#111111",
+    "pattern_spacing": 8, "pattern_stroke_width": 1,
+    "backdrop_opacity": 60, "border_color": "#808080", "border_width": 1,
+    "corner_radius": 8, "padding": 16, "margin": 16,
+    "width": 0, "height": 0, "position": 1,
 }
 
 
@@ -66,8 +97,12 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.mock_defaults = fixture["button_defaults"]
     server.mock_typography = {"default_font": "@builtin", "base_text_size": 0}
     server.scenario = scenario
+    server.mock_ha_lookup_job = 0
+    server.mock_ha_lookup_result = None
     server.mock_screen = "pad_0"
     server.mock_icons = {}
+    server.mock_boot_actions = []
+    server.mock_boot_logo_slots = {}
     server.mock_recipe_catalog = json.loads((SCRIPT_DIR.parent / "docs/samples/recipe-catalog.json").read_text(encoding="utf-8"))
     server.mock_alarms = {"lateness_minutes": 360, "1": {"enabled": False, "hour": 7, "minute": 0, "weekdays": 62,
                                "snooze_minutes": 9, "auto_dismiss_minutes": 30,
@@ -76,7 +111,7 @@ def reset_pad_fixtures(server, scenario="normal"):
                                "ota_deferred": False, "storage_error": False, "hook_error": False,
                                "enabled": False, "once_epoch": 0, "once_local": "", "lateness_minutes": 360}
     for action in fixture["catalog"]:
-        action["alarm_hook_allowed"] = action["type"] not in ("delay", "key", "gamepad", "camera_capture", "voice_assistant")
+        action["alarm_hook_allowed"] = action["type"] not in ("confirm", "delay", "key", "gamepad", "camera_capture", "voice_assistant")
         if action["type"] == "sound_alert":
             action["label"] = "Sound alert"
     fixture["catalog"].append({"type": "alarm", "group": "Alarm", "label": "Alarm Control", "alarm_hook_allowed": True,
@@ -101,6 +136,8 @@ def reset_pad_fixtures(server, scenario="normal"):
             "alarm_hook_allowed": True, "editor_fields": [field,
                 {"name": "sound_alert_volume", "label": "Volume override (%)", "type": "number",
                  "min": 0, "max": 100, "default": "0", "help": "0 = use device volume; 1-100 overrides it."}]})
+    fixture["binding_schema"]["schemes"].append({"name": "ha", "min_params": 1, "max_params": 3,
+        "widget_max_params": 2, "format_param": 2, "validation_mode": 0, "free_form": True, "keys": []})
     fixture["binding_schema"]["schemes"].append({"name": "alarm", "min_params": 1, "max_params": 1,
         "widget_max_params": 1, "format_param": 1, "validation_mode": 0, "free_form": False,
         "keys": ["1_time", "1_enabled", "1_state", "1_ready", "active_id", "1_hour", "1_minute", "1_minutes",
@@ -200,6 +237,27 @@ class PortalHandler(SimpleHTTPRequestHandler):
         # Device API fixtures. POSTs are accepted in do_POST below.
         elif path == "/api/config":
             config = copy.deepcopy(self.server.mock_config)
+            config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
+            config.setdefault("ha_url", "")
+            config["ha_token"] = ""
+            config.setdefault("ha_token_set", False)
+            display_available = self._profile() in (
+                "esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive")
+            config["caps"]["boot_appearance"] = display_available
+            config["caps"]["boot_logo"] = display_available
+            if display_available:
+                config.setdefault("boot_appearance_font_size", 0)
+                config.setdefault("boot_appearance_text_color", 4294967295)
+                config.setdefault("boot_appearance_background_color", 4294967295)
+                config.setdefault("boot_appearance_default_text_color", 0x646464)
+                config.setdefault("boot_appearance_default_background_color",
+                                  0xFFFFFF if self._profile() == "crowpanel-4.2-interactive" else 0)
+                config.setdefault("boot_logo_slot", 255)
+            else:
+                for key in ("boot_appearance_font_size", "boot_appearance_text_color",
+                            "boot_appearance_background_color", "boot_appearance_default_text_color",
+                            "boot_appearance_default_background_color", "boot_logo_slot"):
+                    config.pop(key, None)
             amplifier_control = self._profile() == "esp32-p4-lcd4b"
             config["caps"]["audio_amplifier_mute"] = amplifier_control
             if amplifier_control:
@@ -223,6 +281,57 @@ class PortalHandler(SimpleHTTPRequestHandler):
             config.setdefault("timezone", "Europe/Brussels")
             config["screen_saver_keeps_panel_awake"] = self._profile() == "jc3248w535"
             self._serve_json(config)
+        elif path == "/api/ha/lookup":
+            if self._profile() != "esp32-p4-lcd4b":
+                self._serve_json({"error": "HA lookup unavailable"}, 404)
+                return
+            if "job" in query:
+                if query["job"][0] != str(self.server.mock_ha_lookup_job) or self.server.mock_ha_lookup_result is None:
+                    self._serve_json({"error": "Lookup expired; retry the lookup."}, 404)
+                else:
+                    status, payload = self.server.mock_ha_lookup_result
+                    self._serve_json(payload, status)
+                return
+            entity = query.get("entity", [""])[0]
+            search = query.get("query", [""])[0]
+            if bool(entity) == bool(search):
+                self._serve_json({"error": "Supply either query or entity."}, 400)
+                return
+            if entity and not re.fullmatch(r"[a-z0-9_]+\.[a-z0-9_]+", entity) or not entity and not 3 <= len(search) <= 80:
+                self._serve_json({"error": "Enter a valid entity ID, or a search of 3 to 80 characters."}, 400)
+                return
+            self.server.mock_ha_lookup_job += 1
+            if self.server.scenario == "load-error":
+                result = (503, {"error": "Home Assistant lookup timed out or could not connect."})
+            elif search and search.lower() == "nonadmin":
+                result = (403, {"error": "Entity search requires a Home Assistant administrator token. Enter an entity ID manually; HA bindings and binding generation still work."})
+            elif entity:
+                detail = HA_ENTITIES.get(entity)
+                result = (200, {"entity_id": entity, "state": detail["state"], "unit": detail["unit"],
+                                "paths": detail["paths"], "more": False}) if detail else (404, {"error": "Home Assistant entity not found."})
+            else:
+                matches = [{"entity_id": key, "name": value["name"]} for key, value in HA_ENTITIES.items()
+                           if search.lower() in key.lower() or search.lower() in value["name"].lower()]
+                result = (200, {"entities": matches[:20], "more": len(matches) > 20})
+            self.server.mock_ha_lookup_result = result
+            self._serve_json({"job": self.server.mock_ha_lookup_job}, 202)
+        elif path == "/api/ha/live":
+            if self._profile() != "esp32-p4-lcd4b":
+                self._serve_json({"error": "HA live unavailable"}, 404)
+                return
+            if self.server.scenario == "load-error":
+                self._serve_json({"error": "Mock HA live status failure"}, 503)
+                return
+            config = self.server.mock_config
+            configured = bool(config.get("ha_url") and config.get("ha_token_set"))
+            unsupported = configured and not config["ha_url"].startswith("http://")
+            self._serve_json({
+                "enabled": True, "configured": configured,
+                "state": "error" if unsupported else "idle" if configured else "unconfigured",
+                "entity_count": 0, "connected": False,
+                "last_error": "Live HA requires an HTTP URL; HTTPS is not downgraded." if unsupported else "",
+                "messages": 0, "reconnects": 0,
+            })
         elif path == "/api/info":
             self._serve_json(self._device_info("catalog" in query))
         elif path == "/api/recipes/catalog":
@@ -263,15 +372,43 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_json({"error": "Alarm unavailable"}, 404)
             else:
                 self._serve_json(self.server.mock_alarms if path.endswith("/config") else self.server.mock_alarm_status)
+        elif path == "/api/component/boot-actions/config":
+            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                self._serve_json({"error": "Boot actions unavailable"}, 404)
+            else:
+                self._serve_json({"actions": self.server.mock_boot_actions})
+        elif path == "/api/boot-logo":
+            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                self._serve_json({"error": "Startup logo unavailable"}, 404)
+            else:
+                active_slot = self.server.mock_config.get("boot_logo_slot", 255)
+                slots = self.server.mock_boot_logo_slots
+                self._serve_json({
+                    "active_slot": active_slot,
+                    "slot0_available": 0 in slots,
+                    "slot1_available": 1 in slots,
+                })
+        elif path == "/api/boot-logo/thumbnail":
+            slot_text = query.get("slot", [""])[0]
+            if slot_text not in ("0", "1"):
+                self._serve_json({"error": "Slot must be 0 or 1"}, 400)
+            elif int(slot_text) not in self.server.mock_boot_logo_slots:
+                self._serve_json({"error": "Logo preview is unavailable"}, 404)
+            else:
+                data, content_type = self.server.mock_boot_logo_slots[int(slot_text)]
+                self._serve_bytes(data, content_type)
         elif path == "/api/bindings":
+            schema = copy.deepcopy(self.server.pad_fixture["binding_schema"])
+            if self._profile() != "esp32-p4-lcd4b":
+                schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "ha"]
             if "docs" in query:
                 # Generated by: build/host-tests/tests/test_binding_schema_full --emit-json
                 docs = json.loads((MOCK_DIR / "binding-docs.json").read_text(encoding="utf-8"))
-                available = {scheme["name"] for scheme in self.server.pad_fixture["binding_schema"]["schemes"]}
-                docs["schemes"] = [s for s in docs["schemes"] if s["name"] != "alarm" or "alarm" in available]
+                available = {scheme["name"] for scheme in schema["schemes"]}
+                docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha") or s["name"] in available]
                 self._serve_json(docs)
             else:
-                self._serve_json(self.server.pad_fixture["binding_schema"])
+                self._serve_json(schema)
         elif path == "/api/pad/blocks":
             self._serve_json(self.server.pad_fixture["blocks"])
         elif path == "/api/pad/button_sizes":
@@ -359,6 +496,48 @@ class PortalHandler(SimpleHTTPRequestHandler):
         query = parse_qs(parsed.query)
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
+
+        if path == "/api/component/boot-actions/config":
+            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                self._serve_json({"error": "Boot actions unavailable"}, 404)
+                return
+            try:
+                data = json.loads(body.decode("utf-8")) if body else {}
+                actions = data["actions"]
+                if not isinstance(actions, list) or len(actions) > 3 or not all(isinstance(action, dict) for action in actions):
+                    raise ValueError()
+            except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+                self._serve_json({"error": "Invalid boot actions"}, 400)
+                return
+            if self.server.scenario == "save-error":
+                self._serve_json({"error": "Mock boot-action save failure"}, 503)
+                return
+            self.server.mock_boot_actions = copy.deepcopy(actions)
+            self._serve_json({"success": True})
+            return
+
+        if path == "/api/boot-logo/upload":
+            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                self._serve_json({"error": "Startup logo unavailable"}, 404)
+                return
+            if not body or len(body) > 1024 * 1024:
+                self._serve_json({"message": "Image is empty or exceeds 1 MiB"}, 413)
+                return
+            if body.startswith(b"\x89PNG\r\n\x1a\n"):
+                content_type = "image/png"
+            elif body.startswith(b"\xff\xd8") and body.endswith(b"\xff\xd9"):
+                content_type = "image/jpeg"
+            else:
+                self._serve_json({"message": "Use PNG or baseline (non-progressive) JPEG, up to 1 MiB and 1,000,000 pixels"}, 400)
+                return
+            if self.server.scenario == "save-error":
+                self._serve_json({"message": "Mock logo storage failure"}, 507)
+                return
+            active_slot = self.server.mock_config.get("boot_logo_slot", 255)
+            slot = 1 if active_slot == 0 else 0
+            self.server.mock_boot_logo_slots[slot] = (body, content_type)
+            self._serve_json({"success": True, "slot": slot})
+            return
 
         if path == "/api/fonts/upload":
             name = query.get("name", [""])[0]
@@ -468,6 +647,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
             return
 
         if path in ("/api/pad", "/api/pad/resolve", "/api/component/button-defaults/config",
+                    "/api/component/dialog-appearance/test",
                     "/api/component/display/screen", "/api/recipes/catalog", "/__mock/reset"):
             try:
                 data = json.loads(body.decode("utf-8")) if body else {}
@@ -476,7 +656,15 @@ class PortalHandler(SimpleHTTPRequestHandler):
             except (UnicodeDecodeError, ValueError):
                 self._serve_json({"error": "Invalid JSON object"}, 400)
                 return
-            if path == "/api/recipes/catalog":
+            if path == "/api/component/dialog-appearance/test":
+                if data.get("type") not in {"notification", "confirmation"} or not isinstance(data.get("appearance"), dict):
+                    self._serve_json({"error": "Invalid dialog appearance test"}, 400)
+                    return
+                if self.server.scenario == "save-error":
+                    self._serve_json({"error": "Mock display unavailable"}, 503)
+                    return
+                self.server.mock_dialog_test = copy.deepcopy(data)
+            elif path == "/api/recipes/catalog":
                 if len(body) > 64 * 1024:
                     self._serve_json({"error": "Recipe catalog exceeds 64 KiB"}, 413)
                     return
@@ -545,7 +733,10 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
         if path == "/api/config":
             try:
-                self.server.mock_config.update(json.loads(body.decode("utf-8")))
+                update = json.loads(body.decode("utf-8"))
+                if update.pop("ha_token", ""):
+                    self.server.mock_config["ha_token_set"] = True
+                self.server.mock_config.update(update)
             except (UnicodeDecodeError, json.JSONDecodeError):
                 self.send_error(400, "Invalid JSON")
                 return
@@ -590,6 +781,17 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/boot-logo":
+            if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
+                self._serve_json({"message": "Boot logo unavailable"}, 404)
+            elif self.server.mock_config.get("boot_logo_slot", 255) != 255:
+                self._serve_json({"message": "Select the device logo before deleting uploaded logos"}, 409)
+            elif self.server.scenario == "save-error":
+                self._serve_json({"message": "Mock boot-logo deletion failure"}, 507)
+            else:
+                self.server.mock_boot_logo_slots.clear()
+                self._serve_json({"success": True})
+            return
         if parsed.path == "/api/fonts":
             name = parse_qs(parsed.query).get("name", [""])[0]
             fonts = getattr(self.server, "mock_fonts", {})
@@ -652,6 +854,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             "{{FIRMWARE_VERSION}}": "dev-mock",
             "{{HEALTH_WIDGET}}": (APP_WEB_DIR / "_health_widget.html").read_text(encoding="utf-8"),
             "{{REBOOT_OVERLAY}}": (APP_WEB_DIR / "_reboot_overlay.html").read_text(encoding="utf-8"),
+            "{{BINDING_HELP}}": (APP_WEB_DIR / "_binding_help.html").read_text(encoding="utf-8")
+                if profile in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive") else "",
         }
         for marker, value in replacements.items():
             shell = shell.replace(marker, value)
@@ -670,6 +874,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
         files = []
         enabled = True
         flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
+        if self._profile() == "esp32-p4-lcd4b":
+            flags.add("HAS_HA_LIVE")
         if self._profile() == "crowpanel-4.2-interactive":
             flags = {"HAS_DISPLAY"}
         if self._profile() == "jc3248w535":
@@ -727,6 +933,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 {"id": "alarm-schedule", "display_name": "Schedule", "portal_script": "/portal_alarms.js"},
                 {"id": "alarm-behavior", "display_name": "Behavior", "portal_script": "/portal_alarms.js"}]})
         for category in nav["categories"]:
+            if category["id"] == "pads":
+                category["items"].append({"id": "dialog-appearance", "display_name": "Dialog appearance"})
             if category["id"] == "display" and profile == "crowpanel-4.2-interactive":
                 category["items"].append({"id": "epaper-refresh", "display_name": "E-paper Presentation",
                                           "portal_script": "/portal-epaper-refresh.js"})
@@ -864,13 +1072,24 @@ def main():
         print(f"ERROR: Prototype directory not found: {PROTO_DIR}", file=sys.stderr)
         sys.exit(1)
 
-    server = HTTPServer(("127.0.0.1", args.port), PortalHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), PortalHandler)
     server.profile = args.profile
     server.logs_started = time.monotonic()
     reset_pad_fixtures(server, args.scenario)
     server.mock_config = {
+        "dialog_appearance": {
+            "notification": {**DIALOG_APPEARANCE_DEFAULTS, "position": 2},
+            "confirmation": {
+                **DIALOG_APPEARANCE_DEFAULTS,
+                "button_width": 0, "button_height": 0,
+                "approve_background": "#2563EB", "approve_color": "#FFFFFF",
+                "cancel_background": "#5F6368", "cancel_color": "#FFFFFF",
+            },
+        },
         **SCREENSAVER_DEFAULTS,
         "device_name": "Kitchen Pad",
+        "wifi_failure_mode": "ap",
+        "ap_password": "",
         "backlight_brightness": 80,
         "operating_mode": "always_on",
         "duty_cycle_wake_seconds": 120,

@@ -720,7 +720,7 @@ emit_chunked_variants() {
 
     local bundle_name chunks ckey f n_flags n_indep n_classes n_variants
     local if_expr active_flags cflag include
-    local max_variants=128
+    local max_variants=256
     local variant_tmp variant_orig_size variant_gz_size variant_gz vnum
     for bundle_name in "${!bundle_chunks_ref[@]}"; do
         chunks="${bundle_chunks_ref[$bundle_name]}"
@@ -749,8 +749,8 @@ emit_chunked_variants() {
         # model only independent flags expand exponentially, so this cap is
         # far harder to hit than the old 2^N one; it exists to catch a bundle
         # that accidentally accumulates many independent flags.
-        # Four independent feature chunks plus the five mutually exclusive
-        # device classes produce 96 reachable variants. Keep a bounded cap so
+        # Five independent feature chunks plus the five mutually exclusive
+        # device classes produce 192 variants. Keep a bounded cap so
         # a future independent chunk cannot silently explode generated assets.
         if [[ $n_variants -gt $max_variants ]]; then
             echo "  ✗ Bundle $bundle_name expands to $n_variants variants" \
@@ -847,6 +847,16 @@ for html_file in "${HTML_FILES[@]}"; do
     # Gzip compress
     gzipped=$(gzip_to_c_array "$minified")
     HTML_GZIP_CONTENTS["$filename"]="$gzipped"
+    if [[ "$filename" == "shell" ]]; then
+        without_bindings=$(python3 "$SCRIPT_DIR/_render_html_template.py" \
+            --web-dir "$WEB_DIR" \
+            --input "$html_file" \
+            --project-name "$PROJECT_NAME" \
+            --project-display-name "$PROJECT_DISPLAY_NAME" \
+            --firmware-version "$FIRMWARE_VERSION" \
+            --without-binding-help)
+        HTML_GZIP_CONTENTS["${filename}_without_bindings"]=$(gzip_to_c_array "$without_bindings")
+    fi
     gzipped_size=$(echo -n "$minified" | gzip -9 -c | wc -c)
     
     ORIGINAL_SIZES["html_$filename"]=$original_size
@@ -1049,7 +1059,7 @@ asset_feature_flag() {
     case "$stem" in
         alarm_schedule|alarm_behavior|portal_alarms)
             echo "ALARM_ENABLED" ;;
-        pad_editor|swipe_actions|boot_actions|button_defaults|timers|brightness|rotation|screen_preview|screensaver|image_library|portal_image_library)
+        pad_editor|swipe_actions|boot_actions|system_screens|button_defaults|dialog_appearance|portal_dialog_appearance|timers|brightness|rotation|screen_preview|screensaver|image_library|portal_image_library)
             echo "HAS_DISPLAY" ;;
         mqtt|ha_discovery)
             echo "HAS_MQTT" ;;
@@ -1098,6 +1108,9 @@ asset_feature_flag() {
 
 # Generate HTML sections (gzipped)
 for filename in "${!HTML_CONTENTS[@]}"; do
+    if [[ "$filename" == "shell" ]]; then
+        echo "#if HAS_DISPLAY" >> "$OUTPUT_FILE"
+    fi
     cat >> "$OUTPUT_FILE" << EOF
 // HTML content from src/app/web/${filename}.html (gzipped)
 const uint8_t ${filename}_html_gz[] PROGMEM = {
@@ -1105,6 +1118,16 @@ ${HTML_GZIP_CONTENTS[$filename]}
 };
 
 EOF
+    if [[ "$filename" == "shell" ]]; then
+        cat >> "$OUTPUT_FILE" << EOF
+#else
+const uint8_t ${filename}_html_gz[] PROGMEM = {
+${HTML_GZIP_CONTENTS[${filename}_without_bindings]}
+};
+#endif // HAS_DISPLAY
+
+EOF
+    fi
 done
 
 # Generate fragment HTML sections (gzipped)

@@ -4,6 +4,7 @@
 
 #include "data_stream.h"
 #include "display_manager.h"
+#include "device_dialog.h"
 #include "pad_layout.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
@@ -36,8 +37,8 @@
 #include "drivers/jd9165_dsi_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_epaper_driver.h"
-#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
-#include "drivers/reterminal_e1003_epaper_driver.h"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
+#include "drivers/it8951_epaper_driver.h"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
 #include "drivers/crowpanel42_epaper_driver.h"
 #endif
@@ -59,7 +60,7 @@ DisplayManager* displayManager = nullptr;
 DisplayManager::DisplayManager(DeviceConfig* cfg) 
 		: driver(nullptr), display(nullptr), config(cfg), currentScreen(nullptr), pendingScreen(nullptr),
 		screenHistoryCount(0), skipHistoryPush(false), transientResumeScreen(nullptr), transientScreenActive(false),
-					 infoScreen(cfg, this), testScreen(this), fpsScreen(this),
+					 infoScreen(cfg, this), wifiSetupScreen(cfg), testScreen(this), fpsScreen(this),
 			#if HAS_TOUCH && LV_USE_CANVAS
 			touchTestScreen(this),
 			#endif
@@ -91,8 +92,8 @@ DisplayManager::DisplayManager(DeviceConfig* cfg)
 		driver = new JD9165_DSI_Driver();
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 		driver = new Inkplate6FlickEpaperDriver(config);
-		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
-		driver = new ReTerminalE1003EpaperDriver(config);
+		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
+		driver = new IT8951EpaperDriver(config);
 		#elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
 		driver = new CrowPanel42EpaperDriver();
 		#else
@@ -139,6 +140,7 @@ DisplayManager::~DisplayManager() {
 		displayJobSlot().beginShutdown();
 		lvglStopRequested = true;
 		if (!lvglTaskHandle) {
+			device_dialog_close();
 			lvglTaskStopped = true;
 		}
 		while (!displayJobSlot().shutdown() || !lvglTaskStopped) {
@@ -164,8 +166,9 @@ DisplayManager::~DisplayManager() {
 				currentScreen->hide();
 		}
 		
-		splashScreen.destroy();
 		infoScreen.destroy();
+		wifiSetupScreen.destroy();
+		splashScreen.destroy();
 		testScreen.destroy();
 		fpsScreen.destroy();
 		#if HAS_TOUCH && LV_USE_CANVAS
@@ -361,6 +364,9 @@ void DisplayManager::initLVGL() {
 		// Set flush callback and user data
 		lv_display_set_flush_cb(display, DisplayManager::flushCallback);
 		lv_display_set_user_data(display, this);
+#if HAS_DISPLAY_DIAGNOSTICS
+		lv_display_add_event_cb(display, DisplayManager::displayEventCallback, LV_EVENT_ALL, this);
+#endif
 		
 		// Allocate LVGL draw buffer(s).
 		// v9 uses raw byte buffers; size = pixels × bytes_per_pixel (2 for RGB565).
@@ -461,12 +467,31 @@ void DisplayManager::init() {
 		
 		LOGT("Display", "Manager init start");
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 		data_stream_init();
 #endif
 		
 		// Create all screens
+#if HAS_DISPLAY
+		const uint32_t boot_text = config &&
+				config->boot_appearance_text_color != CONFIG_BOOT_COLOR_INHERIT
+				? config->boot_appearance_text_color : BOOT_APPEARANCE_DEFAULT_TEXT_RGB;
+		const uint32_t boot_background = config &&
+				config->boot_appearance_background_color != CONFIG_BOOT_COLOR_INHERIT
+				? config->boot_appearance_background_color : BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB;
+		bool custom_logo_selected = false;
+#if HAS_BOOT_LOGO
+		custom_logo_selected = config &&
+				config->boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE;
+#endif
+		const uint8_t boot_font_size =
+				config ? config->boot_appearance_font_size : BOOT_APPEARANCE_DEFAULT_FONT_SIZE;
+		splashScreen.setAppearance(boot_font_size, boot_text, boot_background, custom_logo_selected);
+		wifiSetupScreen.setAppearance(boot_font_size, boot_text, boot_background);
+		infoScreen.setAppearance(boot_font_size, boot_text, boot_background);
+#endif
 		splashScreen.create();
+		wifiSetupScreen.create();
 		for (uint8_t i = 0; i < MAX_PADS; i++) {
 				padScreens[i]->create();
 		}

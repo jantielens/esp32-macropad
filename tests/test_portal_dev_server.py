@@ -1,9 +1,11 @@
+import base64
 import copy
 import importlib.util
 import json
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+import socket
 import sys
 import tempfile
 import threading
@@ -25,7 +27,7 @@ from widget_manifest import load_widgets, firmware_includes, portal_assets, vali
 class PortalDevServerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server = PORTAL.HTTPServer(("127.0.0.1", 0), PORTAL.PortalHandler)
+        cls.server = PORTAL.ThreadingHTTPServer(("127.0.0.1", 0), PORTAL.PortalHandler)
         cls.server.profile = "esp32-p4-lcd4b"
         cls.server.logs_started = PORTAL.time.monotonic()
         cls.server.mock_config = {
@@ -33,6 +35,7 @@ class PortalDevServerTest(unittest.TestCase):
             "caps": {"ble": True, "ble_hid": True, "usb_hid": True, "mqtt": True},
             "backlight_brightness": 80, "keyboard_transport": "none",
             "keyboard_active_transport": "none", "device_name": "Mock",
+            "wifi_failure_mode": "ap", "ap_password": "",
         }
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -61,16 +64,37 @@ class PortalDevServerTest(unittest.TestCase):
             return response.status, text if raw else json.loads(text)
 
     def test_production_assets_and_templates(self):
+        status, shell = self.request("/", raw=True)
+        self.assertEqual(status, 200)
+        self.assertNotIn("{{", shell)
+        self.assertEqual(shell.count('id="binding-help-overlay"'), 1)
+        headless_shell = self.request("/?profile=reterminal-e1003-frame", raw=True)[1]
+        self.assertNotIn('id="binding-help-overlay"', headless_shell)
+        self.assertNotIn("{{", headless_shell)
         status, fragment = self.request("/api/section/pad-editor", raw=True)
         self.assertEqual(status, 200)
         self.assertNotIn("{{", fragment)
         self.assertIn('id="pad-edit-gauge-min"', fragment)
+        self.assertNotIn('id="binding-help-overlay"', fragment)
         status, bundle = self.request("/portal.js", raw=True)
         self.assertEqual(status, 200)
         self.assertIn("async function padInit()", bundle)
         self.assertLess(bundle.index("function actionEditorHTML("), bundle.index("async function padInit()"))
         self.assertNotIn("portal_shutter", bundle)
-        self.assertEqual(self.request("/api/bindings")[0], 200)
+        self.assertIn("function haBindingBuilderHTML(", bundle)
+        for profile, display in (("jc3248w535", True), ("reterminal-e1003-frame", False)):
+            other_bundle = self.request("/portal.js", profile=profile, raw=True)[1]
+            self.assertEqual("function showBindingHelp(" in other_bundle, display)
+            self.assertNotIn("function haBindingBuilderHTML(", other_bundle)
+            other_styles = self.request("/portal-all.css", profile=profile, raw=True)[1]
+            self.assertEqual(".binding-docs-overlay" in other_styles, display)
+            self.assertNotIn(".binding-builder-step", other_styles)
+            for suffix in ("", "?docs=1"):
+                other_schema = self.request("/api/bindings" + suffix, profile=profile)[1]
+                self.assertNotIn("ha", {scheme["name"] for scheme in other_schema["schemes"]})
+        status, schema = self.request("/api/bindings")
+        self.assertEqual(status, 200)
+        self.assertIn("ha", {scheme["name"] for scheme in schema["schemes"]})
         status, styles = self.request("/portal-all.css", raw=True)
         self.assertEqual(status, 200)
         headless_styles = self.request("/portal-all.css", profile="reterminal-e1003-frame", raw=True)[1]
@@ -78,6 +102,60 @@ class PortalDevServerTest(unittest.TestCase):
             widget_styles = (ROOT / "src/app/web" / filename).read_text().strip()
             self.assertIn(widget_styles, styles)
             self.assertNotIn(widget_styles, headless_styles)
+
+    def test_idle_browser_connection_does_not_block_requests(self):
+        with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=5):
+            status, config = self.request("/api/config")
+            self.assertEqual(status, 200)
+            self.assertEqual(config["device_name"], "Mock")
+
+    def test_wifi_setup_config_fixture(self):
+        status, config = self.request("/api/config")
+        self.assertEqual(status, 200)
+        self.assertEqual(config["wifi_failure_mode"], "ap")
+        self.assertEqual(config["ap_password"], "")
+
+        status, _ = self.request("/api/config?no_reboot=1", method="POST",
+            body={"wifi_failure_mode": "offline", "ap_password": "share-me-123"})
+        self.assertEqual(status, 200)
+        saved = self.request("/api/config")[1]
+        self.assertEqual(saved["wifi_failure_mode"], "offline")
+        self.assertEqual(saved["ap_password"], "share-me-123")
+
+        status, _ = self.request("/api/config?no_reboot=1", method="POST",
+            body={"wifi_failure_mode": "ap", "ap_password": ""})
+        self.assertEqual(status, 200)
+        cleared = self.request("/api/config")[1]
+        self.assertEqual(cleared["wifi_failure_mode"], "ap")
+        self.assertEqual(cleared["ap_password"], "")
+
+    def test_ha_lookup_jobs(self):
+        config = self.request("/api/config")[1]
+        self.assertTrue(config["caps"]["ha_live"])
+        self.assertNotIn("capabilities", config)
+        headless_config = self.request("/api/config", profile="reterminal-e1003-frame")[1]
+        self.assertFalse(headless_config["caps"]["ha_live"])
+        status, started = self.request("/api/ha/lookup?query=living")
+        self.assertEqual(status, 202)
+        status, matches = self.request("/api/ha/lookup?job=" + str(started["job"]))
+        self.assertEqual(status, 200)
+        self.assertEqual(len(matches["entities"]), 2)
+        self.assertFalse(matches["more"])
+        started = self.request("/api/ha/lookup?entity=light.kitchen")[1]
+        detail = self.request("/api/ha/lookup?job=" + str(started["job"]))[1]
+        self.assertEqual(detail["state"], "on")
+        self.assertIn({"path": "attributes.brightness", "value": "128"}, detail["paths"])
+        self.assertEqual(self.request("/api/ha/lookup?job=0")[0], 404)
+        started = self.request("/api/ha/lookup?query=nonadmin")[1]
+        status, denied = self.request("/api/ha/lookup?job=" + str(started["job"]))
+        self.assertEqual(status, 403)
+        self.assertIn("administrator", denied["error"])
+        self.assertEqual(self.request("/api/ha/lookup?entity=light.kitchen")[0], 202)
+        self.assertEqual(self.request("/api/ha/lookup?query=ab")[0], 400)
+        self.assertEqual(self.request("/api/ha/lookup?query=living", profile="reterminal-e1003-frame")[0], 404)
+        self.server.scenario = "load-error"
+        started = self.request("/api/ha/lookup?query=living")[1]
+        self.assertEqual(self.request("/api/ha/lookup?job=" + str(started["job"]))[0], 503)
 
     def test_widget_manifest(self):
         widgets = load_widgets()
@@ -173,6 +251,8 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(config["epaper_bw_conversion"], "threshold")
         self.assertEqual(config["epaper_bw_threshold"], 128)
+        self.assertEqual(config["epaper_vcom_mv"], 0)
+        self.assertEqual(config["epaper_default_vcom_mv"], 0)
         self.assertEqual(config["epaper_supported_render_modes"], ["bw"])
         nav = self.request("/api/portal/nav", profile=profile)[1]
         items = [item for category in nav["categories"] for item in category["items"]]
@@ -182,13 +262,17 @@ class PortalDevServerTest(unittest.TestCase):
         previous = copy.deepcopy(self.server.mock_config)
         try:
             self.assertEqual(self.request("/api/config?no_reboot=1", method="POST",
-                body={"epaper_bw_conversion": "blue_noise", "epaper_bw_threshold": "96"}, profile=profile)[0], 200)
+                body={"epaper_bw_conversion": "blue_noise", "epaper_bw_threshold": "96",
+                      "epaper_vcom_mv": "1480"}, profile=profile)[0], 200)
             saved = self.request("/api/config", profile=profile)[1]
             self.assertEqual(saved["epaper_bw_conversion"], "blue_noise")
             self.assertEqual(int(saved["epaper_bw_threshold"]), 96)
+            self.assertEqual(int(saved["epaper_vcom_mv"]), 1480)
             lcd = self.request("/api/config")[1]
             self.assertNotIn("epaper_bw_conversion", lcd)
             self.assertNotIn("epaper_bw_threshold", lcd)
+            self.assertNotIn("epaper_vcom_mv", lcd)
+            self.assertNotIn("epaper_default_vcom_mv", lcd)
         finally:
             self.server.mock_config = previous
 
@@ -470,6 +554,69 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(self.request("/api/section/epaper-image", profile="reterminal-e1003-frame", raw=True)[0], 200)
         self.assertEqual(self.request("/?profile=unknown", raw=True)[0], 400)
 
+    def test_boot_settings_and_logo_fixtures(self):
+        previous = copy.deepcopy(self.server.mock_config)
+        try:
+            config = self.request("/api/config")[1]
+            self.assertTrue(config["caps"]["boot_appearance"])
+            self.assertTrue(config["caps"]["boot_logo"])
+            self.assertEqual(config["boot_appearance_font_size"], 0)
+            self.assertEqual(config["boot_logo_slot"], 255)
+            fragment = self.request("/api/section/boot-actions", raw=True)[1]
+            self.assertNotIn('id="boot-appearance-settings"', fragment)
+            self.assertIn('onclick="saveBootActions()"', fragment)
+            fragment = self.request("/api/section/system-screens", raw=True)[1]
+            self.assertIn('id="boot-appearance-settings"', fragment)
+            self.assertIn('id="boot-logo-settings"', fragment)
+            self.assertIn('onclick="saveSystemScreenAppearance()"', fragment)
+            self.assertNotIn('id="boot-action-editors"', fragment)
+            self.assertIn('Reset to device default', fragment)
+            self.assertIn('onclick="deleteBootLogo()"', fragment)
+            self.assertIn('baseline (non-progressive) JPEG', fragment)
+
+            self.assertEqual(self.request("/api/component/boot-actions/config")[1], {"actions": []})
+            actions = [{"type": "notify", "message": "Local mock"}]
+            self.assertEqual(self.request("/api/component/boot-actions/config", "POST",
+                                          {"actions": actions})[0], 200)
+            self.assertEqual(self.request("/api/component/boot-actions/config")[1], {"actions": actions})
+
+            png = base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p2cAAAAASUVORK5CYII=")
+            status, uploaded = self.request("/api/boot-logo/upload", "POST", png)
+            self.assertEqual(status, 200)
+            self.assertEqual(uploaded, {"success": True, "slot": 0})
+            logo_status = self.request("/api/boot-logo")[1]
+            self.assertEqual(logo_status["active_slot"], 255)
+            self.assertTrue(logo_status["slot0_available"])
+            with urlopen(self.base + "/api/boot-logo/thumbnail?slot=0", timeout=5) as response:
+                self.assertEqual(response.headers["Content-Type"], "image/png")
+                self.assertEqual(response.read(), png)
+
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                          {"boot_logo_slot": 0})[0], 200)
+            self.assertEqual(self.request("/api/boot-logo")[1]["active_slot"], 0)
+            status, second_upload = self.request("/api/boot-logo/upload", "POST", png)
+            self.assertEqual(status, 200)
+            self.assertEqual(second_upload, {"success": True, "slot": 1})
+            invalid_status, invalid_upload = self.request("/api/boot-logo/upload", "POST", b"not an image")
+            self.assertEqual(invalid_status, 400)
+            self.assertIn("baseline (non-progressive) JPEG", invalid_upload["message"])
+            self.assertEqual(self.request("/api/boot-logo", "DELETE")[0], 409)
+            self.assertEqual(self.request("/api/config?no_reboot=1", "POST",
+                                          {"boot_logo_slot": 255})[0], 200)
+            self.assertEqual(self.request("/api/boot-logo", "DELETE"), (200, {"success": True}))
+            deleted_status = self.request("/api/boot-logo")[1]
+            self.assertEqual(deleted_status["active_slot"], 255)
+            self.assertFalse(deleted_status["slot0_available"])
+            self.assertFalse(deleted_status["slot1_available"])
+            self.assertEqual(self.request("/api/boot-logo/thumbnail?slot=0")[0], 404)
+            headless = self.request("/api/config", profile="reterminal-e1003-frame")[1]
+            self.assertFalse(headless["caps"]["boot_appearance"])
+            self.assertFalse(headless["caps"]["boot_logo"])
+            self.assertEqual(self.request("/api/boot-logo", profile="reterminal-e1003-frame")[0], 404)
+        finally:
+            self.server.mock_config = previous
+
     def test_layouts_and_template(self):
         for pad in self.server.mock_pads.values():
             self.assertTrue(PORTAL.PortalHandler._valid_pad(pad))
@@ -557,6 +704,18 @@ class PortalDevServerTest(unittest.TestCase):
         for path in ("/api/pad/blocks", "/api/sounds/list", "/api/extensions", "/api/images"):
             self.assertEqual(self.request(path)[0], 200)
 
+    def test_dialog_appearance_test_is_not_saved(self):
+        before = self.request("/api/config")[1]
+        for kind in ("notification", "confirmation"):
+            payload = {"type": kind, "appearance": {
+                "background_opacity": 0, "background_pattern": "diagonal",
+                "background_pattern_color": "#226D78", "pattern_spacing": 12,
+                "pattern_stroke_width": 2}}
+            self.assertEqual(self.request("/api/component/dialog-appearance/test", "POST", payload)[0], 200)
+            self.assertEqual(self.server.mock_dialog_test, payload)
+            self.assertEqual(self.request("/api/config")[1], before)
+        self.assertEqual(self.request("/api/component/dialog-appearance/test", "POST", {"type": "unknown"})[0], 400)
+
     def test_epaper_appearance_defaults(self):
         profile = "crowpanel-4.2-interactive"
         self.assertEqual(self.request("/api/component/button-defaults/config", "POST", {}, profile=profile)[0], 200)
@@ -608,7 +767,11 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual({action["type"] for action in catalog}, expected)
         for action in catalog:
             source = (actions_dir / (action["type"] + "_action.cpp")).read_text()
-            self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
+            if action["type"] in {"notify", "confirm"}:
+                source += (actions_dir / "dialog_action.h").read_text()
+                self.assertIn(json.dumps(action["label"]), source)
+            else:
+                self.assertIn('action["label"] = ' + json.dumps(action["label"]), source)
             self.assertIn('action["group"] = ' + json.dumps(action["group"]), source)
         fields = ("name", "icon", "second_icon", "axis_field", "horizontal_icon", "vertical_icon", "default_axis")
         widgets = {widget["type"]: widget for widget in self.server.pad_fixture["widget_catalog"]}

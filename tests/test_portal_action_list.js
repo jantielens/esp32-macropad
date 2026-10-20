@@ -195,3 +195,77 @@ context.actionEditorTypeChanged('c0');
 assert.strictEqual(document.getElementById('c0-group')._summary.textContent, 'Add action');
 
 console.log('portal_action_list: PASS');
+
+async function checkIndependentBootSaves() {
+    const nodes = new Map();
+    for (const id of ['boot-appearance-settings', 'boot-logo-settings', 'system-screens-save',
+        'boot-appearance-font-size', 'boot-appearance-text-color', 'boot-appearance-background-color',
+        'boot-logo-status', 'boot-logo-preview-wrap', 'boot-logo-preview']) {
+        nodes.set(id, new Element());
+    }
+    const requests = [];
+    const messages = [];
+    let fail = false;
+    let reboot = false;
+    const ctx = {
+        console: { error() {} },
+        document: { getElementById: id => nodes.get(id) || null },
+        actionEditorSlotPrefixes: context.actionEditorSlotPrefixes,
+        actionEditorListBuild: () => [{ type: 'notify', message: 'Hello' }],
+        actionEditorHandleError: () => false,
+        padInitBindableColor() {},
+        setPendingReboot() { reboot = true; },
+        showMessage: (text, kind) => messages.push({ text, kind }),
+        fetch: async (url, options) => {
+            requests.push({ url, options });
+            return {
+                ok: !fail,
+                json: async () => options ? { success: !fail, message: 'Save failed' } : {
+                    caps: { boot_appearance: true, boot_logo: false },
+                    boot_appearance_font_size: 18,
+                    boot_appearance_text_color: 4294967295,
+                    boot_appearance_background_color: 0,
+                    boot_appearance_default_text_color: 0xFFFFFF,
+                    boot_appearance_default_background_color: 0
+                }
+            };
+        }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_config_actions.js', 'utf8'), ctx);
+    await ctx.saveBootActions();
+    assert.strictEqual(requests.length, 1);
+    assert.strictEqual(requests[0].url, '/api/component/boot-actions/config');
+    assert.deepStrictEqual(JSON.parse(requests[0].options.body), {
+        actions: [{ type: 'notify', message: 'Hello' }]
+    });
+    await ctx.bootAppearanceInit();
+    assert.strictEqual(nodes.get('system-screens-save').disabled, false);
+    requests.length = 0;
+    await ctx.saveSystemScreenAppearance();
+    assert.strictEqual(requests.length, 1);
+    assert.strictEqual(requests[0].url, '/api/config?no_reboot=1');
+    assert.deepStrictEqual(JSON.parse(requests[0].options.body), {
+        boot_appearance_font_size: 18,
+        boot_appearance_text_color: 4294967295,
+        boot_appearance_background_color: 0
+    });
+    assert(reboot);
+    fail = true;
+    reboot = false;
+    await ctx.saveSystemScreenAppearance();
+    assert.strictEqual(messages.at(-1).kind, 'error');
+    assert(!reboot);
+    assert.strictEqual(nodes.get('system-screens-save').disabled, false);
+    await ctx.bootAppearanceInit();
+    assert.strictEqual(nodes.get('system-screens-save').disabled, true);
+    const before = requests.length;
+    await ctx.saveSystemScreenAppearance();
+    assert.strictEqual(requests.length, before, 'failed loads must not overwrite saved appearance');
+    console.log('independent boot actions / appearance saves: PASS');
+}
+
+checkIndependentBootSaves().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

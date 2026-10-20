@@ -17,6 +17,10 @@ PowerMode power_manager_get_boot_mode();
 PowerMode power_manager_get_current_mode();
 void power_manager_set_current_mode(PowerMode mode);
 bool power_manager_should_force_config_mode();
+bool power_manager_should_force_setup_ap();
+// Main-loop/internal-stack only. Success reserves network transition ownership
+// through reboot; the caller must arrange the restart.
+bool power_manager_request_setup_ap_restart();
 
 bool power_manager_is_deep_sleep_wake();
 bool power_manager_should_publish_mqtt_discovery();

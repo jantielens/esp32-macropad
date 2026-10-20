@@ -1,4 +1,7 @@
-# Home Assistant + MQTT Integration
+---
+title: Home Assistant and MQTT Integration
+description: Independent direct Home Assistant live bindings and MQTT discovery architecture.
+---
 
 This project includes an optional MQTT integration designed for Home Assistant (HA) using **MQTT Discovery**.
 
@@ -7,6 +10,109 @@ Key design choices:
 - **HA MQTT Discovery** for auto-creating entities
 - **Retained** discovery + state so HA can restart without losing entities/values
 - System/health entities are marked as **Diagnostic** in HA (`entity_category: diagnostic`)
+
+## Direct HA live bindings
+
+`HAS_HA_LIVE` gates direct live entity access independently of `HAS_MQTT` and
+defaults to `(HAS_DISPLAY && HAS_PSRAM)`.
+The existing `ha_url` and write-only `ha_token` settings serve live state,
+REST service actions, and Recorder history. A successful configuration save
+safely applies the HA client's URL/token settings without reboot. There is no
+separate live credential or fixed compile-time entity list. The Binding Reference & Builders
+dialog provides [assisted HA binding authoring](../user/integrations/home-assistant.md#build-an-ha-binding)
+through an independent, on-demand lookup worker.
+
+Bindings use `[ha:entity_id;path;format]`. Empty or `.` paths select `state`;
+explicit `state`, `attributes.brightness`, and other dotted paths select values
+from the entity state document. Formatting and pipe fallbacks follow MQTT
+binding semantics. `unknown`, `unavailable`, missing entities, and disconnected
+data resolve as unavailable rather than ordinary state strings. Removal also
+invalidates the value; a quiet, connected entity's value does not expire.
+
+```text
+[ha:sensor.living_room_temperature;;%.1f C|---]
+[ha:light.living_room;attributes.brightness;%.0f|---]
+```
+
+The live client uses HTTP/plain WebSocket only. An HTTPS URL is not downgraded
+and cannot establish a live connection; REST actions and history retain their
+existing behavior. Use a trusted local network and a suitably restricted HA
+account: bearer credentials and entity data cross the network in plaintext.
+
+### Bounds and ownership
+
+The client requires PSRAM and supports at most 64 entities. Each retained
+serialized entity snapshot occupies at most 2048 bytes, including its NUL
+terminator. The 15 KiB message limit applies to the full reassembled message,
+not separately to each WebSocket fragment. Attribute-heavy messages can reach
+this bound before the entity cap. JSON parsing has a shared, bounded 64 KiB
+allocation budget across parser documents. These are bounded current-state
+snapshots, not an event queue or Recorder history.
+
+Runtime resources and cache storage are allocated lazily when credentials are
+configured and an entity is referenced. The worker has an 8192-byte PSRAM stack;
+the main cache uses strictly PSRAM. WebSockets' transient `malloc` allocations
+may still use internal RAM: this is not a zero-internal-RAM transport.
+
+The background worker owns sockets, authentication, JSON parsing, and
+reconnects. Snapshot copies are protected by a mutex; binding resolution never
+runs in the network task or performs network requests from rendering code.
+The shared pad-source scanner holds the existing display lock while setting
+and restoring named-binding context, including when MQTT invokes it from the
+web task.
+Configuration changes are applied at safe worker checkpoints. OTA activity
+pauses competing live work.
+
+The client issues a separate `subscribe_entities` command per entity. Reference
+collection scans all saved pads, including named bindings and nested expression
+bindings, rather than only the displayed pad. Preview references expire after
+60 seconds unless referenced again; this reference lifetime does not expire
+quiet values of entities that remain subscribed.
+
+A successful host test does not establish device memory headroom or HA server
+compatibility.
+
+### Connection diagnostics
+
+`GET /api/config` exposes `capabilities.ha_live`. On supported builds,
+authenticated `GET /api/ha/live` returns:
+
+```json
+{
+  "enabled": true,
+  "configured": true,
+  "state": "connected",
+  "entity_count": 2,
+  "connected": true,
+  "last_error": "",
+  "messages": 12,
+  "reconnects": 0
+}
+```
+
+States are `disabled`, `unconfigured`, `idle`, `connecting`, `authenticating`,
+`subscribing`, `connected`, `retrying`, `paused`, and `error`. Check `last_error`
+when authentication, URL validation, resource bounds, or subscription fails;
+`connected` alone does not prove an individual entity is readable.
+
+Normal logs retain connection outcomes and failures. Select `HALive` with
+`LOG_DIAGNOSTICS` at DEBUG level for allocation details, expected transition
+messages, and five-minute memory summaries. See the
+[logging guidelines](logging-guidelines.md#selecting-diagnostics).
+
+The Home Assistant portal fragment hides live diagnostics unless the capability
+is true. It polls at five-second intervals without overlapping requests, bounds
+each request to eight seconds, skips polling in hidden tabs, and cancels polling
+when navigating away. The local portal server supplies deterministic fixtures;
+it never contacts an HA instance.
+
+Direct state does not publish device entities into HA and does not replace
+MQTT discovery, telemetry, commands, or `[mqtt:...]` bindings. MQTT remains usable
+without HA credentials. Existing MQTT screensaver-wake and camera-trigger source
+plumbing is not proactively extended to HA live sources; live binding support
+does not imply parity with every MQTT-specific feature.
+See the [user setup guide](../user/integrations/home-assistant.md)
+for configuration and examples.
 
 ## Prerequisites
 

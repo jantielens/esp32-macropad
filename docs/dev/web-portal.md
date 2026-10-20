@@ -47,7 +47,14 @@ only pad-editor fixture target; this mock does not replace hardware verification
 ## Overview
 
 The web portal provides:
-- WiFi configuration via captive portal
+- Display > System Screens for the shared boot, Wi-Fi setup, and info screen
+  font size, colors, and logo. Save Appearance persists only these settings;
+  Actions > Boot Actions saves boot actions independently. Appearance changes
+  take effect after reboot.
+- WiFi configuration via captive portal, with titled WiFi Network and
+  Setup AP & Fallback cards and a shared Save button on the WiFi settings page.
+  The fallback card explains provisioning, router changes, and offline use;
+  its failure preference applies only to normal boot
 - Real-time device health monitoring
 - Over-the-air (OTA) firmware updates
 - REST API for programmatic access
@@ -794,6 +801,63 @@ every component in that custom section to the same category ID.
   - Pad selection and naming: Left rail for up to 16 pads with optional custom names (max 31 chars). Labels retain the `Pad X: Name` format whether selected or not; no legacy selection dropdown is needed.
   - **Grid preview**: Configuration overview with consistent widget type markers for local and inherited buttons. Unlabeled widgets show larger symbols and names when space allows; directional symbols follow widget axis settings. Click a button to open its editor
   - Button inspector: Content, Actions, and Appearance tabs retain the complete label, widget, icon, image, confirmation, and appearance forms. Actions and Appearance expose controls without duplicate same-named accordions. Compact action summaries expand into registry-driven editors. The Pad Bindings tab has no duplicate inner heading; each binding groups its name, expression, live preview, and delete control inside one bordered row.
+  - Button builder: On `HAS_HA_LIVE` builds, selected empty positions offer a separate creation dialog for HA value buttons, single-bar and gauge widgets for numeric readings, history charts with up to three values, and entity-toggle buttons supporting the `light` and `switch` domains. Widget scenarios require their type in the device widget catalog. The bar scenario uses raw HA state for its data binding, with separate bottom-label formatting. It exposes range, orientation, and value formatting, not styling. The history scenario owns per-source formatting and colors, shared sampling controls, and scale selection. The dialog reuses `/api/ha/lookup` and binding-format helpers, requires successful entity lookup, and generates ordinary button fields into the draft without saving or executing actions. On mobile, empty-position selection keeps the canvas visible and offers **Edit manually** for the existing inspector. Configured/inherited buttons are not builder targets. See the [creation workflow](../user/pads/editing.md#create-a-button-from-home-assistant).
+    `portal_button_templates.js` owns the `padButtonBuilders` scenario list.
+    Each entry supplies `id`, `label`, `description`, `available(draft)`,
+    `fields(draft)`, `build(draft)`, and `preview(draft)`.
+    The draft contains `sources`, shared `options`, and `previewState`.
+    Each source contains its HA `detail`, display `name`, and per-source `options`.
+    The source list is authoritative; single-value scenarios read its first entry.
+    Extra sources remain available when switching back to a multi-value scenario.
+    `portal_button_builder.js` owns the dialog, lookup cancellation, shared title
+    control, source-list interactions, field rendering and validation, preview
+    orchestration, and draft insertion. Scenarios receive the draft, not dialog or
+    editor-session state.
+    Both modules belong to the `HAS_HA_LIVE` bundle chunk, with templates loaded first.
+
+    Field descriptors declare `name`, `label`, `type`, and `default` together.
+    Supported types are `text`, `number`, `select`, and `color`. The dialog
+    evaluates fields once per entity/scenario selection and uses the same
+    descriptors for defaults, rendering, and validation. Switching scenarios
+    preserves the title and resets other shared options to the new defaults.
+    Reuse `padButtonBuilderDecimalField()` and `padButtonBuilderUnitField(unit)`
+    for the common formatting controls.
+
+    Optional constraints include `required`, `maxlength`, numeric `min`, `max`,
+    and `step` (default `1`; use `'any'` for arbitrary fractions). Numbers must
+    be nonempty and finite. Select `options` are value/label pairs; validation
+    checks membership. Colors must be literal `#RRGGBB` values and reuse the
+    shared color picker hosted inside the native dialog. Text controls allow
+    empty strings unless required. Optional `error` overrides the field's
+    validation message; `link: { label, href }` adds external help.
+    Input stays raw while editing; `build()` converts numeric options as needed.
+    Cross-field rules, firmware limits, and binding validation remain separate
+    from these basic control checks.
+
+    Multi-value scenarios declare `maxSources` and may supply
+    `sourceFields(source, index)` using the same field descriptors. Source options
+    start from those defaults and retain prior edits. Optional
+    `sourceOptions(source, previous)` customizes that merge on scenario selection
+    or entity replacement. The history scenario resets the unit for a different entity while preserving
+    its color and decimal places. The shell does not infer measurement units.
+    Optional `validateSource(source)` throws a scenario-owned error for incompatible
+    entities, both during selection and before generation. Numeric acceptance is
+    a scenario rule, not a picker restriction.
+
+    The shell validates common labels, foreground color, and widget data bindings.
+    Optional `validateOutput(draft, button)` checks scenario-specific output using
+    `padButtonBuilderValidateText(value, byteLimit)` for binding and UTF-8 limits.
+    Keep persisted widget field names and their limits in the scenario. The history
+    scenario also shares one sampling calculation between output and preview text.
+
+    Optional `renderPreview(draft, cell, button)` adds scenario-owned visuals
+    after the shared cell renderer; the button contains preview label overrides.
+    Optional `note` explains settings; `preferred` selects the first applicable
+    suggested scenario; `previewStates` supplies value/label pairs for simulated
+    state controls, and `previewNote(draft)` supplies a dynamic preview caption.
+    Add scenarios through the template list rather than branching the dialog
+    by scenario ID. Keep output generation and specialized previews as JavaScript
+    functions; do not persist builder metadata.
   - Bar-chart Content: Data sources groups each bar's binding, caption, and color/fill. Scale and Layout & style (including Animation) follow, then optional Gridlines and Target groups. Optional bars use fixed collapsed defaults, including when configured or paired. Disabled gridlines and empty targets retain editable styling and validation. Drafts preserve manual disclosure; field IDs and persisted configuration keys are unchanged.
   - Gauge Content: Data sources groups each ring's binding, label, and color, followed by pair controls with rings 2/4 explicitly identified as negative. Scale and Arc & track (including Animation and the existing shared outline controls) precede Needle, Tick marks, and Target. Core groups and ring 1 open on load; optional rings and feature groups start collapsed regardless of configured values. Needle off, tick count 0, and an empty target retain editable styling and validation. Drafts preserve manual disclosure. Angular units, limits, defaults, IDs, and load/build mappings remain unchanged.
   - Background image: One collapsible frame contains unframed Local Image and Camera Feed or Remote Image disclosures plus their shared Scale control. Source visibility follows image-library and remote-fetch capabilities; the frame opens when an image source or letterbox setting is configured.
@@ -1088,6 +1152,115 @@ fields or loop iterations. JSON response bodies and cache policies are unchanged
 not every authentication failure, redirect, or early error response is instrumented.
 
 ## REST API Reference
+
+### Home Assistant Live Status
+
+Authenticated `GET /api/ha/live` is registered only with `HAS_HA_LIVE`.
+`GET /api/config` advertises this support as `caps.ha_live`.
+The response contains `enabled` (boolean), `configured` (boolean), `state`
+(string), `entity_count` (integer), `connected` (boolean), `last_error` (string),
+`messages` (integer), and `reconnects` (integer).
+States are `disabled`, `unconfigured`, `idle`, `connecting`, `authenticating`,
+`subscribing`, `connected`, `retrying`, `paused`, and `error`.
+
+The Home Assistant fragment hides its Live Entity State card on unsupported
+firmware. Supported fragments poll every five seconds, with no overlapping
+requests and an eight-second request timeout. Hidden tabs skip polling;
+`portal-fragment-leave` cancels the active request and timer. Failures remain
+visible, and the next poll can recover. The local development server's P4
+profile supplies live status fixtures; other profiles exercise the hidden card.
+Use `load-error` to exercise a status request failure.
+
+The existing HA URL/token settings serve live bindings, REST service actions,
+and history independently of MQTT. A successful save safely applies HA client
+URL/token settings without reboot. Live transport accepts HTTP/plain WebSocket
+only and never
+downgrades HTTPS; REST actions and history are unaffected. See
+[live binding bounds and diagnostics](home-assistant-mqtt.md#direct-ha-live-bindings).
+
+### Home Assistant Binding Lookup
+
+Authenticated `GET /api/ha/lookup` is available only with `HAS_HA_LIVE`.
+Supply either `query` (3 to 80 UTF-8 bytes) for autocomplete or `entity`
+(a valid entity ID shorter than 96 bytes) for exact lookup. Admission returns
+HTTP 202 with `{"job":123}`. Poll `?job=123`: HTTP 202 means pending, HTTP 200
+returns the result. Only one job runs at a time (HTTP 409 on contention);
+a newer job replaces the previous completed result. Expired job IDs return
+HTTP 404. Clients must ignore stale results and use `cache: 'no-store'`.
+
+Search calls HA's `POST /api/template` with an application-owned template and
+the query in `variables`, not interpolated template source. Matching is
+case-insensitive on entity IDs and friendly names across all state domains.
+Results contain `entities` (at most 20 `{entity_id,name}` objects) and `more`.
+Friendly names are limited to 64 characters. No complete catalogue is downloaded.
+Search requires an HA admin token. Because HA can use HTTP 401 for both a
+non-admin token and invalid authentication, a template 401 triggers a probe of
+HA's `GET /api/`: successful authentication maps to an explanatory HTTP 403;
+invalid credentials remain HTTP 401.
+
+Exact lookup calls `GET /api/states/<entity_id>`, so non-admin users can load
+entities they may read. It returns `entity_id`, `state`, `state_truncated`,
+`unit`, `paths` (`{path,value,truncated?}` samples), and `more`. Suggestions
+include up to 32 scalar dotted attribute paths, traversing up to four object
+levels. Array indexing and delimiter-bearing keys are not suggested. Samples
+are limited to 192 UTF-8 bytes, preserving character boundaries; units to 32.
+`more` indicates omitted collections, depth, path-length or count limits.
+
+Lookup uses the saved local HTTP HA credentials, independently of the live
+subscription cache. A lazy worker has an 8 KiB PSRAM stack, a retained 12 KiB
+response buffer, and a shared strict 48 KiB PSRAM JSON budget while processing.
+Responses beyond 12 KiB fail explicitly (HTTP 413); JSON-budget, upstream,
+network and timeout failures return explicit errors. Transport and portal
+response machinery can still allocate internal RAM. Network operations have
+four-second timeouts and cooperative overall, OTA, network and configuration
+checkpoints. Credential changes and OTA epochs invalidate old results.
+No request pointers are retained by the worker.
+
+**Binding Reference & Builders** has a **Binding builders > Home Assistant** view, available
+when the device advertises the `ha` scheme. The builder and generated `ha`
+reference link to each other; the reference does not embed the builder.
+The shared dialog belongs to the portal shell so shortcuts work in every editor.
+The asset generator selects shell HTML with the dialog only for `HAS_DISPLAY`.
+Reference and shortcut styles live in `portal_binding_help.css`, also gated by
+`HAS_DISPLAY`. The formatting helpers, HA builder module, and
+`portal_binding_builder.css` use `HAS_HA_LIVE`; the HA module registers its own
+builder entry, so unsupported builds contain neither its UI implementation nor
+its shortcut registration. Bundle generation is capped at 256 variants; only
+one matching JavaScript and CSS variant is compiled into each firmware.
+The generic `fx` entry opens on Basics with a reset builder; Basics links to
+available builders. A shared `BINDING_BUILDERS` list holds registered builder identities,
+shortcut labels and configured predicates, and supplies dialog navigation.
+Configured shortcuts appear beside existing `fx` hints, including dynamically
+created action editors and color popovers. HA requires `caps.ha_live`,
+a saved URL and `ha_token_set`, not connectivity or admin permissions.
+Shortcut entries open a fresh builder while preserving the field and selection
+for insertion. Configuration loads and successful HA saves refresh availability;
+pages with binding hints load configuration on first use if it is not cached.
+The documentation search remains independent of entity search.
+HA's `idle` live-subscription status is informational, without a warning dot:
+no entities are subscribed yet. Lookup works independently of live subscriptions.
+Initial entity details suggest one-decimal numeric formatting and the HA unit
+only for a complete finite numeric state. Suggestions are validated against the
+format/token limits before application; unusable suggestions leave manual
+generation available with an informational explanation. Refreshes and edits
+made while initial details are pending preserve the user's choices.
+The builder uses three numbered sections in one view. Search text is separate
+from the selected entity; formatting controls appear only after selection.
+Selection fetches details automatically, while manual IDs remain usable if
+metadata lookup fails. State, discovered attributes and custom paths share the
+same formatting controls. Unit spacing is automatic, and explicit refreshes
+preserve an edited unit.
+Autocomplete debounces by 350 ms; changing inputs, changing reference views
+and closing the dialog cancel browser requests. Lookup never creates a live
+subscription or changes pads. Formatting and token construction live in
+`portal_binding_builder.js`; HA-specific discovery and UI live in
+`portal_binding_builder_ha.js`. MQTT can reuse the formatting/token helpers
+without adopting HA discovery. See the
+[user workflow](../user/integrations/home-assistant.md#build-an-ha-binding).
+
+The local P4 portal profile supplies deterministic lookup jobs, entity details
+and an administrator-permission failure for the search `nonadmin`. The
+`load-error` scenario exercises lookup availability failures.
 
 ### Development Crash Injection
 
@@ -1594,8 +1767,22 @@ finalization or a subsequent reboot.
     "present_peak_us": 2000,
     "data_stream_peak_us": 100,
     "screen_update_peak_us": 200,
-    "cycle_peak_us": 900
+    "cycle_peak_us": 900,
+    "rendered_cycles": 0,
+    "navigation_renders": 0,
+    "last_render": null,
+    "slowest_render": null,
+    "last_navigation_render": null,
+    "invalidations": {
+      "other": 0,
+      "deferred": 0,
+      "screen_switch": 0,
+      "timer": 0,
+      "screen_update": 0,
+      "requested_pixels": 0
+    }
   },
+  "display_presentation": null,
 
   "runtime": {
     "main_phase": "portal",
@@ -1664,6 +1851,126 @@ not report a PSRAM largest-block value on those boards.
   must not be added to cycle time. Both display fields are API-only, are `null`
   before stats are available or without a display, and report zeros during
   screen-saver rendering suspension.
+- Detailed fields below, from `display_perf.rendered_cycles` through
+  `display_presentation`, require `HAS_DISPLAY_DIAGNOSTICS`. It defaults off on
+  every board. When disabled, those fields are omitted entirely, not returned as
+  `null`; baseline `display_fps` and window-average/peak `display_perf` fields
+  remain available. The example above includes opt-in diagnostic fields.
+- `display_perf.rendered_cycles`: number of LVGL cycles producing flush callbacks
+  since boot. `last_render` and `slowest_render` retain the latest such cycle and
+  the one with the largest `cycle_us`. They are `null` before the first render,
+  persist across idle windows and screen-saver suspension, and update when a
+  cycle completes. Existing window-average/peak fields retain their behavior.
+- `display_perf.navigation_renders` counts flush-producing cycles that process a
+  queued screen switch, including the initial pad switch. `last_navigation_render`
+  retains the latest such cycle independently of later small updates; it is
+  `null` before one completes. Its `screen_switched` flag is true. This captures
+  render completion, not physical panel presentation or the last follow-up
+  redraw triggered by navigation.
+- Each retained render has `completed_ms` (uptime), `cycle_us`, `lock_wait_us`,
+  `deferred_us`, `screen_switch_us`, `screen_update_us`, `data_stream_us`,
+  `lv_timer_us`, `lv_timer_flush_us`, `lv_timer_other_us`, `flush_calls`,
+  `flush_pixels`, `flush_us`, and `flush_peak_us`. Flush totals cover all
+  callbacks in that cycle, including any outside `lv_timer_handler()`;
+  `lv_timer_flush_us` is only the portion inside the handler and
+  `lv_timer_other_us` is the remaining handler time. Flush durations include
+  synchronous driver work, mutex waits, and deliberate yields, but not later
+  asynchronous DMA completion. `screen_switch_us` excludes the separately
+  measured initial screen update; `deferred_us` covers queued jobs, font-cache
+  invalidation, dialogs, action continuations, and deferred splash status.
+  `lock_wait_us` is outside `cycle_us`. Pixel counts include repeated writes,
+  not unique changed pixels.
+- Each retained render also reports LVGL event-based timing inside
+  `lv_timer_handler()`:
+  - `refresh_calls`, `refresh_us`: refresh start-to-ready events, including layout,
+    area processing, rendering, flushing, and refresh cleanup
+  - `render_calls`, `render_us`: render start-to-ready events; an unchanged
+    refresh may have no render event
+  - `render_flush_us`: synchronous flush-callback time within render events,
+    already included in `render_us`
+  - `render_glyph_miss_us`: monochrome FreeType cache-miss work within render
+    events, already included in rendering time; this is not all text-drawing time
+  - `render_other_us`: render time excluding those flush callbacks; includes
+    draw-task preparation, software drawing, image/text processing, and waits
+  - `refresh_overhead_us`: refresh time outside render events; includes layout,
+    invalidated-area processing, and cleanup, not just layout
+  - `timer_other_us`: handler time outside refresh events; includes other LVGL
+    timers such as Extension callbacks and timer-management overhead
+- `display_perf.invalidations` accumulates invalidation events observed by the
+  LVGL display event callback across all completed display cycles, even cycles
+  without flushes. Each retained render also has an `invalidations` object
+  covering requests since the previous completed cycle. Counters are grouped
+  by the task phase issuing the request: `deferred`, `screen_switch` (including
+  initial pad building/updating), `timer`, `screen_update`, and `other` (including
+  requests made between cycles). `requested_pixels` sums requested rectangle
+  areas after LVGL's initial screen clipping but before deduplication; overlapping
+  requests count repeatedly. LVGL also emits these events for draw-buffer height
+  rounding probes, so `timer` counts include those probes, not just widget
+  invalidations. These counts identify the phase, not the requesting
+  widget or a guaranteed future physical update. Requests late in one cycle can
+  cause rendering in the next. Use differences in cumulative counts to avoid
+  missing requests made in non-rendering cycles.
+- `display_perf.font_cache` accumulates monochrome FreeType glyph-cache activity
+  since boot, including work in non-flushing cycles. Each retained render has
+  its own `font_cache` object covering activity since the previous completed
+  cycle, including screen creation, layout, timers, and drawing. Fields are
+  `hits`, `misses`, `evictions` (successful replacements of valid cached glyphs),
+  `failures` (unsatisfied cache misses), and `miss_us` (microseconds spent handling
+  cache misses, including failures). Miss timing covers face recovery when
+  needed, glyph loading/hinting, rasterization, bitmap allocation/conversion,
+  and cache replacement. Descriptor lookup, next-character kerning lookup, and
+  bitmap retrieval all access the cache, so these are lookup counts, not
+  character counts. Missing character mappings and OTA-skipped callbacks do
+  not reach the cache and are not counted as cache failures. Statistics combine
+  all monochrome FreeType font instances; built-in bitmap fonts, TinyTTF, and
+  Extension-owned renderers are not measured. Fields are zero when this backend
+  is disabled or unused. Cache hits are counted without timing each hit; no
+  per-glyph logs or health-time LVGL access are added.
+- `display_presentation`: API-only IT8951 diagnostics, `null` on unsupported or
+  uninitialized drivers. Counters since boot are `attempts`, `failures`,
+  `unchanged_skips`, `ota_deferrals`, `full_updates`, `partial_updates`,
+  `uploaded_bytes`, `flush_calls`, `flush_pixels`, `conversion_us`, `yield_us`,
+  and `framebuffer_wait_us`. The last three accumulate flush-side conversion
+  work, deliberate post-flush sleeps, and framebuffer-lock waits respectively.
+  Use differences between snapshots to measure a workload. Upload byte counts
+  are image payload, excluding protocol overhead; interrupted attempts count
+  bytes already submitted. Failed attempts can also be OTA deferrals.
+- `display_presentation.last` and `.slowest` retain the latest attempted update
+  and the attempt with the largest `total_us`, including failures. They are
+  `null` before an attempt and survive inactivity. Each includes `completed_ms`,
+  `success`, `full`, `waveform` (DU=1, GC16=2), controller-space `x`, `y`,
+  `width`, `height`, `uploaded_bytes`, and these durations in microseconds:
+  - `total_us`: presentation call from entry through state finalization, excluding
+    telemetry publication and logging
+  - `dirty_to_ready_us`: first flush conversion start in the pending batch to
+    attempt completion; not trigger-to-screen latency, and not proof of visible
+    completion (check `success` and the controller caveat below)
+  - `coalesce_us`: actual sleeps waiting for settling or the minimum refresh
+    interval; these requirements overlap and are not added independently
+  - `framebuffer_wait_us`: lock acquisition time on the presentation task
+  - `compare_us`, `copy_us`: framebuffer comparison/decision and snapshot copying
+  - `upload_us`: image-load commands and SPI image transfer, including HRDY waits
+    and upload-loop yields
+  - `controller_us`: display-area command and the subsequent HRDY polling
+  - `hrdy_wait_us`: command/data readiness polling, already included in upload
+    and controller time; do not add it again
+- HRDY reports controller readiness, not independently verified physical panel
+  waveform completion. No physical waveform timer or exact event-to-photon
+  measurement is claimed. Render and presentation operate concurrently, and
+  counters can include writes queued for the next presentation. The separately
+  synchronized render and driver snapshots are not an atomic paired frame.
+  Forced updates without pending pixels start their dirty-age timer at
+  presentation entry. Last/slowest snapshots reset on reboot; 32-bit durations
+  and uptime use wrap-safe subtraction for operations shorter than about
+  71 minutes and wrap after about 49 days respectively.
+- Routine IT8951 INFO summaries remain limited to one per minute of activity,
+  except explicit forced and scheduled cleanup refreshes. The compact summary
+  uses milliseconds (`dirty`, `wait`, `spi`, `ctrl`; `f`=forced, `s`=scheduled)
+  when diagnostics are enabled. Disabled builds retain the original count,
+  mode, duration, forced, and scheduled summary.
+  Per-refresh DEBUG diagnostics retain their existing opt-in logging behavior;
+  no per-flush logs are added.
+
 - `ble_status`: compact user-facing BLE status with values `disabled`, `ready`, `pairing`, `connected`, or `error`
 - `ble_state`: detailed BLE status with values `disabled`, `idle`, `advertising`, `pairing`, `connecting`, `claimed`, `secured`, or `error`
 - `ble_name`: configured device name plus ` BLE`; present when the BLE keyboard is initialized
@@ -1700,6 +2007,39 @@ not report a PSRAM largest-block value on those boards.
 - `async_flush_*`: MIPI-DSI asynchronous DMA2D flush state. A growing
   `async_flush_started_age_ms` while `async_flush_in_flight` is `true`
   indicates a completion callback did not arrive.
+
+#### Capturing display performance
+
+For a local developer build, add `#define HAS_DISPLAY_DIAGNOSTICS true` to the
+target board's `board_overrides.h` and rebuild that board. This enables the
+retained render/presentation samples, invalidation counters, and glyph-cache
+measurements described above. It adds code, internal-RAM state, and profiling
+work; ordinary health polling does not enable it. Remove the local override and
+rebuild before shipping. No board enables it by default, and there is no runtime
+setting.
+
+To capture a slow navigation, save a baseline health response, navigate once,
+wait for the screen update, then save another response. Compare cumulative
+conversion/yield counters and inspect the retained render/presentation samples.
+Use `display_perf.last_navigation_render` for the initial navigation render and
+`last_render` for subsequent redraws. Compare `render_other_us`,
+`refresh_overhead_us`, and `timer_other_us` to separate drawing, refresh setup/
+cleanup, and other timers. These are nested timings, not additional delays to
+sum with `lv_timer_us`.
+Compare `last_navigation_render.render_glyph_miss_us` with its
+`render_other_us` to assess glyph-generation cost during drawing. The sample's
+`font_cache.miss_us` also includes work outside rendering and must not be
+subtracted directly from render time. A high miss count alone does not prove
+cache thrashing: initial glyph loads are also misses. Use repeated navigation
+and cumulative counter differences, particularly evictions and miss time, to
+distinguish cold loading from repeated generation.
+Match `completed_ms` to the serial uptime timestamps; samples from the two tasks
+need not describe the same frame. Replace `DEVICE_IP` below and add `-u` with
+your configured username if HTTP authentication is enabled.
+
+```bash
+curl --fail --silent --show-error "http://DEVICE_IP/api/health" > display-health.json
+```
 
 #### `GET /api/health/history`
 
@@ -1931,9 +2271,58 @@ sound library and retain missing saved file names.
 
 ### Configuration Management
 
+#### `POST /api/component/dialog-appearance/test`
+
+On display boards, show a fixed sample notification or confirmation without
+changing saved appearance. Body: `{"type":"notification","appearance":{...}}`
+or `{"type":"confirmation","appearance":{...}}`, using the corresponding
+`dialog_appearance` template fields from `/api/config`. Requests are bounded
+to 2048 bytes and use the existing component body assembly and authentication.
+The validated appearance is passed directly to the thread-safe dialog API and
+captured under its display lock, without using the bounded display-dispatch
+context slot. Both samples last up to 10 seconds; confirmation
+approval completes an empty continuation and cannot execute a restart or any
+other follow-up action. Successful tests replace either dialog type; failed
+tests preserve the existing dialog. Returns `{"success":true}` on display
+success or a non-2xx JSON error for invalid appearance, unavailable input,
+display availability, or resource failure.
+
+The portal uses two sibling cards with standard headers, fixed browser sample
+messages/captions, and one **Test now** button per card. Testing does not save
+configuration; the separate save button persists both templates.
+Save success, save validation/errors, and test failures use the shared portal
+toast messages rather than inline button status text. Successful tests remain
+silent. Loading status and load failures stay above the form.
+
+Both templates include `background_pattern` (`none`, `diagonal`,
+`reverse_diagonal`, `crosshatch`, `dots`, or `checkerboard`),
+`background_pattern_color` (literal hex color, default `#111111`),
+`pattern_spacing` (2-64 px, default 8), and `pattern_stroke_width` (1-8 px,
+default 1, no larger than spacing). Invalid pattern names, expressions in
+pattern colors, and invalid geometry reject the edit atomically. These fields
+round-trip through the existing `dialog_appearance` configuration and `dialogs`
+NVS value, not action payloads. Background opacity applies to the composed base
+and pattern; text, border, and confirmation button opacity are unchanged.
+The shared pad color picker exposes the pattern settings and previews without
+enabling bindings. TTF font sizes use a numeric input for whole pixels from
+8 to 96; empty input serializes to `0` (Automatic). Built-in sizes remain a
+fixed dropdown.
+
 #### `GET /api/config`
 
-Returns current device configuration (passwords excluded).
+Returns current device configuration. Home Wi-Fi, MQTT, portal-authentication,
+and API credentials remain write-only. The setup AP password is shareable
+configuration, so this endpoint returns it as plain text.
+
+Display builds also return `boot_appearance_font_size`,
+`boot_appearance_text_color`, and `boot_appearance_background_color`.
+`CONFIG_BOOT_COLOR_INHERIT` is represented as `4294967295`; read-only
+`boot_appearance_default_text_color` and
+`boot_appearance_default_background_color` provide the device defaults.
+`caps.boot_appearance` reports whether display appearance controls are
+available. With `HAS_BOOT_LOGO`, the response additionally includes
+`boot_logo_slot` (`0`, `1`, or `255` for the built-in logo) and
+`caps.boot_logo`.
 
 The `timezone` field defaults to `UTC0`. `POST /api/config?no_reboot=1` accepts
 supported Olson names or validated POSIX TZ rules, including explicit transition
@@ -1947,6 +2336,8 @@ timezone and alarm session.
   "wifi_ssid": "MyNetwork",
   "wifi_password": "",
   "wifi_password_set": true,
+  "wifi_failure_mode": "ap",
+  "ap_password": "",
   "device_name": "esp32-device",
   "device_name_sanitized": "esp32-device",
   "fixed_ip": "",
@@ -1979,6 +2370,8 @@ timezone and alarm session.
   "epaper_render_mode": "grayscale",
   "epaper_bw_conversion": "threshold",
   "epaper_bw_threshold": 128,
+  "epaper_vcom_mv": 0,
+  "epaper_default_vcom_mv": 1530,
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
@@ -2049,7 +2442,11 @@ timezone and alarm session.
   secret. This includes WiFi, MQTT, Home Assistant, Basic Auth, and Voice
   Assistant credentials. The e-paper service endpoint follows the same
   write-only pattern with `epaper_service_token_set`.
-- `ha_url` is the Home Assistant base URL used by the **Home Assistant Service** button action. `ha_token` (the long-lived access token) is never returned by `GET /api/config`.
+- `ha_url` is the Home Assistant base URL shared by live bindings (when
+  `caps.ha_live` is true), the **Home Assistant Service** button action,
+  and history backfill. `ha_token` is write-only: `GET /api/config` returns an
+  empty string and `ha_token_set` reports whether a token is stored. A successful
+  save safely applies the HA client configuration without reboot.
 - `ble_burst_count`, `ble_adv_interval_ms`, and `ble_tx_power_dbm` are present
   only when `HAS_BLE` is enabled. TX power is a signed dBm value, not an ESP-IDF
   enum index. It is stored in NVS and also exposed by MCP `get_config`.
@@ -2264,12 +2661,20 @@ hardware validation.
 #### `POST /api/config`
 
 Save new configuration. Device reboots after successful save.
+The request is a partial update: omitted Wi-Fi setup fields keep their saved
+values. `wifi_failure_mode` accepts `ap` or `offline`; it applies only to
+normal-boot Wi-Fi failures, not runtime recovery or duty-cycle failures.
+`ap_password` accepts empty for an open AP or 8-63 printable ASCII characters.
+An empty value clears the saved password. A saved change takes effect the next
+time the setup AP starts; it does not change active AP credentials.
 
 **Request Body:**
 ```json
 {
   "wifi_ssid": "NewNetwork",
   "wifi_password": "password123",
+  "wifi_failure_mode": "offline",
+  "ap_password": "shareable-passphrase",
   "device_name": "my-esp32",
   "fixed_ip": "192.168.1.100",
   "subnet_mask": "255.255.255.0",
@@ -2297,6 +2702,7 @@ Save new configuration. Device reboots after successful save.
   "epaper_render_mode": "bw",
   "epaper_bw_conversion": "blue_noise",
   "epaper_bw_threshold": 128,
+  "epaper_vcom_mv": 1480,
   "epaper_binding_refresh_interval_ms": 1000,
   "epaper_min_refresh_interval_ms": 250,
   "epaper_refresh_clock_on_minute_boundary": true,
@@ -2341,6 +2747,13 @@ Save new configuration. Device reboots after successful save.
 
 **Notes:**
 - Only fields present in request are updated
+- On display builds, `boot_appearance_font_size` accepts `0` (device default)
+  or one of `12`, `14`, `18`, `24`, `32`, and `36`. Text and background colors
+  accept an RGB integer from `0` through `0xFFFFFF`, or `4294967295` to use the
+  device default. With `HAS_BOOT_LOGO`, `boot_logo_slot` accepts `0` or `1` to
+  select a validated uploaded logo, or `255` to use the built-in logo. These
+  settings are applied at startup; use `?no_reboot=1` to save without
+  restarting.
 - `audio_idle_mute` defaults to true and keeps the amplifier quiet between
   sounds. False keeps it enabled for lower feedback latency, but idle hiss may
   return. `audio_wake_delay_ms` accepts an integer or integer string from 0 to
@@ -2365,7 +2778,7 @@ Save new configuration. Device reboots after successful save.
 - Basic Auth password is never returned by `GET /api/config`.
 - `mcp_enabled` / `mcp_control_enabled` are applied live (no reboot needed). Sending `mcp_generate_token: true` mints a new bearer token server-side (hardware RNG); the plaintext token is returned **once** in this POST response as `mcp_token` and never again. Post with `?no_reboot=1` (the portal does) so toggling MCP does not reboot the device.
 - In Core Mode (AP mode), Basic Auth settings cannot be changed via `POST /api/config`.
-- Interactive E-Paper fields are available only when `HAS_LVGL_EPAPER` is enabled. `epaper_render_mode` is read at boot and requires a restart. The shared intervals, minute-boundary setting, and full-refresh threshold apply live. Binding intervals must be 100 to 60,000 ms and refresh intervals must be 250 to 60,000 ms. An `epaper_full_refresh_threshold` of `0` disables scheduled full refreshes and can increase ghosting. Inkplate grayscale always refreshes the full panel and does not use the threshold.
+- Interactive E-Paper fields are available only when `HAS_LVGL_EPAPER` is enabled. `epaper_render_mode` is read at boot and requires a restart. The shared intervals, minute-boundary setting, and full-refresh threshold apply live. Binding intervals must be 100 to 60,000 ms and refresh intervals must be 250 to 60,000 ms. An `epaper_full_refresh_threshold` of `0` disables scheduled full refreshes and can increase ghosting. Inkplate grayscale always refreshes the full panel and does not use the threshold. Waveshare 7.8-inch Interactive E-Paper reuses these controls for B/W DU or grayscale GC16 regional updates; its GPIO14 tap/hold actions start unassigned.
 - `GET /api/config` returns `epaper_supported_render_modes` for Interactive
   E-Paper. CrowPanel returns `["bw"]`; grayscale-capable profiles return
   `["bw", "grayscale"]`. Unsupported `epaper_render_mode` writes return HTTP 400.
@@ -2378,6 +2791,17 @@ Save new configuration. Device reboots after successful save.
   hides the level for dithering. These fields do not change the font backend
   or E-Paper Frame image rendering.
 - Device automatically reboots after successful save
+- Interactive E-Paper also stores `epaper_vcom_mv`, an integer magnitude or
+  digit string from 0 to 5000 mV. Invalid values return HTTP 400 before any
+  settings are changed. Omission preserves the saved selection. Zero means
+  use the current firmware's `EPAPER_DEFAULT_VCOM_MV`, not zero volts.
+  `GET /api/config` exposes that default as read-only `epaper_default_vcom_mv`.
+  VCOM is always shown in E-paper Presentation, including on drivers that
+  ignore it. Consuming drivers apply it only at startup; both interactive
+  IT8951 profiles use it. The portal accepts negative volts and converts
+  them to millivolt magnitude. **Use board default** saves zero so future
+  firmware profiles use their own default; explicit nonzero overrides persist.
+  This does not change the Frame TPS65186 EEPROM calibration interface.
 - Web portal automatically polls for reconnection (see [Automatic Reconnection](#automatic-reconnection-after-reboot))
 
 #### `DELETE /api/config`
@@ -2539,6 +2963,14 @@ Get current progress/state of the online update task.
 `POST /api/update` and `POST /api/firmware/update` share one race-safe OTA
 activity lifecycle. Only one path can own the firmware writer at a time; a
 competing update receives `409 Conflict`.
+
+The same admission lock excludes configuration updates and network transitions.
+The config handler holds a writer reservation while applying and saving fields;
+direct config saves also reserve a writer. Live Continue offline reserves the
+transition through radio shutdown and normal-runtime startup, so an asynchronous
+OTA or save cannot begin between its check and teardown. Restart into setup AP
+keeps that reservation through reboot, including the MCP response grace period.
+Conflicting config or OTA requests receive `409 Conflict`.
 
 While the lifecycle is active, the firmware cooperatively defers new
 nonessential work at subsystem-owned safe points:
@@ -3020,7 +3452,7 @@ All boot-actions endpoints require `HAS_DISPLAY` and are gated by Basic Auth whe
 
 Returns the current boot action configuration.
 
-- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects (same schema as button/swipe actions: `type`, `target`, `topic`, `payload`, `sequence`, `beep_pattern`, `beep_volume`, `sound_file`, `sound_volume`, `notify_text`, `notify_duration_ms`, `notify_text_color`, `notify_bg_color`, `notify_border_color`, `notify_opacity`, `notify_font_size`, `notify_location`, `system_command`, `volume_mode`, `volume_value`, `brightness_mode`, `brightness_value`, `timer_id`, `timer_command`, `timer_mode`, `timer_value`, etc.).
+- **Response:** JSON object with an `actions` array containing up to 3 `ButtonAction` objects, using the same schema as button/swipe actions. Dialog actions use `message` with `duration_ms` for notifications, or `timeout_ms`, `approve_text`, and `cancel_text` for confirmations. Appearance comes from the device-wide dialog templates, not action fields.
 - Default (no file saved): `{"actions": []}`.
 
 #### `POST /api/boot-actions`
@@ -3030,6 +3462,38 @@ Save boot action configuration to LittleFS.
 - **Body:** JSON object with an `actions` array of `ButtonAction` objects. Trailing empty actions are trimmed by the web UI.
 - **Response:** `{"ok": true}` on success; JSON error on failure.
 - Changes take effect on next boot.
+
+### System Screen Appearance and Logo API
+
+Display builds expose shared system-screen appearance through the existing
+`boot_appearance_*` fields and `boot_logo_slot` in `/api/config`. Field names,
+logo routes, and stored settings are unchanged for compatibility. The
+`system-screens` fragment is registered under Display and saves through
+`POST /api/config?no_reboot=1`; `boot-actions` remains under Actions and saves
+only actions through its component config endpoint.
+`HAS_BOOT_LOGO` builds additionally expose these endpoints, subject to the
+portal's Basic Auth policy:
+
+#### `GET /api/boot-logo`
+
+Returns the selected slot and availability of both managed logo slots:
+`{"active_slot":255,"slot0_available":false,"slot1_available":false}`.
+
+#### `GET /api/boot-logo/thumbnail?slot=0|1`
+
+Streams the stored PNG or JPEG source for the requested slot, or returns `404`
+if the slot is unavailable. The portal constrains this image to a small preview.
+
+#### `POST /api/boot-logo/upload`
+
+Accepts a raw PNG or JPEG request body up to 1 MiB. The firmware validates the
+format and decodability, then stores the image in the inactive slot. The
+response contains the staged `slot`; uploading does not change the active
+selection. Select that slot by posting it as `boot_logo_slot` to `/api/config`.
+Invalid images return `400`, oversized images return `413`, and storage,
+configuration, or concurrent-operation failures return an explicit error.
+Uploads are rejected while OTA is active. Factory reset removes managed logo
+files from SD storage and formats them with the LittleFS partition.
 
 ---
 
@@ -3786,6 +4250,8 @@ curl -X DELETE http://192.168.1.100/api/config
 ./upload-erase.sh
 ./upload.sh
 ```
+Join the active AP shown on the device, including its displayed password when
+configured, and use the displayed portal URL.
 
 **Test Full Mode:**
 ```bash
@@ -3797,8 +4263,8 @@ curl http://192.168.1.100/api/info
 
 ### Cannot Access Portal in AP Mode
 
-- Check SSID: Should be `ESP32-XXXXXX`
-- IP address: Always `192.168.4.1`
+- Check the active AP name and password shown on the device
+- Use the displayed URL, usually `http://192.168.4.1`
 - Disable mobile data (can interfere with captive portal)
 
 ### Portal Not Responding After WiFi Config
@@ -3816,6 +4282,8 @@ If WiFi fails to connect after firmware update or reboot:
 - Check serial logs for detailed connection status (SSID not found, wrong password, etc.)
 - If persistent, use physical reset button to fully power-cycle WiFi hardware
 - Auto-reconnect and event handlers ensure recovery from temporary drops
+- For repeated startup failures, use the documented
+  [power-cycle recovery procedure](../user/device/updates-and-recovery.md#recover-setup-access-with-a-power-cycle)
 
 ### OTA Update Fails
 

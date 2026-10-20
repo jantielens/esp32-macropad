@@ -48,11 +48,6 @@ function padLoadLocalImageOptions(selected) {
         });
 }
 
-function padConfirmChanged() {
-    var enabled = document.getElementById('pad-edit-confirm').checked;
-    document.getElementById('pad-edit-confirm-text-group').style.display = enabled ? '' : 'none';
-}
-
 function padDialogOpen(col, row) {
     padDialogSelectionGeneration++;
     padPvHide();
@@ -151,10 +146,6 @@ function padDialogOpen(col, row) {
     // Legacy single-action fallback
     if (!lpActions.length && btn.lp_action && btn.lp_action.type) lpActions = [btn.lp_action];
     actionEditorListLoad(padActionPrefixes('lp'), lpActions);
-
-    document.getElementById('pad-edit-confirm').checked = !!btn.confirm && !btn.widget_type;
-    document.getElementById('pad-edit-confirm-text').value = btn.confirm_text || '';
-    padConfirmChanged();
 
     // Image background
     var localImageGroup = document.getElementById('pad-edit-local-image-group');
@@ -329,12 +320,6 @@ function padDialogBuildButton() {
     var lpArr = actionPolicy.longPress ? actionEditorListBuild(padActionPrefixes('lp')) : [];
     if (lpArr.length) btn.lp_actions = lpArr;
 
-    if (document.getElementById('pad-edit-confirm').checked) {
-        btn.confirm = true;
-        const confirmText = document.getElementById('pad-edit-confirm-text').value.trim();
-        if (confirmText) btn.confirm_text = confirmText;
-    }
-
     // Image background
     const imgUrl = document.getElementById('pad-edit-bg-image-url').value.trim();
     const localImageBinding = document.getElementById('pad-edit-bg-image-binding').value.trim();
@@ -503,21 +488,15 @@ function padPvUnresolved(v) {
     return s === '' || s.indexOf('---') !== -1;
 }
 
-// Anchor the inline value chip next to each field's visible "fx" hint (uniform
-// across text inputs and the display:none color inputs).
+// Find the visible field control, including hidden color inputs and wrappers.
 function padPvAnchor(id) {
     var el = document.getElementById(id);
     if (!el) return null;
-    var node = el;
-    while (node && node !== document.body) {
-        var fx = node.querySelector ? node.querySelector('.fx-hint') : null;
-        if (fx) return fx;
-        node = node.parentElement;
-    }
-    return null;
+    return el.closest('.sparkline-source-heading') ||
+        el.closest('.bindable-color, .binding-input-wrap') || el;
 }
 
-// Create the inline value chip for each field once (idempotent), and hook a
+// Create the value chip below each field once (idempotent), and hook a
 // debounced refresh so values track edits.
 function padPvMount() {
     padPvFields().forEach(function (f) {
@@ -527,7 +506,14 @@ function padPvMount() {
         chip.className = 'pad-pv-val';
         chip.setAttribute('data-pv', f.id);
         chip.style.display = 'none';
+        chip.tabIndex = 0;
+        chip.setAttribute('role', 'button');
         chip.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); padPvRefreshField(f.id); });
+        chip.addEventListener('keydown', function (ev) {
+            if (ev.key !== 'Enter' && ev.key !== ' ') return;
+            ev.preventDefault();
+            chip.click();
+        });
         anchor.insertAdjacentElement('afterend', chip);
     });
     var overlay = document.getElementById('pad-edit-overlay');
@@ -552,7 +538,7 @@ function padPvSetChip(id, value, state) {
     var chip = document.querySelector('.pad-pv-val[data-pv="' + id + '"]');
     if (!chip) return;
     if (!padPvIsBinding(padPvFieldValue(id))) { chip.style.display = 'none'; chip.title = ''; return; }
-    chip.style.display = 'inline-flex';
+    chip.style.display = 'flex';
     if (state === 'loading') {
         chip.innerHTML = '<span class="pad-pv-arrow">\u2192</span><span class="pad-pv-text pad-pv-muted">\u2026</span>';
         chip.title = 'Resolving\u2026';

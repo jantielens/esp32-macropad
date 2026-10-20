@@ -171,6 +171,8 @@ bool binding_template_has_bindings(const char* label);
 // Returns true if any token was resolved. out is always null-terminated.
 // Errors produce "ERR:message" in place of the token (never crashes).
 bool binding_template_resolve(const char* templ, char* out, size_t out_len);
+// Dialog/action safety path: reject resolver failures and truncated output.
+bool binding_template_resolve_checked(const char* templ, char* out, size_t out_len);
 
 // Resolve all tokens and report the aggregate resolver outcome. Output uses the
 // same fallback rules as binding_template_resolve().
@@ -188,6 +190,13 @@ bool binding_template_resolve_single_token(const char* templ, char* out, size_t 
 // Scan a template string and call the collector for each binding token.
 // Used by mqtt_sub_store to discover topics to subscribe.
 void binding_template_collect_topics(const char* templ, void* user_data);
+
+// Visit tokens (including expression children) without invoking transport-owned
+// collectors. Runs on the binding/LVGL task like resolution.
+typedef void (*binding_token_visitor_fn)(const char* scheme, size_t scheme_len,
+                                         const char* params, void* context);
+void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
+                                   void* context);
 
 #ifdef __cplusplus
 }

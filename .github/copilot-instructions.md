@@ -40,11 +40,14 @@ that does not match a file's `applyTo` pattern:
 * Configuration settings: [config settings](instructions/adding-config-settings.instructions.md)
 * Binding schemes: [binding system](instructions/binding-system.instructions.md)
 * Audio: [audio subsystem](instructions/audio.instructions.md)
+* User guides, board READMEs, and commit-ready documentation reconciliation:
+  [user documentation](instructions/user-documentation.instructions.md)
 
 For device-class wiring and branding, use the
 [device-class guide](../docs/dev/adding-a-device-class.md) and
 [build/release guide](../docs/dev/build-and-release-process.md).
-The [MCP guide](../docs/mcp-guide.md) covers device control and pad authoring.
+The [AI assistant guide](../docs/user/integrations/ai-assistants.md) covers device
+control and pad authoring.
 
 ## Local Portal Development
 

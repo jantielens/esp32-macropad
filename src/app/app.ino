@@ -21,6 +21,9 @@
 #include "wifi_manager.h"
 #include "device_class.h"
 #include "duty_cycle.h"
+#if HAS_BOOT_LOGO
+#include "boot_logo_store.h"
+#endif
 #include "dma2d_arbiter.h"
 #include "hw_buttons.h"
 #include "hw_button_config.h"
@@ -54,7 +57,7 @@
 #include "timer_config.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
-#include "message_bubble.h"
+#include "device_dialog.h"
 #include "visual_alert.h"
 #include "swipe_config.h"
 #include "button_defaults.h"
@@ -98,6 +101,7 @@
 #include "sd_storage.h"
 #include "storage.h"
 #include "ota_activity.h"
+#include "ha_live.h"
 
 #if HAS_NATIVE_EXTENSIONS
 #include "native_extension.h"
@@ -169,6 +173,172 @@ static bool check_config_mode_button() {
 	#else
 	return false;
 	#endif
+}
+
+static bool g_normal_runtime_started = false;
+static bool g_boot_entered_setup_ap = false;
+static bool g_setup_ap_active = false;
+
+static void load_boot_logo() {
+	#if HAS_DISPLAY && HAS_BOOT_LOGO
+	if (device_config.boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE) {
+		const uint32_t background = device_config.boot_appearance_background_color ==
+				CONFIG_BOOT_COLOR_INHERIT
+				? BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB
+				: device_config.boot_appearance_background_color;
+		if (!boot_logo_store_load(device_config.boot_logo_slot, background)) {
+			LOGW("BootLogo", "Custom boot logo unavailable; continuing startup");
+		}
+	}
+	#endif
+}
+
+static void start_normal_runtime(bool dispatch_boot_actions) {
+	if (g_normal_runtime_started) return;
+	g_normal_runtime_started = true;
+
+	#if HAS_DISPLAY && HAS_BACKLIGHT
+	display_manager_set_backlight_brightness(device_config.backlight_brightness);
+	#endif
+
+	#if HAS_DISPLAY
+	screen_saver_manager_init(&device_config);
+	pad_config_init();
+	#if HAS_NATIVE_EXTENSIONS
+	native_extension_init();
+	#endif
+	swipe_config_init();
+	button_defaults_init();
+	if (displayManager) {
+		const ButtonDefaults* defaults = button_defaults_get();
+		displayManager->initTypography(defaults->default_font, defaults->base_text_size);
+	}
+	boot_actions_init();
+	pad_block_init();
+	void list_provider_pads_init();
+	list_provider_pads_init();
+	icon_store_init();
+	icon_store_preload_pad_pages();
+	#elif HAS_STORAGE_BROWSER
+	storage_mount();
+	#endif
+
+	#if CAMERA_MOTION_ACTIONS_ENABLED
+	camera_motion_actions_init();
+	#endif
+	#if HAS_SOUND_PLAYER
+	sound_store_init();
+	#endif
+
+	sensor_manager_init();
+
+	#if HAS_BLE_HID
+	if (keyboard_hid_transport() == KeyboardTransport::Ble) {
+		ble_hid_init(device_config.device_name, false);
+	} else {
+		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
+	}
+	#endif
+
+	#if HAS_MQTT
+	char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
+	config_manager_sanitize_device_name(device_config.device_name, sanitized, sizeof(sanitized));
+	mqtt_manager.begin(&device_config, device_config.device_name, sanitized);
+	if (mqtt_manager.enabled()) {
+		#if HAS_DISPLAY
+		mqtt_sub_store_init();
+		#endif
+		mqtt_screen_init();
+		mqtt_wake_init(&device_config);
+		mqtt_audio_init();
+		mqtt_camera_init();
+		mqtt_notify_init();
+		#if MQTT_TRIGGERS_ENABLED
+		mqtt_triggers_init();
+		#endif
+	} else {
+		LOGI("Main", "MQTT not configured: skipping handler init");
+	}
+	#endif
+
+	#if HAS_DISPLAY
+		#if HAS_IMAGE_LIBRARY
+	image_library_config_init();
+	image_library_runtime_init();
+		#endif
+	binding_builtin_schemes_init();
+	timer_config_init();
+	#endif
+	#if ALARM_ENABLED
+	alarm_manager_init();
+	#endif
+
+	hw_button_config_init();
+	hw_buttons_init();
+	device_class_dispatch_normal_runtime(&device_config);
+	last_heartbeat_ms = millis();
+	LOGI("Main", "Normal runtime initialized");
+
+	esp_ota_mark_app_valid_cancel_rollback();
+	device_telemetry_log_memory_snapshot("setup");
+
+	#if HAS_HA_LIVE
+	ha_live_init(device_config.ha_url, device_config.ha_token);
+	#endif
+
+	#if HAS_MQTT
+	if (mqtt_manager.enabled() && WiFi.status() == WL_CONNECTED) {
+		#if HAS_DISPLAY
+		display_manager_set_splash_status("Connecting to MQTT...");
+		#endif
+		mqtt_manager.connectAndPublishDiscoveryBlocking(8000);
+	}
+	#endif
+
+	#if HAS_DISPLAY
+	if (WiFi.status() == WL_CONNECTED) {
+		char ip_msg[48];
+		snprintf(ip_msg, sizeof(ip_msg), "Wi-Fi connected: %s", WiFi.localIP().toString().c_str());
+		display_manager_set_splash_status(ip_msg);
+	} else {
+		display_manager_set_splash_status("Offline mode");
+	}
+	delay(500);
+	if (pad_config_exists(0)) {
+		display_manager_show_screen("pad_0", nullptr);
+	} else {
+		display_manager_show_info();
+	}
+	if (dispatch_boot_actions) boot_actions_dispatch();
+	#if HAS_IMAGE_FETCH
+	image_fetch_init();
+	#endif
+	screen_saver_manager_notify_activity(false);
+	#else
+	(void)dispatch_boot_actions;
+	#endif
+
+	#if HAS_REMOTE_LOG
+	remote_log_finish_boot();
+	#endif
+}
+
+bool app_continue_offline_from_setup() {
+	if (!g_boot_entered_setup_ap || g_normal_runtime_started) return false;
+	if (!ota_activity_try_begin_network_transition()) {
+		LOGW("WiFi", "Continue offline deferred: update or configuration write is active");
+		return false;
+	}
+
+	web_portal_stop_ap();
+	g_setup_ap_active = false;
+	wifi_manager_enter_offline();
+	power_manager_set_current_mode(PowerMode::AlwaysOn);
+	power_manager_led_set_mode(PowerMode::AlwaysOn);
+	portal_idle_set_mode(PowerMode::AlwaysOn);
+	start_normal_runtime(false);
+	ota_activity_finish_network_transition();
+	return true;
 }
 
 void setup()
@@ -314,7 +484,7 @@ void setup()
 
 	#if HAS_DISPLAY
 	display_manager_init(&device_config);
-	display_manager_set_splash_status("Loading device...");
+	display_manager_set_splash_status("Initializing device...");
 	#endif
 
 	#if USE_SD_STORAGE
@@ -322,7 +492,7 @@ void setup()
 	// message below is visible to the user. There is no fallback storage.
 	if (storage_boot_should_halt(sd_storage_mount())) {
 		#if HAS_DISPLAY
-		display_manager_set_splash_status("SD card required. Correct or replace it, then reboot.");
+		display_manager_set_splash_status("SD card unavailable. Check or replace it, then restart.");
 		#endif
 		LOGE("SYS", "SD card required; startup cannot continue. Check the card, filesystem, wiring, and power, then reboot.");
 		while (true) {
@@ -331,6 +501,9 @@ void setup()
 		}
 	}
 	#endif
+
+	// Load best-effort once the splash and required storage are ready.
+	load_boot_logo();
 
 	const bool force_config_mode_burst = power_manager_should_force_config_mode();
 	if (force_config_mode_burst) {
@@ -341,6 +514,9 @@ void setup()
 			force_config_mode_burst || force_config_mode_button;
 	power_manager_configure(&device_config, config_loaded, force_config_mode);
 	PowerMode boot_mode = power_manager_get_boot_mode();
+	if (power_manager_should_force_setup_ap()) {
+		boot_mode = PowerMode::Ap;
+	}
 	power_manager_set_current_mode(boot_mode);
 	power_manager_led_set_mode(boot_mode);
 
@@ -496,242 +672,88 @@ void setup()
 		}
 	}
 
-	// Re-apply brightness from loaded config (display was initialized before config load)
-	#if HAS_DISPLAY && HAS_BACKLIGHT
-	LOGT("Main", "Applying loaded brightness: %d%%", device_config.backlight_brightness);
-	display_manager_set_backlight_brightness(device_config.backlight_brightness);
-	#endif
-
-	#if HAS_DISPLAY
-	// Initialize screen saver manager after config is loaded.
-	screen_saver_manager_init(&device_config);
-	#endif
-
-	#if HAS_DISPLAY
-	// Mount LittleFS for pad config persistence (non-fatal if no storage partition)
-	pad_config_init();
-
-	#if HAS_NATIVE_EXTENSIONS
-	// The extension package is optional; an absent or invalid package must not
-	// prevent the core firmware from continuing to boot.
-	native_extension_init();
-	#endif
-
-	// Load swipe gesture actions from LittleFS (uses same filesystem)
-	swipe_config_init();
-
-	// Load device-level pad and button defaults from LittleFS
-	button_defaults_init();
-	if (displayManager) {
-		const ButtonDefaults* defaults = button_defaults_get();
-		displayManager->initTypography(defaults->default_font, defaults->base_text_size);
-	}
-
-	// Load boot actions from LittleFS
-	boot_actions_init();
-
-	// Register core building blocks (feature branches add their own via pad_block_register)
-	pad_block_init();
-
-	// Register built-in list providers
-	void list_provider_pads_init();
-	list_provider_pads_init();
-
-	// Initialize icon store and preload icons for all pads
-	icon_store_init();
-	icon_store_preload_pad_pages();
-	#elif HAS_STORAGE_BROWSER
-	// Headless portal boards still need the shared filesystem for Storage.
-	storage_mount();
-	#endif
-
-	#if CAMERA_MOTION_ACTIONS_ENABLED
-	camera_motion_actions_init();
-	#endif
-
-	#if HAS_SOUND_PLAYER
-	// Initialize sound file store (creates /sounds/ directory)
-	sound_store_init();
-	#endif
-
-	// Start WiFi BEFORE initializing web server (critical for ESP32-C3)
-	#if HAS_DISPLAY
-	display_manager_set_splash_status("Connecting WiFi...");
-	#endif
-
-		if (boot_mode == PowerMode::Ap) {
-			LOGI("Main", "AP mode selected - starting AP mode");
-			web_portal_start_ap();
-		} else if (!config_loaded) {
-			LOGI("Main", "No config - starting AP mode");
+	bool enter_setup_ap = (boot_mode == PowerMode::Ap);
+	if (enter_setup_ap) {
+		LOGI("Main", "Setup AP mode selected");
+		#if HAS_DISPLAY
+		display_manager_set_splash_status("Starting setup network...");
+		#endif
+		if (!web_portal_start_ap(&device_config)) {
+			LOGE("Main", "Setup AP failed to start");
+			#if HAS_DISPLAY
+			display_manager_set_splash_status("Setup network failed");
+			#endif
+		}
+	} else if (!config_loaded) {
+		enter_setup_ap = true;
+		power_manager_set_current_mode(PowerMode::Ap);
+		power_manager_led_set_mode(PowerMode::Ap);
+		#if HAS_DISPLAY
+		display_manager_set_splash_status("Starting setup network...");
+		#endif
+		if (!web_portal_start_ap(&device_config)) {
+			LOGE("Main", "Setup AP failed to start");
+			#if HAS_DISPLAY
+			display_manager_set_splash_status("Setup network failed");
+			#endif
+		}
+	} else {
+		LOGI("Main", "Connecting to saved Wi-Fi");
+		#if HAS_DISPLAY
+		display_manager_set_splash_status("Connecting to Wi-Fi...");
+		#endif
+		if (wifi_manager_connect(&device_config, false)) {
+			power_manager_note_wifi_success();
+			wifi_manager_start_mdns(&device_config);
+			device_telemetry_cache_rssi();
+			wifi_manager_register_events();
+			#if HAS_DISPLAY
+			time_binding_start_ntp();
+			#endif
+		} else if (boot_mode == PowerMode::AlwaysOn &&
+				strcmp(device_config.wifi_failure_mode, "offline") == 0) {
+			LOGW("Main", "Saved Wi-Fi failed; continuing offline");
+			wifi_manager_enter_offline();
+			power_manager_set_current_mode(PowerMode::AlwaysOn);
+			power_manager_led_set_mode(PowerMode::AlwaysOn);
+		} else {
+			LOGW("Main", "Saved Wi-Fi failed; entering setup AP");
+			enter_setup_ap = true;
 			power_manager_set_current_mode(PowerMode::Ap);
 			power_manager_led_set_mode(PowerMode::Ap);
-			web_portal_start_ap();
-		} else {
-			LOGI("Main", "Config loaded - connecting to WiFi");
-			if (wifi_manager_connect(&device_config, false)) {
-				power_manager_note_wifi_success();
-				wifi_manager_start_mdns(&device_config);
-				device_telemetry_cache_rssi();
-				wifi_manager_register_events();
+			#if HAS_DISPLAY
+			display_manager_set_splash_status("Starting setup network...");
+			#endif
+			if (!web_portal_start_ap(&device_config)) {
+				LOGE("Main", "Setup AP failed to start");
 				#if HAS_DISPLAY
-				time_binding_start_ntp();
+				display_manager_set_splash_status("Setup network failed");
 				#endif
-			} else {
-				LOGW("Main", "WiFi failed - fallback to AP");
-				power_manager_set_current_mode(PowerMode::Ap);
-				power_manager_led_set_mode(PowerMode::Ap);
-				web_portal_start_ap();
 			}
 		}
+	}
 
-		// Initialize web portal AFTER WiFi is started
-		web_portal_init(&device_config);
+	g_boot_entered_setup_ap = enter_setup_ap;
+	g_setup_ap_active = enter_setup_ap;
+	web_portal_init(&device_config);
+	portal_idle_init();
+	portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
+	portal_idle_set_mode(power_manager_get_current_mode());
 
-		portal_idle_init();
-		portal_idle_set_timeout_seconds(device_config.portal_idle_timeout_seconds);
-		portal_idle_set_mode(power_manager_get_current_mode());
-
-	// Let registered device classes finish setup after WiFi / AP / portal
-	// are up (no-op until a class registers).
 	device_class_dispatch_setup_late(&device_config, power_manager_get_current_mode());
 
-	// In AP/captive-portal mode the device's only job is to collect WiFi
-	// credentials, save them, and reboot into STA mode. Skip all heavy
-	// subsystem inits (MQTT, MQTT subscription store, BLE HID, sensors,
-	// HA discovery) — they're irrelevant without LAN/internet and on
-	// small-RAM SoCs (ESP32-C3) the mqtt_sub_store calloc alone (~136 KB)
-	// will OOM the boot when WiFi softAP + lwIP + AsyncTCP are already
-	// resident.
-	const bool in_ap_mode = web_portal_is_ap_mode();
-	if (in_ap_mode) {
-		LOGI("Main", "AP mode: skipping sensor/BLE/MQTT init (saves RAM for portal)");
-	}
-
-	// Initialize sensors (optional adapters)
-	if (!in_ap_mode) {
-		sensor_manager_init();
-	}
-
-	// BLE HID keyboard — guarded by ble_hid_init() which bails gracefully
-	// (init_error = true) if the NimBLE stack fails to allocate.
-	#if HAS_BLE_HID
-	if (!in_ap_mode && keyboard_hid_transport() == KeyboardTransport::Ble) {
-		ble_hid_init(device_config.device_name, false);
-	} else if (!in_ap_mode) {
-		LOGI("Main", "BLE Keyboard disabled (saves ~70 KB RAM)");
-	}
-	#endif
-
-	#if HAS_MQTT
-	if (!in_ap_mode) {
-		// Initialize MQTT manager (will only connect/publish when configured)
-		char sanitized[CONFIG_DEVICE_NAME_MAX_LEN];
-		config_manager_sanitize_device_name(device_config.device_name, sanitized, sizeof(sanitized));
-		mqtt_manager.begin(&device_config, device_config.device_name, sanitized);
-		// mqtt_sub_store caches inbound topic payloads (~136 KB) so widget
-		// bindings can read them from the LVGL task. Only useful with a
-		// display; on headless boards (C3) the store is dead weight and
-		// fragments out of internal RAM. The other init calls below are
-		// already compile-time no-op stubs without HAS_DISPLAY / HAS_AUDIO,
-		// so they cost nothing on C3 — keeping the runtime gate documents
-		// intent and avoids running them when no broker is configured.
-		if (mqtt_manager.enabled()) {
-			#if HAS_DISPLAY
-			mqtt_sub_store_init();
-			#endif
-			mqtt_screen_init();
-			mqtt_wake_init(&device_config);
-			mqtt_audio_init();
-			mqtt_camera_init();
-			mqtt_notify_init();
-#if MQTT_TRIGGERS_ENABLED
-			mqtt_triggers_init();
-#endif
-		} else {
-			LOGI("Main", "MQTT not configured: skipping handler init");
-		}
-	}
-	#endif
-
-	#if HAS_DISPLAY
-	#if HAS_IMAGE_LIBRARY
-	image_library_config_init();
-	image_library_runtime_init();
-	#endif
-	binding_builtin_schemes_init();
-	timer_config_init();
-	#endif
-	#if ALARM_ENABLED
-	alarm_manager_init();
-	#endif
-
-	// Hardware button actions (GPIO buttons). No-op stubs when !HAS_BUTTON.
-	// Initialized after WiFi/MQTT setup so dispatched actions can fire
-	// immediately, and well after check_config_mode_button() has released the
-	// shared GPIO from its boot-hold probe.
-	hw_button_config_init();
-	hw_buttons_init();
-
-	last_heartbeat_ms = millis();
-	LOGI("Main", "Setup complete");
-
-	// Mark OTA partition as valid so the bootloader won't roll back on next reboot.
-	// Safe no-op when not running from an OTA partition.
-	esp_ota_mark_app_valid_cancel_rollback();
-
-	// Snapshot after all subsystems are initialized.
-	device_telemetry_log_memory_snapshot("setup");
-
-	#if HAS_MQTT
-	// Attempt blocking MQTT connect + HA discovery during boot.
-	// Non-fatal: if broker is unreachable we simply move on.
-	if (mqtt_manager.enabled() && WiFi.status() == WL_CONNECTED) {
-		#if HAS_DISPLAY
-		display_manager_set_splash_status("MQTT discovery...");
+	if (g_boot_entered_setup_ap) {
+		#if HAS_DISPLAY && !IS_EPAPER_FRAME
+		if (displayManager) displayManager->showWifiSetup();
 		#endif
-		mqtt_manager.connectAndPublishDiscoveryBlocking(8000);
-	}
-	#endif
-
-	#if HAS_DISPLAY
-	// Brief status flash so user can see connection result
-	if (WiFi.status() == WL_CONNECTED) {
-		char ip_msg[48];
-		snprintf(ip_msg, sizeof(ip_msg), "Connected - %s", WiFi.localIP().toString().c_str());
-		display_manager_set_splash_status(ip_msg);
-	} else if (WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA) {
-		char ip_msg[48];
-		snprintf(ip_msg, sizeof(ip_msg), "AP Mode - %s", WiFi.softAPIP().toString().c_str());
-		display_manager_set_splash_status(ip_msg);
+		esp_ota_mark_app_valid_cancel_rollback();
+		#if HAS_REMOTE_LOG
+		remote_log_finish_boot();
+		#endif
+		return;
 	}
 
-	delay(500);
-
-	// Navigate to pad_0 if configured, otherwise info screen
-	if (pad_config_exists(0)) {
-		display_manager_show_screen("pad_0", nullptr);
-	} else {
-		display_manager_show_info();
-	}
-
-	// Dispatch boot actions after first screen navigation
-	boot_actions_dispatch();
-
-	// Start image fetching AFTER the splash is dismissed and the runtime screen is
-	// visible.  This avoids concurrent WiFi pressure (HTTP downloads + MQTT +
-	// ESP-Hosted RPC) during the critical early-boot window.
-	#if HAS_IMAGE_FETCH
-	image_fetch_init();
-	#endif
-
-	// Start the screen saver inactivity timer after the first runtime screen is visible.
-	// This avoids counting boot + splash time as "inactivity".
-	screen_saver_manager_notify_activity(false);
-	#endif
-	#if HAS_REMOTE_LOG
-	remote_log_finish_boot();
-	#endif
+	start_normal_runtime(true);
 }
 
 void loop()
@@ -768,7 +790,6 @@ void loop()
 
 	#if HAS_DISPLAY
 	device_telemetry_mark_main_loop(DEVICE_RUNTIME_PHASE_MAIN_DISPLAY_EFFECTS);
-	message_bubble_loop();
 	visual_alert_loop();
 	#endif
 
@@ -829,7 +850,8 @@ void loop()
 
 	// WiFi watchdog - monitor connection and reconnect if needed
 	// Only run if we're not in AP mode (AP mode is the fallback, should stay active)
-	wifi_manager_watchdog(&device_config, config_loaded, web_portal_is_ap_mode());
+	wifi_manager_watchdog(&device_config, config_loaded,
+			g_setup_ap_active || web_portal_is_ap_mode());
 
 	// Check if it's time for heartbeat
 	if (current_ms - last_heartbeat_ms >= HEARTBEAT_INTERVAL_MS) {

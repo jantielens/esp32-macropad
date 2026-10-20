@@ -171,21 +171,34 @@ void epaper_frame_screen_config_mode_starting() {
 		LOGI("Epaper", "Config-mode starting screen drawn");
 }
 
-void epaper_frame_screen_config_mode(const char* ssid, const char* ip, bool is_ap) {
+void epaper_frame_screen_config_mode(const char* ssid, const char* password,
+		const char* ip, bool is_ap) {
 		char url[80];
 		snprintf(url, sizeof(url), "http://%s/", ip && *ip ? ip : (is_ap ? "192.168.4.1" : "?.?.?.?"));
 
 		if (is_ap) {
-				StatusScreenBuilder()
-						.heading1("Configuration Mode")
+				StatusScreenBuilder builder;
+				builder.heading1("WiFi Access Point (AP):")
 						.spacer()
-						.text("Connect to Wi-Fi network:")
-						.heading1(ssid && *ssid ? ssid : "")
-						.spacer()
-						.text("then browse to:")
-						.heading1(url)
-						.spacer()
-						.muted("Press the wake button to exit and resume normal mode.")
+						.text("1. Connect to this network:")
+						.heading2(ssid && *ssid ? ssid : "");
+				if (password && *password) {
+						builder.text("Password:");
+						for (size_t offset = 0; offset < strlen(password); offset += 23) {
+								char part[24];
+								const size_t remaining = strlen(password) - offset;
+								const size_t count = remaining < sizeof(part) - 1 ? remaining : sizeof(part) - 1;
+								memcpy(part, password + offset, count);
+								part[count] = '\0';
+								builder.text(part);
+						}
+				} else {
+						builder.text("No password needed");
+				}
+				builder.spacer()
+						.text("2. Browse to")
+						.heading2(url)
+						.text("3. Configure your device")
 						.draw();
 		} else {
 				char wifi_line[96];
@@ -203,6 +216,15 @@ void epaper_frame_screen_config_mode(const char* ssid, const char* ip, bool is_a
 
 		LOGI("Epaper", "Config screen drawn (mode=%s ssid='%s' ip='%s')",
 		     is_ap ? "AP" : "STA", ssid ? ssid : "", ip ? ip : "");
+}
+
+void epaper_frame_screen_config_failed() {
+		StatusScreenBuilder()
+				.heading1("Wi-Fi Setup")
+				.spacer()
+				.text("Setup network failed.")
+				.muted("Restart and try again.")
+				.draw();
 }
 
 void epaper_frame_screen_returning_to_normal() {

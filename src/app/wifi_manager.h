@@ -47,6 +47,9 @@ void wifi_manager_early_init();
 bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid,
                           uint32_t timeout_ms = 0);
 void wifi_manager_start_mdns(const DeviceConfig *config);
+// Copy the successfully registered mDNS hostname, without ".local".
+// Thread-safe; writes an empty string while registration is unavailable.
+void wifi_manager_get_mdns_hostname(char* hostname, size_t size);
 void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool is_ap_mode);
 
 // Register WiFi event handlers for event-driven reconnection.
@@ -56,6 +59,11 @@ void wifi_manager_register_events();
 // Request a WiFi reconnect cycle from any task context.
 // Sets an atomic flag consumed by the watchdog in loop().
 void wifi_manager_request_reconnect();
+// Keep the radio off until an explicit reconnect request is made.
+void wifi_manager_enter_offline();
+
+// Pure configuration validation helper.
+bool wifi_ap_password_is_valid(const char* password);
 
 // --- Pure helper functions (unit-testable, no WiFi dependency) ---
 

@@ -172,7 +172,7 @@ def _detect_bus(defines: Dict[str, str]) -> str:
         return "QSPI"
     # DSI drivers use MIPI-DSI, not SPI
     driver = defines.get("DISPLAY_DRIVER", "")
-    if driver == "DISPLAY_DRIVER_CROWPANEL_42":
+    if driver == "DISPLAY_DRIVER_CROWPANEL_42" or "EPAPER_SPI_SCK_PIN" in defines:
         return "SPI"
     if "_DSI" in driver:
         return "DSI"

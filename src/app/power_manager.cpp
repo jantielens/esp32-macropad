@@ -5,13 +5,18 @@
 #include "config_manager.h"
 #include "device_class.h"
 #include "log_manager.h"
+#include "ota_activity.h"
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
+#include <esp_timer.h>
 #include <Preferences.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <time.h>
+#include <atomic>
 
 // RTC-retained backoff state
 RTC_DATA_ATTR static uint32_t g_wifi_backoff_seconds = 0;
@@ -21,12 +26,72 @@ static bool g_is_deep_sleep_wake = false;
 static PowerMode g_boot_mode = PowerMode::AlwaysOn;
 static PowerMode g_current_mode = PowerMode::AlwaysOn;
 static bool g_force_config_mode = false;
+static bool g_force_setup_ap = false;
 
-static const uint8_t kPoweronBurstRequired = 2;
-static const unsigned long kPoweronBurstWindowMs = 10000;
 #if POWERON_CONFIG_BURST_ENABLED
-static bool g_poweron_burst_pending_clear = false;
-static unsigned long g_poweron_burst_boot_ms = 0;
+static constexpr uint64_t kPoweronBurstWindowUs = 10000000ULL;
+static SemaphoreHandle_t g_power_prefs_mutex = nullptr;
+static esp_timer_handle_t g_poweron_burst_timer = nullptr;
+static std::atomic<bool> g_poweron_burst_pending_clear{false};
+
+static bool clear_poweron_burst_marker() {
+		if (!g_power_prefs_mutex ||
+				xSemaphoreTake(g_power_prefs_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+				return false;
+		}
+		Preferences prefs;
+		const bool opened = prefs.begin("power_burst", false);
+		const bool cleared = opened && prefs.putBool("armed", false) > 0;
+		if (opened) prefs.end();
+		xSemaphoreGive(g_power_prefs_mutex);
+		if (!cleared) LOGE("Power", "Failed to clear power-on recovery marker");
+		return cleared;
+}
+
+static void poweron_burst_expired(void*) {
+		g_poweron_burst_pending_clear.store(true, std::memory_order_release);
+		if (!ota_activity_try_begin_config_write()) return;
+		if (clear_poweron_burst_marker()) {
+				g_poweron_burst_pending_clear.store(false, std::memory_order_release);
+				LOGI("Power", "Power-on recovery window expired");
+		}
+		ota_activity_finish_config_write();
+}
+
+static bool arm_poweron_burst_marker() {
+		if (!g_power_prefs_mutex ||
+				xSemaphoreTake(g_power_prefs_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+				LOGE("Power", "Could not lock NVS for power-on recovery marker");
+				return false;
+		}
+		Preferences prefs;
+		const bool opened = prefs.begin("power_burst", false);
+		const bool armed = opened && prefs.putBool("armed", true) > 0;
+		if (opened) prefs.end();
+		xSemaphoreGive(g_power_prefs_mutex);
+		if (!armed) {
+				LOGE("Power", "Failed to arm power-on recovery marker");
+				return false;
+		}
+
+		if (!g_poweron_burst_timer) {
+				esp_timer_create_args_t timer_args = {};
+				timer_args.callback = poweron_burst_expired;
+				timer_args.dispatch_method = ESP_TIMER_TASK;
+				timer_args.name = "pwr_recovery";
+				if (esp_timer_create(&timer_args, &g_poweron_burst_timer) != ESP_OK) {
+						LOGE("Power", "Failed to create power-on recovery timer");
+						(void)clear_poweron_burst_marker();
+						return false;
+				}
+		}
+		if (esp_timer_start_once(g_poweron_burst_timer, kPoweronBurstWindowUs) != ESP_OK) {
+				LOGE("Power", "Failed to start power-on recovery timer");
+				(void)clear_poweron_burst_marker();
+				return false;
+		}
+		return true;
+}
 #endif
 
 static void led_write(bool on) {
@@ -41,6 +106,7 @@ void power_manager_boot_init() {
 		const esp_reset_reason_t reason = esp_reset_reason();
 		g_is_deep_sleep_wake = (reason == ESP_RST_DEEPSLEEP);
 		g_force_config_mode = false;
+		g_force_setup_ap = false;
 
 		// Allow registered device classes to classify the wake reason and
 		// optionally request Config Mode. OR'd with any contribution from the
@@ -51,34 +117,68 @@ void power_manager_boot_init() {
 				if (dc_force_config) g_force_config_mode = true;
 		}
 
+		Preferences prefs;
+		bool opened = false;
+		bool requested_ap = false;
 		#if POWERON_CONFIG_BURST_ENABLED
-		// Power-on burst detection (for boards without a reliable user button):
-		// - Counts consecutive ESP_RST_POWERON boots.
-		// - If a second power-on happens within ~10s uptime (before clear), force Config Mode.
-		// - Counter is cleared after 10s of uptime.
-		// - Deep sleep and other reset reasons do not affect the counter.
-		g_poweron_burst_pending_clear = false;
-		g_poweron_burst_boot_ms = millis();
-
-		if (reason == ESP_RST_POWERON) {
-				Preferences prefs;
-				if (prefs.begin("power_burst", false)) {
-						uint8_t count = prefs.getUChar("pwr_cnt", 0);
-						if (count >= kPoweronBurstRequired) {
-								count = 0;
+		bool recovery_armed = false;
+		bool need_recovery_arm = false;
+		if (!g_power_prefs_mutex) g_power_prefs_mutex = xSemaphoreCreateMutex();
+		if (g_power_prefs_mutex &&
+				xSemaphoreTake(g_power_prefs_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+				opened = prefs.begin("power_burst", false);
+				if (opened) {
+						recovery_armed = prefs.getBool("armed", false);
+						requested_ap = prefs.getBool("req_ap", false);
+						if (requested_ap && prefs.putBool("req_ap", false) == 0) {
+								LOGE("Power", "Failed to consume setup AP restart request");
+								requested_ap = false;
 						}
-
-						count++;
-						if (count >= kPoweronBurstRequired) {
-								g_force_config_mode = true;
-								prefs.putUChar("pwr_cnt", 0);
-								LOGI("Power", "Power-on burst detected; entering Config Mode");
-						} else {
-								prefs.putUChar("pwr_cnt", count);
-								g_poweron_burst_pending_clear = true;
-								LOGI("Power", "Power-on burst count: %u/%u", (unsigned)count, (unsigned)kPoweronBurstRequired);
+						if (reason == ESP_RST_POWERON) {
+								if (recovery_armed) {
+										if (prefs.putBool("armed", false) > 0) {
+												g_force_setup_ap = true;
+												LOGI("Power", "Power-on recovery detected; entering setup AP");
+										} else {
+												LOGE("Power", "Failed to consume power-on recovery marker");
+										}
+								} else {
+										need_recovery_arm = true;
+								}
+						} else if (recovery_armed) {
+								if (prefs.putBool("armed", false) == 0) {
+										LOGE("Power", "Failed to clear marker after non-power-on reset");
+								}
 						}
 						prefs.end();
+				}
+				xSemaphoreGive(g_power_prefs_mutex);
+		} else {
+				LOGE("Power", "Could not lock NVS during boot recovery check");
+		}
+		#else
+		opened = prefs.begin("power_burst", false);
+		if (opened) {
+				requested_ap = prefs.getBool("req_ap", false);
+				if (requested_ap && prefs.putBool("req_ap", false) == 0) {
+						LOGE("Power", "Failed to consume setup AP restart request");
+						requested_ap = false;
+				}
+				prefs.end();
+		}
+		#endif
+		if (opened && requested_ap) {
+				if (reason == ESP_RST_SW) {
+						g_force_setup_ap = true;
+						LOGI("Power", "One-shot setup AP restart requested");
+				} else {
+						LOGW("Power", "Ignoring setup AP request on reset reason %d", static_cast<int>(reason));
+				}
+		}
+		#if POWERON_CONFIG_BURST_ENABLED
+		if (need_recovery_arm && !g_force_setup_ap) {
+				if (arm_poweron_burst_marker()) {
+						LOGI("Power", "Power-on recovery window armed");
 				}
 		}
 		#endif
@@ -115,6 +215,38 @@ void power_manager_set_current_mode(PowerMode mode) {
 
 bool power_manager_should_force_config_mode() {
 		return g_force_config_mode;
+}
+
+bool power_manager_should_force_setup_ap() {
+		return g_force_setup_ap;
+}
+
+bool power_manager_request_setup_ap_restart() {
+		if (!ota_activity_try_begin_network_transition()) {
+				LOGW("Power", "Setup AP restart rejected while an update or configuration write is active");
+				return false;
+		}
+		#if POWERON_CONFIG_BURST_ENABLED
+		if (!g_power_prefs_mutex) g_power_prefs_mutex = xSemaphoreCreateMutex();
+		if (!g_power_prefs_mutex ||
+				xSemaphoreTake(g_power_prefs_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+				LOGE("Power", "Could not lock NVS for setup AP restart request");
+				ota_activity_finish_network_transition();
+				return false;
+		}
+		#endif
+		Preferences prefs;
+		const bool opened = prefs.begin("power_burst", false);
+		const bool requested = opened && prefs.putBool("req_ap", true) > 0;
+		if (opened) prefs.end();
+		#if POWERON_CONFIG_BURST_ENABLED
+		xSemaphoreGive(g_power_prefs_mutex);
+		#endif
+		if (!requested) {
+				LOGE("Power", "Failed to persist setup AP restart request");
+				ota_activity_finish_network_transition();
+		}
+		return requested;
 }
 
 bool power_manager_is_deep_sleep_wake() {
@@ -195,6 +327,12 @@ void power_manager_sleep_for(uint32_t seconds) {
 				}
 		}
 
+#if POWERON_CONFIG_BURST_ENABLED
+		if (g_poweron_burst_timer) (void)esp_timer_stop(g_poweron_burst_timer);
+		g_poweron_burst_pending_clear.store(false, std::memory_order_release);
+		(void)clear_poweron_burst_marker();
+#endif
+
 		led_write(false);
 
 		WiFi.disconnect(true);
@@ -208,22 +346,13 @@ void power_manager_sleep_for(uint32_t seconds) {
 
 void power_manager_loop() {
 		#if POWERON_CONFIG_BURST_ENABLED
-		if (g_poweron_burst_pending_clear) {
-				const unsigned long now = millis();
-				if (g_poweron_burst_boot_ms == 0) {
-						g_poweron_burst_boot_ms = now;
-						return;
+		if (g_poweron_burst_pending_clear.load(std::memory_order_acquire) &&
+				ota_activity_try_begin_config_write()) {
+				if (clear_poweron_burst_marker()) {
+						g_poweron_burst_pending_clear.store(false, std::memory_order_release);
+						LOGI("Power", "Power-on recovery window expired");
 				}
-
-				if ((now - g_poweron_burst_boot_ms) >= kPoweronBurstWindowMs) {
-						Preferences prefs;
-						if (prefs.begin("power_burst", false)) {
-								prefs.putUChar("pwr_cnt", 0);
-								prefs.end();
-						}
-						g_poweron_burst_pending_clear = false;
-						LOGI("Power", "Power-on burst window expired; clearing counter");
-				}
+				ota_activity_finish_config_write();
 		}
 		#endif
 }

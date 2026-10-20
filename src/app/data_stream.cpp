@@ -1,6 +1,6 @@
 #include "data_stream.h"
 
-#if HAS_DISPLAY && HAS_MQTT
+#if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
 
 #include "binding_template.h"
 #include "ha_stats_resample.h"
@@ -556,4 +556,4 @@ bool data_stream_finish_history(data_stream_handle_t handle, uint32_t uid) {
 
 #endif // HAS_HA_HISTORY
 
-#endif // HAS_DISPLAY && HAS_MQTT
+#endif // HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)

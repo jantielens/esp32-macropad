@@ -9,7 +9,7 @@ function showStyleHelp() {
 /** Toggle label style input visibility for a label slot (top/center/bottom). */
 function toggleLabelStyle(slot) {
     var wrap = document.getElementById('pad-edit-label-' + slot + '-style-wrap');
-    var btn = wrap.previousElementSibling.querySelector('.style-toggle-btn');
+    var btn = wrap.parentElement.querySelector('.style-toggle-btn');
     var visible = wrap.style.display !== 'none';
     wrap.style.display = visible ? 'none' : 'flex';
     btn.classList.toggle('active', !visible);
@@ -20,7 +20,7 @@ function toggleLabelStyle(slot) {
 function syncLabelStyleVisibility(slot) {
     var input = document.getElementById('pad-edit-label-' + slot + '-style');
     var wrap = document.getElementById('pad-edit-label-' + slot + '-style-wrap');
-    var btn = wrap.previousElementSibling.querySelector('.style-toggle-btn');
+    var btn = wrap.parentElement.querySelector('.style-toggle-btn');
     var hasValue = input.value.trim().length > 0;
     wrap.style.display = hasValue ? 'flex' : 'none';
     btn.classList.toggle('active', hasValue);
@@ -354,6 +354,7 @@ function padRenderBindings() {
             '<input id="pad-binding-name-' + idx + '" type="text" class="pad-binding-name" value="' + escAttr(b.name) + '" placeholder="e.g. temperature" maxlength="31" spellcheck="false"></label>' +
             '<button type="button" class="btn btn-outline-danger btn-sm pad-binding-del" aria-label="Delete binding ' + (idx + 1) + '" title="Delete binding"><span class="portal-icon" aria-hidden="true">delete</span><span class="portal-icon-fallback">Delete</span></button>' +
             '<label class="pad-binding-expression" for="pad-binding-value-' + idx + '">Binding' +
+            ' <span class="fx-hint" onclick="showBindingHelp()">fx</span>' +
             '<input id="pad-binding-value-' + idx + '" type="text" class="pad-binding-value" value="' + escAttr(b.value) + '" placeholder="[mqtt:topic;path]" maxlength="191" spellcheck="false"></label>';
         row.querySelector('.pad-binding-name').addEventListener('input', function() {
             var v = this.value.trim();
@@ -516,7 +517,7 @@ function padBindingMaxlenHint(input) {
             hint = document.createElement('div');
             hint.className = 'binding-maxlen-hint';
             hint.innerHTML = 'Reached the maximum length. For a long binding, define a ' +
-                '<a href="#" onclick="showBindingHelp(\'pad\');return false;">named pad binding</a> ' +
+                '<a href="#" onclick="showBindingHelp();return false;">named pad binding</a> ' +
                 'and use the short <code>[pad:name]</code> alias here.';
             // Anchor to the enclosing field block so the hint always lands on its
             // own full-width line below the input, never as a flex sibling that
@@ -550,4 +551,3 @@ if (!window.__padMaxlenHintWired) {
         }
     });
 }
-

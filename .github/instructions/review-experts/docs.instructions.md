@@ -4,15 +4,24 @@ description: "Documentation expert — identifies doc-code inconsistencies and m
 
 # Documentation Expert
 
-Review code changes for documentation accuracy: identify docs that contradict the new code, missing doc updates, and stale references.
+Review documentation against the completed, scoped aggregate change set, not
+only the last edit. Identify contradictions, missing task guidance, and stale
+references at the commit-ready/ready-to-commit handoff. During an explicitly
+interim implementation review, do not require narrative reconciliation early;
+runtime metadata, schemas, fixtures, and required tests cannot be deferred.
 
 ## Review Standards
 
 ### Documentation Files to Check
 
-When code changes affect documented behavior, verify these files are still accurate:
+Choose affected owners rather than auditing every listed file. For user-facing
+changes, follow [user documentation](../user-documentation.instructions.md):
 
-* `README.md` — Project overview, feature list, script table, API table, board list
+* `docs/user/README.md` and its linked task topics — User configuration,
+  specialized workflows, examples, and their authoritative syntax owners
+* `src/boards/<target>/README.md` — Hardware facts, safety, recovery, and variants
+* `docs/samples/` — Shared user-authored examples
+* `README.md` — Project overview and setup, when affected and in scope
 * `docs/dev/web-portal.md` — REST API endpoints, web portal architecture
 * `docs/dev/display-touch-architecture.md` — Display/touch HAL, driver hierarchy, screen lifecycle
 * `docs/dev/audio-architecture.md` — Audio output, I2S, memory, and MP3 playback architecture
@@ -20,9 +29,6 @@ When code changes affect documented behavior, verify these files are still accur
 * `docs/dev/build-and-release-process.md` — Build system, branding, release workflow
 * `docs/dev/library-management.md` — Arduino library management
 * `docs/dev/logging-guidelines.md` — Logging conventions
-* `docs/first-time-setup.md` — User setup guide
-* `docs/web-portal-guide.md` — User web portal guide
-* `docs/pad-editor-guide.md` — Pad editor, bindings, widgets
 * `docs/compile-time-flags.md` — Compile-time flag reference
 * `.github/copilot-instructions.md` — Agent instructions, architecture, key files
 * `.github/instructions/*.instructions.md` — Scoped agent instructions (terminology, web portal, config settings, display/touch, compile-time flags, binding system, agent guidelines, diagramming)
@@ -66,6 +72,12 @@ When code changes affect documented behavior, verify these files are still accur
 * Check cross-references: if a feature is documented in multiple places, verify all locations.
 * Verify that `copilot-instructions.md` entries for new subsystems or key files are present and accurate.
 * Verify that scoped instruction files in `.github/instructions/` are updated when their domain is affected (e.g., web portal conventions, display/touch HAL, terminology).
+* Check conceptual openings, topic ownership, hardware boundaries, complete user
+  input syntax, and affected navigation using the scoped user-documentation
+  contract. Do not request duplicate exhaustive runtime catalogs.
+* Check final generated snapshots against their source metadata and existing
+  generators. Do not weaken runtime metadata requirements or tests/CI to defer
+  documentation.
 
 ## DON'T
 
@@ -73,3 +85,5 @@ When code changes affect documented behavior, verify these files are still accur
 * Suggest documentation for internal implementation details that users do not interact with.
 * Require documentation for trivial changes (typo fixes, minor refactors with no behavior change).
 * Flag `copilot-instructions.md` for missing entries about internal code that does not affect the agent's understanding of the project.
+* Require a new topic, CHANGELOG edit, or excluded-file cleanup mechanically;
+  establish documented impact and respect the agreed scope.

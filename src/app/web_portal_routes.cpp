@@ -11,6 +11,9 @@
 #include "web_portal_pages.h"
 #include "web_portal_recipes.h"
 #include "web_portal_logs.h"
+#if HAS_BOOT_LOGO
+#include "web_portal_boot_logo.h"
+#endif
 
 #include "board_config.h"
 
@@ -59,6 +62,10 @@ static const char* const core_preflight_paths[] = {
 	"/api/config",
 	"/api/info",
 	"/api/bindings",
+#if HAS_HA_LIVE
+	"/api/ha/live",
+	"/api/ha/lookup",
+#endif
 #if HEALTH_HISTORY_ENABLED
 	"/api/health/history",
 #endif
@@ -70,7 +77,7 @@ static const char* const core_preflight_paths[] = {
 	"/api/recipes/catalog",
 	"/api/pad/button_sizes",
 	"/api/pad/blocks",
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 	"/api/pad/resolve",
 #endif
 	"/api/pad",
@@ -103,6 +110,11 @@ static const char* const core_preflight_paths[] = {
 	"/api/sounds/list",
 	"/api/sounds",
 	"/api/sounds/play",
+#endif
+#if HAS_BOOT_LOGO
+	"/api/boot-logo",
+	"/api/boot-logo/thumbnail",
+	"/api/boot-logo/upload",
 #endif
 };
 
@@ -184,6 +196,10 @@ void web_portal_register_routes(AsyncWebServer* server) {
 
 		server->on("/api/info", HTTP_GET, handleGetVersion);
 		server->on("/api/bindings", HTTP_GET, handleGetBindings);
+#if HAS_HA_LIVE
+		server->on("/api/ha/live", HTTP_GET, handleGetHaLive);
+		server->on("/api/ha/lookup", HTTP_GET, handleGetHaLookup);
+#endif
 		#if HEALTH_HISTORY_ENABLED
 		server->on("/api/health/history", HTTP_GET, handleGetHealthHistory);
 		#endif
@@ -221,7 +237,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Pad building blocks catalog (registered before /api/pad to avoid prefix match)
 		server->on("/api/pad/blocks", HTTP_GET, handleGetPadBlocks);
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 		// Pad binding live-resolve (registered before /api/pad to avoid prefix match)
 		server->on(
 				"/api/pad/resolve",
@@ -325,6 +341,14 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		server->on("/api/sounds", HTTP_DELETE, handleDeleteSound);
 
 		server->on("/api/sounds/play", HTTP_POST, handlePostSoundPlay);
+#endif
+
+#if HAS_BOOT_LOGO
+		server->on("/api/boot-logo/thumbnail", HTTP_GET, handleGetBootLogoThumbnail);
+		server->on("/api/boot-logo", HTTP_GET, handleGetBootLogo);
+		server->on("/api/boot-logo", HTTP_DELETE, handleDeleteBootLogo);
+		server->on("/api/boot-logo/upload", HTTP_POST,
+				handlePostBootLogoUploadComplete, nullptr, handlePostBootLogoUpload);
 #endif
 
 		// Feature- and device-class route initializers self-registered via

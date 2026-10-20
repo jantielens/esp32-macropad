@@ -1,0 +1,11 @@
+{
+  "device_class": "macropad",
+  "board_label": "Waveshare 7.8-inch Interactive E-Paper",
+  "description": "Waveshare 7.8-inch IT8951 grayscale e-paper HAT with Unexpected Maker FeatherS3[D] reference wiring and one configurable hardware button.",
+  "chip_family": "ESP32-S3",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "capabilities": ["mcp", "mqtt", "extensions"],
+  "wireless": {"wifi": true, "ble": true},
+  "display": {"size": "7.8\"", "resolution": "1872x1404", "type": "E-Paper", "touch": false}
+}

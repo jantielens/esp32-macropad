@@ -4,6 +4,7 @@
 
 #include "binding_builtin_schemes.h"
 #include "binding_template.h"
+#include "pad_binding.h"
 #include "list_binding.h"
 #include "list_provider.h"
 #include "time_binding.h"
@@ -242,8 +243,32 @@ int main(int argc, char** argv) {
     }
 
     expect(binding_template_scheme_count() > 0, "production profile registered binding schemes");
-    expect(scheme_is_registered("mqtt") && scheme_is_registered("pad"),
-           "mqtt and pad schemes registered on MQTT display profiles");
+    expect(scheme_is_registered("mqtt") == bool(HAS_MQTT), "MQTT registration matches gate");
+    expect(scheme_is_registered("pad") == bool(HAS_MQTT || HAS_HA_LIVE),
+           "named bindings available with either transport");
+    expect(scheme_is_registered("ha") == bool(HAS_HA_LIVE), "HA registration matches gate");
+#if HAS_HA_LIVE
+    {
+        char value[64] = {};
+        binding_template_resolve("[ha:sensor.power]", value, sizeof(value));
+        expect(std::strcmp(value, "12.5") == 0, "HA state resolves through production scheme");
+        binding_template_resolve("[ha:light.kitchen;attributes.brightness]", value, sizeof(value));
+        expect(std::strcmp(value, "42") == 0, "HA attribute path resolves through production scheme");
+        binding_template_resolve("[ha:sensor.power;.;%.1f W]", value, sizeof(value));
+        expect(std::strcmp(value, "12.5 W") == 0, "HA formatting uses shared value formatting");
+        binding_template_resolve("[ha:sensor.power;attributes.missing|Offline]", value, sizeof(value));
+        expect(std::strcmp(value, "Offline") == 0, "missing HA attributes use outer fallback");
+        binding_template_resolve("[expr:[ha:sensor.power]*2;%.0f]", value, sizeof(value));
+        expect(std::strcmp(value, "25") == 0, "HA bindings compose with expressions");
+        PadBinding named{};
+        std::snprintf(named.name, sizeof(named.name), "power");
+        std::snprintf(named.value, sizeof(named.value), "[ha:sensor.power]");
+        pad_binding_set_bindings(&named, 1);
+        binding_template_resolve("[pad:power;%.1f W]", value, sizeof(value));
+        expect(std::strcmp(value, "12.5 W") == 0, "HA bindings compose with named pad values");
+        pad_binding_set_bindings(nullptr, 0);
+    }
+#endif
     expect_key_patterns();
     expect_scheme_docs_complete();
     expect(all_registered_finite_keys_are_recognized(),

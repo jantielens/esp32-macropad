@@ -131,6 +131,7 @@ function padWorkspaceMoveSelection(col, row, button) {
 
 function padWorkspaceDispose() {
     if (!padWorkspace) return;
+    if (typeof padButtonBuilderClose === 'function') padButtonBuilderClose();
     padWorkspace.controller.abort();
     if (padWorkspace.resizeObserver) padWorkspace.resizeObserver.disconnect();
     if (padWorkspace.confirmResolve) padWorkspace.confirmResolve(false);
@@ -149,6 +150,7 @@ function padWorkspaceSelect(col, row) {
         return;
     }
     padDialogOpen(col, row);
+    if (typeof padButtonBuilderAfterSelect === 'function') padButtonBuilderAfterSelect();
 }
 
 function padWorkspaceCapture() {
@@ -179,7 +181,6 @@ function padWorkspaceAfterSelect() {
         padActionPrefixes('tap').concat(padActionPrefixes('lp'), padWidgetActionPrefixes()).forEach(actionEditorTypeChanged);
         padWidgetTypeChanged();
         padIconTypeChanged();
-        padConfirmChanged();
         saved.details.forEach(field => {
             const node = padWorkspace.root.querySelectorAll('#pad-edit-overlay details')[field.index];
             if (node) node.open = field.open;
@@ -339,6 +340,7 @@ function padWorkspaceRenderTabs() {
 
 function padWorkspaceRefresh() {
     if (!padWorkspace || !padWorkspace.root.isConnected) return;
+    if (typeof padButtonBuilderUpdateEntry === 'function') padButtonBuilderUpdateEntry();
     padWorkspaceFit();
     const name = document.getElementById('pad-name').value;
     document.getElementById('pad-workspace-status').textContent = padSaveInProgress ? 'Saving...' : padDirty ? 'Unsaved edits' : '';
@@ -352,7 +354,9 @@ function padWorkspaceRefresh() {
         cell.setAttribute('aria-label', 'Button [' + cell.dataset.col + ', ' + cell.dataset.row + ']');
         cell.setAttribute('aria-pressed', String(selected));
         cell.tabIndex = 0;
-        cell.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); cell.click(); } };
+        cell.onkeydown = event => {
+            if (event.target === cell && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); cell.click(); }
+        };
     });
     const list = document.getElementById('pad-workspace-pads');
     const choices = Array.from({ length: (deviceInfoCache && deviceInfoCache.max_pads) || 8 }, (_, page) => {

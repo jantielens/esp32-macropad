@@ -6,7 +6,7 @@
 #include "action_list.h"
 #include "action_registry.h"
 #include "log_manager.h"
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 #include "binding_template.h"
 #endif
 #if HAS_DISPLAY
@@ -33,7 +33,7 @@ ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* la
     return result;
 }
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 static bool resolve_action_bindings(ButtonAction& act) {
     return action_type_resolve_bindings(action_type_find(act.type), act);
 }
@@ -62,7 +62,7 @@ ActionResult action_dispatch(const ButtonAction& act_in, const char* label,
     // LVGL task and may call LVGL APIs. When invoked from another task (e.g. a
     // hardware button on the loop() task), serialize against the LVGL task with
     // the display lock; lock_if_needed is a no-op when already on the LVGL task.
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     if (action_has_any_binding(act_in)) {
         ButtonAction act = act_in;
 #if HAS_DISPLAY
@@ -74,8 +74,8 @@ ActionResult action_dispatch(const ButtonAction& act_in, const char* label,
         bool resolved = resolve_action_bindings(act);
 #endif
         if (!resolved) {
-            LOGW(TAG, "%s binding result exceeds action field capacity", label);
-            return ACTION_COMPLETE;
+            LOGW(TAG, "%s binding failed or result exceeds action field capacity; remaining actions discarded", label);
+            return ACTION_FAILED;
         }
         return action_dispatch_resolved(act, label, continuation_token);
     }

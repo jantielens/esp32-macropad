@@ -2,12 +2,28 @@
 
 #if HAS_DISPLAY && HAS_TTF_FONTS && HAS_FREETYPE_FONTS
 #include <MacropadFreeType.h>
+#if HAS_DISPLAY_DIAGNOSTICS
+#include <Arduino.h>
+#endif
 #include "ota_activity.h"
 #include <limits.h>
 #include <new>
 
 namespace {
 constexpr size_t glyph_cache_size = 16;
+#if HAS_DISPLAY_DIAGNOSTICS
+DisplayGlyphStats glyph_stats;
+
+struct GlyphMissMeasurement {
+    uint32_t started_us = micros();
+    bool succeeded = false;
+
+    ~GlyphMissMeasurement() {
+        glyph_stats.miss_us += static_cast<uint32_t>(micros() - started_us);
+        if (!succeeded) ++glyph_stats.failures;
+    }
+};
+#endif
 
 struct MonoGlyph {
     uint32_t index = 0;
@@ -104,6 +120,9 @@ MonoGlyph* find_glyph(MonoFont* owner, uint32_t index) {
     MonoGlyph* replacement = nullptr;
     for (MonoGlyph& cached : owner->glyphs) {
         if (cached.valid && cached.index == index) {
+#if HAS_DISPLAY_DIAGNOSTICS
+            ++glyph_stats.hits;
+#endif
             cached.age = ++owner->clock;
             return &cached;
         }
@@ -111,6 +130,10 @@ MonoGlyph* find_glyph(MonoFont* owner, uint32_t index) {
                                   (replacement->valid && cached.age < replacement->age)))
             replacement = &cached;
     }
+#if HAS_DISPLAY_DIAGNOSTICS
+    ++glyph_stats.misses;
+    GlyphMissMeasurement measurement;
+#endif
     if (!replacement || !prepare_face(owner)) return nullptr;
     if (FT_Load_Glyph(owner->face, index, FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_MONO | FT_LOAD_NO_BITMAP) ||
         owner->allocation_failed || FT_Render_Glyph(owner->face->glyph, FT_RENDER_MODE_MONO) ||
@@ -137,6 +160,9 @@ MonoGlyph* find_glyph(MonoFont* owner, uint32_t index) {
         }
         lv_draw_buf_flush_cache(bitmap, nullptr);
     }
+#if HAS_DISPLAY_DIAGNOSTICS
+    if (replacement->valid) ++glyph_stats.evictions;
+#endif
     destroy_bitmap(replacement->bitmap);
     *replacement = MonoGlyph{};
     replacement->index = index;
@@ -153,6 +179,9 @@ MonoGlyph* find_glyph(MonoFont* owner, uint32_t index) {
     replacement->descriptor.stride = bitmap ? bitmap->header.stride : 0;
     replacement->descriptor.format = LV_FONT_GLYPH_FORMAT_A8;
     replacement->descriptor.gid.index = index;
+#if HAS_DISPLAY_DIAGNOSTICS
+    measurement.succeeded = true;
+#endif
     return replacement;
 }
 
@@ -207,6 +236,12 @@ void release_glyph(const lv_font_t*, lv_font_glyph_dsc_t* descriptor) {
     }
 }
 }
+
+#if HAS_DISPLAY_DIAGNOSTICS
+DisplayGlyphStats freetype_mono_font_get_stats() {
+    return glyph_stats;
+}
+#endif
 
 lv_font_t* freetype_mono_font_create(const uint8_t* data, size_t length, uint16_t size) {
     if (FT_AutoMono_Heap_Workspaces() != 1) return nullptr;

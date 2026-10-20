@@ -41,7 +41,7 @@ void list_provider_shutter_tests_init();
 // ---------------------------------------------------------------------------
 static void on_setup_late_hook(DeviceConfig *config, PowerMode /*current_mode*/) {
 #if HAS_DISPLAY
-		display_manager_set_splash_status("Init sensors...");
+		display_manager_set_splash_status("Initializing sensors...");
 #endif
 
 		// List provider registration is order-independent as long as it lands

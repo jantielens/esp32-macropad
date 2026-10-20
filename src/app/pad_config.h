@@ -45,7 +45,8 @@
 #define CONFIG_FORMAT_MAX_LEN          24
 #define CONFIG_STATE_ON_VALUE_MAX_LEN  32
 #define CONFIG_BTN_STATE_MAX_LEN      192
-#define CONFIG_CONFIRM_TEXT_MAX_LEN   128
+#define CONFIG_DIALOG_MESSAGE_MAX_LEN 192
+#define CONFIG_DIALOG_CAPTION_MAX_LEN 28
 #define CONFIG_BG_IMAGE_URL_MAX_LEN   256
 #define CONFIG_BG_IMAGE_PATH_MAX_LEN  IMAGE_LIBRARY_PATH_MAX_LEN
 #define CONFIG_BG_IMAGE_USER_MAX_LEN   32
@@ -161,6 +162,7 @@ void label_style_parse(const char* dsl, LabelStyle* out,
 #define ACTION_TYPE_ALARM_TONE "alarm_tone"
 #define ACTION_TYPE_ALARM_MP3 "alarm_mp3"
 #define ACTION_TYPE_NOTIFY   "notify"
+#define ACTION_TYPE_CONFIRM  "confirm"
 #define ACTION_TYPE_SYSTEM   "system"
 #define ACTION_TYPE_HA_SERVICE "ha_service"
 #define ACTION_TYPE_VISUAL_ALERT "visual_alert"
@@ -245,15 +247,17 @@ struct TimerPayload {
     char timer_value[CONFIG_VALUE_MAX_LEN];           // seconds for set/adjust (supports {step})
 };
 struct NotifyPayload {
-    char notify_text[128];                                // message text (bindable). NOTE: dominates union size — see Future Work.
-    char notify_duration_ms[CONFIG_BINDABLE_SHORT_LEN];   // auto-dismiss delay (bindable), "0" = persistent
-    char notify_text_color[CONFIG_BINDABLE_SHORT_LEN];    // text color hex (bindable)
-    char notify_bg_color[CONFIG_BINDABLE_SHORT_LEN];      // background color hex (bindable)
-    char notify_border_color[CONFIG_BINDABLE_SHORT_LEN];  // border color hex (bindable)
-    uint8_t notify_opacity;                               // 0-100%, 0 = use default (85)
-    uint8_t notify_font_size;                             // 0 = auto
-    char notify_location[8];                              // "top", "center", "bottom"
+    char message[CONFIG_DIALOG_MESSAGE_MAX_LEN];
+    uint32_t duration_ms; // 0 = until dismissed
 };
+struct ConfirmPayload {
+    char message[CONFIG_DIALOG_MESSAGE_MAX_LEN];
+    char approve_text[CONFIG_DIALOG_CAPTION_MAX_LEN];
+    char cancel_text[CONFIG_DIALOG_CAPTION_MAX_LEN];
+    uint32_t timeout_ms; // 0 = no timeout
+};
+static_assert(sizeof(NotifyPayload) <= 256 && sizeof(ConfirmPayload) <= 256,
+              "Dialog payloads must fit the MQTT/key payload budget");
 struct SystemPayload {
     char system_command[CONFIG_ACTION_TYPE_MAX_LEN];      // "reboot", "wifi_reconnect", "screensaver"
 };
@@ -296,7 +300,7 @@ struct ButtonNavigationPayload {
 //
 // Sized to fit today's largest device-class payload with headroom (today:
 // ShutterPayload at 76 B = CONFIG_TIMER_CMD_MAX_LEN(12) + CONFIG_BINDABLE_SHORT_LEN(64)).
-// Stays well under the dominant built-in arm (NotifyPayload at 394 B), so
+// Stays well under the dominant built-in arms (MQTT/key at 256 B), so
 // this slot does not currently move sizeof(ActionPayload). A board that
 // needs more can raise this via board_overrides.h; never raise the default
 // to fit a single class — that would push cost onto every board.
@@ -317,6 +321,7 @@ union ActionPayload {
     TimerPayload      timer;        // type == ACTION_TYPE_TIMER
     AlarmPayload      alarm;
     NotifyPayload     notify;       // type == ACTION_TYPE_NOTIFY
+    ConfirmPayload    confirm;      // type == ACTION_TYPE_CONFIRM
     SystemPayload     system;       // type == ACTION_TYPE_SYSTEM
     HaServicePayload  ha_service;   // type == ACTION_TYPE_HA_SERVICE
     VisualAlertPayload visual_alert; // type == ACTION_TYPE_VISUAL_ALERT
@@ -338,10 +343,9 @@ struct ButtonAction {
 // Sentinel for host-native size-budget tests + tooling.
 #define ACTION_PAYLOAD_PRESENT 1
 
-// ButtonAction has a hard size budget of 420 bytes (notify arm = 394 B dominates).
-// Trimming notify_text length is tracked as separate follow-up work.
-static_assert(sizeof(ButtonAction) <= 420,
-              "ButtonAction size budget exceeded (>420 bytes)");
+// Measured host layout: 16-byte discriminator plus the 256-byte MQTT/key union.
+static_assert(sizeof(ButtonAction) <= 272,
+              "ButtonAction size budget exceeded (>272 bytes)");
 
 // Per-arm size dump for size-canary tests. Lists built-in arms only;
 // device-class payloads share the opaque ACTION_PAYLOAD_DEVICE_CLASS_BYTES
@@ -359,6 +363,7 @@ static_assert(sizeof(ButtonAction) <= 420,
     printf_fn("  BrightnessPayload = %zu\n", sizeof(BrightnessPayload)); \
     printf_fn("  TimerPayload      = %zu\n", sizeof(TimerPayload));      \
     printf_fn("  NotifyPayload     = %zu\n", sizeof(NotifyPayload));     \
+    printf_fn("  ConfirmPayload    = %zu\n", sizeof(ConfirmPayload));    \
     printf_fn("  SystemPayload     = %zu\n", sizeof(SystemPayload));     \
     printf_fn("  HaServicePayload  = %zu\n", sizeof(HaServicePayload));  \
     printf_fn("  VisualAlertPayload= %zu\n", sizeof(VisualAlertPayload)); \
@@ -428,8 +433,6 @@ struct ScreenButtonConfig {
     uint8_t action_count;                          // number of tap actions (0-3)
     ButtonAction lp_actions[MAX_BUTTON_ACTIONS];   // long-press actions (executed sequentially)
     uint8_t lp_action_count;                       // number of long-press actions (0-3)
-    bool confirm;                                  // require confirmation before either action list
-    char confirm_text[CONFIG_CONFIRM_TEXT_MAX_LEN]; // optional confirmation prompt
 
     // Background image sources, displayed as tile backgrounds.
     char bg_image_url[CONFIG_BG_IMAGE_URL_MAX_LEN];       // empty = no image

@@ -57,7 +57,9 @@ void epaper_frame_screen_config_mode_starting();
 // Config / AP mode screen: SSID + IP + instructions. is_ap=true means we are
 // hosting an AP (show "Connect to <ssid>"), false means STA recovery portal
 // (show "Browse to http://<ip>/").
-void epaper_frame_screen_config_mode(const char* ssid, const char* ip, bool is_ap);
+void epaper_frame_screen_config_mode(const char* ssid, const char* password,
+		const char* ip, bool is_ap);
+void epaper_frame_screen_config_failed();
 
 // Brief feedback drawn when the wake button is pressed in Config / AP mode
 // to acknowledge the exit request before ESP.restart() takes the device back

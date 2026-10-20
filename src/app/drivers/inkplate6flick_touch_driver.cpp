@@ -3,7 +3,13 @@
 #include "inkplate6flick_epaper_driver.h"
 #include "../log_manager.h"
 
+#pragma push_macro("jd_prepare")
+#pragma push_macro("jd_decomp")
+#undef jd_prepare
+#undef jd_decomp
 #include <Inkplate.h>
+#pragma pop_macro("jd_decomp")
+#pragma pop_macro("jd_prepare")
 
 Inkplate6Flick_TouchDriver::Inkplate6Flick_TouchDriver()
 		: initialized(false), touched(false), lastX(0), lastY(0), rotation(0), mutex(nullptr) {}

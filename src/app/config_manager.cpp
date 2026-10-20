@@ -14,6 +14,11 @@
 #include "storage.h"
 #include "time_service.h"
 #include "ota_activity.h"
+#include "wifi_manager.h"
+#if HAS_DISPLAY
+#include "device_dialog.h"
+#include "psram_json_allocator.h"
+#endif
 #if HAS_AUDIO
 #include "audio.h"
 #endif
@@ -22,6 +27,7 @@
 #endif
 #include <Preferences.h>
 #include <nvs_flash.h>
+#include <atomic>
 
 // NVS namespace
 #define CONFIG_NAMESPACE "device_cfg"
@@ -29,6 +35,8 @@
 // Preferences keys
 #define KEY_WIFI_SSID      "wifi_ssid"
 #define KEY_WIFI_PASS      "wifi_pass"
+#define KEY_WIFI_FAILURE   "wifi_fail"
+#define KEY_AP_PASSWORD    "ap_pass"
 #define KEY_DEVICE_NAME    "device_name"
 #define KEY_TIMEZONE       "timezone"
 #define KEY_FIXED_IP       "fixed_ip"
@@ -50,6 +58,14 @@
 #define KEY_MQTT_SCOPE     "mqtt_scope"
 #define KEY_BACKLIGHT_BRIGHTNESS "bl_bright"
 #define KEY_DISPLAY_ROTATION "disp_rot"
+#if HAS_DISPLAY
+#define KEY_BOOT_APPEARANCE_FONT "boot_font"
+#define KEY_BOOT_APPEARANCE_TEXT "boot_text"
+#define KEY_BOOT_APPEARANCE_BG "boot_bg"
+#if HAS_BOOT_LOGO
+#define KEY_BOOT_LOGO_SLOT "boot_logo"
+#endif
+#endif
 #if HAS_CAMERA
 #define KEY_CAMERA_JPEG_QUALITY "cam_jpg_q"
 #define KEY_CAMERA_FEED_TARGET_FPS "cam_fps"
@@ -112,6 +128,7 @@
 #define KEY_EPAPER_THRESHOLD "ep_thr"
 #define KEY_EPAPER_BW_CONVERSION "ep_bw_conv"
 #define KEY_EPAPER_BW_THRESHOLD "ep_bw_thr"
+#define KEY_EPAPER_VCOM "ep_vcom"
 #endif
 #if HAS_AUDIO
 #define KEY_AUDIO_VOLUME   "audio_vol"
@@ -123,6 +140,7 @@
 #define KEY_MAGIC          "magic"
 
 static Preferences preferences;
+static std::atomic<bool> g_config_save_in_progress{false};
 
 #if HAS_LVGL_EPAPER
 static portMUX_TYPE epaper_refresh_settings_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -291,11 +309,23 @@ bool config_manager_load(DeviceConfig *config) {
 				return false;
 		}
 
+		strlcpy(config->wifi_failure_mode, "ap", sizeof(config->wifi_failure_mode));
+		config->ap_password[0] = '\0';
+
 		#if HAS_BLE
 		config->ble_burst_count = BLE_TELEMETRY_DEFAULT_BURST_COUNT;
 		config->ble_adv_interval_ms = BLE_TELEMETRY_DEFAULT_ADV_INTERVAL_MS;
 		config->ble_tx_power_dbm = CONFIG_DEFAULT_BLE_TX_POWER_DBM;
 		#endif
+
+#if HAS_DISPLAY
+		config->boot_appearance_font_size = BOOT_APPEARANCE_DEFAULT_FONT_SIZE;
+		config->boot_appearance_text_color = CONFIG_BOOT_COLOR_INHERIT;
+		config->boot_appearance_background_color = CONFIG_BOOT_COLOR_INHERIT;
+#if HAS_BOOT_LOGO
+		config->boot_logo_slot = CONFIG_BOOT_LOGO_SLOT_NONE;
+#endif
+#endif
 
 		#if HAS_BLE_HID || HAS_USB_HID
 		config->keyboard_transport = keyboard_transport_default(HAS_BLE_HID, HAS_USB_HID);
@@ -307,6 +337,7 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_LVGL_EPAPER
+		config->epaper_vcom_mv = 0;
 		config_manager_apply_epaper_refresh_defaults(config);
 		config_manager_publish_epaper_refresh_settings(config);
 		#endif
@@ -354,6 +385,8 @@ bool config_manager_load(DeviceConfig *config) {
 				#endif
 
 				#if HAS_DISPLAY
+				config->dialog_appearance = DialogTemplates{};
+				device_dialog_set_templates(config->dialog_appearance);
 				// Screen saver defaults
 				config->screen_saver_enabled = true;
 				config->screen_saver_timeout_seconds = SCREENSAVER_DEFAULT_TIMEOUT_SECONDS;
@@ -402,6 +435,8 @@ bool config_manager_load(DeviceConfig *config) {
 		// Load WiFi settings
 		preferences.getString(KEY_WIFI_SSID, config->wifi_ssid, CONFIG_SSID_MAX_LEN);
 		preferences.getString(KEY_WIFI_PASS, config->wifi_password, CONFIG_PASSWORD_MAX_LEN);
+		preferences.getString(KEY_WIFI_FAILURE, config->wifi_failure_mode, CONFIG_WIFI_FAILURE_MODE_MAX_LEN);
+		preferences.getString(KEY_AP_PASSWORD, config->ap_password, CONFIG_AP_PASSWORD_MAX_LEN);
 		
 		// Load device settings
 		String default_name = config_manager_get_default_device_name();
@@ -455,6 +490,32 @@ bool config_manager_load(DeviceConfig *config) {
 		config->backlight_brightness = preferences.getUChar(KEY_BACKLIGHT_BRIGHTNESS, 100);
 		config->display_rotation = preferences.getUChar(KEY_DISPLAY_ROTATION, 0);
 		if (config->display_rotation > 3) config->display_rotation = 0;
+#if HAS_DISPLAY
+		config->boot_appearance_font_size = preferences.getUChar(
+				KEY_BOOT_APPEARANCE_FONT, BOOT_APPEARANCE_DEFAULT_FONT_SIZE);
+		switch (config->boot_appearance_font_size) {
+				case 0: case 12: case 14: case 18: case 24: case 32: case 36: break;
+				default: config->boot_appearance_font_size = BOOT_APPEARANCE_DEFAULT_FONT_SIZE; break;
+		}
+		config->boot_appearance_text_color = preferences.getUInt(
+				KEY_BOOT_APPEARANCE_TEXT, CONFIG_BOOT_COLOR_INHERIT);
+		if (config->boot_appearance_text_color != CONFIG_BOOT_COLOR_INHERIT &&
+				config->boot_appearance_text_color > 0xFFFFFFUL) {
+				config->boot_appearance_text_color = CONFIG_BOOT_COLOR_INHERIT;
+		}
+		config->boot_appearance_background_color = preferences.getUInt(
+				KEY_BOOT_APPEARANCE_BG, CONFIG_BOOT_COLOR_INHERIT);
+		if (config->boot_appearance_background_color != CONFIG_BOOT_COLOR_INHERIT &&
+				config->boot_appearance_background_color > 0xFFFFFFUL) {
+				config->boot_appearance_background_color = CONFIG_BOOT_COLOR_INHERIT;
+		}
+#if HAS_BOOT_LOGO
+		config->boot_logo_slot = preferences.getUChar(KEY_BOOT_LOGO_SLOT, CONFIG_BOOT_LOGO_SLOT_NONE);
+		if (config->boot_logo_slot > 1 && config->boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE) {
+				config->boot_logo_slot = CONFIG_BOOT_LOGO_SLOT_NONE;
+		}
+#endif
+#endif
 		LOGT("Config", "Loaded brightness: %d%%", config->backlight_brightness);
 		LOGT("Config", "Display rotation offset: %u quarter turns", config->display_rotation);
 
@@ -495,6 +556,18 @@ bool config_manager_load(DeviceConfig *config) {
 		#endif
 
 		#if HAS_DISPLAY
+		config->dialog_appearance = DialogTemplates{};
+		{
+				BasicJsonDocument<PsramJsonAllocator> dialog_doc(4096);
+				const String stored = preferences.getString("dialogs", "");
+				if (stored.length()) {
+						const auto error = deserializeJson(dialog_doc, stored);
+						const char* validation = error ? "invalid stored JSON" :
+							dialog_appearance_read(dialog_doc.as<JsonObjectConst>(), config->dialog_appearance);
+						if (validation) LOGW("Config", "Dialog appearance: %s; using defaults", validation);
+				}
+				device_dialog_set_templates(config->dialog_appearance);
+		}
 		// Load screen saver settings
 		#if SCREENSAVER_BACKLIGHT_ONLY
 		config->screen_saver_enabled = true;
@@ -524,6 +597,11 @@ bool config_manager_load(DeviceConfig *config) {
 		config->epaper_full_refresh_threshold = preferences.getUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
 		config->epaper_bw_conversion = preferences.getUChar(KEY_EPAPER_BW_CONVERSION, config->epaper_bw_conversion);
 		config->epaper_bw_threshold = preferences.getUChar(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_threshold);
+		config->epaper_vcom_mv = preferences.getUShort(KEY_EPAPER_VCOM, 0);
+		if (config->epaper_vcom_mv > EPAPER_VCOM_MAX_MV) {
+				LOGW("Config", "Invalid persisted VCOM magnitude %u mV; using board default", config->epaper_vcom_mv);
+				config->epaper_vcom_mv = 0;
+		}
 		if (config_manager_normalize_epaper_refresh_settings(config)) {
 				LOGW("Config", "Normalized invalid persisted e-paper presentation settings");
 		}
@@ -584,7 +662,6 @@ bool config_manager_load(DeviceConfig *config) {
 
 // Save configuration to NVS
 bool config_manager_save(const DeviceConfig *config) {
-		if (ota_activity_is_active()) return false;
 		if (!config) {
 				LOGE("Config", "Save failed: NULL pointer");
 				return false;
@@ -595,6 +672,24 @@ bool config_manager_save(const DeviceConfig *config) {
 				return false;
 		}
 
+		bool expected = false;
+		if (!g_config_save_in_progress.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+				LOGW("Config", "Save rejected: another configuration write is active");
+				return false;
+		}
+		struct SaveProgressGuard {
+				bool admitted = false;
+				~SaveProgressGuard() {
+						if (admitted) ota_activity_finish_config_write();
+						g_config_save_in_progress.store(false, std::memory_order_release);
+				}
+		} save_progress_guard;
+		save_progress_guard.admitted = ota_activity_try_begin_config_write();
+		if (!save_progress_guard.admitted) {
+				LOGW("Config", "Save rejected: update or network transition is active");
+				return false;
+		}
+
 		LOGT("Config", "Save start");
 		// ESP32-P4 USB CDC keeps its TX ring buffer in external RAM. Let the
 		// final logging ISR finish before Preferences starts flash writes, which
@@ -602,11 +697,41 @@ bool config_manager_save(const DeviceConfig *config) {
 		Serial.flush();
 		delay(1);
 		
-		preferences.begin(CONFIG_NAMESPACE, false); // Read-write mode
+		if (!preferences.begin(CONFIG_NAMESPACE, false)) {
+				LOGE("Config", "Save failed: could not open NVS namespace");
+				return false;
+		}
+#if HAS_DISPLAY
+		{
+				BasicJsonDocument<PsramJsonAllocator> dialog_doc(4096);
+				dialog_appearance_write(dialog_doc.to<JsonObject>(), config->dialog_appearance);
+				String stored;
+				if (dialog_doc.overflowed() || !serializeJson(dialog_doc, stored) ||
+					preferences.putString("dialogs", stored) != stored.length()) {
+						LOGE("Config", "Failed to persist dialog appearance");
+						preferences.end();
+						return false;
+				}
+		}
+#endif
 		
 		// Save WiFi settings
 		preferences.putString(KEY_WIFI_SSID, config->wifi_ssid);
 		preferences.putString(KEY_WIFI_PASS, config->wifi_password);
+		const bool wifi_failure_saved =
+				preferences.putString(KEY_WIFI_FAILURE, config->wifi_failure_mode) == strlen(config->wifi_failure_mode);
+		// putString() returns 0 for a successfully stored empty string, so
+		// verify by read-back. getString() returns 0 on failure.
+		preferences.putString(KEY_AP_PASSWORD, config->ap_password);
+		char stored_ap_password[CONFIG_AP_PASSWORD_MAX_LEN] = {};
+		const bool ap_password_saved =
+				preferences.getString(KEY_AP_PASSWORD, stored_ap_password, sizeof(stored_ap_password)) > 0 &&
+				strcmp(stored_ap_password, config->ap_password) == 0;
+		if (!wifi_failure_saved || !ap_password_saved) {
+				LOGE("Config", "Failed to persist Wi-Fi setup settings");
+				preferences.end();
+				return false;
+		}
 		
 		// Save device settings
 		preferences.putString(KEY_DEVICE_NAME, config->device_name);
@@ -647,6 +772,29 @@ bool config_manager_save(const DeviceConfig *config) {
 		LOGI("Config", "Saving brightness: %d%%", config->backlight_brightness);
 		preferences.putUChar(KEY_BACKLIGHT_BRIGHTNESS, config->backlight_brightness);
 		preferences.putUChar(KEY_DISPLAY_ROTATION, config->display_rotation);
+#if HAS_DISPLAY
+		const bool boot_font_saved = preferences.putUChar(
+				KEY_BOOT_APPEARANCE_FONT, config->boot_appearance_font_size) == sizeof(uint8_t);
+		const bool boot_text_saved = preferences.putUInt(
+				KEY_BOOT_APPEARANCE_TEXT, config->boot_appearance_text_color) == sizeof(uint32_t);
+		const bool boot_background_saved = preferences.putUInt(
+				KEY_BOOT_APPEARANCE_BG, config->boot_appearance_background_color) == sizeof(uint32_t);
+		if (!boot_font_saved) LOGE("Config", "Failed to persist boot appearance font size");
+		if (!boot_text_saved) LOGE("Config", "Failed to persist boot appearance text color");
+		if (!boot_background_saved) LOGE("Config", "Failed to persist boot appearance background color");
+#if HAS_BOOT_LOGO
+		const bool boot_logo_saved = preferences.putUChar(
+				KEY_BOOT_LOGO_SLOT, config->boot_logo_slot) == sizeof(uint8_t);
+		if (!boot_logo_saved) LOGE("Config", "Failed to persist boot logo selection");
+#else
+		const bool boot_logo_saved = true;
+#endif
+#else
+		const bool boot_font_saved = true;
+		const bool boot_text_saved = true;
+		const bool boot_background_saved = true;
+		const bool boot_logo_saved = true;
+#endif
 
 		// Save Basic Auth settings
 		preferences.putBool(KEY_BASIC_AUTH_ENABLED, config->basic_auth_enabled);
@@ -694,6 +842,7 @@ bool config_manager_save(const DeviceConfig *config) {
 		preferences.putUShort(KEY_EPAPER_THRESHOLD, config->epaper_full_refresh_threshold);
 		preferences.putUChar(KEY_EPAPER_BW_CONVERSION, config->epaper_bw_conversion);
 		preferences.putUChar(KEY_EPAPER_BW_THRESHOLD, config->epaper_bw_threshold);
+		preferences.putUShort(KEY_EPAPER_VCOM, config->epaper_vcom_mv);
 		#endif
 
 		#if HAS_CAMERA
@@ -722,8 +871,15 @@ bool config_manager_save(const DeviceConfig *config) {
 		const char* timezone = config->timezone[0] ? config->timezone : "UTC0";
 		const bool timezone_saved = preferences.putString(KEY_TIMEZONE, timezone) == strlen(timezone);
 		preferences.end();
-		if (!timezone_saved) return false;
+		if (!timezone_saved || !boot_font_saved || !boot_text_saved ||
+				!boot_background_saved || !boot_logo_saved) {
+				LOGE("Config", "Save failed: one or more configuration fields were not persisted");
+				return false;
+		}
 		time_service_set_timezone(timezone);
+		#if HAS_DISPLAY
+		device_dialog_set_templates(config->dialog_appearance);
+		#endif
 		
 		config_manager_print(config);
 		LOGI("Config", "Save complete");
@@ -879,6 +1035,9 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 		if (config->magic != CONFIG_MAGIC) return false;
 		if (config->timezone[0] && !time_service_timezone_valid(config->timezone)) return false;
 		if (strlen(config->device_name) == 0) return false;
+		if (strcmp(config->wifi_failure_mode, "ap") != 0 &&
+				strcmp(config->wifi_failure_mode, "offline") != 0) return false;
+		if (!wifi_ap_password_is_valid(config->ap_password)) return false;
 
 		const PowerMode mode = power_config_parse_power_mode(config);
 		const bool needs_wifi = (mode != PowerMode::DutyCycle && mode != PowerMode::DutyCycleBle);
@@ -889,6 +1048,20 @@ bool config_manager_is_valid(const DeviceConfig *config) {
 				if (strlen(config->basic_auth_username) == 0) return false;
 				if (strlen(config->basic_auth_password) == 0) return false;
 		}
+#if HAS_DISPLAY
+		switch (config->boot_appearance_font_size) {
+				case 0: case 12: case 14: case 18: case 24: case 32: case 36: break;
+				default: return false;
+		}
+		if ((config->boot_appearance_text_color != CONFIG_BOOT_COLOR_INHERIT &&
+				 config->boot_appearance_text_color > 0xFFFFFFUL) ||
+				(config->boot_appearance_background_color != CONFIG_BOOT_COLOR_INHERIT &&
+				 config->boot_appearance_background_color > 0xFFFFFFUL)) return false;
+#if HAS_BOOT_LOGO
+		if (config->boot_logo_slot > 1 &&
+				config->boot_logo_slot != CONFIG_BOOT_LOGO_SLOT_NONE) return false;
+#endif
+#endif
 			#if HAS_LVGL_EPAPER
 			if (!config_manager_validate_epaper_refresh_settings(epaper_refresh_from_config(config))) return false;
 			#endif
@@ -902,6 +1075,14 @@ void config_manager_print(const DeviceConfig *config) {
 		LOGI("Config", "Loaded: device='%s' power=%s brightness=%u%% sleep=%us",
 		     config->device_name, config->operating_mode, unsigned(config->backlight_brightness),
 		     unsigned(config->screen_saver_timeout_seconds));
+				LOGI("Config", "Boot appearance: font=%u logo_slot=%u",
+				     unsigned(config->boot_appearance_font_size),
+		#if HAS_BOOT_LOGO
+				     unsigned(config->boot_logo_slot)
+		#else
+				     unsigned(CONFIG_BOOT_LOGO_SLOT_NONE)
+		#endif
+				);
 		#else
 		LOGI("Config", "Loaded: device='%s' power=%s", config->device_name, config->operating_mode);
 		#endif
@@ -1012,6 +1193,8 @@ LOGI("Config", "Power: mode=%s dc_wake=%us idle=%us backoff_max=%us",
 				(unsigned long)config->epaper_min_refresh_interval_ms,
 				config->epaper_refresh_clock_on_minute_boundary ? "on" : "off",
 				config->epaper_full_refresh_threshold, config->epaper_bw_conversion, config->epaper_bw_threshold);
+		LOGI("Config", "E-paper VCOM: magnitude=%u mV (0=board default, default=%u mV)",
+				config->epaper_vcom_mv, EPAPER_DEFAULT_VCOM_MV);
 #endif
 
 #if HAS_CAMERA

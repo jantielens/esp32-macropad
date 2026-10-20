@@ -25,6 +25,7 @@
 #include "epaper_frame/epaper_frame_refresh.h"
 #include "epaper_frame/epaper_frame_schedule.h"
 #include "epaper_frame/epaper_frame_screens.h"
+#include "web_portal_ap.h"
 #include "epaper_frame/epaper_frame_timing.h"
 #include "epaper_frame/epaper_frame_wake_budget.h"
 #include "log_manager.h"
@@ -742,12 +743,18 @@ static void on_setup_late_hook(DeviceConfig *cfg, PowerMode current_mode) {
 		const bool is_ap = (current_mode == PowerMode::Ap);
 		epaper_frame_show_status(g_epaper_config.epaper_frame_rotation, [is_ap, cfg]() {
 				if (is_ap) {
-						const String ip = WiFi.softAPIP().toString();
-						const String ssid = WiFi.softAPSSID();
-						epaper_frame_screen_config_mode(ssid.c_str(), ip.c_str(), true);
+						char ssid[33];
+						char password[CONFIG_AP_PASSWORD_MAX_LEN];
+						char ip[16];
+						if (!web_portal_ap_get_setup_info(ssid, sizeof(ssid), password,
+								sizeof(password), ip, sizeof(ip))) {
+								epaper_frame_screen_config_failed();
+								return;
+						}
+						epaper_frame_screen_config_mode(ssid, password, ip, true);
 				} else {
 						const String ip = WiFi.localIP().toString();
-						epaper_frame_screen_config_mode(cfg->wifi_ssid, ip.c_str(), false);
+						epaper_frame_screen_config_mode(cfg->wifi_ssid, nullptr, ip.c_str(), false);
 				}
 		});
 }

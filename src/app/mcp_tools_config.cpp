@@ -8,7 +8,7 @@
 //
 //   get_config            — read the (non-secret) device settings.            [read]
 //   get_component_config  — read a feature's saved config JSON.               [read]
-//   notify                — show a message bubble on the display.             [control]
+//   notify                — show a modal notification on the display.         [control]
 //   set_volume            — set/adjust the speaker volume.                    [control]
 //   timer_control         — start/stop/reset/set the on-screen timers.        [control]
 //   set_config            — write a curated, safe subset of device settings.  [control]
@@ -30,6 +30,9 @@
 #if HAS_MCP
 
 #include "config_manager.h"
+#if HAS_DISPLAY
+#include "device_dialog.h"
+#endif
 #include "time_service.h"
 #include "alarm_manager.h"
 #if ALARM_ENABLED
@@ -511,61 +514,46 @@ static bool tool_set_component_config(const JsonObject& args, JsonObject& result
 #endif // HAS_DISPLAY || HAS_BUTTON || MQTT_TRIGGERS_ENABLED
 
 // ============================================================================
-// notify — show a message bubble on the display
+// notify — show a modal notification using device-wide appearance
 // ============================================================================
 #if HAS_DISPLAY
 
 struct NotifyCtx {
-    char text[128];
-    char duration[12];       // ms; "" = default (3000), "0" = persistent
-    char location[8];        // "top" | "center" | "bottom"
-    char text_color[10];     // #RRGGBB
-    char bg_color[10];
-    char border_color[10];
-    uint8_t opacity;         // 0 = default (85), else 1-100
-    uint8_t font_size;       // 0 = auto
+    char text[CONFIG_DIALOG_MESSAGE_MAX_LEN];
+    uint32_t duration_ms;
 };
 
 static void exec_notify(const void* ctx, bool* ok, char* msg, size_t msg_len) {
     const NotifyCtx* c = (const NotifyCtx*)ctx;
+    if (!c->text[0]) {
+        device_dialog_dismiss_notification();
+        *ok = true;
+        strlcpy(msg, "dismissed", msg_len);
+        return;
+    }
     ButtonAction act;
     memset(&act, 0, sizeof(act));
     strlcpy(act.type, ACTION_TYPE_NOTIFY, sizeof(act.type));
     NotifyPayload& n = act.payload.notify;
-    strlcpy(n.notify_text,         c->text,         sizeof(n.notify_text));
-    strlcpy(n.notify_duration_ms,  c->duration,     sizeof(n.notify_duration_ms));
-    strlcpy(n.notify_text_color,   c->text_color,   sizeof(n.notify_text_color));
-    strlcpy(n.notify_bg_color,     c->bg_color,     sizeof(n.notify_bg_color));
-    strlcpy(n.notify_border_color, c->border_color, sizeof(n.notify_border_color));
-    strlcpy(n.notify_location,     c->location,     sizeof(n.notify_location));
-    n.notify_opacity   = c->opacity;
-    n.notify_font_size = c->font_size;
-    action_dispatch(act, "MCP");
-    *ok = true;
-    strlcpy(msg, c->text[0] ? "shown" : "dismissed", msg_len);
+    strlcpy(n.message, c->text, sizeof(n.message));
+    n.duration_ms = c->duration_ms;
+    *ok = action_dispatch(act, "MCP") == ACTION_COMPLETE;
+    strlcpy(msg, *ok ? "shown" : "Notification could not be displayed", msg_len);
 }
 
 static bool tool_notify(const JsonObject& args, JsonObject& result, String& err) {
-    if (!args.containsKey("text")) {
-        return cfg_fail(result, err, CFG_ERR_PARAMS, "missing 'text' (empty string dismisses the bubble)");
+    if (!args["text"].is<const char*>() || strlen(args["text"].as<const char*>()) >= CONFIG_DIALOG_MESSAGE_MAX_LEN) {
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "'text' must fit 191 UTF-8 bytes (empty string dismisses notifications)");
     }
     NotifyCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     strlcpy(ctx.text, args["text"] | "", sizeof(ctx.text));
 
-    if (args.containsKey("duration_ms")) {
-        long d = args["duration_ms"] | -1;
-        if (d < 0) return cfg_fail(result, err, CFG_ERR_PARAMS, "duration_ms must be >= 0 (0 = persistent)");
-        snprintf(ctx.duration, sizeof(ctx.duration), "%ld", d);
+    ctx.duration_ms = args["duration_ms"] | 3000U;
+    if (args.containsKey("duration_ms") && (!args["duration_ms"].is<uint32_t>() ||
+        (ctx.duration_ms && (ctx.duration_ms < 1000 || ctx.duration_ms > 300000)))) {
+        return cfg_fail(result, err, CFG_ERR_PARAMS, "duration_ms must be 0 or 1000-300000");
     }
-    strlcpy(ctx.location,     args["location"]     | "", sizeof(ctx.location));
-    strlcpy(ctx.text_color,   args["text_color"]   | "", sizeof(ctx.text_color));
-    strlcpy(ctx.bg_color,     args["bg_color"]     | "", sizeof(ctx.bg_color));
-    strlcpy(ctx.border_color, args["border_color"] | "", sizeof(ctx.border_color));
-    int op = args["opacity"]   | 0; if (op < 0) op = 0; if (op > 100) op = 100;
-    int fs = args["font_size"] | 0; if (fs < 0) fs = 0; if (fs > 96)  fs = 96;
-    ctx.opacity   = (uint8_t)op;
-    ctx.font_size = (uint8_t)fs;
 
     return mcp_run_control(exec_notify, &ctx, sizeof(ctx),
                            CFG_CONTROL_TIMEOUT_MS, result, err);
@@ -975,12 +963,11 @@ REGISTER_MCP_TOOL(s_tool_set_component_config);
 #if HAS_DISPLAY
 static const McpTool s_tool_notify = {
     "notify",
-    "Show a message bubble on the device screen — the direct way to get a short message in front of the "
+    "Show a modal notification on the device screen using its notification appearance template — "
     "person at the device (e.g. 'Coffee's ready', a reminder, or a status note). 'text' is required; an "
-    "empty string dismisses the current bubble. Optional: duration_ms (0 = stay until dismissed, default "
-    "~3000), location (top|center|bottom), text_color/bg_color/border_color (#RRGGBB), opacity (1-100), "
-    "font_size. Wakes the screen if asleep.",
-    "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"duration_ms\":{\"type\":\"integer\",\"minimum\":0},\"location\":{\"type\":\"string\",\"enum\":[\"top\",\"center\",\"bottom\"]},\"text_color\":{\"type\":\"string\"},\"bg_color\":{\"type\":\"string\"},\"border_color\":{\"type\":\"string\"},\"opacity\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100},\"font_size\":{\"type\":\"integer\"}},\"required\":[\"text\"]}",
+    "empty string dismisses the current notification. Maximum 191 UTF-8 bytes. Optional duration_ms: "
+    "1000-300000, or 0 until dismissed; default 3000. Replacing a confirmation cancels its action list.",
+    "{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"duration_ms\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":300000}},\"required\":[\"text\"]}",
     tool_notify, false, false, true
 };
 REGISTER_MCP_TOOL(s_tool_notify);

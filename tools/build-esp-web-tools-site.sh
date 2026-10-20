@@ -167,7 +167,7 @@ get_chip_family_for_fqbn() {
 
   if [[ "$board_id" == *"esp32p4"* ]]; then
     echo "ESP32-P4"
-  elif [[ "$board_id" == *"esp32s3"* ]]; then
+  elif [[ "$board_id" == *"esp32s3"* || "$board_id" == "um_feathers3" ]]; then
     echo "ESP32-S3"
   elif [[ "$board_id" == *"esp32s2"* ]]; then
     echo "ESP32-S2"

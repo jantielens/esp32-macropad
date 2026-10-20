@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 357
+Total flags: 366
 
 ### Features (HAS_*)
 
@@ -30,11 +30,13 @@ Total flags: 357
 - **HAS_BACKLIGHT** default: `false` — Enable backlight control (typically via PWM).
 - **HAS_BLE** default: `false` — for boards without a display (e.g. ESP32-C3 sensor nodes).
 - **HAS_BLE_HID** default: `true` — Enable BLE HID keyboard support.
+- **HAS_BOOT_LOGO** default: `(HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM)` — Enable an optional Storage-backed boot logo on display boards with PSRAM.
 - **HAS_BUILTIN_LED** default: `false` — Enable built-in status LED support.
 - **HAS_BUTTON** default: `false` — User Button (optional)
 - **HAS_CAMERA** default: `false` — Enable onboard camera hardware support.
 - **HAS_CONFIG_MODE_BUTTON** default: `HAS_BUTTON` — Enables a boot-hold button to enter configuration mode without runtime actions.
 - **HAS_DISPLAY** default: `false` — Enable display + LVGL UI support.
+- **HAS_DISPLAY_DIAGNOSTICS** default: `false` — Developer-only display profiling; compile out detailed collection and health fields by default.
 - **HAS_EPAPER_FRAME_WAKE_BUTTON** default: `false` — Enable e-paper wake-button handling (ext1 wake plus short/long press).
 - **HAS_EPAPER_FRONTLIGHT** default: `false` — Enable e-paper frontlight control on boards with frontlight hardware.
 - **HAS_EPAPER_GRAYSCALE** default: `HAS_LVGL_EPAPER` — Panel supports the grayscale presentation mode.
@@ -43,7 +45,8 @@ Total flags: 357
 - **HAS_ES7210_MIC** default: `false` — Enable ES7210 microphone ADC initialization on the shared I2S transport.
 - **HAS_FILESYSTEM** default: `true` — Enable a persistent filesystem partition or SD card backend.
 - **HAS_FREETYPE_FONTS** default: `(HAS_TTF_FONTS && HAS_LVGL_EPAPER)` — Auto-hinted monochrome uploaded fonts; grayscale retains the STB backend.
-- **HAS_HA_HISTORY** default: `(HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)` — Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
+- **HAS_HA_HISTORY** default: `(HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE) && HAS_PSRAM)` — Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
+- **HAS_HA_LIVE** default: `(HAS_DISPLAY && HAS_PSRAM)` — Direct Home Assistant live bindings; independent of MQTT and requires PSRAM.
 - **HAS_IMAGE_FETCH** default: `HAS_DISPLAY` — Requires HAS_DISPLAY. Uses LVGL's built-in tjpgd (JPEG) and lodepng (PNG).
 - **HAS_IMAGE_LIBRARY** default: `HAS_DISPLAY` — Enable local Storage-backed image loading for pad buttons and slideshows.
 - **HAS_LVGL_EPAPER** default: `false` — Enable the interactive LVGL e-paper refresh pipeline and portal controls.
@@ -72,7 +75,8 @@ Total flags: 357
 
 - **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
-- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_RETERMINAL_E1003, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_IT8951, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
+- **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` (values: DISPLAY_SHAPE_ROUND) — Default display shape (boards override in board_overrides.h)
 - **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_CST820B_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
@@ -97,10 +101,13 @@ Total flags: 357
 - **EPAPER_FRAME_SD_EN_PIN** default: `(no default)` — microSD power-enable gate (drive HIGH ~5 ms before mounting the card).
 - **EPAPER_POWER_PIN** default: `(no default)` — E-paper power-enable GPIO, active HIGH.
 - **EPAPER_RESET_PIN** default: `(no default)` — E-paper reset GPIO, active LOW.
+- **EPAPER_SPI_MISO_PIN** default: `(no default)` — E-paper SPI data-input GPIO for IT8951 responses.
 - **EPAPER_SPI_MOSI_PIN** default: `(no default)` — E-paper SPI data-output GPIO.
 - **EPAPER_SPI_SCK_PIN** default: `(no default)` — E-paper SPI clock GPIO.
 - **HX711_DOUT_PIN** default: `-1` — HX711 data-out pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
 - **HX711_SCK_PIN** default: `-1` — HX711 clock pin. -1 disables the driver even when HAS_SENSOR_HX711 is true.
+- **IT8951_CONTROLLER_POWER_PIN** default: `-1` — Optional active-HIGH controller power enable; -1 means externally powered.
+- **IT8951_PANEL_POWER_PIN** default: `-1` — Optional active-HIGH panel power enable; -1 means externally powered.
 - **LCD_B0_PIN** default: `(no default)` — RGB Blue 0 pin.
 - **LCD_B1_PIN** default: `(no default)` — RGB Blue 1 pin.
 - **LCD_B2_PIN** default: `(no default)` — RGB Blue 2 pin.
@@ -154,6 +161,7 @@ Total flags: 357
 - **ACTION_TYPE_REGISTRY_MAX_TYPES** default: `(no default)` — Room for the built-in catalog and four board-local actions.
 - **AP_MAX_CONNECTIONS** default: `(no default)` — One client is sufficient for first-time provisioning.
 - **AUDIO_TASK_STACK_SIZE** default: `(no default)` — Audio worker stack bytes: 8 KB on ESP32/S3 with tones or PSRAM MP3 scratch; otherwise 24 KB.
+- **BOOT_APPEARANCE_DEFAULT_FONT_SIZE** default: `0` — Device-defined boot appearance defaults; boards may override these values.
 - **CAMERA_MJPEG_MAX_CLIENTS** default: `1` — Maximum simultaneous MJPEG clients; boards with constrained WiFi or PSRAM can keep the default.
 - **CONFIG_ASYNC_TCP_STACK_SIZE** default: `(no default)` — Screenshot encoding and pad saves run from the AsyncTCP worker.
 - **DATA_STREAM_MAX_STREAMS** default: `64` — Each stream uses ~220 bytes static + ~240 bytes PSRAM ring buffer when active.
@@ -282,9 +290,9 @@ Total flags: 357
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
 - **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP** default: `false` — Keep the MIPI-DSI panel powered (Display On, black) during screensaver sleep; no DCS power-down.
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
-- **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` — Default display shape (boards override in board_overrides.h)
 - **EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD** default: `10` — Number of regional updates before a full refresh on supporting e-paper drivers.
 - **EPAPER_DEFAULT_RENDER_MODE** default: `EPAPER_RENDER_MODE_GRAYSCALE` — Default panel mode for an interactive LVGL e-paper driver.
+- **EPAPER_DEFAULT_VCOM_MV** default: `0` — Default VCOM magnitude in millivolts for consuming e-paper drivers; 0 means unspecified.
 - **EPAPER_FRAME_BATTERY_DIVIDER** default: `(no default)` — Voltage divider ratio applied to the raw ADC millivolt reading.
 - **EPAPER_FRAME_FAST_REFRESH** default: `false` — button wakes skip straight to the image fetch to avoid the second waveform.
 - **EPAPER_REFRESH_SETTLE_MS** default: `(no default)` — Resettable quiet period that coalesces final layout and binding updates before display().
@@ -299,6 +307,7 @@ Total flags: 357
 - **IS_EPAPER_FRAME** default: `false` — Select the sleep-first E-Paper Frame product class.
 - **IS_SHUTTER_TESTER** default: `false` — enabled per-board via src/boards/<name>/board_overrides.h.
 - **IS_VOICE_ASSISTANT** default: `false` — transcription, voice actions, transcript bindings, and portal controls.
+- **IT8951_E1003_PROTOCOL** default: `false` — Use reTerminal E1003's controller firmware and reversed image-packing protocol.
 - **JD9165_DSI_HSYNC_BACK_PORCH** default: `136` — HSYNC back porch in pixel clocks.
 - **JD9165_DSI_HSYNC_FRONT_PORCH** default: `160` — HSYNC front porch in pixel clocks.
 - **JD9165_DSI_HSYNC_PULSE_WIDTH** default: `24` — HSYNC pulse width in pixel clocks.
@@ -328,7 +337,7 @@ Total flags: 357
 - **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
 - **PORTAL_PRIMARY_ICON** default: `""` — Icon (UTF-8) for the primary portal category in the nav sidebar.
 - **PORTAL_PRIMARY_LABEL** default: `""` — Display name for the primary portal category in the nav sidebar.
-- **POWERON_CONFIG_BURST_ENABLED** default: `false` — Intended for boards WITHOUT a reliable user button.
+- **POWERON_CONFIG_BURST_ENABLED** default: `true` — Enable the two-power-on recovery gesture to force setup AP.
 - **PROJECT_DISPLAY_NAME** default: `"ESP32 Device"` — Human-friendly project name used in the web UI and device name (can be set by build system).
 - **REMOTE_LOG_BOOT_RECORDS** default: `128` — Startup snapshot capacity; defaults to 128 records when remote capture is enabled.
 - **SCREENSAVER_BACKLIGHT_ONLY** default: `false` — Use the legacy timeout-only lighting policy with instant transitions.
@@ -404,63 +413,65 @@ Total flags: 357
 Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
-| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_DISPLAY | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_GRAYSCALE | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_FILESYSTEM | HAS_FREETYPE_FONTS | HAS_HA_HISTORY | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_TTF_FONTS | HAS_USB_HID |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| crowpanel-4.2-interactive |  |  |  |  |  |  | ✅ |  | ? | ✅ |  |  |  | ✅ |  |  | ✅ | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
-| esp32-4848S040 |  |  | ✅ |  |  |  | ✅ |  | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
-| jc3248w535 |  |  | ✅ |  |  |  | ✅ |  | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| jc3636w518 |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| jc3636w518-sd |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| m5stack-stopwatch | ✅ |  | ✅ |  |  |  | ✅ |  | ✅ | ✅ |  |  | ? |  |  |  | ✅ | ? | ✅ | ✅ |  |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
-| jc4827w543c |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
-| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ✅ |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ |  | ✅ |  | ? | ✅ |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
-| jc4880p433 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| jc4880p433-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
-| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ | ? |  |
-| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ? | ✅ | ? |  |
-| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ? | ✅ | ? |  |
-| jc1060p470c | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
-| esp32c3-withsensors |  |  |  | ✅ |  |  |  |  | ✅ |  |  |  | ? |  |  |  |  | ? | ? | ? | ? |  |  |  |  |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  | ? |  |
-| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  |  |  |  | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? |  | ✅ | ✅ |  |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  | ? |  |
-| inkplate5v2-frame |  |  |  |  |  |  |  |  | ? |  | ✅ |  | ? | ✅ | ✅ |  | ✅ | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
-| inkplate6flick-frame |  |  |  |  |  |  |  |  | ? |  | ✅ |  | ? | ✅ | ✅ |  | ✅ | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
-| inkplate6flick-interactive |  |  | ✅ |  |  |  |  |  | ? | ✅ |  |  | ? | ✅ |  |  | ✅ | ? |  |  |  | ✅ |  | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
-| reterminal-e1003-frame |  |  |  |  |  |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  | ✅ | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
-| reterminal-e1003-interactive |  |  |  |  | ✅ |  |  |  | ? | ✅ |  |  | ? | ✅ |  |  | ✅ | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
+| board-name | HAS_AUDIO | HAS_AUDIO_INPUT | HAS_BACKLIGHT | HAS_BLE | HAS_BLE_HID | HAS_BOOT_LOGO | HAS_BUILTIN_LED | HAS_BUTTON | HAS_CAMERA | HAS_CONFIG_MODE_BUTTON | HAS_DISPLAY | HAS_DISPLAY_DIAGNOSTICS | HAS_EPAPER_FRAME_WAKE_BUTTON | HAS_EPAPER_FRONTLIGHT | HAS_EPAPER_GRAYSCALE | HAS_EPAPER_PANEL | HAS_EPAPER_VCOM | HAS_ES7210_MIC | HAS_FILESYSTEM | HAS_FREETYPE_FONTS | HAS_HA_HISTORY | HAS_HA_LIVE | HAS_IMAGE_FETCH | HAS_IMAGE_LIBRARY | HAS_LVGL_EPAPER | HAS_MCP | HAS_MQTT | HAS_MUSIC_ANALYSIS | HAS_NATIVE_EXTENSIONS | HAS_REMOTE_LOG | HAS_SCALE | HAS_SD_CARD | HAS_SENSOR_AHT10 | HAS_SENSOR_BATTERY_ADC | HAS_SENSOR_BME280 | HAS_SENSOR_DUMMY | HAS_SENSOR_HX711 | HAS_SENSOR_LD2410_OUT | HAS_SENSOR_NAU7802 | HAS_SENSOR_TSL2591 | HAS_SOUND_PLAYER | HAS_STORAGE_BROWSER | HAS_TOUCH | HAS_TTF_FONTS | HAS_USB_HID |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| waveshare-7.8-interactive |  |  |  |  |  | ? | ✅ | ✅ |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
+| crowpanel-4.2-interactive |  |  |  |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  |  | ✅ |  |  | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
+| esp32-4848S040 |  |  | ✅ |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| jc3248w535 |  |  | ✅ |  |  | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| jc3636w518 |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| jc3636w518-sd |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| m5stack-stopwatch | ✅ |  | ✅ |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ✅ | ? | ✅ |  |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| jc4827w543c |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| jc4880p433 | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| jc4880p433-sd | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| jc4880p433-shutter | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| jc4880p433-hx711 | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  | ✅ |  |  |  | ? | ? | ✅ | ? |  |
+| jc4880p433-nau7802 | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  | ✅ |  | ? | ? | ✅ | ? |  |
+| jc4880p433-darkroom | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  | ✅ | ? | ? | ✅ | ? |  |
+| jc1060p470c | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| jc1060p470c-sd | ✅ |  | ✅ |  | ✅ | ? |  | ✅ | ✅ | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
+| esp32c3-withsensors |  |  |  | ✅ |  | ? |  |  |  | ✅ |  |  |  |  | ? |  |  |  |  | ? | ? | ? | ? | ? |  |  |  |  |  |  | ? |  |  |  |  | ✅ |  |  |  |  | ? |  |  | ? |  |
+| firebeetle2-esp32c6-aht10 |  |  |  | ✅ |  | ? |  |  |  | ✅ |  |  |  |  | ? |  |  |  | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ |  |  |  | ? |  | ✅ | ✅ |  |  |  |  |  |  | ? |  |  | ? |  |
+| inkplate5v2-frame |  |  |  |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ | ✅ |  | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
+| inkplate6flick-frame |  |  |  |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ | ✅ |  | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
+| inkplate6flick-interactive |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ✅ | ? |  | ? |  |  | ✅ |  | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
+| reterminal-e1003-frame |  |  |  |  |  | ? |  |  |  | ? |  |  | ✅ |  | ? | ✅ |  |  | ✅ | ? | ? | ? |  | ? |  | ✅ | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  |  | ? |  | ? |  |
+| reterminal-e1003-interactive |  |  |  |  | ✅ | ? |  |  |  | ? | ✅ |  |  |  | ? | ✅ |  |  | ✅ | ? | ? | ? |  |  | ✅ | ✅ | ✅ |  | ✅ |  | ? |  |  |  |  |  |  |  |  |  |  | ? | ✅ | ? |  |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_FEATURES -->
 
 ## Board Matrix: Selectors (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
-| board-name | AUDIO_OUTPUT_DRIVER | CAMERA_DRIVER | DISPLAY_DRIVER | TOUCH_DRIVER |
-| --- | --- | --- | --- | --- |
-| crowpanel-4.2-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_CROWPANEL_42 | — |
-| esp32-4848S040 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7701_RGB | TOUCH_DRIVER_GT911 |
-| jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX | TOUCH_DRIVER_AXS15231B_I2C |
-| jc3636w518 | AUDIO_OUTPUT_DRIVER_PCM510XA | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
-| jc3636w518-sd | AUDIO_OUTPUT_DRIVER_PCM510XA | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | TOUCH_DRIVER_CST816S_WIRE |
-| m5stack-stopwatch | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_CO5300 | TOUCH_DRIVER_CST820B_WIRE |
-| jc4827w543c | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_NV3041A | TOUCH_DRIVER_GT911 |
-| esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
-| esp32-p4-lcd4b-voice | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-sd | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-hx711 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-nau7802 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc4880p433-darkroom | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | TOUCH_DRIVER_GT911 |
-| jc1060p470c | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
-| jc1060p470c-sd | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_JD9165_DSI | TOUCH_DRIVER_GT911 |
-| esp32c3-withsensors | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
-| firebeetle2-esp32c6-aht10 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
-| inkplate5v2-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
-| inkplate6flick-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
-| inkplate6flick-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_INKPLATE6FLICK | TOUCH_DRIVER_INKPLATE6FLICK |
-| reterminal-e1003-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | — |
-| reterminal-e1003-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_RETERMINAL_E1003 | TOUCH_DRIVER_GT911 |
+| board-name | AUDIO_OUTPUT_DRIVER | CAMERA_DRIVER | DISPLAY_DRIVER | DISPLAY_SHAPE | TOUCH_DRIVER |
+| --- | --- | --- | --- | --- | --- |
+| waveshare-7.8-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_IT8951 | DISPLAY_SHAPE_RECT | — |
+| crowpanel-4.2-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_CROWPANEL_42 | DISPLAY_SHAPE_RECT | — |
+| esp32-4848S040 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7701_RGB | DISPLAY_SHAPE_SQUARE | TOUCH_DRIVER_GT911 |
+| jc3248w535 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_AXS15231B_I2C |
+| jc3636w518 | AUDIO_OUTPUT_DRIVER_PCM510XA | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | DISPLAY_SHAPE_ROUND | TOUCH_DRIVER_CST816S_WIRE |
+| jc3636w518-sd | AUDIO_OUTPUT_DRIVER_PCM510XA | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | DISPLAY_SHAPE_ROUND | TOUCH_DRIVER_CST816S_WIRE |
+| m5stack-stopwatch | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_CO5300 | DISPLAY_SHAPE_ROUND | TOUCH_DRIVER_CST820B_WIRE |
+| jc4827w543c | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_NV3041A | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | TOUCH_DRIVER_GT911 |
+| esp32-p4-lcd4b-voice | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | TOUCH_DRIVER_GT911 |
+| jc4880p433 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| jc4880p433-sd | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| jc4880p433-shutter | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| jc4880p433-hx711 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| jc4880p433-nau7802 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| jc4880p433-darkroom | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_ST7701_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| jc1060p470c | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_JD9165_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| jc1060p470c-sd | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_OV02C10_P4 | DISPLAY_DRIVER_JD9165_DSI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
+| esp32c3-withsensors | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | DISPLAY_SHAPE_RECT | — |
+| firebeetle2-esp32c6-aht10 | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | DISPLAY_SHAPE_RECT | — |
+| inkplate5v2-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | DISPLAY_SHAPE_RECT | — |
+| inkplate6flick-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | DISPLAY_SHAPE_RECT | — |
+| inkplate6flick-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_INKPLATE6FLICK | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_INKPLATE6FLICK |
+| reterminal-e1003-frame | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | — | DISPLAY_SHAPE_RECT | — |
+| reterminal-e1003-interactive | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_RETERMINAL_E1003 | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
 <!-- END COMPILE_FLAG_REPORT:MATRIX_SELECTORS -->
 
 ## Usage Map (preprocessor only, generated)
@@ -549,6 +560,23 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_ble.h
   - src/app/web_portal_config.cpp
   - src/app/web_portal_routes.cpp
+- **HAS_BOOT_LOGO**
+  - src/app/app.ino
+  - src/app/board_config.h
+  - src/app/boot_logo_store.cpp
+  - src/app/boot_logo_store.h
+  - src/app/config_manager.cpp
+  - src/app/config_manager.h
+  - src/app/display_manager.cpp
+  - src/app/display_manager.h
+  - src/app/display_manager_api.cpp
+  - src/app/image_decoder.cpp
+  - src/app/image_decoder.h
+  - src/app/lv_conf.h
+  - src/app/web_portal_boot_logo.cpp
+  - src/app/web_portal_boot_logo.h
+  - src/app/web_portal_config.cpp
+  - src/app/web_portal_routes.cpp
 - **HAS_BUILTIN_LED**
   - src/app/app.ino
   - src/app/board_config.h
@@ -573,6 +601,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/back_action.cpp
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
+  - src/app/actions/confirm_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/display_refresh_action.cpp
@@ -582,7 +611,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mouse_button_action.cpp
   - src/app/actions/mqtt_action.cpp
   - src/app/actions/music_action.cpp
-  - src/app/actions/notify_action.cpp
   - src/app/actions/screen_action.cpp
   - src/app/actions/sound_alert_action.cpp
   - src/app/actions/system_action.cpp
@@ -592,6 +620,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/components/hw_buttons_component.cpp
+  - src/app/device_dialog.cpp
   - src/app/gamepad_hid.cpp
   - src/app/ha_service.cpp
   - src/app/ha_service.h
@@ -661,6 +690,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/ble_pair_action.cpp
   - src/app/actions/brightness_action.cpp
   - src/app/actions/button_navigation_action.cpp
+  - src/app/actions/confirm_action.cpp
   - src/app/actions/cycle_pad_action.cpp
   - src/app/actions/delay_action.cpp
   - src/app/actions/display_refresh_action.cpp
@@ -680,11 +710,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/app.ino
   - src/app/audio_input_binding.cpp
   - src/app/binding_builtin_schemes.cpp
+  - src/app/binding_sources.cpp
+  - src/app/binding_sources.h
   - src/app/board_config.h
   - src/app/boot_actions.cpp
   - src/app/boot_actions.h
-  - src/app/button_confirmation.cpp
-  - src/app/button_confirmation.h
   - src/app/button_defaults.cpp
   - src/app/button_defaults.h
   - src/app/camera_binding.cpp
@@ -714,7 +744,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/shutter_tester/web/list_provider_shutter_tests.cpp
   - src/app/device_classes/shutter_tester/widgets/waveform_widget.cpp
   - src/app/device_classes/shutter_tester_device_class.cpp
+  - src/app/device_dialog.cpp
+  - src/app/device_dialog.h
   - src/app/device_telemetry.cpp
+  - src/app/dialog_appearance.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
   - src/app/display_manager_api.cpp
@@ -730,6 +763,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_service.h
   - src/app/health_binding.cpp
   - src/app/health_table_builder.cpp
+  - src/app/hw_buttons.cpp
   - src/app/icon_store.cpp
   - src/app/icon_store.h
   - src/app/keyboard_hid.cpp
@@ -745,8 +779,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
-  - src/app/message_bubble.cpp
-  - src/app/message_bubble.h
   - src/app/mqtt_binding.cpp
   - src/app/mqtt_notify.cpp
   - src/app/mqtt_notify.h
@@ -822,7 +854,20 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.cpp
   - src/app/widgets/widget.h
   - src/app/widgets/widget_registry.h
+  - src/app/wifi_manager.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
+- **HAS_DISPLAY_DIAGNOSTICS**
+  - src/app/board_config.h
+  - src/app/device_telemetry.cpp
+  - src/app/display_driver.h
+  - src/app/display_manager.cpp
+  - src/app/display_manager.h
+  - src/app/display_perf.h
+  - src/app/display_task.cpp
+  - src/app/drivers/it8951_epaper_driver.cpp
+  - src/app/drivers/it8951_epaper_driver.h
+  - src/app/freetype_mono_font.cpp
+  - src/app/freetype_mono_font.h
 - **HAS_EPAPER_FRAME_WAKE_BUTTON**
   - src/app/board_config.h
   - src/app/device_classes/epaper_frame/epaper_frame_config.h
@@ -850,6 +895,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/web_portal_utils.cpp
 - **HAS_FREETYPE_FONTS**
   - src/app/board_config.h
+  - src/app/display_task.cpp
   - src/app/freetype_mono_font.cpp
   - src/app/freetype_mono_font.h
   - src/app/pad_font_cache.cpp
@@ -861,6 +907,47 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_stats.h
   - src/app/web_portal_device_api.cpp
   - src/app/widgets/sparkline_widget.cpp
+- **HAS_HA_LIVE**
+  - src/app/action_dispatch.cpp
+  - src/app/action_dispatch.h
+  - src/app/action_registry.cpp
+  - src/app/action_registry.h
+  - src/app/app.ino
+  - src/app/binding_builtin_schemes.cpp
+  - src/app/binding_sources.cpp
+  - src/app/binding_sources.h
+  - src/app/board_config.h
+  - src/app/data_stream.cpp
+  - src/app/data_stream.h
+  - src/app/display_manager.cpp
+  - src/app/display_task.cpp
+  - src/app/ha_binding.cpp
+  - src/app/ha_live.cpp
+  - src/app/ha_live.h
+  - src/app/ha_live_state.cpp
+  - src/app/ha_lookup.cpp
+  - src/app/ha_lookup.h
+  - src/app/ha_lookup_data.cpp
+  - src/app/ha_lookup_data.h
+  - src/app/mcp_tools_pads.cpp
+  - src/app/pad_binding.cpp
+  - src/app/pad_binding.h
+  - src/app/pad_resolve_request.cpp
+  - src/app/pad_resolve_request.h
+  - src/app/portal_components.cpp
+  - src/app/screens/pad_screen.cpp
+  - src/app/screens/pad_screen_poll.cpp
+  - src/app/screens/pad_tile_builder.cpp
+  - src/app/web_portal_config.cpp
+  - src/app/web_portal_device_api.cpp
+  - src/app/web_portal_ha_lookup.cpp
+  - src/app/web_portal_pad.cpp
+  - src/app/web_portal_pad.h
+  - src/app/web_portal_routes.cpp
+  - src/app/widgets/bar_chart_widget.cpp
+  - src/app/widgets/gauge_widget.cpp
+  - src/app/widgets/sparkline_widget.cpp
+  - src/app/widgets/widget.h
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h
@@ -869,6 +956,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/image_decoder.h
   - src/app/image_fetch.cpp
   - src/app/image_fetch.h
+  - src/app/lv_conf.h
   - src/app/screen_saver_manager.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h
@@ -893,6 +981,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/image_library_runtime.h
   - src/app/local_image_loader.cpp
   - src/app/local_image_loader.h
+  - src/app/lv_conf.h
   - src/app/pad_validate.cpp
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
@@ -909,7 +998,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/lv_conf.h
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
-  - src/app/screens/splash_screen.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_pages.cpp
   - src/app/web_portal_pages.h
@@ -971,6 +1059,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/actions/mqtt_action.cpp
   - src/app/app.ino
   - src/app/binding_builtin_schemes.cpp
+  - src/app/binding_sources.cpp
+  - src/app/binding_sources.h
   - src/app/board_config.h
   - src/app/camera_motion_actions.cpp
   - src/app/camera_motion_actions.h
@@ -984,7 +1074,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/display_manager.cpp
   - src/app/display_task.cpp
   - src/app/duty_cycle.cpp
-  - src/app/expr_binding.cpp
   - src/app/ha_discovery.cpp
   - src/app/ha_discovery.h
   - src/app/mcp_tools_config.cpp
@@ -1046,6 +1135,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
   - src/app/components/extensions_component.cpp
   - src/app/components/web_portal_native_extensions.cpp
+  - src/app/lv_conf.h
   - src/app/native_extension.cpp
   - src/app/native_extension.h
   - src/app/native_extension_signature.cpp
@@ -1168,9 +1258,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/storage_browser.cpp
 - **HAS_TOUCH**
+  - src/app/actions/confirm_action.cpp
   - src/app/app.ino
   - src/app/board_config.h
   - src/app/config_manager.cpp
+  - src/app/device_dialog.cpp
   - src/app/display_manager.cpp
   - src/app/display_manager.h
   - src/app/display_task.cpp
@@ -1182,6 +1274,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screens/pad_tile_builder.cpp
   - src/app/screens/touch_test_screen.cpp
   - src/app/screens/touch_test_screen.h
+  - src/app/screens/wifi_setup_screen.cpp
   - src/app/touch_drivers.cpp
   - src/app/touch_manager.cpp
   - src/app/touch_manager.h
@@ -1253,7 +1346,13 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_hardware.cpp
   - src/app/display_drivers.cpp
   - src/app/display_manager.cpp
+  - src/app/lv_conf.h
   - src/app/web_portal_screenshot.cpp
+- **DISPLAY_SHAPE**
+  - src/app/board_config.h
+  - src/app/screens/info_screen.cpp
+  - src/app/screens/splash_screen.cpp
+  - src/app/screens/wifi_setup_screen.cpp
 - **TOUCH_DRIVER**
   - src/app/board_config.h
   - src/app/board_hardware.cpp
@@ -1339,6 +1438,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_hardware.cpp
 - **BOARD_SENSOR_SOURCE**
   - src/app/sensors.cpp
+- **BOOT_APPEARANCE_DEFAULT_FONT_SIZE**
+  - src/app/board_config.h
 - **BUTTON_ACTIVE_LOW**
   - src/app/board_config.h
 - **BUTTON_PIN**
@@ -1465,8 +1566,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP**
   - src/app/board_config.h
   - src/app/drivers/mipi_dsi_driver.cpp
-- **DISPLAY_SHAPE**
-  - src/app/board_config.h
 - **EPAPER_BINDING_REFRESH_INTERVAL_MAX_MS**
   - src/app/board_config.h
 - **EPAPER_BINDING_REFRESH_INTERVAL_MIN_MS**
@@ -1474,6 +1573,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD**
   - src/app/board_config.h
 - **EPAPER_DEFAULT_RENDER_MODE**
+  - src/app/board_config.h
+- **EPAPER_DEFAULT_VCOM_MV**
   - src/app/board_config.h
 - **EPAPER_FRAME_BATTERY_ADC_PIN**
   - src/app/device_classes/epaper_frame/drivers/reterminal_e1003_driver.cpp
@@ -1578,6 +1679,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/portal_components.cpp
   - src/app/route_components.cpp
 - **IS_EPAPER_FRAME**
+  - src/app/app.ino
   - src/app/board_config.h
   - src/app/device_class_registry.cpp
   - src/app/device_classes.cpp
@@ -1671,6 +1773,12 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/device_classes/voice_assistant/voice_payload.h
   - src/app/device_classes/voice_assistant_device_class.cpp
   - src/app/portal_components.cpp
+- **IT8951_CONTROLLER_POWER_PIN**
+  - src/app/board_config.h
+- **IT8951_E1003_PROTOCOL**
+  - src/app/board_config.h
+- **IT8951_PANEL_POWER_PIN**
+  - src/app/board_config.h
 - **JD9165_DSI_DPI_CLK_HZ**
   - src/app/board_config.h
 - **JD9165_DSI_HSYNC_BACK_PORCH**

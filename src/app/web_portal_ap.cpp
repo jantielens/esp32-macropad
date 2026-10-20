@@ -4,6 +4,8 @@
 #include "log_manager.h"
 #include "project_branding.h"
 #include "class_branding.h"
+#include "config_manager.h"
+#include "wifi_manager.h"
 
 #include <Arduino.h>
 #include <DNSServer.h>
@@ -16,6 +18,9 @@ static const IPAddress CAPTIVE_PORTAL_IP(192, 168, 4, 1);
 
 static DNSServer dnsServer;
 static bool ap_mode_active = false;
+static char active_ap_name[33];
+static char active_ap_password[CONFIG_AP_PASSWORD_MAX_LEN];
+static char active_ap_ip[16];
 
 bool web_portal_is_ap_mode() {
 		return ap_mode_active;
@@ -34,7 +39,16 @@ void web_portal_ap_register_not_found(AsyncWebServer *server) {
 		});
 }
 
-void web_portal_start_ap() {
+bool web_portal_start_ap(const DeviceConfig* config) {
+		if (!config) {
+				LOGE("AP", "Cannot start setup AP without configuration");
+				return false;
+		}
+		if (!wifi_ap_password_is_valid(config->ap_password)) {
+				LOGE("AP", "Cannot start setup AP: configured password is invalid");
+				return false;
+		}
+
 		LOGI("AP", "Mode start");
 
 		// Generate AP name from chip ID. Device-class-aware SSID:
@@ -57,30 +71,52 @@ void web_portal_start_ap() {
 				snprintf(apName, sizeof(apName), "ESP32-MP-%s-%06X", classSlug, chipIdSuffix);
 		}
 
-		LOGI("AP", "SSID: %s", apName);
-
-		// Configure AP
-		WiFi.mode(WIFI_AP);
-		WiFi.softAPConfig(CAPTIVE_PORTAL_IP, CAPTIVE_PORTAL_IP, IPAddress(255, 255, 255, 0));
+		if (!WiFi.mode(WIFI_AP)) {
+				LOGE("AP", "Failed to select AP radio mode");
+				return false;
+		}
+		if (!WiFi.softAPConfig(CAPTIVE_PORTAL_IP, CAPTIVE_PORTAL_IP, IPAddress(255, 255, 255, 0))) {
+				LOGE("AP", "Failed to configure setup AP address");
+				WiFi.mode(WIFI_OFF);
+				return false;
+		}
+		const char* passphrase = config->ap_password[0] ? config->ap_password : nullptr;
 #ifdef AP_MAX_CONNECTIONS
 		// Board override: cap concurrent stations to save DMA-internal SRAM
 		// (relevant on small-RAM SoCs like ESP32-C3).
-		WiFi.softAP(apName, nullptr, /*channel=*/1, /*hidden=*/0,
+		const bool started = WiFi.softAP(apName, passphrase, /*channel=*/1, /*hidden=*/0,
 		            /*max_connection=*/AP_MAX_CONNECTIONS);
 #else
-		WiFi.softAP(apName);
+		const bool started = WiFi.softAP(apName, passphrase);
 #endif
+		if (!started) {
+				LOGE("AP", "Failed to start setup AP");
+				WiFi.softAPdisconnect(true);
+				WiFi.mode(WIFI_OFF);
+				return false;
+		}
 
 		// Start DNS server for captive portal (redirect all DNS queries to our IP)
-		dnsServer.start(DNS_PORT, "*", CAPTIVE_PORTAL_IP);
+		if (!dnsServer.start(DNS_PORT, "*", CAPTIVE_PORTAL_IP)) {
+				LOGE("AP", "Failed to start captive DNS");
+				WiFi.softAPdisconnect(true);
+				WiFi.mode(WIFI_OFF);
+				return false;
+		}
 
 		WiFi.softAPsetHostname(apName);
+		strlcpy(active_ap_name, apName, sizeof(active_ap_name));
+		strlcpy(active_ap_password, config->ap_password, sizeof(active_ap_password));
+		const String ip = WiFi.softAPIP().toString();
+		strlcpy(active_ap_ip, ip.c_str(), sizeof(active_ap_ip));
 
 		// Mark AP mode active so watchdog/DNS handling knows we're in captive portal
 		ap_mode_active = true;
 
-		LOGI("AP", "IP: %s", WiFi.softAPIP().toString().c_str());
+		LOGI("AP", "SSID: %s", active_ap_name);
+		LOGI("AP", "IP: %s", active_ap_ip);
 		LOGI("AP", "Captive portal active");
+		return true;
 }
 
 void web_portal_stop_ap() {
@@ -90,6 +126,20 @@ void web_portal_stop_ap() {
 		dnsServer.stop();
 		WiFi.softAPdisconnect(true);
 		ap_mode_active = false;
+		active_ap_name[0] = '\0';
+		active_ap_password[0] = '\0';
+		active_ap_ip[0] = '\0';
+}
+
+bool web_portal_ap_get_setup_info(char* ssid, size_t ssid_len,
+		char* password, size_t password_len, char* ip, size_t ip_len) {
+		if (!ap_mode_active || !ssid || !ssid_len || !password || !password_len || !ip || !ip_len) {
+				return false;
+		}
+		strlcpy(ssid, active_ap_name, ssid_len);
+		strlcpy(password, active_ap_password, password_len);
+		strlcpy(ip, active_ap_ip, ip_len);
+		return true;
 }
 
 void web_portal_ap_handle() {

@@ -7,6 +7,7 @@
 #include "action_registry.h"
 #include "pad_validate.h"
 #include "widgets/widget_registry.h"
+#include "../src/app/actions/dialog_action.h"
 
 static int g_failures = 0;
 
@@ -189,60 +190,33 @@ int main() {
                           "service must be bare; use 'toggle'") == 0);
     }
 
-    {
+    for (bool confirmation : {false, true}) {
         JsonDocument doc;
-        JsonObject button = make_button(doc);
-        button["confirm"] = true;
-        button["confirm_text"] = "Turn off the studio?";
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
-    }
-
-    {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        button["confirm"] = "yes";
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "confirm must be boolean") == 0);
-    }
-
-    {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        button["confirm_text"] = 42;
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "confirm_text must be a string") == 0);
-    }
-
-    {
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        button["widget_type"] = "test";
-        button["confirm"] = true;
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "confirm is only supported on normal buttons") == 0);
-    }
-
-    {
-        char valid[CONFIG_CONFIRM_TEXT_MAX_LEN];
-        std::memset(valid, 'a', sizeof(valid) - 1);
-        valid[sizeof(valid) - 1] = '\0';
-
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        button["confirm_text"] = valid;
-        CHECK(pad_validate(doc.as<JsonObjectConst>()) == nullptr);
-    }
-
-    {
-        char too_long[CONFIG_CONFIRM_TEXT_MAX_LEN + 1];
-        std::memset(too_long, 'a', sizeof(too_long) - 1);
-        too_long[sizeof(too_long) - 1] = '\0';
-
-        JsonDocument doc;
-        JsonObject button = make_button(doc);
-        button["confirm_text"] = too_long;
-        CHECK(std::strcmp(pad_validate(doc.as<JsonObjectConst>()),
-                          "confirm_text too long (max 127 chars)") == 0);
+        doc["message"] = "Line one\nLine two";
+        const char* timing = confirmation ? "timeout_ms" : "duration_ms";
+        for (uint32_t duration : {0U, 1000U, 61000U, 300000U}) {
+            doc[timing] = duration;
+            CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), confirmation) == nullptr);
+        }
+        for (uint32_t duration : {1U, 999U, 300001U}) {
+            doc[timing] = duration;
+            CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), confirmation) != nullptr);
+        }
+        doc[timing] = 0;
+        char text[CONFIG_DIALOG_MESSAGE_MAX_LEN + 1];
+        memset(text, 'a', sizeof(text) - 1);
+        text[sizeof(text) - 1] = '\0';
+        doc["message"] = text;
+        CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), confirmation) != nullptr);
+        text[CONFIG_DIALOG_MESSAGE_MAX_LEN - 1] = '\0';
+        doc["message"] = text;
+        CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), confirmation) == nullptr);
+        if (confirmation) {
+            doc["approve_text"] = "";
+            CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), true) != nullptr);
+            doc["approve_text"] = "[literal:caption]";
+            CHECK(dialog_action::validate(doc.as<JsonObjectConst>(), true) == nullptr);
+        }
     }
 
     {

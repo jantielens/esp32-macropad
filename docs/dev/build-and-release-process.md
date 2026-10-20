@@ -152,6 +152,20 @@ Conventions:
 
 ## Build System
 
+The `waveshare-7.8-interactive` target uses
+`esp32:esp32:um_feathers3` with hardware USB CDC, enabled QSPI PSRAM, and
+the `ota_4mb_16MB_ext` OTA partition scheme. Build it with
+`./build.sh waveshare-7.8-interactive`. Its metadata advertises the non-touch
+1872 x 1404 IT8951 display under Macropad with native Extensions enabled.
+The layout has two 4 MiB application slots, 7.625 MiB LittleFS storage,
+and three Extension slots (56 KiB, 56 KiB, and 120 KiB usable ELF capacity).
+Run `./tools/install-custom-partitions.sh` before building. Migration from
+the earlier `default_16MB` layout requires a data backup, full USB flash,
+storage reinitialization, and restoration, not a firmware-only OTA.
+The web installer maps the native `um_feathers3` board ID to ESP32-S3 and
+places the bootloader at offset 0.
+See the [Waveshare HAT wiring guide](interactive-epaper.md#waveshare-78-interactive).
+
 ### Build Configuration
 
 The build system automatically applies project branding during compilation:
@@ -159,6 +173,9 @@ The build system automatically applies project branding during compilation:
 1. `build.sh` sources `config.sh` to get `PROJECT_NAME` and `PROJECT_DISPLAY_NAME` (and `config.sh` will also source `config.project.sh` if present)
 2. (Optional) If `assets/png/*.png` exists and you are building a display-enabled board, `build.sh` generates LVGL image assets into `src/app/png_assets.cpp` and `src/app/png_assets.h`
 3. `tools/minify-web-assets.sh` performs template substitution in HTML files
+   and emits feature-gated shell, JavaScript, and CSS variants. Binding reference
+   HTML/styles follow `HAS_DISPLAY`; HA builder assets follow `HAS_HA_LIVE`.
+   Each firmware selects one variant, excluding unsupported binding UI from flash.
 4. Branding C++ `#define` statements are generated in `src/app/project_branding.h` (and `web_assets.h` includes it)
 5. If the repo was built from a GitHub checkout with a detectable `remote.origin.url`, the repo slug is generated into `src/app/repo_slug_config.h` (used to construct GitHub Pages links)
 6. `build.sh` also embeds the board name as a compile-time string define (`BUILD_BOARD_NAME`) so the portal can report the active board
@@ -498,8 +515,8 @@ This template automates the installation:
 
 ### ESP32-S3 4 MiB OTA Layout
 
-`esp32-4848S040`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`, and
-`m5stack-stopwatch` use
+`esp32-4848S040`, `jc3248w535`, `jc3636w518`, `jc3636w518-sd`,
+`m5stack-stopwatch`, and `waveshare-7.8-interactive` use
 `ota_4mb_16MB_ext` to provide firmware headroom while retaining two 4 MiB OTA
 slots. The 16 MiB layout also provides 256 KiB for native Extensions and
 7.625 MiB for internal

@@ -4,7 +4,13 @@
 #include "../board_config.h"
 #include "../log_manager.h"
 
+#pragma push_macro("jd_prepare")
+#pragma push_macro("jd_decomp")
+#undef jd_prepare
+#undef jd_decomp
 #include <Inkplate.h>
+#pragma pop_macro("jd_decomp")
+#pragma pop_macro("jd_prepare")
 #include <esp_heap_caps.h>
 
 #include <cstring>

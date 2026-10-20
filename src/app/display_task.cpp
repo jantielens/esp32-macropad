@@ -10,14 +10,18 @@
 #include "rtos_task_utils.h"
 
 #include "data_stream.h"
+#include "ha_live.h"
 #include "action_list.h"
-#include "button_confirmation.h"
+#include "device_dialog.h"
 #include "pad_config.h"
 #include "screen_saver_manager.h"
 #if HAS_TOUCH
 #include "touch_manager.h"
 #endif
 #include "timer_engine.h"
+#if HAS_DISPLAY_DIAGNOSTICS && HAS_TTF_FONTS && HAS_FREETYPE_FONTS
+#include "freetype_mono_font.h"
+#endif
 #if HAS_MUSIC_ANALYSIS
 #include "music_analysis.h"
 #endif
@@ -69,9 +73,49 @@ bool display_manager_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t*
 // is in flight; cleared from the completion ISR.
 volatile bool g_displayFlushBusy = false;
 
+#if HAS_DISPLAY_DIAGNOSTICS
+void DisplayManager::displayEventCallback(lv_event_t* event) {
+		auto* mgr = static_cast<DisplayManager*>(lv_event_get_user_data(event));
+		const lv_event_code_t code = lv_event_get_code(event);
+		if (code == LV_EVENT_INVALIDATE_AREA) {
+			const auto* area = static_cast<const lv_area_t*>(lv_event_get_param(event));
+			if (area && area->x2 >= area->x1 && area->y2 >= area->y1) {
+				mgr->cycleRefresh.stats.invalidations.add(lv_area_get_width(area), lv_area_get_height(area),
+						mgr->invalidationSource);
+			}
+			return;
+		}
+		if (mgr->invalidationSource != DisplayInvalidationSource::Timer) return;
+		uint64_t glyph_miss_us = 0;
+#if HAS_TTF_FONTS && HAS_FREETYPE_FONTS
+		if (code == LV_EVENT_RENDER_START || code == LV_EVENT_RENDER_READY)
+			glyph_miss_us = freetype_mono_font_get_stats().miss_us;
+#endif
+		switch (code) {
+			case LV_EVENT_REFR_START:
+				mgr->cycleRefresh.beginRefresh(esp_timer_get_time());
+				break;
+			case LV_EVENT_REFR_READY:
+				mgr->cycleRefresh.endRefresh(esp_timer_get_time());
+				break;
+			case LV_EVENT_RENDER_START:
+				mgr->cycleRefresh.beginRender(esp_timer_get_time(), mgr->cycleFlush.total_us, glyph_miss_us);
+				break;
+			case LV_EVENT_RENDER_READY:
+				mgr->cycleRefresh.endRender(esp_timer_get_time(), mgr->cycleFlush.total_us, glyph_miss_us);
+				break;
+			default:
+				break;
+		}
+}
+#endif
+
 // LVGL v9 flush callback
 void DisplayManager::flushCallback(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
 		DisplayManager* mgr = (DisplayManager*)lv_display_get_user_data(disp);
+#if HAS_DISPLAY_DIAGNOSTICS
+		const uint64_t flush_start_us = esp_timer_get_time();
+#endif
 
 		uint32_t w = (area->x2 - area->x1 + 1);
 		uint32_t h = (area->y2 - area->y1 + 1);
@@ -98,6 +142,9 @@ void DisplayManager::flushCallback(lv_display_t *disp, const lv_area_t *area, ui
 		if (!mgr->driver->asyncFlush()) {
 				lv_display_flush_ready(disp);
 		}
+#if HAS_DISPLAY_DIAGNOSTICS
+		mgr->cycleFlush.add(w * h, static_cast<uint32_t>(esp_timer_get_time() - flush_start_us));
+#endif
 }
 
 // FreeRTOS task for continuous LVGL rendering
@@ -106,6 +153,9 @@ void DisplayManager::flushCallback(lv_display_t *disp, const lv_area_t *area, ui
 #endif
 void DisplayManager::lvglTask(void* pvParameter) {
 		DisplayManager* mgr = (DisplayManager*)pvParameter;
+#if HAS_DISPLAY_DIAGNOSTICS
+		DisplayGlyphStats previous_glyphs;
+#endif
 #if HAS_TTF_FONTS
         uint32_t font_generation_seen = font_store_generation();
 #endif
@@ -118,17 +168,28 @@ void DisplayManager::lvglTask(void* pvParameter) {
 		
 		while (true) {
 				device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_WAIT_LOCK);
+#if HAS_DISPLAY_DIAGNOSTICS
+				const uint64_t lock_start_us = esp_timer_get_time();
+#endif
 				mgr->lock();
 				const uint64_t cycle_start_us = esp_timer_get_time();
 				uint32_t screen_update_us = 0;
+#if HAS_DISPLAY_DIAGNOSTICS
+				const uint32_t lock_wait_us = static_cast<uint32_t>(cycle_start_us - lock_start_us);
+				uint32_t screen_switch_us = 0;
+				bool screen_switched = false;
+				mgr->cycleFlush = {};
+#endif
 				bool updated_after_screen_switch = false;
 				if (mgr->lvglStopRequested) {
+						device_dialog_close();
 						mgr->unlock();
 						mgr->lvglTaskStopped = true;
 						vTaskSuspend(nullptr);
 						continue;
 				}
 					if (ota_activity_is_active()) {
+						device_dialog_close();
 						#if HAS_TOUCH
 						touch_manager_cancel_physical_input();
 						#endif
@@ -138,6 +199,10 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						continue;
 					}
 					device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_DEFERRED_WORK);
+#if HAS_DISPLAY_DIAGNOSTICS
+					mgr->invalidationSource = DisplayInvalidationSource::Deferred;
+					const uint64_t deferred_start_us = esp_timer_get_time();
+#endif
 #if HAS_TTF_FONTS
 					const uint32_t font_generation = font_store_generation();
 					if (font_generation != font_generation_seen) {
@@ -149,6 +214,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 					}
 #endif
 					mgr->processDisplayJob();
+					device_dialog_loop();
 					action_list_dispatch_continuation(ACTION_CONTINUATION_OWNER_LVGL);
 
 				// Apply any deferred splash status update.
@@ -167,11 +233,25 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						}
 				}
 				
+#if HAS_DISPLAY_DIAGNOSTICS
+				const uint32_t deferred_us = static_cast<uint32_t>(esp_timer_get_time() - deferred_start_us);
+				mgr->invalidationSource = DisplayInvalidationSource::Other;
+#endif
 				// Process pending screen switch (deferred from external calls)
 				if (mgr->pendingScreen) {
+#if HAS_DISPLAY_DIAGNOSTICS
+						screen_switched = true;
+						mgr->invalidationSource = DisplayInvalidationSource::ScreenSwitch;
+						const uint64_t switch_start_us = esp_timer_get_time();
+#endif
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_SWITCH);
 						Screen* target = mgr->pendingScreen;
-						button_confirmation_cancel();
+						if (target == &mgr->wifiSetupScreen) {
+								mgr->wifiSetupScreen.setLogo(mgr->splashScreen.getLogo());
+						} else if (target == &mgr->infoScreen) {
+								mgr->infoScreen.setLogo(mgr->splashScreen.getLogo());
+						}
+						device_dialog_close();
 						#if HAS_TOUCH
 						touch_manager_cancel_physical_input();
 						#endif
@@ -227,19 +307,34 @@ void DisplayManager::lvglTask(void* pvParameter) {
 								lv_obj_set_style_translate_x(lv_scr_act(), dx, 0);
 								lv_obj_set_style_translate_y(lv_scr_act(), dy, 0);
 						}
+						// Initial update is already reported separately.
+#if HAS_DISPLAY_DIAGNOSTICS
+						screen_switch_us = static_cast<uint32_t>(esp_timer_get_time() - switch_start_us) - screen_update_us;
+#endif
 				}
 				
 				// Handle LVGL rendering (animations, timers, etc.)
 				device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_TIMER);
+#if HAS_DISPLAY_DIAGNOSTICS
+				mgr->invalidationSource = DisplayInvalidationSource::Timer;
+				const uint32_t flush_before_timer_us = mgr->cycleFlush.total_us;
+#endif
 				const uint64_t lv_start_us = esp_timer_get_time();
 				uint32_t delayMs = lv_timer_handler();
 				const uint32_t lv_timer_us = (uint32_t)(esp_timer_get_time() - lv_start_us);
+#if HAS_DISPLAY_DIAGNOSTICS
+				const uint32_t lv_timer_flush_us = mgr->cycleFlush.total_us - flush_before_timer_us;
+				mgr->invalidationSource = DisplayInvalidationSource::Other;
+#endif
 
 				// Check countdown timer expiry (fire beep on edge)
 				timer_engine_tick();
 
 				uint32_t data_stream_us = 0;
-#if HAS_MQTT
+#if HAS_HA_LIVE
+				ha_live_tick();
+#endif
+#if HAS_MQTT || HAS_HA_LIVE
 				// Poll data stream registry (background ring buffers for
 				// history-based widgets, independent of active screen).
 				{
@@ -258,7 +353,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				}
 #endif
 
-#if HAS_MUSIC_ANALYSIS && !HAS_MQTT
+#if HAS_MUSIC_ANALYSIS && !HAS_MQTT && !HAS_HA_LIVE
 				{
 						static uint32_t s_music_generation = UINT32_MAX;
 						const uint32_t generation = pad_config_get_generation();
@@ -273,9 +368,15 @@ void DisplayManager::lvglTask(void* pvParameter) {
 				if (!updated_after_screen_switch && mgr->currentScreen
 						&& !screen_saver_manager_is_rendering_suspended()) {
 						device_telemetry_mark_lvgl_task(DEVICE_RUNTIME_PHASE_LVGL_SCREEN_UPDATE);
+#if HAS_DISPLAY_DIAGNOSTICS
+						mgr->invalidationSource = DisplayInvalidationSource::ScreenUpdate;
+#endif
 						const uint64_t update_start_us = esp_timer_get_time();
 						mgr->currentScreen->update();
 						screen_update_us = static_cast<uint32_t>(esp_timer_get_time() - update_start_us);
+#if HAS_DISPLAY_DIAGNOSTICS
+						mgr->invalidationSource = DisplayInvalidationSource::Other;
+#endif
 				}
 				
 				// Flush canvas buffer only when LVGL produced draw data.
@@ -304,13 +405,28 @@ void DisplayManager::lvglTask(void* pvParameter) {
 
 				const uint32_t cycle_us = static_cast<uint32_t>(esp_timer_get_time() - cycle_start_us);
 				const uint32_t sample_ms = millis();
+#if HAS_DISPLAY_DIAGNOSTICS
+				DisplayGlyphStats glyphs;
+#if HAS_TTF_FONTS && HAS_FREETYPE_FONTS
+				glyphs = freetype_mono_font_get_stats();
+#endif
+#endif
 				portENTER_CRITICAL(&g_perf_mux);
 				g_perf_window.lv_timer.add(lv_timer_us);
 				g_perf_window.data_stream.add(data_stream_us);
 				g_perf_window.screen_update.add(screen_update_us);
 				g_perf_window.cycle.add(cycle_us);
+#if HAS_DISPLAY_DIAGNOSTICS
+				g_perf_window.render.add({sample_ms, lock_wait_us, deferred_us, screen_switch_us,
+						lv_timer_us, lv_timer_flush_us, data_stream_us, screen_update_us, cycle_us, mgr->cycleFlush,
+						screen_switched, mgr->cycleRefresh.stats, glyphs.since(previous_glyphs)});
+#endif
 				if (g_perf_window.publish(sample_ms, g_perf)) g_perf_ready = true;
 				portEXIT_CRITICAL(&g_perf_mux);
+#if HAS_DISPLAY_DIAGNOSTICS
+				previous_glyphs = glyphs;
+				mgr->cycleRefresh = {};
+#endif
 				mgr->unlock();
 				
 				// Sleep based on LVGL's suggested next timer deadline.
@@ -331,6 +447,9 @@ void DisplayManager::lvglTask(void* pvParameter) {
 						// doesn't show a stale value from before the screensaver.
 						portENTER_CRITICAL(&g_perf_mux);
 						g_perf = {};
+#if HAS_DISPLAY_DIAGNOSTICS
+						g_perf.render = g_perf_window.render;
+#endif
 						g_perf_window.reset(millis());
 						g_perf_ready = true;
 						portEXIT_CRITICAL(&g_perf_mux);
@@ -377,9 +496,22 @@ bool display_manager_get_perf_stats(DisplayPerfStats* out) {
 		ok = g_perf_ready;
 		if (ok) {
 				*out = g_perf;
+#if HAS_DISPLAY_DIAGNOSTICS
+				out->render = g_perf_window.render;
+#endif
 		}
 		portEXIT_CRITICAL(&g_perf_mux);
 		return ok;
 }
+
+#if HAS_DISPLAY_DIAGNOSTICS
+bool DisplayManager::getPresentationStats(DisplayPresentationStats* out) {
+		return driver && out && driver->getPresentationStats(out);
+}
+
+bool display_manager_get_presentation_stats(DisplayPresentationStats* out) {
+		return displayManager && displayManager->getPresentationStats(out);
+}
+#endif
 
 #endif // HAS_DISPLAY

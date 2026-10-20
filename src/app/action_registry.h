@@ -96,7 +96,7 @@ void action_substitute_step_field(char* field, size_t field_size, float step);
 void action_type_substitute_step(const ActionTypeDef* def, ButtonAction& act, float step);
 bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& act,
                                        ActionBindableFieldVisitor visitor, void* context);
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act);
 bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act);
 // Collect MQTT topics referenced by the type's bindable value field (if any)

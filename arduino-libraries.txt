@@ -28,6 +28,9 @@ XPT2046_Touchscreen@1.4.0
 # MQTT
 PubSubClient@2.8
 
+# Home Assistant live-data WebSocket transport
+WebSockets@2.7.1
+
 # Sensors
 Adafruit BME280 Library
 Adafruit Unified Sensor

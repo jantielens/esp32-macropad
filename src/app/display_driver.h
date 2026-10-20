@@ -33,6 +33,9 @@
 
 #include <Arduino.h>
 #include <lvgl.h>
+#if HAS_DISPLAY_DIAGNOSTICS
+#include "display_perf.h"
+#endif
 
 // ============================================================================
 // Display Driver Interface
@@ -106,6 +109,11 @@ public:
 
 		// Returns the active panel presentation mode, or -1 when not applicable.
 		virtual int presentationMode() const { return -1; }
+
+		// Implementations publish a synchronized snapshot without taking the LVGL lock.
+#if HAS_DISPLAY_DIAGNOSTICS
+		virtual bool getPresentationStats(DisplayPresentationStats*) { return false; }
+#endif
 
 		// Panel-level sleep/wake.  Sends standard display sleep commands (0x10/0x11,
 		// 0x28/0x29) where supported.  Reduces panel power consumption and provides

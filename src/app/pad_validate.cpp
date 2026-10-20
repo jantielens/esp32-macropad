@@ -40,7 +40,6 @@ static const char* check_max(JsonObjectConst b, const char* key, size_t cap, con
 }
 static const char* LEN_MSG_LABEL = "field too long (max 191 chars); factor long binding expressions into a pad-level [pad:name] binding and reference it";
 static const char* LEN_MSG_SHORT = "field too long (max 63 chars)";
-static const char* LEN_MSG_CONFIRM = "confirm_text too long (max 127 chars)";
 // Single in-flight validation (web task), so a static buffer for a formatted
 // validation message is safe (and the validator returns const char*).
 static char s_len_err[96];
@@ -131,7 +130,6 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         const char* widget_error = wtype->validateConfig(b);
         if (widget_error) return widget_error;
     }
-    if (wt[0] && (b["confirm"] | false)) return "confirm is only supported on normal buttons";
     // Widget config field length limits, enforced from the widget's own
     // describeSchema (single source): each field may declare its own "max"
     // (e.g. caption fields are 63, others differ or declare none). Only fields
@@ -201,9 +199,6 @@ static const char* validate_button(JsonObjectConst b, int cols, int rows, bool t
         return "bg_image_path must be a canonical image library path or binding";
     }
 #endif
-    if (b.containsKey("confirm_text") && !b["confirm_text"].is<const char*>()) return "confirm_text must be a string";
-    if ((e = check_max(b, "confirm_text", CONFIG_CONFIRM_TEXT_MAX_LEN, LEN_MSG_CONFIRM))) return e;
-    if (b.containsKey("confirm") && !b["confirm"].is<bool>()) return "confirm must be boolean";
     if ((e = check_max(b, "widget_data_binding",   CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "widget_data_binding_2", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;
     if ((e = check_max(b, "widget_data_binding_3", CONFIG_LABEL_MAX_LEN, LEN_MSG_LABEL))) return e;

@@ -77,17 +77,6 @@ bool mqtt_sub_store_get(const char* topic, char* buf, size_t buf_len, bool* chan
 // read their topics. Thread-safe.
 void mqtt_sub_store_clear_dirty();
 
-// Extract a value from a JSON payload using a dot-separated path.
-// path="." returns the raw value. path="temp" returns doc["temp"].
-// path="a.b" returns doc["a"]["b"]. Result written to out (null-terminated).
-// Returns true on success.
-bool mqtt_sub_store_extract_json(const char* payload, const char* path, char* out, size_t out_len);
-
-// Apply a printf format string to a raw value. Best-effort: if the format
-// string is invalid or the value can't be parsed, the raw value is copied.
-// Result written to out (null-terminated).
-void mqtt_sub_store_format_value(const char* raw_value, const char* format, char* out, size_t out_len);
-
 #ifdef __cplusplus
 }
 #endif

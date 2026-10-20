@@ -18,6 +18,7 @@
 #if HAS_MCP
 #include "class_branding.h"
 #include "config_manager.h"
+#include "power_manager.h"
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "sensors/sensor_manager.h"
@@ -389,8 +390,7 @@ static void exec_press_button(const void* ctx, bool* ok, char* msg, size_t msg_l
         return;
     }
 
-    // Programmatic activation intentionally bypasses the on-device confirmation
-    // dialog; MCP clients must inspect protected buttons before dispatch.
+    // Confirmation actions keep their on-device approval requirement.
     uint32_t execution_id = 0;
     const McpPressDispatchResult dispatch = mcp_press_button_dispatch(
         btn.actions, btn.action_count, PRESS_DISPATCH_OPS, nullptr,
@@ -597,7 +597,7 @@ static bool tool_tap_screen(const JsonObject& args, JsonObject& result, String& 
 
 // --- system_command --------------------------------------------------------
 // Board-agnostic buffer for the small set of system commands (reboot,
-// wifi_reconnect, screensaver). Sized independently of pad_config.h, which is
+// reboot_ap, wifi_reconnect, screensaver). Sized independently of pad_config.h, which is
 // not compiled on action-less boards (e.g. e-paper), and kept in sync with
 // ButtonAction::payload.system.system_command (CONFIG_ACTION_TYPE_MAX_LEN = 16).
 struct SysCtx { char command[16]; };
@@ -610,6 +610,17 @@ static void exec_system_command(const void* ctx, bool* ok, char* msg, size_t msg
         mcp_request_reboot();
         *ok = true;
         strlcpy(msg, "reboot scheduled", msg_len);
+        return;
+    }
+    if (strcmp(c->command, "reboot_ap") == 0) {
+        if (!power_manager_request_setup_ap_restart()) {
+            *ok = false;
+            strlcpy(msg, "setup AP restart refused or could not be persisted; check device logs", msg_len);
+            return;
+        }
+        mcp_request_reboot();
+        *ok = true;
+        strlcpy(msg, "restart into setup AP scheduled", msg_len);
         return;
     }
 
@@ -641,9 +652,10 @@ static bool tool_system_command(const JsonObject& args, JsonObject& result, Stri
         return tool_fail(result, err, TOOL_ERR_PARAMS, "missing command");
     }
     if (strcmp(cmd, "reboot") != 0 &&
+        strcmp(cmd, "reboot_ap") != 0 &&
         strcmp(cmd, "wifi_reconnect") != 0 &&
         strcmp(cmd, "screensaver") != 0) {
-        return tool_fail(result, err, TOOL_ERR_PARAMS, "command must be reboot, wifi_reconnect, or screensaver");
+        return tool_fail(result, err, TOOL_ERR_PARAMS, "command must be reboot, reboot_ap, wifi_reconnect, or screensaver");
     }
 
     SysCtx ctx;
@@ -726,7 +738,7 @@ REGISTER_MCP_TOOL(s_tool_get_pad);
 
 static const McpTool s_tool_press_button = {
     "press_button",
-    "Activate a pad button programmatically, running its tap action(s) without the on-device confirmation dialog. The action is REAL and may have side effects (publish MQTT, call Home Assistant, send BLE keystrokes, navigate screens, or run a system command like reboot) — always inspect an unfamiliar or confirmation-protected button with get_pad first. Discover buttons via list_pads/get_pad; 'position' is the 0-based index in the pad's button array, NOT a grid cell. Args: screen (pad id like 'pad_0') plus either position or label (case-insensitive).",
+    "Activate a pad button programmatically. Confirmation actions still require on-device approval and pause remaining actions; cancellation, timeout, replacement, or failure stops them. A successful press response means dispatch started, not approval or completion. HA result tracking is not available for lists containing confirmation. Actions are REAL and may have side effects; inspect unfamiliar buttons with get_pad first. Discover buttons via list_pads/get_pad; 'position' is the 0-based index in the pad's button array, NOT a grid position. Args: screen (pad id like 'pad_0') plus either position or label (case-insensitive).",
     "{\"type\":\"object\",\"properties\":{\"screen\":{\"type\":\"string\"},\"position\":{\"type\":\"integer\"},\"label\":{\"type\":\"string\"}},\"required\":[\"screen\"]}",
     tool_press_button, false, false, true
 };
@@ -778,8 +790,8 @@ REGISTER_MCP_TOOL(s_tool_tap_screen);
 
 static const McpTool s_tool_system_command = {
     "system_command",
-    "Run a system command: 'reboot' (destructive — restarts the device and DROPS this connection/MCP session), 'wifi_reconnect' (re-establish the WiFi link), or 'screensaver' (trigger the display screen saver).",
-    "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"reboot\",\"wifi_reconnect\",\"screensaver\"]}},\"required\":[\"command\"]}",
+    "Run a system command: 'reboot' (destructive — restarts the device and DROPS this connection/MCP session), 'reboot_ap' (restarts into setup AP and DROPS this connection/MCP session), 'wifi_reconnect' (re-establish the WiFi link), or 'screensaver' (trigger the display screen saver).",
+    "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"enum\":[\"reboot\",\"reboot_ap\",\"wifi_reconnect\",\"screensaver\"]}},\"required\":[\"command\"]}",
     tool_system_command, false, true, true
 };
 REGISTER_MCP_TOOL(s_tool_system_command);

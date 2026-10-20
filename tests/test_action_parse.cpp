@@ -596,19 +596,9 @@ TEST(per_type_round_trips_cover_all_arms) {
         ASSERT_EQ(a.payload.sound_alert.sound_alert_volume, 90);
     }
     {
-        ButtonAction a = round_trip(
-            "{\"type\":\"notify\",\"notify_text\":\"hello\",\"notify_duration_ms\":\"5000\","
-            "\"notify_text_color\":\"#ff0000\",\"notify_bg_color\":\"#00ff00\","
-            "\"notify_border_color\":\"#0000ff\",\"notify_opacity\":90,"
-            "\"notify_font_size\":24,\"notify_location\":\"top\"}");
-        ASSERT_STR(a.payload.notify.notify_text, "hello");
-        ASSERT_STR(a.payload.notify.notify_duration_ms, "5000");
-        ASSERT_STR(a.payload.notify.notify_text_color, "#ff0000");
-        ASSERT_STR(a.payload.notify.notify_bg_color, "#00ff00");
-        ASSERT_STR(a.payload.notify.notify_border_color, "#0000ff");
-        ASSERT_EQ(a.payload.notify.notify_opacity, 90);
-        ASSERT_EQ(a.payload.notify.notify_font_size, 24);
-        ASSERT_STR(a.payload.notify.notify_location, "top");
+        ButtonAction a = round_trip("{\"type\":\"notify\",\"message\":\"hello\",\"duration_ms\":5000}");
+        ASSERT_STR(a.payload.notify.message, "hello");
+        ASSERT_EQ(a.payload.notify.duration_ms, 5000);
     }
     {
         ButtonAction a = round_trip("{\"type\":\"system\",\"system_command\":\"reboot\"}");
@@ -622,53 +612,43 @@ TEST(per_type_round_trips_cover_all_arms) {
 
 TEST(notify_action_parse) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"notify\",\"notify_text\":\"Power high!\","
-        "\"notify_duration_ms\":\"5000\",\"notify_text_color\":\"#ffa0a0\","
-        "\"notify_bg_color\":\"#2e1a1a\",\"notify_border_color\":\"#5a2a2a\","
-        "\"notify_opacity\":90,\"notify_font_size\":18,\"notify_location\":\"top\"}");
+        "{\"type\":\"notify\",\"message\":\"Power high!\\nCheck device.\",\"duration_ms\":300000}");
     ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.payload.notify.notify_text, "Power high!");
-    ASSERT_STR(act.payload.notify.notify_duration_ms, "5000");
-    ASSERT_STR(act.payload.notify.notify_text_color, "#ffa0a0");
-    ASSERT_STR(act.payload.notify.notify_bg_color, "#2e1a1a");
-    ASSERT_STR(act.payload.notify.notify_border_color, "#5a2a2a");
-    ASSERT_EQ(act.payload.notify.notify_opacity, 90);
-    ASSERT_EQ(act.payload.notify.notify_font_size, 18);
-    ASSERT_STR(act.payload.notify.notify_location, "top");
+    ASSERT_STR(act.payload.notify.message, "Power high!\nCheck device.");
+    ASSERT_EQ(act.payload.notify.duration_ms, 300000);
 }
 
 TEST(notify_action_round_trip) {
     ButtonAction act = round_trip(
-        "{\"type\":\"notify\",\"notify_text\":\"Test msg\","
-        "\"notify_duration_ms\":\"0\",\"notify_bg_color\":\"#333333\","
-        "\"notify_location\":\"center\"}");
+        "{\"type\":\"notify\",\"message\":\"Test msg\",\"duration_ms\":0}");
     ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.payload.notify.notify_text, "Test msg");
-    ASSERT_STR(act.payload.notify.notify_duration_ms, "0");
-    ASSERT_STR(act.payload.notify.notify_bg_color, "#333333");
-    ASSERT_STR(act.payload.notify.notify_location, "center");
+    ASSERT_STR(act.payload.notify.message, "Test msg");
+    ASSERT_EQ(act.payload.notify.duration_ms, 0);
 }
 
-TEST(notify_zero_opacity_not_serialized) {
+TEST(confirm_round_trip_and_defaults) {
     ButtonAction act = parse_from_string(
-        "{\"type\":\"notify\",\"notify_text\":\"hi\",\"notify_opacity\":0}");
+        "{\"type\":\"confirm\",\"message\":\"Restart?\",\"approve_text\":\"Restart\",\"cancel_text\":\"Not now\",\"timeout_ms\":0}");
     StaticJsonDocument<512> doc;
     JsonObject obj = doc.to<JsonObject>();
     action_to_json(act, obj);
-    ASSERT_TRUE(obj.containsKey("notify_text"));
+    ASSERT_EQ(obj.size(), 5);
+    ASSERT_STR(act.payload.confirm.message, "Restart?");
+    ASSERT_STR(act.payload.confirm.approve_text, "Restart");
+    ASSERT_STR(act.payload.confirm.cancel_text, "Not now");
+    ASSERT_EQ(obj["timeout_ms"].as<uint32_t>(), 0);
     ASSERT_TRUE(!obj.containsKey("notify_opacity"));
 }
 
 TEST(notify_minimal_only_text) {
-    ButtonAction act = round_trip("{\"type\":\"notify\",\"notify_text\":\"hello\"}");
+    ButtonAction act = round_trip("{\"type\":\"notify\",\"message\":\"hello\"}");
     ASSERT_STR(act.type, "notify");
-    ASSERT_STR(act.payload.notify.notify_text, "hello");
-    ASSERT_STR(act.payload.notify.notify_duration_ms, "");
-    ASSERT_STR(act.payload.notify.notify_text_color, "");
-    ASSERT_STR(act.payload.notify.notify_bg_color, "");
-    ASSERT_EQ(act.payload.notify.notify_opacity, 0);
-    ASSERT_EQ(act.payload.notify.notify_font_size, 0);
-    ASSERT_STR(act.payload.notify.notify_location, "");
+    ASSERT_STR(act.payload.notify.message, "hello");
+    ASSERT_EQ(act.payload.notify.duration_ms, 3000);
+    act = round_trip("{\"type\":\"confirm\",\"message\":\"Proceed?\"}");
+    ASSERT_STR(act.payload.confirm.approve_text, "Continue");
+    ASSERT_STR(act.payload.confirm.cancel_text, "Cancel");
+    ASSERT_EQ(act.payload.confirm.timeout_ms, 10000);
 }
 
 // ============================================================================
@@ -951,7 +931,7 @@ int main(int argc, char** argv) {
     printf("\n--- Notify action ---\n");
     RUN(notify_action_parse);
     RUN(notify_action_round_trip);
-    RUN(notify_zero_opacity_not_serialized);
+    RUN(confirm_round_trip_and_defaults);
     RUN(notify_minimal_only_text);
 
     printf("\n--- System action ---\n");

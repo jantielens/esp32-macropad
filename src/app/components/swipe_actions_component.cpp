@@ -36,7 +36,7 @@ static void swipe_actions_save_config(AsyncWebServerRequest *request, uint8_t *d
 static ComponentDef swipe_actions_component = {
     .id = "swipe-actions",
     .category = "actions",
-    .display_name = "Swipe Actions",
+    .display_name = "Swipes",
     .nav_order = 10,
     .get_config = swipe_actions_get_config,
     .save_config = nullptr,

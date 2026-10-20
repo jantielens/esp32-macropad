@@ -187,23 +187,249 @@ async function loadBootActions() {
     }
 }
 
-async function saveBootActions() {
+var bootLogoDraftSlot = 255;
+var bootLogoSelectionLoaded = false;
+
+function bootAppearanceColorValue(value, defaultValue) {
+    return Number(value) === 4294967295
+        ? '#' + Number(defaultValue).toString(16).padStart(6, '0')
+        : '#' + Number(value).toString(16).padStart(6, '0');
+}
+
+function setBootAppearanceColorDefault(color, useDefault) {
+    color.dataset.useDeviceDefault = useDefault ? 'true' : 'false';
+}
+
+function resetBootAppearanceColor(colorId) {
+    const color = document.getElementById(colorId);
+    if (!color) return;
+    color.value = color.dataset.deviceDefaultColor;
+    color.dispatchEvent(new Event('input', { bubbles: true }));
+    setBootAppearanceColorDefault(color, true);
+}
+
+function showBootLogoPreview(slot) {
+    const wrapper = document.getElementById('boot-logo-preview-wrap');
+    const image = document.getElementById('boot-logo-preview');
+    if (!wrapper || !image) return;
+    if (slot === 255) {
+        wrapper.hidden = true;
+        image.removeAttribute('src');
+        return;
+    }
+    image.src = '/api/boot-logo/thumbnail?slot=' + slot + '&t=' + Date.now();
+    wrapper.hidden = false;
+}
+
+async function bootAppearanceInit() {
+    const appearance = document.getElementById('boot-appearance-settings');
+    if (!appearance) return;
+    bootLogoSelectionLoaded = false;
+    const saveButton = document.getElementById('system-screens-save');
+    if (saveButton) saveButton.disabled = true;
+    const status = document.getElementById('boot-logo-status');
     try {
-        var actions = actionEditorListBuild(BOOT_ACTION_PREFIXES);
+        const response = await fetch('/api/config');
+        if (!response.ok) throw new Error('Could not load system-screen settings');
+        const config = await response.json();
+        const caps = config.caps || {};
+        appearance.hidden = !caps.boot_appearance;
+        const logoSettings = document.getElementById('boot-logo-settings');
+        if (logoSettings) logoSettings.hidden = !caps.boot_logo;
+        if (!caps.boot_appearance) return;
+
+        document.getElementById('boot-appearance-font-size').value =
+            String(config.boot_appearance_font_size || 0);
+        const textDefault = Number(config.boot_appearance_text_color) === 4294967295;
+        const backgroundDefault = Number(config.boot_appearance_background_color) === 4294967295;
+        const textColor = document.getElementById('boot-appearance-text-color');
+        const backgroundColor = document.getElementById('boot-appearance-background-color');
+        textColor.dataset.deviceDefaultColor = bootAppearanceColorValue(
+            4294967295, config.boot_appearance_default_text_color);
+        backgroundColor.dataset.deviceDefaultColor = bootAppearanceColorValue(
+            4294967295, config.boot_appearance_default_background_color);
+        textColor.value = bootAppearanceColorValue(
+            config.boot_appearance_text_color, config.boot_appearance_default_text_color);
+        backgroundColor.value = bootAppearanceColorValue(
+            config.boot_appearance_background_color, config.boot_appearance_default_background_color);
+        setBootAppearanceColorDefault(textColor, textDefault);
+        setBootAppearanceColorDefault(backgroundColor, backgroundDefault);
+        padInitBindableColor(document.getElementById('boot-appearance-text-color-wrap'));
+        padInitBindableColor(document.getElementById('boot-appearance-background-color-wrap'));
+        textColor.addEventListener('input', function() { setBootAppearanceColorDefault(textColor, false); });
+        backgroundColor.addEventListener('input', function() { setBootAppearanceColorDefault(backgroundColor, false); });
+
+        if (caps.boot_logo) {
+            const logoResponse = await fetch('/api/boot-logo');
+            if (!logoResponse.ok) throw new Error('Could not load boot-logo status');
+            const logo = await logoResponse.json();
+            bootLogoDraftSlot = Number(logo.active_slot);
+            if (![0, 1, 255].includes(bootLogoDraftSlot)) {
+                throw new Error('Boot-logo status is invalid');
+            }
+            if (bootLogoDraftSlot !== 255 && !logo['slot' + bootLogoDraftSlot + '_available']) {
+                bootLogoDraftSlot = 255;
+                if (status) status.textContent = 'The selected logo file is missing. Save Appearance to use the device logo.';
+            }
+            bootLogoSelectionLoaded = true;
+            showBootLogoPreview(bootLogoDraftSlot);
+        }
+        if (saveButton) saveButton.disabled = false;
+    } catch (err) {
+        if (status) status.textContent = err.message;
+        showMessage('Could not load system-screen settings: ' + err.message, 'error');
+        console.error('Failed to load boot appearance:', err);
+    }
+}
+
+async function uploadBootLogo() {
+    const fileInput = document.getElementById('boot-logo-file');
+    const status = document.getElementById('boot-logo-status');
+    const file = fileInput && fileInput.files && fileInput.files[0];
+    if (!file) {
+        if (status) status.textContent = 'Choose a PNG or JPEG image first.';
+        return;
+    }
+    if (file.size > 1024 * 1024) {
+        if (status) status.textContent = 'Image exceeds the 1 MiB upload limit.';
+        return;
+    }
+    if (!/^image\/(png|jpeg)$/.test(file.type)) {
+        if (status) status.textContent = 'Choose a PNG or baseline (non-progressive) JPEG image.';
+        return;
+    }
+    if (status) status.textContent = 'Uploading and validating image…';
+    try {
+        const response = await fetch('/api/boot-logo/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: file
+        });
+        const result = await response.json().catch(function() { return {}; });
+        if (!response.ok || result.success !== true || ![0, 1].includes(Number(result.slot))) {
+            throw new Error(result.message || 'Upload or validation failed');
+        }
+        bootLogoDraftSlot = Number(result.slot);
+        bootLogoSelectionLoaded = true;
+        showBootLogoPreview(bootLogoDraftSlot);
+        fileInput.value = '';
+        if (status) status.textContent = 'Uploaded and validated. Save Appearance to select this logo.';
+    } catch (err) {
+        if (status) status.textContent = err.message;
+    }
+}
+
+async function deleteBootLogo() {
+    const status = document.getElementById('boot-logo-status');
+    const button = document.getElementById('boot-logo-delete-btn');
+    if (!confirm('Delete all uploaded logos and use the device logo? This cannot be undone.')) return;
+    if (button) button.disabled = true;
+    if (status) status.textContent = 'Selecting the device logo…';
+    let defaultLogoSaved = false;
+    try {
+        const configResponse = await fetch('/api/config?no_reboot=1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ boot_logo_slot: 255 })
+        });
+        if (!configResponse.ok) {
+            const result = await configResponse.json().catch(function() { return {}; });
+            throw new Error(result.message || 'Could not select the device logo');
+        }
+        defaultLogoSaved = true;
+
+        bootLogoDraftSlot = 255;
+        bootLogoSelectionLoaded = true;
+        showBootLogoPreview(255);
+        const fileInput = document.getElementById('boot-logo-file');
+        if (fileInput) fileInput.value = '';
+
+        const response = await fetch('/api/boot-logo', { method: 'DELETE' });
+        const result = await response.json().catch(function() { return {}; });
+        if (!response.ok || result.success !== true) {
+            throw new Error(result.message || 'Could not delete uploaded logos');
+        }
+        if (status) status.textContent = 'Uploaded logos deleted. The device logo will appear on the next boot.';
+    } catch (err) {
+        if (status) status.textContent = defaultLogoSaved
+            ? err.message + ' The device logo is selected, but some uploaded files may remain.'
+            : err.message;
+        console.error('Failed to delete boot logo:', err);
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+async function saveBootActions() {
+    let actions;
+    try {
+        actions = actionEditorListBuild(BOOT_ACTION_PREFIXES);
+    } catch (err) {
+        if (actionEditorHandleError(err)) return;
+        showMessage('Could not read boot actions: ' + err.message, 'error');
+        return;
+    }
+
+    try {
         const response = await fetch('/api/component/boot-actions/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ actions: actions })
         });
-        if (response.ok) {
-            showMessage('Boot actions saved', 'success');
-        } else {
-            showMessage('Failed to save boot actions', 'error');
+        if (!response.ok) {
+            const result = await response.json();
+            throw new Error(result.message || 'Boot actions could not be saved');
         }
+        showMessage('Boot actions saved. Changes take effect on the next boot.', 'success');
     } catch (err) {
-        if (actionEditorHandleError(err)) return;
-        console.error('Error saving boot actions:', err);
-        showMessage('Error saving boot actions: ' + err.message, 'error');
+        showMessage('Could not save boot actions: ' + err.message, 'error');
+    }
+}
+
+async function saveSystemScreenAppearance() {
+    const appearance = document.getElementById('boot-appearance-settings');
+    const saveButton = document.getElementById('system-screens-save');
+    if (!appearance || appearance.hidden || !saveButton || saveButton.disabled) {
+        showMessage('System-screen settings are not ready. Reload this section before saving.', 'error');
+        return;
+    }
+    const logoSettings = document.getElementById('boot-logo-settings');
+    if (logoSettings && !logoSettings.hidden && !bootLogoSelectionLoaded) {
+        showMessage('Could not confirm the selected logo. Reload this section before saving.', 'error');
+        return;
+    }
+    saveButton.disabled = true;
+    try {
+        const textColor = document.getElementById('boot-appearance-text-color');
+        const backgroundColor = document.getElementById('boot-appearance-background-color');
+        for (const color of [textColor, backgroundColor]) {
+            if (!/^#[0-9a-f]{6}$/i.test(color.value)) {
+                throw new Error('Choose a valid six-digit color');
+            }
+        }
+        const payload = {
+            boot_appearance_font_size: Number(document.getElementById('boot-appearance-font-size').value),
+            boot_appearance_text_color: textColor.dataset.useDeviceDefault === 'true'
+                ? 4294967295 : parseInt(textColor.value.slice(1), 16),
+            boot_appearance_background_color: backgroundColor.dataset.useDeviceDefault === 'true'
+                ? 4294967295 : parseInt(backgroundColor.value.slice(1), 16)
+        };
+        if (logoSettings && !logoSettings.hidden) payload.boot_logo_slot = bootLogoDraftSlot;
+        const response = await fetch('/api/config?no_reboot=1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const result = await response.json();
+            throw new Error(result.message || 'Configuration save failed');
+        }
+        showMessage('Appearance saved. Changes take effect on the next boot.', 'success');
+        if (typeof setPendingReboot === 'function') setPendingReboot();
+    } catch (err) {
+        showMessage('Could not save appearance: ' + err.message, 'error');
+    } finally {
+        saveButton.disabled = false;
     }
 }
 

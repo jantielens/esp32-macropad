@@ -3,20 +3,26 @@
 #include "web_portal_auth.h"
 #include "web_portal_state.h"
 #include "portal_idle.h"
+#include "ota_activity.h"
 
 #include "board_config.h"
 #if HAS_TTF_FONTS
 #include "font_store.h"
 #endif
 #include "config_manager.h"
+#include "wifi_manager.h"
 #include "time_service.h"
 #include "keyboard_hid.h"
 #include "device_class.h"
+#if HAS_DISPLAY
+#include "dialog_appearance.h"
+#endif
 #include "device_telemetry.h"
 #include "log_manager.h"
 #include "psram_json_allocator.h"
 #include "web_portal_json.h"
 #include "web_mcp.h"
+#include "ha_live.h"
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -31,6 +37,7 @@
 #include <WiFi.h>
 
 #include <esp_heap_caps.h>
+#include <errno.h>
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -51,6 +58,44 @@ static uint32_t parseUintField(const JsonVariantConst& field, uint32_t default_v
 				return v ? (uint32_t)strtoul(v, nullptr, 10) : default_value;
 		}
 		return (uint32_t)(field | default_value);
+}
+
+static bool parseStrictUintField(const JsonVariantConst& field, uint32_t* value) {
+		if (!value) return false;
+		if (field.is<uint32_t>()) {
+				*value = field.as<uint32_t>();
+				return true;
+		}
+		if (!field.is<const char*>()) return false;
+		const char* text = field.as<const char*>();
+		if (!text || !*text || strspn(text, "0123456789") != strlen(text)) return false;
+		char* end = nullptr;
+		errno = 0;
+		const unsigned long long parsed = strtoull(text, &end, 10);
+		if (errno == ERANGE || !end || *end || parsed > UINT32_MAX) return false;
+		*value = static_cast<uint32_t>(parsed);
+		return true;
+}
+
+static bool valid_boot_font_size(uint32_t size) {
+		return size == 0 || size == 12 || size == 14 || size == 18 ||
+				size == 24 || size == 32 || size == 36;
+}
+
+static bool parse_boot_color(const JsonVariantConst& field, uint32_t* value) {
+		if (!value) return false;
+		if (field.is<const char*>()) {
+				const char* text = field.as<const char*>();
+				if (text && strcmp(text, "default") == 0) {
+						*value = CONFIG_BOOT_COLOR_INHERIT;
+						return true;
+				}
+		}
+		uint32_t parsed = 0;
+		if (!parseStrictUintField(field, &parsed) ||
+				(parsed != CONFIG_BOOT_COLOR_INHERIT && parsed > 0xFFFFFFUL)) return false;
+		*value = parsed;
+		return true;
 }
 
 static bool is_idle_pad_id(const char* id) {
@@ -108,12 +153,15 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				return;
 		}
 
-		// Create JSON response (don't include passwords)
-		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(2560);
+		// Home Wi-Fi credentials remain write-only. The setup AP password is
+		// intentionally ordinary, shareable configuration.
+		std::shared_ptr<BasicJsonDocument<PsramJsonAllocator>> doc = make_psram_json_doc(HAS_DISPLAY ? 6144 : 2560);
 		if (doc && doc->capacity() > 0) {
 				(*doc)["wifi_ssid"] = current_config->wifi_ssid;
 				(*doc)["wifi_password"] = ""; // Don't send password
 				(*doc)["wifi_password_set"] = (strlen(current_config->wifi_password) > 0);
+				(*doc)["wifi_failure_mode"] = current_config->wifi_failure_mode;
+				(*doc)["ap_password"] = current_config->ap_password;
 				(*doc)["device_name"] = current_config->device_name;
 				(*doc)["timezone"] = current_config->timezone;
 
@@ -164,6 +212,9 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				caps["usb_hid"] = (bool)HAS_USB_HID;
 				caps["mcp"] = (bool)HAS_MCP;
 				caps["ha_history"] = (bool)HAS_HA_HISTORY;
+				caps["ha_live"] = (bool)HAS_HA_LIVE;
+				caps["boot_appearance"] = (bool)HAS_DISPLAY;
+				caps["boot_logo"] = (bool)HAS_BOOT_LOGO;
 #if HAS_TTF_FONTS
 				caps["ttf_fonts"] = font_store_available();
 #else
@@ -191,6 +242,14 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["backlight_brightness"] = current_config->backlight_brightness;
 				#if HAS_DISPLAY
 				(*doc)["display_rotation"] = current_config->display_rotation;
+				(*doc)["boot_appearance_font_size"] = current_config->boot_appearance_font_size;
+				(*doc)["boot_appearance_text_color"] = current_config->boot_appearance_text_color;
+				(*doc)["boot_appearance_background_color"] = current_config->boot_appearance_background_color;
+				(*doc)["boot_appearance_default_text_color"] = BOOT_APPEARANCE_DEFAULT_TEXT_RGB;
+				(*doc)["boot_appearance_default_background_color"] = BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB;
+				#if HAS_BOOT_LOGO
+				(*doc)["boot_logo_slot"] = current_config->boot_logo_slot;
+				#endif
 				#endif
 				(*doc)["backlight_brightness_min"] = MIN_USER_BRIGHTNESS;
 							(*doc)["screen_saver_backlight_only"] = SCREENSAVER_BACKLIGHT_ONLY;
@@ -200,6 +259,8 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				(*doc)["epaper_bw_conversion"] = current_config->epaper_bw_conversion == MONOCHROME_CONVERSION_BAYER ? "bayer4x4" :
 						current_config->epaper_bw_conversion == MONOCHROME_CONVERSION_BLUE_NOISE ? "blue_noise" : "threshold";
 				(*doc)["epaper_bw_threshold"] = current_config->epaper_bw_threshold;
+				(*doc)["epaper_vcom_mv"] = current_config->epaper_vcom_mv;
+				(*doc)["epaper_default_vcom_mv"] = EPAPER_DEFAULT_VCOM_MV;
 				JsonArray render_modes = (*doc)["epaper_supported_render_modes"].to<JsonArray>();
 				render_modes.add("bw");
 				if (HAS_EPAPER_GRAYSCALE) render_modes.add("grayscale");
@@ -226,6 +287,7 @@ void handleGetConfig(AsyncWebServerRequest *request) {
 				#endif
 
 				#if HAS_DISPLAY
+				dialog_appearance_write((*doc)["dialog_appearance"].to<JsonObject>(), current_config->dialog_appearance);
 				// Screen saver settings
 				(*doc)["screen_saver_enabled"] = current_config->screen_saver_enabled;
 				(*doc)["screen_saver_timeout_seconds"] = current_config->screen_saver_timeout_seconds;
@@ -348,6 +410,18 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		if (!ota_activity_try_begin_config_write()) {
+				LOGW("Portal", "Config update rejected: update or network transition is active");
+				request->send(409, "application/json", "{\"success\":false,\"message\":\"Update or network transition in progress\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+		struct ConfigUpdateGuard {
+				~ConfigUpdateGuard() { ota_activity_finish_config_write(); }
+		} config_update_guard;
+
 		// Finalize buffer and parse.
 		uint8_t* body = nullptr;
 		size_t body_len = 0;
@@ -357,7 +431,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (body) body[body_len] = 0;
 		portEXIT_CRITICAL(&g_config_post_mux);
 
-		BasicJsonDocument<PsramJsonAllocator> doc(2560);
+		BasicJsonDocument<PsramJsonAllocator> doc(HAS_DISPLAY ? 6144 : 2560);
 		DeserializationError error = deserializeJson(doc, body, body_len);
 
 		if (error) {
@@ -376,6 +450,83 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		char wifi_failure_mode_candidate[CONFIG_WIFI_FAILURE_MODE_MAX_LEN];
+		char ap_password_candidate[CONFIG_AP_PASSWORD_MAX_LEN];
+		strlcpy(wifi_failure_mode_candidate, current_config->wifi_failure_mode,
+				sizeof(wifi_failure_mode_candidate));
+		strlcpy(ap_password_candidate, current_config->ap_password, sizeof(ap_password_candidate));
+		bool wifi_setup_fields_valid = true;
+		if (doc.containsKey("wifi_failure_mode")) {
+				const JsonVariantConst value = doc["wifi_failure_mode"];
+				const char* text = value.is<const char*>() ? value.as<const char*>() : nullptr;
+				wifi_setup_fields_valid = text &&
+						(strlen(text) < sizeof(wifi_failure_mode_candidate)) &&
+						(strcmp(text, "ap") == 0 || strcmp(text, "offline") == 0);
+				if (wifi_setup_fields_valid) {
+						strlcpy(wifi_failure_mode_candidate, text, sizeof(wifi_failure_mode_candidate));
+				}
+		}
+		if (wifi_setup_fields_valid && doc.containsKey("ap_password")) {
+				const JsonVariantConst value = doc["ap_password"];
+				const char* text = value.is<const char*>() ? value.as<const char*>() : nullptr;
+				wifi_setup_fields_valid = text &&
+						(strlen(text) < sizeof(ap_password_candidate)) &&
+						wifi_ap_password_is_valid(text);
+				if (wifi_setup_fields_valid) {
+						strlcpy(ap_password_candidate, text, sizeof(ap_password_candidate));
+				}
+		}
+		if (!wifi_setup_fields_valid) {
+				request->send(400, "application/json",
+						"{\"success\":false,\"message\":\"Wi-Fi fallback must be ap or offline; AP password must be empty or 8-63 printable ASCII characters\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+
+		#if HAS_DISPLAY
+		const uint8_t previous_boot_font_size = current_config->boot_appearance_font_size;
+		const uint32_t previous_boot_text_color = current_config->boot_appearance_text_color;
+		const uint32_t previous_boot_background_color = current_config->boot_appearance_background_color;
+		uint8_t boot_font_size = previous_boot_font_size;
+		uint32_t boot_text_color = previous_boot_text_color;
+		uint32_t boot_background_color = previous_boot_background_color;
+		#if HAS_BOOT_LOGO
+		const uint8_t previous_boot_logo_slot = current_config->boot_logo_slot;
+		uint8_t boot_logo_slot = previous_boot_logo_slot;
+		#endif
+		bool boot_appearance_valid = true;
+		uint32_t parsed_value = 0;
+		if (doc.containsKey("boot_appearance_font_size")) {
+				boot_appearance_valid = parseStrictUintField(
+						doc["boot_appearance_font_size"], &parsed_value) && valid_boot_font_size(parsed_value);
+				if (boot_appearance_valid) boot_font_size = static_cast<uint8_t>(parsed_value);
+		}
+		if (boot_appearance_valid && doc.containsKey("boot_appearance_text_color")) {
+				boot_appearance_valid = parse_boot_color(doc["boot_appearance_text_color"], &boot_text_color);
+		}
+		if (boot_appearance_valid && doc.containsKey("boot_appearance_background_color")) {
+				boot_appearance_valid = parse_boot_color(
+						doc["boot_appearance_background_color"], &boot_background_color);
+		}
+		#if HAS_BOOT_LOGO
+		if (boot_appearance_valid && doc.containsKey("boot_logo_slot")) {
+				boot_appearance_valid = parseStrictUintField(doc["boot_logo_slot"], &parsed_value) &&
+						(parsed_value <= 1 || parsed_value == CONFIG_BOOT_LOGO_SLOT_NONE);
+				if (boot_appearance_valid) boot_logo_slot = static_cast<uint8_t>(parsed_value);
+		}
+		#endif
+		if (!boot_appearance_valid) {
+				request->send(400, "application/json",
+						"{\"success\":false,\"message\":\"Invalid boot appearance settings\"}");
+				portENTER_CRITICAL(&g_config_post_mux);
+				config_post_reset();
+				portEXIT_CRITICAL(&g_config_post_mux);
+				return;
+		}
+		#endif
+
 		// Security hardening: never allow changing Basic Auth settings in AP/core
 		// mode AFTER initial setup. Otherwise, an attacker near the device could
 		// wait for fallback AP mode and lock out the owner. EXCEPTION: during
@@ -391,10 +542,20 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				return;
 		}
 
+		#if HAS_DISPLAY
+		DialogTemplates dialog_candidate = current_config->dialog_appearance;
+		#endif
 		{
 				JsonObject body_object = doc.as<JsonObject>();
 				const char *validation_error =
 						device_class_dispatch_config_api_validate(current_config, body_object);
+#if HAS_DISPLAY
+				if (!validation_error && doc.containsKey("dialog_appearance")) {
+						validation_error = !doc["dialog_appearance"].is<JsonObjectConst>() ?
+							"dialog_appearance must be an object" :
+							dialog_appearance_read(doc["dialog_appearance"].as<JsonObjectConst>(), dialog_candidate);
+				}
+#endif
 				if (validation_error) {
 						StaticJsonDocument<192> response;
 						response["success"] = false;
@@ -408,6 +569,27 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 						return;
 				}
 		}
+
+		#if HAS_LVGL_EPAPER
+		uint16_t epaper_vcom_mv = current_config->epaper_vcom_mv;
+		if (doc.containsKey("epaper_vcom_mv")) {
+				uint32_t magnitude = UINT32_MAX;
+				const JsonVariantConst field = doc["epaper_vcom_mv"];
+				if (field.is<uint32_t>()) magnitude = field.as<uint32_t>();
+				else if (field.is<const char*>()) {
+						const char* text = field.as<const char*>();
+						if (text && *text && strlen(text) <= 4 && strspn(text, "0123456789") == strlen(text)) {
+								magnitude = strtoul(text, nullptr, 10);
+						}
+				}
+				if (magnitude > EPAPER_VCOM_MAX_MV) {
+						request->send(400, "application/json", "{\"success\":false,\"message\":\"epaper_vcom_mv must be an integer magnitude from 0 to 5000; 0 uses the board default\"}");
+						portENTER_CRITICAL(&g_config_post_mux); config_post_reset(); portEXIT_CRITICAL(&g_config_post_mux);
+						return;
+				}
+				epaper_vcom_mv = uint16_t(magnitude);
+		}
+		#endif
 
 		#if HAS_BLE
 		int ble_tx_power_dbm = 0;
@@ -512,6 +694,9 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		if (doc.containsKey("wifi_ssid")) {
 				strlcpy(current_config->wifi_ssid, doc["wifi_ssid"] | "", CONFIG_SSID_MAX_LEN);
 		}
+		strlcpy(current_config->wifi_failure_mode, wifi_failure_mode_candidate,
+				sizeof(current_config->wifi_failure_mode));
+		strlcpy(current_config->ap_password, ap_password_candidate, sizeof(current_config->ap_password));
 
 		// WiFi password - only update if provided and not empty
 		if (doc.containsKey("wifi_password")) {
@@ -831,6 +1016,7 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 			return;
 		}
 		config_manager_publish_epaper_refresh_settings(current_config);
+		current_config->epaper_vcom_mv = epaper_vcom_mv;
 		#endif
 
 		#if HAS_DISPLAY
@@ -916,11 +1102,27 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		#endif
 
 		if (doc.containsKey("timezone")) strlcpy(current_config->timezone, doc["timezone"], sizeof(current_config->timezone));
+#if HAS_DISPLAY
+		current_config->boot_appearance_font_size = boot_font_size;
+		current_config->boot_appearance_text_color = boot_text_color;
+		current_config->boot_appearance_background_color = boot_background_color;
+#if HAS_BOOT_LOGO
+		current_config->boot_logo_slot = boot_logo_slot;
+#endif
+#endif
 		current_config->magic = CONFIG_MAGIC;
 
 		// Validate config
 		if (!config_manager_is_valid(current_config)) {
 				strlcpy(current_config->timezone, previous_timezone, sizeof(current_config->timezone));
+#if HAS_DISPLAY
+				current_config->boot_appearance_font_size = previous_boot_font_size;
+				current_config->boot_appearance_text_color = previous_boot_text_color;
+				current_config->boot_appearance_background_color = previous_boot_background_color;
+#if HAS_BOOT_LOGO
+				current_config->boot_logo_slot = previous_boot_logo_slot;
+#endif
+#endif
 				request->send(400, "application/json", "{\"success\":false,\"message\":\"Invalid configuration\"}");
 				portENTER_CRITICAL(&g_config_post_mux);
 				config_post_reset();
@@ -929,7 +1131,15 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 		}
 
 		// Save to NVS
+		#if HAS_DISPLAY
+		const DialogTemplates previous_dialog_appearance = current_config->dialog_appearance;
+		current_config->dialog_appearance = dialog_candidate;
+		#endif
 		if (config_manager_save(current_config)) {
+#if HAS_HA_LIVE
+				if (doc.containsKey("ha_url") || doc.containsKey("ha_token"))
+						ha_live_configure(current_config->ha_url, current_config->ha_token);
+#endif
 				LOGI("Portal", "Config saved");
 #if HAS_MCP
 				if (mcp_token_minted) {
@@ -957,7 +1167,18 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 				}
 		} else {
 				LOGE("Portal", "Config save failed");
+				#if HAS_DISPLAY
+				current_config->dialog_appearance = previous_dialog_appearance;
+				#endif
 				strlcpy(current_config->timezone, previous_timezone, sizeof(current_config->timezone));
+#if HAS_DISPLAY
+				current_config->boot_appearance_font_size = previous_boot_font_size;
+				current_config->boot_appearance_text_color = previous_boot_text_color;
+				current_config->boot_appearance_background_color = previous_boot_background_color;
+#if HAS_BOOT_LOGO
+				current_config->boot_logo_slot = previous_boot_logo_slot;
+#endif
+#endif
 				request->send(500, "application/json", "{\"success\":false,\"message\":\"Failed to save\"}");
 
 				portENTER_CRITICAL(&g_config_post_mux);

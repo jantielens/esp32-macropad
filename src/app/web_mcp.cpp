@@ -392,7 +392,8 @@ static void mcp_method_initialize(AsyncWebServerRequest* request, JsonVariantCon
         "keystrokes, navigate, or reboot \u2014 exactly as a physical tap, so inspect an unfamiliar "
         "button with get_pad before pressing it. Control tools (press_button, set_screen, set_backlight, "
         "wake, system_command) appear only when the control toggle is enabled; system_command 'reboot' "
-        "restarts the device and drops this connection.";
+        "restarts the device and drops this connection, while 'reboot_ap' restarts into the setup AP "
+        "and drops this connection.";
 #if HAS_DISPLAY
     instructions +=
         " This device has a display, so you can visually verify UI changes: GET /api/screenshot "

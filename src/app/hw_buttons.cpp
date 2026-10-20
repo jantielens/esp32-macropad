@@ -6,6 +6,9 @@
 #include "action_list.h"
 #include "hw_button_config.h"
 #include "log_manager.h"
+#if HAS_DISPLAY
+#include "device_dialog.h"
+#endif
 
 #if HAS_AUDIO
 #include "audio.h"
@@ -27,6 +30,7 @@ enum class BtnState : uint8_t { Idle, Debounce, Pressed, TapRelease, Held, HoldR
 struct BtnRuntime {
     BtnState state;
     uint32_t t_change;  // millis() at last state transition
+    uint32_t dialog_generation;
 };
 
 static BtnRuntime s_rt[NUM_HW_BUTTONS];
@@ -61,10 +65,24 @@ static void maybe_beep(const ButtonAction* actions, uint8_t count) {
 #endif
 
 static void dispatch_event(uint8_t index, bool is_hold) {
+#if HAS_DISPLAY
+    if (s_rt[index].dialog_generation != device_dialog_input_generation()) return;
+#endif
     const HwButtonConfig* cfg = hw_button_config_get(index);
     if (!cfg) return;
     const ButtonAction* actions = is_hold ? cfg->hold_actions : cfg->tap_actions;
     uint8_t count = is_hold ? cfg->hold_count : cfg->tap_count;
+#if HAS_DISPLAY
+    if (device_dialog_active()) {
+        for (uint8_t i = 0; i < count; ++i) {
+            if (!strcmp(actions[i].type, ACTION_TYPE_BUTTON_NAVIGATION)) {
+                action_dispatch(actions[i], "Dialog navigation");
+                break;
+            }
+        }
+        return;
+    }
+#endif
     LOGI(TAG, "HW btn %u %s: dispatching %u action(s)", index, is_hold ? "hold" : "tap", count);
     if (count == 0) return;
 #if HAS_AUDIO
@@ -111,7 +129,13 @@ void hw_buttons_loop() {
         BtnRuntime& rt = s_rt[i];
         switch (rt.state) {
             case BtnState::Idle:
-                if (active) { rt.state = BtnState::Debounce; rt.t_change = now; }
+                if (active) {
+                    rt.state = BtnState::Debounce;
+                    rt.t_change = now;
+#if HAS_DISPLAY
+                    rt.dialog_generation = device_dialog_input_generation();
+#endif
+                }
                 break;
             case BtnState::Debounce:
                 if (!active) {

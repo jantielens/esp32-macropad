@@ -1,0 +1,28 @@
+.dialog-appearance-editor { min-width: 0; }
+.dialog-appearance-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 1fr); gap: 1.5rem; align-items: start; }
+.dialog-appearance-controls { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.dialog-control-group { min-width: 0; margin: 0; padding: 0; border: 0; }
+.dialog-control-group legend { float: none; width: auto; font-size: .95rem; font-weight: 600; margin-bottom: .6rem; }
+.dialog-control-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .8rem; }
+.dialog-control-row + .dialog-control-row { margin-top: .8rem; }
+.dialog-control-row > label { flex: 1 1 100px; }
+.dialog-color-field { display: flex; flex-direction: column; gap: .3rem; }
+.dialog-color-field .bindable-color { margin: 0; }
+.dialog-appearance-controls label { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.dialog-appearance-controls input, .dialog-appearance-controls select { width: 100%; min-width: 0; box-sizing: border-box; }
+.dialog-preview-column { min-width: 0; position: sticky; top: 1rem; }
+.dialog-preview-screen { position: relative; width: 100%; aspect-ratio: 4 / 3; overflow: hidden; background: #14202c; border: 1px solid #808080; }
+.dialog-preview-pad { position: absolute; inset: 4%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4%; }
+.dialog-preview-pad span { display: grid; place-items: center; background: #226d78; border-radius: 6px; color: white; font: 14px sans-serif; }
+.dialog-preview-backdrop { position: absolute; inset: 0; pointer-events: none; }
+.dialog-preview-box { position: absolute; display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; }
+.dialog-preview-background { position: absolute; inset: 0; pointer-events: none; }
+.dialog-preview-message, .dialog-preview-buttons { position: relative; }
+.dialog-preview-message { white-space: pre-wrap; overflow-y: auto; overflow-wrap: anywhere; flex: 1 1 auto; min-height: 0; }
+.dialog-preview-buttons { display: flex; gap: 8px; justify-content: center; flex: 0 0 auto; margin-top: 8px; }
+.dialog-preview-buttons span { box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px; min-width: 44px; }
+.dialog-preview-note { font-size: .85rem; margin-top: .5rem; }
+@media (max-width: 800px) {
+    .dialog-appearance-layout { grid-template-columns: minmax(0, 1fr); }
+    .dialog-preview-column { position: static; }
+}

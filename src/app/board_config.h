@@ -87,6 +87,16 @@ struct HwButtonDef {
 #define DEBUG_CRASH_API_ENABLED 0
 #endif
 
+// Direct Home Assistant live bindings; independent of MQTT and requires PSRAM.
+#ifndef HAS_HA_LIVE
+#define HAS_HA_LIVE (HAS_DISPLAY && HAS_PSRAM)
+#endif
+
+// Developer-only display profiling; compile out detailed collection and health fields by default.
+#ifndef HAS_DISPLAY_DIAGNOSTICS
+#define HAS_DISPLAY_DIAGNOSTICS false
+#endif
+
 // ============================================================================
 // Project Branding
 // Human-friendly project name used in the web UI and device name (can be set by build system).
@@ -661,10 +671,9 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #endif
 #endif
 
-// Enable power-on burst detection to force Config Mode (NVS-backed, disabled by default).
-// Intended for boards WITHOUT a reliable user button.
+// Enable the two-power-on recovery gesture to force setup AP.
 #ifndef POWERON_CONFIG_BURST_ENABLED
-#define POWERON_CONFIG_BURST_ENABLED false
+#define POWERON_CONFIG_BURST_ENABLED true
 #endif
 
 // ----------------------------------------------------------------------------
@@ -907,6 +916,10 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #ifndef EPAPER_DEFAULT_RENDER_MODE
 #define EPAPER_DEFAULT_RENDER_MODE EPAPER_RENDER_MODE_GRAYSCALE
 #endif
+// Default VCOM magnitude in millivolts for consuming e-paper drivers; 0 means unspecified.
+#ifndef EPAPER_DEFAULT_VCOM_MV
+#define EPAPER_DEFAULT_VCOM_MV 0
+#endif
 // Number of regional updates before a full refresh on supporting e-paper drivers.
 #ifndef EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD
 #define EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD 10
@@ -949,6 +962,34 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Enable local Storage-backed image loading for pad buttons and slideshows.
 #ifndef HAS_IMAGE_LIBRARY
 #define HAS_IMAGE_LIBRARY HAS_DISPLAY
+#endif
+
+// Enable an optional Storage-backed boot logo on display boards with PSRAM.
+#ifndef HAS_BOOT_LOGO
+#define HAS_BOOT_LOGO (HAS_DISPLAY && HAS_FILESYSTEM && HAS_PSRAM)
+#endif
+
+#if HAS_BOOT_LOGO && (!HAS_DISPLAY || !HAS_FILESYSTEM || !HAS_PSRAM)
+#error "HAS_BOOT_LOGO requires HAS_DISPLAY, HAS_FILESYSTEM, and HAS_PSRAM."
+#endif
+
+// Device-defined boot appearance defaults; boards may override these values.
+#ifndef BOOT_APPEARANCE_DEFAULT_FONT_SIZE
+#define BOOT_APPEARANCE_DEFAULT_FONT_SIZE 0
+#endif
+#ifndef BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB
+#if HAS_LVGL_EPAPER
+#define BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB 0xFFFFFF
+#else
+#define BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB 0x000000
+#endif
+#endif
+#ifndef BOOT_APPEARANCE_DEFAULT_TEXT_RGB
+#if HAS_LVGL_EPAPER
+#define BOOT_APPEARANCE_DEFAULT_TEXT_RGB 0x000000
+#else
+#define BOOT_APPEARANCE_DEFAULT_TEXT_RGB 0x646464
+#endif
 #endif
 
 // Enable onboard camera hardware support.
@@ -1012,7 +1053,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 //   DISPLAY_DRIVER_JD9165_DSI (10) - Direct ESP-IDF JD9165 MIPI-DSI (JC1060P470C, ESP32-P4)
 //   DISPLAY_DRIVER_ARDUINO_GFX_NV3041A (11) - Arduino_GFX NV3041A QSPI (JC4827W543C)
 //   DISPLAY_DRIVER_INKPLATE6FLICK (12) - InkplateLibrary monochrome e-paper (experimental)
-//   DISPLAY_DRIVER_RETERMINAL_E1003 (13) - IT8951 grayscale e-paper (reTerminal E1003)
+//   DISPLAY_DRIVER_IT8951 (13) - IT8951 grayscale e-paper (Waveshare HAT / reTerminal E1003)
 #define DISPLAY_DRIVER_TFT_ESPI 1
 #define DISPLAY_DRIVER_LOVYANGFX 3
 #define DISPLAY_DRIVER_ARDUINO_GFX 4
@@ -1023,9 +1064,23 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define DISPLAY_DRIVER_JD9165_DSI 10
 #define DISPLAY_DRIVER_ARDUINO_GFX_NV3041A 11
 #define DISPLAY_DRIVER_INKPLATE6FLICK 12
-#define DISPLAY_DRIVER_RETERMINAL_E1003 13
+#define DISPLAY_DRIVER_IT8951 13
+#define DISPLAY_DRIVER_RETERMINAL_E1003 DISPLAY_DRIVER_IT8951
 #define DISPLAY_DRIVER_ARDUINO_GFX_CO5300 14
 #define DISPLAY_DRIVER_CROWPANEL_42 15
+
+// Use reTerminal E1003's controller firmware and reversed image-packing protocol.
+#ifndef IT8951_E1003_PROTOCOL
+#define IT8951_E1003_PROTOCOL false
+#endif
+// Optional active-HIGH panel power enable; -1 means externally powered.
+#ifndef IT8951_PANEL_POWER_PIN
+#define IT8951_PANEL_POWER_PIN -1
+#endif
+// Optional active-HIGH controller power enable; -1 means externally powered.
+#ifndef IT8951_CONTROLLER_POWER_PIN
+#define IT8951_CONTROLLER_POWER_PIN -1
+#endif
 
 // Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 #ifndef DISPLAY_DRIVER
@@ -1612,7 +1667,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 // Requires PSRAM for the background fetch task and response buffers.
 // Backfill sparkline history from Home Assistant Recorder statistics after a reboot.
 #ifndef HAS_HA_HISTORY
-#define HAS_HA_HISTORY (HAS_DISPLAY && HAS_MQTT && HAS_PSRAM)
+#define HAS_HA_HISTORY (HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE) && HAS_PSRAM)
 #endif
 
 #endif // BOARD_CONFIG_H

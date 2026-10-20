@@ -29,8 +29,8 @@
 #include "drivers/jd9165_dsi_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
 #include "drivers/inkplate6flick_epaper_driver.cpp"
-#elif DISPLAY_DRIVER == DISPLAY_DRIVER_RETERMINAL_E1003
-#include "drivers/reterminal_e1003_epaper_driver.cpp"
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
+#include "drivers/it8951_epaper_driver.cpp"
 #elif DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
 #include "drivers/crowpanel42_epaper_driver.cpp"
 #else

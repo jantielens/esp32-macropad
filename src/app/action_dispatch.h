@@ -29,7 +29,7 @@ ActionResult action_dispatch_synchronous(const ButtonAction& act, const char* la
 // Process deferred action work and loop-owned action continuations — call from loop().
 void action_dispatch_loop();
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 #include "binding_template.h"
 #include <string.h>
 

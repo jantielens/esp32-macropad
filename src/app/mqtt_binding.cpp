@@ -3,6 +3,7 @@
 #if HAS_MQTT && HAS_DISPLAY
 
 #include "binding_template.h"
+#include "binding_value.h"
 #include "mqtt_sub_store.h"
 #include "pad_config.h"
 #include "config_psram.h"
@@ -11,45 +12,13 @@
 
 static char* s_payload = nullptr;
 
-// Splits "topic;path;format" on the first two ';'; the format may contain ';'.
-static void parse_mqtt_params(const char* params,
-                              char* topic, size_t topic_len,
-                              char* path, size_t path_len,
-                              char* fmt, size_t fmt_len) {
-    topic[0] = '\0';
-    path[0] = '\0';
-    fmt[0] = '\0';
-    if (!params || !params[0]) return;
-
-    const char* s1 = strchr(params, ';');
-    if (!s1) {
-        strlcpy(topic, params, topic_len);
-        return;
-    }
-    size_t tlen = (size_t)(s1 - params);
-    if (tlen >= topic_len) tlen = topic_len - 1;
-    memcpy(topic, params, tlen);
-    topic[tlen] = '\0';
-
-    const char* s2 = strchr(s1 + 1, ';');
-    if (!s2) {
-        strlcpy(path, s1 + 1, path_len);
-        return;
-    }
-    size_t plen = (size_t)(s2 - (s1 + 1));
-    if (plen >= path_len) plen = path_len - 1;
-    memcpy(path, s1 + 1, plen);
-    path[plen] = '\0';
-
-    strlcpy(fmt, s2 + 1, fmt_len);
-}
-
 static BindingResolverStatus mqtt_binding_resolve(const char* params, char* out, size_t out_len) {
     char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
     char path[CONFIG_JSON_PATH_MAX_LEN];
     char fmt[CONFIG_FORMAT_MAX_LEN];
 
-    parse_mqtt_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
+    // MQTT historically accepts truncated parameters.
+    (void)binding_value_parse_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
 
     if (!topic[0]) {
         strlcpy(out, "ERR:no topic", out_len);
@@ -64,12 +33,12 @@ static BindingResolverStatus mqtt_binding_resolve(const char* params, char* out,
 
     const char* jp = (path[0]) ? path : ".";
     char extracted[128];
-    if (!mqtt_sub_store_extract_json(s_payload, jp, extracted, sizeof(extracted))) {
+    if (!binding_value_extract_json(s_payload, jp, extracted, sizeof(extracted))) {
         strlcpy(extracted, truncated ? "ERR:too big" : s_payload, sizeof(extracted));
     }
 
     if (fmt[0]) {
-        mqtt_sub_store_format_value(extracted, fmt, out, out_len);
+        binding_value_format(extracted, fmt, out, out_len);
     } else {
         strlcpy(out, extracted, out_len);
     }
@@ -81,7 +50,7 @@ static void mqtt_binding_collect(const char* params, void* user_data) {
     char path[CONFIG_JSON_PATH_MAX_LEN];
     char fmt[CONFIG_FORMAT_MAX_LEN];
 
-    parse_mqtt_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
+    (void)binding_value_parse_params(params, topic, sizeof(topic), path, sizeof(path), fmt, sizeof(fmt));
     if (topic[0] && user_data) mqtt_sub_store_collect_topic(user_data, topic);
 }
 

@@ -11,7 +11,7 @@
 #if HAS_LVGL_EPAPER
 extern DeviceConfig device_config;
 #endif
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 #include "../mqtt_manager.h"
 #include "../mqtt_sub_store.h"
 #include "../pad_binding.h"
@@ -320,9 +320,9 @@ void PadScreen::pollLiveData(bool force) {
     (void)force;
 #endif
 
-#if HAS_MQTT || HAS_IMAGE_LIBRARY
+#if HAS_MQTT || HAS_HA_LIVE || HAS_IMAGE_LIBRARY
     // Set page context so [pad:] tokens in bindings can resolve
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     pad_binding_set_bindings(pageBindings, pageBindingCount);
 #endif
     pollBtnStateBindings();   // Visibility/interactivity first
@@ -333,6 +333,8 @@ void PadScreen::pollLiveData(bool force) {
     }
     #if HAS_MQTT
     mqtt_sub_store_clear_dirty();
+#endif
+#if HAS_MQTT || HAS_HA_LIVE
     pad_binding_set_bindings(nullptr, 0);
 #endif
 #if HAS_IMAGE_FETCH || HAS_IMAGE_LIBRARY

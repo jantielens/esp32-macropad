@@ -464,11 +464,9 @@ void PadScreen::buildTiles() {
         memcpy(tile.actions, bcfg.actions, bcfg.action_count * sizeof(ButtonAction));
         tile.lp_action_count = bcfg.lp_action_count;
         memcpy(tile.lp_actions, bcfg.lp_actions, bcfg.lp_action_count * sizeof(ButtonAction));
-        tile.confirm = bcfg.confirm;
-        strlcpy(tile.confirm_text, bcfg.confirm_text, sizeof(tile.confirm_text));
 
-        // Create MQTT-bound center label early so widgets can position it
-#if HAS_MQTT
+        // Create a bound center label early so widgets can position it
+#if HAS_MQTT || HAS_HA_LIVE
         if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center) {
             tile.label_center = lv_label_create(obj);
             lv_obj_set_style_text_color(tile.label_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
@@ -495,7 +493,7 @@ void PadScreen::buildTiles() {
             if (wt) {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
                 // Expand [pad:] tokens in widget data bindings so stream-based
                 // widgets (e.g. sparkline) look up their data stream by the same
                 // expanded key that data_stream_rebuild() registered it under.
@@ -520,7 +518,7 @@ void PadScreen::buildTiles() {
             }
         }
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
         // Register template-based label bindings for labels containing [scheme:...]
         auto addTemplateBinding = [this](lv_obj_t* lbl, const char* label_text,
                                          const LabelStyle& style,
@@ -727,7 +725,7 @@ void PadScreen::buildTiles() {
         swipe_actions_register(padActionOverlay, swipes_enabled);
     }
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     // Register page-level background color binding (target=0xFF = page bg, tileIndex unused)
     if (pageBgTemplate[0] && binding_template_has_bindings(pageBgTemplate) && colorBindingCount < MAX_COLOR_BINDINGS) {
         RuntimeColorBinding& cb = colorBindings[colorBindingCount];

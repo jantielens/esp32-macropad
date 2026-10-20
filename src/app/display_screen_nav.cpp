@@ -1,7 +1,7 @@
 // Display Manager - Screen navigation, splash status, and screen history
 #include "board_config.h"
 #if HAS_DISPLAY
-#include "button_confirmation.h"
+#include "device_dialog.h"
 #include "display_manager.h"
 #include "screen_saver_manager.h"
 #endif
@@ -11,7 +11,7 @@ bool DisplayManager::navigateButtons(const char* command) {
 	const bool wasAsleep = screen_saver_manager_is_asleep();
 	prepareNavigationWake();
 	if (wasAsleep || !screen_saver_manager_input_ready()) return true;
-	if (button_confirmation_navigate(command)) return true;
+	if (device_dialog_navigate(command)) return true;
 	if (pendingScreen) return false;
 	for (uint8_t index = 0; index < MAX_PADS; ++index) {
 		if (currentScreen == padScreens[index]) return padScreens[index]->navigateButtons(command);
@@ -32,6 +32,7 @@ extern portMUX_TYPE g_splash_status_mux;
 void DisplayManager::showSplash() {
 		// Splash shown during init - can switch immediately (no task running yet)
 		lock();
+		device_dialog_close();
 		if (currentScreen) {
 				currentScreen->hide();
 		}
@@ -43,8 +44,17 @@ void DisplayManager::showSplash() {
 
 void DisplayManager::showInfo() {
 		// Defer screen switch to lvglTask (non-blocking)
+		if (currentScreen == &wifiSetupScreen) skipHistoryPush = true;
 		pendingScreen = &infoScreen;
 		LOGT("Display", "Queued switch to InfoScreen");
+}
+
+void DisplayManager::showWifiSetup() {
+		bool didLock = false;
+		lockIfNeeded(didLock);
+		skipHistoryPush = true;
+		pendingScreen = &wifiSetupScreen;
+		unlockIfNeeded(didLock);
 }
 
 void DisplayManager::showTest() {
@@ -88,6 +98,7 @@ bool DisplayManager::showScreen(const char* screen_id, bool wake) {
 		for (size_t i = 0; i < screenCount; i++) {
 				if (strcmp(availableScreens[i].id, screen_id) == 0) {
 						// Defer screen switch to lvglTask (non-blocking)
+						if (currentScreen == &wifiSetupScreen) skipHistoryPush = true;
 						pendingScreen = availableScreens[i].instance;
 						if (wake) {
 								skipHistoryPush = false;
@@ -211,6 +222,7 @@ void DisplayManager::handleSleepScreenRedirect() {
 }
 
 const char* DisplayManager::getCurrentScreenId() {
+		if (currentScreen == &wifiSetupScreen) return "wifi_setup";
 		// Return ID of current screen (nullptr if splash or unknown)
 		for (size_t i = 0; i < screenCount; i++) {
 				if (currentScreen == availableScreens[i].instance) {

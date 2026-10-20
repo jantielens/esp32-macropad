@@ -244,7 +244,7 @@ struct MockWire {
     int expanderReadHz = 0, frequency = 100000;
     std::vector<int> clockChanges;
     std::vector<std::pair<int, int>> identityReads;
-    unsigned long expanderStartupMs = 0, railsEnabledAt = 0;
+    unsigned long expanderStartupMs = 0, railsEnabledAt = 0, panelResetReleasedAt = 0;
     bool begin(int sda, int scl, int hz = 100000) {
         assert(lockDepth == 1 && sda == 47 && scl == 48 && hz == 100000);
         ++begins; return true;
@@ -278,6 +278,9 @@ struct MockWire {
         if (tx.size() == 2 && !shortWrite) {
             if (address == 0x6e && tx[0] == 6 && (regs[address][6] & 6) != 6 && (tx[1] & 6) == 6)
                 railsEnabledAt = totalDelayMs;
+            if ((address == 0x4f || address == 0x6f) && tx[0] == 5 &&
+                !(regs[address][5] & 0x10) && (tx[1] & 0x10))
+                panelResetReleasedAt = totalDelayMs;
             regs[address][tx[0]] = tx[1];
             writes.emplace_back(address, tx[0], tx[1]);
         }
@@ -307,7 +310,10 @@ static int panelBrightness = -1;
 class Arduino_DataBus {
 public:
     virtual ~Arduino_DataBus() = default;
-    void sendCommand(int command) { commands.emplace_back(command, -1); }
+    void sendCommand(int command) {
+        if (command == 0x11) assert(totalDelayMs - Wire.panelResetReleasedAt >= 120);
+        commands.emplace_back(command, -1);
+    }
     void beginWrite() {}
     void endWrite() {}
     void writeCommand(int command) { sendCommand(command); }
@@ -623,7 +629,8 @@ int main() {
     assert(mutexCreates == created);
     reset();
     assert(m5stack_stopwatch_init());
-    assert(delays == std::vector<int>({10,10,10,50}));
+    assert(totalDelayMs - Wire.panelResetReleasedAt >= 120);
+    assert(delays == std::vector<int>({10,10,10,200}));
     assert(Wire.regs[0x4f][5] == 0xfb); // audio OFF, USB/OLED/reset HIGH.
     assert(Wire.regs[0x4f][6] == 0xfc); // PA and motor OFF.
     assert(Wire.regs[0x4f][3] == 0x9d);
@@ -918,7 +925,7 @@ int main() {
     for (unsigned long startup : {50UL, 190UL, 200UL, 210UL, 500UL, 1990UL, 2000UL}) {
         reset(); Wire.expanderStartupMs = startup;
         assert(m5stack_stopwatch_init() && ready && expander == 0x4f);
-        assert(totalDelayMs == startup + 70 && lockDepth == 0);
+        assert(totalDelayMs == startup + 220 && lockDepth == 0);
     }
     reset(); Wire.expanderStartupMs = 4000;
     assert(!m5stack_stopwatch_init() && !ready && !expander && lockDepth == 0);
@@ -1136,6 +1143,16 @@ int main() {
     Arduino_GFX_CO5300_Driver failedBus(board_co5300_config());
     failedBus.init(); assert(!failedBus.isAvailable());
     assert(lockDepth == 0);
+    for (bool warmBoot : {false, true}) {
+        reset();
+        if (warmBoot) {
+            assert(m5stack_stopwatch_init());
+            ready = wireStarted = false; // ESP32 restart retains peripheral state.
+        }
+        assert(m5stack_stopwatch_init());
+        Arduino_DataBus panelBus;
+        initialize_stopwatch_panel(&panelBus);
+    }
 }
 '''
 

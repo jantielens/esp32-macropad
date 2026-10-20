@@ -87,7 +87,7 @@ function padColorCheck(raw, maxLen, allowBindings) {
 var _cpPopover = null;
 var _cpErrorTimer = null;
 
-/** Create a swatch button that submits a color or binding value. */
+/** Create a swatch button that stages a color or binding until Apply. */
 function padColorSwatchButton(val) {
     var sw = document.createElement('button');
     sw.type = 'button';
@@ -98,10 +98,10 @@ function padColorSwatchButton(val) {
     if (val.charAt(0) === '#') sw.style.background = val;
     else sw.classList.add('cp-swatch-binding');
     sw.addEventListener('click', function() {
-        if (_cpPopover && _cpPopover.fill) {
+        if (_cpPopover) {
             _cpPopover.pop.querySelector('#cp-input').value = val;
             padColorPopoverValidate(true);
-        } else padColorPopoverSubmit(val);
+        }
     });
     return sw;
 }
@@ -142,6 +142,11 @@ function padColorPopoverCreate() {
             '<select id="cp-fill-pattern">' + PAD_FILL_PATTERNS.map(function(entry) {
                 return '<option value="' + entry[0] + '">' + entry[1] + '</option>';
             }).join('') + '</select>' +
+            '</div><div id="cp-fill-geometry" class="cp-pattern-settings" hidden>' +
+                '<label class="cp-gen-label" for="cp-fill-spacing">Spacing (px)</label>' +
+                '<input type="number" class="cp-gen-input" id="cp-fill-spacing" min="2" max="64" step="1" required>' +
+                '<label class="cp-gen-label" for="cp-fill-stroke">Thickness (px)</label>' +
+                '<input type="number" class="cp-gen-input" id="cp-fill-stroke" min="1" max="8" step="1" required>' +
             '</div><div id="cp-pattern-body"></div>' +
         '</details>' +
         '<div id="cp-color-editor">' +
@@ -228,6 +233,13 @@ function padColorPopoverCreate() {
         _cpPopover.fill.pattern = padFillPattern(this.value);
         padColorPopoverValidate(true);
     });
+    ['spacing', 'stroke'].forEach(function(field) {
+        pop.querySelector('#cp-fill-' + field).addEventListener('input', function() {
+            if (!_cpPopover.fill || !_cpPopover.fill.geometry) return;
+            _cpPopover.fill.geometry[field] = Number(this.value);
+            padColorPopoverValidate(true);
+        });
+    });
     pop.querySelector('#cp-fx').addEventListener('click', function() {
         if (typeof showBindingHelp === 'function') showBindingHelp();
     });
@@ -237,6 +249,7 @@ function padColorPopoverCreate() {
         if (e.key !== 'Escape' || pop.style.display === 'none') return;
         var help = document.getElementById('binding-help-overlay');
         if (help && help.style.display !== 'none' && help.style.display !== '') return;
+        e.preventDefault();
         e.stopPropagation();
         padColorPopoverClose();
     }, true);
@@ -277,12 +290,19 @@ function padColorPopoverValidate(showError) {
             return entry[0] === _cpPopover.fill.pattern;
         })[1];
         padFillPaintSwatch(pop.querySelector('#cp-fill-badge'), _cpPopover.fill.pattern,
-            _cpPopover.fill.base, _cpPopover.fill.color);
+            _cpPopover.fill.base, _cpPopover.fill.color, _cpPopover.fill.geometry);
         for (var layer of ['base', 'color']) {
-            var layerResult = padColorCheck(_cpPopover.fill[layer], target.maxLength, true);
+            var layerResult = padColorCheck(_cpPopover.fill[layer], target.maxLength, target.dataset.allowBindings !== 'false');
             if (!layerResult.value || layerResult.error) {
                 res.error = (layer === 'base' ? 'Base Color: ' : 'Pattern Color: ') + (layerResult.error || 'Enter a color');
                 break;
+            }
+            if (_cpPopover.fill.geometry) {
+                var geometry = _cpPopover.fill.geometry;
+                pop.querySelector('#cp-fill-stroke').max = Math.min(8, geometry.spacing);
+                if (!pop.querySelector('#cp-fill-spacing').checkValidity() ||
+                    !pop.querySelector('#cp-fill-stroke').checkValidity())
+                    res.error = 'Use spacing of 2-64 px and thickness of 1-8 px, no larger than spacing.';
             }
         }
     }
@@ -321,19 +341,34 @@ function padColorPopoverSubmit(val) {
 /** Open the color popover anchored to a swatch element, targeting a specific input. */
 function padColorPopoverOpen(swatch, input) {
     var cp = padColorPopoverCreate();
+    // A modal dialog makes body-level controls inert, regardless of z-index.
+    var host = input.closest('dialog[open]') || document.body;
+    if (cp.pop.parentNode !== host) {
+        host.appendChild(cp.bd);
+        host.appendChild(cp.pop);
+    }
     cp.target = input;
     cp.anchor = swatch;
     cp.returnFocus = document.activeElement;
     cp.layer = 'base';
-    var fillControls = input.dataset.fillPattern ? padFillControls().find(function(controls) {
-        return controls.dataset.patternField === input.dataset.fillPattern;
-    }) : null;
+    var fillControls = padColorFillControls(input);
     cp.fill = fillControls ? {
         controls: fillControls, base: input.value,
         pattern: fillControls.querySelector('select').value,
         color: fillControls.querySelector('.bc-input').value,
         originalColor: fillControls.querySelector('.bc-input').value
     } : null;
+    if (cp.fill && fillControls.querySelector('[data-fill-spacing]')) {
+        cp.fill.geometry = {
+            spacing: Number(fillControls.querySelector('[data-fill-spacing]').value),
+            stroke: Number(fillControls.querySelector('[data-fill-stroke]').value)
+        };
+    }
+    cp.pop.querySelector('#cp-fill-geometry').hidden = !(cp.fill && cp.fill.geometry);
+    if (cp.fill && cp.fill.geometry) {
+        cp.pop.querySelector('#cp-fill-spacing').value = cp.fill.geometry.spacing;
+        cp.pop.querySelector('#cp-fill-stroke').value = cp.fill.geometry.stroke;
+    }
     cp.pop.querySelector('#cp-fill').style.display = cp.fill ? '' : 'none';
     cp.pop.querySelector('#cp-base-summary').style.display = cp.fill ? '' : 'none';
     cp.pop.querySelector('#cp-base').open = true;
@@ -345,7 +380,7 @@ function padColorPopoverOpen(swatch, input) {
     var allowBindings = input.dataset.allowBindings !== 'false';
     cp.pop.querySelector('#cp-gen').style.display = allowBindings ? '' : 'none';
     cp.pop.querySelector('#cp-fx').style.display = allowBindings ? '' : 'none';
-    cp.pop.querySelector('#cp-input-label').textContent = cp.fill ? 'Base Color or expression' : allowBindings ? 'Color or expression' : 'Color';
+    cp.pop.querySelector('#cp-input-label').textContent = cp.fill ? (allowBindings ? 'Base Color or expression' : 'Base Color') : allowBindings ? 'Color or expression' : 'Color';
     cp.pop.querySelector('#cp-input').placeholder = allowBindings ? '#RRGGBB or [expr:\u2026]' : '#RRGGBB';
     padThresholdGenLoad(allowBindings ? input.value : '');
     // Show off-screen first so we can measure
@@ -390,7 +425,8 @@ function padColorPopoverLayer(layer) {
     cp.layer = layer;
     cp.pop.querySelector(layer === 'base' ? '#cp-base-body' : '#cp-pattern-body').appendChild(cp.pop.querySelector('#cp-color-editor'));
     cp.pop.querySelector('#cp-input').value = cp.fill[layer];
-    cp.pop.querySelector('#cp-input-label').textContent = layer === 'base' ? 'Base Color or expression' : 'Pattern Color or expression';
+    cp.pop.querySelector('#cp-input-label').textContent = (layer === 'base' ? 'Base Color' : 'Pattern Color') +
+        (cp.target.dataset.allowBindings === 'false' ? '' : ' or expression');
     padThresholdGenLoad(cp.fill[layer]);
     padColorPopoverValidate(true);
     padColorPopoverReposition();
@@ -563,14 +599,19 @@ function padColorPopoverApply(val) {
     if (!_cpPopover || !_cpPopover.target) return;
     if (_cpPopover.fill) {
         var fill = _cpPopover.fill;
-        var base = padColorCheck(fill.base, _cpPopover.target.maxLength, true);
-        var color = padColorCheck(fill.color, _cpPopover.target.maxLength, true);
+        var allowBindings = !_cpPopover.target.dataset || _cpPopover.target.dataset.allowBindings !== 'false';
+        var base = padColorCheck(fill.base, _cpPopover.target.maxLength, allowBindings);
+        var color = padColorCheck(fill.color, _cpPopover.target.maxLength, allowBindings);
         if (!base.value || base.error || !color.value || color.error) return;
         fill.controls.querySelector('select').value = fill.pattern;
         fill.controls.querySelector('.bc-input').value = color.value;
         if (fill.pattern !== 'none' || color.value !== fill.originalColor) fill.controls.dataset.colorSet = '1';
         val = base.value;
-        padFillRefreshVisibility();
+        if (fill.geometry) {
+            fill.controls.querySelector('[data-fill-spacing]').value = fill.geometry.spacing;
+            fill.controls.querySelector('[data-fill-stroke]').value = fill.geometry.stroke;
+        }
+        if (!_cpPopover.target.dataset || !_cpPopover.target.dataset.fillControls) padFillRefreshVisibility();
     }
     _cpPopover.target.value = val;
     _cpPopover.target.dispatchEvent(new Event('input', { bubbles: true }));
@@ -585,6 +626,10 @@ function padColorPopoverClose() {
     _cpPopover.bd.style.display = 'none';
     _cpPopover.target = null;
     _cpPopover.fill = null;
+    if (_cpPopover.pop.parentNode !== document.body) {
+        document.body.appendChild(_cpPopover.bd);
+        document.body.appendChild(_cpPopover.pop);
+    }
     var rf = _cpPopover.returnFocus;
     _cpPopover.returnFocus = null;
     if (rf && typeof rf.focus === 'function' && document.body.contains(rf)) rf.focus();
@@ -678,14 +723,22 @@ function padInitFillColor(container, input) {
 }
 
 function padFillSyncSwatch(input, swatch) {
-    if (!input.dataset.fillPattern) return;
-    var controls = padFillControls().find(function(control) { return control.dataset.patternField === input.dataset.fillPattern; });
+    var controls = padColorFillControls(input);
     if (!controls) return;
     var pattern = padFillPattern(controls.querySelector('select').value);
-    padFillPaintSwatch(swatch, pattern, input.value, controls.querySelector('.bc-input').value);
+    var spacing = controls.querySelector('[data-fill-spacing]');
+    var stroke = controls.querySelector('[data-fill-stroke]');
+    padFillPaintSwatch(swatch, pattern, input.value, controls.querySelector('.bc-input').value,
+        spacing ? {spacing: Number(spacing.value), stroke: Number(stroke.value)} : null);
 }
 
-function padFillPaintSwatch(swatch, pattern, baseValue, patternValue) {
+function padColorFillControls(input) {
+    if (input.dataset.fillControls) return document.getElementById(input.dataset.fillControls);
+    if (!input.dataset.fillPattern) return null;
+    return padFillControls().find(function(control) { return control.dataset.patternField === input.dataset.fillPattern; });
+}
+
+function padFillPaintSwatch(swatch, pattern, baseValue, patternValue, geometry) {
     swatch.classList.toggle('bc-pattern', pattern !== 'none');
     swatch.title = PAD_FILL_PATTERNS.find(function(entry) { return entry[0] === pattern; })[1];
     swatch.style.background = padColorNormalizeLiteral(baseValue) || (baseValue ? '' : '#e5e5ea');
@@ -693,8 +746,22 @@ function padFillPaintSwatch(swatch, pattern, baseValue, patternValue) {
     if (pattern === 'none') return;
     var base = padColorNormalizeLiteral(baseValue) || '#EEEEEE';
     var color = padColorNormalizeLiteral(patternValue) || '#111111';
-    var spacing = padFillGeometry(document.getElementById('pad-edit-pattern-spacing').value, 8, 2, 64);
-    var stroke = padFillGeometry(document.getElementById('pad-edit-pattern-stroke').value, 1, 1, Math.min(8, spacing));
+    var spacing = padFillGeometry(geometry ? geometry.spacing : document.getElementById('pad-edit-pattern-spacing').value, 8, 2, 64);
+    var stroke = padFillGeometry(geometry ? geometry.stroke : document.getElementById('pad-edit-pattern-stroke').value, 1, 1, Math.min(8, spacing));
+    var background = padFillBackground(pattern, color, spacing, stroke);
+    swatch.style.backgroundColor = base;
+    swatch.style.backgroundImage = background.image;
+    swatch.style.backgroundSize = background.size;
+    swatch.style.setProperty('--fill-base', base);
+    swatch.style.setProperty('--fill-preview', background.image);
+    swatch.style.setProperty('--fill-preview-size', background.size);
+    var bound = !padColorNormalizeLiteral(baseValue) || !padColorNormalizeLiteral(patternValue);
+    swatch.classList.toggle('bc-binding', bound);
+    if (bound) swatch.title += ' (bound color; representative preview)';
+}
+
+function padFillBackground(pattern, color, spacing, stroke) {
+    if (pattern === 'none') return {image: 'none', size: 'auto'};
     function stripes(angle) { return 'repeating-linear-gradient(' + angle + 'deg,' + color + ' 0 ' + stroke + 'px,transparent ' + stroke + 'px ' + spacing + 'px)'; }
     var image = pattern === 'diagonal' ? stripes(135) : pattern === 'reverse_diagonal' ? stripes(45) :
         pattern === 'crosshatch' ? stripes(135) + ',' + stripes(45) :
@@ -702,15 +769,7 @@ function padFillPaintSwatch(swatch, pattern, baseValue, patternValue) {
         'conic-gradient(' + color + ' 0 25%,transparent 0 50%,' + color + ' 0 75%,transparent 0)';
     var size = pattern === 'dots' ? spacing + 'px ' + spacing + 'px' :
         pattern === 'checkerboard' ? spacing * 2 + 'px ' + spacing * 2 + 'px' : 'auto';
-    swatch.style.backgroundColor = base;
-    swatch.style.backgroundImage = image;
-    swatch.style.backgroundSize = size;
-    swatch.style.setProperty('--fill-base', base);
-    swatch.style.setProperty('--fill-preview', image);
-    swatch.style.setProperty('--fill-preview-size', size);
-    var bound = !padColorNormalizeLiteral(baseValue) || !padColorNormalizeLiteral(patternValue);
-    swatch.classList.toggle('bc-binding', bound);
-    if (bound) swatch.title += ' (bound color; representative preview)';
+    return {image: image, size: size};
 }
 
 function padFillControls() {

@@ -396,8 +396,6 @@ static bool parse_button(JsonObject obj, ScreenButtonConfig* btn, const ButtonDe
         }
     }
 
-    btn->confirm = obj["confirm"] | false;
-    strlcpy(btn->confirm_text, obj["confirm_text"] | "", sizeof(btn->confirm_text));
 
     // Background image fields
     strlcpy(btn->bg_image_url, obj["bg_image_url"] | "", CONFIG_BG_IMAGE_URL_MAX_LEN);

@@ -6,6 +6,9 @@
 #include "log_manager.h"
 #include "power_manager.h"
 #include "version.h"
+#if HAS_DISPLAY
+#include "time_binding.h"
+#endif
 
 #include <atomic>
 #include <WiFi.h>
@@ -56,6 +59,21 @@ static unsigned long g_last_retry_ms = 0;     // millis() of last Tier 2 reconne
 static unsigned int  g_tier2_attempt = 0;     // Tier 2 backoff attempt counter
 static bool g_events_registered = false;
 static bool g_mdns_started = false;
+static portMUX_TYPE g_mdns_hostname_mux = portMUX_INITIALIZER_UNLOCKED;
+static char g_mdns_hostname[CONFIG_DEVICE_NAME_MAX_LEN] = {};
+
+static void set_mdns_hostname(const char* hostname) {
+		portENTER_CRITICAL(&g_mdns_hostname_mux);
+		strlcpy(g_mdns_hostname, hostname, sizeof(g_mdns_hostname));
+		portEXIT_CRITICAL(&g_mdns_hostname_mux);
+}
+
+void wifi_manager_get_mdns_hostname(char* hostname, size_t size) {
+		if (!hostname || !size) return;
+		portENTER_CRITICAL(&g_mdns_hostname_mux);
+		strlcpy(hostname, g_mdns_hostname, size);
+		portEXIT_CRITICAL(&g_mdns_hostname_mux);
+}
 
 enum class WifiEventType : uint8_t { None, Disconnected, GotIp };
 
@@ -63,6 +81,8 @@ enum class WifiEventType : uint8_t { None, Disconnected, GotIp };
 // Wi-Fi events are edge notifications; current association state remains authoritative.
 static std::atomic<uint16_t> g_wifi_event{0};
 static std::atomic<bool> g_wifi_reconnect_requested{false};
+static std::atomic<bool> g_intentional_offline{false};
+static constexpr uint32_t WIFI_MANUAL_RECONNECT_TIMEOUT_MS = 10000;
 
 static std::atomic<int16_t> g_diag_rssi{0};
 static std::atomic<uint8_t> g_diag_channel{0};
@@ -307,6 +327,10 @@ bool wifi_manager_connect(const DeviceConfig *config, bool allow_cached_bssid, u
 				// Backward compat: if early_init wasn't called, do full hardware init now.
 				wifi_manager_early_init();
 		}
+		if (WiFi.getMode() == WIFI_OFF && !WiFi.mode(WIFI_STA)) {
+				LOGE("WiFi", "Failed to enable station mode");
+				return false;
+		}
 
 		#ifdef CONFIG_IDF_TARGET_ESP32P4
 		// Wait for ESP-Hosted SDIO link if not yet ready.
@@ -549,6 +573,16 @@ void wifi_manager_request_reconnect() {
 		LOGI("WiFi", "Reconnect requested");
 }
 
+void wifi_manager_enter_offline() {
+		g_intentional_offline.store(true, std::memory_order_release);
+		g_wifi_reconnect_requested.store(false, std::memory_order_release);
+		g_wifi_event.store(0, std::memory_order_release);
+		set_mdns_hostname("");
+		WiFi.disconnect(true);
+		WiFi.mode(WIFI_OFF);
+		LOGI("WiFi", "Radio disabled by intentional offline mode");
+}
+
 // --- State machine helpers ---
 
 static void enter_outage(unsigned long now) {
@@ -582,6 +616,7 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 		if (!config) return;
 
 		LOGI("mDNS", "Start");
+		set_mdns_hostname("");
 		if (g_mdns_started) {
 			MDNS.end();
 			g_mdns_started = false;
@@ -597,6 +632,7 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 
 		if (MDNS.begin(sanitized)) {
 			g_mdns_started = true;
+			set_mdns_hostname(sanitized);
 				LOGI("mDNS", "Name: %s.local", sanitized);
 
 				MDNS.addService("http", "tcp", 80);
@@ -626,7 +662,43 @@ void wifi_manager_start_mdns(const DeviceConfig *config) {
 }
 
 void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool is_ap_mode) {
-		if (!config || !config_loaded || is_ap_mode) return;
+		if (!config) return;
+		if (is_ap_mode) {
+				g_wifi_reconnect_requested.store(false, std::memory_order_release);
+				return;
+		}
+		if (g_intentional_offline.load(std::memory_order_acquire)) {
+				if (!g_wifi_reconnect_requested.exchange(false, std::memory_order_acquire)) {
+						g_wifi_event.store(0, std::memory_order_release);
+						return;
+				}
+				if (!config_loaded || config->wifi_ssid[0] == '\0') {
+						LOGE("WiFi", "Manual reconnect failed: no saved SSID");
+						wifi_manager_enter_offline();
+						return;
+				}
+				LOGI("WiFi", "Manual reconnect attempt started");
+				const bool connected = wifi_manager_connect(
+						config, false, WIFI_MANUAL_RECONNECT_TIMEOUT_MS);
+				if (!connected) {
+						LOGE("WiFi", "Manual reconnect failed; radio remains off");
+						wifi_manager_enter_offline();
+						return;
+				}
+				g_intentional_offline.store(false, std::memory_order_release);
+				g_wifi_state = WifiState::Connected;
+				g_wifi_event.store(0, std::memory_order_release);
+				wifi_manager_register_events();
+				power_manager_note_wifi_success();
+				wifi_manager_start_mdns(config);
+				device_telemetry_cache_rssi();
+				#if HAS_DISPLAY
+				time_binding_start_ntp();
+				#endif
+				LOGI("WiFi", "Manual reconnect succeeded");
+				return;
+		}
+		if (!config_loaded) return;
 		if (strlen(config->wifi_ssid) == 0) return;
 
 		const unsigned long now = millis();
@@ -774,6 +846,7 @@ void wifi_manager_watchdog(const DeviceConfig *config, bool config_loaded, bool 
 						LOGW("WiFi", "Tier 3: low internal RAM (%u bytes free) before reset", (unsigned)int_free);
 				}
 				LOGW("WiFi", "Tier 3: hard reset (WIFI_OFF cycle)");
+				set_mdns_hostname("");
 				WiFi.disconnect(false);
 				WiFi.mode(WIFI_OFF);
 				g_wifi_state = WifiState::Tier3Off;

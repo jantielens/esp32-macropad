@@ -11,6 +11,15 @@ McpPressDispatchResult mcp_press_button_dispatch(
     if (count > MAX_BUTTON_ACTIONS) return MCP_PRESS_DISPATCH_INVALID;
     if (!actions || !count) return MCP_PRESS_DISPATCH_COMPLETED;
 
+    // Tracked HA dispatch runs individual actions and cannot preserve a paused
+    // suffix. Confirmation lists must stay with the continuation runner.
+    for (uint8_t index = 0; index < count; ++index) {
+        if (!strcmp(actions[index].type, ACTION_TYPE_CONFIRM)) {
+            ops.dispatch_list(actions, count, context);
+            return MCP_PRESS_DISPATCH_COMPLETED;
+        }
+    }
+
     uint8_t ha_action_count = 0;
     for (uint8_t action_index = 0; action_index < count; action_index++) {
         if (strcmp(actions[action_index].type, ACTION_TYPE_HA_SERVICE) == 0) {

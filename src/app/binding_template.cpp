@@ -216,7 +216,8 @@ bool binding_template_has_bindings(const char* label) {
 }
 
 static bool resolve_template(const char* templ, char* out, size_t out_len,
-                             BindingResolverStatus* status) {
+                             BindingResolverStatus* status, bool* complete = nullptr) {
+    if (complete) *complete = false;
     if (!templ || !out || out_len == 0) {
         if (out && out_len > 0) out[0] = '\0';
         if (status) *status = BINDING_RESOLVER_UNAVAILABLE;
@@ -224,6 +225,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
     }
 
     bool any_resolved = false;
+    bool fits = true;
     BindingResolverStatus outcome = BINDING_RESOLVER_RESOLVED;
     size_t written = 0;
     const char* p = templ;
@@ -241,8 +243,10 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
             size_t remain = strlen(p);
             size_t space = out_len - 1 - written;
             size_t copy = remain < space ? remain : space;
+            if (copy != remain) fits = false;
             memcpy(out + written, p, copy);
             written += copy;
+            p += remain;
             break;
         }
 
@@ -251,6 +255,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
         if (prefix_len > 0) {
             size_t space = out_len - 1 - written;
             size_t copy = prefix_len < space ? prefix_len : space;
+            if (copy != prefix_len) fits = false;
             memcpy(out + written, p, copy);
             written += copy;
         }
@@ -269,20 +274,22 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
         } else {
             // Make null-terminated copy of params
             size_t plen = params_len < sizeof(params_buf) - 1 ? params_len : sizeof(params_buf) - 1;
+            if (plen != params_len) fits = false;
             memcpy(params_buf, params, plen);
             params_buf[plen] = '\0';
 
             // Extract pipe fallback before resolving
             char* fallback = split_pipe_fallback(params_buf);
 
-            char resolved[128];
+            char resolved[BINDING_TEMPLATE_MAX_LEN + 1];
             BindingResolverStatus resolved_status = binding_template_resolve_registered(
-                scheme, scheme_len, params_buf, resolved, sizeof(resolved));
+                scheme, scheme_len, params_buf, resolved, complete ? sizeof(resolved) : 128);
             if (resolved_status == BINDING_RESOLVER_RESOLVED) {
                 any_resolved = true;
                 size_t rlen = strlen(resolved);
                 size_t space = out_len - 1 - written;
                 size_t copy = rlen < space ? rlen : space;
+                if (copy != rlen || (complete && rlen == sizeof(resolved) - 1)) fits = false;
                 memcpy(out + written, resolved, copy);
                 written += copy;
             } else {
@@ -296,6 +303,7 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
                 size_t phlen = strlen(ph);
                 size_t space = out_len - 1 - written;
                 size_t copy = phlen < space ? phlen : space;
+                if (copy != phlen) fits = false;
                 memcpy(out + written, ph, copy);
                 written += copy;
             }
@@ -305,8 +313,15 @@ static bool resolve_template(const char* templ, char* out, size_t out_len,
     }
 
     out[written] = '\0';
+    if (complete) *complete = fits && !*p && outcome == BINDING_RESOLVER_RESOLVED;
     if (status) *status = outcome;
     return any_resolved;
+}
+
+bool binding_template_resolve_checked(const char* templ, char* out, size_t out_len) {
+    bool complete = false;
+    resolve_template(templ, out, out_len, nullptr, &complete);
+    return complete;
 }
 
 bool binding_template_resolve(const char* templ, char* out, size_t out_len) {
@@ -385,4 +400,29 @@ void binding_template_collect_topics(const char* templ, void* user_data) {
 
         p = token_end;
     }
+}
+
+static void visit_tokens(const char* templ, binding_token_visitor_fn visitor,
+                          void* context, unsigned depth) {
+    if (!templ || !visitor || depth >= 8) return;
+    const char* p = templ;
+    while (*p) {
+        const char *start, *scheme, *params, *end;
+        size_t scheme_len, params_len;
+        if (!find_next_token(p, &start, &scheme, &scheme_len, &params, &params_len, &end)) break;
+        char buffer[BINDING_TEMPLATE_MAX_LEN];
+        if (params_len < sizeof(buffer)) {
+            memcpy(buffer, params, params_len);
+            buffer[params_len] = '\0';
+            split_pipe_fallback(buffer);
+            visitor(scheme, scheme_len, buffer, context);
+            visit_tokens(buffer, visitor, context, depth + 1);
+        }
+        p = end;
+    }
+}
+
+void binding_template_visit_tokens(const char* templ, binding_token_visitor_fn visitor,
+                                   void* context) {
+    visit_tokens(templ, visitor, context, 0);
 }

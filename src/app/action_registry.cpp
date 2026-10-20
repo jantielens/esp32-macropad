@@ -5,14 +5,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 #include "binding_template.h"
 #endif
 
 // Built-ins and device classes share this fixed-size registry. Reserve room
 // for device classes even when every built-in action is present.
 #ifndef ACTION_TYPE_REGISTRY_MAX_TYPES
-#define ACTION_TYPE_REGISTRY_MAX_TYPES 24
+#define ACTION_TYPE_REGISTRY_MAX_TYPES 25
 #endif
 static constexpr int MAX_ACTION_TYPES = ACTION_TYPE_REGISTRY_MAX_TYPES;
 static const ActionTypeDef* s_types[MAX_ACTION_TYPES] = {};
@@ -83,7 +83,7 @@ bool action_type_visit_bindable_fields(const ActionTypeDef* def, ButtonAction& a
     return !field || !field[0] || visitor(field, size, true, context);
 }
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 bool action_type_has_binding(const ActionTypeDef* def, const ButtonAction& act) {
     bool has_binding = false;
     auto check = [](char* field, size_t, bool, void* context) {
@@ -99,7 +99,7 @@ bool action_type_resolve_bindings(const ActionTypeDef* def, ButtonAction& act) {
     auto resolve = [](char* field, size_t size, bool reject_overflow, void*) {
         if (!field[0] || !size || !binding_template_has_bindings(field)) return true;
         char tmp[BINDING_TEMPLATE_MAX_LEN];
-        binding_template_resolve(field, tmp, sizeof(tmp));
+        if (!binding_template_resolve_checked(field, tmp, sizeof(tmp))) return false;
         if (reject_overflow && strlen(tmp) >= size) return false;
         strlcpy(field, tmp, size);
         return true;

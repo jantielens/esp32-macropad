@@ -193,6 +193,7 @@ async function loadConfig() {
         const config = await response.json();
         // Cache for validation logic (e.g., whether passwords are already set)
         window.deviceConfig = config;
+        if (typeof bindingBuilderRefreshShortcuts === 'function') bindingBuilderRefreshShortcuts();
         // Cache compile-time capability map for fragments that gate UI on it.
         window.__device_caps = config.caps || {};
         if (typeof window.padUpdateSparklineEditor === 'function' &&
@@ -229,6 +230,8 @@ async function loadConfig() {
         
         // WiFi settings
         setValueIfExists('wifi_ssid', config.wifi_ssid);
+        setValueIfExists('wifi_failure_mode', config.wifi_failure_mode || 'ap');
+        setValueIfExists('ap_password', config.ap_password);
         updateWriteOnlySecretField('wifi_password', 'wifi_password_status',
             config.wifi_password_set === true,
             hasConfig ? 'No password saved. This may be an open network.' : 'Not configured.',
@@ -450,6 +453,15 @@ function validateConfig(config) {
     
     if (config.device_name !== undefined && (!config.device_name || config.device_name.trim() === '')) {
         return { valid: false, message: 'Device name is required' };
+    }
+
+    if (config.wifi_failure_mode !== undefined &&
+        config.wifi_failure_mode !== 'ap' && config.wifi_failure_mode !== 'offline') {
+        return { valid: false, message: 'Choose a valid WiFi failure behavior' };
+    }
+    if (config.ap_password !== undefined && config.ap_password !== '' &&
+        !/^[\x20-\x7E]{8,63}$/.test(config.ap_password)) {
+        return { valid: false, message: 'Setup AP password must be 8-63 printable ASCII characters, or empty for an open AP' };
     }
     
     // Validate fixed IP configuration only if on network page

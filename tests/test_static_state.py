@@ -29,6 +29,7 @@ PRELUDE = r'''
 #include "action_list.h"
 #include "list_provider.h"
 #include "binding_template.h"
+#include "binding_value.h"
 #include "mqtt_sub_store.h"
 #include "psram_json_allocator.h"
 #include "LittleFS.h"
@@ -73,29 +74,15 @@ bool mqtt_sub_store_active() { return true; }
 void mqtt_sub_store_collect_topic(void*, const char*) {}
 bool mqtt_sub_store_get(const char*, char* output, size_t length, bool*, bool* truncated) {
     assert(length == MQTT_SUB_STORE_MAX_VALUE_LEN);
-    std::string payload(1900, 'x');
+    std::string payload = "{\"value\":42,\"padding\":\"";
+    payload.append(1900 - payload.size() - 2, 'x');
+    payload += "\"}";
     strlcpy(output, payload.c_str(), length);
     *truncated = false;
     return true;
 }
-bool mqtt_sub_store_extract_json(const char* payload, const char*, char* output, size_t length) {
-    assert(strlen(payload) == 1900);
-    strlcpy(output, "42", length);
-    return true;
-}
-void mqtt_sub_store_format_value(const char* value, const char*, char* output, size_t length) {
-    strlcpy(output, value, length);
-}
 
-struct lv_obj_t {};
-struct lv_timer_t {};
-struct lv_event_t {};
-struct lv_font_t {};
-static lv_font_t test_font;
-const lv_font_t* pad_typography_font(int) { return &test_font; }
 int pad_font_pixel_size(int) { return 24; }
-int lv_font_get_line_height(const lv_font_t*) { return 24; }
-const lv_font_t* lv_obj_get_style_text_font(lv_obj_t*, int) { return &test_font; }
 struct DeviceTypography { const char* font_name; uint16_t base_size; };
 const DeviceTypography& device_typography_get() {
     static const DeviceTypography active = {"@builtin", 0};
@@ -105,77 +92,13 @@ bool font_store_validate_name(const char*) { return false; }
 #ifndef HAS_TTF_FONTS
 #define HAS_TTF_FONTS 0
 #endif
-using lv_color_t = int;
-using lv_event_cb_t = void (*)(lv_event_t*);
-static lv_obj_t top_layer;
-lv_obj_t* lv_layer_top() { return &top_layer; }
-lv_obj_t* lv_obj_create(lv_obj_t*) { return new lv_obj_t; }
-lv_obj_t* lv_label_create(lv_obj_t* parent) { return parent; }
-void lv_obj_delete(lv_obj_t* object) { delete object; }
-lv_timer_t* lv_timer_create(void (*)(lv_timer_t*), uint32_t, void*) { return new lv_timer_t; }
-void lv_timer_delete(lv_timer_t* timer) { delete timer; }
-lv_color_t lv_color_white() { return 1; }
-lv_color_t lv_color_black() { return 0; }
-lv_color_t lv_color_hex(uint32_t color) { return color; }
-#define LV_OPA_COVER 255
-#define LV_OPA_60 153
-#define LV_OBJ_FLAG_CLICKABLE 1
-#define LV_EVENT_CLICKED 1
-#define LV_ALIGN_TOP_MID 1
-#define LV_ALIGN_BOTTOM_LEFT 2
-#define LV_ALIGN_BOTTOM_RIGHT 3
-#define LV_LABEL_LONG_WRAP 1
-#define LV_LABEL_LONG_DOT 2
-#define LV_PART_MAIN 0
-#define LV_TEXT_ALIGN_CENTER 1
-#define LV_PCT(value) (value)
-#define NOOP(name) template <typename... Args> void name(Args...) {}
-NOOP(lv_obj_remove_style_all)
-NOOP(lv_obj_set_style_bg_color)
-NOOP(lv_obj_set_style_bg_opa)
-NOOP(lv_obj_set_style_radius)
-NOOP(lv_obj_add_flag)
-NOOP(lv_obj_add_event_cb)
-NOOP(lv_label_set_text)
-NOOP(lv_obj_set_style_text_color)
-NOOP(lv_obj_set_style_text_font)
-NOOP(lv_obj_center)
-NOOP(lv_obj_set_size)
-NOOP(lv_obj_set_style_border_color)
-NOOP(lv_obj_set_style_border_width)
-NOOP(lv_obj_set_style_outline_width)
-NOOP(lv_obj_set_style_outline_color)
-NOOP(lv_obj_align)
-NOOP(lv_label_set_long_mode)
-NOOP(lv_obj_set_width)
-NOOP(lv_obj_set_height)
-NOOP(lv_obj_set_style_text_align)
-NOOP(lv_timer_set_repeat_count)
-struct DisplayManager {
-    int getActiveWidth() { return 466; }
-    int getActiveHeight() { return 466; }
-};
-static DisplayManager manager;
-DisplayManager* displayManager = &manager;
 struct ScaleInfo { int font_medium; int font_large; };
 ScaleInfo pad_get_scale_info() { return {0, 0}; }
-static unsigned dispatched = 0;
-void action_list_dispatch(const ButtonAction* actions, uint8_t count, const char*,
-                          ActionContinuationOwner owner) {
-    assert(owner == ACTION_CONTINUATION_OWNER_LVGL);
-    assert(count == 1 && !strcmp(actions[0].type, "screen"));
-    ++dispatched;
-}
 '''
 
 CHECKS = r'''
 int main() {
     allocator_probe::run_checks();
-    ButtonAction action = {};
-    strlcpy(action.type, "screen", sizeof(action.type));
-    assert(!button_confirmation_show(&action, 1, "test", "", ""));
-    assert(!s_overlay && !s_action_count);
-    button_confirmation_cancel();
 
     char output[128] = {};
     mqtt_binding_init();
@@ -214,16 +137,8 @@ int main() {
     assert(registered_provider->provide(items, 0) == 0);
     assert(registered_provider->provide(items, 1) == 1);
 
-    assert(button_confirmation_show(&action, 1, "test", "", ""));
-    memset(&action, 0, sizeof(action));
-    on_confirm(nullptr);
-    assert(dispatched == 1 && !s_overlay && !s_action_count);
-    strlcpy(action.type, "screen", sizeof(action.type));
     const unsigned allocated = allocations;
     allocation_fail = true;
-    assert(button_confirmation_show(&action, 1, "test", "", ""));
-    button_confirmation_cancel();
-    assert(!s_overlay && !s_action_count && dispatched == 1);
     mqtt_binding_init();
     list_provider_pads_invalidate();
     button_defaults_init();
@@ -281,7 +196,7 @@ def main():
     if not compiler:
         raise SystemExit("g++ is required")
     json_headers = pathlib.Path.home() / "Arduino/libraries/ArduinoJson/src"
-    sources = ["button_defaults.cpp", "list_provider_pads.cpp", "mqtt_binding.cpp", "button_confirmation.cpp"]
+    sources = ["button_defaults.cpp", "list_provider_pads.cpp", "mqtt_binding.cpp"]
     with tempfile.TemporaryDirectory(prefix="static-state-") as directory:
         source = pathlib.Path(directory) / "test.cpp"
         executable = pathlib.Path(directory) / "test"
@@ -294,6 +209,7 @@ def main():
             "-I", str(ROOT / "tests/timer_test_overrides"),
             "-I", str(ROOT / "tests"), "-I", str(ROOT / "src/app"),
             "-I", str(json_headers), str(source), str(ROOT / "tests/stubs.cpp"),
+            str(ROOT / "src/app/binding_value.cpp"),
             "-o", str(executable),
         ], check=True)
         subprocess.run([str(executable)], check=True)

@@ -16,7 +16,7 @@ class RemoteLogRuntimeTests(unittest.TestCase):
         self.assertTrue(boards)
         for board, fqbn in boards:
             flash = re.search(r"FlashSize=(\d+)M", fqbn)
-            enabled = ":esp32p4:" in fqbn or (
+            enabled = ":esp32p4:" in fqbn or ":um_feathers3:" in fqbn or (
                 ":esp32s3:" in fqbn and flash is not None and int(flash[1]) > 5)
             with self.subTest(board=board):
                 source = f'''#include "board_config.h"

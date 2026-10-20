@@ -57,6 +57,7 @@ FEATURES = {
     ),
     "Monochrome fonts (HAS_FREETYPE_FONTS)": (("freetype_mono_font.cpp.o", "automono_*.c.o"), ()),
     "Image decoding / encoding": (("image_decoder.cpp.o", "jpeg_encoder_service.cpp.o"), ()),
+    "Boot logo (HAS_BOOT_LOGO)": (("boot_logo_store.cpp.o", "web_portal_boot_logo.cpp.o"), ()),
     "Image fetch (HAS_IMAGE_FETCH)": (("image_fetch.cpp.o",), ()),
     "Image library (HAS_IMAGE_LIBRARY)": (
         ("image_library*.cpp.o", "local_image_loader.cpp.o"),
@@ -73,8 +74,9 @@ FEATURES = {
     "Widgets (HAS_DISPLAY)": (("widgets.cpp.o",), ()),
     "Pads / screens (HAS_DISPLAY)": (
         ("pad*.cpp.o", "screens.cpp.o", "screen_saver*.cpp.o", "button*.cpp.o", "label_style.cpp.o",
-         "visual_alert.cpp.o", "message_bubble.cpp.o", "swipe_config.cpp.o", "web_portal_pad.cpp.o"),
-        ("pad_editor_fragment_html_gz", "button_defaults_fragment_html_gz", "screensaver_fragment_html_gz"),
+         "visual_alert.cpp.o", "device_dialog.cpp.o", "dialog_appearance.cpp.o", "swipe_config.cpp.o", "web_portal_pad.cpp.o"),
+        ("pad_editor_fragment_html_gz", "button_defaults_fragment_html_gz",
+         "dialog_appearance_fragment_html_gz", "screensaver_fragment_html_gz"),
     ),
     "BLE HID (HAS_BLE_HID)": (
         ("ble_hid.cpp.o", "web_portal_ble.cpp.o"), (),
@@ -110,6 +112,7 @@ FEATURES = {
     "Linker-merged strings / constants (shared)": ((), ()),
 }
 LIBRARIES = {
+    "Home Assistant": ("WebSockets",),
     "Monochrome fonts (HAS_FREETYPE_FONTS)": ("MacropadFreeType",),
     "LVGL": ("lvgl", "liblvgl.a"),
     "Display / touch (HAS_DISPLAY / HAS_TOUCH)": (
@@ -152,6 +155,7 @@ LIBRARIES = {
     ),
 }
 FLAG_SUBSYSTEMS = {
+    "HAS_DISPLAY_DIAGNOSTICS": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_BACKLIGHT": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_BUILTIN_LED": "Sensors / power",
     "HAS_BUTTON": "Sensors / power",
@@ -162,6 +166,7 @@ FLAG_SUBSYSTEMS = {
     "HAS_EPAPER_VCOM": "Display / touch (HAS_DISPLAY / HAS_TOUCH)",
     "HAS_ES7210_MIC": "Audio input (HAS_AUDIO_INPUT)",
     "HAS_HA_HISTORY": "Home Assistant",
+    "HAS_HA_LIVE": "Home Assistant",
     "HAS_LVGL_EPAPER": "LVGL",
     "HAS_MUSIC_ANALYSIS": "Music playback / analysis",
     "HAS_SD_CARD": "Storage",

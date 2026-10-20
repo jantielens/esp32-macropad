@@ -49,6 +49,7 @@ static void lv_indev_reset(lv_indev_t*, void*) { ++resets; }
 static bool screen_saver_manager_input_ready() { return ready; }
 static void screen_saver_manager_notify_activity(bool) { ++activities; }
 #if HAS_USB_HID
+static bool device_dialog_active() { return false; }
 static unsigned routed = 0, canceled = 0;
 static uint32_t gamepad_hid_generation() { return 1; }
 static uint32_t mouse_hid_generation() { return 1; }

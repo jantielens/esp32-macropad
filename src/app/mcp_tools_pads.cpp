@@ -119,8 +119,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
         "label_top_style", "label_center_style", "label_bottom_style",
         "bg_color", "fg_color", "border_color", "border_width", "corner_radius", "content_pad", "button_shadow",
         "bg_pattern", "bg_pattern_color", "pattern_spacing", "pattern_stroke_width",
-        "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions",
-        "confirm", "confirm_text"
+        "icon_id", "btn_state", "widget_type", "widget_data_binding", "actions", "lp_actions"
     };
     for (const char* f : fields) bf.add(f);
     btn["widget_note"] = "widget keys are flat: widget_type + widget_data_binding[_2.._4]; widget config fields (e.g. min/max/color) are flat on the button too";
@@ -131,7 +130,7 @@ static bool tool_get_capabilities(const JsonObject& args, JsonObject& result, St
     JsonArray states = btn.createNestedArray("btn_state");
     states.add("enabled"); states.add("disabled"); states.add("hidden");
     btn["btn_state_note"] = "accepts a binding for conditional visibility, e.g. [expr:[mqtt:printer;state]==\"online\"?\"enabled\":\"hidden\"] (unresolved -> enabled)";
-    btn["confirm_note"] = "confirm=true requires an on-device Cancel/Confirm prompt before normal button tap or long-press actions run; unsupported on widgets; confirm_text is optional plain text (max 127 chars); timeout is 10 seconds; programmatic MCP press_button bypasses the dialog";
+    btn["dialog_note"] = "Use a confirm action to pause a sequence for on-device approval, including programmatic presses. Cancel, timeout, replacement, or display/binding failure stops its remaining actions. Dialog messages resolve bindings once; later actions resolve their own values.";
 
     JsonObject style = result.createNestedObject("label_style");
 #if HAS_TTF_FONTS
@@ -312,7 +311,7 @@ static bool tool_validate_pad(const JsonObject& args, JsonObject& result, String
     return true;
 }
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 // ============================================================================
 // resolve_bindings (read tool, authoring-gated) — resolve binding tokens
 // against LIVE data on the main loop; no save. Powers debugging/preview of what
@@ -463,7 +462,7 @@ static const McpTool s_tool_validate_pad = {
 };
 REGISTER_MCP_TOOL(s_tool_validate_pad);
 
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
 static const McpTool s_tool_resolve_bindings = {
     "resolve_bindings",
     "Resolve [scheme:params] binding tokens against the device's LIVE data and return the resolved text — to debug/preview what a binding or a proposed button renders to, WITHOUT saving. Args: bindings (array of template strings) and/or button (a proposed button object; its bindable fields label_*/*_color/btn_state/widget_data_binding[_2..4] are resolved), plus optional screen (pad_N or friendly name) to supply that pad's [pad:name] context. Best practice: after adding or editing any binding, call this to confirm it resolves to the intended value — writes only check binding SYNTAX, so a valid binding can still resolve to '---' or the wrong value. Returns resolved VALUES only — it does not render pixels (use GET /api/screenshot for a visual). Read-only; nothing is persisted. Requires pad authoring.",

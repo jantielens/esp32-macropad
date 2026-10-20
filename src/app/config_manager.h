@@ -25,10 +25,15 @@
 #include "camera_motion.h"
 #endif
 #include "camera.h"
+#if HAS_DISPLAY
+#include "dialog_appearance.h"
+#endif
 
 // Maximum string lengths
 #define CONFIG_SSID_MAX_LEN 32
 #define CONFIG_PASSWORD_MAX_LEN 64
+#define CONFIG_AP_PASSWORD_MAX_LEN 64
+#define CONFIG_WIFI_FAILURE_MODE_MAX_LEN 9
 #define CONFIG_DEVICE_NAME_MAX_LEN 32
 #define CONFIG_TIMEZONE_MAX_LEN 64
 #define CONFIG_IP_STR_MAX_LEN 16
@@ -46,6 +51,8 @@
 #define CONFIG_OPERATING_MODE_MAX_LEN 32
 #define CONFIG_MQTT_SCOPE_MAX_LEN 20
 #define CONFIG_DEFAULT_BLE_TX_POWER_DBM 9
+#define CONFIG_BOOT_COLOR_INHERIT 0xFFFFFFFFUL
+#define CONFIG_BOOT_LOGO_SLOT_NONE 255
 
 // Screen saver MQTT wake binding
 #define CONFIG_SS_WAKE_BINDING_MAX_LEN 192
@@ -70,6 +77,9 @@
 // Configuration structure
 #if HAS_LVGL_EPAPER
 #include "drivers/monochrome_render.h"
+constexpr int EPAPER_VCOM_MAX_MV = 5000;
+static_assert(EPAPER_DEFAULT_VCOM_MV >= 0 && EPAPER_DEFAULT_VCOM_MV <= EPAPER_VCOM_MAX_MV,
+		"E-paper default VCOM must be 0 (unspecified) or a magnitude up to 5000 mV");
 constexpr bool config_manager_epaper_mode_supported(uint8_t mode) {
 	return mode == EPAPER_RENDER_MODE_BW || (HAS_EPAPER_GRAYSCALE && mode == EPAPER_RENDER_MODE_GRAYSCALE);
 }
@@ -85,9 +95,14 @@ struct EpaperRefreshSettings {
 #endif
 
 struct DeviceConfig {
+#if HAS_DISPLAY
+		DialogTemplates dialog_appearance;
+#endif
 		// WiFi credentials
 		char wifi_ssid[CONFIG_SSID_MAX_LEN];
 		char wifi_password[CONFIG_PASSWORD_MAX_LEN];
+		char wifi_failure_mode[CONFIG_WIFI_FAILURE_MODE_MAX_LEN]; // ap | offline
+		char ap_password[CONFIG_AP_PASSWORD_MAX_LEN]; // empty or WPA2 passphrase
 		
 		// Device settings
 		char device_name[CONFIG_DEVICE_NAME_MAX_LEN];
@@ -129,6 +144,15 @@ struct DeviceConfig {
 		uint8_t backlight_brightness;  // 0-100%, default 100
 		uint8_t display_rotation;      // Quarter turns relative to the board default, 0-3
 
+#if HAS_DISPLAY
+		uint8_t boot_appearance_font_size; // 0 = device default/Auto
+		uint32_t boot_appearance_text_color; // RGB; CONFIG_BOOT_COLOR_INHERIT selects device default
+		uint32_t boot_appearance_background_color; // RGB; CONFIG_BOOT_COLOR_INHERIT selects device default
+#if HAS_BOOT_LOGO
+		uint8_t boot_logo_slot; // Managed asset slot, or CONFIG_BOOT_LOGO_SLOT_NONE
+#endif
+#endif
+
 		// Web portal Basic Auth (optional; enforced in STA/full mode only)
 		bool basic_auth_enabled;
 		char basic_auth_username[CONFIG_BASIC_AUTH_USERNAME_MAX_LEN];
@@ -168,7 +192,7 @@ struct DeviceConfig {
 #endif
 
 #if HAS_LVGL_EPAPER
-		// E-paper presentation settings. Panel mode is sampled only at boot.
+		// E-paper presentation settings. Panel mode and VCOM are sampled only at boot.
 		uint8_t epaper_render_mode;
 		uint32_t epaper_binding_refresh_interval_ms;
 		uint32_t epaper_min_refresh_interval_ms;
@@ -176,6 +200,7 @@ struct DeviceConfig {
 		uint16_t epaper_full_refresh_threshold;
 		uint8_t epaper_bw_conversion;
 		uint8_t epaper_bw_threshold;
+		uint16_t epaper_vcom_mv; // Boot-only magnitude; 0 selects the current board default.
 #endif
 
 #if HAS_CAMERA

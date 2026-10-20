@@ -72,14 +72,15 @@ assert.strictEqual(context.padThresholdSourceValidate(), false);
 assert.strictEqual(sourceError.style.display, '');
 
 const elements = {};
-for (const selector of ['#cp-base', '#cp-base-summary', '#cp-base-body', '#cp-color-editor', '#cp-fill', '#cp-gen', '#cp-fx', '#cp-input-label', '#cp-input', '#cp-recent-grid', '#cp-recent-heading', '#cp-gen-source']) {
+for (const selector of ['#cp-base', '#cp-base-summary', '#cp-base-body', '#cp-color-editor', '#cp-fill', '#cp-fill-geometry', '#cp-gen', '#cp-fx', '#cp-input-label', '#cp-input', '#cp-recent-grid', '#cp-recent-heading', '#cp-gen-source']) {
     elements[selector] = { style: {}, children: [], value: '', focus() {}, appendChild(child) { this.children.push(child); } };
 }
 Object.defineProperty(elements['#cp-recent-grid'], 'innerHTML', { set() { this.children = []; } });
 const dialog = { pop: {
     style: {}, querySelector(selector) { return elements[selector]; }, querySelectorAll() { return []; }
 }, bd: { style: {} } };
-context.document = { activeElement: null };
+const body = { appendChild(child) { child.parentNode = this; } };
+context.document = { activeElement: null, body };
 context.padState = { editCol: 1, editRow: 1 };
 context.padColorPopoverCreate = () => dialog;
 context.padThresholdGenLoad = () => {};
@@ -87,13 +88,17 @@ context.padColorPopoverValidate = () => {};
 context.padColorPopoverReposition = () => {};
 context.padColorSwatchButton = value => ({ value });
 context.padCollectUsedColors = () => ['#FFFFFF', '[expr:1]'];
-context.padColorPopoverOpen({}, { value: '#FFFFFF', dataset: { allowBindings: 'false' } });
+context.padColorPopoverOpen({}, { value: '#FFFFFF', dataset: { allowBindings: 'false' }, closest() { return null; } });
+assert.strictEqual(dialog.pop.parentNode, body);
 assert.strictEqual(elements['#cp-gen'].style.display, 'none');
 assert.strictEqual(elements['#cp-fx'].style.display, 'none');
 assert.strictEqual(elements['#cp-input-label'].textContent, 'Color');
 assert.strictEqual(elements['#cp-input'].placeholder, '#RRGGBB');
 assert.strictEqual(elements['#cp-recent-grid'].children.length, 1);
-context.padColorPopoverOpen({}, { value: '[expr:1]', dataset: {} });
+const modalHost = { appendChild(child) { child.parentNode = this; } };
+context.padColorPopoverOpen({}, { value: '[expr:1]', dataset: {}, closest() { return modalHost; } });
+assert.strictEqual(dialog.pop.parentNode, modalHost, 'The shared picker must be interactive inside a native modal');
+assert.strictEqual(dialog.bd.parentNode, modalHost);
 assert.strictEqual(elements['#cp-gen'].style.display, '');
 assert.strictEqual(elements['#cp-fx'].style.display, '');
 assert.strictEqual(elements['#cp-input-label'].textContent, 'Color or expression');
@@ -105,21 +110,13 @@ for (const widget of ['rocker', 'numericrocker']) {
     const markup = fs.readFileSync('src/app/web/_widget_' + widget + '.html', 'utf8');
     assert.match(markup, /class="bc-input" data-allow-bindings="false"/);
 }
-for (const widget of ['gauge', 'bar_chart', 'sparkline', 'waveform']) {
-    const markup = fs.readFileSync('src/app/web/_widget_' + widget + '.html', 'utf8');
-    for (const input of markup.matchAll(/<input\b[^>]*class="bc-input"[^>]*>/g)) {
-        const identifier = /id="([^"]+)"/.exec(input[0])[1];
-        const label = markup.match(new RegExp('<label for="' + identifier + '">([\\s\\S]*?)</label>'));
-        assert.ok(label && label[1].includes('class="fx-hint"'), identifier + ' needs a binding hint');
-    }
-}
 const sparkline = fs.readFileSync('src/app/web/_widget_sparkline.html', 'utf8');
 for (let reference = 1; reference <= 3; reference++) {
     assert.match(sparkline, new RegExp('<input type="number" id="pad-edit-sparkline-ref-' + reference + '-y" step="any"'));
 }
 for (const identifier of ['min-label', 'max-label', 'ref-1', 'ref-2', 'ref-3']) {
     assert.match(sparkline, new RegExp('id="pad-edit-sparkline-' + identifier + '-color"[^>]*maxlength="63"'));
-    assert.match(sparkline, new RegExp('<label for="pad-edit-sparkline-' + identifier + '-color">Color '));
+    assert.match(sparkline, new RegExp('<label for="pad-edit-sparkline-' + identifier + '-color">Color</label>'));
 }
 const barChart = fs.readFileSync('src/app/web/_widget_bar_chart.html', 'utf8');
 assert.match(barChart, /id="pad-edit-widget-bar-bg-color"[^>]*maxlength="63"/);
@@ -188,7 +185,8 @@ const gaugeFill = {};
 context.padFillBuild(gaugeFill, 'gauge');
 assert.strictEqual(gaugeFill.widget_bar_track_radius, undefined);
 
-const pickerContext = { Event: class {}, clearTimeout() {}, document: { body: { contains() { return false; } } } };
+const pickerBody = { contains() { return false; }, appendChild(child) { child.parentNode = this; } };
+const pickerContext = { Event: class {}, clearTimeout() {}, document: { body: pickerBody } };
 vm.createContext(pickerContext);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_colors.js', 'utf8'), pickerContext);
 pickerContext.padFillRefreshVisibility = () => {};
@@ -208,6 +206,8 @@ function draft() {
 }
 pickerContext._cpPopover = draft();
 pickerContext.padColorPopoverClose();
+assert.strictEqual(pickerContext._cpPopover.pop.parentNode, pickerBody, 'Closing must preserve the singleton when its dialog is removed');
+assert.strictEqual(pickerContext._cpPopover.bd.parentNode, pickerBody);
 assert.strictEqual(target.value, '#FFFFFF');
 assert.strictEqual(selection.value, 'none');
 assert.strictEqual(patternColor.value, '#000000');
@@ -217,6 +217,72 @@ pickerContext.padColorPopoverApply('#123456');
 assert.strictEqual(applyEvents, 1);
 assert.strictEqual(controls.dataset.colorSet, '1');
 assert.strictEqual(pickerContext._cpPopover.fill, null);
+
+const spacingInput = { value: '8' };
+const strokeInput = { value: '1' };
+controls.querySelector = selector => ({
+    select: selection, '.bc-input': patternColor,
+    '[data-fill-spacing]': spacingInput, '[data-fill-stroke]': strokeInput
+})[selector];
+target.dataset = { allowBindings: 'false', fillControls: 'dialog-pattern' };
+pickerContext._cpPopover = draft();
+pickerContext._cpPopover.fill.geometry = { spacing: 12, stroke: 2 };
+pickerContext.padColorPopoverClose();
+assert.strictEqual(spacingInput.value, '8');
+assert.strictEqual(strokeInput.value, '1');
+pickerContext._cpPopover = draft();
+pickerContext._cpPopover.fill.geometry = { spacing: 12, stroke: 2 };
+pickerContext.padColorPopoverApply('#123456');
+assert.strictEqual(spacingInput.value, 12);
+assert.strictEqual(strokeInput.value, 2);
+assert.strictEqual(applyEvents, 2);
+pickerContext._cpPopover = draft();
+pickerContext._cpPopover.fill.color = '[expr:1]';
+pickerContext.padColorPopoverApply('#123456');
+assert.strictEqual(applyEvents, 2);
+pickerContext.padColorPopoverClose();
+pickerContext.document.getElementById = id => id === 'dialog-pattern' ? controls : null;
+assert.strictEqual(pickerContext.padColorFillControls(target), controls);
+const background = pickerContext.padFillBackground('diagonal', '#123456', 12, 2);
+assert.match(background.image, /repeating-linear-gradient\(135deg,#123456 0 2px,transparent 2px 12px\)/);
+assert.strictEqual(background.size, 'auto');
+assert.deepStrictEqual({ ...pickerContext.padFillBackground('none', '#123456', 12, 2) },
+    { image: 'none', size: 'auto' });
+
+const pickerNodes = {};
+for (const id of ['cp-input', 'cp-preview', 'cp-apply', 'cp-error']) {
+    pickerNodes['#' + id] = { value: '#FFFFFF', style: {},
+        classList: { add() {}, remove() {}, toggle() {} } };
+}
+pickerContext.document.createElement = () => ({
+    style: {}, dataset: {}, classList: { add() {} }, setAttribute() {},
+    addEventListener(type, handler) { this[type] = handler; }
+});
+let plainApplyEvents = 0;
+const plainTarget = { value: '#FFFFFF', dataset: {}, maxLength: 191,
+    dispatchEvent() { plainApplyEvents++; } };
+function plainDraft() {
+    return { target: plainTarget, pop: { style: { display: '' },
+        querySelector: selector => pickerNodes[selector], querySelectorAll: () => [] },
+    bd: { style: { display: '' } } };
+}
+for (const color of ['#2196F3', '[expr:1]']) {
+    pickerContext._cpPopover = plainDraft();
+    pickerContext.padColorSwatchButton(color).click();
+    assert.strictEqual(pickerNodes['#cp-input'].value, color);
+    assert.strictEqual(pickerNodes['#cp-apply'].disabled, false);
+    assert.strictEqual(pickerContext._cpPopover.pop.style.display, '');
+    assert.strictEqual(plainTarget.value, '#FFFFFF');
+    assert.strictEqual(plainApplyEvents, 0);
+    pickerContext.padColorPopoverClose();
+    assert.strictEqual(plainTarget.value, '#FFFFFF', 'Closing discards the staged selection');
+}
+pickerContext._cpPopover = plainDraft();
+pickerContext.padColorSwatchButton('#2196F3').click();
+pickerContext.padColorPopoverSubmit(pickerNodes['#cp-input'].value);
+assert.strictEqual(plainTarget.value, '#2196F3');
+assert.strictEqual(plainApplyEvents, 1);
+assert.strictEqual(pickerContext._cpPopover.pop.style.display, 'none');
 
 const defaultsFixture = JSON.parse(fs.readFileSync('tools/mock-data/pad-editor.json', 'utf8'));
 const defaultInputs = new Map();

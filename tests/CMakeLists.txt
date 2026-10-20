@@ -69,7 +69,7 @@ set(HOST_LVGL_DIR "$ENV{HOME}/Arduino/libraries/lvgl/src")
 
 add_host_legacy_test(test_crowpanel_epaper_driver
     SOURCES test_crowpanel_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/app/drivers/crowpanel42_epaper_driver.cpp
-    INCLUDES ${PROJECT_SOURCE_DIR}/tests/crowpanel_driver_test_overrides ${HOST_LVGL_DIR}
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/crowpanel_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
         ${PROJECT_SOURCE_DIR}/src/boards/crowpanel-4.2-interactive
     DEFINITIONS BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1 TEST_HEAP_CAPS_ALLOCATOR=1
         LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0 TEST_FREERTOS_MUTEX_LIFECYCLE=1
@@ -77,8 +77,26 @@ add_host_legacy_test(test_crowpanel_epaper_driver
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h
 )
 
+foreach(board waveshare-7.8-interactive reterminal-e1003-interactive)
+  foreach(diagnostics 0 1)
+    set(diagnostic_suffix "")
+    if(diagnostics)
+        set(diagnostic_suffix "_diagnostics")
+    endif()
+    add_host_legacy_test(test_it8951_${board}${diagnostic_suffix}
+        SOURCES test_it8951_epaper_driver.cpp ${PROJECT_SOURCE_DIR}/src/app/drivers/it8951_epaper_driver.cpp
+        INCLUDES ${PROJECT_SOURCE_DIR}/tests/it8951_driver_test_overrides ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
+            ${PROJECT_SOURCE_DIR}/src/boards/${board}
+        DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics} BOARD_HAS_OVERRIDE=1 BOARD_HAS_PSRAM=1 CONFIG_IDF_TARGET_ESP32S3=1
+            TEST_HEAP_CAPS_ALLOCATOR=1 TEST_FREERTOS_MUTEX_LIFECYCLE=1 LV_CONF_SKIP=1 LV_USE_OS=0 LV_USE_LOG=0
+        OPTIONS -Wno-unused-parameter
+        PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/freertos/portmacro.h
+    )
+  endforeach()
+endforeach()
+
 add_host_legacy_test(test_sensor_manager
-    SOURCES test_sensor_manager.cpp
+    SOURCES test_sensor_manager.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     OPTIONS -Wno-deprecated-declarations
 )
@@ -168,18 +186,24 @@ file(GLOB HOST_FREETYPE_SOURCES CONFIGURE_DEPENDS
 add_library(host_freetype STATIC EXCLUDE_FROM_ALL ${HOST_FREETYPE_SOURCES})
 target_include_directories(host_freetype PUBLIC
     "${PROJECT_SOURCE_DIR}/libraries/MacropadFreeType/src")
-add_host_legacy_test(test_pad_font_cache_freetype
+foreach(diagnostics 0 1)
+set(font_cache_target test_pad_font_cache_freetype)
+if(diagnostics)
+    string(APPEND font_cache_target "_diagnostics")
+endif()
+add_host_legacy_test(${font_cache_target}
     SOURCES test_pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
         ${PROJECT_SOURCE_DIR}/src/app/freetype_mono_font.cpp
-    DEFINITIONS HAS_TTF_FONTS=1 HAS_FREETYPE_FONTS=1 HOST_LOG_CAPTURE
+    DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=${diagnostics} HAS_TTF_FONTS=1 HAS_FREETYPE_FONTS=1 HOST_LOG_CAPTURE
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/board_config.h ${PROJECT_SOURCE_DIR}/tests/font_runtime_overrides.h ${PROJECT_SOURCE_DIR}/tests/log_manager.h
     LIBRARIES host_lvgl host_freetype m
 )
-set_tests_properties(test_pad_font_cache_freetype PROPERTIES TIMEOUT 15)
-target_link_options(test_pad_font_cache_freetype PRIVATE
+set_tests_properties(${font_cache_target} PROPERTIES TIMEOUT 15)
+target_link_options(${font_cache_target} PRIVATE
     "-Wl,--wrap=lv_malloc_core" "-Wl,--wrap=lv_realloc_core")
-target_compile_definitions(test_pad_font_cache_freetype PRIVATE
+target_compile_definitions(${font_cache_target} PRIVATE
     TEST_UNICODE_FONT_PATH="${PROJECT_SOURCE_DIR}/tests/fixtures/DevanagariTest.ttf")
+endforeach()
 foreach(disabled_font_feature IN ITEMS HAS_DISPLAY HAS_TTF_FONTS HAS_FREETYPE_FONTS)
     add_test(NAME test_freetype_disabled_${disabled_font_feature}
         COMMAND ${CMAKE_CXX_COMPILER} -DBOARD_CONFIG_H
@@ -219,6 +243,15 @@ target_compile_options(test_gamepad_widgets PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 target_link_libraries(test_gamepad_widgets PRIVATE host_lvgl)
 
+add_host_gtest(test_sparkline_widget test_sparkline_widget.cpp)
+target_sources(test_sparkline_widget PRIVATE ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp)
+target_include_directories(test_sparkline_widget PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_options(test_sparkline_widget PRIVATE
+    -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable -Wno-format-truncation
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+target_link_libraries(test_sparkline_widget PRIVATE host_lvgl m)
+
 add_host_gtest(test_fill_draw test_fill_draw.cpp)
 target_include_directories(test_fill_draw BEFORE PRIVATE ${HOST_ARDUINOJSON_DIR})
 target_link_libraries(test_fill_draw PRIVATE host_lvgl m)
@@ -255,10 +288,13 @@ add_custom_command(
 )
 
 add_host_legacy_test(test_stopwatch_round_ui
-    SOURCES test_stopwatch_round_ui.cpp ${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp
+    SOURCES test_stopwatch_round_ui.cpp ${CMAKE_CURRENT_BINARY_DIR}/png_assets.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_font_cache.cpp ${PROJECT_SOURCE_DIR}/src/app/action_continuation.cpp ${PROJECT_SOURCE_DIR}/src/app/component_registry.cpp
     DEFINITIONS UI_SCALE_TIER=1 DISPLAY_DISABLE_ANIMATIONS=1
-    OPTIONS -Wno-missing-field-initializers
-    INCLUDES ${CMAKE_CURRENT_BINARY_DIR} ${HOST_LVGL_DIR}
+        BOOT_APPEARANCE_DEFAULT_FONT_SIZE=0 BOOT_APPEARANCE_DEFAULT_TEXT_RGB=0x646464
+        BOOT_APPEARANCE_DEFAULT_BACKGROUND_RGB=0x000000 DISPLAY_SHAPE_ROUND=1 DISPLAY_SHAPE=1
+    OPTIONS -Wno-missing-field-initializers -Wno-deprecated-declarations
+    INCLUDES ${PROJECT_SOURCE_DIR}/tests/system_screen_overrides
+        ${CMAKE_CURRENT_BINARY_DIR} ${HOST_LVGL_DIR} ${HOST_ARDUINOJSON_DIR}
     LIBRARIES host_lvgl
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
@@ -301,6 +337,20 @@ add_host_legacy_test(test_ha_stats_resample
     SOURCES test_ha_stats_resample.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_stats_resample.cpp
     LIBRARIES m
 )
+
+add_host_gtest(test_ha_live
+    test_ha_live.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_live_state.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/ha_lookup_data.cpp)
+target_include_directories(test_ha_live PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_ha_live PRIVATE HAS_HA_LIVE=1)
+target_compile_options(test_ha_live PRIVATE
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
+
+add_host_legacy_test(test_binding_value
+    SOURCES test_binding_value.cpp ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h
+    OPTIONS -Wno-deprecated-declarations)
 
 add_host_legacy_test(test_ha_service_delivery
     SOURCES test_ha_service_delivery.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_service_delivery.cpp
@@ -451,7 +501,7 @@ set(ACTION_TEST_SOURCES
 add_host_legacy_test(test_action_parse
     SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
+    DEFINITIONS ALARM_ENABLED=1 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 HAS_TOUCH=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
@@ -459,7 +509,7 @@ add_host_legacy_test(test_action_parse_alarm_disabled
     SOURCES test_action_parse.cpp ${ACTION_TEST_SOURCES} ${PROJECT_SOURCE_DIR}/src/app/action_catalog.cpp
         ${PROJECT_SOURCE_DIR}/src/app/alarm_manager.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
-    DEFINITIONS ALARM_ENABLED=0 HAS_AUDIO=1 HAS_SOUND_PLAYER=1
+    DEFINITIONS ALARM_ENABLED=0 HAS_AUDIO=1 HAS_SOUND_PLAYER=1 HAS_TOUCH=1
     OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h)
 add_host_legacy_test(test_action_bindings
@@ -485,6 +535,12 @@ add_host_legacy_test(test_action_sizes
     SOURCES test_action_sizes.cpp stubs.cpp
     INCLUDES ${HOST_ARDUINOJSON_DIR}
     OPTIONS -Wno-unused
+    PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
+)
+add_host_legacy_test(test_pad_confirmation
+    SOURCES test_pad_confirmation.cpp ${PROJECT_SOURCE_DIR}/src/app/pad_validate.cpp ${PROJECT_SOURCE_DIR}/src/app/action_validate.cpp stubs.cpp
+    INCLUDES ${HOST_ARDUINOJSON_DIR}
+    OPTIONS -Wno-deprecated-declarations
     PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/log_manager.h ${PROJECT_SOURCE_DIR}/tests/board_config.h
 )
 add_host_legacy_test(test_camera_capture_action
@@ -614,6 +670,12 @@ target_compile_features(binding_schema_json PRIVATE cxx_std_17)
 target_compile_options(binding_schema_json PRIVATE -Wall -Wextra -Werror)
 target_include_directories(binding_schema_json PRIVATE ${HOST_ARDUINOJSON_DIR} ${PROJECT_SOURCE_DIR}/src/app)
 
+add_library(binding_schema_values STATIC ${PROJECT_SOURCE_DIR}/src/app/binding_value.cpp)
+target_include_directories(binding_schema_values PRIVATE ${HOST_ARDUINOJSON_DIR}
+    ${PROJECT_SOURCE_DIR}/tests ${PROJECT_SOURCE_DIR}/src/app)
+target_compile_options(binding_schema_values PRIVATE -Wno-deprecated-declarations)
+target_link_libraries(test_pad_binding PRIVATE binding_schema_values)
+
 function(add_binding_schema_profile name definition)
     add_host_legacy_test(test_binding_schema_${name}
         SOURCES test_binding_schema_production.cpp binding_schema_profiles/stubs.cpp
@@ -627,10 +689,12 @@ function(add_binding_schema_profile name definition)
             ${PROJECT_SOURCE_DIR}/src/app/camera_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/expr_eval.cpp
             ${PROJECT_SOURCE_DIR}/src/app/time_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/time_service.cpp
             ${PROJECT_SOURCE_DIR}/src/app/mqtt_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/config_psram.cpp
+            ${PROJECT_SOURCE_DIR}/src/app/ha_binding.cpp
             $<TARGET_OBJECTS:binding_schema_json> ${ARGN}
         INCLUDES ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles ${PROJECT_SOURCE_DIR}/src
         DEFINITIONS ${definition}
         OPTIONS -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+        LIBRARIES binding_schema_values
         PREINCLUDE ${PROJECT_SOURCE_DIR}/tests/Arduino.h ${PROJECT_SOURCE_DIR}/tests/binding_schema_profiles/platform_stubs.h
     )
 endfunction()
@@ -645,6 +709,7 @@ add_test(NAME test_binding_docs_fixture
     COMMAND sh -c "$<TARGET_FILE:test_binding_schema_full> --emit-json | diff -u tools/mock-data/binding-docs.json -")
 set_tests_properties(test_binding_docs_fixture PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
+add_binding_schema_profile(ha_only "HAS_HA_LIVE=1;HAS_MQTT=0")
 add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_binding.cpp)
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)
 add_binding_schema_profile(darkroom "BINDING_SCHEMA_PROFILE_DARKROOM;HAS_FILESYSTEM=1" ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/print_log.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/meter.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/expose_timer.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/darkroom_timer/test_strip.cpp)
@@ -681,7 +746,8 @@ endforeach()
 add_host_command_test(test_portal_component_capacity_matrix python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_component_capacity_matrix.py)
 add_host_command_test(test_widget_schema python3 ${PROJECT_SOURCE_DIR}/tools/lint_widget_schema.py)
 add_host_command_test(test_gauge_caption_cache python3 ${PROJECT_SOURCE_DIR}/tests/test_gauge_caption_cache.py)
-add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp)
+add_host_legacy_test(test_display_perf SOURCES test_display_perf.cpp DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=0)
+add_host_legacy_test(test_display_perf_diagnostics SOURCES test_display_perf.cpp DEFINITIONS HAS_DISPLAY_DIAGNOSTICS=1)
 add_host_command_test(test_pad_refresh_schedule python3 ${PROJECT_SOURCE_DIR}/tests/test_pad_refresh_schedule.py)
 add_host_command_test(test_portal_info_preparation python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_info_preparation.py)
 add_host_command_test(test_portal_dev_server python3 ${PROJECT_SOURCE_DIR}/tests/test_portal_dev_server.py)
@@ -696,7 +762,7 @@ foreach(script
     test_timer_action_editor.js test_portal_action_editor_cycle.js test_portal_action_picker.js
     test_portal_action_list.js test_portal_timer_binding.js test_portal_pad_dialog_transaction.js
     test_portal_pad_import.js test_portal_pad_dirty.js test_portal_recipes.js
-    test_portal_ble_config.js test_portal_audio_config.js test_portal_pad_preview.js test_portal_startup.js
+    test_portal_ble_config.js test_portal_audio_config.js test_portal_epaper_config.js test_portal_pad_preview.js test_portal_startup.js
     test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js
     test_portal_binding_help.js test_portal_asset_gates.js
 )
@@ -778,6 +844,20 @@ add_host_gtest(test_power_config
     test_power_config.cpp
     ${PROJECT_SOURCE_DIR}/src/app/power_config.cpp
 )
+
+add_host_gtest(test_power_manager
+    test_power_manager.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/power_manager.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/power_config.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/device_class.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/ota_activity.cpp
+)
+target_include_directories(test_power_manager BEFORE PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/power_manager_overrides ${HOST_ARDUINOJSON_DIR})
+target_compile_definitions(test_power_manager PRIVATE
+    OTA_ACTIVITY_HOST_TEST HAS_DISPLAY=0 HAS_BUTTON=1 HAS_BUILTIN_LED=0)
+target_compile_options(test_power_manager PRIVATE -Wno-unused-variable -Wno-deprecated-declarations
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 
 add_host_gtest(test_epaper_frame_wake_journal
         test_epaper_frame_wake_journal.cpp

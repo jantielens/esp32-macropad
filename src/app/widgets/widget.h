@@ -66,7 +66,7 @@ inline void widget_parse_field(JsonVariant v, char* out, size_t out_len,
 // Resolve a color string (static "#RRGGBB" or "[scheme:...]") to uint32_t RGB.
 inline uint32_t resolve_color(const char* s, uint32_t def) {
     if (!s || !s[0]) return def;
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     if (binding_template_has_bindings(s)) {
         char resolved[BINDING_TEMPLATE_MAX_LEN];
         binding_template_resolve(s, resolved, sizeof(resolved));

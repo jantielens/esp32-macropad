@@ -19,30 +19,38 @@ Before implementing significant changes or starting major work, the agent must:
 
 ## After Significant Changes
 
-After every significant change, the agent must:
+Verify changes using the focused checks and build decision in
+[Build Verification](#build-verification). Keep runtime schemas, action/binding
+metadata, fixtures, and required tests synchronized during implementation.
 
-1. **Verify the changes** using the focused checks and build decision in
-   [Build Verification](#build-verification).
+Track narrative documentation impact, but reconcile it once against the
+completed change set at the checkpoint below, not after every development edit.
+Documentation-focused tasks still produce their requested documentation directly.
 
-2. **Check if documentation needs updates** by reviewing:
-   - `README.md` — Main project documentation
-   - `docs/dev/web-portal.md` — Web portal and REST API guide
-   - `docs/dev/display-touch-architecture.md` — Display/touch HAL and screen architecture
-   - `docs/dev/audio-architecture.md` — Audio output, I2S, memory, and MP3 playback architecture
-   - `docs/dev/adding-a-device-class.md` — Device class extension contract
-   - `docs/dev/scripts.md` — Script usage guide
-   - `docs/dev/library-management.md` — Library management guide
-   - `docs/dev/build-and-release-process.md` — Project branding, build system, and release workflow guide
-   - `docs/dev/wsl-development.md` — WSL setup guide
-   - `docs/first-time-setup.md` — User first-time setup guide
-   - `docs/web-portal-guide.md` — User web portal guide
-   - `docs/pad-editor-guide.md` — Pad editor, binding templates, widgets, and real-world examples
-   - `.github/copilot-instructions.md` — Project instructions
-   - `.github/workflows/build.yml` — CI/CD build pipeline
-   - `.github/workflows/release.yml` — CI/CD release pipeline
+## Commit-Ready Documentation Reconciliation
 
-3. **Update existing documentation** if changes affect documented behavior
-4. **Before creating new documentation files**, ask the user first
+Before requesting commit approval, creating a commit or pull request, or handing
+off work as ready to commit:
+
+1. Review the completed, scoped aggregate change set, including relevant staged,
+   unstaged, and untracked files, not only the last edit.
+2. Identify affected documentation owners from the impact triggers below.
+   Follow [user documentation](user-documentation.instructions.md) for user
+   tasks, examples, board facts, and page patterns. Read only relevant developer
+   references rather than sweeping the whole documentation collection.
+3. Update the smallest authoritative topics and their affected links. Prefer
+   existing owners; ask before creating new documentation files unless already
+   approved. Respect explicit exclusions and report their stale references rather
+   than silently expanding scope.
+4. Reconcile generated documentation snapshots with final source metadata using
+   existing generators and subsystem instructions. If implementation tests need
+   an earlier refresh, do it then; this checkpoint never postpones runtime
+   metadata, permits failing checks, or weakens tests/CI.
+5. Validate affected links, examples, and Markdown with focused existing checks.
+   Report updated owners, why no update was needed where applicable, validation
+   results, and any deferred scope or unverified behavior.
+
+This checkpoint does not authorize a commit, push, release, or out-of-scope edit.
 
 ## Verification Does Not Require New Tests
 
@@ -115,6 +123,10 @@ If the build fails:
 
 ## Documentation Update Triggers
 
+Use narrative destinations below at the commit-ready checkpoint, not as a
+per-edit full-documentation checklist. Implementation metadata, registration,
+and required validation remain part of development.
+
 - New script added → Update `README.md` script table and `docs/dev/scripts.md`
 - Library management changed → Update `docs/dev/library-management.md`
 - Build workflow modified → Update `README.md` CI/CD section and `docs/dev/build-and-release-process.md`
@@ -127,8 +139,8 @@ If the build fails:
 - New binding scheme added → Pass a complete `BindingSchemeSpec`, including a `BindingSchemeDoc` (category, summary, one param doc per `max_params`, key docs, examples), to `binding_template_register()`. The portal Binding reference and MCP manifest are generated from it; `tests/test_mcp_scheme_parity.sh` and the `test_binding_schema_*` host profiles enforce it. Regenerate `tools/mock-data/binding-docs.json` when docs in the full profile change.
 - New built-in action added → Add its persisted type/payload to `pad_config.h`; create one self-contained `src/app/actions/<type>_action.cpp` with parse, serialize, dispatch, validation, binding handling, and `describe()` metadata; call `DEFINE_AND_REGISTER_ACTION_TYPE(...)` exactly once; add the module to `src/app/actions/action_modules.inc`; run `tests/test_action_catalog_completeness.sh`. Do not add action-specific ladders to `action_parse.cpp` or `action_dispatch.cpp`.
 - New device-class action added → Keep its self-contained action module under `src/app/device_classes/<class>/`, call `DEFINE_AND_REGISTER_ACTION_TYPE(...)` exactly once, and include it through the existing device-class aggregation path. Do not add it to the built-in action manifest.
-- New user-facing control or feature added → Consider whether it should be exposed to the MCP server (a control/authoring tool via `REGISTER_MCP_TOOL`, and/or advertised in `get_capabilities`) so AI clients can use it; update `docs/mcp-guide.md`
-- Web UI feature changed → Update `docs/dev/web-portal.md` features section and `docs/web-portal-guide.md`
+- New user-facing control or feature added → Consider MCP exposure via `REGISTER_MCP_TOOL` and/or `get_capabilities` during implementation. At the checkpoint, update the owning user topic; update `docs/user/integrations/ai-assistants.md` only when client setup or safe-operation guidance changes, not to append a tool catalog.
+- Web UI feature changed → Update the owning task under `docs/user/`; update `docs/dev/web-portal.md` when its architecture or API contract changes. Follow [user documentation](user-documentation.instructions.md) rather than appending to a portal-wide manual.
 - Display/touch driver added/changed → Update `docs/dev/display-touch-architecture.md` driver sections
 - Audio output driver, I2S framing, or MP3 playback changed → Update `docs/dev/audio-architecture.md`
 - Screen management changed → Update `docs/dev/display-touch-architecture.md` screen lifecycle

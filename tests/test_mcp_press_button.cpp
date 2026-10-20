@@ -183,6 +183,16 @@ static void test_busy_rejects_before_side_effects() {
 }
 
 int main() {
+    {
+        Harness harness;
+        ButtonAction confirm{};
+        strcpy(confirm.type, ACTION_TYPE_CONFIRM);
+        ButtonAction actions[] = {confirm, ha_action("light.wait", "toggle")};
+        uint32_t id = 0;
+        assert(mcp_press_button_dispatch(actions, 2, OPS, &harness, &id) == MCP_PRESS_DISPATCH_COMPLETED);
+        assert(id == 0 && harness.event_count == 1);
+        assert(harness.events[0].type == EVENT_DISPATCH_LIST);
+    }
     test_no_ha_uses_unchanged_list_dispatch();
     test_action_count_boundaries();
     test_reserve_precedes_mixed_side_effects();

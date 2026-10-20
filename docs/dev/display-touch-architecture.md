@@ -92,6 +92,15 @@ observed boot discovered the expander after 250 ms, beyond the previous
 Expander IO8 powers the display; IO5
 resets it and IO4 resets touch. They are not ordinary GPIOs.
 
+After releasing reset, board startup waits 200 ms before returning to display
+initialization. The CO5300 datasheet (section 6.6) requires at least 120 ms
+before Sleep Out when resetting an active panel. Software restarts leave the
+panel powered, so this wait must precede Sleep Out rather than rely on the
+150 ms delay after that command. This replaces the previous 50 ms reset wait
+and adds 150 ms to startup. User hardware testing on 2026-10-19 confirmed the
+fix works for the reported software-reboot symptom; a broader repeated-reboot
+and cold-boot matrix remains unverified.
+
 The logical canvas is the documented 466 × 466 round area. The factory
 reference configures 468 × 466 at panel offset (6, 0), while M5GFX has used
 468 × 468. This adapter crops one horizontal pixel per side, giving the
@@ -285,6 +294,12 @@ periodic full refreshes; grayscale uses full waveforms. The Cypress touch driver
 continues polling while a presentation is pending. This target uses a no-OTA
 partition and must be updated over USB.
 
+LVGL's JPEG decoder uses project-prefixed entry points on this target to avoid
+colliding with InkplateLibrary's separate TJpgDec implementation. The display
+and touch drivers temporarily remove those aliases around `Inkplate.h`, keeping
+its declarations unchanged. Both decoders remain available, including JPEG boot
+logos; installed library files are not patched.
+
 The driver copies the mode-specific drawing framebuffer into a PSRAM presentation
 snapshot while holding its mutex, then releases the mutex before the blocking
 waveform. That preserves writes made during the waveform for the next
@@ -299,7 +314,28 @@ itself a release: it can also mean that no event is pending. The touch driver
 reads only pending events, retains contact state between them, and serializes
 controller reads so a one-shot report cannot be consumed by another observer.
 
-### reTerminal E1003 LVGL
+### IT8951 Interactive E-Paper
+
+`waveshare-7.8-interactive` and `reterminal-e1003-interactive` share
+`drivers/it8951_epaper_driver.cpp`, selected by `DISPLAY_DRIVER_IT8951`.
+`DISPLAY_DRIVER_RETERMINAL_E1003` remains an alias for compatibility.
+The Waveshare profile uses FeatherS3[D] reference wiring, the standard HAT protocol, externally supplied
+5 V, SPI GPIO36/35/37, CS10, RESET38, HRDY5, and default VCOM -1.53 V. It has no touch.
+Its single GPIO14 button has configurable tap/hold actions without defaults.
+The board uses landscape rotation 2. See the
+[Waveshare profile](interactive-epaper.md#waveshare-78-interactive)
+for wiring, startup provenance, and hardware acceptance checks.
+
+The E1003 override sets `IT8951_E1003_PROTOCOL=true` and retains its original
+power GPIO11/21, 10 MHz SPI, short reset, mirrored controller coordinates,
+reversed upload words, temperature command, and VCOM selector 2 with a -1.4 V default.
+The standard HAT uses a 200 ms reset, 24 MHz writes, 1 MHz reads, explicit
+packed-mode initialization, direct big-endian uploads, and VCOM selector 1
+with readback verification. HAT startup fails explicitly on a VCOM mismatch.
+Both profiles consume the boot-only `epaper_vcom_mv` setting; zero selects
+their `EPAPER_DEFAULT_VCOM_MV` without replacing the saved zero. Other
+interactive drivers may ignore this generic setting. See the
+[configuration contract](interactive-epaper.md#configuration-contract).
 
 `reterminal-e1003-interactive` is an always-on IT8951 e-paper Macropad target.
 Its buffered driver keeps 4-bit drawing and presentation framebuffers in PSRAM.
@@ -312,6 +348,9 @@ Initial and forced presentations use full-panel GC16, as do scheduled refreshes
 in both modes. Regional grayscale quality still needs hardware validation.
 Touch uses the existing GT911 driver on the E1003's shared
 GPIO19/GPIO20 I2C lines.
+Both profiles defer uploads at row checkpoints when OTA begins. Failed or
+interrupted presentations invalidate the known panel state and retry with a
+full refresh instead of treating the unsent snapshot as an unchanged frame.
 
 ### CrowPanel 4.2 A-Revision
 
@@ -691,15 +730,58 @@ public:
 ### Included Screens
 
 **SplashScreen** (`splash_screen.h/cpp`)
-- Boot screen with animated spinner
-- Status text updates during initialization
-- Optimized layout for 240x240 round displays
+- Boot screen with fixed logo, status, and spinner regions; status updates do
+  not reflow the layout
+- Reads boot font and color preferences before screen creation
+- Optional custom RGB565 logo source is attached on the LVGL task and retained
+  by the splash for reuse on the setup and info screens, including later visits.
+  It is released at display teardown after those screens are destroyed.
+  Loading is attempted once after display startup and
+  required SD validation, before peripheral initialization and Wi-Fi connection.
+  The loader mounts the selected filesystem on demand. This is best-effort:
+  initial frames may have no logo, and a missing or invalid logo does not stop boot
+- Round-display logo and text margins are handled locally by the splash screen
 
 **InfoScreen** (`info_screen.h/cpp`)
-- Device information and real-time stats
-- Round display compatible (all text centered)
-- Shows: device name, uptime, memory, WiFi, IP, version, chip info
-- Device name as hero element with separator lines
+- Connection and configuration guidance, also shown after a fresh device joins Wi-Fi
+- Shows the friendly device name, connected Wi-Fi network, and separate HTTP
+  URLs for the current IP and active `.local` hostname
+- Hides URLs when disconnected or waiting for an IP address
+- Reads a synchronized snapshot of the successfully registered mDNS hostname,
+  not the Wi-Fi station hostname or a pending device-name setting. The `.local`
+  URL is hidden during mDNS restart or if registration fails; the IP URL remains.
+- Uses the same font, colors, and logo as the boot and setup screens, configured
+  under Display > System Screens in the portal
+- Shares centered, wrapping layout and space-dependent logo sizing with setup;
+  round screens use narrower content, and overflowing content scrolls vertically
+- Preserves tap-to-return and swipe actions; updates changed labels at most twice
+  per second rather than continuously invalidating the screen
+
+**WifiSetupScreen** (`wifi_setup_screen.h/cpp`)
+- Shown only while the setup AP is active; it is not part of normal screen
+  discovery or navigation
+- Reads the active AP name, password, and URL from the portal after startup,
+  rather than showing pending saved settings
+- Reuses the boot appearance font size, text color, and background color.
+  Content is centered and round-screen aware; the two-line Stop AP and continue
+  offline button uses
+  inverted colors so it stays legible on light, dark, and e-paper themes
+- Gives compact numbered steps to connect, browse to the active AP URL, and
+  configure the device. Reuses
+  the built-in or selected boot logo when it fits without crowding instructions.
+  The logo is capped at one-sixth of the screen height; contain alignment keeps
+  its image object bounds equal to the displayed area, avoiding invisible
+  overflow in the centered stack.
+  Setup and info borrow the splash-owned logo without loading, decoding, or
+  copying the image again. Shared layout helpers live in `system_screen_layout.h`
+- Touch builds queue Stop AP and continue offline through the main-loop bridge. That path
+  stops AP/Wi-Fi and enters the shared normal-runtime initialization without
+  dispatching boot actions
+- Pressed styling and a disabled Starting offline button acknowledge the tap
+  while startup runs, without resizing the button or re-centering the instructions.
+  Busy or update/config-write conflicts show a retry message;
+  only the display task changes widgets, with an atomic failure notification
+  from the main loop
 
 **TestScreen** (`test_screen.h/cpp`)
 - Display calibration and color testing
@@ -818,7 +900,8 @@ assets and loads replacements. This cap is not a glyph-memory budget.
 The snapshot comes from `default_font` and `base_text_size` in
 `/config/button_defaults.json`, activated under the display lock after storage
 initialization. Saving never changes active typography. System screens and the
-LVGL theme are initialized then; the early boot splash keeps built-in fonts.
+LVGL theme are initialized then. The earlier boot splash uses its selected
+boot font size from built-in LVGL fonts rather than uploaded device typography.
 Pad labels, widget text/annotations, dialogs, notifications, and system text
 use the resolver. Per-style metrics remain opt-in, and `font_upscale` only
 transforms actual bitmap fonts. Icons, symbol-only controls, E-Paper Frame GFX
@@ -1707,20 +1790,45 @@ Each board compiles with its own display driver and settings.
 - **Total:** ~50-60 KB for display subsystem
 
 Alarm configuration and session actions, timer instances, MQTT binding scratch,
-device-level button defaults, the pad-list cache, and saved confirmation actions
+device-level button defaults, and the pad-list cache
 use `config_psram_alloc()`. Each block is allocated once when its subsystem
-initializes, except confirmation actions, which allocate on first use. Button
+initializes. Button
 defaults also allocate on an early getter call. Reinitialization and cache
 rebuilds reuse the blocks. The allocator prefers PSRAM and falls back to internal
 RAM on boards without PSRAM or when PSRAM allocation fails.
 
 If both allocations fail, timers and alarms stay unavailable, MQTT bindings
-resolve as unavailable, the pad list stays empty, and confirmation returns false
-without dispatching actions. The defaults getter remains non-null by returning
+resolve as unavailable, and the pad list stays empty. The defaults getter remains non-null by returning
 immutable built-in styling from flash; saving defaults fails before writing.
 Failed allocations can be retried by initialization or the next relevant call.
 Task stacks, synchronization state, and DMA buffers remain in their existing
 memory regions.
+
+`device_dialog.cpp` owns one active notification or confirmation. It builds a
+hidden replacement completely before retiring the previous dialog, snapshots
+the applicable device-wide appearance, and owns a font cache until its LVGL
+objects are deleted. Replacement, screen changes, display teardown, and OTA
+release waiting confirmation tokens without resuming their suffix. Approval
+completes a token once; the continuation manager resumes on its originating task.
+Timeouts are checked before accepting input, including queued physical navigation.
+Input generation changes and LVGL release suppression prevent stale gestures
+from approving a replacement or activating the underlying pad. A fully
+transparent overlay remains modal.
+
+Each confirmation starts with no physical-navigation selection or focus
+outline, including after replacement. The first Next selects Cancel; Previous
+selects Approve; Tap selects Cancel without completing the waiting continuation.
+Only a later Tap activates that selection. Direct touch activation is unchanged.
+
+Dialog background patterns reuse `fill_draw.h` and the shared pattern names.
+An optional non-interactive background child captures the pattern color and
+geometry in dialog-owned state. LVGL layered opacity blends the solid base and
+pattern together, leaving the parent border, message, and buttons unaffected.
+At 0% background opacity no pattern child is created. Background objects and
+their draw callbacks are deleted with the overlay before dialog-owned state
+and fonts are released. Runtime templates occupy 84 bytes each (168 bytes for
+both, previously 76/152); action payloads remain 256 bytes and `ButtonAction`
+remains 272 bytes.
 
 The `m5stack-stopwatch` static-state migration measures as follows in the ELF:
 
@@ -1778,6 +1886,86 @@ for `lv_timer_handler()`, data-stream polling, current-screen updates, and the
 total display-mutex-held cycle. Buffered presentation is measured separately.
 The FPS screen shows average Render, Present, and Cycle times; Cycle excludes
 lock wait and task sleep and does not sum concurrent rendering and presentation.
+
+Detailed profiling requires `HAS_DISPLAY_DIAGNOSTICS`, which defaults off on
+every board. Disabled builds retain the baseline FPS and average/peak timing
+window, but compile out the extra event callback, counters, timestamps, retained
+samples, FreeType measurements, IT8951 profiling state, and health serialization.
+The rendering optimizations and existing operational logs do not depend on this
+flag. There is no runtime or NVS setting. For local opt-in and cleanup, see
+[Capturing display performance](web-portal.md#capturing-display-performance).
+
+With diagnostics enabled, active render cycles retain last and
+slowest-since-boot snapshots, including
+flush calls, pixel counts, synchronous flush duration, display-lock wait,
+deferred work, and screen switching. These snapshots survive idle sampling
+windows and screen-saver suspension. They are copied under the performance
+spinlock; the flush callback accumulates locally on the LVGL task, without
+logging or taking the performance spinlock for each flush. Asynchronous drivers
+measure callback submission time, not later DMA completion.
+
+`last_navigation_render` independently retains the most recent active cycle
+that processed a queued screen switch, so later widget redraws cannot overwrite
+the initial navigation measurement. A display event callback timestamps refresh
+and render start/ready events only within `lv_timer_handler()`, separating actual
+render-event work from refresh setup/cleanup and other LVGL timers. Rendering
+still includes synchronous flush time, which is measured separately and
+subtracted for `render_other_us`. These wall times are nested, not additive.
+
+The same callback counts invalidation events by display-task phase, without
+per-request timers or logs. Cumulative counts include non-flushing cycles;
+requests between cycles remain pending until the next completed cycle consumes
+them. Per-cycle counts can precede a redraw in the next cycle, and requested
+areas can overlap. Counts include LVGL's draw-buffer rounding probes during
+rendering, not just widget requests. Phase attribution is not a widget-level call trace.
+All callback state is owned under the existing LVGL mutex and only published
+snapshots cross into the health API; polling adds no LVGL work.
+
+Monochrome FreeType cache diagnostics count hits, misses, successful evictions,
+and failed misses across font instances. Only miss handling is timed, using
+wrap-safe microsecond intervals; cache hits have no timestamp calls. Miss work
+includes loading/hinting, rasterization, expanded bitmap creation, and replacement,
+not all font callback or text blending work. The cache remains 16 glyphs per
+font instance. Counts and time are retained cumulatively and per active cycle,
+with `render_glyph_miss_us` isolating miss work inside render events. Glyph
+activity in non-flushing cycles is included in cumulative totals. Updates and
+snapshot collection use existing LVGL ownership; the health API only reads the
+published performance snapshot. No glyph logs, new allocations, or cache policy
+changes are introduced.
+
+IT8951 implements the optional `getPresentationStats()` HAL snapshot using a
+separate short-held spinlock. The health API reads it without acquiring LVGL or
+framebuffer locks, so polling does not wait for rendering or a panel transfer.
+Conversion and deliberate flush-yield durations are cumulative, while
+presentation phases retain the last and slowest attempts. No per-pixel timers,
+additional tasks, or telemetry buffers are allocated. Routine refresh summaries
+retain the existing once-per-minute cadence; explicitly forced and scheduled
+cleanup refreshes retain their existing summaries.
+
+Sparkline updates compare generated point coordinates and counts before
+invalidating data or reference lines. They also skip unchanged color setters
+and marker-label text updates. Stream revisions still trigger evaluation, and
+label refreshes still resolve bindings, scales, and colors, but identical visual
+output does not request a redraw. Every completed redraw evaluation advances
+the label-refresh timestamp, avoiding a duplicate label refresh when widget
+`update()` and `tick()` run in the same poll. No geometry cache, additional
+allocation, or reduction in data polling is required.
+
+IT8951 RGB565 conversion uses a 256-byte compile-time table of weighted channel
+contributions, preserving the original channel expansion and luminance rounding.
+For in-bounds flush rectangles at rotations 0 and 2, it converts pairs of pixels
+into complete packed framebuffer bytes. Only unpaired boundary pixels require
+read-modify-write operations, preserving neighboring nibbles. Dithering still
+uses logical pixel coordinates; quarter-turn rotations and clipped rectangles
+retain the per-pixel path. This changes neither the draw-buffer size nor refresh
+settling, yielding, controller transport, or waveform selection.
+
+Use `display_perf.last_render` to distinguish flush overhead from other LVGL
+work, and `display_presentation.last` to separate coalescing, framebuffer
+comparison/copying, upload, and controller-ready handling. The two tasks overlap;
+do not sum their elapsed times. Controller HRDY is not a measured physical
+waveform-completion signal. See the
+[health API](web-portal.md#health-monitoring) for field definitions and collection.
 
 On LCD boards, `DISPLAY_BINDING_REFRESH_INTERVAL_MS` throttles passive labels,
 colors, numeric styles, and local-image path templates independently of button

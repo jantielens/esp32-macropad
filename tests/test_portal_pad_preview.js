@@ -4,9 +4,23 @@ const vm = require('vm');
 
 function element() {
     return {
-        style: {}, dataset: {}, children: [], attributes: {}, classes: new Set(),
+        style: { setProperty(name, value) { this[name] = value; } },
+        dataset: {}, children: [], attributes: {}, classes: new Set(),
         classList: { add(...names) { names.forEach(name => this.owner.classes.add(name)); } },
         appendChild(child) { this.children.push(child); },
+        replaceChildren(...children) { this.children = children; },
+        insertBefore(child, before) {
+            const index = this.children.indexOf(before);
+            this.children.splice(index < 0 ? this.children.length : index, 0, child);
+        },
+        querySelector(selector) {
+            for (const child of this.children) {
+                if ((child.className || '').split(' ').includes(selector.slice(1))) return child;
+                const nested = child.querySelector(selector);
+                if (nested) return nested;
+            }
+            return null;
+        },
         addEventListener() {},
         setAttribute(name, value) { this.attributes[name] = value; }
     };
@@ -19,8 +33,10 @@ function createElement() {
 }
 
 const context = {
+    TextEncoder,
+    window: {},
     deviceInfoCache: { widget_catalog: [] },
-    document: { createElement },
+    document: { createElement, createElementNS: createElement },
     padColorToHex: (color, fallback) => color || fallback,
     padGetEffectiveDefault: key => ({ bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000', border_width: '0', corner_radius: '8', content_pad: '4' })[key]
 };
@@ -112,4 +128,163 @@ const font = Buffer.from(css.match(/data:font\/woff2;base64,([^']+)/)[1], 'base6
 assert.strictEqual(font.toString('ascii', 0, 4), 'wOF2');
 assert.strictEqual(font.length, font.readUInt32BE(8));
 assert(!css.includes('.pad-cell-widget-'));
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_button_templates.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
+context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
+    widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
+const barBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "bar")', context);
+const builderElements = Object.fromEntries(['fields', 'states', 'note', 'sources', 'selection', 'name', 'id', 'state'].map(name => ['[data-bb-' + name + ']', createElement()]));
+const makeDraft = (detail, name) => ({ sources: [{ detail, name, options: {} }], options: {}, previewState: detail.state });
+context.testBuilderSession = {
+    draft: makeDraft({ state: '42', unit: '%' }, 'Battery'), scenario: barBuilder,
+    dialog: { querySelector: selector => builderElements[selector] }
+};
+context.padButtonBuilderSetScenario(context.testBuilderSession, barBuilder);
+vm.runInContext('padButtonBuilderSession = testBuilderSession', context);
+context.padColorPopoverClose = () => {};
+const updatePreview = context.padButtonBuilderUpdatePreview;
+let previewUpdates = 0;
+context.padButtonBuilderUpdatePreview = () => previewUpdates++;
+context.padButtonBuilderRenderFields();
+const builderInputs = builderElements['[data-bb-fields]'].children.map(label => label.children[0]);
+assert.strictEqual(builderInputs.find(input => input.name === 'min').step, 'any');
+assert.strictEqual(builderInputs.find(input => input.name === 'decimals').step, '1');
+const orientationInput = builderInputs.find(input => input.name === 'orientation');
+orientationInput.value = 'horizontal';
+orientationInput.onchange();
+assert.strictEqual(context.testBuilderSession.draft.options.orientation, 'horizontal', 'Custom dropdowns dispatch change, not input');
+assert.strictEqual(previewUpdates, 2);
+const minimumInput = builderInputs.find(input => input.name === 'min');
+minimumInput.value = '';
+minimumInput.oninput();
+assert.strictEqual(context.testBuilderSession.draft.options.min, '', 'Keep incomplete numeric input raw');
+assert.throws(() => context.padButtonBuilderValidateFields(context.testBuilderSession), /minimum and maximum/);
+minimumInput.value = '-0.5';
+minimumInput.oninput();
+assert.strictEqual(context.testBuilderSession.draft.options.min, '-0.5');
+assert.doesNotThrow(() => context.padButtonBuilderValidateFields(context.testBuilderSession));
+context.padButtonBuilderUpdatePreview = updatePreview;
+vm.runInContext('padButtonBuilderSession = null', context);
+for (const orientation of ['vertical', 'horizontal']) {
+    for (const [state, signed, start, size] of [
+        ['0', false, '0%', '0%'], ['50', false, '0%', '50%'], ['100', false, '0%', '100%'],
+        ['200', false, '0%', '100%'], ['-200', false, '0%', '0%'],
+        ['-50', true, '25%', '25%'], ['0', true, '50%', '0%'], ['50', true, '50%', '25%'],
+        ['unavailable', false, undefined, undefined]
+    ]) {
+        const cell = createElement();
+        const detail = { state };
+        const button = { label_top: 'Power', label_bottom: state, widget_type: 'bar_chart',
+            widget_bar_min: signed ? -100 : 0, widget_bar_max: 100,
+            widget_bar_zero_centered: signed, widget_orientation: orientation };
+        context.padRenderCellContent(cell, button);
+        barBuilder.renderPreview(makeDraft(detail, 'Power'), cell, button);
+        const bar = cell.querySelector('.pad-button-builder-bar');
+        const track = cell.querySelector('.pad-button-builder-bar-track');
+        const fill = cell.querySelector('.pad-button-builder-bar-fill');
+        assert.strictEqual(bar.dataset.orientation, orientation);
+        assert.strictEqual(bar.attributes.role, state === 'unavailable' ? 'img' : 'meter');
+        assert.strictEqual(track.style['--bar-start'], start);
+        assert.strictEqual(track.style['--bar-size'], size);
+        assert.strictEqual(!!fill.hidden, state === 'unavailable');
+        assert.strictEqual(track.style.background, '#1A1A1A');
+        assert.strictEqual(fill.style.background, '#4CAF50');
+        assert.strictEqual(cell.children.indexOf(bar) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
+    }
+}
+const gaugeBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "gauge")', context);
+for (const [state, min, max, percent] of [
+    ['0', 0, 100, 0], ['50', 0, 100, 50], ['100', 0, 100, 100],
+    ['200', 0, 100, 100], ['-200', 0, 100, 0], ['-50', -100, 100, 25],
+    ['unavailable', 0, 100, null]
+]) {
+    const detail = { entity_id: 'sensor.power', state, unit: '%' };
+    const session = { draft: makeDraft(detail, 'Power') };
+    context.padButtonBuilderSetScenario(session, gaugeBuilder);
+    Object.assign(session.draft.options, { min, max, color: '#2196F3' });
+    const button = { label_top: 'Power', ...gaugeBuilder.build(session.draft),
+        ...gaugeBuilder.preview(session.draft) };
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    gaugeBuilder.renderPreview(session.draft, cell, button);
+    assert(cell.querySelector('.pad-widget-marker'));
+    assert.strictEqual(cell.querySelector('.pad-cell-label-center'), null);
+    const gauge = cell.children.find(child => child.attributes.class === 'pad-button-builder-gauge');
+    assert.strictEqual(gauge.attributes.role, percent === null ? 'img' : 'meter');
+    assert.strictEqual(gauge.children[0].attributes.stroke, '#1A1A1A');
+    if (percent === null) {
+        assert.match(gauge.attributes['aria-label'], /unavailable/);
+        assert.strictEqual(gauge.children.length, 6, 'Only track and ticks remain when data is unavailable');
+        assert.strictEqual(button.label_bottom, '---');
+    } else {
+        assert.strictEqual(gauge.attributes['aria-valuemin'], String(min));
+        assert.strictEqual(gauge.attributes['aria-valuemax'], String(max));
+        assert.strictEqual(gauge.attributes['aria-valuenow'], String(Math.max(min, Math.min(max, Number(state)))));
+        assert.strictEqual(gauge.attributes['aria-valuetext'], Number(state).toFixed(1) + ' %');
+        assert.strictEqual(gauge.children[1].attributes['stroke-dasharray'], percent + ' 100');
+        assert.strictEqual(gauge.children[1].attributes.stroke, '#2196F3');
+        assert.strictEqual(gauge.children[2].attributes.transform, 'rotate(' + percent * 1.8 + ' 140 130)');
+        assert.strictEqual(gauge.children[2].attributes.stroke, '#FFFFFF');
+        assert.strictEqual(gauge.children.length, 8, 'One track, one ring, one needle, and five ticks');
+    }
+    assert.strictEqual(cell.children.indexOf(gauge) + 1, cell.children.indexOf(cell.querySelector('.pad-cell-label-bottom')));
+}
+const historyBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "history")', context);
+let samplePoints;
+for (const color of ['#4CAF50', '#2196F3']) {
+    const cell = createElement();
+    const detail = { entity_id: 'sensor.temperature', state: '21.37', unit: '\u00b0C' };
+    const session = { draft: makeDraft(detail, 'Living room') };
+    context.padButtonBuilderSetScenario(session, historyBuilder);
+    session.draft.sources[0].options.color = color;
+    const button = { ...historyBuilder.build(session.draft),
+        ...historyBuilder.preview(session.draft) };
+    context.padRenderCellContent(cell, button);
+    historyBuilder.renderPreview(session.draft, cell, button);
+    assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, 'Living room');
+    assert.strictEqual(cell.querySelector('.pad-widget-marker'), null);
+    assert.strictEqual(cell.children.length, 2, 'Only the title and chart are shown');
+    const chart = cell.children.at(-1);
+    assert.strictEqual(chart.attributes.role, 'img');
+    assert.match(chart.attributes['aria-label'], /Illustrative trend, not actual history/);
+    assert.match(chart.attributes['aria-label'], /Living room: 21\.4/);
+    const [line, dot, value] = chart.children;
+    assert.strictEqual(line.attributes.stroke, color);
+    assert.strictEqual(dot.attributes.fill, color);
+    assert.strictEqual(value.textContent, '21.4 \u00b0C');
+    assert.strictEqual(value.attributes.fill, color);
+    assert(Number(value.attributes.x) > Number(dot.attributes.cx), 'Current value is to the right of its line');
+    assert.strictEqual(value.attributes.y, dot.attributes.cy, 'Current value follows the line endpoint');
+    assert.strictEqual(Number(dot.attributes.r) * 2, 5);
+    const points = line.attributes.points.split(' ').map(point => point.split(',').map(Number));
+    assert.deepStrictEqual(points.at(-1), [Number(dot.attributes.cx), Number(dot.attributes.cy)]);
+    if (samplePoints) assert.strictEqual(line.attributes.points, samplePoints, 'The illustrative curve stays deterministic');
+    samplePoints = line.attributes.points;
+}
+{
+    const detail = { entity_id: 'sensor.temperature', state: '21.37', unit: '\u00b0C' };
+    const session = { draft: makeDraft(detail, 'Living room') };
+    context.padButtonBuilderSetScenario(session, historyBuilder);
+    session.draft.sources.push(context.padButtonBuilderSource(historyBuilder,
+        { entity_id: 'sensor.humidity', state: '54.2', unit: '%' }, 'Humidity', 1));
+    const render = () => {
+        const cell = createElement();
+        const button = { ...historyBuilder.build(session.draft), ...historyBuilder.preview(session.draft) };
+        context.padRenderCellContent(cell, button);
+        historyBuilder.renderPreview(session.draft, cell, button);
+        return cell;
+    };
+    const cell = render();
+    const chart = cell.children.at(-1);
+    assert.strictEqual(chart.children.length, 6, 'Both values have a line, dot, and endpoint label');
+    assert.strictEqual(chart.children[5].textContent, '54.2 %');
+    assert.strictEqual(chart.children[5].attributes.fill, '#2196F3');
+    assert.strictEqual(chart.children[5].attributes.y, chart.children[4].attributes.cy);
+    session.draft.sources[1].detail.state = 'unavailable';
+    const unavailable = render();
+    assert.strictEqual(unavailable.children.at(-1).children[3].textContent, '---');
+    assert.strictEqual(unavailable.children.at(-1).children.length, 4, 'Unavailable values have a label but no zero or fake trend');
+}
 console.log('portal_pad_preview: PASS');

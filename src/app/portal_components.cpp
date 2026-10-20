@@ -48,6 +48,7 @@
 // --- Display-gated components ---
 #if HAS_DISPLAY
 #include "components/display_component.cpp"
+#include "components/system_screens_component.cpp"
 #if !SCREENSAVER_BACKLIGHT_ONLY
 #include "components/screensaver_component.cpp"
 #endif
@@ -57,6 +58,7 @@
 #include "components/swipe_actions_component.cpp"
 #include "components/boot_actions_component.cpp"
 #include "components/button_defaults_component.cpp"
+#include "components/dialog_appearance_component.cpp"
 #include "components/timers_component.cpp"
 #if HAS_LVGL_EPAPER
 #include "components/epaper_refresh_component.cpp"
@@ -69,12 +71,15 @@
 // --- MQTT-gated components ---
 #if HAS_MQTT
 #include "components/mqtt_component.cpp"
-#include "components/ha_discovery_component.cpp"
 // MQTT-Triggered Actions. Self-gated on MQTT_TRIGGERS_ENABLED (HAS_MQTT &&
 // (HAS_DISPLAY || HAS_BUTTON)); compiles to nothing on action-less boards
 // (e.g. e-paper) where the action system is unavailable.
 #include "components/mqtt_triggers_component.cpp"
 #endif // HAS_MQTT
+
+#if HAS_MQTT || HAS_HA_LIVE || HAS_DISPLAY || HAS_BUTTON
+#include "components/ha_discovery_component.cpp"
+#endif
 
 // --- Hardware Button Actions (boards with GPIO buttons) ---
 #if HAS_BUTTON

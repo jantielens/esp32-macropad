@@ -10,6 +10,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 #include "binding_template.h"
 #include "action_dispatch.h"
@@ -40,6 +41,19 @@ static BindingResolverStatus mock_long(const char* params, char* out, size_t out
     (void)params;
     strlcpy(out, "1234567890123456789", out_len);
     return BINDING_RESOLVER_RESOLVED;
+}
+
+static BindingResolverStatus mock_boundary(const char* params, char* out, size_t out_len) {
+    size_t length = !strcmp(params, "fit") ? 191 : 192;
+    if (length >= out_len) length = out_len - 1;
+    memset(out, 'x', length);
+    out[length] = '\0';
+    return BINDING_RESOLVER_RESOLVED;
+}
+
+static BindingResolverStatus mock_unavailable(const char*, char* out, size_t) {
+    out[0] = '\0';
+    return BINDING_RESOLVER_UNAVAILABLE;
 }
 
 static void mock_collect(const char* params, void* user_data) {
@@ -140,17 +154,9 @@ static void test_value_fields_resolved() {
     }
     {
         ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
-        strlcpy(act.payload.notify.notify_text,         "[mock:nt]", sizeof(act.payload.notify.notify_text));
-        strlcpy(act.payload.notify.notify_duration_ms,  "[mock:nd]", sizeof(act.payload.notify.notify_duration_ms));
-        strlcpy(act.payload.notify.notify_text_color,   "[mock:tc]", sizeof(act.payload.notify.notify_text_color));
-        strlcpy(act.payload.notify.notify_bg_color,     "[mock:bg]", sizeof(act.payload.notify.notify_bg_color));
-        strlcpy(act.payload.notify.notify_border_color, "[mock:bc]", sizeof(act.payload.notify.notify_border_color));
+        strlcpy(act.payload.notify.message, "[mock:nt]", sizeof(act.payload.notify.message));
         resolve_action_bindings(act);
-        check_str(act.payload.notify.notify_text,         "RESOLVED", "notify_text resolved");
-        check_str(act.payload.notify.notify_duration_ms,  "RESOLVED", "notify_duration_ms resolved");
-        check_str(act.payload.notify.notify_text_color,   "RESOLVED", "notify_text_color resolved");
-        check_str(act.payload.notify.notify_bg_color,     "RESOLVED", "notify_bg_color resolved");
-        check_str(act.payload.notify.notify_border_color, "RESOLVED", "notify_border_color resolved");
+        check_str(act.payload.notify.message, "RESOLVED", "notification message resolved");
     }
     {
         ButtonAction act = make_action(ACTION_TYPE_VISUAL_ALERT);
@@ -199,10 +205,10 @@ static void test_structural_fields_excluded() {
         check_str(act.payload.system.system_command, "[mock:x]", "system_command not resolved");
     }
     {
-        ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
-        strlcpy(act.payload.notify.notify_location, "[m:x]", sizeof(act.payload.notify.notify_location));
+        ButtonAction act = make_action(ACTION_TYPE_CONFIRM);
+        strlcpy(act.payload.confirm.approve_text, "[mock:x]", sizeof(act.payload.confirm.approve_text));
         resolve_action_bindings(act);
-        check_str(act.payload.notify.notify_location, "[m:x]", "notify_location not resolved");
+        check_str(act.payload.confirm.approve_text, "[mock:x]", "confirmation caption stays literal");
     }
     {
         ButtonAction act = make_action(ACTION_TYPE_SOUND_ALERT);
@@ -241,8 +247,7 @@ static void test_empty_fields_stay_empty() {
 
     ButtonAction n = make_action(ACTION_TYPE_NOTIFY);
     resolve_action_bindings(n);
-    check_str(n.payload.notify.notify_text,        "", "empty notify_text stays empty");
-    check_str(n.payload.notify.notify_duration_ms, "", "empty notify_duration_ms stays empty");
+    check_str(n.payload.notify.message, "", "empty message stays empty");
 }
 
 static void test_curly_brace_step_not_affected() {
@@ -270,9 +275,9 @@ static void test_curly_brace_step_not_affected() {
 static void test_mixed_static_and_binding() {
     printf("--- mixed static text and binding token ---\n");
     ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
-    strlcpy(act.payload.notify.notify_text, "CPU: [echo:42]%", sizeof(act.payload.notify.notify_text));
+    strlcpy(act.payload.notify.message, "CPU: [echo:42]%", sizeof(act.payload.notify.message));
     resolve_action_bindings(act);
-    check_str(act.payload.notify.notify_text, "CPU: 42%", "mixed binding resolved");
+    check_str(act.payload.notify.message, "CPU: 42%", "mixed binding resolved");
 }
 
 static void test_small_field_truncation() {
@@ -302,16 +307,31 @@ static void test_unregistered_scheme() {
     printf("--- unregistered scheme produces error marker ---\n");
     ButtonAction act = make_action(ACTION_TYPE_MQTT);
     strlcpy(act.payload.mqtt.mqtt_payload, "[nosuch:key]", sizeof(act.payload.mqtt.mqtt_payload));
-    resolve_action_bindings(act);
-    check_str(act.payload.mqtt.mqtt_payload, "ERR:unknown", "unregistered scheme produces error");
+    check_true(!resolve_action_bindings(act), "unregistered scheme fails closed");
+    check_str(act.payload.mqtt.mqtt_payload, "[nosuch:key]", "failed binding is not dispatched");
 }
 
 static void test_multiple_bindings_in_one_field() {
     printf("--- multiple binding tokens in one field ---\n");
     ButtonAction act = make_action(ACTION_TYPE_NOTIFY);
-    strlcpy(act.payload.notify.notify_text, "[echo:hello] [echo:world]", sizeof(act.payload.notify.notify_text));
+    strlcpy(act.payload.notify.message, "[echo:hello] [echo:world]", sizeof(act.payload.notify.message));
     resolve_action_bindings(act);
-    check_str(act.payload.notify.notify_text, "hello world", "multiple bindings resolved");
+    check_str(act.payload.notify.message, "hello world", "multiple bindings resolved");
+}
+
+static void test_dialog_binding_boundaries() {
+    for (const char* type : {ACTION_TYPE_NOTIFY, ACTION_TYPE_CONFIRM}) {
+        ButtonAction action = make_action(type);
+        char* message = !strcmp(type, ACTION_TYPE_NOTIFY) ? action.payload.notify.message : action.payload.confirm.message;
+        strlcpy(message, "[boundary:fit]", CONFIG_DIALOG_MESSAGE_MAX_LEN);
+        check_true(resolve_action_bindings(action), "191-byte dialog expansion fits");
+        check_true(strlen(message) == 191, "exact message capacity preserved");
+        for (const char* value : {"[boundary:overflow]", "prefix[boundary:fit]", "[missing:x]", "[unavailable:x]"}) {
+            strlcpy(message, value, CONFIG_DIALOG_MESSAGE_MAX_LEN);
+            check_true(!resolve_action_bindings(action), "overflow and failed dialog bindings stop dispatch");
+            check_str(message, value, "failed resolution leaves action intact");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -324,6 +344,8 @@ int main() {
     binding_template_register("mock", mock_resolve, mock_collect, free_form);
     binding_template_register("echo", mock_echo, mock_collect, free_form);
     binding_template_register("long", mock_long, mock_collect, free_form);
+    binding_template_register("boundary", mock_boundary, mock_collect, free_form);
+    binding_template_register("unavailable", mock_unavailable, mock_collect, free_form);
     // Register "m" as alias for mock (short scheme name for small-field tests)
     binding_template_register("m", mock_resolve, mock_collect, free_form);
 
@@ -337,6 +359,7 @@ int main() {
     test_oversized_timer_binding_rejected();
     test_unregistered_scheme();
     test_multiple_bindings_in_one_field();
+    test_dialog_binding_boundaries();
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;

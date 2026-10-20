@@ -223,6 +223,7 @@ fill in only what you need.
 |---|---|---|
 | `on_setup_early` | After config load, before WiFi/portal | One-shot hardware init that the rest of setup depends on |
 | `on_setup_late` | After WiFi/AP/portal | Sensor/measurement init, binding/list-provider registration |
+| `on_normal_runtime` | Once in shared normal startup, including live Continue offline | Runtime workers that must not start while setup AP is active |
 | `on_loop` | Every `loop()` iteration | Drain queues, process captured data (must not block) |
 | `run_duty_cycle` | When `owned_mode` matches boot mode | Owns the entire duty cycle for the mode |
 | `on_wake_classify` | From `power_manager_boot_init()` | Classify wake reason; optionally force Config Mode |
@@ -232,6 +233,10 @@ fill in only what you need.
 | `config_api_get` / `config_api_set` | REST `/api/config` | Append/parse device-class fields |
 | `mqtt_on_discovery` | HA discovery publish | Publish device-class entities; set `*skip_generic` to suppress core discovery |
 | `mqtt_publish_state` | Discovery bootstrap | Publish initial state snapshot |
+
+Keep setup-only registration in `on_setup_late`; it also runs during AP setup.
+Use `on_normal_runtime` for workers needed after connected boot, offline boot,
+or live AP exit. Duty-cycle pipelines do not invoke this normal-runtime hook.
 
 ### 3.3 Bind to the Aggregator
 

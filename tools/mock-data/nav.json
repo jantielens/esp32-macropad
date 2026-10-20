@@ -18,6 +18,7 @@
       "icon": "🖥️",
       "items": [
         { "id": "brightness", "display_name": "Brightness" },
+        { "id": "system-screens", "display_name": "System Screens" },
         { "id": "rotation", "display_name": "Rotation" },
         { "id": "screensaver", "display_name": "Screen Saver" }
       ]
@@ -36,7 +37,7 @@
       "display_name": "Actions",
       "icon": "⚡",
       "items": [
-        { "id": "swipe-actions", "display_name": "Swipe Actions" },
+        { "id": "swipe-actions", "display_name": "Swipes" },
         { "id": "boot-actions", "display_name": "Boot Actions" },
         { "id": "timers", "display_name": "Timers" }
       ]

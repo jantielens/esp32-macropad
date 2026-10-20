@@ -5,6 +5,8 @@
 
 void handleGetVersion(AsyncWebServerRequest *request);
 void handleGetBindings(AsyncWebServerRequest *request);
+void handleGetHaLive(AsyncWebServerRequest *request);
+void handleGetHaLookup(AsyncWebServerRequest *request);
 void handleGetHealth(AsyncWebServerRequest *request);
 void handleGetHealthHistory(AsyncWebServerRequest *request);
 void handleReboot(AsyncWebServerRequest *request);

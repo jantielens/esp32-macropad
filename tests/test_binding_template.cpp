@@ -4,6 +4,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "binding_template.h"
 
@@ -125,6 +127,23 @@ static void test_metadata_parameter_validation() {
                "full finite parameter list accepted");
 }
 
+static void test_nested_token_visit() {
+    std::vector<std::string> tokens;
+    binding_template_visit_tokens(
+        "[expr:[ha:sensor.power]+[ha:light.kitchen;attributes.brightness]|0] [pad:power]",
+        [](const char* scheme, size_t size, const char* params, void* user) {
+            static_cast<std::vector<std::string>*>(user)->push_back(
+                std::string(scheme, size) + ":" + params);
+        }, &tokens);
+    check_true(tokens.size() == 4, "visitor discovers nested expression dependencies");
+    if (tokens.size() != 4) return;
+    check_eq(tokens[0].c_str(), "expr:[ha:sensor.power]+[ha:light.kitchen;attributes.brightness]",
+             "outer fallback removed before visiting");
+    check_eq(tokens[1].c_str(), "ha:sensor.power", "first nested HA dependency");
+    check_eq(tokens[2].c_str(), "ha:light.kitchen;attributes.brightness", "attribute dependency intact");
+    check_eq(tokens[3].c_str(), "pad:power", "named dependency available for scoped expansion");
+}
+
 int main() {
     std::printf("=== binding_template resolver tests ===\n\n");
 
@@ -136,6 +155,7 @@ int main() {
     test_single_token_fallback();
     test_single_token_unknown_scheme();
     test_metadata_parameter_validation();
+    test_nested_token_visit();
     test_scheme_registry_capacity();
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);

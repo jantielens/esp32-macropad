@@ -142,7 +142,7 @@ static void bar_chart_set_label_text(lv_obj_t* label, const char* templ) {
     if (!label || !templ) return;
     char resolved[CONFIG_BINDABLE_SHORT_LEN];
     resolved[0] = '\0';
-#if HAS_MQTT
+#if HAS_MQTT || HAS_HA_LIVE
     if (binding_template_has_bindings(templ)) {
         binding_template_resolve(templ, resolved, sizeof(resolved));
     } else
@@ -450,6 +450,8 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         BarSlot* slot = &st->slots[oi];
         int16_t track_radius = fill_geometry_clamp(fill_style ? fill_style->style()->track_radius : 4,
             0, (track_cross < fill_len ? track_cross : fill_len) / 2);
+        // The rounded track clips square fills when an outline defines the container.
+        int16_t fill_radius = fill_style && fill_style->style()->outline_width > 0 ? 0 : track_radius;
 
         // Per-bar track (background). Vertical: the column group is centered
         // via TOP_MID with a per-column x offset. Horizontal: stacked rows,
@@ -488,7 +490,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         }
         lv_obj_set_style_bg_color(fill, resolve_lv_color(bar_slot_color_cfg(cfg, oi), BAR_SLOT_DEFAULT_COLOR[oi]), 0);
         lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(fill, track_radius, 0);
+        lv_obj_set_style_radius(fill, fill_radius, 0);
         lv_obj_set_style_border_width(fill, 0, 0);
         lv_obj_set_style_pad_all(fill, 0, 0);
         lv_obj_clear_flag(fill, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
@@ -502,7 +504,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
         // Square off the inner (center/baseline) corners with a cap overlay:
         // dual bars (fixed center seam) and single zero-centered bars (baseline
         // edge re-anchored per value sign in bar_chart_anim_cb).
-        if (slot->dual_dir != 0 || cfg->zero_centered) {
+        if (fill_radius > 0 && (slot->dual_dir != 0 || cfg->zero_centered)) {
             slot->cap = bar_chart_make_center_cap(
                 fill, cfg->horizontal,
                 slot->dual_dir != 0 ? slot->dual_dir : (int8_t)+1, track_cross,
@@ -526,7 +528,7 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             }
             lv_obj_set_style_bg_color(pfill, resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]), 0);
             lv_obj_set_style_bg_opa(pfill, LV_OPA_COVER, 0);
-            lv_obj_set_style_radius(pfill, track_radius, 0);
+            lv_obj_set_style_radius(pfill, fill_radius, 0);
             lv_obj_set_style_border_width(pfill, 0, 0);
             lv_obj_set_style_pad_all(pfill, 0, 0);
             lv_obj_clear_flag(pfill, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
@@ -535,10 +537,12 @@ static void bar_chart_create(lv_obj_t* tile, const WidgetConfig* wcfg,
             partner->bg = nullptr;  // shares the owner's track (no own bg/marker)
             partner->track_total = fill_len;
             partner->track_cross = track_cross;
-            partner->cap = bar_chart_make_center_cap(
-                pfill, cfg->horizontal, partner->dual_dir, track_cross,
-                resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]));
-            fill_style_attach_pattern(partner->cap, fill_style, oi + 2);
+            if (fill_radius > 0) {
+                partner->cap = bar_chart_make_center_cap(
+                    pfill, cfg->horizontal, partner->dual_dir, track_cross,
+                    resolve_lv_color(bar_slot_color_cfg(cfg, oi + 1), BAR_SLOT_DEFAULT_COLOR[oi + 1]));
+                fill_style_attach_pattern(partner->cap, fill_style, oi + 2);
+            }
         }
 
         fill_style_attach_rect_outline(bg, fill_style);

@@ -48,6 +48,17 @@
 
 // --- Driver Selection (HAL) ------------------------------------------------
 #define DISPLAY_DRIVER DISPLAY_DRIVER_RETERMINAL_E1003
+#define IT8951_E1003_PROTOCOL true
+#define EPAPER_DEFAULT_VCOM_MV 1400
+#define EPAPER_SPI_SCK_PIN 7
+// E-paper SPI data-input GPIO for IT8951 responses.
+#define EPAPER_SPI_MISO_PIN 8
+#define EPAPER_SPI_MOSI_PIN 9
+#define EPAPER_CS_PIN 10
+#define EPAPER_BUSY_PIN 13
+#define EPAPER_RESET_PIN 12
+#define IT8951_PANEL_POWER_PIN 11
+#define IT8951_CONTROLLER_POWER_PIN 21
 // Panel IC name used by the generated board-to-driver table.
 #define DISPLAY_PANEL "IT8951"
 #define TOUCH_DRIVER TOUCH_DRIVER_GT911
