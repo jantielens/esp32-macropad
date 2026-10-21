@@ -1156,25 +1156,28 @@ from the reduced Extension root back to the full button size.
 
 ESP32-P4 and supported 16 MB ESP32-S3 display builds support trusted native
 Extensions in two 56 KiB slots and one 120 KiB slot. Inkplate 6FLICK
-Interactive provides one 32 KiB slot. Upload a signed package named
+Interactive provides one 32 KiB slot. Build signed packages with names such as
 `<extension-id>@<version>-p4.ext`, `<extension-id>@<version>-s3.ext`, or
-`<extension-id>@<version>-esp32.ext` that matches the device. It contains a
-native ELF followed by its fixed 64-byte ECDSA P-256 signature;
-it stages on the configured storage backend and installs into the selected
-executable flash slot during the next boot.
+`<extension-id>@<version>-esp32.ext` for the matching device. The upload
+accepts any local filename; its signed descriptor determines the Extension
+identity and target compatibility. A package contains a native ELF followed
+by its fixed 64-byte ECDSA P-256 signature. It stages on the configured
+storage backend and installs into the selected executable flash slot during
+the next boot.
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/extensions` | Returns all slot metadata and runtime load status |
-| `POST` | `/api/extensions/upload?slot=N&filename=id@version-target.ext` | Verifies and stages a signed Extension package for installation at next boot |
+| `POST` | `/api/extensions/upload?slot=N` | Verifies and stages a signed Extension package for installation at next boot |
 | `POST` | `/api/extensions/enabled?slot=N&enabled=true|false` | Enables or disables an installed extension for the next boot |
 | `DELETE` | `/api/extensions?slot=N` | Erases an extension slot |
 
-The endpoint accepts only signed `.ext` packages and uses the normal portal
-authentication gate. Firmware verifies the embedded ELF's format and signature
-before staging, before installation, and before executable mapping. The Pad
-editor's **Extension** widget selects an enabled installed extension and passes
-its per-button configuration text to the native instance.
+The endpoint accepts signed package bytes regardless of their local filename
+and uses the normal portal authentication gate. Firmware verifies the embedded
+ELF format and signature before staging, before installation, and before
+executable mapping. The Pad editor's **Extension** widget selects an enabled
+installed extension and passes its per-button configuration text to the
+native instance.
 
 Supported P4 and S3 boards use an `_ext` partition scheme, which reserves a
 256 KiB raw `extensions` partition. Inkplate 6FLICK Interactive uses

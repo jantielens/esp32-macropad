@@ -16,7 +16,7 @@ async function extensionUpload(slot, input) {
     const file = input.files && input.files[0];
     if (!file) return;
     try {
-        const response = await fetch('/api/extensions/upload?slot=' + slot.slot + '&filename=' + encodeURIComponent(file.name), {
+        const response = await fetch('/api/extensions/upload?slot=' + slot.slot, {
             method: 'POST', headers: {'Content-Type': 'application/octet-stream'}, body: file
         });
         const result = await response.json().catch(function () { return {}; });

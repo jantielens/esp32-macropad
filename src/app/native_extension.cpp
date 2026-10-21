@@ -733,41 +733,6 @@ bool read_stage(uint8_t slot, StageHeader* stage) {
     return valid;
 }
 
-bool parse_filename(const char* filename, NativeExtensionSlotHeader* header) {
-    const char* at = filename ? strrchr(filename, '@') : nullptr;
-    const char* dot = filename ? strrchr(filename, '.') : nullptr;
-    const char* version = at ? at + 1 : nullptr;
-    size_t version_len = at && dot ? static_cast<size_t>(dot - version) : 0;
-    if (!at || !dot || at == filename || at >= dot || strcmp(dot, ".ext") != 0 ||
-        static_cast<size_t>(at - filename) >= sizeof(header->id) ||
-        version_len >= sizeof(header->version)) return false;
-#if defined(CONFIG_IDF_TARGET_ESP32)
-    constexpr const char* TARGET_SUFFIX = "-esp32";
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-    constexpr const char* TARGET_SUFFIX = "-s3";
-#else
-    constexpr const char* TARGET_SUFFIX = "-p4";
-#endif
-    const char* suffix = strrchr(version, '-');
-    const size_t suffix_len = suffix && suffix < dot ? static_cast<size_t>(dot - suffix) : 0;
-    if ((suffix_len == 3 && (memcmp(suffix, "-p4", 3) == 0 || memcmp(suffix, "-s3", 3) == 0)) ||
-        (suffix_len == 6 && memcmp(suffix, "-esp32", 6) == 0)) {
-        if (strlen(TARGET_SUFFIX) != suffix_len || memcmp(suffix, TARGET_SUFFIX, suffix_len) != 0) return false;
-        version_len = static_cast<size_t>(suffix - version);
-    }
-    if (version_len == 0) return false;
-    memset(header, 0, sizeof(*header));
-    memcpy(header->id, filename, at - filename);
-    memcpy(header->version, version, version_len);
-    for (size_t index = 0; header->id[index]; ++index) {
-        const char c = header->id[index];
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) return false;
-    }
-    header->abi_version = NATIVE_EXTENSION_ABI_VERSION;
-    header->enabled = 1;
-    return header->version[0];
-}
-
 bool symbol_is_executable(const ElfProgram* programs, uint16_t count, uint32_t value) {
     for (uint16_t index = 0; index < count; ++index) {
         const ElfProgram& program = programs[index];
@@ -842,12 +807,20 @@ bool read_descriptor(const uint8_t* file, size_t len, NativeExtensionDescriptor*
             size_t offset = 0;
             if (!vaddr_to_file_offset(programs, elf->phnum, symbols[index].value, sizeof(*out), len, &offset)) return false;
             memcpy(out, file + offset, sizeof(*out));
-            return out->magic == NATIVE_EXTENSION_DESCRIPTOR_MAGIC &&
-                   out->abi_version == NATIVE_EXTENSION_ABI_VERSION &&
-                   strcmp(out->target_abi, NATIVE_EXTENSION_TARGET_ABI) == 0 &&
-                     out->id[0] && out->version[0] && out->title[0] &&
-                     out->tick_interval_ms >= NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS &&
-                     out->tick_interval_ms <= NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS;
+            if (out->magic != NATIVE_EXTENSION_DESCRIPTOR_MAGIC ||
+                !memchr(out->target_abi, '\0', sizeof(out->target_abi)) ||
+                !memchr(out->id, '\0', sizeof(out->id)) ||
+                !memchr(out->version, '\0', sizeof(out->version)) ||
+                !memchr(out->title, '\0', sizeof(out->title)) ||
+                !out->id[0] || !out->version[0] || !out->title[0] ||
+                out->tick_interval_ms < NATIVE_EXTENSION_TICK_INTERVAL_MIN_MS ||
+                out->tick_interval_ms > NATIVE_EXTENSION_TICK_INTERVAL_MAX_MS) return false;
+            for (size_t index = 0; out->id[index]; ++index) {
+                const char c = out->id[index];
+                if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'))
+                    return false;
+            }
+            return true;
         }
     }
     return false;
@@ -1002,6 +975,8 @@ bool load_slot(const esp_partition_t* partition, uint8_t slot, const NativeExten
     }
     NativeExtensionDescriptor descriptor = {};
     if (!read_descriptor(metadata, header.elf_size, &descriptor) ||
+        descriptor.abi_version != NATIVE_EXTENSION_ABI_VERSION ||
+        strcmp(descriptor.target_abi, NATIVE_EXTENSION_TARGET_ABI) != 0 ||
         strcmp(descriptor.id, header.id) != 0 || strcmp(descriptor.version, header.version) != 0 ||
         strcmp(descriptor.target_abi, header.target_abi) != 0) { heap_caps_free(metadata); return false; }
     const ElfProgram* programs = reinterpret_cast<const ElfProgram*>(metadata + elf->phoff);
@@ -1182,40 +1157,68 @@ bool native_extension_get_slot(uint8_t slot, NativeExtensionSlotInfo* out) {
     }
     return true;
 }
-bool native_extension_stage_file(uint8_t slot, const char* filename, const char* source_path) {
-    if (!valid_slot(slot) || !source_path) return false;
+NativeExtensionStageResult native_extension_stage_file(uint8_t slot, const char* source_path) {
+    if (!valid_slot(slot)) return NATIVE_EXTENSION_STAGE_INVALID_SLOT;
+    if (!source_path) return NATIVE_EXTENSION_STAGE_STORAGE_ERROR;
     File source = Storage.open(source_path, "r");
     const size_t package_size = source ? source.size() : 0;
-    if (!source || package_size <= NATIVE_EXTENSION_SIGNATURE_SIZE ||
-        package_size - NATIVE_EXTENSION_SIGNATURE_SIZE > SLOT_CAPACITY[slot]) {
-        if (source) source.close();
-        return false;
+    if (!source) return NATIVE_EXTENSION_STAGE_STORAGE_ERROR;
+    if (package_size <= NATIVE_EXTENSION_SIGNATURE_SIZE) {
+        source.close();
+        return NATIVE_EXTENSION_STAGE_INVALID_ELF;
+    }
+    if (package_size - NATIVE_EXTENSION_SIGNATURE_SIZE > SLOT_CAPACITY[slot]) {
+        source.close();
+        return NATIVE_EXTENSION_STAGE_PACKAGE_TOO_LARGE;
     }
     const size_t elf_size = package_size - NATIVE_EXTENSION_SIGNATURE_SIZE;
     uint8_t* elf = static_cast<uint8_t*>(heap_caps_malloc(elf_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     uint8_t signature[NATIVE_EXTENSION_SIGNATURE_SIZE] = {};
-    if (!elf || source.read(elf, elf_size) != elf_size ||
-        source.read(signature, sizeof(signature)) != sizeof(signature) || !valid_elf(elf, elf_size)) {
-        if (elf) heap_caps_free(elf);
+    if (!elf) {
         source.close();
-        return false;
+        return NATIVE_EXTENSION_STAGE_STORAGE_ERROR;
+    }
+    if (source.read(elf, elf_size) != elf_size ||
+        source.read(signature, sizeof(signature)) != sizeof(signature)) {
+        heap_caps_free(elf);
+        source.close();
+        return NATIVE_EXTENSION_STAGE_STORAGE_ERROR;
+    }
+    if (!valid_elf(elf, elf_size)) {
+        heap_caps_free(elf);
+        source.close();
+        return NATIVE_EXTENSION_STAGE_INVALID_ELF;
     }
     source.close();
     NativeExtensionDescriptor descriptor = {};
     NativeExtensionSlotHeader slot_header = {};
-    if (!native_extension_verify_signature(elf, elf_size, signature) ||
-        !read_descriptor(elf, elf_size, &descriptor) || !parse_filename(filename, &slot_header) ||
-        strcmp(slot_header.id, descriptor.id) != 0 || strcmp(slot_header.version, descriptor.version) != 0) {
+    if (!native_extension_verify_signature(elf, elf_size, signature)) {
         heap_caps_free(elf);
-        return false;
+        return NATIVE_EXTENSION_STAGE_INVALID_SIGNATURE;
     }
+    if (!read_descriptor(elf, elf_size, &descriptor)) {
+        heap_caps_free(elf);
+        return NATIVE_EXTENSION_STAGE_INVALID_DESCRIPTOR;
+    }
+    if (descriptor.abi_version != NATIVE_EXTENSION_ABI_VERSION) {
+        heap_caps_free(elf);
+        return NATIVE_EXTENSION_STAGE_INCOMPATIBLE_ABI;
+    }
+    if (strcmp(descriptor.target_abi, NATIVE_EXTENSION_TARGET_ABI) != 0) {
+        heap_caps_free(elf);
+        return NATIVE_EXTENSION_STAGE_INCOMPATIBLE_TARGET;
+    }
+    memset(&slot_header, 0, sizeof(slot_header));
+    strlcpy(slot_header.id, descriptor.id, sizeof(slot_header.id));
+    strlcpy(slot_header.version, descriptor.version, sizeof(slot_header.version));
+    slot_header.enabled = 1;
     slot_header.abi_version = descriptor.abi_version;
     strlcpy(slot_header.target_abi, descriptor.target_abi, sizeof(slot_header.target_abi));
     strlcpy(slot_header.title, descriptor.title, sizeof(slot_header.title));
     slot_header.elf_size = elf_size;
     if (!Storage.exists("/extensions") && !Storage.mkdir("/extensions")) {
         heap_caps_free(elf);
-        return false;
+        return NATIVE_EXTENSION_STAGE_STORAGE_ERROR;
     }
     char path[32]; stage_path(slot, path, sizeof(path));
     File file = Storage.open(path, "w");
@@ -1225,18 +1228,19 @@ bool native_extension_stage_file(uint8_t slot, const char* filename, const char*
                          file.write(elf, elf_size) == elf_size;
     if (file) file.close();
     heap_caps_free(elf);
-    if (!written) Storage.remove(path);
-    if (written) {
-        char delete_marker[32];
-        delete_path(slot, delete_marker, sizeof(delete_marker));
-        Storage.remove(delete_marker);
-        char enabled_marker[32];
-        enabled_path(slot, enabled_marker, sizeof(enabled_marker));
-        Storage.remove(enabled_marker);
+    if (!written) {
+        Storage.remove(path);
+        return NATIVE_EXTENSION_STAGE_WRITE_ERROR;
     }
-    if (written) LOGI(TAG, "Staged slot %u: %s@%s (%u bytes)", slot, slot_header.id,
-                      slot_header.version, static_cast<unsigned>(elf_size));
-    return written;
+    char delete_marker[32];
+    delete_path(slot, delete_marker, sizeof(delete_marker));
+    Storage.remove(delete_marker);
+    char enabled_marker[32];
+    enabled_path(slot, enabled_marker, sizeof(enabled_marker));
+    Storage.remove(enabled_marker);
+    LOGI(TAG, "Staged slot %u: %s@%s (%u bytes)", slot, slot_header.id,
+         slot_header.version, static_cast<unsigned>(elf_size));
+    return NATIVE_EXTENSION_STAGE_SUCCESS;
 }
 bool native_extension_set_enabled(uint8_t slot, bool enabled) {
     const esp_partition_t* partition = extension_partition();

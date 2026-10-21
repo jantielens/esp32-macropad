@@ -812,6 +812,7 @@ foreach(script
     test_portal_ble_config.js test_portal_audio_config.js test_portal_epaper_config.js test_portal_pad_preview.js test_portal_startup.js
     test_portal_logs.js test_portal_screensaver.js test_portal_pad_colors.js
     test_portal_binding_help.js test_portal_asset_gates.js
+    test_portal_extension_upload.js
 )
     get_filename_component(name ${script} NAME_WE)
     add_host_command_test(${name} node ${PROJECT_SOURCE_DIR}/tests/${script})

@@ -61,10 +61,23 @@ struct NativeExtensionSlotHeader {
 	char title[NATIVE_EXTENSION_TITLE_MAX_LEN];
 };
 
+enum NativeExtensionStageResult : uint8_t {
+	NATIVE_EXTENSION_STAGE_SUCCESS,
+	NATIVE_EXTENSION_STAGE_INVALID_SLOT,
+	NATIVE_EXTENSION_STAGE_STORAGE_ERROR,
+	NATIVE_EXTENSION_STAGE_PACKAGE_TOO_LARGE,
+	NATIVE_EXTENSION_STAGE_INVALID_ELF,
+	NATIVE_EXTENSION_STAGE_INVALID_SIGNATURE,
+	NATIVE_EXTENSION_STAGE_INVALID_DESCRIPTOR,
+	NATIVE_EXTENSION_STAGE_INCOMPATIBLE_ABI,
+	NATIVE_EXTENSION_STAGE_INCOMPATIBLE_TARGET,
+	NATIVE_EXTENSION_STAGE_WRITE_ERROR,
+};
+
 bool native_extension_init();
 uint8_t native_extension_slot_count();
 bool native_extension_get_slot(uint8_t slot, NativeExtensionSlotInfo* out);
-bool native_extension_stage_file(uint8_t slot, const char* filename, const char* source_path);
+NativeExtensionStageResult native_extension_stage_file(uint8_t slot, const char* source_path);
 bool native_extension_set_enabled(uint8_t slot, bool enabled);
 bool native_extension_delete(uint8_t slot);
 

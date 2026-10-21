@@ -58,6 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* Accept signed Extension packages regardless of their local filename. Stage
+  identity and version from the verified descriptor, retain ABI and target
+  compatibility checks, and return actionable upload errors.
 * Increase the Home Assistant service action's portal input limit from 19 to
   63 characters to match existing firmware support, allowing longer service
   names such as `media_previous_track` without increasing fixed RAM usage.
