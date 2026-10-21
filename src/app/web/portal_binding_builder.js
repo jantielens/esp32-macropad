@@ -52,7 +52,8 @@
  * @typedef {Object} BindingSourceProvider
  * @property {string} id
  * @property {(query: string, signal: AbortSignal) => Promise<BindingSourceCandidate[]>} [list]
- * @property {(reference: Object, signal: AbortSignal) => Promise<BindingSourceCandidate>} inspect
+ * @property {(reference: Object) => BindingSourceCandidate} [prepare] Build a candidate from declared samples.
+ * @property {(reference: Object, signal: AbortSignal) => Promise<BindingSourceCandidate>} [inspect] Acquire an initial source value.
  * @property {(candidate: BindingSourceCandidate, selection: Object) => string} buildBinding
  * @property {(candidate: BindingSourceCandidate) => void|Promise<void>} dispose
  */
@@ -92,12 +93,16 @@ function bindingSourcePickerHTML() {
             <div class="binding-builder-selection">
                 <div class="binding-builder-selection-info"><strong data-bb-picked-name></strong>
                     <code data-bb-picked-id></code></div>
-                <button type="button" class="binding-docs-link" data-bb-picked-change>Change</button>
+                <button type="button" class="binding-docs-link" data-bb-picked-change>Edit value</button>
             </div>
+            <div class="binding-source-customize pad-button-builder-design">
+            <div>
             <details class="binding-builder-options" data-bb-display><summary>Display options</summary>
                 <div data-bb-format></div>
             </details>
-            <div data-bb-picked-result></div>
+            </div>
+            <div class="pad-button-builder-preview-panel" data-bb-picked-result></div>
+            </div>
             <button type="button" class="btn btn-primary" data-bb-continue>Continue to button</button>
         </section>
     </div>`;
@@ -226,10 +231,8 @@ function bindingBuilderResultHTML(token, sample, options = {}) {
         '<span class="binding-builder-code-label">Generated binding</span>' +
         '<pre class="binding-example-code"><code>' + esc(token) + '</code></pre>' +
         '<div class="binding-example-actions">' +
-        _bhActions(token, { copy: 'Copy binding', insert: 'Insert binding' }) +
-        '<button type="button" class="binding-copy-btn" data-binding-preview="' + esc(token) +
-        '">Preview on device</button></div>' +
-        '<p class="binding-builder-device-preview" data-binding-preview-result role="status" aria-live="polite" hidden></p></div>';
+        _bhActions(token, { copy: 'Copy binding', insert: options.insert === false ? false : 'Insert binding' }) +
+        '</div></div>';
 }
 
 function bindingBuilderErrorHTML(message) {
@@ -237,116 +240,52 @@ function bindingBuilderErrorHTML(message) {
         _bhEsc(message || 'Could not build this binding. Retry or enter it manually.') + '</p>';
 }
 
-const _bindingBuilderPreview = { controller: null, generation: 0 };
+let bindingBuilderSession = null;
 
-function bindingBuilderStopPreview() {
-    if (_bindingBuilderPreview.controller) _bindingBuilderPreview.controller.abort();
-    _bindingBuilderPreview.controller = null;
-    _bindingBuilderPreview.generation++;
+function showBindingBuilder(id) {
+    if (bindingBuilderSession) return;
+    const dialog = document.createElement('dialog');
+    dialog.className = 'pad-button-builder portal-form binding-builder-dialog';
+    dialog.setAttribute('aria-labelledby', 'binding-builder-title');
+    dialog.innerHTML = `<header><h2 id="binding-builder-title">Build a binding from...</h2>
+        <button type="button" class="btn btn-sm" data-binding-close aria-label="Close Binding Builder">&#215;</button></header>
+        <div class="pad-button-builder-body">${bindingSourcePickerHTML()}</div>
+        <footer><span>Changes this field only. Save your changes in the editor.</span><div>
+            <button type="button" class="btn btn-secondary" data-binding-cancel>Cancel</button>
+            <button type="button" class="btn btn-primary" data-binding-insert disabled hidden>Insert binding</button>
+        </div></footer>`;
+    if (!_bindingHelp.target) _bindingHelp.opener = document.activeElement;
+    document.body.appendChild(dialog);
+    const session = {
+        dialog, initialProvider: id || undefined,
+        rawOnly: bindingValidationOptions.get(_bindingHelp.target)?.isWidgetBinding === true,
+        page: undefined, controller: null, timer: null, bindingOnly: true
+    };
+    bindingBuilderSession = session;
+    session.dispose = bindingSourcePickerMount(session);
+    dialog.querySelector('[data-binding-close]').onclick = closeBindingBuilder;
+    dialog.querySelector('[data-binding-cancel]').onclick = closeBindingBuilder;
+    dialog.oncancel = event => { event.preventDefault(); closeBindingBuilder(); };
+    dialog.onkeydown = event => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closeBindingBuilder();
+        }
+    };
+    dialog.showModal();
+    padButtonBuilderLoadConfig(session);
 }
 
-async function bindingBuilderPreviewBinding(token, result) {
-    bindingBuilderStopPreview();
-    const generation = _bindingBuilderPreview.generation;
-    const controller = new AbortController();
-    _bindingBuilderPreview.controller = controller;
-    const status = result.querySelector('[data-binding-preview-result]');
-    status.hidden = false;
-    status.dataset.kind = 'info';
-    status.textContent = 'Resolving on this device...';
-    try {
-        const response = await fetch('/api/pad/resolve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bindings: [token] }),
-            cache: 'no-store',
-            signal: controller.signal
-        });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Device preview failed (HTTP ' + response.status + ').');
-        const value = payload && Array.isArray(payload.resolved) && payload.resolved[0] &&
-            typeof payload.resolved[0].value === 'string' ? payload.resolved[0].value : null;
-        if (value === null) throw new Error('The device returned an invalid binding preview.');
-        if (generation !== _bindingBuilderPreview.generation || !result.isConnected) return;
-        status.dataset.kind = 'success';
-        status.textContent = 'Device result: ' + value;
-    } catch (error) {
-        if (generation !== _bindingBuilderPreview.generation || !result.isConnected ||
-            (error && error.name === 'AbortError')) return;
-        status.dataset.kind = 'error';
-        status.textContent = error.message || 'Device preview failed. Retry or use the binding manually.';
-    } finally {
-        if (generation === _bindingBuilderPreview.generation) _bindingBuilderPreview.controller = null;
-    }
-}
-
-function bindingBuilderForScheme(scheme) {
-    return BINDING_BUILDERS.find(builder => builder.scheme === scheme) ||
-        BINDING_BUILDERS.find(builder => !builder.scheme) || null;
-}
-
-let bindingSourcePickerDispose = null;
-
-function bindingBuilderHTML(id) {
-    const builder = BINDING_BUILDERS.find(item => item.id === id);
-    if (!builder || typeof builder.render !== 'function') return '';
-    if (!_bindingHelp.builderScheme) {
-        return '<section class="binding-builder binding-builder-compact" aria-label="Binding builder">' +
-            bindingSourcePickerHTML() +
-            '<button type="button" class="binding-docs-link binding-builder-reference" ' +
-            'data-bh-view="guide:basics">Binding reference</button></section>';
-    }
-    const description = typeof builder.description === 'function'
-        ? builder.description(_bindingHelp.target) : builder.description;
-    const unavailable = typeof builder.availability === 'function'
-        ? builder.availability(window.deviceConfig || {}) : '';
-    return '<div class="binding-docs-title"><h4>' +
-        _bhEsc(builder.id === 'catalog' ? 'Advanced binding' : builder.name) + '</h4>' +
-        '<span class="binding-docs-badge">Binding builder</span></div>' +
-        '<p class="binding-docs-summary">Build a binding from ' + _bhEsc(description) + ' ' +
-        (builder.scheme ? '(<button type="button" class="binding-docs-link" data-bh-view="' + _bhEsc(builder.scheme) +
-        '">full syntax and examples</button>)' : 'Syntax and examples follow the selected scheme.') + '</p>' +
-        (unavailable ? '<p class="binding-docs-status" role="status">' + _bhEsc(unavailable) + '</p>' : '') +
-        '<section class="binding-builder" aria-label="' + _bhEsc(builder.name) + ' binding builder">' +
-        '<header class="binding-builder-header"><h5>Build a binding</h5>' +
-        '<p>' + _bhEsc(typeof builder.instructions === 'function'
-            ? builder.instructions(_bindingHelp.target) : builder.instructions) + '</p></header>' +
-        builder.render() + '</section>';
-}
-
-function bindingBuilderMount(id, scheme) {
-    if (!scheme) {
-        const root = document.querySelector('#binding-docs-body .binding-source-picker');
-        if (!root) return;
-        const session = {
-            dialog: root, initialProvider: id, rawOnly:
-                bindingValidationOptions.get(_bindingHelp.target)?.isWidgetBinding === true,
-            page: undefined, controller: null, timer: null,
-            bindingOnly: true
-        };
-        bindingSourcePickerDispose = bindingSourcePickerMount(session);
-        padButtonBuilderLoadConfig(session);
-        return;
-    }
-    const builder = BINDING_BUILDERS.find(item => item.id === id);
-    if (builder && typeof builder.mount === 'function') builder.mount(scheme);
-}
-
-function bindingBuilderStop() {
-    bindingSourcePickerDispose?.();
-    bindingSourcePickerDispose = null;
-    bindingBuilderStopPreview();
-    BINDING_BUILDERS.forEach(builder => {
-        if (typeof builder.stop === 'function') builder.stop();
-    });
-}
-
-function bindingBuilderReset() {
-    bindingSourcePickerDispose?.();
-    bindingSourcePickerDispose = null;
-    bindingBuilderStopPreview();
-    BINDING_BUILDERS.forEach(builder => {
-        if (typeof builder.reset === 'function') builder.reset();
-        else if (typeof builder.stop === 'function') builder.stop();
-    });
+function closeBindingBuilder() {
+    const session = bindingBuilderSession;
+    if (!session) return;
+    session.dispose();
+    session.dialog.close();
+    session.dialog.remove();
+    bindingBuilderSession = null;
+    const restore = _bindingHelp.target || _bindingHelp.opener;
+    _bindingHelp.target = null;
+    _bindingHelp.opener = null;
+    if (restore?.isConnected) restore.focus();
 }

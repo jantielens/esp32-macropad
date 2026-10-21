@@ -31,12 +31,6 @@ const haButtonBuilderProvider = vm.runInContext('haButtonBuilderProvider', conte
 
 const scheme = name => fixture.schemes.find(s => s.name === name);
 const haConfigured = { caps: { ha_live: true }, ha_url: 'http://ha.local:8123', ha_token_set: true };
-assert.strictEqual(context.bindingBuilderShortcuts(haConfigured)[0].label, 'HA');
-assert.strictEqual(context.bindingBuilderShortcuts({ ...haConfigured, connected: false })[0].id, 'ha');
-for (const config of [{}, { ...haConfigured, caps: {} }, { ...haConfigured, ha_url: ' ' },
-    { ...haConfigured, ha_token_set: false }]) {
-    assert.strictEqual(context.bindingBuilderShortcuts(config).length, 0);
-}
 
 assert.ok(context.bindingHelpKeyMatches('#_state', '12_state'));
 assert.ok(!context.bindingHelpKeyMatches('#_state', 'x_state'));
@@ -225,16 +219,14 @@ context.document.getElementById = id => helpElements[id] || null;
 context.document.querySelector = () => null;
 context.document.querySelectorAll = () => [];
 context.testHelpSchemes = fixture.schemes;
-vm.runInContext("_bindingHelp.schemes = testHelpSchemes; _bindingHelp.view = 'builder:ha'", context);
+vm.runInContext("_bindingHelp.schemes = testHelpSchemes; _bindingHelp.view = 'guide:basics'", context);
 context._bhRenderNav();
-assert.match(helpElements['binding-docs-nav'].innerHTML, /Binding builders/);
-assert.match(helpElements['binding-docs-nav'].innerHTML, /data-bh-view="builder:ha">Home Assistant/);
+assert.ok(!helpElements['binding-docs-nav'].innerHTML.includes('builder:'));
 const navHTML = helpElements['binding-docs-nav'].innerHTML;
-assert.ok(navHTML.indexOf('<h6>Guides</h6>') < navHTML.indexOf('<h6>Binding builders</h6>'));
-assert.ok(navHTML.indexOf('<h6>Binding builders</h6>') < navHTML.indexOf('<h6>Data</h6>'));
+assert.ok(navHTML.indexOf('<h6>Guides</h6>') < navHTML.indexOf('<h6>Data</h6>'));
 context._bhRender();
-assert.match(helpElements['binding-docs-body'].innerHTML, /binding-source-picker/);
-assert.match(helpElements['binding-docs-body'].innerHTML, /data-bb-provider-picker/);
+assert.match(helpElements['binding-docs-body'].innerHTML, /<h4>Basics<\/h4>/);
+assert.ok(!helpElements['binding-docs-body'].innerHTML.includes('builder:'));
 assert.ok(!helpElements['binding-docs-body'].innerHTML.includes('binding-docs-signature'));
 context.window.deviceConfig = { caps: { ha_live: false } };
 assert.match(haButtonBuilderProvider.availability(context.window.deviceConfig),
@@ -242,7 +234,7 @@ assert.match(haButtonBuilderProvider.availability(context.window.deviceConfig),
 context.window.deviceConfig = {};
 const haReference = context._bhRenderScheme(scheme('ha'));
 assert.ok(!haReference.includes('id="ha-binding-builder"'));
-assert.match(haReference, /data-bh-view="builder:ha">Open Home Assistant builder/);
+assert.ok(!haReference.includes('builder:'));
 for (const status of ['idle', '', 'Invalid token']) {
     const haStatus = { ...scheme('ha'), status };
     const warning = status === 'Invalid token';
@@ -274,13 +266,32 @@ helpElements['binding-docs-search'].value = 'temperature';
 context.showBindingHelp();
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
 const shortcutField = Object.assign(field('Before selected after', 7, 15), {
-    tagName: 'INPUT', type: 'text', isConnected: true, addEventListener() {}
+    tagName: 'INPUT', type: 'text', isConnected: true, addEventListener() {}, focus() {}
 });
 context.window.deviceConfig = haConfigured;
 helpElements['shortcut-field'] = shortcutField;
 context.document.activeElement = shortcutField;
+// The dialog boundary must preserve the target/selection and cancel acquisition.
+const mountPicker = context.bindingSourcePickerMount;
+const loadPickerConfig = context.padButtonBuilderLoadConfig;
+let mountedSession;
+let disposedPickers = 0;
+const dialogs = [];
+context.document.body = { appendChild(dialog) { dialogs.push(dialog); } };
+context.document.createElement = () => ({
+    controls: {}, setAttribute() {},
+    querySelector(selector) { return this.controls[selector] ||= {}; },
+    showModal() { this.open = true; },
+    close() { this.open = false; },
+    remove() { this.removed = true; }
+});
+context.bindingSourcePickerMount = session => {
+    mountedSession = session;
+    return () => { session.disposed = true; disposedPickers++; };
+};
+context.padButtonBuilderLoadConfig = () => {};
 const shortcut = {
-    dataset: { bindingBuilder: 'ha' },
+    dataset: { bindingBuilder: '' },
     closest(selector) { return selector === 'label' ? { htmlFor: 'shortcut-field' } : this; },
     matches(selector) { return selector === '.binding-builder-shortcut'; }
 };
@@ -290,31 +301,33 @@ listeners.find(listener => listener.type === 'click' && listener.capture).handle
     target: shortcut, preventDefault() { preventedLabelFocus = true; }
 });
 assert.ok(preventedLabelFocus);
-assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'builder:ha');
+assert.strictEqual(dialogs[0].open, true);
+assert.strictEqual(mountedSession.initialProvider, undefined);
 assert.strictEqual(vm.runInContext('_bindingHelp.targetFocused', context), true);
-assert.strictEqual(builderState().rawOnly, false);
+assert.strictEqual(mountedSession.rawOnly, false);
+context.closeBindingBuilder();
+assert.strictEqual(disposedPickers, 1);
+assert.strictEqual(dialogs[0].removed, true);
 context.bindingAttachValidation(shortcutField, { isWidgetBinding: true });
 listeners.find(listener => listener.type === 'click' && listener.capture).handler({
     target: shortcut, preventDefault() {}
 });
-assert.strictEqual(builderState().rawOnly, true);
-context.showBindingHelp();
-context.showBindingBuilder('ha');
-assert.strictEqual(builderState().rawOnly, true);
+assert.strictEqual(mountedSession.rawOnly, true);
 context.bindingHelpInsertText(shortcutField, '[ha:sensor.temperature]', true);
 assert.strictEqual(shortcutField.value, 'Before [ha:sensor.temperature] after');
+context.closeBindingBuilder();
 vm.runInContext('_bindingHelp.target = null; _bindingHelp.pointer = null', context);
-context.showBindingHelp();
-context.window.deviceConfig = haConfigured;
-context.showBindingBuilder('ha');
-assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'builder:ha');
-assert.strictEqual(builderState().rawOnly, false);
-assert.match(helpElements['binding-docs-body'].innerHTML, /binding-source-picker/);
+context.window.deviceConfig = {};
+context.showBindingBuilder();
+assert.strictEqual(mountedSession.rawOnly, false);
+context.closeBindingBuilder();
+context.bindingSourcePickerMount = mountPicker;
+context.padButtonBuilderLoadConfig = loadPickerConfig;
 context.showBindingHelp();
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
 assert.strictEqual(helpElements['binding-docs-search'].value, '');
 assert.match(helpElements['binding-docs-body'].innerHTML, /<h4>Basics<\/h4>/);
-assert.match(helpElements['binding-docs-body'].innerHTML, /data-bh-view="builder:ha">Home Assistant/);
+assert.ok(!helpElements['binding-docs-body'].innerHTML.includes('builder:'));
 vm.runInContext("_bindingHelp.view = 'ha'", context);
 context.showBindingHelp();
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
@@ -990,27 +1003,6 @@ delete context.testHelpSchemes;
     context.padButtonBuilderRenderChoices = renderChoices;
     vm.runInContext('padButtonBuilderSession = null', context);
 
-    const previewStatus = { hidden: true, dataset: {}, textContent: '' };
-    const previewResult = {
-        isConnected: true,
-        querySelector: selector => selector === '[data-binding-preview-result]' ? previewStatus : null
-    };
-    let previewRequest;
-    context.fetch = async (url, options) => {
-        previewRequest = { url, options };
-        return { ok: true, json: async () => ({ resolved: [{ value: '73' }] }) };
-    };
-    await context.bindingBuilderPreviewBinding('[health:cpu;%ld]', previewResult);
-    assert.strictEqual(previewRequest.url, '/api/pad/resolve');
-    assert.strictEqual(previewRequest.options.method, 'POST');
-    assert.deepStrictEqual(JSON.parse(previewRequest.options.body), { bindings: ['[health:cpu;%ld]'] });
-    assert.strictEqual(previewStatus.textContent, 'Device result: 73');
-
-    context.fetch = async () => ({ ok: false, status: 503, json: async () => ({ error: 'Busy, retry.' }) });
-    await context.bindingBuilderPreviewBinding('[health:cpu]', previewResult);
-    assert.strictEqual(previewStatus.dataset.kind, 'error');
-    assert.match(previewStatus.textContent, /Busy, retry/);
-
     context.fetch = async () => ({ ok: true, json: async () => fixture });
     await context._bhLoad();
     vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_catalog.js', 'utf8'), context);
@@ -1043,9 +1035,13 @@ delete context.testHelpSchemes;
     assert.ok(!inlineCatalog.includes('>Scheme<'), 'selected scheme is not selected a second time');
     assert.ok(inlineCatalog.includes('data-catalog-change'), 'selected binding can return to search');
     assert.ok((await catalogProvider.list('core 0')).some(candidate => candidate.sourceId === 'health:cpu_core_0'));
-    assert.strictEqual(context.bindingBuilderForScheme('time').id, 'catalog');
-    assert.strictEqual(context.bindingBuilderForScheme('ha').id, 'ha');
-    assert.strictEqual(context.bindingBuilderForScheme('mqtt').id, 'mqtt');
+    const catalogSearchProvider = vm.runInContext('catalogButtonBuilderProvider', context);
+    assert.ok((await catalogSearchProvider.search('expr', undefined, true)).candidates
+        .some(candidate => candidate.reference.scheme === 'expr'),
+    'Binding Builder must retain expression parameter authoring without a reference handoff');
+    assert.ok(!(await catalogSearchProvider.search('expr')).candidates
+        .some(candidate => candidate.reference.scheme === 'expr'),
+    'Button Builder source choices remain unchanged');
     const catalogReference = (name, ...params) => ({ scheme: name, params, fallback: '' });
     const catalogToken = (name, ...params) => context.catalogBindingToken(catalogReference(name, ...params));
     assert.strictEqual(catalogToken('health', 'cpu_core_0'), '[health:cpu_core_0]');
@@ -1095,51 +1091,29 @@ delete context.testHelpSchemes;
     assert.notStrictEqual(context.catalogBindingCandidate(catalogReference('time', '%H')).sourceId,
         context.catalogBindingCandidate(catalogReference('time', '%M')).sourceId);
 
-    let providerRequests = [];
-    context.fetch = async (url, options) => {
-        providerRequests.push({ url, options });
-        return { ok: true, status: 200, json: async () => ({ resolved: [{ value: '73' }] }) };
-    };
-    const cpu = await catalogProvider.inspect(catalogReference('health', 'cpu'), new AbortController().signal);
-    assert.strictEqual(cpu.acquisitionState, 'received');
-    assert.strictEqual(cpu.sample, '73');
+    const catalogSamples = vm.runInContext('catalogButtonBuilderProvider', context);
+    let providerRequests = 0;
+    context.fetch = async () => { providerRequests++; throw new Error('Catalog selection must not resolve live data'); };
+    const cpu = catalogSamples.prepare(catalogReference('health', 'cpu'));
+    assert.strictEqual(cpu.acquisitionState, 'not_required');
+    assert.strictEqual(cpu.sample, '42');
+    assert.strictEqual(cpu.sampleIsExample, true);
     assert.strictEqual(catalogProvider.buildBinding(cpu, { mode: 'integer' }), '[health:cpu;%ld]');
-    assert.strictEqual(providerRequests[0].url, '/api/pad/resolve');
-    assert.deepStrictEqual(JSON.parse(providerRequests[0].options.body),
-        { bindings: ['[health:cpu]'] });
-    context.fetch = async () => ({
-        ok: true, status: 200, json: async () => ({ resolved: [{ value: '?' }] })
-    });
-    const unavailable = await catalogProvider.inspect(catalogReference('health', 'wifi_ssid'), new AbortController().signal);
-    assert.strictEqual(unavailable.acquisitionState, 'unavailable');
-    assert.strictEqual(Object.hasOwn(unavailable, 'sample'), false);
-    assert.strictEqual(catalogProvider.buildBinding(unavailable, { mode: 'raw' }), '[health:wifi_ssid]');
-
-    context.fetch = async (url, options) => {
-        providerRequests.push({ url, options });
-        return { ok: true, json: async () => ({ resolved: [{ value: '73' }] }) };
-    };
-    const generic = await catalogProvider.inspect(catalogReference('health', 'cpu_core_0'), undefined, 'pad_2');
-    assert.strictEqual(generic.sample, '73');
+    const generic = catalogSamples.prepare(catalogReference('health', 'cpu_core_0'));
+    assert.strictEqual(generic.sampleIsExample, true);
     assert.strictEqual(generic.valueKind, 'integer', 'CPU cores now declare their numeric type');
     assert.strictEqual(generic.capabilities.numericWidget, true);
     assert.strictEqual(generic.capabilities.liveSampling, true);
-    assert.deepStrictEqual(JSON.parse(providerRequests.at(-1).options.body),
-        { bindings: ['[health:cpu_core_0]'], screen: 'pad_2' });
-    const formatted = await catalogProvider.inspect(catalogReference('health', 'cpu', '%ld'));
+    const formatted = catalogSamples.prepare(catalogReference('health', 'cpu', '%ld'));
     assert.strictEqual(formatted.capabilities.numericWidget, false, 'Formatted tokens cannot become widget inputs');
-    const clearedFormat = await catalogProvider.inspect(catalogReference('health', 'cpu', ''));
+    const clearedFormat = catalogSamples.prepare(catalogReference('health', 'cpu', ''));
     assert.strictEqual(clearedFormat.capabilities.numericWidget, true, 'Cleared optional formats restore raw numeric eligibility');
-    const fallbackCandidate = await catalogProvider.inspect({ ...catalogReference('health', 'cpu'), fallback: '0' });
+    const fallbackCandidate = catalogSamples.prepare({ ...catalogReference('health', 'cpu'), fallback: '0' });
     assert.strictEqual(fallbackCandidate.capabilities.numericWidget, false, 'A fallback is not live numeric evidence');
-    context.fetch = async () => ({ ok: true, json: async () => ({ resolved: [{ value: '1'.repeat(127) }] }) });
-    const catalogTruncated = await catalogProvider.inspect(catalogReference('health', 'cpu'));
+    const catalogTruncated = catalogSamples.prepare({ ...catalogReference('health', 'cpu'), exampleValue: '1'.repeat(127) });
     assert.strictEqual(catalogTruncated.sampleTruncated, true);
     assert.strictEqual(catalogTruncated.capabilities.numericWidget, false);
-    context.fetch = async () => ({ ok: false, status: 503, json: async () => ({ error: 'Device busy' }) });
-    await assert.rejects(catalogProvider.inspect(catalogReference('time', '%H')), /Device busy/);
-    context.fetch = async () => ({ ok: true, json: async () => ({ resolved: [] }) });
-    await assert.rejects(catalogProvider.inspect(catalogReference('time', '%H')), /invalid binding preview/);
+    assert.strictEqual(providerRequests, 0, 'Catalog samples do not make device-preview requests');
 
     const mqttResponse = (status, payload, ok = true) => ({
         ok, status, json: async () => payload
@@ -1288,7 +1262,7 @@ delete context.testHelpSchemes;
     const selectedCpu = { ...cpu, selection: { mode: 'integer', decimals: 1, unit: '%', fallback: 'Offline' } };
     assert.strictEqual(context.bindingSourceToken(selectedCpu, selectedCpu.selection), '[health:cpu;%ld|Offline] %');
     assert.strictEqual(context.bindingSourceToken(selectedCpu, selectedCpu.selection, true), '[health:cpu|Offline]');
-    assert.strictEqual(context.bindingSourceSample(selectedCpu, selectedCpu.selection), '73 %');
+    assert.strictEqual(context.bindingSourceSample(selectedCpu, selectedCpu.selection), '42 %');
     assert.throws(() => context.bindingSourceToken(selectedCpu, { ...selectedCpu.selection, unit: '[bad]' }), /delimiters/);
     const selectedMqtt = { ...selectedTemperature, selection: {
         mode: 'number', decimals: 2, unit: 'C', fallback: 'Offline'
@@ -1407,6 +1381,7 @@ delete context.testHelpSchemes;
     const pickerRoot = { querySelectorAll: () => providerInputs, querySelector(selector) {
         if (!pickerNodes.has(selector)) pickerNodes.set(selector, {
             hidden: true, value: '', dataset: {}, firstChild: { textContent: '' }, focus() {}, replaceChildren() {},
+            closest() { return this; }, remove() {},
             setAttribute(name) { if (name === 'hidden') this.hidden = true; },
             removeAttribute(name) { if (name === 'hidden') this.hidden = false; }
         });
@@ -1425,6 +1400,27 @@ delete context.testHelpSchemes;
         'Searchable sources do not need an extra confirmation button');
     assert.strictEqual(pickerRoot.querySelector('[data-bb-catalog-search-panel]').hidden, false);
     assert.deepStrictEqual(providerInputs.map(input => input.checked), [true, false, false]);
+    const bindingSession = { dialog: pickerRoot, bindingOnly: true };
+    const integerCandidate = catalogButtons.prepare(catalogReference('health', 'cpu'));
+    pickerRoot.querySelector('#source-format-mode').value = 'integer';
+    pickerRoot.querySelector('#source-format-decimals').value = '1';
+    pickerRoot.querySelector('#source-format-unit').value = '%';
+    pickerRoot.querySelector('#source-format-fallback').value = '';
+    context.testTarget = shortcutField;
+    vm.runInContext('_bindingHelp.target = testTarget', context);
+    context.bindingSourcePickerSelect(bindingSession, integerCandidate);
+    const bindingInsert = pickerRoot.querySelector('[data-binding-insert]');
+    assert.strictEqual(bindingInsert.dataset.bhInsert, '[health:cpu;%ld] %');
+    assert.strictEqual(bindingInsert.disabled, false);
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-display]').open, true);
+    pickerRoot.querySelector('#source-format-unit').value = '[invalid]';
+    pickerRoot.querySelector('[data-bb-format]').oninput();
+    assert.strictEqual(bindingInsert.disabled, true, 'Invalid edits cannot insert the previous valid token');
+    assert.strictEqual(bindingInsert.dataset.bhInsert, undefined);
+    pickerRoot.querySelector('#source-format-unit').value = '%';
+    pickerRoot.querySelector('[data-bb-format]').oninput();
+    assert.strictEqual(bindingInsert.disabled, false);
+    vm.runInContext('_bindingHelp.target = null', context);
     const configuredSources = { ...haConfigured, caps: { ha_live: true, mqtt: true }, mqtt_host: 'broker' };
     assert.deepStrictEqual(Array.from(context.bindingSourceProviders(configuredSources), item => item.id).sort(),
         ['catalog', 'ha', 'mqtt']);
@@ -1449,52 +1445,16 @@ delete context.testHelpSchemes;
     assert.strictEqual(context.bindingSourceSessionActive(pickerSession), false);
     const cpuExample = context.catalogBindingCandidate(catalogReference('health', 'cpu'));
     const cpuExampleSession = candidateSession(cpuExample, valueBuilder);
-    assert.strictEqual(catalogButtons.canEnableNumeric(cpuExample), true,
-        'declared numeric metadata can offer a live check without treating the example as evidence');
     assert.strictEqual(valueBuilder.preview(cpuExampleSession.draft).label_center, '42');
     assert.strictEqual(context.padButtonBuilderCandidateValueText(cpuExample), '',
         'example is rendered in the button preview, not repeated as current state');
     assert.match(catalogButtons.previewNote(cpuExample), /Illustrative sample preview/);
     assert.strictEqual(barBuilder.available(candidateSession(cpuExample, barBuilder).draft, runtime), false,
         'Representative examples never qualify as numeric evidence');
-    const textExample = context.catalogBindingCandidate(catalogReference('health', 'wifi_ssid'));
-    assert.strictEqual(catalogButtons.canEnableNumeric(textExample), false,
-        'text bindings do not offer a live numeric check');
-    const originalRenderSelection = context.padButtonBuilderRenderSelection;
-    const originalRenderChoices = context.padButtonBuilderRenderChoices;
-    const originalRenderFields = context.padButtonBuilderRenderFields;
-    const originalShowStatus = context.padButtonBuilderStatus;
-    const liveCheckStatuses = [];
-    context.padButtonBuilderRenderSelection = () => {};
-    context.padButtonBuilderRenderChoices = () => {};
-    context.padButtonBuilderRenderFields = () => {};
-    context.padButtonBuilderStatus = (message, error) => liveCheckStatuses.push({ message, error });
-    const liveCheckSession = {
-        page: 0, scenario: valueBuilder, controller: null, timer: null,
-        dialog: { querySelector: () => null },
-        draft: { sources: [context.padButtonBuilderSource(valueBuilder, cpuExample, 0)],
-            options: {}, previewState: cpuExample.exampleValue }
-    };
-    context.testLiveCheckSession = liveCheckSession;
-    vm.runInContext('padButtonBuilderSession = testLiveCheckSession', context);
-    context.fetch = async () => mqttResponse(200, { resolved: [{ value: '23' }] });
-    await context.padButtonBuilderReadCurrentValue();
-    assert.strictEqual(liveCheckSession.draft.sources[0].candidate.sample, '23');
-    assert.strictEqual(liveCheckSession.draft.sources[0].candidate.capabilities.numericWidget, true);
-    assert.strictEqual(liveCheckSession.draft.previewState, '23');
-    assert.strictEqual(barBuilder.available(liveCheckSession.draft, runtime), true,
-        'A live numeric read enables numeric layouts after an illustrative sample alone did not');
-    assert.deepStrictEqual(liveCheckStatuses.map(item => item.message),
-        ['Reading the current device value...', '']);
-    context.padButtonBuilderRenderSelection = originalRenderSelection;
-    context.padButtonBuilderRenderChoices = originalRenderChoices;
-    context.padButtonBuilderRenderFields = originalRenderFields;
-    context.padButtonBuilderStatus = originalShowStatus;
-    vm.runInContext('padButtonBuilderSession = null', context);
     const cpuSession = candidateSession(cpu, valueBuilder);
     assert.strictEqual(context.padButtonBuilderBuild(cpuSession).label_center, '[health:cpu;%ld]');
     assert.strictEqual(cpuSession.fields.some(field => field.name === 'decimals'), false);
-    assert.strictEqual(valueBuilder.preview(cpuSession.draft).label_center, '73');
+    assert.strictEqual(valueBuilder.preview(cpuSession.draft).label_center, '42');
     for (const builder of [barBuilder, gaugeBuilder, historyBuilder]) {
         const session = candidateSession(cpu, builder);
         const button = context.padButtonBuilderBuild(session);
@@ -1505,12 +1465,8 @@ delete context.testHelpSchemes;
         assert.strictEqual((builder.sourceFields ? builder.sourceFields(session.draft.sources[0], 0) : session.fields)
             .some(field => field.name === 'decimals'), false);
     }
-    assert.strictEqual(context.padButtonBuilderBuild(candidateSession(unavailable, valueBuilder)).label_center,
-        '[health:wifi_ssid]');
-    assert.strictEqual(valueBuilder.preview(candidateSession(unavailable, valueBuilder).draft).label_center, '---');
     for (const sample of ['?', 'true', '', '12abc', 'Infinity']) {
-        context.fetch = async () => mqttResponse(200, { resolved: [{ value: sample }] });
-        const candidate = await catalogButtons.inspect(catalogReference('health', 'cpu'), new AbortController().signal);
+        const candidate = catalogButtons.prepare({ ...catalogReference('health', 'cpu'), exampleValue: sample });
         assert.strictEqual(candidate.capabilities.numericWidget, false);
         assert.strictEqual(historyBuilder.available(candidateSession(candidate, valueBuilder).draft, runtime), false);
     }
@@ -1723,7 +1679,7 @@ delete context.testHelpSchemes;
         chooseCatalog = onUse;
         return () => { stoppedConfigurations++; };
     };
-    context.fetch = () => { throw new Error('Catalog selection must not fetch without an explicit preview'); };
+    context.fetch = () => { throw new Error('Catalog selection must not fetch device previews'); };
     controlReplacement.sourceIndex = 0;
     const musicReference = catalogReference('music', 'title');
     await context.padButtonBuilderLookup(true, { reference: musicReference });
@@ -1738,6 +1694,26 @@ delete context.testHelpSchemes;
     assert.strictEqual(stoppedConfigurations, 2);
     assert.strictEqual(parameters.hidden, true);
     assert.strictEqual(context.padButtonBuilderBuild(controlReplacement).label_center, '[music:title]');
+    const acceptCandidate = context.padButtonBuilderAcceptCandidate;
+    let acceptedCandidate;
+    context.padButtonBuilderAcceptCandidate = (_session, candidate) => { acceptedCandidate = candidate; };
+    const bindingPickSession = { ...controlReplacement, picker: true, bindingOnly: true };
+    configuredReference = null;
+    await context.padButtonBuilderLookup(true, { reference: catalogReference('sensor', 'temperature') },
+        bindingPickSession);
+    assert.strictEqual(configuredReference, null, 'Complete catalog values skip the intermediate parameter form');
+    assert.strictEqual(acceptedCandidate.reference.scheme, 'sensor');
+    assert.strictEqual(acceptedCandidate.sampleIsExample, true);
+    assert.strictEqual(acceptedCandidate.sample, '21.37');
+    const expressionReference = catalogReference('expr');
+    await context.padButtonBuilderLookup(true, { reference: expressionReference }, bindingPickSession);
+    assert.strictEqual(configuredReference, expressionReference, 'Missing required parameters still open the form');
+    context.padButtonBuilderStopLookup(bindingPickSession);
+    configuredReference = null;
+    await context.padButtonBuilderLookup(true, { reference: musicReference }, bindingPickSession, true);
+    assert.strictEqual(configuredReference, musicReference, 'Edit value can deliberately open optional parameters');
+    context.padButtonBuilderStopLookup(bindingPickSession);
+    context.padButtonBuilderAcceptCandidate = acceptCandidate;
     catalogButtons.configureSelection = configureSelection;
     context.padButtonBuilderRenderFields = renderFields;
     context.padButtonBuilderRenderChoices = renderChoices;

@@ -189,38 +189,6 @@ const catalogBindingProvider = {
         }
         return candidates;
     },
-    async inspect(reference, signal, screen) {
-        const candidate = catalogBindingCandidate(reference);
-        const response = await fetch('/api/pad/resolve', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                bindings: [candidate.sourceId],
-                ...(screen ? { screen } : {})
-            }),
-            cache: 'no-store', signal
-        });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Device preview failed (HTTP ' + response.status + ').');
-        const value = payload?.resolved?.[0]?.value;
-        if (typeof value !== 'string') throw new Error('The device returned an invalid binding preview.');
-        const unavailable = value === '?' || value === '---' || /^ERR:/.test(value);
-        const metadata = catalogBindingMetadata(candidate.reference);
-        const scheme = catalogBindingScheme(candidate.reference.scheme);
-        const truncated = new TextEncoder().encode(value).length >= 127;
-        const numeric = !unavailable && !truncated && bindingBuilderIsNumeric(value) &&
-            ['integer', 'number'].includes(metadata?.kind) && !candidate.reference.fallback &&
-            candidate.reference.params.length <= scheme.widget_max_params;
-        return {
-            ...candidate, acquisitionState: unavailable ? 'unavailable' : 'received',
-            sampleTruncated: truncated,
-            ...(!unavailable ? { sample: value } : {}),
-            capabilities: {
-                display: true,
-                numericWidget: !!numeric && metadata.capabilities.includes('numeric_widget'),
-                liveSampling: !!numeric && metadata.capabilities.includes('live_sampling')
-            }
-        };
-    },
     buildBinding: (candidate, selection = {}) => catalogBindingToken(candidate.reference, selection) +
         (selection.mode === 'number' ? bindingBuilderUnitSuffix(selection.unit || '') : ''),
     dispose() {}
@@ -244,7 +212,7 @@ function catalogBindingFormHTML(rawOnly = false, unified = false) {
             'Parameters use the registered syntax, without guessed types or units. ' +
             (rawOnly ? 'Widget inputs omit display formatting and extra parameters.' :
                 'Leave optional formatting empty for raw output.') +
-            ' Preview may require a configured integration or saved pad context.</p>') +
+            ' Samples are illustrative, not current device readings.</p>') +
         '<p data-catalog-status class="binding-builder-status" role="status" aria-live="polite"></p>' +
         '<div data-catalog-output></div></div>';
 }
@@ -263,15 +231,9 @@ function catalogBindingMountForm(root, initial = {}, onUse, screen, rawOnly = fa
         params: initialReference.params,
         fallback: initialReference.fallback,
         exampleValue: initialReference.exampleValue ?? selected?.exampleValue,
-        displayName: initialReference.displayName ?? selected?.displayName,
-        candidate: null, controller: null, generation: 0
+        displayName: initialReference.displayName ?? selected?.displayName
     };
     let disposed = false;
-    const stop = () => {
-        state.controller?.abort();
-        state.controller = null;
-        state.generation++;
-    };
     const reference = () => ({
         scheme: state.scheme, params: state.params.slice(), fallback: state.fallback,
         ...(state.exampleValue !== undefined ? { exampleValue: state.exampleValue } : {}),
@@ -289,18 +251,16 @@ function catalogBindingMountForm(root, initial = {}, onUse, screen, rawOnly = fa
         const selectionLabel = root.querySelector('[data-catalog-selection]');
         if (selectionLabel) selectionLabel.textContent = state.displayName || state.scheme;
         try {
-            const candidate = state.candidate || catalogBindingCandidate(reference());
+            const candidate = catalogBindingCandidate(reference());
             const token = catalogBindingProvider.buildBinding(candidate, { isWidgetBinding: rawOnly });
-            status.textContent = state.candidate?.acquisitionState === 'unavailable'
-                ? 'No current value is available. The binding can still be used.' : '';
+            status.textContent = '';
             if (onUse) {
                 output.replaceChildren();
             } else {
-                const sample = state.candidate?.sample ?? candidate.exampleValue ?? null;
+                const sample = candidate.exampleValue ?? null;
                 output.innerHTML = bindingBuilderResultHTML(token, sample, {
-                    sampleLabel: state.candidate?.sample !== undefined ? 'Device result' : 'Example value'
+                    sampleLabel: 'Sample value (example)'
                 });
-                output.querySelector('[data-binding-preview]')?.remove();
             }
             let actions = output.querySelector('.binding-example-actions');
             if (!actions) {
@@ -308,44 +268,14 @@ function catalogBindingMountForm(root, initial = {}, onUse, screen, rawOnly = fa
                 actions.className = 'binding-example-actions';
                 output.appendChild(actions);
             }
-            if (!onUse) {
-                const preview = document.createElement('button');
-                preview.type = 'button';
-                preview.className = 'binding-copy-btn';
-                preview.textContent = 'Preview on device';
-                preview.onclick = async () => {
-                    stop();
-                    const generation = state.generation;
-                    const controller = new AbortController();
-                    state.controller = controller;
-                    preview.disabled = true;
-                    status.textContent = 'Resolving on this device...';
-                    const timeout = setTimeout(() => controller.abort(), 15000);
-                    try {
-                        const candidate = await catalogBindingProvider.inspect(reference(), controller.signal, screen);
-                        if (disposed || generation !== state.generation || !root.isConnected) return;
-                        state.candidate = candidate;
-                        renderOutput();
-                    } catch (error) {
-                        if (disposed || generation !== state.generation || !root.isConnected) return;
-                        status.dataset.kind = 'error';
-                        status.textContent = controller.signal.aborted
-                            ? 'Device preview timed out. Retry to continue.' : error.message;
-                        preview.disabled = false;
-                    } finally {
-                        clearTimeout(timeout);
-                        if (generation === state.generation) state.controller = null;
-                    }
-                };
-                actions.appendChild(preview);
-            }
             if (onUse) {
                 const use = document.createElement('button');
                 use.type = 'button';
                 use.className = 'btn btn-secondary';
                 use.textContent = 'Continue';
                 use.onclick = () => {
-                    try { onUse(state.candidate || catalogButtonBuilderProvider.prepare(reference())); }
+                    if (disposed) return;
+                    try { onUse(catalogButtonBuilderProvider.prepare(reference())); }
                     catch (error) { status.dataset.kind = 'error'; status.textContent = error.message; }
                 };
                 actions.appendChild(use);
@@ -373,11 +303,11 @@ function catalogBindingMountForm(root, initial = {}, onUse, screen, rawOnly = fa
             (unified ? '' : '<p class="binding-builder-note">' + _bhEsc(scheme.summary) + '</p>' +
                 (scheme.status ? '<p class="binding-docs-status">' + _bhEsc(scheme.status) + '</p>' : '')) +
             (scheme.name === 'pad' ? '<p class="binding-builder-note">' +
-                (screen ? 'Preview uses saved bindings from ' + _bhEsc(screen) + ', not unsaved definitions.' :
-                    'This dialog has no pad context. Preview named pad bindings in the button editor or Button Builder.') + '</p>' : '') +
+                'Named bindings use saved pad definitions. Check their resolved values in the button editor after saving.</p>' : '') +
             params.map((param, index) => {
                 if (unified && index === 0 && !scheme.free_form) return '';
-                if (unified && index === scheme.format_param && index >= scheme.min_params) return '';
+                if (unified && index === scheme.format_param && index >= scheme.min_params &&
+                    catalogBindingMetadata(reference())?.formats.some(mode => mode !== 'raw')) return '';
                 const control = index === 0 && !scheme.free_form && Array.isArray(scheme.keys)
                     ? '<select data-catalog-param="' + index + '" class="form-control">' +
                         '<option value="">Choose a registered key</option>' +
@@ -396,9 +326,7 @@ function catalogBindingMountForm(root, initial = {}, onUse, screen, rawOnly = fa
         renderOutput();
     };
     const changeReference = next => {
-        stop();
         Object.assign(state, catalogBindingDefaultReference(next), {
-            candidate: null,
             exampleValue: next.exampleValue,
             displayName: next.displayName
         });
@@ -408,18 +336,14 @@ function catalogBindingMountForm(root, initial = {}, onUse, screen, rawOnly = fa
     root.querySelector('[data-catalog-scheme]')?.addEventListener('change', event =>
         changeReference({ scheme: event.target.value, params: [], fallback: '' }));
     root.querySelector('[data-catalog-fallback]').oninput = event => {
-        stop();
         state.fallback = event.target.value;
-        state.candidate = null;
         renderOutput();
     };
     const updateParameter = event => {
         if (!event.target.hasAttribute('data-catalog-param')) return;
-        stop();
         const index = Number(event.target.dataset.catalogParam);
         while (state.params.length <= index) state.params.push('');
         state.params[index] = event.target.value;
-        state.candidate = null;
         state.exampleValue = undefined;
         renderOutput();
     };
@@ -430,7 +354,8 @@ function catalogBindingMountForm(root, initial = {}, onUse, screen, rawOnly = fa
         if (event.target.tagName === 'SELECT') updateParameter(event);
     };
     renderFields();
-    return () => { disposed = true; stop(); };
+    root.querySelector('[data-catalog-param]')?.focus();
+    return () => { disposed = true; };
 }
 
 let catalogBindingBuilderDispose = null;
@@ -442,7 +367,7 @@ function catalogBindingBuilderStop() {
 BINDING_BUILDERS.push({
     id: 'catalog', scheme: null, label: 'On-device bindings', name: 'On-device bindings',
     description: 'any scheme registered on this device.',
-    instructions: 'Complete the registered parameters. Preview is optional.',
+    instructions: 'Complete the registered parameters.',
     tooltip: 'Build a binding from the device catalog',
     configured: () => false, availability: () => '', provider: catalogBindingProvider,
     render: () => '<div id="catalog-binding-builder"></div>',
@@ -466,13 +391,13 @@ const catalogButtonBuilderProvider = {
         try { catalogBindingReference(query); return true; } catch { return false; }
     },
     referenceFromInput: catalogBindingReference,
-    async search(query, signal) {
+    async search(query, signal, bindingOnly = false) {
         if (String(query || '').trim().length < 3) return { candidates: [], more: false };
         const candidates = (await catalogBindingProvider.list(query, signal))
-            .filter(candidate => !['ha', 'mqtt', 'expr', 'pad'].includes(candidate.reference.scheme));
+            .filter(candidate => !(bindingOnly ? ['ha', 'mqtt'] : ['ha', 'mqtt', 'expr', 'pad'])
+                .includes(candidate.reference.scheme));
         return { candidates: candidates.slice(0, 40), more: candidates.length > 40 };
     },
-    inspect: (reference, signal, screen) => catalogBindingProvider.inspect(reference, signal, screen),
     prepare(reference, signal) {
         if (signal?.aborted) throw new DOMException('Lookup cancelled', 'AbortError');
         const candidate = catalogBindingCandidate(reference);
@@ -495,12 +420,8 @@ const catalogButtonBuilderProvider = {
         try { catalogBindingCandidate(reference); return false; }
         catch { return true; }
     },
-    canEnableNumeric: candidate => {
-        const metadata = catalogBindingMetadata(candidate.reference);
-        return metadata?.capabilities?.includes('numeric_widget') === true;
-    },
-    configureSelection: (root, reference, onUse, screen, selected, onChange) =>
-        catalogBindingMountForm(root, reference, onUse, screen, false, selected, onChange),
+    configureSelection: (root, reference, onUse, screen, selected, onChange, rawOnly = false) =>
+        catalogBindingMountForm(root, reference, onUse, screen, rawOnly, selected, onChange),
     previewNote(candidate) {
         return (candidate.sampleIsExample || candidate.sample === undefined && candidate.exampleValue !== undefined) &&
             candidate.acquisitionState !== 'unavailable'

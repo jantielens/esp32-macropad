@@ -48,8 +48,8 @@ Publish a small JSON message, for example `{"temperature":22.5}` on
 ```
 
 For a numeric widget, omit formatting/units.
-To generate a single token, use **fx > Binding builders > MQTT** in a bindable
-field. Enter one exact topic and choose **Read topic**, then click its received
+To generate a single token, choose the wand button beside a bindable field,
+then select **MQTT**. Enter one exact topic and choose **Read topic**, then click its received
 raw payload or a scalar field. Scalar payloads are selected automatically.
 See the [shared binding workflow](../pads/bindings.md#build-a-token-from-a-source)
 for limits, formatting, and temporary inspection cleanup. Inspection does not

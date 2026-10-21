@@ -116,7 +116,7 @@ for (let reference = 1; reference <= 3; reference++) {
 }
 for (const identifier of ['min-label', 'max-label', 'ref-1', 'ref-2', 'ref-3']) {
     assert.match(sparkline, new RegExp('id="pad-edit-sparkline-' + identifier + '-color"[^>]*maxlength="63"'));
-    assert.match(sparkline, new RegExp('<label for="pad-edit-sparkline-' + identifier + '-color">Color</label>'));
+    assert.match(sparkline, new RegExp('<label for="pad-edit-sparkline-' + identifier + '-color">Color(?:\\s|</label>)'));
 }
 const barChart = fs.readFileSync('src/app/web/_widget_bar_chart.html', 'utf8');
 assert.match(barChart, /id="pad-edit-widget-bar-bg-color"[^>]*maxlength="63"/);

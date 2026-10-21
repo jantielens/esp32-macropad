@@ -108,43 +108,41 @@ history. For historical data, use Sparkline backfill below.
 ## Build an HA binding
 
 The portal's [shared binding workflow](../pads/bindings.md#build-a-token-from-a-source)
-includes a **Home Assistant** view under **Binding builders**.
+includes a **Home Assistant** source in the Binding Builder.
 HA lookup generates a token without saving a pad or subscribing to additional
-live entities. **Preview on device** uses the normal resolver and can acquire a
-temporary live reference.
+live entities. Both builders use the value acquired during lookup for their
+preview; there is no separate device-preview action.
 
-When live HA bindings are supported and the HA URL and token are saved, an
-**HA** shortcut appears beside **fx** on bindable fields. Choose **HA** to open
-a fresh Home Assistant builder directly and insert into that field. The shortcut
-does not depend on an active connection or administrator permissions.
+The wand button beside **fx** on bindable fields opens a fresh Binding Builder.
+Choose **Home Assistant** to look up an entity and insert into that field.
+The source picker explains missing setup; unsupported integrations are hidden.
 An **idle** live-binding status is normal when no entities are subscribed.
 Lookup works independently; saved pads and temporary previews subscribe
 automatically when they reference HA entities.
 
-1. Open **Binding Reference & Builders** from the bindable field you want to fill, then
-   select **Binding builders > Home Assistant**.
+1. Choose the wand button beside the bindable field you want to fill, then
+   select **Home Assistant**.
 2. Type at least three characters of an entity ID or
    friendly name and select a match. Search shows up to 20 matches; keep typing
    to narrow the list. Alternatively, enter an exact ID and press Enter.
 3. State is selected by default. Expand **Change value** to select an attribute
-   or enter a custom dotted path. Expand **Display options** to change the
-   default **As received** presentation, unit text, or unavailable-value fallback.
+   or enter a custom dotted path. Use **Display options** to change the
+   suggested presentation, unit text, or unavailable-value fallback.
    The entity's reported unit is suggested for its state, not its attributes.
    Widget data bindings and other raw-value widget fields, such as gauge limits,
    automatically omit formatting and units.
    For display text, choose **Number** with 0 to 6 decimal places, or **Text**.
    Edit **Unit (optional)**;
    spacing is automatic. Expand **When unavailable** to set fallback text.
-4. Check **Current value**.
+4. Check **Sample value** and the generated binding.
    Use **Insert binding** to fill the originating field, or **Copy binding**
    when authoring elsewhere. Save your changes using the editor's normal Save control.
 
-The **fx** entry opens on **Basics** each time; **HA** opens the builder directly.
-Both entries start with an empty builder.
-Use **Change** to select a different source. Selecting an entity fetches its
+The **fx** entry opens Binding Reference on **Basics** each time; the wand
+opens a new builder. Close either dialog before using the other field control.
+Use **Edit value** to select a different source. Selecting an entity fetches its
 details automatically; a failed lookup offers Retry. Manual binding entry and
-the scheme-specific editor under the `ha` reference remain available without
-a successful lookup.
+the `ha` syntax reference remain available without a successful lookup.
 
 Entity search uses HA's template API and requires an administrator user's
 token. A non-admin token can still load readable entities by exact ID, generate

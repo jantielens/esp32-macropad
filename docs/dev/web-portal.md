@@ -1319,8 +1319,9 @@ search after three characters; MQTT explicitly reads one exact topic and
 offers clickable scalar fields. HA defaults to state and permits attribute or
 custom-path selection. Display options travel with the selected candidate;
 button scenarios apply them to labels, never to raw numeric widget inputs.
-Only required catalog parameters interrupt direct selection. Generic syntax
-editing and explicit preview remain available through the scheme reference.
+Only missing required catalog parameters interrupt direct selection in either
+builder. Binding Builder's **Edit value** opens the catalog parameter form for
+optional changes, including expressions and named pad bindings.
 Guided device selection uses declared `example_value` or reference-row samples,
 without calling `/api/pad/resolve`. Samples carry `sampleIsExample` and are shown
 as **Sample value (example)**, never as current readings. Numeric scenarios
@@ -1339,7 +1340,17 @@ Completeness is enforced across the core and device-class host profiles.
 HA/MQTT lookup values, computed expressions, named pad bindings, and arbitrary
 custom free-form formats do not have fixed local samples.
 
-The dialog (`portal_binding_help.js`, markup in `_binding_help.html`) lists
+The compact wand control opens a native modal Binding Builder
+(`portal_binding_builder.js`) using the Button Builder dialog shell, selected
+source summary, customization/preview columns, and Cancel/Insert footer.
+Both dialogs use `portal-form` for shared input styles, plus shared design-grid
+and preview-panel classes. Generated binding text, sample provenance, and Copy
+remain visible during binding customization. Samples are declared examples or
+the first value acquired during HA/MQTT selection; neither builder offers a
+separate device-resolution action. Widget targets restrict display options.
+Close disposes the picker and pending acquisition work before restoring focus.
+
+The separate Binding Reference dialog (`portal_binding_help.js`, markup in `_binding_help.html`) lists
 guides and the registered schemes by category, searches scheme names, keys,
 descriptions, examples, and format codes, and offers Copy and Insert actions.
 Insert targets the text field next to the `fx` hint or `?` button that opened
@@ -1347,7 +1358,9 @@ the dialog, inserting at the cursor when that field had focus and appending
 otherwise. Host profile tests require every registered scheme to document all
 parameters and keys and validate every example; the portal dev server serves
 `tools/mock-data/binding-docs.json`, generated from the full host profile and
-checked by `test_binding_docs_fixture`.
+checked by `test_binding_docs_fixture`. The field's `fx` control opens this
+reference. Neither dialog links to the other; the reference contains no builder
+navigation or builder-launch actions.
 
 On `HAS_USB_HID` builds, the health key list includes `usb_status` for
 `[health:usb_status]`: `disabled`, `ready`, `connected`, `suspended`, or `error`.

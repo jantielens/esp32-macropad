@@ -6,8 +6,8 @@
  * @property {(config: Object) => boolean} [supported]
  * @property {(query: string) => boolean} acceptsReference
  * @property {(query: string) => Object} referenceFromInput
- * @property {(query: string, signal: AbortSignal) => Promise<{candidates: BindingSourceCandidate[], more: boolean}>} [search]
- * @property {(reference: Object, signal: AbortSignal, screen?: string) => Promise<BindingSourceCandidate>} inspect
+ * @property {(query: string, signal: AbortSignal, bindingOnly?: boolean) => Promise<{candidates: BindingSourceCandidate[], more: boolean}>} [search]
+ * @property {(reference: Object, signal: AbortSignal, screen?: string) => Promise<BindingSourceCandidate>} [inspect]
  * @property {(reference: Object, signal: AbortSignal, screen?: string) => BindingSourceCandidate|Promise<BindingSourceCandidate>} [prepare]
  * @property {(reference: Object) => boolean} [requiresParameters]
  * @property {(candidate: BindingSourceCandidate, selection: Object) => string} buildBinding
@@ -18,9 +18,8 @@
  * @property {(candidate: BindingSourceCandidate, suffix: string) => Object} [buildHistoryFields]
  * @property {(candidate: BindingSourceCandidate) => Object[]} [controlFields]
  * @property {(candidate: BindingSourceCandidate, options: Object) => Object} [buildControl]
- * @property {(candidate: BindingSourceCandidate) => boolean} [canEnableNumeric]
  * @property {(candidate: BindingSourceCandidate) => void|Promise<void>} dispose
- * @property {(root: HTMLElement, reference: Object, onUse: (candidate: BindingSourceCandidate) => void, screen: string, selected?: BindingSourceCandidate, onChange?: () => void) => (() => void)} [configureSelection]
+ * @property {(root: HTMLElement, reference: Object, onUse: (candidate: BindingSourceCandidate) => void, screen: string, selected?: BindingSourceCandidate, onChange?: () => void, rawOnly?: boolean) => (() => void)} [configureSelection]
  */
 
 /**
@@ -105,12 +104,20 @@ function bindingSourcePickerMount(session) {
     };
     root.querySelector('[data-bb-picked-change]').onclick = () => {
         padButtonBuilderStopLookup(session);
+        if (session.bindingOnly) {
+            root.querySelector('#binding-builder-title').textContent = 'Build a binding from...';
+            root.querySelector('[data-binding-insert]').hidden = true;
+        }
         padButtonBuilderStatus('', false, session);
         root.querySelector('[data-bb-retry]').hidden = true;
         root.querySelector('[data-bb-provider-picker]').hidden = false;
         root.querySelector('[data-bb-picked]').hidden = true;
         root.querySelector('[data-bb-source]').hidden = false;
         root.querySelector('[data-bb-catalog-search-panel]').hidden = false;
+        if (session.bindingOnly && session.provider.configureSelection) {
+            padButtonBuilderLookup(true, session.picked, session, true);
+            return;
+        }
         search.focus();
     };
     root.querySelector('[data-bb-continue]').onclick = () => {
@@ -139,6 +146,9 @@ function bindingSourcePickerSelect(session, candidate) {
     root.querySelector('[data-bb-picked-name]').textContent = candidate.displayName;
     root.querySelector('[data-bb-picked-name]').tabIndex = -1;
     root.querySelector('[data-bb-picked-id]').textContent = candidate.sourceId;
+    if (session.bindingOnly) {
+        root.querySelector('#binding-builder-title').textContent = 'Customize your binding';
+    }
     const modes = session.rawOnly ? ['raw'] : candidate.formatModes;
     root.querySelector('[data-bb-format]').innerHTML = bindingBuilderFormatControlsHTML({
         idPrefix: 'source-format', dataPrefix: 'source',
@@ -160,6 +170,11 @@ function bindingSourcePickerSelect(session, candidate) {
         root.querySelector('[data-source-raw-note]').hidden = true;
         const result = root.querySelector('[data-bb-picked-result]');
         const next = root.querySelector('[data-bb-continue]');
+        const insert = session.bindingOnly ? root.querySelector('[data-binding-insert]') : null;
+        if (insert) {
+            insert.disabled = true;
+            delete insert.dataset.bhInsert;
+        }
         next.hidden = !!session.bindingOnly;
         try {
             const token = bindingSourceToken(candidate, selection, session.rawOnly);
@@ -171,8 +186,14 @@ function bindingSourcePickerSelect(session, candidate) {
                 _bhEsc(sample) + (candidate.sampleTruncated ? ' <small>(truncated)</small>' : '') +
                 '</output></div>';
             if (session.bindingOnly) {
-                result.innerHTML += '<div class="binding-example-actions">' +
-                    _bhActions(token, { copy: 'Copy binding', insert: 'Insert binding' }) + '</div>';
+                result.innerHTML = '<h3>Preview</h3>' + bindingBuilderResultHTML(token, sample, {
+                    insert: false, truncated: candidate.sampleTruncated,
+                    sampleLabel: 'Sample value' + (candidate.sampleIsExample ? ' (example)' :
+                        candidate.cached ? ' (cached)' : '')
+                });
+                insert.hidden = !_bindingHelp.target;
+                insert.disabled = false;
+                insert.dataset.bhInsert = token;
             }
             next.hidden = !!session.bindingOnly;
             next.disabled = false;
@@ -218,7 +239,7 @@ function bindingSourcePickerSelect(session, candidate) {
         values.append(label, use);
         root.querySelector('[data-bb-display]').before(values);
     }
-    root.querySelector('[data-bb-display]').open = false;
+    root.querySelector('[data-bb-display]').open = !!session.bindingOnly;
     update();
     root.querySelector('[data-bb-picked-name]').focus({ preventScroll: true });
 }
@@ -411,7 +432,7 @@ function padButtonBuilderOpen() {
     if (padButtonBuilderSession || !padWorkspace || !padWorkspace.selected ||
         !padButtonBuilderCanCreate(padState.editCol, padState.editRow)) return;
     const dialog = document.createElement('dialog');
-    dialog.className = 'pad-button-builder';
+    dialog.className = 'pad-button-builder portal-form';
     dialog.dataset.stage = 'source';
     dialog.setAttribute('aria-labelledby', 'button-builder-title');
     dialog.innerHTML = `
@@ -426,8 +447,7 @@ function padButtonBuilderOpen() {
             </section>
             <div data-bb-design hidden>
                 <fieldset class="pad-button-builder-choices"><legend>What should this button do?</legend>
-                    <div data-bb-choices></div>
-                    <div class="pad-button-builder-live-check" data-bb-live-check hidden></div></fieldset>
+                    <div data-bb-choices></div></fieldset>
                 <div class="pad-button-builder-design">
                     <div><h3>Customize</h3><div class="binding-builder-fields" data-bb-fields></div>
                         <section data-bb-sources hidden aria-label="Button values"></section>
@@ -613,7 +633,7 @@ async function padButtonBuilderLoadConfig(session = padButtonBuilderSession) {
     }
 }
 
-async function padButtonBuilderLookup(exact, selected, session = padButtonBuilderSession) {
+async function padButtonBuilderLookup(exact, selected, session = padButtonBuilderSession, editParameters = false) {
     const dialog = session.dialog;
     const provider = session.provider;
     const query = dialog.querySelector('#button-builder-search').value.trim();
@@ -631,7 +651,7 @@ async function padButtonBuilderLookup(exact, selected, session = padButtonBuilde
         return;
     }
     if (reference && provider.configureSelection &&
-        (!session.picker || provider.requiresParameters?.(reference))) {
+        (editParameters || !session.picker || provider.requiresParameters?.(reference))) {
         const root = dialog.querySelector('[data-bb-parameters]');
         root.hidden = false;
         const catalogSearchPanel = dialog.querySelector('[data-bb-catalog-search-panel]');
@@ -645,7 +665,7 @@ async function padButtonBuilderLookup(exact, selected, session = padButtonBuilde
             padButtonBuilderStopLookup(session);
             if (catalogSearchPanel) catalogSearchPanel.hidden = false;
             padButtonBuilderLookup(false, undefined, session);
-        });
+        }, session.rawOnly);
         session.controller = null;
         padButtonBuilderStatus('', false, session);
         return;
@@ -658,7 +678,7 @@ async function padButtonBuilderLookup(exact, selected, session = padButtonBuilde
                 ? provider.prepare(reference, controller.signal,
                     session.page === undefined ? undefined : 'pad_' + session.page)
                 : provider.inspect(reference, controller.signal)) }
-            : await provider.search(query, controller.signal);
+            : await provider.search(query, controller.signal, session.bindingOnly);
         if (!bindingSourceSessionActive(session) || controller !== session.controller || controller.signal.aborted) {
             if (result.candidate) padButtonBuilderDisposeSource({ candidate: result.candidate });
             return;
@@ -782,79 +802,6 @@ function padButtonBuilderRenderChoices() {
         text.append(heading, description);
         label.append(radio, text);
         choices.appendChild(label);
-    }
-    padButtonBuilderRenderLiveCheck();
-}
-
-function padButtonBuilderRenderLiveCheck() {
-    const session = padButtonBuilderSession;
-    const liveCheck = session.dialog.querySelector('[data-bb-live-check]');
-    if (!liveCheck) return;
-    liveCheck.replaceChildren();
-    const source = session.draft.sources[0];
-    const candidate = source?.candidate;
-    const provider = candidate ? padButtonBuilderProvider(candidate) : null;
-    const needed = !candidate?.selection && session.draft.sources.length === 1 &&
-        provider?.canEnableNumeric?.(candidate) && !candidate.capabilities.numericWidget;
-    liveCheck.hidden = !needed;
-    if (!needed) return;
-
-    const note = document.createElement('p');
-    note.textContent = 'Read a live value to enable numeric layouts.';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'btn btn-sm btn-secondary';
-    button.textContent = 'Read current value';
-    button.setAttribute('data-bb-live-read', '');
-    button.onclick = padButtonBuilderReadCurrentValue;
-    liveCheck.append(note, button);
-}
-
-async function padButtonBuilderReadCurrentValue() {
-    const session = padButtonBuilderSession;
-    const source = session?.draft.sources[0];
-    const candidate = source?.candidate;
-    const provider = candidate ? padButtonBuilderProvider(candidate) : null;
-    if (!source || !provider?.canEnableNumeric?.(candidate)) return;
-
-    padButtonBuilderStopLookup();
-    const controller = new AbortController();
-    session.controller = controller;
-    const readButton = session.dialog.querySelector('[data-bb-live-read]');
-    if (readButton) {
-        readButton.disabled = true;
-        readButton.textContent = 'Reading current value...';
-    }
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    padButtonBuilderStatus('Reading the current device value...');
-    try {
-        const resolved = await provider.inspect(candidate.reference, controller.signal, 'pad_' + session.page);
-        if (padButtonBuilderSession !== session || controller !== session.controller || controller.signal.aborted) return;
-        session.draft.sources[0] = padButtonBuilderSource(session.scenario, resolved, 0, source);
-        session.draft.previewState = resolved.sample;
-        padButtonBuilderRenderSelection();
-        padButtonBuilderRenderChoices();
-        padButtonBuilderRenderFields();
-        if (!resolved.capabilities.numericWidget) {
-            padButtonBuilderStatus(
-                'The current binding result is not a valid numeric sample. Numeric layouts remain unavailable.', true);
-        } else {
-            padButtonBuilderStatus('');
-            session.dialog.querySelector('[data-bb-choices] input:checked')?.focus();
-        }
-    } catch (error) {
-        if (padButtonBuilderSession !== session || controller !== session.controller) return;
-        padButtonBuilderStatus(controller.signal.aborted
-            ? 'The current-value check timed out. Retry to enable numeric layouts.' : error.message, true);
-    } finally {
-        clearTimeout(timeout);
-        if (session.controller === controller) {
-            session.controller = null;
-            if (readButton?.isConnected) {
-                readButton.disabled = false;
-                readButton.textContent = 'Read current value';
-            }
-        }
     }
 }
 

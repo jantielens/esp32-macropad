@@ -23,8 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Wildcard discovery and inferred MQTT control commands are not supported.
 * Add a searchable On-device bindings catalog using the running firmware's
   registered schemes, keys, descriptions, and format presets. Create tokens
-  and value-label buttons with parameter inputs, declared examples, and
-  explicit device previews. Numeric widgets require explicit capability
+  and value-label buttons with parameter inputs and declared examples.
+  Numeric widgets require explicit capability
   metadata and suitable samples; numeric-looking text does not imply a type
   or unit. See [Build a token from a source](docs/user/pads/bindings.md#build-a-token-from-a-source).
 * Support up to three readings from different sources in one history button.
@@ -40,6 +40,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   workflows for Home Assistant, MQTT, and on-device bindings. Share source
   selection, formatting, fallback controls, and previews while preserving
   Home Assistant lookup, attributes, history, and light/switch toggles.
+  Open Binding Builder with a compact wand control beside bindable fields;
+  **fx** opens the separate Binding Reference, without builder navigation.
+  Color fields expose these controls only inside the color picker.
+  Both builders share dialog and input styles, with search results using the
+  available dialog space instead of a short, separately scrolling list.
+  Binding Builder shows
+  customization beside the sample and exact generated token, with Copy and
+  Cancel/Insert controls. Complete catalog values go straight to customization;
+  only missing required parameters need an extra step, and **Edit value**
+  allows optional parameter changes. Previews use declared examples or the
+  initial HA/MQTT reading, without a separate device-preview action.
   Button scenarios follow source capabilities and available widgets; generated
   buttons remain ordinary unsaved drafts until **Save Pad**. Manual entry,
   the binding reference, and existing binding syntax remain available.

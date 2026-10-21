@@ -26,10 +26,17 @@
 .binding-builder-shortcut:hover { color: var(--portal-primary); border-color: var(--portal-primary); }
 .fx-hint:focus-visible,
 .binding-builder-shortcut:focus-visible { outline: 2px solid var(--portal-primary); outline-offset: 2px; }
-.binding-builder-shortcuts { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; vertical-align: middle; }
+.binding-builder-shortcuts { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; vertical-align: middle; }
 .binding-field-controls > .binding-builder-shortcuts,
 .binding-field-controls > .reset-hint { margin-left: 0; }
+.binding-field-controls > .binding-builder-shortcuts { margin-right: 0; }
 .binding-builder-shortcuts[hidden] { display: none; }
+@media (pointer: coarse) {
+  .binding-field-controls { gap: 8px; }
+  .fx-hint, .binding-builder-shortcut { position: relative; }
+  .fx-hint::after, .binding-builder-shortcut::after { content: ""; position: absolute; inset: -8px -3px; }
+  .binding-field-header { min-height: 36px; }
+}
 
 /* ================================================================
    Binding Reference Dialog

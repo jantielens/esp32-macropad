@@ -779,7 +779,7 @@ body {
 
 /* Bootstrap's .form-select keeps its dropdown chevron — use
    background-color (not the shorthand) so we don't wipe it out. */
-.content-pane :is(.form-control, .form-select) {
+:is(.content-pane, .portal-form) :is(.form-control, .form-select) {
   background-color: var(--portal-form-bg);
   border-color: var(--portal-form-border);
 }
@@ -1129,8 +1129,8 @@ body {
 /* ================================================================
    Placeholder contrast
    ================================================================ */
-.content-pane .form-control::placeholder,
-.content-pane input::placeholder {
+:is(.content-pane, .portal-form) .form-control::placeholder,
+:is(.content-pane, .portal-form) input::placeholder {
   color: var(--portal-text-muted, #86868b);
   opacity: 0.55;
 }
@@ -1960,7 +1960,6 @@ body {
 .color-popover-swatch.active { border-color: var(--portal-link-blue); box-shadow: 0 0 0 2px rgba(var(--portal-primary-rgb),0.3); }
 .color-popover-input-row { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--portal-border); background: var(--portal-surface-alt); border-radius: 6px; padding: 10px; }
 .color-popover-input-row input { width: 100%; height: 34px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; box-sizing: border-box; }
-.color-popover-input-row button { height: 34px; padding: 0 12px; font-size: 13px; align-self: flex-end; }
 .color-popover-backdrop { position: fixed; inset: 0; z-index: 10000; }
 
 /* Color picker — threshold generator */

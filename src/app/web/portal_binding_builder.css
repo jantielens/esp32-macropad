@@ -2,12 +2,18 @@
 .binding-builder [hidden] { display: none; }
 .binding-source-picker [hidden] { display: none !important; }
 .binding-source-picker .binding-builder-input-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.binding-builder-compact { padding: 0; border: 0; box-shadow: none; margin: 0; }
-.binding-builder-reference { display: block; margin-top: 24px; font-size: 12px; }
-#binding-help-overlay.is-building .binding-docs-nav,
-#binding-help-overlay.is-building .binding-docs-search { display: none; }
-#binding-help-overlay.is-building .binding-docs-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-#binding-help-overlay.is-building .binding-docs-modal { width: min(680px, calc(100vw - 24px)); height: auto; max-height: calc(100dvh - 24px); }
+.binding-builder-dialog .binding-source-customize { margin-top: 20px; }
+.pad-button-builder:not(.binding-builder-dialog) .binding-source-customize { display: block; }
+.pad-button-builder:not(.binding-builder-dialog) [data-bb-picked-result] { padding: 0; border: 0; }
+.binding-builder-dialog [data-bb-display] { margin: 0; padding: 0; border: 0; }
+.binding-builder-dialog [data-bb-display] > summary { font-size: 15px; font-weight: 650; color: var(--portal-docs-heading); }
+.binding-builder-dialog [data-bb-picked-result] { min-width: 0; margin: 0; }
+.binding-builder-dialog .binding-builder-fields { grid-template-columns: 1fr; margin-top: 12px; }
+.binding-builder-dialog [data-catalog-fields] { display: grid; gap: 12px; margin-top: 12px; }
+.binding-builder-dialog [data-catalog-fields] > label { display: flex; flex-direction: column; gap: 4px; }
+.binding-builder-dialog .binding-example-code { margin: 0; padding: 10px; border-radius: 6px; background: var(--portal-docs-code-bg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.binding-builder-dialog .binding-example-actions { flex-wrap: wrap; padding: 0; margin-top: 12px; }
+.binding-builder-dialog .binding-copy-btn { min-height: 36px; }
 .binding-source-options { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 16px; border: 1px solid var(--portal-docs-border); border-radius: 10px; background: var(--portal-surface-alt); }
 .binding-source-options > label { position: relative; display: flex; flex: 1 1 130px; min-width: 0; margin: 0; cursor: pointer; }
 .binding-source-options input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
@@ -46,6 +52,7 @@
 .binding-builder-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px; }
 .binding-builder-fields label { display: flex; flex-direction: column; gap: 4px; }
 .binding-builder-suggestions { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; margin-top: 10px; }
+.pad-button-builder .binding-builder-suggestions { max-height: none; overflow-y: visible; }
 .binding-builder-suggestions:empty { display: none; }
 .binding-builder-suggestion { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--portal-docs-border); border-radius: 6px; background: var(--portal-surface-alt); color: inherit; text-align: left; cursor: pointer; }
 .binding-builder-suggestion-info { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }

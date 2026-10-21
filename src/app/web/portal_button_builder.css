@@ -21,8 +21,6 @@
 .pad-button-builder-choices { margin: 22px 0; padding: 0; border: 0; }
 .pad-button-builder-choices legend, .pad-button-builder h3 { margin: 0 0 10px; font-size: 15px; font-weight: 650; color: var(--portal-docs-heading); }
 .pad-button-builder-choices > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
-.pad-button-builder-live-check { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--portal-docs-border); border-radius: 8px; }
-.pad-button-builder-live-check p { margin: 0; color: var(--portal-text-muted); font-size: 12px; line-height: 1.5; }
 .pad-button-builder-choices label { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 12px; border: 1px solid var(--portal-docs-border); border-radius: 8px; cursor: pointer; }
 .pad-button-builder-choices label:has(input:checked) { border-color: var(--portal-primary); background: rgba(var(--portal-primary-rgb), .07); }
 .pad-button-builder-choices input { margin-top: 4px; accent-color: var(--portal-primary); }
@@ -62,7 +60,6 @@
   .pad-button-builder-design { grid-template-columns: 1fr; gap: 20px; }
   .pad-button-builder footer { align-items: stretch; flex-direction: column; gap: 6px; padding: 8px 14px; }
   .pad-button-builder footer > div { justify-content: flex-end; }
-  .pad-button-builder-live-check { align-items: flex-start; flex-direction: column; }
 }
 @media (max-width: 980px) {
   .pad-button-builder-manual { display: block; padding: 4px; min-height: 44px; }

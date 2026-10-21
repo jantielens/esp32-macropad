@@ -187,6 +187,28 @@ async function main() {
     assert(get('logs-error').textContent.includes('Clipboard unavailable'));
     assert.strictEqual(document.body.children.length, 0, 'failed fallback must clean up');
     document.execCommand = copyCommand;
+    const modal = new Node();
+    let restoredCopyFocus = false;
+    document.activeElement = {
+        isConnected: true,
+        closest(selector) { assert.strictEqual(selector, 'dialog[open]'); return modal; },
+        focus() { restoredCopyFocus = true; }
+    };
+    context.navigator.clipboard = undefined;
+    document.execCommand = () => {
+        assert.strictEqual(document.body.children.length, 0);
+        clipboard = modal.children.at(-1).value;
+        return true;
+    };
+    await context.copyTextToClipboard('[health:cpu]');
+    assert.strictEqual(clipboard, '[health:cpu]', 'HTTP fallback must copy inside the active modal');
+    assert.strictEqual(modal.children.length, 0);
+    assert.strictEqual(restoredCopyFocus, true);
+    document.execCommand = () => false;
+    await assert.rejects(context.copyTextToClipboard('[health:cpu]'), /Browser rejected/);
+    assert.strictEqual(modal.children.length, 0, 'modal clipboard failures must clean up');
+    delete document.activeElement;
+    document.execCommand = copyCommand;
     await get('logs-copy').emit('click');
     assert.strictEqual(get('logs-error').textContent, '');
     get('logs-download').emit('click');

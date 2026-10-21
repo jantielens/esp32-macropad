@@ -91,7 +91,7 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
     assert.equal(js.includes('function padButtonBuilderOpen('), display, 'Shared button builder must follow HAS_DISPLAY');
     assert.equal(js.includes('const padButtonBuilders='), display, 'Shared button templates must follow HAS_DISPLAY');
     assert.equal(js.includes('function bindingBuilderToken('), display, 'Shared builder helpers must follow HAS_DISPLAY');
-    assert.equal(js.includes('function bindingBuilderHTML('), display);
+    assert.equal(js.includes('function showBindingBuilder('), display, 'Binding dialog must follow HAS_DISPLAY');
     assert.equal(js.includes('function bindingBuilderFormatControlsHTML('), display);
     assert.equal(js.includes('const catalogBindingProvider='), display,
         'Catalog binding provider must follow HAS_DISPLAY');
@@ -116,7 +116,6 @@ for (const [board, target, psram, integrationMode = 'default', epaperProfile = f
                 provider + ' must register after the shared registry and before scenarios');
         }
     }
-    assert.equal(js.includes('Preview on device'), display, 'Shared preview controls must follow HAS_DISPLAY');
     assert.equal(js.includes("Build a Home Assistant binding"), ha, 'HA shortcut registration must follow HAS_HA_LIVE');
     assert.equal(assets.has('dialog_appearance_fragment_html_gz'), display);
     assert.equal(js.includes('init_dialog_appearance_fragment'), display);
