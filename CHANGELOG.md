@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Use a compact title, current value, and taller trend preview for single-value
+  history buttons; adding more values switches to the comparison layout.
 * Extend lossless presented-frame PNG screenshots to the Inkplate 6FLICK and
   IT8951 e-paper drivers. Captures preserve the completed B/W or grayscale
   presentation and orientation, use a single in-flight slot, and return a

@@ -408,7 +408,7 @@ delete context.testHelpSchemes;
     assert.ok(!Object.hasOwn(switchingSession.draft.options, 'window'));
     context.padButtonBuilderSetScenario(switchingSession, historyBuilder, switchingSession.draft.options.title);
     const switchedBack = context.padButtonBuilderBuild(switchingSession);
-    assert.strictEqual(switchedBack.widget_sparkline_current_label, '[ha:sensor.living_room_temperature;;%.1f degrees]');
+    assert.strictEqual(switchedBack.label_center, '[ha:sensor.living_room_temperature;;%.1f degrees]');
     assert.strictEqual(switchedBack.widget_sparkline_line_color, '#123456');
 
     // A new numeric knob needs only a descriptor and output mapping.
@@ -526,12 +526,12 @@ delete context.testHelpSchemes;
     context.window.__device_caps = { ha_history: true };
     const historySession = buildSession(temperature, historyBuilder);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(context.padButtonBuilderBuild(historySession))), {
-        col: 2, row: 1, label_top: '', label_center: 'Living room', label_center_style: 'align:left',
+        col: 2, row: 1, label_top: 'Living room',
+        label_center: '[ha:sensor.living_room_temperature;;%.1f \u00b0C]',
         widget_type: 'sparkline', widget_data_binding: '[ha:sensor.living_room_temperature]',
-        widget_sparkline_current_label: '[ha:sensor.living_room_temperature;;%.1f \u00b0C]',
         widget_sparkline_line_color: '#4CAF50', widget_sparkline_line_width: 2,
         widget_sparkline_current_dot: 5, widget_sparkline_smooth: 0,
-        widget_sparkline_unified_scale: true, widget_sparkline_window: 86400, widget_sparkline_label_width: 100,
+        widget_sparkline_unified_scale: true, widget_sparkline_window: 86400,
         widget_sparkline_slots: 288, widget_sparkline_ha_entity: temperature.entity_id
     });
     for (const [window, slots, caption] of [
@@ -555,7 +555,7 @@ delete context.testHelpSchemes;
     historySession.draft.sources[0].options.color = 'red';
     assert.throws(() => context.padButtonBuilderBuild(historySession), /line color/);
     Object.assign(historySession.draft.sources[0].options, { color: '#2196F3', unit: '%', decimals: 2 });
-    assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_current_label, '[ha:sensor.living_room_temperature;;%.2f %%]');
+    assert.strictEqual(context.padButtonBuilderBuild(historySession).label_center, '[ha:sensor.living_room_temperature;;%.2f %%]');
     historySession.draft.sources[0].options.decimals = 7;
     assert.throws(() => context.padButtonBuilderBuild(historySession), /decimal/);
     historySession.draft.sources[0].options.decimals = 1;
@@ -1460,7 +1460,8 @@ delete context.testHelpSchemes;
         const button = context.padButtonBuilderBuild(session);
         assert.strictEqual(builder.available(session.draft, runtime), true);
         assert.strictEqual(button.widget_data_binding, '[health:cpu]');
-        assert.strictEqual(button.label_bottom || button.widget_sparkline_current_label, '[health:cpu;%ld] %');
+        assert.strictEqual(builder === historyBuilder ? button.label_center : button.label_bottom,
+            '[health:cpu;%ld] %');
         assert.ok(!JSON.stringify(button).includes('%.'));
         assert.strictEqual((builder.sourceFields ? builder.sourceFields(session.draft.sources[0], 0) : session.fields)
             .some(field => field.name === 'decimals'), false);
@@ -1576,8 +1577,10 @@ delete context.testHelpSchemes;
     assert.strictEqual(backToMqtt.options.unit, '');
     assert.strictEqual(backToMqtt.options.decimals, 1);
     const longTopic = await acquiredButton('0', {}, 's'.repeat(60));
-    assert.throws(() => context.padButtonBuilderBuild(candidateSession(mqttButtons.selectField(longTopic, ''), historyBuilder)),
-        /63 UTF-8 byte/);
+    const longTopicButton = context.padButtonBuilderBuild(
+        candidateSession(mqttButtons.selectField(longTopic, ''), historyBuilder));
+    assert.ok(new TextEncoder().encode(longTopicButton.label_center).length > 63,
+        'A single-value chart uses the larger button-label limit instead of the series-caption limit');
     assert.throws(() => mqttButtons.buildBinding(mqttTemperature, { format: 'x'.repeat(24) }), /24 UTF-8/);
 
     // Failed, canceled, and superseded acquisitions cannot mutate the prior valid draft.

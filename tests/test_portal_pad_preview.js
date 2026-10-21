@@ -259,20 +259,20 @@ for (const color of ['#4CAF50', '#2196F3']) {
         ...historyBuilder.preview(session.draft) };
     context.padRenderCellContent(cell, button);
     historyBuilder.renderPreview(session.draft, cell, button);
-    assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, 'Living room');
+    assert.strictEqual(cell.querySelector('.pad-cell-label-top').textContent, 'Living room');
+    assert.strictEqual(cell.querySelector('.pad-cell-label-center').textContent, '21.4 \u00b0C');
     assert.strictEqual(cell.querySelector('.pad-widget-marker'), null);
-    assert.strictEqual(cell.children.length, 2, 'Only the title and chart are shown');
+    assert.ok(cell.classes.has('pad-button-builder-preview-single-history'));
     const chart = cell.children.at(-1);
     assert.strictEqual(chart.attributes.role, 'img');
+    assert.strictEqual(chart.attributes.viewBox, '0 0 280 190');
     assert.match(chart.attributes['aria-label'], /Illustrative trend, not actual history/);
     assert.match(chart.attributes['aria-label'], /Living room: 21\.4/);
-    const [line, dot, value] = chart.children;
+    const [line, dot] = chart.children;
     assert.strictEqual(line.attributes.stroke, color);
     assert.strictEqual(dot.attributes.fill, color);
-    assert.strictEqual(value.textContent, '21.4 \u00b0C');
-    assert.strictEqual(value.attributes.fill, color);
-    assert(Number(value.attributes.x) > Number(dot.attributes.cx), 'Current value is to the right of its line');
-    assert.strictEqual(value.attributes.y, dot.attributes.cy, 'Current value follows the line endpoint');
+    assert.strictEqual(line.attributes.points.split(' ').at(-1).split(',')[0], '276',
+        'The single-value trend spans the preview width without an endpoint label');
     assert.strictEqual(Number(dot.attributes.r) * 2, 5);
     const points = line.attributes.points.split(' ').map(point => point.split(',').map(Number));
     assert.deepStrictEqual(points.at(-1), [Number(dot.attributes.cx), Number(dot.attributes.cy)]);

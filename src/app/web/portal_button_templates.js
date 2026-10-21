@@ -254,7 +254,7 @@ const padButtonBuilders = [
     },
     {
         id: 'history', label: 'Show a value with history',
-        description: 'Show up to three current values and their trends.',
+        description: 'Show a value and its trend, or compare up to three values.',
         note: 'Units change display text, not values. Automatic scale shares a scale only for matching known source units; otherwise each value has its own scale, so line heights are not directly comparable. Sampling is limited to 1024 points per line. Only eligible Home Assistant values load recorded history; other values are collected live while the device runs. Resize the button in the editor for more space.',
         maxSources: 3,
         available: ({ sources: [source] }, runtime = deviceInfoCache) => !!source && padButtonBuilderHistorySourceAvailable(source) &&
@@ -296,29 +296,41 @@ const padButtonBuilders = [
             const units = sources.map(source => (source.candidate.unit || '').trim());
             const knownUnitsMatch = units.every(Boolean) && new Set(units).size === 1;
             const button = {
-                label_top: '',
-                label_center: options.title.trim(),
-                label_center_style: 'align:left',
                 widget_type: 'sparkline',
                 widget_sparkline_line_width: 2,
                 widget_sparkline_current_dot: 5,
                 widget_sparkline_smooth: 0,
-                widget_sparkline_label_width: 100,
                 widget_sparkline_unified_scale: options.scale === 'shared' || (options.scale === 'auto' && knownUnitsMatch),
                 widget_sparkline_window: windowSeconds,
                 widget_sparkline_slots: slots
             };
+            if (sources.length === 1) {
+                button.label_center = padButtonBuilderLabel(sources[0], sources[0].options);
+            } else {
+                button.label_top = '';
+                button.label_center = options.title.trim();
+                button.label_center_style = 'align:left';
+                button.widget_sparkline_label_width = 100;
+            }
             sources.forEach((source, index) => {
                 const suffix = index ? '_' + (index + 1) : '';
                 button['widget_data_binding' + suffix] = padButtonBuilderBinding(source);
-                button['widget_sparkline_current_label' + suffix] = padButtonBuilderLabel(source, source.options);
                 button['widget_sparkline_line_color' + suffix] = source.options.color;
+                if (sources.length > 1) {
+                    button['widget_sparkline_current_label' + suffix] = padButtonBuilderLabel(source, source.options);
+                }
                 Object.assign(button, padButtonBuilderProvider(source.candidate)
                     .buildHistoryFields?.(source.candidate, suffix) || {});
             });
             return button;
         },
-        preview() {
+        preview({ options, sources }) {
+            if (sources.length === 1) {
+                const [source] = sources;
+                const sample = bindingBuilderIsNumeric(source.candidate.sample) ?
+                    padButtonBuilderSampleLabel(source, source.options) : '---';
+                return { widget_type: '', label_top: options.title.trim(), label_center: sample };
+            }
             return { widget_type: '' };
         },
         previewNote({ options }) {
@@ -332,25 +344,29 @@ const padButtonBuilders = [
                 ' points per line). Illustrative trend, not actual history. Preview only. Does not control the entity.';
         },
         renderPreview({ sources }, cell, button) {
+            const singleSource = sources.length === 1;
+            if (singleSource) cell.classList.add('pad-button-builder-preview-single-history');
             const chart = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             chart.setAttribute('class', 'pad-button-builder-sparkline');
-            chart.setAttribute('viewBox', '0 0 280 70');
+            chart.setAttribute('viewBox', singleSource ? '0 0 280 190' : '0 0 280 70');
             chart.setAttribute('role', 'img');
             const curves = [
                 '8,54 22,50 36,52 50,30 64,26 78,40 92,44 106,24 120,18 134,22 148,38 162,36 176,20 200,12',
                 '8,18 22,22 36,30 50,28 64,36 78,30 92,20 106,26 120,38 134,42 148,40 162,48 176,44 200,54',
                 '8,36 22,32 36,38 50,44 64,42 78,50 92,46 106,38 120,30 134,34 148,22 162,28 176,32 200,33'
             ];
+            const singleCurve = '4,72 16,48 28,20 40,47 52,69 64,104 76,129 88,151 100,166 112,178 124,187 136,188 148,166 160,119 172,93 184,70 196,45 208,57 220,76 232,84 244,81 256,94 268,109 276,116';
             const descriptions = [];
             sources.forEach((source, index) => {
-                const [x, y] = curves[index].split(' ').at(-1).split(',');
+                const curve = singleSource ? singleCurve : curves[index];
+                const [x, y] = curve.split(' ').at(-1).split(',');
                 const numeric = bindingBuilderIsNumeric(source.candidate.sample);
                 const sample = numeric ?
                     padButtonBuilderSampleLabel(source, source.options) : '---';
                 descriptions.push(source.name + ': ' + sample);
                 if (numeric) {
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-                    line.setAttribute('points', curves[index]);
+                    line.setAttribute('points', curve);
                     line.setAttribute('fill', 'none');
                     line.setAttribute('stroke', source.options.color);
                     line.setAttribute('stroke-width', String(button.widget_sparkline_line_width));
@@ -362,6 +378,7 @@ const padButtonBuilders = [
                     chart.appendChild(line);
                     chart.appendChild(dot);
                 }
+                if (sources.length === 1) return;
                 const value = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 value.setAttribute('x', String(Number(x) + 8));
                 value.setAttribute('y', y);

@@ -104,10 +104,12 @@ For a single field rather than a complete button, use the
    Additional rings, targets, geometry, and other styling remain available in
    the normal editor; see [Gauge](../widgets/gauge.md).
    **Show a value with history** requires sparkline widget support and
-   non-truncated readings. It shows a chart title and up to three colored
-   lines, each with its own current-value label. Choose **Add another value**
-   to choose another source, including a different provider. Each value has its
-   own display options and line color; **Edit value** and
+   non-truncated readings. With one value, the button shows its title,
+   formatted current value, and trend. Choose **Add another value** to compare
+   sources, including values from different providers. Two or three values
+   automatically use the multi-value layout with a chart title and a colored
+   line and current-value label for each value. Each value has its own display
+   options and line color; **Edit value** and
    **Remove value** affect only that value. Canceling selection preserves the
    chart design. An unavailable Home Assistant reading with a reported unit
    can also be selected; its preview label shows `---` rather than plotting
