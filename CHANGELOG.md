@@ -56,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the binding reference, and existing binding syntax remain available.
   See [Create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
 
+### Fixed
+
+* Increase the Home Assistant service action's portal input limit from 19 to
+  63 characters to match existing firmware support, allowing longer service
+  names such as `media_previous_track` without increasing fixed RAM usage.
+
 ## [1.42.0] - 2026-10-20
 
 ### Added

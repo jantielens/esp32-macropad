@@ -20,7 +20,7 @@
             h += '</div>';
             h += '<div class="form-group">';
             h += '<label class="form-label" for="' + prefix + '-ha-service">Service</label>';
-            h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-ha-service" maxlength="19" placeholder="toggle">';
+            h += '<input type="text" class="form-control form-control-sm" id="' + prefix + '-ha-service" maxlength="63" placeholder="toggle">';
             h += '</div>';
             h += '<div class="form-group">';
             h += '<label class="form-label" for="' + prefix + '-ha-data">Data (optional)</label>';
