@@ -1,6 +1,8 @@
 #include <SPI.h>
 #include "drivers/it8951_epaper_driver.h"
 #include "drivers/monochrome_render.h"
+#include "presented_frame.h"
+#include "presented_png.h"
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -21,6 +23,137 @@ static std::vector<unsigned long> delays;
 static std::function<void()> waveformHook, uploadHook;
 static EpaperRefreshSettings settings = {EPAPER_RENDER_MODE_GRAYSCALE, 1000, 500, true, 2, 0, 128};
 #define CHECK(condition) do { if (!(condition)) { std::printf("FAIL %d: %s\n", __LINE__, #condition); ++failures; } } while (0)
+
+static uint32_t readBigEndian32(const uint8_t* bytes) {
+    return (uint32_t(bytes[0]) << 24) | (uint32_t(bytes[1]) << 16) |
+        (uint32_t(bytes[2]) << 8) | bytes[3];
+}
+
+static uint32_t referenceCrc32(const uint8_t* bytes, size_t length) {
+    uint32_t crc = 0xFFFFFFFF;
+    for (size_t index = 0; index < length; ++index) {
+        crc ^= bytes[index];
+        for (uint8_t bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ ((crc & 1) ? 0xEDB88320 : 0);
+    }
+    return ~crc;
+}
+
+static uint32_t referenceAdler32(const std::vector<uint8_t>& bytes) {
+    uint32_t a = 1, b = 0;
+    for (uint8_t value : bytes) {
+        a = (a + value) % 65521;
+        b = (b + a) % 65521;
+    }
+    return (b << 16) | a;
+}
+
+static void checkPresentedPng(uint16_t width, uint16_t height, uint8_t bitDepth,
+                              const std::vector<uint8_t>& pixels,
+                              const std::vector<uint8_t>& expectedScanlines) {
+    size_t pixelBytes = 0, pngCapacity = 0;
+    CHECK(presented_png::encoded_size(width, height, bitDepth, &pixelBytes, &pngCapacity));
+    CHECK(pixelBytes == pixels.size());
+    if (!pixelBytes || !pngCapacity || pixelBytes != pixels.size()) return;
+
+    std::vector<uint8_t> png(pngCapacity);
+    size_t pngSize = 0;
+    CHECK(presented_png::encode(width, height, bitDepth, pixels.data(), pixels.size(),
+                                png.data(), png.size(), &pngSize));
+    CHECK(pngSize == png.size());
+    if (pngSize != png.size()) return;
+
+    static const uint8_t signature[] = {137, 80, 78, 71, 13, 10, 26, 10};
+    CHECK(memcmp(png.data(), signature, sizeof(signature)) == 0);
+    size_t offset = sizeof(signature);
+    std::vector<uint8_t> compressed;
+    bool sawHeader = false, sawImage = false, sawEnd = false;
+    while (offset + 12 <= png.size()) {
+        const uint32_t chunkBytes = readBigEndian32(png.data() + offset);
+        offset += 4;
+        const size_t chunkStart = offset;
+        if (chunkBytes > png.size() - offset - 4) {
+            CHECK(false);
+            return;
+        }
+        const uint8_t* type = png.data() + offset;
+        const uint8_t* data = type + 4;
+        const uint32_t storedCrc = readBigEndian32(data + chunkBytes);
+        CHECK(storedCrc == referenceCrc32(type, size_t(chunkBytes) + 4));
+        if (memcmp(type, "IHDR", 4) == 0) {
+            CHECK(!sawHeader && chunkBytes == 13);
+            sawHeader = true;
+            CHECK(readBigEndian32(data) == width && readBigEndian32(data + 4) == height);
+            CHECK(data[8] == bitDepth && data[9] == 0 && data[10] == 0 &&
+                  data[11] == 0 && data[12] == 0);
+        } else if (memcmp(type, "IDAT", 4) == 0) {
+            CHECK(sawHeader && !sawEnd);
+            sawImage = true;
+            compressed.insert(compressed.end(), data, data + chunkBytes);
+        } else if (memcmp(type, "IEND", 4) == 0) {
+            CHECK(sawImage && chunkBytes == 0);
+            sawEnd = true;
+        } else {
+            CHECK(false);
+        }
+        offset = chunkStart + size_t(chunkBytes) + 8;
+        if (sawEnd) break;
+    }
+    CHECK(sawHeader && sawImage && sawEnd && offset == png.size());
+    if (compressed.size() < 6) {
+        CHECK(false);
+        return;
+    }
+    CHECK(compressed[0] == 0x78 && compressed[1] == 0x01);
+    std::vector<uint8_t> decoded;
+    size_t deflateOffset = 2;
+    bool finalBlock = false;
+    while (!finalBlock && deflateOffset + 5 <= compressed.size() - 4) {
+        const uint8_t header = compressed[deflateOffset++];
+        finalBlock = (header & 1) != 0;
+        CHECK((header & 0xFE) == 0);
+        const uint16_t blockBytes = uint16_t(compressed[deflateOffset]) |
+            (uint16_t(compressed[deflateOffset + 1]) << 8);
+        const uint16_t inverseBytes = uint16_t(compressed[deflateOffset + 2]) |
+            (uint16_t(compressed[deflateOffset + 3]) << 8);
+        deflateOffset += 4;
+        CHECK(uint16_t(~blockBytes) == inverseBytes);
+        if (blockBytes > compressed.size() - 4 - deflateOffset) {
+            CHECK(false);
+            return;
+        }
+        decoded.insert(decoded.end(), compressed.begin() + deflateOffset,
+                       compressed.begin() + deflateOffset + blockBytes);
+        deflateOffset += blockBytes;
+    }
+    CHECK(finalBlock && deflateOffset + 4 == compressed.size());
+    CHECK(decoded == expectedScanlines);
+    CHECK(readBigEndian32(compressed.data() + deflateOffset) == referenceAdler32(decoded));
+
+    size_t ignored = 0;
+    CHECK(!presented_png::encoded_size(0, height, bitDepth, nullptr, &ignored));
+    CHECK(!presented_png::encode(width, height, bitDepth, pixels.data(), pixels.size(),
+                                 png.data(), png.size() - 1, &pngSize));
+}
+
+static void testPresentedPng() {
+    checkPresentedPng(9, 2, 1, {0x80, 0x80, 0x01, 0x00},
+                      {0, 0x80, 0x80, 0, 0x01, 0x00});
+    checkPresentedPng(5, 2, 4, {0x12, 0x34, 0x50, 0x67, 0x89, 0xA0},
+                      {0, 0x12, 0x34, 0x50, 0, 0x67, 0x89, 0xA0});
+    std::vector<uint8_t> pixels(512 * 128);
+    std::vector<uint8_t> scanlines;
+    scanlines.reserve((512 + 1) * 128);
+    for (uint16_t row = 0; row < 128; ++row) {
+        scanlines.push_back(0);
+        for (uint16_t column = 0; column < 512; ++column) {
+            const uint8_t value = uint8_t(row * 17 + column * 31);
+            pixels[size_t(row) * 512 + column] = value;
+            scanlines.push_back(value);
+        }
+    }
+    checkPresentedPng(4095, 128, 1, pixels, scanlines);
+}
 
 extern "C" unsigned long millis() { return clockMs; }
 unsigned long micros() { return uint32_t(clockMs * 1000); }
@@ -184,8 +317,71 @@ static void checkConversion(int rotation, int mode, int conversion) {
     CHECK(uploads == 1);
 }
 
+static uint8_t readPresentedGray(const std::vector<uint8_t>& pixels, size_t rowBytes,
+                                uint16_t x, uint16_t y, uint8_t bitDepth) {
+    const uint8_t value = pixels[size_t(y) * rowBytes +
+        (bitDepth == 1 ? x / 8 : x / 2)];
+    return bitDepth == 1 ? ((value >> (7 - (x & 7))) & 1) :
+        ((x & 1) ? value & 0x0F : value >> 4);
+}
+
+static void checkPresentedCapture(uint8_t rotation, int mode) {
+    reset();
+    DeviceConfig config{};
+    config.epaper_render_mode = mode;
+    config.epaper_bw_threshold = 128;
+    IT8951EpaperDriver driver(&config);
+    driver.init();
+    driver.setRotation(rotation);
+
+    IT8951EpaperDriver::PresentedFrameInfo info;
+    CHECK(!driver.getPresentedFrameInfo(info));
+    std::vector<uint8_t> pixels(1872 * 1404 / 2);
+    CHECK(!driver.copyPresentedFrame(pixels.data(), pixels.size()));
+    pixel(driver, 0, 0, 0);
+    pixel(driver, driver.width() - 1, 0, 0x8410);
+    waveformHook = [&] {
+        CHECK(!driver.getPresentedFrameInfo(info));
+        CHECK(!driver.copyPresentedFrame(pixels.data(), pixels.size()));
+    };
+    driver.present();
+    waveformHook = nullptr;
+
+    CHECK(driver.getPresentedFrameInfo(info));
+    CHECK(info.width == driver.width() && info.height == driver.height());
+    CHECK(info.bitDepth == (mode == EPAPER_RENDER_MODE_BW ? 1 : 4));
+    const size_t rowBytes = presented_frame_row_bytes(info.width, info.bitDepth);
+    const size_t required = rowBytes * info.height;
+    CHECK(required == presented_frame_bytes(info.width, info.height, info.bitDepth));
+    CHECK(driver.copyPresentedFrame(pixels.data(), required));
+    CHECK(readPresentedGray(pixels, rowBytes, 0, 0, info.bitDepth) == 0);
+
+    const uint8_t red = ((0x8410 >> 11) & 31) * 255 / 31;
+    const uint8_t green = ((0x8410 >> 5) & 63) * 255 / 63;
+    const uint8_t blue = (0x8410 & 31) * 255 / 31;
+    const uint8_t luminance = (red * 77 + green * 150 + blue * 29) >> 8;
+    const uint8_t expected = mode == EPAPER_RENDER_MODE_BW ?
+        (monochrome_is_white(luminance, driver.width() - 1, 0,
+            MONOCHROME_CONVERSION_THRESHOLD, 128) ? 1 : 0) :
+        (uint16_t(luminance) * 15 + 127) / 255;
+    CHECK(readPresentedGray(pixels, rowBytes, info.width - 1, 0, info.bitDepth) == expected);
+
+    if (rotation == 1) {
+        pixel(driver, 1, 0, 0);
+        CHECK(driver.copyPresentedFrame(pixels.data(), required));
+        CHECK(readPresentedGray(pixels, rowBytes, 1, 0, info.bitDepth) ==
+            (info.bitDepth == 1 ? 1 : 15));
+        driver.present();
+        CHECK(driver.copyPresentedFrame(pixels.data(), required));
+        CHECK(readPresentedGray(pixels, rowBytes, 1, 0, info.bitDepth) == 0);
+    }
+}
+
 int main() {
+    testPresentedPng();
     for (int rotation : {0, 1, 2, 3}) {
+        checkPresentedCapture(rotation, EPAPER_RENDER_MODE_BW);
+        checkPresentedCapture(rotation, EPAPER_RENDER_MODE_GRAYSCALE);
         checkConversion(rotation, EPAPER_RENDER_MODE_GRAYSCALE, MONOCHROME_CONVERSION_THRESHOLD);
         for (int conversion : {MONOCHROME_CONVERSION_THRESHOLD, MONOCHROME_CONVERSION_BAYER,
                                MONOCHROME_CONVERSION_BLUE_NOISE}) {
@@ -272,6 +468,8 @@ int main() {
             pixel(driver, 33, 2, 0);
             busy = true;
             driver.present();
+            IT8951EpaperDriver::PresentedFrameInfo failedFrame;
+            CHECK(!driver.getPresentedFrameInfo(failedFrame));
 #if HAS_DISPLAY_DIAGNOSTICS
             CHECK(driver.getPresentationStats(&telemetry));
             CHECK(telemetry.failures == 1 && !telemetry.last.success);
@@ -279,6 +477,7 @@ int main() {
 #endif
             busy = false;
             driver.present();
+            CHECK(driver.getPresentedFrameInfo(failedFrame));
             CHECK(arguments(0x0034).back() == std::vector<uint16_t>({0, 0, 1872, 1404, 2}));
             transactions.clear();
             CHECK(driver.requestFullRefresh());

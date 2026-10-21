@@ -1,5 +1,6 @@
 #include "it8951_epaper_driver.h"
 #include "monochrome_render.h"
+#include "../presented_frame.h"
 
 #include "../board_config.h"
 #include "../log_manager.h"
@@ -605,6 +606,7 @@ void IT8951EpaperDriver::present() {
 #endif
 		pendingChanges = false;
 		dirtyRegionValid = false;
+		hasPresentedFrame = false;
 		xSemaphoreGive(framebufferMutex);
 
 		const uint32_t startMs = millis();
@@ -700,6 +702,50 @@ void IT8951EpaperDriver::present() {
 					forceFull, scheduledFull, (unsigned long)partialCountBefore,
 					settings.epaper_full_refresh_threshold);
 		}
+}
+
+bool IT8951EpaperDriver::getPresentedFrameInfo(PresentedFrameInfo& info) const {
+		if (!initialized || !framebufferMutex) return false;
+		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+		const bool available = hasPresentedFrame;
+		if (available) {
+				info.width = rotation & 1 ? kPanelHeight : kPanelWidth;
+				info.height = rotation & 1 ? kPanelWidth : kPanelHeight;
+				info.bitDepth = usesBwMode() ? 1 : 4;
+		}
+		xSemaphoreGive(framebufferMutex);
+		return available;
+}
+
+bool IT8951EpaperDriver::copyPresentedFrame(uint8_t* pixels, size_t length) {
+		PresentedFrameInfo info;
+		if (!getPresentedFrameInfo(info) || !pixels ||
+				length < presented_frame_bytes(info.width, info.height, info.bitDepth)) return false;
+		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+		if (!hasPresentedFrame) {
+				xSemaphoreGive(framebufferMutex);
+				return false;
+		}
+
+		const size_t rowBytes = presented_frame_row_bytes(info.width, info.bitDepth);
+		memset(pixels, 0, rowBytes * info.height);
+		for (uint16_t row = 0; row < info.height; ++row) {
+				for (uint16_t column = 0; column < info.width; ++column) {
+						uint16_t nativeX = 0, nativeY = 0;
+						if (!presented_frame_native_coords(kPanelWidth, kPanelHeight, rotation,
+								column, row, &nativeX, &nativeY)) {
+								xSemaphoreGive(framebufferMutex);
+								return false;
+						}
+						const size_t offset = size_t(nativeY) * (kPanelWidth / 2) + nativeX / 2;
+						const uint8_t packed = presentedFramebuffer[offset];
+						const uint8_t gray = nativeX & 1 ? packed & 0x0F : packed >> 4;
+						presented_frame_write_gray(pixels, rowBytes, column, row, info.bitDepth,
+								info.bitDepth == 1 ? (gray ? 1 : 0) : gray);
+				}
+		}
+		xSemaphoreGive(framebufferMutex);
+		return true;
 }
 
 #if HAS_DISPLAY_DIAGNOSTICS

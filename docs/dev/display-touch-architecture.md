@@ -360,6 +360,13 @@ the SPI presentation snapshot. The driver follows Elecrow's V1.2A sample
 clear/partial sequence with GC/DU waveforms, applies cadence and no-op coalescing, and stops accepting
 requests after a bounded BUSY timeout. It has no touch or backlight control.
 
+CrowPanel, Inkplate 6FLICK, and IT8951 expose an optional compact presented-frame
+capture through `DisplayDriver`. Drivers copy only a completed presentation
+into row-packed 1-bit or 4-bit grayscale pixels, with logical orientation
+restored by the driver. Screenshot encoding happens after the driver lock is
+released; the API allows one PNG capture/response at a time and checks available
+heap before allocating the temporary image.
+
 All three interactive drivers share `drivers/monochrome_render.h`. B/W
 conversion and its threshold level are cached at startup. Threshold defaults
 to 128; Bayer uses a 4x4 matrix; blue noise uses a fixed 64x64 threshold map.

@@ -1,5 +1,6 @@
 #include "crowpanel42_epaper_driver.h"
 #include "monochrome_render.h"
+#include "../presented_frame.h"
 #include "../config_manager.h"
 #include "../log_manager.h"
 #include "../ota_activity.h"
@@ -247,6 +248,7 @@ void CrowPanel42EpaperDriver::present() {
         const bool full = forceFull || !hasPresented ||
             (settings.epaper_full_refresh_threshold && partialsSinceFull >= settings.epaper_full_refresh_threshold);
         memcpy(snapshot, drawing, framebufferBytes);
+        hasPresented = false;
         pending = false;
         forceFull = false;
         xSemaphoreGive(mutex);
@@ -264,25 +266,37 @@ void CrowPanel42EpaperDriver::present() {
     }
 }
 
+bool CrowPanel42EpaperDriver::getPresentedFrameInfo(PresentedFrameInfo& info) const {
+    if (!isAvailable() || !mutex) return false;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    const bool available = hasPresented;
+    if (available) {
+        info.width = rotation & 1 ? 300 : 400;
+        info.height = rotation & 1 ? 400 : 300;
+        info.bitDepth = 1;
+    }
+    xSemaphoreGive(mutex);
+    return available;
+}
+
 bool CrowPanel42EpaperDriver::copyPresentedFrame(uint8_t* pixels, size_t length) {
-    if (!isAvailable() || !pixels || length < framebufferBytes) return false;
+    PresentedFrameInfo info;
+    if (!getPresentedFrameInfo(info) || !pixels ||
+            length < presented_frame_bytes(info.width, info.height, info.bitDepth)) return false;
     xSemaphoreTake(mutex, portMAX_DELAY);
     if (!hasPresented) { xSemaphoreGive(mutex); return false; }
-    memset(pixels, 0, framebufferBytes);
-    const int logicalWidth = width();
-    const int logicalHeight = height();
-    for (int row = 0; row < logicalHeight; ++row) {
-        for (int column = 0; column < logicalWidth; ++column) {
-            int nativeX = column;
-            int nativeY = row;
-            if (rotation == 1) { nativeX = 399 - row; nativeY = column; }
-            else if (rotation == 2) { nativeX = 399 - column; nativeY = 299 - row; }
-            else if (rotation == 3) { nativeX = row; nativeY = 299 - column; }
-            const size_t sourceIndex = size_t(nativeY) * 50 + size_t(nativeX) / 8;
-            if (snapshot[sourceIndex] & (0x80 >> (nativeX & 7))) {
-                const size_t pixelIndex = size_t(row) * logicalWidth + column;
-                pixels[pixelIndex / 8] |= uint8_t(0x80 >> (pixelIndex & 7));
+    const size_t rowBytes = presented_frame_row_bytes(info.width, info.bitDepth);
+    memset(pixels, 0, rowBytes * info.height);
+    for (uint16_t row = 0; row < info.height; ++row) {
+        for (uint16_t column = 0; column < info.width; ++column) {
+            uint16_t nativeX = 0, nativeY = 0;
+            if (!presented_frame_native_coords(400, 300, rotation, column, row, &nativeX, &nativeY)) {
+                xSemaphoreGive(mutex);
+                return false;
             }
+            const size_t sourceIndex = size_t(nativeY) * 50 + nativeX / 8;
+            const bool white = snapshot[sourceIndex] & (0x80 >> (nativeX & 7));
+            presented_frame_write_gray(pixels, rowBytes, column, row, info.bitDepth, white ? 1 : 0);
         }
     }
     xSemaphoreGive(mutex);

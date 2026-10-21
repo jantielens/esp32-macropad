@@ -3,6 +3,9 @@
 #if HAS_DISPLAY
 
 #include "display_manager.h"
+#include "display_driver.h"
+#include "presented_frame.h"
+#include "presented_png.h"
 #include "web_portal_auth.h"
 #include "web_portal_cors.h"
 #include "log_manager.h"
@@ -13,13 +16,21 @@
 
 #include <lvgl.h>
 #include <esp_heap_caps.h>
+#include <atomic>
 #include <memory>
 #include <new>
 
 #if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
 #include "drivers/crowpanel42_epaper_driver.h"
-#define LODEPNG_NO_COMPILE_CPP
-#include <libs/lodepng/lodepng.h>
+#define HAS_PRESENTED_FRAME_PNG 1
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_INKPLATE6FLICK
+#include "drivers/inkplate6flick_epaper_driver.h"
+#define HAS_PRESENTED_FRAME_PNG 1
+#elif DISPLAY_DRIVER == DISPLAY_DRIVER_IT8951
+#include "drivers/it8951_epaper_driver.h"
+#define HAS_PRESENTED_FRAME_PNG 1
+#else
+#define HAS_PRESENTED_FRAME_PNG 0
 #endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
@@ -80,12 +91,38 @@ struct ScreenshotCaptureResult {
 		uint16_t width = 0;
 		uint16_t height = 0;
 		uint32_t stride = 0;
+		uint8_t bitDepth = 0;
+		uint16_t errorStatus = 500;
 };
 
 struct ScreenshotCaptureRequest {
 		ScreenshotCaptureResult* result;
-		bool monochrome;
+		bool presentedFrame;
 };
+
+#if HAS_PRESENTED_FRAME_PNG
+static std::atomic<bool> s_pngCaptureInFlight{false};
+
+class ScreenshotPngLease {
+public:
+		bool acquire() {
+				bool expected = false;
+				acquired = s_pngCaptureInFlight.compare_exchange_strong(expected, true);
+				return acquired;
+		}
+
+		void transfer() { acquired = false; }
+
+		~ScreenshotPngLease() {
+				if (acquired) s_pngCaptureInFlight.store(false);
+		}
+
+private:
+		bool acquired = false;
+};
+
+static constexpr size_t PNG_MEMORY_SAFETY_RESERVE = 64 * 1024;
+#endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
 static jpeg_encoder_handle_t s_hw_jpeg = nullptr;
@@ -201,25 +238,58 @@ static void captureScreenshot(const void* opaque, bool* ok, char* msg, size_t ms
 				return;
 		}
 
-#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
-		if (request->monochrome) {
-				auto* driver = displayManager ? static_cast<CrowPanel42EpaperDriver*>(displayManager->getDriver()) : nullptr;
+#if HAS_PRESENTED_FRAME_PNG
+		if (request->presentedFrame) {
+				DisplayDriver* driver = displayManager ? displayManager->getDriver() : nullptr;
+				DisplayDriver::PresentedFrameInfo info;
 				if (!driver || !driver->isAvailable()) {
+						result->errorStatus = 503;
 						snprintf(msg, msgLen, "panel capture unavailable");
 						return;
 				}
-				result->width = driver->width();
-				result->height = driver->height();
-				const size_t bytes = (size_t(result->width) * result->height + 7) / 8;
-				result->pixels = static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+				if (!driver->getPresentedFrameInfo(info)) {
+						result->errorStatus = 503;
+						snprintf(msg, msgLen, "no completed panel frame available");
+						return;
+				}
+				if (!info.width || !info.height || (info.bitDepth != 1 && info.bitDepth != 4)) {
+						snprintf(msg, msgLen, "unsupported presented frame format");
+						return;
+				}
+				result->width = info.width;
+				result->height = info.height;
+				result->bitDepth = info.bitDepth;
+				size_t pixelBytes = 0, pngBytes = 0;
+				if (!presented_png::encoded_size(info.width, info.height, info.bitDepth,
+						&pixelBytes, &pngBytes)) {
+						snprintf(msg, msgLen, "unsupported presented frame format");
+						return;
+				}
+				if (pixelBytes > SIZE_MAX - PNG_MEMORY_SAFETY_RESERVE ||
+						pngBytes > SIZE_MAX - PNG_MEMORY_SAFETY_RESERVE - pixelBytes) {
+						result->errorStatus = 503;
+						snprintf(msg, msgLen, "PNG capture exceeds available memory range");
+						return;
+				}
+				const size_t minFree = pixelBytes + pngBytes + PNG_MEMORY_SAFETY_RESERVE;
+				if (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) < minFree ||
+						heap_caps_get_free_size(MALLOC_CAP_8BIT) < minFree) {
+						result->errorStatus = 503;
+						snprintf(msg, msgLen, "insufficient free memory for PNG capture");
+						return;
+				}
+				result->pixels = static_cast<uint8_t*>(
+						heap_caps_malloc(pixelBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
 				if (!result->pixels) {
+						result->errorStatus = 503;
 						snprintf(msg, msgLen, "screenshot buffer allocation failed");
 						return;
 				}
-				if (!driver->copyPresentedFrame(result->pixels, bytes)) {
+				if (!driver->copyPresentedFrame(result->pixels, pixelBytes)) {
 						free(result->pixels);
 						result->pixels = nullptr;
-						snprintf(msg, msgLen, "no presented panel frame available");
+						result->errorStatus = 503;
+						snprintf(msg, msgLen, "no completed panel frame available");
 						return;
 				}
 				*ok = true;
@@ -408,24 +478,45 @@ static bool sendJpeg(AsyncWebServerRequest* request, ScreenshotCaptureResult* ca
 }
 #endif
 
-#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
-static void sendMonochromePng(AsyncWebServerRequest* request, ScreenshotCaptureResult* capture) {
-		unsigned char* pngBuf = nullptr;
-		size_t pngSize = 0;
-		const unsigned error = lodepng_encode_memory(&pngBuf, &pngSize, capture->pixels,
-				capture->width, capture->height, LCT_GREY, 1);
-		free(capture->pixels);
-		delete capture;
-		if (error) {
-				lv_free(pngBuf);
-				LOGE(TAG, "PNG encoding failed: %u", error);
-				request->send(500, "text/plain", "PNG encoding failed");
+#if HAS_PRESENTED_FRAME_PNG
+static void sendPresentedPng(AsyncWebServerRequest* request, ScreenshotCaptureResult* capture,
+		ScreenshotPngLease& lease) {
+		size_t pngSize = 0, pngCapacity = 0;
+		uint8_t* pngBuf = nullptr;
+		uint16_t failureStatus = 500;
+		const char* failureMessage = "PNG encoding failed";
+		if (capture && capture->pixels &&
+				presented_png::encoded_size(capture->width, capture->height, capture->bitDepth,
+						nullptr, &pngCapacity)) {
+				pngBuf = static_cast<uint8_t*>(
+						heap_caps_malloc(pngCapacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+				if (!pngBuf) {
+						failureStatus = 503;
+						failureMessage = "Insufficient memory for PNG encoding; retry later";
+				} else if (!presented_png::encode(capture->width, capture->height, capture->bitDepth,
+								capture->pixels, presented_frame_bytes(capture->width, capture->height,
+										capture->bitDepth),
+								pngBuf, pngCapacity, &pngSize)) {
+						heap_caps_free(pngBuf);
+						pngBuf = nullptr;
+				}
+		}
+		if (capture) {
+				free(capture->pixels);
+				delete capture;
+		}
+		if (!pngBuf) {
+				request->send(failureStatus, "text/plain", failureMessage);
 				return;
 		}
-		std::shared_ptr<unsigned char> payload(pngBuf, lv_free);
+		std::shared_ptr<unsigned char> payload(pngBuf, [](unsigned char* data) {
+				heap_caps_free(data);
+				s_pngCaptureInFlight.store(false);
+		});
+		lease.transfer();
 		AsyncWebServerResponse* response = request->beginChunkedResponse(
 				"image/png",
-				[payload, pngSize](uint8_t* buffer, size_t maxLen, size_t index) mutable -> size_t {
+				[payload = std::move(payload), pngSize](uint8_t* buffer, size_t maxLen, size_t index) mutable -> size_t {
 						if (index >= pngSize) return 0;
 						size_t count = pngSize - index;
 						if (count > maxLen) count = maxLen;
@@ -489,10 +580,10 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 				if (value == "bmp") {
 						format = ScreenshotFormat::Bmp;
 				} else if (value == "png") {
-#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+#if HAS_PRESENTED_FRAME_PNG
 						format = ScreenshotFormat::Png;
 #else
-						request->send(400, "text/plain", "Monochrome PNG screenshots are not supported on this board");
+						request->send(400, "text/plain", "Presented-frame PNG screenshots are not supported on this board");
 						return;
 #endif
 				} else if (value == "jpg") {
@@ -503,10 +594,18 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 						return;
 						#endif
 				} else {
-						request->send(400, "text/plain", "Invalid format; expected bmp, jpg, or png (CrowPanel only)");
+						request->send(400, "text/plain", "Invalid format; expected bmp, jpg, or supported presented-frame png");
 						return;
 				}
 		}
+
+#if HAS_PRESENTED_FRAME_PNG
+		ScreenshotPngLease pngLease;
+		if (format == ScreenshotFormat::Png && !pngLease.acquire()) {
+				request->send(503, "text/plain", "PNG capture service busy; retry later");
+				return;
+		}
+#endif
 
 		uint8_t quality = DEFAULT_JPEG_QUALITY;
 		if (!parseQuality(request, &quality)) {
@@ -559,15 +658,16 @@ void handleGetScreenshot(AsyncWebServerRequest *request) {
 				return;
 		}
 		if (!captureOk) {
+				const uint16_t status = capture->errorStatus;
 				delete capture;
-				request->send(500, "text/plain",
+				request->send(status, "text/plain",
 						captureMessage[0] ? captureMessage : "Screenshot capture failed");
 				return;
 		}
 
-#if DISPLAY_DRIVER == DISPLAY_DRIVER_CROWPANEL_42
+#if HAS_PRESENTED_FRAME_PNG
 		if (format == ScreenshotFormat::Png) {
-				sendMonochromePng(request, capture);
+				sendPresentedPng(request, capture, pngLease);
 				return;
 		}
 #endif

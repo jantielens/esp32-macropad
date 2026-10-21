@@ -54,6 +54,12 @@ public:
 				// DisplayManager must call present() to push that buffer to the panel.
 				Buffered = 1,
 		};
+
+		struct PresentedFrameInfo {
+				uint16_t width = 0;
+				uint16_t height = 0;
+				uint8_t bitDepth = 0;
+		};
 		
 		// Hardware initialization
 		virtual void init() = 0;
@@ -109,6 +115,11 @@ public:
 
 		// Returns the active panel presentation mode, or -1 when not applicable.
 		virtual int presentationMode() const { return -1; }
+
+		// Optional compact, row-packed grayscale snapshot of the last completed
+		// panel presentation. Supported bit depths are 1 and 4.
+		virtual bool getPresentedFrameInfo(PresentedFrameInfo&) const { return false; }
+		virtual bool copyPresentedFrame(uint8_t*, size_t) { return false; }
 
 		// Implementations publish a synchronized snapshot without taking the LVGL lock.
 #if HAS_DISPLAY_DIAGNOSTICS

@@ -1,5 +1,6 @@
 #include "drivers/crowpanel42_epaper_driver.h"
 #include "drivers/monochrome_render.h"
+#include "presented_frame.h"
 #include "config_manager.h"
 #include <cstdio>
 #include <cstdlib>
@@ -179,12 +180,16 @@ int main() {
                     for (int column = 0; column < 64; ++column) pixel(driver, column + 3, row + 5, 0x7bef);
                 }
                 driver.present();
-                std::vector<uint8_t> image(15000);
-                CHECK(driver.copyPresentedFrame(image.data(), image.size()));
+                std::vector<uint8_t> image(15200);
+                CrowPanel42EpaperDriver::PresentedFrameInfo info;
+                CHECK(driver.getPresentedFrameInfo(info));
+                CHECK(driver.copyPresentedFrame(image.data(),
+                    presented_frame_bytes(info.width, info.height, info.bitDepth)));
+                const size_t rowBytes = presented_frame_row_bytes(info.width, info.bitDepth);
                 for (int row = 0; row < 64; ++row) {
                     for (int column = 0; column < 64; ++column) {
-                        const size_t offset = size_t(row + 5) * driver.width() + column + 3;
-                        const bool white = image[offset / 8] & (0x80 >> (offset & 7));
+                        const size_t offset = size_t(row + 5) * rowBytes + (column + 3) / 8;
+                        const bool white = image[offset] & (0x80 >> ((column + 3) & 7));
                         CHECK(white == monochrome_is_white(124, column + 3, row + 5, conversion, 64));
                     }
                 }
@@ -258,23 +263,38 @@ int main() {
         driver.setRotation(rotation);
         CHECK(driver.width() == (rotation & 1 ? 300 : 400));
         CHECK(driver.height() == (rotation & 1 ? 400 : 300));
-        std::vector<uint8_t> captured(15000);
+        std::vector<uint8_t> captured(15200);
+        CrowPanel42EpaperDriver::PresentedFrameInfo info;
+        CHECK(!driver.getPresentedFrameInfo(info));
         CHECK(!driver.copyPresentedFrame(captured.data(), captured.size()));
         pixel(driver, 0, 0, 0);
         pixel(driver, driver.width() - 1, 1, 0);
+        waveform_hook = [&] {
+            CHECK(!driver.getPresentedFrameInfo(info));
+            CHECK(!driver.copyPresentedFrame(captured.data(), captured.size()));
+        };
         driver.present();
+        waveform_hook = nullptr;
+        CHECK(driver.getPresentedFrameInfo(info));
+        CHECK(info.width == driver.width() && info.height == driver.height() && info.bitDepth == 1);
         const size_t indices[] = {0, 49, 14999, 14950};
         const uint8_t values[] = {0x7f, 0xfe, 0xfe, 0x7f};
         CHECK(frames().back().at(indices[rotation]) == values[rotation]);
         CHECK(!driver.copyPresentedFrame(nullptr, captured.size()));
-        CHECK(!driver.copyPresentedFrame(captured.data(), captured.size() - 1));
+        const size_t required = presented_frame_bytes(info.width, info.height, info.bitDepth);
+        CHECK(!driver.copyPresentedFrame(captured.data(), required - 1));
         pixel(driver, 1, 0, 0);
         const size_t commandCount = commands.size();
         CHECK(driver.copyPresentedFrame(captured.data(), captured.size()));
         CHECK(commands.size() == commandCount);
-        for (size_t pixelIndex = 0; pixelIndex < 120000; ++pixelIndex) {
-            const bool white = captured[pixelIndex / 8] & (0x80 >> (pixelIndex & 7));
-            CHECK(white == (pixelIndex != 0 && pixelIndex != size_t(driver.width() * 2 - 1)));
+        const size_t rowBytes = presented_frame_row_bytes(info.width, info.bitDepth);
+        for (uint16_t row = 0; row < info.height; ++row) {
+            for (uint16_t column = 0; column < info.width; ++column) {
+                const bool white = captured[size_t(row) * rowBytes + column / 8] & (0x80 >> (column & 7));
+                const bool expectedWhite = !((column == 0 && row == 0) ||
+                    (column == info.width - 1 && row == 1));
+                CHECK(white == expectedWhite);
+            }
         }
     }
     for (bool alreadyPresented : {false, true}) {
@@ -354,6 +374,8 @@ int main() {
         pixel(driver, 0, 0, 0);
         driver.present();
         CHECK(!driver.isAvailable() && !driver.requestFullRefresh());
+        CrowPanel42EpaperDriver::PresentedFrameInfo info;
+        CHECK(!driver.getPresentedFrameInfo(info));
         CHECK(clock_ms - start <= 15600 && clock_ms - start >= 15420);
     }
     for (int failure = 1; failure <= 3; ++failure) {

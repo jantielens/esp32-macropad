@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Extend lossless presented-frame PNG screenshots to the Inkplate 6FLICK and
+  IT8951 e-paper drivers. Captures preserve the completed B/W or grayscale
+  presentation and orientation, use a single in-flight slot, and return a
+  retryable error when available heap is below the capture reserve.
 * Add exact-topic MQTT inspection to the binding and button builders. Select a
   received raw payload, JSON scalar field, or custom path, with explicit
   handling for missing messages, empty payloads, zero, and truncated values.

@@ -35,6 +35,8 @@ public:
 		bool requestFullRefresh() override;
 		bool isAvailable() const override { return initialized; }
 		int presentationMode() const override { return panelMode; }
+		bool getPresentedFrameInfo(PresentedFrameInfo& info) const override;
+		bool copyPresentedFrame(uint8_t* pixels, size_t length) override;
 
 private:
 		Inkplate* display;
