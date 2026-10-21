@@ -491,15 +491,12 @@ const haButtonBuilderProvider = {
     },
     historyBackfill(candidate) {
         if (!candidate.capabilities.historyBackfill || window.__device_caps?.ha_history !== true) return null;
-        return { entity: candidate.reference.detail.entity_id, stat: 'mean' };
+        return { entity: candidate.reference.detail.entity_id };
     },
     buildHistoryFields(candidate, suffix) {
         const backfill = this.historyBackfill(candidate);
         if (!backfill) return {};
-        return {
-            ['widget_sparkline_ha_entity' + suffix]: backfill.entity,
-            ['widget_sparkline_ha_stat' + suffix]: backfill.stat
-        };
+        return { ['widget_sparkline_ha_entity' + suffix]: backfill.entity };
     },
     validateHistoryFields(candidate, suffix, button, validateText) {
         const backfill = this.historyBackfill(candidate);

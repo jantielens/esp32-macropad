@@ -283,20 +283,27 @@ foreach(profile IN ITEMS psram internal)
     endif()
 endforeach()
 
-add_host_gtest(test_data_stream_display_only
-    test_data_stream_display_only.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/data_stream.cpp
-    ${PROJECT_SOURCE_DIR}/src/app/widgets/widget.cpp)
-target_include_directories(test_data_stream_display_only PRIVATE
-    ${HOST_ARDUINOJSON_DIR}
-    ${HOST_LVGL_DIR})
-target_compile_definitions(test_data_stream_display_only PRIVATE
-    HAS_DISPLAY=1 HAS_MQTT=0 HAS_HA_LIVE=0 HAS_HA_HISTORY=0 HAS_PSRAM=0)
-target_compile_options(test_data_stream_display_only PRIVATE
-    -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable
-    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
-    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
-target_link_libraries(test_data_stream_display_only PRIVATE host_lvgl m)
+foreach(profile display_only history)
+    set(history_enabled 0)
+    if(profile STREQUAL history)
+        set(history_enabled 1)
+    endif()
+    add_host_gtest(test_data_stream_${profile}
+        test_data_stream_display_only.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/data_stream.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/ha_stats_resample.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/widgets/widget.cpp)
+    target_include_directories(test_data_stream_${profile} PRIVATE
+        ${HOST_ARDUINOJSON_DIR}
+        ${HOST_LVGL_DIR})
+    target_compile_definitions(test_data_stream_${profile} PRIVATE
+        HAS_DISPLAY=1 HAS_MQTT=0 HAS_HA_LIVE=0 HAS_HA_HISTORY=${history_enabled} HAS_PSRAM=0)
+    target_compile_options(test_data_stream_${profile} PRIVATE
+        -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+        "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+    target_link_libraries(test_data_stream_${profile} PRIVATE host_lvgl m)
+endforeach()
 
 add_host_gtest(test_fill_draw test_fill_draw.cpp)
 target_include_directories(test_fill_draw BEFORE PRIVATE ${HOST_ARDUINOJSON_DIR})
@@ -383,6 +390,13 @@ add_host_legacy_test(test_ha_stats_resample
     SOURCES test_ha_stats_resample.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_stats_resample.cpp
     LIBRARIES m
 )
+
+add_host_gtest(test_ha_history_decoder
+    test_ha_history_decoder.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/ha_history_decoder.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/ha_stats_resample.cpp)
+target_include_directories(test_ha_history_decoder PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_options(test_ha_history_decoder PRIVATE -Wno-deprecated-declarations)
 
 add_host_gtest(test_ha_live
     test_ha_live.cpp ${PROJECT_SOURCE_DIR}/src/app/ha_live_state.cpp

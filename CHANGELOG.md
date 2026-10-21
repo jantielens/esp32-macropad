@@ -32,11 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   metadata and suitable samples; numeric-looking text does not imply a type
   or unit. See [Build a token from a source](docs/user/pads/bindings.md#build-a-token-from-a-source).
 * Support up to three readings from different sources in one history button.
-  Home Assistant series can use recorded history where supported; MQTT and
-  on-device series collect live values while the device runs. Automatic shared
-  scales require matching known source units; entered unit text does not
-  convert readings. Local labels and live history also work on display
-  firmware without Home Assistant or MQTT.
+  Home Assistant series prefer recorded entity states and use older `mean`
+  statistics only for the uncovered prefix; MQTT and on-device series collect
+  live values while the device runs. Automatic shared scales require matching
+  known source units; entered unit text does not convert readings. Local labels
+  and live history also work on display firmware without Home Assistant or MQTT.
+* Extend Sparkline history ranges to 30 days. Incomplete raw-history responses
+  now discard partial samples before the full-window statistics fallback.
+* Add a shared Sparkline raw history limit in Sampling. Zero preserves full-window
+  raw requests; positive limits use raw data for the recent suffix and available
+  statistics for older history.
+* Reconnect Sparkline widgets when their streams register after the screen is
+  built, so history appears without saving the pad a second time.
+* Preserve actual statistics coverage when stitching Sparkline history: missing
+  periods remain gaps, overlapping initial periods are included, and the bounded
+  fallback supports the full 30-day window. Retry transient source failures
+  without finalizing partial history or overwriting locally collected samples.
 
 ### Changed
 
@@ -59,6 +70,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   buttons remain ordinary unsaved drafts until **Save Pad**. Manual entry,
   the binding reference, and existing binding syntax remain available.
   See [Create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
+* Sparkline Home Assistant backfill now prefers raw recorded entity states and
+  uses Recorder `mean` statistics only for an older uncovered prefix. The
+  per-line statistic selector is removed; saved configurations containing
+  that selector may need to be re-created. Raw-history gaps remain visible
+  instead of being bridged or filled from statistics.
 
 ### Fixed
 

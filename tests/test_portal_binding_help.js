@@ -532,12 +532,12 @@ delete context.testHelpSchemes;
         widget_sparkline_line_color: '#4CAF50', widget_sparkline_line_width: 2,
         widget_sparkline_current_dot: 5, widget_sparkline_smooth: 0,
         widget_sparkline_unified_scale: true, widget_sparkline_window: 86400, widget_sparkline_label_width: 100,
-        widget_sparkline_slots: 288, widget_sparkline_ha_entity: temperature.entity_id,
-        widget_sparkline_ha_stat: 'mean'
+        widget_sparkline_slots: 288, widget_sparkline_ha_entity: temperature.entity_id
     });
     for (const [window, slots, caption] of [
         ['3600', 12, 'Last 1 hour.'], ['18000', 60, 'Last 5 hours.'], ['21600', 72, 'Last 6 hours.'],
-        ['86400', 288, 'Last 24 hours.'], ['604800', 1024, 'Last 7 days.']
+        ['86400', 288, 'Last 24 hours.'], ['604800', 1024, 'Last 7 days.'],
+        ['2592000', 1024, 'Last 30 days.']
     ]) {
         historySession.draft.options.window = window;
         const button = context.padButtonBuilderBuild(historySession);
@@ -569,7 +569,7 @@ delete context.testHelpSchemes;
     assert.strictEqual(multi.widget_sparkline_current_label_2, '[ha:sensor.living_room_humidity;;%.1f %%]');
     assert.strictEqual(multi.widget_sparkline_line_color_2, '#2196F3');
     assert.strictEqual(multi.widget_sparkline_ha_entity_2, humidity.entity_id);
-    assert.strictEqual(multi.widget_sparkline_ha_stat_2, 'mean');
+    assert.strictEqual(multi.widget_sparkline_ha_stat_2, undefined);
     assert.match(historyBuilder.previewNote(historySession.draft), /60 seconds \(300 points per line\)/);
     historySession.draft.options.scale = 'shared';
     assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_unified_scale, true);

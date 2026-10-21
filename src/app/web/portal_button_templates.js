@@ -266,10 +266,10 @@ const padButtonBuilders = [
         },
         fields: () => [
             { name: 'window', label: 'Time range', type: 'select', default: '86400',
-                options: [['3600', '1 hour'], ['18000', '5 hours'], ['21600', '6 hours'], ['86400', '24 hours'], ['604800', '7 days']],
+                options: [['3600', '1 hour'], ['18000', '5 hours'], ['21600', '6 hours'], ['86400', '24 hours'], ['604800', '7 days'], ['2592000', '30 days']],
                 error: 'Choose a valid time range.' },
             { name: 'interval', label: 'Requested sample interval (seconds)', type: 'number',
-                default: 300, step: 'any', min: 0.1, max: 604800, error: 'Enter a sample interval between 0.1 seconds and 7 days.' },
+                default: 300, step: 'any', min: 0.1, max: 2592000, error: 'Enter a sample interval between 0.1 seconds and 30 days.' },
             { name: 'scale', label: 'Scale', type: 'select', default: 'auto',
                 options: [['auto', 'Automatic (based on source units)'], ['shared', 'Shared scale'],
                     ['independent', 'Independent per value']], error: 'Choose a valid scale.' }
@@ -323,7 +323,8 @@ const padButtonBuilders = [
         },
         previewNote({ options }) {
             const hours = Number(options.window) / 3600;
-            const range = hours === 168 ? '7 days' : hours + (hours === 1 ? ' hour' : ' hours');
+            const range = hours === 24 ? '24 hours' : hours % 24 === 0 ? (hours / 24) + ' days' :
+                hours + (hours === 1 ? ' hour' : ' hours');
             const sampling = padButtonBuilderHistorySampling(options);
             const slots = sampling.slots;
             const interval = Number(sampling.interval.toFixed(2));

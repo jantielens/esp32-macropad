@@ -39,11 +39,6 @@ typedef int8_t data_stream_handle_t;
 // Maximum length of a Home Assistant entity ID used as a history source.
 #define DATA_STREAM_HA_ENTITY_MAX_LEN 64
 
-// Recorder statistic selector (measurement and total sensors differ in semantics)
-#define HA_STAT_MEAN   0
-#define HA_STAT_STATE  1
-#define HA_STAT_SUM    2
-#define HA_STAT_COUNT  3
 #endif
 
 // Read-only snapshot of a stream's ring buffer state.
@@ -74,15 +69,14 @@ void data_stream_rebuild();
 void data_stream_poll();
 
 // Look up a stream handle by binding string + config.
-// `ha_entity` / `ha_stat` are part of the identity so that two lines sharing a
-// live binding but hydrating from different Home Assistant entities stay
-// separate. Pass nullptr / 0 when the caller has no history source.
+// `ha_entity` is part of the identity so lines sharing a live binding but
+// hydrating from different Home Assistant entities stay separate. `raw_hours`
+// also participates in identity so changes rebuild and rehydrate the stream.
 // Returns DATA_STREAM_INVALID if not found.
 data_stream_handle_t data_stream_find(const char* binding,
                                       uint32_t window_secs,
                                       uint16_t slot_count,
-                                      const char* ha_entity,
-                                      uint8_t ha_stat);
+                                      const char* ha_entity, uint16_t raw_hours = 0);
 
 // Get a read-only snapshot of a stream's state.
 // Returns false if handle is invalid or stream has no data.
@@ -102,15 +96,21 @@ uint32_t data_stream_uid(data_stream_handle_t handle);
 // that period" and are left absent.
 //
 // Live data always wins: only ring slots not yet covered by locally collected
-// samples are filled. Returns false (and changes nothing) when the handle, uid,
+// samples are filled. Incomplete results stay eligible for bounded retries;
+// previously hydrated slots are not mistaken for live samples.
+// Returns false (and changes nothing) when the handle, uid,
 // or slot configuration no longer matches the request.
 bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
                                uint64_t end_bucket, const float* values,
-                               uint16_t count);
+                               uint16_t count, bool complete = true);
 
 // Mark a stream's hydration complete without merging values. Used when
 // Recorder successfully reports no usable statistics for the requested source.
 bool data_stream_finish_history(data_stream_handle_t handle, uint32_t uid);
+
+// Release one hydration attempt when its request was cancelled by OTA or a
+// configuration change. The stream remains eligible for a later retry.
+bool data_stream_cancel_history(data_stream_handle_t handle, uint32_t uid);
 #endif // HAS_HA_HISTORY
 
 #endif // HAS_DISPLAY

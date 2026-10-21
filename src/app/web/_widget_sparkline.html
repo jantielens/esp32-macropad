@@ -28,16 +28,8 @@
                                         <label for="pad-edit-sparkline-ha-entity">History Entity</label>
                                         <input type="text" id="pad-edit-sparkline-ha-entity" maxlength="63" placeholder="e.g. sensor.living_room_temperature">
                                     </div>
-                                    <div class="form-group">
-                                        <label for="pad-edit-sparkline-ha-stat">Historical Value</label>
-                                        <select id="pad-edit-sparkline-ha-stat" onchange="padUpdateSparklineEditor()">
-                                            <option value="mean">Average reading</option>
-                                            <option value="state">Latest state</option>
-                                            <option value="sum">Accumulated total</option>
-                                        </select>
-                                    </div>
                                 </div>
-                                <small id="pad-edit-sparkline-ha-stat-help"></small>
+                                <small>Recent history uses recorded numeric readings. Older gaps can use statistical means when Home Assistant has them.</small>
                                 <small>Uses the Home Assistant URL and token configured on the Integrations page.</small>
                             </div>
                             </div>
@@ -64,9 +56,8 @@
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-2">
                                 <div class="sparkline-history-row">
                                     <div class="form-group"><label for="pad-edit-sparkline-ha-entity-2">History Entity</label><input type="text" id="pad-edit-sparkline-ha-entity-2" maxlength="63" placeholder="e.g. sensor.living_room_humidity"></div>
-                                    <div class="form-group"><label for="pad-edit-sparkline-ha-stat-2">Historical Value</label><select id="pad-edit-sparkline-ha-stat-2" onchange="padUpdateSparklineEditor()"><option value="mean">Average reading</option><option value="state">Latest state</option><option value="sum">Accumulated total</option></select></div>
                                 </div>
-                                <small id="pad-edit-sparkline-ha-stat-help-2"></small>
+                                <small>Recent history uses recorded numeric readings. Older gaps can use statistical means when Home Assistant has them.</small>
                             </div>
                             </div>
                         </details>
@@ -92,9 +83,8 @@
                             <div class="sparkline-history-fields sparkline-ha-source" id="pad-edit-sparkline-ha-fields-3">
                                 <div class="sparkline-history-row">
                                     <div class="form-group"><label for="pad-edit-sparkline-ha-entity-3">History Entity</label><input type="text" id="pad-edit-sparkline-ha-entity-3" maxlength="63" placeholder="e.g. sensor.outdoor_temperature"></div>
-                                    <div class="form-group"><label for="pad-edit-sparkline-ha-stat-3">Historical Value</label><select id="pad-edit-sparkline-ha-stat-3" onchange="padUpdateSparklineEditor()"><option value="mean">Average reading</option><option value="state">Latest state</option><option value="sum">Accumulated total</option></select></div>
                                 </div>
-                                <small id="pad-edit-sparkline-ha-stat-help-3"></small>
+                                <small>Recent history uses recorded numeric readings. Older gaps can use statistical means when Home Assistant has them.</small>
                             </div>
                             </div>
                         </details>
@@ -158,7 +148,12 @@
                             </div>
                         </div>
                         <small class="sparkline-resolution-summary" id="pad-edit-sparkline-resolution"></small>
-                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 7 days.</small>
+                        <div class="form-group sparkline-ha-source">
+                            <label for="pad-edit-sparkline-raw-hours">Raw history limit (hours)</label>
+                            <input type="number" id="pad-edit-sparkline-raw-hours" min="0" max="720" step="1" value="0">
+                            <small>Applies to all lines. 0 uses the full time range. Older data uses statistics when available.</small>
+                        </div>
+                        <small class="editor-warn" id="pad-edit-sparkline-window-warn" style="display:none;">Maximum time range is 30 days.</small>
                         <small class="editor-warn" id="pad-edit-sparkline-points-warn" style="display:none;"></small>
                         <small class="editor-warn" id="pad-edit-sparkline-ha-warn" style="display:none;">Home Assistant history is stored in 5-minute periods. Historical values are visually interpolated; live data uses the finer interval.</small>
 

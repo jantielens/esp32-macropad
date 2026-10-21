@@ -911,6 +911,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/data_stream.h
   - src/app/ha_stats.cpp
   - src/app/ha_stats.h
+  - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
   - src/app/widgets/sparkline_widget.cpp
 - **HAS_HA_LIVE**

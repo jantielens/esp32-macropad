@@ -49,7 +49,8 @@ struct DataStream {
 
 #if HAS_HA_HISTORY
     char     ha_entity[DATA_STREAM_HA_ENTITY_MAX_LEN];  // "" = no history source
-    uint8_t  ha_stat;                                    // HA_STAT_*
+    uint16_t live_count;  // Trailing locally sampled slots, excluding backfill
+    uint16_t raw_hours;
     uint8_t  hydrate_attempts;
     bool     hydrate_done;   // History already merged (or nothing left to fill)
 #endif
@@ -121,6 +122,9 @@ static void reset_ring(DataStream* s) {
     s->last_value = NAN;
     s->last_slot_ms = millis();
     s->newest_bucket = 0;
+#if HAS_HA_HISTORY
+    s->live_count = 0;
+#endif
 }
 
 // Recompute auto min/max from buffer contents so that expired outliers no
@@ -148,14 +152,20 @@ static void fill_locf(DataStream* s, uint32_t slots) {
         s->head = (uint16_t)((s->head + 1) % s->slot_count);
         if (s->count < s->slot_count) s->count++;
     }
+#if HAS_HA_HISTORY
+    if (isfinite(s->last_value)) {
+        const uint32_t live = s->live_count + slots;
+        s->live_count = (uint16_t)(live > s->slot_count ? s->slot_count : live);
+    }
+#endif
     s->rev++;
 }
 
 // Advance the ring to the current time, filling skipped slots with LOCF.
 static void advance_time(DataStream* s) {
-    // Skip LOCF when no real sample has been ingested yet — avoid
-    // injecting fake zeros that would corrupt auto-scale and display.
-    if (isnan(s->last_value)) return;
+    // History-only streams still advance, but with unknown slots until a live
+    // observation arrives rather than carrying a historical value as live.
+    if (s->count == 0) return;
 
     if (s->wallclock) {
         uint64_t bucket = current_bucket(s);
@@ -186,6 +196,9 @@ static void ingest_value(DataStream* s, float value) {
         if (s->wallclock) s->newest_bucket = current_bucket(s);
         s->rev++;
         s->last_value = value;
+#if HAS_HA_HISTORY
+        s->live_count = 1;
+#endif
         recompute_auto_range(s);
         return;
     }
@@ -195,6 +208,9 @@ static void ingest_value(DataStream* s, float value) {
     // actually arrived.
     advance_time(s);
     s->last_value = value;
+#if HAS_HA_HISTORY
+    if (s->live_count == 0) s->live_count = 1;
+#endif
 
     // Polling resolves the same binding every LVGL cycle, so most calls land on
     // the slot that already holds this value. Only signal a change when the
@@ -242,7 +258,7 @@ static void hydrate_streams() {
             if (clock_pending < 0) clock_pending = (int8_t)i;
             continue;
         }
-        if (s->count >= s->slot_count) {                // Live data covers it all
+        if (s->live_count >= s->slot_count) {
             s->hydrate_done = true;
             continue;
         }
@@ -253,11 +269,10 @@ static void hydrate_streams() {
             continue;
         }
 
-        // Recorder statistics seed their matching slots and are held across a
-        // finer grid. Locally collected trailing slots remain authoritative.
+        // Partial backfill does not protect holes from later retry results.
         const uint32_t slot_ms = slot_duration_ms(s);
         if (ha_stats_request((data_stream_handle_t)i, s->uid, s->ha_entity,
-                             s->ha_stat, slot_ms, s->slot_count, current_bucket(s))) {
+                             slot_ms, s->slot_count, current_bucket(s), s->raw_hours)) {
             s->hydrate_attempts++;
             g_hydrate_cursor = (uint8_t)((i + 1) % DATA_STREAM_MAX_STREAMS);
         } else {
@@ -333,10 +348,10 @@ void data_stream_rebuild() {
                 uint16_t slot_count = 60;
                 const char* binding = nullptr;
                 const char* ha_entity = nullptr;
-                uint8_t ha_stat = 0;
+                uint16_t raw_hours = 0;
                 if (!wt->getStreamParams(&widget, si,
                                          &window_secs, &slot_count, &binding,
-                                         &ha_entity, &ha_stat))
+                                         &ha_entity, &raw_hours))
                     break;  // No more streams for this widget
                 if (!binding || !binding[0]) continue;
 
@@ -350,7 +365,7 @@ void data_stream_rebuild() {
 
                 // Check if an existing stream matches
                 data_stream_handle_t existing =
-                    data_stream_find(binding, window_secs, slot_count, ha_entity, ha_stat);
+                    data_stream_find(binding, window_secs, slot_count, ha_entity, raw_hours);
                 if (existing != DATA_STREAM_INVALID) {
                     keep[existing] = true;
                     continue;
@@ -375,7 +390,7 @@ void data_stream_rebuild() {
                 s->wallclock = clock_is_valid();
 #if HAS_HA_HISTORY
                 strlcpy(s->ha_entity, ha_entity ? ha_entity : "", sizeof(s->ha_entity));
-                s->ha_stat = ha_stat;
+                s->raw_hours = raw_hours;
                 s->hydrate_attempts = 0;
                 s->hydrate_done = false;
 #endif
@@ -470,12 +485,11 @@ void data_stream_poll() {
 data_stream_handle_t data_stream_find(const char* binding,
                                       uint32_t window_secs,
                                       uint16_t slot_count,
-                                      const char* ha_entity,
-                                      uint8_t ha_stat) {
+                                      const char* ha_entity, uint16_t raw_hours) {
     if (!g_streams || !binding || !binding[0]) return DATA_STREAM_INVALID;
 #if !HAS_HA_HISTORY
     (void)ha_entity;
-    (void)ha_stat;
+    (void)raw_hours;
 #endif
     for (int i = 0; i < DATA_STREAM_MAX_STREAMS; i++) {
         if (!g_streams[i].in_use) continue;
@@ -486,7 +500,7 @@ data_stream_handle_t data_stream_find(const char* binding,
         // Two lines can share a live binding but hydrate from different HA
         // entities, so the history source is part of the stream identity.
         if (strcmp(g_streams[i].ha_entity, ha_entity ? ha_entity : "") != 0) continue;
-        if (g_streams[i].ha_stat != ha_stat) continue;
+        if (g_streams[i].raw_hours != raw_hours) continue;
 #endif
         return (data_stream_handle_t)i;
     }
@@ -519,7 +533,7 @@ uint32_t data_stream_uid(data_stream_handle_t handle) {
 
 bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
                                uint64_t end_bucket, const float* values,
-                               uint16_t count) {
+                               uint16_t count, bool complete) {
     if (!g_streams || handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
     DataStream* s = &g_streams[handle];
     if (!s->in_use || !s->samples) return false;
@@ -533,13 +547,13 @@ bool data_stream_apply_history(data_stream_handle_t handle, uint32_t uid,
     else s->newest_bucket = current_bucket(s);
 
     const uint16_t before = s->count;
-    s->count = (uint16_t)ha_stats_merge(s->samples, s->slot_count, s->head,
-                                        s->count, s->newest_bucket,
-                                        values, count, end_bucket);
-    s->hydrate_done = true;                   // Response consumed, don't re-ask
-    if (s->count == before) return true;      // Nothing usable in the response
+    const uint16_t merged = (uint16_t)ha_stats_merge(
+        s->samples, s->slot_count, s->head, s->live_count, s->newest_bucket,
+        values, count, end_bucket, s->count);
+    if (merged > s->count) s->count = merged;
+    s->hydrate_done = complete;
 
-    s->rev++;                                 // Slots behind head changed
+    s->rev++;
     recompute_auto_range(s);
     LOGD(TAG, "Stream[%d] hydrated %u slots from history", handle,
          (unsigned)(s->count - before));
@@ -551,6 +565,14 @@ bool data_stream_finish_history(data_stream_handle_t handle, uint32_t uid) {
     DataStream* s = &g_streams[handle];
     if (!s->in_use || s->uid != uid) return false;
     s->hydrate_done = true;
+    return true;
+}
+
+bool data_stream_cancel_history(data_stream_handle_t handle, uint32_t uid) {
+    if (!g_streams || handle < 0 || handle >= DATA_STREAM_MAX_STREAMS) return false;
+    DataStream* s = &g_streams[handle];
+    if (!s->in_use || s->uid != uid) return false;
+    if (s->hydrate_attempts > 0) s->hydrate_attempts--;
     return true;
 }
 

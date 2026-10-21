@@ -1,5 +1,5 @@
 (() => {
-    const maxWindow = 7 * 86400;
+    const maxWindow = 30 * 86400;
     const maxPoints = 1024;
     const defaultWindow = 300;
     const defaultSlots = 60;
@@ -22,7 +22,7 @@
     }
     function sampling() {
         const range = duration('window', [1, 60, 3600, 86400]);
-        if (range < 10 || range > maxWindow) fail('window', 'Time range must be between 10 seconds and 7 days');
+        if (range < 10 || range > maxWindow) fail('window', 'Time range must be between 10 seconds and 30 days');
         const interval = duration('interval', [1, 60, 3600]);
         if (interval < 0.1) fail('interval', 'Requested interval must be at least 100 milliseconds');
         const windowSeconds = Math.round(range);
@@ -66,11 +66,13 @@
             ...[1, 2, 3].flatMap(source => {
                 const suffix = source === 1 ? '' : '_' + source;
                 const group = 'pad-edit-sparkline-source-' + source;
-                return [{ group, key: 'widget_sparkline_ha_entity' + suffix, kind: 'text', default: '' },
-                    { group, key: 'widget_sparkline_ha_stat' + suffix, kind: 'text', default: 'mean' }];
+                return [
+                    { group, key: 'widget_sparkline_ha_entity' + suffix, kind: 'text', default: '' }
+                ];
             }),
             { group: 'pad-edit-sparkline-sampling', key: 'widget_sparkline_window', kind: 'number', default: defaultWindow },
-            { group: 'pad-edit-sparkline-sampling', key: 'widget_sparkline_slots', kind: 'number', default: defaultSlots }
+            { group: 'pad-edit-sparkline-sampling', key: 'widget_sparkline_slots', kind: 'number', default: defaultSlots },
+            { group: 'pad-edit-sparkline-sampling', key: 'widget_sparkline_raw_hours', kind: 'number', default: 0 }
         ],
         icon: { fixedPosition: true, width: 1, height: 1 },
         load(button) {
@@ -78,10 +80,10 @@
             const slots = button.widget_sparkline_slots === undefined ? defaultSlots : button.widget_sparkline_slots;
             setDuration('window', range, [86400, 3600, 60, 1]);
             setDuration('interval', range / slots, [3600, 60, 1]);
+            input('raw-hours').value = button.widget_sparkline_raw_hours ?? 0;
             for (const suffix of ['', '-2', '-3']) {
                 const keySuffix = suffix.replace('-', '_');
                 input('ha-entity' + suffix).value = button['widget_sparkline_ha_entity' + keySuffix] || '';
-                input('ha-stat' + suffix).value = button['widget_sparkline_ha_stat' + keySuffix] || 'mean';
             }
         },
         build(button) {
@@ -95,11 +97,15 @@
                 const entity = entityInput.value.trim();
                 if (entity && !input('data-binding' + suffix).value.trim()) fail('ha-entity' + suffix, 'History entity requires a live data binding');
                 if (!entity) continue;
-                const stat = input('ha-stat' + suffix).value;
-                if (!['mean', 'state', 'sum'].includes(stat)) fail('ha-stat' + suffix, 'Select a history statistic');
                 const keySuffix = suffix.replace('-', '_');
                 button['widget_sparkline_ha_entity' + keySuffix] = entity;
-                button['widget_sparkline_ha_stat' + keySuffix] = stat;
+            }
+            if (['', '-2', '-3'].some(suffix => input('ha-entity' + suffix).value.trim())) {
+                const rawInput = input('raw-hours');
+                const hours = Number(rawInput.value);
+                if (!String(rawInput.value).trim() || !Number.isInteger(hours) || hours < 0 || hours > 720)
+                    fail('raw-hours', 'Raw history limit must be a whole number from 0 to 720 hours');
+                if (hours) button.widget_sparkline_raw_hours = hours;
             }
         },
         refresh() {
@@ -108,11 +114,7 @@
             for (const suffix of ['', '-2', '-3']) {
                 input('ha-fields' + suffix).style.display = '';
                 input('ha-entity' + suffix).disabled = false;
-                input('ha-stat' + suffix).disabled = false;
                 input('ha-dependency' + suffix).textContent = '';
-                const stat = input('ha-stat' + suffix).value;
-                input('ha-stat-help' + suffix).textContent = stat === 'state' ? 'Most recently recorded value.' :
-                    stat === 'sum' ? 'Accumulated total for total sensors.' : 'Average value during each statistics period.';
             }
             const unit = Number(input('window-unit').value);
             input('window').min = String(10 / unit);
@@ -130,10 +132,8 @@
                     input('points-warn').style.display = '';
                 }
                 const history = historyAvailable && ['', '-2', '-3'].some(suffix => input('ha-entity' + suffix).value.trim());
-                if (history && sample.interval < (sample.windowSeconds > 86400 ? 3600 : 300)) {
-                    input('ha-warn').textContent = sample.windowSeconds > 86400 ?
-                        'Hourly historical values are visually interpolated; live data uses the finer interval.' :
-                        'Five-minute historical values are held between periods; live data uses the finer interval.';
+                if (history) {
+                    input('ha-warn').textContent = 'Recorded HA state changes are resampled to the chart interval. Older history may use five-minute or hourly statistical means when available.';
                     input('ha-warn').style.display = '';
                 }
             } catch (error) {

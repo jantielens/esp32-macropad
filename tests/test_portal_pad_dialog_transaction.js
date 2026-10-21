@@ -493,7 +493,7 @@ const samplingGroup = disclosureGroup(sparklineEditor, 'pad-edit-sparkline-sampl
 const markerParent = disclosureGroup(sparklineEditor, 'pad-edit-sparkline-markers', []);
 markerParent.element.contains = element => sparklineEditor.groups.slice(2, 4).some(group => group.element === element || group.element.contains(element));
 sparklineEditor.groups.push(samplingGroup, markerParent);
-context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_sparkline_ha_stat_2: 'mean',
+context.padWidgetEditorsLoad({ widget_type: 'sparkline',
     widget_sparkline_window: '300', widget_sparkline_slots: 60, widget_data_binding_3: '  ' });
 assert.ok(sparklineEditor.groups.every(group => !group.element.open), 'Blank sources and explicit custom defaults leave optional sections closed');
 context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_sparkline_ha_entity_2: 'sensor.temperature',
@@ -502,13 +502,13 @@ assert.strictEqual(sparklineEditor.groups[0].element.open, true, 'Owner-declared
 assert.strictEqual(samplingGroup.element.open, true, 'Changed sampling opens its section');
 assert.strictEqual(markerParent.element.open, true, 'A configured child opens its containing group');
 context.padWidgetEditorsLoad({ widget_type: 'sparkline', widget_sparkline_ref_1_color: '#123456' });
-document.getElementById('pad-edit-sparkline-window').value = '7';
+document.getElementById('pad-edit-sparkline-window').value = '30';
 document.getElementById('pad-edit-sparkline-window-unit').value = '86400';
 document.getElementById('pad-edit-sparkline-interval').value = '0.1';
 document.getElementById('pad-edit-sparkline-interval-unit').value = '1';
 document.getElementById('pad-edit-widget-type').value = 'sparkline';
 const sparkline = context.padDialogBuildButton();
-assert.strictEqual(sparkline.widget_sparkline_window, 604800);
+assert.strictEqual(sparkline.widget_sparkline_window, 2592000);
 assert.strictEqual(sparkline.widget_sparkline_slots, 1024);
 assert.strictEqual(sparkline.widget_sparkline_min, undefined);
 assert.strictEqual(sparkline.widget_sparkline_max_label_color, undefined);
@@ -521,16 +521,45 @@ context.window.__device_caps = { ha_history: true };
 document.getElementById('pad-edit-sparkline-ha-entity').value = 'sensor.energy';
 assert.throws(() => context.padDialogBuildButton(), /requires a live data binding/);
 document.getElementById('pad-edit-sparkline-data-binding').value = '[mqtt:energy]';
-document.getElementById('pad-edit-sparkline-ha-stat').value = 'sum';
-assert.strictEqual(context.padDialogBuildButton().widget_sparkline_ha_stat, 'sum');
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_ha_entity, 'sensor.energy');
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_ha_stat, undefined);
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours, undefined, 'Default zero remains compact and backward compatible');
+document.getElementById('pad-edit-sparkline-raw-hours').value = '24';
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours, 24);
+context.padWidgetEditorsLoad({ widget_type: 'sparkline',
+    widget_data_binding: '[mqtt:energy]', widget_sparkline_ha_entity: 'sensor.energy',
+    widget_sparkline_raw_hours: 24, widget_data_binding_2: '[ha:sensor.second]',
+    widget_sparkline_ha_entity_2: 'sensor.second', widget_sparkline_raw_hours_2: 72,
+    widget_data_binding_3: '[ha:sensor.third]', widget_sparkline_ha_entity_3: 'sensor.third',
+    widget_sparkline_raw_hours_3: 720 });
+assert.strictEqual(String(document.getElementById('pad-edit-sparkline-raw-hours').value), '24');
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours, 24);
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours_2, undefined);
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours_3, undefined);
+assert.strictEqual(samplingGroup.element.open, true, 'Shared history limit opens Sampling');
+for (const invalid of ['-1', '1.5', '721', '', 'NaN']) {
+    document.getElementById('pad-edit-sparkline-raw-hours').value = invalid;
+    assert.throws(() => context.padDialogBuildButton(), /whole number from 0 to 720 hours/);
+}
+document.getElementById('pad-edit-sparkline-raw-hours').value = '0';
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours, undefined);
+document.getElementById('pad-edit-sparkline-raw-hours').value = '24';
 document.getElementById('pad-edit-sparkline-ha-entity').value = '';
 assert.strictEqual(context.padDialogBuildButton().widget_sparkline_ha_entity, undefined);
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours, 24, 'Extra history lines still use the shared limit');
+document.getElementById('pad-edit-sparkline-ha-entity-2').value = '';
+document.getElementById('pad-edit-sparkline-ha-entity-3').value = '';
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours, undefined, 'Removing history also removes the limit');
 document.getElementById('pad-edit-sparkline-ha-entity').value = 'sensor.energy';
 context.window.__device_caps.ha_history = false;
 assert.strictEqual(context.padDialogBuildButton().widget_sparkline_ha_entity, undefined);
+assert.strictEqual(context.padDialogBuildButton().widget_sparkline_raw_hours, undefined, 'Unsupported firmware omits history limits');
 document.getElementById('pad-edit-sparkline-window').value = '9';
 document.getElementById('pad-edit-sparkline-window-unit').value = '1';
-assert.throws(() => context.padDialogBuildButton(), /10 seconds and 7 days/);
+assert.throws(() => context.padDialogBuildButton(), /10 seconds and 30 days/);
+document.getElementById('pad-edit-sparkline-window').value = '31';
+document.getElementById('pad-edit-sparkline-window-unit').value = '86400';
+assert.throws(() => context.padDialogBuildButton(), /10 seconds and 30 days/);
 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_waveform.js', 'utf8'), context);
 const waveformEditor = context.padWidgetEditor('waveform');

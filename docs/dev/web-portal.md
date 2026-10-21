@@ -636,13 +636,41 @@ owner's declared host in `padFillRefreshVisibility()`.
 
 Sparkline owns duration conversion, derived sampling, history validation, and
 warnings in `portal_widget_sparkline.js`. Time range accepts 10 seconds through
-7 days and converts to whole seconds. Requested intervals must be at least
+30 days and converts to whole seconds. Requested intervals must be at least
 100 ms; the owner derives 2..1024 points and displays the actual interval without
 correcting the inputs. Blank bounds remain automatic and blank label colors
 follow the line. A nonempty history entity enables backfill and requires that
 line's live binding; clearing it omits the entity/statistic on save. No separate
 enable checkbox or persisted boolean exists. Unsupported history settings are
 hidden and omitted from edited serialization, not deleted on load.
+
+HA backfill uses a single worker and the stream's wall-clock bucket grid.
+The shared Sampling setting `widget_sparkline_raw_hours` applies to all lines
+and accepts whole hours from 0 to 720. Zero or omission requests the full
+chart window; a positive value caps the raw request to the recent suffix.
+The cap participates in stream identity so edits trigger fresh hydration.
+Recorder's initial state's original timestamp is bounded to the requested
+suffix before sampling; it cannot extend raw coverage into the statistics prefix.
+Raw state changes hold until their next change; explicit unavailable states
+clear that carry-forward. Older statistical means cover only their returned
+five-minute or hourly periods, without interpolation across missing periods
+or indefinite carry-forward. The statistics request starts at the source period
+overlapping the first output bucket and ends at the raw prefix boundary.
+Only wholly older output buckets receive statistics, so raw gaps win at the join.
+The bounded statistics workspace accepts up to 722 periods for a 30-day window,
+with a 128 KiB PSRAM-only JSON allocation budget.
+
+A transiently failed required source leaves hydration incomplete, even if the
+other source succeeds or returns empty. Usable partial data is delivered while
+the existing backoff and three-attempt stream budget bound retries.
+The registry tracks trailing live slots separately from the occupied ring count:
+backfilled slots and their gaps can be repaired on retry, even when the ring is
+full, but live samples collected during a fetch remain authoritative. A later
+successful empty or unavailable response can clear old backfill rather than
+leaving stale finite values at the beginning of the chart.
+History-only rings advance with unknown slots until live sampling starts.
+OTA/config cancellation releases the attempt as before; successful empty results
+and permanent failures do not start continuous polling.
 
 Extension owns its mounted asynchronous catalog in `portal_widget_extension.js`.
 Loading and failure block an edited Extension draft, but not untouched buttons
@@ -803,7 +831,10 @@ every component in that custom section to the same category ID.
     Spacing and stroke stay inside Patterns, with unused stroke disabled. The Patterns note explains shared spacing, stroke thickness/dot diameter, and the disabled state for None and Checkerboard.
     Bar/gauge track outlines have static width and bindable color in Content beside their track settings, reusing one outline input group when the widget type changes. Bars also have static `widget_bar_track_radius` there (0-64, default 4), clamped to half the smaller track dimension, with square dual baseline joins.
     Controls preserve base colors. Save to inspect complete widgets and outlines on-device; no grid styling preview or monochrome simulation is provided. Gauge patterns and image compositing are deferred.
-  - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to seven days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
+  - **Sparkline data sources**: Each line keeps its live binding, color, and optional Home Assistant history source together. Time ranges up to 30 days and the desired interval per point accept human units; the editor calculates up to 1024 points and reports the effective interval
+    Enabled Home Assistant history fetches raw entity states first and uses
+    Recorder `mean` statistics only for an older uncovered prefix. Raw-covered
+    gaps remain gaps; there is no per-line statistic selector.
     Data sources, Scale, Sampling, Line style, Markers, Current-value annotations, and Reference lines each use the shared `editor-group` frame, initially open, matching Bar Chart. Per-line disclosures remain inside Data sources.
   - **Button action confirmation**: Optional per-button modal protects both normal tap and long-press action lists, supports custom prompt text, and auto-cancels after 10 seconds
   - **Delay action**: Timer-category action accepts a required whole-number `duration_ms` from 1 to 55,000. It pauses its current ordered action list and resumes remaining actions on the dispatch owner task without blocking the portal, main loop, or display task. The firmware catalog supplies the board's maximum concurrent pausable-action count (three by default)

@@ -112,7 +112,8 @@ For a single field rather than a complete button, use the
    chart design. An unavailable Home Assistant reading with a reported unit
    can also be selected; its preview label shows `---` rather than plotting
    zero. This exception does not apply to MQTT or catalog values.
-   Choose a shared time range (1 hour, 5 hours, 6 hours, 24 hours, or 7 days)
+   Choose a shared time range (1 hour, 5 hours, 6 hours, 24 hours, 7 days, or
+   30 days)
    and requested sample interval in seconds. The preview caption shows the actual
    interval after the 1024-point capacity limit is applied.
    **Automatic (based on source units)** uses a shared scale only when every
