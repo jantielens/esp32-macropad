@@ -16,6 +16,10 @@
 #include <ArduinoJson.h>
 
 #include "config_manager.h"
+#include "mqtt_subscription_registry.h"
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 class MqttManager {
 public:
@@ -50,6 +54,10 @@ public:
 
 		// Subscribe helper
 		bool subscribe(const char *topic);
+		bool setSubscriptionOwner(const char *topic, MqttSubscriptionOwner owner, bool active);
+		MqttSubscriptionState subscriptionState(const char *topic, MqttSubscriptionOwner owner);
+		MqttSubscriptionCleanup subscriptionCleanup(const char *topic);
+		bool connectionAvailableSnapshot() const { return _connection_available; }
 
 		// Topic helpers
 		const char *baseTopic() const { return _base_topic; }
@@ -68,6 +76,9 @@ private:
 		void publishDiscoveryOncePerBoot();
 		void publishHealthNow();
 		void publishHealthIfDue();
+		void processSubscriptionChanges();
+		bool lockSubscriptions();
+		void unlockSubscriptions();
 
 		// Shared connect helper: sets server, builds client ID, calls PubSubClient::connect
 		// with LWT (unless duty_cycle is true). Returns true on success.
@@ -98,6 +109,9 @@ private:
 		unsigned long _last_health_attempt_ms = 0;
 		bool _health_attempted = false;
 		uint32_t _health_publish_failures = 0;
+		MqttSubscriptionRegistry* _subscription_registry = nullptr;
+		SemaphoreHandle_t _subscription_mutex = nullptr;
+		volatile bool _connection_available = false;
 };
 
 // Global instance (defined in app.ino)

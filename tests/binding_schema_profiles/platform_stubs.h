@@ -21,6 +21,7 @@ class String {};
 #define HAS_CAMERA 0
 #ifndef HAS_HA_LIVE
 #if defined(BINDING_SCHEMA_PROFILE_FULL)
+#define HAS_IMAGE_LIBRARY 1
 #define HAS_HA_LIVE HAS_PSRAM
 #else
 #define HAS_HA_LIVE 0

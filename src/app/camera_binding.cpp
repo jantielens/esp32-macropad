@@ -157,10 +157,27 @@ static const BindingSchemeDoc kCameraDoc = {
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
 
+static const BindingAuthoringKey kCameraAuthoringKeys[] = {
+    binding_authoring_text("presence", "ON"),
+    binding_authoring_text("motion_enabled", "ON"),
+    binding_authoring_integer("changed_tiles", "", "12", "%lu"),
+    binding_authoring_integer("score", "", "180", "%lu"),
+    binding_authoring_integer("tile_threshold", "", "8", "%lu"),
+    binding_authoring_integer("score_threshold", "", "120", "%lu"),
+    binding_authoring_text("global_change", "OFF"),
+    binding_authoring_integer("confirm_frames", "", "3", "%lu"),
+    binding_authoring_text("baseline_ready", "ON"),
+    binding_authoring_integer("sample_age", "s", "2", "%lu"),
+    binding_authoring_integer("last_motion", "s", "1791360000", "%lu"),
+    binding_authoring_integer("motion_age", "s", "15", "%lu"),
+};
+static const BindingAuthoringSpec kCameraAuthoring = {BINDING_DOC_LIST(kCameraAuthoringKeys)};
+
 void camera_binding_init() {
     if (!binding_template_register("camera", camera_binding_resolve, camera_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    camera_binding_key_count, camera_binding_key_at, &kCameraDoc})) {
+                                    camera_binding_key_count, camera_binding_key_at, &kCameraDoc,
+                                    &kCameraAuthoring})) {
         LOGE("Camera", "Failed to register camera binding scheme");
     }
 }

@@ -65,7 +65,7 @@
         <section class="card mb-3" data-pad-tab="Appearance">
             <div class="card-body">
             <div id="pad-page-bg-color-wrap">
-                <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Background Color</label>
+                <label style="font-weight:600; font-size:13px; display:block; margin-bottom:6px;">Background Color <span class="fx-hint" onclick="showBindingHelp()">fx</span></label>
                 <div class="pad-background-control-row">
                     <select id="pad-page-bg-mode" class="form-select form-select-sm" onchange="padPageBackgroundModeChanged()">
                         <option value="inherit">Inherit device default</option>
@@ -241,6 +241,19 @@
                 <div id="pad-edit-actions-section">
                     <div class="editor-group-body">
                         <div id="pad-action-editors"></div>
+                        <div id="pad-edit-confirm-group" style="margin-top:16px;">
+                            <div class="form-label">Action Safety</div>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="pad-edit-confirm" onchange="padConfirmChanged()">
+                                <label class="form-check-label" for="pad-edit-confirm">Confirm before tap or long-press actions</label>
+                            </div>
+                            <small>Either gesture asks once before running its complete action list.</small>
+                        </div>
+                        <div class="form-group" id="pad-edit-confirm-text-group" style="display:none; margin-top:10px;">
+                            <label for="pad-edit-confirm-text">Confirmation message (optional)</label>
+                            <input type="text" id="pad-edit-confirm-text" maxlength="127" placeholder="Generated from the button label">
+                            <small>Leave empty to generate a message from the button label. Cancel or no response after 10 seconds runs no actions.</small>
+                        </div>
                     </div>
                 </div>
 
@@ -337,7 +350,7 @@
                         <div class="form-group">
                             <label for="pad-edit-bg-image-interval">Refresh Interval (ms)</label>
                             <input type="number" id="pad-edit-bg-image-interval" min="0" max="86400000" value="0" placeholder="0 = fetch once / stream">
-                            <small>For snapshots: <code>0</code> = load once (no automatic refresh); e.g. <code>5000</code> = refresh every 5 s. For MJPEG streams: <code>0</code> = continuous playback; a higher value limits how often frames are read.</small>
+                            <small>For MJPEG streams: set to <code>0</code> — the stream runs continuously. For snapshots: e.g. <code>5000</code> = refresh every 5 s.</small>
                         </div>
                     </div>
                 </details>
@@ -358,14 +371,14 @@
                     <div class="editor-group-body">
                         <div class="pad-appearance-row">
                             <div id="pad-edit-bg-color-wrap" style="flex:1;">
-                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="reset-hint material-symbols-outlined" id="pad-edit-bg-color-reset" onclick="padResetAppearance('pad-edit-bg-color','bg_color')" title="Reset to default">restart_alt</span></label>
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Background <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint material-symbols-outlined" id="pad-edit-bg-color-reset" onclick="padResetAppearance('pad-edit-bg-color','bg_color')" title="Reset to default">restart_alt</span></label>
                                 <div class="bindable-color">
                                     <div class="bc-swatch"></div>
                                     <input type="text" id="pad-edit-bg-color" class="bc-input" data-fill-pattern="bg_pattern" data-fill-color="bg_pattern_color" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
                                 </div>
                             </div>
                             <div id="pad-edit-fg-color-wrap" style="flex:1;">
-                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text <span class="reset-hint material-symbols-outlined" id="pad-edit-fg-color-reset" onclick="padResetAppearance('pad-edit-fg-color','fg_color')" title="Reset to default">restart_alt</span></label>
+                                <label style="font-size:13px; font-weight:600; margin-bottom:2px; display:block;">Text <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint material-symbols-outlined" id="pad-edit-fg-color-reset" onclick="padResetAppearance('pad-edit-fg-color','fg_color')" title="Reset to default">restart_alt</span></label>
                                 <div class="bindable-color">
                                     <div class="bc-swatch"></div>
                                     <input type="text" id="pad-edit-fg-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
@@ -398,7 +411,7 @@
                             <div class="editor-group-body">
                         <div class="pad-appearance-row">
                         <div id="pad-edit-border-color-wrap" class="form-group" style="flex:1;">
-                            <label for="pad-edit-border-color">Border Color <span class="reset-hint material-symbols-outlined" id="pad-edit-border-color-reset" onclick="padResetAppearance('pad-edit-border-color','border_color')" title="Reset to default">restart_alt</span></label>
+                            <label for="pad-edit-border-color">Border Color <span class="fx-hint" onclick="showBindingHelp()">fx</span> <span class="reset-hint material-symbols-outlined" id="pad-edit-border-color-reset" onclick="padResetAppearance('pad-edit-border-color','border_color')" title="Reset to default">restart_alt</span></label>
                             <div class="bindable-color">
                                 <div class="bc-swatch"></div>
                                 <input type="text" id="pad-edit-border-color" class="bc-input" maxlength="191" spellcheck="false" placeholder="#hex or [binding]">
@@ -459,6 +472,8 @@
             <button type="button" id="pad-workspace-discard-confirm" class="btn btn-danger">Discard and Switch</button>
         </div>
     </dialog>
+
+    {{BINDING_HELP}}
 
     {{STYLE_HELP}}
 

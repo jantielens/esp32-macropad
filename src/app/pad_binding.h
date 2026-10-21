@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#if HAS_DISPLAY
 
 #include "pad_config.h"
 #include <stddef.h>
@@ -69,4 +69,4 @@ void pad_resolve(const char* const* inputs, size_t count,
 }
 #endif
 
-#endif // HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#endif // HAS_DISPLAY

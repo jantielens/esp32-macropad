@@ -470,6 +470,14 @@ static const BindingSchemeDoc kPrintDoc = {
     BINDING_DOC_LIST(kPrintParams), BINDING_DOC_LIST(kPrintKeyDocs), BINDING_DOC_LIST(kPrintExamples),
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
+static const BindingAuthoringKey kPrintAuthoringKeys[] = {
+    binding_authoring_text("id", "261007-013"),
+    binding_authoring_text("last_id", "261007-012"),
+    binding_authoring_integer("count", "", "12"),
+    binding_authoring_integer("starred", "", "1"),
+    binding_authoring_text("star_label", "*"),
+};
+static const BindingAuthoringSpec kPrintAuthoring = {BINDING_DOC_LIST(kPrintAuthoringKeys)};
 
 // ============================================================================
 // Public API
@@ -571,7 +579,8 @@ void print_log_init() {
 
     if (!binding_template_register("print", print_resolve, print_collect,
                                    {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    print_binding_key_count, print_binding_key_at, &kPrintDoc})) {
+                                    print_binding_key_count, print_binding_key_at, &kPrintDoc,
+                                    &kPrintAuthoring})) {
         LOGE(TAG, "Failed to register print binding scheme");
     } else {
         LOGI(TAG, "Print binding scheme registered");

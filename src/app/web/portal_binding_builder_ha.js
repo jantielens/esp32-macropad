@@ -1,10 +1,3 @@
-BINDING_BUILDERS.push({
-    id: 'ha', label: 'HA', name: 'Home Assistant',
-    tooltip: 'Build a Home Assistant binding',
-    configured: config => config.caps?.ha_live === true &&
-        !!config.ha_url?.trim() && config.ha_token_set === true
-});
-
 const _haBuilderDefaults = {
     query: '', entity: '', name: '', manual: false, path: '', customPath: false,
     mode: 'raw', decimals: 1, unit: '', fallback: '', formattingEdited: false,
@@ -34,10 +27,7 @@ function haBindingBuilderReset() {
 function haBindingBuilderHTML() {
     const b = _haBuilder;
     const esc = _bhEsc;
-    return '<section id="ha-binding-builder" class="binding-builder" aria-labelledby="ha-builder-title">' +
-        '<header class="binding-builder-header"><h5 id="ha-builder-title">Build a binding</h5>' +
-        '<p>' + (b.rawOnly ? 'Choose your data, then use its raw value in your pad.' :
-            'Choose your data, adjust its appearance, then use it in your pad.') + '</p></header>' +
+    return '<div id="ha-binding-builder">' +
         '<div class="binding-builder-step" aria-labelledby="ha-builder-choose-title">' +
         '<div class="binding-builder-step-heading"><span class="binding-builder-number" aria-hidden="true">1</span>' +
         '<h6 id="ha-builder-choose-title">Choose an entity</h6></div>' +
@@ -63,31 +53,26 @@ function haBindingBuilderHTML() {
         '<div class="binding-builder-step-heading"><span class="binding-builder-number" aria-hidden="true">2</span>' +
         '<h6 id="ha-builder-format-title" tabindex="-1">' + (b.rawOnly ? 'Choose the value' : 'Format the value') + '</h6></div>' +
         '<p class="binding-builder-note" data-ha-format-pending>Choose an entity to see value and formatting options.</p>' +
-        '<div data-ha-format-controls hidden><div class="binding-builder-fields">' +
-        '<label for="ha-builder-value">Value<select id="ha-builder-value" class="form-control"></select></label>' +
-        '<label for="ha-builder-path" data-ha-custom-path hidden>Custom path<input id="ha-builder-path" class="form-control" ' +
-        'type="text" maxlength="127" placeholder="attributes.brightness" value="' + esc(b.path) + '"></label>' +
-        '<label for="ha-builder-mode" data-ha-format-choice>Display as<select id="ha-builder-mode" class="form-control">' +
-        [['raw', 'As received'], ['number', 'Number'], ['text', 'Text']].map(([value, label]) =>
-            '<option value="' + value + '"' + (value === b.mode ? ' selected' : '') + '>' + label + '</option>').join('') +
-        '</select></label>' +
-        '<label for="ha-builder-decimals" data-ha-number>Decimal places<select id="ha-builder-decimals" class="form-control">' +
-        [0, 1, 2, 3, 4, 5, 6].map(n => '<option' + (n === b.decimals ? ' selected' : '') + '>' + n + '</option>').join('') +
-        '</select></label>' +
-        '<label for="ha-builder-unit" data-ha-formatted>Unit (optional)<input id="ha-builder-unit" class="form-control" ' +
-        'type="text" maxlength="60" placeholder="e.g. \u00b0C or %" value="' + esc(b.unit) + '"></label></div>' +
-        '<p class="binding-builder-note" data-ha-raw-note>' + (b.rawOnly ?
-            'This field uses the raw value; formatting and units are omitted.' :
-            'Use As received for numeric widget inputs.') + '</p>' +
-        '<p class="binding-builder-note" data-ha-formatted>Unit spacing is automatic. Adding a unit does not convert the value.</p>' +
-        '<details class="binding-builder-options"><summary>When unavailable (optional)</summary>' +
-        '<label for="ha-builder-fallback">Show this instead<input id="ha-builder-fallback" class="form-control" type="text" ' +
-        'placeholder="Default: ---" maxlength="80" value="' + esc(b.fallback) + '"></label>' +
-        '<p class="binding-builder-note">Used when the entity or value is unavailable. Leave empty for ---.</p></details></div></div>' +
+        '<div data-ha-format-controls hidden>' +
+        bindingBuilderFormatControlsHTML({
+            idPrefix: 'ha-builder',
+            dataPrefix: 'ha',
+            mode: b.mode,
+            decimals: b.decimals,
+            unit: b.unit,
+            fallback: b.fallback,
+            extraFields: '<label for="ha-builder-value">Value<select id="ha-builder-value" class="form-control"></select></label>' +
+                '<label for="ha-builder-path" data-ha-custom-path hidden>Custom path<input id="ha-builder-path" class="form-control" ' +
+                'type="text" maxlength="127" placeholder="attributes.brightness" value="' + esc(b.path) + '"></label>',
+            formatModes: [['raw', 'As received'], ['number', 'Number'], ['text', 'Text']],
+            rawNote: b.rawOnly
+                ? 'This field uses the raw value; formatting and units are omitted.'
+                : 'Use As received for numeric widget inputs.'
+        }) + '</div></div>' +
         '<div class="binding-builder-step binding-builder-step-result" data-ha-result-step aria-labelledby="ha-builder-result-title">' +
         '<div class="binding-builder-step-heading"><span class="binding-builder-number" aria-hidden="true">3</span>' +
         '<h6 id="ha-builder-result-title">Insert the binding</h6></div>' +
-        '<div id="ha-builder-output"></div></div></section>';
+        '<div id="ha-builder-output"></div></div></div>';
 }
 
 // A bounded, polled job keeps HA I/O off the web-server and display tasks.
@@ -184,18 +169,14 @@ function _haBuilderUpdate(root) {
         const unavailable = detail && ['unknown', 'unavailable'].includes(detail.state);
         const sample = unavailable ? (b.fallback || '---') : bindingBuilderSample(raw, mode, b.decimals, suffix);
         const truncated = detail && (path === 'state' ? detail.state_truncated : attribute && attribute.truncated);
-        output.innerHTML = (sample == null ? '<p class="binding-builder-note">' +
-            (detail ? 'No sample for this path; it may be missing or outside lookup limits.' :
-                'Sample unavailable. You can still copy or insert the binding.') + '</p>' :
-            '<div class="binding-builder-sample"><span>Binding result</span><output aria-live="polite">' +
-            _bhEsc(sample) + (truncated ? ' <small>(truncated)</small>' : '') +
-            '</output></div>') +
-            '<span class="binding-builder-code-label">Generated binding</span>' +
-            '<pre class="binding-example-code"><code>' + _bhEsc(token) + '</code></pre>' +
-            '<div class="binding-example-actions">' +
-            _bhActions(token, { copy: 'Copy binding', insert: 'Insert binding' }) + '</div>';
+        output.innerHTML = bindingBuilderResultHTML(token, sample, {
+            truncated,
+            message: detail
+                ? 'No sample for this path; it may be missing or outside lookup limits.'
+                : 'Sample unavailable. You can still copy or insert the binding.'
+        });
     } catch (error) {
-        output.innerHTML = '<p class="binding-builder-status" data-kind="error" role="alert">' + _bhEsc(error.message) + '</p>';
+        output.innerHTML = bindingBuilderErrorHTML(error.message);
     }
 }
 
@@ -354,3 +335,202 @@ function haBindingBuilderMount() {
         }
     });
 }
+
+function haBindingConfigured(config) {
+    return config.caps?.ha_live === true &&
+        !!config.ha_url?.trim() && config.ha_token_set === true;
+}
+
+BINDING_BUILDERS.push({
+    id: 'ha',
+    scheme: 'ha',
+    label: 'HA',
+    name: 'Home Assistant',
+    description: 'Home Assistant entities and their attributes.',
+    instructions: field => bindingValidationOptions.get(field)?.isWidgetBinding === true
+        ? 'Choose your data, then use its raw value in your pad.'
+        : 'Choose your data, adjust its appearance, then use it in your pad.',
+    tooltip: 'Build a Home Assistant binding',
+    configured: haBindingConfigured,
+    availability: config => {
+        if (!config.caps) return '';
+        if (config.caps.ha_live !== true) {
+            return 'Home Assistant live lookup is not available on this device. You can still enter an entity ID manually.';
+        }
+        if (!haBindingConfigured(config)) {
+            return 'Configure Home Assistant to enable entity lookup. Manual entity IDs can still be used.';
+        }
+        return '';
+    },
+    render: haBindingBuilderHTML,
+    mount: haBindingBuilderMount,
+    reset: haBindingBuilderReset,
+    stop: haBindingBuilderStop
+});
+
+function haButtonBuilderCandidate(detail, name) {
+    const numeric = !detail.state_truncated && bindingBuilderIsNumeric(detail.state);
+    const entityId = detail.entity_id;
+    const domain = entityId.split('.', 1)[0];
+    return {
+        providerId: 'ha',
+        sourceId: entityId,
+        displayName: name || entityId,
+        reference: { entity_id: entityId, name, detail },
+        acquisitionState: ['unknown', 'unavailable'].includes(detail.state) ? 'unavailable' : 'received',
+        sample: detail.state,
+        sampleTruncated: !!detail.state_truncated,
+        valueKind: numeric ? 'number' : 'text',
+        ...(typeof detail.unit === 'string' ? { unit: detail.unit } : {}),
+        formatModes: numeric || detail.unit ? ['raw', 'number', 'text'] : ['raw', 'text'],
+        limits: { tokenBytes: 191, labelBytes: 191, formatBytes: 63, pathBytes: 127 },
+        capabilities: {
+            display: true,
+            numericWidget: numeric,
+            liveSampling: true,
+            historyBackfill: window.__device_caps?.ha_history === true,
+            control: ['light', 'switch'].includes(domain)
+        },
+        fields: [
+            { path: '', displayName: 'State', sample: detail.state },
+            ...(detail.paths || []).filter(field => field.path !== 'state' && !field.truncated).map(field => ({
+                path: field.path, displayName: field.path.replace(/^attributes\./, ''),
+                sample: field.value
+            }))
+        ]
+    };
+}
+
+const haButtonBuilderProvider = {
+    id: 'ha',
+    name: 'Home Assistant',
+    preferred: true,
+    sourceLabel: 'Home Assistant entity',
+    inputLimit: 95,
+    searchPlaceholder: 'Search by name or enter an exact entity ID',
+    searchHelp: 'Type at least 3 characters to search. An administrator token is required for search; other tokens can look up an exact entity ID.',
+    useLabel: 'Use entity',
+    invalidReferenceMessage: 'Enter an exact entity ID, such as sensor.living_room_temperature.',
+    noResultsMessage: 'No matching entities. Try another name or enter an exact entity ID.',
+    moreResultsMessage: 'Showing 20 matches. Keep typing to narrow the results.',
+    controlActionType: 'ha_service',
+    setupHref: '#ha-discovery',
+    supported: config => config.caps?.ha_live === true,
+    availability(config) {
+        if (config.caps?.ha_live !== true) {
+            return 'Home Assistant live lookup is not available on this device.';
+        }
+        if (!haBindingConfigured(config)) {
+            return 'Configure Home Assistant to search for entities.';
+        }
+        return '';
+    },
+    acceptsReference(value) {
+        return haBindingValidEntity(value);
+    },
+    referenceFromInput(value) {
+        return { entity_id: value };
+    },
+    async search(query, signal) {
+        const payload = await haBindingLookup('query=' + encodeURIComponent(query), signal);
+        if (!Array.isArray(payload.entities)) throw new Error('Invalid Home Assistant entity suggestions.');
+        return {
+            candidates: payload.entities.map(item => haButtonBuilderCandidate({
+                entity_id: item.entity_id
+            }, item.name)),
+            more: !!payload.more
+        };
+    },
+    async inspect(reference, signal) {
+        const entityId = reference?.entity_id;
+        if (!haBindingValidEntity(entityId || '')) throw new Error('Enter a valid Home Assistant entity ID.');
+        const detail = await haBindingLookup('entity=' + encodeURIComponent(entityId), signal);
+        if (detail.entity_id !== entityId || typeof detail.state !== 'string' || !Array.isArray(detail.paths)) {
+            throw new Error('Invalid Home Assistant entity details.');
+        }
+        const name = detail.paths.find(path => path.path === 'attributes.friendly_name' && !path.truncated)?.value ||
+            reference.name || entityId;
+        return haButtonBuilderCandidate(detail, name);
+    },
+    selectField(candidate, path) {
+        if (new TextEncoder().encode(path).length > 127 || /[;[\]|\0]/.test(path)) {
+            throw new Error('Enter a dotted path of at most 127 UTF-8 bytes, without binding delimiters.');
+        }
+        const detail = candidate.reference.detail;
+        const parent = haButtonBuilderCandidate(detail, candidate.reference.name);
+        if (!path || path === 'state' || path === '.') return parent;
+        const field = parent.fields.find(item => item.path === path);
+        const available = parent.acquisitionState === 'received' && field?.sample !== undefined;
+        const numeric = available && bindingBuilderIsNumeric(field.sample);
+        return {
+            ...parent,
+            sourceId: detail.entity_id + '|' + path,
+            displayName: parent.displayName + ' / ' + path.replace(/^attributes\./, ''),
+            reference: { ...parent.reference, path },
+            sample: field?.sample,
+            acquisitionState: available ? 'received' : 'unavailable',
+            sampleTruncated: false,
+            valueKind: numeric ? 'number' : 'text',
+            unit: undefined,
+            formatModes: numeric ? ['raw', 'number', 'text'] : ['raw', 'text'],
+            capabilities: {
+                display: true, numericWidget: numeric, liveSampling: true,
+                historyBackfill: false, control: false
+            }
+        };
+    },
+    buildBinding(candidate, { format = '', fallback = '' } = {}) {
+        const entityId = candidate.reference.detail.entity_id;
+        return bindingBuilderToken('ha', entityId, candidate.reference.path || '', format, fallback);
+    },
+    dispose() {},
+    supportsHistory(candidate) {
+        const state = candidate.sample;
+        return candidate.capabilities.numericWidget ||
+            (!candidate.sampleTruncated && ['unknown', 'unavailable'].includes(state) && !!candidate.unit);
+    },
+    historyBackfill(candidate) {
+        if (!candidate.capabilities.historyBackfill || window.__device_caps?.ha_history !== true) return null;
+        return { entity: candidate.reference.detail.entity_id, stat: 'mean' };
+    },
+    buildHistoryFields(candidate, suffix) {
+        const backfill = this.historyBackfill(candidate);
+        if (!backfill) return {};
+        return {
+            ['widget_sparkline_ha_entity' + suffix]: backfill.entity,
+            ['widget_sparkline_ha_stat' + suffix]: backfill.stat
+        };
+    },
+    validateHistoryFields(candidate, suffix, button, validateText) {
+        const backfill = this.historyBackfill(candidate);
+        if (backfill) validateText(button['widget_sparkline_ha_entity' + suffix], 63);
+    },
+    controlFields(candidate) {
+        if (!candidate.capabilities.control) return [];
+        const entityId = candidate.reference.detail.entity_id;
+        return [
+            { name: 'icon', label: 'Material Symbol name', type: 'text', maxlength: 28, required: true,
+                default: entityId.startsWith('light.') ? 'lightbulb' : 'toggle_on',
+                link: { label: 'Browse Material Symbols', href: 'https://fonts.google.com/icons' } },
+            { name: 'on', label: 'On color', type: 'color', default: '#FFC857',
+                error: 'Choose valid on and off colors.' },
+            { name: 'off', label: 'Off color', type: 'color', default: '#64748B',
+                error: 'Choose valid on and off colors.' }
+        ];
+    },
+    buildControl(candidate, options) {
+        const entityId = candidate.reference.detail.entity_id;
+        if (entityId.length >= 48) throw new Error('Entity IDs must be shorter than 48 characters for service actions.');
+        if (!/^[a-z][a-z0-9_]{0,27}$/.test(options.icon)) throw new Error('Enter a Material Symbol name, such as lightbulb.');
+        const state = this.buildBinding(candidate, { format: '' });
+        return {
+            icon_id: 'mi_' + options.icon,
+            icon_position: 'center',
+            label_top_style: 'color:' + (padColorNormalizeLiteral(padGetEffectiveDefault('fg_color')) || '#FFFFFF'),
+            fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|#EF6B73]',
+            actions: [{ type: 'ha_service', entity_id: entityId, service: 'toggle' }]
+        };
+    }
+};
+
+BUTTON_BUILDER_PROVIDERS.push(haButtonBuilderProvider);

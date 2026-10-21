@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-20
+ms.date: 2026-10-21
 ms.topic: reference
 ---
 
@@ -13,6 +13,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+* Add exact-topic MQTT inspection to the binding and button builders. Select a
+  received raw payload, JSON scalar field, or custom path, with explicit
+  handling for missing messages, empty payloads, zero, and truncated values.
+  Temporary inspection subscriptions are released when no longer needed.
+  Wildcard discovery and inferred MQTT control commands are not supported.
+* Add a searchable On-device bindings catalog using the running firmware's
+  registered schemes, keys, descriptions, and format presets. Create tokens
+  and value-label buttons with parameter inputs, declared examples, and
+  explicit device previews. Numeric widgets require explicit capability
+  metadata and suitable samples; numeric-looking text does not imply a type
+  or unit. See [Build a token from a source](docs/user/pads/bindings.md#build-a-token-from-a-source).
+* Support up to three readings from different sources in one history button.
+  Home Assistant series can use recorded history where supported; MQTT and
+  on-device series collect live values while the device runs. Automatic shared
+  scales require matching known source units; entered unit text does not
+  convert readings. Local labels and live history also work on display
+  firmware without Home Assistant or MQTT.
+
+### Changed
+
+* Replace the Home Assistant-only binding and button builders with shared
+  workflows for Home Assistant, MQTT, and on-device bindings. Share source
+  selection, formatting, fallback controls, and previews while preserving
+  Home Assistant lookup, attributes, history, and light/switch toggles.
+  Button scenarios follow source capabilities and available widgets; generated
+  buttons remain ordinary unsaved drafts until **Save Pad**. Manual entry,
+  the binding reference, and existing binding syntax remain available.
+  See [Create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
 
 ## [1.42.0] - 2026-10-20
 

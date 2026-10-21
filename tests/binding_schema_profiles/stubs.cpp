@@ -22,6 +22,13 @@
 
 unsigned long millis() { return 10000; }
 
+#if HAS_IMAGE_LIBRARY
+bool image_library_runtime_current(char* out, size_t size) {
+    snprintf(out, size, "/images/fixture.jpg");
+    return true;
+}
+#endif
+
 #if HAS_HA_LIVE
 void ha_live_status(HaLiveStatus& status) {
     status = {true, true, 1, 0, 0, "connected", ""};
@@ -34,13 +41,18 @@ bool ha_live_read(const char*, char* snapshot, size_t size) {
 #endif
 
 static const SensorField kFixtureSensorFields[] = {
-    {"temperature", "Temperature in degrees Celsius."},
-    {"humidity", "Relative humidity in percent."},
-    {"battery_voltage", "Battery voltage in volts."},
-    {"presence", "Presence detected: 1 or 0."},
+#if IS_COFFEE_SCALE
+    {"weight_g", "Weight in grams.", "g", "250.5"},
+    {"flow_rate", "Flow rate in grams per second.", "g/s", "4.2"},
+#else
+    {"temperature", "Temperature in degrees Celsius.", "\xC2\xB0" "C", "21.37"},
+    {"humidity", "Relative humidity in percent.", "%", "54.2"},
+    {"battery_voltage", "Battery voltage in volts.", "V", "3.85"},
+    {"presence", "Presence detected: 1 or 0.", "", "1"},
+#endif
 };
 size_t sensor_manager_field_count() {
-#if defined(BINDING_SCHEMA_PROFILE_FULL)
+#if defined(BINDING_SCHEMA_PROFILE_FULL) || IS_COFFEE_SCALE
     return sizeof(kFixtureSensorFields) / sizeof(kFixtureSensorFields[0]);
 #else
     return 0;
@@ -83,12 +95,12 @@ uint32_t heap_caps_get_total_size(uint32_t) { return 0; }
 void configTime(long, int, const char*) {}
 esp_reset_reason_t esp_reset_reason() { return ESP_RST_POWERON; }
 int16_t device_telemetry_get_cached_rssi(bool* valid) {
-    if (valid) *valid = false;
-    return 0;
+    if (valid) *valid = true;
+    return -55;
 }
 void device_telemetry_get_cpu_usage_snapshot(int* aggregate, int* per_core_values, uint8_t max_cores) {
-    if (aggregate) *aggregate = -1;
-    for (uint8_t index = 0; index < max_cores; ++index) per_core_values[index] = -1;
+    if (aggregate) *aggregate = 73;
+    for (uint8_t index = 0; index < max_cores; ++index) per_core_values[index] = 73;
 }
 DeviceMemorySnapshot device_telemetry_get_memory_snapshot() { return {}; }
 uint8_t display_manager_get_backlight_brightness() { return 0; }

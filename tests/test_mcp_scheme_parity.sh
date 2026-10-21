@@ -40,7 +40,7 @@ for path in pathlib.Path(sys.argv[1]).rglob("*.cpp"):
     if "build" in path.parts:
         continue
     for match in re.finditer(r'binding_template_register\("([a-z_]+)".*?\);', path.read_text(), re.S):
-        if not re.search(r'&k\w+Doc\}', match.group(0)):
+        if not re.search(r'&k\w+Doc\s*[,}]', match.group(0)):
             print(f"{path}: {match.group(1)}")
 PY
 )"

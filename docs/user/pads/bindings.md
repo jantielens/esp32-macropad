@@ -29,6 +29,70 @@ formats, and malformed expressions. They do not prove a topic exists or a path
 returns the expected value. Metadata comes from the device; if loading it fails,
 generic structural checks are not a substitute for device save validation.
 
+## Build a token from a source
+
+In **Binding Reference & Builders**, choose **On-device bindings**, **Home Assistant**,
+or **MQTT** under **Binding builders**. They share the same source picker and
+display options. Select a source using the options above the search or topic
+input. Unconfigured integrations are muted and marked **Setup needed**;
+select one to see its configuration link. Integrations unsupported by the
+firmware are hidden. Local device values do not need an integration configured.
+
+* **Home Assistant** searches entities or loads an exact entity ID, then offers
+  state, attributes, or a custom path. Follow the
+  [HA lookup workflow](../integrations/home-assistant.md#build-an-ha-binding)
+  for token permissions and unavailable states.
+* **MQTT** inspects one exact topic after you configure a broker. Choose
+  **Read topic**, wait for a received message, then click the raw payload
+  or a suggested scalar field. A scalar payload is selected automatically.
+  There is no wildcard or broker-wide discovery.
+  No message is different from an empty payload or zero. Failure or timeout
+  leaves you in source selection; retry or edit the topic. Cached received
+  messages are identified. See [MQTT data](../integrations/mqtt.md#feed-labels-and-widgets).
+* In **On-device bindings**, type at least three characters of a key or description
+  and click a result. Complete any required parameters. Static local values,
+  including device-class values and listed format presets, supply declared
+  examples without reading the device. Custom free-form formats may need
+  **Preview on device**.
+
+After selection, the picker shows **Sample value**. Device examples are marked
+**(example)**; HA and MQTT use the value acquired during selection. Examples
+are illustrative, not current readings, and are never saved as runtime data.
+**Display options** contains supported formatting, unit text, and
+**When unavailable**. Numeric values default to **Number**, or **Whole number**
+for integer-only bindings where supported. Values with fixed numeric output
+or duration-specific syntax retain their supported native formatting.
+Other values use **As received**. **Insert binding** fills the
+originating field; **Copy binding** is available elsewhere. **Change** returns
+to source selection. Raw-value widget fields omit display formatting and units.
+
+For expressions, named pad bindings, or other advanced syntax, open the scheme
+in the reference and choose its builder. The generic parameter editor remains
+available for every registered scheme and includes syntax, examples, generated
+tokens, and explicit **Preview on device**. Preview resolves text without saving
+or running an action. Its parameter inputs do not infer types or units from a
+sample. The reference dialog has no pad context; preview named pad bindings in
+the button editor or Button Builder using saved definitions, not unsaved edits.
+
+MQTT units start empty and are display text, not conversion. Inspection can
+expose up to 2,047 payload bytes, but a selected MQTT value must fit the
+resolver's 127-byte output. Truncated payloads do not supply JSON suggestions
+or numeric evidence; the builder explains output limits rather than promising
+a complete sample. Topic input is limited to 127 UTF-8 bytes, scalar paths to
+47, and generated tokens and labels to 191. Use shorter values when needed.
+Closing or changing the source releases temporary inspection; abandoned handles
+expire after 30 seconds. A subscribe request being accepted is not proof the
+broker acknowledged it.
+
+The reference and manual input remain available. To create labels and a widget
+together instead, use the
+[Button Builder](editing.md#create-a-button-from-a-source). It creates only an
+unsaved draft. Catalog entries without explicit numeric authoring metadata
+offer value labels only, even if a preview looks numeric. Numeric scenarios
+also need suitable samples and runtime widgets.
+Local labels and live history work on display firmware without HA or MQTT;
+history starts collecting while the device runs, not from an invented backfill.
+
 ## Preview and save
 
 In the button editor, a bindable field shows its resolved value below the input

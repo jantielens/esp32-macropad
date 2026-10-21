@@ -12,5 +12,9 @@ void binding_schema_dump_json() {
     binding_schema_emit(&schemes, true);
     std::string out;
     serializeJsonPretty(doc, out);
-    std::printf("%s\n", out.c_str());
+    for (size_t i = 0; i < out.size(); ++i) {
+        if (out[i] == '\r' && i + 1 < out.size() && out[i + 1] == '\n') continue;
+        std::putchar(out[i]);
+    }
+    std::putchar('\n');
 }

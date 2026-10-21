@@ -53,6 +53,17 @@ void mqtt_sub_store_resubscribe();
 // true if a new subscription was issued. Thread-safe.
 bool mqtt_sub_store_ensure_subscribed(const char* topic);
 
+// Add or release a short-lived inspection interest. Multiple handles for the
+// same topic share the store entry and manager subscription.
+bool mqtt_sub_store_inspection_acquire(const char* topic, bool* cached_sample);
+bool mqtt_sub_store_inspection_release(const char* topic);
+
+// Copy the latest inspection sample. `received` distinguishes no payload from
+// a received zero-length value. The return value indicates a tracked topic.
+bool mqtt_sub_store_inspection_snapshot(const char* topic, uint8_t* payload,
+                                        size_t payload_capacity, size_t* payload_len,
+                                        bool* received, bool* truncated);
+
 // Collect the MQTT topics a binding template references (recursing through
 // [pad:]/[expr:]) and ensure each is subscribed (see above). Call with the pad
 // binding context set if the template uses [pad:name]. Used by the live-preview

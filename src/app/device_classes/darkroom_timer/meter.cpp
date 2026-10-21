@@ -582,11 +582,27 @@ static const BindingSchemeDoc kMeterDoc = {
     nullptr, false, BINDING_DOC_NONE,
     "Values show --- until the needed readings exist.", nullptr,
 };
+static const BindingAuthoringKey kMeterAuthoringKeys[] = {
+    binding_authoring_number("lref", "lux", "1.2500", false),
+    binding_authoring_number("zone5_time", "s", "12.0", false),
+    binding_authoring_number("l_bright", "lux", "5.0000", false),
+    binding_authoring_number("l_dark", "lux", "0.4500", false),
+    binding_authoring_number("sbr", "", "1.05", false),
+    binding_authoring_number("grade", "", "2.5", false),
+    binding_authoring_text("grade_label", "Normal"),
+    binding_authoring_number("time", "s", "16.0", false),
+    binding_authoring_number("mag_lux_a", "lux", "2.0000", false),
+    binding_authoring_number("mag_lux_b", "lux", "1.0000", false),
+    binding_authoring_number("mag_factor", "", "2.0", false),
+    binding_authoring_number("mag_time", "s", "32.0", false),
+};
+static const BindingAuthoringSpec kMeterAuthoring = {BINDING_DOC_LIST(kMeterAuthoringKeys)};
 
 void meter_init() {
     if (!binding_template_register("meter", meter_resolve, meter_collect,
                                    {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    meter_binding_key_count, meter_binding_key_at, &kMeterDoc})) {
+                                    meter_binding_key_count, meter_binding_key_at, &kMeterDoc,
+                                    &kMeterAuthoring})) {
         LOGE(TAG, "Failed to register meter binding scheme");
     } else {
         LOGI(TAG, "Meter binding scheme registered");

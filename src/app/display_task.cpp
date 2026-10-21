@@ -334,7 +334,7 @@ void DisplayManager::lvglTask(void* pvParameter) {
 #if HAS_HA_LIVE
 				ha_live_tick();
 #endif
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
 				// Poll data stream registry (background ring buffers for
 				// history-based widgets, independent of active screen).
 				{

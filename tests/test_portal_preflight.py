@@ -48,15 +48,19 @@ int main() {
     assert(!handler.canHandle(nullptr));
     const std::vector<std::string> expected = {
         "/api/config", "/api/info", "/api/bindings",
+#if HAS_HA_LIVE
+        "/api/ha/live", "/api/ha/lookup",
+#endif
+#if HAS_MQTT && HAS_DISPLAY
+        "/api/mqtt/inspect",
+#endif
 #if HEALTH_HISTORY_ENABLED
         "/api/health/history",
 #endif
         "/api/health", "/api/reboot", "/api/firmware/update/status", "/api/firmware/update",
 #if HAS_DISPLAY
         "/api/recipes/catalog", "/api/pad/button_sizes", "/api/pad/blocks",
-#if HAS_MQTT
         "/api/pad/resolve",
-#endif
         "/api/pad", "/api/screenshot",
 #if HAS_TOUCH
         "/api/screen/tap",
@@ -100,6 +104,10 @@ int main() {
     assert(handler.canHandle(&history));
     AsyncWebServerRequest resolve(HTTP_OPTIONS, "/api/pad/resolve");
     assert(handler.canHandle(&resolve) == bool(HAS_DISPLAY));
+    AsyncWebServerRequest inspect(HTTP_OPTIONS, "/api/mqtt/inspect");
+    assert(handler.canHandle(&inspect) == bool(HAS_MQTT && HAS_DISPLAY));
+    AsyncWebServerRequest lookup(HTTP_OPTIONS, "/api/ha/lookup");
+    assert(handler.canHandle(&lookup) == bool(HAS_HA_LIVE));
     AsyncWebServerRequest request(HTTP_OPTIONS, "/api/config");
     handler.handleRequest(&request);
     assert(request.sent && request.response.status == 204);
@@ -408,10 +416,16 @@ int main() {
     constants = cors[cors.index("static constexpr const char kCorsAllowHeaders"):
                      cors.index("void web_portal_add_default_cors_headers")]
     responses = cors[cors.index("void web_portal_add_cors_headers"):]
-    flags = ["HEALTH_HISTORY_ENABLED", "HAS_DISPLAY", "HAS_MQTT", "HAS_TOUCH",
+    flags = ["HEALTH_HISTORY_ENABLED", "HAS_DISPLAY", "HAS_MQTT", "HAS_HA_LIVE", "HAS_TOUCH",
              "HAS_CAMERA", "HAS_BLE_HID", "HAS_TTF_FONTS", "HAS_SOUND_PLAYER"]
     profiles = [dict.fromkeys(flags, 0), dict.fromkeys(flags, 1)]
     profiles += [dict(dict.fromkeys(flags, 1), **{flag: 0}) for flag in flags]
+    profiles += [
+        dict(dict.fromkeys(flags, 0), HAS_DISPLAY=1),
+        dict(dict.fromkeys(flags, 0), HAS_DISPLAY=1, HAS_HA_LIVE=1),
+        dict(dict.fromkeys(flags, 0), HAS_DISPLAY=1, HAS_MQTT=1),
+        dict(dict.fromkeys(flags, 0), HAS_DISPLAY=1, HAS_MQTT=1, HAS_HA_LIVE=1),
+    ]
     with tempfile.TemporaryDirectory(prefix="portal-preflight-") as directory:
         test = pathlib.Path(directory) / "test.cpp"
         binary = pathlib.Path(directory) / "test"
@@ -421,7 +435,7 @@ int main() {
                             *[f"-D{flag}={value}" for flag, value in profile.items()],
                             str(test), "-o", str(binary)], check=True)
             subprocess.run([str(binary)], check=True)
-    print("Portal preflight matching and CORS checks passed (10 profiles)")
+    print(f"Portal preflight matching and CORS checks passed ({len(profiles)} profiles)")
 
 
 if __name__ == "__main__":

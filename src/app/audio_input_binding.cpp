@@ -91,6 +91,13 @@ const BindingSchemeDoc kAudioDoc = {
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
 
+const BindingAuthoringKey kAudioAuthoringKeys[] = {
+    binding_authoring_integer("input.rms", "", "12000"),
+    binding_authoring_integer("input.peak", "", "24000"),
+    binding_authoring_text("input.active", "true"),
+};
+const BindingAuthoringSpec kAudioAuthoring = {BINDING_DOC_LIST(kAudioAuthoringKeys)};
+
 } // namespace
 
 void audio_input_binding_init() {
@@ -98,7 +105,7 @@ void audio_input_binding_init() {
                                    audio_input_binding_collect,
                                    {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
                                     audio_input_binding_key_count, audio_input_binding_key_at,
-                                    &kAudioDoc})) {
+                                    &kAudioDoc, &kAudioAuthoring})) {
         LOGE("AudioInputBind", "Failed to register audio input binding scheme");
         return;
     }

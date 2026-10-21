@@ -70,7 +70,7 @@ static void dummy_publish_ha(MqttManager &mqtt) {
 #endif
 
 void register_dummy_sensor(SensorRegistry &registry) {
-		static const SensorField fields[] = {{"dummy_value", "Synthetic value from 0 to 99.99."}};
+		static const SensorField fields[] = {{"dummy_value", "Synthetic value from 0 to 99.99.", "", "42.5"}};
 		SensorCallbacks callbacks = {};
 		callbacks.name = "DUMMY";
 		callbacks.init = dummy_init;

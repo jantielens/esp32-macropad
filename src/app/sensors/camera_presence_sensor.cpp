@@ -95,8 +95,8 @@ void camera_presence_publish_ha(MqttManager& mqtt) {
 
 void register_camera_presence_sensor(SensorRegistry& registry) {
     static const SensorField fields[] = {
-        {"camera_presence", "Camera presence detected: 1 or 0."},
-        {"camera_last_motion", "Last camera motion as Unix seconds; 0 if none."},
+        {"camera_presence", "Camera presence detected: 1 or 0.", "", "1"},
+        {"camera_last_motion", "Last camera motion as Unix seconds; 0 if none.", "s", "0"},
     };
     SensorCallbacks callbacks = {};
     callbacks.name = "Camera Presence";

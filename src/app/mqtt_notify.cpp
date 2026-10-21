@@ -25,7 +25,7 @@ void mqtt_notify_init() {
 }
 
 void mqtt_notify_on_connected() {
-    mqtt_manager.subscribe(command_topic);
+    mqtt_manager.setSubscriptionOwner(command_topic, MqttSubscriptionOwner::Notify, true);
     mqtt_manager.publish(state_topic, "", true);
 }
 

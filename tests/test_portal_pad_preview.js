@@ -132,11 +132,27 @@ assert(!css.includes('.pad-cell-widget-'));
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_templates.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
+vm.runInContext(`BUTTON_BUILDER_PROVIDERS.push({
+    id: 'ha',
+    buildBinding(candidate, { format = '' } = {}) {
+        return '[ha:' + candidate.reference.entity_id + (format ? ';;' + format : '') + ']';
+    },
+    supportsHistory(candidate) {
+        return candidate.capabilities.numericWidget;
+    },
+    historyBackfill() { return null; }
+});`, context);
 context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
     widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
 const barBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "bar")', context);
 const builderElements = Object.fromEntries(['fields', 'states', 'note', 'sources', 'selection', 'name', 'id', 'state'].map(name => ['[data-bb-' + name + ']', createElement()]));
-const makeDraft = (detail, name) => ({ sources: [{ detail, name, options: {} }], options: {}, previewState: detail.state });
+const makeDraft = (detail, name) => {
+    const candidate = { providerId: 'ha', sourceId: detail.entity_id || 'sensor.preview',
+        displayName: name, reference: { entity_id: detail.entity_id || 'sensor.preview' },
+        sample: detail.state, sampleTruncated: false, unit: detail.unit,
+        formatModes: ['raw', 'number'], capabilities: { display: true, numericWidget: true, liveSampling: true } };
+    return { sources: [{ candidate, name, options: {} }], options: {}, previewState: detail.state };
+};
 context.testBuilderSession = {
     draft: makeDraft({ state: '42', unit: '%' }, 'Battery'), scenario: barBuilder,
     dialog: { querySelector: selector => builderElements[selector] }
@@ -267,8 +283,11 @@ for (const color of ['#4CAF50', '#2196F3']) {
     const detail = { entity_id: 'sensor.temperature', state: '21.37', unit: '\u00b0C' };
     const session = { draft: makeDraft(detail, 'Living room') };
     context.padButtonBuilderSetScenario(session, historyBuilder);
-    session.draft.sources.push(context.padButtonBuilderSource(historyBuilder,
-        { entity_id: 'sensor.humidity', state: '54.2', unit: '%' }, 'Humidity', 1));
+    session.draft.sources.push(context.padButtonBuilderSource(historyBuilder, {
+        providerId: 'ha', sourceId: 'sensor.humidity', displayName: 'Humidity',
+        reference: { entity_id: 'sensor.humidity' }, sample: '54.2', sampleTruncated: false, unit: '%',
+        formatModes: ['raw', 'number'], capabilities: { display: true, numericWidget: true, liveSampling: true }
+    }, 1));
     const render = () => {
         const cell = createElement();
         const button = { ...historyBuilder.build(session.draft), ...historyBuilder.preview(session.draft) };
@@ -282,7 +301,7 @@ for (const color of ['#4CAF50', '#2196F3']) {
     assert.strictEqual(chart.children[5].textContent, '54.2 %');
     assert.strictEqual(chart.children[5].attributes.fill, '#2196F3');
     assert.strictEqual(chart.children[5].attributes.y, chart.children[4].attributes.cy);
-    session.draft.sources[1].detail.state = 'unavailable';
+    session.draft.sources[1].candidate.sample = 'unavailable';
     const unavailable = render();
     assert.strictEqual(unavailable.children.at(-1).children[3].textContent, '---');
     assert.strictEqual(unavailable.children.at(-1).children.length, 4, 'Unavailable values have a label but no zero or fake trend');

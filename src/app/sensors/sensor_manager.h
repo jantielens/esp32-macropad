@@ -12,6 +12,8 @@ class MqttManager;
 struct SensorField {
 	const char *key;
 	const char *summary;
+	const char *unit = nullptr;
+	const char *example_value = nullptr;
 };
 
 struct SensorCallbacks {

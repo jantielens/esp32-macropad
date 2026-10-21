@@ -311,7 +311,7 @@ static bool gauge_set_start_label_text(lv_obj_t* label, const char* templ) {
 
     char resolved[CONFIG_BINDABLE_SHORT_LEN];
     resolved[0] = '\0';
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
     if (binding_template_has_bindings(templ)) {
         binding_template_resolve(templ, resolved, sizeof(resolved));
     } else

@@ -387,6 +387,18 @@ See the [REST API reference](docs/dev/web-portal.md#home-assistant-live-status).
 Live bindings share HA credentials with REST actions and history; MQTT remains
 independent.
 
+### MQTT inspection API
+
+| Endpoint                                 | Purpose                                                                                 |
+|------------------------------------------|-----------------------------------------------------------------------------------------|
+| `POST /api/mqtt/inspect`                  | Start authenticated, bounded exact-topic inspection; returns a queued handle              |
+| `GET /api/mqtt/inspect?handle=<id>`        | Poll received sample, cached/truncated flags, and explicit acquisition or cleanup status   |
+| `DELETE /api/mqtt/inspect?handle=<id>`     | Request idempotent release; acceptance does not claim broker acknowledgement               |
+
+Available with `HAS_MQTT`, independently of display support. Four concurrent
+handles share a ten-second acquisition deadline and 30-second hard lifetime.
+See [inspection limits, status codes, and ownership](docs/dev/web-portal.md#mqtt-topic-inspection).
+
 ### Running Tests
 
 Host-native unit and integration tests run on the development machine (no ESP32 needed). They require CMake 3.20 or later. If CMake is installed through ESP-IDF but is not on `PATH`, use its toolchain directory for the commands below:

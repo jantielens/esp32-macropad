@@ -252,6 +252,52 @@ target_compile_options(test_sparkline_widget PRIVATE
     "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/board_config.h")
 target_link_libraries(test_sparkline_widget PRIVATE host_lvgl m)
 
+add_host_gtest(test_mqtt_subscription_registry test_mqtt_subscription_registry.cpp)
+
+add_host_gtest(test_mqtt_sub_store
+    test_mqtt_sub_store.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/mqtt_sub_store.cpp)
+target_compile_definitions(test_mqtt_sub_store PRIVATE TEST_HEAP_CAPS_ALLOCATOR)
+target_compile_options(test_mqtt_sub_store PRIVATE
+    -Werror=frame-larger-than=1536
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/mqtt_sub_store_test_support.h")
+
+add_host_gtest(test_mqtt_sub_store_headless
+    test_mqtt_sub_store.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/mqtt_sub_store.cpp)
+target_compile_definitions(test_mqtt_sub_store_headless PRIVATE
+    TEST_HEAP_CAPS_ALLOCATOR TEST_HAS_DISPLAY=0)
+target_compile_options(test_mqtt_sub_store_headless PRIVATE
+    -Werror=frame-larger-than=1536
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/mqtt_sub_store_test_support.h")
+
+foreach(profile IN ITEMS psram internal)
+    add_host_legacy_test(test_mqtt_inspection_${profile}
+        SOURCES test_mqtt_inspection.cpp
+        INCLUDES ${HOST_ARDUINOJSON_DIR}
+        DEFINITIONS TEST_HEAP_CAPS_ALLOCATOR TEST_FREERTOS_MUTEX_LIFECYCLE
+        OPTIONS -Wno-deprecated-declarations -Wno-class-memaccess
+        LIBRARIES GTest::gtest_main)
+    if(profile STREQUAL internal)
+        target_compile_definitions(test_mqtt_inspection_${profile} PRIVATE HAS_PSRAM=0)
+    endif()
+endforeach()
+
+add_host_gtest(test_data_stream_display_only
+    test_data_stream_display_only.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/data_stream.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/widgets/widget.cpp)
+target_include_directories(test_data_stream_display_only PRIVATE
+    ${HOST_ARDUINOJSON_DIR}
+    ${HOST_LVGL_DIR})
+target_compile_definitions(test_data_stream_display_only PRIVATE
+    HAS_DISPLAY=1 HAS_MQTT=0 HAS_HA_LIVE=0 HAS_HA_HISTORY=0 HAS_PSRAM=0)
+target_compile_options(test_data_stream_display_only PRIVATE
+    -Wno-deprecated-declarations -Wno-unused-parameter -Wno-unused-variable
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/Arduino.h"
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
+target_link_libraries(test_data_stream_display_only PRIVATE host_lvgl m)
+
 add_host_gtest(test_fill_draw test_fill_draw.cpp)
 target_include_directories(test_fill_draw BEFORE PRIVATE ${HOST_ARDUINOJSON_DIR})
 target_link_libraries(test_fill_draw PRIVATE host_lvgl m)
@@ -700,15 +746,16 @@ function(add_binding_schema_profile name definition)
 endfunction()
 
 add_binding_schema_profile(baseline "")
+add_binding_schema_profile(display_only "HAS_MQTT=0;HAS_HA_LIVE=0")
 add_binding_schema_profile(alarm_disabled "ALARM_ENABLED=0")
 add_binding_schema_profile(camera BINDING_SCHEMA_PROFILE_CAMERA)
-add_binding_schema_profile(full BINDING_SCHEMA_PROFILE_FULL ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
+add_binding_schema_profile(full BINDING_SCHEMA_PROFILE_FULL ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp)
 # Portal dev-server fixture for GET /api/bindings?docs=1; regenerate with
 # build/host-tests/tests/test_binding_schema_full --emit-json > tools/mock-data/binding-docs.json
 add_test(NAME test_binding_docs_fixture
     COMMAND sh -c "$<TARGET_FILE:test_binding_schema_full> --emit-json | diff -u tools/mock-data/binding-docs.json -")
 set_tests_properties(test_binding_docs_fixture PROPERTIES WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp)
+add_binding_schema_profile(full_no_psram "BINDING_SCHEMA_PROFILE_FULL;HAS_PSRAM=0" ${PROJECT_SOURCE_DIR}/src/app/audio_input_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/image_binding.cpp)
 add_binding_schema_profile(ha_only "HAS_HA_LIVE=1;HAS_MQTT=0")
 add_binding_schema_profile(voice BINDING_SCHEMA_PROFILE_VOICE ${PROJECT_SOURCE_DIR}/src/app/device_classes/voice_assistant/voice_binding.cpp)
 add_binding_schema_profile(coffee BINDING_SCHEMA_PROFILE_COFFEE ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/scale_binding.cpp ${PROJECT_SOURCE_DIR}/src/app/device_classes/coffee_scale/brew/brew_binding.cpp)

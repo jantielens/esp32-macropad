@@ -118,9 +118,9 @@ static void bme280_publish_ha(MqttManager &mqtt) {
 
 void register_bme280_sensor(SensorRegistry &registry) {
 		static const SensorField fields[] = {
-				{"temperature", "Temperature in degrees Celsius."},
-				{"humidity", "Relative humidity in percent."},
-				{"pressure", "Atmospheric pressure in hPa."},
+				{"temperature", "Temperature in degrees Celsius.", "\xC2\xB0" "C", "21.37"},
+				{"humidity", "Relative humidity in percent.", "%", "54.2"},
+				{"pressure", "Atmospheric pressure in hPa.", "hPa", "1013.25"},
 		};
 		SensorCallbacks callbacks = {};
 		callbacks.name = "BME280";

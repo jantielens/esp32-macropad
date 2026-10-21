@@ -28,13 +28,42 @@
 struct SubStoreEntry {
     char topic[CONFIG_MQTT_TOPIC_MAX_LEN];
     char value[MQTT_SUB_STORE_MAX_VALUE_LEN];
+    size_t value_len;
+    uint8_t inspection_refs;
     bool dirty;      // set by store_set, cleared by store_get
     bool in_use;
     bool truncated;  // payload exceeded MAX_VALUE_LEN on ingestion
+    bool received;
+    bool saved;
+    bool preview;
 };
 
 static SubStoreEntry* g_entries = nullptr;
 static SemaphoreHandle_t g_mutex = nullptr;
+static SemaphoreHandle_t g_interest_mutex = nullptr;
+
+static bool lock_interests() {
+    return g_interest_mutex &&
+           xSemaphoreTake(g_interest_mutex, pdMS_TO_TICKS(100)) == pdTRUE;
+}
+
+static void unlock_interests() {
+    if (g_interest_mutex) xSemaphoreGive(g_interest_mutex);
+}
+
+static bool entry_has_interest(const SubStoreEntry& entry) {
+    return entry.saved || entry.preview || entry.inspection_refs != 0;
+}
+
+static void reset_entry(SubStoreEntry& entry, const char* topic) {
+    memset(&entry, 0, sizeof(entry));
+    strlcpy(entry.topic, topic, sizeof(entry.topic));
+    entry.in_use = true;
+}
+
+static void clear_entry(SubStoreEntry& entry) {
+    memset(&entry, 0, sizeof(entry));
+}
 
 // user_data points to a TopicCollectorCtx (defined in subscribe_all)
 struct TopicCollectorCtx {
@@ -55,27 +84,34 @@ void mqtt_sub_store_collect_topic(void* user_data, const char* topic) {
     (*ctx->count)++;
 }
 
-bool mqtt_sub_store_active() { return g_entries != nullptr; }
+bool mqtt_sub_store_active() {
+    return g_entries != nullptr && g_mutex != nullptr && g_interest_mutex != nullptr;
+}
 
 // ============================================================================
 // Init
 // ============================================================================
 
 void mqtt_sub_store_init() {
-    if (g_entries) return; // already initialized
-
-    g_entries = (SubStoreEntry*)heap_caps_calloc(
-        MQTT_SUB_STORE_MAX_ENTRIES, sizeof(SubStoreEntry),
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!g_entries) {
-        g_entries = (SubStoreEntry*)calloc(MQTT_SUB_STORE_MAX_ENTRIES, sizeof(SubStoreEntry));
+        g_entries = (SubStoreEntry*)heap_caps_calloc(
+            MQTT_SUB_STORE_MAX_ENTRIES, sizeof(SubStoreEntry),
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!g_entries) {
+            g_entries = (SubStoreEntry*)calloc(MQTT_SUB_STORE_MAX_ENTRIES, sizeof(SubStoreEntry));
+        }
     }
     if (!g_entries) {
         LOGE(TAG, "OOM: failed to allocate store");
         return;
     }
 
-    g_mutex = xSemaphoreCreateMutex();
+    if (!g_mutex) g_mutex = xSemaphoreCreateMutex();
+    if (!g_interest_mutex) g_interest_mutex = xSemaphoreCreateMutex();
+    if (!g_mutex || !g_interest_mutex) {
+        LOGE(TAG, "Failed to create store mutexes");
+        return;
+    }
     LOGI(TAG, "Initialized (%d entries, %u bytes)", MQTT_SUB_STORE_MAX_ENTRIES,
          (unsigned)(MQTT_SUB_STORE_MAX_ENTRIES * sizeof(SubStoreEntry)));
 }
@@ -85,42 +121,27 @@ void mqtt_sub_store_init() {
 // ============================================================================
 
 void mqtt_sub_store_subscribe_all() {
-    if (!g_entries || !g_mutex) return;
+#if HAS_DISPLAY
+    if (!g_entries || !g_mutex || !lock_interests()) return;
 
     // Collect unique topics from all pad page label bindings and state/widget bindings.
     static const int MAX_UNIQUE = MQTT_SUB_STORE_MAX_ENTRIES;
     int unique_count = 0;
 
-    // Allocate temp list in PSRAM
+    // Keep all full-store snapshots off the 8 KiB Arduino loop stack.
     typedef TopicCollectorCtx::Entry TopicEntry;
+    const size_t workspace_bytes = 3 * MAX_UNIQUE * sizeof(TopicEntry);
+    const uint32_t workspace_caps = MALLOC_CAP_8BIT |
+        (HAS_PSRAM ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL);
     TopicEntry* unique = (TopicEntry*)heap_caps_malloc(
-        MAX_UNIQUE * sizeof(TopicEntry), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!unique) {
-        unique = (TopicEntry*)malloc(MAX_UNIQUE * sizeof(TopicEntry));
-    }
+        workspace_bytes, workspace_caps);
     if (!unique) {
         LOGE(TAG, "OOM for topic dedup list");
+        unlock_interests();
         return;
     }
 
-    // Context for binding_template_collect_topics
-    TopicCollectorCtx ctx;
-    ctx.list = unique;
-    ctx.count = &unique_count;
-    ctx.max = MAX_UNIQUE;
-
-    // Helper lambda to add a plain topic string (for widget data)
-    auto add_unique = [&](const char* topic) {
-        if (!topic[0]) return;
-        for (int i = 0; i < unique_count; i++) {
-            if (strcmp(unique[i].topic, topic) == 0) return;
-        }
-        if (unique_count >= MAX_UNIQUE) return;
-        strlcpy(unique[unique_count].topic, topic, CONFIG_MQTT_TOPIC_MAX_LEN);
-        unique_count++;
-    };
-
-#if HAS_DISPLAY
+    TopicCollectorCtx ctx{unique, &unique_count, MAX_UNIQUE};
     binding_sources_visit(binding_template_collect_topics, &ctx);
 
     // Scan screen saver wake binding for MQTT topics
@@ -133,48 +154,73 @@ void mqtt_sub_store_subscribe_all() {
 #if CAMERA_MOTION_ACTIONS_ENABLED
     camera_motion_actions_collect_binding_topics(&ctx);
 #endif
-#endif // HAS_DISPLAY
+    TopicEntry* old_saved = unique + MAX_UNIQUE;
+    TopicEntry* old_preview = old_saved + MAX_UNIQUE;
+    int old_saved_count = 0;
+    int old_preview_count = 0;
 
-    // Update store entries and subscribe
+    // Reconcile saved and lazy-preview interests without disturbing active
+    // inspection handles or holding the store lock across manager calls.
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        // Mark all entries as unused, then re-add unique topics
         for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
-            g_entries[i].in_use = false;
+            SubStoreEntry& entry = g_entries[i];
+            if (!entry.in_use) continue;
+            if (entry.saved) strlcpy(old_saved[old_saved_count++].topic, entry.topic, CONFIG_MQTT_TOPIC_MAX_LEN);
+            if (entry.preview) strlcpy(old_preview[old_preview_count++].topic, entry.topic, CONFIG_MQTT_TOPIC_MAX_LEN);
+            entry.saved = false;
+            entry.preview = false;
+            entry.in_use = entry_has_interest(entry);
         }
 
         for (int t = 0; t < unique_count; t++) {
-            // Find or allocate a slot
             int slot = -1;
             for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
-                if (!g_entries[i].in_use) {
+                if (g_entries[i].topic[0] && strcmp(g_entries[i].topic, unique[t].topic) == 0) {
                     slot = i;
                     break;
                 }
             }
             if (slot < 0) {
+                for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+                    if (!g_entries[i].in_use) {
+                        slot = i;
+                        reset_entry(g_entries[i], unique[t].topic);
+                        break;
+                    }
+                }
+            }
+            if (slot < 0) {
                 LOGW(TAG, "Store full, skipping topic: %s", unique[t].topic);
-                break;
+                continue;
             }
-
-            // Preserve existing value if topic was already tracked
-            bool existed = (strcmp(g_entries[slot].topic, unique[t].topic) == 0);
-            if (!existed) {
-                strlcpy(g_entries[slot].topic, unique[t].topic, CONFIG_MQTT_TOPIC_MAX_LEN);
-                g_entries[slot].value[0] = '\0';
-                g_entries[slot].dirty = false;
-            }
+            g_entries[slot].saved = true;
             g_entries[slot].in_use = true;
         }
+        for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+            if (!entry_has_interest(g_entries[i])) clear_entry(g_entries[i]);
+        }
         xSemaphoreGive(g_mutex);
+    } else {
+        LOGW(TAG, "Could not lock store while reconciling saved topics");
+        free(unique);
+        unlock_interests();
+        return;
     }
 
-    // Subscribe to each unique topic via MQTT manager
+    for (int t = 0; t < old_saved_count; t++) {
+        mqtt_manager.setSubscriptionOwner(old_saved[t].topic, MqttSubscriptionOwner::SavedBindings, false);
+    }
+    for (int t = 0; t < old_preview_count; t++) {
+        mqtt_manager.setSubscriptionOwner(old_preview[t].topic, MqttSubscriptionOwner::Preview, false);
+    }
     for (int t = 0; t < unique_count; t++) {
-        mqtt_manager.subscribe(unique[t].topic);
+        mqtt_manager.setSubscriptionOwner(unique[t].topic, MqttSubscriptionOwner::SavedBindings, true);
     }
 
-    LOGI(TAG, "Subscribed to %d unique topics", unique_count);
+    LOGI(TAG, "Reconciled %d unique topics", unique_count);
     free(unique);
+    unlock_interests();
+#endif // HAS_DISPLAY
 }
 
 // ============================================================================
@@ -182,22 +228,40 @@ void mqtt_sub_store_subscribe_all() {
 // ============================================================================
 
 void mqtt_sub_store_resubscribe() {
-    if (!g_entries || !g_mutex) return;
+    if (!g_entries || !g_mutex || !lock_interests()) return;
 
     int count = 0;
-    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
-            if (g_entries[i].in_use && g_entries[i].topic[0]) {
-                mqtt_manager.subscribe(g_entries[i].topic);
-                count++;
-            }
+    for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+        char topic[CONFIG_MQTT_TOPIC_MAX_LEN] = {};
+        bool saved = false;
+        bool preview = false;
+        bool inspection = false;
+        if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+            LOGW(TAG, "Could not lock store while restoring subscriptions");
+            unlock_interests();
+            return;
+        }
+        const SubStoreEntry& entry = g_entries[i];
+        if (entry.in_use && entry.topic[0]) {
+            strlcpy(topic, entry.topic, sizeof(topic));
+            saved = entry.saved;
+            preview = entry.preview;
+            inspection = entry.inspection_refs != 0;
         }
         xSemaphoreGive(g_mutex);
+
+        if (!topic[0]) continue;
+        // The interest mutex keeps ownership stable while the payload lock is released.
+        if (saved) mqtt_manager.setSubscriptionOwner(topic, MqttSubscriptionOwner::SavedBindings, true);
+        if (preview) mqtt_manager.setSubscriptionOwner(topic, MqttSubscriptionOwner::Preview, true);
+        if (inspection) mqtt_manager.setSubscriptionOwner(topic, MqttSubscriptionOwner::Inspection, true);
+        count++;
     }
 
     if (count > 0) {
         LOGI(TAG, "Re-subscribed to %d topics", count);
     }
+    unlock_interests();
 }
 
 // ============================================================================
@@ -205,8 +269,9 @@ void mqtt_sub_store_resubscribe() {
 // ============================================================================
 
 bool mqtt_sub_store_ensure_subscribed(const char* topic) {
-    if (!g_entries || !g_mutex || !topic || !topic[0]) return false;
-    bool need_sub = false;
+    if (!g_entries || !g_mutex || !topic || !topic[0] || !lock_interests()) return false;
+    bool add_preview = false;
+    bool new_entry = false;
     if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
         int slot = -1;
         for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
@@ -217,18 +282,152 @@ bool mqtt_sub_store_ensure_subscribed(const char* topic) {
                 if (!g_entries[i].in_use) { slot = i; break; }
             }
             if (slot >= 0) {
-                strlcpy(g_entries[slot].topic, topic, CONFIG_MQTT_TOPIC_MAX_LEN);
-                g_entries[slot].value[0] = '\0';
-                g_entries[slot].dirty = false;
-                g_entries[slot].truncated = false;
-                g_entries[slot].in_use = true;
-                need_sub = true;
+                reset_entry(g_entries[slot], topic);
+                new_entry = true;
             }
         }
+        if (slot >= 0 && !g_entries[slot].preview) {
+            g_entries[slot].preview = true;
+            add_preview = true;
+        }
         xSemaphoreGive(g_mutex);
+    } else {
+        unlock_interests();
+        return false;
     }
-    if (need_sub) mqtt_manager.subscribe(topic);
-    return need_sub;
+    if (add_preview) mqtt_manager.setSubscriptionOwner(topic, MqttSubscriptionOwner::Preview, true);
+    unlock_interests();
+    return new_entry;
+}
+
+bool mqtt_sub_store_inspection_acquire(const char* topic, bool* cached_sample) {
+    if (!g_entries || !g_mutex || !topic || !topic[0] || !lock_interests()) return false;
+    bool first_interest = false;
+    if (cached_sample) *cached_sample = false;
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        unlock_interests();
+        return false;
+    }
+
+    int slot = -1;
+    for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+        if (g_entries[i].in_use && strcmp(g_entries[i].topic, topic) == 0) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+            if (!g_entries[i].in_use) {
+                slot = i;
+                reset_entry(g_entries[i], topic);
+                break;
+            }
+        }
+    }
+    if (slot < 0 || g_entries[slot].inspection_refs == UINT8_MAX) {
+        xSemaphoreGive(g_mutex);
+        unlock_interests();
+        return false;
+    }
+    if (cached_sample) *cached_sample = g_entries[slot].received;
+    first_interest = g_entries[slot].inspection_refs++ == 0;
+    xSemaphoreGive(g_mutex);
+
+    if (first_interest &&
+        !mqtt_manager.setSubscriptionOwner(topic, MqttSubscriptionOwner::Inspection, true)) {
+        if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+                SubStoreEntry& entry = g_entries[i];
+                if (!entry.in_use || strcmp(entry.topic, topic) != 0) continue;
+                if (entry.inspection_refs > 0) --entry.inspection_refs;
+                if (!entry_has_interest(entry)) clear_entry(entry);
+                break;
+            }
+            xSemaphoreGive(g_mutex);
+        }
+        unlock_interests();
+        return false;
+    }
+    unlock_interests();
+    return true;
+}
+
+bool mqtt_sub_store_inspection_release(const char* topic) {
+    if (!g_entries || !g_mutex || !topic || !topic[0] || !lock_interests()) return false;
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        unlock_interests();
+        return false;
+    }
+    bool found = false;
+
+    for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+        SubStoreEntry& entry = g_entries[i];
+        if (!entry.in_use || strcmp(entry.topic, topic) != 0) continue;
+        found = true;
+        if (entry.inspection_refs > 1) {
+            --entry.inspection_refs;
+            xSemaphoreGive(g_mutex);
+            unlock_interests();
+            return true;
+        }
+        found = entry.inspection_refs == 1;
+        break;
+    }
+    xSemaphoreGive(g_mutex);
+
+    if (!found) {
+        unlock_interests();
+        return true;
+    }
+
+    // Keep the final local reference until the manager has accepted removal.
+    // This makes a retry after registry-lock contention idempotent.
+    if (!mqtt_manager.setSubscriptionOwner(topic, MqttSubscriptionOwner::Inspection, false)) {
+        unlock_interests();
+        return false;
+    }
+
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        unlock_interests();
+        return false;
+    }
+    for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+        SubStoreEntry& entry = g_entries[i];
+        if (!entry.in_use || strcmp(entry.topic, topic) != 0) continue;
+        if (entry.inspection_refs == 1) --entry.inspection_refs;
+        if (!entry_has_interest(entry)) clear_entry(entry);
+        break;
+    }
+    xSemaphoreGive(g_mutex);
+    unlock_interests();
+    return true;
+}
+
+bool mqtt_sub_store_inspection_snapshot(const char* topic, uint8_t* payload,
+                                        size_t payload_capacity, size_t* payload_len,
+                                        bool* received, bool* truncated) {
+    if (payload_len) *payload_len = 0;
+    if (received) *received = false;
+    if (truncated) *truncated = false;
+    if (!g_entries || !g_mutex || !topic || !payload || payload_capacity == 0) return false;
+
+    bool found = false;
+    if (xSemaphoreTake(g_mutex, pdMS_TO_TICKS(50)) != pdTRUE) return false;
+    for (int i = 0; i < MQTT_SUB_STORE_MAX_ENTRIES; i++) {
+        const SubStoreEntry& entry = g_entries[i];
+        if (!entry.in_use || strcmp(entry.topic, topic) != 0) continue;
+        if (entry.value_len >= payload_capacity) break;
+        if (entry.value_len) memcpy(payload, entry.value, entry.value_len);
+        payload[entry.value_len] = '\0';
+        if (payload_len) *payload_len = entry.value_len;
+        if (received) *received = entry.received;
+        if (truncated) *truncated = entry.truncated;
+        found = true;
+        break;
+    }
+    xSemaphoreGive(g_mutex);
+    return found;
 }
 
 void mqtt_sub_store_ensure_binding_subscribed(const char* templ) {
@@ -256,10 +455,12 @@ void mqtt_sub_store_set(const char* topic, const uint8_t* payload, unsigned int 
                 if (copy_len >= MQTT_SUB_STORE_MAX_VALUE_LEN) {
                     copy_len = MQTT_SUB_STORE_MAX_VALUE_LEN - 1;
                 }
-                memcpy(g_entries[i].value, payload, copy_len);
+                if (copy_len) memcpy(g_entries[i].value, payload, copy_len);
                 g_entries[i].value[copy_len] = '\0';
+                g_entries[i].value_len = copy_len;
                 g_entries[i].dirty = true;
                 g_entries[i].truncated = was_truncated;
+                g_entries[i].received = true;
                 if (was_truncated) {
                     LOGW(TAG, "Payload truncated for %s (%u > %d)",
                          topic, (unsigned)len, MQTT_SUB_STORE_MAX_VALUE_LEN - 1);

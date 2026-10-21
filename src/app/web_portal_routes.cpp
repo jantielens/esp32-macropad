@@ -16,6 +16,9 @@
 #endif
 
 #include "board_config.h"
+#if HAS_MQTT && HAS_DISPLAY
+#include "mqtt_inspection.h"
+#endif
 
 #if HAS_DISPLAY
 #include "web_portal_screenshot.h"
@@ -66,6 +69,9 @@ static const char* const core_preflight_paths[] = {
 	"/api/ha/live",
 	"/api/ha/lookup",
 #endif
+#if HAS_MQTT && HAS_DISPLAY
+	"/api/mqtt/inspect",
+#endif
 #if HEALTH_HISTORY_ENABLED
 	"/api/health/history",
 #endif
@@ -77,7 +83,7 @@ static const char* const core_preflight_paths[] = {
 	"/api/recipes/catalog",
 	"/api/pad/button_sizes",
 	"/api/pad/blocks",
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
 	"/api/pad/resolve",
 #endif
 	"/api/pad",
@@ -237,7 +243,7 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// Pad building blocks catalog (registered before /api/pad to avoid prefix match)
 		server->on("/api/pad/blocks", HTTP_GET, handleGetPadBlocks);
 
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
 		// Pad binding live-resolve (registered before /api/pad to avoid prefix match)
 		server->on(
 				"/api/pad/resolve",
@@ -356,6 +362,9 @@ void web_portal_register_routes(AsyncWebServer* server) {
 		// exact-match routes they install take precedence over the wildcard
 		// component dispatcher.
 		web_portal_routes_register_all(server);
+#if HAS_MQTT && HAS_DISPLAY
+		mqtt_inspection_register_routes(server);
+#endif
 
 		// Fragment serving — /api/section/{id}
 		// Uses wildcard so /api/section/wifi, /api/section/pad-editor, etc. all match.

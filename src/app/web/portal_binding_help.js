@@ -23,7 +23,8 @@ const BINDING_HELP_GUIDES = [
 const BINDING_BUILDERS = [];
 
 function bindingHelpBuilders(schemes) {
-    return BINDING_BUILDERS.filter(builder => schemes.some(scheme => scheme.name === builder.id));
+    return BINDING_BUILDERS.filter(builder => builder.scheme
+        ? schemes.some(scheme => scheme.name === builder.scheme) : schemes.length > 0);
 }
 
 function bindingBuilderShortcuts(config) {
@@ -276,9 +277,12 @@ function _bhRenderScheme(scheme) {
         html += '<p class="binding-docs-status" role="status">' + _bhEsc(scheme.status) +
             '. Tokens show --- or their fallback until this is resolved.</p>';
     }
-    if (scheme.name === 'ha') {
+    const builder = bindingBuilderForScheme(scheme.name);
+    if (builder) {
         html += '<div class="binding-example-actions"><button type="button" class="binding-copy-btn binding-insert-btn" ' +
-            'data-bh-view="builder:ha">Open Home Assistant builder</button></div>';
+            'data-builder-scheme="' + _bhEsc(scheme.name) + '" data-bh-view="builder:' +
+            _bhEsc(builder.id) + '">Open ' +
+            _bhEsc(builder.id === 'catalog' ? 'parameter editor' : builder.name + ' builder') + '</button></div>';
     }
     html += '<pre class="binding-docs-signature"><code>' + _bhEsc(bindingHelpSignature(scheme)) + '</code></pre>';
     html += '<section><h5>Parameters</h5><table class="binding-docs-table"><tbody>' +
@@ -405,11 +409,15 @@ function _bhMarkNav() {
 }
 
 function _bhRender() {
-    if (typeof haBindingBuilderStop === 'function') haBindingBuilderStop();
+    if (typeof bindingBuilderStop === 'function') bindingBuilderStop();
     const body = document.getElementById('binding-docs-body');
     const search = document.getElementById('binding-docs-search');
     const count = document.getElementById('binding-docs-count');
     if (!body) return;
+    const compact = _bindingHelp.view.startsWith('builder:') && !_bindingHelp.builderScheme;
+    document.getElementById('binding-help-overlay').classList.toggle('is-building', compact);
+    const title = document.getElementById('binding-docs-title');
+    if (title) title.textContent = compact ? 'Build a binding' : 'Binding Reference & Builders';
     if (_bindingHelp.error) {
         body.innerHTML = '<p class="binding-docs-empty">' + _bhEsc(_bindingHelp.error) +
             ' <button type="button" class="binding-docs-link" data-bh-retry>Retry</button></p>';
@@ -424,15 +432,12 @@ function _bhRender() {
         body.innerHTML = _bhRenderSearch(query);
     } else {
         count.textContent = _bindingHelp.schemes.length + ' schemes';
-        const haBuilder = _bindingHelp.view === 'builder:ha' &&
-            typeof haBindingBuilderHTML === 'function' && _bindingHelp.schemes.some(s => s.name === 'ha');
-        if (haBuilder) {
-            body.innerHTML = '<div class="binding-docs-title"><h4>Home Assistant</h4>' +
-                '<span class="binding-docs-badge">Binding builder</span></div>' +
-                '<p class="binding-docs-summary">Build a binding from real Home Assistant entities and their attributes. ' +
-                '(<button type="button" class="binding-docs-link" data-bh-view="ha">full syntax and examples</button>)</p>' +
-                haBindingBuilderHTML();
-            haBindingBuilderMount();
+        const builderId = _bindingHelp.view.startsWith('builder:')
+            ? _bindingHelp.view.slice('builder:'.length) : '';
+        const builder = bindingHelpBuilders(_bindingHelp.schemes).find(item => item.id === builderId);
+        if (builder && typeof bindingBuilderHTML === 'function') {
+            body.innerHTML = bindingBuilderHTML(builder.id);
+            bindingBuilderMount(builder.id, _bindingHelp.builderScheme);
         } else {
             const scheme = _bindingHelp.schemes.find(s => s.name === _bindingHelp.view);
             body.innerHTML = scheme ? _bhRenderScheme(scheme) : _bhRenderGuide(_bindingHelp.view.replace('guide:', ''));
@@ -452,6 +457,7 @@ function _bhLoad() {
         })
         .then(payload => {
             _bindingHelp.schemes = Array.isArray(payload && payload.schemes) ? payload.schemes : [];
+            bindingRegisterSchema(_bindingHelp.schemes);
         })
         .catch(() => {
             _bindingHelp.error = 'Could not load binding reference and builders.';
@@ -502,20 +508,21 @@ function showBindingBuilder(id) {
 function _bhOpen(view) {
     const overlay = document.getElementById('binding-help-overlay');
     if (!overlay) return;
-    if (typeof haBindingBuilderReset === 'function') haBindingBuilderReset();
+    if (typeof bindingBuilderReset === 'function') bindingBuilderReset();
     if (!_bindingHelp.target) _bindingHelp.opener = document.activeElement;
     _bindingHelp.view = view;
+    _bindingHelp.builderScheme = undefined;
     const search = document.getElementById('binding-docs-search');
     if (search) search.value = '';
     overlay.style.display = 'flex';
     _bhRenderNav();
     _bhRender();
     _bhLoad();
-    if (search) search.focus();
+    if (search && !view.startsWith('builder:')) search.focus();
 }
 
 function closeBindingHelp() {
-    if (typeof haBindingBuilderStop === 'function') haBindingBuilderStop();
+    if (typeof bindingBuilderStop === 'function') bindingBuilderStop();
     const overlay = document.getElementById('binding-help-overlay');
     if (!overlay) return;
     overlay.style.display = 'none';
@@ -619,6 +626,7 @@ document.addEventListener('click', event => {
     const view = event.target.closest('[data-bh-view]');
     if (view) {
         _bindingHelp.view = view.dataset.bhView;
+        _bindingHelp.builderScheme = view.dataset.builderScheme;
         document.getElementById('binding-docs-search').value = '';
         _bhMarkNav();
         _bhRender();
@@ -635,6 +643,12 @@ document.addEventListener('click', event => {
     if (insert && _bindingHelp.target && _bindingHelp.target.isConnected) {
         bindingHelpInsertText(_bindingHelp.target, insert.dataset.bhInsert, _bindingHelp.targetFocused);
         closeBindingHelp();
+        return;
+    }
+    const preview = event.target.closest('[data-binding-preview]');
+    if (preview && typeof bindingBuilderPreviewBinding === 'function') {
+        const result = preview.closest('[data-binding-builder-result]');
+        if (result) bindingBuilderPreviewBinding(preview.dataset.bindingPreview, result);
         return;
     }
     if (event.target.closest('[data-bh-retry]')) {
@@ -662,7 +676,9 @@ document.addEventListener('keydown', event => {
     const typing = event.target.matches && event.target.matches('input, textarea');
     if (event.key === '/' && !typing) {
         event.preventDefault();
-        search.focus();
+        const sourceSearch = _bindingHelp.view.startsWith('builder:') && !_bindingHelp.builderScheme
+            ? overlay.querySelector('#button-builder-search') : null;
+        (sourceSearch || search).focus();
     } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();

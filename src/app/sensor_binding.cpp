@@ -11,6 +11,8 @@
 #include <new>
 
 static BindingKeyDoc *s_sensor_keys = nullptr;
+static BindingAuthoringKey *s_sensor_authoring_keys = nullptr;
+static BindingAuthoringSpec s_sensor_authoring = {};
 static uint8_t s_sensor_key_count = 0;
 
 static uint8_t sensor_binding_key_count() { return s_sensor_key_count; }
@@ -77,14 +79,30 @@ void sensor_binding_init() {
         return;
     }
     s_sensor_keys = new (std::nothrow) BindingKeyDoc[field_count];
-    if (!s_sensor_keys) return;
+    s_sensor_authoring_keys = new (std::nothrow) BindingAuthoringKey[field_count];
+    if (!s_sensor_keys || !s_sensor_authoring_keys) {
+        delete[] s_sensor_keys;
+        delete[] s_sensor_authoring_keys;
+        s_sensor_keys = nullptr;
+        s_sensor_authoring_keys = nullptr;
+        LOGE("SensorBind", "Sensor metadata allocation failed");
+        return;
+    }
     for (size_t field = 0; field < field_count; ++field) {
         const SensorField *definition = sensor_manager_field_at(field);
         uint8_t index = 0;
         while (index < s_sensor_key_count && strcmp(s_sensor_keys[index].key, definition->key) != 0) ++index;
         if (index == s_sensor_key_count) ++s_sensor_key_count;
         s_sensor_keys[index] = {definition->key, definition->summary, nullptr};
+        s_sensor_authoring_keys[index] = {
+            definition->key, BINDING_AUTHORING_KIND_NUMBER, definition->unit,
+            BINDING_AUTHORING_FORMAT_RAW | BINDING_AUTHORING_FORMAT_NUMBER, nullptr,
+            BINDING_AUTHORING_CAP_DISPLAY | BINDING_AUTHORING_CAP_NUMERIC_WIDGET |
+                BINDING_AUTHORING_CAP_LIVE_SAMPLING,
+            true, definition->example_value,
+        };
     }
+    s_sensor_authoring = {s_sensor_authoring_keys, s_sensor_key_count};
     snprintf(s_sensor_example, sizeof(s_sensor_example), "[sensor:%s;%%.1f|N/A]", s_sensor_keys[0].key);
     static const BindingSchemeDoc kSensorDoc = {
         "Device", "Latest local sensor readings, without an MQTT broker.",
@@ -95,7 +113,8 @@ void sensor_binding_init() {
     };
     if (!binding_template_register("sensor", sensor_binding_resolve, nullptr,
                                   {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                   sensor_binding_key_count, sensor_binding_key_at, &kSensorDoc})) {
+                                   sensor_binding_key_count, sensor_binding_key_at, &kSensorDoc,
+                                   &s_sensor_authoring})) {
         LOGE("SensorBind", "Failed to register sensor binding scheme");
     }
 }

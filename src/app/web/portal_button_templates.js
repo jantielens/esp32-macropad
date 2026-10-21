@@ -7,9 +7,47 @@ function padButtonBuilderUnitField(unit) {
     return { name: 'unit', label: 'Unit', type: 'text', default: unit || '', maxlength: 60 };
 }
 
-function padButtonBuilderRangeFields(detail) {
-    const value = Number(detail.state);
-    const percentage = detail.unit?.trim() === '%';
+function padButtonBuilderFormattingFields(candidate) {
+    if (candidate.selection) return [];
+    return [
+        ...(candidate.formatModes.includes('number') ? [padButtonBuilderDecimalField()] : []),
+        padButtonBuilderUnitField(candidate.unit)
+    ];
+}
+
+function padButtonBuilderLabel(source, options, includeUnit = true) {
+    if (source.candidate.selection) {
+        const selection = source.candidate.selection;
+        const display = { ...selection, unit: includeUnit ? selection.unit : '' };
+        return bindingSourceToken(source.candidate, display);
+    }
+    const provider = padButtonBuilderProvider(source.candidate);
+    if (provider.buildLabel) return provider.buildLabel(source.candidate, options, includeUnit);
+    const modes = source.candidate.formatModes;
+    const mode = modes.includes('number') ? 'number' : modes.includes('text') ? 'text' : 'raw';
+    const suffix = includeUnit ? bindingBuilderUnitSuffix(options.unit) : '';
+    return padButtonBuilderBinding(source, bindingBuilderFormat(mode, Number(options.decimals), suffix)) +
+        (mode === 'raw' ? suffix : '');
+}
+
+function padButtonBuilderSampleLabel(source, options, includeUnit = true) {
+    if (source.candidate.selection) {
+        const selection = source.candidate.selection;
+        const sample = bindingSourceSample(source.candidate,
+            { ...selection, unit: includeUnit ? selection.unit : '' });
+        return sample == null ? '---' : sample;
+    }
+    const provider = padButtonBuilderProvider(source.candidate);
+    if (provider.previewLabel) return provider.previewLabel(source.candidate, options, includeUnit);
+    const sample = source.candidate.sample ??
+        (source.candidate.acquisitionState === 'unavailable' ? undefined : source.candidate.exampleValue);
+    return bindingBuilderSample(sample, bindingBuilderIsNumeric(sample) ? 'number' : 'text',
+        Number(options.decimals), includeUnit ? bindingBuilderUnitSuffix(options.unit) : '');
+}
+
+function padButtonBuilderRangeFields(candidate) {
+    const value = Number(candidate.sample);
+    const percentage = candidate.unit?.trim() === '%';
     let max = 100;
     if (!percentage && value !== 0) {
         const target = Math.abs(value) * 2;
@@ -33,9 +71,10 @@ function padButtonBuilderRange(options) {
     return { min, max };
 }
 
-function padButtonBuilderHistorySourceAvailable({ detail }) {
-    return !detail.state_truncated && (bindingBuilderIsNumeric(detail.state) ||
-        (['unknown', 'unavailable'].includes(detail.state) && !!detail.unit));
+function padButtonBuilderHistorySourceAvailable(source) {
+    const provider = padButtonBuilderProvider(source.candidate);
+    return source.candidate.capabilities.liveSampling &&
+        (source.candidate.capabilities.numericWidget || !!provider.supportsHistory?.(source.candidate));
 }
 
 function padButtonBuilderHistorySampling({ window: range, interval }) {
@@ -48,60 +87,54 @@ function padButtonBuilderHistorySampling({ window: range, interval }) {
 const padButtonBuilders = [
     {
         id: 'value', label: 'Show a value',
-        description: 'Show the entity name, current value, and unit.',
+        description: 'Show the source name, current value, and unit.',
         note: 'The unit is display text only; changing it does not convert the value.',
         available: () => true,
-        fields: ({ sources: [{ detail }] }) => [
-            ...(bindingBuilderIsNumeric(detail.state) || detail.unit ? [padButtonBuilderDecimalField()] : []),
-            padButtonBuilderUnitField(detail.unit)
-        ],
-        build({ sources: [{ detail }], options }) {
-            const numeric = bindingBuilderIsNumeric(detail.state) || !!detail.unit;
-            const format = bindingBuilderFormat(numeric ? 'number' : 'text', Number(options.decimals), '');
+        fields: ({ sources: [{ candidate }] }) => padButtonBuilderFormattingFields(candidate),
+        build({ sources: [source], options }) {
             return {
-                label_center: bindingBuilderToken('ha', detail.entity_id, '', format, ''),
-                label_bottom: options.unit.trim()
+                label_center: padButtonBuilderLabel(source, options, false),
+                label_bottom: (source.candidate.selection?.unit ?? options.unit).trim()
             };
         },
-        preview({ sources: [{ detail }], options }) {
-            return { label_center: ['unknown', 'unavailable'].includes(detail.state) ? '---' :
-                bindingBuilderSample(detail.state, bindingBuilderIsNumeric(detail.state) ? 'number' : 'text',
-                    Number(options.decimals), '') };
+        preview({ sources: [source] , options }) {
+            return { label_center: source.candidate.acquisitionState === 'unavailable' ? '---' :
+                padButtonBuilderSampleLabel(source, options, false) };
         }
     },
     {
         id: 'bar', label: 'Show a bar',
         description: 'Show a numeric value as a single bar within a fixed range.',
         note: 'Check the suggested range before creating the button. The unit changes display text, not the value. Fine-tune styling in the pad editor.',
-        available: ({ sources: [{ detail }] }) => !detail.state_truncated && bindingBuilderIsNumeric(detail.state) &&
-            !!deviceInfoCache?.widget_catalog?.some(widget => widget.type === 'bar_chart'),
-        fields({ sources: [{ detail }] }) {
+        available: ({ sources: [{ candidate }] }, runtime = deviceInfoCache) => candidate.capabilities.numericWidget &&
+            !!runtime?.widget_catalog?.some(widget => widget.type === 'bar_chart'),
+        fields({ sources: [{ candidate }] }) {
             return [
-                ...padButtonBuilderRangeFields(detail),
+                ...padButtonBuilderRangeFields(candidate),
                 { name: 'orientation', label: 'Orientation', type: 'select', default: 'vertical',
                     options: [['vertical', 'Vertical'], ['horizontal', 'Horizontal']],
                     error: 'Choose a valid orientation.' },
-                padButtonBuilderDecimalField(),
-                padButtonBuilderUnitField(detail.unit)
+                ...padButtonBuilderFormattingFields(candidate)
             ];
         },
-        build({ sources: [{ detail }], options }) {
+        build({ sources: [source], options }) {
             const { min, max } = padButtonBuilderRange(options);
-            const format = bindingBuilderFormat('number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit));
             return {
                 widget_type: 'bar_chart',
-                widget_data_binding: bindingBuilderToken('ha', detail.entity_id, '', '', ''),
+                widget_data_binding: padButtonBuilderBinding(source),
                 widget_bar_min: min, widget_bar_max: max,
                 widget_orientation: options.orientation,
                 widget_bar_zero_centered: min < 0 && max > 0,
-                label_bottom: bindingBuilderToken('ha', detail.entity_id, '', format, '')
+                label_bottom: padButtonBuilderLabel(source, options)
             };
         },
-        preview({ sources: [{ detail }], options }) {
-            return { label_bottom: bindingBuilderIsNumeric(detail.state) ?
-                bindingBuilderSample(detail.state, 'number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit)) : '---' };
+        preview({ sources: [source], options }) {
+            const sample = source.candidate.sample;
+            return { label_bottom: bindingBuilderIsNumeric(sample) ?
+                padButtonBuilderSampleLabel(source, options) : '---' };
         },
-        renderPreview({ sources: [{ detail }] }, cell, button) {
+        renderPreview({ sources: [source] }, cell, button) {
+            const sample = source.candidate.sample;
             const bar = document.createElement('div');
             bar.className = 'pad-button-builder-bar';
             bar.dataset.orientation = button.widget_orientation;
@@ -111,9 +144,9 @@ const padButtonBuilders = [
             const fill = document.createElement('div');
             fill.className = 'pad-button-builder-bar-fill';
             fill.style.background = PAD_FIRMWARE_DEFAULTS.widget_series_color;
-            if (bindingBuilderIsNumeric(detail.state)) {
+            if (bindingBuilderIsNumeric(sample)) {
                 const min = button.widget_bar_min, max = button.widget_bar_max;
-                const value = Math.max(min, Math.min(max, Number(detail.state)));
+                const value = Math.max(min, Math.min(max, Number(sample)));
                 const baseline = button.widget_bar_zero_centered ? 0 : min;
                 bar.setAttribute('role', 'meter');
                 bar.setAttribute('aria-label', button.label_top || 'Entity value');
@@ -137,34 +170,34 @@ const padButtonBuilders = [
         id: 'gauge', label: 'Show a gauge',
         description: 'Show a numeric value as a single ring with a needle within a fixed range.',
         note: 'Check the suggested range before creating the button. The unit changes display text, not the value. Fine-tune styling in the pad editor.',
-        available: ({ sources: [{ detail }] }) => !detail.state_truncated && bindingBuilderIsNumeric(detail.state) &&
-            !!deviceInfoCache?.widget_catalog?.some(widget => widget.type === 'gauge'),
-        fields: ({ sources: [{ detail }] }) => [
-            ...padButtonBuilderRangeFields(detail),
-            padButtonBuilderDecimalField(),
-            padButtonBuilderUnitField(detail.unit),
+        available: ({ sources: [{ candidate }] }, runtime = deviceInfoCache) => candidate.capabilities.numericWidget &&
+            !!runtime?.widget_catalog?.some(widget => widget.type === 'gauge'),
+        fields: ({ sources: [{ candidate }] }) => [
+            ...padButtonBuilderRangeFields(candidate),
+            ...padButtonBuilderFormattingFields(candidate),
             { name: 'color', label: 'Arc color', type: 'color', default: PAD_FIRMWARE_DEFAULTS.widget_series_color,
                 error: 'Choose a valid arc color.' }
         ],
-        build({ sources: [{ detail }], options }) {
+        build({ sources: [source], options }) {
             const { min, max } = padButtonBuilderRange(options);
-            const format = bindingBuilderFormat('number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit));
             return {
                 widget_type: 'gauge',
-                widget_data_binding: bindingBuilderToken('ha', detail.entity_id, '', '', ''),
+                widget_data_binding: padButtonBuilderBinding(source),
                 widget_gauge_min: min, widget_gauge_max: max,
                 widget_gauge_degrees: 180, widget_gauge_start_angle: 180,
                 widget_gauge_show_needle: true, widget_gauge_ticks: 5,
                 widget_arc_color: options.color,
-                label_bottom: bindingBuilderToken('ha', detail.entity_id, '', format, '')
+                label_bottom: padButtonBuilderLabel(source, options)
             };
         },
-        preview({ sources: [{ detail }], options }) {
-            return { label_bottom: bindingBuilderIsNumeric(detail.state) ?
-                bindingBuilderSample(detail.state, 'number', Number(options.decimals), bindingBuilderUnitSuffix(options.unit)) : '---' };
+        preview({ sources: [source], options }) {
+            const sample = source.candidate.sample;
+            return { label_bottom: bindingBuilderIsNumeric(sample) ?
+                padButtonBuilderSampleLabel(source, options) : '---' };
         },
         previewNote: () => 'Approximate gauge using the fetched value. Preview only. Does not control the entity.',
-        renderPreview({ sources: [{ detail }] }, cell, button) {
+        renderPreview({ sources: [source] }, cell, button) {
+            const sample = source.candidate.sample;
             const gauge = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             gauge.setAttribute('class', 'pad-button-builder-gauge');
             gauge.setAttribute('viewBox', '0 0 280 145');
@@ -174,9 +207,9 @@ const padButtonBuilders = [
             track.setAttribute('stroke', PAD_FIRMWARE_DEFAULTS.widget_track_color);
             track.setAttribute('stroke-width', '17');
             gauge.appendChild(track);
-            if (bindingBuilderIsNumeric(detail.state)) {
+            if (bindingBuilderIsNumeric(sample)) {
                 const min = button.widget_gauge_min, max = button.widget_gauge_max;
-                const value = Math.max(min, Math.min(max, Number(detail.state)));
+                const value = Math.max(min, Math.min(max, Number(sample)));
                 const progress = (value - min) / (max - min);
                 gauge.setAttribute('role', 'meter');
                 gauge.setAttribute('aria-label', button.label_top || 'Entity value');
@@ -222,13 +255,13 @@ const padButtonBuilders = [
     {
         id: 'history', label: 'Show a value with history',
         description: 'Show up to three current values and their trends.',
-        note: 'Units change display text, not values. Automatic scale shares a scale for matching units; otherwise each value has its own scale, so line heights are not directly comparable. Sampling is limited to 1024 points per line. Without Home Assistant history support, the device collects live values while it runs. Resize the button in the editor for more space.',
+        note: 'Units change display text, not values. Automatic scale shares a scale only for matching known source units; otherwise each value has its own scale, so line heights are not directly comparable. Sampling is limited to 1024 points per line. Only eligible Home Assistant values load recorded history; other values are collected live while the device runs. Resize the button in the editor for more space.',
         maxSources: 3,
-        available: ({ sources: [source] }) => padButtonBuilderHistorySourceAvailable(source) &&
-            !!deviceInfoCache?.widget_catalog?.some(widget => widget.type === 'sparkline'),
+        available: ({ sources: [source] }, runtime = deviceInfoCache) => !!source && padButtonBuilderHistorySourceAvailable(source) &&
+            !!runtime?.widget_catalog?.some(widget => widget.type === 'sparkline'),
         validateSource(source) {
             if (!padButtonBuilderHistorySourceAvailable(source)) {
-                throw new Error('Choose an entity with a numeric, non-truncated state or an unavailable reading with a unit.');
+                throw new Error('Choose a source with a numeric, non-truncated sample or a provider-supported history fallback.');
             }
         },
         fields: () => [
@@ -238,28 +271,30 @@ const padButtonBuilders = [
             { name: 'interval', label: 'Requested sample interval (seconds)', type: 'number',
                 default: 300, step: 'any', min: 0.1, max: 604800, error: 'Enter a sample interval between 0.1 seconds and 7 days.' },
             { name: 'scale', label: 'Scale', type: 'select', default: 'auto',
-                options: [['auto', 'Automatic (based on entity units)'], ['shared', 'Shared scale'],
+                options: [['auto', 'Automatic (based on source units)'], ['shared', 'Shared scale'],
                     ['independent', 'Independent per value']], error: 'Choose a valid scale.' }
         ],
-        sourceFields: ({ detail }, index) => [
-            padButtonBuilderDecimalField(),
-            padButtonBuilderUnitField(detail.unit),
+        sourceFields: ({ candidate }, index) => [
+            ...padButtonBuilderFormattingFields(candidate),
             { name: 'color', label: 'Line color', type: 'color', default: ['#4CAF50', '#2196F3', '#9C27B0'][index],
                 error: 'Choose a valid line color.' }
         ],
-        sourceOptions({ detail }, previous) {
-            return previous?.detail.entity_id === detail.entity_id ? {} : { unit: detail.unit || '' };
+        sourceOptions({ candidate }, previous) {
+            return previous?.candidate.sourceId === candidate.sourceId &&
+                previous?.candidate.providerId === candidate.providerId ? {} : { unit: candidate.unit || '' };
         },
         validateOutput({ sources }, button) {
             sources.forEach((source, index) => {
                 const suffix = index ? '_' + (index + 1) : '';
                 padButtonBuilderValidateText(button['widget_sparkline_current_label' + suffix], 63);
-                padButtonBuilderValidateText(button['widget_sparkline_ha_entity' + suffix], 63);
+                padButtonBuilderProvider(source.candidate).validateHistoryFields?.(
+                    source.candidate, suffix, button, padButtonBuilderValidateText);
             });
         },
         build({ options, sources }) {
             const { windowSeconds, slots } = padButtonBuilderHistorySampling(options);
-            const units = new Set(sources.map(source => (source.detail.unit || '').trim()));
+            const units = sources.map(source => (source.candidate.unit || '').trim());
+            const knownUnitsMatch = units.every(Boolean) && new Set(units).size === 1;
             const button = {
                 label_top: '',
                 label_center: options.title.trim(),
@@ -269,20 +304,17 @@ const padButtonBuilders = [
                 widget_sparkline_current_dot: 5,
                 widget_sparkline_smooth: 0,
                 widget_sparkline_label_width: 100,
-                widget_sparkline_unified_scale: options.scale === 'shared' || (options.scale === 'auto' && units.size === 1),
+                widget_sparkline_unified_scale: options.scale === 'shared' || (options.scale === 'auto' && knownUnitsMatch),
                 widget_sparkline_window: windowSeconds,
                 widget_sparkline_slots: slots
             };
             sources.forEach((source, index) => {
                 const suffix = index ? '_' + (index + 1) : '';
-                const format = bindingBuilderFormat('number', Number(source.options.decimals), bindingBuilderUnitSuffix(source.options.unit));
-                button['widget_data_binding' + suffix] = bindingBuilderToken('ha', source.detail.entity_id, '', '', '');
-                button['widget_sparkline_current_label' + suffix] = bindingBuilderToken('ha', source.detail.entity_id, '', format, '');
+                button['widget_data_binding' + suffix] = padButtonBuilderBinding(source);
+                button['widget_sparkline_current_label' + suffix] = padButtonBuilderLabel(source, source.options);
                 button['widget_sparkline_line_color' + suffix] = source.options.color;
-                if ((window.__device_caps || {}).ha_history === true) {
-                    button['widget_sparkline_ha_entity' + suffix] = source.detail.entity_id;
-                    button['widget_sparkline_ha_stat' + suffix] = 'mean';
-                }
+                Object.assign(button, padButtonBuilderProvider(source.candidate)
+                    .buildHistoryFields?.(source.candidate, suffix) || {});
             });
             return button;
         },
@@ -311,10 +343,9 @@ const padButtonBuilders = [
             const descriptions = [];
             sources.forEach((source, index) => {
                 const [x, y] = curves[index].split(' ').at(-1).split(',');
-                const numeric = bindingBuilderIsNumeric(source.detail.state);
+                const numeric = bindingBuilderIsNumeric(source.candidate.sample);
                 const sample = numeric ?
-                    bindingBuilderSample(source.detail.state, 'number', Number(source.options.decimals),
-                        bindingBuilderUnitSuffix(source.options.unit)) : '---';
+                    padButtonBuilderSampleLabel(source, source.options) : '---';
                 descriptions.push(source.name + ': ' + sample);
                 if (numeric) {
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
@@ -349,26 +380,13 @@ const padButtonBuilders = [
         description: 'Toggle a light or switch and show whether it is on or off.',
         note: 'Icon color follows the entity state. Unavailable data uses a pink-red icon.',
         preferred: true,
-        available: ({ sources: [{ detail }] }) => /^(light|switch)\./.test(detail.entity_id) && !!actionEditorCatalogEntry('ha_service'),
-        fields: ({ sources: [{ detail }] }) => [
-            { name: 'icon', label: 'Material Symbol name', type: 'text', maxlength: 28, required: true,
-                default: detail.entity_id.startsWith('light.') ? 'lightbulb' : 'toggle_on',
-                link: { label: 'Browse Material Symbols', href: 'https://fonts.google.com/icons' } },
-            { name: 'on', label: 'On color', type: 'color', default: '#FFC857',
-                error: 'Choose valid on and off colors.' },
-            { name: 'off', label: 'Off color', type: 'color', default: '#64748B',
-                error: 'Choose valid on and off colors.' }
-        ],
-        build({ sources: [{ detail }], options }) {
-            if (detail.entity_id.length >= 48) throw new Error('Entity IDs must be shorter than 48 characters for service actions.');
-            if (!/^[a-z][a-z0-9_]{0,27}$/.test(options.icon)) throw new Error('Enter a Material Symbol name, such as lightbulb.');
-            const state = bindingBuilderToken('ha', detail.entity_id, '', '', '');
-            return {
-                icon_id: 'mi_' + options.icon, icon_position: 'center',
-                label_top_style: 'color:' + (padColorNormalizeLiteral(padGetEffectiveDefault('fg_color')) || '#FFFFFF'),
-                fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|#EF6B73]',
-                actions: [{ type: 'ha_service', entity_id: detail.entity_id, service: 'toggle' }]
-            };
+        available: ({ sources: [source] }) => !!source?.candidate.capabilities.control &&
+            !!padButtonBuilderProvider(source.candidate).controlFields?.(source.candidate).length &&
+            !!actionEditorCatalogEntry(padButtonBuilderProvider(source.candidate).controlActionType),
+        fields: ({ sources: [source] }) =>
+            padButtonBuilderProvider(source.candidate).controlFields(source.candidate),
+        build({ sources: [source], options }) {
+            return padButtonBuilderProvider(source.candidate).buildControl(source.candidate, options);
         },
         preview({ options, previewState }) {
             return { fg_color: previewState === 'on' ? options.on : previewState === 'off' ? options.off : '#EF6B73' };

@@ -33,7 +33,7 @@ void binding_builtin_schemes_init() {
 #if HAS_HA_LIVE
     ha_binding_init();
 #endif
-#if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#if HAS_DISPLAY
     pad_binding_init();
 #endif
     timer_binding_init();

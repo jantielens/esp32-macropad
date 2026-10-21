@@ -63,7 +63,8 @@ connection is not a guarantee that a particular entity exists or is readable.
 Use entity IDs directly in Pad Editor bindings, or use the HA binding builder
 described below. To create a complete value button or a toggle button for a light
 or switch at an empty position, use the
-[Home Assistant Button Builder](../pads/editing.md#create-a-button-from-home-assistant).
+[Button Builder](../pads/editing.md#create-a-button-from-a-source) with the
+Home Assistant provider.
 To display a temperature with a fallback while unavailable:
 
 ```text
@@ -106,9 +107,11 @@ history. For historical data, use Sparkline backfill below.
 
 ## Build an HA binding
 
-The portal's **Binding Reference & Builders** dialog includes a **Home Assistant**
-view under **Binding builders**. It generates a token without saving a pad or subscribing
-to additional live entities.
+The portal's [shared binding workflow](../pads/bindings.md#build-a-token-from-a-source)
+includes a **Home Assistant** view under **Binding builders**.
+HA lookup generates a token without saving a pad or subscribing to additional
+live entities. **Preview on device** uses the normal resolver and can acquire a
+temporary live reference.
 
 When live HA bindings are supported and the HA URL and token are saved, an
 **HA** shortcut appears beside **fx** on bindable fields. Choose **HA** to open
@@ -120,34 +123,28 @@ automatically when they reference HA entities.
 
 1. Open **Binding Reference & Builders** from the bindable field you want to fill, then
    select **Binding builders > Home Assistant**.
-2. Under **Choose an entity**, type at least three characters of an entity ID or
+2. Type at least three characters of an entity ID or
    friendly name and select a match. Search shows up to 20 matches; keep typing
-   to narrow the list. Alternatively, choose **enter an entity ID manually**,
-   enter an exact ID, then choose **Use entity** or press Enter.
-3. Under **Format the value** (or **Choose the value** for raw-value fields),
-   choose **State**, a suggested attribute, or
-   **Custom path** to enter a dotted path. These controls appear after selection.
-   For labels, numeric states initially select **Number**, one decimal place, and the
-   entity's `unit_of_measurement` when it fits the binding syntax. These are
-   suggestions: change any field, or choose **As received** to omit formatting.
+   to narrow the list. Alternatively, enter an exact ID and press Enter.
+3. State is selected by default. Expand **Change value** to select an attribute
+   or enter a custom dotted path. Expand **Display options** to change the
+   default **As received** presentation, unit text, or unavailable-value fallback.
+   The entity's reported unit is suggested for its state, not its attributes.
    Widget data bindings and other raw-value widget fields, such as gauge limits,
-   automatically omit formatting and units; their formatting controls are hidden.
-   Refreshing details preserves your formatting choices.
-   For display text, choose
-   **Number** with 0 to 6 decimal places, or **Text**. Edit **Unit (optional)**;
+   automatically omit formatting and units.
+   For display text, choose **Number** with 0 to 6 decimal places, or **Text**.
+   Edit **Unit (optional)**;
    spacing is automatic. Expand **When unavailable** to set fallback text.
-4. Under **Insert the binding**, check the generated binding and **Binding result**.
+4. Check **Current value**.
    Use **Insert binding** to fill the originating field, or **Copy binding**
    when authoring elsewhere. Save your changes using the editor's normal Save control.
 
 The **fx** entry opens on **Basics** each time; **HA** opens the builder directly.
 Both entries start with an empty builder.
-All three sections stay in the same view. Use **Change entity** to select a
-different source, or **Refresh details** to fetch a newer sample and attributes.
-Selecting an entity fetches its details automatically; a failed fetch does not
-prevent formatting or insertion.
-Use **full syntax and examples** for the `ha` reference, or
-**Open Home Assistant builder** in that reference to return to the builder.
+Use **Change** to select a different source. Selecting an entity fetches its
+details automatically; a failed lookup offers Retry. Manual binding entry and
+the scheme-specific editor under the `ha` reference remain available without
+a successful lookup.
 
 Entity search uses HA's template API and requires an administrator user's
 token. A non-admin token can still load readable entities by exact ID, generate

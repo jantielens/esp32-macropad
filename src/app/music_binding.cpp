@@ -147,12 +147,33 @@ const BindingSchemeDoc kMusicDoc = {
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
 
+const BindingAuthoringKey kMusicAuthoringKeys[] = {
+    binding_authoring_text("file", "/sounds/song.mp3"),
+    binding_authoring_text("file_name", "song.mp3"),
+    binding_authoring_text("title", "Evening"),
+    binding_authoring_text("artist", "Local artist"),
+    binding_authoring_text("album", "Acoustic sessions"),
+    binding_authoring_text("track", "3/12"),
+    binding_authoring_integer("index", "", "2"),
+    binding_authoring_integer("count", "", "12"),
+    binding_authoring_integer("elapsed_s", "s", "75"),
+    binding_authoring_integer("total_s", "s", "240"),
+    binding_authoring_text("status", "playing"),
+#if HAS_MUSIC_ANALYSIS
+    binding_authoring_integer("analysis.rms", "", "12000"),
+    binding_authoring_integer("analysis.peak", "", "24000"),
+    binding_authoring_integer("analysis.band.#", "", "16000"),
+#endif
+};
+const BindingAuthoringSpec kMusicAuthoring = {BINDING_DOC_LIST(kMusicAuthoringKeys)};
+
 } // namespace
 
 void music_binding_init() {
     if (!binding_template_register("music", music_binding_resolve, music_binding_collect,
                                    {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    music_binding_key_count, music_binding_key_at, &kMusicDoc})) {
+                                    music_binding_key_count, music_binding_key_at, &kMusicDoc,
+                                    &kMusicAuthoring})) {
         LOGE("MusicBind", "Failed to register music binding scheme");
         return;
     }

@@ -1,6 +1,78 @@
 {
   "schemes": [
     {
+      "name": "image",
+      "min_params": 1,
+      "max_params": 1,
+      "widget_max_params": 1,
+      "format_param": 1,
+      "validation_mode": 0,
+      "free_form": false,
+      "keys": [
+        "current",
+        "error"
+      ],
+      "category": "Data",
+      "summary": "Current image of the on-device image library.",
+      "params": [
+        {
+          "name": "key",
+          "desc": "current or error.",
+          "required": true
+        }
+      ],
+      "key_docs": [
+        {
+          "key": "current",
+          "desc": "Path of the image library's current image"
+        },
+        {
+          "key": "error",
+          "desc": "Last image load error as stage:detail, or ok"
+        }
+      ],
+      "examples": [
+        {
+          "code": "[image:current]",
+          "desc": "Use as a button image source to follow the library."
+        },
+        {
+          "code": "[image:error]",
+          "desc": "Show why the last image failed to load."
+        }
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "current",
+            "kind": "text",
+            "unit": "",
+            "example_value": "/images/landscape.jpg",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ok",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
+    },
+    {
       "name": "health",
       "min_params": 1,
       "max_params": 2,
@@ -299,7 +371,645 @@
           "code": "[health:table]",
           "desc": "Exact single token for a Table widget."
         }
-      ]
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "cpu",
+            "kind": "integer",
+            "unit": "%",
+            "example_value": "42",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "cpu_core_0",
+            "kind": "integer",
+            "unit": "%",
+            "example_value": "38",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "cpu_core_1",
+            "kind": "integer",
+            "unit": "%",
+            "example_value": "38",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "uptime",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "12345",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "chip",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ESP32-S3",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "chip_rev",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "chip_cores",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "2",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "cpu_freq",
+            "kind": "integer",
+            "unit": "MHz",
+            "example_value": "240",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "flash_size",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "16777216",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "firmware",
+            "kind": "text",
+            "unit": "",
+            "example_value": "1.41.0",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "board",
+            "kind": "text",
+            "unit": "",
+            "example_value": "esp32-p4-lcd4b",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "mac",
+            "kind": "text",
+            "unit": "",
+            "example_value": "02:00:00:12:34:56",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "reset_reason",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Power On",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "heap_total",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "327680",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "heap_free",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "245760",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "heap_min",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "196608",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "heap_largest",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "131072",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "heap_internal_total",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "327680",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "heap_internal",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "196608",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "heap_internal_used",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "131072",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "psram_total",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "8388608",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "psram_free",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "6291456",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "psram_used",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "2097152",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "psram_min",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "5242880",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "psram_largest",
+            "kind": "integer",
+            "unit": "B",
+            "example_value": "4194304",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_connected",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "wifi_ssid",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Home WiFi",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "rssi",
+            "kind": "integer",
+            "unit": "dBm",
+            "example_value": "-62",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ip",
+            "kind": "text",
+            "unit": "",
+            "example_value": "192.0.2.10",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "hostname",
+            "kind": "text",
+            "unit": "",
+            "example_value": "kitchen-pad",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "brightness",
+            "kind": "integer",
+            "unit": "%",
+            "example_value": "80",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "volume",
+            "kind": "integer",
+            "unit": "%",
+            "example_value": "50",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "%ld",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble_status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "connected",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble_name",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Kitchen Pad BLE",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "advertising",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble_pairing",
+            "kind": "text",
+            "unit": "",
+            "example_value": "OFF",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble_bonded",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble_encrypted",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble_peer_addr",
+            "kind": "text",
+            "unit": "",
+            "example_value": "02:00:00:65:43:21",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble_peer_id_addr",
+            "kind": "text",
+            "unit": "",
+            "example_value": "02:00:00:65:43:21",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "table",
+            "kind": "text",
+            "unit": "",
+            "example_value": "[{\"label\":\"CPU\",\"value\":\"42\",\"unit\":\"%\"}]",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "extended_table",
+            "kind": "text",
+            "unit": "",
+            "example_value": "[{\"label\":\"Free heap\",\"value\":\"245760\",\"unit\":\"B\"}]",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
     },
     {
       "name": "sensor",
@@ -353,7 +1063,75 @@
           "code": "[sensor:temperature;%.1f|N/A]",
           "desc": "Local reading with one decimal place and an unavailable fallback."
         }
-      ]
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "temperature",
+            "kind": "number",
+            "unit": "°C",
+            "example_value": "21.37",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "humidity",
+            "kind": "number",
+            "unit": "%",
+            "example_value": "54.2",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "battery_voltage",
+            "kind": "number",
+            "unit": "V",
+            "example_value": "3.85",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "presence",
+            "kind": "number",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "number"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          }
+        ]
+      }
     },
     {
       "name": "time",
@@ -370,7 +1148,8 @@
         {
           "name": "format",
           "desc": "strftime format plus %ms, %cs, %ds, or %ums for uptime.",
-          "required": true
+          "required": true,
+          "default": "%H:%M"
         },
         {
           "name": "timezone",
@@ -400,61 +1179,219 @@
             "syntax": "%H:%M",
             "sample": "14:05",
             "desc": "24-hour clock",
-            "example": "[time:%H:%M]"
+            "example": "[time:%H:%M]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%I:%M %p",
             "sample": "02:05 PM",
             "desc": "12-hour clock",
-            "example": "[time:%I:%M %p]"
+            "example": "[time:%I:%M %p]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%H:%M:%S",
             "sample": "14:05:09",
             "desc": "With seconds",
-            "example": "[time:%H:%M:%S]"
+            "example": "[time:%H:%M:%S]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%H:%M:%S.%ms",
             "sample": "14:05:09.347",
             "desc": "Milliseconds; %cs and %ds give 1/100 and 1/10",
-            "example": "[time:%H:%M:%S.%ms]"
+            "example": "[time:%H:%M:%S.%ms]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%a %d %b",
             "sample": "Fri 09 Oct",
             "desc": "Short date",
-            "example": "[time:%a %d %b]"
+            "example": "[time:%a %d %b]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%A",
             "sample": "Friday",
             "desc": "Weekday name",
-            "example": "[time:%A]"
+            "example": "[time:%A]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%d-%m-%Y",
             "sample": "09-10-2026",
             "desc": "Day-month-year",
-            "example": "[time:%d-%m-%Y]"
+            "example": "[time:%d-%m-%Y]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%Y-%m-%d",
             "sample": "2026-10-09",
             "desc": "ISO date",
-            "example": "[time:%Y-%m-%d]"
+            "example": "[time:%Y-%m-%d]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%V",
-            "sample": "41",
+            "sample": "Week 41",
             "desc": "ISO week number",
-            "example": "[time:Week %V]"
+            "example": "[time:Week %V]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "%ums",
             "sample": "734512",
             "desc": "Uptime in ms, before NTP sync too",
-            "example": "[time:%ums]"
+            "example": "[time:%ums]",
+            "unit": "ms",
+            "kind": "integer"
+          }
+        ]
+      },
+      "authoring": {
+        "keys": [
+          {
+            "key": "%H:%M",
+            "kind": "text",
+            "unit": "",
+            "example_value": "14:05",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "%I:%M %p",
+            "kind": "text",
+            "unit": "",
+            "example_value": "02:05 PM",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "%H:%M:%S",
+            "kind": "text",
+            "unit": "",
+            "example_value": "14:05:09",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "%H:%M:%S.%ms",
+            "kind": "text",
+            "unit": "",
+            "example_value": "14:05:09.347",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "%a %d %b",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Fri 09 Oct",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "%A",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Friday",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "%d-%m-%Y",
+            "kind": "text",
+            "unit": "",
+            "example_value": "09-10-2026",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "%Y-%m-%d",
+            "kind": "text",
+            "unit": "",
+            "example_value": "2026-10-09",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "Week %V",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Week 41",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "%ums",
+            "kind": "integer",
+            "unit": "ms",
+            "example_value": "734512",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
           }
         ]
       }
@@ -772,25 +1709,250 @@
             "syntax": "mm:ss",
             "sample": "4:05",
             "desc": "Minutes and seconds",
-            "example": "[timer:1;mm:ss]"
+            "example": "[timer:1;mm:ss]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "hh:mm:ss",
             "sample": "0:04:05",
             "desc": "With hours",
-            "example": "[timer:1;hh:mm:ss]"
+            "example": "[timer:1;hh:mm:ss]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "mm:ss.d",
             "sample": "4:05.3",
             "desc": "With tenths",
-            "example": "[timer:1;mm:ss.d]"
+            "example": "[timer:1;mm:ss.d]",
+            "unit": "",
+            "kind": "text"
           },
           {
             "syntax": "ss",
             "sample": "245",
             "desc": "Whole seconds",
-            "example": "[timer:1;ss]"
+            "example": "[timer:1;ss]",
+            "unit": "s",
+            "kind": "integer"
+          }
+        ]
+      },
+      "authoring": {
+        "keys": [
+          {
+            "key": "1",
+            "kind": "number",
+            "unit": "s",
+            "example_value": "245.3",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "running",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_mode",
+            "kind": "text",
+            "unit": "",
+            "example_value": "down",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_expired",
+            "kind": "text",
+            "unit": "",
+            "example_value": "OFF",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_target",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "300",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "2",
+            "kind": "number",
+            "unit": "s",
+            "example_value": "245.3",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "2_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "running",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "2_mode",
+            "kind": "text",
+            "unit": "",
+            "example_value": "down",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "2_expired",
+            "kind": "text",
+            "unit": "",
+            "example_value": "OFF",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "2_target",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "300",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "3",
+            "kind": "number",
+            "unit": "s",
+            "example_value": "245.3",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "3_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "running",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "3_mode",
+            "kind": "text",
+            "unit": "",
+            "example_value": "down",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "3_expired",
+            "kind": "text",
+            "unit": "",
+            "example_value": "OFF",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "3_target",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "300",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
           }
         ]
       }
@@ -1040,7 +2202,591 @@
           "code": "[expr:[alarm:1_next_available]==\"ON\"?\"Next alarm set\":\"No alarm\"]",
           "desc": "Check availability before using a countdown."
         }
-      ]
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "1_time",
+            "kind": "text",
+            "unit": "",
+            "example_value": "07:30",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_enabled",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "idle",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_ready",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "active_id",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_hour",
+            "kind": "integer",
+            "unit": "h",
+            "example_value": "7",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_minute",
+            "kind": "integer",
+            "unit": "min",
+            "example_value": "30",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_minutes",
+            "kind": "integer",
+            "unit": "min",
+            "example_value": "450",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_weekdays",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "62",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_day_0",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_day_1",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_day_2",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_day_3",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_day_4",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_day_5",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_day_6",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_repeat",
+            "kind": "text",
+            "unit": "",
+            "example_value": "weekly",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_snooze_minutes",
+            "kind": "integer",
+            "unit": "min",
+            "example_value": "9",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_auto_dismiss_minutes",
+            "kind": "integer",
+            "unit": "min",
+            "example_value": "30",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_once_epoch",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "1791360000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_once_local",
+            "kind": "text",
+            "unit": "",
+            "example_value": "2026-10-07 07:30",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_once_available",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_next_epoch",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "1791360000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_next_local",
+            "kind": "text",
+            "unit": "",
+            "example_value": "2026-10-07 07:30",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_next_seconds",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "3600",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_next_available",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_snooze_seconds",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "540",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_snooze_available",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_dismiss_seconds",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "1800",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_dismiss_available",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_next_ring_seconds",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "540",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_next_ring_available",
+            "kind": "text",
+            "unit": "",
+            "example_value": "ON",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_ota_deferred",
+            "kind": "text",
+            "unit": "",
+            "example_value": "OFF",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_storage_error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "OFF",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_hook_error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "OFF",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_command_error",
+            "kind": "text",
+            "unit": "",
+            "example_value": "OFF",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_command_message",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Alarm enabled",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_pending_commands",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "0",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_completed_commands",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "12",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "1_save_state",
+            "kind": "text",
+            "unit": "",
+            "example_value": "saved",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
     },
     {
       "name": "music",
@@ -1167,7 +2913,340 @@
           "code": "[expr:[music:status]==\"playing\"?\"#22c55e\":\"#64748b\"]",
           "desc": "Green while music plays."
         }
-      ]
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "file",
+            "kind": "text",
+            "unit": "",
+            "example_value": "/sounds/song.mp3",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "file_name",
+            "kind": "text",
+            "unit": "",
+            "example_value": "song.mp3",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "title",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Evening",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "artist",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Local artist",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "album",
+            "kind": "text",
+            "unit": "",
+            "example_value": "Acoustic sessions",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "track",
+            "kind": "text",
+            "unit": "",
+            "example_value": "3/12",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "index",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "2",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "count",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "12",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "elapsed_s",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "75",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "total_s",
+            "kind": "integer",
+            "unit": "s",
+            "example_value": "240",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "status",
+            "kind": "text",
+            "unit": "",
+            "example_value": "playing",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.rms",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "12000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.peak",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "24000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.band.0",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "16000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.band.1",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "16000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.band.2",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "16000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.band.3",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "16000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.band.4",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "16000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.band.5",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "16000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.band.6",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "16000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "analysis.band.7",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "16000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          }
+        ]
+      }
     },
     {
       "name": "audio",
@@ -1214,7 +3293,58 @@
           "code": "[expr:[audio:input.active]==\"true\"?\"#22c55e\":\"#334155\"]",
           "desc": "Light up while someone speaks."
         }
-      ]
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "input.rms",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "12000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "input.peak",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "24000",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "input.active",
+            "kind": "text",
+            "unit": "",
+            "example_value": "true",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
     },
     {
       "name": "list",
@@ -1248,7 +3378,24 @@
           "code": "[list:pads.selected|none]",
           "desc": "Selected pad with a fallback before any selection."
         }
-      ]
+      ],
+      "authoring": {
+        "keys": [
+          {
+            "key": "fixture.selected",
+            "kind": "text",
+            "unit": "",
+            "example_value": "selected-item",
+            "formats": [
+              "raw"
+            ],
+            "capabilities": [
+              "display"
+            ],
+            "read_only": true
+          }
+        ]
+      }
     },
     {
       "name": "net",
@@ -1335,7 +3482,242 @@
           "code": "[expr:[net:portal;age] < 1000 ? \"ACTIVE\" : \"idle\"]",
           "desc": "Label for a second after a portal request."
         }
-      ]
+      ],
+      "reference": {
+        "title": "Activity age",
+        "formats": true,
+        "rows": [
+          {
+            "syntax": "portal;age",
+            "sample": "125",
+            "desc": "Time since a portal request",
+            "example": "[net:portal;age]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": "mcp;age",
+            "sample": "125",
+            "desc": "Time since an MCP call",
+            "example": "[net:mcp;age]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": "mqtt_rx;age",
+            "sample": "125",
+            "desc": "Time since an MQTT message",
+            "example": "[net:mqtt_rx;age]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": "mqtt_tx;age",
+            "sample": "125",
+            "desc": "Time since an MQTT publish",
+            "example": "[net:mqtt_tx;age]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": "mqtt;age",
+            "sample": "125",
+            "desc": "Time since either MQTT direction",
+            "example": "[net:mqtt;age]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": "http;age",
+            "sample": "125",
+            "desc": "Time since an outbound HTTP request",
+            "example": "[net:http;age]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": "ble;age",
+            "sample": "125",
+            "desc": "Time since a BLE report",
+            "example": "[net:ble;age]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": "ota;age",
+            "sample": "125",
+            "desc": "Time since a firmware flash write",
+            "example": "[net:ota;age]",
+            "unit": "ms",
+            "kind": "integer"
+          },
+          {
+            "syntax": "any;age",
+            "sample": "125",
+            "desc": "Time since any transport activity",
+            "example": "[net:any;age]",
+            "unit": "ms",
+            "kind": "integer"
+          }
+        ]
+      },
+      "authoring": {
+        "keys": [
+          {
+            "key": "portal",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "mcp",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "mqtt_rx",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "mqtt_tx",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "mqtt",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "http",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ble",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "ota",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          },
+          {
+            "key": "any",
+            "kind": "integer",
+            "unit": "",
+            "example_value": "1",
+            "formats": [
+              "raw",
+              "integer"
+            ],
+            "integer_format": "",
+            "capabilities": [
+              "display",
+              "numeric_widget",
+              "live_sampling"
+            ],
+            "read_only": true
+          }
+        ]
+      }
     }
   ]
 }

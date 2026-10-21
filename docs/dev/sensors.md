@@ -44,8 +44,10 @@ No new task or user-facing sampling setting is required.
   booleans, retaining each field's last good value indefinitely after failure.
   Before the first successful sample, consumers see an unavailable value.
 - Cached values live only in RAM and are reset by reboot or deep sleep.
-- Declare every field in a static `SensorField` array, including units in the
-  description. Only declared fields are cached. The array and strings must
+- Declare every field in a static `SensorField` array with a description,
+  optional unit, and optional representative example value. Use `""` for a
+  known unitless value and `nullptr` for an unknown unit. Only declared fields
+  are cached. The array and strings must
   remain valid for the lifetime of the firmware.
 - Duplicate flat keys use the later registered sensor, even if it has never
   produced a valid sample. Prefer unique names for new measurements.
@@ -102,9 +104,9 @@ static void bme280_sample(JsonObject &doc) {
 
 void register_bme280_sensor(SensorRegistry &registry) {
   static const SensorField fields[] = {
-    {"temperature", "Temperature in degrees Celsius."},
-    {"humidity", "Relative humidity in percent."},
-    {"pressure", "Atmospheric pressure in hPa."},
+    {"temperature", "Temperature in degrees Celsius.", "\xC2\xB0" "C", "21.37"},
+    {"humidity", "Relative humidity in percent.", "%", "54.2"},
+    {"pressure", "Atmospheric pressure in hPa.", "hPa", "1013.25"},
   };
   SensorCallbacks callbacks = {};
   callbacks.name = "BME280";
@@ -122,6 +124,12 @@ Omit the interval assignment to use two seconds. Add `publish_ha` under
 the main task, outside the cache lock; use the owning hardware facade's bus
 lock when hardware is shared with another task. API and binding callbacks must
 not call the adapter directly.
+
+The field catalog also supplies numeric authoring metadata for binding and
+button builders. Examples make previews available before a sensor has a valid
+reading, but are never returned by the runtime resolver or stored as readings.
+Sensor bindings accept a single floating-point format such as `%.1f`; display
+units stay outside the token.
 
 In `src/app/sensors.cpp`, include and register it behind a compile-time flag:
 ```cpp

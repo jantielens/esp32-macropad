@@ -27,6 +27,7 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder.js', 'utf8')
 vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_ha.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_templates.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_button_builder.js', 'utf8'), context);
+const haButtonBuilderProvider = vm.runInContext('haButtonBuilderProvider', context);
 
 const scheme = name => fixture.schemes.find(s => s.name === name);
 const haConfigured = { caps: { ha_live: true }, ha_url: 'http://ha.local:8123', ha_token_set: true };
@@ -214,13 +215,14 @@ assert.strictEqual(builderState().rawOnly, false);
 delete context.testTarget;
 
 const helpElements = {
-    'binding-help-overlay': { style: {} },
+    'binding-help-overlay': { style: {}, classList: { toggle() {} } },
     'binding-docs-nav': { innerHTML: '' },
     'binding-docs-body': { innerHTML: '', scrollTop: 0 },
     'binding-docs-search': { value: '', focus() {} },
     'binding-docs-count': { textContent: '' }
 };
 context.document.getElementById = id => helpElements[id] || null;
+context.document.querySelector = () => null;
 context.document.querySelectorAll = () => [];
 context.testHelpSchemes = fixture.schemes;
 vm.runInContext("_bindingHelp.schemes = testHelpSchemes; _bindingHelp.view = 'builder:ha'", context);
@@ -231,9 +233,13 @@ const navHTML = helpElements['binding-docs-nav'].innerHTML;
 assert.ok(navHTML.indexOf('<h6>Guides</h6>') < navHTML.indexOf('<h6>Binding builders</h6>'));
 assert.ok(navHTML.indexOf('<h6>Binding builders</h6>') < navHTML.indexOf('<h6>Data</h6>'));
 context._bhRender();
-assert.match(helpElements['binding-docs-body'].innerHTML, /id="ha-binding-builder"/);
-assert.match(helpElements['binding-docs-body'].innerHTML, /data-bh-view="ha">full syntax and examples/);
+assert.match(helpElements['binding-docs-body'].innerHTML, /binding-source-picker/);
+assert.match(helpElements['binding-docs-body'].innerHTML, /data-bb-provider-picker/);
 assert.ok(!helpElements['binding-docs-body'].innerHTML.includes('binding-docs-signature'));
+context.window.deviceConfig = { caps: { ha_live: false } };
+assert.match(haButtonBuilderProvider.availability(context.window.deviceConfig),
+    /Home Assistant live lookup is not available on this device/);
+context.window.deviceConfig = {};
 const haReference = context._bhRenderScheme(scheme('ha'));
 assert.ok(!haReference.includes('id="ha-binding-builder"'));
 assert.match(haReference, /data-bh-view="builder:ha">Open Home Assistant builder/);
@@ -303,7 +309,7 @@ context.window.deviceConfig = haConfigured;
 context.showBindingBuilder('ha');
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'builder:ha');
 assert.strictEqual(builderState().rawOnly, false);
-assert.match(helpElements['binding-docs-body'].innerHTML, /id="ha-binding-builder"/);
+assert.match(helpElements['binding-docs-body'].innerHTML, /binding-source-picker/);
 context.showBindingHelp();
 assert.strictEqual(vm.runInContext('_bindingHelp.view', context), 'guide:basics');
 assert.strictEqual(helpElements['binding-docs-search'].value, '');
@@ -337,14 +343,25 @@ delete context.testHelpSchemes;
     const historyBuilder = builders.find(builder => builder.id === 'history');
     const temperature = { entity_id: 'sensor.living_room_temperature', state: '21.37', unit: '\u00b0C', paths: [] };
     const light = { entity_id: 'light.kitchen', state: 'on', unit: '', paths: [] };
+    const makeCandidate = (detail, name = 'Living room') => context.haButtonBuilderCandidate(detail, name);
+    const makeSource = (builder, detail, name = 'Living room', index = 0, previous) =>
+        context.padButtonBuilderSource(builder, makeCandidate(detail, name), index, previous);
     const makeDraft = (detail, options = {}) => ({
-        sources: [{ detail, name: 'Living room', options: {} }], options, previewState: detail.state
+        sources: [makeSource(null, detail)], options, previewState: detail.state
     });
     const buildSession = (detail, builder) => {
         const session = { col: 2, row: 1, page: 0, draft: makeDraft(detail) };
         context.padButtonBuilderSetScenario(session, builder);
         return session;
     };
+    const temperatureCandidate = makeCandidate(temperature);
+    assert.strictEqual(temperatureCandidate.sourceId, temperature.entity_id);
+    assert.strictEqual(temperatureCandidate.sample, temperature.state);
+    assert.strictEqual(temperatureCandidate.capabilities.numericWidget, true);
+    assert.strictEqual(Object.hasOwn(temperatureCandidate, 'entity_id'), false,
+        'Shared candidates do not expose HA-specific identity fields');
+    assert.strictEqual(haButtonBuilderProvider.buildBinding(temperatureCandidate, { format: '%.1f' }),
+        '[ha:sensor.living_room_temperature;;%.1f]');
     const valueSession = buildSession(temperature, valueBuilder);
     const generatedValue = context.padButtonBuilderBuild(valueSession);
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedValue)), {
@@ -408,11 +425,11 @@ delete context.testHelpSchemes;
         available: () => true,
         fields: () => [],
         sourceFields: () => [{ name: 'unit', label: 'Suffix', type: 'text', default: 'state', maxlength: 60 }],
-        validateSource({ detail }) {
-            if (!['on', 'off'].includes(detail.state)) throw new Error('Choose an on/off entity.');
+        validateSource({ candidate }) {
+            if (!['on', 'off'].includes(candidate.sample)) throw new Error('Choose an on/off entity.');
         },
         build({ sources }) {
-            return { label_center: sources.map(source => source.detail.state).join(' / '),
+            return { label_center: sources.map(source => source.candidate.sample).join(' / '),
                 state_caption: sources[0].options.unit };
         },
         validateOutput(draft, button) {
@@ -422,7 +439,7 @@ delete context.testHelpSchemes;
     const textPairSession = buildSession(light, textPairBuilder);
     assert.strictEqual(textPairSession.draft.sources[0].options.unit, 'state', 'The shell does not infer units');
     textPairSession.draft.sources[0].options.unit = 'custom';
-    const replacementText = context.padButtonBuilderSource(textPairBuilder,
+    const replacementText = makeSource(textPairBuilder,
         { ...light, entity_id: 'switch.example', unit: '%' }, 'Example', 0, textPairSession.draft.sources[0]);
     assert.strictEqual(replacementText.options.unit, 'custom', 'Replacement policy belongs to the scenario');
     assert.strictEqual(context.padButtonBuilderBuild(textPairSession).label_center, 'on');
@@ -516,6 +533,9 @@ delete context.testHelpSchemes;
         assert.ok(historyBuilder.previewNote(historySession.draft).startsWith(caption));
         assert.match(historyBuilder.previewNote(historySession.draft), /Illustrative trend, not actual history/);
     }
+    const unknownUnitHistory = buildSession({ ...temperature, unit: undefined }, historyBuilder);
+    assert.strictEqual(context.padButtonBuilderBuild(unknownUnitHistory).widget_sparkline_unified_scale,
+        false, 'Automatic scaling requires a known provider-reported unit');
     historySession.draft.options.window = '0';
     assert.throws(() => context.padButtonBuilderBuild(historySession), /time range/);
     historySession.draft.options.window = '86400';
@@ -527,7 +547,7 @@ delete context.testHelpSchemes;
     assert.throws(() => context.padButtonBuilderBuild(historySession), /decimal/);
     historySession.draft.sources[0].options.decimals = 1;
     const humidity = { entity_id: 'sensor.living_room_humidity', state: '54.2', unit: '%', paths: [] };
-    historySession.draft.sources.push(context.padButtonBuilderSource(historyBuilder, humidity, 'Humidity', 1));
+    historySession.draft.sources.push(makeSource(historyBuilder, humidity, 'Humidity', 1));
     Object.assign(historySession.draft.options, { window: '18000', interval: 60 });
     let multi = context.padButtonBuilderBuild(historySession);
     assert.strictEqual(multi.widget_sparkline_slots, 300);
@@ -550,10 +570,12 @@ delete context.testHelpSchemes;
     historySession.draft.sources[1].options.unit = '\u00b0'.repeat(30);
     assert.throws(() => context.padButtonBuilderBuild(historySession), /format|63 UTF-8 byte/);
     historySession.draft.sources[1].options.unit = '%';
-    historySession.draft.sources[1].detail = { ...humidity, entity_id: 'sensor.' + 'h'.repeat(48) };
+    historySession.draft.sources[1].candidate = makeCandidate({
+        ...humidity, entity_id: 'sensor.' + 'h'.repeat(48)
+    }, 'Humidity');
     assert.throws(() => context.padButtonBuilderBuild(historySession), /63 UTF-8 byte/, 'Secondary current-value labels must fit firmware buffers');
-    historySession.draft.sources[1].detail = humidity;
-    historySession.draft.sources.push(context.padButtonBuilderSource(historyBuilder,
+    historySession.draft.sources[1].candidate = makeCandidate(humidity, 'Humidity');
+    historySession.draft.sources.push(makeSource(historyBuilder,
         { ...temperature, entity_id: 'sensor.bedroom_temperature' }, 'Bedroom', 2));
     multi = context.padButtonBuilderBuild(historySession);
     assert.strictEqual(multi.widget_data_binding_3, '[ha:sensor.bedroom_temperature]');
@@ -567,7 +589,7 @@ delete context.testHelpSchemes;
     assert.strictEqual(multi.widget_data_binding_3, undefined);
     historySession.draft.options.scale = 'auto';
     assert.strictEqual(context.padButtonBuilderBuild(historySession).widget_sparkline_unified_scale, true);
-    const replacement = context.padButtonBuilderSource(historyBuilder, humidity, 'Humidity', 0, historySession.draft.sources[0]);
+    const replacement = makeSource(historyBuilder, humidity, 'Humidity', 0, historySession.draft.sources[0]);
     assert.strictEqual(replacement.options.color, '#2196F3', 'Changing an entity preserves styling');
     assert.strictEqual(replacement.options.decimals, 1);
     assert.strictEqual(replacement.options.unit, '%', 'Changing an entity updates its unit');
@@ -736,6 +758,11 @@ delete context.testHelpSchemes;
     assert.strictEqual(context.padState.buttons.length, 1);
     assert.match(validation.textContent, /no longer empty/);
     context.padState.buttons = [];
+    context.padState.page = 1;
+    context.padButtonBuilderCreate();
+    assert.strictEqual(context.padState.buttons.length, 0);
+    assert.match(validation.textContent, /no longer empty/);
+    context.padState.page = 0;
     valueSession.draft.sources = [];
     context.padButtonBuilderCreate();
     assert.strictEqual(context.padState.buttons.length, 0);
@@ -853,11 +880,11 @@ delete context.testHelpSchemes;
     const buttonRetry = {};
     const buttonSearch = { value: 'older' };
     const matches = { replaceChildren() {} };
-    const buttonDialog = { querySelector: selector => ({
+    const buttonDialog = { dataset: {}, querySelectorAll: () => [], querySelector: selector => ({
         '[data-bb-status]': buttonStatus, '[data-bb-retry]': buttonRetry,
         '#button-builder-search': buttonSearch, '[data-bb-matches]': matches
     })[selector] };
-    context.testButtonSession = { dialog: buttonDialog };
+    context.testButtonSession = { dialog: buttonDialog, provider: haButtonBuilderProvider };
     vm.runInContext('padButtonBuilderSession = testButtonSession', context);
     const buttonPending = [];
     context.haBindingLookup = () => new Promise((resolve, reject) => buttonPending.push({ resolve, reject }));
@@ -877,15 +904,19 @@ delete context.testHelpSchemes;
     await stopped;
     assert.notStrictEqual(buttonStatus.textContent, 'No matching entities. Try another name or enter an exact entity ID.');
 
-    // Multi-value selection is transactional, including cancellation during a lookup.
+    // Going back to source selection supersedes any pending lookup.
     context.deviceInfoCache = { widget_catalog: [{ type: 'sparkline' }] };
     const sourceSession = buildSession(temperature, historyBuilder);
+    sourceSession.provider = haButtonBuilderProvider;
     sourceSession.draft.options.title = 'Leefruimte';
     sourceSession.draft.options.window = '18000';
     sourceSession.draft.sources[0].options.decimals = 2;
     sourceSession.dialog = buttonDialog;
-    const sourceNodes = Object.fromEntries(['source', 'source-cancel', 'design', 'create', 'name', 'id', 'state']
+    const sourceNodes = Object.fromEntries(['source', 'design', 'create', 'name', 'id', 'state',
+        'selection', 'choices']
         .map(name => ['[data-bb-' + name + ']', {}]));
+    sourceNodes['[data-bb-choices] input:checked'] = { focus() {} };
+    sourceNodes['#button-builder-title'] = { textContent: 'Customize your button' };
     const originalQuery = buttonDialog.querySelector;
     buttonDialog.querySelector = selector => sourceNodes[selector] || originalQuery(selector);
     buttonSearch.focus = () => {};
@@ -898,16 +929,17 @@ delete context.testHelpSchemes;
     vm.runInContext('padButtonBuilderSession = testButtonSession', context);
     const beforeSelection = JSON.stringify(context.padButtonBuilderBuild(sourceSession));
     context.padButtonBuilderPickSource(1);
+    assert.strictEqual(sourceNodes['#button-builder-title'].textContent, 'Build a button from...');
     buttonSearch.value = humidity.entity_id;
     const cancelledSource = context.padButtonBuilderLookup(true);
     const cancelledSourceSignal = sourceSession.controller.signal;
-    context.padButtonBuilderCancelSource();
+    context.padButtonBuilderPickSource(1);
     assert.strictEqual(cancelledSourceSignal.aborted, true);
     buttonPending[3].resolve(humidity);
     await cancelledSource;
     assert.strictEqual(JSON.stringify(context.padButtonBuilderBuild(sourceSession)), beforeSelection);
-    assert.strictEqual(sourceNodes['[data-bb-design]'].hidden, false);
-    assert.strictEqual(sourceNodes['[data-bb-source]'].hidden, true);
+    assert.strictEqual(sourceNodes['[data-bb-design]'].hidden, true);
+    assert.strictEqual(sourceNodes['[data-bb-source]'].hidden, false);
     context.padButtonBuilderPickSource(1);
     buttonSearch.value = light.entity_id;
     context.haBindingLookup = async () => light;
@@ -922,20 +954,22 @@ delete context.testHelpSchemes;
     assert.strictEqual(sourceSession.draft.options.title, 'Leefruimte');
     assert.strictEqual(sourceSession.draft.options.window, '18000');
     assert.strictEqual(sourceSession.sourceIndex, undefined);
+    assert.strictEqual(sourceNodes['#button-builder-title'].textContent, 'Customize your button');
     context.padButtonBuilderPickSource(0);
     buttonSearch.value = humidity.entity_id;
     await context.padButtonBuilderLookup(true);
     assert.match(buttonStatus.textContent, /already included/);
-    assert.strictEqual(sourceSession.draft.sources[0].detail.entity_id, temperature.entity_id);
+    assert.strictEqual(sourceSession.draft.sources[0].candidate.sourceId, temperature.entity_id);
     const bedroom = { ...temperature, entity_id: 'sensor.bedroom_temperature' };
     buttonSearch.value = bedroom.entity_id;
     context.haBindingLookup = async () => bedroom;
     await context.padButtonBuilderLookup(true);
-    assert.strictEqual(sourceSession.draft.sources[0].detail.entity_id, bedroom.entity_id);
+    assert.strictEqual(sourceSession.draft.sources[0].candidate.sourceId, bedroom.entity_id);
     assert.strictEqual(valueBuilder.build({ ...sourceSession.draft, options: { decimals: 1, unit: '' } }).label_center,
         '[ha:sensor.bedroom_temperature;;%.1f]', 'Other scenarios derive the changed primary entity from the same source');
     assert.strictEqual(sourceSession.draft.sources[0].options.decimals, 2);
     textPairSession.dialog = buttonDialog;
+    textPairSession.provider = haButtonBuilderProvider;
     context.testButtonSession = textPairSession;
     vm.runInContext('padButtonBuilderSession = testButtonSession', context);
     context.padButtonBuilderPickSource(1);
@@ -950,11 +984,765 @@ delete context.testHelpSchemes;
     context.haBindingLookup = async () => temperature;
     await context.padButtonBuilderLookup(true);
     assert.match(buttonStatus.textContent, /on\/off entity/);
-    assert.strictEqual(textPairSession.draft.sources[1].detail.entity_id, switchDetail.entity_id);
-    context.padButtonBuilderCancelSource();
+    assert.strictEqual(textPairSession.draft.sources[1].candidate.sourceId, switchDetail.entity_id);
+    context.padButtonBuilderStopLookup();
     context.padButtonBuilderRenderFields = renderFields;
     context.padButtonBuilderRenderChoices = renderChoices;
     vm.runInContext('padButtonBuilderSession = null', context);
+
+    const previewStatus = { hidden: true, dataset: {}, textContent: '' };
+    const previewResult = {
+        isConnected: true,
+        querySelector: selector => selector === '[data-binding-preview-result]' ? previewStatus : null
+    };
+    let previewRequest;
+    context.fetch = async (url, options) => {
+        previewRequest = { url, options };
+        return { ok: true, json: async () => ({ resolved: [{ value: '73' }] }) };
+    };
+    await context.bindingBuilderPreviewBinding('[health:cpu;%ld]', previewResult);
+    assert.strictEqual(previewRequest.url, '/api/pad/resolve');
+    assert.strictEqual(previewRequest.options.method, 'POST');
+    assert.deepStrictEqual(JSON.parse(previewRequest.options.body), { bindings: ['[health:cpu;%ld]'] });
+    assert.strictEqual(previewStatus.textContent, 'Device result: 73');
+
+    context.fetch = async () => ({ ok: false, status: 503, json: async () => ({ error: 'Busy, retry.' }) });
+    await context.bindingBuilderPreviewBinding('[health:cpu]', previewResult);
+    assert.strictEqual(previewStatus.dataset.kind, 'error');
+    assert.match(previewStatus.textContent, /Busy, retry/);
+
+    context.fetch = async () => ({ ok: true, json: async () => fixture });
+    await context._bhLoad();
+    vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_catalog.js', 'utf8'), context);
+    vm.runInContext(fs.readFileSync('src/app/web/portal_binding_builder_mqtt.js', 'utf8'), context);
+    const catalogProvider = vm.runInContext('catalogBindingProvider', context);
+    const mqttProvider = vm.runInContext('mqttBindingProvider', context);
+    const catalogKeys = await catalogProvider.list('');
+    for (const scheme of fixture.schemes) {
+        if (scheme.free_form && scheme.reference?.formats && scheme.reference.rows?.length) {
+            assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === scheme.name),
+                scheme.name + ' format presets');
+            continue;
+        }
+        for (const key of scheme.free_form ? [''] : scheme.keys) {
+            assert.ok(catalogKeys.some(candidate => candidate.reference.scheme === scheme.name &&
+                candidate.reference.params[0] === (key || undefined)), scheme.name + ':' + key);
+        }
+    }
+    const timePreset = catalogKeys.find(candidate => candidate.displayName === 'Time — 24-hour clock');
+    assert.ok(timePreset, 'catalog exposes complete time presets');
+    assert.strictEqual(timePreset.sourceId, 'time:%H:%M');
+    assert.strictEqual(timePreset.exampleValue, '14:05');
+    assert.strictEqual(JSON.stringify(context.catalogBindingDefaultReference(
+        { scheme: 'time', params: [], fallback: '' })),
+        JSON.stringify({ scheme: 'time', params: ['%H:%M'], fallback: '' }));
+    assert.strictEqual(context.catalogBindingCandidate(
+        { scheme: 'health', params: ['cpu'], fallback: '' }).exampleValue, '42');
+    const inlineCatalog = context.catalogBindingFormHTML(false, true);
+    assert.ok(!inlineCatalog.includes('data-catalog-search'), 'unified selection has only one search box');
+    assert.ok(!inlineCatalog.includes('>Scheme<'), 'selected scheme is not selected a second time');
+    assert.ok(inlineCatalog.includes('data-catalog-change'), 'selected binding can return to search');
+    assert.ok((await catalogProvider.list('core 0')).some(candidate => candidate.sourceId === 'health:cpu_core_0'));
+    assert.strictEqual(context.bindingBuilderForScheme('time').id, 'catalog');
+    assert.strictEqual(context.bindingBuilderForScheme('ha').id, 'ha');
+    assert.strictEqual(context.bindingBuilderForScheme('mqtt').id, 'mqtt');
+    const catalogReference = (name, ...params) => ({ scheme: name, params, fallback: '' });
+    const catalogToken = (name, ...params) => context.catalogBindingToken(catalogReference(name, ...params));
+    assert.strictEqual(catalogToken('health', 'cpu_core_0'), '[health:cpu_core_0]');
+    assert.strictEqual(catalogToken('music', 'title'), '[music:title]');
+    assert.strictEqual(catalogToken('time', '%H:%M', 'Europe/Amsterdam'), '[time:%H:%M;Europe/Amsterdam]');
+    assert.strictEqual(catalogToken('mqtt', 'room/state', '', '%.1f'), '[mqtt:room/state;;%.1f]');
+    assert.strictEqual(catalogToken('mqtt', 'room/state', '', ''), '[mqtt:room/state]');
+    assert.strictEqual(context.catalogBindingToken(catalogReference('health', 'cpu'), { isWidgetBinding: true }),
+        '[health:cpu]');
+    assert.throws(() => context.catalogBindingToken(catalogReference('health', 'cpu', '%ld'),
+        { isWidgetBinding: true }), /Widget data bindings/);
+    assert.strictEqual(catalogToken('expr', '[mqtt:room/state;watts|0] > 0 ? "A;B|C" : "off"', '%.1f'),
+        '[expr:[mqtt:room/state;watts|0] > 0 ? "A;B|C" : "off";%.1f]');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(context.catalogBindingReference('[mqtt:room/state;;%.1f|none]'))),
+        { scheme: 'mqtt', params: ['room/state', '', '%.1f'], fallback: 'none' });
+    assert.throws(() => catalogToken('music', 'missing'), /registered key/);
+    assert.throws(() => catalogToken('time', ''), /Enter format/);
+    assert.throws(() => catalogToken('time', '%H:%M;injected'), /top-level/);
+    assert.throws(() => catalogToken('expr', '[health:cpu'), /brackets/);
+    assert.throws(() => catalogToken('time', 'é'.repeat(93)), /192 UTF-8/);
+    assert.throws(() => context.catalogBindingToken({ ...catalogReference('music', 'title'), fallback: 'bad|fallback' }),
+        /fallback/);
+    const requiredScheme = {
+        name: 'test_multi', min_params: 2, max_params: 3, widget_max_params: 2,
+        format_param: 2, free_form: true, params: [
+            { name: 'source', desc: 'Source', required: true },
+            { name: 'field', desc: 'Field', required: true },
+            { name: 'format', desc: 'Format', required: false }
+        ]
+    };
+    vm.runInContext('_bindingHelp.schemes', context).push(requiredScheme);
+    context.bindingRegisterSchema(fixture.schemes);
+    assert.throws(() => catalogToken('test_multi', 'source'), /required parameters/);
+    assert.throws(() => catalogToken('test_multi', 'source', ''), /Enter field/);
+    assert.strictEqual(catalogToken('test_multi', 'source', 'field', ''), '[test_multi:source;field]');
+    delete requiredScheme.params;
+    assert.ok(context.catalogBindingSchemes().some(scheme => scheme.name === 'test_multi'),
+        'Missing parameter documentation or authoring metadata must not hide a registered scheme');
+    assert.ok((await catalogProvider.list('test_multi')).some(candidate => candidate.reference.scheme === 'test_multi'));
+    assert.strictEqual(catalogToken('test_multi', 'source', 'field'), '[test_multi:source;field]');
+    vm.runInContext('_bindingHelp.schemes', context).pop();
+    context.bindingRegisterSchema(fixture.schemes);
+    const unpreviewed = context.catalogBindingCandidate(catalogReference('health', 'cpu'));
+    assert.strictEqual(unpreviewed.capabilities.numericWidget, false);
+    assert.strictEqual(unpreviewed.acquisitionState, 'not_required');
+    assert.strictEqual(unpreviewed.exampleValue, '42', 'catalog examples do not count as live samples');
+    assert.notStrictEqual(context.catalogBindingCandidate(catalogReference('time', '%H')).sourceId,
+        context.catalogBindingCandidate(catalogReference('time', '%M')).sourceId);
+
+    let providerRequests = [];
+    context.fetch = async (url, options) => {
+        providerRequests.push({ url, options });
+        return { ok: true, status: 200, json: async () => ({ resolved: [{ value: '73' }] }) };
+    };
+    const cpu = await catalogProvider.inspect(catalogReference('health', 'cpu'), new AbortController().signal);
+    assert.strictEqual(cpu.acquisitionState, 'received');
+    assert.strictEqual(cpu.sample, '73');
+    assert.strictEqual(catalogProvider.buildBinding(cpu, { mode: 'integer' }), '[health:cpu;%ld]');
+    assert.strictEqual(providerRequests[0].url, '/api/pad/resolve');
+    assert.deepStrictEqual(JSON.parse(providerRequests[0].options.body),
+        { bindings: ['[health:cpu]'] });
+    context.fetch = async () => ({
+        ok: true, status: 200, json: async () => ({ resolved: [{ value: '?' }] })
+    });
+    const unavailable = await catalogProvider.inspect(catalogReference('health', 'wifi_ssid'), new AbortController().signal);
+    assert.strictEqual(unavailable.acquisitionState, 'unavailable');
+    assert.strictEqual(Object.hasOwn(unavailable, 'sample'), false);
+    assert.strictEqual(catalogProvider.buildBinding(unavailable, { mode: 'raw' }), '[health:wifi_ssid]');
+
+    context.fetch = async (url, options) => {
+        providerRequests.push({ url, options });
+        return { ok: true, json: async () => ({ resolved: [{ value: '73' }] }) };
+    };
+    const generic = await catalogProvider.inspect(catalogReference('health', 'cpu_core_0'), undefined, 'pad_2');
+    assert.strictEqual(generic.sample, '73');
+    assert.strictEqual(generic.valueKind, 'integer', 'CPU cores now declare their numeric type');
+    assert.strictEqual(generic.capabilities.numericWidget, true);
+    assert.strictEqual(generic.capabilities.liveSampling, true);
+    assert.deepStrictEqual(JSON.parse(providerRequests.at(-1).options.body),
+        { bindings: ['[health:cpu_core_0]'], screen: 'pad_2' });
+    const formatted = await catalogProvider.inspect(catalogReference('health', 'cpu', '%ld'));
+    assert.strictEqual(formatted.capabilities.numericWidget, false, 'Formatted tokens cannot become widget inputs');
+    const clearedFormat = await catalogProvider.inspect(catalogReference('health', 'cpu', ''));
+    assert.strictEqual(clearedFormat.capabilities.numericWidget, true, 'Cleared optional formats restore raw numeric eligibility');
+    const fallbackCandidate = await catalogProvider.inspect({ ...catalogReference('health', 'cpu'), fallback: '0' });
+    assert.strictEqual(fallbackCandidate.capabilities.numericWidget, false, 'A fallback is not live numeric evidence');
+    context.fetch = async () => ({ ok: true, json: async () => ({ resolved: [{ value: '1'.repeat(127) }] }) });
+    const catalogTruncated = await catalogProvider.inspect(catalogReference('health', 'cpu'));
+    assert.strictEqual(catalogTruncated.sampleTruncated, true);
+    assert.strictEqual(catalogTruncated.capabilities.numericWidget, false);
+    context.fetch = async () => ({ ok: false, status: 503, json: async () => ({ error: 'Device busy' }) });
+    await assert.rejects(catalogProvider.inspect(catalogReference('time', '%H')), /Device busy/);
+    context.fetch = async () => ({ ok: true, json: async () => ({ resolved: [] }) });
+    await assert.rejects(catalogProvider.inspect(catalogReference('time', '%H')), /invalid binding preview/);
+
+    const mqttResponse = (status, payload, ok = true) => ({
+        ok, status, json: async () => payload
+    });
+    const mqttInspect = async (payload, topic = 'sensors/room/state') => {
+        const requests = [];
+        const responses = [
+            mqttResponse(202, { handle: 77, status: 'queued' }),
+            mqttResponse(200, payload),
+            mqttResponse(202, { handle: 77, status: 'released' })
+        ];
+        context.fetch = async (url, options = {}) => {
+            requests.push({ url, options });
+            return responses.shift();
+        };
+        const candidate = await mqttProvider.inspect(
+            { topic }, new AbortController().signal);
+        return { candidate, requests };
+    };
+    assert.strictEqual(context.mqttBindingTopicValid('sensors/room/state'), true);
+    for (const topic of ['', 'sensors/#', 'sensors/+', '\ud800']) {
+        assert.strictEqual(context.mqttBindingTopicValid(topic), false);
+    }
+    assert.strictEqual(context.mqttBindingTopicValid('x'.repeat(128)), false);
+    const mqttReceived = await mqttInspect({
+        status: 'received', received: true, cached: true, truncated: false,
+        sample: '{"temperature":21.37,"active":true,"nested":{"value":"ok"}}'
+    });
+    assert.strictEqual(mqttReceived.candidate.cached, true);
+    assert.deepStrictEqual(Array.from(mqttReceived.candidate.fields, item => item.path),
+        ['', 'temperature', 'active', 'nested.value']);
+    const selectedTemperature = context.mqttBindingBuilderSelectedField(
+        mqttReceived.candidate, 'temperature');
+    assert.strictEqual(selectedTemperature.sample, '21.37');
+    assert.strictEqual(mqttProvider.buildBinding(selectedTemperature, {
+        path: 'temperature', mode: 'number', decimals: 1, unit: '\u00b0C'
+    }), '[mqtt:sensors/room/state;temperature;%.1f \u00b0C]');
+    await mqttProvider.dispose(mqttReceived.candidate);
+    assert.strictEqual(mqttReceived.requests[2].options.method, 'DELETE');
+
+    const longScalar = await mqttInspect({
+        status: 'received', received: true, truncated: false,
+        sample: JSON.stringify({ description: 'x'.repeat(128) })
+    });
+    const selectedLongScalar = context.mqttBindingBuilderSelectedField(
+        longScalar.candidate, 'description');
+    assert.strictEqual(selectedLongScalar.sampleTruncated, true);
+    assert.strictEqual(selectedLongScalar.capabilities.numericWidget, false);
+
+    for (const sample of ['', '---', 'ERR:mock']) {
+        const result = await mqttInspect({
+            status: 'received', received: true, truncated: false, sample
+        });
+        assert.strictEqual(result.candidate.acquisitionState, 'received');
+        assert.strictEqual(result.candidate.sample, sample);
+    }
+    const malformed = await mqttInspect({
+        status: 'received', received: true, truncated: false, sample: '{"temperature":'
+    });
+    assert.strictEqual(malformed.candidate.malformedJson, true);
+    assert.deepStrictEqual(Array.from(malformed.candidate.fields, item => item.path), ['']);
+    const truncated = await mqttInspect({
+        status: 'received', received: true, truncated: true, sample: 'x'.repeat(2047)
+    });
+    assert.strictEqual(truncated.candidate.payloadTruncated, true);
+    assert.deepStrictEqual(Array.from(truncated.candidate.fields, item => item.path), ['']);
+
+    const cancellation = new AbortController();
+    let cancelReleased = false;
+    context.fetch = async (url, options = {}) => {
+        if (options.method === 'POST') return mqttResponse(202, { handle: 78 }, true);
+        if (options.method === 'DELETE') {
+            cancelReleased = true;
+            return mqttResponse(202, { handle: 78, status: 'released' }, true);
+        }
+        cancellation.abort();
+        throw new DOMException('Inspection cancelled', 'AbortError');
+    };
+    await assert.rejects(
+        mqttProvider.inspect({ topic: 'sensors/cancel' }, cancellation.signal),
+        { name: 'AbortError' });
+    assert.strictEqual(cancelReleased, true);
+
+    // Additional button sources reuse acquisition and enforce numeric evidence per selected value.
+    const catalogButtons = vm.runInContext('catalogButtonBuilderProvider', context);
+    const mqttButtons = vm.runInContext('mqttButtonBuilderProvider', context);
+    assert.strictEqual(catalogButtons.listOnOpen, undefined, 'catalog does not show every entry on open');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify((await catalogButtons.search('he')).candidates)), [],
+        'catalog waits for three characters before suggesting entries');
+    assert.ok((await catalogButtons.search('hea')).candidates.length,
+        'catalog searches after three characters');
+    const candidateSession = (candidate, builder) => {
+        const session = { col: 2, row: 1, page: 0, draft: {
+            sources: [context.padButtonBuilderSource(null, candidate, 0)], options: {}, previewState: candidate.sample
+        } };
+        context.padButtonBuilderSetScenario(session, builder);
+        return session;
+    };
+    const runtime = { widget_catalog: [{ type: 'sparkline' }, { type: 'bar_chart' }, { type: 'gauge' }] };
+    context.deviceInfoCache = runtime;
+    const attributeParent = context.haButtonBuilderCandidate({
+        entity_id: 'light.desk', state: 'on', unit: '%',
+        paths: [{ path: 'attributes.brightness', value: '128' }]
+    }, 'Desk light');
+    const brightness = haButtonBuilderProvider.selectField(attributeParent, 'attributes.brightness');
+    assert.strictEqual(brightness.sample, '128');
+    assert.strictEqual(brightness.unit, undefined);
+    assert.strictEqual(brightness.capabilities.numericWidget, true);
+    assert.strictEqual(brightness.capabilities.control, false);
+    assert.strictEqual(brightness.capabilities.historyBackfill, false);
+    assert.strictEqual(context.bindingSourceSelection(brightness).mode, 'number');
+    assert.strictEqual(context.bindingSourceSelection(attributeParent).mode, 'raw');
+    assert.strictEqual(haButtonBuilderProvider.buildBinding(brightness),
+        '[ha:light.desk;attributes.brightness]');
+    const unknownAttribute = haButtonBuilderProvider.selectField(attributeParent, 'attributes.missing');
+    assert.strictEqual(unknownAttribute.capabilities.numericWidget, false);
+    assert.strictEqual(unknownAttribute.acquisitionState, 'unavailable');
+    const unavailableAttribute = haButtonBuilderProvider.selectField(context.haButtonBuilderCandidate({
+        entity_id: 'light.desk', state: 'unavailable',
+        paths: [{ path: 'attributes.brightness', value: '128' }]
+    }), 'attributes.brightness');
+    assert.strictEqual(unavailableAttribute.acquisitionState, 'unavailable');
+    assert.strictEqual(unavailableAttribute.capabilities.numericWidget, false,
+        'Cached attributes cannot qualify for numeric widgets while their entity is unavailable');
+    assert.throws(() => haButtonBuilderProvider.selectField(attributeParent, 'attributes.bad;key'), /dotted path/);
+    const selectedBrightness = { ...brightness, selection: {
+        mode: 'number', decimals: '2', unit: 'level', fallback: 'Offline'
+    } };
+    assert.strictEqual(context.bindingSourceToken(selectedBrightness, selectedBrightness.selection),
+        '[ha:light.desk;attributes.brightness;%.2f level|Offline]');
+    assert.strictEqual(context.bindingSourceToken(selectedBrightness, selectedBrightness.selection, true),
+        '[ha:light.desk;attributes.brightness|Offline]');
+    for (const builder of [valueBuilder, barBuilder, gaugeBuilder, historyBuilder]) {
+        const session = candidateSession(selectedBrightness, builder);
+        const button = context.padButtonBuilderBuild(session);
+        const label = button.label_center?.includes('[ha:') ? button.label_center :
+            button.label_bottom || button.widget_sparkline_current_label;
+        assert.match(label, /\[ha:light.desk;attributes\.brightness;%\.2f(?: level)?\|Offline\]/);
+        if (builder !== valueBuilder) {
+            assert.strictEqual(button.widget_data_binding, '[ha:light.desk;attributes.brightness]',
+                'Display formatting and fallback must not alter the numeric widget input');
+        }
+        assert.ok(!session.fields.some(field => ['decimals', 'unit'].includes(field.name)),
+            'Selected display options are not requested again in button customization');
+    }
+    const selectedCpu = { ...cpu, selection: { mode: 'integer', decimals: 1, unit: '%', fallback: 'Offline' } };
+    assert.strictEqual(context.bindingSourceToken(selectedCpu, selectedCpu.selection), '[health:cpu;%ld|Offline] %');
+    assert.strictEqual(context.bindingSourceToken(selectedCpu, selectedCpu.selection, true), '[health:cpu|Offline]');
+    assert.strictEqual(context.bindingSourceSample(selectedCpu, selectedCpu.selection), '73 %');
+    assert.throws(() => context.bindingSourceToken(selectedCpu, { ...selectedCpu.selection, unit: '[bad]' }), /delimiters/);
+    const selectedMqtt = { ...selectedTemperature, selection: {
+        mode: 'number', decimals: 2, unit: 'C', fallback: 'Offline'
+    } };
+    assert.strictEqual(context.bindingSourceToken(selectedMqtt, selectedMqtt.selection),
+        '[mqtt:sensors/room/state;temperature;%.2f C|Offline]');
+    assert.strictEqual(context.bindingSourceSelection(selectedTemperature).mode, 'number');
+    assert.strictEqual(context.bindingSourceSelection({
+        ...selectedTemperature, sample: '0'
+    }).mode, 'number', 'Zero is numeric');
+    assert.strictEqual(context.bindingSourceSelection({
+        ...selectedTemperature, sample: '', valueKind: 'text'
+    }).mode, 'raw', 'An empty payload is not numeric');
+    assert.strictEqual(context.bindingSourceSelection({
+        ...selectedTemperature, selection: { mode: 'raw', decimals: 2, unit: 'C', fallback: '' }
+    }).mode, 'raw', 'An explicit display choice is preserved');
+    for (const sample of ['', '0', 'unavailable']) {
+        assert.strictEqual(context.bindingSourceSample({
+            ...selectedMqtt, sample, acquisitionState: 'received'
+        }, { mode: 'raw', decimals: 1, unit: '', fallback: 'Offline' }), sample,
+        'Received MQTT text must not be confused with a missing sample');
+    }
+    assert.strictEqual(context.bindingSourceSample({
+        ...selectedMqtt, acquisitionState: 'unavailable'
+    }, { mode: 'raw', decimals: 1, unit: '', fallback: 'Offline' }), 'Offline');
+    const sampleController = new AbortController();
+    context.fetch = async () => { throw new Error('Authoring must not require a live device read'); };
+    const sampleCpu = await catalogButtons.prepare(catalogReference('health', 'cpu'), sampleController.signal);
+    assert.strictEqual(sampleCpu.acquisitionState, 'not_required');
+    assert.strictEqual(sampleCpu.sample, '42');
+    assert.strictEqual(sampleCpu.sampleIsExample, true);
+    assert.strictEqual(sampleCpu.capabilities.numericWidget, true);
+    assert.strictEqual(context.bindingSourceSelection(sampleCpu).mode, 'integer');
+    const sensor = catalogButtons.prepare(catalogReference('sensor', 'temperature'));
+    assert.strictEqual(sensor.valueKind, 'number');
+    assert.strictEqual(sensor.sample, '21.37');
+    assert.strictEqual(sensor.unit, '\u00b0C');
+    assert.strictEqual(sensor.capabilities.numericWidget, true);
+    assert.strictEqual(sensor.capabilities.liveSampling, true);
+    const sensorDisplay = context.bindingSourceSelection(sensor);
+    assert.strictEqual(sensorDisplay.mode, 'number');
+    assert.strictEqual(context.bindingSourceToken(sensor, sensorDisplay), '[sensor:temperature;%.1f] \u00b0C');
+    assert.strictEqual(context.bindingSourceSample(sensor, sensorDisplay), '21.4 \u00b0C');
+    assert.strictEqual(context.bindingSourceToken(sensor, sensorDisplay, true), '[sensor:temperature]');
+    const preformattedSensor = catalogButtons.prepare(catalogReference('sensor', 'temperature', '%.3f'));
+    const preformattedDisplay = context.bindingSourceSelection(preformattedSensor);
+    assert.strictEqual(preformattedDisplay.mode, 'raw', 'A supplied native format is not overwritten by defaults');
+    assert.strictEqual(context.bindingSourceToken(preformattedSensor, preformattedDisplay),
+        '[sensor:temperature;%.3f] \u00b0C');
+    for (const builder of [barBuilder, gaugeBuilder, historyBuilder]) {
+        const session = candidateSession({ ...sensor, selection: sensorDisplay }, builder);
+        assert.strictEqual(builder.available(session.draft, runtime), true);
+        const button = context.padButtonBuilderBuild(session);
+        assert.strictEqual(button.widget_data_binding, '[sensor:temperature]');
+        assert.ok(!JSON.stringify(button).includes('21.37'), 'Illustrative samples are never saved as runtime values');
+    }
+    const clock = catalogButtons.prepare(timePreset.reference);
+    assert.strictEqual(clock.sample, '14:05');
+    assert.strictEqual(clock.capabilities.numericWidget, false,
+        'Example output does not grant undeclared numeric capabilities');
+    for (const scheme of fixture.schemes.filter(scheme =>
+        !['ha', 'mqtt', 'expr', 'pad'].includes(scheme.name))) {
+        for (const key of scheme.free_form ? [] : scheme.keys) {
+            const candidate = catalogButtons.prepare(catalogReference(scheme.name, key));
+            assert.strictEqual(typeof candidate.sample, 'string', scheme.name + ':' + key + ' sample');
+            assert.strictEqual(candidate.sampleIsExample, true);
+            assert.ok(['integer', 'number', 'text'].includes(candidate.valueKind));
+        }
+    }
+    const elapsed = catalogButtons.prepare(catalogReference('music', 'elapsed_s'));
+    assert.strictEqual(elapsed.unit, 's');
+    assert.strictEqual(context.bindingSourceSelection(elapsed).mode, 'integer');
+    assert.strictEqual(context.bindingSourceToken(elapsed, context.bindingSourceSelection(elapsed)),
+        '[music:elapsed_s] s', 'Raw integer resolvers do not receive an invented printf argument');
+    const duration = catalogButtons.prepare(catalogReference('timer', '1'));
+    assert.strictEqual(duration.sample, '245.3');
+    assert.strictEqual(duration.unit, 's');
+    assert.strictEqual(duration.capabilities.numericWidget, true);
+    assert.deepStrictEqual(Array.from(duration.formatModes), ['raw'],
+        'Duration syntax must not be advertised as printf formatting');
+    const formattedDuration = catalogButtons.prepare(catalogReference('timer', '1', 'mm:ss'));
+    assert.strictEqual(formattedDuration.sample, '4:05');
+    assert.strictEqual(formattedDuration.valueKind, 'text');
+    assert.strictEqual(formattedDuration.unit, '');
+    assert.strictEqual(formattedDuration.capabilities.numericWidget, false);
+    const activityAge = catalogButtons.prepare(catalogReference('net', 'mqtt_rx', 'age'));
+    assert.strictEqual(activityAge.sample, '125');
+    assert.strictEqual(activityAge.valueKind, 'integer');
+    assert.strictEqual(activityAge.unit, 'ms', 'Age variants do not inherit unitless activity metadata');
+    const customClock = catalogButtons.prepare(catalogReference('time', '%H'));
+    assert.strictEqual(customClock.sample, undefined, 'Custom free-form formats do not inherit a preset sample');
+    const structuralScheme = {
+        name: 'test_structural', min_params: 1, max_params: 2, widget_max_params: 1,
+        format_param: 1, free_form: true,
+        key_docs: [{ key: 'sensor_#_ms', desc: 'Sensor duration' }],
+        authoring: { keys: [{ key: 'sensor_#_ms', kind: 'number', unit: 'ms',
+            example_value: '1.020', formats: ['raw', 'number'],
+            capabilities: ['display', 'numeric_widget', 'live_sampling'], read_only: true }] }
+    };
+    vm.runInContext('_bindingHelp.schemes', context).push(structuralScheme);
+    context.bindingRegisterSchema(fixture.schemes);
+    const structuralResults = await catalogProvider.list('Sensor duration');
+    assert.ok(structuralResults.some(candidate => candidate.sourceId === 'test_structural:sensor_1_ms'));
+    const structuralValue = catalogButtons.prepare(catalogReference('test_structural', 'sensor_3_ms'));
+    assert.strictEqual(structuralValue.sample, '1.020');
+    assert.strictEqual(structuralValue.unit, 'ms');
+    assert.strictEqual(structuralValue.capabilities.numericWidget, true);
+    assert.strictEqual(context.bindingSourceToken(structuralValue, context.bindingSourceSelection(structuralValue)),
+        '[test_structural:sensor_3_ms;%.1f] ms');
+    vm.runInContext('_bindingHelp.schemes', context).pop();
+    context.bindingRegisterSchema(fixture.schemes);
+    sampleController.abort();
+    assert.throws(() => catalogButtons.prepare(catalogReference('health', 'cpu'), sampleController.signal),
+        /cancelled/);
+    const pickerNodes = new Map();
+    const pickerRoot = { querySelectorAll: () => providerInputs, querySelector(selector) {
+        if (!pickerNodes.has(selector)) pickerNodes.set(selector, {
+            hidden: true, value: '', dataset: {}, firstChild: { textContent: '' }, focus() {}, replaceChildren() {},
+            setAttribute(name) { if (name === 'hidden') this.hidden = true; },
+            removeAttribute(name) { if (name === 'hidden') this.hidden = false; }
+        });
+        return pickerNodes.get(selector);
+    } };
+    const providerInputs = [{ value: 'catalog' }, { value: 'mqtt' }, { value: 'ha' }];
+    const pickerSession = { dialog: pickerRoot, picker: true, config: { caps: { mqtt: true }, mqtt_host: 'broker' } };
+    context.padButtonBuilderChooseProvider('mqtt', pickerSession);
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-catalog-search-panel]').hidden, false,
+        'Changing provider restores the input after a catalog selection');
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-use]').hidden, false);
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-picked]').hidden, true);
+    assert.deepStrictEqual(providerInputs.map(input => input.checked), [false, true, false]);
+    context.padButtonBuilderChooseProvider('catalog', pickerSession);
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-use]').hidden, true,
+        'Searchable sources do not need an extra confirmation button');
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-catalog-search-panel]').hidden, false);
+    assert.deepStrictEqual(providerInputs.map(input => input.checked), [true, false, false]);
+    const configuredSources = { ...haConfigured, caps: { ha_live: true, mqtt: true }, mqtt_host: 'broker' };
+    assert.deepStrictEqual(Array.from(context.bindingSourceProviders(configuredSources), item => item.id).sort(),
+        ['catalog', 'ha', 'mqtt']);
+    const unconfiguredSources = { caps: { ha_live: true, mqtt: true } };
+    assert.deepStrictEqual(Array.from(context.bindingSourceProviders(unconfiguredSources), item => item.id).sort(),
+        ['catalog', 'ha', 'mqtt'], 'Unconfigured integrations remain selectable');
+    assert.strictEqual((context.bindingSourceProviderOptions(unconfiguredSources, 'test-source')
+        .match(/Setup needed/g) || []).length, 2);
+    assert.ok(!context.bindingSourceProviderOptions(configuredSources, 'test-source').includes('Setup needed'));
+    assert.deepStrictEqual(Array.from(context.bindingSourceProviders({ caps: {} }), item => item.id), ['catalog'],
+        'Unsupported integrations are omitted rather than offering unusable settings');
+    pickerSession.config = unconfiguredSources;
+    context.padButtonBuilderChooseProvider('ha', pickerSession, false);
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-source]').hidden, true);
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-setup]').hidden, false);
+    assert.match(pickerRoot.querySelector('[data-bb-setup]').firstChild.textContent, /Configure Home Assistant/);
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-settings]').href, '#ha-discovery');
+    context.padButtonBuilderChooseProvider('mqtt', pickerSession, false);
+    assert.strictEqual(pickerRoot.querySelector('[data-bb-settings]').href, '#mqtt');
+    context.padButtonBuilderStopLookup(pickerSession);
+    pickerSession.disposed = true;
+    assert.strictEqual(context.bindingSourceSessionActive(pickerSession), false);
+    const cpuExample = context.catalogBindingCandidate(catalogReference('health', 'cpu'));
+    const cpuExampleSession = candidateSession(cpuExample, valueBuilder);
+    assert.strictEqual(catalogButtons.canEnableNumeric(cpuExample), true,
+        'declared numeric metadata can offer a live check without treating the example as evidence');
+    assert.strictEqual(valueBuilder.preview(cpuExampleSession.draft).label_center, '42');
+    assert.strictEqual(context.padButtonBuilderCandidateValueText(cpuExample), '',
+        'example is rendered in the button preview, not repeated as current state');
+    assert.match(catalogButtons.previewNote(cpuExample), /Illustrative sample preview/);
+    assert.strictEqual(barBuilder.available(candidateSession(cpuExample, barBuilder).draft, runtime), false,
+        'Representative examples never qualify as numeric evidence');
+    const textExample = context.catalogBindingCandidate(catalogReference('health', 'wifi_ssid'));
+    assert.strictEqual(catalogButtons.canEnableNumeric(textExample), false,
+        'text bindings do not offer a live numeric check');
+    const originalRenderSelection = context.padButtonBuilderRenderSelection;
+    const originalRenderChoices = context.padButtonBuilderRenderChoices;
+    const originalRenderFields = context.padButtonBuilderRenderFields;
+    const originalShowStatus = context.padButtonBuilderStatus;
+    const liveCheckStatuses = [];
+    context.padButtonBuilderRenderSelection = () => {};
+    context.padButtonBuilderRenderChoices = () => {};
+    context.padButtonBuilderRenderFields = () => {};
+    context.padButtonBuilderStatus = (message, error) => liveCheckStatuses.push({ message, error });
+    const liveCheckSession = {
+        page: 0, scenario: valueBuilder, controller: null, timer: null,
+        dialog: { querySelector: () => null },
+        draft: { sources: [context.padButtonBuilderSource(valueBuilder, cpuExample, 0)],
+            options: {}, previewState: cpuExample.exampleValue }
+    };
+    context.testLiveCheckSession = liveCheckSession;
+    vm.runInContext('padButtonBuilderSession = testLiveCheckSession', context);
+    context.fetch = async () => mqttResponse(200, { resolved: [{ value: '23' }] });
+    await context.padButtonBuilderReadCurrentValue();
+    assert.strictEqual(liveCheckSession.draft.sources[0].candidate.sample, '23');
+    assert.strictEqual(liveCheckSession.draft.sources[0].candidate.capabilities.numericWidget, true);
+    assert.strictEqual(liveCheckSession.draft.previewState, '23');
+    assert.strictEqual(barBuilder.available(liveCheckSession.draft, runtime), true,
+        'A live numeric read enables numeric layouts after an illustrative sample alone did not');
+    assert.deepStrictEqual(liveCheckStatuses.map(item => item.message),
+        ['Reading the current device value...', '']);
+    context.padButtonBuilderRenderSelection = originalRenderSelection;
+    context.padButtonBuilderRenderChoices = originalRenderChoices;
+    context.padButtonBuilderRenderFields = originalRenderFields;
+    context.padButtonBuilderStatus = originalShowStatus;
+    vm.runInContext('padButtonBuilderSession = null', context);
+    const cpuSession = candidateSession(cpu, valueBuilder);
+    assert.strictEqual(context.padButtonBuilderBuild(cpuSession).label_center, '[health:cpu;%ld]');
+    assert.strictEqual(cpuSession.fields.some(field => field.name === 'decimals'), false);
+    assert.strictEqual(valueBuilder.preview(cpuSession.draft).label_center, '73');
+    for (const builder of [barBuilder, gaugeBuilder, historyBuilder]) {
+        const session = candidateSession(cpu, builder);
+        const button = context.padButtonBuilderBuild(session);
+        assert.strictEqual(builder.available(session.draft, runtime), true);
+        assert.strictEqual(button.widget_data_binding, '[health:cpu]');
+        assert.strictEqual(button.label_bottom || button.widget_sparkline_current_label, '[health:cpu;%ld] %');
+        assert.ok(!JSON.stringify(button).includes('%.'));
+        assert.strictEqual((builder.sourceFields ? builder.sourceFields(session.draft.sources[0], 0) : session.fields)
+            .some(field => field.name === 'decimals'), false);
+    }
+    assert.strictEqual(context.padButtonBuilderBuild(candidateSession(unavailable, valueBuilder)).label_center,
+        '[health:wifi_ssid]');
+    assert.strictEqual(valueBuilder.preview(candidateSession(unavailable, valueBuilder).draft).label_center, '---');
+    for (const sample of ['?', 'true', '', '12abc', 'Infinity']) {
+        context.fetch = async () => mqttResponse(200, { resolved: [{ value: sample }] });
+        const candidate = await catalogButtons.inspect(catalogReference('health', 'cpu'), new AbortController().signal);
+        assert.strictEqual(candidate.capabilities.numericWidget, false);
+        assert.strictEqual(historyBuilder.available(candidateSession(candidate, valueBuilder).draft, runtime), false);
+    }
+    cpuSession.draft.options.unit = 'custom';
+    assert.strictEqual(context.padButtonBuilderBuild(cpuSession).label_bottom, 'custom');
+    assert.strictEqual(catalogButtons.buildLabel(cpu, { unit: '%;bad' }, false), '[health:cpu;%ld]');
+    assert.throws(() => catalogButtons.buildLabel(cpu, { unit: '[ha:sensor.bad]' }, true), /delimiters/);
+    assert.strictEqual(context.padButtonBuilderBuild(candidateSession(generic, valueBuilder)).label_center,
+        '[health:cpu_core_0;%ld]');
+    assert.strictEqual(historyBuilder.available(candidateSession(generic, valueBuilder).draft, runtime), true);
+
+    const acquiredButton = async (sample, extra = {}, topic = 'sensors/room') => {
+        const requests = [];
+        context.fetch = async (url, options = {}) => {
+            requests.push({ url, options });
+            if (options.method === 'POST') return mqttResponse(202, { handle: 91 });
+            if (options.method === 'DELETE') return mqttResponse(202, { status: 'release_pending' });
+            return mqttResponse(200, { status: 'received', received: true, truncated: false, sample, ...extra });
+        };
+        const candidate = await mqttButtons.inspect({ topic }, new AbortController().signal);
+        assert.strictEqual(requests.filter(request => request.options.method === 'DELETE').length, 1,
+            'Button acquisition releases immediately, before selection or draft creation');
+        assert.strictEqual(candidate.reference.handle, undefined);
+        await mqttButtons.dispose(candidate);
+        assert.strictEqual(requests.length, 3, 'Draft lifetime cannot retain or re-release a preview handle');
+        return candidate;
+    };
+    for (const sample of ['0', '', '---', 'ERR:mock', 'unavailable', 'true', '12abc', '1e999', '{}', '[]']) {
+        const acquired = await acquiredButton(sample);
+        const selected = mqttButtons.selectField(acquired, '');
+        const session = candidateSession(selected, valueBuilder);
+        assert.strictEqual(selected.sample, sample);
+        assert.strictEqual(Object.hasOwn(selected, 'unit'), false, 'MQTT never invents a unit');
+        for (const builder of [barBuilder, gaugeBuilder, historyBuilder]) {
+            assert.strictEqual(builder.available(session.draft, runtime), sample === '0');
+        }
+        assert.strictEqual(toggleBuilder.available(session.draft), false);
+        assert.strictEqual(valueBuilder.preview(session.draft).label_center, sample === '0' ? '0.0' : sample);
+        assert.ok(!JSON.stringify(context.padButtonBuilderBuild(session)).includes('ha_entity'));
+    }
+    const objectSample = await acquiredButton('{"temperature":21.37,"active":true,"custom":0,"text":"12abc"}');
+    const mqttTemperature = mqttButtons.selectField(objectSample, 'temperature');
+    assert.strictEqual(mqttButtons.buildBinding(mqttTemperature), '[mqtt:sensors/room;temperature]');
+    assert.strictEqual(context.padButtonBuilderBuild(candidateSession(mqttTemperature, barBuilder)).label_bottom,
+        '[mqtt:sensors/room;temperature;%.1f]');
+    for (const path of ['active', 'text']) {
+        const selected = mqttButtons.selectField(objectSample, path);
+        assert.strictEqual(historyBuilder.available(candidateSession(selected, valueBuilder).draft, runtime), false);
+    }
+    assert.strictEqual(mqttButtons.selectField(objectSample, 'custom').sample, '0');
+    const manualSample = await acquiredButton('{"room":{"sensor value":12,"\u6e29\u5ea6":0}}');
+    assert.strictEqual(mqttButtons.selectField(manualSample, '.room..sensor value.').sample, '12');
+    assert.strictEqual(mqttButtons.selectField(manualSample, 'room.\u6e29\u5ea6').sample, '0');
+    assert.strictEqual(mqttButtons.selectField(objectSample, '.').reference.path, '');
+    assert.throws(() => mqttButtons.selectField(objectSample, 'missing'), /scalar value/);
+    assert.throws(() => mqttButtons.selectField(objectSample, 'x'.repeat(48)), /47 UTF-8/);
+    assert.throws(() => mqttButtons.selectField(objectSample, 'temperature;bad'), /dotted scalar/);
+    const bounded = await acquiredButton(JSON.stringify(Object.fromEntries(
+        Array.from({ length: 34 }, (_, index) => ['v' + index, index]))));
+    assert.strictEqual(bounded.fields.length, 33);
+    assert.strictEqual(mqttButtons.selectField(bounded, 'v33').sample, '33', 'Manual paths work beyond the suggestion cap');
+    const oversized = await acquiredButton('x'.repeat(128));
+    assert.throws(() => mqttButtons.selectField(oversized, ''), /127 UTF-8 bytes/);
+    const truncatedButton = await acquiredButton('123', { truncated: true });
+    assert.throws(() => mqttButtons.selectField(truncatedButton, ''), /127 UTF-8 bytes/);
+    assert.throws(() => mqttButtons.selectField(truncatedButton, 'value'), /complete JSON/);
+    const malformedButton = await acquiredButton('{"value":');
+    assert.strictEqual(mqttButtons.selectField(malformedButton, '').sample, '{"value":');
+    assert.throws(() => mqttButtons.selectField(malformedButton, 'value'), /complete JSON/);
+
+    // Per-series tokens and backfill are independent of ordering and display-unit overrides.
+    context.window.__device_caps = { ha_history: true };
+    const mixed = candidateSession(makeCandidate(temperature), historyBuilder);
+    mixed.draft.sources.push(context.padButtonBuilderSource(historyBuilder, mqttTemperature, 1),
+        context.padButtonBuilderSource(historyBuilder, cpu, 2));
+    let mixedButton = context.padButtonBuilderBuild(mixed);
+    assert.strictEqual(mixedButton.widget_data_binding, '[ha:sensor.living_room_temperature]');
+    assert.strictEqual(mixedButton.widget_data_binding_2, '[mqtt:sensors/room;temperature]');
+    assert.strictEqual(mixedButton.widget_data_binding_3, '[health:cpu]');
+    assert.strictEqual(mixedButton.widget_sparkline_current_label_2, '[mqtt:sensors/room;temperature;%.1f]');
+    assert.strictEqual(mixedButton.widget_sparkline_current_label_3, '[health:cpu;%ld] %');
+    assert.strictEqual(mixedButton.widget_sparkline_ha_entity, temperature.entity_id);
+    assert.strictEqual(mixedButton.widget_sparkline_unified_scale, false);
+    for (const suffix of ['_2', '_3']) {
+        assert.strictEqual(Object.hasOwn(mixedButton, 'widget_sparkline_ha_entity' + suffix), false);
+        assert.strictEqual(Object.hasOwn(mixedButton, 'widget_sparkline_ha_stat' + suffix), false);
+    }
+    mixed.draft.sources.forEach(source => { source.options.unit = '%'; });
+    assert.strictEqual(context.padButtonBuilderBuild(mixed).widget_sparkline_unified_scale, false);
+    mixed.draft.options.scale = 'shared';
+    assert.strictEqual(context.padButtonBuilderBuild(mixed).widget_sparkline_unified_scale, true);
+    mixed.draft.options.scale = 'independent';
+    assert.strictEqual(context.padButtonBuilderBuild(mixed).widget_sparkline_unified_scale, false);
+    mixed.draft.options.scale = 'auto';
+    mixed.draft.sources = [
+        context.padButtonBuilderSource(historyBuilder, cpu, 0),
+        makeSource(historyBuilder, humidity, 'Humidity', 1)
+    ];
+    mixedButton = context.padButtonBuilderBuild(mixed);
+    assert.strictEqual(mixedButton.widget_sparkline_unified_scale, true, 'Known matching HA/built-in units share a scale');
+    assert.strictEqual(Object.hasOwn(mixedButton, 'widget_sparkline_ha_entity'), false);
+    assert.strictEqual(mixedButton.widget_sparkline_ha_entity_2, humidity.entity_id);
+    const noDecimalSource = context.padButtonBuilderSource(historyBuilder, cpu, 0,
+        { candidate: mqttTemperature, options: { decimals: 6, unit: 'leaked', color: '#123456', entity_id: 'bad' } });
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(noDecimalSource.options)), { unit: '%', color: '#123456' });
+    const backToMqtt = context.padButtonBuilderSource(historyBuilder, mqttTemperature, 0, noDecimalSource);
+    assert.strictEqual(backToMqtt.options.unit, '');
+    assert.strictEqual(backToMqtt.options.decimals, 1);
+    const longTopic = await acquiredButton('0', {}, 's'.repeat(60));
+    assert.throws(() => context.padButtonBuilderBuild(candidateSession(mqttButtons.selectField(longTopic, ''), historyBuilder)),
+        /63 UTF-8 byte/);
+    assert.throws(() => mqttButtons.buildBinding(mqttTemperature, { format: 'x'.repeat(24) }), /24 UTF-8/);
+
+    // Failed, canceled, and superseded acquisitions cannot mutate the prior valid draft.
+    context.padButtonBuilderRenderFields = () => {};
+    context.padButtonBuilderRenderChoices = () => {};
+    const acquisitionSession = candidateSession(cpu, historyBuilder);
+    acquisitionSession.provider = mqttButtons;
+    acquisitionSession.dialog = buttonDialog;
+    context.testButtonSession = acquisitionSession;
+    vm.runInContext('padButtonBuilderSession = testButtonSession', context);
+    const priorDraft = JSON.stringify(context.padButtonBuilderBuild(acquisitionSession));
+    for (const error of ['timeout', 'subscribe_failed', 'expired', 'broker_disconnected']) {
+        context.padButtonBuilderPickSource(1);
+        buttonSearch.value = 'sensors/failure';
+        let deleted = false;
+        context.fetch = async (url, options = {}) => {
+            if (options.method === 'POST') return mqttResponse(202, { handle: 92 });
+            if (options.method === 'DELETE') {
+                deleted = true;
+                return mqttResponse(202, { status: 'release_pending' });
+            }
+            return mqttResponse(200, { status: 'failed', error });
+        };
+        await context.padButtonBuilderLookup(true);
+        assert.strictEqual(deleted, true);
+        assert.strictEqual(JSON.stringify(context.padButtonBuilderBuild(acquisitionSession)), priorDraft);
+        assert.strictEqual(sourceNodes['[data-bb-create]'].disabled, true);
+        assert.strictEqual(buttonStatus.dataset.kind, 'error');
+    }
+    context.padButtonBuilderPickSource(1);
+    buttonSearch.value = 'sensors/late';
+    let resolveLate;
+    let lateReleased = 0;
+    context.fetch = async (url, options = {}) => {
+        if (options.method === 'POST') return mqttResponse(202, { handle: 93 });
+        if (options.method === 'DELETE') {
+            lateReleased++;
+            return mqttResponse(202, { status: 'release_pending' });
+        }
+        return new Promise(resolve => { resolveLate = resolve; });
+    };
+    const lateAcquisition = context.padButtonBuilderLookup(true);
+    await new Promise(resolve => setImmediate(resolve));
+    context.padButtonBuilderPickSource(1);
+    resolveLate(mqttResponse(200, { status: 'received', received: true, sample: '0' }));
+    await lateAcquisition;
+    assert.strictEqual(lateReleased, 1);
+    assert.strictEqual(acquisitionSession.pendingCandidate, undefined);
+    assert.strictEqual(JSON.stringify(context.padButtonBuilderBuild(acquisitionSession)), priorDraft);
+    context.padButtonBuilderPickSource(1);
+    buttonSearch.value = 'sensors/cleanup';
+    for (const status of [202, 503]) {
+        context.fetch = async (url, options = {}) => {
+            if (options.method === 'POST') return mqttResponse(202, { handle: 94 });
+            if (options.method === 'DELETE') {
+                return mqttResponse(status, { status: 'cleanup_failed', error: 'unsubscribe_failed' }, status === 202);
+            }
+            return mqttResponse(200, { status: 'received', received: true, sample: '0' });
+        };
+        await context.padButtonBuilderLookup(true);
+        assert.strictEqual(acquisitionSession.pendingCandidate, undefined);
+        assert.strictEqual(JSON.stringify(context.padButtonBuilderBuild(acquisitionSession)), priorDraft);
+        assert.strictEqual(buttonStatus.dataset.kind, 'error');
+    }
+    context.padButtonBuilderStopLookup();
+    assert.throws(() => context.padButtonBuilderAcceptCandidate(acquisitionSession,
+        mqttButtons.selectField(objectSample, 'active')), /numeric/);
+    assert.strictEqual(JSON.stringify(context.padButtonBuilderBuild(acquisitionSession)), priorDraft);
+    context.padButtonBuilderAcceptCandidate(acquisitionSession, mqttTemperature);
+    assert.strictEqual(acquisitionSession.draft.sources.length, 2);
+    assert.strictEqual(acquisitionSession.draft.sources[1].options.unit, '');
+    assert.strictEqual(acquisitionSession.sourceIndex, undefined);
+    const controlReplacement = candidateSession(makeCandidate(light), toggleBuilder);
+    controlReplacement.provider = catalogButtons;
+    controlReplacement.dialog = buttonDialog;
+    controlReplacement.sourceIndex = 0;
+    context.testButtonSession = controlReplacement;
+    vm.runInContext('padButtonBuilderSession = testButtonSession', context);
+    context.padButtonBuilderAcceptCandidate(controlReplacement, cpu);
+    const withoutControl = context.padButtonBuilderBuild(controlReplacement);
+    assert.strictEqual(controlReplacement.scenario.id, 'value');
+    assert.strictEqual(withoutControl.label_center, '[health:cpu;%ld]');
+    for (const key of ['actions', 'fg_color', 'icon_id', 'widget_sparkline_ha_entity']) {
+        assert.strictEqual(Object.hasOwn(withoutControl, key), false);
+    }
+    assert.deepStrictEqual(Object.keys(controlReplacement.draft.options).sort(), ['title', 'unit']);
+
+    // Catalog source selection configures parameters without acquiring a sample first.
+    const parameters = { hidden: true, setAttribute() { this.hidden = true; } };
+    sourceNodes['[data-bb-parameters]'] = parameters;
+    const configureSelection = catalogButtons.configureSelection;
+    let configuredReference;
+    let chooseCatalog;
+    let stoppedConfigurations = 0;
+    catalogButtons.configureSelection = (root, reference, onUse, screen) => {
+        assert.strictEqual(root, parameters);
+        assert.strictEqual(screen, 'pad_0');
+        configuredReference = reference;
+        chooseCatalog = onUse;
+        return () => { stoppedConfigurations++; };
+    };
+    context.fetch = () => { throw new Error('Catalog selection must not fetch without an explicit preview'); };
+    controlReplacement.sourceIndex = 0;
+    const musicReference = catalogReference('music', 'title');
+    await context.padButtonBuilderLookup(true, { reference: musicReference });
+    assert.strictEqual(configuredReference, musicReference);
+    assert.strictEqual(parameters.hidden, false);
+    assert.strictEqual(context.padButtonBuilderBuild(controlReplacement).label_center, '[health:cpu;%ld]');
+    context.padButtonBuilderStopLookup();
+    assert.strictEqual(stoppedConfigurations, 1);
+    assert.strictEqual(parameters.hidden, true);
+    await context.padButtonBuilderLookup(true, { reference: musicReference });
+    chooseCatalog(context.catalogBindingCandidate(musicReference));
+    assert.strictEqual(stoppedConfigurations, 2);
+    assert.strictEqual(parameters.hidden, true);
+    assert.strictEqual(context.padButtonBuilderBuild(controlReplacement).label_center, '[music:title]');
+    catalogButtons.configureSelection = configureSelection;
+    context.padButtonBuilderRenderFields = renderFields;
+    context.padButtonBuilderRenderChoices = renderChoices;
+    vm.runInContext('padButtonBuilderSession = null', context);
+
     console.log('portal binding help tests passed');
 })().catch(error => {
     console.error(error);

@@ -422,11 +422,53 @@ static const BindingExampleDoc kBrewExamples[] = {
     {"[brew:stages_json]", "Exact single token for a Table widget."},
 };
 
+static const BindingReferenceDoc kBrewFormats[] = {
+    {nullptr, "mm:ss", "2:15", "Elapsed brew time as minutes and seconds", "[brew:timer;mm:ss]"},
+    {nullptr, "hh:mm:ss", "0:02:15", "Elapsed brew time with hours", "[brew:timer;hh:mm:ss]"},
+    {nullptr, "mm:ss.d", "2:15.3", "Elapsed brew time with tenths", "[brew:timer;mm:ss.d]"},
+    {nullptr, "ss", "135", "Elapsed brew time in whole seconds", "[brew:timer;ss]", "s", BINDING_AUTHORING_KIND_INTEGER},
+};
+
 static const BindingSchemeDoc kBrewDoc = {
     "Coffee scale", "Guided brew state: weight, flow, timer, and stage progress.",
     BINDING_DOC_LIST(kBrewParams), BINDING_DOC_LIST(kBrewKeyDocs), BINDING_DOC_LIST(kBrewExamples),
-    nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
+    "Brew durations", true, BINDING_DOC_LIST(kBrewFormats), nullptr, nullptr,
 };
+static const BindingAuthoringKey kBrewAuthoringKeys[] = {
+    binding_authoring_number("weight", "g", "250.5"),
+    binding_authoring_number("flow_rate", "g/s", "4.2"),
+    binding_authoring_text("timer", "2:15"),
+    binding_authoring_text("stage", "Pour"),
+    binding_authoring_integer("active", "", "1"),
+    binding_authoring_text("template", "Pour over"),
+    binding_authoring_number("dose", "g", "18.0"),
+    binding_authoring_number("water", "g", "250.5"),
+    binding_authoring_number("ratio", "", "13.9"),
+    binding_authoring_text("instruction", "Pour to 300 g"),
+    binding_authoring_text("next_label", "Next stage"),
+    binding_authoring_text("advance_state", "ready"),
+    binding_authoring_text("stage_status", "250 / 300 g"),
+    binding_authoring_number("stage_weight_target", "g", "300"),
+    binding_authoring_number("stage_weight_current", "g", "250.5"),
+    binding_authoring_number("stage_weight_remaining", "g", "50"),
+    binding_authoring_number("stage_weight_pct", "%", "84"),
+    binding_authoring_integer("stage_time_target", "s", "60", "%u"),
+    binding_authoring_integer("stage_time_current", "s", "45", "%u"),
+    binding_authoring_integer("stage_time_remaining", "s", "15", "%u"),
+    binding_authoring_number("stage_time_pct", "%", "75"),
+    binding_authoring_number("stage_flow_target", "g/s", "5.0"),
+    binding_authoring_number("stage_flow_current", "g/s", "4.2"),
+    binding_authoring_number("stage_flow_pct", "%", "84"),
+    binding_authoring_text("display_name", "Morning pour over"),
+    binding_authoring_text("stages_json", "{\"show_header\":false,\"columns\":[{\"key\":\"s\"}],\"rows\":[{\"s\":\"Pour\"}]}"),
+    binding_authoring_text("summary_json", "[{\"label\":\"Dose\",\"value\":\"18.0\",\"unit\":\"g\"}]"),
+    binding_authoring_integer("template_count", "", "3", "%u"),
+    binding_authoring_text("tpl_#_name", "pour-over"),
+    binding_authoring_text("tpl_#_display_name", "Pour over"),
+    binding_authoring_text("tpl_#_description", "A balanced filter coffee"),
+    binding_authoring_integer("tpl_#_stages", "", "4", "%u"),
+};
+static const BindingAuthoringSpec kBrewAuthoring = {BINDING_DOC_LIST(kBrewAuthoringKeys)};
 
 // ============================================================================
 // Init
@@ -435,7 +477,8 @@ static const BindingSchemeDoc kBrewDoc = {
 void brew_binding_init() {
     if (!binding_template_register("brew", brew_binding_resolve, brew_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    brew_binding_key_count, brew_binding_key_at, &kBrewDoc})) {
+                                    brew_binding_key_count, brew_binding_key_at, &kBrewDoc,
+                                    &kBrewAuthoring})) {
         LOGE(TAG, "Failed to register brew binding scheme");
     }
 }

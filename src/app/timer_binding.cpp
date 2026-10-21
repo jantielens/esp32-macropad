@@ -142,7 +142,7 @@ static const BindingReferenceDoc kTimerFormats[] = {
     {nullptr, "mm:ss", "4:05", "Minutes and seconds", "[timer:1;mm:ss]"},
     {nullptr, "hh:mm:ss", "0:04:05", "With hours", "[timer:1;hh:mm:ss]"},
     {nullptr, "mm:ss.d", "4:05.3", "With tenths", "[timer:1;mm:ss.d]"},
-    {nullptr, "ss", "245", "Whole seconds", "[timer:1;ss]"},
+    {nullptr, "ss", "245", "Whole seconds", "[timer:1;ss]", "s", BINDING_AUTHORING_KIND_INTEGER},
 };
 
 static const BindingSchemeDoc kTimerDoc = {
@@ -151,6 +151,14 @@ static const BindingSchemeDoc kTimerDoc = {
     "Timer durations", true, BINDING_DOC_LIST(kTimerFormats),
     "Countdowns that run past zero show negative values, e.g. -0:05.", nullptr,
 };
+static const BindingAuthoringKey kTimerAuthoringKeys[] = {
+    binding_authoring_number("#", "s", "245.3", false),
+    binding_authoring_text("#_state", "running"),
+    binding_authoring_text("#_mode", "down"),
+    binding_authoring_text("#_expired", "OFF"),
+    binding_authoring_integer("#_target", "s", "300"),
+};
+static const BindingAuthoringSpec kTimerAuthoring = {BINDING_DOC_LIST(kTimerAuthoringKeys)};
 
 // ============================================================================
 // Init
@@ -160,7 +168,8 @@ void timer_binding_init() {
     timer_engine_init();
     if (!binding_template_register("timer", timer_binding_resolve, timer_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    timer_binding_key_count, timer_binding_key_at, &kTimerDoc})) {
+                                    timer_binding_key_count, timer_binding_key_at, &kTimerDoc,
+                                    &kTimerAuthoring})) {
         LOGE(TAG, "Failed to register timer binding scheme");
     } else {
         LOGI(TAG, "Timer binding scheme registered");

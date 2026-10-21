@@ -58,6 +58,11 @@ const BindingSchemeDoc kImageDoc = {
     BINDING_DOC_LIST(kImageParams), BINDING_DOC_LIST(kImageKeyDocs), BINDING_DOC_LIST(kImageExamples),
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
+const BindingAuthoringKey kImageAuthoringKeys[] = {
+    binding_authoring_text("current", "/images/landscape.jpg"),
+    binding_authoring_text("error", "ok"),
+};
+const BindingAuthoringSpec kImageAuthoring = {BINDING_DOC_LIST(kImageAuthoringKeys)};
 }
 
 void image_binding_set_error(const char* stage, const char* detail) {
@@ -70,7 +75,8 @@ void image_binding_set_error(const char* stage, const char* detail) {
 void image_binding_init() {
     if (!binding_template_register("image", image_binding_resolve, nullptr,
                                    {1, 1, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    image_binding_key_count, image_binding_key_at, &kImageDoc})) {
+                                    image_binding_key_count, image_binding_key_at, &kImageDoc,
+                                    &kImageAuthoring})) {
         LOGE("ImageBind", "Failed to register image binding scheme");
     }
 }

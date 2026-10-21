@@ -25,6 +25,16 @@ var _bindingSchemeRegistry = {};
 var _bindingSchemaLoaded = false;
 var _bindingSchemaPromise = null;
 
+function bindingRegisterSchema(schemes) {
+    _bindingSchemeRegistry = {};
+    for (const scheme of schemes) {
+        if (scheme && typeof scheme.name === 'string') {
+            _bindingSchemeRegistry[scheme.name.toLowerCase()] = scheme;
+        }
+    }
+    _bindingSchemaLoaded = true;
+}
+
 function bindingLoadSchema() {
     if (_bindingSchemaPromise) return _bindingSchemaPromise;
     _bindingSchemaPromise = fetch('/api/bindings', { cache: 'no-store' })
@@ -34,13 +44,7 @@ function bindingLoadSchema() {
         })
         .then(function(payload) {
             var schemes = payload && Array.isArray(payload.schemes) ? payload.schemes : [];
-            for (var i = 0; i < schemes.length; i++) {
-                var scheme = schemes[i];
-                if (scheme && typeof scheme.name === 'string') {
-                    _bindingSchemeRegistry[scheme.name.toLowerCase()] = scheme;
-                }
-            }
-            _bindingSchemaLoaded = true;
+            bindingRegisterSchema(schemes);
         })
         .catch(function() {
             _bindingSchemaLoaded = true;

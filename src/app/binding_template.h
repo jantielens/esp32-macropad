@@ -70,6 +70,7 @@ enum BindingValidationMode : uint8_t {
 struct BindingParamDoc {
     const char* name;
     const char* desc;
+    const char* default_value = nullptr;
 };
 
 struct BindingKeyDoc {
@@ -83,12 +84,20 @@ struct BindingExampleDoc {
     const char* desc;
 };
 
+enum BindingAuthoringValueKind : uint8_t {
+    BINDING_AUTHORING_KIND_INTEGER,
+    BINDING_AUTHORING_KIND_TEXT,
+    BINDING_AUTHORING_KIND_NUMBER,
+};
+
 struct BindingReferenceDoc {
     const char* group;    // optional
     const char* syntax;
     const char* sample;   // optional example output
     const char* desc;
     const char* example;  // optional complete token
+    const char* unit = "";  // nullptr = unknown, "" = unitless
+    BindingAuthoringValueKind kind = BINDING_AUTHORING_KIND_TEXT;
 };
 
 // Returns nullptr when the scheme can resolve, else a short reason.
@@ -111,6 +120,59 @@ struct BindingSchemeDoc {
     binding_status_fn status;        // optional
 };
 
+enum BindingAuthoringFormat : uint8_t {
+    BINDING_AUTHORING_FORMAT_RAW = 1 << 0,
+    BINDING_AUTHORING_FORMAT_INTEGER = 1 << 1,
+    BINDING_AUTHORING_FORMAT_NUMBER = 1 << 2,
+};
+
+enum BindingAuthoringCapability : uint8_t {
+    BINDING_AUTHORING_CAP_DISPLAY = 1 << 0,
+    BINDING_AUTHORING_CAP_NUMERIC_WIDGET = 1 << 1,
+    BINDING_AUTHORING_CAP_LIVE_SAMPLING = 1 << 2,
+};
+
+struct BindingAuthoringKey {
+    const char* key;
+    BindingAuthoringValueKind kind;
+    const char* unit;  // nullptr = unknown, "" = known to have no unit
+    uint8_t formats;
+    const char* integer_format;
+    uint8_t capabilities;
+    bool read_only;
+    const char* example_value = nullptr;
+};
+
+constexpr BindingAuthoringKey binding_authoring_text(
+    const char* key, const char* example, const char* unit = "") {
+    return {key, BINDING_AUTHORING_KIND_TEXT, unit, BINDING_AUTHORING_FORMAT_RAW,
+            nullptr, BINDING_AUTHORING_CAP_DISPLAY, true, example};
+}
+
+constexpr BindingAuthoringKey binding_authoring_integer(
+    const char* key, const char* unit, const char* example, const char* format = "") {
+    return {key, BINDING_AUTHORING_KIND_INTEGER, unit,
+            BINDING_AUTHORING_FORMAT_RAW | BINDING_AUTHORING_FORMAT_INTEGER, format,
+            BINDING_AUTHORING_CAP_DISPLAY | BINDING_AUTHORING_CAP_NUMERIC_WIDGET |
+                BINDING_AUTHORING_CAP_LIVE_SAMPLING,
+            true, example};
+}
+
+constexpr BindingAuthoringKey binding_authoring_number(
+    const char* key, const char* unit, const char* example, bool formatted = true) {
+    return {key, BINDING_AUTHORING_KIND_NUMBER, unit,
+            static_cast<uint8_t>(BINDING_AUTHORING_FORMAT_RAW |
+                (formatted ? BINDING_AUTHORING_FORMAT_NUMBER : 0)), nullptr,
+            BINDING_AUTHORING_CAP_DISPLAY | BINDING_AUTHORING_CAP_NUMERIC_WIDGET |
+                BINDING_AUTHORING_CAP_LIVE_SAMPLING,
+            true, example};
+}
+
+struct BindingAuthoringSpec {
+    const BindingAuthoringKey* keys;
+    uint8_t key_count;
+};
+
 #define BINDING_DOC_LIST(array) (array), (uint8_t)(sizeof(array) / sizeof((array)[0]))
 #define BINDING_DOC_NONE nullptr, 0
 
@@ -127,6 +189,7 @@ struct BindingSchemeSpec {
     binding_key_count_fn key_count;
     binding_key_at_fn key_at;
     const BindingSchemeDoc* doc;
+    const BindingAuthoringSpec* authoring = nullptr;
 };
 
 // Register a scheme resolver and its complete metadata contract. The metadata

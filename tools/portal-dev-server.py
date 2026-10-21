@@ -99,6 +99,8 @@ def reset_pad_fixtures(server, scenario="normal"):
     server.scenario = scenario
     server.mock_ha_lookup_job = 0
     server.mock_ha_lookup_result = None
+    server.mock_mqtt_inspections = {}
+    server.mock_mqtt_next_handle = 1
     server.mock_screen = "pad_0"
     server.mock_icons = {}
     server.mock_boot_actions = []
@@ -238,6 +240,7 @@ class PortalHandler(SimpleHTTPRequestHandler):
         elif path == "/api/config":
             config = copy.deepcopy(self.server.mock_config)
             config["caps"]["ha_live"] = self._profile() == "esp32-p4-lcd4b"
+            config.setdefault("mqtt_host", "broker.example.test" if self._mqtt_enabled() else "")
             config.setdefault("ha_url", "")
             config["ha_token"] = ""
             config.setdefault("ha_token_set", False)
@@ -281,6 +284,22 @@ class PortalHandler(SimpleHTTPRequestHandler):
             config.setdefault("timezone", "Europe/Brussels")
             config["screen_saver_keeps_panel_awake"] = self._profile() == "jc3248w535"
             self._serve_json(config)
+        elif path == "/api/mqtt/inspect":
+            if not self._mqtt_capable():
+                self._serve_json({"error": "MQTT inspection unavailable"}, 404)
+                return
+            handle_text = query.get("handle", [""])[0]
+            if not handle_text.isdecimal() or int(handle_text) <= 0:
+                self._serve_json({"error": "invalid_handle"}, 400)
+                return
+            inspection = self.server.mock_mqtt_inspections.get(int(handle_text))
+            if inspection is None:
+                self._serve_json({"error": "unknown_handle"}, 404)
+            elif inspection["status"] == "expired":
+                self._serve_json({"handle": int(handle_text), "status": "expired",
+                                  "error": "expired", "cleanup_failed": False}, 410)
+            else:
+                self._serve_json(copy.deepcopy(inspection))
         elif path == "/api/ha/lookup":
             if self._profile() != "esp32-p4-lcd4b":
                 self._serve_json({"error": "HA lookup unavailable"}, 404)
@@ -399,6 +418,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 self._serve_bytes(data, content_type)
         elif path == "/api/bindings":
             schema = copy.deepcopy(self.server.pad_fixture["binding_schema"])
+            if not self._mqtt_capable():
+                schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "mqtt"]
             if self._profile() != "esp32-p4-lcd4b":
                 schema["schemes"] = [scheme for scheme in schema["schemes"] if scheme["name"] != "ha"]
             if "docs" in query:
@@ -406,6 +427,12 @@ class PortalHandler(SimpleHTTPRequestHandler):
                 docs = json.loads((MOCK_DIR / "binding-docs.json").read_text(encoding="utf-8"))
                 available = {scheme["name"] for scheme in schema["schemes"]}
                 docs["schemes"] = [s for s in docs["schemes"] if s["name"] not in ("alarm", "ha") or s["name"] in available]
+                mqtt_scheme = next((scheme for scheme in docs["schemes"] if scheme["name"] == "mqtt"), None)
+                if mqtt_scheme:
+                    if not self._mqtt_configured():
+                        mqtt_scheme["status"] = "No MQTT broker configured"
+                    else:
+                        mqtt_scheme.pop("status", None)
                 self._serve_json(docs)
             else:
                 self._serve_json(schema)
@@ -496,6 +523,77 @@ class PortalHandler(SimpleHTTPRequestHandler):
         query = parse_qs(parsed.query)
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
+
+        if path == "/api/mqtt/inspect":
+            if not self._mqtt_capable():
+                self._serve_json({"error": "MQTT inspection unavailable"}, 404)
+                return
+            if not self._mqtt_configured():
+                self._serve_json({"error": "broker_unconfigured"}, 503)
+                return
+            if len(body) > 826:
+                self._serve_json({"error": "body_too_large"}, 400)
+                return
+            try:
+                data = json.loads(body.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self._serve_json({"error": "invalid_topic_or_json"}, 400)
+                return
+            topic = data.get("topic") if isinstance(data, dict) and len(data) == 1 else None
+            if not isinstance(topic, str):
+                self._serve_json({"error": "invalid_topic_or_json"}, 400)
+                return
+            try:
+                topic_bytes = topic.encode("utf-8")
+            except UnicodeEncodeError:
+                self._serve_json({"error": "invalid_topic_or_json"}, 400)
+                return
+            if (not 1 <= len(topic_bytes) <= 127 or "\0" in topic or
+                    any(char in topic for char in "+#;[]|")):
+                self._serve_json({"error": "invalid_topic_or_json"}, 400)
+                return
+            scenario = topic.rsplit("/", 1)[-1] if topic.startswith("mock/") else "received"
+            if scenario == "disconnected":
+                self._serve_json({"error": "broker_disconnected"}, 503)
+                return
+            if scenario == "capacity":
+                self._serve_json({"error": "capacity_exhausted"}, 429)
+                return
+
+            handle = self.server.mock_mqtt_next_handle
+            self.server.mock_mqtt_next_handle += 1
+            inspection = {
+                "handle": handle, "status": "waiting", "received": False,
+                "truncated": False, "cached": False,
+            }
+            if scenario == "failed":
+                inspection.update(status="failed", error="subscribe_failed")
+            elif scenario == "expired":
+                inspection.update(status="expired", error="expired")
+            elif scenario == "empty":
+                inspection.update(status="received", received=True, sample="")
+            elif scenario == "zero":
+                inspection.update(status="received", received=True, sample="0")
+            elif scenario == "timeout":
+                inspection.update(status="failed", error="timeout")
+            elif scenario == "placeholder":
+                inspection.update(status="received", received=True, sample="---")
+            elif scenario == "error":
+                inspection.update(status="received", received=True, sample="ERR:mock")
+            elif scenario == "malformed":
+                inspection.update(status="received", received=True, sample='{"temperature":')
+            elif scenario == "truncated":
+                inspection.update(status="received", received=True,
+                                  truncated=True, sample="x" * 2047)
+            elif scenario == "received":
+                inspection.update(status="received", received=True,
+                                  sample='{"temperature":21.37,"active":true,"nested":{"value":"ok"}}')
+            elif scenario != "waiting":
+                self._serve_json({"error": "invalid_topic_or_json"}, 400)
+                return
+            self.server.mock_mqtt_inspections[handle] = inspection
+            self._serve_json({"handle": handle, "status": "queued"}, 202)
+            return
 
         if path == "/api/component/boot-actions/config":
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
@@ -781,6 +879,23 @@ class PortalHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/mqtt/inspect":
+            if not self._mqtt_capable():
+                self._serve_json({"error": "MQTT inspection unavailable"}, 404)
+                return
+            handle_text = parse_qs(parsed.query).get("handle", [""])[0]
+            if not handle_text.isdecimal() or int(handle_text) <= 0:
+                self._serve_json({"error": "invalid_handle"}, 400)
+                return
+            handle = int(handle_text)
+            inspection = self.server.mock_mqtt_inspections.get(handle)
+            if inspection is None:
+                self._serve_json({"error": "unknown_handle"}, 404)
+                return
+            inspection.update(status="released", received=False)
+            inspection.pop("sample", None)
+            self._serve_json({"handle": handle, "status": "released"}, 202)
+            return
         if parsed.path == "/api/boot-logo":
             if self._profile() not in ("esp32-p4-lcd4b", "jc3248w535", "crowpanel-4.2-interactive"):
                 self._serve_json({"message": "Boot logo unavailable"}, 404)
@@ -873,18 +988,18 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_bundle(self, manifest, content_type):
         files = []
         enabled = True
-        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME"}
+        flags = {"HAS_DISPLAY", "HAS_STORAGE_BROWSER", "HAS_SOUND_PLAYER", "HAS_NATIVE_EXTENSIONS", "HAS_MQTT"} if self._profile() in ("esp32-p4-lcd4b", "jc3248w535") else {"IS_EPAPER_FRAME", "HAS_MQTT"}
         if self._profile() == "esp32-p4-lcd4b":
             flags.add("HAS_HA_LIVE")
         if self._profile() == "crowpanel-4.2-interactive":
-            flags = {"HAS_DISPLAY"}
+            flags = {"HAS_DISPLAY", "HAS_MQTT"}
         if self._profile() == "jc3248w535":
             flags.discard("HAS_SOUND_PLAYER")
         for line in expand_bundle(APP_WEB_DIR / manifest).splitlines():
             line = line.strip()
             if line.startswith("# [chunk:"):
                 chunk = line.removeprefix("# [chunk:").removesuffix("]").split()
-                enabled = len(chunk) == 1 or chunk[1] in flags
+                enabled = all(flag in flags for flag in chunk[1:])
             elif enabled and line and not line.startswith("#"):
                 source = APP_WEB_DIR / line
                 files.append(source if source.is_file() else EPAPER_WEB_DIR / line)
@@ -1045,6 +1160,22 @@ class PortalHandler(SimpleHTTPRequestHandler):
     def _serve_json(self, payload, status=200):
         self._serve_bytes(json.dumps(payload).encode("utf-8"), "application/json; charset=utf-8", status)
 
+    def _mqtt_enabled(self):
+        return self._mqtt_capable() and self._mqtt_configured()
+
+    def _mqtt_capable(self):
+        available_profiles = {
+            "esp32-p4-lcd4b", "jc3248w535", "reterminal-e1003-frame",
+            "crowpanel-4.2-interactive"
+        }
+        config = getattr(self.server, "mock_config", {})
+        caps = config.get("caps", {})
+        return self._profile() in available_profiles and caps.get("mqtt") is True
+
+    def _mqtt_configured(self):
+        config = getattr(self.server, "mock_config", {})
+        return isinstance(config.get("mqtt_host"), str) and bool(config["mqtt_host"].strip())
+
     def _serve_bytes(self, data, content_type, status=200):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -1088,6 +1219,9 @@ def main():
         },
         **SCREENSAVER_DEFAULTS,
         "device_name": "Kitchen Pad",
+        "mqtt_host": "broker.example.test",
+        "ha_url": "http://ha.example.test",
+        "ha_token_set": True,
         "wifi_failure_mode": "ap",
         "ap_password": "",
         "backlight_brightness": 80,

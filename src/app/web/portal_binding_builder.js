@@ -1,3 +1,147 @@
+/**
+ * @typedef {Object} BindingSourceCapabilities
+ * @property {boolean} display
+ * @property {boolean} numericWidget Requires declared support and a complete numeric authoring sample.
+ * @property {boolean} liveSampling
+ * @property {boolean} [historyBackfill]
+ * @property {boolean} [control]
+ */
+
+/**
+ * @typedef {Object} BindingSourceField
+ * @property {string} path Bounded provider path for this selectable value.
+ * @property {string} displayName
+ * @property {string} [sample] Absent means no sample; an empty string is a received value.
+ * @property {boolean} sampleTruncated
+ * @property {'integer'|'number'|'text'|'boolean'|'json'} [valueKind]
+ * @property {string} [unit] Absent means unknown; '' means known to have no unit.
+ * @property {string[]} formatModes
+ * @property {BindingSourceCapabilities} capabilities
+ */
+
+/**
+ * @typedef {Object} BindingSourceLimits
+ * @property {number} tokenBytes
+ * @property {number} labelBytes
+ * @property {number} formatBytes
+ * @property {number} [pathBytes]
+ * @property {number} [topicBytes]
+ * @property {number} [sampleBytes]
+ */
+
+/**
+ * @typedef {Object} BindingSourceCandidate
+ * @property {string} providerId
+ * @property {string} sourceId Stable within its provider; include a selected field path.
+ * @property {string} displayName
+ * @property {Object} reference Opaque value owned by the provider.
+ * @property {'not_required'|'pending'|'waiting'|'received'|'unavailable'|'error'} acquisitionState
+ * @property {string} [sample] Absent means no sample; '' and '0' are received values.
+ * @property {boolean} sampleTruncated
+ * @property {boolean} [sampleIsExample] The sample is illustrative, not a device reading.
+ * @property {'integer'|'number'|'text'|'boolean'|'json'} [valueKind]
+ * @property {string} [unit] Absent means unknown; '' means known to have no unit.
+ * @property {BindingSourceField[]} [fields]
+ * @property {string[]} formatModes
+ * @property {BindingSourceLimits} limits Effective provider-specific byte limits.
+ * @property {BindingSourceCapabilities} capabilities
+ * @property {{mode: string, decimals: number|string, unit: string, fallback: string}} [selection] Draft display options, never numeric widget input.
+ */
+
+/**
+ * @typedef {Object} BindingSourceProvider
+ * @property {string} id
+ * @property {(query: string, signal: AbortSignal) => Promise<BindingSourceCandidate[]>} [list]
+ * @property {(reference: Object, signal: AbortSignal) => Promise<BindingSourceCandidate>} inspect
+ * @property {(candidate: BindingSourceCandidate, selection: Object) => string} buildBinding
+ * @property {(candidate: BindingSourceCandidate) => void|Promise<void>} dispose
+ */
+
+const BUTTON_BUILDER_PROVIDERS = [];
+
+function bindingSourcePickerHTML() {
+    return `<div class="binding-source-picker">
+        <div class="binding-source-options" data-bb-provider-picker role="radiogroup" aria-label="Source"></div>
+        <p data-bb-setup hidden><a data-bb-settings>Open source settings</a></p>
+        <section data-bb-source hidden>
+            <div data-bb-catalog-search-panel>
+                <label class="binding-builder-input-label" for="button-builder-search" data-bb-source-label>Find a value</label>
+                <div class="binding-builder-source">
+                    <input id="button-builder-search" class="form-control" autocomplete="off" spellcheck="false"
+                        maxlength="191" aria-describedby="button-builder-search-help">
+                    <button type="button" class="btn btn-secondary" data-bb-use hidden>Read topic</button>
+                </div>
+                <p id="button-builder-search-help" class="binding-builder-note" hidden></p>
+                <div class="binding-builder-suggestions" data-bb-matches aria-label="Source suggestions"></div>
+            </div>
+            <div data-bb-value hidden>
+                <button type="button" class="binding-docs-link" data-bb-value-back>Change topic</button>
+                <div data-bb-value-matches class="binding-builder-suggestions" aria-label="Available values"></div>
+                <details><summary>Custom path</summary>
+                    <label for="button-builder-path">Dotted path<input id="button-builder-path" class="form-control"
+                        maxlength="127" placeholder="nested.temperature"></label>
+                    <button type="button" class="btn btn-secondary" data-bb-confirm-value>Use path</button>
+                </details>
+                <p data-bb-value-note class="binding-builder-note" role="status"></p>
+            </div>
+            <div data-bb-parameters hidden></div>
+        </section>
+        <div class="binding-builder-status" data-bb-status role="status" aria-live="polite" hidden></div>
+        <button type="button" class="btn btn-sm btn-secondary" data-bb-retry hidden>Retry</button>
+        <section data-bb-picked hidden>
+            <div class="binding-builder-selection">
+                <div class="binding-builder-selection-info"><strong data-bb-picked-name></strong>
+                    <code data-bb-picked-id></code></div>
+                <button type="button" class="binding-docs-link" data-bb-picked-change>Change</button>
+            </div>
+            <details class="binding-builder-options" data-bb-display><summary>Display options</summary>
+                <div data-bb-format></div>
+            </details>
+            <div data-bb-picked-result></div>
+            <button type="button" class="btn btn-primary" data-bb-continue>Continue to button</button>
+        </section>
+    </div>`;
+}
+
+function bindingSourceSelection(candidate) {
+    const numeric = ['integer', 'number'].includes(candidate.valueKind) ||
+        bindingBuilderIsNumeric(candidate.sample);
+    const mode = numeric && candidate.formatModes.includes('number') ? 'number' :
+        numeric && candidate.formatModes.includes('integer') ? 'integer' : 'raw';
+    return { mode, decimals: 1, unit: candidate.unit || '',
+        fallback: candidate.reference.fallback || '', ...candidate.selection };
+}
+
+function bindingSourceToken(candidate, selection, rawOnly = false) {
+    const provider = BUTTON_BUILDER_PROVIDERS.find(item => item.id === candidate.providerId);
+    if (!provider) throw new Error('The selected source is no longer available.');
+    const mode = rawOnly ? 'raw' : selection.mode;
+    if (!candidate.formatModes.includes(mode)) throw new Error('Choose a supported display format.');
+    const format = ['number', 'text'].includes(mode)
+        ? bindingBuilderFormat(mode, Number(selection.decimals), bindingBuilderUnitSuffix(selection.unit)) : '';
+    const suffix = !rawOnly && ['raw', 'integer'].includes(mode)
+        ? bindingBuilderUnitSuffix(selection.unit) : '';
+    if (/[;[\]|]/.test(suffix)) throw new Error('The unit cannot contain binding delimiters (; [ ] |).');
+    const token = provider.buildBinding(candidate, {
+        ...selection, mode, format, isWidgetBinding: rawOnly
+    }) + suffix;
+    if (new TextEncoder().encode(token).length > 191) {
+        throw new Error('The binding and its unit must fit within 191 UTF-8 bytes.');
+    }
+    return token;
+}
+
+function bindingSourceSample(candidate, selection, rawOnly = false) {
+    const unavailable = candidate.acquisitionState === 'unavailable';
+    const mode = rawOnly ? 'raw' : selection.mode;
+    const sample = unavailable ? selection.fallback || '---' :
+        bindingBuilderSample(candidate.sample, mode === 'integer' ? 'raw' : mode,
+        Number(selection.decimals), mode === 'raw' || mode === 'integer' ? '' :
+            bindingBuilderUnitSuffix(selection.unit));
+    return sample == null ? null : sample + (!rawOnly && ['raw', 'integer'].includes(mode)
+        ? bindingBuilderUnitSuffix(selection.unit) : '');
+}
+
 // Shared by source-specific builders; discovery stays with the owning scheme.
 function bindingBuilderUnitSuffix(unit) {
     return unit.trim() ? ' ' + unit.trim() : '';
@@ -40,4 +184,169 @@ function bindingBuilderSample(value, mode, decimals, suffix) {
     if (mode === 'text') return String(value) + suffix;
     // Do not turn an empty string, boolean, or partially numeric text into a number.
     return bindingBuilderIsNumeric(value) ? Number(value).toFixed(decimals) + suffix : String(value);
+}
+
+function bindingBuilderFormatControlsHTML(options) {
+    const {
+        idPrefix, dataPrefix, mode, decimals, unit, fallback, formatModes, extraFields = '',
+        rawNote = 'Use As received for numeric widget inputs.'
+    } = options;
+    const esc = _bhEsc;
+    const modes = formatModes.map(([value, label]) =>
+        '<option value="' + value + '"' + (value === mode ? ' selected' : '') + '>' + esc(label) + '</option>').join('');
+    const numberAvailable = formatModes.some(([value]) => value === 'number');
+    return '<div class="binding-builder-fields">' + extraFields +
+        '<label for="' + idPrefix + '-mode" data-' + dataPrefix + '-format-choice>Display as<select id="' +
+        idPrefix + '-mode" class="form-control">' + modes + '</select></label>' +
+        '<label for="' + idPrefix + '-decimals" data-' + dataPrefix + '-number' + (numberAvailable ? '' : ' hidden') +
+        '>Decimal places<select id="' + idPrefix + '-decimals" class="form-control">' +
+        [0, 1, 2, 3, 4, 5, 6].map(n => '<option' + (n === Number(decimals) ? ' selected' : '') + '>' + n + '</option>').join('') +
+        '</select></label>' +
+        '<label for="' + idPrefix + '-unit" data-' + dataPrefix + '-formatted' + (mode === 'raw' ? ' hidden' : '') +
+        '>Unit (optional)<input id="' + idPrefix + '-unit" class="form-control" type="text" maxlength="60" ' +
+        'placeholder="e.g. \u00b0C or %" value="' + esc(unit) + '"></label></div>' +
+        '<p class="binding-builder-note" data-' + dataPrefix + '-raw-note' + (mode === 'raw' ? '' : ' hidden') + '>' +
+        esc(rawNote) + '</p>' +
+        '<p class="binding-builder-note" data-' + dataPrefix + '-formatted' + (mode === 'raw' ? ' hidden' : '') +
+        '>Unit spacing is automatic. Adding a unit does not convert the value.</p>' +
+        '<details class="binding-builder-options"><summary>When unavailable (optional)</summary>' +
+        '<label for="' + idPrefix + '-fallback">Show this instead<input id="' + idPrefix +
+        '-fallback" class="form-control" type="text" placeholder="Default: ---" maxlength="80" value="' +
+        esc(fallback) + '"></label><p class="binding-builder-note">Used when the value is unavailable. Leave empty for ---.</p></details>';
+}
+
+function bindingBuilderResultHTML(token, sample, options = {}) {
+    const esc = _bhEsc;
+    const message = options.message || 'No sample is available yet. You can still copy or insert the binding.';
+    return '<div data-binding-builder-result>' +
+        (sample == null ? '<p class="binding-builder-note">' + esc(message) + '</p>' :
+        '<div class="binding-builder-sample"><span>' + esc(options.sampleLabel || 'Binding result') +
+        '</span><output aria-live="polite">' +
+        esc(sample) + (options.truncated ? ' <small>(truncated)</small>' : '') + '</output></div>') +
+        '<span class="binding-builder-code-label">Generated binding</span>' +
+        '<pre class="binding-example-code"><code>' + esc(token) + '</code></pre>' +
+        '<div class="binding-example-actions">' +
+        _bhActions(token, { copy: 'Copy binding', insert: 'Insert binding' }) +
+        '<button type="button" class="binding-copy-btn" data-binding-preview="' + esc(token) +
+        '">Preview on device</button></div>' +
+        '<p class="binding-builder-device-preview" data-binding-preview-result role="status" aria-live="polite" hidden></p></div>';
+}
+
+function bindingBuilderErrorHTML(message) {
+    return '<p class="binding-builder-status" data-kind="error" role="alert">' +
+        _bhEsc(message || 'Could not build this binding. Retry or enter it manually.') + '</p>';
+}
+
+const _bindingBuilderPreview = { controller: null, generation: 0 };
+
+function bindingBuilderStopPreview() {
+    if (_bindingBuilderPreview.controller) _bindingBuilderPreview.controller.abort();
+    _bindingBuilderPreview.controller = null;
+    _bindingBuilderPreview.generation++;
+}
+
+async function bindingBuilderPreviewBinding(token, result) {
+    bindingBuilderStopPreview();
+    const generation = _bindingBuilderPreview.generation;
+    const controller = new AbortController();
+    _bindingBuilderPreview.controller = controller;
+    const status = result.querySelector('[data-binding-preview-result]');
+    status.hidden = false;
+    status.dataset.kind = 'info';
+    status.textContent = 'Resolving on this device...';
+    try {
+        const response = await fetch('/api/pad/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bindings: [token] }),
+            cache: 'no-store',
+            signal: controller.signal
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Device preview failed (HTTP ' + response.status + ').');
+        const value = payload && Array.isArray(payload.resolved) && payload.resolved[0] &&
+            typeof payload.resolved[0].value === 'string' ? payload.resolved[0].value : null;
+        if (value === null) throw new Error('The device returned an invalid binding preview.');
+        if (generation !== _bindingBuilderPreview.generation || !result.isConnected) return;
+        status.dataset.kind = 'success';
+        status.textContent = 'Device result: ' + value;
+    } catch (error) {
+        if (generation !== _bindingBuilderPreview.generation || !result.isConnected ||
+            (error && error.name === 'AbortError')) return;
+        status.dataset.kind = 'error';
+        status.textContent = error.message || 'Device preview failed. Retry or use the binding manually.';
+    } finally {
+        if (generation === _bindingBuilderPreview.generation) _bindingBuilderPreview.controller = null;
+    }
+}
+
+function bindingBuilderForScheme(scheme) {
+    return BINDING_BUILDERS.find(builder => builder.scheme === scheme) ||
+        BINDING_BUILDERS.find(builder => !builder.scheme) || null;
+}
+
+let bindingSourcePickerDispose = null;
+
+function bindingBuilderHTML(id) {
+    const builder = BINDING_BUILDERS.find(item => item.id === id);
+    if (!builder || typeof builder.render !== 'function') return '';
+    if (!_bindingHelp.builderScheme) {
+        return '<section class="binding-builder binding-builder-compact" aria-label="Binding builder">' +
+            bindingSourcePickerHTML() +
+            '<button type="button" class="binding-docs-link binding-builder-reference" ' +
+            'data-bh-view="guide:basics">Binding reference</button></section>';
+    }
+    const description = typeof builder.description === 'function'
+        ? builder.description(_bindingHelp.target) : builder.description;
+    const unavailable = typeof builder.availability === 'function'
+        ? builder.availability(window.deviceConfig || {}) : '';
+    return '<div class="binding-docs-title"><h4>' +
+        _bhEsc(builder.id === 'catalog' ? 'Advanced binding' : builder.name) + '</h4>' +
+        '<span class="binding-docs-badge">Binding builder</span></div>' +
+        '<p class="binding-docs-summary">Build a binding from ' + _bhEsc(description) + ' ' +
+        (builder.scheme ? '(<button type="button" class="binding-docs-link" data-bh-view="' + _bhEsc(builder.scheme) +
+        '">full syntax and examples</button>)' : 'Syntax and examples follow the selected scheme.') + '</p>' +
+        (unavailable ? '<p class="binding-docs-status" role="status">' + _bhEsc(unavailable) + '</p>' : '') +
+        '<section class="binding-builder" aria-label="' + _bhEsc(builder.name) + ' binding builder">' +
+        '<header class="binding-builder-header"><h5>Build a binding</h5>' +
+        '<p>' + _bhEsc(typeof builder.instructions === 'function'
+            ? builder.instructions(_bindingHelp.target) : builder.instructions) + '</p></header>' +
+        builder.render() + '</section>';
+}
+
+function bindingBuilderMount(id, scheme) {
+    if (!scheme) {
+        const root = document.querySelector('#binding-docs-body .binding-source-picker');
+        if (!root) return;
+        const session = {
+            dialog: root, initialProvider: id, rawOnly:
+                bindingValidationOptions.get(_bindingHelp.target)?.isWidgetBinding === true,
+            page: undefined, controller: null, timer: null,
+            bindingOnly: true
+        };
+        bindingSourcePickerDispose = bindingSourcePickerMount(session);
+        padButtonBuilderLoadConfig(session);
+        return;
+    }
+    const builder = BINDING_BUILDERS.find(item => item.id === id);
+    if (builder && typeof builder.mount === 'function') builder.mount(scheme);
+}
+
+function bindingBuilderStop() {
+    bindingSourcePickerDispose?.();
+    bindingSourcePickerDispose = null;
+    bindingBuilderStopPreview();
+    BINDING_BUILDERS.forEach(builder => {
+        if (typeof builder.stop === 'function') builder.stop();
+    });
+}
+
+function bindingBuilderReset() {
+    bindingSourcePickerDispose?.();
+    bindingSourcePickerDispose = null;
+    bindingBuilderStopPreview();
+    BINDING_BUILDERS.forEach(builder => {
+        if (typeof builder.reset === 'function') builder.reset();
+        else if (typeof builder.stop === 'function') builder.stop();
+    });
 }

@@ -780,6 +780,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_core.cpp
   - src/app/mcp_tools_pads.cpp
   - src/app/mqtt_binding.cpp
+  - src/app/mqtt_inspection.cpp
+  - src/app/mqtt_inspection.h
+  - src/app/mqtt_manager.cpp
   - src/app/mqtt_notify.cpp
   - src/app/mqtt_notify.h
   - src/app/mqtt_screen.cpp
@@ -803,8 +806,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/screen_saver_manager.cpp
   - src/app/screen_saver_manager.h
   - src/app/screens.cpp
+  - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen.h
   - src/app/screens/pad_screen_events.cpp
+  - src/app/screens/pad_screen_poll.cpp
+  - src/app/screens/pad_tile_builder.cpp
   - src/app/sensor_binding.cpp
   - src/app/sensors/camera_presence_sensor.cpp
   - src/app/swipe_actions.cpp
@@ -917,9 +923,6 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/binding_sources.cpp
   - src/app/binding_sources.h
   - src/app/board_config.h
-  - src/app/data_stream.cpp
-  - src/app/data_stream.h
-  - src/app/display_manager.cpp
   - src/app/display_task.cpp
   - src/app/ha_binding.cpp
   - src/app/ha_live.cpp
@@ -930,24 +933,11 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/ha_lookup_data.cpp
   - src/app/ha_lookup_data.h
   - src/app/mcp_tools_pads.cpp
-  - src/app/pad_binding.cpp
-  - src/app/pad_binding.h
-  - src/app/pad_resolve_request.cpp
-  - src/app/pad_resolve_request.h
   - src/app/portal_components.cpp
-  - src/app/screens/pad_screen.cpp
-  - src/app/screens/pad_screen_poll.cpp
-  - src/app/screens/pad_tile_builder.cpp
   - src/app/web_portal_config.cpp
   - src/app/web_portal_device_api.cpp
   - src/app/web_portal_ha_lookup.cpp
-  - src/app/web_portal_pad.cpp
-  - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp
-  - src/app/widgets/bar_chart_widget.cpp
-  - src/app/widgets/gauge_widget.cpp
-  - src/app/widgets/sparkline_widget.cpp
-  - src/app/widgets/widget.h
 - **HAS_IMAGE_FETCH**
   - src/app/app.ino
   - src/app/board_config.h
@@ -1065,13 +1055,10 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/camera_motion_actions.cpp
   - src/app/camera_motion_actions.h
   - src/app/config_manager.cpp
-  - src/app/data_stream.cpp
-  - src/app/data_stream.h
   - src/app/device_classes/epaper_frame/epaper_frame_mqtt.cpp
   - src/app/device_classes/epaper_frame/epaper_frame_mqtt.h
   - src/app/device_classes/epaper_frame_device_class.cpp
   - src/app/device_telemetry.cpp
-  - src/app/display_manager.cpp
   - src/app/display_task.cpp
   - src/app/duty_cycle.cpp
   - src/app/ha_discovery.cpp
@@ -1083,6 +1070,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_binding.cpp
   - src/app/mqtt_camera.cpp
   - src/app/mqtt_camera.h
+  - src/app/mqtt_inspection.cpp
+  - src/app/mqtt_inspection.h
   - src/app/mqtt_manager.cpp
   - src/app/mqtt_manager.h
   - src/app/mqtt_notify.cpp
@@ -1095,14 +1084,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mqtt_wake.h
   - src/app/native_extension.cpp
   - src/app/pad_binding.cpp
-  - src/app/pad_binding.h
-  - src/app/pad_resolve_request.cpp
-  - src/app/pad_resolve_request.h
   - src/app/portal_components.cpp
   - src/app/screens/pad_screen.cpp
   - src/app/screens/pad_screen_events.cpp
-  - src/app/screens/pad_screen_poll.cpp
-  - src/app/screens/pad_tile_builder.cpp
   - src/app/sensors/aht10_sensor.cpp
   - src/app/sensors/aht10_sensor.h
   - src/app/sensors/battery_adc_sensor.cpp
@@ -1116,12 +1100,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/sensor_manager.cpp
   - src/app/sensors/sensor_manager.h
   - src/app/web_portal_pad.cpp
-  - src/app/web_portal_pad.h
   - src/app/web_portal_routes.cpp
-  - src/app/widgets/bar_chart_widget.cpp
-  - src/app/widgets/gauge_widget.cpp
-  - src/app/widgets/sparkline_widget.cpp
-  - src/app/widgets/widget.h
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
 - **HAS_MUSIC_ANALYSIS**
   - src/app/audio.cpp
