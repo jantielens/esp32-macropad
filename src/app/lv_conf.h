@@ -1,6 +1,6 @@
 /**
  * @file lv_conf.h
- * Configuration file for LVGL v9.5.0
+ * Configuration file for LVGL v9.6.0
  *
  * Rewritten from v8.4 for native v9 API.
  */

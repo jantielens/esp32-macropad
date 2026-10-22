@@ -109,7 +109,8 @@ inline void fill_style_attach_rect_outline(lv_obj_t* track, FillStyleRuntime* ru
     lv_obj_remove_style_all(outline);
     lv_obj_set_size(outline, lv_obj_get_style_width(track, LV_PART_MAIN), lv_obj_get_style_height(track, LV_PART_MAIN));
     lv_obj_set_pos(outline, 0, 0);
-    lv_obj_clear_flag(outline, static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+    lv_obj_set_scrollable(outline, false);
+    lv_obj_set_clickable(outline, false);
     lv_obj_add_event_cb(outline, fill_style_rect_outline_event, LV_EVENT_DRAW_MAIN_END, runtime);
 }
 

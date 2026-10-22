@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* Upgrade LVGL from 9.5.0 to 9.6.0 while keeping LVGL PPA acceleration
+  disabled. Migrate affected flag setters and the FreeType glyph-entry pointer.
+  The Tiny TTF allocation-failure check still exposes unsafe backend OOM
+  handling: its known cache-creation crash now produces a warning and a CTest
+  skip rather than failing CI. Unexpected failures remain fatal; graceful
+  backend OOM recovery is not guaranteed.
+  See [Accepted backend OOM limitation](docs/dev/display-touch-architecture.md#accepted-backend-oom-limitation).
 * Make Pad Editor selection distinct from button borders with an external
   contrasting frame and four persistent, borderless resize grips. Use white
   grips on most backgrounds and dark grips on very light backgrounds. Click

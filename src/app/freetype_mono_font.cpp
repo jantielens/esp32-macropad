@@ -224,7 +224,7 @@ const void* glyph_bitmap(lv_font_glyph_dsc_t* descriptor, lv_draw_buf_t*) {
     MonoGlyph* cached = find_glyph(owner, descriptor->gid.index);
     if (!cached || !cached->bitmap) return nullptr;
     ++cached->references;
-    descriptor->entry = reinterpret_cast<lv_cache_entry_t*>(cached);
+    descriptor->entry = cached;
     return cached->bitmap;
 }
 

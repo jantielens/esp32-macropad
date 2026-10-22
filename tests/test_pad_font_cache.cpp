@@ -245,10 +245,10 @@ int main(int argument_count, char** arguments) {
         lv_label_set_text(label, "88");
         lv_obj_update_layout(label);
         CHECK(lv_obj_get_style_text_font(label, LV_PART_MAIN) == font);
-        lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_hidden(label, true);
         CHECK(buffers.size() == 2);
         CHECK(pad_resolve_font(style, &lv_font_montserrat_14, &first) == font);
-        lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_hidden(label, false);
         lv_font_glyph_dsc_t glyph{};
         CHECK(lv_font_get_glyph_dsc(font, &glyph, '8', 0));
         CHECK(glyph.format == LV_FONT_GLYPH_FORMAT_A8);

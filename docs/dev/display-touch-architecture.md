@@ -29,7 +29,7 @@ The display and touch subsystem is built on four main pillars:
 4. **Manager Classes** - Centralized management of hardware, LVGL, and lifecycle
 
 **Key Technologies:**
-- **LVGL 9.5** - Embedded graphics library
+- **LVGL 9.6.0** - Embedded graphics library
 - **TFT_eSPI** - Default display driver (supports ILI9341, ST7789, ST7735, etc.)
 - **XPT2046_Touchscreen** - Resistive touch support
 - **FreeRTOS** - Task-based continuous rendering
@@ -42,9 +42,9 @@ temporary mitigation leaves pattern rendering unchanged and may reduce P4
 drawing performance. The MIPI-DSI driver's separate PPA rotation path retains
 its aligned buffers and remains enabled.
 
-Keep LVGL pinned to 9.5.0 until a released upgrade supports the stable
-Arduino-ESP32 SDK: 9.6.0 fixes buffer-size alignment but its PPA cache code uses
-an API absent from Arduino-ESP32 3.3.12's ESP-IDF 5.5.5. Re-enabling LVGL PPA
+LVGL is pinned to 9.6.0 with PPA disabled. This release fixes buffer-size
+alignment, but its PPA cache code uses an API absent from Arduino-ESP32
+3.3.12's ESP-IDF 5.5.5. Re-enabling LVGL PPA
 requires patterned-button and bar-track checks, rounded clipping, partial
 redraws, repeated pad navigation, and a hardware soak test. The software-rendering
 mitigation builds for `jc1060p470c-sd` and passed an initial user hardware check.
@@ -65,7 +65,7 @@ graph TD
     TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>GT911_Driver"]
     DImpl --> Lib1["TFT_eSPI library<br/>Arduino_GFX lib"]
     TImpl --> Lib2["XPT2046 library<br/>Wire.h (I2C)<br/>Vendored drivers"]
-    Lib1 --> LVGL["**LVGL 9.5**<br/>Widget rendering<br/>Themes · Fonts · Animations"]
+    Lib1 --> LVGL["**LVGL 9.6.0**<br/>Widget rendering<br/>Themes · Fonts · Animations"]
     Lib2 --> LVGL
     LVGL --> HW["**Hardware**<br/>(SPI · Display Panel · Touch Controller)"]
 ```
@@ -978,14 +978,21 @@ remain available at their existing lower levels.
 
 #### Accepted Backend OOM Limitation
 
-The grayscale and flag-disabled paths use unpatched LVGL 9.5.0/STB. Allocation
+The grayscale and flag-disabled paths use unpatched LVGL 9.6.0/STB. Allocation
 failure inside font cache creation or rasterization can assert forever,
 crash, or reboot, even for a valid font. Watchdog recovery is not guaranteed;
 a saved font-heavy pad may fail again after reboot. There are no new font
 caps, budgets, global caches, allocator changes, or guarantees of graceful
 backend OOM fallback. Ordinary upload/storage errors still clean up their
 own transaction and report errors. `test_runtime_ttf_oom` characterizes the
-known cache-creation assertion rather than proving OOM recovery.
+known cache-creation limitation rather than proving OOM recovery. With 9.6.0,
+the third injected allocation failure causes a segmentation fault instead of
+the 9.5.0 assertion timeout. Either known outcome at that allocation index
+prints a warning and returns 77, which CTest reports as skipped, not passed.
+Baseline rendering and the first two allocation-failure probes still run;
+remaining probes do not run after the known limitation. The exception is
+limited to these exact versions and outcomes; unexpected failures remain fatal.
+This keeps CI running without claiming backend OOM recovery.
 
 Future work, if device stability warrants it: a repository-managed,
 version-checked LVGL/STB allocation-error patch covering cache creation,

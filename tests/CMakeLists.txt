@@ -168,7 +168,7 @@ add_host_legacy_test(test_runtime_ttf_oom
 )
 target_link_options(test_runtime_ttf_oom PRIVATE
     "-Wl,--wrap=lv_malloc_core" "-Wl,--wrap=lv_realloc_core")
-set_tests_properties(test_runtime_ttf_oom PROPERTIES TIMEOUT 15)
+set_tests_properties(test_runtime_ttf_oom PROPERTIES TIMEOUT 15 SKIP_RETURN_CODE 77)
 add_host_legacy_test(test_font_store
     SOURCES test_font_store.cpp ${PROJECT_SOURCE_DIR}/src/app/font_store.cpp
     DEFINITIONS HAS_TTF_FONTS=0

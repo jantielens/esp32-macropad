@@ -43,7 +43,7 @@ HX711 Arduino Library@0.7.5
 
 # Display (TFT_eSPI for ESP32-2432S028R CYD and compatible displays)
 TFT_eSPI@2.5.43
-lvgl@9.5.0
+lvgl@9.6.0
 
 # Display (Arduino_GFX for JC3248W535, JC3636W518, and other QSPI displays)
 GFX Library for Arduino@1.6.5
