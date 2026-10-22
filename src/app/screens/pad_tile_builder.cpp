@@ -466,7 +466,7 @@ void PadScreen::buildTiles() {
         memcpy(tile.lp_actions, bcfg.lp_actions, bcfg.lp_action_count * sizeof(ButtonAction));
 
         // Create a bound center label early so widgets can position it
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
         if (binding_template_has_bindings(bcfg.label_center) && !tile.label_center) {
             tile.label_center = lv_label_create(obj);
             lv_obj_set_style_text_color(tile.label_center, pad_resolve_label_color(bcfg.style_center, fg), 0);
@@ -493,7 +493,7 @@ void PadScreen::buildTiles() {
             if (wt) {
                 tile.widget_type = wt;
                 memcpy(&tile.widget_cfg, &bcfg.widget, sizeof(WidgetConfig));
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
                 // Expand [pad:] tokens in widget data bindings so stream-based
                 // widgets (e.g. sparkline) look up their data stream by the same
                 // expanded key that data_stream_rebuild() registered it under.
@@ -518,7 +518,7 @@ void PadScreen::buildTiles() {
             }
         }
 
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
         // Register template-based label bindings for labels containing [scheme:...]
         auto addTemplateBinding = [this](lv_obj_t* lbl, const char* label_text,
                                          const LabelStyle& style,
@@ -725,7 +725,7 @@ void PadScreen::buildTiles() {
         swipe_actions_register(padActionOverlay, swipes_enabled);
     }
 
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
     // Register page-level background color binding (target=0xFF = page bg, tileIndex unused)
     if (pageBgTemplate[0] && binding_template_has_bindings(pageBgTemplate) && colorBindingCount < MAX_COLOR_BINDINGS) {
         RuntimeColorBinding& cb = colorBindings[colorBindingCount];

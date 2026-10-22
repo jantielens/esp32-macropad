@@ -35,7 +35,7 @@ void mqtt_screen_init() {
 }
 
 void mqtt_screen_on_connected() {
-		mqtt_manager.subscribe(g_command_topic);
+		mqtt_manager.setSubscriptionOwner(g_command_topic, MqttSubscriptionOwner::Screen, true);
 
 		// Publish current screen state
 		const char* current = display_manager_get_current_screen_id();

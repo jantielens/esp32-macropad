@@ -56,12 +56,12 @@ struct WidgetType {
     void (*destroyUI)(WidgetState* state);
     void (*tick)(lv_obj_t* tile, const WidgetConfig* cfg, WidgetState* state);
     // Describe stream `stream_index` (false = widget has no further streams).
-    // `out_ha_entity` / `out_ha_stat` name the optional Home Assistant history
-    // source; widgets without one report "" / 0.
+    // `out_ha_entity` names the optional Home Assistant history source.
+    // `out_raw_hours` caps raw history age; zero uses the full chart window.
     bool (*getStreamParams)(const WidgetConfig* cfg, uint8_t stream_index,
                             uint32_t* window_secs, uint16_t* slot_count,
-                            const char** out_binding,
-                            const char** out_ha_entity, uint8_t* out_ha_stat);
+                            const char** out_binding, const char** out_ha_entity,
+                            uint16_t* out_raw_hours);
     bool resolveInTick;
     void (*describeSchema)(JsonObject& out);
     void (*onShow)(WidgetState* state);

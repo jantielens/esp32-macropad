@@ -33,6 +33,8 @@ class PortalDevServerTest(unittest.TestCase):
         cls.server.mock_config = {
             **PORTAL.SCREENSAVER_DEFAULTS,
             "caps": {"ble": True, "ble_hid": True, "usb_hid": True, "mqtt": True},
+            "mqtt_host": "broker.example.test",
+            "ha_url": "http://ha.example.test", "ha_token_set": True,
             "backlight_brightness": 80, "keyboard_transport": "none",
             "keyboard_active_transport": "none", "device_name": "Mock",
             "wifi_failure_mode": "ap", "ap_password": "",
@@ -86,15 +88,26 @@ class PortalDevServerTest(unittest.TestCase):
             other_bundle = self.request("/portal.js", profile=profile, raw=True)[1]
             self.assertEqual("function showBindingHelp(" in other_bundle, display)
             self.assertNotIn("function haBindingBuilderHTML(", other_bundle)
+            self.assertEqual("function bindingSourcePickerHTML(" in other_bundle, display)
+            self.assertEqual("const mqttBindingProvider =" in other_bundle, display)
             other_styles = self.request("/portal-all.css", profile=profile, raw=True)[1]
             self.assertEqual(".binding-docs-overlay" in other_styles, display)
-            self.assertNotIn(".binding-builder-step", other_styles)
+            self.assertEqual(".binding-builder-step" in other_styles, display)
+            self.assertEqual(".pad-button-builder-entry" in other_styles, display)
+            self.assertEqual("const catalogButtonBuilderProvider =" in other_bundle, display)
+            self.assertEqual("const mqttButtonBuilderProvider =" in other_bundle, display)
             for suffix in ("", "?docs=1"):
                 other_schema = self.request("/api/bindings" + suffix, profile=profile)[1]
                 self.assertNotIn("ha", {scheme["name"] for scheme in other_schema["schemes"]})
         status, schema = self.request("/api/bindings")
         self.assertEqual(status, 200)
         self.assertIn("ha", {scheme["name"] for scheme in schema["schemes"]})
+        self.assertIn("mqtt", {scheme["name"] for scheme in schema["schemes"]})
+        docs = self.request("/api/bindings?docs=1")[1]
+        mqtt_docs = next(scheme for scheme in docs["schemes"] if scheme["name"] == "mqtt")
+        self.assertNotIn("status", mqtt_docs)
+        headless_docs = self.request("/api/bindings?docs=1", profile="reterminal-e1003-frame")[1]
+        self.assertNotIn("status", next(scheme for scheme in headless_docs["schemes"] if scheme["name"] == "mqtt"))
         status, styles = self.request("/portal-all.css", raw=True)
         self.assertEqual(status, 200)
         headless_styles = self.request("/portal-all.css", profile="reterminal-e1003-frame", raw=True)[1]
@@ -132,6 +145,9 @@ class PortalDevServerTest(unittest.TestCase):
     def test_ha_lookup_jobs(self):
         config = self.request("/api/config")[1]
         self.assertTrue(config["caps"]["ha_live"])
+        self.assertEqual(config["ha_url"], "http://ha.example.test")
+        self.assertTrue(config["ha_token_set"])
+        self.assertEqual(config["ha_token"], "")
         self.assertNotIn("capabilities", config)
         headless_config = self.request("/api/config", profile="reterminal-e1003-frame")[1]
         self.assertFalse(headless_config["caps"]["ha_live"])
@@ -141,6 +157,10 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(len(matches["entities"]), 2)
         self.assertFalse(matches["more"])
+        started = self.request("/api/ha/lookup?entity=sensor.living_room_temperature")[1]
+        temperature = self.request("/api/ha/lookup?job=" + str(started["job"]))[1]
+        self.assertEqual(temperature["state"], "21.37")
+        self.assertEqual(temperature["unit"], "\u00b0C")
         started = self.request("/api/ha/lookup?entity=light.kitchen")[1]
         detail = self.request("/api/ha/lookup?job=" + str(started["job"]))[1]
         self.assertEqual(detail["state"], "on")
@@ -679,6 +699,80 @@ class PortalDevServerTest(unittest.TestCase):
         self.assertEqual([value["value"] for value in result["resolved"]], ["21.5 C", "---", "literal"])
         self.assertEqual(result["button"]["label_center"], "21.5 C")
         self.assertEqual(self.request("/api/pad/resolve", "POST", {"button": {"label_center": 5}})[0], 400)
+        _, local = self.request("/api/pad/resolve", "POST", {
+            "bindings": ["[health:cpu]", "[health:rssi]", "[health:wifi_ssid]"],
+        }, profile="jc3248w535")
+        self.assertEqual([value["value"] for value in local["resolved"]], ["23", "-55", "?"])
+
+    def test_mqtt_inspection_fixtures_and_limits(self):
+        status, waiting = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/waiting"})
+        self.assertEqual(status, 202)
+        self.assertEqual(waiting["status"], "queued")
+        status, result = self.request("/api/mqtt/inspect?handle=" + str(waiting["handle"]))
+        self.assertEqual(status, 200)
+        self.assertEqual(result["status"], "waiting")
+        self.assertFalse(result["received"])
+
+        for name, sample in (("empty", ""), ("zero", "0"), ("placeholder", "---"), ("error", "ERR:mock")):
+            status, queued = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/" + name})
+            self.assertEqual(status, 202)
+            status, result = self.request("/api/mqtt/inspect?handle=" + str(queued["handle"]))
+            self.assertEqual(status, 200)
+            self.assertTrue(result["received"])
+            self.assertEqual(result["sample"], sample)
+
+        _, queued = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/received"})
+        received = self.request("/api/mqtt/inspect?handle=" + str(queued["handle"]))[1]
+        self.assertEqual(received["status"], "received")
+        self.assertIn('"temperature":21.37', received["sample"])
+
+        _, queued = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/malformed"})
+        malformed = self.request("/api/mqtt/inspect?handle=" + str(queued["handle"]))[1]
+        self.assertEqual(malformed["sample"], '{"temperature":')
+
+        _, queued = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/truncated"})
+        truncated = self.request("/api/mqtt/inspect?handle=" + str(queued["handle"]))[1]
+        self.assertTrue(truncated["truncated"])
+        self.assertEqual(len(truncated["sample"]), 2047)
+
+        _, queued = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/failed"})
+        failed = self.request("/api/mqtt/inspect?handle=" + str(queued["handle"]))[1]
+        self.assertEqual((failed["status"], failed["error"]), ("failed", "subscribe_failed"))
+        _, queued = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/timeout"})
+        timeout = self.request("/api/mqtt/inspect?handle=" + str(queued["handle"]))[1]
+        self.assertEqual((timeout["status"], timeout["error"]), ("failed", "timeout"))
+
+        _, expired = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/expired"})
+        self.assertEqual(self.request("/api/mqtt/inspect?handle=" + str(expired["handle"]))[0], 410)
+        self.assertEqual(self.request("/api/mqtt/inspect?handle=987654")[0], 404)
+        _, releasable = self.request("/api/mqtt/inspect", "POST", {"topic": "mock/received"})
+        release_path = "/api/mqtt/inspect?handle=" + str(releasable["handle"])
+        self.assertEqual(self.request(release_path, "DELETE")[0], 202)
+        released = self.request(release_path)[1]
+        self.assertEqual(released["status"], "released")
+        self.assertFalse(released["received"])
+        self.assertEqual(self.request(release_path, "DELETE")[0], 202)
+        self.assertEqual(self.request("/api/mqtt/inspect?handle=987654", "DELETE")[0], 404)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST", {"topic": "mock/disconnected"})[0], 503)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST", {"topic": "mock/capacity"})[0], 429)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST", {"topic": "sensor/#"})[0], 400)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST", {"topic": "bad\ud800"})[0], 400)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST", {"topic": "x" * 128})[0], 400)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST", {"topic": "x" * 800})[0], 400)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST", b"{")[0], 400)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST",
+                                      b'{"topic":"' + b"x" * 820 + b'"}')[0], 400)
+        self.assertEqual(self.request("/api/mqtt/inspect", "POST",
+                                      {"topic": "mock/received"},
+                                      profile="reterminal-e1003-frame")[0], 202)
+
+        previous = self.server.mock_config["mqtt_host"]
+        try:
+            self.server.mock_config["mqtt_host"] = ""
+            self.assertEqual(self.request("/api/mqtt/inspect", "POST",
+                                          {"topic": "mock/received"})[0], 503)
+        finally:
+            self.server.mock_config["mqtt_host"] = previous
 
     def test_display_icons_defaults_and_catalog_routes(self):
         self.assertEqual(self.request("/api/component/display/brightness", "PUT", {"brightness": 0})[0], 200)

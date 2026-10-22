@@ -5,7 +5,7 @@
 #
 # Chunk markers:
 #   # [chunk:NAME]            — always-on chunk
-#   # [chunk:NAME HAS_FLAG]   — compiled out of flash unless HAS_FLAG is true
+#   # [chunk:NAME HAS_FLAG ...] — included only when every listed flag is true
 #
 # The first marker opens the first chunk; each subsequent marker closes the
 # previous one. Files before any marker are rejected. Disabled chunks are
@@ -30,10 +30,18 @@ portal_dropdown.js
 # [chunk:bindings HAS_DISPLAY]
 portal_binding_validator.js
 portal_binding_help.js
+portal_binding_builder.js
+
+# [chunk:catalog_bindings HAS_DISPLAY]
+portal_binding_builder_catalog.js
+
+# [chunk:mqtt_bindings HAS_MQTT HAS_DISPLAY]
+portal_binding_builder_mqtt.js
 
 # [chunk:ha_bindings HAS_HA_LIVE]
-portal_binding_builder.js
 portal_binding_builder_ha.js
+
+# [chunk:button_builder HAS_DISPLAY]
 portal_button_templates.js
 portal_button_builder.js
 

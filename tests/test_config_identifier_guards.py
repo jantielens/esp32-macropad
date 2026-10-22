@@ -27,6 +27,15 @@ class IdentifierGuards(unittest.TestCase):
 
     def test_widget_cpp11_initialization(self):
         source = '''#include "widgets/widget.h"
+constexpr BindingParamDoc binding_param = {"value", "Value"};
+static_assert(binding_param.default_value == nullptr, "Optional parameter default must stay null");
+constexpr BindingReferenceDoc binding_reference = {};
+static_assert(binding_reference.unit[0] == '\\0', "Reference units must default to unitless");
+static_assert(binding_reference.kind == BINDING_AUTHORING_KIND_TEXT, "References must default to text");
+constexpr auto binding_authoring = binding_authoring_integer("value", "", "42");
+static_assert(binding_authoring.example_value[0] == '4', "Authoring helpers must remain constexpr");
+constexpr BindingSchemeSpec binding_spec = {};
+static_assert(binding_spec.authoring == nullptr, "Optional authoring metadata must default to null");
 constexpr WidgetPreview simple_preview = {"Test", "test"};
 constexpr WidgetPreview axis_preview = {
     "Axis", "swap_vert", nullptr, "axis", "swap_horiz", "swap_vert", "vertical"

@@ -11,13 +11,14 @@
 // ============================================================================
 // Home Assistant history hydration
 // ============================================================================
-// Backfills a sparkline data stream from Home Assistant's Recorder statistics
+// Backfills a sparkline data stream from raw Recorder history and older means
 // so a configured window is populated after a reboot instead of starting empty.
 //
 // Only one request is in flight at a time: the HTTP round trip runs on a
 // dedicated PSRAM-stacked task so it never blocks the LVGL task, and the result
 // is handed back for the LVGL task to merge. data_stream.cpp drives both ends
-// and queues its streams round-robin.
+// and queues its streams round-robin. A usable partial result is delivered
+// without finalizing the stream when a required source fails transiently.
 
 // Create the fetch task. Safe to call when the feature is unused — the task
 // stays blocked until the first request arrives.
@@ -25,16 +26,21 @@ void ha_stats_init();
 
 bool ha_stats_get_stack_watermark(uint32_t* minimum_free_bytes, uint32_t* configured_bytes);
 
+// Invalidate any queued or active request after the HA credentials change.
+void ha_stats_config_changed();
+
 // Queue a hydration request. Returns false when a request is already in flight,
 // when the caller's arguments are unusable, or when HA is not configured.
 //
 // `end_bucket` is the bucket id (floor(unix_ms / slot_ms)) of the newest slot
 // the response should cover; `slot_count` buckets ending there are requested.
 // The stream's `uid` is carried through so a stale response can be dropped.
+// `raw_hours` caps raw history to the newest hours (0 = full chart window).
+// Statistics still cover any older prefix not covered by the raw response.
 bool ha_stats_request(data_stream_handle_t handle, uint32_t uid,
-                      const char* entity_id, uint8_t statistic,
+                      const char* entity_id,
                       uint32_t slot_ms, uint16_t slot_count,
-                      uint64_t end_bucket);
+                      uint64_t end_bucket, uint16_t raw_hours = 0);
 
 // True while a request is queued or being fetched.
 bool ha_stats_busy();

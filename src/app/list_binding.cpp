@@ -126,11 +126,16 @@ static const BindingSchemeDoc kListDoc = {
     nullptr, false, BINDING_DOC_NONE,
     "Available providers are listed under Keys.", nullptr,
 };
+static const BindingAuthoringKey kListAuthoringKeys[] = {
+    binding_authoring_text("*.selected", "selected-item"),
+};
+static const BindingAuthoringSpec kListAuthoring = {BINDING_DOC_LIST(kListAuthoringKeys)};
 
 void list_binding_init() {
     if (!binding_template_register("list", list_binding_resolve, list_binding_collect,
                                    {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    list_binding_key_count, list_binding_key_at, &kListDoc})) {
+                                    list_binding_key_count, list_binding_key_at, &kListDoc,
+                                    &kListAuthoring})) {
         LOGE(TAG, "Failed to register list binding scheme");
     } else {
         LOGI(TAG, "List binding scheme registered");

@@ -21,6 +21,7 @@ public:
 class AsyncWebServerRequest {
 public:
     void* _tempObject = nullptr;
+    bool isSent() const { return response_code != 0; }
     int response_code = 0;
     std::string response_body;
     bool authorized = true;

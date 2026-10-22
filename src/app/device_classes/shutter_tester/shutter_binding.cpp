@@ -576,8 +576,8 @@ static const BindingKeyDoc kShutterKeyDocs[] = {
     {"session.guide.steps", "Total steps", "Session"},
     {"session.guide.shot", "Current shot in the step", "Session"},
     {"session.guide.shots", "Shots per step", "Session"},
-    {"session.guide.taking", "true while waiting for a shot", "Session"},
-    {"session.guide.total", "Total progress text", "Session"},
+    {"session.guide.taking", "Current shot across the guided test", "Session"},
+    {"session.guide.total", "Total shots in the guided test", "Session"},
 };
 
 static const BindingExampleDoc kShutterExamples[] = {
@@ -592,11 +592,65 @@ static const BindingSchemeDoc kShutterDoc = {
     nullptr, false, BINDING_DOC_NONE,
     "N is a sensor number from 1 to sensor_count.", nullptr,
 };
+static const BindingAuthoringKey kShutterAuthoringKeys[] = {
+    binding_authoring_text("speed", "1/1000"),
+    binding_authoring_number("speed_seconds", "s", "0.001020"),
+    binding_authoring_number("duration_ms", "ms", "1.020"),
+    binding_authoring_text("target_speed", "1/1000s"),
+    binding_authoring_number("target_ms", "ms", "1.000"),
+    binding_authoring_number("deviation", "%", "2.0"),
+    binding_authoring_number("deviation_abs", "%", "2.0"),
+    binding_authoring_number("deviation_stops", "stops", "0.029"),
+    binding_authoring_text("verdict", "pass"),
+    binding_authoring_text("available", "true"),
+    binding_authoring_number("count", "", "12"),
+    binding_authoring_number("capture_id", "", "12"),
+    binding_authoring_text("speed_locked", "true"),
+    binding_authoring_text("preset_id", "direct_3_line"),
+    binding_authoring_text("preset_name", "Three-sensor line"),
+    binding_authoring_text("history_json", "[{\"speed\":\"1/1000\",\"ms\":\"1.0\",\"dev\":\"2.0%\",\"verdict\":\"pass\",\"preset_id\":\"direct_3_line\",\"sensor_count\":3}]"),
+    binding_authoring_number("spread", "%", "1.5"),
+    binding_authoring_number("spread_ms", "ms", "0.015"),
+    binding_authoring_number("capping_gradient", "stops/mm", "0.001"),
+    binding_authoring_number("capping_frame_stops", "stops", "0.024"),
+    binding_authoring_number("sensor_count", "", "3"),
+    binding_authoring_number("valid_sensor_count", "", "3"),
+    binding_authoring_number("worst_noise_rms", "ADC", "2.4"),
+    binding_authoring_number("sensor_#_ms", "ms", "1.020"),
+    binding_authoring_text("sensor_#_valid", "true"),
+    binding_authoring_number("sensor_#_depth", "ADC", "1200.0"),
+    binding_authoring_number("sensor_#_snr", "", "500.0"),
+    binding_authoring_text("sensor_#_saturated", "false"),
+    binding_authoring_number("sensor_#_min_adc", "ADC", "180.0"),
+    binding_authoring_number("sensor_#_threshold", "ADC", "780.0"),
+    binding_authoring_text("align.active", "true"),
+    binding_authoring_text("align.status", "Aligned"),
+    binding_authoring_text("align.hint", "Keep the light steady"),
+    binding_authoring_number("align.spread", "%", "2.0"),
+    binding_authoring_number("align.sensor_count", "", "3"),
+    binding_authoring_number("align.s#_pct", "%", "82"),
+    binding_authoring_number("align.s#_raw", "ADC", "3200"),
+    binding_authoring_number("calib.active", "", "1"),
+    binding_authoring_text("session.active", "true"),
+    binding_authoring_number("session.id", "", "7"),
+    binding_authoring_text("session.type", "guided"),
+    binding_authoring_number("session.count", "", "6"),
+    binding_authoring_text("session.guide.name", "Speed sweep"),
+    binding_authoring_text("session.guide.id", "speed-sweep"),
+    binding_authoring_text("session.guide.target", "1/1000s"),
+    binding_authoring_number("session.guide.step", "", "2"),
+    binding_authoring_number("session.guide.steps", "", "5"),
+    binding_authoring_number("session.guide.shot", "", "1"),
+    binding_authoring_number("session.guide.shots", "", "3"),
+    binding_authoring_number("session.guide.taking", "", "4"),
+    binding_authoring_number("session.guide.total", "", "15"),
+};
+static const BindingAuthoringSpec kShutterAuthoring = {BINDING_DOC_LIST(kShutterAuthoringKeys)};
 
 void shutter_binding_init() {
     if (!binding_template_register("shutter", shutter_binding_resolve, shutter_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
-                                    &kShutterDoc})) {
+                                    &kShutterDoc, &kShutterAuthoring})) {
         LOGE(TAG, "Failed to register shutter binding scheme");
     }
 }

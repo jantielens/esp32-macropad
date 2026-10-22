@@ -1,5 +1,33 @@
 .binding-builder { overflow: hidden; border: 1px solid rgba(var(--portal-primary-rgb), 0.3); border-radius: 12px; margin: 16px 0 24px; background: var(--portal-surface); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05); }
 .binding-builder [hidden] { display: none; }
+.binding-source-picker [hidden] { display: none !important; }
+.binding-source-picker .binding-builder-input-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.binding-builder-dialog .binding-source-customize { margin-top: 20px; }
+.pad-button-builder:not(.binding-builder-dialog) .binding-source-customize { display: block; }
+.pad-button-builder:not(.binding-builder-dialog) [data-bb-picked-result] { padding: 0; border: 0; }
+.binding-builder-dialog [data-bb-display] { margin: 0; padding: 0; border: 0; }
+.binding-builder-dialog [data-bb-display] > summary { font-size: 15px; font-weight: 650; color: var(--portal-docs-heading); }
+.binding-builder-dialog [data-bb-picked-result] { min-width: 0; margin: 0; }
+.binding-builder-dialog .binding-builder-fields { grid-template-columns: 1fr; margin-top: 12px; }
+.binding-builder-dialog [data-catalog-fields] { display: grid; gap: 12px; margin-top: 12px; }
+.binding-builder-dialog [data-catalog-fields] > label { display: flex; flex-direction: column; gap: 4px; }
+.binding-builder-dialog .binding-example-code { margin: 0; padding: 10px; border-radius: 6px; background: var(--portal-docs-code-bg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.binding-builder-dialog .binding-example-actions { flex-wrap: wrap; padding: 0; margin-top: 12px; }
+.binding-builder-dialog .binding-copy-btn { min-height: 36px; }
+.binding-source-options { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 16px; border: 1px solid var(--portal-docs-border); border-radius: 10px; background: var(--portal-surface-alt); }
+.binding-source-options > label { position: relative; display: flex; flex: 1 1 130px; min-width: 0; margin: 0; cursor: pointer; }
+.binding-source-options input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
+.binding-source-options label > span { display: flex; flex: 1; flex-direction: column; justify-content: center; align-items: center; gap: 2px; min-height: 44px; padding: 8px 12px; border: 1px solid transparent; border-radius: 7px; color: var(--portal-text); font-size: 13px; font-weight: 600; text-align: center; }
+.binding-source-options label.is-unconfigured > span { color: var(--portal-text-muted); }
+.binding-source-options small { font-size: 11px; font-weight: 400; }
+.binding-source-options input:checked + span { border-color: var(--portal-primary); background: rgba(var(--portal-primary-rgb), 0.1); color: var(--portal-docs-heading); }
+.binding-source-options label:hover > span { background: rgba(var(--portal-primary-rgb), 0.06); }
+.binding-source-options input:focus-visible + span { outline: 2px solid var(--portal-primary); outline-offset: 2px; }
+.binding-source-picker [data-bb-picked] { margin-top: 12px; }
+.binding-source-picker [data-bb-picked-result] { margin-top: 18px; }
+.binding-source-picker [data-bb-continue] { margin-top: 12px; }
+.binding-source-picker [data-bb-format] { padding-top: 12px; }
+.binding-source-picker .binding-builder-options label { max-width: none; }
 .binding-builder-header { padding: 16px 20px; background: rgba(var(--portal-primary-rgb), 0.08); }
 .binding-builder-header h5 { margin: 0 0 4px; color: var(--portal-docs-heading); font-size: 17px; text-transform: none; letter-spacing: 0; }
 .binding-builder-header p { margin: 0; line-height: 1.5; color: var(--portal-text-muted); }
@@ -19,10 +47,12 @@
 .binding-builder-selection-info code { font-size: 11px; }
 .binding-builder-selection-actions { display: grid; justify-items: end; gap: 10px; flex-shrink: 0; font-size: 12px; }
 .binding-builder-status { margin: 10px 0 0; padding: 8px 10px; border-left: 3px solid var(--portal-primary); border-radius: 4px; background: rgba(var(--portal-primary-rgb), 0.07); font-size: 12px; line-height: 1.5; }
+.binding-builder-status:empty { display: none; }
 .binding-builder-status[data-kind="error"] { border-left-color: #dc3545; background: rgba(220, 53, 69, 0.09); }
 .binding-builder-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px; }
 .binding-builder-fields label { display: flex; flex-direction: column; gap: 4px; }
 .binding-builder-suggestions { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; margin-top: 10px; }
+.pad-button-builder .binding-builder-suggestions { max-height: none; overflow-y: visible; }
 .binding-builder-suggestions:empty { display: none; }
 .binding-builder-suggestion { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--portal-docs-border); border-radius: 6px; background: var(--portal-surface-alt); color: inherit; text-align: left; cursor: pointer; }
 .binding-builder-suggestion-info { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }

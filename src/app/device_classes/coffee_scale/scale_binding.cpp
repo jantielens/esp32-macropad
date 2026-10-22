@@ -153,6 +153,16 @@ static const BindingSchemeDoc kScaleDoc = {
     BINDING_DOC_LIST(kScaleParams), BINDING_DOC_LIST(kScaleKeyDocs), BINDING_DOC_LIST(kScaleExamples),
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
+static const BindingAuthoringKey kScaleAuthoringKeys[] = {
+    binding_authoring_number("weight", "g", "250.5"),
+    binding_authoring_number("flow_rate", "g/s", "4.2"),
+    binding_authoring_number("calibration_factor", "counts/g", "420.1250"),
+    binding_authoring_number("offset", "counts", "123456"),
+    binding_authoring_text("available", "ON"),
+    binding_authoring_number("cal_weight", "g", "100.0"),
+    binding_authoring_text("status", "idle"),
+};
+static const BindingAuthoringSpec kScaleAuthoring = {BINDING_DOC_LIST(kScaleAuthoringKeys)};
 
 // ============================================================================
 // Init — register the "scale" scheme
@@ -161,7 +171,8 @@ static const BindingSchemeDoc kScaleDoc = {
 void scale_binding_init() {
     if (!binding_template_register("scale", scale_binding_resolve, scale_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    scale_binding_key_count, scale_binding_key_at, &kScaleDoc})) {
+                                    scale_binding_key_count, scale_binding_key_at, &kScaleDoc,
+                                    &kScaleAuthoring})) {
         LOGE(TAG, "Failed to register scale binding scheme");
     }
 }

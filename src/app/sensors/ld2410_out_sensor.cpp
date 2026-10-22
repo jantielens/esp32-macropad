@@ -121,7 +121,7 @@ static void ld2410_out_publish_ha(MqttManager &mqtt) {
 #endif
 
 void register_ld2410_out_sensor(SensorRegistry &registry) {
-		static const SensorField fields[] = {{"presence", "Presence detected: 1 or 0."}};
+		static const SensorField fields[] = {{"presence", "Presence detected: 1 or 0.", "", "1"}};
 		SensorCallbacks callbacks = {};
 		callbacks.name = "LD2410_OUT";
 		callbacks.init = ld2410_out_init;

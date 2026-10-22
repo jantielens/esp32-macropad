@@ -148,17 +148,43 @@ static const BindingExampleDoc kNetExamples[] = {
     {"[expr:[net:portal;age] < 1000 ? \"ACTIVE\" : \"idle\"]", "Label for a second after a portal request."},
 };
 
+static const BindingReferenceDoc kNetVariants[] = {
+    {nullptr, "portal;age", "125", "Time since a portal request", "[net:portal;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "mcp;age", "125", "Time since an MCP call", "[net:mcp;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "mqtt_rx;age", "125", "Time since an MQTT message", "[net:mqtt_rx;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "mqtt_tx;age", "125", "Time since an MQTT publish", "[net:mqtt_tx;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "mqtt;age", "125", "Time since either MQTT direction", "[net:mqtt;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "http;age", "125", "Time since an outbound HTTP request", "[net:http;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "ble;age", "125", "Time since a BLE report", "[net:ble;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "ota;age", "125", "Time since a firmware flash write", "[net:ota;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "any;age", "125", "Time since any transport activity", "[net:any;age]", "ms", BINDING_AUTHORING_KIND_INTEGER},
+};
+
 static const BindingSchemeDoc kNetDoc = {
     "Device", "Short activity pulses per network transport, for blinking indicators.",
     BINDING_DOC_LIST(kNetParams), BINDING_DOC_LIST(kNetKeyDocs), BINDING_DOC_LIST(kNetExamples),
-    nullptr, false, BINDING_DOC_NONE,
+    "Activity age", true, BINDING_DOC_LIST(kNetVariants),
     "age is capped at 999999, which also means never.", nullptr,
 };
+
+static const BindingAuthoringKey kNetAuthoringKeys[] = {
+    binding_authoring_integer("portal", "", "1"),
+    binding_authoring_integer("mcp", "", "1"),
+    binding_authoring_integer("mqtt_rx", "", "1"),
+    binding_authoring_integer("mqtt_tx", "", "1"),
+    binding_authoring_integer("mqtt", "", "1"),
+    binding_authoring_integer("http", "", "1"),
+    binding_authoring_integer("ble", "", "1"),
+    binding_authoring_integer("ota", "", "1"),
+    binding_authoring_integer("any", "", "1"),
+};
+static const BindingAuthoringSpec kNetAuthoring = {BINDING_DOC_LIST(kNetAuthoringKeys)};
 
 void net_binding_init() {
     if (!binding_template_register("net", net_binding_resolve, net_binding_collect,
                                    {1, 2, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                                    net_binding_key_count, net_binding_key_at, &kNetDoc})) {
+                                    net_binding_key_count, net_binding_key_at, &kNetDoc,
+                                    &kNetAuthoring})) {
         LOGE(TAG, "Failed to register net binding scheme");
     }
 }

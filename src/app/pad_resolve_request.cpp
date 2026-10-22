@@ -1,14 +1,14 @@
 // ============================================================================
 // pad_resolve_request.cpp — see pad_resolve_request.h.
 //
-// Compiled directly (sketch root). Gated HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE) (bindings are
-// meaningless without the resolver schemes). Independent of HAS_MCP so the web
+// Compiled directly (sketch root). Gated by HAS_DISPLAY because local binding
+// schemes are useful without an HA or MQTT integration. Independent of HAS_MCP so the web
 // portal endpoint works even when MCP is compiled out.
 // ============================================================================
 
 #include "pad_resolve_request.h"
 
-#if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#if HAS_DISPLAY
 
 #include "binding_template.h"   // BINDING_TEMPLATE_MAX_LEN
 #include "main_loop_bridge.h"
@@ -227,4 +227,4 @@ PadResolveStatus pad_resolve_request(JsonObjectConst args, JsonObject result,
     return PAD_RESOLVE_OK;
 }
 
-#endif // HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#endif // HAS_DISPLAY

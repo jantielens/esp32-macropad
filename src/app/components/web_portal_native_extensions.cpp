@@ -20,7 +20,6 @@ struct ExtensionUploadState {
     uint8_t slot;
     size_t total;
     size_t received;
-    char filename[64];
     char temporary[64];
 };
 
@@ -40,8 +39,8 @@ void upload_cleanup(AsyncWebServerRequest* request, bool remove_temporary = true
 }
 
 bool upload_start(AsyncWebServerRequest* request, size_t total) {
-    if (!request->hasParam("slot") || !request->hasParam("filename") || total == 0) {
-        web_portal_send_json_error(request, 400, "Slot, filename, and package body are required");
+    if (!request->hasParam("slot") || total == 0) {
+        web_portal_send_json_error(request, 400, "Slot and package body are required");
         return false;
     }
     const long slot_value = request->getParam("slot")->value().toInt();
@@ -75,7 +74,6 @@ bool upload_start(AsyncWebServerRequest* request, size_t total) {
     }
     state->slot = slot;
     state->total = total;
-    strlcpy(state->filename, request->getParam("filename")->value().c_str(), sizeof(state->filename));
     snprintf(state->temporary, sizeof(state->temporary), "/extensions/upload-%u-%08lx.tmp", slot,
              static_cast<unsigned long>(esp_random()));
     state->file = Storage.open(state->temporary, "w");
@@ -133,10 +131,44 @@ void native_extension_routes_register(AsyncWebServer* server) {
                    if (state->received != state->total) return;
                    state->file.close();
                    const uint8_t slot = state->slot;
-                   const bool staged = native_extension_stage_file(slot, state->filename, state->temporary);
+                   const NativeExtensionStageResult result =
+                       native_extension_stage_file(slot, state->temporary);
                    upload_cleanup(request);
-                   if (!staged) {
-                       web_portal_send_json_error(request, 400, "Invalid or unsigned extension package");
+                   if (result != NATIVE_EXTENSION_STAGE_SUCCESS) {
+                       const char* message = "Unable to stage extension package";
+                       switch (result) {
+                           case NATIVE_EXTENSION_STAGE_INVALID_SLOT:
+                               message = "Invalid extension slot";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_STORAGE_ERROR:
+                               message = "Unable to read or stage extension package";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_PACKAGE_TOO_LARGE:
+                               message = "Extension package exceeds slot capacity";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_INVALID_ELF:
+                               message = "Extension package contains an invalid ELF";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_INVALID_SIGNATURE:
+                               message = "Extension signature is invalid or untrusted";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_INVALID_DESCRIPTOR:
+                               message = "Extension descriptor is invalid";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_INCOMPATIBLE_ABI:
+                               message = "Extension ABI is incompatible with this firmware";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_INCOMPATIBLE_TARGET:
+                               message = "Extension package targets a different device";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_WRITE_ERROR:
+                               message = "Unable to stage extension package";
+                               break;
+                           case NATIVE_EXTENSION_STAGE_SUCCESS:
+                           default:
+                               break;
+                       }
+                       web_portal_send_json_error(request, 400, message);
                        return;
                    }
                    request->send(201, "application/json", "{\"success\":true}");

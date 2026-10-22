@@ -524,6 +524,66 @@ static const BindingSchemeDoc kHealthDoc = {
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
 
+static const BindingAuthoringKey kHealthAuthoringKeys[] = {
+    binding_authoring_integer("cpu", "%", "42", "%ld"),
+    binding_authoring_integer("rssi", "dBm", "-62", "%ld"),
+    binding_authoring_integer("uptime", "s", "12345", "%ld"),
+    binding_authoring_integer("heap_free", "B", "245760", "%ld"),
+    binding_authoring_text("wifi_ssid", "Home WiFi"),
+    binding_authoring_text("wifi_connected", "ON"),
+    binding_authoring_integer("cpu_core_#", "%", "38", "%ld"),
+    binding_authoring_text("chip", "ESP32-S3"),
+    binding_authoring_integer("chip_rev", "", "1", "%ld"),
+    binding_authoring_integer("chip_cores", "", "2", "%ld"),
+    binding_authoring_integer("cpu_freq", "MHz", "240", "%ld"),
+    binding_authoring_integer("flash_size", "B", "16777216", "%ld"),
+    binding_authoring_text("firmware", "1.41.0"),
+    binding_authoring_text("board", "esp32-p4-lcd4b"),
+    binding_authoring_text("mac", "02:00:00:12:34:56"),
+    binding_authoring_text("reset_reason", "Power On"),
+    binding_authoring_integer("heap_total", "B", "327680", "%ld"),
+    binding_authoring_integer("heap_min", "B", "196608", "%ld"),
+    binding_authoring_integer("heap_largest", "B", "131072", "%ld"),
+    binding_authoring_integer("heap_internal_total", "B", "327680", "%ld"),
+    binding_authoring_integer("heap_internal", "B", "196608", "%ld"),
+    binding_authoring_integer("heap_internal_used", "B", "131072", "%ld"),
+    binding_authoring_integer("psram_total", "B", "8388608", "%ld"),
+    binding_authoring_integer("psram_free", "B", "6291456", "%ld"),
+    binding_authoring_integer("psram_used", "B", "2097152", "%ld"),
+    binding_authoring_integer("psram_min", "B", "5242880", "%ld"),
+#if TELEMETRY_ALLOW_PSRAM_POOL_WALK
+    binding_authoring_integer("psram_largest", "B", "4194304", "%ld"),
+#else
+    {"psram_largest", BINDING_AUTHORING_KIND_INTEGER, "B", BINDING_AUTHORING_FORMAT_RAW,
+        nullptr, BINDING_AUTHORING_CAP_DISPLAY, true, "4194304"},
+#endif
+    binding_authoring_text("ip", "192.0.2.10"),
+    binding_authoring_text("hostname", "kitchen-pad"),
+    binding_authoring_integer("brightness", "%", "80", "%ld"),
+#if HAS_AUDIO
+    binding_authoring_integer("volume", "%", "50", "%ld"),
+#endif
+#if HAS_USB_HID
+    binding_authoring_text("usb_status", "connected"),
+#endif
+#if HAS_BLE_HID
+    binding_authoring_text("ble_status", "connected"),
+    binding_authoring_text("ble_name", "Kitchen Pad BLE"),
+    binding_authoring_text("ble_state", "advertising"),
+    binding_authoring_text("ble_pairing", "OFF"),
+    binding_authoring_text("ble_bonded", "ON"),
+    binding_authoring_text("ble_encrypted", "ON"),
+    binding_authoring_text("ble_peer_addr", "02:00:00:65:43:21"),
+    binding_authoring_text("ble_peer_id_addr", "02:00:00:65:43:21"),
+#endif
+    binding_authoring_text("table", "[{\"label\":\"CPU\",\"value\":\"42\",\"unit\":\"%\"}]"),
+    binding_authoring_text("extended_table", "[{\"label\":\"Free heap\",\"value\":\"245760\",\"unit\":\"B\"}]"),
+};
+static const BindingAuthoringSpec kHealthAuthoring = {
+    kHealthAuthoringKeys,
+    static_cast<uint8_t>(sizeof(kHealthAuthoringKeys) / sizeof(kHealthAuthoringKeys[0])),
+};
+
 uint8_t health_binding_key_count() {
     return (uint8_t)(sizeof(HEALTH_KEYS) / sizeof(HEALTH_KEYS[0]));
 }
@@ -543,7 +603,8 @@ static bool health_key_known(const char* key) {
 void health_binding_init() {
     if (!binding_template_register("health", health_binding_resolve, health_binding_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    health_binding_key_count, health_binding_key_at, &kHealthDoc})) {
+                                    health_binding_key_count, health_binding_key_at, &kHealthDoc,
+                                    &kHealthAuthoring})) {
         LOGE(TAG, "Failed to register health binding scheme");
     }
 }

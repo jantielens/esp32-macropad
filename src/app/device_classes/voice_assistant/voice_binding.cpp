@@ -76,12 +76,18 @@ const BindingSchemeDoc kVoiceDoc = {
     BINDING_DOC_LIST(kVoiceParams), BINDING_DOC_LIST(kVoiceKeyDocs), BINDING_DOC_LIST(kVoiceExamples),
     nullptr, false, BINDING_DOC_NONE, nullptr, nullptr,
 };
+const BindingAuthoringKey kVoiceAuthoringKeys[] = {
+    binding_authoring_text("status", "ready"),
+    binding_authoring_text("text", "Turn on the kitchen light"),
+};
+const BindingAuthoringSpec kVoiceAuthoring = {BINDING_DOC_LIST(kVoiceAuthoringKeys)};
 } // namespace
 
 void voice_binding_init() {
     binding_template_register("stt", voice_binding_resolve, voice_binding_collect,
                               {1, 1, 1, -1, BINDING_VALIDATION_STANDARD, false,
-                               voice_binding_key_count, voice_binding_key_at, &kVoiceDoc});
+                               voice_binding_key_count, voice_binding_key_at, &kVoiceDoc,
+                               &kVoiceAuthoring});
 }
 
 #endif // IS_VOICE_ASSISTANT

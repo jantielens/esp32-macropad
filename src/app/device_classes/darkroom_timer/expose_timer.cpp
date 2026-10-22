@@ -505,10 +505,10 @@ static const BindingExampleDoc kExposeExamples[] = {
 };
 
 static const BindingReferenceDoc kExposeFormats[] = {
-    {nullptr, "mm:ss", "1:05", "Minutes and seconds (default)", "[expose:remaining;mm:ss]"},
+    {nullptr, "mm:ss", "1:05", "Minutes and seconds", "[expose:remaining;mm:ss]"},
     {nullptr, "mm:ss.d", "1:05.3", "With tenths", "[expose:remaining;mm:ss.d]"},
-    {nullptr, "ss.d", "65.3", "Seconds with tenths", "[expose:remaining;ss.d]"},
-    {nullptr, "ss", "65", "Whole seconds", "[expose:remaining;ss]"},
+    {nullptr, "ss.d", "65.3", "Seconds with tenths", "[expose:remaining;ss.d]", "s", BINDING_AUTHORING_KIND_NUMBER},
+    {nullptr, "ss", "65", "Whole seconds", "[expose:remaining;ss]", "s", BINDING_AUTHORING_KIND_INTEGER},
     {nullptr, "hh:mm:ss", "0:01:05", "With hours", "[expose:remaining;hh:mm:ss]"},
 };
 
@@ -518,11 +518,22 @@ static const BindingSchemeDoc kExposeDoc = {
     "Exposure durations", true, BINDING_DOC_LIST(kExposeFormats),
     "Without a format, time keys show seconds with one decimal.", nullptr,
 };
+static const BindingAuthoringKey kExposeAuthoringKeys[] = {
+    binding_authoring_number("time", "s", "65.3", false),
+    binding_authoring_number("remaining", "s", "42.5", false),
+    binding_authoring_number("elapsed", "s", "22.8", false),
+    binding_authoring_number("effective_time", "s", "62.0", false),
+    binding_authoring_text("state", "running"),
+    binding_authoring_text("relay", "ON"),
+    binding_authoring_number("dry_down", "%", "5.0", false),
+};
+static const BindingAuthoringSpec kExposeAuthoring = {BINDING_DOC_LIST(kExposeAuthoringKeys)};
 
 void expose_timer_init() {
     if (!binding_template_register("expose", expose_resolve, expose_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    expose_binding_key_count, expose_binding_key_at, &kExposeDoc})) {
+                                    expose_binding_key_count, expose_binding_key_at, &kExposeDoc,
+                                    &kExposeAuthoring})) {
         LOGE(TAG, "Failed to register expose binding scheme");
     } else {
         LOGT(TAG, "Expose binding scheme registered");

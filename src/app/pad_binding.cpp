@@ -1,10 +1,12 @@
 #include "pad_binding.h"
 
-#if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#if HAS_DISPLAY
 
 #include "binding_template.h"
 #include "log_manager.h"
+#if HAS_MQTT
 #include "mqtt_sub_store.h"
+#endif
 #include "binding_value.h"
 
 #include <stdio.h>
@@ -315,4 +317,4 @@ void pad_binding_init() {
     }
 }
 
-#endif // HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#endif // HAS_DISPLAY

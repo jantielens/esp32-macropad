@@ -700,12 +700,42 @@ static const BindingExampleDoc kStripExamples[] = {
     {"[strip:table]", "Exact single token for a Table widget."},
 };
 
+static const BindingReferenceDoc kStripFormats[] = {
+    {nullptr, "mm:ss", "1:05", "Phase countdown as minutes and seconds", "[strip:remaining;mm:ss]"},
+    {nullptr, "hh:mm:ss", "0:01:05", "Phase countdown with hours", "[strip:remaining;hh:mm:ss]"},
+    {nullptr, "mm:ss.d", "1:05.3", "Phase countdown with tenths", "[strip:remaining;mm:ss.d]"},
+    {nullptr, "ss", "65", "Phase countdown in whole seconds", "[strip:remaining;ss]", "s", BINDING_AUTHORING_KIND_INTEGER},
+    {nullptr, "ss.d", "65.3", "Phase countdown in seconds with tenths", "[strip:remaining;ss.d]", "s", BINDING_AUTHORING_KIND_NUMBER},
+};
+
 static const BindingSchemeDoc kStripDoc = {
     "Darkroom", "Test strip sequence state, timing, and per-segment times.",
     BINDING_DOC_LIST(kStripParams), BINDING_DOC_LIST(kStripKeyDocs), BINDING_DOC_LIST(kStripExamples),
-    nullptr, false, BINDING_DOC_NONE,
+    "Test strip durations", true, BINDING_DOC_LIST(kStripFormats),
     "Duration formats match the expose scheme.", nullptr,
 };
+static const BindingAuthoringKey kStripAuthoringKeys[] = {
+    binding_authoring_text("state", "exposing"),
+    binding_authoring_integer("segment", "", "3"),
+    binding_authoring_integer("segments", "", "7"),
+    binding_authoring_number("remaining", "s", "4.5", false),
+    binding_authoring_number("elapsed", "s", "1.5", false),
+    binding_authoring_number("seg_inc", "s", "6.0", false),
+    binding_authoring_number("base_time", "s", "12.0", false),
+    binding_authoring_text("step", "1/3", "stops"),
+    binding_authoring_text("relay", "ON"),
+    binding_authoring_text("progress", "3/7"),
+    binding_authoring_text("range", "6.0-24.0", "s"),
+    binding_authoring_number("total_time", "s", "45", false),
+    binding_authoring_integer("countdown", "s", "3"),
+    binding_authoring_integer("pause", "s", "2"),
+    binding_authoring_text("tick", "on"),
+    binding_authoring_text("table", "{\"columns\":[{\"key\":\"seg\"},{\"key\":\"dur\"}],\"rows\":[{\"seg\":\"1\",\"dur\":\"6.0s\"}]}"),
+    binding_authoring_number("seg_time:#", "s", "6.0", false),
+    binding_authoring_number("seg_offset:#", "stops", "-1.0", false),
+    binding_authoring_number("seg_inc:#", "s", "6.0", false),
+};
+static const BindingAuthoringSpec kStripAuthoring = {BINDING_DOC_LIST(kStripAuthoringKeys)};
 // ============================================================================
 // Public API
 // ============================================================================
@@ -859,7 +889,8 @@ void test_strip_init() {
     recalculate_segments();
     if (!binding_template_register("strip", strip_resolve, strip_collect,
                                    {1, 2, 1, 1, BINDING_VALIDATION_STANDARD, false,
-                                    strip_binding_key_count, strip_binding_key_at, &kStripDoc})) {
+                                    strip_binding_key_count, strip_binding_key_at, &kStripDoc,
+                                    &kStripAuthoring})) {
         LOGE(TAG, "Failed to register strip binding scheme");
     } else {
         LOGT(TAG, "Strip binding scheme registered");

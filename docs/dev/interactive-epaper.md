@@ -235,7 +235,9 @@ production integration. Actual task stack watermark, peak internal/PSRAM use,
 latency, and OTA stress need separate measurements; successful functional
 testing alone does not establish them. Capture
 `/api/screenshot?format=png` after the physical refresh settles to inspect the
-CrowPanel's presented pixels.
+presented B/W or grayscale pixels on CrowPanel, Inkplate 6FLICK, and IT8951
+interactive displays. The PNG captures the digital presentation data and does
+not show optical artifacts such as ghosting.
 
 ### Panel Refresh Implementation
 

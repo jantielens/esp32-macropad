@@ -23,6 +23,9 @@
 #include "web_portal_json.h"
 #include "web_mcp.h"
 #include "ha_live.h"
+#if HAS_HA_HISTORY
+#include "ha_stats.h"
+#endif
 
 #if HAS_DISPLAY
 #include "display_manager.h"
@@ -1139,6 +1142,10 @@ void handlePostConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len,
 #if HAS_HA_LIVE
 				if (doc.containsKey("ha_url") || doc.containsKey("ha_token"))
 						ha_live_configure(current_config->ha_url, current_config->ha_token);
+#endif
+#if HAS_HA_HISTORY
+				if (doc.containsKey("ha_url") || doc.containsKey("ha_token"))
+						ha_stats_config_changed();
 #endif
 				LOGI("Portal", "Config saved");
 #if HAS_MCP

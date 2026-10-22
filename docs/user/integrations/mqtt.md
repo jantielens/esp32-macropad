@@ -48,6 +48,16 @@ Publish a small JSON message, for example `{"temperature":22.5}` on
 ```
 
 For a numeric widget, omit formatting/units.
+To generate a single token, choose the wand button beside a bindable field,
+then select **MQTT**. Enter one exact topic and choose **Read topic**, then click its received
+raw payload or a scalar field. Scalar payloads are selected automatically.
+See the [shared binding workflow](../pads/bindings.md#build-a-token-from-a-source)
+for limits, formatting, and temporary inspection cleanup. Inspection does not
+save a topic or send a command; a cached sample is not proof of a fresh message.
+To generate a complete button at an empty canvas position, use the
+[Button Builder](../pads/editing.md#create-a-button-from-a-source) with the
+MQTT provider. It requires a received message and supports display scenarios,
+not command-topic or toggle creation.
 The device subscribes to configured binding topics; use
 [data-source syntax](../pads/data-sources.md#read-mqtt-payloads) for paths,
 formatting, and [fallbacks](../pads/bindings.md#set-a-fallback).

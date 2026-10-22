@@ -10,11 +10,12 @@
 .pad-button-builder[open] { display: flex; flex-direction: column; }
 .pad-button-builder [hidden] { display: none !important; }
 .pad-button-builder header, .pad-button-builder footer { display: flex; flex: 0 0 auto; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 22px; }
-.pad-button-builder header { border-bottom: 1px solid var(--portal-docs-border); }
-.pad-button-builder h2 { margin: 0 0 6px; font-size: 21px; color: var(--portal-docs-heading); }
+.pad-button-builder header { align-items: center; padding: 10px 22px; border-bottom: 1px solid var(--portal-docs-border); }
+.pad-button-builder h2 { margin: 0; font-size: 21px; color: var(--portal-docs-heading); }
 .pad-button-builder header p { margin: 0; color: var(--portal-text-muted); font-size: 13px; }
 .pad-button-builder-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; padding: 18px 22px; }
-.pad-button-builder-target { margin: 0 0 16px; color: var(--portal-text-muted); font-size: 12px; }
+.pad-button-builder[data-stage="source"] [data-bb-create] { display: none; }
+.pad-button-builder[data-stage="design"] .binding-source-picker { display: none; }
 .pad-button-builder .binding-builder-selection { margin-top: 12px; }
 .pad-button-builder .binding-builder-source .btn { flex-shrink: 0; }
 .pad-button-builder-choices { margin: 22px 0; padding: 0; border: 0; }
@@ -37,6 +38,11 @@
 .pad-button-builder-preview .pad-cell-icon { font-size: 64px; }
 .pad-button-builder-sparkline { display: block; width: 100%; height: 70px; flex: 0 1 70px; min-height: 0; }
 .pad-button-builder-preview:has(> .pad-button-builder-sparkline) > .pad-cell-label-center { align-self: stretch; text-align: left; }
+.pad-button-builder-preview-single-history { height: 320px; }
+.pad-button-builder-preview.pad-button-builder-preview-single-history > .pad-cell-label-center {
+  align-self: auto; flex: none; text-align: center;
+}
+.pad-button-builder-preview-single-history > .pad-button-builder-sparkline { height: auto; flex: 1 1 0; }
 .pad-button-builder-source { min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--portal-docs-border); border-radius: 8px; }
 .pad-button-builder-source legend { max-width: 100%; font-size: 13px; overflow-wrap: anywhere; }
 .pad-button-builder-source > code { display: block; font-size: 12px; overflow-wrap: anywhere; }
@@ -49,13 +55,15 @@
 .pad-button-builder-states { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .pad-button-builder-states > span { flex-basis: 100%; }
 .pad-button-builder-states [aria-pressed="true"] { outline: 2px solid var(--portal-primary); outline-offset: 1px; }
-.pad-button-builder footer { align-items: center; border-top: 1px solid var(--portal-docs-border); }
+.pad-button-builder footer { align-items: center; padding: 8px 22px; border-top: 1px solid var(--portal-docs-border); }
+.pad-button-builder footer .btn { min-height: 44px; }
 .pad-button-builder footer > span { font-size: 12px; color: var(--portal-text-muted); }
 .pad-button-builder footer > div { display: flex; gap: 8px; flex-shrink: 0; }
 @media (max-width: 600px) {
   .pad-button-builder header, .pad-button-builder footer, .pad-button-builder-body { padding: 14px; }
+  .pad-button-builder header { padding: 10px 14px; }
   .pad-button-builder-design { grid-template-columns: 1fr; gap: 20px; }
-  .pad-button-builder footer { align-items: stretch; flex-direction: column; gap: 10px; }
+  .pad-button-builder footer { align-items: stretch; flex-direction: column; gap: 6px; padding: 8px 14px; }
   .pad-button-builder footer > div { justify-content: flex-end; }
 }
 @media (max-width: 980px) {

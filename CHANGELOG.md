@@ -1,7 +1,7 @@
 ---
 title: Changelog
 description: Notable changes for ESP32 Macropad releases.
-ms.date: 2026-10-20
+ms.date: 2026-10-22
 ms.topic: reference
 ---
 
@@ -13,6 +13,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.43.0] - 2026-10-22
+
+### Added
+
+* Add shared Binding Builder and Button Builder workflows for Home Assistant,
+  MQTT, and on-device bindings, replacing the Home Assistant-only builders.
+  Share source selection, formatting, fallback controls, and previews while
+  preserving Home Assistant lookup, attributes, history, and light/switch toggles.
+  Inspect exact MQTT topics to select a received raw payload, JSON scalar field,
+  or custom path, with explicit handling for missing messages, empty payloads,
+  zero, and truncated values. Temporary inspection subscriptions are released
+  when no longer needed; wildcard discovery and inferred MQTT control commands
+  are not supported.
+  Search the On-device bindings catalog for the running firmware's registered
+  schemes, keys, descriptions, format presets, and declared examples.
+  Numeric widgets require explicit capability metadata and suitable samples;
+  numeric-looking text does not imply a type or unit.
+  Open Binding Builder with a compact wand control beside bindable fields;
+  **fx** opens the separate Binding Reference, without builder navigation.
+  Color fields expose these controls only inside the color picker.
+  Customize beside the sample and exact generated token, with Copy and
+  Cancel/Insert controls. Complete catalog values go straight to customization,
+  while **Edit value** allows parameter changes. Previews use declared examples
+  or the initial Home Assistant/MQTT reading.
+  Button scenarios follow source capabilities and available widgets; buttons
+  remain ordinary unsaved drafts until **Save Pad**. Manual entry, the binding
+  reference, and existing binding syntax remain available.
+  See [Build a token from a source](docs/user/pads/bindings.md#build-a-token-from-a-source)
+  and [Create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
+* Support up to three readings from different sources in one history button,
+  including live MQTT and on-device values. Automatic shared scales require
+  matching known source units; entered unit text does not convert readings.
+  Local labels and live history also work on display firmware without
+  Home Assistant or MQTT. Single-value buttons use a compact title, current
+  value, and taller trend preview; additional values use a comparison layout.
+  See [Create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
+* Extend lossless presented-frame PNG screenshots to the Inkplate 6FLICK and
+  IT8951 e-paper drivers. Captures preserve the completed B/W or grayscale
+  presentation and orientation, use a single in-flight slot, and return a
+  retryable error when available heap is below the capture reserve.
+
+### Changed
+
+* Extend Sparkline history ranges to 30 days and prefer raw Home Assistant
+  recorded entity states, using Recorder `mean` statistics only for an older
+  uncovered prefix. A shared raw history limit in Sampling controls the split:
+  zero requests raw data for the full window; positive limits reserve raw data
+  for the recent suffix. Incomplete raw responses discard partial samples
+  before a full-window statistics fallback.
+  Raw-history gaps and missing statistics periods remain visible; overlapping
+  initial statistics periods are included. Transient source failures retry
+  without finalizing partial history or overwriting locally collected samples.
+  Widgets reconnect when streams register after the screen is built, without
+  needing to save the pad again.
+  The per-line statistic selector is removed; saved configurations containing
+  that selector may need to be re-created.
+
+### Fixed
+
+* Accept signed Extension packages regardless of their local filename. Stage
+  identity and version from the verified descriptor, retain ABI and target
+  compatibility checks, and return actionable upload errors.
+* Increase the Home Assistant service action's portal input limit from 19 to
+  63 characters to match existing firmware support, allowing longer service
+  names such as `media_previous_track` without increasing fixed RAM usage.
 
 ## [1.42.0] - 2026-10-20
 

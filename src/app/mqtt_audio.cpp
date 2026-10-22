@@ -133,14 +133,14 @@ void mqtt_audio_init() {
 // On MQTT connect
 // ---------------------------------------------------------------------------
 void mqtt_audio_on_connected() {
-    mqtt_manager.subscribe(g_siren_cmd_topic);
-    mqtt_manager.subscribe(g_volume_cmd_topic);
-    mqtt_manager.subscribe(g_beep_topic);
-    mqtt_manager.subscribe(g_beep_double_topic);
-    mqtt_manager.subscribe(g_beep_triple_topic);
-    mqtt_manager.subscribe(g_custom_tone_cmd_topic);
+    mqtt_manager.setSubscriptionOwner(g_siren_cmd_topic, MqttSubscriptionOwner::Audio, true);
+    mqtt_manager.setSubscriptionOwner(g_volume_cmd_topic, MqttSubscriptionOwner::Audio, true);
+    mqtt_manager.setSubscriptionOwner(g_beep_topic, MqttSubscriptionOwner::Audio, true);
+    mqtt_manager.setSubscriptionOwner(g_beep_double_topic, MqttSubscriptionOwner::Audio, true);
+    mqtt_manager.setSubscriptionOwner(g_beep_triple_topic, MqttSubscriptionOwner::Audio, true);
+    mqtt_manager.setSubscriptionOwner(g_custom_tone_cmd_topic, MqttSubscriptionOwner::Audio, true);
 #if HAS_SOUND_PLAYER
-    mqtt_manager.subscribe(g_sound_cmd_topic);
+    mqtt_manager.setSubscriptionOwner(g_sound_cmd_topic, MqttSubscriptionOwner::Audio, true);
 #endif
 
     // Publish initial custom tone state

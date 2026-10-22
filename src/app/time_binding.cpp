@@ -121,7 +121,7 @@ static void time_binding_collect(const char* params, void* user_data) {
 // ============================================================================
 
 static const BindingParamDoc kTimeParams[] = {
-    {"format", "strftime format plus %ms, %cs, %ds, or %ums for uptime."},
+    {"format", "strftime format plus %ms, %cs, %ds, or %ums for uptime.", "%H:%M"},
     {"timezone", "Olson name such as Europe/Amsterdam, or a POSIX TZ string."},
 };
 
@@ -140,8 +140,9 @@ static const BindingReferenceDoc kTimeFormats[] = {
     {nullptr, "%A", "Friday", "Weekday name", "[time:%A]"},
     {nullptr, "%d-%m-%Y", "09-10-2026", "Day-month-year", "[time:%d-%m-%Y]"},
     {nullptr, "%Y-%m-%d", "2026-10-09", "ISO date", "[time:%Y-%m-%d]"},
-    {nullptr, "%V", "41", "ISO week number", "[time:Week %V]"},
-    {nullptr, "%ums", "734512", "Uptime in ms, before NTP sync too", "[time:%ums]"},
+    {nullptr, "%V", "Week 41", "ISO week number", "[time:Week %V]"},
+    {nullptr, "%ums", "734512", "Uptime in ms, before NTP sync too", "[time:%ums]", "ms",
+        BINDING_AUTHORING_KIND_INTEGER},
 };
 
 static const BindingSchemeDoc kTimeDoc = {
@@ -150,11 +151,24 @@ static const BindingSchemeDoc kTimeDoc = {
     "Clock & date", true, BINDING_DOC_LIST(kTimeFormats),
     "Shows --:-- until the clock has synced over NTP. The format cannot contain ';'.", nullptr,
 };
+static const BindingAuthoringKey kTimeAuthoringKeys[] = {
+    binding_authoring_text("%H:%M", "14:05"),
+    binding_authoring_text("%I:%M %p", "02:05 PM"),
+    binding_authoring_text("%H:%M:%S", "14:05:09"),
+    binding_authoring_text("%H:%M:%S.%ms", "14:05:09.347"),
+    binding_authoring_text("%a %d %b", "Fri 09 Oct"),
+    binding_authoring_text("%A", "Friday"),
+    binding_authoring_text("%d-%m-%Y", "09-10-2026"),
+    binding_authoring_text("%Y-%m-%d", "2026-10-09"),
+    binding_authoring_text("Week %V", "Week 41"),
+    binding_authoring_integer("%ums", "ms", "734512"),
+};
+static const BindingAuthoringSpec kTimeAuthoring = {BINDING_DOC_LIST(kTimeAuthoringKeys)};
 
 void time_binding_init() {
     if (!binding_template_register("time", time_binding_resolve, time_binding_collect,
                                    {1, 2, 1, -1, BINDING_VALIDATION_STANDARD, true, nullptr, nullptr,
-                                    &kTimeDoc})) {
+                                    &kTimeDoc, &kTimeAuthoring})) {
         LOGE(TAG, "Failed to register time binding scheme");
     }
 }

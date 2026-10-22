@@ -82,8 +82,8 @@ static void aht10_publish_ha(MqttManager &mqtt) { g_aht10_adapter.publishHaDisco
 
 void register_aht10_sensor(SensorRegistry &registry) {
 	static const SensorField fields[] = {
-		{"temperature", "Temperature in degrees Celsius."},
-		{"humidity", "Relative humidity in percent."},
+		{"temperature", "Temperature in degrees Celsius.", "\xC2\xB0" "C", "21.37"},
+		{"humidity", "Relative humidity in percent.", "%", "54.2"},
 	};
 	SensorCallbacks callbacks = {};
 	callbacks.name = "AHT10";

@@ -29,6 +29,13 @@ escape_c_string() {
     printf '%s' "$s"
 }
 
+trim_whitespace() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
 # ---------------------------------------------------------------------------
 # Chunked-bundle variant enumeration (pure, testable)
 # ---------------------------------------------------------------------------
@@ -273,7 +280,7 @@ discover_bundle_manifests() {    local ext="$1"
         expanded_manifest=$(python3 "$SCRIPT_DIR/widget_manifest.py" --bundle "$bundle_manifest") || return 1
         while IFS= read -r bline || [[ -n "$bline" ]]; do
             bline="${bline%%#*}"                     # strip comments
-            bline="$(echo "$bline" | xargs)"         # trim whitespace
+            bline="$(trim_whitespace "$bline")"
             [[ -z "$bline" ]] && continue
             # Validate that the listed file exists (WEB_DIR or device_classes/*/web/)
             local resolved
@@ -319,7 +326,7 @@ concatenate_bundle() {
     expanded_manifest=$(python3 "$SCRIPT_DIR/widget_manifest.py" --bundle "$manifest") || return 1
     while IFS= read -r bline || [[ -n "$bline" ]]; do
         bline="${bline%%#*}"
-        bline="$(echo "$bline" | xargs)"
+        bline="$(trim_whitespace "$bline")"
         [[ -z "$bline" ]] && continue
         local resolved
         resolved=$(resolve_bundle_path "$bline")
@@ -333,7 +340,8 @@ concatenate_bundle() {
 }
 
 # concatenate_bundle_chunked <manifest> <chunks_array> <flags_array> <names_array>
-#   Parses a .bundle manifest with `# [chunk:NAME]` or `# [chunk:NAME HAS_FLAG]`
+#   Parses a .bundle manifest with `# [chunk:NAME]` or
+#   `# [chunk:NAME HAS_FLAG ...]` markers. All listed flags gate the chunk.
 #   markers and emits one temp file per chunk (in order). Populates:
 #     chunks: list of temp file paths (caller must rm)
 #     flags:  list of feature flag strings (empty for always-on chunks; HAS_* or IS_*)
@@ -361,12 +369,12 @@ concatenate_bundle_chunked() {
     while IFS= read -r bline || [[ -n "$bline" ]]; do
         # Detect [chunk:NAME] or [chunk:NAME HAS_FLAG] markers BEFORE stripping.
         local trimmed
-        trimmed=$(echo "$bline" | xargs)
-        if [[ "$trimmed" =~ ^#[[:space:]]*\[chunk:([a-z0-9_-]+)(([[:space:]]+(HAS|IS)_[A-Z_0-9]+)?)\][[:space:]]*$ ]]; then
+        trimmed=$(trim_whitespace "$bline")
+        if [[ "$trimmed" =~ ^#[[:space:]]*\[chunk:([a-z0-9_-]+)(([[:space:]]+(HAS|IS)_[A-Z_0-9]+)*)\][[:space:]]*$ ]]; then
             local new_name="${BASH_REMATCH[1]}"
             local new_flag_raw="${BASH_REMATCH[2]}"
             local new_flag
-            new_flag=$(echo "$new_flag_raw" | xargs)
+            new_flag=$(trim_whitespace "$new_flag_raw")
             # Flush current chunk
             if [[ $seen_marker -eq 1 ]]; then
                 if [[ $has_content -eq 0 ]]; then
@@ -386,7 +394,7 @@ concatenate_bundle_chunked() {
             continue
         fi
         bline="${bline%%#*}"
-        bline="$(echo "$bline" | xargs)"
+        bline="$(trim_whitespace "$bline")"
         [[ -z "$bline" ]] && continue
         if [[ $seen_marker -eq 0 ]]; then
             echo "  ✗ file '$bline' appears before first [chunk:NAME] marker" >&2
@@ -421,7 +429,7 @@ concatenate_bundle_chunked() {
 bundle_has_chunk_markers() {
     local manifest="$1"
     [[ -f "$manifest" ]] || return 1
-    grep -qE '^[[:space:]]*#[[:space:]]*\[chunk:[a-z0-9_-]+([[:space:]]+(HAS|IS)_[A-Z_0-9]+)?\][[:space:]]*$' "$manifest"
+    grep -qE '^[[:space:]]*#[[:space:]]*\[chunk:[a-z0-9_-]+([[:space:]]+(HAS|IS)_[A-Z_0-9]+)*\][[:space:]]*$' "$manifest"
 }
 
 declare -A JS_SKIP_FILES
@@ -720,7 +728,7 @@ emit_chunked_variants() {
 
     local bundle_name chunks ckey f n_flags n_indep n_classes n_variants
     local if_expr active_flags cflag include
-    local max_variants=256
+    local max_variants=512
     local variant_tmp variant_orig_size variant_gz_size variant_gz vnum
     for bundle_name in "${!bundle_chunks_ref[@]}"; do
         chunks="${bundle_chunks_ref[$bundle_name]}"
@@ -729,10 +737,12 @@ emit_chunked_variants() {
         local -A seen_flags=()
         for ckey in $chunks; do
             f="${chunk_flags_ref[$ckey]:-}"
-            if [[ -n "$f" && -z "${seen_flags[$f]:-}" ]]; then
-                unique_flags+=("$f")
-                seen_flags["$f"]=1
-            fi
+            for f in $f; do
+                if [[ -z "${seen_flags[$f]:-}" ]]; then
+                    unique_flags+=("$f")
+                    seen_flags["$f"]=1
+                fi
+            done
         done
         n_flags=${#unique_flags[@]}
 
@@ -749,9 +759,9 @@ emit_chunked_variants() {
         # model only independent flags expand exponentially, so this cap is
         # far harder to hit than the old 2^N one; it exists to catch a bundle
         # that accidentally accumulates many independent flags.
-        # Five independent feature chunks plus the five mutually exclusive
-        # device classes produce 192 variants. Keep a bounded cap so
-        # a future independent chunk cannot silently explode generated assets.
+        # Six independent feature chunks plus the five mutually exclusive
+        # device classes produce 384 variants. Keep a bounded cap so a future
+        # independent chunk cannot silently explode generated assets.
         if [[ $n_variants -gt $max_variants ]]; then
             echo "  ✗ Bundle $bundle_name expands to $n_variants variants" \
                  "(${n_indep} independent flag(s), ${n_classes} device-class flag(s); max ${max_variants})." >&2
@@ -785,10 +795,14 @@ EOF
                 if [[ -z "$cflag" ]]; then
                     include=1
                 else
-                    # Included iff this variant has the chunk's flag ON.
-                    case " $active_flags " in
-                        *" $cflag "*) include=1 ;;
-                    esac
+                    # Every feature flag listed on the chunk marker must be on.
+                    include=1
+                    for required_flag in $cflag; do
+                        case " $active_flags " in
+                            *" $required_flag "*) ;;
+                            *) include=0; break ;;
+                        esac
+                    done
                 fi
                 if [[ $include -eq 1 ]]; then
                     printf '%s\n' "${contents_ref[$ckey]}" >> "$variant_tmp"

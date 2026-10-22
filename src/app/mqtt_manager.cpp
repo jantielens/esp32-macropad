@@ -13,11 +13,14 @@
 #include "mqtt_camera.h"
 #include "mqtt_notify.h"
 #include "mqtt_triggers.h"
+#include "mqtt_inspection.h"
 #include "power_manager.h"
 #include "power_config.h"
 #include "log_manager.h"
 #include "net_activity.h"
 #include "ota_activity.h"
+#include <esp_heap_caps.h>
+#include <new>
 #if IS_EPAPER_FRAME
 #include "device_classes/epaper_frame/epaper_frame_mqtt.h"
 #endif
@@ -25,6 +28,23 @@
 MqttManager::MqttManager() : _client(_net) {}
 
 void MqttManager::begin(const DeviceConfig *config, const char *friendly_name, const char *sanitized_name) {
+		if (!_subscription_mutex) _subscription_mutex = xSemaphoreCreateMutex();
+		if (!_subscription_mutex) {
+				LOGE("MQTT", "Failed to create subscription mutex");
+		}
+		if (!_subscription_registry) {
+				constexpr bool use_psram = HAS_PSRAM;
+				const uint32_t caps = MALLOC_CAP_8BIT | (use_psram ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL);
+				void* memory = heap_caps_malloc(sizeof(MqttSubscriptionRegistry), caps);
+				if (memory) {
+						_subscription_registry = new (memory) MqttSubscriptionRegistry();
+						LOGD("MQTT", "Subscription registry: %u bytes in %s",
+								(unsigned)sizeof(MqttSubscriptionRegistry), use_psram ? "PSRAM" : "internal RAM");
+				} else {
+						LOGE("MQTT", "Could not allocate subscription registry (%u bytes in %s)",
+								(unsigned)sizeof(MqttSubscriptionRegistry), use_psram ? "PSRAM" : "internal RAM");
+				}
+		}
 		_config = config;
 
 		if (friendly_name) {
@@ -50,6 +70,10 @@ void MqttManager::begin(const DeviceConfig *config, const char *friendly_name, c
 		_subscriptions_initialized = false;
 		_last_reconnect_attempt_ms = 0;
 		_last_health_publish_ms = 0;
+		_connection_available = false;
+#if HAS_DISPLAY
+		mqtt_inspection_init();
+#endif
 }
 
 bool MqttManager::connectAndPublishDiscoveryBlocking(uint32_t timeout_ms) {
@@ -179,12 +203,90 @@ bool MqttManager::subscribe(const char *topic) {
 		if (!topic || !topic[0]) return false;
 		if (!_client.connected()) return false;
 		bool ok = _client.subscribe(topic);
+		if (lockSubscriptions()) {
+				_subscription_registry->recordDirectSubscribe(topic, ok);
+				unlockSubscriptions();
+		}
 		if (ok) {
 				LOGT("MQTT", "Subscribed: %s", topic);
 		} else {
 				LOGW("MQTT", "Subscribe failed: %s", topic);
 		}
 		return ok;
+}
+
+bool MqttManager::setSubscriptionOwner(const char *topic, MqttSubscriptionOwner owner, bool active) {
+		if (!topic || !topic[0]) return false;
+		if (!lockSubscriptions()) {
+				LOGE("MQTT", "Could not lock subscription registry");
+				return false;
+		}
+		const bool result = _subscription_registry->setOwner(topic, owner, active);
+		unlockSubscriptions();
+		if (!result) LOGE("MQTT", "Subscription registry full or topic invalid: %s", topic);
+		return result;
+}
+
+MqttSubscriptionState MqttManager::subscriptionState(const char *topic, MqttSubscriptionOwner owner) {
+		if (!lockSubscriptions()) return MqttSubscriptionState::Missing;
+		const MqttSubscriptionState state = _subscription_registry->state(topic, owner);
+		unlockSubscriptions();
+		return state;
+}
+
+MqttSubscriptionCleanup MqttManager::subscriptionCleanup(const char *topic) {
+		if (!lockSubscriptions()) return MqttSubscriptionCleanup::Pending;
+		const MqttSubscriptionCleanup state = _subscription_registry->cleanup(topic);
+		unlockSubscriptions();
+		return state;
+}
+
+bool MqttManager::lockSubscriptions() {
+		return _subscription_registry && _subscription_mutex &&
+				xSemaphoreTake(_subscription_mutex, pdMS_TO_TICKS(50)) == pdTRUE;
+}
+
+void MqttManager::unlockSubscriptions() {
+		if (_subscription_mutex) xSemaphoreGive(_subscription_mutex);
+}
+
+void MqttManager::processSubscriptionChanges() {
+		if (ota_activity_is_active()) return;
+		if (!_client.connected()) {
+				_connection_available = false;
+				if (lockSubscriptions()) {
+						_subscription_registry->disconnected();
+						unlockSubscriptions();
+				}
+				return;
+		}
+		_connection_available = true;
+
+		for (;;) {
+				MqttSubscriptionOperation operation{};
+				if (!lockSubscriptions()) return;
+				const bool pending = _subscription_registry->nextOperation(millis(), &operation);
+				unlockSubscriptions();
+				if (!pending) return;
+
+				net_activity_mark(NET_CH_MQTT_TX);
+				const bool success = operation.type == MqttSubscriptionOperationType::Subscribe
+						? _client.subscribe(operation.topic)
+						: _client.unsubscribe(operation.topic);
+				if (lockSubscriptions()) {
+						_subscription_registry->complete(operation, success, millis());
+						unlockSubscriptions();
+				}
+				if (!success) {
+						LOGW("MQTT", "%s failed: %s",
+								operation.type == MqttSubscriptionOperationType::Subscribe ? "Subscribe" : "Unsubscribe",
+								operation.topic);
+				} else {
+						LOGT("MQTT", "%s: %s",
+								operation.type == MqttSubscriptionOperationType::Subscribe ? "Subscribed" : "Unsubscribed",
+								operation.topic);
+				}
+		}
 }
 
 void MqttManager::installCallback() {
@@ -336,6 +438,7 @@ bool MqttManager::attemptConnectWithLWT(bool use_lwt, bool unique_client_id) {
 }
 
 void MqttManager::onConnected(bool publish_availability) {
+		_connection_available = true;
 		if (publish_availability) {
 				publishAvailability(true);
 		}
@@ -383,6 +486,7 @@ void MqttManager::onConnected(bool publish_availability) {
 
 		// Start/reset interval timing for periodic health publishes.
 		_last_health_publish_ms = millis();
+		processSubscriptionChanges();
 }
 
 void MqttManager::ensureConnected() {
@@ -410,6 +514,9 @@ void MqttManager::ensureConnected() {
 }
 
 void MqttManager::loop() {
+#if HAS_DISPLAY
+		mqtt_inspection_tick();
+#endif
 		if (ota_activity_is_active()) return;
 		if (!enabled()) return;
 
@@ -418,12 +525,21 @@ void MqttManager::loop() {
 		if (_client.connected()) {
 				_client.loop();
 				publishHealthIfDue();
+				_connection_available = true;
+		} else {
+				_connection_available = false;
 		}
+		processSubscriptionChanges();
 }
 
 void MqttManager::disconnect() {
 		if (_client.connected()) {
 				_client.disconnect();
+		}
+		_connection_available = false;
+		if (lockSubscriptions()) {
+				_subscription_registry->disconnected();
+				unlockSubscriptions();
 		}
 }
 

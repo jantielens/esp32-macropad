@@ -144,7 +144,7 @@ bool epaper_frame_mqtt_publish_state(const EpaperRefreshOutcome& outcome,
 
 		if (timing) doc["wake_loop_ms"] = timing->total_active_ms;
 		if (g_epaper_offline_telemetry.count > 0) {
-				if (!mqtt_manager.subscribe(topic)) return false;
+				if (!mqtt_manager.setSubscriptionOwner(topic, MqttSubscriptionOwner::EpaperFrame, true)) return false;
 				strlcpy(g_offline_state_topic, topic, sizeof(g_offline_state_topic));
 				g_pending_offline_ack_id = esp_random();
 				if (g_pending_offline_ack_id == 0) g_pending_offline_ack_id = 1;
@@ -196,7 +196,7 @@ bool epaper_frame_mqtt_prepare_wake_delivery() {
 		g_pending_wake_ack_session_id = 0;
 		g_pending_wake_ack_id = 0;
 		g_pending_wake_ack_received = false;
-		if (!mqtt_manager.subscribe(g_wake_topic)) {
+		if (!mqtt_manager.setSubscriptionOwner(g_wake_topic, MqttSubscriptionOwner::EpaperFrame, true)) {
 			LOGW("Epaper", "Wake acknowledgement subscription failed");
 			return false;
 		}

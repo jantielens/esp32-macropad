@@ -90,6 +90,99 @@ TEST(parse_rejects_garbage) {
     ASSERT_EQ(ha_stats_parse_iso8601("2024-13-01T00:00:00Z"), 0ULL);
 }
 
+TEST(parse_milliseconds_truncates_fraction_and_applies_offset) {
+    ASSERT_EQ(ha_stats_parse_iso8601_ms("2024-01-01T02:00:00.1239+02:00"),
+              1704067200123ULL);
+    ASSERT_EQ(ha_stats_parse_iso8601_ms("2024-01-01T00:00:00.4Z"),
+              1704067200400ULL);
+}
+
+TEST(parse_milliseconds_rejects_invalid_calendar_and_zone) {
+    ASSERT_EQ(ha_stats_parse_iso8601_ms("2024-02-30T00:00:00Z"), 0ULL);
+    ASSERT_EQ(ha_stats_parse_iso8601_ms("2024-01-01T00:00:00+24:00"), 0ULL);
+    ASSERT_EQ(ha_stats_parse_iso8601_ms("2024-01-01T00:00:00."), 0ULL);
+    ASSERT_EQ(ha_stats_parse_iso8601_ms("2024-01-01T00:00:00Ztail"), 0ULL);
+}
+
+TEST(raw_history_samples_steps_and_unavailability) {
+    float out[5];
+    HaRawHistorySampler sampler;
+    assert(ha_raw_history_sampler_init(&sampler, out, 5, 1000, 1000, 5000));
+    assert(ha_raw_history_sampler_add(&sampler, 1500, 0.0f));
+    assert(ha_raw_history_sampler_add(&sampler, 2500, 2.0f));
+    assert(ha_raw_history_sampler_add(&sampler, 3000, NAN));
+    assert(ha_raw_history_sampler_add(&sampler, 4000, -4.0f));
+    ASSERT_EQ(ha_raw_history_sampler_finish(&sampler), 0u);
+    ASSERT_NEAR(out[0], 0.0f);
+    ASSERT_NEAR(out[1], 2.0f);
+    ASSERT_NAN(out[2]);
+    ASSERT_NEAR(out[3], -4.0f);
+    ASSERT_NEAR(out[4], -4.0f);
+}
+
+TEST(raw_history_seeds_window_from_initial_state) {
+    float out[4];
+    HaRawHistorySampler sampler;
+    assert(ha_raw_history_sampler_init(&sampler, out, 4, 1000, 1000, 4000));
+    assert(ha_raw_history_sampler_add(&sampler, 500, 7.0f));
+    ASSERT_EQ(ha_raw_history_sampler_finish(&sampler), 0u);
+    for (float value : out) ASSERT_NEAR(value, 7.0f);
+}
+
+TEST(raw_history_last_state_in_bucket_wins_and_order_is_checked) {
+    float out[3];
+    HaRawHistorySampler sampler;
+    assert(ha_raw_history_sampler_init(&sampler, out, 3, 1000, 1000, 3000));
+    assert(ha_raw_history_sampler_add(&sampler, 1100, 1.0f));
+    assert(ha_raw_history_sampler_add(&sampler, 1500, 3.0f));
+    assert(ha_raw_history_sampler_add(&sampler, 2000, 4.0f));
+    assert(!ha_raw_history_sampler_add(&sampler, 1900, 5.0f));
+    ASSERT_EQ(ha_raw_history_sampler_finish(&sampler), 0u);
+    ASSERT_NEAR(out[0], 3.0f);
+    ASSERT_NEAR(out[1], 4.0f);
+    ASSERT_NEAR(out[2], 4.0f);
+}
+
+TEST(raw_history_empty_response_leaves_full_window_for_fallback) {
+    float out[3];
+    HaRawHistorySampler sampler;
+    assert(ha_raw_history_sampler_init(&sampler, out, 3, 1000, 1000, 3000));
+    ASSERT_EQ(ha_raw_history_sampler_finish(&sampler), 3u);
+    for (float value : out) ASSERT_NAN(value);
+}
+
+TEST(raw_first_merge_only_fills_the_uncovered_older_prefix) {
+    float raw[] = {NAN, 2.0f, 10.0f, NAN, 20.0f};
+    const float statistics[] = {1.0f, 9.0f, 30.0f, 4.0f, 50.0f};
+    ASSERT_EQ(ha_history_merge_older_statistics(raw, statistics, 5, 2), 1u);
+    ASSERT_NEAR(raw[0], 1.0f);
+    ASSERT_NEAR(raw[1], 2.0f);
+    ASSERT_NEAR(raw[2], 10.0f);
+    ASSERT_NAN(raw[3]);
+    ASSERT_NEAR(raw[4], 20.0f);
+}
+
+TEST(raw_first_merge_uses_all_statistics_when_raw_coverage_is_empty) {
+    float raw[] = {NAN, NAN, NAN};
+    const float statistics[] = {1.0f, NAN, -2.0f};
+    ASSERT_EQ(ha_history_merge_older_statistics(raw, statistics, 3, 3), 2u);
+    ASSERT_NEAR(raw[0], 1.0f);
+    ASSERT_NAN(raw[1]);
+    ASSERT_NEAR(raw[2], -2.0f);
+}
+
+TEST(incomplete_raw_history_is_discarded_before_statistics_fallback) {
+    float raw[] = {1.0f, NAN, 3.0f};
+    const float statistics[] = {10.0f, 20.0f, 30.0f};
+
+    ha_history_discard_incomplete_raw(raw, 3);
+    for (float value : raw) ASSERT_NAN(value);
+    ASSERT_EQ(ha_history_merge_older_statistics(raw, statistics, 3, 3), 3u);
+    ASSERT_NEAR(raw[0], 10.0f);
+    ASSERT_NEAR(raw[1], 20.0f);
+    ASSERT_NEAR(raw[2], 30.0f);
+}
+
 TEST(request_window_preserves_fractional_second_slots) {
     const uint32_t slot_ms = 338823;  // 24 hours / 255 points
     const uint16_t slot_count = 255;
@@ -111,7 +204,7 @@ TEST(request_window_preserves_fractional_second_slots) {
 }
 
 TEST(request_window_supports_1024_slots) {
-    const uint32_t slot_ms = 590625;  // 7 days / 1024 points
+    const uint32_t slot_ms = 2531250;  // 30 days / 1024 points
     const uint16_t slot_count = 1024;
     const uint64_t end_bucket = 3000000;
     uint64_t start_sec = 0;
@@ -120,7 +213,71 @@ TEST(request_window_supports_1024_slots) {
     ha_stats_request_window(slot_ms, slot_count, end_bucket,
                             &start_sec, &end_sec);
 
-    ASSERT_EQ(end_sec - start_sec, 604800u);
+    ASSERT_EQ(end_sec - start_sec, 2592000u);
+}
+
+TEST(statistics_query_includes_overlapping_first_period_and_clips_raw_prefix) {
+    // 26 hours on a five-minute grid starts at 01:15, not on an hour.
+    const auto window = ha_history_statistics_window(300000, 312, 326, 10);
+    ASSERT_EQ(window.period_sec, 3600u);
+    ASSERT_EQ(window.start_sec, 3600u);
+    ASSERT_EQ(window.end_sec, 7500u);  // Raw coverage starts at 02:05.
+    const HaStatPoint points[] = {{3600, 10}, {7200, 20}};
+    float statistics[312];
+    ha_stats_resample(points, 2, 300000, 3600000, 326, statistics, 312);
+    float raw[312];
+    HaRawHistorySampler sampler;
+    assert(ha_raw_history_sampler_init(&sampler, raw, 312, 300000, 4500000, 98100000));
+    assert(ha_raw_history_sampler_add(&sampler, 7500000, 41));
+    assert(ha_raw_history_sampler_add(&sampler, 7800000, NAN));
+    const auto cutoff = ha_raw_history_sampler_finish(&sampler);
+    ASSERT_EQ(cutoff, 10u);
+    ha_history_merge_older_statistics(raw, statistics, 312, cutoff);
+    ASSERT_NEAR(raw[0], 10);
+    ASSERT_NEAR(raw[8], 10);
+    ASSERT_NEAR(raw[9], 20);
+    ASSERT_NEAR(raw[10], 41);
+    ASSERT_NAN(raw[11]);
+}
+
+TEST(stitching_preserves_missing_and_explicitly_invalid_statistics_periods) {
+    const HaStatPoint points[] = {{3600, 10}, {10800, 30}, {14400, NAN}};
+    float statistics[7];
+    ha_stats_resample(points, 3, 3600000, 3600000, 7, statistics, 7);
+    float raw[] = {NAN, NAN, NAN, NAN, NAN, 60, NAN};
+    ha_history_merge_older_statistics(raw, statistics, 7, 5);
+    ASSERT_NEAR(raw[0], 10);
+    ASSERT_NAN(raw[1]);
+    ASSERT_NEAR(raw[2], 30);
+    ASSERT_NAN(raw[3]);
+    ASSERT_NAN(raw[4]);
+    ASSERT_NEAR(raw[5], 60);
+    ASSERT_NAN(raw[6]);
+}
+
+TEST(transient_sources_require_retry_even_with_usable_or_empty_other_source) {
+    using Source = HaHistorySourceOutcome;
+    using Fetch = HaHistoryFetchOutcome;
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Success, Source::Retryable, true, true),
+              Fetch::PartialRetryable);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Success, Source::Retryable, true, false),
+              Fetch::RetryableFailure);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Retryable, Source::Success, true, true),
+              Fetch::PartialRetryable);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Retryable, Source::Success, true, false),
+              Fetch::RetryableFailure);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Permanent, Source::Retryable, true, false),
+              Fetch::RetryableFailure);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Success, Source::Success, true, false),
+              Fetch::Success);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Success, Source::Permanent, true, true),
+              Fetch::Success);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Success, Source::Retryable, false, true),
+              Fetch::Success);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::Success, Source::Cancelled, true, true),
+              Fetch::Cancelled);
+    ASSERT_EQ(ha_history_fetch_outcome(Source::AuthFailure, Source::Success, true, true),
+              Fetch::PermanentFailure);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,29 +308,30 @@ TEST(resample_supports_slot_index_above_255) {
     HaStatPoint point = { 1800 * 600, 42.0f };
     float out[1024];
 
-    size_t filled = ha_stats_resample(&point, 1, 600000, RECORDER_5_MIN_MS, 2000, out, 1024);
+    size_t filled = ha_stats_resample(&point, 1, 600000, RECORDER_HOUR_MS, 2000, out, 1024);
 
-    ASSERT_EQ(filled, 201u);
+    ASSERT_EQ(filled, 6u);
     ASSERT_NEAR(out[823], 42.0f);
-    ASSERT_NEAR(out[1023], 42.0f);
+    ASSERT_NEAR(out[828], 42.0f);
+    ASSERT_NAN(out[829]);
+    ASSERT_NAN(out[1023]);
 }
 
-TEST(resample_holds_values_across_missing_periods) {
+TEST(resample_preserves_missing_periods) {
     HaStatPoint pts[2] = {
         { 1000 * 300, 10.0f },
         { 1003 * 300, 40.0f },
     };
     float out[4];
     size_t filled = ha_stats_resample(pts, 2, SLOT_MS, RECORDER_5_MIN_MS, 1003, out, 4);
-    ASSERT_EQ(filled, 4u);
+    ASSERT_EQ(filled, 2u);
     ASSERT_NEAR(out[0], 10.0f);
-    ASSERT_NEAR(out[1], 10.0f);
-    ASSERT_NEAR(out[2], 10.0f);
+    ASSERT_NAN(out[1]);
+    ASSERT_NAN(out[2]);
     ASSERT_NEAR(out[3], 40.0f);
 }
 
-TEST(resample_interpolates_consecutive_coarse_history_on_fine_grid) {
-    // Two five-minute Recorder values become a smooth one-minute transition.
+TEST(resample_limits_five_minute_values_to_their_own_periods) {
     HaStatPoint pts[2] = {
         { 1000 * 60, 10.0f },
         { 1005 * 60, 20.0f },
@@ -182,14 +340,11 @@ TEST(resample_interpolates_consecutive_coarse_history_on_fine_grid) {
     size_t filled = ha_stats_resample(pts, 2, 60000, RECORDER_5_MIN_MS, 1009, out, 10);
     ASSERT_EQ(filled, 10u);
     ASSERT_NEAR(out[0], 10.0f);
-    ASSERT_NEAR(out[1], 12.0f);
-    ASSERT_NEAR(out[2], 14.0f);
-    ASSERT_NEAR(out[3], 16.0f);
-    ASSERT_NEAR(out[4], 18.0f);
+    for (size_t i = 1; i < 5; i++) ASSERT_NEAR(out[i], 10.0f);
     for (size_t i = 5; i < 10; i++) ASSERT_NEAR(out[i], 20.0f);
 }
 
-TEST(resample_interpolates_hourly_history_on_fine_grid) {
+TEST(resample_limits_hourly_values_to_their_own_periods) {
     HaStatPoint pts[2] = {
         { 1000 * 900, 10.0f },
         { 1004 * 900, 50.0f },
@@ -198,9 +353,7 @@ TEST(resample_interpolates_hourly_history_on_fine_grid) {
     size_t filled = ha_stats_resample(pts, 2, 900000, RECORDER_HOUR_MS, 1007, out, 8);
     ASSERT_EQ(filled, 8u);
     ASSERT_NEAR(out[0], 10.0f);
-    ASSERT_NEAR(out[1], 20.0f);
-    ASSERT_NEAR(out[2], 30.0f);
-    ASSERT_NEAR(out[3], 40.0f);
+    for (size_t i = 1; i < 4; i++) ASSERT_NEAR(out[i], 10.0f);
     for (size_t i = 4; i < 8; i++) ASSERT_NEAR(out[i], 50.0f);
 }
 
@@ -231,7 +384,7 @@ TEST(resample_last_point_in_bucket_wins) {
     HaStatPoint pts[3] = {
         { 3600, 1.0f },
         { 3900, 2.0f },
-        { 4200, 3.0f },
+        { 6900, 3.0f },
     };
     float out[1];
     size_t filled = ha_stats_resample(pts, 3, 3600000, RECORDER_5_MIN_MS, 1, out, 1);  // 1 h slots
@@ -389,17 +542,31 @@ int main() {
     RUN(parse_applies_negative_offset);
     RUN(parse_handles_leap_day);
     RUN(parse_rejects_garbage);
+    RUN(parse_milliseconds_truncates_fraction_and_applies_offset);
+    RUN(parse_milliseconds_rejects_invalid_calendar_and_zone);
+
+    printf("\nRaw history:\n");
+    RUN(raw_history_samples_steps_and_unavailability);
+    RUN(raw_history_seeds_window_from_initial_state);
+    RUN(raw_history_last_state_in_bucket_wins_and_order_is_checked);
+    RUN(raw_history_empty_response_leaves_full_window_for_fallback);
+    RUN(raw_first_merge_only_fills_the_uncovered_older_prefix);
+    RUN(raw_first_merge_uses_all_statistics_when_raw_coverage_is_empty);
+    RUN(incomplete_raw_history_is_discarded_before_statistics_fallback);
 
     printf("\nRequest window:\n");
     RUN(request_window_preserves_fractional_second_slots);
     RUN(request_window_supports_1024_slots);
+    RUN(statistics_query_includes_overlapping_first_period_and_clips_raw_prefix);
+    RUN(stitching_preserves_missing_and_explicitly_invalid_statistics_periods);
+    RUN(transient_sources_require_retry_even_with_usable_or_empty_other_source);
 
     printf("\nResampling:\n");
     RUN(resample_aligns_points_to_buckets);
     RUN(resample_supports_slot_index_above_255);
-    RUN(resample_holds_values_across_missing_periods);
-    RUN(resample_interpolates_consecutive_coarse_history_on_fine_grid);
-    RUN(resample_interpolates_hourly_history_on_fine_grid);
+    RUN(resample_preserves_missing_periods);
+    RUN(resample_limits_five_minute_values_to_their_own_periods);
+    RUN(resample_limits_hourly_values_to_their_own_periods);
     RUN(resample_keeps_leading_history_without_value_empty);
     RUN(resample_ignores_points_outside_window);
     RUN(resample_last_point_in_bucket_wins);

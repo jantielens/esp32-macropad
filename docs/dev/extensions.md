@@ -40,11 +40,14 @@ for the required full-USB-flash migration from its earlier layout.
 Inkplate 6FLICK Interactive has one 32 KiB usable slot in a 40 KiB raw
 partition. It does not support the other two slots.
 
-Upload a signed package named `<extension-id>@<package-semver>-p4.ext` or
-`<extension-id>@<package-semver>-s3.ext`, or
-`<extension-id>@<package-semver>-esp32.ext`. The ID uses lowercase letters, digits,
-and hyphens. A package contains an ELF followed by its 64-byte signature. P4
-ELFs are relocation-free. Xtensa ELFs may contain only `R_XTENSA_RELATIVE`
+Upload any signed `.ext` package built for the device. Package build tools
+produce names such as `<extension-id>@<package-semver>-p4.ext`,
+`<extension-id>@<package-semver>-s3.ext`, and
+`<extension-id>@<package-semver>-esp32.ext`, but the local filename does not
+determine package identity or compatibility. The verified embedded descriptor
+provides the Extension ID and version, while its target ABI must match the
+device. A package contains an ELF followed by its 64-byte signature. P4 ELFs
+are relocation-free. Xtensa ELFs may contain only `R_XTENSA_RELATIVE`
 relocations, which the loader applies while creating the in-memory image. The
 portal stages the upload on the configured storage backend; the next boot
 verifies the target ABI and commits it into the selected extension slot.
@@ -187,8 +190,8 @@ not scaled. The setting does not change the Extension ABI, so existing packages
 can use it without rebuilding. If a host allocation fails during creation, the
 button shows a memory-specific message instead of "Extension unavailable".
 
-The loader requires the descriptor, then verifies its ID and package version
-against the filename as well as its ABI and target ABI against firmware. Package
+The loader requires the descriptor and verifies its ID, package version, ABI,
+and target ABI against firmware. The upload filename is ignored. Package
 semantic versioning is independent from the firmware ABI: use
 `flight-radar@1.2.0-p4.elf`, `flight-radar@1.2.0-s3.elf`, or
 `flight-radar@1.2.0-esp32.elf`, not an ABI-derived

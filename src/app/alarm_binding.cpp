@@ -116,9 +116,47 @@ static const BindingSchemeDoc kAlarmDoc = {
     nullptr, false, BINDING_DOC_NONE,
     "Countdowns are empty, not 0, when unavailable; check the matching _available key.", nullptr,
 };
+static const BindingAuthoringKey kAlarmAuthoringKeys[] = {
+    binding_authoring_text("1_time", "07:30"),
+    binding_authoring_text("1_enabled", "ON"),
+    binding_authoring_text("1_ready", "ON"),
+    binding_authoring_text("1_state", "idle"),
+    binding_authoring_integer("active_id", "", "1"),
+    binding_authoring_integer("1_hour", "h", "7"),
+    binding_authoring_integer("1_minute", "min", "30"),
+    binding_authoring_integer("1_minutes", "min", "450"),
+    binding_authoring_integer("1_weekdays", "", "62"),
+    binding_authoring_text("1_day_#", "ON"),
+    binding_authoring_text("1_repeat", "weekly"),
+    binding_authoring_integer("1_snooze_minutes", "min", "9"),
+    binding_authoring_integer("1_auto_dismiss_minutes", "min", "30"),
+    binding_authoring_integer("1_once_epoch", "s", "1791360000"),
+    binding_authoring_text("1_once_local", "2026-10-07 07:30"),
+    binding_authoring_text("1_once_available", "ON"),
+    binding_authoring_integer("1_next_epoch", "s", "1791360000"),
+    binding_authoring_text("1_next_local", "2026-10-07 07:30"),
+    binding_authoring_integer("1_next_seconds", "s", "3600"),
+    binding_authoring_text("1_next_available", "ON"),
+    binding_authoring_integer("1_snooze_seconds", "s", "540"),
+    binding_authoring_text("1_snooze_available", "ON"),
+    binding_authoring_integer("1_dismiss_seconds", "s", "1800"),
+    binding_authoring_text("1_dismiss_available", "ON"),
+    binding_authoring_integer("1_next_ring_seconds", "s", "540"),
+    binding_authoring_text("1_next_ring_available", "ON"),
+    binding_authoring_text("1_ota_deferred", "OFF"),
+    binding_authoring_text("1_storage_error", "OFF"),
+    binding_authoring_text("1_hook_error", "OFF"),
+    binding_authoring_text("1_command_error", "OFF"),
+    binding_authoring_text("1_command_message", "Alarm enabled"),
+    binding_authoring_integer("1_pending_commands", "", "0"),
+    binding_authoring_integer("1_completed_commands", "", "12"),
+    binding_authoring_text("1_save_state", "saved"),
+};
+static const BindingAuthoringSpec kAlarmAuthoring = {BINDING_DOC_LIST(kAlarmAuthoringKeys)};
 void alarm_binding_init() {
     binding_template_register("alarm", alarm_resolve, nullptr,
-        {1, 1, 1, 1, BINDING_VALIDATION_STANDARD, false, alarm_key_count, alarm_key_at, &kAlarmDoc});
+        {1, 1, 1, 1, BINDING_VALIDATION_STANDARD, false, alarm_key_count, alarm_key_at,
+         &kAlarmDoc, &kAlarmAuthoring});
 }
 #else
 void alarm_binding_init() {}

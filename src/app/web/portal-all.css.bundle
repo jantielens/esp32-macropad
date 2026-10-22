@@ -13,12 +13,10 @@ portal-all.css
 
 # [chunk:pad HAS_DISPLAY]
 portal_binding_help.css
-portal_dialog_appearance.css
-@widgets
-
-# [chunk:ha_bindings HAS_HA_LIVE]
 portal_binding_builder.css
 portal_button_builder.css
+portal_dialog_appearance.css
+@widgets
 
 # [chunk:shutter IS_SHUTTER_TESTER]
 portal_shutter.css

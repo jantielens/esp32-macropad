@@ -1,5 +1,6 @@
 #include "inkplate6flick_epaper_driver.h"
 #include "monochrome_render.h"
+#include "../presented_frame.h"
 
 #include "../board_config.h"
 #include "../log_manager.h"
@@ -255,27 +256,33 @@ void Inkplate6FlickEpaperDriver::present() {
 		const uint16_t fullUpdateThreshold = settings.epaper_full_refresh_threshold;
 		const bool scheduledFullRefresh = usesBwMode() && fullUpdateThreshold > 0 &&
 				bwPartialUpdatesSinceFull >= fullUpdateThreshold;
+		const bool hadPresentedFrame = hasPresentedFrame;
 		memcpy(presentedFramebuffer, framebuffer(), framebufferBytes());
 		setPresentationFramebuffer();
+		hasPresentedFrame = false;
 		pendingChanges = false;
 		xSemaphoreGive(framebufferMutex);
 
 		const uint32_t refreshStartMs = millis();
-		if (forceFullRefresh || scheduledFullRefresh) {
-			display->display();
-			refreshCount++;
-			bwPartialUpdatesSinceFull = 0;
-		} else if (usesBwMode() && hasPresentedFrame) {
-			display->partialUpdate(false);
-			partialUpdateCount++;
-			bwPartialUpdatesSinceFull++;
-		} else {
-			display->display();
-			refreshCount++;
+		const bool refreshSuccess = display->einkOn();
+		if (refreshSuccess) {
+				if (forceFullRefresh || scheduledFullRefresh) {
+						display->display();
+						refreshCount++;
+						bwPartialUpdatesSinceFull = 0;
+				} else if (usesBwMode() && hadPresentedFrame) {
+						display->partialUpdate(false);
+						partialUpdateCount++;
+						bwPartialUpdatesSinceFull++;
+				} else {
+						display->display();
+						refreshCount++;
+				}
 		}
 		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
-		hasPresentedFrame = true;
-		lastRefreshMs = millis();
+		hasPresentedFrame = refreshSuccess;
+		if (!refreshSuccess) pendingChanges = true;
+		if (refreshSuccess) lastRefreshMs = millis();
 		const uint32_t completed_ms = lastRefreshMs;
 		const uint32_t full_count = refreshCount;
 		const uint32_t partial_count = partialUpdateCount;
@@ -292,6 +299,57 @@ void Inkplate6FlickEpaperDriver::present() {
 			     (unsigned long)full_count, (unsigned long)partial_count, (unsigned long)skipped_count,
 			     (unsigned long)(completed_ms - refreshStartMs));
 		}
+}
+
+bool Inkplate6FlickEpaperDriver::getPresentedFrameInfo(PresentedFrameInfo& info) const {
+		if (!initialized || !framebufferMutex) return false;
+		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+		const bool available = hasPresentedFrame;
+		if (available) {
+				info.width = rotation & 1 ? DISPLAY_HEIGHT : DISPLAY_WIDTH;
+				info.height = rotation & 1 ? DISPLAY_WIDTH : DISPLAY_HEIGHT;
+				info.bitDepth = usesBwMode() ? 1 : 4;
+		}
+		xSemaphoreGive(framebufferMutex);
+		return available;
+}
+
+bool Inkplate6FlickEpaperDriver::copyPresentedFrame(uint8_t* pixels, size_t length) {
+		PresentedFrameInfo info;
+		if (!getPresentedFrameInfo(info) || !pixels ||
+				length < presented_frame_bytes(info.width, info.height, info.bitDepth)) return false;
+		xSemaphoreTake(framebufferMutex, portMAX_DELAY);
+		if (!hasPresentedFrame) {
+				xSemaphoreGive(framebufferMutex);
+				return false;
+		}
+
+		const size_t rowBytes = presented_frame_row_bytes(info.width, info.bitDepth);
+		memset(pixels, 0, rowBytes * info.height);
+		for (uint16_t row = 0; row < info.height; ++row) {
+				for (uint16_t column = 0; column < info.width; ++column) {
+						uint16_t nativeX = 0, nativeY = 0;
+						if (!presented_frame_native_coords(DISPLAY_WIDTH, DISPLAY_HEIGHT, rotation,
+								column, row, &nativeX, &nativeY)) {
+								xSemaphoreGive(framebufferMutex);
+								return false;
+						}
+						uint8_t gray;
+						if (usesBwMode()) {
+								const size_t offset = size_t(nativeY) * (DISPLAY_WIDTH / 8) + nativeX / 8;
+								const bool black = presentedFramebuffer[offset] & (1U << (nativeX & 7));
+								gray = black ? 0 : 1;
+						} else {
+								const size_t offset = size_t(nativeY) * (DISPLAY_WIDTH / 2) + nativeX / 2;
+								const uint8_t packed = presentedFramebuffer[offset];
+								const uint8_t level = nativeX & 1 ? packed & 0x0F : packed >> 4;
+								gray = uint8_t((level * 15 + 3) / 7);
+						}
+						presented_frame_write_gray(pixels, rowBytes, column, row, info.bitDepth, gray);
+				}
+		}
+		xSemaphoreGive(framebufferMutex);
+		return true;
 }
 
 bool Inkplate6FlickEpaperDriver::requestFullRefresh() {

@@ -82,14 +82,18 @@ async function copyTextToClipboard(text) {
     temp.setAttribute('readonly', '');
     temp.style.position = 'absolute';
     temp.style.left = '-9999px';
-    document.body.appendChild(temp);
+    var active = document.activeElement;
+    // A modal dialog makes controls outside it inert, including clipboard helpers.
+    var parent = active?.closest('dialog[open]') || document.body;
+    parent.appendChild(temp);
     try {
         temp.select();
         if (!document.execCommand('copy')) {
             throw new Error('Browser rejected clipboard copy');
         }
     } finally {
-        document.body.removeChild(temp);
+        parent.removeChild(temp);
+        if (active?.isConnected) active.focus();
     }
 }
 

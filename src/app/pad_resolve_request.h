@@ -2,7 +2,7 @@
 
 #include "board_config.h"
 
-#if HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#if HAS_DISPLAY
 
 #include <ArduinoJson.h>
 
@@ -44,4 +44,4 @@ enum PadResolveStatus {
 PadResolveStatus pad_resolve_request(JsonObjectConst args, JsonObject result,
                                      const char** err_msg);
 
-#endif // HAS_DISPLAY && (HAS_MQTT || HAS_HA_LIVE)
+#endif // HAS_DISPLAY

@@ -29,8 +29,8 @@ void mqtt_camera_init() {
 }
 
 void mqtt_camera_on_connected() {
-	mqtt_manager.subscribe(s_latest_topic);
-	mqtt_manager.subscribe(s_roll_topic);
+	mqtt_manager.setSubscriptionOwner(s_latest_topic, MqttSubscriptionOwner::Camera, true);
+	mqtt_manager.setSubscriptionOwner(s_roll_topic, MqttSubscriptionOwner::Camera, true);
 }
 
 void mqtt_camera_on_message(const char* topic, const uint8_t*, unsigned int) {

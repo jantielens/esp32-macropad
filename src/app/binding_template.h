@@ -70,6 +70,12 @@ enum BindingValidationMode : uint8_t {
 struct BindingParamDoc {
     const char* name;
     const char* desc;
+    const char* default_value;
+
+    constexpr BindingParamDoc(const char* param_name = nullptr,
+                              const char* description = nullptr,
+                              const char* default_text = nullptr)
+        : name(param_name), desc(description), default_value(default_text) {}
 };
 
 struct BindingKeyDoc {
@@ -83,12 +89,30 @@ struct BindingExampleDoc {
     const char* desc;
 };
 
+enum BindingAuthoringValueKind : uint8_t {
+    BINDING_AUTHORING_KIND_INTEGER,
+    BINDING_AUTHORING_KIND_TEXT,
+    BINDING_AUTHORING_KIND_NUMBER,
+};
+
 struct BindingReferenceDoc {
     const char* group;    // optional
     const char* syntax;
     const char* sample;   // optional example output
     const char* desc;
     const char* example;  // optional complete token
+    const char* unit;  // nullptr = unknown, "" = unitless
+    BindingAuthoringValueKind kind;
+
+    constexpr BindingReferenceDoc(const char* reference_group = nullptr,
+                                  const char* reference_syntax = nullptr,
+                                  const char* sample_output = nullptr,
+                                  const char* description = nullptr,
+                                  const char* example_token = nullptr,
+                                  const char* source_unit = "",
+                                  BindingAuthoringValueKind value_kind = BINDING_AUTHORING_KIND_TEXT)
+        : group(reference_group), syntax(reference_syntax), sample(sample_output),
+          desc(description), example(example_token), unit(source_unit), kind(value_kind) {}
 };
 
 // Returns nullptr when the scheme can resolve, else a short reason.
@@ -111,6 +135,71 @@ struct BindingSchemeDoc {
     binding_status_fn status;        // optional
 };
 
+enum BindingAuthoringFormat : uint8_t {
+    BINDING_AUTHORING_FORMAT_RAW = 1 << 0,
+    BINDING_AUTHORING_FORMAT_INTEGER = 1 << 1,
+    BINDING_AUTHORING_FORMAT_NUMBER = 1 << 2,
+};
+
+enum BindingAuthoringCapability : uint8_t {
+    BINDING_AUTHORING_CAP_DISPLAY = 1 << 0,
+    BINDING_AUTHORING_CAP_NUMERIC_WIDGET = 1 << 1,
+    BINDING_AUTHORING_CAP_LIVE_SAMPLING = 1 << 2,
+};
+
+struct BindingAuthoringKey {
+    const char* key;
+    BindingAuthoringValueKind kind;
+    const char* unit;  // nullptr = unknown, "" = known to have no unit
+    uint8_t formats;
+    const char* integer_format;
+    uint8_t capabilities;
+    bool read_only;
+    const char* example_value;
+
+    constexpr BindingAuthoringKey(const char* binding_key = nullptr,
+                                  BindingAuthoringValueKind value_kind = BINDING_AUTHORING_KIND_INTEGER,
+                                  const char* source_unit = nullptr,
+                                  uint8_t supported_formats = 0,
+                                  const char* integer_format_text = nullptr,
+                                  uint8_t supported_capabilities = 0,
+                                  bool is_read_only = false,
+                                  const char* example = nullptr)
+        : key(binding_key), kind(value_kind), unit(source_unit), formats(supported_formats),
+          integer_format(integer_format_text), capabilities(supported_capabilities),
+          read_only(is_read_only), example_value(example) {}
+};
+
+constexpr BindingAuthoringKey binding_authoring_text(
+    const char* key, const char* example, const char* unit = "") {
+    return {key, BINDING_AUTHORING_KIND_TEXT, unit, BINDING_AUTHORING_FORMAT_RAW,
+            nullptr, BINDING_AUTHORING_CAP_DISPLAY, true, example};
+}
+
+constexpr BindingAuthoringKey binding_authoring_integer(
+    const char* key, const char* unit, const char* example, const char* format = "") {
+    return {key, BINDING_AUTHORING_KIND_INTEGER, unit,
+            BINDING_AUTHORING_FORMAT_RAW | BINDING_AUTHORING_FORMAT_INTEGER, format,
+            BINDING_AUTHORING_CAP_DISPLAY | BINDING_AUTHORING_CAP_NUMERIC_WIDGET |
+                BINDING_AUTHORING_CAP_LIVE_SAMPLING,
+            true, example};
+}
+
+constexpr BindingAuthoringKey binding_authoring_number(
+    const char* key, const char* unit, const char* example, bool formatted = true) {
+    return {key, BINDING_AUTHORING_KIND_NUMBER, unit,
+            static_cast<uint8_t>(BINDING_AUTHORING_FORMAT_RAW |
+                (formatted ? BINDING_AUTHORING_FORMAT_NUMBER : 0)), nullptr,
+            BINDING_AUTHORING_CAP_DISPLAY | BINDING_AUTHORING_CAP_NUMERIC_WIDGET |
+                BINDING_AUTHORING_CAP_LIVE_SAMPLING,
+            true, example};
+}
+
+struct BindingAuthoringSpec {
+    const BindingAuthoringKey* keys;
+    uint8_t key_count;
+};
+
 #define BINDING_DOC_LIST(array) (array), (uint8_t)(sizeof(array) / sizeof((array)[0]))
 #define BINDING_DOC_NONE nullptr, 0
 
@@ -127,6 +216,19 @@ struct BindingSchemeSpec {
     binding_key_count_fn key_count;
     binding_key_at_fn key_at;
     const BindingSchemeDoc* doc;
+    const BindingAuthoringSpec* authoring;
+
+    constexpr BindingSchemeSpec(uint8_t minimum_params = 0, uint8_t maximum_params = 0,
+                                uint8_t widget_params = 0, int8_t format_index = 0,
+                                BindingValidationMode validation = BINDING_VALIDATION_STANDARD,
+                                bool is_free_form = false,
+                                binding_key_count_fn count_keys = nullptr,
+                                binding_key_at_fn key_at_index = nullptr,
+                                const BindingSchemeDoc* documentation = nullptr,
+                                const BindingAuthoringSpec* authoring_spec = nullptr)
+        : min_params(minimum_params), max_params(maximum_params), widget_max_params(widget_params),
+          format_param(format_index), validation_mode(validation), free_form(is_free_form),
+          key_count(count_keys), key_at(key_at_index), doc(documentation), authoring(authoring_spec) {}
 };
 
 // Register a scheme resolver and its complete metadata contract. The metadata

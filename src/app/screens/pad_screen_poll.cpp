@@ -21,9 +21,9 @@
 // ============================================================================
 
 void PadScreen::pollMqttBindings(bool refreshPassive) {
-#if HAS_MQTT || HAS_HA_LIVE || HAS_IMAGE_LIBRARY
+#if HAS_DISPLAY
     char resolved[BINDING_TEMPLATE_MAX_LEN];
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
     for (uint16_t i = 0; refreshPassive && i < bindingCount; i++) {
         RuntimeLabelBinding& rb = bindings[i];
         if (!rb.active || !rb.label) continue;
@@ -133,7 +133,7 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
     }
 #endif
 #endif
-#if !HAS_MQTT && !HAS_HA_LIVE && !HAS_IMAGE_LIBRARY
+#if !HAS_DISPLAY
     (void)refreshPassive;
 #endif
 }
@@ -144,7 +144,7 @@ void PadScreen::pollMqttBindings(bool refreshPassive) {
 
 void PadScreen::pollColorBindings() {
     for (uint8_t index = 0; index < tileCount; ++index) fill_style_poll(tiles[index].fill_style);
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
     if (colorBindingCount == 0) return;
 
     char resolved[BINDING_TEMPLATE_MAX_LEN];
@@ -267,7 +267,7 @@ void PadScreen::pollColorBindings() {
 // ============================================================================
 
 void PadScreen::pollNumberBindings() {
-#if HAS_MQTT || HAS_HA_LIVE
+#if HAS_DISPLAY
     char resolved[BINDING_TEMPLATE_MAX_LEN];
     for (uint16_t i = 0; i < numberBindingCount; i++) {
         RuntimeNumberBinding& nb = numberBindings[i];

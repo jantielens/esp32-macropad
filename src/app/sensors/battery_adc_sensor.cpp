@@ -98,8 +98,8 @@ static void battery_adc_publish_ha(MqttManager &mqtt) { g_battery_adc_adapter.pu
 
 void register_battery_adc_sensor(SensorRegistry &registry) {
 	static const SensorField fields[] = {
-		{"battery_voltage", "Battery voltage in volts."},
-		{"battery_percentage", "Estimated battery charge in percent."},
+		{"battery_voltage", "Battery voltage in volts.", "V", "3.85"},
+		{"battery_percentage", "Estimated battery charge in percent.", "%", "73"},
 	};
 	SensorCallbacks callbacks = {};
 	callbacks.name = "Battery ADC";

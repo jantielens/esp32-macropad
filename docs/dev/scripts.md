@@ -223,6 +223,7 @@ build. The server serves the production shell, feature-selected JavaScript
 bundle, styles, and rendered fragments with deterministic in-memory API fixtures.
 JavaScript and CSS both follow their production bundle manifests and profile
 feature gates, including widget-owned stylesheets.
+Binding dialogs belong to the shell; rendered fragments do not duplicate them.
 
 **Usage:**
 
@@ -256,6 +257,13 @@ http://localhost:8765/?profile=jc3248w535&fragment=screensaver
 * The server binds to `127.0.0.1`. Mock writes are process-local and never contact a device.
 * Pad edits, defaults, icon uploads, brightness, and screen commands are retained in memory.
 * Fixtures include populated, empty, widget, template, inherited, dense 8x8, and input-control pads.
+* In Button Builder, use MQTT topic `sensors/room/state` (or `mock/received`)
+  for JSON with `temperature: 21.37`, `active: true`, and `nested.value: "ok"`.
+  Use `mock/zero` for a scalar numeric value.
+* Home Assistant is preconfigured in the P4 profile. Search for `living` or enter
+  `sensor.living_room_temperature` for `21.37` degrees Celsius; `light.kitchen`
+  has state `on` and attribute `attributes.brightness` set to `128`.
+  These lookups are fixtures and do not contact a broker or HA server.
 * Binding previews use fixed sample values, not MQTT, Home Assistant, expressions, or device execution. Icon font height is approximate.
 
 Use `--scenario load-error`, `--scenario save-error`, or

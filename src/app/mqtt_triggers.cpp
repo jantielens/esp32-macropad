@@ -26,6 +26,7 @@ static_assert(MAX_MQTT_TRIGGERS <= 32, "MAX_MQTT_TRIGGERS must be <= 32 (pending
 // RAM cache (PSRAM preferred, SRAM fallback). nullptr if allocation failed
 // (feature then degrades to a no-op).
 static MqttTriggerConfig* g_triggers = nullptr;
+static char g_registered_topics[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN] = {};
 
 // Mutex guarding the g_triggers array. The save path (load_from_flash) runs on
 // the async web-server task and mutates the cache, while the MQTT message
@@ -156,9 +157,7 @@ bool mqtt_triggers_save_raw(const uint8_t* json, size_t len) {
 
     // Reload the RAM cache and (re)subscribe so changes take effect immediately.
     load_from_flash();
-    if (mqtt_manager.connected()) {
-        mqtt_triggers_on_connected();
-    }
+    mqtt_triggers_on_connected();
     storage_publish_usage(false);
 
     LOGI(TAG, "Saved (%u bytes)", (unsigned)len);
@@ -170,12 +169,31 @@ bool mqtt_triggers_save_raw(const uint8_t* json, size_t len) {
 // ---------------------------------------------------------------------------
 void mqtt_triggers_on_connected() {
     if (!g_triggers) return;
-    // Subscribe every configured topic on each (re)connect. mqtt_sub_store's
-    // subscribe_all() only restores pad-binding topics, so triggers must
-    // re-subscribe explicitly here (mirrors mqtt_audio_on_connected()).
+    char current[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN] = {};
+    char previous[MAX_MQTT_TRIGGERS][CONFIG_MQTT_TOPIC_MAX_LEN] = {};
+    triggers_lock();
     for (uint8_t i = 0; i < MAX_MQTT_TRIGGERS; i++) {
-        if (g_triggers[i].topic[0]) {
-            mqtt_manager.subscribe(g_triggers[i].topic);
+        strlcpy(current[i], g_triggers[i].topic, sizeof(current[i]));
+        strlcpy(previous[i], g_registered_topics[i], sizeof(previous[i]));
+        strlcpy(g_registered_topics[i], current[i], sizeof(g_registered_topics[i]));
+    }
+    triggers_unlock();
+
+    for (uint8_t i = 0; i < MAX_MQTT_TRIGGERS; i++) {
+        if (previous[i][0]) {
+            bool retained = false;
+            for (uint8_t j = 0; j < MAX_MQTT_TRIGGERS; j++) {
+                if (current[j][0] && strcmp(previous[i], current[j]) == 0) {
+                    retained = true;
+                    break;
+                }
+            }
+            if (!retained) {
+                mqtt_manager.setSubscriptionOwner(previous[i], MqttSubscriptionOwner::Triggers, false);
+            }
+        }
+        if (current[i][0]) {
+            mqtt_manager.setSubscriptionOwner(current[i], MqttSubscriptionOwner::Triggers, true);
         }
     }
 }

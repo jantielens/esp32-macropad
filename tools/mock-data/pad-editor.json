@@ -73,7 +73,10 @@
   "binding_values": {
     "[mqtt:home/living/temperature]": "21.5 C", "[mqtt:home/living/humidity]": "46",
     "[mqtt:home/living/light]": "ON", "[mqtt:home/power]": "420", "[mqtt:home/solar]": "780",
-    "[mqtt:home/setpoint]": "22.0"
+    "[mqtt:home/setpoint]": "22.0",
+    "[health:cpu]": "23", "[health:rssi]": "-55", "[health:uptime]": "3600",
+    "[health:heap_free]": "184320", "[health:wifi_connected]": "ON",
+    "[health:wifi_ssid]": "?"
   },
   "sounds": ["/sounds/chime.mp3", "/sounds/notification.mp3"],
   "extensions": {"slots": [{"slot": 0, "id": "word-clock", "title": "Word Clock", "version": "1.0.0", "installed": true, "enabled": true, "loaded": true, "capacity": 262144, "size": 24576}]},

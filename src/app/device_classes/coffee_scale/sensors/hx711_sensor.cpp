@@ -263,8 +263,8 @@ static void hx711_sample(JsonObject &doc) {
 
 void register_hx711_sensor(SensorRegistry &registry) {
     static const SensorField fields[] = {
-        {"weight_g", "Weight in grams."},
-        {"flow_rate", "Flow rate in grams per second."},
+        {"weight_g", "Weight in grams.", "g", "250.5"},
+        {"flow_rate", "Flow rate in grams per second.", "g/s", "4.2"},
     };
     SensorCallbacks callbacks = {};
     callbacks.name        = "HX711";
