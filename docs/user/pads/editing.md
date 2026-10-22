@@ -80,7 +80,7 @@ For a single field rather than a complete button, use the
    into the button and are not requested again during customization.
 5. Under **What should this button do?**, choose **Show a value**,
    **Show a bar**, **Show a gauge**, or **Show a value with history** for a numeric reading, or
-   **Toggle an entity** for a light or switch. Adjust the title and available controls.
+   **Toggle an entity** for a light or switch, or **Show a toggle switch** to add an interactive switch widget. Adjust the title and available controls.
    Value buttons show the name, formatted value, and unit in three labels.
    Bar buttons show the title, a single bar, and the formatted value with its
    unit below. Set a minimum and maximum, orientation, formatting, and unit.
@@ -138,6 +138,10 @@ For a single field rather than a complete button, use the
    Lights default to a lightbulb icon; switches default to a switch icon.
    Select an on/off color badge to open the shared color picker. Choose a palette
    color or enter a custom hex color, then choose **Apply**.
+   **Show a toggle switch** adds a switch widget bound to the entity state. Its
+   on and off positions send separate turn-on and turn-off actions. This is
+   distinct from **Toggle an entity**, which uses a single toggle action on a
+   regular button.
 6. Check the approximate **Preview**, then choose **Create button**.
    Preview uses fetched data rather than continuous updates. The bar preview
    reflects the chosen range and orientation. The gauge preview reflects its

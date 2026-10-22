@@ -33,6 +33,7 @@
 .pad-button-builder-preview-panel { padding: 14px; border: 1px solid var(--portal-docs-border); border-radius: 8px; }
 .pad-button-builder-preview-panel > p:last-child { margin-bottom: 0; }
 .pad-button-builder-preview { position: relative; width: 100%; height: 190px; gap: 8px; margin: 0 0 12px; cursor: default; }
+.pad-button-builder-preview .pad-widget-marker { display: none; }
 .pad-button-builder-preview .pad-cell-label-top, .pad-button-builder-preview .pad-cell-label-bottom { font-size: 15px; }
 .pad-button-builder-preview .pad-cell-label-center { font-size: 36px; }
 .pad-button-builder-preview .pad-cell-icon { font-size: 64px; }
@@ -48,6 +49,10 @@
 .pad-button-builder-source > code { display: block; font-size: 12px; overflow-wrap: anywhere; }
 .pad-button-builder-source-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .pad-button-builder-gauge { display: block; width: 100%; height: 125px; flex: 0 1 125px; min-height: 0; }
+.pad-button-builder-toggle { position: relative; width: 104px; height: 52px; flex: 0 0 52px; }
+.pad-button-builder-toggle-track { position: absolute; inset: 0; border-radius: 26px; }
+.pad-button-builder-toggle-knob { position: absolute; top: 6px; left: 6px; width: 40px; height: 40px; border-radius: 50%; transition: transform 120ms ease; }
+.pad-button-builder-toggle[data-state="on"] .pad-button-builder-toggle-knob { transform: translateX(52px); }
 .pad-button-builder-bar { display: flex; flex: 1; min-height: 0; width: 100%; align-items: center; justify-content: center; }
 .pad-button-builder-bar-track { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 4px; }
 .pad-button-builder-bar-fill { position: absolute; left: 0; bottom: var(--bar-start); width: 100%; height: var(--bar-size); }

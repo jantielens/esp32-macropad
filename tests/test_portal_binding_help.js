@@ -351,6 +351,7 @@ delete context.testHelpSchemes;
     const builders = vm.runInContext('padButtonBuilders', context);
     const valueBuilder = builders.find(builder => builder.id === 'value');
     const toggleBuilder = builders.find(builder => builder.id === 'toggle');
+    const toggleWidgetBuilder = builders.find(builder => builder.id === 'toggle_widget');
     const barBuilder = builders.find(builder => builder.id === 'bar');
     const gaugeBuilder = builders.find(builder => builder.id === 'gauge');
     const historyBuilder = builders.find(builder => builder.id === 'history');
@@ -485,10 +486,24 @@ delete context.testHelpSchemes;
     assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedSwitch.actions)), [
         { type: 'ha_service', entity_id: 'switch.desk_fan', service: 'toggle' }
     ]);
+    const toggleRuntime = { widget_catalog: [{ type: 'toggle' }] };
+    assert.strictEqual(toggleWidgetBuilder.available(makeDraft(temperature), toggleRuntime), false);
+    assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), { widget_catalog: [] }), false);
+    assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), toggleRuntime), true);
+    const generatedToggleWidget = context.padButtonBuilderBuild(buildSession(light, toggleWidgetBuilder));
+    assert.strictEqual(generatedToggleWidget.widget_type, 'toggle');
+    assert.strictEqual(generatedToggleWidget.widget_data_binding, '[ha:light.kitchen]');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedToggleWidget.actions)), [
+        { type: 'ha_service', entity_id: 'light.kitchen', service: 'turn_on' }
+    ]);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(generatedToggleWidget.lp_actions)), [
+        { type: 'ha_service', entity_id: 'light.kitchen', service: 'turn_off' }
+    ]);
     const catalogEntry = context.actionEditorCatalogEntry;
     context.actionEditorCatalogEntry = () => null;
     assert.strictEqual(toggleBuilder.available(makeDraft(switchDetail)), false);
     assert.strictEqual(toggleBuilder.available(makeDraft(light)), false);
+    assert.strictEqual(toggleWidgetBuilder.available(makeDraft(light), toggleRuntime), false);
     context.actionEditorCatalogEntry = catalogEntry;
     const previewColors = ['on', 'off', 'unavailable'].map(previewState =>
         toggleBuilder.preview({ ...lightSession.draft, previewState }).fg_color);

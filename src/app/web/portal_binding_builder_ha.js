@@ -527,6 +527,17 @@ const haButtonBuilderProvider = {
             fg_color: '[expr:' + state + '=="on"?"' + options.on + '":"' + options.off + '"|#EF6B73]',
             actions: [{ type: 'ha_service', entity_id: entityId, service: 'toggle' }]
         };
+    },
+    buildToggleWidget(candidate) {
+        const entityId = candidate.reference.detail.entity_id;
+        if (!candidate.capabilities.control) throw new Error('Choose a controllable Home Assistant light or switch.');
+        if (entityId.length >= 48) throw new Error('Entity IDs must be shorter than 48 characters for service actions.');
+        return {
+            widget_type: 'toggle',
+            widget_data_binding: this.buildBinding(candidate, { format: '' }),
+            actions: [{ type: 'ha_service', entity_id: entityId, service: 'turn_on' }],
+            lp_actions: [{ type: 'ha_service', entity_id: entityId, service: 'turn_off' }]
+        };
     }
 };
 

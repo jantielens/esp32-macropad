@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Configure read-only mode, track/knob colors, switch size, and icon position,
   with automatic placement around existing labels and binding-aware styling.
   See [Toggle switch](docs/user/widgets/README.md#toggle-switch).
+* Add a **Show a toggle switch** Button Builder template for controllable Home
+  Assistant lights and switches. Generated buttons bind to entity state and use
+  separate turn-on and turn-off actions. See
+  [Create a button from a source](docs/user/pads/editing.md#create-a-button-from-a-source).
 * Add `abs`, `min`, `max`, `clamp`, `round`, `floor`, and `ceil` to expression
   bindings. Document the functions in the portal Binding Reference and MCP
   pad-authoring capabilities.
