@@ -84,6 +84,31 @@ static void test_unary() {
     check_ok("--5",              "5",      "double neg");
 }
 
+static void test_numeric_functions() {
+    printf("--- Numeric functions ---\n");
+    check_ok("abs(-2.5)",                  "2.5",  "absolute value");
+    check_ok("min(3, -1)",                 "-1",   "minimum");
+    check_ok("max(-2, 4)",                 "4",    "maximum");
+    check_ok("clamp(5, 0, 3)",              "3",    "clamp high");
+    check_ok("clamp(-1, 0, 3)",             "0",    "clamp low");
+    check_ok("clamp(2, 0, 3)",              "2",    "clamp in range");
+    check_ok("round(2.5)",                  "3",    "round half away from zero");
+    check_ok("round(-2.5)",                 "-3",   "round negative half away from zero");
+    check_ok("floor(-1.2)",                 "-2",   "floor negative value");
+    check_ok("ceil(-1.2)",                  "-1",   "ceil negative value");
+    check_ok("max(abs(-4), clamp(8, 0, 3))", "4",    "nested functions");
+}
+
+static void test_numeric_function_errors() {
+    printf("--- Numeric function errors ---\n");
+    check_err("abs(\"text\")",       "ERR:", "non-numeric unary argument");
+    check_err("abs(1, 2)",          "ERR:", "unary function extra argument");
+    check_err("min(1)",             "ERR:", "binary function missing argument");
+    check_err("max(1, 2, 3)",       "ERR:", "binary function extra argument");
+    check_err("clamp(1, 0, 2, 3)",  "ERR:", "clamp extra argument");
+    check_err("clamp(1, 3, 0)",     "ERR:", "clamp reversed bounds");
+}
+
 static void test_comparisons() {
     printf("--- Comparisons ---\n");
     check_ok("5 > 3",           "1",      "gt true");
@@ -310,6 +335,8 @@ int main() {
     test_float_arithmetic();
     test_operator_precedence();
     test_unary();
+    test_numeric_functions();
+    test_numeric_function_errors();
     test_comparisons();
     test_ternary();
     test_string_equality();

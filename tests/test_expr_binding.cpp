@@ -317,6 +317,8 @@ static void test_cross_binding_math() {
     g_mqtt_values["grid/power;watts"]  = "2000";
     check("[expr:[mqtt:solar/power;watts] - [mqtt:grid/power;watts]]",
           "-1500", "importing from grid");
+    check("[expr:abs([mqtt:solar/power;watts] - [mqtt:grid/power;watts])]",
+        "1500", "absolute importing power");
 }
 
 static void test_health_binding_in_expr() {

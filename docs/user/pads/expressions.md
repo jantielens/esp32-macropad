@@ -26,7 +26,7 @@ An unresolved inner value makes the expression unavailable.
 Use decimal numbers or double-quoted strings. String equality is case-sensitive.
 Arithmetic and ordered comparisons require numbers; `+` is not string
 concatenation. This is not JavaScript: do not assume `&&`, `||`, assignments,
-or arbitrary functions are accepted.
+or functions beyond those listed here are accepted.
 Expressions support up to 12 nested groups/unary/conditional/function levels.
 
 ```text
@@ -35,9 +35,32 @@ Expressions support up to 12 nested groups/unary/conditional/function levels.
 [expr:[mqtt:device;state]=="ON"?"Running":"Stopped"]
 ```
 
+## Use numeric functions
+
+Numeric functions accept numbers and return numbers. `round()` rounds halfway
+values away from zero. `floor()` rounds toward negative infinity, and `ceil()`
+rounds toward positive infinity. `clamp()` requires `low` to be less than or
+equal to `high`.
+
+| Function | Result |
+| -------- | ------ |
+| `abs(x)` | Absolute value |
+| `min(a, b)` | Smaller of two values |
+| `max(a, b)` | Larger of two values |
+| `clamp(x, low, high)` | `x` limited to the inclusive range from `low` to `high` |
+| `round(x)` | Nearest integer, with halfway values away from zero |
+| `floor(x)` | Integer at or below `x` |
+| `ceil(x)` | Integer at or above `x` |
+
+```text
+[expr:abs([mqtt:solar;power]-[mqtt:grid;power]);%.0f W]
+[expr:clamp([mqtt:room;humidity],0,100);%.0f%%]
+[expr:floor([mqtt:room;temp])]
+```
+
 ## Map thresholds to colors
 
-The supported function is:
+Use `threshold()` to map a number to a color:
 
 ```text
 threshold(value, color0, threshold1, color1, ..., thresholdN, colorN)

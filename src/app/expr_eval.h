@@ -14,9 +14,11 @@
 //   Grouping:     ( expr )
 //   Strings:      "quoted text" (valid in ternary branches and == / != comparisons)
 //   Unary minus:  -expr
-//   Functions:    threshold(value, color0, t1, color1, ..., tN, colorN)
-//                   Maps a numeric value to a color string via ascending thresholds.
-//                   Returns color_i where value < t_(i+1), or the last color.
+//   Numeric functions: abs(x), min(a, b), max(a, b), clamp(x, low, high),
+//                       round(x), floor(x), ceil(x)
+//   Threshold function: threshold(value, color0, t1, color1, ..., tN, colorN)
+//                       Maps a number to a color string via ascending thresholds.
+//                       Returns the color for the matched range, or the last color.
 //
 // Output is written to `out` (max out_len bytes, null-terminated).
 // Returns true on success, false on error (out contains "ERR:xxx").

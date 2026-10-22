@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* Add `abs`, `min`, `max`, `clamp`, `round`, `floor`, and `ceil` to expression
+  bindings. Document the functions in the portal Binding Reference and MCP
+  pad-authoring capabilities.
+
 ## [1.43.0] - 2026-10-22
 
 ### Added
