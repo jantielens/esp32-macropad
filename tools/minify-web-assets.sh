@@ -29,6 +29,13 @@ escape_c_string() {
     printf '%s' "$s"
 }
 
+trim_whitespace() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
 # ---------------------------------------------------------------------------
 # Chunked-bundle variant enumeration (pure, testable)
 # ---------------------------------------------------------------------------
@@ -273,7 +280,7 @@ discover_bundle_manifests() {    local ext="$1"
         expanded_manifest=$(python3 "$SCRIPT_DIR/widget_manifest.py" --bundle "$bundle_manifest") || return 1
         while IFS= read -r bline || [[ -n "$bline" ]]; do
             bline="${bline%%#*}"                     # strip comments
-            bline="$(echo "$bline" | xargs)"         # trim whitespace
+            bline="$(trim_whitespace "$bline")"
             [[ -z "$bline" ]] && continue
             # Validate that the listed file exists (WEB_DIR or device_classes/*/web/)
             local resolved
@@ -319,7 +326,7 @@ concatenate_bundle() {
     expanded_manifest=$(python3 "$SCRIPT_DIR/widget_manifest.py" --bundle "$manifest") || return 1
     while IFS= read -r bline || [[ -n "$bline" ]]; do
         bline="${bline%%#*}"
-        bline="$(echo "$bline" | xargs)"
+        bline="$(trim_whitespace "$bline")"
         [[ -z "$bline" ]] && continue
         local resolved
         resolved=$(resolve_bundle_path "$bline")
@@ -362,12 +369,12 @@ concatenate_bundle_chunked() {
     while IFS= read -r bline || [[ -n "$bline" ]]; do
         # Detect [chunk:NAME] or [chunk:NAME HAS_FLAG] markers BEFORE stripping.
         local trimmed
-        trimmed=$(echo "$bline" | xargs)
+        trimmed=$(trim_whitespace "$bline")
         if [[ "$trimmed" =~ ^#[[:space:]]*\[chunk:([a-z0-9_-]+)(([[:space:]]+(HAS|IS)_[A-Z_0-9]+)*)\][[:space:]]*$ ]]; then
             local new_name="${BASH_REMATCH[1]}"
             local new_flag_raw="${BASH_REMATCH[2]}"
             local new_flag
-            new_flag=$(echo "$new_flag_raw" | xargs)
+            new_flag=$(trim_whitespace "$new_flag_raw")
             # Flush current chunk
             if [[ $seen_marker -eq 1 ]]; then
                 if [[ $has_content -eq 0 ]]; then
@@ -387,7 +394,7 @@ concatenate_bundle_chunked() {
             continue
         fi
         bline="${bline%%#*}"
-        bline="$(echo "$bline" | xargs)"
+        bline="$(trim_whitespace "$bline")"
         [[ -z "$bline" ]] && continue
         if [[ $seen_marker -eq 0 ]]; then
             echo "  ✗ file '$bline' appears before first [chunk:NAME] marker" >&2

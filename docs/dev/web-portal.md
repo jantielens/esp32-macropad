@@ -3786,6 +3786,9 @@ links one selected gzip stream rather than all generated variants.
 
 The minifier supports `.bundle` manifests for both JavaScript and CSS. A bundle manifest lists source files that should be concatenated into a single asset at build time, reducing HTTP requests, route handlers, and flash usage on the ESP32.
 
+Manifest parsing trims leading and trailing whitespace without interpreting
+shell quoting or escapes. Comments may contain apostrophes and quotation marks.
+
 The same three shared functions (`discover_bundle_manifests`, `filter_bundle_fragments`, `concatenate_bundle`) handle both JS and CSS bundles in `tools/minify-web-assets.sh`.
 
 #### Shared JavaScript Bundle

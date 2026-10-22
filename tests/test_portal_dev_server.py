@@ -88,7 +88,7 @@ class PortalDevServerTest(unittest.TestCase):
             other_bundle = self.request("/portal.js", profile=profile, raw=True)[1]
             self.assertEqual("function showBindingHelp(" in other_bundle, display)
             self.assertNotIn("function haBindingBuilderHTML(", other_bundle)
-            self.assertEqual("function bindingBuilderHTML(" in other_bundle, display)
+            self.assertEqual("function bindingSourcePickerHTML(" in other_bundle, display)
             self.assertEqual("const mqttBindingProvider =" in other_bundle, display)
             other_styles = self.request("/portal-all.css", profile=profile, raw=True)[1]
             self.assertEqual(".binding-docs-overlay" in other_styles, display)

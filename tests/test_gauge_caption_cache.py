@@ -25,6 +25,7 @@ harness = r'''
 #include <cstring>
 #include <string>
 #define HAS_MQTT 1
+#define HAS_DISPLAY 1
 #define CONFIG_BINDABLE_SHORT_LEN 64
 #define LV_OBJ_FLAG_HIDDEN 1
 #define strlcpy test_strlcpy

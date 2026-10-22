@@ -23,6 +23,7 @@ harness = r'''
 #include <cstdint>
 #include <sys/time.h>
 #define HAS_MQTT 1
+#define HAS_DISPLAY 1
 #define HAS_IMAGE_LIBRARY 1
 #define HAS_IMAGE_FETCH 1
 #define millis test_millis

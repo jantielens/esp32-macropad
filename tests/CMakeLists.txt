@@ -305,8 +305,11 @@ foreach(profile display_only history)
     target_link_libraries(test_data_stream_${profile} PRIVATE host_lvgl m)
 endforeach()
 
-add_host_gtest(test_fill_draw test_fill_draw.cpp)
+add_host_gtest(test_fill_draw test_fill_draw.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/binding_template.cpp stubs.cpp)
 target_include_directories(test_fill_draw BEFORE PRIVATE ${HOST_ARDUINOJSON_DIR})
+target_compile_options(test_fill_draw PRIVATE
+    "SHELL:-include ${PROJECT_SOURCE_DIR}/tests/log_manager.h")
 target_link_libraries(test_fill_draw PRIVATE host_lvgl m)
 
 add_host_legacy_test(test_ota_activity

@@ -223,6 +223,7 @@ build. The server serves the production shell, feature-selected JavaScript
 bundle, styles, and rendered fragments with deterministic in-memory API fixtures.
 JavaScript and CSS both follow their production bundle manifests and profile
 feature gates, including widget-owned stylesheets.
+Binding dialogs belong to the shell; rendered fragments do not duplicate them.
 
 **Usage:**
 

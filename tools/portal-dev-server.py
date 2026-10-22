@@ -509,7 +509,8 @@ class PortalHandler(SimpleHTTPRequestHandler):
             for frag in candidates:
                 if frag.is_file():
                     html = render(frag, APP_WEB_DIR, "esp32-macropad", "ESP32 Macropad (Local Mock)",
-                                  "dev-mock", self._profile() != "esp32-p4-lcd4b")
+                                  "dev-mock", self._profile() != "esp32-p4-lcd4b",
+                                  has_binding_help=False)
                     self._serve_bytes(html.encode("utf-8"), "text/html; charset=utf-8")
                     return
             self.send_error(404, f"Fragment not found: {fragment}")
