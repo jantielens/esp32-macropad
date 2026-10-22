@@ -260,7 +260,9 @@ bool id_in_use(uint32_t id) {
 }
 
 void remember_expired(uint32_t id, bool cleanup_failed) {
-    g_runtime->expired[g_runtime->expired_next] = {id, cleanup_failed};
+    ExpiredHandle& handle = g_runtime->expired[g_runtime->expired_next];
+    handle.id = id;
+    handle.cleanup_failed = cleanup_failed;
     g_runtime->expired_next = static_cast<uint8_t>((g_runtime->expired_next + 1) % kExpiredHandleCapacity);
 }
 
