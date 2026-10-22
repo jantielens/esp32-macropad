@@ -17,7 +17,7 @@ static inline bool psram_available() {
 #endif
 }
 
-// Internal helper: allocate PSRAM stack + internal TCB, create task.
+// Allocate the selected stack and an internal TCB, then create the task.
 static bool create_task_impl(
 		TaskFunction_t taskFunction,
 		const char* name,

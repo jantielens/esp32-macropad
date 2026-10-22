@@ -50,6 +50,7 @@ python3 tools/generate-board-driver-table.py --update-drivers-readme
 | jc4880p433-nau7802 | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-sd | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
 | jc4880p433-shutter | ST7701_DSI | ST7701 | DSI | 480×800 | 0 | GT911 |  |
+| m5stack-core2 | TFT_ESPI | ILI9342 | SPI | 320×240 | 1 | FT6336 | inversion on |
 | m5stack-stopwatch | ARDUINO_GFX_CO5300 | CO5300 | QSPI | 466×466 | 0 | CST820B |  |
 | reterminal-e1003-frame | ? | ? | ? | ?×? | ? | none |  |
 | reterminal-e1003-interactive | RETERMINAL_E1003 | IT8951 | SPI | 1872×1404 | 1 | GT911 |  |

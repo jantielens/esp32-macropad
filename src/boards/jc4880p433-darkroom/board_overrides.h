@@ -24,9 +24,13 @@
 // Dedicated secondary I2C bus so the metering sensor never contends with the
 // GT911 touch controller / ES8311 codec on bus 0.
 #define HAS_SENSOR_TSL2591 true
+// I2C bus used by the TSL2591 light sensor.
 #define TSL2591_I2C_BUS       1
+// SDA pin on the TSL2591's dedicated I2C bus.
 #define TSL2591_I2C_SDA       52
+// SCL pin on the TSL2591's dedicated I2C bus.
 #define TSL2591_I2C_SCL       51
+// Clock frequency for the TSL2591 I2C bus, in hertz.
 #define TSL2591_I2C_FREQUENCY 400000
 
 // ============================================================================

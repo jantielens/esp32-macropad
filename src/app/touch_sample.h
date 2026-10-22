@@ -9,6 +9,7 @@ struct TouchSample {
     bool pressed = false;
     uint16_t horizontal = 0;
     uint16_t vertical = 0;
+    int8_t virtual_button = -1;
 };
 
 static constexpr uint8_t TOUCH_CONTACT_CAPACITY = 5;
@@ -27,6 +28,7 @@ struct TouchContact {
 struct TouchSnapshot {
     TouchReadStatus status = TouchReadStatus::Fresh;
     uint8_t count = 0;
+    int8_t virtual_button = -1;
     TouchContact contacts[TOUCH_CONTACT_CAPACITY]{};
 };
 
@@ -67,7 +69,10 @@ public:
         const bool accept = state_.update(snapshot.status, !snapshot.count, now);
         if (accept && snapshot.status == TouchReadStatus::Fresh) last_ = snapshot;
         canceled = state_.newly_timed_out;
-        if (state_.timed_out) last_.count = 0;
+        if (state_.timed_out) {
+            last_.count = 0;
+            last_.virtual_button = -1;
+        }
         TouchSnapshot result = last_;
         result.status = snapshot.status;
         return result;

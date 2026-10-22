@@ -211,6 +211,27 @@ for flags, expected in policy_cases:
     )
 print(f"PASS: {len(policy_cases)} target, PSRAM, and override combinations")
 
+core2 = "m5stack-core2"
+subprocess.run(
+    ["c++", "-std=c++11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only",
+     "-x", "c++", "-", "-I", str(root), "-I", str(root / "src/boards" / core2),
+     "-DBOARD_HAS_OVERRIDE", "-DBOARD_HAS_PSRAM", "-DCONFIG_IDF_TARGET_ESP32=1"],
+    input='''#include "src/app/board_config.h"
+static_assert(HAS_DISPLAY && HAS_TOUCH && HAS_AUDIO && !HAS_AUDIO_INPUT, "Core2 display, touch, and output audio profile required");
+static_assert(!HAS_MCP, "Core2 MCP server must be disabled");
+static_assert(!HAS_REMOTE_LOG, "Core2 remote logging must remain disabled");
+static_assert(DISPLAY_WIDTH == 320 && DISPLAY_HEIGHT == 240 && DISPLAY_ROTATION == 1, "Core2 landscape dimensions required");
+static_assert(TOUCH_DRIVER == TOUCH_DRIVER_FT6336, "FT6336 driver required");
+static_assert(AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_NS4168, "NS4168 output required");
+static_assert(NUM_HW_BUTTONS == 3, "Three touch-zone buttons required");
+static_assert(HW_BUTTON_DEFS[0].pin == HW_BUTTON_VIRTUAL_PIN && HW_BUTTON_DEFS[2].pin == HW_BUTTON_VIRTUAL_PIN, "Touch-zone buttons must not claim GPIOs");
+''', text=True, check=True,
+)
+core2_metadata = json.loads((root / "src/boards" / core2 / "metadata.json").read_text())
+assert core2_metadata["flash_mb"] == 16 and core2_metadata["psram_mb"] == 8
+assert "audio" in core2_metadata["capabilities"]
+print("PASS: m5stack-core2 hardware and memory profile")
+
 with tempfile.TemporaryDirectory() as directory:
     pathlib.Path(directory, "sdkconfig.h").write_text("")
     for target in ("ESP32", "ESP32S3", "ESP32C3", "ESP32C6", "ESP32P4", None):

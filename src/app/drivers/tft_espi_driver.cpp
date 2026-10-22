@@ -1,5 +1,8 @@
 #include "tft_espi_driver.h"
 #include "../log_manager.h"
+#if defined(BACKLIGHT_VIA_PMIC) && BACKLIGHT_VIA_PMIC
+#include BOARD_HARDWARE_HEADER
+#endif
 
 TFT_eSPI_Driver::TFT_eSPI_Driver() : currentBrightness(100) {
 		// TFT_eSPI constructor already called
@@ -10,7 +13,7 @@ void TFT_eSPI_Driver::init() {
 		LOGT("TFT_eSPI", "Initializing");
 		tft.init();
 		
-		#if HAS_BACKLIGHT
+		#if HAS_BACKLIGHT && (!defined(BACKLIGHT_VIA_PMIC) || !BACKLIGHT_VIA_PMIC)
 		// Initialize PWM for backlight control
 		LOGT("TFT_eSPI", "Configuring PWM backlight control on pin %d", TFT_BL);
 		
@@ -54,7 +57,11 @@ void TFT_eSPI_Driver::setBacklight(bool on) {
 }
 
 void TFT_eSPI_Driver::setBacklightBrightness(uint8_t brightness) {
-		#if HAS_BACKLIGHT
+		#if defined(BACKLIGHT_VIA_PMIC) && BACKLIGHT_VIA_PMIC
+		if (brightness > 100) brightness = 100;
+		currentBrightness = brightness;
+		m5stack_core2_set_backlight_brightness(brightness);
+		#elif HAS_BACKLIGHT
 		// Clamp brightness to 0-100 range
 		if (brightness > 100) brightness = 100;
 		currentBrightness = brightness;

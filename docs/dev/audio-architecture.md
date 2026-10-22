@@ -20,7 +20,7 @@ flowchart TD
     Storage["LittleFS sound files"] --> Player["sound_player.cpp\nMP3 decode and resampling"]
     Audio --> Driver["AudioOutputDriver"]
     Player --> Driver
-    Driver --> Hardware["ES8311 or PCM510xA\nI2S output hardware"]
+    Driver --> Hardware["ES8311, PCM510xA, or NS4168\nI2S output hardware"]
 ```
 
 `audio_output_drivers.cpp` includes exactly one concrete driver selected by
@@ -253,7 +253,8 @@ Audio-capable boards select their driver and pin mapping in
 | `esp32-p4-lcd4b` | ES8311 codec | `ES8311Driver` |
 | `jc4880p433` | ES8311 codec | `ES8311Driver` |
 | `jc1060p470c` | ES8311 codec | `ES8311Driver` |
-| `jc3636w518` | PCM510xA DAC | `PCM510xADriver` |
+| `jc3636w518` | PCM510xA DAC | `I2SOutputDriver` |
+| `m5stack-core2` | NS4168 speaker amplifier, AXP192 mute | `I2SOutputDriver` |
 | `m5stack-stopwatch` (hardware validation pending) | ES8311 + AW8737A, M5IOE1 power/mute | `ES8311Driver` |
 
 The audio sample rate is board-configurable. The current audio boards use
@@ -315,10 +316,17 @@ BCK/LRCK still run, then disables/deletes TX and removes any controllable rail.
 Failed setup uses that same cleanup path. The generic manager does not add
 codec-specific silence writes or delays.
 
-The PCM510xA path applies the shared Q15 gain table in `audio_gain.h` to each
-16-bit PCM sample before DMA transfer. The table ranges from silence at volume
-0 to unity at volume 100 and must not amplify above unity. Do not replace this
-with floating-point gain in the output path.
+The PCM510xA and NS4168 paths apply the shared Q15 gain table in
+`audio_gain.h` to each 16-bit PCM sample before DMA transfer. The table ranges
+from silence at volume 0 to unity at volume 100 and must not amplify above
+unity. Do not replace this with floating-point gain in the output path.
+
+## NS4168 Output
+
+The NS4168 is a codec-less class-D amplifier with no I2C control, MCLK, or
+hardware volume interface. The Core2 uses the shared TX-only I2S output driver
+with 16-bit PCM in 32-bit slots. Its AXP192 GPIO2 controls amplifier mute;
+software gain controls volume. No microphone input is configured.
 
 ## I2S Frame Format
 

@@ -22,9 +22,13 @@ void hw_buttons_init();
 // Process debounce + hold detection and dispatch actions. Call from loop().
 void hw_buttons_loop();
 
+// Update a board-defined virtual button from a non-GPIO input source.
+void hw_buttons_set_virtual_state(uint8_t index, bool pressed);
+
 #else  // !HAS_BUTTON — zero-cost no-op stubs
 
 static inline void hw_buttons_init() {}
 static inline void hw_buttons_loop() {}
+static inline void hw_buttons_set_virtual_state(uint8_t, bool) {}
 
 #endif  // HAS_BUTTON

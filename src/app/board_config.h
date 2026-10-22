@@ -17,6 +17,8 @@ struct HwButtonDef {
 };
 #endif
 
+#define HW_BUTTON_VIRTUAL_PIN 255
+
 // ============================================================================
 // Board Configuration - Two-Phase Include Pattern
 // ============================================================================
@@ -513,6 +515,7 @@ struct HwButtonDef {
 // Audio output driver selection.
 #define AUDIO_OUTPUT_DRIVER_ES8311   0
 #define AUDIO_OUTPUT_DRIVER_PCM510XA 1
+#define AUDIO_OUTPUT_DRIVER_NS4168 2
 
 // Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 #ifndef AUDIO_OUTPUT_DRIVER
@@ -627,7 +630,7 @@ struct HwButtonDef {
 #endif
 
 // ----------------------------------------------------------------------------
-// Hardware Button Actions (optional, GPIO-direct buttons)
+// Hardware Button Actions (optional, GPIO or virtual buttons)
 // ----------------------------------------------------------------------------
 // Boards with physical buttons expose them in the web portal where users can
 // assign tap/hold action lists — identical to on-screen button actions. The
@@ -1476,6 +1479,7 @@ static constexpr HwButtonDef HW_BUTTON_DEFS[1] = { { 0, true, "" } };
 #define TOUCH_DRIVER_CST816S_WIRE 6
 #define TOUCH_DRIVER_INKPLATE6FLICK 7
 #define TOUCH_DRIVER_CST820B_WIRE 8
+#define TOUCH_DRIVER_FT6336 9
 
 // Maximum AXS15231B contacts (1 or 2); enable two only on verified panels.
 #ifndef MAX_AXS15231B_CONTACTS

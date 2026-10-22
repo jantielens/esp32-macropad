@@ -3,9 +3,9 @@
 #include "audio_output_driver.h"
 #include "driver/i2s_std.h"
 
-class PCM510xADriver final : public AudioOutputDriver {
+class I2SOutputDriver final : public AudioOutputDriver {
 public:
-    explicit PCM510xADriver(const AudioBoardControl& value) : control(value) {}
+    explicit I2SOutputDriver(const AudioBoardControl& value) : control(value) {}
     bool begin(uint32_t sample_rate) override;
     bool write(const int16_t* frames, size_t frame_count) override;
     bool setVolume(uint8_t vol_0_100) override;

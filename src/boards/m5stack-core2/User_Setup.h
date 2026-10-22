@@ -1,0 +1,13 @@
+#ifndef M5STACK_CORE2_TFT_ESPI_USER_SETUP_H
+#define M5STACK_CORE2_TFT_ESPI_USER_SETUP_H
+
+#define LOAD_GLCD
+#define LOAD_FONT2
+#define LOAD_FONT4
+#define LOAD_FONT6
+#define LOAD_FONT7
+#define LOAD_FONT8
+#define LOAD_GFXFF
+#define SMOOTH_FONT
+
+#endif

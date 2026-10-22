@@ -1,0 +1,19 @@
+{
+  "device_class": "macropad",
+  "board_label": "M5Stack Core2",
+  "description": "M5Stack Core2 with 2.0-inch 320x240 TFT, capacitive touch, speaker output, AXP192 power management, 16 MB flash, and 8 MB PSRAM.",
+  "chip_family": "ESP32",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "capabilities": ["audio"],
+  "wireless": {
+    "wifi": true,
+    "ble": true
+  },
+  "display": {
+    "size": "2.0-inch",
+    "resolution": "320x240",
+    "type": "TFT",
+    "touch": true
+  }
+}

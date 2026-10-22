@@ -55,6 +55,7 @@ public:
 				TouchSnapshot snapshot;
 				snapshot.status = sample.status;
 				snapshot.count = sample.pressed ? 1 : 0;
+				snapshot.virtual_button = sample.virtual_button;
 				snapshot.contacts[0].horizontal = sample.horizontal;
 				snapshot.contacts[0].vertical = sample.vertical;
 				return snapshot;

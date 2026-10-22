@@ -11,15 +11,17 @@
 
 static constexpr uint32_t kClockSettleMs = 10;
 
-bool PCM510xADriver::begin(uint32_t sample_rate) {
+bool I2SOutputDriver::begin(uint32_t sample_rate) {
     if (!sample_rate) return false;
     if (tx_handle) return initialized && setMuted(true);
     if (!setMuted(true) || (control.power && !control.power(true))) {
         end();
         return false;
     }
-    pinMode(AUDIO_I2S_MCLK, OUTPUT);
-    digitalWrite(AUDIO_I2S_MCLK, LOW);
+    if (AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_PCM510XA && AUDIO_I2S_MCLK >= 0) {
+        pinMode(AUDIO_I2S_MCLK, OUTPUT);
+        digitalWrite(AUDIO_I2S_MCLK, LOW);
+    }
 
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     chan_cfg.auto_clear = true;
@@ -68,11 +70,12 @@ bool PCM510xADriver::begin(uint32_t sample_rate) {
     this->sample_rate = sample_rate;
     vTaskDelay(pdMS_TO_TICKS(kClockSettleMs));
     initialized = true;
-    LOGT(TAG, "PCM510xA: %u Hz, 16-bit data in 32-bit slots", sample_rate);
+        LOGT(TAG, "%s: %u Hz, 16-bit data in 32-bit slots",
+            AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_NS4168 ? "NS4168" : "PCM510xA", sample_rate);
     return true;
 }
 
-bool PCM510xADriver::write(const int16_t* frames, size_t frame_count) {
+bool I2SOutputDriver::write(const int16_t* frames, size_t frame_count) {
     if (!isAvailable() || !frames || frame_count == 0) return false;
 
     int16_t scratch[512];
@@ -97,17 +100,17 @@ bool PCM510xADriver::write(const int16_t* frames, size_t frame_count) {
     return true;
 }
 
-bool PCM510xADriver::setVolume(uint8_t vol_0_100) {
+bool I2SOutputDriver::setVolume(uint8_t vol_0_100) {
     volume = vol_0_100 > 100 ? 100 : vol_0_100;
     return true;
 }
 
-bool PCM510xADriver::setMuted(bool muted) {
+bool I2SOutputDriver::setMuted(bool muted) {
     if ((!initialized && !muted) || !control.mute) return false;
     return control.mute(muted);
 }
 
-bool PCM510xADriver::end() {
+bool I2SOutputDriver::end() {
     bool ok = setMuted(true);
     if (tx_handle) {
         if (tx_running) {
@@ -127,7 +130,7 @@ bool PCM510xADriver::end() {
 }
 
 AudioOutputDriver* audio_output_driver_create() {
-    static PCM510xADriver driver(audio_board_control_create());
+    static I2SOutputDriver driver(audio_board_control_create());
     return &driver;
 }
 

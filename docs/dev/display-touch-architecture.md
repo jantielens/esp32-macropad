@@ -62,7 +62,7 @@ graph TD
     DM --> DD["**DisplayDriver**<br/>(HAL Interface)"]
     TM --> TD["**TouchDriver**<br/>(HAL Interface)"]
     DD --> DImpl["TFT_eSPI_Driver<br/>Arduino_GFX_Drv<br/>ST7701_RGB_Driver<br/>MipiDsiDriver<br/>(ST7703 / ST7701 / JD9165 DSI subclasses)"]
-    TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>GT911_Driver"]
+    TD --> TImpl["XPT2046_Driver<br/>AXS15231B_Touch<br/>CST816S_Driver<br/>FT6336_TouchDriver<br/>GT911_Driver"]
     DImpl --> Lib1["TFT_eSPI library<br/>Arduino_GFX lib"]
     TImpl --> Lib2["XPT2046 library<br/>Wire.h (I2C)<br/>Vendored drivers"]
     Lib1 --> LVGL["**LVGL 9.5**<br/>Widget rendering<br/>Themes · Fonts · Animations"]
@@ -1292,6 +1292,13 @@ with instant lighting transitions.
 - **Communication**: I2C (compile-time bus selection via `TOUCH_I2C_BUS`: Wire or Wire1)
 - **Optional reset**: Hardware reset via `TOUCH_RST` pin (INT pin selects I2C address)
 - **Used by**: ESP32-4848S040 (Guition ESP32-S3, ST7701 RGB 480×480), ESP32-P4-LCD4B (Waveshare, ST7703 DSI 720×720), JC4880P433 (Guition ESP32-P4, ST7701 DSI 480×800)
+
+**FT6336_TouchDriver** ([`src/app/drivers/ft6336_touch_driver.h/cpp`](../src/app/drivers/ft6336_touch_driver.cpp))
+
+The FT6336 capacitive controller uses the shared I2C bus at address `0x38`,
+protected by the I2C bus mutex. M5Stack Core2 also uses three vendor-defined
+touch zones below the 320 x 240 display as virtual buttons. These dispatch
+hardware-button tap/hold actions and are suppressed from LVGL pointer input.
 
 ### Touch Manager
 

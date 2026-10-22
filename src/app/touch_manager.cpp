@@ -3,6 +3,9 @@
 #if HAS_TOUCH
 
 #include "touch_manager.h"
+#if HAS_BUTTON
+#include "hw_buttons.h"
+#endif
 #if HAS_DISPLAY
 #include "device_dialog.h"
 #endif
@@ -32,6 +35,8 @@ static GamepadTouchRouter g_gamepad_touch_router;
 #include "drivers/wire_cst816s_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_CST820B_WIRE
 #include "drivers/wire_cst820b_touch_driver.h"
+#elif TOUCH_DRIVER == TOUCH_DRIVER_FT6336
+#include "drivers/ft6336_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 #include "drivers/gt911_touch_driver.h"
 #elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK
@@ -125,7 +130,21 @@ void TouchManager::readCallback(lv_indev_t* indev, lv_indev_data_t* data) {
 
 		const uint32_t now = millis();
 		const TouchSnapshot physical = manager->driver->readSnapshot();
-		const TouchSnapshot snapshot = g_touch_snapshot_filter.update(physical, now);
+		TouchSnapshot snapshot = g_touch_snapshot_filter.update(physical, now);
+		#if HAS_BUTTON
+		const int8_t virtualButton = snapshot.count ? snapshot.virtual_button : -1;
+		static int8_t previousVirtualButton = -1;
+		if (virtualButton != previousVirtualButton) {
+			if (previousVirtualButton >= 0) {
+				hw_buttons_set_virtual_state(static_cast<uint8_t>(previousVirtualButton), false);
+			}
+			if (virtualButton >= 0) {
+				hw_buttons_set_virtual_state(static_cast<uint8_t>(virtualButton), true);
+			}
+			previousVirtualButton = virtualButton;
+		}
+		if (virtualButton >= 0) snapshot.count = 0;
+		#endif
 		portENTER_CRITICAL(&g_physical_touch_mux);
 		g_cached_physical.status = snapshot.status;
 		g_cached_physical.pressed = snapshot.count != 0;
@@ -302,6 +321,8 @@ void TouchManager::init(uint8_t rotation) {
 		driver = new Wire_CST816S_TouchDriver();
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_CST820B_WIRE
 		driver = new Wire_CST820B_TouchDriver(board_cst820b_config());
+		#elif TOUCH_DRIVER == TOUCH_DRIVER_FT6336
+		driver = new FT6336_TouchDriver();
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_GT911
 		driver = new GT911_TouchDriver();
 		#elif TOUCH_DRIVER == TOUCH_DRIVER_INKPLATE6FLICK

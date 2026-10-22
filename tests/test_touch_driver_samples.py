@@ -101,6 +101,16 @@ public:
 };
 static TwoWire Wire;
 '''
+freertos = r'''
+#pragma once
+#include <cstdint>
+using TickType_t = uint32_t;
+#define pdMS_TO_TICKS(value) (value)
+'''
+semphr = r'''
+#pragma once
+using SemaphoreHandle_t = void*;
+'''
 spi = r'''
 #pragma once
 class SPIClass {};
@@ -143,10 +153,12 @@ int main() {
     driver.sample.pressed = true;
     driver.sample.horizontal = 12;
     driver.sample.vertical = 34;
+    driver.sample.virtual_button = 2;
     TouchSnapshotFilter filter;
     auto snapshot = driver.readSnapshot();
     assert(driver.reads == 1 && snapshot.count == 1 && snapshot.contacts[0].id == 0);
     assert(snapshot.contacts[0].horizontal == 12 && snapshot.contacts[0].vertical == 34);
+    assert(snapshot.virtual_button == 2);
     assert(filter.update(snapshot, 0).count == 1);
     driver.sample.status = TouchReadStatus::Unchanged;
     snapshot = driver.readSnapshot();
@@ -165,6 +177,51 @@ int main() {
     assert(filter.update(driver.readSnapshot(), 150).count == 0);
     driver.sample.pressed = true;
     assert(filter.update(driver.readSnapshot(), 160).count == 1);
+}
+''',
+    "core2_zones": r'''
+#include "drivers/ft6336_touch_zones.h"
+int main() {
+    assert(ft6336_virtual_button_at(10, 240) == 0);
+    assert(ft6336_virtual_button_at(119, 279) == 0);
+    assert(ft6336_virtual_button_at(130, 240) == 1);
+    assert(ft6336_virtual_button_at(199, 279) == 1);
+    assert(ft6336_virtual_button_at(230, 240) == 2);
+    assert(ft6336_virtual_button_at(309, 279) == 2);
+    assert(ft6336_virtual_button_at(9, 240) == -1);
+    assert(ft6336_virtual_button_at(120, 260) == -1);
+    assert(ft6336_virtual_button_at(200, 260) == -1);
+    assert(ft6336_virtual_button_at(310, 260) == -1);
+    assert(ft6336_virtual_button_at(50, 239) == -1);
+    assert(ft6336_virtual_button_at(50, 280) == -1);
+}
+''',
+    "ft6336": r'''
+#include "drivers/ft6336_touch_driver.cpp"
+bool bus_available = true;
+bool i2c_bus_lock(TickType_t) { return bus_available; }
+void i2c_bus_unlock() {}
+int main() {
+    FT6336_TouchDriver driver;
+    driver.init();
+    Wire.packet({1, 0, 50, 0, 100});
+    TouchSample sample = driver.readSample();
+    assert(sample.status == TouchReadStatus::Fresh && sample.pressed);
+    assert(sample.horizontal == 50 && sample.vertical == 100 && sample.virtual_button == -1);
+    Wire.packet({1, 0, 50, 1, 4});
+    sample = driver.readSample();
+    assert(sample.pressed && sample.virtual_button == 0 && sample.vertical == 260);
+    Wire.packet({1, 0, 150, 1, 4});
+    assert(driver.readSample().virtual_button == 1);
+    Wire.packet({1, 0, 250, 1, 4});
+    assert(driver.readSample().virtual_button == 2);
+    Wire.packet({0, 0, 0, 0, 0});
+    sample = driver.readSample();
+    assert(sample.status == TouchReadStatus::Fresh && !sample.pressed);
+    Wire.packet({3, 0, 50, 0, 100});
+    assert(driver.readSample().status == TouchReadStatus::Error);
+    bus_available = false;
+    assert(driver.readSample().status == TouchReadStatus::Error);
 }
 ''',
     "axs": r'''
@@ -620,6 +677,11 @@ with tempfile.TemporaryDirectory() as directory:
     (temporary / "Arduino.h").write_text(arduino)
     (temporary / "Wire.h").write_text(wire)
     (temporary / "SPI.h").write_text(spi)
+    (temporary / "log_manager.h").write_text('#pragma once\n#include <Arduino.h>\n')
+    freertos_dir = temporary / "freertos"
+    freertos_dir.mkdir()
+    (freertos_dir / "FreeRTOS.h").write_text(freertos)
+    (freertos_dir / "semphr.h").write_text(semphr)
     (temporary / "XPT2046_Touchscreen.h").write_text(xpt)
     for name, case in cases.items():
         source = temporary / f"{name}.cpp"

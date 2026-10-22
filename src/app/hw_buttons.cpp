@@ -34,6 +34,7 @@ struct BtnRuntime {
 };
 
 static BtnRuntime s_rt[NUM_HW_BUTTONS];
+static bool s_virtual_pressed[NUM_HW_BUTTONS] = {};
 
 // ISR-set flag: an edge occurred on at least one button. Protected by a
 // portMUX spinlock for safe read-modify-write between ISR and loop().
@@ -47,6 +48,12 @@ static void IRAM_ATTR hw_button_isr() {
 }
 
 static inline bool button_pressed(uint8_t i) {
+    if (HW_BUTTON_DEFS[i].pin == HW_BUTTON_VIRTUAL_PIN) {
+        portENTER_CRITICAL(&s_mux);
+        const bool pressed = s_virtual_pressed[i];
+        portEXIT_CRITICAL(&s_mux);
+        return pressed;
+    }
     int level = digitalRead(HW_BUTTON_DEFS[i].pin);
     return HW_BUTTON_DEFS[i].active_low ? (level == LOW) : (level == HIGH);
 }
@@ -97,14 +104,29 @@ static void dispatch_event(uint8_t index, bool is_hold) {
 void hw_buttons_init() {
     for (uint8_t i = 0; i < NUM_HW_BUTTONS; i++) {
         const HwButtonDef& def = HW_BUTTON_DEFS[i];
-        pinMode(def.pin, def.active_low ? INPUT_PULLUP : INPUT_PULLDOWN);
         s_rt[i].state = BtnState::Idle;
         s_rt[i].t_change = 0;
-        attachInterrupt(digitalPinToInterrupt(def.pin), hw_button_isr, CHANGE);
-        LOGI(TAG, "Button %u: GPIO%u active-%s label='%s'", i, def.pin,
-             def.active_low ? "low" : "high", def.label);
+        s_virtual_pressed[i] = false;
+        if (def.pin == HW_BUTTON_VIRTUAL_PIN) {
+            LOGI(TAG, "Button %u: virtual label='%s'", i, def.label);
+        } else {
+            pinMode(def.pin, def.active_low ? INPUT_PULLUP : INPUT_PULLDOWN);
+            attachInterrupt(digitalPinToInterrupt(def.pin), hw_button_isr, CHANGE);
+            LOGI(TAG, "Button %u: GPIO%u active-%s label='%s'", i, def.pin,
+                 def.active_low ? "low" : "high", def.label);
+        }
     }
     LOGI(TAG, "Initialized %u hardware button(s)", (unsigned)NUM_HW_BUTTONS);
+}
+
+void hw_buttons_set_virtual_state(uint8_t index, bool pressed) {
+    if (index >= NUM_HW_BUTTONS || HW_BUTTON_DEFS[index].pin != HW_BUTTON_VIRTUAL_PIN) return;
+    portENTER_CRITICAL(&s_mux);
+    if (s_virtual_pressed[index] != pressed) {
+        s_virtual_pressed[index] = pressed;
+        s_edge_pending = true;
+    }
+    portEXIT_CRITICAL(&s_mux);
 }
 
 void hw_buttons_loop() {

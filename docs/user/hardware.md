@@ -30,6 +30,7 @@ complete circuit schematic. Verify the board revision before wiring accessories.
 | JC1060P470C with primary SD storage       | [`jc1060p470c-sd`](../../src/boards/jc1060p470c-sd/README.md)         |
 | Waveshare ESP32-P4-WIFI6-Touch-LCD-4B     | [`esp32-p4-lcd4b`](../../src/boards/esp32-p4-lcd4b/README.md)         |
 | M5Stack StopWatch, round AMOLED           | [`m5stack-stopwatch`](../../src/boards/m5stack-stopwatch/README.md)   |
+| M5Stack Core2, 2.0-inch TFT                | [`m5stack-core2`](../../src/boards/m5stack-core2/README.md)            |
 
 ## E-paper
 

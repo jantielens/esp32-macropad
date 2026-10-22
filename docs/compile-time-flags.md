@@ -21,7 +21,7 @@ This document is a template. Sections marked with `COMPILE_FLAG_REPORT` markers 
 ## Flags (generated)
 
 <!-- BEGIN COMPILE_FLAG_REPORT:FLAGS -->
-Total flags: 366
+Total flags: 378
 
 ### Features (HAS_*)
 
@@ -73,11 +73,12 @@ Total flags: 366
 
 ### Selectors (*_DRIVER)
 
-- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
+- **AUDIO_OUTPUT_DRIVER** default: `AUDIO_OUTPUT_DRIVER_ES8311` (values: AUDIO_OUTPUT_DRIVER_ES8311, AUDIO_OUTPUT_DRIVER_NS4168, AUDIO_OUTPUT_DRIVER_PCM510XA) — Select the audio output HAL backend (one of the AUDIO_OUTPUT_DRIVER_* constants).
 - **CAMERA_DRIVER** default: `CAMERA_DRIVER_NONE` (values: CAMERA_DRIVER_OV02C10_P4) — Select the board-specific camera driver.
 - **DISPLAY_DRIVER** default: `DISPLAY_DRIVER_TFT_ESPI` (values: DISPLAY_DRIVER_ARDUINO_GFX, DISPLAY_DRIVER_ARDUINO_GFX_CO5300, DISPLAY_DRIVER_ARDUINO_GFX_NV3041A, DISPLAY_DRIVER_ARDUINO_GFX_ST77916, DISPLAY_DRIVER_CROWPANEL_42, DISPLAY_DRIVER_INKPLATE6FLICK, DISPLAY_DRIVER_IT8951, DISPLAY_DRIVER_JD9165_DSI, DISPLAY_DRIVER_ST7701_DSI, DISPLAY_DRIVER_ST7701_RGB, DISPLAY_DRIVER_ST7703_DSI, DISPLAY_DRIVER_TFT_ESPI) — Select the display HAL backend (one of the DISPLAY_DRIVER_* constants).
 - **DISPLAY_SHAPE** default: `DISPLAY_SHAPE_RECT` (values: DISPLAY_SHAPE_ROUND) — Default display shape (boards override in board_overrides.h)
-- **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_CST820B_WIRE, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
+- **ILI9341_DRIVER** default: `(no default)` — Select TFT_eSPI's ILI9341-compatible initialization for the ILI9342 panel.
+- **TOUCH_DRIVER** default: `TOUCH_DRIVER_XPT2046` (values: TOUCH_DRIVER_AXS15231B_I2C, TOUCH_DRIVER_CST816S_WIRE, TOUCH_DRIVER_CST820B_WIRE, TOUCH_DRIVER_FT6336, TOUCH_DRIVER_GT911, TOUCH_DRIVER_INKPLATE6FLICK, TOUCH_DRIVER_XPT2046) — Select the touch HAL backend (one of the TOUCH_DRIVER_* constants).
 
 ### Hardware (Geometry)
 
@@ -149,6 +150,12 @@ Total flags: 366
 - **SDMMC_POWER_PIN** default: `-1` — Optional application-managed SD card power-enable GPIO; -1 leaves it alone.
 - **SENSOR_I2C_SCL** default: `-1` — I2C SCL pin for sensors.
 - **SENSOR_I2C_SDA** default: `-1` — I2C pins for sensors. Use -1 to keep default Wire pins.
+- **TFT_CS** default: `(no default)` — TFT chip-select signal.
+- **TFT_DC** default: `(no default)` — TFT data/command select signal.
+- **TFT_MISO** default: `(no default)` — TFT SPI data from the panel to the ESP32.
+- **TFT_MOSI** default: `(no default)` — TFT SPI data from the ESP32 to the panel.
+- **TFT_RST** default: `(no default)` — Reset is controlled by AXP192 GPIO4, not a direct TFT_eSPI GPIO.
+- **TFT_SCLK** default: `(no default)` — TFT SPI clock signal.
 - **TOUCH_I2C_SCL** default: `(no default)` — Touch I2C SCL pin.
 - **TOUCH_I2C_SDA** default: `(no default)` — Touch I2C SDA pin.
 - **TOUCH_INT** default: `(no default)` — Touch interrupt pin (-1 = not connected).
@@ -193,6 +200,8 @@ Total flags: 366
 - **SCREENSAVER_DEFAULT_TIMEOUT_SECONDS** default: `300` — Default inactivity timeout before the screen saver activates (seconds; 0 disables automatic sleep).
 - **SDMMC_MAX_FREQUENCY_KHZ** default: `20000` — SDMMC maximum bus frequency in kHz.
 - **SENSOR_I2C_FREQUENCY** default: `400000` — I2C clock for sensors (Hz).
+- **SPI_FREQUENCY** default: `(no default)` — TFT_eSPI SPI write clock frequency in hertz.
+- **SPI_READ_FREQUENCY** default: `(no default)` — TFT_eSPI SPI read clock frequency in hertz.
 - **ST7701_DSI_DPI_CLK_HZ** default: `34000000L` — DPI pixel clock in Hz.
 - **ST7703_DPI_CLK_HZ** default: `38000000L` — DPI pixel clock in Hz for ST7703 MIPI-DSI panels (ESP32-P4 only).
 - **TELEMETRY_INTERNAL_POOL_WALK_PERIOD_MS** default: `30000` — Sampling period for the cached internal largest-free-block metric (ms).
@@ -222,6 +231,7 @@ Total flags: 366
 - **AUDIO_MP3_SCRATCH_PSRAM** default: `false` — Use PSRAM for minimp3's per-frame workspace; requires reliable PSRAM.
 - **AUDIO_PA_ACTIVE_LOW** default: `false` — Some boards route the PA enable through an inverting transistor.
 - **AUDIO_SAMPLE_RATE** default: `48000` — Audio output sample rate in Hz.
+- **BACKLIGHT_VIA_PMIC** default: `(no default)` — Route backlight brightness through the AXP192 PMIC instead of GPIO PWM.
 - **BATTERY_ADC_CALIBRATION** default: `1.0f` — Calibration multiplier applied after ADC millivolt conversion and divider scaling.
 - **BATTERY_ADC_DIVIDER** default: `1.0f` — Battery voltage divided by this factor before reaching BATTERY_ADC_PIN.
 - **BATTERY_ADC_SAMPLE_COUNT** default: `8` — Number of ADC samples averaged for each battery reading.
@@ -288,6 +298,7 @@ Total flags: 366
 - **DISPLAY_DEBIAS_SETTLE_MS** default: `300` — Soft-landing VCOM settle (ms) at the end of each de-bias refresh; 0 disables.
 - **DISPLAY_DISABLE_ANIMATIONS** default: `false` — Suppress visual transitions on slow-refresh displays while preserving state updates.
 - **DISPLAY_HARD_RESET_ON_SLEEP** default: `false` — Hold panel RST low during screensaver sleep (MipiDsiDriver only; needs LCD_RST_PIN).
+- **DISPLAY_INVERSION_ON** default: `(no default)` — Enable the panel's required display inversion.
 - **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP** default: `false` — Keep the MIPI-DSI panel powered (Display On, black) during screensaver sleep; no DCS power-down.
 - **DISPLAY_PANEL** default: `(no default)` — Panel IC name string (used by tools/generate-board-driver-table.py for the board→driver table).
 - **EPAPER_DEFAULT_FULL_REFRESH_THRESHOLD** default: `10` — Number of regional updates before a full refresh on supporting e-paper drivers.
@@ -332,6 +343,7 @@ Total flags: 366
 - **LVGL_TASK_USE_PSRAM_STACK** default: `true` — Disable on targets whose FreeRTOS port rejects external static task stacks.
 - **LVGL_THEME_DARK_MODE** default: `true` — light theme to avoid a full-screen black background.
 - **LV_USE_PERF_MONITOR_POS** default: `(no default)` — LVGL perf monitor alignment.
+- **M5STACK** default: `(no default)` — Apply the M5Stack-specific TFT_eSPI rotation and color handling.
 - **NUM_HW_BUTTONS** default: `0` — Number of buttons actually declared by the board (0 = none).
 - **PORTAL_PRIMARY_CATEGORY** default: `""` — Custom nav category ID promoted to first position (empty = standard behavior).
 - **PORTAL_PRIMARY_FRAGMENT** default: `""` — Default startup fragment for board variants with a primary portal category.
@@ -422,6 +434,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | jc3636w518-sd |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  | ✅ | ✅ | ? | ✅ |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | m5stack-stopwatch | ✅ |  | ✅ |  |  | ? |  | ✅ |  | ✅ | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ✅ | ? | ✅ |  |  |  | ✅ |  |  | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
+| m5stack-core2 | ✅ |  | ✅ |  |  | ? |  | ✅ |  |  | ✅ |  |  |  | ? |  |  |  | ✅ | ? |  |  |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | jc4827w543c |  |  | ✅ |  |  | ? |  |  |  | ? | ✅ |  |  |  | ? |  |  |  | ✅ | ? | ? | ? |  | ? |  |  | ✅ |  |  |  | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
 | esp32-p4-lcd4b | ✅ | ✅ | ✅ |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? | ✅ |
 | esp32-p4-lcd4b-voice | ✅ | ✅ | ✅ |  | ✅ | ? |  | ✅ |  | ? | ✅ |  |  |  | ? |  |  | ✅ | ✅ | ? | ? | ? | ? | ? |  | ✅ | ✅ | ✅ | ✅ | ✅ | ? |  |  |  |  |  |  |  |  |  | ? | ? | ✅ | ? |  |
@@ -454,6 +467,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 | jc3636w518 | AUDIO_OUTPUT_DRIVER_PCM510XA | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | DISPLAY_SHAPE_ROUND | TOUCH_DRIVER_CST816S_WIRE |
 | jc3636w518-sd | AUDIO_OUTPUT_DRIVER_PCM510XA | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_ST77916 | DISPLAY_SHAPE_ROUND | TOUCH_DRIVER_CST816S_WIRE |
 | m5stack-stopwatch | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_CO5300 | DISPLAY_SHAPE_ROUND | TOUCH_DRIVER_CST820B_WIRE |
+| m5stack-core2 | AUDIO_OUTPUT_DRIVER_NS4168 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_TFT_ESPI | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_FT6336 |
 | jc4827w543c | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ARDUINO_GFX_NV3041A | DISPLAY_SHAPE_RECT | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | TOUCH_DRIVER_GT911 |
 | esp32-p4-lcd4b-voice | AUDIO_OUTPUT_DRIVER_ES8311 | CAMERA_DRIVER_NONE | DISPLAY_DRIVER_ST7703_DSI | DISPLAY_SHAPE_SQUARE | TOUCH_DRIVER_GT911 |
@@ -541,6 +555,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/battery_adc_sensor.cpp
   - src/app/sensors/dummy_sensor.cpp
   - src/app/web_portal_config.cpp
+  - src/boards/m5stack-core2/m5stack_core2_battery_sensor.cpp
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
 - **HAS_BLE_HID**
   - src/app/actions/ble_pair_action.cpp
@@ -634,7 +649,9 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/mcp_tools_config.cpp
   - src/app/mcp_tools_core.cpp
   - src/app/portal_components.cpp
+  - src/app/touch_manager.cpp
   - src/app/web_portal_device_api.cpp
+  - src/boards/m5stack-core2/m5stack_core2_actions.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
 - **HAS_CAMERA**
   - src/app/actions/camera_capture_action.cpp
@@ -863,6 +880,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/widgets/widget.h
   - src/app/widgets/widget_registry.h
   - src/app/wifi_manager.cpp
+  - src/boards/m5stack-core2/m5stack_core2_actions.cpp
   - src/boards/m5stack-stopwatch/stopwatch_actions.cpp
 - **HAS_DISPLAY_DIAGNOSTICS**
   - src/app/board_config.h
@@ -1105,6 +1123,7 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/sensors/sensor_manager.h
   - src/app/web_portal_pad.cpp
   - src/app/web_portal_routes.cpp
+  - src/boards/m5stack-core2/m5stack_core2_battery_sensor.cpp
   - src/boards/m5stack-stopwatch/stopwatch_battery_sensor.cpp
 - **HAS_MUSIC_ANALYSIS**
   - src/app/audio.cpp
@@ -1394,6 +1413,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
   - src/app/board_config.h
 - **AUDIO_TASK_STACK_SIZE**
   - src/app/board_config.h
+- **BACKLIGHT_VIA_PMIC**
+  - src/app/drivers/tft_espi_driver.cpp
 - **BATTERY_ADC_CALIBRATION**
   - src/app/board_config.h
 - **BATTERY_ADC_DIVIDER**
@@ -1546,6 +1567,8 @@ Legend: ✅ = enabled/true, blank = disabled/false, ? = unknown/undefined
 - **DISPLAY_HARD_RESET_ON_SLEEP**
   - src/app/board_config.h
   - src/app/drivers/mipi_dsi_driver.cpp
+- **DISPLAY_INVERSION_ON**
+  - src/app/drivers/tft_espi_driver.cpp
 - **DISPLAY_KEEP_PANEL_AWAKE_ON_SLEEP**
   - src/app/board_config.h
   - src/app/drivers/mipi_dsi_driver.cpp

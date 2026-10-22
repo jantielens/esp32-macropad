@@ -31,7 +31,7 @@ AudioBoardControl audio_board_control_create() {
 
 #if AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_ES8311
 #include "drivers/es8311_audio_driver.cpp"
-#elif AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_PCM510XA
+#elif AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_PCM510XA || AUDIO_OUTPUT_DRIVER == AUDIO_OUTPUT_DRIVER_NS4168
 #include "drivers/pcm510xa_audio_driver.cpp"
 #else
 #error "No audio output driver selected or unknown driver type"

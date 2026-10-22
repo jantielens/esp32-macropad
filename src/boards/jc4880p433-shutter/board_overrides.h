@@ -50,9 +50,12 @@
 // (ShutterTesterConfig.preset_id) selects how many sensors are active for
 // a given test — 3-sensor presets ignore S4.
 #define SHUTTER_ADC_PIN_S1 49   // Sensor 1 — GPIO 49
-#define SHUTTER_ADC_PIN_S2 50   // Sensor 2 — GPIO 50
-#define SHUTTER_ADC_PIN_S3 51   // Sensor 3 — GPIO 51
-#define SHUTTER_ADC_PIN_S4 52   // Sensor 4 — GPIO 52 (optional)
+// ADC input for shutter sensor 2 (GPIO 50).
+#define SHUTTER_ADC_PIN_S2 50
+// ADC input for shutter sensor 3 (GPIO 51).
+#define SHUTTER_ADC_PIN_S3 51
+// Optional ADC input for shutter sensor 4 (GPIO 52).
+#define SHUTTER_ADC_PIN_S4 52
 
 // Capture buffer tuning — more baseline context for slow shutter speeds.
 // 4096 samples at 27.7 kHz ≈ 148 ms of visible baseline on each side.

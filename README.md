@@ -267,6 +267,7 @@ more room without using the board's internal flash for those files.
 | **Guition JC4827W543C** | ESP32-S3 | 4.3" IPS LCD | 480 x 272 | Landscape |
 | **JC3636W518** | ESP32-S3 | 3.6" IPS LCD | 360 × 360 | Round |
 | **M5Stack StopWatch** | ESP32-S3 | 1.75" AMOLED | 466 × 466 | Round |
+| **M5Stack Core2** | ESP32 | 2.0" TFT LCD | 320 x 240 | Landscape |
 | **Waveshare ESP32-P4 Touch LCD 4B** | ESP32-P4 | 4.0" IPS LCD | 720 × 720 | Square |
 | **Guition JC4880P433** | ESP32-P4 | 4.3" IPS LCD | 480 x 800 | Portrait |
 | **Guition JC1060P470C** | ESP32-P4 | 7.0" IPS LCD | 1024 × 600 | Rectangle |

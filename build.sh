@@ -267,6 +267,8 @@ build_board() {
         flag_allowlist=(
             # TFT_eSPI controller + bus selection
             ILI9341_2_DRIVER
+            ILI9341_DRIVER
+            M5STACK
             USE_HSPI_PORT
         )
 
