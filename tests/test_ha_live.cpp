@@ -4,10 +4,69 @@
 #include "bounded_psram_json_allocator.h"
 #include <gtest/gtest.h>
 #include <string>
+#include "binding_template.h"
+#include "expr_binding.h"
+#include "ha_binding.h"
+#include "ha_live.h"
+
+static bool thermostat_connected = true;
+static std::string thermostat_snapshot;
+
+void ha_live_status(HaLiveStatus& status) {
+    status = {true, thermostat_connected, 1, 0, 0, "test", ""};
+}
+
+bool ha_live_valid_entity(const char* value) {
+    return strcmp(value, "climate.bureau_boven_thermostaat") == 0;
+}
+
+bool ha_live_read(const char*, char* out, size_t size) {
+    if (!thermostat_connected) return false;
+    ArduinoJson::JsonDocument snapshot;
+    if (deserializeJson(snapshot, thermostat_snapshot)) return false;
+    if (!ha_live_state_available(snapshot.as<ArduinoJson::JsonVariantConst>())) return false;
+    snprintf(out, size, "%s", thermostat_snapshot.c_str());
+    return true;
+}
 
 namespace {
 using namespace ArduinoJson;
 const char* entity = "sensor.power";
+
+TEST(HaLive, BureauProductionExpressionAndNestedDiscovery) {
+    ha_binding_init();
+    expr_binding_init();
+    const char* source = "[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?\"on\":\"off\"]";
+    char resolved[BINDING_TEMPLATE_MAX_LEN];
+    for (int temperature : {10, 19, 20, 21, 22}) {
+        thermostat_snapshot = "{\"state\":\"heat\",\"attributes\":{\"temperature\":" + std::to_string(temperature) + "}}";
+        EXPECT_EQ(binding_template_resolve_status(source, resolved, sizeof(resolved)), BINDING_RESOLVER_RESOLVED);
+        EXPECT_STREQ(resolved, temperature > 20 ? "on" : "off");
+    }
+    for (const char* invalid : {"null", "\"\"", "\"unknown\"", "\"unavailable\"", "\"nonnumeric\""}) {
+        thermostat_snapshot = std::string("{\"state\":\"heat\",\"attributes\":{\"temperature\":") + invalid + "}}";
+        EXPECT_NE(binding_template_resolve_status(source, resolved, sizeof(resolved)), BINDING_RESOLVER_RESOLVED);
+        EXPECT_STRNE(resolved, "off");
+    }
+    for (const char* snapshot : {"{\"state\":\"heat\",\"attributes\":{}}", "{\"state\":\"unknown\"}", "{\"state\":\"unavailable\"}"}) {
+        thermostat_snapshot = snapshot;
+        EXPECT_NE(binding_template_resolve_status(source, resolved, sizeof(resolved)), BINDING_RESOLVER_RESOLVED);
+    }
+    thermostat_connected = false;
+    EXPECT_NE(binding_template_resolve_status(source, resolved, sizeof(resolved)), BINDING_RESOLVER_RESOLVED);
+    thermostat_connected = true;
+    thermostat_snapshot = "{\"state\":\"heat\",\"attributes\":{\"temperature\":22}}";
+    EXPECT_EQ(binding_template_resolve_status(source, resolved, sizeof(resolved)), BINDING_RESOLVER_RESOLVED);
+    EXPECT_STREQ(resolved, "on");
+    unsigned count = 0;
+    binding_template_visit_tokens(source, [](const char* scheme, size_t length, const char* params, void* context) {
+        if (length == 2 && strncmp(scheme, "ha", length) == 0) {
+            EXPECT_STREQ(params, "climate.bureau_boven_thermostaat;attributes.temperature");
+            ++*static_cast<unsigned*>(context);
+        }
+    }, &count);
+    EXPECT_EQ(count, 1u);
+}
 
 const char* apply(JsonDocument& state, const std::string& payload) {
     JsonDocument event;

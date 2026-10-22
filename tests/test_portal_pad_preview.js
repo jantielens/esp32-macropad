@@ -43,6 +43,7 @@ const context = {
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gauge.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_toggle.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
 
 const fields = ['name', 'icon', 'second_icon', 'axis_field', 'horizontal_icon', 'vertical_icon', 'default_axis'];
@@ -306,4 +307,16 @@ for (const color of ['#4CAF50', '#2196F3']) {
     assert.strictEqual(unavailable.children.at(-1).children[3].textContent, '---');
     assert.strictEqual(unavailable.children.at(-1).children.length, 4, 'Unavailable values have a label but no zero or fake trend');
 }
+for (const source of ['', 'on', 'off', '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"on":"off"]']) {
+    const cell = createElement();
+    context.padRenderCellContent(cell, { widget_type: 'toggle', widget_data_binding: source,
+        label_top: 'Bureau', label_bottom: '[ha:climate.bureau_boven_thermostaat;attributes.temperature;%.1f \u00b0C]',
+        widget_toggle_on_color: '#123456' });
+    assert.strictEqual(cell.children[0].className, 'pad-widget-marker');
+    assert.strictEqual(cell.children[0].attributes['aria-label'], 'Toggle switch Widget');
+    assert(!cell.children.some(child => child.attributes.role === 'switch'));
+    assert(cell.children.some(child => child.textContent === 'Bureau'));
+}
+assert.strictEqual(context.padWidgetEditor('toggle').icon.width, 0.4);
+assert.strictEqual(context.padWidgetEditor('toggle').icon.height, 0.4);
 console.log('portal_pad_preview: PASS');

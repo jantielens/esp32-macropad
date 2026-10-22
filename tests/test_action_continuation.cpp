@@ -220,6 +220,22 @@ TEST(explicit_input_wait_and_completion_are_single_use) {
     ASSERT_EQ(action_continuation_take(nullptr, nullptr, nullptr, 0), ACTION_CONTINUATION_TIMED_OUT);
 }
 
+TEST(dispatch_reports_initial_result_without_changing_suffix_policy) {
+    reset_dispatch();
+    ButtonAction actions[2] = {};
+    strlcpy(actions[0].type, "failed", sizeof(actions[0].type));
+    strlcpy(actions[1].type, "next", sizeof(actions[1].type));
+    ASSERT_EQ(action_list_dispatch_result(actions, 2, "Test"), ACTION_FAILED);
+    ASSERT_EQ(g_dispatched_count, 1);
+    ASSERT_EQ(action_list_dispatch_result(nullptr, 0, "Test"), ACTION_COMPLETE);
+    reset_dispatch();
+    strlcpy(actions[0].type, "pending", sizeof(actions[0].type));
+    ASSERT_EQ(action_list_dispatch_result(actions, 2, "Test"), ACTION_PENDING);
+    ASSERT_EQ(g_dispatched_count, 1);
+    ASSERT_TRUE(action_continuation_complete(g_pending_token, false));
+    action_list_dispatch_continuation();
+}
+
 int main() {
     RUN(success_copies_saved_suffix);
     RUN(failure_discards_suffix);
@@ -232,6 +248,7 @@ int main() {
     RUN(failed_pending_action_does_not_resume_suffix);
     RUN(failure_before_confirmation_stops_entire_suffix);
     RUN(explicit_input_wait_and_completion_are_single_use);
+    RUN(dispatch_reports_initial_result_without_changing_suffix_policy);
     std::printf("action continuation: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

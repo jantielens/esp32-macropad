@@ -34,6 +34,7 @@ const originalButton = { col: 1, row: 2, label_center: 'Keep me' };
 const originalButtons = [originalButton];
 const context = {
     console,
+    TextEncoder,
     document,
     MAX_ACTIONS: 3,
     padState: { editCol: 1, editRow: 2, buttons: originalButtons },
@@ -54,6 +55,7 @@ vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), 
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_table.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gamepad_button.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_toggle.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_inputs.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_list.js', 'utf8'), context);
@@ -109,7 +111,7 @@ assert.strictEqual(document.getElementById('pad-edit-validation-error').style.di
 
 context.actionEditorLoadGamepad = function() {};
 context.actionEditorLoad = function() {};
-context.PAD_FIRMWARE_DEFAULTS = { widget_indicator_color: '#FFFFFF' };
+context.PAD_FIRMWARE_DEFAULTS = { widget_indicator_color: '#FFFFFF', widget_series_color: '#4CAF50', widget_track_color: '#1A1A1A' };
 context.padSetBindableColor = function(id, value, fallback) { document.getElementById(id).value = value || fallback; };
 context.padWidgetEditorsLoad({ widget_type: 'table', widget_table_scrollable: false });
 assert.strictEqual(document.getElementById('pad-edit-table-scrollable').value, 'false');
@@ -687,6 +689,49 @@ async function checkSourceColors() {
     pending[5].resolve({ ok: true, json: () => ({ button: { widget_arc_color: '#ff0000' } }) });
     await settle();
     assert.strictEqual(border('pad-edit-gauge-source-1'), '#123456', 'Switching buttons rejects old results');
+}
+
+{
+    const savedLabel = context.padLabelFromInput;
+    const savedAction = context.actionEditorBuild;
+    const source = '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"on":"off"]';
+    const bottom = '[ha:climate.bureau_boven_thermostaat;attributes.temperature;%.1f \u00b0C]';
+    const foreground = '[expr:[ha:climate.bureau_boven_thermostaat;attributes.temperature]>20?"#FF0000":"#FFFFFF"]';
+    const on = { type: 'ha_service', entity_id: 'climate.bureau_boven_thermostaat', service: 'set_temperature', data_json: '{"temperature": 21}' };
+    const off = { ...on, data_json: '{"temperature": 10}' };
+    context.padLabelFromInput = id => document.getElementById(id).value;
+    document.getElementById('pad-edit-label-top').value = 'Bureau';
+    document.getElementById('pad-edit-label-bottom').value = bottom;
+    document.getElementById('pad-edit-fg-color').value = foreground;
+    context.actionEditorBuild = prefix => prefix === 'tap-0' ? on : prefix === 'lp-0' ? off : {};
+    context.padWidgetEditorsLoad({ widget_type: 'toggle', widget_data_binding: source });
+    document.getElementById('pad-edit-widget-type').value = 'toggle';
+    const button = context.padDialogBuildButton();
+    assert.strictEqual(button.label_top, 'Bureau');
+    assert.strictEqual(button.label_bottom, bottom);
+    assert.strictEqual(button.fg_color, foreground);
+    assert.strictEqual(button.widget_data_binding, source);
+    assert.strictEqual(button.widget_toggle_width_pct, 100);
+    assert.strictEqual(button.widget_toggle_icon_position, 'left');
+    assert.strictEqual(button.widget_toggle_placement, undefined);
+    assert.deepStrictEqual(button.actions[0], on);
+    assert.deepStrictEqual(button.lp_actions[0], off);
+    assert.deepStrictEqual(Array.from(context.padWidgetEditor('toggle').actions.labels()), ['Turn-on actions', 'Turn-off actions']);
+    context.padWidgetEditorsLoad(JSON.parse(JSON.stringify(button)));
+    assert.strictEqual(JSON.stringify(context.padDialogBuildButton()), JSON.stringify(button));
+    context.padWidgetEditorsLoad({ ...button, widget_toggle_width_pct: 60,
+        widget_toggle_placement: 'top', widget_toggle_icon_position: 'below' });
+    const positioned = context.padDialogBuildButton();
+    assert.strictEqual(positioned.widget_toggle_width_pct, 60);
+    assert.strictEqual(positioned.widget_toggle_icon_position, 'below');
+    assert.strictEqual(positioned.widget_toggle_placement, undefined);
+    document.getElementById('pad-edit-toggle-on-value').value = ' OFF ';
+    assert.throws(() => context.padDialogBuildButton(), /distinct/);
+    document.getElementById('pad-edit-toggle-on-value').value = 'on';
+    document.getElementById('pad-edit-toggle-width-pct').value = '101';
+    assert.throws(() => context.padDialogBuildButton(), /Switch size/);
+    context.padLabelFromInput = savedLabel;
+    context.actionEditorBuild = savedAction;
 }
 
 checkSourceColors().then(() => console.log('portal_pad_dialog_transaction: PASS')).catch(error => {

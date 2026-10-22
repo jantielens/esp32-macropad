@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add a Toggle switch widget with local state or an authoritative state binding,
+  including Home Assistant states and expression-derived categories. Reuse the
+  button's two action lists for turn-on and turn-off commands. Local state resets
+  off when leaving the pad; bound switches wait for reported confirmation,
+  suppress repeated taps while pending, and block input when unavailable.
+  Configure read-only mode, track/knob colors, switch size, and icon position,
+  with automatic placement around existing labels and binding-aware styling.
+  See [Toggle switch](docs/user/widgets/README.md#toggle-switch).
 * Add `abs`, `min`, `max`, `clamp`, `round`, `floor`, and `ceil` to expression
   bindings. Document the functions in the portal Binding Reference and MCP
   pad-authoring capabilities.

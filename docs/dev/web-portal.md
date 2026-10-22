@@ -492,7 +492,7 @@ remains visible when Back is off to preserve existing validation. Input navigati
 remains in Layout; input-widget action suppression is declared by each owner.
 Extension declares that it replaces shared labels, icons, and images.
 
-All 14 active widget editors register explicitly through
+All 15 active widget editors register explicitly through
 `portal_widget_editor.js`. Their `portal_widget_*.js` modules precede the dialog
 through the bundle's `@widgets` marker; markup remains in the existing partials. Mousepad,
 Scrollpad, and Gamepad Joystick share the input-family owner module.
@@ -556,6 +556,16 @@ only where needed: Gamepad Button generates and loads its existing held-control
 editor. Its action policy builds the first tap action with operation `down`,
 hides ordinary tap/long-press lists, and keeps the held-control section in
 Content. The firmware still owns release behavior.
+
+Toggle switch owns its state field, matching values, static palette, read-only,
+switch size, and icon position. It relabels `actions[]` and `lp_actions[]` as
+Turn-on and Turn-off actions without changing either action list's payload.
+Its State source uses the shared binding header, builder shortcut, and reference
+action. It uses the same catalog marker and label rendering as other widgets;
+neither the inspector nor the pad editor simulates a switch. The size field
+retains `widget_toggle_width_pct` for compatibility, now scaling the fitted
+maximum with a default of 100%. `widget_toggle_icon_position` accepts left,
+above, or below; the older switch placement field is ignored and not emitted.
 
 The workspace owns raw drafts, dirty tracking, tab/error presentation, and
 fragment disposal. A successful save reloads canonical configuration while

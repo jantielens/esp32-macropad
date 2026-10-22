@@ -804,6 +804,48 @@ public:
 - Ghost touch suppression via `touch_manager_suppress_lvgl_input(200)` on show
 - Adaptive brush size (~0.8% of smaller display dimension, clamped 2–6 px)
 
+### Toggle Switch Widget Contract
+
+`toggle` is opt-in on display builds and registered through the widget manifest.
+Its packed configuration and state fit the existing widget buffers without
+enlarging every button. It uses `widget_data_binding` for its state source;
+blank/ASCII-whitespace-only sources select local mode. A literal nonblank source
+is binding-authoritative. Matching uses trimmed, ASCII-case-insensitive strings.
+
+The widget resolves in its existing tick with `binding_template_resolve_checked()`
+instead of consuming the poller's lossy combined string. This rejects direct
+resolver failures and overflow, including direct pipe fallbacks. Existing widget
+resolution and expression semantics are unchanged. Nested expression failure
+handling is covered through the production HA/expression resolver host test.
+
+The parent button owns short clicks; its `lv_switch` child is nonclickable and
+cannot independently auto-toggle or duplicate dispatch. `tapAt()` routes toggle
+requests to the widget and suppresses ordinary tap dispatch, while long presses
+are ignored. Local mode changes immediately and resets on `onHide()`. Bound mode
+keeps the reported position, arms pending before dispatch, and confirms the
+requested category, not the exact action payload. Timeout uses wrap-safe elapsed
+ticks (five seconds). Unavailability cancels pending and retains known position.
+
+Both action lists use normal action dispatch. The additive
+`action_list_dispatch_result()` reports initial completion/failure/pending;
+the existing void wrapper and continuation semantics remain unchanged. Later
+asynchronous failures are not a confirmation channel: without a new report the
+toggle times out. A temporary LVGL delete guard prevents state access after an
+action navigates and destroys the owning pad. Hiding cancels pending without
+cancelling an action already submitted to an external service.
+
+Track/knob styling is separate from binding-aware button foreground styling.
+The layout reserves top/bottom label rows, then places the natural-width center
+label left of the 2:1 switch in the remaining area. An icon sits left of that
+row by default, or above/below it. Switch size scales the largest fit (default
+100%); insufficient space hides the switch. Sizing and positioning use painted
+bounds, including label transforms and image scaling around their pivots.
+Unchanged bound reports do not rewrite styles or invalidate the switch.
+The widget tick recalculates layout after live label updates.
+UI Offset moves the middle group together, while
+center label-style offsets remain independent. Explicit offsets or oversized
+content remain subject to button clipping.
+
 ### Table Widget Payload Contract
 
 The table widget consumes a structured JSON payload, not plain formatted text.

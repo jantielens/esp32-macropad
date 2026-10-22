@@ -1,10 +1,12 @@
 #include "pad_screen.h"
 #include "../widgets/numericrocker_zones.h"
+#include "../widgets/toggle_widget.h"
 #include <cstring>
 #if HAS_DISPLAY
 bool PadScreen::navigationZoneAvailable(const ButtonTile& tile, uint8_t zone) const {
     if (!navigationZoneCount(tile)) return false;
     if (!tile.widget_type) return tile.action_count || tile.lp_action_count;
+    if (strcmp(tile.widget_type->name, "toggle") == 0) return toggle_interactive(&tile.widget_state);
     if (strcmp(tile.widget_type->name, "rocker") == 0) return zone ? tile.lp_action_count : tile.action_count;
     if (strcmp(tile.widget_type->name, "numericrocker") == 0 && navigationZoneCount(tile) == 5) {
         const auto* config = reinterpret_cast<const NumericRockerConfig*>(tile.widget_cfg.data);
@@ -20,6 +22,8 @@ uint8_t PadScreen::navigationZoneCount(const ButtonTile& tile) const {
     if (padActionOverlay && padActionCount) return 0;
     if (!tile.obj || lv_obj_has_flag(tile.obj, LV_OBJ_FLAG_HIDDEN) ||
         lv_obj_has_state(tile.obj, LV_STATE_DISABLED)) return 0;
+    if (tile.widget_type && strcmp(tile.widget_type->name, "toggle") == 0)
+        return toggle_interactive(&tile.widget_state) ? 1 : 0;
     if (tile.widget_type && strcmp(tile.widget_type->name, "numericrocker") == 0) {
         const auto* config = reinterpret_cast<const NumericRockerConfig*>(tile.widget_cfg.data);
         if (config->adjust_action.type[0] && (config->small_step > 0 || config->large_step > 0)) return 5;
@@ -364,6 +368,12 @@ void PadScreen::tapAt(ButtonTile* tile, const lv_point_t& point) {
     // Suppress taps that LVGL fires as part of a swipe gesture
     if (lv_tick_get() - swipe_actions_last_swipe_time() < 300) return;
 
+    if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) {
+        toggle_tap(&tile->widget_cfg, &tile->widget_state, tile->actions, tile->action_count,
+                    tile->lp_actions, tile->lp_action_count);
+        return;
+    }
+
 #if HAS_NATIVE_EXTENSIONS
     if (strcmp(tile->widget_cfg.type, "external") == 0) {
         const uint32_t instance_id = external_widget_instance_id(tile->page, tile->col, tile->row);
@@ -528,6 +538,7 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     if (!tile || !tile->obj) return;
     if (device_dialog_active()) return;
     (void)point;
+    if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) return;
 
 #if HAS_NATIVE_EXTENSIONS
     if (strcmp(tile->widget_cfg.type, "external") == 0) {
