@@ -81,8 +81,12 @@ Binding updates recalculate the fit as text changes. Icon scaling and label
 font upscaling are included in the fit. When less than four pixels
 of switch width remain, it is hidden instead of overlapping content. Enlarge
 the button or reduce its content if needed. Explicit offsets and oversized text
-are clipped at the button boundary. The pad editor uses the standard widget
-marker and label text, not a rendered or simulated switch.
+are clipped at the button boundary. The pad editor shows button styling and
+labels, with a large subdued symbol identifying each widget behind its labels.
+It does not reproduce widget graphics or widget-specific visual settings.
+Binding text is abbreviated to fit; hover over a binding or select the button
+to read its full text. The grid does not resolve bindings, show sample or live
+values, or dispatch actions.
 
 ### Bureau comfort setpoint
 

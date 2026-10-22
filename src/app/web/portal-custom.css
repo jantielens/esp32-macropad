@@ -1718,9 +1718,9 @@ body {
 .pad-cell:active      { transform: scale(0.96); }
 .pad-cell-empty       { background: transparent; color: #636366; font-size: 20px; }
 .pad-cell-empty:hover { background: rgba(255,255,255,0.04); }
-.pad-cell-btn         { border: none; outline-style: solid; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+.pad-cell-btn         { border: none; outline-style: solid; outline-color: var(--pad-cell-border-color, #48484a); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
 .pad-cell-ghost       { opacity: 0.85; outline: 2px dashed #9ca3af; outline-offset: -2px; }
-.pad-cell-btn:hover   { box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+.pad-cell-btn:hover   { outline-color: var(--pad-cell-border-color, #48484a); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
 
 .pad-cell-image-placeholder {
   position: absolute;
@@ -1736,10 +1736,21 @@ body {
 }
 
 .pad-cell-label-top    { font-size: 10px; opacity: 0.7; line-height: 1.2; white-space: pre-line; }
-.pad-cell-label-center { font-size: 14px; font-weight: 600; line-height: 1.3; white-space: pre-line; }
+.pad-cell-label-center { min-width: 0; max-width: 100%; font-size: 14px; font-weight: 600; line-height: 1.3; white-space: pre-line; }
 .pad-cell-icon         { font-size: 24px; line-height: 1; }
-.pad-cell-icon-row     { display: flex; align-items: center; gap: 4px; overflow: hidden; max-width: 100%; }
+.pad-cell-icon-row     { display: flex; align-items: center; gap: 4px; overflow: hidden; width: 100%; max-width: 100%; min-width: 0; }
+.pad-cell-icon-row > .pad-cell-icon { flex: none; }
+.pad-cell-icon-row > .pad-cell-label-center { flex: 1 1 auto; overflow: hidden; }
 .pad-cell-label-bottom { font-size: 10px; opacity: 0.7; line-height: 1.2; white-space: pre-line; }
+.pad-cell-binding {
+  display: inline-block;
+  max-width: min(28ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+  word-break: normal;
+}
 
 @font-face {
   font-family: 'Pad Widget Symbols';
@@ -1771,39 +1782,26 @@ body {
 }
 .pad-widget-marker {
   position: absolute;
-  bottom: 4px;
-  left: 4px;
-  width: 34px;
-  height: 20px;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #fff;
-  border-radius: 3px;
-  background: #202124;
-  color: #fff;
-  box-sizing: border-box;
-  z-index: 1;
-}
-.pad-widget-marker .pad-widget-symbol-vertical .pad-widget-glyph { font-size: 9px; }
-.pad-widget-fallback {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  width: 100%;
-  min-height: 0;
+  color: inherit;
+  opacity: 0.12;
   overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
 }
-.pad-widget-fallback .pad-widget-glyph { font-size: 28px; }
-.pad-widget-fallback .pad-widget-symbol-vertical .pad-widget-glyph { font-size: 18px; }
-.pad-widget-name {
-  font-size: 11px;
-  line-height: 1.2;
-  max-width: 100%;
-  overflow-wrap: anywhere;
+.pad-widget-marker .pad-widget-glyph { font-size: min(95cqw, 95cqh); }
+.pad-widget-marker .pad-widget-symbol:has(.pad-widget-glyph + .pad-widget-glyph) {
+  flex-direction: column-reverse;
+  gap: 6cqh;
 }
+.pad-widget-marker .pad-widget-symbol:has(.pad-widget-glyph + .pad-widget-glyph) .pad-widget-glyph {
+  font-size: min(46cqw, 46cqh);
+}
+.pad-cell-has-widget > [class^="pad-cell-label-"] { position: relative; z-index: 1; }
+.pad-button-builder-preview .pad-widget-marker { display: none; }
 .pad-cell-has-widget > .pad-cell-label-top,
 .pad-cell-has-widget > .pad-cell-label-center,
 .pad-cell-has-widget > .pad-cell-label-bottom {
@@ -1812,13 +1810,6 @@ body {
   overflow: hidden;
   flex-shrink: 1;
 }
-@container (max-width: 80px) or (max-height: 85px) {
-  .pad-widget-name { display: none; }
-}
-@container (max-height: 52px) {
-  .pad-widget-fallback { display: none; }
-}
-
 /* Resize drag handles */
 .pad-resize-handle {
   position: absolute; background: rgba(100,180,255,0.45); border-radius: 2px;

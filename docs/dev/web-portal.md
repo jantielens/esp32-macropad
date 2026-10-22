@@ -24,9 +24,9 @@ http://localhost:8765/?profile=esp32-p4-lcd4b&fragment=pad-editor
 
 Its fixtures cover empty and populated pads, spanning buttons, action lists,
 widgets, template inheritance, a dense grid, and input controls. Save, reload,
-delete, defaults, icon uploads, binding previews, and Show on Device run against
-memory-backed APIs. Show on Device records the chosen screen without rendering
-or executing actions on hardware.
+delete, defaults, icon uploads, pad-editor previews, and Show on Device run
+against memory-backed APIs. Show on Device records the chosen screen without
+rendering or executing actions on hardware.
 
 The existing E-Paper Frame image workflow remains available at:
 
@@ -37,8 +37,8 @@ http://localhost:8765/?profile=reterminal-e1003-frame&fragment=epaper-image
 Changes to served HTML, CSS, and JavaScript are applied on the next browser
 reload. Restart the server after changing `tools/portal-dev-server.py`. Mock
 configuration writes remain in memory for the server process and never reach a
-physical device. The server binds to localhost. Binding previews resolve fixed
-sample values rather than reproducing the firmware binding engine.
+physical device. The server binds to localhost. Pad-editor previews keep raw
+bindings abbreviated; they do not resolve or simulate values.
 
 See the [script reference](scripts.md#toolsportal-dev-serverpy) for reset
 commands, failure scenarios, and focused regression tests. The P4 profile is the
@@ -561,11 +561,22 @@ Toggle switch owns its state field, matching values, static palette, read-only,
 switch size, and icon position. It relabels `actions[]` and `lp_actions[]` as
 Turn-on and Turn-off actions without changing either action list's payload.
 Its State source uses the shared binding header, builder shortcut, and reference
-action. It uses the same catalog marker and label rendering as other widgets;
-neither the inspector nor the pad editor simulates a switch. The size field
+action. It uses the same catalog symbol and label rendering as other widgets;
+the pad editor does not simulate a switch. The size field
 retains `widget_toggle_width_pct` for compatibility, now scaling the fitted
 maximum with a default of 100%. `widget_toggle_icon_position` accepts left,
 above, or below; the older switch placement field is ignored and not emitted.
+
+The shared cell renderer shows button styling and labels, with a large subdued
+Material Symbol behind widget labels. Symbols come from existing catalog
+metadata, including axis variants and the unknown-widget fallback. Widget
+buttons omit additional configured icons and image placeholders; ordinary
+buttons retain their configured icons. There are no per-widget drawing hooks,
+sample values, binding resolution requests, or action dispatch in grid rendering.
+Bindings are abbreviated for display, with their full text retained in tooltips
+and accessible descriptions. Valid edits update the grid immediately; invalid
+input leaves the last valid layout in place. The `test_portal_pad_preview`
+regression covers ordinary and template buttons.
 
 The workspace owns raw drafts, dirty tracking, tab/error presentation, and
 fragment disposal. A successful save reloads canonical configuration while

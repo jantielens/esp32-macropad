@@ -32,18 +32,33 @@ function createElement() {
     return node;
 }
 
+function descendants(node) {
+    return (node.children || []).flatMap(child => [child, ...descendants(child)]);
+}
+
+function visibleText(node) {
+    return node.textContent !== undefined ? node.textContent : (node.children || []).map(visibleText).join('');
+}
+
 const context = {
     TextEncoder,
     window: {},
     deviceInfoCache: { widget_catalog: [] },
-    document: { createElement, createElementNS: createElement },
+    document: {
+        createElement, createElementNS: createElement,
+        createTextNode: textContent => ({ textContent, querySelector: () => null })
+    },
     padColorToHex: (color, fallback) => color || fallback,
+    padColorNormalizeLiteral: color => /^#[0-9a-f]{6}$/i.test(color || '') ? color.toLowerCase() : '',
     padGetEffectiveDefault: key => ({ bg_color: '#333333', fg_color: '#ffffff', border_color: '#000000', border_width: '0', corner_radius: '8', content_pad: '4' })[key]
 };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_editor.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_gauge.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_widget_toggle.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_rocker.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_widget_numericrocker.js', 'utf8'), context);
+vm.runInContext(fs.readFileSync('src/app/web/portal_binding_validator.js', 'utf8'), context);
 vm.runInContext(fs.readFileSync('src/app/web/portal_pad_icons.js', 'utf8'), context);
 
 const fields = ['name', 'icon', 'second_icon', 'axis_field', 'horizontal_icon', 'vertical_icon', 'default_axis'];
@@ -69,8 +84,8 @@ for (const widget_type of types) {
     context.padRenderCellContent(cell, { widget_type });
     assert(cell.classes.has('pad-cell-has-widget'), widget_type);
     assert.strictEqual(cell.children[0].className, 'pad-widget-marker', widget_type);
-    assert.strictEqual(cell.children[1].className, 'pad-widget-fallback', widget_type);
-    assert.notStrictEqual(cell.children[1].children[1].textContent, 'Unknown Widget', widget_type);
+    assert.strictEqual(cell.children.length, 1, widget_type);
+    assert.notStrictEqual(cell.children[0].title, 'Unknown Widget Widget', widget_type);
     assert(cell.children[0].attributes['aria-label']);
     const labeled = createElement();
     context.padRenderCellContent(labeled, { widget_type, label_center: 'My label' });
@@ -89,6 +104,51 @@ assert.strictEqual(context.padWidgetPreview({}), null);
 context.deviceInfoCache.widget_catalog.push({ type: 'future_widget', name: 'Future Widget', icon: 'list',
     axis_field: 'custom_axis', horizontal_icon: 'swap_horiz', vertical_icon: 'swap_vert', default_axis: 'vertical' });
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'future_widget', custom_axis: 'horizontal' }).icon, 'swap_horiz');
+const longBinding = '[mqtt:home/building/room/sensor/temperature;state;%.1f C|offline]';
+const nestedExpression = '[expr:[mqtt:home/setpoint;state;%.1f]*2]';
+const mixedBindingText = 'Room ' + longBinding + ' is [health:cpu]\nTarget ' + nestedExpression;
+const bindingButton = { label_center: mixedBindingText };
+const bindingButtonBefore = JSON.stringify(bindingButton);
+const bindingCell = createElement();
+context.padRenderCellContent(bindingCell, bindingButton);
+const bindingLabel = bindingCell.children.find(child => child.className === 'pad-cell-label-center');
+const bindingSpans = descendants(bindingLabel).filter(child => child.className === 'pad-cell-binding');
+const longAbbreviation = bindingSpans[0].textContent;
+assert(longAbbreviation.startsWith('[mqtt:...') && longAbbreviation.endsWith('/temperature]'));
+assert.strictEqual(visibleText(bindingLabel), 'Room ' + longAbbreviation + ' is [health:cpu]\nTarget [expr:...]');
+assert.deepStrictEqual(bindingSpans.slice(1).map(span => span.textContent), ['[health:cpu]', '[expr:...]']);
+assert.deepStrictEqual(bindingSpans.map(span => span.title), [longBinding, '[health:cpu]', nestedExpression]);
+assert(bindingSpans.every(span => span.attributes['aria-hidden'] === 'true'));
+assert.strictEqual(bindingCell.attributes['aria-description'], mixedBindingText);
+assert.strictEqual(JSON.stringify(bindingButton), bindingButtonBefore);
+assert(bindingSpans.every(span => span.textContent.length <= 28));
+
+for (const [field, value, expected] of [
+    ['label_top', '[mqtt:home/setpoint;state;%.1f|offline]', '[mqtt:home/setpoint]'],
+    ['label_bottom', '[health:cpu]', '[health:cpu]']
+]) {
+    const labeledCell = createElement();
+    context.padRenderCellContent(labeledCell, { [field]: value });
+    const className = field === 'label_top' ? 'pad-cell-label-top' : 'pad-cell-label-bottom';
+    const label = labeledCell.children.find(child => child.className === className);
+    assert.strictEqual(visibleText(label), expected);
+    assert.strictEqual(descendants(label).find(child => child.className === 'pad-cell-binding').title, value);
+}
+
+const incompleteCell = createElement();
+const incompleteBinding = '[mqtt:home/building/temperature;state';
+context.padRenderCellContent(incompleteCell, { label_center: incompleteBinding });
+const incompleteLabel = incompleteCell.children.find(child => child.className === 'pad-cell-label-center');
+assert(visibleText(incompleteLabel).startsWith('[mqtt:...') && visibleText(incompleteLabel).endsWith('/temperature'));
+assert.strictEqual(incompleteCell.attributes['aria-description'], incompleteBinding);
+
+const iconBindingCell = createElement();
+context.padRenderCellContent(iconBindingCell, {
+    icon_id: 'emoji_thermometer', icon_position: 'left', label_center: '[mqtt:home/very/long/temperature]'
+});
+const iconRow = iconBindingCell.children.find(child => child.className === 'pad-cell-icon-row');
+const iconRowLabel = iconRow.children.find(child => child.className === 'pad-cell-label-center');
+assert(visibleText(iconRowLabel).startsWith('[mqtt:...') && visibleText(iconRowLabel).endsWith('/temperature]'));
 const widgetCatalog = context.deviceInfoCache;
 context.deviceInfoCache = null;
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'gauge' }).name, 'Unknown Widget');
@@ -102,6 +162,12 @@ for (const content of [{ label_top: 'Top' }, { label_bottom: 'Bottom' }, { icon_
 const normal = createElement();
 context.padRenderCellContent(normal, {});
 assert.strictEqual(normal.children[0].textContent, '\u2022');
+for (const width of ['1', '2', '3']) {
+    const bordered = createElement();
+    context.padRenderCellContent(bordered, { border_width: width, border_color: '#123456' });
+    assert.strictEqual(bordered.style.border, width + 'px solid #123456');
+    assert.strictEqual(bordered.style['--pad-cell-border-color'], '#123456');
+}
 
 const grid = fs.readFileSync('src/app/web/portal_pad_grid.js', 'utf8');
 assert(grid.includes('padRenderCellContent(cell, tplBtn)'));
@@ -110,20 +176,22 @@ const gridElement = createElement();
 context.deviceInfoCache = widgetCatalog;
 context.document.getElementById = id => id === 'pad-grid' ? gridElement : null;
 context.padState = { cols: 3, rows: 1, buttons: [{ col: 0, row: 0, widget_type: 'list' }],
-    templateButtons: [{ col: 1, row: 0, col_span: 2, widget_type: 'gauge' }] };
+    templateButtons: [{ col: 1, row: 0, col_span: 2, widget_type: 'gauge',
+        label_top: '[mqtt:home/building/temperature;state;%.1f C]' }] };
 context.padBuildOccupancySet = () => new Set();
 vm.runInContext(grid, context);
 context.padRenderResizeHandles = () => {};
 context.padRenderGrid();
 assert.strictEqual(gridElement.children.length, 2);
-for (const cell of gridElement.children) {
-    assert(cell.children.some(child => child.className === 'pad-widget-marker'));
-    assert(cell.children.some(child => child.className === 'pad-widget-fallback'));
-}
+for (const cell of gridElement.children) assert(cell.children.some(child => child.className === 'pad-widget-marker'));
+assert(!gridElement.children[0].children.some(child => child.className === 'pad-widget-fallback'));
+assert(!gridElement.children[1].children.some(child => child.className === 'pad-widget-fallback'));
 assert(gridElement.children[1].classes.has('pad-cell-ghost'));
 assert.strictEqual(gridElement.children[1].style.gridColumn, '2 / span 2');
 assert.strictEqual(gridElement.children[1].style.gridRow, '1 / span 1');
 assert.strictEqual(gridElement.children[1].children[0].title, 'Gauge Widget');
+const templateBindingLabel = gridElement.children[1].children.find(child => child.className === 'pad-cell-label-top');
+assert(visibleText(templateBindingLabel).startsWith('[mqtt:...') && visibleText(templateBindingLabel).endsWith('/temperature]'));
 const css = fs.readFileSync('src/app/web/portal-custom.css', 'utf8');
 const font = Buffer.from(css.match(/data:font\/woff2;base64,([^']+)/)[1], 'base64');
 assert.strictEqual(font.toString('ascii', 0, 4), 'wOF2');
@@ -145,6 +213,33 @@ vm.runInContext(`BUTTON_BUILDER_PROVIDERS.push({
 });`, context);
 context.PAD_FIRMWARE_DEFAULTS = { widget_track_color: '#1A1A1A', widget_series_color: '#4CAF50',
     widget_indicator_color: '#FFFFFF', widget_tick_color: '#AAAAAA' };
+for (const widget_type of ['toggle', 'rocker', 'numericrocker', 'future_widget']) {
+    const button = { widget_type, label_top: 'Top', label_center: 'Center', label_bottom: 'Bottom', icon_id: 'emoji_X' };
+    const original = JSON.stringify(button);
+    const cell = createElement();
+    context.padRenderCellContent(cell, button);
+    const marker = cell.children.find(child => child.className === 'pad-widget-marker');
+    assert(marker.attributes['aria-label']);
+    assert.strictEqual(cell.children.slice(1).map(visibleText).join('|'), 'Top|Center|Bottom');
+    assert.strictEqual(cell.querySelector('.pad-cell-icon'), null);
+    assert.strictEqual(JSON.stringify(button), original, 'Preview rendering leaves widget configuration unchanged');
+}
+const ordinaryToggle = { col: 0, row: 0, widget_type: 'toggle', label_center: 'Ordinary',
+    widget_toggle_on_color: '#4caf50', widget_toggle_off_color: '#59636e', widget_toggle_knob_color: '#ffffff', widget_toggle_width_pct: 75 };
+const templateToggle = { col: 1, row: 0, widget_type: 'toggle', label_center: 'Template', col_span: 2,
+    widget_toggle_on_color: '#2196f3', widget_toggle_off_color: '#59636e', widget_toggle_knob_color: '#ffffff', widget_toggle_width_pct: 70 };
+const ordinaryToggleBefore = JSON.stringify(ordinaryToggle);
+const templateToggleBefore = JSON.stringify(templateToggle);
+context.padState = { cols: 3, rows: 1, buttons: [ordinaryToggle], templateButtons: [templateToggle] };
+gridElement.children = [];
+context.padRenderGrid();
+assert.strictEqual(gridElement.children.length, 2);
+assert(gridElement.children[0].querySelector('.pad-widget-marker'));
+assert(gridElement.children[1].querySelector('.pad-widget-marker'));
+assert(gridElement.children[1].classes.has('pad-cell-ghost'));
+assert.strictEqual(gridElement.children[1].style.gridColumn, '2 / span 2');
+assert.strictEqual(JSON.stringify(ordinaryToggle), ordinaryToggleBefore);
+assert.strictEqual(JSON.stringify(templateToggle), templateToggleBefore);
 const barBuilder = vm.runInContext('padButtonBuilders.find(builder => builder.id === "bar")', context);
 const builderElements = Object.fromEntries(['fields', 'states', 'note', 'sources', 'selection', 'name', 'id', 'state'].map(name => ['[data-bb-' + name + ']', createElement()]));
 const makeDraft = (detail, name) => {

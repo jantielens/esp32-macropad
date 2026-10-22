@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add simplified Pad Editor layout previews with button styling, configured
+  labels, and large subdued widget symbols. Abbreviate raw bindings with full
+  text available on hover, without substituting sample or live values.
+  See [Build the layout](docs/user/pads/editing.md#build-the-layout).
 * Add a Toggle switch widget with local state or an authoritative state binding,
   including Home Assistant states and expression-derived categories. Reuse the
   button's two action lists for turn-on and turn-off commands. Local state resets

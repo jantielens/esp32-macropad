@@ -21,6 +21,12 @@ The canvas reflects the device's aspect ratio and spacing, not an exact renderin
 of fonts, widgets, or live images. Each pad saves independently.
 **Show on Device** does not save the draft.
 
+Button styling and labels update as you edit valid settings. Widget buttons show
+a large subdued symbol behind their labels rather than simulated widget graphics;
+ordinary buttons retain their configured icons. Long bindings are abbreviated
+without substituting sample or live values. Hover over a binding or select its
+button to read the full text. The saved binding is unchanged.
+
 ## Create a button from a source
 
 The **Button Builder** configures related fields together, so you do not need
