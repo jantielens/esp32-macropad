@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bindings. Document the functions in the portal Binding Reference and MCP
   pad-authoring capabilities.
 
+### Changed
+
+* Make Pad Editor selection distinct from button borders with an external
+  contrasting frame and four persistent, borderless resize grips. Use white
+  grips on most backgrounds and dark grips on very light backgrounds. Click
+  the empty canvas around the preview to deselect without discarding edits.
+  See [Move and resize](docs/user/pads/editing.md#move-and-resize).
+
 ## [1.43.0] - 2026-10-22
 
 ### Added

@@ -101,6 +101,15 @@ assert.strictEqual(context.padWidgetPreview({ widget_type: 'numericrocker' }).ve
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'numericrocker', widget_numericrocker_axis: 'vertical' }).vertical, true);
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'future_widget' }).name, 'Unknown Widget');
 assert.strictEqual(context.padWidgetPreview({}), null);
+for (const [background, gripColor] of [
+    ['#ffffff', '#17212b'], ['#f0f0f0', '#17212b'], ['#ffff00', '#17212b'],
+    ['#bcbcbc', '#17212b'], ['#bbbbbb', '#ffffff'],
+    ['#4e8cff', '#ffffff'], ['#0000ff', '#ffffff'], ['#17212b', '#ffffff']
+]) {
+    const cell = createElement();
+    context.padRenderCellContent(cell, { bg_color: background });
+    assert.strictEqual(cell.style['--pad-resize-grip-color'], gripColor, background);
+}
 context.deviceInfoCache.widget_catalog.push({ type: 'future_widget', name: 'Future Widget', icon: 'list',
     axis_field: 'custom_axis', horizontal_icon: 'swap_horiz', vertical_icon: 'swap_vert', default_axis: 'vertical' });
 assert.strictEqual(context.padWidgetPreview({ widget_type: 'future_widget', custom_axis: 'horizontal' }).icon, 'swap_horiz');

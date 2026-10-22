@@ -23,6 +23,11 @@ function padWorkspaceInit() {
         node.dataset.buttonTab = actions ? 'Actions' : appearance ? 'Appearance' : 'Content';
     });
     const on = (node, event, callback) => node.addEventListener(event, callback, { signal: controller.signal });
+    on(canvas, 'click', event => {
+        if (event.target !== canvas || !padWorkspace.selected) return;
+        padWorkspaceSetScope('pad');
+        padWorkspaceReturn();
+    });
     root.addEventListener('wheel', padWorkspaceWheel, { passive: false, signal: controller.signal });
     on(element('pad-workspace-pad-scope'), 'click', () => padWorkspaceSetScope('pad'));
     on(element('pad-workspace-button-scope'), 'click', () => padWorkspaceSetScope('button'));

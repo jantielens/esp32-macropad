@@ -1812,15 +1812,24 @@ body {
 }
 /* Resize drag handles */
 .pad-resize-handle {
-  position: absolute; background: rgba(100,180,255,0.45); border-radius: 2px;
-  opacity: 0; transition: opacity .15s; z-index: 10; touch-action: none;
+  position: absolute; width: 24px; height: 24px;
+  opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 10; touch-action: none;
 }
-.pad-cell:hover > .pad-resize-handle { opacity: 1; }
-.pad-resize-handle-right  { top: 12%; right: 0; width: 5px; height: 76%; cursor: col-resize; }
-.pad-resize-handle-left   { top: 12%; left: 0;  width: 5px; height: 76%; cursor: col-resize; }
-.pad-resize-handle-down   { left: 12%; bottom: 0; height: 5px; width: 76%; cursor: row-resize; }
-.pad-resize-handle-up     { left: 12%; top: 0;    height: 5px; width: 76%; cursor: row-resize; }
-.pad-resize-handle:hover  { background: rgba(100,180,255,0.85); }
+.pad-resize-handle::after {
+  content: ''; position: absolute; width: 8px; height: 8px; box-sizing: border-box;
+  background: var(--pad-resize-grip-color, #fff); border-radius: 1px;
+}
+.pad-cell:hover > .pad-resize-handle { opacity: .65; pointer-events: auto; }
+.pad-resize-handle-right  { top: calc(50% - 12px); right: 0; cursor: col-resize; }
+.pad-resize-handle-left   { top: calc(50% - 12px); left: 0; cursor: col-resize; }
+.pad-resize-handle-down   { left: calc(50% - 12px); bottom: 0; cursor: row-resize; }
+.pad-resize-handle-up     { left: calc(50% - 12px); top: 0; cursor: row-resize; }
+.pad-resize-handle-right::after { right: 2px; top: 8px; }
+.pad-resize-handle-left::after { left: 2px; top: 8px; }
+.pad-resize-handle-down::after { bottom: 2px; left: 8px; }
+.pad-resize-handle-up::after { top: 2px; left: 8px; }
+.pad-cell > .pad-resize-handle:hover { opacity: 1; }
+.pad-resize-handle:hover::after { filter: brightness(.85); }
 
 .action-add-link {
   display: inline-block; margin-top: 8px; color: var(--portal-blue); cursor: pointer; font-size: 13px;
@@ -2353,7 +2362,13 @@ body:has(#pad-editor-root) #toast-container {
 #pad-workspace-pads button { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; background: transparent; text-align: left; padding-left: 14px; border-radius: 0; margin: 0; overflow-wrap: anywhere; }
 #pad-editor-root .pad-workspace-stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; background-color: var(--portal-editor-bg); background-image: radial-gradient(var(--pad-workspace-line) .7px, transparent .7px); background-size: 16px 16px; }
 #pad-editor-root .pad-workspace-canvas { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-#pad-editor-root .pad-cell-selected { outline: 3px solid var(--portal-primary); outline-offset: -3px; z-index: 1; }
+#pad-editor-root .pad-cell-selected {
+  outline: 2px solid var(--portal-primary); outline-offset: 2px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 5px #17212b; z-index: 1;
+}
+#pad-editor-root .pad-cell-selected > .pad-resize-handle { opacity: 1; pointer-events: auto; }
+#pad-editor-root .pad-cell-selected:active,
+.pad-cell:has(> .pad-resize-handle:active) { transform: none; }
 #pad-editor-root .pad-workspace-inspector { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-left: 1px solid var(--pad-workspace-line); background: var(--portal-surface); overflow: hidden; }
 #pad-workspace-mobile-save { display: none; }
 #pad-editor-root .pad-workspace-inspector-head { padding: 10px 10px 0; flex: none; }

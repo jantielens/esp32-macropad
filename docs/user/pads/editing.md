@@ -195,7 +195,15 @@ have a green outline. Drop on an occupied position or press Escape to cancel.
 A multi-position span is preserved where it fits, otherwise movement can reduce
 it to 1 x 1. Check the result before saving.
 
-Hover a button for resize handles or edit Column span/Row span explicitly.
+Select a button to show an external selection frame and four persistent resize
+grips at its edge midpoints. The borderless grips are white on most button
+backgrounds and dark on very light backgrounds. Drag a grip to resize along
+that edge, or edit Column span/Row span explicitly. Hovering an unselected
+button also reveals its grips.
+
+Click the empty canvas around the preview to deselect the button and return
+to Pad settings without discarding edits.
+
 Covered positions belong to the spanning button; do not hide useful controls
 under it. Copy/paste is an alternative and works on mobile where dragging is
 unavailable.
