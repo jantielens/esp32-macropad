@@ -579,6 +579,35 @@ TEST_F(GamepadWidget, RouterRetainsIdsAndDoesNotAdoptExtraFinger) {
     router.cancel();
 }
 
+TEST_F(GamepadWidget, RouterRevalidatesOnlyBlockedCapturedContacts) {
+    create("gamepad_button");
+    GamepadTouchRouter router;
+    router.update(contacts({{3, 50, 50}}), false, widget_generation);
+    ASSERT_EQ(delivered().buttons, 1);
+    lv_area_t blocking_area{100, 100, 150, 150};
+    const auto blocked = [](lv_obj_t*, const lv_point_t& point, void* context) {
+        const auto* area = static_cast<lv_area_t*>(context);
+        return point.x >= area->x1 && point.x <= area->x2 &&
+               point.y >= area->y1 && point.y <= area->y2;
+    };
+    EXPECT_FALSE(router.has_blocked_input(blocked, &blocking_area));
+    EXPECT_NE(reinterpret_cast<GamepadButtonState*>(state.data)->touch.owner, 0U);
+    router.update(contacts({{3, 250, 250}}), false, widget_generation);
+    blocking_area = {40, 40, 60, 60};
+    EXPECT_FALSE(router.has_blocked_input(blocked, &blocking_area));
+    blocking_area = {240, 240, 260, 260};
+    EXPECT_TRUE(router.has_blocked_input(blocked, &blocking_area));
+    router.cancel();
+    EXPECT_EQ(delivered().buttons, 0);
+    EXPECT_FALSE(router.has_blocked_input(blocked, &blocking_area));
+    router.update(contacts({{3, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(delivered().buttons, 0);
+    router.update(contacts({}), false, widget_generation);
+    router.update(contacts({{3, 50, 50}}), false, widget_generation);
+    EXPECT_EQ(delivered().buttons, 1);
+    router.cancel();
+}
+
 TEST_F(GamepadWidget, RouterIdleGenerationChangePreservesFirstPress) {
     GamepadTouchRouter router;
     router.update(contacts({}), false, widget_generation, 1);

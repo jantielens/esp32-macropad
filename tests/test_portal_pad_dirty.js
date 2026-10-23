@@ -493,6 +493,35 @@ assert.strictEqual(vm.runInContext("padWorkspace.forms.get('overlay:0,0').values
 assert.strictEqual(vm.runInContext("padWorkspace.errors.get('main:0,0')", workspaceContext), 'Main error');
 assert.strictEqual(vm.runInContext("padWorkspace.errors.get('overlay:0,0')", workspaceContext), 'Overlay error');
 
+const sharedControls = ['checkbox', 'text', 'button'].map((type, index) => ({
+	type, disabled: index === 2, readOnly: false, dataset: {},
+	hasAttribute(name) { return name === 'data-main-disabled' && this.dataset.mainDisabled !== undefined; }
+}));
+workspaceContext.document.getElementById = id => id === 'pad-workspace-pad-fields'
+	? { querySelectorAll() { return sharedControls; } } : null;
+workspaceContext.padState.selectedLayer = 'overlay';
+workspaceContext.padWorkspaceRenderLayer();
+workspaceContext.padWorkspaceRenderLayer();
+assert(sharedControls.every(control => control.disabled), 'Overlay must lock every shared control, including checkboxes');
+workspaceContext.padState.selectedLayer = 'main';
+workspaceContext.padWorkspaceRenderLayer();
+assert.deepStrictEqual(sharedControls.map(control => control.disabled), [false, false, true], 'Main must restore the original disabled states');
+workspaceContext.document.getElementById = draftLookup;
+
+vm.runInContext(fs.readFileSync('src/app/web/portal_pad_io.js', 'utf8'), workspaceContext);
+workspaceContext.confirm = () => true;
+workspaceContext.showMessage = () => {};
+workspaceContext.padState.btnClipboard = { label_center: 'Copied' };
+workspaceContext.padState.selectedLayer = 'overlay';
+workspaceContext.padState.layerSelections = { main: { col: 0, row: 0 }, overlay: { col: 0, row: 0 } };
+workspaceContext.padFillWithClipboard();
+assert.strictEqual(vm.runInContext("padWorkspace.forms.get('main:0,0').values[0].value", workspaceContext), 'Main same-coordinate draft', 'Filling Overlay must preserve Main drafts');
+assert.strictEqual(vm.runInContext("padWorkspace.errors.get('main:0,0')", workspaceContext), 'Main error', 'Filling Overlay must preserve Main validation errors');
+assert.strictEqual(vm.runInContext("padWorkspace.forms.has('overlay:0,0') || padWorkspace.errors.has('overlay:0,0')", workspaceContext), false);
+assert.deepStrictEqual(workspaceContext.padState.layerSelections.main, { col: 0, row: 0 });
+assert.strictEqual(workspaceContext.padState.overlayButtons.length, 4);
+workspaceContext.padState.selectedLayer = 'main';
+
 const refreshElements = new Map();
 const refreshContext = {
 	console, padState: { page: 0, cols: 4, rows: 3, selectedLayer: 'main', mainButtons: [], overlayButtons: [] }, padDirty: false, padSaveInProgress: false,

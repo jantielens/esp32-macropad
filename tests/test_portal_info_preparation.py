@@ -100,16 +100,22 @@ static bool is_valid_binding_name(const char*) { return true; }
 static uint8_t action_list_parse(JsonVariantConst, ButtonAction*, size_t, bool) {
     return 0;
 }
-static bool parse_button(JsonObject, ScreenButtonConfig*, const ButtonDefaults*) { return true; }
-static void merge_template_buttons(uint8_t, PadConfig**) {}
+static bool parse_button(JsonObject object, ScreenButtonConfig* button, const ButtonDefaults*) {
+    button->col = object["col"] | uint8_t(0);
+    button->row = object["row"] | uint8_t(0);
+    button->col_span = object["col_span"] | uint8_t(1);
+    button->row_span = object["row_span"] | uint8_t(1);
+    return true;
+}
 '''
 harness += section("static bool g_fs_mounted", "// ============================================================================")
 harness += section("static void pad_config_path", "// ============================================================================")
 harness += section("bool pad_config_init()", "// Internal: read and parse")
-harness += section("static PadConfig* pad_config_load_from_flash(uint8_t page, bool skip_template)",
+harness += section("static int select_template_buttons",
                    "void pad_config_rebuild_all_caches()")
 harness += section("void pad_config_rebuild_all_caches()", "bool pad_config_get_data_stream_snapshot")
 harness += section("bool pad_config_save_raw", "bool pad_config_exists")
+harness += section("uint32_t pad_config_get_generation()", "uint32_t pad_config_get_eligible_mask()")
 harness += section("bool pad_config_read_name", "int pad_config_resolve_ref")
 harness += info_source[info_source.index("template <typename TJson"):info_source.index("static void print_json_string")]
 harness += r'''
@@ -125,13 +131,23 @@ struct TestResponse {
     }
     size_t write(uint8_t byte) { return write(&byte, 1); }
 };
+static bool save_document(uint8_t pad, JsonDocument& doc) {
+    std::string json;
+    serializeJson(doc, json);
+    return pad_config_save_raw(pad, reinterpret_cast<const uint8_t*>(json.data()), json.size());
+}
 static bool save(uint8_t pad, const std::string& name) {
     JsonDocument doc;
     doc["name"] = name;
     doc["buttons"].to<JsonArray>();
-    std::string json;
-    serializeJson(doc, json);
-    return pad_config_save_raw(pad, reinterpret_cast<const uint8_t*>(json.data()), json.size());
+    return save_document(pad, doc);
+}
+static void add_buttons(JsonArray buttons, unsigned count) {
+    for (unsigned index = 0; index < count; ++index) {
+        JsonObject button = buttons.add<JsonObject>();
+        button["col"] = index % 8;
+        button["row"] = index / 8;
+    }
 }
 int main() {
     files["/config/pad_0.json"] = R"({"name":"Boot name","buttons":[]})";
@@ -172,6 +188,58 @@ int main() {
     assert(resized->name == reinterpret_cast<char*>(resized->buttons + 4));
     assert(!pad_config_resize(&resized, 0));
     pad_config_release(resized);
+    JsonDocument template_pad;
+    template_pad["cols"] = 8;
+    template_pad["rows"] = 8;
+    add_buttons(template_pad["buttons"].to<JsonArray>(), MAX_PAD_BUTTONS - 1);
+    assert(save_document(1, template_pad));
+    JsonDocument child;
+    child["cols"] = 8;
+    child["rows"] = 8;
+    child["template_pad"] = 1;
+    child["buttons"].to<JsonArray>();
+    add_buttons(child["overlay_buttons"].to<JsonArray>(), 1);
+    assert(save_document(0, child));
+    const PadConfig* inherited = pad_config_acquire(0);
+    assert(inherited->main_button_count == MAX_PAD_BUTTONS - 1);
+    assert(inherited->button_count == MAX_PAD_BUTTONS);
+    assert(inherited->buttons[MAX_PAD_BUTTONS - 1].col == 0);
+    assert(inherited->buttons[MAX_PAD_BUTTONS - 1].row == 0);
+    const std::string old_template = files.at("/config/pad_1.json");
+    const std::string old_child = files.at("/config/pad_0.json");
+    const uint32_t old_generation = pad_config_get_generation();
+    JsonObject extra = template_pad["buttons"].as<JsonArray>().add<JsonObject>();
+    extra["col"] = 7;
+    extra["row"] = 7;
+    assert(!save_document(1, template_pad));
+    assert(files.at("/config/pad_1.json") == old_template);
+    assert(pad_config_get_generation() == old_generation);
+    JsonObject second_overlay = child["overlay_buttons"].as<JsonArray>().add<JsonObject>();
+    second_overlay["col"] = 1;
+    second_overlay["row"] = 0;
+    assert(!save_document(0, child));
+    assert(files.at("/config/pad_0.json") == old_child);
+    assert(pad_config_get_generation() == old_generation);
+    const PadConfig* unchanged = pad_config_acquire(0);
+    assert(unchanged == inherited);
+    pad_config_release(unchanged);
+    pad_config_release(inherited);
+    template_pad["buttons"].clear();
+    add_buttons(template_pad["buttons"].to<JsonArray>(), 32);
+    assert(save_document(1, template_pad));
+    child["overlay_buttons"].clear();
+    add_buttons(child["overlay_buttons"].to<JsonArray>(), 32);
+    assert(save_document(0, child));
+    const PadConfig* balanced = pad_config_acquire(0);
+    assert(balanced->main_button_count == 32 && balanced->button_count == 64);
+    assert(balanced->button_capacity == balanced->button_count);
+    for (unsigned index = 0; index < 32; ++index) {
+        assert(balanced->buttons[index].col == index % 8);
+        assert(balanced->buttons[index].row == index / 8);
+        assert(balanced->buttons[index + 32].col == index % 8);
+        assert(balanced->buttons[index + 32].row == index / 8);
+    }
+    pad_config_release(balanced);
     files["/config/pad_1.json"] = R"({"name":"Imported","buttons":[]})";
     pad_config_rebuild_all_caches();
     assert(pad_config_read_name(1, copied, sizeof(copied)));

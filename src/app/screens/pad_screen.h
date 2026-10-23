@@ -157,6 +157,7 @@ private:
     lv_area_t navigationArea(const ButtonTile& tile, uint8_t zone) const;
     bool inputAllowed(const ButtonTile& tile, const lv_point_t& point) const;
     bool isOverlayButton(const ButtonTile* tile) const;
+    bool overlayIntersects(const lv_area_t& area, bool disabledOnly = false) const;
     bool pointBlockedByOverlay(const lv_point_t& point) const;
     bool disabledOverlayBlocksPoint(const lv_point_t& point) const;
     bool coveredByOverlay(const ButtonTile& tile) const;

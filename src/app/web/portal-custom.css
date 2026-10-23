@@ -2362,11 +2362,14 @@ body:has(#pad-editor-root) #toast-container {
 #pad-editor-root .pad-workspace-rail { overflow-y: auto; padding: 8px 0; border-right: 1px solid var(--pad-workspace-line); min-width: 0; background: var(--portal-sidebar-bg); }
 #pad-workspace-pads button { width: 100%; border-top: 0; border-right: 0; border-bottom: 0; background: transparent; text-align: left; padding-left: 14px; border-radius: 0; margin: 0; overflow-wrap: anywhere; }
 #pad-editor-root .pad-workspace-stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; background-color: var(--portal-editor-bg); background-image: radial-gradient(var(--pad-workspace-line) .7px, transparent .7px); background-size: 16px 16px; }
-#pad-editor-root .pad-layer-switch { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
-#pad-editor-root .pad-layer-segments { display: inline-flex; border: 1px solid var(--pad-workspace-line); border-radius: 5px; padding: 2px; gap: 2px; }
-#pad-editor-root .pad-layer-segments button { border: 0; border-radius: 3px; padding: 5px 12px; background: transparent; color: var(--portal-text-muted); }
-#pad-editor-root .pad-layer-segments button[aria-pressed="true"] { background: var(--portal-surface); color: var(--portal-text); box-shadow: 0 1px 2px #0002; }
+#pad-editor-root .pad-layer-switch { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; }
+#pad-editor-root .pad-layer-segments { display: inline-grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 164px; flex: none; border: 1px solid var(--pad-workspace-line); border-radius: 5px; padding: 2px; gap: 2px; }
+#pad-editor-root .pad-layer-segments button { border: 0; border-radius: 3px; padding: 5px 12px; background: transparent; color: var(--portal-text-muted); font-weight: 600; }
+#pad-editor-root .pad-layer-segments button[aria-pressed="true"] { background: var(--portal-primary); color: var(--portal-sidebar-bg); }
+#pad-editor-root .pad-layer-segments button:focus-visible { outline: 2px solid var(--portal-primary); outline-offset: 2px; }
 #pad-layer-capacity { color: var(--portal-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+#pad-layer-note { flex-basis: 100%; margin: 0; max-width: 64ch; color: var(--portal-text-muted); font-size: 12px; line-height: 1.5; }
+#pad-editor-root:not(.pad-overlay-editing) #pad-layer-note { visibility: hidden; }
 #pad-editor-root.pad-overlay-editing .pad-cell-main-preview { opacity: .38; pointer-events: none; }
 #pad-editor-root.pad-overlay-editing .pad-cell-overlay { z-index: 1; }
 #pad-editor-root.pad-overlay-editing .pad-cell-empty { z-index: 2; }

@@ -109,7 +109,6 @@ static void external_create(lv_obj_t* tile, const WidgetConfig* cfg,
                             const UIScaleInfo* scale, lv_obj_t* icon_img,
                             lv_obj_t* center_label, WidgetState* state) {
     (void)cfg;
-    (void)btn;
     (void)scale;
     auto* external = reinterpret_cast<ExternalWidgetState*>(state->data);
     memset(external, 0, sizeof(ExternalWidgetState));

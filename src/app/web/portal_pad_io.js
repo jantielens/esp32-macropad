@@ -89,7 +89,7 @@ function padFillWithClipboard() {
         return;
     }
     if (!confirm('Fill all cells with the copied button settings?')) return;
-    if (typeof padWorkspaceReset === 'function') padWorkspaceReset();
+    if (typeof padWorkspaceReset === 'function') padWorkspaceReset(padState.selectedLayer);
 
     for (let r = 0; r < padState.rows; r++) {
         for (let c = 0; c < padState.cols; c++) {

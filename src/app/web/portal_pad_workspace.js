@@ -179,23 +179,18 @@ function padWorkspaceRenderLayer() {
     });
     const capacity = document.getElementById('pad-layer-capacity');
     if (capacity) capacity.textContent = (padState.mainButtons.length + padState.overlayButtons.length) + ' / ' +
-        padMaxButtons();
+        padMaxButtons() + ' button slots used';
     const fields = document.getElementById('pad-workspace-pad-fields');
     if (!fields) return;
     fields.querySelectorAll('input, select, textarea, button').forEach(control => {
         if (overlay) {
             if (!control.hasAttribute('data-main-disabled')) {
                 control.dataset.mainDisabled = String(Boolean(control.disabled));
-                if ('readOnly' in control) control.dataset.mainReadOnly = String(Boolean(control.readOnly));
             }
-            if ('readOnly' in control && control.type !== 'button' && control.type !== 'submit') control.readOnly = true;
-            else control.disabled = true;
+            control.disabled = true;
         } else if (control.hasAttribute('data-main-disabled')) {
             control.disabled = control.dataset.mainDisabled === 'true';
-            if ('readOnly' in control && control.dataset.mainReadOnly !== undefined)
-                control.readOnly = control.dataset.mainReadOnly === 'true';
             delete control.dataset.mainDisabled;
-            delete control.dataset.mainReadOnly;
         }
     });
 }
@@ -351,12 +346,21 @@ function padWorkspaceClearButton(col, row) {
     padWorkspaceSetScope('pad');
 }
 
-function padWorkspaceReset() {
+function padWorkspaceReset(layer) {
     if (!padWorkspace) return;
-    padWorkspace.forms.clear();
-    padWorkspace.errors.clear();
+    if (layer) {
+        for (const entries of [padWorkspace.forms, padWorkspace.errors]) {
+            for (const key of entries.keys()) {
+                if (key.startsWith(layer + ':')) entries.delete(key);
+            }
+        }
+        padState.layerSelections[layer] = null;
+    } else {
+        padWorkspace.forms.clear();
+        padWorkspace.errors.clear();
+        padState.layerSelections = { main: null, overlay: null };
+    }
     padWorkspace.selected = false;
-    padState.layerSelections = { main: null, overlay: null };
     padWorkspaceSetScope('pad');
     padWorkspace.root.classList.remove('pad-workspace-inspecting');
 }

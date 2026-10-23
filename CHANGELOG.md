@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* Add Main and Overlay button layers to pads for conditional warnings and
+  controls above the main layout. Overlay buttons can share Main positions;
+  hidden Overlay buttons leave Main buttons usable, while visible enabled or
+  disabled Overlay buttons block input beneath them. Use state bindings to
+  show, disable, or hide buttons. Edit each layer independently in the Pad
+  Editor while sharing pad settings, grid dimensions, and one combined button
+  limit. See [Edit Main and Overlay buttons](docs/user/pads/editing.md#edit-main-and-overlay-buttons).
 * Add custom row heights and column widths in the Pad Editor's Layout tab.
   Set individual sizes in device pixels while Auto rows and columns share the
   remaining space equally, without changing button positions or spans. Preview

@@ -70,8 +70,7 @@ int main() {
     assert(!pad_overlay_covers_button(BTN_STATE_HIDDEN, overlay, main_button));
     assert(!pad_overlay_covers_button(BTN_STATE_ENABLED, overlay, separate));
 
-    static bool initialized = false;
-    if (!initialized) { lv_init(); initialized = true; }
+    lv_init();
     LvglInputFixture fixture;
     fixture.display = lv_display_create(200, 100);
     assert(fixture.display);

@@ -21,21 +21,7 @@ bool PadScreen::coveredByOverlay(const ButtonTile& tile) const {
     if (!tile.obj || isOverlayButton(&tile)) return false;
     lv_area_t button_area;
     lv_obj_get_coords(tile.obj, &button_area);
-    for (uint8_t index = 0; index < tileCount; ++index) {
-        const ButtonTile& overlay = tiles[index];
-        if (!isOverlayButton(&overlay) || !overlay.obj ||
-            lv_obj_has_flag(overlay.obj, LV_OBJ_FLAG_HIDDEN)) continue;
-        const BtnState state = lv_obj_has_state(overlay.obj, LV_STATE_DISABLED)
-            ? BTN_STATE_DISABLED : BTN_STATE_ENABLED;
-        lv_area_t overlay_area;
-        lv_obj_get_coords(overlay.obj, &overlay_area);
-        if (pad_overlay_covers_button(state,
-                {overlay_area.x1, overlay_area.y1, overlay_area.x2, overlay_area.y2},
-                {button_area.x1, button_area.y1, button_area.x2, button_area.y2})) {
-            return true;
-        }
-    }
-    return false;
+    return overlayIntersects(button_area);
 }
 
 bool PadScreen::inputAllowed(const ButtonTile& tile, const lv_point_t& point) const {
@@ -46,30 +32,23 @@ bool PadScreen::inputAllowed(const ButtonTile& tile, const lv_point_t& point) co
 }
 
 bool PadScreen::pointBlockedByOverlay(const lv_point_t& point) const {
-    for (uint8_t index = 0; index < tileCount; ++index) {
-        const ButtonTile& overlay = tiles[index];
-        if (!isOverlayButton(&overlay) || !overlay.obj ||
-            lv_obj_has_flag(overlay.obj, LV_OBJ_FLAG_HIDDEN)) continue;
-        const BtnState state = lv_obj_has_state(overlay.obj, LV_STATE_DISABLED)
-            ? BTN_STATE_DISABLED : BTN_STATE_ENABLED;
-        lv_area_t area;
-        lv_obj_get_coords(overlay.obj, &area);
-        if (pad_overlay_blocks_point(state,
-            {area.x1, area.y1, area.x2, area.y2}, point.x, point.y)) return true;
-    }
-    return false;
+    return overlayIntersects({point.x, point.y, point.x, point.y});
 }
 
 bool PadScreen::disabledOverlayBlocksPoint(const lv_point_t& point) const {
-    for (uint8_t index = 0; index < tileCount; ++index) {
+    return overlayIntersects({point.x, point.y, point.x, point.y}, true);
+}
+
+bool PadScreen::overlayIntersects(const lv_area_t& area, bool disabledOnly) const {
+    for (uint8_t index = mainButtonCount; index < tileCount; ++index) {
         const ButtonTile& overlay = tiles[index];
-        if (!isOverlayButton(&overlay) || !overlay.obj ||
-            !lv_obj_has_state(overlay.obj, LV_STATE_DISABLED) ||
-            lv_obj_has_flag(overlay.obj, LV_OBJ_FLAG_HIDDEN)) continue;
-        lv_area_t area;
-        lv_obj_get_coords(overlay.obj, &area);
-        if (pad_overlay_rect_contains(
-                {area.x1, area.y1, area.x2, area.y2}, point.x, point.y)) return true;
+        if (!overlay.obj || lv_obj_has_flag(overlay.obj, LV_OBJ_FLAG_HIDDEN) ||
+            (disabledOnly && !lv_obj_has_state(overlay.obj, LV_STATE_DISABLED))) continue;
+        lv_area_t overlay_area;
+        lv_obj_get_coords(overlay.obj, &overlay_area);
+        if (pad_overlay_rects_intersect(
+                {overlay_area.x1, overlay_area.y1, overlay_area.x2, overlay_area.y2},
+                {area.x1, area.y1, area.x2, area.y2})) return true;
     }
     return false;
 }
@@ -652,7 +631,6 @@ void PadScreen::longPressAt(ButtonTile* tile, const lv_point_t& point) {
     if (!owner || !owner->inputAllowed(*tile, point)) return;
     const bool overlay = owner->buttonIsOverlay(tile);
     if (device_dialog_active()) return;
-    (void)point;
     if (tile->widget_type && strcmp(tile->widget_type->name, "toggle") == 0) return;
 
 #if HAS_NATIVE_EXTENSIONS

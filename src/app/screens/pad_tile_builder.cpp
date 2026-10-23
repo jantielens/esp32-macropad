@@ -281,6 +281,7 @@ void PadScreen::buildTiles() {
         lv_obj_t* obj = lv_obj_create(container);
         lv_obj_set_user_data(obj, this);
         tile.obj = obj;
+        tileCount++;
         lv_obj_add_event_cb(obj, onPress, LV_EVENT_ALL, &tiles[i]);
         lv_obj_set_pos(obj, r.x, r.y);
         lv_obj_set_size(obj, r.w, r.h);
@@ -712,7 +713,6 @@ void PadScreen::buildTiles() {
             }
         }
 
-        tileCount++;
     }
 
     if (padActionCount > 0) {
